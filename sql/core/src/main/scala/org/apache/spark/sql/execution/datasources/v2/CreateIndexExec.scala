@@ -38,7 +38,7 @@ case class CreateIndexExec(
     ignoreIfExists: Boolean,
     columns: Seq[(NamedReference, Map[String, String])],
     properties: Map[String, String])
-    extends LeafV2CommandExec {
+  extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
 
     val propertiesWithIndexType: Map[String, String] = if (indexType.nonEmpty) {
@@ -48,20 +48,16 @@ case class CreateIndexExec(
     }
 
     val colProperties = new util.HashMap[NamedReference, util.Map[String, String]]
-    columns.foreach { case (column, map) =>
-      colProperties.put(column, map.asJava)
+    columns.foreach {
+      case (column, map) => colProperties.put(column, map.asJava)
     }
     try {
       table.createIndex(
-        indexName,
-        columns.map(_._1).toArray,
-        colProperties,
-        propertiesWithIndexType.asJava)
+        indexName, columns.map(_._1).toArray, colProperties, propertiesWithIndexType.asJava)
     } catch {
       case _: IndexAlreadyExistsException if ignoreIfExists =>
-        logWarning(
-          log"Index ${MDC(INDEX_NAME, indexName)} already exists in " +
-            log"table ${MDC(TABLE_NAME, table.name)}. Ignoring.")
+        logWarning(log"Index ${MDC(INDEX_NAME, indexName)} already exists in " +
+          log"table ${MDC(TABLE_NAME, table.name)}. Ignoring.")
     }
     Seq.empty
   }

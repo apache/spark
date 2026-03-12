@@ -36,8 +36,8 @@ case class MicroBatchScanExec(
     @transient end: Offset,
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
     ordering: Option[Seq[SortOrder]] = None)
-    extends DataSourceV2ScanExecBase
-    with StreamSourceAwareSparkPlan {
+  extends DataSourceV2ScanExecBase
+  with StreamSourceAwareSparkPlan {
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
@@ -53,8 +53,8 @@ case class MicroBatchScanExec(
   override lazy val readerFactory: PartitionReaderFactory = stream.createReaderFactory()
 
   override lazy val inputRDD: RDD[InternalRow] = {
-    val inputRDD =
-      new DataSourceRDD(sparkContext, partitions, readerFactory, supportsColumnar, customMetrics)
+    val inputRDD = new DataSourceRDD(sparkContext, partitions, readerFactory, supportsColumnar,
+      customMetrics)
     postDriverMetrics()
     inputRDD
   }

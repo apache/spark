@@ -67,9 +67,8 @@ trait SharedSparkSession extends SQLTestUtils with SharedSparkSessionBase {
 
     // Wait for listener to finish computing the metrics for the execution.
     eventually(timeout(10.seconds), interval(10.milliseconds)) {
-      assert(
-        statusStore.executionsList().nonEmpty &&
-          statusStore.executionsList().last.metricValues != null)
+      assert(statusStore.executionsList().nonEmpty &&
+        statusStore.executionsList().last.metricValues != null)
     }
 
     val exec = statusStore.executionsList().last
@@ -83,10 +82,10 @@ trait SharedSparkSession extends SQLTestUtils with SharedSparkSessionBase {
  * Helper trait for SQL test suites where all tests share a single [[TestSparkSession]].
  */
 trait SharedSparkSessionBase
-    extends SQLTestUtilsBase
-    with SparkSessionProvider
-    with BeforeAndAfterEach
-    with Eventually { self: Suite =>
+  extends SQLTestUtilsBase
+  with SparkSessionProvider
+  with BeforeAndAfterEach
+  with Eventually { self: Suite =>
 
   protected def sparkConf = {
     val conf = new SparkConf()
@@ -103,27 +102,19 @@ trait SharedSparkSessionBase
       StaticSQLConf.WAREHOUSE_PATH,
       conf.get(StaticSQLConf.WAREHOUSE_PATH) + "/" + getClass.getCanonicalName)
     conf.set(StaticSQLConf.LOAD_SESSION_EXTENSIONS_FROM_CLASSPATH, false)
-    conf.set(
-      StaticSQLConf.SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD,
-      sys.env
-        .getOrElse(
-          "SPARK_TEST_SQL_SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD",
-          StaticSQLConf.SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD.defaultValueString)
-        .toInt)
-    conf.set(
-      StaticSQLConf.RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD,
-      sys.env
-        .getOrElse(
-          "SPARK_TEST_SQL_RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD",
-          StaticSQLConf.RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD.defaultValueString)
-        .toInt)
+    conf.set(StaticSQLConf.SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD,
+      sys.env.getOrElse("SPARK_TEST_SQL_SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD",
+        StaticSQLConf.SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD.defaultValueString).toInt)
+    conf.set(StaticSQLConf.RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD,
+      sys.env.getOrElse("SPARK_TEST_SQL_RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD",
+        StaticSQLConf.RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD.defaultValueString).toInt)
   }
 
   /**
    * The [[TestSparkSession]] to use for all tests in this suite.
    *
-   * By default, the underlying [[org.apache.spark.SparkContext]] will be run in local mode with
-   * the default test configurations.
+   * By default, the underlying [[org.apache.spark.SparkContext]] will be run in local
+   * mode with the default test configurations.
    */
   private var _spark: TestSparkSession = null
 
@@ -145,11 +136,13 @@ trait SharedSparkSessionBase
   protected def sqlConf: SQLConf = _spark.sessionState.conf
 
   /**
-   * Initialize the [[TestSparkSession]]. Generally, this is just called from beforeAll; however,
-   * in test using styles other than FunSuite, there is often code that relies on the session
-   * between test group constructs and the actual tests, which may need this session. It is purely
-   * a semantic difference, but semantically, it makes more sense to call 'initializeSession'
-   * between a 'describe' and an 'it' call than it does to call 'beforeAll'.
+   * Initialize the [[TestSparkSession]].  Generally, this is just called from
+   * beforeAll; however, in test using styles other than FunSuite, there is
+   * often code that relies on the session between test group constructs and
+   * the actual tests, which may need this session.  It is purely a semantic
+   * difference, but semantically, it makes more sense to call
+   * 'initializeSession' between a 'describe' and an 'it' call than it does to
+   * call 'beforeAll'.
    */
   protected def initializeSession(): Unit = {
     if (_spark == null) {

@@ -38,6 +38,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.SerializableConfiguration
 
+
 /**
  * The binary file data source.
  *
@@ -55,7 +56,8 @@ import org.apache.spark.util.SerializableConfiguration
  *     .load("/path/to/fileDir");
  * }}}
  */
-case class BinaryFileFormat() extends FileFormat with DataSourceRegister with SessionStateHelper {
+case class BinaryFileFormat() extends FileFormat
+  with DataSourceRegister with SessionStateHelper {
 
   import BinaryFileFormat._
 
@@ -91,8 +93,7 @@ case class BinaryFileFormat() extends FileFormat with DataSourceRegister with Se
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
-    require(
-      DataTypeUtils.sameType(dataSchema, schema),
+    require(DataTypeUtils.sameType(dataSchema, schema),
       s"""
          |Binary file data source expects dataSchema: $schema,
          |but got: $dataSchema.
@@ -148,38 +149,35 @@ object BinaryFileFormat {
    * Schema for the binary file data source.
    *
    * Schema:
-   *   - path (StringType): The path of the file.
-   *   - modificationTime (TimestampType): The modification time of the file. In some Hadoop
-   *     FileSystem implementation, this might be unavailable and fallback to some default value.
-   *   - length (LongType): The length of the file in bytes.
-   *   - content (BinaryType): The content of the file.
+   *  - path (StringType): The path of the file.
+   *  - modificationTime (TimestampType): The modification time of the file.
+   *    In some Hadoop FileSystem implementation, this might be unavailable and fallback to some
+   *    default value.
+   *  - length (LongType): The length of the file in bytes.
+   *  - content (BinaryType): The content of the file.
    */
-  val schema = StructType(
-    Array(
-      StructField(PATH, StringType, false),
-      StructField(MODIFICATION_TIME, TimestampType, false),
-      StructField(LENGTH, LongType, false),
-      StructField(CONTENT, BinaryType, true)))
+  val schema = StructType(Array(
+    StructField(PATH, StringType, false),
+    StructField(MODIFICATION_TIME, TimestampType, false),
+    StructField(LENGTH, LongType, false),
+    StructField(CONTENT, BinaryType, true)))
 
   private[binaryfile] def createFilterFunction(filter: Filter): Option[FileStatus => Boolean] = {
     filter match {
-      case And(left, right) =>
-        (createFilterFunction(left), createFilterFunction(right)) match {
-          case (Some(leftPred), Some(rightPred)) => Some(s => leftPred(s) && rightPred(s))
-          case (Some(leftPred), None) => Some(leftPred)
-          case (None, Some(rightPred)) => Some(rightPred)
-          case (None, None) => Some(_ => true)
-        }
-      case Or(left, right) =>
-        (createFilterFunction(left), createFilterFunction(right)) match {
-          case (Some(leftPred), Some(rightPred)) => Some(s => leftPred(s) || rightPred(s))
-          case _ => Some(_ => true)
-        }
-      case Not(child) =>
-        createFilterFunction(child) match {
-          case Some(pred) => Some(s => !pred(s))
-          case _ => Some(_ => true)
-        }
+      case And(left, right) => (createFilterFunction(left), createFilterFunction(right)) match {
+        case (Some(leftPred), Some(rightPred)) => Some(s => leftPred(s) && rightPred(s))
+        case (Some(leftPred), None) => Some(leftPred)
+        case (None, Some(rightPred)) => Some(rightPred)
+        case (None, None) => Some(_ => true)
+      }
+      case Or(left, right) => (createFilterFunction(left), createFilterFunction(right)) match {
+        case (Some(leftPred), Some(rightPred)) => Some(s => leftPred(s) || rightPred(s))
+        case _ => Some(_ => true)
+      }
+      case Not(child) => createFilterFunction(child) match {
+        case Some(pred) => Some(s => !pred(s))
+        case _ => Some(_ => true)
+      }
       case LessThan(LENGTH, value: Long) => Some(_.getLen < value)
       case LessThanOrEqual(LENGTH, value: Long) => Some(_.getLen <= value)
       case GreaterThan(LENGTH, value: Long) => Some(_.getLen > value)
@@ -199,3 +197,4 @@ object BinaryFileFormat {
     }
   }
 }
+

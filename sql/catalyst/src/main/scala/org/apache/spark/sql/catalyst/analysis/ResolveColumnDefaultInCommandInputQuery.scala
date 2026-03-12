@@ -29,28 +29,24 @@ import org.apache.spark.sql.types.StructField
 
 /**
  * A virtual rule to resolve column "DEFAULT" in [[Project]] and [[UnresolvedInlineTable]] under
- * [[InsertIntoStatement]] and [[SetVariable]]. It's only used by the real rule
- * `ResolveReferences`.
+ * [[InsertIntoStatement]] and [[SetVariable]]. It's only used by the real rule `ResolveReferences`.
  *
  * This virtual rule is triggered if:
- *   1. The column "DEFAULT" can't be resolved normally by `ResolveReferences`. This is guaranteed
- *      as `ResolveReferences` resolves the query plan bottom up. This means that when we reach
- *      here to resolve the command, its child plans have already been resolved by
- *      `ResolveReferences`.
- *   2. The plan nodes between [[Project]] and command are all unary nodes that inherit the output
- *      columns from its child.
- *   3. The plan nodes between [[UnresolvedInlineTable]] and command are either [[Project]], or
- *      [[Aggregate]], or [[SubqueryAlias]].
+ * 1. The column "DEFAULT" can't be resolved normally by `ResolveReferences`. This is guaranteed as
+ *    `ResolveReferences` resolves the query plan bottom up. This means that when we reach here to
+ *    resolve the command, its child plans have already been resolved by `ResolveReferences`.
+ * 2. The plan nodes between [[Project]] and command are all unary nodes that inherit the
+ *    output columns from its child.
+ * 3. The plan nodes between [[UnresolvedInlineTable]] and command are either
+ *    [[Project]], or [[Aggregate]], or [[SubqueryAlias]].
  */
 class ResolveColumnDefaultInCommandInputQuery(val catalogManager: CatalogManager)
-    extends SQLConfHelper
-    with ColumnResolutionHelper {
+  extends SQLConfHelper with ColumnResolutionHelper {
 
   // TODO (SPARK-43752): support v2 write commands as well.
   def apply(plan: LogicalPlan): LogicalPlan = plan match {
-    case i: InsertIntoStatement
-        if conf.enableDefaultColumns && i.table.resolved &&
-          i.query.containsPattern(UNRESOLVED_ATTRIBUTE) =>
+    case i: InsertIntoStatement if conf.enableDefaultColumns && i.table.resolved &&
+        i.query.containsPattern(UNRESOLVED_ATTRIBUTE) =>
       val staticPartCols = i.partitionSpec.filter(_._2.isDefined).keySet.map(normalizeFieldName)
       // For INSERT with static partitions, such as `INSERT INTO t PARTITION(c=1) SELECT ...`, the
       // input query schema should match the table schema excluding columns with static
@@ -82,12 +78,12 @@ class ResolveColumnDefaultInCommandInputQuery(val catalogManager: CatalogManager
         }
       }
 
-    case s: SetVariable
-        if s.targetVariables.forall(_.isInstanceOf[VariableReference]) &&
-          s.sourceQuery.containsPattern(UNRESOLVED_ATTRIBUTE) =>
-      val expectedQuerySchema = s.targetVariables.map { case v: VariableReference =>
-        StructField(v.identifier.name, v.dataType, v.nullable)
-          .withCurrentDefaultValue(v.varDef.defaultValueSQL)
+    case s: SetVariable if s.targetVariables.forall(_.isInstanceOf[VariableReference]) &&
+        s.sourceQuery.containsPattern(UNRESOLVED_ATTRIBUTE) =>
+      val expectedQuerySchema = s.targetVariables.map {
+        case v: VariableReference =>
+          StructField(v.identifier.name, v.dataType, v.nullable)
+            .withCurrentDefaultValue(v.varDef.defaultValueSQL)
       }
       // We match the query schema with the SET variable schema by position. If the n-th
       // column of the query is the DEFAULT column, we should get the default value expression
@@ -100,18 +96,17 @@ class ResolveColumnDefaultInCommandInputQuery(val catalogManager: CatalogManager
   /**
    * Resolves the column "DEFAULT" in [[Project]] and [[UnresolvedInlineTable]]. A column is a
    * "DEFAULT" column if all the following conditions are met:
-   *   1. The expression inside project list or inline table expressions is a single
-   *      [[UnresolvedAttribute]] with name "DEFAULT". This means `SELECT DEFAULT, ...` is valid
-   *      but `SELECT DEFAULT + 1, ...` is not.
-   *   2. The project list or inline table expressions have less elements than the expected
-   *      schema. To find the default value definition, we need to find the matching column for
-   *      expressions inside project list or inline table expressions. This matching is by
-   *      position and it doesn't make sense if we have more expressions than the columns of
-   *      expected schema.
-   *   3. The plan nodes between [[Project]] and [[InsertIntoStatement]] are all unary nodes that
-   *      inherit the output columns from its child.
-   *   4. The plan nodes between [[UnresolvedInlineTable]] and [[InsertIntoStatement]] are either
-   *      [[Project]], or [[Aggregate]], or [[SubqueryAlias]].
+   * 1. The expression inside project list or inline table expressions is a single
+   *    [[UnresolvedAttribute]] with name "DEFAULT". This means `SELECT DEFAULT, ...` is valid but
+   *    `SELECT DEFAULT + 1, ...` is not.
+   * 2. The project list or inline table expressions have less elements than the expected schema.
+   *    To find the default value definition, we need to find the matching column for expressions
+   *    inside project list or inline table expressions. This matching is by position and it
+   *    doesn't make sense if we have more expressions than the columns of expected schema.
+   * 3. The plan nodes between [[Project]] and [[InsertIntoStatement]] are
+   *    all unary nodes that inherit the output columns from its child.
+   * 4. The plan nodes between [[UnresolvedInlineTable]] and [[InsertIntoStatement]] are either
+   *    [[Project]], or [[Aggregate]], or [[SubqueryAlias]].
    */
   private def resolveColumnDefault(
       plan: LogicalPlan,
@@ -124,12 +119,12 @@ class ResolveColumnDefaultInCommandInputQuery(val catalogManager: CatalogManager
           resolveColumnDefault(_, expectedQuerySchema, acceptProject, acceptInlineTable))
 
       case _: GlobalLimit | _: LocalLimit | _: Offset | _: Sort if acceptProject =>
-        plan.mapChildren(resolveColumnDefault(_, expectedQuerySchema, acceptInlineTable = false))
+        plan.mapChildren(
+          resolveColumnDefault(_, expectedQuerySchema, acceptInlineTable = false))
 
-      case p: Project
-          if acceptProject && p.child.resolved &&
-            p.containsPattern(UNRESOLVED_ATTRIBUTE) &&
-            p.projectList.length <= expectedQuerySchema.length =>
+      case p: Project if acceptProject && p.child.resolved &&
+          p.containsPattern(UNRESOLVED_ATTRIBUTE) &&
+          p.projectList.length <= expectedQuerySchema.length =>
         val newProjectList = p.projectList.zipWithIndex.map {
           case (u: UnresolvedAttribute, i) if isExplicitDefaultColumn(u) =>
             Alias(getDefaultValueExprOrNullLit(expectedQuerySchema(i)), u.name)()
@@ -146,10 +141,9 @@ class ResolveColumnDefaultInCommandInputQuery(val catalogManager: CatalogManager
       case _: Project | _: Aggregate if acceptInlineTable =>
         plan.mapChildren(resolveColumnDefault(_, expectedQuerySchema, acceptProject = false))
 
-      case inlineTable: UnresolvedInlineTable
-          if acceptInlineTable &&
-            inlineTable.containsPattern(UNRESOLVED_ATTRIBUTE) &&
-            inlineTable.rows.forall(exprs => exprs.length <= expectedQuerySchema.length) =>
+      case inlineTable: UnresolvedInlineTable if acceptInlineTable &&
+          inlineTable.containsPattern(UNRESOLVED_ATTRIBUTE) &&
+          inlineTable.rows.forall(exprs => exprs.length <= expectedQuerySchema.length) =>
         val newRows = inlineTable.rows.map { exprs =>
           exprs.zipWithIndex.map {
             case (u: UnresolvedAttribute, i) if isExplicitDefaultColumn(u) =>
@@ -171,10 +165,8 @@ class ResolveColumnDefaultInCommandInputQuery(val catalogManager: CatalogManager
   /**
    * Normalizes a schema field name suitable for use in looking up into maps keyed by schema field
    * names.
-   * @param str
-   *   the field name to normalize
-   * @return
-   *   the normalized result
+   * @param str the field name to normalize
+   * @return the normalized result
    */
   private def normalizeFieldName(str: String): String = {
     if (SQLConf.get.caseSensitiveAnalysis) {

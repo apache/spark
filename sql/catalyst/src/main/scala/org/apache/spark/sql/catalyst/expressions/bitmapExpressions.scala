@@ -38,11 +38,10 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, LongT
        0
   """,
   since = "3.5.0",
-  group = "misc_funcs")
+  group = "misc_funcs"
+)
 case class BitmapBucketNumber(child: Expression)
-    extends UnaryExpression
-    with RuntimeReplaceable
-    with ImplicitCastInputTypes {
+  extends UnaryExpression with RuntimeReplaceable with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(LongType)
 
@@ -72,11 +71,10 @@ case class BitmapBucketNumber(child: Expression)
        122
   """,
   since = "3.5.0",
-  group = "misc_funcs")
+  group = "misc_funcs"
+)
 case class BitmapBitPosition(child: Expression)
-    extends UnaryExpression
-    with RuntimeReplaceable
-    with ImplicitCastInputTypes {
+  extends UnaryExpression with RuntimeReplaceable with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(LongType)
 
@@ -108,8 +106,10 @@ case class BitmapBitPosition(child: Expression)
        0
   """,
   since = "3.5.0",
-  group = "misc_funcs")
-case class BitmapCount(child: Expression) extends UnaryExpression with RuntimeReplaceable {
+  group = "misc_funcs"
+)
+case class BitmapCount(child: Expression)
+  extends UnaryExpression with RuntimeReplaceable {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (child.dataType != BinaryType) {
@@ -119,7 +119,9 @@ case class BitmapCount(child: Expression) extends UnaryExpression with RuntimeRe
           "paramIndex" -> ordinalNumber(0),
           "requiredType" -> toSQLType(BinaryType),
           "inputSql" -> toSQLExpr(child),
-          "inputType" -> toSQLType(child.dataType)))
+          "inputType" -> toSQLType(child.dataType)
+        )
+      )
     } else {
       TypeCheckSuccess
     }
@@ -156,14 +158,12 @@ case class BitmapCount(child: Expression) extends UnaryExpression with RuntimeRe
   """,
   // scalastyle:on line.size.limit
   since = "3.5.0",
-  group = "agg_funcs")
-case class BitmapConstructAgg(
-    child: Expression,
-    mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0)
-    extends ImperativeAggregate
-    with ImplicitCastInputTypes
-    with UnaryLike[Expression] {
+  group = "agg_funcs"
+)
+case class BitmapConstructAgg(child: Expression,
+                              mutableAggBufferOffset: Int = 0,
+                              inputAggBufferOffset: Int = 0)
+  extends ImperativeAggregate with ImplicitCastInputTypes with UnaryLike[Expression] {
 
   def this(child: Expression) = {
     this(child = child, mutableAggBufferOffset = 0, inputAggBufferOffset = 0)
@@ -178,8 +178,7 @@ case class BitmapConstructAgg(
   override protected def withNewChildInternal(newChild: Expression): BitmapConstructAgg =
     copy(child = newChild)
 
-  override def withNewMutableAggBufferOffset(
-      newMutableAggBufferOffset: Int): ImperativeAggregate =
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
@@ -246,13 +245,12 @@ case class BitmapConstructAgg(
   """,
   // scalastyle:on line.size.limit
   since = "3.5.0",
-  group = "agg_funcs")
-case class BitmapOrAgg(
-    child: Expression,
-    mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0)
-    extends ImperativeAggregate
-    with UnaryLike[Expression] {
+  group = "agg_funcs"
+)
+case class BitmapOrAgg(child: Expression,
+                       mutableAggBufferOffset: Int = 0,
+                       inputAggBufferOffset: Int = 0)
+  extends ImperativeAggregate with UnaryLike[Expression] {
 
   def this(child: Expression) = {
     this(child = child, mutableAggBufferOffset = 0, inputAggBufferOffset = 0)
@@ -266,7 +264,9 @@ case class BitmapOrAgg(
           "paramIndex" -> ordinalNumber(0),
           "requiredType" -> toSQLType(BinaryType),
           "inputSql" -> toSQLExpr(child),
-          "inputType" -> toSQLType(child.dataType)))
+          "inputType" -> toSQLType(child.dataType)
+        )
+      )
     } else {
       TypeCheckSuccess
     }
@@ -279,8 +279,7 @@ case class BitmapOrAgg(
   override protected def withNewChildInternal(newChild: Expression): BitmapOrAgg =
     copy(child = newChild)
 
-  override def withNewMutableAggBufferOffset(
-      newMutableAggBufferOffset: Int): ImperativeAggregate =
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =

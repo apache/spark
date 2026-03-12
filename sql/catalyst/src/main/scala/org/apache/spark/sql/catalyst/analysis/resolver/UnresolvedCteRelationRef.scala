@@ -20,9 +20,9 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, UnresolvedLeafNode}
 
 /**
- * A reference to a CTE definition in the form of an unresolved relation. This node is introduced
- * by [[IdentifierAndCteSubstitutor]] to replace the CTE reference to avoid ineffective catalog
- * RPC lookups in [[MetadataResolver]].
+ * A reference to a CTE definition in the form of an unresolved relation. This node is introduced by
+ * [[IdentifierAndCteSubstitutor]] to replace the CTE reference to avoid ineffective catalog RPC
+ * lookups in [[MetadataResolver]].
  */
 case class UnresolvedCteRelationRef(override val name: String)
     extends UnresolvedLeafNode

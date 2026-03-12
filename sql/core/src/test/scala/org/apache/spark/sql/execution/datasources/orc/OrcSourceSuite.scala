@@ -43,7 +43,8 @@ import org.apache.spark.util.Utils
 
 case class OrcData(intField: Int, stringField: String)
 
-abstract class OrcSuite extends OrcTest with CommonFileDataSourceSuite with SQLTestUtilsBase {
+abstract class OrcSuite
+  extends OrcTest with CommonFileDataSourceSuite with SQLTestUtilsBase {
   import testImplicits._
 
   override protected def dataSourceFormat = "orc"
@@ -97,8 +98,7 @@ abstract class OrcSuite extends OrcTest with CommonFileDataSourceSuite with SQLT
         sql(sqlStatement)
         sql(s"INSERT INTO $tableName VALUES (1, 'str')")
 
-        val partFiles = dir
-          .listFiles()
+        val partFiles = dir.listFiles()
           .filter(f => f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_"))
         assert(partFiles.length === 1)
 
@@ -125,9 +125,7 @@ abstract class OrcSuite extends OrcTest with CommonFileDataSourceSuite with SQLT
     }
   }
 
-  protected def testSelectiveDictionaryEncoding(
-      isSelective: Boolean,
-      isHiveOrc: Boolean): Unit = {
+  protected def testSelectiveDictionaryEncoding(isSelective: Boolean, isHiveOrc: Boolean): Unit = {
     val tableName = "orcTable"
 
     withTempDir { dir =>
@@ -161,8 +159,7 @@ abstract class OrcSuite extends OrcTest with CommonFileDataSourceSuite with SQLT
         sql(sqlStatement)
         sql(s"INSERT INTO $tableName VALUES ('94086', 'random-uuid-string', 0.0)")
 
-        val partFiles = dir
-          .listFiles()
+        val partFiles = dir.listFiles()
           .filter(f => f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_"))
         assert(partFiles.length === 1)
 
@@ -219,13 +216,13 @@ abstract class OrcSuite extends OrcTest with CommonFileDataSourceSuite with SQLT
         val fileStatuses =
           Seq(fs.listStatus(path1), fs.listStatus(path2), fs.listStatus(path3)).flatten
 
-        val schema =
-          SchemaMergeUtils.mergeSchemasInParallel(spark, Map.empty, fileStatuses, schemaReader)
+        val schema = SchemaMergeUtils.mergeSchemasInParallel(
+          spark, Map.empty, fileStatuses, schemaReader)
 
         assert(schema.isDefined)
-        assert(
-          schema.get == StructType(
-            Seq(StructField("a", LongType, true), StructField("b", LongType, true))))
+        assert(schema.get == StructType(Seq(
+          StructField("a", LongType, true),
+          StructField("b", LongType, true))))
       }
     }
   }
@@ -238,13 +235,16 @@ abstract class OrcSuite extends OrcTest with CommonFileDataSourceSuite with SQLT
         testMergeSchemasInParallel(false, schemaReader)
       }.getCause.getCause.asInstanceOf[SparkException],
       condition = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
-      parameters = Map("path" -> "file:.*"))
+      parameters = Map("path" -> "file:.*")
+    )
   }
 
   test("create temporary orc table") {
     checkAnswer(sql("SELECT COUNT(*) FROM normal_orc_source"), Row(10))
 
-    checkAnswer(sql("SELECT * FROM normal_orc_source"), (1 to 10).map(i => Row(i, s"part-$i")))
+    checkAnswer(
+      sql("SELECT * FROM normal_orc_source"),
+      (1 to 10).map(i => Row(i, s"part-$i")))
 
     checkAnswer(
       sql("SELECT * FROM normal_orc_source where intField > 5"),
@@ -258,7 +258,9 @@ abstract class OrcSuite extends OrcTest with CommonFileDataSourceSuite with SQLT
   test("create temporary orc table as") {
     checkAnswer(sql("SELECT COUNT(*) FROM normal_orc_as_source"), Row(10))
 
-    checkAnswer(sql("SELECT * FROM normal_orc_source"), (1 to 10).map(i => Row(i, s"part-$i")))
+    checkAnswer(
+      sql("SELECT * FROM normal_orc_source"),
+      (1 to 10).map(i => Row(i, s"part-$i")))
 
     checkAnswer(
       sql("SELECT * FROM normal_orc_source WHERE intField > 5"),
@@ -280,17 +282,21 @@ abstract class OrcSuite extends OrcTest with CommonFileDataSourceSuite with SQLT
   }
 
   test("overwrite insert") {
-    sql("""INSERT OVERWRITE TABLE normal_orc_as_source
+    sql(
+      """INSERT OVERWRITE TABLE normal_orc_as_source
         |SELECT * FROM orc_temp_table WHERE intField > 5
       """.stripMargin)
 
-    checkAnswer(sql("SELECT * FROM normal_orc_as_source"), (6 to 10).map(i => Row(i, s"part-$i")))
+    checkAnswer(
+      sql("SELECT * FROM normal_orc_as_source"),
+      (6 to 10).map(i => Row(i, s"part-$i")))
   }
 
   test("write null values") {
     sql("DROP TABLE IF EXISTS orcNullValues")
 
-    val df = sql("""
+    val df = sql(
+      """
         |SELECT
         |  CAST(null as TINYINT) as c0,
         |  CAST(null as SMALLINT) as c1,
@@ -308,7 +314,9 @@ abstract class OrcSuite extends OrcTest with CommonFileDataSourceSuite with SQLT
 
     df.write.format("orc").saveAsTable("orcNullValues")
 
-    checkAnswer(sql("SELECT * FROM orcNullValues"), Row.fromSeq(Seq.fill(11)(null)))
+    checkAnswer(
+      sql("SELECT * FROM orcNullValues"),
+      Row.fromSeq(Seq.fill(11)(null)))
 
     sql("DROP TABLE IF EXISTS orcNullValues")
   }
@@ -323,8 +331,7 @@ abstract class OrcSuite extends OrcTest with CommonFileDataSourceSuite with SQLT
   test("SPARK-21839: Add SQL config for ORC compression") {
     val conf = spark.sessionState.conf
     // Test if the default of spark.sql.orc.compression.codec is used.
-    assert(
-      new OrcOptions(Map.empty[String, String], conf).compressionCodec ==
+    assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec ==
         SQLConf.ORC_COMPRESSION.defaultValueString.toUpperCase(Locale.ROOT))
 
     // OrcOptions's parameters have a higher priority than SQL configuration.
@@ -370,8 +377,7 @@ abstract class OrcSuite extends OrcTest with CommonFileDataSourceSuite with SQLT
     withTempPath { path =>
       spark.range(1).repartition(1).write.orc(path.getCanonicalPath)
 
-      val partFiles = path
-        .listFiles()
+      val partFiles = path.listFiles()
         .filter(f => f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_"))
       assert(partFiles.length === 1)
 
@@ -415,18 +421,10 @@ abstract class OrcSuite extends OrcTest with CommonFileDataSourceSuite with SQLT
         assert(spark.read.orc(basePath).columns.length === expectedColumnNumber)
 
         // OrcOptions.MERGE_SCHEMA has higher priority
-        assert(
-          spark.read
-            .option(OrcOptions.MERGE_SCHEMA, true)
-            .orc(basePath)
-            .columns
-            .length === 3)
-        assert(
-          spark.read
-            .option(OrcOptions.MERGE_SCHEMA, false)
-            .orc(basePath)
-            .columns
-            .length === 2)
+        assert(spark.read.option(OrcOptions.MERGE_SCHEMA, true)
+          .orc(basePath).columns.length === 3)
+        assert(spark.read.option(OrcOptions.MERGE_SCHEMA, false)
+          .orc(basePath).columns.length === 2)
       }
     }
 
@@ -443,12 +441,8 @@ abstract class OrcSuite extends OrcTest with CommonFileDataSourceSuite with SQLT
     withTempDir { dir =>
       val basePath = dir.getCanonicalPath
       spark.range(0, 10).toDF("a").write.orc(new Path(basePath, "foo=1").toString)
-      spark
-        .range(0, 10)
-        .map(s => s"value_$s")
-        .toDF("a")
-        .write
-        .orc(new Path(basePath, "foo=2").toString)
+      spark.range(0, 10).map(s => s"value_$s").toDF("a")
+        .write.orc(new Path(basePath, "foo=2").toString)
 
       // with schema merging, there should throw exception
       withSQLConf(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key -> "true") {
@@ -456,9 +450,8 @@ abstract class OrcSuite extends OrcTest with CommonFileDataSourceSuite with SQLT
           spark.read.orc(basePath).columns.length
         }
         assert(ex.getCondition == "CANNOT_MERGE_SCHEMAS")
-        assert(
-          ex.getCause.asInstanceOf[SparkException].getCondition ===
-            "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE")
+        assert(ex.getCause.asInstanceOf[SparkException].getCondition ===
+          "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE")
       }
 
       // it is ok if no schema merging
@@ -488,7 +481,8 @@ abstract class OrcSuite extends OrcTest with CommonFileDataSourceSuite with SQLT
               spark.read.orc(basePath).columns.length
             }.getCause.getCause.asInstanceOf[SparkException],
             condition = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
-            parameters = Map("path" -> "file:.*"))
+            parameters = Map("path" -> "file:.*")
+          )
         }
       }
     }
@@ -505,8 +499,7 @@ abstract class OrcSuite extends OrcTest with CommonFileDataSourceSuite with SQLT
   test("SPARK-31238, SPARK-31423: rebasing dates in write") {
     withTempPath { dir =>
       val path = dir.getAbsolutePath
-      Seq("1001-01-01", "1582-10-10")
-        .toDF("dateS")
+      Seq("1001-01-01", "1582-10-10").toDF("dateS")
         .select($"dateS".cast("date").as("date"))
         .write
         .orc(path)
@@ -530,8 +523,7 @@ abstract class OrcSuite extends OrcTest with CommonFileDataSourceSuite with SQLT
   test("SPARK-31284, SPARK-31423: rebasing timestamps in write") {
     withTempPath { dir =>
       val path = dir.getAbsolutePath
-      Seq("1001-01-01 01:02:03.123456", "1582-10-10 11:12:13.654321")
-        .toDF("tsS")
+      Seq("1001-01-01 01:02:03.123456", "1582-10-10 11:12:13.654321").toDF("tsS")
         .select($"tsS".cast("timestamp").as("ts"))
         .write
         .orc(path)
@@ -575,9 +567,8 @@ abstract class OrcSuite extends OrcTest with CommonFileDataSourceSuite with SQLT
       }
       val events = logAppender.loggingEvents
       assert {
-        !events.exists {
-          _.getMessage.getFormattedMessage
-            .contains("This could be due to the output format not writing empty files")
+        !events.exists { _.getMessage.getFormattedMessage
+          .contains("This could be due to the output format not writing empty files")
         }
       }
     }
@@ -588,8 +579,7 @@ abstract class OrcSuite extends OrcTest with CommonFileDataSourceSuite with SQLT
       val canonicalPath = path.getCanonicalPath
       // creates an empty data set
       spark.range(1, 1, 1, 1).write.orc(canonicalPath)
-      assert(
-        spark.read.orc(canonicalPath).isEmpty,
+      assert(spark.read.orc(canonicalPath).isEmpty,
         "ORC sources shall write an empty file contains meta if necessary")
     }
   }
@@ -608,7 +598,8 @@ abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
   protected override def beforeAll(): Unit = {
     super.beforeAll()
 
-    sql(s"""CREATE TABLE normal_orc(
+    sql(
+      s"""CREATE TABLE normal_orc(
          |  intField INT,
          |  stringField STRING
          |)
@@ -616,18 +607,21 @@ abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
          |LOCATION '${orcTableAsDir.toURI}'
        """.stripMargin)
 
-    sql(s"""INSERT INTO TABLE normal_orc
+    sql(
+      s"""INSERT INTO TABLE normal_orc
          |SELECT intField, stringField FROM orc_temp_table
        """.stripMargin)
 
-    spark.sql(s"""CREATE TEMPORARY VIEW normal_orc_source
+    spark.sql(
+      s"""CREATE TEMPORARY VIEW normal_orc_source
          |USING ORC
          |OPTIONS (
          |  PATH '${new File(orcTableAsDir.getAbsolutePath).toURI}'
          |)
        """.stripMargin)
 
-    spark.sql(s"""CREATE TEMPORARY VIEW normal_orc_as_source
+    spark.sql(
+      s"""CREATE TEMPORARY VIEW normal_orc_as_source
          |USING ORC
          |OPTIONS (
          |  PATH '${new File(orcTableAsDir.getAbsolutePath).toURI}'
@@ -655,7 +649,8 @@ abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
 
   test("SPARK-34897: Support reconcile schemas based on index after nested column pruning") {
     withTable("t1") {
-      spark.sql("""
+      spark.sql(
+        """
           |CREATE TABLE t1 (
           |  _col0 INT,
           |  _col1 STRING,
@@ -668,86 +663,83 @@ abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
     }
   }
 
-  test(
-    "SPARK-36663: OrcUtils.toCatalystSchema should correctly handle " +
-      "a column name which consists of only numbers") {
+  test("SPARK-36663: OrcUtils.toCatalystSchema should correctly handle " +
+    "a column name which consists of only numbers") {
     withTempPath { dir =>
       val path = dir.getAbsolutePath
       spark.sql("SELECT 'a' as `1`, 'b' as `2`, 'c' as `3`").write.orc(path)
       val df = spark.read.orc(path)
       checkAnswer(df, Row("a", "b", "c"))
-      assert(
-        df.schema.toArray ===
-          Array(
-            StructField("1", StringType),
-            StructField("2", StringType),
-            StructField("3", StringType)))
+      assert(df.schema.toArray ===
+        Array(
+          StructField("1", StringType),
+          StructField("2", StringType),
+          StructField("3", StringType)))
     }
 
     // test for struct in struct
     withTempPath { dir =>
       val path = dir.getAbsolutePath
-      spark
-        .sql("SELECT 'a' as `10`, named_struct('20', 'b', '30', named_struct('40', 'c')) as `50`")
-        .write
-        .orc(path)
+      spark.sql(
+        "SELECT 'a' as `10`, named_struct('20', 'b', '30', named_struct('40', 'c')) as `50`")
+        .write.orc(path)
       val df = spark.read.orc(path)
       checkAnswer(df, Row("a", Row("b", Row("c"))))
-      assert(
-        df.schema.toArray === Array(
-          StructField("10", StringType),
-          StructField(
-            "50",
-            StructType(StructField("20", StringType) ::
-              StructField("30", StructType(StructField("40", StringType) :: Nil)) :: Nil))))
+      assert(df.schema.toArray === Array(
+        StructField("10", StringType),
+        StructField("50",
+          StructType(
+            StructField("20", StringType) ::
+            StructField("30",
+              StructType(
+                StructField("40", StringType) :: Nil)) :: Nil))))
     }
 
     // test for struct in array
     withTempPath { dir =>
       val path = dir.getAbsolutePath
-      spark
-        .sql("SELECT array(array(named_struct('123', 'a'), named_struct('123', 'b'))) as `789`")
-        .write
-        .orc(path)
+      spark.sql("SELECT array(array(named_struct('123', 'a'), named_struct('123', 'b'))) as `789`")
+        .write.orc(path)
       val df = spark.read.orc(path)
       checkAnswer(df, Row(Seq(Seq(Row("a"), Row("b")))))
-      assert(
-        df.schema.toArray === Array(
-          StructField(
-            "789",
-            ArrayType(ArrayType(StructType(StructField("123", StringType) :: Nil))))))
+      assert(df.schema.toArray === Array(
+        StructField("789",
+          ArrayType(
+            ArrayType(
+              StructType(
+                StructField("123", StringType) :: Nil))))))
     }
 
     // test for struct in map
     withTempPath { dir =>
       val path = dir.getAbsolutePath
-      spark
-        .sql("""
+      spark.sql(
+        """
           |SELECT
           |  map(
           |    named_struct('123', 'a'),
           |    map(
           |      named_struct('456', 'b'),
-          |      named_struct('789', 'c'))) as `012`""".stripMargin)
-        .write
-        .orc(path)
+          |      named_struct('789', 'c'))) as `012`""".stripMargin).write.orc(path)
       val df = spark.read.orc(path)
       checkAnswer(df, Row(Map(Row("a") -> Map(Row("b") -> Row("c")))))
-      assert(
-        df.schema.toArray === Array(StructField(
-          "012",
+      assert(df.schema.toArray === Array(
+        StructField("012",
           MapType(
-            StructType(StructField("123", StringType) :: Nil),
+            StructType(
+              StructField("123", StringType) :: Nil),
             MapType(
-              StructType(StructField("456", StringType) :: Nil),
-              StructType(StructField("789", StringType) :: Nil))))))
+              StructType(
+                StructField("456", StringType) :: Nil),
+              StructType(
+                StructField("789", StringType) :: Nil))))))
     }
 
     // test for deeply nested struct with complex types
     withTempPath { dir =>
       val path = dir.getAbsolutePath
-      spark
-        .sql("""
+      spark.sql(
+        """
           |SELECT
           |  named_struct('123',
           |    array(
@@ -779,68 +771,71 @@ abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
           |      named_struct('123', 'a')),
           |    array(
           |      named_struct('456', 'b'))) as `6000`
-        """.stripMargin)
-        .write
-        .orc(path)
+        """.stripMargin).write.orc(path)
       val df = spark.read.orc(path)
-      checkAnswer(
-        df,
-        Row(
-          Row(Seq(Map(Row("a") -> Row("b")))),
-          Row(Map(Seq(Row("a")) -> Seq(Row("b")))),
-          Seq(Row(Map(Row("a") -> Row("b")))),
-          Seq(Map(Row("a") -> Row("b"))),
-          Map(Row(Seq(Row("a"))) -> Row(Seq(Row("b")))),
-          Map(Seq(Row("a")) -> Seq(Row("b")))))
-      assert(
-        df.schema.toArray === Array(
-          StructField(
-            "1000",
-            StructType(
-              StructField(
-                "123",
-                ArrayType(MapType(
-                  StructType(StructField("456", StringType) :: Nil),
-                  StructType(StructField("789", StringType) :: Nil)))) :: Nil)),
-          StructField(
-            "2000",
-            StructType(
-              StructField(
-                "123",
+      checkAnswer(df, Row(
+        Row(Seq(Map(Row("a") -> Row("b")))),
+        Row(Map(Seq(Row("a")) -> Seq(Row("b")))),
+        Seq(Row(Map(Row("a") -> Row("b")))),
+        Seq(Map(Row("a") -> Row("b"))),
+        Map(Row(Seq(Row("a"))) -> Row(Seq(Row("b")))),
+        Map(Seq(Row("a")) -> Seq(Row("b")))))
+      assert(df.schema.toArray === Array(
+        StructField("1000",
+          StructType(
+            StructField("123",
+              ArrayType(
                 MapType(
-                  ArrayType(StructType(StructField("456", StringType) :: Nil)),
-                  ArrayType(StructType(StructField("789", StringType) :: Nil)))) :: Nil)),
-          StructField(
-            "3000",
-            ArrayType(
-              StructType(
-                StructField(
-                  "123",
-                  MapType(
-                    StructType(StructField("456", StringType) :: Nil),
-                    StructType(StructField("789", StringType) :: Nil))) :: Nil))),
-          StructField(
-            "4000",
-            ArrayType(
+                  StructType(
+                    StructField("456", StringType) :: Nil),
+                  StructType(
+                    StructField("789", StringType) :: Nil)))) :: Nil)),
+        StructField("2000",
+          StructType(
+            StructField("123",
               MapType(
-                StructType(StructField("123", StringType) :: Nil),
-                StructType(StructField("456", StringType) :: Nil)))),
-          StructField(
-            "5000",
+                ArrayType(
+                  StructType(
+                    StructField("456", StringType) :: Nil)),
+                ArrayType(
+                  StructType(
+                    StructField("789", StringType) :: Nil)))) :: Nil)),
+        StructField("3000",
+          ArrayType(
+            StructType(
+              StructField("123",
+                MapType(
+                  StructType(
+                    StructField("456", StringType) :: Nil),
+                  StructType(
+                    StructField("789", StringType) :: Nil))) :: Nil))),
+        StructField("4000",
+          ArrayType(
             MapType(
               StructType(
-                StructField(
-                  "123",
-                  ArrayType(StructType(StructField("456", StringType) :: Nil))) :: Nil),
+                StructField("123", StringType) :: Nil),
               StructType(
-                StructField(
-                  "789",
-                  ArrayType(StructType(StructField("012", StringType) :: Nil))) :: Nil))),
-          StructField(
-            "6000",
-            MapType(
-              ArrayType(StructType(StructField("123", StringType) :: Nil)),
-              ArrayType(StructType(StructField("456", StringType) :: Nil))))))
+                StructField("456", StringType) :: Nil)))),
+        StructField("5000",
+          MapType(
+            StructType(
+              StructField("123",
+                ArrayType(
+                  StructType(
+                    StructField("456", StringType) :: Nil))) :: Nil),
+            StructType(
+              StructField("789",
+                ArrayType(
+                  StructType(
+                    StructField("012", StringType) :: Nil))) :: Nil))),
+        StructField("6000",
+          MapType(
+            ArrayType(
+              StructType(
+                StructField("123", StringType) :: Nil)),
+            ArrayType(
+              StructType(
+                StructField("456", StringType) :: Nil))))))
     }
   }
 
@@ -858,22 +853,23 @@ abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
             vecReaderNestedColEnabled.toString) {
           Seq(
             YearMonthIntervalType() -> ((i: Int) => Period.of(i, i, 0)),
-            DayTimeIntervalType() -> ((i: Int) => Duration.ofDays(i).plusSeconds(i))).foreach {
-            case (it, f) =>
-              val data = (1 to 10).map(i => Row(i, f(i)))
-              val schema = StructType(
-                Array(StructField("d", IntegerType, false), StructField("i", it, false)))
-              withTempPath { file =>
-                val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
-                df.write.orc(file.getCanonicalPath)
-                val df2 = spark.read.orc(file.getCanonicalPath)
-                checkAnswer(df2, df.collect().toSeq)
-              }
+            DayTimeIntervalType() -> ((i: Int) => Duration.ofDays(i).plusSeconds(i))
+          ).foreach { case (it, f) =>
+            val data = (1 to 10).map(i => Row(i, f(i)))
+            val schema = StructType(Array(StructField("d", IntegerType, false),
+              StructField("i", it, false)))
+            withTempPath { file =>
+              val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+              df.write.orc(file.getCanonicalPath)
+              val df2 = spark.read.orc(file.getCanonicalPath)
+              checkAnswer(df2, df.collect().toSeq)
+            }
           }
 
           // Tests for ANSI intervals in complex types.
           withTempPath { file =>
-            val df = spark.sql("""SELECT
+            val df = spark.sql(
+              """SELECT
                 |  named_struct('interval', interval '1-2' year to month) a,
                 |  array(interval '1 2:3' day to minute) b,
                 |  map('key', interval '10' year) c,
@@ -1011,7 +1007,8 @@ abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
         |    'a', 5,
         |    'b', 6))
         |tbl(c1)
-        |""".stripMargin)
+        |""".stripMargin
+    )
 
     queries.foreach { query =>
       withAllNativeOrcReaders {
@@ -1019,9 +1016,8 @@ abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
           // SPARK-37812 only applies to the configuration where
           // ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED is false. However, these
           // are good general correctness tests for the other configurations as well.
-          withSQLConf(
-            SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key ->
-              vecReaderNestedColEnabled.toString) {
+          withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key ->
+            vecReaderNestedColEnabled.toString) {
             withTempPath { file =>
               val df = sql(query)
               // use coalesce so we write just 1 file for the multi-row case
@@ -1038,12 +1034,14 @@ abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
 
 class OrcSourceV1Suite extends OrcSourceSuite {
   override protected def sparkConf: SparkConf =
-    super.sparkConf
+    super
+      .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "orc")
 }
 
 class OrcSourceV2Suite extends OrcSourceSuite {
   override protected def sparkConf: SparkConf =
-    super.sparkConf
+    super
+      .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
 }

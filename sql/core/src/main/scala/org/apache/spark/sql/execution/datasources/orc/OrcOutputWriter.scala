@@ -33,7 +33,7 @@ private[sql] class OrcOutputWriter(
     dataSchema: StructType,
     context: TaskAttemptContext,
     batchSize: Int)
-    extends OutputWriter {
+  extends OutputWriter {
 
   private[this] val serializer = new OrcSerializer(dataSchema)
 

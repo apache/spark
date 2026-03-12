@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.types.DoubleType
 
+
 class ProductAggSuite extends SparkFunSuite {
   val input = AttributeReference("product", DoubleType, nullable = true)()
   val evaluator = DeclarativeAggregateEvaluator(Product(input), Seq(input))
@@ -30,32 +31,48 @@ class ProductAggSuite extends SparkFunSuite {
   }
 
   test("update") {
-    val result =
-      evaluator.update(InternalRow(-2.0), InternalRow(3.0), InternalRow(-5.0), InternalRow(7.0))
+    val result = evaluator.update(
+      InternalRow(-2.0),
+      InternalRow(3.0),
+      InternalRow(-5.0),
+      InternalRow(7.0))
     assert(result === InternalRow(210.0))
   }
 
   test("update - with nulls") {
-    val result1 =
-      evaluator.update(InternalRow(null), InternalRow(11.0), InternalRow(null), InternalRow(13.0))
+    val result1 = evaluator.update(
+      InternalRow(null),
+      InternalRow(11.0),
+      InternalRow(null),
+      InternalRow(13.0))
     assert(result1 === InternalRow(143.0))
 
-    val result2 = evaluator.update(InternalRow(null), InternalRow(null))
+    val result2 = evaluator.update(
+      InternalRow(null),
+      InternalRow(null))
     assert(result2 === InternalRow(null))
   }
 
   test("update - with specials") {
-    val result1 = evaluator.update(InternalRow(Double.NaN), InternalRow(2.0))
+    val result1 = evaluator.update(
+      InternalRow(Double.NaN),
+      InternalRow(2.0))
     assert(result1 === InternalRow(Double.NaN))
 
-    val result2 = evaluator.update(InternalRow(3.0), InternalRow(Double.PositiveInfinity))
+    val result2 = evaluator.update(
+      InternalRow(3.0),
+      InternalRow(Double.PositiveInfinity))
     assert(result2 === InternalRow(Double.PositiveInfinity))
 
-    val result3 = evaluator.update(InternalRow(Double.NegativeInfinity), InternalRow(5.0))
+    val result3 = evaluator.update(
+      InternalRow(Double.NegativeInfinity),
+      InternalRow(5.0))
     assert(result3 === InternalRow(Double.NegativeInfinity))
 
-    val result4 =
-      evaluator.update(InternalRow(7.0), InternalRow(Double.PositiveInfinity), InternalRow(null))
+    val result4 = evaluator.update(
+      InternalRow(7.0),
+      InternalRow(Double.PositiveInfinity),
+      InternalRow(null))
     assert(result4 === InternalRow(Double.PositiveInfinity))
 
     val result5 = evaluator.update(

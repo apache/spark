@@ -34,8 +34,8 @@ class ExpressionSetSuite extends SparkFunSuite {
 
   // An [AttributeReference] with almost the maximum hashcode, to make testing canonicalize rules
   // like `case GreaterThan(l, r) if l.hashcode > r.hashcode => GreaterThan(r, l)` easier
-  val maxHash =
-    AttributeReference("none", IntegerType)(exprId = new ExprId(4, NamedExpression.jvmId) {
+  val maxHash = AttributeReference("none", IntegerType)(exprId =
+    new ExprId(4, NamedExpression.jvmId) {
       // This `hashCode` is carefully picked to make `maxHash.hashCode` becomes `Int.MaxValue`.
       override def hashCode: Int = 1394598635
       // We are implementing this equals() only because the style-checking rule "you should
@@ -46,8 +46,8 @@ class ExpressionSetSuite extends SparkFunSuite {
 
   // An [AttributeReference] with almost the minimum hashcode, to make testing canonicalize rules
   // like `case GreaterThan(l, r) if l.hashcode > r.hashcode => GreaterThan(r, l)` easier
-  val minHash =
-    AttributeReference("none", IntegerType)(exprId = new ExprId(5, NamedExpression.jvmId) {
+  val minHash = AttributeReference("none", IntegerType)(exprId =
+    new ExprId(5, NamedExpression.jvmId) {
       // This `hashCode` is carefully picked to make `minHash.hashCode` becomes `Int.MinValue`.
       override def hashCode: Int = -462684520
       // We are implementing this equals() only because the style-checking rule "you should
@@ -76,14 +76,12 @@ class ExpressionSetSuite extends SparkFunSuite {
 
   setTest(1, aUpper + aLower, aLower + aUpper)
   setTest(1, aUpper + bUpper, bUpper + aUpper)
-  setTest(
-    1,
+  setTest(1,
     aUpper + bUpper + 3,
     bUpper + 3 + aUpper,
     bUpper + aUpper + 3,
     Literal(3) + aUpper + bUpper)
-  setTest(
-    1,
+  setTest(1,
     aUpper * bUpper * 3,
     bUpper * 3 * aUpper,
     bUpper * aUpper * 3,
@@ -91,6 +89,7 @@ class ExpressionSetSuite extends SparkFunSuite {
   setTest(1, aUpper === bUpper, bUpper === aUpper)
 
   setTest(1, aUpper + 1 === bUpper, bUpper === Literal(1) + aUpper)
+
 
   // Not commutative
   setTest(2, aUpper - bUpper, bUpper - aUpper)
@@ -111,24 +110,20 @@ class ExpressionSetSuite extends SparkFunSuite {
 
   // Reordering AND/OR expressions
   setTest(1, aUpper > bUpper && aUpper <= 10, aUpper <= 10 && aUpper > bUpper)
-  setTest(
-    1,
+  setTest(1,
     aUpper > bUpper && bUpper > 100 && aUpper <= 10,
     bUpper > 100 && aUpper <= 10 && aUpper > bUpper)
 
   setTest(1, aUpper > bUpper || aUpper <= 10, aUpper <= 10 || aUpper > bUpper)
-  setTest(
-    1,
+  setTest(1,
     aUpper > bUpper || bUpper > 100 || aUpper <= 10,
     bUpper > 100 || aUpper <= 10 || aUpper > bUpper)
 
-  setTest(
-    1,
+  setTest(1,
     (aUpper <= 10 && aUpper > bUpper) || bUpper > 100,
     bUpper > 100 || (aUpper <= 10 && aUpper > bUpper))
 
-  setTest(
-    1,
+  setTest(1,
     aUpper >= bUpper || (aUpper > 10 && bUpper < 10),
     (bUpper < 10 && aUpper > 10) || aUpper >= bUpper)
 
@@ -138,8 +133,7 @@ class ExpressionSetSuite extends SparkFunSuite {
   //   (aUpper < 100 && bUpper <= aUpper)
   //   (aUpper >= 10 && bUpper >= 50)
   // They can be reordered and the sub-predicates contained in each of them can be reordered too.
-  setTest(
-    1,
+  setTest(1,
     (bUpper > 100) || (aUpper < 100 && bUpper <= aUpper) || (aUpper >= 10 && bUpper >= 50),
     (aUpper >= 10 && bUpper >= 50) || (bUpper > 100) || (aUpper < 100 && bUpper <= aUpper),
     (bUpper >= 50 && aUpper >= 10) || (bUpper <= aUpper && aUpper < 100) || (bUpper > 100))
@@ -147,8 +141,7 @@ class ExpressionSetSuite extends SparkFunSuite {
   // Two predicates in the following:
   //   (bUpper > 100 && aUpper < 100 && bUpper <= aUpper)
   //   (aUpper >= 10 && bUpper >= 50)
-  setTest(
-    1,
+  setTest(1,
     (bUpper > 100 && aUpper < 100 && bUpper <= aUpper) || (aUpper >= 10 && bUpper >= 50),
     (aUpper >= 10 && bUpper >= 50) || (aUpper < 100 && bUpper > 100 && bUpper <= aUpper),
     (bUpper >= 50 && aUpper >= 10) || (bUpper <= aUpper && aUpper < 100 && bUpper > 100))
@@ -157,8 +150,7 @@ class ExpressionSetSuite extends SparkFunSuite {
   //   (aUpper >= 10)
   //   (bUpper <= 10 && aUpper === bUpper && aUpper < 100)
   //   (bUpper >= 100)
-  setTest(
-    1,
+  setTest(1,
     (aUpper >= 10) || (bUpper <= 10 && aUpper === bUpper && aUpper < 100) || (bUpper >= 100),
     (aUpper === bUpper && aUpper < 100 && bUpper <= 10) || (bUpper >= 100) || (aUpper >= 10),
     (aUpper < 100 && bUpper <= 10 && aUpper === bUpper) || (aUpper >= 10) || (bUpper >= 100),
@@ -166,34 +158,29 @@ class ExpressionSetSuite extends SparkFunSuite {
 
   // Don't reorder non-deterministic expression in AND/OR.
   setTest(2, Rand(1L) > aUpper && aUpper <= 10, aUpper <= 10 && Rand(1L) > aUpper)
-  setTest(
-    2,
+  setTest(2,
     aUpper > bUpper && bUpper > 100 && Rand(1L) > aUpper,
     bUpper > 100 && Rand(1L) > aUpper && aUpper > bUpper)
 
   setTest(2, Rand(1L) > aUpper || aUpper <= 10, aUpper <= 10 || Rand(1L) > aUpper)
-  setTest(
-    2,
+  setTest(2,
     aUpper > bUpper || aUpper <= Rand(1L) || aUpper <= 10,
     aUpper <= Rand(1L) || aUpper <= 10 || aUpper > bUpper)
 
   // Keep all the non-deterministic expressions even they are semantically equal.
   setTest(2, Rand(1L), Rand(1L))
 
-  setTest(
-    2,
+  setTest(2,
     (aUpper > bUpper || bUpper > 100) && aUpper === Rand(1L),
     (bUpper > 100 || aUpper > bUpper) && aUpper === Rand(1L))
 
-  setTest(
-    2,
+  setTest(2,
     Rand(1L) > aUpper || (aUpper <= Rand(1L) && aUpper > bUpper) || (aUpper > 10 && bUpper > 10),
     Rand(1L) > aUpper || (aUpper <= Rand(1L) && aUpper > bUpper) || (bUpper > 10 && aUpper > 10))
 
   // Same predicates as above, but a negative case when we reorder non-deterministic
   // expression in (aUpper <= Rand(1L) && aUpper > bUpper).
-  setTest(
-    2,
+  setTest(2,
     Rand(1L) > aUpper || (aUpper <= Rand(1L) && aUpper > bUpper) || (aUpper > 10 && bUpper > 10),
     Rand(1L) > aUpper || (aUpper > bUpper && aUpper <= Rand(1L)) || (aUpper > 10 && bUpper > 10))
 
@@ -256,13 +243,11 @@ class ExpressionSetSuite extends SparkFunSuite {
   test("simpleString limits the number of expressions recursively") {
     val expressionSet =
       ExpressionSet(InSet(aUpper, Set(0, 1)) :: Rand(1) :: Rand(2) :: Rand(3) :: Nil)
-    assert(
-      expressionSet.simpleString(1) ==
-        "Set(A#1 INSET 0, ... 1 more fields, ... 3 more fields)")
+    assert(expressionSet.simpleString(1) ==
+      "Set(A#1 INSET 0, ... 1 more fields, ... 3 more fields)")
     assert(expressionSet.simpleString(2) == "Set(A#1 INSET 0, 1, rand(1), ... 2 more fields)")
-    assert(
-      expressionSet.simpleString(3) ==
-        "Set(A#1 INSET 0, 1, rand(1), rand(2), ... 1 more fields)")
+    assert(expressionSet.simpleString(3) ==
+      "Set(A#1 INSET 0, 1, rand(1), rand(2), ... 1 more fields)")
     assert(expressionSet.simpleString(4) == expressionSet.toString)
 
     // Only one expression, but the simple string for this expression must be truncated.

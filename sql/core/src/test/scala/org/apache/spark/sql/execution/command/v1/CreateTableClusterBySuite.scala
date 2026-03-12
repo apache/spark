@@ -31,8 +31,7 @@ import org.apache.spark.sql.execution.command
  *   - V1 Hive External catalog:
  *     `org.apache.spark.sql.hive.execution.command.CreateTableClusterBySuite`
  */
-trait CreateTableClusterBySuiteBase
-    extends command.CreateTableClusterBySuiteBase
+trait CreateTableClusterBySuiteBase extends command.CreateTableClusterBySuiteBase
     with command.TestsV1AndV2Commands {
   override def validateClusterBy(tableName: String, clusteringColumns: Seq[String]): Unit = {
     val catalog = spark.sessionState.catalog
@@ -46,6 +45,7 @@ trait CreateTableClusterBySuiteBase
  * The class contains tests for the `CREATE TABLE ... CLUSTER BY` command to check V1 In-Memory
  * table catalog.
  */
-class CreateTableClusterBySuite extends CreateTableClusterBySuiteBase with CommandSuiteBase {
+class CreateTableClusterBySuite extends CreateTableClusterBySuiteBase
+    with CommandSuiteBase {
   override def commandVersion: String = super[CreateTableClusterBySuiteBase].commandVersion
 }

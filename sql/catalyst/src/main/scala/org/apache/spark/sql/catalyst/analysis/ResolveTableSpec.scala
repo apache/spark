@@ -66,25 +66,24 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
         case (key: String, null) =>
           (key, null)
         case (key: String, value: Expression) =>
-          val newValue: String =
-            try {
-              val dt = value.dataType
-              value match {
-                case Literal(null, _) =>
-                  null
-                case _
-                    if dt.isInstanceOf[ArrayType] ||
-                      dt.isInstanceOf[StructType] ||
-                      dt.isInstanceOf[MapType] =>
-                  throw QueryCompilationErrors.optionMustBeConstant(key)
-                case _ =>
-                  val result = value.eval()
-                  Literal(result, dt).toString
-              }
-            } catch {
-              case e @ (_: SparkThrowable | _: java.lang.RuntimeException) =>
-                throw QueryCompilationErrors.optionMustBeConstant(key, Some(e))
+          val newValue: String = try {
+            val dt = value.dataType
+            value match {
+              case Literal(null, _) =>
+                null
+              case _
+                if dt.isInstanceOf[ArrayType] ||
+                  dt.isInstanceOf[StructType] ||
+                  dt.isInstanceOf[MapType] =>
+                throw QueryCompilationErrors.optionMustBeConstant(key)
+              case _ =>
+                val result = value.eval()
+                Literal(result, dt).toString
             }
+          } catch {
+            case e @ (_: SparkThrowable | _: java.lang.RuntimeException) =>
+              throw QueryCompilationErrors.optionMustBeConstant(key, Some(e))
+          }
           (key, newValue)
       }
 
@@ -93,7 +92,8 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
           if (!check.child.deterministic) {
             check.child.failAnalysis(
               errorClass = "NON_DETERMINISTIC_CHECK_CONSTRAINT",
-              messageParameters = Map("checkCondition" -> check.condition))
+              messageParameters = Map("checkCondition" -> check.condition)
+            )
           }
         case _ =>
       }

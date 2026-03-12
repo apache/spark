@@ -82,12 +82,12 @@ trait BaseAggregateExec extends UnaryExecNode with PartitioningPreservingUnaryEx
 
   override def producedAttributes: AttributeSet =
     AttributeSet(aggregateAttributes) ++
-      AttributeSet(resultExpressions.diff(groupingExpressions).map(_.toAttribute)) ++
-      AttributeSet(aggregateBufferAttributes) ++
-      // it's not empty when the inputAggBufferAttributes is not equal to the aggregate buffer
-      // attributes of the child Aggregate, when the child Aggregate contains the subquery in
-      // AggregateFunction. See SPARK-31620 for more details.
-      AttributeSet(inputAggBufferAttributes.filterNot(child.output.contains))
+    AttributeSet(resultExpressions.diff(groupingExpressions).map(_.toAttribute)) ++
+    AttributeSet(aggregateBufferAttributes) ++
+    // it's not empty when the inputAggBufferAttributes is not equal to the aggregate buffer
+    // attributes of the child Aggregate, when the child Aggregate contains the subquery in
+    // AggregateFunction. See SPARK-31620 for more details.
+    AttributeSet(inputAggBufferAttributes.filterNot(child.output.contains))
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
@@ -100,12 +100,12 @@ trait BaseAggregateExec extends UnaryExecNode with PartitioningPreservingUnaryEx
         if (isStreaming) {
           numShufflePartitions match {
             case Some(parts) =>
-              StatefulOperatorPartitioning.getCompatibleDistribution(exprs, parts, conf) :: Nil
+              StatefulOperatorPartitioning.getCompatibleDistribution(
+                exprs, parts, conf) :: Nil
 
-            case _ =>
-              throw SparkException.internalError(
-                "Expected to set the number of partitions before " +
-                  "constructing required child distribution!")
+            case _ => throw SparkException.internalError(
+              "Expected to set the number of partitions before " +
+              "constructing required child distribution!")
           }
         } else {
           ClusteredDistribution(exprs) :: Nil
@@ -119,14 +119,8 @@ trait BaseAggregateExec extends UnaryExecNode with PartitioningPreservingUnaryEx
    */
   def toSortAggregate: SortAggregateExec = {
     SortAggregateExec(
-      requiredChildDistributionExpressions,
-      isStreaming,
-      numShufflePartitions,
-      groupingExpressions,
-      aggregateExpressions,
-      aggregateAttributes,
-      initialInputBufferOffset,
-      resultExpressions,
+      requiredChildDistributionExpressions, isStreaming, numShufflePartitions, groupingExpressions,
+      aggregateExpressions, aggregateAttributes, initialInputBufferOffset, resultExpressions,
       child)
   }
 }

@@ -61,7 +61,8 @@ class AnalysisConfOverrideSuite extends SharedSparkSession {
 
   testOverride("CTE") { case (key, value) =>
     ValidateConfOverrideRule.withConfValidationEnabled(key, value) {
-      spark.sql("""WITH cte AS (SELECT * FROM TaBlE)
+      spark.sql(
+        """WITH cte AS (SELECT * FROM TaBlE)
           |SELECT * FROM cte
           |""".stripMargin)
     }
@@ -69,7 +70,8 @@ class AnalysisConfOverrideSuite extends SharedSparkSession {
 
   testOverride("Subquery") { case (key, value) =>
     ValidateConfOverrideRule.withConfValidationEnabled(key, value) {
-      spark.sql("""
+      spark.sql(
+        """
           |SELECT * FROM TaBlE WHERE a in (SELECT a FROM table2)
           |""".stripMargin)
     }
@@ -80,9 +82,8 @@ class AnalysisConfOverrideSuite extends SharedSparkSession {
       spark.sql("CREATE TABLE test_table AS SELECT id as a FROM range(10)")
       spark.sql("CREATE TABLE test_table2 AS SELECT id as a, (id + 1) as b FROM range(10)")
       withView("test_view") {
-        spark.sql(
-          "CREATE VIEW test_view AS " +
-            "SELECT * FROM test_table WHERE a in (SELECT a FROM test_table2)")
+        spark.sql("CREATE VIEW test_view AS " +
+          "SELECT * FROM test_table WHERE a in (SELECT a FROM test_table2)")
 
         ValidateConfOverrideRule.withConfValidationEnabled(key, value) {
           spark.sql("SELECT * FROM test_view")
@@ -96,15 +97,21 @@ class AnalysisConfOverrideSuite extends SharedSparkSession {
       spark.sql("CREATE TABLE test_table AS SELECT id as a FROM range(10)")
       spark.sql("CREATE TABLE test_table2 AS SELECT id as a, (id + 1) as b FROM range(10)")
       withUserDefinedFunction("f1" -> true, "f2" -> false, "f3" -> false) {
-        spark.sql("""CREATE OR REPLACE TEMPORARY FUNCTION f1() RETURNS TABLE (a bigint)
+        spark.sql(
+          """CREATE OR REPLACE TEMPORARY FUNCTION f1() RETURNS TABLE (a bigint)
             |RETURN SELECT * FROM test_table WHERE a in (SELECT a FROM test_table2)
-            |""".stripMargin)
-        spark.sql("""CREATE OR REPLACE FUNCTION f2() RETURNS TABLE (a bigint)
+            |""".stripMargin
+        )
+        spark.sql(
+          """CREATE OR REPLACE FUNCTION f2() RETURNS TABLE (a bigint)
             |RETURN SELECT * FROM test_table WHERE a in (SELECT a FROM test_table2)
-            |""".stripMargin)
-        spark.sql("""CREATE OR REPLACE FUNCTION f3(in bigint) RETURNS bigint
+            |""".stripMargin
+        )
+        spark.sql(
+          """CREATE OR REPLACE FUNCTION f3(in bigint) RETURNS bigint
             |RETURN in + 1
-            |""".stripMargin)
+            |""".stripMargin
+        )
 
         ("SELECT * FROM f1()" :: "SELECT * FROM f2()" :: "SELECT f3(1)" :: Nil).foreach { query =>
           ValidateConfOverrideRule.withConfValidationEnabled(key, value) {
@@ -122,26 +129,31 @@ class AnalysisConfOverrideSuite extends SharedSparkSession {
       // turn the flag off to maintain former behavior
       withSQLConf("spark.sql.analyzer.sqlFunctionResolution.applyConfOverrides" -> "false") {
         withUserDefinedFunction("f1" -> true, "f2" -> false, "f3" -> false) {
-          spark.sql("""CREATE OR REPLACE TEMPORARY FUNCTION f1() RETURNS TABLE (a bigint)
+          spark.sql(
+            """CREATE OR REPLACE TEMPORARY FUNCTION f1() RETURNS TABLE (a bigint)
               |RETURN SELECT * FROM test_table WHERE a in (SELECT a FROM test_table2)
-              |""".stripMargin)
-          spark.sql("""CREATE OR REPLACE FUNCTION f2() RETURNS TABLE (a bigint)
+              |""".stripMargin
+          )
+          spark.sql(
+            """CREATE OR REPLACE FUNCTION f2() RETURNS TABLE (a bigint)
               |RETURN SELECT * FROM test_table WHERE a in (SELECT a FROM test_table2)
-              |""".stripMargin)
-          spark.sql("""CREATE OR REPLACE FUNCTION f3(in bigint) RETURNS bigint
+              |""".stripMargin
+          )
+          spark.sql(
+            """CREATE OR REPLACE FUNCTION f3(in bigint) RETURNS bigint
               |RETURN in + 1
-              |""".stripMargin)
+              |""".stripMargin
+          )
 
-          ("SELECT * FROM f1()" :: "SELECT * FROM f2()" :: "SELECT f3(1)" :: Nil).foreach {
-            query =>
-              checkError(
-                exception = intercept[SparkNoSuchElementException] {
-                  ValidateConfOverrideRule.withConfValidationEnabled(key, value) {
-                    spark.sql(query)
-                  }
-                },
-                condition = "SQL_CONF_NOT_FOUND",
-                parameters = Map("sqlConf" -> "\"spark.sql.catalog.x.y\""))
+          ("SELECT * FROM f1()" :: "SELECT * FROM f2()" :: "SELECT f3(1)" :: Nil).foreach { query =>
+            checkError(
+              exception = intercept[SparkNoSuchElementException] {
+                ValidateConfOverrideRule.withConfValidationEnabled(key, value) {
+                  spark.sql(query)
+                }
+              },
+              condition = "SQL_CONF_NOT_FOUND",
+              parameters = Map("sqlConf" -> "\"spark.sql.catalog.x.y\""))
           }
         }
       }
@@ -169,7 +181,8 @@ object ValidateConfOverrideRule {
 class ValidateConfOverrideRule extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     ValidateConfOverrideRule.confToCheck.foreach { case (k, v) =>
-      assert(conf.getConfString(k) == v, s"The feature wasn't enabled within plan:\n$plan")
+      assert(conf.getConfString(k) == v,
+        s"The feature wasn't enabled within plan:\n$plan")
       ValidateConfOverrideRule.isCalled = true
     }
     plan

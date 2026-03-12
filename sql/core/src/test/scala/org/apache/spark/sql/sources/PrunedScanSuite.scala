@@ -32,15 +32,15 @@ class PrunedScanSource extends RelationProvider {
 }
 
 case class SimplePrunedScan(from: Int, to: Int)(@transient val sparkSession: SparkSession)
-    extends BaseRelation
-    with PrunedScan {
+  extends BaseRelation
+  with PrunedScan {
 
   override def sqlContext: SQLContext = sparkSession.sqlContext
 
   override def schema: StructType =
     StructType(
       StructField("a", IntegerType, nullable = false) ::
-        StructField("b", IntegerType, nullable = false) :: Nil)
+      StructField("b", IntegerType, nullable = false) :: Nil)
 
   override def buildScan(requiredColumns: Array[String]): RDD[Row] = {
     val rowBuilders = requiredColumns.map {
@@ -48,9 +48,8 @@ case class SimplePrunedScan(from: Int, to: Int)(@transient val sparkSession: Spa
       case "b" => (i: Int) => Seq(i * 2)
     }
 
-    sparkSession.sparkContext
-      .parallelize(from to to)
-      .map(i => Row.fromSeq(rowBuilders.map(_(i)).reduceOption(_ ++ _).getOrElse(Seq.empty)))
+    sparkSession.sparkContext.parallelize(from to to).map(i =>
+      Row.fromSeq(rowBuilders.map(_(i)).reduceOption(_ ++ _).getOrElse(Seq.empty)))
   }
 }
 
@@ -59,7 +58,8 @@ class PrunedScanSuite extends DataSourceTest with SharedSparkSession {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    sql("""
+    sql(
+      """
         |CREATE TEMPORARY VIEW oneToTenPruned
         |USING org.apache.spark.sql.sources.PrunedScanSource
         |OPTIONS (
@@ -69,21 +69,37 @@ class PrunedScanSuite extends DataSourceTest with SharedSparkSession {
       """.stripMargin)
   }
 
-  sqlTest("SELECT * FROM oneToTenPruned", (1 to 10).map(i => Row(i, i * 2)).toSeq)
+  sqlTest(
+    "SELECT * FROM oneToTenPruned",
+    (1 to 10).map(i => Row(i, i * 2)).toSeq)
 
-  sqlTest("SELECT a, b FROM oneToTenPruned", (1 to 10).map(i => Row(i, i * 2)).toSeq)
+  sqlTest(
+    "SELECT a, b FROM oneToTenPruned",
+    (1 to 10).map(i => Row(i, i * 2)).toSeq)
 
-  sqlTest("SELECT b, a FROM oneToTenPruned", (1 to 10).map(i => Row(i * 2, i)).toSeq)
+  sqlTest(
+    "SELECT b, a FROM oneToTenPruned",
+    (1 to 10).map(i => Row(i * 2, i)).toSeq)
 
-  sqlTest("SELECT a FROM oneToTenPruned", (1 to 10).map(i => Row(i)).toSeq)
+  sqlTest(
+    "SELECT a FROM oneToTenPruned",
+    (1 to 10).map(i => Row(i)).toSeq)
 
-  sqlTest("SELECT a, a FROM oneToTenPruned", (1 to 10).map(i => Row(i, i)).toSeq)
+  sqlTest(
+    "SELECT a, a FROM oneToTenPruned",
+    (1 to 10).map(i => Row(i, i)).toSeq)
 
-  sqlTest("SELECT b FROM oneToTenPruned", (1 to 10).map(i => Row(i * 2)).toSeq)
+  sqlTest(
+    "SELECT b FROM oneToTenPruned",
+    (1 to 10).map(i => Row(i * 2)).toSeq)
 
-  sqlTest("SELECT a * 2 FROM oneToTenPruned", (1 to 10).map(i => Row(i * 2)).toSeq)
+  sqlTest(
+    "SELECT a * 2 FROM oneToTenPruned",
+    (1 to 10).map(i => Row(i * 2)).toSeq)
 
-  sqlTest("SELECT A AS b FROM oneToTenPruned", (1 to 10).map(i => Row(i)).toSeq)
+  sqlTest(
+    "SELECT A AS b FROM oneToTenPruned",
+    (1 to 10).map(i => Row(i)).toSeq)
 
   sqlTest(
     "SELECT x.b, y.a FROM oneToTenPruned x JOIN oneToTenPruned y ON x.a = y.b",
@@ -131,10 +147,10 @@ class PrunedScanSuite extends DataSourceTest with SharedSparkSession {
           fail(s"Wrong output row. Got $rawOutput\n$queryExecution")
         }
       } finally {
-        spark.conf.set(
-          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key,
+        spark.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key,
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.defaultValue.get)
       }
     }
   }
 }
+

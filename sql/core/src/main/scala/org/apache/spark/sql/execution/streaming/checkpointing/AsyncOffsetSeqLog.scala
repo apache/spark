@@ -37,7 +37,7 @@ class AsyncOffsetSeqLog(
     executorService: ThreadPoolExecutor,
     offsetCommitIntervalMs: Long,
     clock: Clock = new SystemClock())
-    extends OffsetSeqLog(sparkSession, path) {
+  extends OffsetSeqLog(sparkSession, path) {
 
   // the cache needs to be enabled because we may not be persisting every entry to durable storage
   // entries not persisted to durable storage will just be stored in memory for faster lookups
@@ -56,11 +56,10 @@ class AsyncOffsetSeqLog(
     new ConcurrentLinkedDeque[Long](listBatchesOnDisk.toList.asJavaCollection)
 
   /**
-   * Get a async offset write by batch id. To check if a corresponding commit log entry needs to
-   * be written to durable storage as well
+   * Get a async offset write by batch id.  To check if a corresponding commit log entry
+   * needs to be written to durable storage as well
    * @param batchId
-   * @return
-   *   a option to indicate whether a async offset write was issued for the batch with id
+   * @return a option to indicate whether a async offset write was issued for the batch with id
    */
   def getAsyncOffsetWrite(batchId: Long): Option[CompletableFuture[Long]] = {
     Option(pendingOffsetWrites.get(batchId))
@@ -76,14 +75,11 @@ class AsyncOffsetSeqLog(
 
   /**
    * Writes a new batch to the offset log asynchronously
-   * @param batchId
-   *   id of batch to write
-   * @param metadata
-   *   metadata of batch to write
-   * @return
-   *   a CompeletableFuture that contains the batch id. The future is completed when the async
-   *   write of the batch is completed. Future may also be completed exceptionally to indicate
-   *   some write error.
+   * @param batchId id of batch to write
+   * @param metadata metadata of batch to write
+   * @return a CompeletableFuture that contains the batch id.  The future is completed when
+   *         the async write of the batch is completed.  Future may also be completed exceptionally
+   *         to indicate some write error.
    */
   def addAsync(batchId: Long, metadata: OffsetSeqBase): CompletableFuture[(Long, Boolean)] = {
     require(metadata != null, "'null' metadata cannot written to a metadata log")
@@ -129,13 +125,11 @@ class AsyncOffsetSeqLog(
 
   /**
    * Adds new batch asynchronously
-   * @param batchId
-   *   id of batch to write
-   * @param fn
-   *   serialization function
-   * @return
-   *   CompletableFuture that contains a boolean do indicate whether the write was successfully or
-   *   not. Future can also be completed exceptionally to indicate write errors.
+   * @param batchId id of batch to write
+   * @param fn serialization function
+   * @return CompletableFuture that contains a boolean do
+   *         indicate whether the write was successfully or not.
+   *         Future can also be completed exceptionally to indicate write errors.
    */
   private def addNewBatchByStreamAsync(batchId: Long)(
       fn: OutputStream => Unit): CompletableFuture[Boolean] = {
@@ -153,19 +147,21 @@ class AsyncOffsetSeqLog(
               future.complete(false)
             } else {
               val start = System.currentTimeMillis()
-              write(batchMetadataFile, fn)
+              write(
+                batchMetadataFile,
+                fn
+              )
               logDebug(
                 s"Offset commit for batch ${batchId} took" +
-                  s" ${System.currentTimeMillis() - start} ms to be persisted to durable storage")
+                s" ${System.currentTimeMillis() - start} ms to be persisted to durable storage"
+              )
               writtenToDurableStorage.add(batchId)
               future.complete(true)
             }
           } catch {
             case e: Throwable =>
-              logError(
-                log"Encountered error while writing batch " +
-                  log"${MDC(LogKeys.BATCH_ID, batchId)} to offset log",
-                e)
+              logError(log"Encountered error while writing batch " +
+                log"${MDC(LogKeys.BATCH_ID, batchId)} to offset log", e)
               future.completeExceptionally(e)
           }
         }

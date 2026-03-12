@@ -23,9 +23,9 @@ import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * This base suite contains unified tests for the `ALTER NAMESPACE ... SET PROPERTIES` command
- * that check V1 and V2 table catalogs. The tests that cannot run for all supported catalogs are
- * located in more specific test suites:
+ * This base suite contains unified tests for the `ALTER NAMESPACE ... SET PROPERTIES` command that
+ * check V1 and V2 table catalogs. The tests that cannot run for all supported catalogs are located
+ * in more specific test suites:
  *
  *   - V2 table catalog tests:
  *     `org.apache.spark.sql.execution.command.v2.AlterNamespaceSetPropertiesSuite`
@@ -34,7 +34,7 @@ import org.apache.spark.sql.internal.SQLConf
  *     - V1 In-Memory catalog:
  *       `org.apache.spark.sql.execution.command.v1.AlterNamespaceSetPropertiesSuite`
  *     - V1 Hive External catalog:
- *       `org.apache.spark.sql.hive.execution.command.AlterNamespaceSetPropertiesSuite`
+ *        `org.apache.spark.sql.hive.execution.command.AlterNamespaceSetPropertiesSuite`
  */
 trait AlterNamespaceSetPropertiesSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "ALTER NAMESPACE ... SET PROPERTIES"
@@ -48,8 +48,7 @@ trait AlterNamespaceSetPropertiesSuiteBase extends QueryTest with DDLCommandTest
     val e = intercept[AnalysisException] {
       sql(s"ALTER DATABASE $catalog.$ns SET PROPERTIES ('d'='d')")
     }
-    checkError(
-      e,
+    checkError(e,
       condition = "SCHEMA_NOT_FOUND",
       parameters = Map("schemaName" -> s"`$catalog`.`$ns`"))
   }
@@ -92,31 +91,30 @@ trait AlterNamespaceSetPropertiesSuiteBase extends QueryTest with DDLCommandTest
             condition = "UNSUPPORTED_FEATURE.SET_NAMESPACE_PROPERTY",
             parameters = Map("property" -> key, "msg" -> ".*"),
             sqlState = None,
-            context =
-              ExpectedContext(fragment = sqlText, start = 0, stop = 46 + ns.length + key.length))
+            context = ExpectedContext(
+              fragment = sqlText,
+              start = 0,
+              stop = 46 + ns.length + key.length)
+          )
         }
       }
     }
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "true")) {
       CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES
-        .filterNot(prop => prop == PROP_COLLATION || prop == PROP_COMMENT)
-        .foreach { key =>
-          withNamespace(ns) {
-            // Set the location explicitly because v2 catalog may not set the default location.
-            // Without this, `meta.get(key)` below may return null.
-            sql(s"CREATE NAMESPACE $ns LOCATION 'tmp/prop_test'")
-            assert(getProperties(ns) === "")
-            sql(s"ALTER NAMESPACE $ns SET PROPERTIES ('$key'='foo')")
-            assert(getProperties(ns) === "", s"$key is a reserved namespace property and ignored")
-            val meta = spark.sessionState.catalogManager
-              .catalog(catalog)
-              .asNamespaceCatalog
-              .loadNamespaceMetadata(namespace.split('.'))
-            assert(
-              !meta.get(key).contains("foo"),
-              "reserved properties should not have side effects")
-          }
+        .filterNot(prop => prop == PROP_COLLATION || prop == PROP_COMMENT).foreach { key =>
+        withNamespace(ns) {
+          // Set the location explicitly because v2 catalog may not set the default location.
+          // Without this, `meta.get(key)` below may return null.
+          sql(s"CREATE NAMESPACE $ns LOCATION 'tmp/prop_test'")
+          assert(getProperties(ns) === "")
+          sql(s"ALTER NAMESPACE $ns SET PROPERTIES ('$key'='foo')")
+          assert(getProperties(ns) === "", s"$key is a reserved namespace property and ignored")
+          val meta = spark.sessionState.catalogManager.catalog(catalog)
+            .asNamespaceCatalog.loadNamespaceMetadata(namespace.split('.'))
+          assert(!meta.get(key).contains("foo"),
+            "reserved properties should not have side effects")
         }
+      }
     }
   }
 

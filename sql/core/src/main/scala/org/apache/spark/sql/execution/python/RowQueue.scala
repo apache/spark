@@ -43,13 +43,13 @@ trait RowQueue extends Queue[UnsafeRow]
  * A RowQueue that is based on in-memory page. UnsafeRows are appended into it until it's full.
  * Another thread could read from it at the same time (behind the writer).
  *
- * The format of UnsafeRow in page: [4 bytes to hold length of record (N)] [N bytes to hold
- * record] [...]
+ * The format of UnsafeRow in page:
+ * [4 bytes to hold length of record (N)] [N bytes to hold record] [...]
  *
  * -1 length means end of page.
  */
 private[python] abstract class InMemoryRowQueue(val page: MemoryBlock, numFields: Int)
-    extends RowQueue {
+  extends RowQueue {
   private val base: AnyRef = page.getBaseObject
   private val endOfPage: Long = page.getBaseOffset + page.size
   // the first location where a new row would be written
@@ -92,11 +92,13 @@ private[python] abstract class InMemoryRowQueue(val page: MemoryBlock, numFields
  * A RowQueue that is backed by a file on disk. This queue will stop accepting new rows once any
  * reader has begun reading from the queue.
  */
-private[python] case class DiskRowQueue(file: File, fields: Int, serMgr: SerializerManager)
-    extends RowQueue {
+private[python] case class DiskRowQueue(
+    file: File,
+    fields: Int,
+    serMgr: SerializerManager) extends RowQueue {
 
-  private var out = new DataOutputStream(
-    serMgr.wrapForEncryption(new BufferedOutputStream(new FileOutputStream(file.toString))))
+  private var out = new DataOutputStream(serMgr.wrapForEncryption(
+    new BufferedOutputStream(new FileOutputStream(file.toString))))
   private var unreadBytes = 0L
 
   private var in: DataInputStream = _
@@ -117,7 +119,8 @@ private[python] case class DiskRowQueue(file: File, fields: Int, serMgr: Seriali
     if (out != null) {
       out.close()
       out = null
-      in = new DataInputStream(serMgr.wrapForEncryption(new NioBufferedFileInputStream(file)))
+      in = new DataInputStream(serMgr.wrapForEncryption(
+        new NioBufferedFileInputStream(file)))
     }
 
     if (unreadBytes > 0) {
@@ -154,7 +157,7 @@ case class HybridRowQueue(
     tempDir: File,
     numFields: Int,
     serMgr: SerializerManager)
-    extends HybridQueue[UnsafeRow, RowQueue](memManager, tempDir, serMgr) {
+  extends HybridQueue[UnsafeRow, RowQueue](memManager, tempDir, serMgr) {
 
   override protected def createDiskQueue(): RowQueue = {
     DiskRowQueue(File.createTempFile("buffer", "", tempDir), numFields, serMgr)

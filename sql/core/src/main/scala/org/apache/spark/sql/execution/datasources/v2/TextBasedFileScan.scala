@@ -25,8 +25,9 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
-abstract class TextBasedFileScan(sparkSession: SparkSession, options: CaseInsensitiveStringMap)
-    extends FileScan {
+abstract class TextBasedFileScan(
+    sparkSession: SparkSession,
+    options: CaseInsensitiveStringMap) extends FileScan {
   @transient private lazy val codecFactory: CompressionCodecFactory = new CompressionCodecFactory(
     sparkSession.sessionState.newHadoopConfWithOptions(options.asScala.toMap))
 

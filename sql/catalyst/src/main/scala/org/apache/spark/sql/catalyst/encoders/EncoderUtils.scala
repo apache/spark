@@ -29,27 +29,24 @@ import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType,
 import org.apache.spark.unsafe.types.{CalendarInterval, GeographyVal, GeometryVal, UTF8String, VariantVal}
 
 /**
- * :: DeveloperApi :: Extensible [[AgnosticEncoder]] providing conversion extension points over
- * type T
- * @tparam T
- *   over T
+ * :: DeveloperApi ::
+ * Extensible [[AgnosticEncoder]] providing conversion extension points over type T
+ * @tparam T over T
  */
 @DeveloperApi
 @deprecated("This trait is intended only as a migration tool and will be removed in 4.1")
-trait AgnosticExpressionPathEncoder[T] extends AgnosticEncoder[T] {
-
+trait AgnosticExpressionPathEncoder[T]
+  extends AgnosticEncoder[T] {
   /**
    * Converts from T to InternalRow
-   * @param input
-   *   the starting input path
+   * @param input the starting input path
    * @return
    */
   def toCatalyst(input: Expression): Expression
 
   /**
    * Converts from InternalRow to T
-   * @param inputPath
-   *   path expression from InternalRow
+   * @param inputPath path expression from InternalRow
    * @return
    */
   def fromCatalyst(inputPath: Expression): Expression
@@ -59,7 +56,6 @@ trait AgnosticExpressionPathEncoder[T] extends AgnosticEncoder[T] {
  * Helper class for Generating [[ExpressionEncoder]]s.
  */
 object EncoderUtils {
-
   /**
    * Return the data type we expect to see when deserializing a value with encoder `enc`.
    */
@@ -67,7 +63,7 @@ object EncoderUtils {
     externalDataTypeFor(enc, lenientSerialization = false)
   }
 
-  private[catalyst] def lenientExternalDataTypeFor(enc: AgnosticEncoder[_]): DataType =
+  private[catalyst]  def lenientExternalDataTypeFor(enc: AgnosticEncoder[_]): DataType =
     externalDataTypeFor(enc, enc.lenientSerialization)
 
   private def externalDataTypeFor(
@@ -160,7 +156,8 @@ object EncoderUtils {
     TimestampNTZType -> classOf[PhysicalLongType.InternalType],
     BinaryType -> classOf[PhysicalBinaryType.InternalType],
     CalendarIntervalType -> classOf[CalendarInterval],
-    VariantType -> classOf[VariantVal])
+    VariantType -> classOf[VariantVal]
+  )
 
   def dataTypeForClass(c: Class[_]): DataType =
     javaClassToPrimitiveType.get(c).getOrElse(ObjectType(c))
@@ -178,5 +175,6 @@ object EncoderUtils {
     DoubleType -> classOf[java.lang.Double],
     DateType -> classOf[java.lang.Integer],
     TimestampType -> classOf[java.lang.Long],
-    TimestampNTZType -> classOf[java.lang.Long])
+    TimestampNTZType -> classOf[java.lang.Long]
+  )
 }

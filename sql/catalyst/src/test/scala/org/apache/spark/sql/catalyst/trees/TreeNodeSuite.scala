@@ -48,13 +48,12 @@ case class Dummy(optKey: Option[Expression]) extends Expression with CodegenFall
   override def dataType: NullType = NullType
   override lazy val resolved = true
   override def eval(input: InternalRow): Any = null.asInstanceOf[Any]
-  override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[Expression]): Expression =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     copy(optKey = if (optKey.isDefined) Some(newChildren(0)) else None)
 }
 
 case class ComplexPlan(exprs: Seq[Seq[Expression]])
-    extends org.apache.spark.sql.catalyst.plans.logical.LeafNode {
+  extends org.apache.spark.sql.catalyst.plans.logical.LeafNode {
   override def output: Seq[Attribute] = Nil
 }
 
@@ -63,22 +62,18 @@ case class ExpressionInMap(map: Map[String, Expression]) extends Unevaluable {
   override def nullable: Boolean = true
   override def dataType: NullType = NullType
   override lazy val resolved = true
-  override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[Expression]): Expression =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     super.legacyWithNewChildren(newChildren)
 }
 
-case class SeqTupleExpression(
-    sons: Seq[(Expression, Expression)],
-    nonSons: Seq[(Expression, Expression)])
-    extends Unevaluable {
+case class SeqTupleExpression(sons: Seq[(Expression, Expression)],
+    nonSons: Seq[(Expression, Expression)]) extends Unevaluable {
   override def children: Seq[Expression] = sons.flatMap(t => Iterator(t._1, t._2))
   override def nullable: Boolean = true
   override def dataType: NullType = NullType
   override lazy val resolved = true
 
-  override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[Expression]): Expression =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     super.legacyWithNewChildren(newChildren)
 }
 
@@ -90,14 +85,14 @@ case class NameValue(name: String, value: Any)
 
 case object DummyObject
 
-case class SelfReferenceUDF(var config: Map[String, Any] = Map.empty[String, Any])
-    extends Function1[String, Boolean] {
+case class SelfReferenceUDF(
+    var config: Map[String, Any] = Map.empty[String, Any]) extends Function1[String, Boolean] {
   config += "self" -> this
   def apply(key: String): Boolean = config.contains(key)
 }
 
 case class FakeLeafPlan(child: LogicalPlan)
-    extends org.apache.spark.sql.catalyst.plans.logical.LeafNode {
+  extends org.apache.spark.sql.catalyst.plans.logical.LeafNode {
   override def output: Seq[Attribute] = child.output
 }
 
@@ -118,18 +113,18 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
 
   test("no change") {
     val before = Add(Literal(1), Add(Literal(2), Add(Literal(3), Literal(4))))
-    val after = before transform { case Literal(5, _) => Literal(1) }
+    val after = before transform { case Literal(5, _) => Literal(1)}
 
     assert(before === after)
     // Ensure that the objects after are the same objects before the transformation.
-    before.map(identity[Expression]).zip(after.map(identity[Expression])).foreach { case (b, a) =>
-      assert(b eq a)
+    before.map(identity[Expression]).zip(after.map(identity[Expression])).foreach {
+      case (b, a) => assert(b eq a)
     }
   }
 
   test("collect") {
     val tree = Add(Literal(1), Add(Literal(2), Add(Literal(3), Literal(4))))
-    val literals = tree collect { case l: Literal => l }
+    val literals = tree collect {case l: Literal => l}
 
     assert(literals.size === 4)
     (1 to 4).foreach(i => assert(literals contains Literal(i)))
@@ -190,8 +185,8 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     val add = Add(Literal(1), Literal(1))
     CurrentOrigin.reset()
 
-    val transformed = add transform { case Literal(1, _) =>
-      Literal(2)
+    val transformed = add transform {
+      case Literal(1, _) => Literal(2)
     }
 
     assert(transformed.origin.line.isDefined)
@@ -297,8 +292,8 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
 
     // Collect the top node.
     {
-      val actual = expression.collectFirst { case add: Add =>
-        add
+      val actual = expression.collectFirst {
+        case add: Add => add
       }
       val expected =
         Some(Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4)))))
@@ -307,8 +302,8 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
 
     // Collect the first children.
     {
-      val actual = expression.collectFirst { case l @ Literal(1, IntegerType) =>
-        l
+      val actual = expression.collectFirst {
+        case l @ Literal(1, IntegerType) => l
       }
       val expected = Some(Literal(1))
       assert(expected === actual)
@@ -316,8 +311,8 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
 
     // Collect an internal node (Subtract).
     {
-      val actual = expression.collectFirst { case sub: Subtract =>
-        sub
+      val actual = expression.collectFirst {
+        case sub: Subtract => sub
       }
       val expected = Some(Subtract(Literal(3), Literal(4)))
       assert(expected === actual)
@@ -325,8 +320,8 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
 
     // Collect a leaf node.
     {
-      val actual = expression.collectFirst { case l @ Literal(3, IntegerType) =>
-        l
+      val actual = expression.collectFirst {
+        case l @ Literal(3, IntegerType) => l
       }
       val expected = Some(Literal(3))
       assert(expected === actual)
@@ -334,8 +329,8 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
 
     // Collect nothing.
     {
-      val actual = expression.collectFirst { case l @ Literal(100, IntegerType) =>
-        l
+      val actual = expression.collectFirst {
+        case l @ Literal(100, IntegerType) => l
       }
       val expected = None
       assert(expected === actual)
@@ -344,8 +339,8 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
 
   test("transformExpressions on nested expression sequence") {
     val plan = ComplexPlan(Seq(Seq(Literal(1)), Seq(Literal(2))))
-    val actual = plan.transformExpressions { case Literal(value, _) =>
-      Literal(value.toString)
+    val actual = plan.transformExpressions {
+      case Literal(value, _) => Literal(value.toString)
     }
     val expected = ComplexPlan(Seq(Seq(Literal("1")), Seq(Literal("2"))))
     assert(expected === actual)
@@ -355,8 +350,8 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     val expression = ExpressionInMap(Map("1" -> Literal(1), "2" -> Literal(2)))
 
     {
-      val actual = expression.transform { case Literal(i: Int, _) =>
-        Literal(i + 1)
+      val actual = expression.transform {
+        case Literal(i: Int, _) => Literal(i + 1)
       }
       val expected = ExpressionInMap(Map("1" -> Literal(2), "2" -> Literal(3)))
       assert(actual === expected)
@@ -388,13 +383,12 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     assertJSON(44, 44)
     assertJSON(55L, 55L)
     assertJSON(3.0, 3.0)
-    assertJSON(4.0d, 4.0d)
+    assertJSON(4.0D, 4.0D)
     assertJSON(BigInt(BigInteger.valueOf(88L)), 88L)
     assertJSON(null, JNull)
     assertJSON("text", "text")
     assertJSON(Some("text"), "text")
-    compareJSON(
-      JsonTestTreeNode(None).toJSON,
+    compareJSON(JsonTestTreeNode(None).toJSON,
       s"""[
          |  {
          |    "class": "${classOf[JsonTestTreeNode].getName}",
@@ -416,7 +410,8 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
         "useMemory" -> false,
         "useOffHeap" -> false,
         "deserialized" -> false,
-        "replication" -> 1))
+        "replication" -> 1)
+    )
 
     // Converts TreeNode argument to JSON
     assertJSON(
@@ -449,7 +444,10 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     // Converts ExprId to JSON
     assertJSON(
       ExprId(0, uuid),
-      JObject("product-class" -> classOf[ExprId].getName, "id" -> 0, "jvmId" -> uuid.toString))
+      JObject(
+        "product-class" -> classOf[ExprId].getName,
+        "id" -> 0,
+        "jvmId" -> uuid.toString))
 
     // Converts StructField to JSON
     assertJSON(
@@ -464,7 +462,9 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     // Converts TableIdentifier to JSON
     assertJSON(
       TableIdentifier("table"),
-      JObject("product-class" -> classOf[TableIdentifier].getName, "table" -> "table"))
+      JObject(
+        "product-class" -> classOf[TableIdentifier].getName,
+        "table" -> "table"))
 
     // Converts JoinType to JSON
     assertJSON(
@@ -478,15 +478,15 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
       FunctionIdentifier("function", None),
       JObject(
         "product-class" -> JString(classOf[FunctionIdentifier].getName),
-        "funcName" -> "function"))
+          "funcName" -> "function"))
 
     // Converts AliasIdentifier to JSON
     assertJSON(
       AliasIdentifier("alias", Seq("ns1", "ns2")),
       JObject(
         "product-class" -> JString(classOf[AliasIdentifier].getName),
-        "name" -> "alias",
-        "qualifier" -> "[ns1, ns2]"))
+          "name" -> "alias",
+          "qualifier" -> "[ns1, ns2]"))
 
     // Converts SubqueryAlias to JSON
     assertJSON(
@@ -495,12 +495,14 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
         JObject(
           "class" -> classOf[SubqueryAlias].getName,
           "num-children" -> 1,
-          "identifier" -> JObject(
-            "product-class" -> JString(classOf[AliasIdentifier].getName),
+          "identifier" -> JObject("product-class" -> JString(classOf[AliasIdentifier].getName),
             "name" -> "t1",
             "qualifier" -> JArray(Nil)),
           "child" -> 0),
-        JObject("class" -> classOf[JsonTestTreeNode].getName, "num-children" -> 0, "arg" -> "0")))
+        JObject(
+          "class" -> classOf[JsonTestTreeNode].getName,
+          "num-children" -> 0,
+          "arg" -> "0")))
 
     // Converts BucketSpec to JSON
     assertJSON(
@@ -521,13 +523,19 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
           "frameType" -> JObject("object" -> JString(RowFrame.getClass.getName)),
           "lower" -> 0,
           "upper" -> 1),
-        JObject("class" -> UnboundedPreceding.getClass.getName, "num-children" -> 0),
-        JObject("class" -> CurrentRow.getClass.getName, "num-children" -> 0)))
+        JObject(
+          "class" -> UnboundedPreceding.getClass.getName,
+          "num-children" -> 0),
+        JObject(
+          "class" -> CurrentRow.getClass.getName,
+          "num-children" -> 0)))
 
     // Converts Partitioning to JSON
     assertJSON(
       RoundRobinPartitioning(numPartitions = 3),
-      JObject("product-class" -> classOf[RoundRobinPartitioning].getName, "numPartitions" -> 3))
+      JObject(
+        "product-class" -> classOf[RoundRobinPartitioning].getName,
+        "numPartitions" -> 3))
 
     // Converts FunctionResource to JSON
     assertJSON(
@@ -551,18 +559,22 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
         StructType(StructField("a", IntegerType, true) :: Nil),
         createTime = 0L,
         createVersion = "2.x"),
+
       JObject(
         "product-class" -> classOf[CatalogTable].getName,
         "identifier" -> JObject(
           "product-class" -> classOf[TableIdentifier].getName,
-          "table" -> "table"),
+          "table" -> "table"
+        ),
         "tableType" -> JObject(
           "product-class" -> classOf[CatalogTableType].getName,
-          "name" -> "MANAGED"),
+          "name" -> "MANAGED"
+        ),
         "storage" -> JObject(
           "product-class" -> classOf[CatalogStorageFormat].getName,
           "compressed" -> false,
-          "properties" -> JNull),
+          "properties" -> JNull
+        ),
         "schema" -> JObject(
           "type" -> "struct",
           "fields" -> List(
@@ -622,8 +634,14 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
           "children" -> List(0, 1),
           "byName" -> JBool(false),
           "allowMissingCol" -> JBool(false)),
-        JObject("class" -> classOf[JsonTestTreeNode].getName, "num-children" -> 0, "arg" -> "0"),
-        JObject("class" -> classOf[JsonTestTreeNode].getName, "num-children" -> 0, "arg" -> "1")))
+        JObject(
+          "class" -> classOf[JsonTestTreeNode].getName,
+          "num-children" -> 0,
+          "arg" -> "0"),
+        JObject(
+          "class" -> classOf[JsonTestTreeNode].getName,
+          "num-children" -> 0,
+          "arg" -> "1")))
 
     // Convert Seq of Product contains TreeNode to JSON.
     assertJSON(
@@ -632,19 +650,19 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
         JObject(
           "product-class" -> "scala.Tuple2",
           "_1" -> "a",
-          "_2" -> List(
-            JObject(
-              "class" -> classOf[JsonTestTreeNode].getName,
-              "num-children" -> 0,
-              "arg" -> "0"))),
+          "_2" -> List(JObject(
+            "class" -> classOf[JsonTestTreeNode].getName,
+            "num-children" -> 0,
+            "arg" -> "0"
+          ))),
         JObject(
           "product-class" -> "scala.Tuple2",
           "_1" -> "b",
-          "_2" -> List(
-            JObject(
-              "class" -> classOf[JsonTestTreeNode].getName,
-              "num-children" -> 0,
-              "arg" -> "1")))))
+          "_2" -> List(JObject(
+            "class" -> classOf[JsonTestTreeNode].getName,
+            "num-children" -> 0,
+            "arg" -> "1"
+          )))))
 
     // Convert currying product contains TreeNode to JSON.
     assertJSON(
@@ -657,14 +675,13 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
             "num-children" -> 0,
             "value" -> "1",
             "dataType" -> "integer")),
-        "y" -> 1))
+        "y" -> 1
+      )
+    )
   }
 
   test("toJSON should not throws java.lang.StackOverflowError") {
-    val udf = ScalaUDF(
-      SelfReferenceUDF(),
-      BooleanType,
-      Seq("col1".attr),
+    val udf = ScalaUDF(SelfReferenceUDF(), BooleanType, Seq("col1".attr),
       Option(ExpressionEncoder[String]()) :: Nil)
     // Should not throw java.lang.StackOverflowError
     udf.toJSON
@@ -779,31 +796,29 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
 
     withClue("transformDown") {
       checkTransform(
-        sameTypeTransform = _ transformDown { case Dummy(None) =>
-          Dummy(Some(Literal(1)))
+        sameTypeTransform = _ transformDown {
+          case Dummy(None) => Dummy(Some(Literal(1)))
         },
-        differentTypeTransform = _ transformDown { case Dummy(None) =>
-          Literal(1)
+        differentTypeTransform = _ transformDown {
+          case Dummy(None) => Literal(1)
 
         })
     }
 
     withClue("transformUp") {
       checkTransform(
-        sameTypeTransform = _ transformUp { case Dummy(None) =>
-          Dummy(Some(Literal(1)))
+        sameTypeTransform = _ transformUp {
+          case Dummy(None) => Dummy(Some(Literal(1)))
         },
-        differentTypeTransform = _ transformUp { case Dummy(None) =>
-          Literal(1)
+        differentTypeTransform = _ transformUp {
+          case Dummy(None) => Literal(1)
 
         })
     }
   }
 
   test("clone") {
-    def assertDifferentInstance[T <: TreeNode[T]](
-        before: TreeNode[T],
-        after: TreeNode[T]): Unit = {
+    def assertDifferentInstance[T <: TreeNode[T]](before: TreeNode[T], after: TreeNode[T]): Unit = {
       assert(before.ne(after) && before == after)
       before.children.zip(after.children).foreach { case (beforeChild, afterChild) =>
         assertDifferentInstance(
@@ -864,8 +879,9 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     assert(statefulExprBefore ne statefulExprAfter)
 
     // Transforms expressions nested three levels deep:
-    val withNestedStatefulBefore =
-      makeExprWithPositionAndTag(Add(Literal(1), Add(Literal(1), Rand(Literal(1)))))
+    val withNestedStatefulBefore = makeExprWithPositionAndTag(
+      Add(Literal(1), Add(Literal(1), Rand(Literal(1))))
+    )
     val withNestedStatefulAfter = withNestedStatefulBefore.freshCopyIfContainsStatefulExpression()
     genericAssertions(withNestedStatefulBefore, withNestedStatefulAfter)
     assert(withNestedStatefulBefore ne withNestedStatefulAfter)
@@ -926,26 +942,44 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
   test("SPARK-39046: Return an empty context string if TreeNode.origin is wrongly set") {
     val text = Some("select a + b")
     // missing start index
-    val origin1 = Origin(startIndex = Some(7), stopIndex = None, sqlText = text)
+    val origin1 = Origin(
+      startIndex = Some(7),
+      stopIndex = None,
+      sqlText = text)
     // missing stop index
-    val origin2 = Origin(startIndex = None, stopIndex = Some(11), sqlText = text)
+    val origin2 = Origin(
+      startIndex = None,
+      stopIndex = Some(11),
+      sqlText = text)
     // missing text
-    val origin3 = Origin(startIndex = Some(7), stopIndex = Some(11), sqlText = None)
+    val origin3 = Origin(
+      startIndex = Some(7),
+      stopIndex = Some(11),
+      sqlText = None)
     // negative start index
-    val origin4 = Origin(startIndex = Some(-1), stopIndex = Some(11), sqlText = text)
+    val origin4 = Origin(
+      startIndex = Some(-1),
+      stopIndex = Some(11),
+      sqlText = text)
     // stop index >= text.length
-    val origin5 = Origin(startIndex = Some(-1), stopIndex = Some(text.get.length), sqlText = text)
+    val origin5 = Origin(
+      startIndex = Some(-1),
+      stopIndex = Some(text.get.length),
+      sqlText = text)
     // start index > stop index
-    val origin6 = Origin(startIndex = Some(2), stopIndex = Some(1), sqlText = text)
+    val origin6 = Origin(
+      startIndex = Some(2),
+      stopIndex = Some(1),
+      sqlText = text)
     Seq(origin1, origin2, origin3, origin4, origin5, origin6).foreach { origin =>
       assert(origin.context.summary.isEmpty)
     }
   }
 
   private def newErrorAfterLazyList(es: Expression*) = {
-    es.to(LazyList)
-      .lazyAppendedAll(
-        throw new NoSuchElementException("LazyList should not return more elements"))
+    es.to(LazyList).lazyAppendedAll(
+      throw new NoSuchElementException("LazyList should not return more elements")
+    )
   }
 
   test("multiTransformDown generates all alternatives") {
@@ -1001,8 +1035,7 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     val transformed = e.multiTransformDown {
       case s @ StringLiteral("a") => Seq(Literal(1), Literal(2), s)
       case s @ StringLiteral("b") => Seq(Literal(10), Literal(20), s)
-      case a @ Add(StringLiteral("c"), StringLiteral("d"), _) =>
-        Seq(Literal(100), Literal(200), a)
+      case a @ Add(StringLiteral("c"), StringLiteral("d"), _) => Seq(Literal(100), Literal(200), a)
     }
     val expected = for {
       cd <- Seq(Literal(100), Literal(200), Add(Literal("c"), Literal("d")))
@@ -1012,9 +1045,8 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     assert(transformed == expected)
   }
 
-  test(
-    "multiTransformDown doesn't stop generating alternatives of descendants when non-leaf is " +
-      "transformed and itself is in the alternatives") {
+  test("multiTransformDown doesn't stop generating alternatives of descendants when non-leaf is " +
+    "transformed and itself is in the alternatives") {
     val e = Add(Add(Literal("a"), Literal("b")), Add(Literal("c"), Literal("d")))
     val transformed = e.multiTransformDown {
       case a @ Add(StringLiteral("a"), StringLiteral("b"), _) =>
@@ -1036,8 +1068,8 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
 
   test("multiTransformDown can prune") {
     val e = Add(Add(Literal("a"), Literal("b")), Add(Literal("c"), Literal("d")))
-    val transformed = e.multiTransformDown { case StringLiteral("a") =>
-      Seq.empty
+    val transformed = e.multiTransformDown {
+      case StringLiteral("a") => Seq.empty
     }
     assert(transformed.isEmpty)
 
@@ -1070,15 +1102,13 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
         a_or_b.getOrElse(
           // Besides returning the alternatives for the first encounter, also set up a mechanism to
           // update the cache when the new alternatives are requested.
-          LazyList(Literal(1), Literal(2))
-            .map { x =>
-              a_or_b = Some(Seq(x))
-              x
-            }
-            .lazyAppendedAll {
-              a_or_b = None
-              Seq.empty
-            })
+          LazyList(Literal(1), Literal(2)).map { x =>
+            a_or_b = Some(Seq(x))
+            x
+          }.lazyAppendedAll {
+            a_or_b = None
+            Seq.empty
+          })
       case Add(StringLiteral("c"), StringLiteral("d"), _) => Seq(Literal(100), Literal(200))
     }
     val expected = for {
@@ -1091,26 +1121,22 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     val transformed2 = e.multiTransformDown {
       case StringLiteral("a") | StringLiteral("b") =>
         a_or_b.getOrElse(
-          LazyList(Literal(1), Literal(2))
-            .map { x =>
-              a_or_b = Some(Seq(x))
-              x
-            }
-            .lazyAppendedAll {
-              a_or_b = None
-              Seq.empty
-            })
+          LazyList(Literal(1), Literal(2)).map { x =>
+            a_or_b = Some(Seq(x))
+            x
+          }.lazyAppendedAll {
+            a_or_b = None
+            Seq.empty
+          })
       case StringLiteral("c") | StringLiteral("d") =>
         c_or_d.getOrElse(
-          LazyList(Literal(10), Literal(20))
-            .map { x =>
-              c_or_d = Some(Seq(x))
-              x
-            }
-            .lazyAppendedAll {
-              c_or_d = None
-              Seq.empty
-            })
+          LazyList(Literal(10), Literal(20)).map { x =>
+            c_or_d = Some(Seq(x))
+            x
+          }.lazyAppendedAll {
+            c_or_d = None
+            Seq.empty
+          })
     }
     val expected2 = for {
       c_or_d <- Seq(Literal(10), Literal(20))

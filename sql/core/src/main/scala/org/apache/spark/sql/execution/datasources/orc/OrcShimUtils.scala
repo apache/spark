@@ -52,15 +52,16 @@ private[sql] object OrcShimUtils {
       (getter, ordinal) =>
         result.set(getter.getInt(ordinal))
         result
-    } else { (getter: SpecializedGetters, ordinal: Int) =>
-      new DaysWritable(getter.getInt(ordinal))
+    } else {
+      (getter: SpecializedGetters, ordinal: Int) =>
+        new DaysWritable(getter.getInt(ordinal))
     }
   }
 
-  def getHiveDecimalWritable(
-      precision: Int,
-      scale: Int): (SpecializedGetters, Int) => HiveDecimalWritable = { (getter, ordinal) =>
-    val d = getter.getDecimal(ordinal, precision, scale)
-    new HiveDecimalWritable(HiveDecimal.create(d.toJavaBigDecimal))
+  def getHiveDecimalWritable(precision: Int, scale: Int):
+      (SpecializedGetters, Int) => HiveDecimalWritable = {
+    (getter, ordinal) =>
+      val d = getter.getDecimal(ordinal, precision, scale)
+      new HiveDecimalWritable(HiveDecimal.create(d.toJavaBigDecimal))
   }
 }

@@ -20,13 +20,12 @@ package org.apache.spark.sql
 import org.apache.spark.sql.catalyst.util.resourceToString
 
 /**
- * This test suite ensures all the TPC-H queries can be successfully analyzed, optimized and
- * compiled without hitting the max iteration threshold.
+ * This test suite ensures all the TPC-H queries can be successfully analyzed, optimized
+ * and compiled without hitting the max iteration threshold.
  */
 class TPCHQuerySuite extends BenchmarkQueryTest with TPCHBase {
   tpchQueries.foreach { name =>
-    val queryString = resourceToString(
-      s"tpch/$name.sql",
+    val queryString = resourceToString(s"tpch/$name.sql",
       classLoader = Thread.currentThread().getContextClassLoader)
     test(name) {
       // check the plans can be properly generated

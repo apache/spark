@@ -24,10 +24,8 @@ import org.apache.spark.sql.functions.expr
 import org.apache.spark.sql.test.SharedSparkSessionBase
 import org.apache.spark.storage.StorageLevel
 
-class InMemoryRelationSuite
-    extends SparkFunSuite
-    with SharedSparkSessionBase
-    with AdaptiveSparkPlanHelper {
+class InMemoryRelationSuite extends SparkFunSuite
+  with SharedSparkSessionBase with AdaptiveSparkPlanHelper {
 
   test("SPARK-46779: InMemoryRelations with the same cached plan are semantically equivalent") {
     val d = spark.range(1)
@@ -46,23 +44,16 @@ class InMemoryRelationSuite
       tableCache.get.asInstanceOf[InMemoryTableScanExec].relation.innerChildren.head
     }
 
-    val d1 = spark
-      .range(1)
-      .withColumn("key", expr("id % 100"))
-      .groupBy("key")
-      .agg(Map("key" -> "count"))
+    val d1 = spark.range(1).withColumn("key", expr("id % 100"))
+      .groupBy("key").agg(Map("key" -> "count"))
     val cached_d2 = d1.cache()
-    val df = cached_d2
-      .withColumn("key2", expr("key % 10"))
-      .groupBy("key2")
-      .agg(Map("key2" -> "count"))
+    val df = cached_d2.withColumn("key2", expr("key % 10"))
+      .groupBy("key2").agg(Map("key2" -> "count"))
 
-    assert(
-      findIMRInnerChild(df.queryExecution.executedPlan).treeString
-        .contains("AdaptiveSparkPlan isFinalPlan=false"))
+    assert(findIMRInnerChild(df.queryExecution.executedPlan).treeString
+      .contains("AdaptiveSparkPlan isFinalPlan=false"))
     df.collect()
-    assert(
-      findIMRInnerChild(df.queryExecution.executedPlan).treeString
-        .contains("AdaptiveSparkPlan isFinalPlan=true"))
+    assert(findIMRInnerChild(df.queryExecution.executedPlan).treeString
+      .contains("AdaptiveSparkPlan isFinalPlan=true"))
   }
 }

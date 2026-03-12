@@ -30,9 +30,7 @@ case class ParquetWrite(
     paths: Seq[String],
     formatName: String,
     supportsDataType: DataType => Boolean,
-    info: LogicalWriteInfo)
-    extends FileWrite
-    with Logging {
+    info: LogicalWriteInfo) extends FileWrite with Logging {
 
   override def prepareWrite(
       sqlConf: SQLConf,

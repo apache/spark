@@ -56,7 +56,7 @@ import org.apache.spark.util.{LazyTry, Utils, UUIDv7Generator}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * The primary workflow for executing relational queries using Spark. Designed to allow easy
+ * The primary workflow for executing relational queries using Spark.  Designed to allow easy
  * access to the intermediate phases of query execution for developers.
  *
  * While this is not a public class, we should avoid changing the function names for the sake of
@@ -69,8 +69,7 @@ class QueryExecution(
     val mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
     val shuffleCleanupModeOpt: Option[ShuffleCleanupMode] = None,
     val refreshPhaseEnabled: Boolean = true,
-    val queryId: UUID = UUIDv7Generator.generate())
-    extends Logging {
+    val queryId: UUID = UUIDv7Generator.generate()) extends Logging {
 
   val id: Long = QueryExecution.nextExecutionId
 
@@ -82,8 +81,7 @@ class QueryExecution(
 
   /**
    * Check whether the query represented by this QueryExecution is a SQL script.
-   * @return
-   *   True if the query is a SQL script, False otherwise.
+   * @return True if the query is a SQL script, False otherwise.
    */
   def isSqlScript: Boolean = QueryExecution.isUnresolvedPlanSqlScript(logical)
 
@@ -111,8 +109,8 @@ class QueryExecution(
   }
 
   /**
-   * Execute the SQL script if the logical plan is a SQL script. There are multiple cases, and
-   * they are originating from:
+   * Execute the SQL script if the logical plan is a SQL script.
+   * There are multiple cases, and they are originating from:
    *   - SparkSession.sql() - Spark and Spark Connect case
    *   - QueryRuntimePredictionUtils.getParsedPlanWithTracking() - DBSQL case
    */
@@ -124,7 +122,9 @@ class QueryExecution(
           script = compoundBody,
           args = argNames.zip(argValues).toMap)
       case compoundBody: CompoundBody =>
-        SqlScriptingExecution.executeSqlScript(session = sparkSession, script = compoundBody)
+        SqlScriptingExecution.executeSqlScript(
+          session = sparkSession,
+          script = compoundBody)
       case _ => logical
     }
   }
@@ -184,12 +184,7 @@ class QueryExecution(
       // for eagerly executed commands we mark this place as beginning of execution.
       tracker.setReadyForExecution()
       val (qe, result) = QueryExecution.runCommand(
-        sparkSession,
-        p,
-        name,
-        refreshPhaseEnabled,
-        mode,
-        Some(shuffleCleanupMode))
+        sparkSession, p, name, refreshPhaseEnabled, mode, Some(shuffleCleanupMode))
       CommandResult(
         qe.analyzed.output,
         qe.commandExecuted,
@@ -199,8 +194,7 @@ class QueryExecution(
     p transformDown {
       case u @ Union(children, _, _) if children.forall(_.isInstanceOf[Command]) =>
         eagerlyExecute(u, "multi-commands", CommandExecutionMode.SKIP)
-      case w @ WithCTE(u @ Union(children, _, _), _)
-          if children.forall(_.isInstanceOf[Command]) =>
+      case w @ WithCTE(u @ Union(children, _, _), _) if children.forall(_.isInstanceOf[Command]) =>
         eagerlyExecute(w, "multi-commands", CommandExecutionMode.SKIP)
       case c: Command =>
         val name = commandExecutionName(c)
@@ -307,13 +301,14 @@ class QueryExecution(
   }
 
   /**
-   * Internal version of the RDD. Avoids copies and has no schema. Note for callers: Spark may
-   * apply various optimization including reusing object: this means the row is valid only for the
-   * iteration it is retrieved. You should avoid storing row and accessing after iteration.
-   * (Calling `collect()` is one of known bad usage.) If you want to store these rows into
-   * collection, please apply some converter or copy row which produces new object per iteration.
-   * Given QueryExecution is not a public class, end users are discouraged to use this: please use
-   * `Dataset.rdd` instead where conversion will be applied.
+   * Internal version of the RDD. Avoids copies and has no schema.
+   * Note for callers: Spark may apply various optimization including reusing object: this means
+   * the row is valid only for the iteration it is retrieved. You should avoid storing row and
+   * accessing after iteration. (Calling `collect()` is one of known bad usage.)
+   * If you want to store these rows into collection, please apply some converter or copy row
+   * which produces new object per iteration.
+   * Given QueryExecution is not a public class, end users are discouraged to use this: please
+   * use `Dataset.rdd` instead where conversion will be applied.
    */
   def toRdd: RDD[InternalRow] = lazyToRdd.get
 
@@ -326,15 +321,12 @@ class QueryExecution(
   }
 
   protected def preparations: Seq[Rule[SparkPlan]] = {
-    QueryExecution.preparations(
-      sparkSession,
-      Option(InsertAdaptiveSparkPlan(AdaptiveExecutionContext(sparkSession, this))),
-      false)
+    QueryExecution.preparations(sparkSession,
+      Option(InsertAdaptiveSparkPlan(AdaptiveExecutionContext(sparkSession, this))), false)
   }
 
   protected def executePhase[T](phase: String)(block: => T): T = sparkSession.withActive {
-    QueryExecution.withInternalError(
-      s"The Spark SQL phase $phase failed with an internal error.") {
+    QueryExecution.withInternalError(s"The Spark SQL phase $phase failed with an internal error.") {
       tracker.measurePhase(phase)(block)
     }
   }
@@ -347,7 +339,10 @@ class QueryExecution(
     }
   }
 
-  private def simpleString(formatted: Boolean, maxFields: Int, append: String => Unit): Unit = {
+  private def simpleString(
+      formatted: Boolean,
+      maxFields: Int,
+      append: String => Unit): Unit = {
     append("== Physical Plan ==\n")
     if (formatted) {
       try {
@@ -357,12 +352,8 @@ class QueryExecution(
         case e: IllegalArgumentException => append(e.toString)
       }
     } else {
-      QueryPlan.append(
-        executedPlan,
-        append,
-        verbose = false,
-        addSuffix = false,
-        maxFields = maxFields)
+      QueryPlan.append(executedPlan,
+        append, verbose = false, addSuffix = false, maxFields = maxFields)
     }
     extendedExplainInfo(append, executedPlan)
     append("\n")
@@ -381,18 +372,9 @@ class QueryExecution(
       // This is used only by explaining `Dataset/DataFrame` created by `spark.readStream`, so the
       // output mode does not matter since there is no `Sink`.
       new IncrementalExecution(
-        sparkSession,
-        logical,
-        OutputMode.Append(),
-        "<unknown>",
-        UUID.randomUUID,
-        UUID.randomUUID,
-        0,
-        None,
-        OffsetSeqMetadata(0, 0),
-        WatermarkPropagator.noop(),
-        false,
-        mode = this.mode)
+        sparkSession, logical, OutputMode.Append(), "<unknown>",
+        UUID.randomUUID, UUID.randomUUID, 0, None, OffsetSeqMetadata(0, 0),
+        WatermarkPropagator.noop(), false, mode = this.mode)
     } else {
       this
     }
@@ -424,9 +406,8 @@ class QueryExecution(
       if (analyzed.output.nonEmpty) {
         append(
           truncatedString(
-            analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"),
-            ", ",
-            maxFields))
+            analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ", maxFields)
+        )
         append("\n")
       }
       QueryPlan.append(analyzed, append, verbose, addSuffix, maxFields)
@@ -466,8 +447,8 @@ class QueryExecution(
       // This will trigger to compute stats for all the nodes in the plan, including subqueries,
       // if the stats doesn't exist in the statsCache and update the statsCache corresponding
       // to the node.
-      optimizedPlan.collectWithSubqueries { case plan =>
-        plan.stats
+      optimizedPlan.collectWithSubqueries {
+        case plan => plan.stats
       }
     } catch {
       case e: AnalysisException => append(e.toString + "\n")
@@ -489,9 +470,9 @@ class QueryExecution(
 
   /**
    * Determine the shuffle cleanup mode, based on the following order:
-   *   1. input arg when constructing this QueryExecution
-   *   2. the cleanup mode of the root execution
-   *   3. SQLConf from SparkSession
+   * 1. input arg when constructing this QueryExecution
+   * 2. the cleanup mode of the root execution
+   * 3. SQLConf from SparkSession
    */
   lazy val shuffleCleanupMode: ShuffleCleanupMode =
     shuffleCleanupModeOpt.getOrElse(
@@ -514,11 +495,9 @@ class QueryExecution(
   }
 
   def extendedExplainInfo(append: String => Unit, plan: SparkPlan): Unit = {
-    val generators = sparkSession.sessionState.conf
-      .getConf(SQLConf.EXTENDED_EXPLAIN_PROVIDERS)
+    val generators = sparkSession.sessionState.conf.getConf(SQLConf.EXTENDED_EXPLAIN_PROVIDERS)
       .getOrElse(Seq.empty)
-    val extensions = Utils.loadExtensions(
-      classOf[ExtendedExplainGenerator],
+    val extensions = Utils.loadExtensions(classOf[ExtendedExplainGenerator],
       generators,
       sparkSession.sparkContext.conf)
     if (extensions.nonEmpty) {
@@ -527,11 +506,8 @@ class QueryExecution(
           append(s"\n== Extended Information (${extension.title}) ==\n")
           append(extension.generateExtendedInfo(plan))
         } catch {
-          case NonFatal(e) =>
-            logWarning(
-              log"Cannot use " +
-                log"${MDC(EXTENDED_EXPLAIN_GENERATOR, extension)} to get extended information.",
-              e)
+          case NonFatal(e) => logWarning(log"Cannot use " +
+            log"${MDC(EXTENDED_EXPLAIN_GENERATOR, extension)} to get extended information.", e)
         })
     }
   }
@@ -539,7 +515,7 @@ class QueryExecution(
   /** A special namespace for commands that can be used to debug query execution. */
   // scalastyle:off
   object debug {
-    // scalastyle:on
+  // scalastyle:on
 
     /**
      * Prints to stdout all the generated code found in this plan (i.e. the output of each
@@ -554,8 +530,7 @@ class QueryExecution(
     /**
      * Get WholeStageCodegenExec subtrees and the codegen in a query plan
      *
-     * @return
-     *   Sequence of WholeStageCodegen subtrees and corresponding codegen
+     * @return Sequence of WholeStageCodegen subtrees and corresponding codegen
      */
     def codegenToSeq(): Seq[(String, String, ByteCodeStats)] = {
       org.apache.spark.sql.execution.debug.codegenStringSeq(executedPlan)
@@ -564,12 +539,10 @@ class QueryExecution(
     /**
      * Dumps debug information about query execution into the specified file.
      *
-     * @param path
-     *   path of the file the debug info is written to.
-     * @param maxFields
-     *   maximum number of fields converted to string representation.
-     * @param explainMode
-     *   the explain mode to be used to generate the string representation of the plan.
+     * @param path path of the file the debug info is written to.
+     * @param maxFields maximum number of fields converted to string representation.
+     * @param explainMode the explain mode to be used to generate the string
+     *                    representation of the plan.
      */
     def toFile(
         path: String,
@@ -594,13 +567,13 @@ class QueryExecution(
 }
 
 /**
- * SPARK-35378: Commands should be executed eagerly so that something like `sql("INSERT ...")` can
- * trigger the table insertion immediately without a `.collect()`. To avoid end-less recursion we
- * should use `NON_ROOT` when recursively executing commands. Note that we can't execute a query
- * plan with leaf command nodes, because many commands return `GenericInternalRow` and can't be
- * put in a query plan directly, otherwise the query engine may cast `GenericInternalRow` to
- * `UnsafeRow` and fail. When running EXPLAIN, or commands inside other command, we should use
- * `SKIP` to not eagerly trigger the command execution.
+ * SPARK-35378: Commands should be executed eagerly so that something like `sql("INSERT ...")`
+ * can trigger the table insertion immediately without a `.collect()`. To avoid end-less recursion
+ * we should use `NON_ROOT` when recursively executing commands. Note that we can't execute
+ * a query plan with leaf command nodes, because many commands return `GenericInternalRow`
+ * and can't be put in a query plan directly, otherwise the query engine may cast
+ * `GenericInternalRow` to `UnsafeRow` and fail. When running EXPLAIN, or commands inside other
+ * command, we should use `SKIP` to not eagerly trigger the command execution.
  */
 object CommandExecutionMode extends Enumeration {
   val SKIP, NON_ROOT, ALL = Value
@@ -609,9 +582,9 @@ object CommandExecutionMode extends Enumeration {
 /**
  * Modes for shuffle dependency cleanup.
  *
- * DoNotCleanup: Do not perform any cleanup. SkipMigration: Shuffle dependencies will not be
- * migrated at node decommissions. RemoveShuffleFiles: Shuffle dependency files are removed at the
- * end of SQL executions.
+ * DoNotCleanup: Do not perform any cleanup.
+ * SkipMigration: Shuffle dependencies will not be migrated at node decommissions.
+ * RemoveShuffleFiles: Shuffle dependency files are removed at the end of SQL executions.
  */
 sealed trait ShuffleCleanupMode
 
@@ -620,6 +593,7 @@ case object DoNotCleanup extends ShuffleCleanupMode
 case object SkipMigration extends ShuffleCleanupMode
 
 case object RemoveShuffleFiles extends ShuffleCleanupMode
+
 
 object QueryExecution {
   private val _nextExecutionId = new AtomicLong(0)
@@ -640,9 +614,9 @@ object QueryExecution {
 
   /**
    * Construct a sequence of rules that are used to prepare a planned [[SparkPlan]] for execution.
-   * These rules will make sure subqueries are planned, make sure the data partitioning and
-   * ordering are correct, insert whole stage code gen, and try to reduce the work done by reusing
-   * exchanges and subqueries.
+   * These rules will make sure subqueries are planned, make sure the data partitioning and ordering
+   * are correct, insert whole stage code gen, and try to reduce the work done by reusing exchanges
+   * and subqueries.
    */
   private[execution] def preparations(
       sparkSession: SparkSession,
@@ -651,32 +625,31 @@ object QueryExecution {
     // `AdaptiveSparkPlanExec` is a leaf node. If inserted, all the following rules will be no-op
     // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
     adaptiveExecutionRule.toSeq ++
-      Seq(
-        CoalesceBucketsInJoin,
-        PlanDynamicPruningFilters(sparkSession),
-        PlanSubqueries(sparkSession),
-        RemoveRedundantProjects,
-        EnsureRequirements(),
-        // This rule must be run after `EnsureRequirements`.
-        InsertSortForLimitAndOffset,
-        // `ReplaceHashWithSortAgg` needs to be added after `EnsureRequirements` to guarantee the
-        // sort order of each node is checked to be valid.
-        ReplaceHashWithSortAgg,
-        // `RemoveRedundantSorts` and `RemoveRedundantWindowGroupLimits` needs to be added after
-        // `EnsureRequirements` to guarantee the same number of partitions when instantiating
-        // PartitioningCollection.
-        RemoveRedundantSorts,
-        RemoveRedundantWindowGroupLimits,
-        DisableUnnecessaryBucketedScan,
-        ApplyColumnarRulesAndInsertTransitions(
-          sparkSession.sessionState.columnarRules,
-          outputsColumnar = false),
-        CollapseCodegenStages()) ++
+    Seq(
+      CoalesceBucketsInJoin,
+      PlanDynamicPruningFilters(sparkSession),
+      PlanSubqueries(sparkSession),
+      RemoveRedundantProjects,
+      EnsureRequirements(),
+      // This rule must be run after `EnsureRequirements`.
+      InsertSortForLimitAndOffset,
+      // `ReplaceHashWithSortAgg` needs to be added after `EnsureRequirements` to guarantee the
+      // sort order of each node is checked to be valid.
+      ReplaceHashWithSortAgg,
+      // `RemoveRedundantSorts` and `RemoveRedundantWindowGroupLimits` needs to be added after
+      // `EnsureRequirements` to guarantee the same number of partitions when instantiating
+      // PartitioningCollection.
+      RemoveRedundantSorts,
+      RemoveRedundantWindowGroupLimits,
+      DisableUnnecessaryBucketedScan,
+      ApplyColumnarRulesAndInsertTransitions(
+        sparkSession.sessionState.columnarRules, outputsColumnar = false),
+      CollapseCodegenStages()) ++
       (if (subquery) {
-         Nil
-       } else {
-         Seq(ReuseExchangeAndSubquery)
-       })
+        Nil
+      } else {
+        Seq(ReuseExchangeAndSubquery)
+      })
   }
 
   /**
@@ -701,7 +674,9 @@ object QueryExecution {
    *
    * Note that the returned physical plan still needs to be prepared for execution.
    */
-  def createSparkPlan(planner: SparkPlanner, plan: LogicalPlan): SparkPlan = {
+  def createSparkPlan(
+      planner: SparkPlanner,
+      plan: LogicalPlan): SparkPlan = {
     // TODO: We use next(), i.e. take the first plan returned by the planner, here for now,
     //       but we will implement to choose the best plan.
     planner.plan(ReturnAnswer(plan)).next()
@@ -724,10 +699,12 @@ object QueryExecution {
   }
 
   /**
-   * Prepare the [[SparkPlan]] for execution using exists adaptive execution context. This method
-   * is only called by [[PlanAdaptiveDynamicPruningFilters]].
+   * Prepare the [[SparkPlan]] for execution using exists adaptive execution context.
+   * This method is only called by [[PlanAdaptiveDynamicPruningFilters]].
    */
-  def prepareExecutedPlan(plan: LogicalPlan, context: AdaptiveExecutionContext): SparkPlan = {
+  def prepareExecutedPlan(
+      plan: LogicalPlan,
+      context: AdaptiveExecutionContext): SparkPlan = {
     val sparkPlan = createSparkPlan(context.session.sessionState.planner, plan.clone())
     val preparationRules =
       preparations(context.session, Option(InsertAdaptiveSparkPlan(context)), true)
@@ -802,10 +779,8 @@ object QueryExecution {
 
   /**
    * Determines whether the given unresolved plan is a SQL script.
-   * @param plan
-   *   Logical plan to check.
-   * @return
-   *   True if the plan is a SQL script, False otherwise.
+   * @param plan Logical plan to check.
+   * @return True if the plan is a SQL script, False otherwise.
    */
   def isUnresolvedPlanSqlScript(plan: LogicalPlan): Boolean = {
     plan match {
@@ -822,7 +797,7 @@ object QueryExecution {
       refreshPhaseEnabled: Boolean = true,
       mode: CommandExecutionMode.Value = CommandExecutionMode.SKIP,
       shuffleCleanupModeOpt: Option[ShuffleCleanupMode] = None)
-      : (QueryExecution, Array[InternalRow]) = {
+    : (QueryExecution, Array[InternalRow]) = {
     val qe = new QueryExecution(
       sparkSession,
       command,

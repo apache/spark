@@ -28,8 +28,7 @@ class GroupBasedMergeIntoTableSuite extends MergeIntoTableSuiteBase {
 
   test("merge handles metadata columns correctly") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "software" }
           |{ "pk": 3, "salary": 300, "dep": "hr" }
@@ -41,7 +40,8 @@ class GroupBasedMergeIntoTableSuite extends MergeIntoTableSuiteBase {
       val sourceDF = Seq(3, 4, 5, 6, 7).toDF("pk")
       sourceDF.createOrReplaceTempView("source")
 
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source s
            |ON t.pk = s.pk
            |WHEN MATCHED AND t.pk != 7 THEN
@@ -60,9 +60,7 @@ class GroupBasedMergeIntoTableSuite extends MergeIntoTableSuiteBase {
           Row(4, 401, "hr"), // update
           Row(5, 501, "hr"), // update
           Row(6, 0, "new"), // insert
-          Row(7, 700, "hr")
-        )
-      ) // unchanged
+          Row(7, 700, "hr"))) // unchanged
 
       checkLastWriteInfo(
         expectedRowSchema = table.schema,
@@ -80,8 +78,7 @@ class GroupBasedMergeIntoTableSuite extends MergeIntoTableSuiteBase {
 
   test("merge runtime filtering is disabled with NOT MATCHED BY SOURCE clauses") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "hr" }
           |{ "pk": 3, "salary": 300, "dep": "hr" }
@@ -112,9 +109,7 @@ class GroupBasedMergeIntoTableSuite extends MergeIntoTableSuiteBase {
           Row(1, 101, "hr"), // update
           Row(2, 201, "hr"), // update
           Row(3, 301, "hr"), // update
-          Row(6, 0, "hr")
-        )
-      ) // insert
+          Row(6, 0, "hr"))) // insert
 
       checkReplacedPartitions(Seq("hr", "software"))
     }
@@ -146,8 +141,7 @@ class GroupBasedMergeIntoTableSuite extends MergeIntoTableSuiteBase {
 
   private def checkMergeRuntimeGroupFiltering(): Unit = {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "hr" }
           |{ "pk": 3, "salary": 300, "dep": "hr" }
@@ -178,9 +172,7 @@ class GroupBasedMergeIntoTableSuite extends MergeIntoTableSuiteBase {
           Row(3, 301, "hr"), // update
           Row(4, 400, "software"), // unchanged
           Row(5, 500, "software"), // unchanged
-          Row(6, 0, "hr")
-        )
-      ) // insert
+          Row(6, 0, "hr"))) // insert
 
       checkReplacedPartitions(Seq("hr"))
     }
@@ -189,19 +181,20 @@ class GroupBasedMergeIntoTableSuite extends MergeIntoTableSuiteBase {
   test("merge does not double plan table (group filter enabled)") {
     withSQLConf(SQLConf.RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED.key -> "true") {
       withTempView("source") {
-        createAndInitTable(
-          "pk INT NOT NULL, salary INT, dep STRING",
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
           """{ "pk": 1, "salary": 100, "dep": "hr" }
             |{ "pk": 2, "salary": 200, "dep": "software" }
             |{ "pk": 3, "salary": 300, "dep": "hr" }
             |""".stripMargin)
 
-        sql(s"""CREATE TEMP VIEW source AS
+        sql(
+          s"""CREATE TEMP VIEW source AS
              |SELECT pk, salary FROM $tableNameAsString WHERE salary > 150
              |""".stripMargin)
 
         val (_, groupFilterCond) = executeAndKeepConditions {
-          sql(s"""MERGE INTO $tableNameAsString t
+          sql(
+            s"""MERGE INTO $tableNameAsString t
                |USING source s
                |ON t.pk = s.pk
                |WHEN MATCHED THEN
@@ -228,19 +221,20 @@ class GroupBasedMergeIntoTableSuite extends MergeIntoTableSuiteBase {
   test("merge does not double plan table (group filter disabled)") {
     withSQLConf(SQLConf.RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED.key -> "false") {
       withTempView("source") {
-        createAndInitTable(
-          "pk INT NOT NULL, salary INT, dep STRING",
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
           """{ "pk": 1, "salary": 100, "dep": "hr" }
             |{ "pk": 2, "salary": 200, "dep": "software" }
             |{ "pk": 3, "salary": 300, "dep": "hr" }
             |""".stripMargin)
 
-        sql(s"""CREATE TEMP VIEW source AS
+        sql(
+          s"""CREATE TEMP VIEW source AS
              |SELECT pk, salary FROM $tableNameAsString WHERE salary > 150
              |""".stripMargin)
 
         val (_, groupFilterCond) = executeAndKeepConditions {
-          sql(s"""MERGE INTO $tableNameAsString t
+          sql(
+            s"""MERGE INTO $tableNameAsString t
                |USING source s
                |ON t.pk = s.pk
                |WHEN MATCHED THEN

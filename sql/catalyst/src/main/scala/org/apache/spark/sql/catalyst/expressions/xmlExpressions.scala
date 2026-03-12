@@ -31,14 +31,13 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * Converts an XML input string to a [[StructType]] with the specified schema. It is assumed that
- * the XML input string constitutes a single record; so the [[rowTag]] option will be not
- * applicable.
+ * Converts an XML input string to a [[StructType]] with the specified schema.
+ * It is assumed that the XML input string constitutes a single record; so the
+ * [[rowTag]] option will be not applicable.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage =
-    "_FUNC_(xmlStr, schema[, options]) - Returns a struct value with the given `xmlStr` and `schema`.",
+  usage = "_FUNC_(xmlStr, schema[, options]) - Returns a struct value with the given `xmlStr` and `schema`.",
   examples = """
     Examples:
       > SELECT _FUNC_('<p><a>1</a><b>0.8</b></p>', 'a INT, b DOUBLE');
@@ -56,10 +55,10 @@ case class XmlToStructs(
     options: Map[String, String],
     child: Expression,
     timeZoneId: Option[String] = None)
-    extends UnaryExpression
-    with TimeZoneAwareExpression
-    with ExpectsInputTypes
-    with QueryErrorsBase {
+  extends UnaryExpression
+  with TimeZoneAwareExpression
+  with ExpectsInputTypes
+  with QueryErrorsBase {
 
   def this(child: Expression, schema: Expression, options: Map[String, String]) =
     this(
@@ -136,16 +135,19 @@ case class XmlToStructs(
   """,
   since = "4.0.0",
   group = "xml_funcs")
-case class SchemaOfXml(child: Expression, options: Map[String, String])
-    extends UnaryExpression
-    with RuntimeReplaceable
-    with DefaultStringProducingExpression
-    with QueryErrorsBase {
+case class SchemaOfXml(
+    child: Expression,
+    options: Map[String, String])
+  extends UnaryExpression
+  with RuntimeReplaceable
+  with DefaultStringProducingExpression
+  with QueryErrorsBase {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
 
-  def this(child: Expression, options: Expression) =
-    this(child = child, options = ExprUtils.convertToMapData(options))
+  def this(child: Expression, options: Expression) = this(
+    child = child,
+    options = ExprUtils.convertToMapData(options))
 
   override def nullable: Boolean = false
 
@@ -155,9 +157,7 @@ case class SchemaOfXml(child: Expression, options: Map[String, String])
   @transient
   private lazy val xmlInferSchema = {
     if (xmlOptions.parseMode == DropMalformedMode) {
-      throw QueryCompilationErrors.parseModeUnsupportedError(
-        "schema_of_xml",
-        xmlOptions.parseMode)
+      throw QueryCompilationErrors.parseModeUnsupportedError("schema_of_xml", xmlOptions.parseMode)
     }
     new XmlInferSchema(xmlOptions, caseSensitive = SQLConf.get.caseSensitiveAnalysis)
   }
@@ -181,7 +181,8 @@ case class SchemaOfXml(child: Expression, options: Map[String, String])
           "paramIndex" -> ordinalNumber(0),
           "inputSql" -> toSQLExpr(child),
           "inputType" -> toSQLType(child.dataType),
-          "requiredType" -> toSQLType(StringType)))
+          "requiredType" -> toSQLType(StringType))
+      )
     } else {
       super.checkInputDataTypes()
     }
@@ -228,10 +229,10 @@ case class StructsToXml(
     options: Map[String, String],
     child: Expression,
     timeZoneId: Option[String] = None)
-    extends UnaryExpression
-    with TimeZoneAwareExpression
-    with DefaultStringProducingExpression
-    with ExpectsInputTypes {
+  extends UnaryExpression
+  with TimeZoneAwareExpression
+  with DefaultStringProducingExpression
+  with ExpectsInputTypes {
   override def nullable: Boolean = true
   override def nullIntolerant: Boolean = true
 
@@ -241,20 +242,24 @@ case class StructsToXml(
   def this(child: Expression) = this(Map.empty, child, None)
 
   def this(child: Expression, options: Expression) =
-    this(options = ExprUtils.convertToMapData(options), child = child, timeZoneId = None)
+    this(
+      options = ExprUtils.convertToMapData(options),
+      child = child,
+      timeZoneId = None)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     child.dataType match {
       case _: StructType => TypeCheckSuccess
       case _: VariantType => TypeCheckSuccess
-      case _ =>
-        DataTypeMismatch(
-          errorSubClass = "UNEXPECTED_INPUT_TYPE",
-          messageParameters = Map(
-            "paramIndex" -> ordinalNumber(0),
-            "requiredType" -> toSQLType(StructType),
-            "inputSql" -> toSQLExpr(child),
-            "inputType" -> toSQLType(child.dataType)))
+      case _ => DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(0),
+          "requiredType" -> toSQLType(StructType),
+          "inputSql" -> toSQLExpr(child),
+          "inputType" -> toSQLType(child.dataType)
+        )
+      )
     }
   }
 

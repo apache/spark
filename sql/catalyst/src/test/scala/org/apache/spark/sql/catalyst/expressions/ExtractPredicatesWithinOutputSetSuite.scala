@@ -56,7 +56,7 @@ class ExtractPredicatesWithinOutputSetSuite extends SparkFunSuite with PlanTest 
   test("Convertible disjunctive predicates") {
     checkCondition(a || b, Seq(a, b), Some(a || b))
     checkCondition(a || b, Seq(a), None)
-    checkCondition(a || b, Seq(b), None)
+    checkCondition(a ||  b, Seq(b), None)
     checkCondition(a || b || c, Seq(a, c), None)
     checkCondition(a || b || c || d, Seq(a, b, d), None)
     checkCondition(a || b || c || d, Seq(d, c, b, a), Some(a || b || c || d))
@@ -67,20 +67,13 @@ class ExtractPredicatesWithinOutputSetSuite extends SparkFunSuite with PlanTest 
     checkCondition((a && b) || (c && d), Seq(a, b), None)
     checkCondition((a && b) || (c && d), Seq(a, c, d), Some(a || (c && d)))
     checkCondition((a && b && c) || (d && e && f), Seq(a, c, d, f), Some((a && c) || (d && f)))
-    checkCondition(
-      (a && b) || (c && d) || (e && f) || (g && h),
-      Seq(a, c, e, g),
+    checkCondition((a && b) || (c && d) || (e && f) || (g && h), Seq(a, c, e, g),
       Some(a || c || e || g))
     checkCondition((a && b) || (c && d) || (e && f) || (g && h), Seq(a, e, g), None)
     checkCondition((a || b) || (c && d) || (e && f) || (g && h), Seq(a, c, e, g), None)
-    checkCondition(
-      (a || b) || (c && d) || (e && f) || (g && h),
-      Seq(a, b, c, e, g),
+    checkCondition((a || b) || (c && d) || (e && f) || (g && h), Seq(a, b, c, e, g),
       Some(a || b || c || e || g))
-    checkCondition(
-      (a && b && c) || (d && e && f) || (g && h && i),
-      Seq(b, e, h),
-      Some(b || e || h))
+    checkCondition((a && b && c) || (d && e && f) || (g && h && i), Seq(b, e, h), Some(b || e || h))
     checkCondition((a && b && c) || (d && e && f) || (g && h && i), Seq(b, e, d), None)
   }
 }

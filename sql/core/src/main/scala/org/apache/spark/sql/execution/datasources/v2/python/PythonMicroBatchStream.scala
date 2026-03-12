@@ -37,8 +37,8 @@ abstract class PythonMicroBatchStreamBase(
     outputSchema: StructType,
     options: CaseInsensitiveStringMap,
     runner: PythonStreamingSourceRunner)
-    extends MicroBatchStream
-    with Logging {
+  extends MicroBatchStream
+  with Logging {
 
   private val streamId = nextStreamId
   private var nextBlockId = 0L
@@ -67,10 +67,7 @@ abstract class PythonMicroBatchStreamBase(
       nextBlockId = nextBlockId + 1
       val blockId = PythonStreamBlockId(streamId, nextBlockId)
       SparkEnv.get.blockManager.putIterator(
-        blockId,
-        rows.get,
-        StorageLevel.MEMORY_AND_DISK_SER,
-        true)
+        blockId, rows.get, StorageLevel.MEMORY_AND_DISK_SER, true)
       val partition = PythonStreamingInputPartition(0, partitions.head, Some(blockId))
       cachedInputPartition.foreach(_._3.dropCache())
       cachedInputPartition = Some((startOffsetJson, endOffsetJson, partition))
@@ -86,7 +83,8 @@ abstract class PythonMicroBatchStreamBase(
   }
 
   override def createReaderFactory(): PartitionReaderFactory = {
-    new PythonStreamingPartitionReaderFactory(ds.source, readInfo.func, outputSchema, None, None)
+    new PythonStreamingPartitionReaderFactory(
+      ds.source, readInfo.func, outputSchema, None, None)
   }
 
   override def commit(end: Offset): Unit = {
@@ -107,8 +105,8 @@ class PythonMicroBatchStream(
     outputSchema: StructType,
     options: CaseInsensitiveStringMap,
     runner: PythonStreamingSourceRunner)
-    extends PythonMicroBatchStreamBase(ds, shortName, outputSchema, options, runner)
-    with AcceptsLatestSeenOffset {
+  extends PythonMicroBatchStreamBase(ds, shortName, outputSchema, options, runner)
+  with AcceptsLatestSeenOffset {
 
   override def setLatestSeenOffset(offset: Offset): Unit = {
     // Call planPartition on python with an empty offset range to initialize the start offset
@@ -123,13 +121,12 @@ class PythonMicroBatchStreamWithAdmissionControl(
     outputSchema: StructType,
     options: CaseInsensitiveStringMap,
     runner: PythonStreamingSourceRunner)
-    extends PythonMicroBatchStreamBase(ds, shortName, outputSchema, options, runner)
-    with SupportsAdmissionControl {
+  extends PythonMicroBatchStreamBase(ds, shortName, outputSchema, options, runner)
+  with SupportsAdmissionControl {
 
   override def latestOffset(): Offset = {
-    throw new IllegalStateException(
-      "latestOffset without parameters is not expected to be " +
-        "called. Please use latestOffset(startOffset: Offset, limit: ReadLimit) instead.")
+    throw new IllegalStateException("latestOffset without parameters is not expected to be " +
+      "called. Please use latestOffset(startOffset: Offset, limit: ReadLimit) instead.")
   }
 
   override def latestOffset(startOffset: Offset, limit: ReadLimit): Offset = {
@@ -157,13 +154,8 @@ class PythonMicroBatchStreamWithTriggerAvailableNow(
     outputSchema: StructType,
     options: CaseInsensitiveStringMap,
     runner: PythonStreamingSourceRunner)
-    extends PythonMicroBatchStreamWithAdmissionControl(
-      ds,
-      shortName,
-      outputSchema,
-      options,
-      runner)
-    with SupportsTriggerAvailableNow {
+  extends PythonMicroBatchStreamWithAdmissionControl(ds, shortName, outputSchema, options, runner)
+  with SupportsTriggerAvailableNow {
 
   override def prepareForTriggerAvailableNow(): Unit = {
     runner.prepareForTriggerAvailableNow()
@@ -187,7 +179,10 @@ object PythonMicroBatchStream {
     // timing/sequencing issue of calling them in here.
     def createDataSourceFunc: PythonFunction =
       ds.source.createPythonFunction(
-        ds.getOrCreateDataSourceInPython(shortName, options, Some(outputSchema)).dataSource)
+        ds.getOrCreateDataSourceInPython(
+          shortName,
+          options,
+          Some(outputSchema)).dataSource)
 
     new PythonStreamingSourceRunner(createDataSourceFunc, outputSchema)
   }

@@ -38,9 +38,10 @@ import org.apache.spark.status.{ElementTrackingStore, KVUtils, LiveEntity}
 import org.apache.spark.util.{MetricUtils, Utils}
 import org.apache.spark.util.collection.OpenHashMap
 
-class SQLAppStatusListener(conf: SparkConf, kvstore: ElementTrackingStore, live: Boolean)
-    extends SparkListener
-    with Logging {
+class SQLAppStatusListener(
+    conf: SparkConf,
+    kvstore: ElementTrackingStore,
+    live: Boolean) extends SparkListener with Logging {
 
   // How often to flush intermediate state of a live execution to the store. When replaying logs,
   // never flush (only do the very last write).
@@ -57,9 +58,8 @@ class SQLAppStatusListener(conf: SparkConf, kvstore: ElementTrackingStore, live:
     liveExecutions.isEmpty && stageMetrics.isEmpty
   }
 
-  kvstore.addTrigger(classOf[SQLExecutionUIData], conf.get[Int](UI_RETAINED_EXECUTIONS)) {
-    count =>
-      cleanupExecutions(count)
+  kvstore.addTrigger(classOf[SQLExecutionUIData], conf.get[Int](UI_RETAINED_EXECUTIONS)) { count =>
+    cleanupExecutions(count)
   }
 
   kvstore.onFlush {
@@ -109,17 +109,15 @@ class SQLAppStatusListener(conf: SparkConf, kvstore: ElementTrackingStore, live:
         } catch {
           case _: NoSuchElementException => None
         }
-      }
-      .getOrElse(getOrCreateExecution(executionId))
+      }.getOrElse(getOrCreateExecution(executionId))
 
     // Record the accumulator IDs and metric types for the stages of this job, so that the code
     // that keeps track of the metrics knows which accumulators to look at.
     val accumIdsAndType = exec.metricAccumulatorIdToMetricType
     if (accumIdsAndType.nonEmpty) {
       event.stageInfos.foreach { stage =>
-        stageMetrics.put(
-          stage.stageId,
-          new LiveStageMetrics(stage.stageId, 0, stage.numTasks, accumIdsAndType))
+        stageMetrics.put(stage.stageId, new LiveStageMetrics(stage.stageId, 0,
+          stage.numTasks, accumIdsAndType))
       }
     }
 
@@ -136,13 +134,9 @@ class SQLAppStatusListener(conf: SparkConf, kvstore: ElementTrackingStore, live:
     // Reset the metrics tracking object for the new attempt.
     Option(stageMetrics.get(event.stageInfo.stageId)).foreach { stage =>
       if (stage.attemptId != event.stageInfo.attemptNumber()) {
-        stageMetrics.put(
-          event.stageInfo.stageId,
-          new LiveStageMetrics(
-            event.stageInfo.stageId,
-            event.stageInfo.attemptNumber(),
-            stage.numTasks,
-            stage.accumIdsToMetricType))
+        stageMetrics.put(event.stageInfo.stageId,
+          new LiveStageMetrics(event.stageInfo.stageId, event.stageInfo.attemptNumber(),
+            stage.numTasks, stage.accumIdsToMetricType))
       }
     }
   }
@@ -163,13 +157,8 @@ class SQLAppStatusListener(conf: SparkConf, kvstore: ElementTrackingStore, live:
 
   override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = {
     event.accumUpdates.foreach { case (taskId, stageId, attemptId, accumUpdates) =>
-      updateStageMetrics(
-        stageId,
-        attemptId,
-        taskId,
-        SQLAppStatusListener.UNKNOWN_INDEX,
-        accumUpdates,
-        false)
+      updateStageMetrics(stageId, attemptId, taskId, SQLAppStatusListener.UNKNOWN_INDEX,
+        accumUpdates, false)
     }
   }
 
@@ -202,12 +191,7 @@ class SQLAppStatusListener(conf: SparkConf, kvstore: ElementTrackingStore, live:
     } else {
       info.accumulables
     }
-    updateStageMetrics(
-      event.stageId,
-      event.stageAttemptId,
-      info.taskId,
-      info.index,
-      accums.toSeq,
+    updateStageMetrics(event.stageId, event.stageAttemptId, info.taskId, info.index, accums.toSeq,
       info.successful)
   }
 
@@ -227,36 +211,33 @@ class SQLAppStatusListener(conf: SparkConf, kvstore: ElementTrackingStore, live:
     val metricAggregationMap = new mutable.HashMap[String, (Array[Long], Array[Long]) => String]()
     val metricAggregationMethods = exec.metrics.map { m =>
       val optClassName = CustomMetrics.parseV2CustomMetricType(m.metricType)
-      val metricAggMethod = optClassName
-        .map { className =>
-          if (metricAggregationMap.contains(className)) {
-            metricAggregationMap(className)
-          } else {
-            // Try to initiate custom metric object
-            try {
-              val metric = Utils.loadExtensions(classOf[CustomMetric], Seq(className), conf).head
-              val method =
-                (metrics: Array[Long], _: Array[Long]) => metric.aggregateTaskMetrics(metrics)
-              metricAggregationMap.put(className, method)
-              method
-            } catch {
-              case NonFatal(e) =>
-                logWarning(
-                  log"Unable to load custom metric object for class " +
-                    log"`${MDC(CLASS_NAME, className)}`. Please make sure that the custom metric " +
-                    log"class is in the classpath and it has 0-arg constructor.",
-                  e)
-                // Cannot initialize custom metric object, we might be in history server that does
-                // not have the custom metric class.
-                val defaultMethod = (_: Array[Long], _: Array[Long]) => "N/A"
-                metricAggregationMap.put(className, defaultMethod)
-                defaultMethod
-            }
+      val metricAggMethod = optClassName.map { className =>
+        if (metricAggregationMap.contains(className)) {
+          metricAggregationMap(className)
+        } else {
+          // Try to initiate custom metric object
+          try {
+            val metric = Utils.loadExtensions(classOf[CustomMetric], Seq(className), conf).head
+            val method =
+              (metrics: Array[Long], _: Array[Long]) => metric.aggregateTaskMetrics(metrics)
+            metricAggregationMap.put(className, method)
+            method
+          } catch {
+            case NonFatal(e) =>
+              logWarning(log"Unable to load custom metric object for class " +
+                log"`${MDC(CLASS_NAME, className)}`. Please make sure that the custom metric " +
+                log"class is in the classpath and it has 0-arg constructor.", e)
+              // Cannot initialize custom metric object, we might be in history server that does
+              // not have the custom metric class.
+              val defaultMethod = (_: Array[Long], _: Array[Long]) => "N/A"
+              metricAggregationMap.put(className, defaultMethod)
+              defaultMethod
           }
         }
-        .getOrElse(
-          // Built-in SQLMetric
-          MetricUtils.stringValue(m.metricType, _, _))
+      }.getOrElse(
+        // Built-in SQLMetric
+        MetricUtils.stringValue(m.metricType, _, _)
+      )
       (m.accumulatorId, metricAggMethod)
     }.toMap
 
@@ -284,8 +265,7 @@ class SQLAppStatusListener(conf: SparkConf, kvstore: ElementTrackingStore, live:
     // Find the max for each metric id between all stages.
     val validMaxMetrics = maxMetrics.filter(m => accumIds.contains(m._1))
     validMaxMetrics.foreach { case (id, value, taskId, stageId, attemptId) =>
-      val updated =
-        maxMetricsFromAllStages.getOrElse(id, Array(value, stageId, attemptId, taskId))
+      val updated = maxMetricsFromAllStages.getOrElse(id, Array(value, stageId, attemptId, taskId))
       if (value > updated(0)) {
         updated(0) = value
         updated(1) = stageId
@@ -316,9 +296,8 @@ class SQLAppStatusListener(conf: SparkConf, kvstore: ElementTrackingStore, live:
     }
 
     val aggregatedMetrics = allMetrics.map { case (id, values) =>
-      id -> metricAggregationMethods(id)(
-        values,
-        maxMetricsFromAllStages.getOrElse(id, Array.empty[Long]))
+      id -> metricAggregationMethods(id)(values, maxMetricsFromAllStages.getOrElse(id,
+        Array.empty[Long]))
     }.toMap
 
     // Check the execution again for whether the aggregated metrics data has been calculated.
@@ -364,30 +343,18 @@ class SQLAppStatusListener(conf: SparkConf, kvstore: ElementTrackingStore, live:
   }
 
   private def onExecutionStart(event: SparkListenerSQLExecutionStart): Unit = {
-    val SparkListenerSQLExecutionStart(
-      executionId,
-      rootExecutionId,
-      description,
-      details,
-      physicalPlanDescription,
-      sparkPlanInfo,
-      time,
-      modifiedConfigs,
-      _,
-      _,
-      queryId) = event
+    val SparkListenerSQLExecutionStart(executionId, rootExecutionId, description, details,
+      physicalPlanDescription, sparkPlanInfo, time, modifiedConfigs, _, _, queryId) = event
 
     val planGraph = SparkPlanGraph(sparkPlanInfo)
-    val sqlPlanMetrics = planGraph.allNodes
-      .flatMap { node =>
-        node.metrics.map { metric => (metric.accumulatorId, metric) }
-      }
-      .toMap
-      .values
-      .toList
+    val sqlPlanMetrics = planGraph.allNodes.flatMap { node =>
+      node.metrics.map { metric => (metric.accumulatorId, metric) }
+    }.toMap.values.toList
 
-    val graphToStore =
-      new SparkPlanGraphWrapper(executionId, toStoredNodes(planGraph.nodes), planGraph.edges)
+    val graphToStore = new SparkPlanGraphWrapper(
+      executionId,
+      toStoredNodes(planGraph.nodes),
+      planGraph.edges)
     kvstore.write(graphToStore)
 
     val exec = getOrCreateExecution(executionId)
@@ -404,21 +371,17 @@ class SQLAppStatusListener(conf: SparkConf, kvstore: ElementTrackingStore, live:
 
   private def onAdaptiveExecutionUpdate(event: SparkListenerSQLAdaptiveExecutionUpdate): Unit = {
     val SparkListenerSQLAdaptiveExecutionUpdate(
-      executionId,
-      physicalPlanDescription,
-      sparkPlanInfo) = event
+      executionId, physicalPlanDescription, sparkPlanInfo) = event
 
     val planGraph = SparkPlanGraph(sparkPlanInfo)
-    val sqlPlanMetrics = planGraph.allNodes
-      .flatMap { node =>
-        node.metrics.map { metric => (metric.accumulatorId, metric) }
-      }
-      .toMap
-      .values
-      .toList
+    val sqlPlanMetrics = planGraph.allNodes.flatMap { node =>
+      node.metrics.map { metric => (metric.accumulatorId, metric) }
+    }.toMap.values.toList
 
-    val graphToStore =
-      new SparkPlanGraphWrapper(executionId, toStoredNodes(planGraph.nodes), planGraph.edges)
+    val graphToStore = new SparkPlanGraphWrapper(
+      executionId,
+      toStoredNodes(planGraph.nodes),
+      planGraph.edges)
     kvstore.write(graphToStore)
 
     val exec = getOrCreateExecution(executionId)
@@ -456,16 +419,10 @@ class SQLAppStatusListener(conf: SparkConf, kvstore: ElementTrackingStore, live:
 
   private def removeStaleMetricsData(exec: LiveExecutionData): Unit = {
     // Remove stale LiveStageMetrics objects for stages that are not active anymore.
-    val activeStages = liveExecutions
-      .values()
-      .asScala
-      .flatMap { other =>
-        if (other != exec) other.stages else Nil
-      }
-      .toSet
-    stageMetrics
-      .keySet()
-      .asScala
+    val activeStages = liveExecutions.values().asScala.flatMap { other =>
+      if (other != exec) other.stages else Nil
+    }.toSet
+    stageMetrics.keySet().asScala
       .filter(!activeStages.contains(_))
       .foreach(stageMetrics.remove)
   }
@@ -488,7 +445,8 @@ class SQLAppStatusListener(conf: SparkConf, kvstore: ElementTrackingStore, live:
   }
 
   private def getOrCreateExecution(executionId: Long): LiveExecutionData = {
-    liveExecutions.computeIfAbsent(executionId, (_: Long) => new LiveExecutionData(executionId))
+    liveExecutions.computeIfAbsent(executionId,
+      (_: Long) => new LiveExecutionData(executionId))
   }
 
   private def update(exec: LiveExecutionData, force: Boolean = false): Unit = {
@@ -598,14 +556,14 @@ private class LiveStageMetrics(
   private val completedIndices = new mutable.BitSet()
 
   /**
-   * Task metrics values for the stage. Maps the metric ID to the metric values for each index.
-   * For each metric ID, there will be the same number of values as the number of indices. This
-   * relies on `MetricUtils.stringValue` treating 0 as a neutral value, independent of the actual
-   * metric type.
+   * Task metrics values for the stage. Maps the metric ID to the metric values for each
+   * index. For each metric ID, there will be the same number of values as the number
+   * of indices. This relies on `MetricUtils.stringValue` treating 0 as a neutral value,
+   * independent of the actual metric type.
    */
   private val taskMetrics = new ConcurrentHashMap[Long, Array[Long]]()
 
-  private val metricsIdToMaxTaskValue = new ConcurrentHashMap[Long, Array[Long]]()
+  private val  metricsIdToMaxTaskValue = new ConcurrentHashMap[Long, Array[Long]]()
 
   def registerTask(taskId: Long, taskIdx: Int): Unit = {
     taskIndices.update(taskId, taskIdx)
@@ -648,8 +606,8 @@ private class LiveStageMetrics(
         metricValues(taskIdx) = value
 
         if (MetricUtils.metricNeedsMax(accumIdsToMetricType(acc.id))) {
-          val maxMetricsTaskId =
-            metricsIdToMaxTaskValue.computeIfAbsent(acc.id, _ => Array(value, taskId))
+          val maxMetricsTaskId = metricsIdToMaxTaskValue.computeIfAbsent(acc.id, _ => Array(value,
+            taskId))
 
           if (value > maxMetricsTaskId.head) {
             maxMetricsTaskId(0) = value
@@ -666,8 +624,8 @@ private class LiveStageMetrics(
 
   // Return Seq of metric id, value, taskId, stageId, attemptId for this stage
   def maxMetricValues(): Seq[(Long, Long, Long, Int, Int)] = {
-    metricsIdToMaxTaskValue.asScala.toSeq.map { case (id, maxMetrics) =>
-      (id, maxMetrics(0), maxMetrics(1), stageId, attemptId)
+    metricsIdToMaxTaskValue.asScala.toSeq.map { case (id, maxMetrics) => (id, maxMetrics(0),
+      maxMetrics(1), stageId, attemptId)
     }
   }
 }

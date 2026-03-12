@@ -23,8 +23,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
 
 /**
- * A relation produced by applying a function that takes an iterator of pandas DataFrames and
- * outputs an iterator of pandas DataFrames.
+ * A relation produced by applying a function that takes an iterator of pandas DataFrames
+ * and outputs an iterator of pandas DataFrames.
  */
 case class MapInPandasExec(
     func: Expression,
@@ -32,7 +32,7 @@ case class MapInPandasExec(
     child: SparkPlan,
     override val isBarrier: Boolean,
     override val profile: Option[ResourceProfile])
-    extends MapInBatchExec {
+  extends MapInBatchExec {
 
   override protected val pythonEvalType: Int = PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
 

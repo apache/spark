@@ -37,10 +37,11 @@ object SchemaUtil {
   def getSchemaAsDataType(schema: StructType, fieldName: String): DataType = {
     schema.getFieldIndex(fieldName) match {
       case Some(idx) => schema(idx).dataType
-      case _ =>
-        throw new AnalysisException(
-          errorClass = "_LEGACY_ERROR_TEMP_3074",
-          messageParameters = Map("fieldName" -> fieldName, "schema" -> schema.toString()))
+      case _ => throw new AnalysisException(
+        errorClass = "_LEGACY_ERROR_TEMP_3074",
+        messageParameters = Map(
+          "fieldName" -> fieldName,
+          "schema" -> schema.toString()))
     }
   }
 
@@ -70,10 +71,8 @@ object SchemaUtil {
         .add("column_family_name", StringType)
     } else if (transformWithStateVariableInfoOpt.isDefined) {
       require(stateStoreColFamilySchemaOpt.isDefined)
-      generateSchemaForStateVar(
-        transformWithStateVariableInfoOpt.get,
-        stateStoreColFamilySchemaOpt.get,
-        sourceOptions)
+      generateSchemaForStateVar(transformWithStateVariableInfoOpt.get,
+        stateStoreColFamilySchemaOpt.get, sourceOptions)
     } else if (sourceOptions.readChangeFeed) {
       new StructType()
         .add("batch_id", LongType)
@@ -99,10 +98,10 @@ object SchemaUtil {
 
   /**
    * Returns an InternalRow representing
-   *   1. partitionKey (extracted using the StatePartitionKeyExtractor)
-   *   2. key in bytes
-   *   3. value in bytes
-   *   4. column family name
+   * 1. partitionKey (extracted using the StatePartitionKeyExtractor)
+   * 2. key in bytes
+   * 3. value in bytes
+   * 4. column family name
    */
   def unifyStateRowPairAsRawBytes(
       pair: (UnsafeRow, UnsafeRow),
@@ -127,38 +126,43 @@ object SchemaUtil {
   }
 
   /**
-   * For map state variables, state rows are stored as composite key. To return grouping key ->
-   * Map{user key -> value} as one state reader row to the users, we need to perform grouping on
-   * state rows by their grouping key, and construct a map for that grouping key.
+   * For map state variables, state rows are stored as composite key.
+   * To return grouping key -> Map{user key -> value} as one state reader row to
+   * the users, we need to perform grouping on state rows by their grouping key,
+   * and construct a map for that grouping key.
    *
-   * We traverse the iterator returned from state store, and will only return a row for `next()`
-   * only if the grouping key in the next row from state store is different (or there are no more
-   * rows)
+   * We traverse the iterator returned from state store,
+   * and will only return a row for `next()` only if the grouping key in the next row
+   * from state store is different (or there are no more rows)
    *
-   * Note that all state rows with the same grouping key are co-located so they will appear
-   * consecutively during the iterator traversal.
+   * Note that all state rows with the same grouping key are co-located so they will
+   * appear consecutively during the iterator traversal.
    */
   def unifyMapStateRowPair(
       stateRows: Iterator[UnsafeRowPair],
       compositeKeySchema: StructType,
       partitionId: Int,
       stateSourceOptions: StateSourceOptions): Iterator[InternalRow] = {
-    val groupingKeySchema =
-      SchemaUtil.getSchemaAsDataType(compositeKeySchema, "key").asInstanceOf[StructType]
-    val userKeySchema =
-      SchemaUtil.getSchemaAsDataType(compositeKeySchema, "userKey").asInstanceOf[StructType]
+    val groupingKeySchema = SchemaUtil.getSchemaAsDataType(
+      compositeKeySchema, "key"
+    ).asInstanceOf[StructType]
+    val userKeySchema = SchemaUtil.getSchemaAsDataType(
+      compositeKeySchema, "userKey"
+    ).asInstanceOf[StructType]
 
-    def appendKVPairToMap(curMap: mutable.Map[Any, Any], stateRowPair: UnsafeRowPair): Unit = {
+    def appendKVPairToMap(
+        curMap: mutable.Map[Any, Any],
+        stateRowPair: UnsafeRowPair): Unit = {
       curMap += (
-        stateRowPair.key
-          .get(1, userKeySchema)
-          .asInstanceOf[UnsafeRow]
-          .copy() ->
+        stateRowPair.key.get(1, userKeySchema)
+          .asInstanceOf[UnsafeRow].copy() ->
           stateRowPair.value.copy()
-      )
+        )
     }
 
-    def createDataRow(groupingKey: Any, curMap: mutable.Map[Any, Any]): GenericInternalRow = {
+    def createDataRow(
+        groupingKey: Any,
+        curMap: mutable.Map[Any, Any]): GenericInternalRow = {
       val row = new GenericInternalRow(3)
       val mapData = ArrayBasedMapData(curMap)
       row.update(0, groupingKey)
@@ -208,9 +212,7 @@ object SchemaUtil {
               // Need to make a copy because we need to keep the
               // value across function calls
               curGroupingKey = curStateRowPair.key
-                .get(0, groupingKeySchema)
-                .asInstanceOf[UnsafeRow]
-                .copy()
+                .get(0, groupingKeySchema).asInstanceOf[UnsafeRow].copy()
               appendKVPairToMap(curMap, curStateRowPair)
             } else {
               val curPairGroupingKey =
@@ -227,10 +229,9 @@ object SchemaUtil {
             // found a different grouping key
             val row = createDataRow(curGroupingKey, curMap)
             // update vars
-            curGroupingKey = curStateRowPair.key
-              .get(0, groupingKeySchema)
-              .asInstanceOf[UnsafeRow]
-              .copy()
+            curGroupingKey =
+              curStateRowPair.key.get(0, groupingKeySchema)
+                .asInstanceOf[UnsafeRow].copy()
             // empty the map, append current row
             curMap.clear()
             appendKVPairToMap(curMap, curStateRowPair)
@@ -238,10 +239,10 @@ object SchemaUtil {
             row
           } else {
             if (curMap.isEmpty) {
-              throw new NoSuchElementException(
-                "Please check if the iterator hasNext(); Likely " +
-                  "user is trying to get element from an exhausted iterator.")
-            } else {
+              throw new NoSuchElementException("Please check if the iterator hasNext(); Likely " +
+                "user is trying to get element from an exhausted iterator.")
+            }
+            else {
               // reach the end of the state rows
               val row = createDataRow(curGroupingKey, curMap)
               // clear the map to end the iterator
@@ -258,7 +259,7 @@ object SchemaUtil {
       sourceOptions: StateSourceOptions,
       schema: StructType,
       transformWithStateVariableInfoOpt: Option[TransformWithStateVariableInfo]): Boolean = {
-    val expectedTypes = Map(
+  val expectedTypes = Map(
       "batch_id" -> classOf[LongType],
       "change_type" -> classOf[StringType],
       "key" -> classOf[StructType],
@@ -300,13 +301,7 @@ object SchemaUtil {
 
         case MapState =>
           if (sourceOptions.readChangeFeed) {
-            Seq(
-              "batch_id",
-              "change_type",
-              "key",
-              "user_map_key",
-              "user_map_value",
-              "partition_id")
+            Seq("batch_id", "change_type", "key", "user_map_key", "user_map_value", "partition_id")
           } else if (sourceOptions.flattenCollectionTypes) {
             Seq("key", "user_map_key", "user_map_value", "partition_id")
           } else {
@@ -379,12 +374,13 @@ object SchemaUtil {
         }
 
       case MapState =>
-        val groupingKeySchema =
-          SchemaUtil.getSchemaAsDataType(stateStoreColFamilySchema.keySchema, "key")
+        val groupingKeySchema = SchemaUtil.getSchemaAsDataType(
+          stateStoreColFamilySchema.keySchema, "key")
         val userKeySchema = stateStoreColFamilySchema.userKeyEncoderSchema.get
         val valueMapSchema = MapType.apply(
           keyType = userKeySchema,
-          valueType = stateStoreColFamilySchema.valueSchema)
+          valueType = stateStoreColFamilySchema.valueSchema
+        )
 
         if (stateSourceOptions.readChangeFeed) {
           new StructType()
@@ -408,16 +404,15 @@ object SchemaUtil {
         }
 
       case TimerState =>
-        val groupingKeySchema =
-          SchemaUtil.getSchemaAsDataType(stateStoreColFamilySchema.keySchema, "key")
+        val groupingKeySchema = SchemaUtil.getSchemaAsDataType(
+          stateStoreColFamilySchema.keySchema, "key")
         new StructType()
           .add("key", groupingKeySchema)
           .add("expiration_timestamp_ms", LongType)
           .add("partition_id", IntegerType)
 
       case _ =>
-        throw StateDataSourceErrors.internalError(
-          s"Unsupported state variable type $stateVarType")
+        throw StateDataSourceErrors.internalError(s"Unsupported state variable type $stateVarType")
     }
   }
 
@@ -425,35 +420,30 @@ object SchemaUtil {
       stateVariableInfoOpt: Option[TransformWithStateVariableInfo],
       varType: StateVariableType): Boolean = {
     stateVariableInfoOpt.isDefined &&
-    stateVariableInfoOpt.get.stateVariableType == varType
+      stateVariableInfoOpt.get.stateVariableType == varType
   }
 
   /**
-   * Given key-value schema generated from `generateSchemaForStateVar()`, returns the compositeKey
-   * schema that key is stored in the state store
+   * Given key-value schema generated from `generateSchemaForStateVar()`,
+   * returns the compositeKey schema that key is stored in the state store
    */
   def getCompositeKeySchema(
       schema: StructType,
       stateSourceOptions: StateSourceOptions): StructType = {
-    val groupingKeySchema = SchemaUtil.getSchemaAsDataType(schema, "key").asInstanceOf[StructType]
-    val userKeySchema =
-      try {
-        if (stateSourceOptions.flattenCollectionTypes) {
-          Option(SchemaUtil.getSchemaAsDataType(schema, "user_map_key").asInstanceOf[StructType])
-        } else {
-          Option(
-            SchemaUtil
-              .getSchemaAsDataType(schema, "map_value")
-              .asInstanceOf[MapType]
-              .keyType
-              .asInstanceOf[StructType])
-        }
-      } catch {
-        case NonFatal(e) =>
-          throw StateDataSourceErrors.internalError(
-            s"No such field named as 'map_value' " +
-              s"during state source reader schema initialization. Internal exception message: $e")
+    val groupingKeySchema = SchemaUtil.getSchemaAsDataType(
+      schema, "key").asInstanceOf[StructType]
+    val userKeySchema = try {
+      if (stateSourceOptions.flattenCollectionTypes) {
+        Option(SchemaUtil.getSchemaAsDataType(schema, "user_map_key").asInstanceOf[StructType])
+      } else {
+        Option(SchemaUtil.getSchemaAsDataType(schema, "map_value").asInstanceOf[MapType]
+          .keyType.asInstanceOf[StructType])
       }
+    } catch {
+      case NonFatal(e) =>
+        throw StateDataSourceErrors.internalError(s"No such field named as 'map_value' " +
+          s"during state source reader schema initialization. Internal exception message: $e")
+    }
     new StructType()
       .add("key", groupingKeySchema)
       .add("userKey", userKeySchema.get)
@@ -503,11 +493,8 @@ object SchemaUtil {
         }
 
       case StateVariableType.MapState =>
-        unifyMapStateRowPair(
-          store.iterator(stateVarName),
-          compositeKeySchema,
-          partitionId,
-          stateSourceOptions)
+        unifyMapStateRowPair(store.iterator(stateVarName),
+          compositeKeySchema, partitionId, stateSourceOptions)
 
       case StateVariableType.TimerState =>
         store
@@ -517,7 +504,8 @@ object SchemaUtil {
           }
 
       case _ =>
-        throw new IllegalStateException(s"Unsupported state variable type: $stateVarType")
+        throw new IllegalStateException(
+          s"Unsupported state variable type: $stateVarType")
     }
   }
 

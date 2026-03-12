@@ -35,10 +35,7 @@ class AlterTableRenameParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("alter Table spark_catalog.ns.tbl RENAME to tbl"),
       RenameTable(
-        UnresolvedTableOrView(
-          Seq("spark_catalog", "ns", "tbl"),
-          "ALTER TABLE ... RENAME TO",
-          true),
+        UnresolvedTableOrView(Seq("spark_catalog", "ns", "tbl"), "ALTER TABLE ... RENAME TO", true),
         Seq("tbl"),
         isView = false))
   }

@@ -37,7 +37,7 @@ object PushProjectionThroughLimitAndOffset extends Rule[LogicalPlan] {
       g.copy(child = limit.copy(child = p.copy(projectList, child)))
 
     case p @ Project(projectList, offset @ Offset(_, child))
-        if projectList.forall(_.deterministic) =>
+      if projectList.forall(_.deterministic) =>
       offset.copy(child = p.copy(projectList, child))
   }
 }

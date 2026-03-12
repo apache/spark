@@ -32,85 +32,70 @@ import org.apache.spark.util.{CompletionIterator, NextIterator}
 
 /**
  * A physical operator for executing a streaming limit, which makes sure no more than streamLimit
- * rows are returned. This physical operator is only meant for logical limit operations that will
- * get a input stream of rows that are effectively appends. For example,
- *   - limit on any query in append mode
- *   - limit before the aggregation in a streaming aggregation query complete mode
+ * rows are returned. This physical operator is only meant for logical limit operations that
+ * will get a input stream of rows that are effectively appends. For example,
+ * - limit on any query in append mode
+ * - limit before the aggregation in a streaming aggregation query complete mode
  */
 case class StreamingGlobalLimitExec(
     streamLimit: Long,
     child: SparkPlan,
     stateInfo: Option[StatefulOperatorStateInfo] = None,
     outputMode: Option[OutputMode] = None)
-    extends UnaryExecNode
-    with StateStoreWriter {
+  extends UnaryExecNode with StateStoreWriter {
 
   private val keySchema = StructType(Array(StructField("key", NullType)))
   private val valueSchema = StructType(Array(StructField("value", LongType)))
 
   override def validateAndMaybeEvolveStateSchema(
-      hadoopConf: Configuration,
-      batchId: Long,
-      stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
-    val newStateSchema = List(
-      StateStoreColFamilySchema(
-        StateStore.DEFAULT_COL_FAMILY_NAME,
-        keySchemaId = 0,
-        keySchema,
-        valueSchemaId = 0,
-        valueSchema))
-    List(
-      StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(
-        getStateInfo,
-        hadoopConf,
-        newStateSchema,
-        session.sessionState,
-        stateSchemaVersion))
+      hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
+    List[StateSchemaValidationResult] = {
+    val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchemaId = 0, keySchema, valueSchemaId = 0, valueSchema))
+    List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
+      newStateSchema, session.sessionState, stateSchemaVersion))
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
 
-    child
-      .execute()
-      .mapPartitionsWithStateStore(
+    child.execute().mapPartitionsWithStateStore(
         getStateInfo,
         keySchema,
         valueSchema,
         NoPrefixKeyStateEncoderSpec(keySchema),
         session.sessionState,
         Some(session.streams.stateStoreCoordinator)) { (store, iter) =>
-        val key = UnsafeProjection.create(keySchema)(new GenericInternalRow(Array[Any](null)))
-        val numOutputRows = longMetric("numOutputRows")
-        val numUpdatedStateRows = longMetric("numUpdatedStateRows")
-        val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
-        val commitTimeMs = longMetric("commitTimeMs")
-        val updatesStartTimeNs = System.nanoTime
+      val key = UnsafeProjection.create(keySchema)(new GenericInternalRow(Array[Any](null)))
+      val numOutputRows = longMetric("numOutputRows")
+      val numUpdatedStateRows = longMetric("numUpdatedStateRows")
+      val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
+      val commitTimeMs = longMetric("commitTimeMs")
+      val updatesStartTimeNs = System.nanoTime
 
-        val preBatchRowCount: Long = Option(store.get(key)).map(_.getLong(0)).getOrElse(0L)
-        var cumulativeRowCount = preBatchRowCount
+      val preBatchRowCount: Long = Option(store.get(key)).map(_.getLong(0)).getOrElse(0L)
+      var cumulativeRowCount = preBatchRowCount
 
-        val result = iter.filter { r =>
-          val x = cumulativeRowCount < streamLimit
-          if (x) {
-            cumulativeRowCount += 1
-          }
-          x
+      val result = iter.filter { r =>
+        val x = cumulativeRowCount < streamLimit
+        if (x) {
+          cumulativeRowCount += 1
         }
-
-        CompletionIterator[InternalRow, Iterator[InternalRow]](
-          result, {
-            if (cumulativeRowCount > preBatchRowCount) {
-              numUpdatedStateRows += 1
-              numOutputRows += cumulativeRowCount - preBatchRowCount
-              store.put(key, getValueRow(cumulativeRowCount))
-            }
-            allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
-            commitTimeMs += timeTakenMs { store.commit() }
-            setStoreMetrics(store)
-            setOperatorMetrics()
-          })
+        x
       }
+
+      CompletionIterator[InternalRow, Iterator[InternalRow]](result, {
+        if (cumulativeRowCount > preBatchRowCount) {
+          numUpdatedStateRows += 1
+          numOutputRows += cumulativeRowCount - preBatchRowCount
+          store.put(key, getValueRow(cumulativeRowCount))
+        }
+        allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
+        commitTimeMs += timeTakenMs { store.commit() }
+        setStoreMetrics(store)
+        setOperatorMetrics()
+      })
+    }
   }
 
   override def output: Seq[Attribute] = child.output
@@ -129,15 +114,18 @@ case class StreamingGlobalLimitExec(
     copy(child = newChild)
 }
 
+
 /**
  * A physical operator for executing limits locally on each partition. The main difference from
  * LocalLimitExec is that this will fully consume `child` plan's iterators to ensure that any
  * stateful operation within `child` commits all the state changes (many stateful operations
  * commit state changes only after the iterator is consumed).
  */
-case class StreamingLocalLimitExec(limit: Int, child: SparkPlan) extends LimitExec {
+case class StreamingLocalLimitExec(limit: Int, child: SparkPlan)
+  extends LimitExec {
 
   override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
+
     var generatedCount = 0
 
     new NextIterator[InternalRow]() {

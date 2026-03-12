@@ -33,14 +33,12 @@ sealed trait ShufflePartitionSpec
 case class CoalescedPartitionSpec(
     startReducerIndex: Int,
     endReducerIndex: Int,
-    @transient dataSize: Option[Long] = None)
-    extends ShufflePartitionSpec
+    @transient dataSize: Option[Long] = None) extends ShufflePartitionSpec
 
 object CoalescedPartitionSpec {
-  def apply(
-      startReducerIndex: Int,
-      endReducerIndex: Int,
-      dataSize: Long): CoalescedPartitionSpec = {
+  def apply(startReducerIndex: Int,
+            endReducerIndex: Int,
+            dataSize: Long): CoalescedPartitionSpec = {
     CoalescedPartitionSpec(startReducerIndex, endReducerIndex, Some(dataSize))
   }
 }
@@ -51,37 +49,38 @@ case class PartialReducerPartitionSpec(
     reducerIndex: Int,
     startMapIndex: Int,
     endMapIndex: Int,
-    @transient dataSize: Long)
-    extends ShufflePartitionSpec
+    @transient dataSize: Long) extends ShufflePartitionSpec
 
 // A partition that reads partial data of one mapper, from `startReducerIndex` (inclusive) to
 // `endReducerIndex` (exclusive).
-case class PartialMapperPartitionSpec(mapIndex: Int, startReducerIndex: Int, endReducerIndex: Int)
-    extends ShufflePartitionSpec
+case class PartialMapperPartitionSpec(
+    mapIndex: Int,
+    startReducerIndex: Int,
+    endReducerIndex: Int) extends ShufflePartitionSpec
 
 // TODO(SPARK-36234): Consider mapper location and shuffle block size when coalescing mappers
-case class CoalescedMapperPartitionSpec(startMapIndex: Int, endMapIndex: Int, numReducers: Int)
-    extends ShufflePartitionSpec
+case class CoalescedMapperPartitionSpec(
+    startMapIndex: Int,
+    endMapIndex: Int,
+    numReducers: Int) extends ShufflePartitionSpec
 
 /**
  * The [[Partition]] used by [[ShuffledRowRDD]].
  */
-private final case class ShuffledRowRDDPartition(index: Int, spec: ShufflePartitionSpec)
-    extends Partition
+private final case class ShuffledRowRDDPartition(
+  index: Int, spec: ShufflePartitionSpec) extends Partition
 
 /**
  * A Partitioner that might group together one or more partitions from the parent.
  *
- * @param parent
- *   a parent partitioner
- * @param partitionStartIndices
- *   indices of partitions in parent that should create new partitions in child (this should be an
- *   array of increasing partition IDs). For example, if we have a parent with 5 partitions, and
- *   partitionStartIndices is [0, 2, 4], we get three output partitions, corresponding to
- *   partition ranges [0, 1], [2, 3] and [4] of the parent partitioner.
+ * @param parent a parent partitioner
+ * @param partitionStartIndices indices of partitions in parent that should create new partitions
+ *   in child (this should be an array of increasing partition IDs). For example, if we have a
+ *   parent with 5 partitions, and partitionStartIndices is [0, 2, 4], we get three output
+ *   partitions, corresponding to partition ranges [0, 1], [2, 3] and [4] of the parent partitioner.
  */
 class CoalescedPartitioner(val parent: Partitioner, val partitionStartIndices: Array[Int])
-    extends Partitioner {
+  extends Partitioner {
 
   @transient private lazy val parentPartitionMapping: Array[Int] = {
     val n = parent.numPartitions
@@ -118,27 +117,26 @@ class CoalescedPartitioner(val parent: Partitioner, val partitionStartIndices: A
  * be implemented in Spark core, but that is blocked by some more general refactorings to shuffle
  * interfaces / internals.
  *
- * This RDD takes a [[ShuffleDependency]] (`dependency`), and an array of [[ShufflePartitionSpec]]
- * as input arguments.
+ * This RDD takes a [[ShuffleDependency]] (`dependency`),
+ * and an array of [[ShufflePartitionSpec]] as input arguments.
  *
  * The `dependency` has the parent RDD of this RDD, which represents the dataset before shuffle
- * (i.e. map output). Elements of this RDD are (partitionId, Row) pairs. Partition ids should be
- * in the range [0, numPartitions - 1]. `dependency.partitioner` is the original partitioner used
- * to partition map output, and `dependency.partitioner.numPartitions` is the number of
- * pre-shuffle partitions (i.e. the number of partitions of the map output).
+ * (i.e. map output). Elements of this RDD are (partitionId, Row) pairs.
+ * Partition ids should be in the range [0, numPartitions - 1].
+ * `dependency.partitioner` is the original partitioner used to partition
+ * map output, and `dependency.partitioner.numPartitions` is the number of pre-shuffle partitions
+ * (i.e. the number of partitions of the map output).
  */
 class ShuffledRowRDD(
     var dependency: ShuffleDependency[Int, InternalRow, InternalRow],
     metrics: Map[String, SQLMetric],
     partitionSpecs: Array[ShufflePartitionSpec])
-    extends RDD[InternalRow](dependency.rdd.context, Nil) {
+  extends RDD[InternalRow](dependency.rdd.context, Nil) {
 
   def this(
       dependency: ShuffleDependency[Int, InternalRow, InternalRow],
       metrics: Map[String, SQLMetric]) = {
-    this(
-      dependency,
-      metrics,
+    this(dependency, metrics,
       Array.tabulate(dependency.partitioner.numPartitions)(i => CoalescedPartitionSpec(i, i + 1)))
   }
 

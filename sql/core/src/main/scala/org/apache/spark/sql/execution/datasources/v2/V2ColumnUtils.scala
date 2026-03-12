@@ -21,7 +21,7 @@ import org.apache.spark.sql.connector.expressions.{Expression, NamedReference}
 
 object V2ColumnUtils {
   def extractV2Column(expr: Expression): Option[String] = expr match {
-    case r: NamedReference if r.fieldNames.length == 1 => Some(r.fieldNames.head)
+    case r: NamedReference if r. fieldNames.length == 1 => Some(r.fieldNames.head)
     case _ => None
   }
 }

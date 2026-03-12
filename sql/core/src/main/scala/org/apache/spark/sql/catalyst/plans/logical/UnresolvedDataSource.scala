@@ -28,7 +28,7 @@ case class UnresolvedDataSource(
     options: CaseInsensitiveMap[String],
     override val isStreaming: Boolean,
     paths: Seq[String])
-    extends UnresolvedLeafNode {
+  extends UnresolvedLeafNode {
 
   override def simpleString(maxFields: Int): String = toString
 

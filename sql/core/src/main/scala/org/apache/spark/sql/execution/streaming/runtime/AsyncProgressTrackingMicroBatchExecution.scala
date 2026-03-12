@@ -39,12 +39,12 @@ class AsyncProgressTrackingMicroBatchExecution(
     triggerClock: Clock,
     extraOptions: Map[String, String],
     plan: WriteToStream)
-    extends MicroBatchExecution(sparkSession, trigger, triggerClock, extraOptions, plan) {
+  extends MicroBatchExecution(sparkSession, trigger, triggerClock, extraOptions, plan) {
 
   import AsyncProgressTrackingMicroBatchExecution._
 
-  protected val asyncProgressTrackingCheckpointingIntervalMs: Long =
-    getAsyncProgressTrackingCheckpointingIntervalMs(extraOptions)
+  protected val asyncProgressTrackingCheckpointingIntervalMs: Long
+  = getAsyncProgressTrackingCheckpointingIntervalMs(extraOptions)
 
   // Offsets that are ready to be committed by the source.
   // This is needed so that we can call source commit in the same thread as micro-batch execution
@@ -59,30 +59,31 @@ class AsyncProgressTrackingMicroBatchExecution(
 
   // thread pool is only one thread because we want offset
   // writes to execute in order in a serialized fashion
-  protected val asyncWritesExecutorService =
-    ThreadUtils.newDaemonSingleThreadExecutorWithRejectedExecutionHandler(
-      "async-log-write",
-      2, // one for offset commit and one for completion commit
-      new RejectedExecutionHandler() {
-        override def rejectedExecution(r: Runnable, executor: ThreadPoolExecutor): Unit = {
-          try {
-            if (!executor.isShutdown) {
-              val start = System.currentTimeMillis()
-              executor.getQueue.put(r)
-              logDebug(
-                s"Async write paused execution for " +
-                  s"${System.currentTimeMillis() - start} due to task queue being full.")
-            }
-          } catch {
-            case e: InterruptedException =>
-              Thread.currentThread.interrupt()
-              throw new RejectedExecutionException("Producer interrupted", e)
-            case e: Throwable =>
-              logError("Encountered error in async write executor service", e)
-              errorNotifier.markError(e)
+  protected val asyncWritesExecutorService
+  = ThreadUtils.newDaemonSingleThreadExecutorWithRejectedExecutionHandler(
+    "async-log-write",
+    2, // one for offset commit and one for completion commit
+    new RejectedExecutionHandler() {
+      override def rejectedExecution(r: Runnable, executor: ThreadPoolExecutor): Unit = {
+        try {
+          if (!executor.isShutdown) {
+            val start = System.currentTimeMillis()
+            executor.getQueue.put(r)
+            logDebug(
+              s"Async write paused execution for " +
+                s"${System.currentTimeMillis() - start} due to task queue being full."
+            )
           }
+        } catch {
+          case e: InterruptedException =>
+            Thread.currentThread.interrupt()
+            throw new RejectedExecutionException("Producer interrupted", e)
+          case e: Throwable =>
+            logError("Encountered error in async write executor service", e)
+            errorNotifier.markError(e)
         }
-      })
+      }
+    })
 
   /**
    * Manages the metadata from this checkpoint location with async write operations.
@@ -93,7 +94,8 @@ class AsyncProgressTrackingMicroBatchExecution(
       resolvedCheckpointRoot,
       asyncWritesExecutorService,
       asyncProgressTrackingCheckpointingIntervalMs,
-      triggerClock)
+      triggerClock
+    )
 
   override lazy val offsetLog: AsyncOffsetSeqLog = asyncCheckpointMetadata.offsetLog
 
@@ -108,14 +110,10 @@ class AsyncProgressTrackingMicroBatchExecution(
      * The offset log may not be contiguous */
     val prevBatchId = offsetLog.getPrevBatchFromStorage(latestBatchId)
     if (latestBatchId != 0 && prevBatchId.isDefined) {
-      Some(
-        offsetLog
-          .get(prevBatchId.get)
-          .getOrElse({
-            throw new IllegalStateException(
-              s"Offset metadata for batch ${prevBatchId}" +
-                s" cannot be found.  This should not happen.")
-          }))
+      Some(offsetLog.get(prevBatchId.get).getOrElse({
+        throw new IllegalStateException(s"Offset metadata for batch ${prevBatchId}" +
+          s" cannot be found.  This should not happen.")
+      }))
     } else {
       None
     }
@@ -140,15 +138,14 @@ class AsyncProgressTrackingMicroBatchExecution(
   }
 
   /**
-   * Should not call super method as we need to do something completely different in this method
-   * for async progress tracking
+   * Should not call super method as we need to do something completely different
+   * in this method for async progress tracking
    */
   override def markMicroBatchStart(execCtx: MicroBatchExecutionContext): Unit = {
     // Because we are using a thread pool with only one thread, async writes to the offset log
     // are still written in a serial / in order fashion
     offsetLog
-      .addAsync(
-        execCtx.batchId,
+      .addAsync(execCtx.batchId,
         execCtx.endOffsets.toOffsets(sources, sourceIdMap, execCtx.offsetSeqMetadata))
       .thenAccept((tuple: (Long, Boolean)) => {
         val (batchId: Long, persistedToDurableStorage: Boolean) = tuple
@@ -177,10 +174,8 @@ class AsyncProgressTrackingMicroBatchExecution(
         }
       })
       .exceptionally((th: Throwable) => {
-        logError(
-          log"Encountered error while performing async offset write for batch " +
-            log"${MDC(BATCH_ID, execCtx.batchId)}",
-          th)
+        logError(log"Encountered error while performing async offset write for batch " +
+          log"${MDC(BATCH_ID, execCtx.batchId)}", th)
         errorNotifier.markError(th)
         return
       })
@@ -211,17 +206,14 @@ class AsyncProgressTrackingMicroBatchExecution(
         commitLog
           .addAsync(execCtx.batchId, CommitMetadata(watermarkTracker.currentWatermark))
           .exceptionally((th: Throwable) => {
-            logError(
-              log"Got exception during async write to commit log for batch " +
-                log"${MDC(BATCH_ID, execCtx.batchId)}",
-              th)
+            logError(log"Got exception during async write to commit log for batch " +
+              log"${MDC(BATCH_ID, execCtx.batchId)}", th)
             errorNotifier.markError(th)
             return
           })
       } else {
         if (!commitLog.addInMemory(
-            execCtx.batchId,
-            CommitMetadata(watermarkTracker.currentWatermark))) {
+          execCtx.batchId, CommitMetadata(watermarkTracker.currentWatermark))) {
           throw QueryExecutionErrors.concurrentStreamLogUpdate(execCtx.batchId)
         }
       }
@@ -247,15 +239,13 @@ class AsyncProgressTrackingMicroBatchExecution(
     super.cleanup()
 
     ThreadUtils.shutdown(asyncWritesExecutorService)
-    logInfo(
-      log"Async progress tracking executor pool for query " +
-        log"${MDC(PRETTY_ID_STRING, prettyIdString)} has been shutdown")
+    logInfo(log"Async progress tracking executor pool for query " +
+      log"${MDC(PRETTY_ID_STRING, prettyIdString)} has been shutdown")
   }
 
   // used for testing
   def areWritesPendingOrInProgress(): Boolean = {
-    asyncWritesExecutorService.getQueue
-      .size() > 0 || asyncWritesExecutorService.getActiveCount > 0
+    asyncWritesExecutorService.getQueue.size() > 0 || asyncWritesExecutorService.getActiveCount > 0
   }
 
   override protected def getTrigger(): TriggerExecutor = validateAndGetTrigger()
@@ -263,8 +253,9 @@ class AsyncProgressTrackingMicroBatchExecution(
   private def validateAndGetTrigger(): TriggerExecutor = {
     // validate that the pipeline is using a supported sink
     if (!extraOptions
-        .getOrElse(ASYNC_PROGRESS_TRACKING_OVERRIDE_SINK_SUPPORT_CHECK, "false")
-        .toBoolean) {
+      .getOrElse(
+        ASYNC_PROGRESS_TRACKING_OVERRIDE_SINK_SUPPORT_CHECK, "false")
+      .toBoolean) {
       try {
         plan.sink.name() match {
           case "noop-table" =>
@@ -274,7 +265,8 @@ class AsyncProgressTrackingMicroBatchExecution(
           case _ =>
             throw new IllegalArgumentException(
               s"Sink ${plan.sink.name()}" +
-                s" does not support async progress tracking")
+                s" does not support async progress tracking"
+            )
         }
       } catch {
         case e: IllegalStateException =>
@@ -282,7 +274,8 @@ class AsyncProgressTrackingMicroBatchExecution(
           if (e.getMessage.equals("should not be called.")) {
             throw new IllegalArgumentException(
               s"Sink ${plan.sink}" +
-                s" does not support async progress tracking")
+                s" does not support async progress tracking"
+            )
           } else {
             throw e
           }
@@ -296,7 +289,8 @@ class AsyncProgressTrackingMicroBatchExecution(
           "Async progress tracking cannot be used with Once trigger")
       case AvailableNowTrigger =>
         throw new IllegalArgumentException(
-          "Async progress tracking cannot be used with AvailableNow trigger")
+          "Async progress tracking cannot be used with AvailableNow trigger"
+        )
       case _ => throw new IllegalStateException(s"Unknown type of trigger: $trigger")
     }
   }
@@ -306,7 +300,8 @@ class AsyncProgressTrackingMicroBatchExecution(
       lastExecution.executedPlan.collect {
         case p if p.isInstanceOf[StateStoreWriter] =>
           throw new IllegalArgumentException(
-            "Stateful streaming queries does not support async progress tracking at this moment.")
+            "Stateful streaming queries does not support async progress tracking at this moment."
+          )
       }
     }
   }
@@ -324,7 +319,10 @@ object AsyncProgressTrackingMicroBatchExecution {
   private def getAsyncProgressTrackingCheckpointingIntervalMs(
       extraOptions: Map[String, String]): Long = {
     extraOptions
-      .getOrElse(ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS, "1000")
+      .getOrElse(
+        ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS,
+        "1000"
+      )
       .toLong
   }
 }

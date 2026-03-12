@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.checkpointing
 
+
 import java.io.{InputStream, OutputStream}
 import java.nio.charset.StandardCharsets._
 
@@ -27,20 +28,31 @@ import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2}
 import org.apache.spark.sql.execution.streaming.runtime.SerializedOffset
 
 /**
- * This class is used to log offsets to persistent files in HDFS. Each file corresponds to a
- * specific batch of offsets. The file format contains a version string in the first line,
- * followed by a the JSON string representation of the offsets separated by a newline character.
- * If a source offset is missing, then that line will contain a string value defined in the
- * SERIALIZED_VOID_OFFSET variable in [[OffsetSeqLog]] companion object. For instance, when
- * dealing with [[LongOffset]] types: v1 // version 1 metadata {0} // LongOffset 0 {3} //
- * LongOffset 3
- *   - // No offset for this source i.e., an invalid JSON string {2} // LongOffset 2 ...
+ * This class is used to log offsets to persistent files in HDFS.
+ * Each file corresponds to a specific batch of offsets. The file
+ * format contains a version string in the first line, followed
+ * by a the JSON string representation of the offsets separated
+ * by a newline character. If a source offset is missing, then
+ * that line will contain a string value defined in the
+ * SERIALIZED_VOID_OFFSET variable in [[OffsetSeqLog]] companion object.
+ * For instance, when dealing with [[LongOffset]] types:
+ *   v1        // version 1
+ *   metadata
+ *   {0}       // LongOffset 0
+ *   {3}       // LongOffset 3
+ *   -         // No offset for this source i.e., an invalid JSON string
+ *   {2}       // LongOffset 2
+ *   ...
  *
- * Version 2 format (OffsetMap): v2 // version 2 metadata 0:{0} // sourceId:offset 1:{3} //
- * sourceId:offset ...
+ * Version 2 format (OffsetMap):
+ *   v2        // version 2
+ *   metadata
+ *   0:{0}     // sourceId:offset
+ *   1:{3}     // sourceId:offset
+ *   ...
  */
 class OffsetSeqLog(sparkSession: SparkSession, path: String)
-    extends HDFSMetadataLog[OffsetSeqBase](sparkSession, path) {
+  extends HDFSMetadataLog[OffsetSeqBase](sparkSession, path) {
 
   override protected def deserialize(in: InputStream): OffsetSeqBase = {
     // called inside a try-finally where the underlying stream is closed in the caller
@@ -77,22 +89,19 @@ class OffsetSeqLog(sparkSession: SparkSession, path: String)
         sourceId -> offset
       }.toMap
       // V2 requires metadata
-      val metadataV2 = metadata
-        .map(OffsetSeqMetadataV2.apply)
-        .getOrElse(throw new IllegalStateException("VERSION_2 offset log requires metadata"))
+      val metadataV2 = metadata.map(OffsetSeqMetadataV2.apply).getOrElse(
+        throw new IllegalStateException("VERSION_2 offset log requires metadata"))
       OffsetMap(offsetsMap, metadataV2)
     } else {
-      OffsetSeq.fill(
-        metadata,
+      OffsetSeq.fill(metadata,
         lines.map(OffsetSeqLog.parseOffset).toArray.toImmutableArraySeq: _*)
     }
   }
 
   override protected def serialize(offsetSeq: OffsetSeqBase, out: OutputStream): Unit = {
     // called inside a try-finally where the underlying stream is closed in the caller
-    out.write(
-      ("v" + offsetSeq.metadataOpt.map(_.version).getOrElse(OffsetSeqLog.VERSION_1))
-        .getBytes(UTF_8))
+    out.write(("v" + offsetSeq.metadataOpt.map(_.version).getOrElse(OffsetSeqLog.VERSION_1))
+      .getBytes(UTF_8))
 
     // write metadata
     out.write('\n')
@@ -134,7 +143,7 @@ class OffsetSeqLog(sparkSession: SparkSession, path: String)
 object OffsetSeqLog {
   private[streaming] val VERSION_1 = 1
   private[streaming] val VERSION_2 = 2
-  private[streaming] val VERSION = VERSION_1 // Default version for backward compatibility
+  private[streaming] val VERSION = VERSION_1  // Default version for backward compatibility
   private[streaming] val MAX_VERSION = VERSION_2
   private[spark] val SERIALIZED_VOID_OFFSET = "-"
 

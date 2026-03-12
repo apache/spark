@@ -46,9 +46,7 @@ case class RefCountedCachedBatch(
     numRows: Int,
     stats: InternalRow,
     size: Long,
-    cachedBatch: CachedBatch)
-    extends SimpleMetricsCachedBatch
-    with AutoCloseable {
+    cachedBatch: CachedBatch) extends SimpleMetricsCachedBatch with AutoCloseable {
   DummyAllocator.alloc(size)
   var allocated_size: Long = size
   override def close(): Unit = synchronized {
@@ -119,8 +117,8 @@ class RefCountedTestCachedBatchSerializerSuite extends QueryTest with SharedSpar
   }
 
   test("SPARK-35396: Release objects stored in InMemoryRelation when clearCache called") {
-    val df =
-      spark.range(1, 100).selectExpr("id % 10 as id").rdd.map(id => Tuple1(s"str_$id")).toDF("i")
+    val df = spark.range(1, 100).selectExpr("id % 10 as id")
+      .rdd.map(id => Tuple1(s"str_$id")).toDF("i")
     val cached = df.cache()
     // count triggers the caching action. It should not throw.
     cached.count()

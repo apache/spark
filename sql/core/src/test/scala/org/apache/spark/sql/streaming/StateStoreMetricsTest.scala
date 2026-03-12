@@ -39,58 +39,52 @@ trait StateStoreMetricsTest extends StreamTest {
       updated: Seq[Long],
       droppedByWatermark: Seq[Long],
       removed: Option[Seq[Long]]): AssertOnQuery = {
-    AssertOnQuery(
-      s"Check total state rows = $total, updated state rows = $updated" +
-        s", rows dropped by watermark = $droppedByWatermark, removed state rows = $removed") {
-      q =>
-        // This assumes that the streaming query will not make any progress while the eventually
-        // is being executed.
-        eventually(timeout(streamingTimeout)) {
-          val (progressesSinceLastCheck, lastCheckedProgressIndex, numStateOperators) =
-            retrieveProgressesSinceLastCheck(q)
+    AssertOnQuery(s"Check total state rows = $total, updated state rows = $updated" +
+      s", rows dropped by watermark = $droppedByWatermark, removed state rows = $removed") { q =>
+      // This assumes that the streaming query will not make any progress while the eventually
+      // is being executed.
+      eventually(timeout(streamingTimeout)) {
+        val (progressesSinceLastCheck, lastCheckedProgressIndex, numStateOperators) =
+          retrieveProgressesSinceLastCheck(q)
 
-          val allNumUpdatedRowsSinceLastCheck =
-            progressesSinceLastCheck.map(_.stateOperators.map(_.numRowsUpdated))
+        val allNumUpdatedRowsSinceLastCheck =
+          progressesSinceLastCheck.map(_.stateOperators.map(_.numRowsUpdated))
 
-          val allNumRowsDroppedByWatermarkSinceLastCheck =
-            progressesSinceLastCheck.map(_.stateOperators.map(_.numRowsDroppedByWatermark))
+        val allNumRowsDroppedByWatermarkSinceLastCheck =
+          progressesSinceLastCheck.map(_.stateOperators.map(_.numRowsDroppedByWatermark))
 
-          lazy val debugString = "recent progresses:\n" +
-            progressesSinceLastCheck.map(_.prettyJson).mkString("\n\n")
+        lazy val debugString = "recent progresses:\n" +
+          progressesSinceLastCheck.map(_.prettyJson).mkString("\n\n")
 
-          val numTotalRows = progressesSinceLastCheck.last.stateOperators.map(_.numRowsTotal)
-          assert(numTotalRows === total, s"incorrect total rows, $debugString")
+        val numTotalRows = progressesSinceLastCheck.last.stateOperators.map(_.numRowsTotal)
+        assert(numTotalRows === total, s"incorrect total rows, $debugString")
 
-          val numUpdatedRows =
-            arraySum(allNumUpdatedRowsSinceLastCheck.toImmutableArraySeq, numStateOperators)
-          assert(numUpdatedRows === updated, s"incorrect updates rows, $debugString")
+        val numUpdatedRows = arraySum(
+          allNumUpdatedRowsSinceLastCheck.toImmutableArraySeq, numStateOperators)
+        assert(numUpdatedRows === updated, s"incorrect updates rows, $debugString")
 
-          val numRowsDroppedByWatermark = arraySum(
-            allNumRowsDroppedByWatermarkSinceLastCheck.toImmutableArraySeq,
-            numStateOperators)
-          assert(
-            numRowsDroppedByWatermark === droppedByWatermark,
-            s"incorrect dropped rows by watermark, $debugString")
+        val numRowsDroppedByWatermark = arraySum(
+          allNumRowsDroppedByWatermarkSinceLastCheck.toImmutableArraySeq, numStateOperators)
+        assert(numRowsDroppedByWatermark === droppedByWatermark,
+          s"incorrect dropped rows by watermark, $debugString")
 
-          if (removed.isDefined) {
-            val allNumRowsRemovedSinceLastCheck =
-              progressesSinceLastCheck.map(_.stateOperators.map(_.numRowsRemoved))
-            val numRemovedRows =
-              arraySum(allNumRowsRemovedSinceLastCheck.toImmutableArraySeq, numStateOperators)
-            assert(numRemovedRows === removed.get, s"incorrect removed rows, $debugString")
-          }
-
-          advanceLastCheckedRecentProgressIndex(lastCheckedProgressIndex)
+        if (removed.isDefined) {
+          val allNumRowsRemovedSinceLastCheck =
+            progressesSinceLastCheck.map(_.stateOperators.map(_.numRowsRemoved))
+          val numRemovedRows = arraySum(
+            allNumRowsRemovedSinceLastCheck.toImmutableArraySeq, numStateOperators)
+          assert(numRemovedRows === removed.get, s"incorrect removed rows, $debugString")
         }
-        true
+
+        advanceLastCheckedRecentProgressIndex(lastCheckedProgressIndex)
+      }
+      true
     }
   }
 
   /** AssertOnQuery to verify the given state operator's custom metric has expected value */
   def assertStateOperatorCustomMetric(
-      metric: String,
-      expected: Long,
-      operatorIndex: Int = 0): AssertOnQuery = {
+      metric: String, expected: Long, operatorIndex: Int = 0): AssertOnQuery = {
     AssertOnQuery(s"Check metrics $metric has value $expected") { q =>
       eventually(timeout(streamingTimeout)) {
         val (progressesSinceLastCheck, lastCheckedProgressIndex, numStateOperators) =
@@ -104,8 +98,7 @@ trait StateStoreMetricsTest extends StreamTest {
         lazy val debugString = "recent progresses:\n" +
           progressesSinceLastCheck.map(_.prettyJson).mkString("\n\n")
 
-        assert(
-          allCustomMetricValuesSinceLastCheck.sum === expected,
+        assert(allCustomMetricValuesSinceLastCheck.sum === expected,
           s"incorrect custom metric ($metric), $debugString")
 
         advanceLastCheckedRecentProgressIndex(lastCheckedProgressIndex)
@@ -115,15 +108,11 @@ trait StateStoreMetricsTest extends StreamTest {
   }
 
   /** Assert on [[StateOperatorProgress]] metrics */
-  def assertStateOperatorProgressMetric(
-      operatorName: String,
-      numShufflePartitions: Long,
-      numStateStoreInstances: Long,
-      operatorIndex: Int = 0): AssertOnQuery = {
-    AssertOnQuery(
-      s"Check operator progress metrics: operatorName = $operatorName, " +
-        s"numShufflePartitions = $numShufflePartitions, " +
-        s"numStateStoreInstances = $numStateStoreInstances") { q =>
+  def assertStateOperatorProgressMetric(operatorName: String, numShufflePartitions: Long,
+      numStateStoreInstances: Long, operatorIndex: Int = 0): AssertOnQuery = {
+    AssertOnQuery(s"Check operator progress metrics: operatorName = $operatorName, " +
+      s"numShufflePartitions = $numShufflePartitions, " +
+      s"numStateStoreInstances = $numStateStoreInstances") { q =>
       eventually(timeout(streamingTimeout), interval(200.milliseconds)) {
         val (progressesSinceLastCheck, lastCheckedProgressIndex, numStateOperators) =
           retrieveProgressesSinceLastCheck(q)
@@ -133,14 +122,11 @@ trait StateStoreMetricsTest extends StreamTest {
         lazy val debugString = "recent progresses:\n" +
           progressesSinceLastCheck.map(_.prettyJson).mkString("\n\n")
 
-        assert(
-          lastOpProgress.operatorName === operatorName,
+        assert(lastOpProgress.operatorName === operatorName,
           s"incorrect operator name, $debugString")
-        assert(
-          lastOpProgress.numShufflePartitions === numShufflePartitions,
+        assert(lastOpProgress.numShufflePartitions === numShufflePartitions,
           s"incorrect number of shuffle partitions, $debugString")
-        assert(
-          lastOpProgress.numStateStoreInstances === numStateStoreInstances,
+        assert(lastOpProgress.numStateStoreInstances === numStateStoreInstances,
           s"incorrect number of state stores, $debugString")
 
         advanceLastCheckedRecentProgressIndex(lastCheckedProgressIndex)
@@ -151,7 +137,8 @@ trait StateStoreMetricsTest extends StreamTest {
 
   def assertNumStateRows(total: Seq[Long], updated: Seq[Long]): AssertOnQuery = {
     assert(total.length === updated.length)
-    assertNumStateRows(total, updated, droppedByWatermark = total.indices.map(_ => 0L), None)
+    assertNumStateRows(
+      total, updated, droppedByWatermark = total.indices.map(_ => 0L), None)
   }
 
   def assertNumStateRows(
@@ -164,8 +151,7 @@ trait StateStoreMetricsTest extends StreamTest {
   def arraySum(arraySeq: Seq[Array[Long]], arrayLength: Int): Seq[Long] = {
     if (arraySeq.isEmpty) return Seq.fill(arrayLength)(0L)
 
-    assert(
-      arraySeq.forall(_.length == arrayLength),
+    assert(arraySeq.forall(_.length == arrayLength),
       "Arrays are of different lengths:\n" + arraySeq.map(_.toSeq).mkString("\n"))
     (0 until arrayLength).map { index => arraySeq.map(_.apply(index)).sum }
   }
@@ -174,8 +160,7 @@ trait StateStoreMetricsTest extends StreamTest {
       execution: StreamExecution): (Array[StreamingQueryProgress], Int, Int) = {
     val recentProgress = execution.recentProgress
     require(recentProgress != null, "No progress made")
-    require(
-      recentProgress.length < spark.sessionState.conf.streamingProgressRetention,
+    require(recentProgress.length < spark.sessionState.conf.streamingProgressRetention,
       "This test assumes that all progresses are present in q.recentProgress but " +
         "some may have been dropped due to retention limits")
 

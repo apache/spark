@@ -38,8 +38,7 @@ abstract class WholeTextFileSuite extends QueryTest with SharedSparkSession {
     super.sparkConf.set("spark.hadoop.fs.file.impl.disable.cache", "true")
 
   test("reading text file with option wholetext=true") {
-    val df = spark.read
-      .option("wholetext", "true")
+    val df = spark.read.option("wholetext", "true")
       .format("text")
       .load(testFile("test-data/text-suite.txt"))
     // schema
@@ -47,11 +46,10 @@ abstract class WholeTextFileSuite extends QueryTest with SharedSparkSession {
 
     // verify content
     val data = df.collect()
-    assert(
-      data(0) ==
-        Row(
-          // scalastyle:off nonascii
-          """This is a test file for the text data source
+    assert(data(0) ==
+      Row(
+        // scalastyle:off nonascii
+        """This is a test file for the text data source
           |1+1
           |数据砖头
           |"doh"
@@ -64,8 +62,7 @@ abstract class WholeTextFileSuite extends QueryTest with SharedSparkSession {
     import org.apache.spark.sql.catalyst.util._
     withTempDir { dir =>
       val file1 = new File(dir, "text1.txt")
-      stringToFile(
-        file1,
+      stringToFile(file1,
         """text file 1 contents.
           |From: None to: ??
         """.stripMargin)
@@ -78,13 +75,17 @@ abstract class WholeTextFileSuite extends QueryTest with SharedSparkSession {
       val data = df.sort("value").collect()
       assert(data.length == 3)
       // Each files should represent a single Row/element in Dataframe/Dataset
-      assert(data(0) == Row("""text file 1 contents.
+      assert(data(0) == Row(
+        """text file 1 contents.
           |From: None to: ??
         """.stripMargin))
-      assert(data(1) == Row("""text file 2 contents.""".stripMargin))
-      assert(data(2) == Row("""text file 3 contents.""".stripMargin))
+      assert(data(1) == Row(
+        """text file 2 contents.""".stripMargin))
+      assert(data(2) == Row(
+        """text file 3 contents.""".stripMargin))
     }
   }
+
 
   test("Correctness of wholetext option with gzip compression mode.") {
     withTempDir { dir =>
@@ -107,12 +108,14 @@ abstract class WholeTextFileSuite extends QueryTest with SharedSparkSession {
 
 class WholeTextFileV1Suite extends WholeTextFileSuite {
   override protected def sparkConf: SparkConf =
-    super.sparkConf
+    super
+      .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "text")
 }
 
 class WholeTextFileV2Suite extends WholeTextFileSuite {
   override protected def sparkConf: SparkConf =
-    super.sparkConf
+    super
+      .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
 }

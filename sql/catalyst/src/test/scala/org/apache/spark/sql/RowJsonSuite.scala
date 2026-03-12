@@ -84,10 +84,7 @@ class RowJsonSuite extends SparkFunSuite {
     Timestamp.valueOf("2017-05-30 10:22:03.00").toInstant,
     TimestampType,
     JString("2017-05-30 10:22:03"))
-  testJson(
-    LocalDateTime.of(2018, 5, 14, 12, 13),
-    TimestampNTZType,
-    JString("2018-05-14 12:13:00"))
+  testJson(LocalDateTime.of(2018, 5, 14, 12, 13), TimestampNTZType, JString("2018-05-14 12:13:00"))
 
   // Complex types
   testJson(
@@ -111,8 +108,8 @@ class RowJsonSuite extends SparkFunSuite {
     MapType(IntegerType, StringType, valueContainsNull = true),
     JArray(
       JObject("key" -> JLong(1), "value" -> JString("b")) ::
-        JObject("key" -> JLong(2), "value" -> JString("d")) ::
-        JObject("key" -> JLong(3), "value" -> JNull) :: Nil))
+      JObject("key" -> JLong(2), "value" -> JString("d")) ::
+      JObject("key" -> JLong(3), "value" -> JNull) :: Nil))
 
   testJson(
     new GenericRowWithSchema(Array("1", 2), schema),
@@ -144,6 +141,8 @@ class RowJsonSuite extends SparkFunSuite {
       parameters = Map(
         "value" -> toSQLValue("(1,2)"),
         "class" -> "class scala.Tuple2$mcII$sp",
-        "sqlType" -> toSQLType("ObjectType(class scala.Tuple2)")))
+        "sqlType" -> toSQLType("ObjectType(class scala.Tuple2)")
+      )
+    )
   }
 }

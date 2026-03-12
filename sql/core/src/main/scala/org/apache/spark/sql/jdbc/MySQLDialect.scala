@@ -36,7 +36,7 @@ import org.apache.spark.sql.types._
 
 private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with NoLegacyJDBCError {
 
-  override def canHandle(url: String): Boolean =
+  override def canHandle(url : String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:mysql")
 
   private val distinctUnsupportedAggregateFunctions =
@@ -86,9 +86,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
     }
 
     override def visitSortOrder(
-        sortKey: String,
-        sortDirection: SortDirection,
-        nullOrdering: NullOrdering): String = {
+        sortKey: String, sortDirection: SortDirection, nullOrdering: NullOrdering): String = {
       (sortDirection, nullOrdering) match {
         case (SortDirection.ASCENDING, NullOrdering.NULLS_FIRST) =>
           s"$sortKey $sortDirection"
@@ -117,13 +115,13 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
     }
 
     override def visitAggregateFunction(
-        funcName: String,
-        isDistinct: Boolean,
-        inputs: Array[String]): String =
+        funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
       if (isDistinct && distinctUnsupportedAggregateFunctions.contains(funcName)) {
         throw new SparkUnsupportedOperationException(
           errorClass = "_LEGACY_ERROR_TEMP_3184",
-          messageParameters = Map("class" -> this.getClass.getSimpleName, "funcName" -> funcName))
+          messageParameters = Map(
+            "class" -> this.getClass.getSimpleName,
+            "funcName" -> funcName))
       } else {
         super.visitAggregateFunction(funcName, isDistinct, inputs)
       }
@@ -141,10 +139,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
   }
 
   override def getCatalystType(
-      sqlType: Int,
-      typeName: String,
-      size: Int,
-      md: MetadataBuilder): Option[DataType] = {
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     def getCatalystTypeForBitArray: Option[DataType] = {
       md.putLong("binarylong", 1)
       if (conf.legacyMySqlBitArrayMappingEnabled) {
@@ -355,24 +350,17 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
           val indexComment = rs.getString("index_comment")
           if (indexMap.contains(indexName)) {
             val index = indexMap.get(indexName).get
-            val newIndex = new TableIndex(
-              indexName,
-              indexType,
+            val newIndex = new TableIndex(indexName, indexType,
               index.columns() :+ FieldReference(colName),
-              index.columnProperties,
-              index.properties)
+              index.columnProperties, index.properties)
             indexMap += (indexName -> newIndex)
           } else {
             // The only property we are building here is `COMMENT` because it's the only one
             // we can get from `SHOW INDEXES`.
             val properties = new util.Properties();
             if (indexComment.nonEmpty) properties.put("COMMENT", indexComment)
-            val index = new TableIndex(
-              indexName,
-              indexType,
-              Array(FieldReference(colName)),
-              new util.HashMap[NamedReference, util.Properties](),
-              properties)
+            val index = new TableIndex(indexName, indexType, Array(FieldReference(colName)),
+              new util.HashMap[NamedReference, util.Properties](), properties)
             indexMap += (indexName -> index)
           }
         }
@@ -422,7 +410,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
   }
 
   class MySQLSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions)
-      extends JdbcSQLQueryBuilder(dialect, options) {
+    extends JdbcSQLQueryBuilder(dialect, options) {
 
     override def build(): String = {
       val limitOrOffsetStmt = if (limit > 0) {

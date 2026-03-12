@@ -46,7 +46,9 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         |WHERE id < :constA
         |""".stripMargin
     val args = Map("div" -> 3, "constA" -> 4L)
-    checkAnswer(spark.sql(sqlText, args), Row(0, 0) :: Row(1, 1) :: Row(2, 2) :: Row(3, 0) :: Nil)
+    checkAnswer(
+      spark.sql(sqlText, args),
+      Row(0, 0) :: Row(1, 1) :: Row(2, 2) :: Row(3, 0) :: Nil)
 
     checkAnswer(
       spark.sql("""SELECT contains('Spark \'SQL\'', :subStr)""", Map("subStr" -> "SQL")),
@@ -61,13 +63,20 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         |WHERE id < ?
         |""".stripMargin
     val args = Array(3, 4L)
-    checkAnswer(spark.sql(sqlText, args), Row(0, 0) :: Row(1, 1) :: Row(2, 2) :: Row(3, 0) :: Nil)
+    checkAnswer(
+      spark.sql(sqlText, args),
+      Row(0, 0) :: Row(1, 1) :: Row(2, 2) :: Row(3, 0) :: Nil)
 
-    checkAnswer(spark.sql("""SELECT contains('Spark \'SQL\'', ?)""", Array("SQL")), Row(true))
+    checkAnswer(
+      spark.sql("""SELECT contains('Spark \'SQL\'', ?)""", Array("SQL")),
+      Row(true))
   }
 
   test("parameter binding is case sensitive") {
-    checkAnswer(spark.sql("SELECT :p, :P", Map("p" -> 1, "P" -> 2)), Row(1, 2))
+    checkAnswer(
+      spark.sql("SELECT :p, :P", Map("p" -> 1, "P" -> 2)),
+      Row(1, 2)
+    )
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -75,7 +84,10 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       },
       condition = "UNBOUND_SQL_PARAMETER",
       parameters = Map("name" -> "P"),
-      context = ExpectedContext(fragment = ":P", start = 7, stop = 8))
+      context = ExpectedContext(
+        fragment = ":P",
+        start = 7,
+        stop = 8))
   }
 
   test("case sensitivity for named parameters in shared grammar contexts") {
@@ -87,20 +99,25 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       checkAnswer(
         spark.sql(
           "SELECT id FROM test_data WHERE id >= :min_val AND id <= :MIN_VAL ORDER BY id",
-          Map("min_val" -> 2, "MIN_VAL" -> 5)),
-        Row(2) :: Row(3) :: Row(4) :: Row(5) :: Nil)
+          Map("min_val" -> 2, "MIN_VAL" -> 5)
+        ),
+        Row(2) :: Row(3) :: Row(4) :: Row(5) :: Nil
+      )
 
       // Verify that mismatched case fails in integerValue context
       checkError(
         exception = intercept[AnalysisException] {
           spark.sql(
             "SELECT id FROM test_data WHERE id = :param",
-            Map("PARAM" -> 1) // Wrong case
+            Map("PARAM" -> 1)  // Wrong case
           )
         },
         condition = "UNBOUND_SQL_PARAMETER",
         parameters = Map("name" -> "param"),
-        context = ExpectedContext(fragment = ":param", start = 36, stop = 41))
+        context = ExpectedContext(
+          fragment = ":param",
+          start = 36,
+          stop = 41))
     }
 
     // Test parameters in LIMIT clause (uses integerValue -> parameterMarker rule)
@@ -110,32 +127,39 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       checkAnswer(
         spark.sql(
           "SELECT id FROM limit_test ORDER BY id LIMIT :limit_param",
-          Map("limit_param" -> 3)),
-        Row(0) :: Row(1) :: Row(2) :: Nil)
+          Map("limit_param" -> 3)
+        ),
+        Row(0) :: Row(1) :: Row(2) :: Nil
+      )
 
       // Verify that mismatched case fails in LIMIT context
       checkError(
         exception = intercept[AnalysisException] {
           spark.sql(
             "SELECT id FROM limit_test ORDER BY id LIMIT :limit_param",
-            Map("LIMIT_PARAM" -> 3) // Wrong case
+            Map("LIMIT_PARAM" -> 3)  // Wrong case
           )
         },
         condition = "UNBOUND_SQL_PARAMETER",
         parameters = Map("name" -> "limit_param"),
-        context = ExpectedContext(fragment = ":limit_param", start = 44, stop = 55))
+        context = ExpectedContext(
+          fragment = ":limit_param",
+          start = 44,
+          stop = 55))
     }
 
     // Test case sensitivity consistency between legacy and modern modes
     withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "false") {
-      val modernResult = spark
-        .sql("SELECT 1 WHERE 1 = :param AND 2 = :Param", Map("param" -> 1, "Param" -> 2))
-        .collect()
+      val modernResult = spark.sql(
+        "SELECT 1 WHERE 1 = :param AND 2 = :Param",
+        Map("param" -> 1, "Param" -> 2)
+      ).collect()
 
       withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
-        val legacyResult = spark
-          .sql("SELECT 1 WHERE 1 = :param AND 2 = :Param", Map("param" -> 1, "Param" -> 2))
-          .collect()
+        val legacyResult = spark.sql(
+          "SELECT 1 WHERE 1 = :param AND 2 = :Param",
+          Map("param" -> 1, "Param" -> 2)
+        ).collect()
 
         // Both modes should produce the same results
         assert(modernResult.sameElements(legacyResult))
@@ -152,7 +176,9 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         |SELECT p + :p2 FROM w1
         |""".stripMargin
     val args = Map("p1" -> 1, "p2" -> 2)
-    checkAnswer(spark.sql(sqlText, args), Row(3))
+    checkAnswer(
+      spark.sql(sqlText, args),
+      Row(3))
   }
 
   test("positional parameters in CTE") {
@@ -162,7 +188,9 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         |SELECT p + ? FROM w1
         |""".stripMargin
     val args = Array(1, 2)
-    checkAnswer(spark.sql(sqlText, args), Row(3))
+    checkAnswer(
+      spark.sql(sqlText, args),
+      Row(3))
   }
 
   test("named parameters in nested CTE") {
@@ -173,7 +201,9 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         |SELECT p2 + :p3 FROM w1
         |""".stripMargin
     val args = Map("p1" -> 1, "p2" -> 2, "p3" -> 3)
-    checkAnswer(spark.sql(sqlText, args), Row(6))
+    checkAnswer(
+      spark.sql(sqlText, args),
+      Row(6))
   }
 
   test("positional parameters in nested CTE") {
@@ -184,31 +214,41 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         |SELECT p2 + ? FROM w1
         |""".stripMargin
     val args = Array(1, 2, 3)
-    checkAnswer(spark.sql(sqlText, args), Row(6))
+    checkAnswer(
+      spark.sql(sqlText, args),
+      Row(6))
   }
 
   test("named parameters in subquery expression") {
     val sqlText = "SELECT (SELECT max(id) + :p1 FROM range(10)) + :p2"
     val args = Map("p1" -> 1, "p2" -> 2)
-    checkAnswer(spark.sql(sqlText, args), Row(12))
+    checkAnswer(
+      spark.sql(sqlText, args),
+      Row(12))
   }
 
   test("positional parameters in subquery expression") {
     val sqlText = "SELECT (SELECT max(id) + ? FROM range(10)) + ?"
     val args = Array(1, 2)
-    checkAnswer(spark.sql(sqlText, args), Row(12))
+    checkAnswer(
+      spark.sql(sqlText, args),
+      Row(12))
   }
 
   test("named parameters in nested subquery expression") {
     val sqlText = "SELECT (SELECT (SELECT max(id) + :p1 FROM range(10)) + :p2) + :p3"
     val args = Map("p1" -> 1, "p2" -> 2, "p3" -> 3)
-    checkAnswer(spark.sql(sqlText, args), Row(15))
+    checkAnswer(
+      spark.sql(sqlText, args),
+      Row(15))
   }
 
   test("positional parameters in nested subquery expression") {
     val sqlText = "SELECT (SELECT (SELECT max(id) + ? FROM range(10)) + ?) + ?"
     val args = Array(1, 2, 3)
-    checkAnswer(spark.sql(sqlText, args), Row(15))
+    checkAnswer(
+      spark.sql(sqlText, args),
+      Row(15))
   }
 
   test("named parameters in subquery expression inside CTE") {
@@ -218,7 +258,9 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         |SELECT p + :p3 FROM w1
         |""".stripMargin
     val args = Map("p1" -> 1, "p2" -> 2, "p3" -> 3)
-    checkAnswer(spark.sql(sqlText, args), Row(15))
+    checkAnswer(
+      spark.sql(sqlText, args),
+      Row(15))
   }
 
   test("positional parameters in subquery expression inside CTE") {
@@ -228,21 +270,27 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         |SELECT p + ? FROM w1
         |""".stripMargin
     val args = Array(1, 2, 3)
-    checkAnswer(spark.sql(sqlText, args), Row(15))
+    checkAnswer(
+      spark.sql(sqlText, args),
+      Row(15))
   }
 
   test("named parameter in identifier clause") {
     val sqlText =
       "SELECT IDENTIFIER('T.' || :p1 || '1') FROM VALUES(1) T(c1)"
     val args = Map("p1" -> "c")
-    checkAnswer(spark.sql(sqlText, args), Row(1))
+    checkAnswer(
+      spark.sql(sqlText, args),
+      Row(1))
   }
 
   test("positional parameter in identifier clause") {
     val sqlText =
       "SELECT IDENTIFIER('T.' || ? || '1') FROM VALUES(1) T(c1)"
     val args = Array("c")
-    checkAnswer(spark.sql(sqlText, args), Row(1))
+    checkAnswer(
+      spark.sql(sqlText, args),
+      Row(1))
   }
 
   test("named parameter in identifier clause in DDL and utility commands") {
@@ -257,7 +305,9 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
   test("positional parameter in identifier clause in DDL and utility commands") {
     spark.sql("CREATE VIEW IDENTIFIER(?)(c1) AS SELECT 1", args = Array("v"))
     spark.sql("ALTER VIEW IDENTIFIER(?) AS SELECT 2 AS c1", args = Array("v"))
-    checkAnswer(spark.sql("SHOW COLUMNS FROM IDENTIFIER(?)", args = Array("v")), Row("c1"))
+    checkAnswer(
+      spark.sql("SHOW COLUMNS FROM IDENTIFIER(?)", args = Array("v")),
+      Row("c1"))
     spark.sql("DROP VIEW IDENTIFIER(?)", args = Array("v"))
   }
 
@@ -347,14 +397,20 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       },
       condition = "UNBOUND_SQL_PARAMETER",
       parameters = Map("name" -> "def"),
-      context = ExpectedContext(fragment = ":def", start = 13, stop = 16))
+      context = ExpectedContext(
+        fragment = ":def",
+        start = 13,
+        stop = 16))
     checkError(
       exception = intercept[AnalysisException] {
         sql("select :abc").collect()
       },
       condition = "UNBOUND_SQL_PARAMETER",
       parameters = Map("name" -> "abc"),
-      context = ExpectedContext(fragment = ":abc", start = 7, stop = 10))
+      context = ExpectedContext(
+        fragment = ":abc",
+        start = 7,
+        stop = 10))
   }
 
   test("non-substituted positional parameters") {
@@ -364,14 +420,20 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       },
       condition = "UNBOUND_SQL_PARAMETER",
       parameters = Map("name" -> "_10"),
-      context = ExpectedContext(fragment = "?", start = 10, stop = 10))
+      context = ExpectedContext(
+        fragment = "?",
+        start = 10,
+        stop = 10))
     checkError(
       exception = intercept[AnalysisException] {
         sql("select ?").collect()
       },
       condition = "UNBOUND_SQL_PARAMETER",
       parameters = Map("name" -> "_7"),
-      context = ExpectedContext(fragment = "?", start = 7, stop = 7))
+      context = ExpectedContext(
+        fragment = "?",
+        start = 7,
+        stop = 7))
   }
 
   test("literal argument of named parameter in `sql()`") {
@@ -381,7 +443,9 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       spark.sql(sqlText, args = Map("player_name" -> lit("E'Twaun Moore"))),
       Row("E'Twaun Moore") :: Nil)
-    checkAnswer(spark.sql(sqlText, args = Map("player_name" -> lit("Vander Blue--comment"))), Nil)
+    checkAnswer(
+      spark.sql(sqlText, args = Map("player_name" -> lit("Vander Blue--comment"))),
+      Nil)
     checkAnswer(
       spark.sql(sqlText, args = Map("player_name" -> lit("Jeff /*__*/ Green"))),
       Row("Jeff /*__*/ Green") :: Nil)
@@ -405,11 +469,9 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
                       |WHERE d < :currDate
                       |""".stripMargin,
           args = Map("currDate" -> lit(Instant.parse("2023-04-01T00:00:00Z")))),
-        Row(
-          LocalDateTime
-            .of(1970, 1, 1, 1, 2, 3)
-            .atZone(ZoneId.of("Europe/Amsterdam"))
-            .toInstant) :: Nil)
+        Row(LocalDateTime.of(1970, 1, 1, 1, 2, 3)
+          .atZone(ZoneId.of("Europe/Amsterdam"))
+          .toInstant) :: Nil)
     }
   }
 
@@ -420,7 +482,9 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       spark.sql(sqlText, args = Array(lit("E'Twaun Moore"))),
       Row("E'Twaun Moore") :: Nil)
-    checkAnswer(spark.sql(sqlText, args = Array(lit("Vander Blue--comment"))), Nil)
+    checkAnswer(
+      spark.sql(sqlText, args = Array(lit("Vander Blue--comment"))),
+      Nil)
     checkAnswer(
       spark.sql(sqlText, args = Array(lit("Jeff /*__*/ Green"))),
       Row("Jeff /*__*/ Green") :: Nil)
@@ -444,16 +508,16 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
                       |WHERE d < ?
                       |""".stripMargin,
           args = Array(lit(Instant.parse("2023-04-01T00:00:00Z")))),
-        Row(
-          LocalDateTime
-            .of(1970, 1, 1, 1, 2, 3)
-            .atZone(ZoneId.of("Europe/Amsterdam"))
-            .toInstant) :: Nil)
+        Row(LocalDateTime.of(1970, 1, 1, 1, 2, 3)
+          .atZone(ZoneId.of("Europe/Amsterdam"))
+          .toInstant) :: Nil)
     }
   }
 
   test("unused positional arguments") {
-    checkAnswer(spark.sql("SELECT ?, ?", Array(1, "abc", 3.14f)), Row(1, "abc"))
+    checkAnswer(
+      spark.sql("SELECT ?, ?", Array(1, "abc", 3.14f)),
+      Row(1, "abc"))
   }
 
   test("mixing of positional and named parameters") {
@@ -474,40 +538,44 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-44680: parameters in DEFAULT work") {
     withTable("t11") {
-      spark.sql("CREATE TABLE t11(c1 int default :parm) USING parquet", args = Map("parm" -> 5))
+      spark.sql(
+        "CREATE TABLE t11(c1 int default :parm) USING parquet",
+        args = Map("parm" -> 5))
 
       // Insert a row using the default value
       spark.sql("INSERT INTO t11 (c1) VALUES (DEFAULT)")
 
       // Verify the default value was used correctly
-      checkAnswer(spark.table("t11"), Row(5))
+      checkAnswer(
+        spark.table("t11"),
+        Row(5))
     }
   }
 
   test("SPARK-44783: arrays as parameters") {
     checkAnswer(
-      spark.sql(
-        "SELECT array_position(:arrParam, 'abc')",
-        Map("arrParam" -> Array.empty[String])),
+      spark.sql("SELECT array_position(:arrParam, 'abc')", Map("arrParam" -> Array.empty[String])),
       Row(0))
-    checkAnswer(spark.sql("SELECT array_position(?, 0.1D)", Array(Array.empty[Double])), Row(0))
+    checkAnswer(
+      spark.sql("SELECT array_position(?, 0.1D)", Array(Array.empty[Double])),
+      Row(0))
     checkAnswer(
       spark.sql("SELECT array_contains(:arrParam, 10)", Map("arrParam" -> Array(10, 20, 30))),
       Row(true))
     checkAnswer(
       spark.sql("SELECT array_contains(?, ?)", Array(Array("a", "b", "c"), "b")),
       Row(true))
-    checkAnswer(spark.sql("SELECT :arr[1]", Map("arr" -> Array(10, 20, 30))), Row(20))
-    checkAnswer(spark.sql("SELECT ?[?]", Array(Array(1f, 2f, 3f), 0)), Row(1f))
     checkAnswer(
-      spark.sql(
-        "SELECT :arr[0][1]",
-        Map("arr" -> Array(Array(1, 2), Array(20), Array.empty[Int]))),
+      spark.sql("SELECT :arr[1]", Map("arr" -> Array(10, 20, 30))),
+      Row(20))
+    checkAnswer(
+      spark.sql("SELECT ?[?]", Array(Array(1f, 2f, 3f), 0)),
+      Row(1f))
+    checkAnswer(
+      spark.sql("SELECT :arr[0][1]", Map("arr" -> Array(Array(1, 2), Array(20), Array.empty[Int]))),
       Row(2))
     checkAnswer(
-      spark.sql(
-        "SELECT ?[?][?]",
-        Array(Array(Array(1f, 2f), Array.empty[Float], Array(3f)), 0, 1)),
+      spark.sql("SELECT ?[?][?]", Array(Array(Array(1f, 2f), Array.empty[Float], Array(3f)), 0, 1)),
       Row(2f))
   }
 
@@ -528,45 +596,35 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       call_function("map", zipped.flatMap { case (k, v) => Seq(k, v) }.toImmutableArraySeq: _*)
     }
     def fromEntries(keys: Array[_], values: Array[_]): Column = {
-      val structures = keys
-        .zip(values)
-        .map { case (k, v) => struct(lit(k), lit(v)) }
+      val structures = keys.zip(values)
+        .map { case (k, v) => struct(lit(k), lit(v))}
       map_from_entries(array(structures.toImmutableArraySeq: _*))
     }
     def callFromEntries(keys: Array[_], values: Array[_]): Column = {
-      val structures = keys
-        .zip(values)
-        .map { case (k, v) => struct(lit(k), lit(v)) }
-      call_function(
-        "map_from_entries",
-        call_function("array", structures.toImmutableArraySeq: _*))
+      val structures = keys.zip(values)
+        .map { case (k, v) => struct(lit(k), lit(v))}
+      call_function("map_from_entries", call_function("array", structures.toImmutableArraySeq: _*))
     }
 
     Seq(fromArr(_, _), createMap(_, _), callFromArr(_, _), callMap(_, _)).foreach { f =>
       checkAnswer(
-        spark.sql(
-          "SELECT map_contains_key(:mapParam, 0)",
+        spark.sql("SELECT map_contains_key(:mapParam, 0)",
           Map("mapParam" -> f(Array.empty[Int], Array.empty[String]))),
         Row(false))
       checkAnswer(
-        spark.sql(
-          "SELECT map_contains_key(?, 'a')",
+        spark.sql("SELECT map_contains_key(?, 'a')",
           Array(f(Array.empty[String], Array.empty[Double]))),
         Row(false))
     }
-    Seq(
-      fromArr(_, _),
-      createMap(_, _),
-      fromEntries(_, _),
-      callFromArr(_, _),
-      callMap(_, _),
-      callFromEntries(_, _)).foreach { f =>
+    Seq(fromArr(_, _), createMap(_, _), fromEntries(_, _),
+      callFromArr(_, _), callMap(_, _), callFromEntries(_, _)).foreach { f =>
       checkAnswer(
-        spark.sql(
-          "SELECT element_at(:mapParam, 'a')",
+        spark.sql("SELECT element_at(:mapParam, 'a')",
           Map("mapParam" -> f(Array("a"), Array(0)))),
         Row(0))
-      checkAnswer(spark.sql("SELECT element_at(?, 'a')", Array(f(Array("a"), Array(0)))), Row(0))
+      checkAnswer(
+        spark.sql("SELECT element_at(?, 'a')", Array(f(Array("a"), Array(0)))),
+        Row(0))
       checkAnswer(
         spark.sql("SELECT :m[10]", Map("m" -> f(Array(10, 20, 30), Array(0, 1, 2)))),
         Row(0))
@@ -575,28 +633,27 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         Row(2))
     }
     checkAnswer(
-      spark.sql(
-        "SELECT :m['a'][1]",
-        Map(
-          "m" ->
-            map_from_arrays(
-              lit(Array("a")),
-              array(map_from_arrays(lit(Array(1)), lit(Array(2))))))),
+      spark.sql("SELECT :m['a'][1]",
+        Map("m" ->
+          map_from_arrays(
+            lit(Array("a")),
+            array(map_from_arrays(lit(Array(1)), lit(Array(2))))))),
       Row(2))
     // `str_to_map` is not supported
     checkError(
       exception = intercept[AnalysisException] {
-        spark.sql(
-          "SELECT :m['a'][1]",
-          Map(
-            "m" ->
-              map_from_arrays(lit(Array("a")), array(str_to_map(lit("a:1,b:2,c:3"))))))
+        spark.sql("SELECT :m['a'][1]",
+          Map("m" ->
+            map_from_arrays(
+              lit(Array("a")),
+              array(str_to_map(lit("a:1,b:2,c:3"))))))
       },
       condition = "INVALID_SQL_ARG",
       parameters = Map("name" -> "m"),
       context = ExpectedContext(
         fragment = "map_from_arrays",
-        callSitePattern = getCurrentClassCallSitePattern))
+        callSitePattern = getCurrentClassCallSitePattern)
+    )
   }
 
   test("SPARK-46481: Test variable folding") {
@@ -623,13 +680,11 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       spark.sql("insert into identifier(:tab) values(1, 'test1')", Map("tab" -> "testtab"))
 
       // Select from table using param
-      checkAnswer(
-        spark.sql("select * from identifier(:tab)", Map("tab" -> "testtab")),
+      checkAnswer(spark.sql("select * from identifier(:tab)", Map("tab" -> "testtab")),
         Seq(Row(1, "test1")))
 
       // Insert into table using multiple params
-      spark.sql(
-        "insert into identifier(:tab) values(2, :name)",
+      spark.sql("insert into identifier(:tab) values(2, :name)",
         Map("tab" -> "testtab", "name" -> "test2"))
 
       // Select from table using param
@@ -639,11 +694,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       sql("insert into testtab values(2, 'test3')")
 
       // Select from table using param
-      checkAnswer(
-        spark.sql(
-          "select identifier(:col) from identifier(:tab) where :name == name",
-          Map("tab" -> "testtab", "name" -> "test2", "col" -> "id")),
-        Seq(Row(2)))
+      checkAnswer(spark.sql("select identifier(:col) from identifier(:tab) where :name == name",
+        Map("tab" -> "testtab", "name" -> "test2", "col" -> "id")), Seq(Row(2)))
     }
   }
 
@@ -653,15 +705,16 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       spark.sql("create table testtab (id int, name string)")
 
       // Insert into table using single param
-      spark.sql("insert into identifier(?) values(1, 'test1')", Array("testtab"))
+      spark.sql("insert into identifier(?) values(1, 'test1')",
+        Array("testtab"))
 
       // Select from table using param
-      checkAnswer(
-        spark.sql("select * from identifier(?)", Array("testtab")),
+      checkAnswer(spark.sql("select * from identifier(?)", Array("testtab")),
         Seq(Row(1, "test1")))
 
       // Insert into table using multiple params
-      spark.sql("insert into identifier(?) values(2, ?)", Array("testtab", "test2"))
+      spark.sql("insert into identifier(?) values(2, ?)",
+        Array("testtab", "test2"))
 
       // Select from table using param
       checkAnswer(sql("select * from testtab"), Seq(Row(1, "test1"), Row(2, "test2")))
@@ -670,11 +723,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       sql("insert into testtab values(2, 'test3')")
 
       // Select from table using param
-      checkAnswer(
-        spark.sql(
-          "select identifier(?) from identifier(?) where ? == name",
-          Array("id", "testtab", "test2")),
-        Seq(Row(2)))
+      checkAnswer(spark.sql("select identifier(?) from identifier(?) where ? == name",
+        Array("id", "testtab", "test2")), Seq(Row(2)))
     }
   }
 
@@ -695,7 +745,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-46999: bind parameters for nested IDENTIFIER clause") {
-    val query = sql("""
+    val query = sql(
+      """
         |EXECUTE IMMEDIATE
         |'SELECT IDENTIFIER(?)(IDENTIFIER(?)) FROM VALUES (\'abc\') AS (col)'
         |USING 'UPPER', 'col'
@@ -716,7 +767,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     // This validates that our top-level parsing fix doesn't break nested parameter substitution
     checkAnswer(
       sql("EXECUTE IMMEDIATE 'SELECT 5::DECIMAL(:p, :s)' USING 10 AS p, 5 AS s"),
-      Row(BigDecimal("5.00000")))
+      Row(BigDecimal("5.00000"))
+    )
   }
 
   test("SPARK-49398: Cache Table with parameter markers in select query works") {
@@ -724,7 +776,9 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     spark.sql(sqlText, Map("param1" -> "1"))
 
     // Verify the cached table works correctly
-    checkAnswer(spark.table("CacheTable"), Row(2))
+    checkAnswer(
+      spark.table("CacheTable"),
+      Row(2))
 
     // Clean up
     spark.sql("UNCACHE TABLE CacheTable")
@@ -778,11 +832,9 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
          |SELECT * FROM IDENTIFIER($p)""".stripMargin
     }
 
-    checkAnswer(
-      spark.sql(query(":cte"), args = Map("cte" -> "t1")),
+    checkAnswer(spark.sql(query(":cte"), args = Map("cte" -> "t1")),
       Seq(Row(1), Row(2), Row(3), Row(4), Row(5)))
-    checkAnswer(
-      spark.sql(query("?"), args = Array("t1")),
+    checkAnswer(spark.sql(query("?"), args = Array("t1")),
       Seq(Row(1), Row(2), Row(3), Row(4), Row(5)))
   }
 
@@ -796,13 +848,12 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
          |SELECT * FROM t1""".stripMargin
     }
 
-    checkAnswer(
-      spark.sql(query(":cte"), args = Map("cte" -> "t1")),
+    checkAnswer(spark.sql(query(":cte"), args = Map("cte" -> "t1")),
       Seq(Row(1), Row(2), Row(3), Row(4), Row(5)))
-    checkAnswer(
-      spark.sql(query("?"), args = Array("t1")),
+    checkAnswer(spark.sql(query("?"), args = Array("t1")),
       Seq(Row(1), Row(2), Row(3), Row(4), Row(5)))
   }
+
 
   test("SPARK-50403: parameterized execute immediate") {
     checkAnswer(spark.sql("execute immediate 'select ?' using ?", Array(1)), Row(1))
@@ -816,23 +867,16 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       context = ExpectedContext("?", 10, 10))
 
     checkAnswer(spark.sql("execute immediate 'select ?' using 1", Map("param1" -> "1")), Row(1))
-    checkAnswer(
-      spark.sql(
-        "execute immediate 'select :param1' using :param2 as param1",
-        Map("param2" -> 42)),
-      Row(42))
-    checkAnswer(
-      spark.sql(
-        "execute immediate 'select :param1, :param2' using :param2 as param1, 43 as param2",
-        Map("param2" -> 42)),
-      Row(42, 43))
-    checkAnswer(
-      spark.sql("execute immediate 'select :param' using 0 as param", Map("param" -> 42)),
-      Row(0))
+    checkAnswer(spark.sql("execute immediate 'select :param1' using :param2 as param1",
+      Map("param2" -> 42)), Row(42))
+    checkAnswer(spark.sql(
+      "execute immediate 'select :param1, :param2' using :param2 as param1, 43 as param2",
+      Map("param2" -> 42)), Row(42, 43))
+    checkAnswer(spark.sql("execute immediate 'select :param' using 0 as param",
+      Map("param" -> 42)), Row(0))
     checkError(
       exception = intercept[AnalysisException] {
-        spark.sql(
-          "execute immediate 'select :param1, :param2' using 1 as param1",
+        spark.sql("execute immediate 'select :param1, :param2' using 1 as param1",
           Map("param2" -> 2))
       },
       condition = "UNBOUND_SQL_PARAMETER",
@@ -846,9 +890,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
   test("named parameters in DDL data type specifications") {
     withTable("ddl_datatype_named") {
       // Test VARCHAR length parameter
-      spark.sql(
-        "CREATE TABLE ddl_datatype_named (name VARCHAR(:length)) USING PARQUET",
-        Map("length" -> 100))
+      spark.sql("CREATE TABLE ddl_datatype_named (name VARCHAR(:length)) USING PARQUET",
+                Map("length" -> 100))
       val schema = spark.table("ddl_datatype_named").schema
       checkColType(schema("name"), VarcharType(100))
     }
@@ -864,9 +907,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
 
     withTable("ddl_char_named") {
       // Test CHAR length parameter
-      spark.sql(
-        "CREATE TABLE ddl_char_named (code CHAR(:length)) USING PARQUET",
-        Map("length" -> 5))
+      spark.sql("CREATE TABLE ddl_char_named (code CHAR(:length)) USING PARQUET",
+                Map("length" -> 5))
       val schema = spark.table("ddl_char_named").schema
       checkColType(schema("code"), CharType(5))
     }
@@ -875,21 +917,25 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
   test("positional parameters in DDL data type specifications") {
     withTable("ddl_datatype_pos") {
       // Test VARCHAR length parameter
-      spark.sql("CREATE TABLE ddl_datatype_pos (name VARCHAR(?)) USING PARQUET", Array(150))
+      spark.sql("CREATE TABLE ddl_datatype_pos (name VARCHAR(?)) USING PARQUET",
+                Array(150))
       val schema = spark.table("ddl_datatype_pos").schema
       checkColType(schema("name"), VarcharType(150))
     }
 
     withTable("ddl_decimal_pos") {
       // Test DECIMAL precision and scale parameters
-      spark.sql("CREATE TABLE ddl_decimal_pos (amount DECIMAL(?, ?)) USING PARQUET", Array(12, 3))
+      spark.sql(
+        "CREATE TABLE ddl_decimal_pos (amount DECIMAL(?, ?)) USING PARQUET",
+        Array(12, 3))
       val schema = spark.table("ddl_decimal_pos").schema
       assert(schema("amount").dataType == DecimalType(12, 3))
     }
 
     withTable("ddl_char_pos") {
       // Test CHAR length parameter
-      spark.sql("CREATE TABLE ddl_char_pos (code CHAR(?)) USING PARQUET", Array(8))
+      spark.sql("CREATE TABLE ddl_char_pos (code CHAR(?)) USING PARQUET",
+                Array(8))
       val schema = spark.table("ddl_char_pos").schema
       checkColType(schema("code"), CharType(8))
     }
@@ -898,19 +944,17 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
   test("named parameters in DDL comments and properties") {
     withTable("ddl_comments_named") {
       // Test table comment parameter
-      spark.sql(
-        "CREATE TABLE ddl_comments_named (id INT) USING PARQUET COMMENT :comment",
-        Map("comment" -> "Test table with named parameter"))
+      spark.sql("CREATE TABLE ddl_comments_named (id INT) USING PARQUET COMMENT :comment",
+                Map("comment" -> "Test table with named parameter"))
       val tableDesc = spark.catalog.getTable("ddl_comments_named").description
       assert(tableDesc == "Test table with named parameter")
     }
 
     withTable("ddl_props_named") {
       // Test TBLPROPERTIES parameters
-      spark.sql(
-        """CREATE TABLE ddl_props_named (id INT) USING PARQUET
+      spark.sql("""CREATE TABLE ddl_props_named (id INT) USING PARQUET
                    TBLPROPERTIES ('created_by' = :owner, 'department' = :dept)""",
-        Map("owner" -> "test_user", "dept" -> "engineering"))
+                Map("owner" -> "test_user", "dept" -> "engineering"))
       val tableProps = spark.sql("DESCRIBE TABLE EXTENDED ddl_props_named").collect()
       val propsRow = tableProps.find(_.getString(0) == "Table Properties").get
       assert(propsRow.getString(1).contains("created_by=test_user"))
@@ -921,19 +965,17 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
   test("positional parameters in DDL comments and properties") {
     withTable("ddl_comments_pos") {
       // Test table comment parameter
-      spark.sql(
-        "CREATE TABLE ddl_comments_pos (id INT) USING PARQUET COMMENT ?",
-        Array("Test table with positional parameter"))
+      spark.sql("CREATE TABLE ddl_comments_pos (id INT) USING PARQUET COMMENT ?",
+                Array("Test table with positional parameter"))
       val tableDesc = spark.catalog.getTable("ddl_comments_pos").description
       assert(tableDesc == "Test table with positional parameter")
     }
 
     withTable("ddl_props_pos") {
       // Test TBLPROPERTIES parameters
-      spark.sql(
-        """CREATE TABLE ddl_props_pos (id INT) USING PARQUET
+      spark.sql("""CREATE TABLE ddl_props_pos (id INT) USING PARQUET
                    TBLPROPERTIES ('created_by' = ?, 'version' = ?)""",
-        Array("spark_sql", "3.5"))
+                Array("spark_sql", "3.5"))
       val tableProps = spark.sql("DESCRIBE TABLE EXTENDED ddl_props_pos").collect()
       val propsRow = tableProps.find(_.getString(0) == "Table Properties").get
       assert(propsRow.getString(1).contains("created_by=spark_sql"))
@@ -946,9 +988,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       withTable("ddl_location_named") {
         // Test location parameter
         val location = dir.getAbsolutePath
-        spark.sql(
-          "CREATE TABLE ddl_location_named (id INT) USING PARQUET LOCATION :path",
-          Map("path" -> location))
+        spark.sql("CREATE TABLE ddl_location_named (id INT) USING PARQUET LOCATION :path",
+                  Map("path" -> location))
         val tableMeta = spark.catalog.getTable("ddl_location_named")
         assert(tableMeta.tableType == "EXTERNAL")
       }
@@ -960,9 +1001,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       withTable("ddl_location_pos") {
         // Test location parameter
         val location = dir.getAbsolutePath
-        spark.sql(
-          "CREATE TABLE ddl_location_pos (id INT) USING PARQUET LOCATION ?",
-          Array(location))
+        spark.sql("CREATE TABLE ddl_location_pos (id INT) USING PARQUET LOCATION ?",
+                  Array(location))
         val tableMeta = spark.catalog.getTable("ddl_location_pos")
         assert(tableMeta.tableType == "EXTERNAL")
       }
@@ -987,8 +1027,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     withTable("ddl_default_pos") {
       // Test DEFAULT expression parameter
       spark.sql(
-        "CREATE TABLE ddl_default_pos (id INT, priority INT DEFAULT ?) USING PARQUET",
-        Array(1))
+        "CREATE TABLE ddl_default_pos (id INT, priority INT DEFAULT ?) USING PARQUET", Array(1))
 
       // Insert without specifying priority to test default
       spark.sql("INSERT INTO ddl_default_pos (id) VALUES (1)")
@@ -1000,9 +1039,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
   test("named parameters in expressions that previously only accepted literals") {
     // Test CAST with data type parameters
     checkAnswer(
-      spark.sql(
-        "SELECT CAST(:value AS DECIMAL(:precision, :scale))",
-        Map("value" -> "123.456", "precision" -> 10, "scale" -> 2)),
+      spark.sql("SELECT CAST(:value AS DECIMAL(:precision, :scale))",
+                Map("value" -> "123.456", "precision" -> 10, "scale" -> 2)),
       Row(java.math.BigDecimal.valueOf(123.46)))
   }
 
@@ -1017,7 +1055,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     withTable("partition_insert_named") {
       spark.sql(
         "CREATE TABLE partition_insert_named (id INT, year INT, month INT) " +
-          "USING PARQUET PARTITIONED BY (year, month)")
+        "USING PARQUET PARTITIONED BY (year, month)")
 
       // Test parameterized partition values in INSERT
       spark.sql(
@@ -1038,9 +1076,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         "CREATE TABLE partition_insert_pos (id INT, year INT) USING PARQUET PARTITIONED BY (year)")
 
       // Test parameterized partition values in INSERT
-      spark.sql(
-        "INSERT INTO partition_insert_pos PARTITION (year = ?) VALUES (?)",
-        Array(2024, 2))
+      spark.sql("INSERT INTO partition_insert_pos PARTITION (year = ?) VALUES (?)", Array(2024, 2))
 
       val result = spark.sql("SELECT * FROM partition_insert_pos").collect()
       assert(result.length == 1)
@@ -1054,8 +1090,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       spark.sql("CREATE TABLE show_test_named (id INT) USING PARQUET")
 
       // Test SHOW TABLES with LIKE pattern parameter
-      val showResult =
-        spark.sql("SHOW TABLES LIKE :pattern", Map("pattern" -> "show_test_named")).collect()
+      val showResult = spark.sql(
+        "SHOW TABLES LIKE :pattern", Map("pattern" -> "show_test_named")).collect()
       assert(showResult.length == 1)
       assert(showResult(0).getString(1) == "show_test_named")
     }
@@ -1077,11 +1113,12 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     // This test is disabled until grammar support is added
     // For now, test that we can use parameters in other auxiliary statements
     withTable("describe_test_named") {
-      spark.sql("CREATE TABLE describe_test_named (id INT, name VARCHAR(100)) USING PARQUET")
+      spark.sql(
+        "CREATE TABLE describe_test_named (id INT, name VARCHAR(100)) USING PARQUET")
 
       // Test SHOW TABLES with parameter instead (which works)
-      val showResult =
-        spark.sql("SHOW TABLES LIKE :pattern", Map("pattern" -> "describe_test_named")).collect()
+      val showResult = spark.sql("SHOW TABLES LIKE :pattern",
+        Map("pattern" -> "describe_test_named")).collect()
       assert(showResult.length == 1)
       assert(showResult(0).getString(1) == "describe_test_named")
     }
@@ -1104,9 +1141,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
   test("named parameters in CREATE VIEW statements") {
     withView("view_named_params") {
       // Test CREATE VIEW with parameter in SELECT clause
-      spark.sql(
-        "CREATE VIEW view_named_params AS SELECT :value as constant_col",
-        Map("value" -> 42))
+      spark.sql("CREATE VIEW view_named_params AS SELECT :value as constant_col",
+                Map("value" -> 42))
 
       checkAnswer(spark.table("view_named_params"), Row(42))
     }
@@ -1131,9 +1167,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
 
     // SPLIT function with limit parameter
     checkAnswer(
-      spark.sql(
-        "SELECT SPLIT(:str, :delim, :limit)",
-        Map("str" -> "a,b,c,d", "delim" -> ",", "limit" -> 2)),
+      spark.sql("SELECT SPLIT(:str, :delim, :limit)",
+                Map("str" -> "a,b,c,d", "delim" -> ",", "limit" -> 2)),
       Row(Array("a", "b,c,d")))
 
     // ROUND function with scale parameter
@@ -1152,11 +1187,14 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
 
     // OVERLAY function with position and length parameters
     checkAnswer(
-      spark.sql("SELECT OVERLAY(? PLACING ? FROM ? FOR ?)", Array("Hello World", "XX", 7, 5)),
+      spark.sql("SELECT OVERLAY(? PLACING ? FROM ? FOR ?)",
+                Array("Hello World", "XX", 7, 5)),
       Row("Hello XX"))
 
     // LOCATE function with start position parameter
-    checkAnswer(spark.sql("SELECT LOCATE(?, ?, ?)", Array("o", "Hello World", 6)), Row(8))
+    checkAnswer(
+      spark.sql("SELECT LOCATE(?, ?, ?)", Array("o", "Hello World", 6)),
+      Row(8))
   }
 
   test("named parameters in table sampling") {
@@ -1166,17 +1204,15 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         "INSERT INTO sample_test_named VALUES (1, 'a'), (2, 'b'), (3, 'c'), (4, 'd'), (5, 'e')")
 
       // Test TABLESAMPLE with named percentage parameter
-      val sampleResult = spark
-        .sql(
-          "SELECT * FROM sample_test_named TABLESAMPLE (:percent PERCENT)",
-          Map("percent" -> 50))
-        .collect()
+      val sampleResult = spark.sql(
+        "SELECT * FROM sample_test_named TABLESAMPLE (:percent PERCENT)",
+        Map("percent" -> 50)).collect()
       assert(sampleResult.length >= 0) // Should return some subset of rows
 
       // Test TABLESAMPLE with named row count parameter
-      val rowSampleResult = spark
-        .sql("SELECT * FROM sample_test_named TABLESAMPLE (:rows ROWS)", Map("rows" -> 3))
-        .collect()
+      val rowSampleResult = spark.sql(
+        "SELECT * FROM sample_test_named TABLESAMPLE (:rows ROWS)",
+        Map("rows" -> 3)).collect()
       assert(rowSampleResult.length <= 3) // Should return at most 3 rows
     }
   }
@@ -1188,13 +1224,15 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         "INSERT INTO sample_test_pos VALUES (1, 'a'), (2, 'b'), (3, 'c'), (4, 'd'), (5, 'e')")
 
       // Test TABLESAMPLE with positional percentage parameter
-      val sampleResult =
-        spark.sql("SELECT * FROM sample_test_pos TABLESAMPLE (? PERCENT)", Array(30)).collect()
+      val sampleResult = spark.sql(
+        "SELECT * FROM sample_test_pos TABLESAMPLE (? PERCENT)",
+        Array(30)).collect()
       assert(sampleResult.length >= 0) // Should return some subset of rows
 
       // Test TABLESAMPLE with positional row count parameter
-      val rowSampleResult =
-        spark.sql("SELECT * FROM sample_test_pos TABLESAMPLE (? ROWS)", Array(2)).collect()
+      val rowSampleResult = spark.sql(
+        "SELECT * FROM sample_test_pos TABLESAMPLE (? ROWS)",
+        Array(2)).collect()
       assert(rowSampleResult.length <= 2) // Should return at most 2 rows
     }
   }
@@ -1204,7 +1242,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       // Test parameterized table property keys
       spark.sql(
         "CREATE TABLE tblprop_key_named (id INT) USING PARQUET " +
-          "TBLPROPERTIES (:key1 = 'value1', :key2 = 'value2')",
+        "TBLPROPERTIES (:key1 = 'value1', :key2 = 'value2')",
         Map("key1" -> "created_by", "key2" -> "department"))
 
       val tableProps = spark.sql("DESCRIBE TABLE EXTENDED tblprop_key_named").collect()
@@ -1288,7 +1326,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       // Test with multiple named parameters
       checkAnswer(
         spark.sql("SELECT :a, :b", Map("a" -> "hello", "b" -> "world")),
-        Row("hello", "world"))
+        Row("hello", "world")
+      )
     }
 
     // Ensure when config is true, parameter binding works correctly through analyzer
@@ -1343,13 +1382,18 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         spark.sql(sqlText, args),
         Row(0, 0) :: Row(1, 1) :: Row(2, 2) :: Row(3, 0) :: Nil)
 
-      checkAnswer(spark.sql("""SELECT contains('Spark \'SQL\'', ?)""", Array("SQL")), Row(true))
+      checkAnswer(
+        spark.sql("""SELECT contains('Spark \'SQL\'', ?)""", Array("SQL")),
+        Row(true))
     }
   }
 
   test("legacy mode - parameter binding is case sensitive") {
     withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
-      checkAnswer(spark.sql("SELECT :p, :P", Map("p" -> 1, "P" -> 2)), Row(1, 2))
+      checkAnswer(
+        spark.sql("SELECT :p, :P", Map("p" -> 1, "P" -> 2)),
+        Row(1, 2)
+      )
     }
   }
 
@@ -1361,7 +1405,9 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
           |SELECT p + :p2 FROM w1
           |""".stripMargin
       val args = Map("p1" -> 1, "p2" -> 2)
-      checkAnswer(spark.sql(sqlText, args), Row(3))
+      checkAnswer(
+        spark.sql(sqlText, args),
+        Row(3))
     }
   }
 
@@ -1373,7 +1419,9 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
           |SELECT p + ? FROM w1
           |""".stripMargin
       val args = Array(1, 2)
-      checkAnswer(spark.sql(sqlText, args), Row(3))
+      checkAnswer(
+        spark.sql(sqlText, args),
+        Row(3))
     }
   }
 
@@ -1386,7 +1434,9 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
           |SELECT p2 + :p3 FROM w1
           |""".stripMargin
       val args = Map("p1" -> 1, "p2" -> 2, "p3" -> 3)
-      checkAnswer(spark.sql(sqlText, args), Row(6))
+      checkAnswer(
+        spark.sql(sqlText, args),
+        Row(6))
     }
   }
 
@@ -1399,7 +1449,9 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
           |SELECT p2 + ? FROM w1
           |""".stripMargin
       val args = Array(1, 2, 3)
-      checkAnswer(spark.sql(sqlText, args), Row(6))
+      checkAnswer(
+        spark.sql(sqlText, args),
+        Row(6))
     }
   }
 
@@ -1407,7 +1459,9 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
       val sqlText = "SELECT (SELECT max(id) + :p1 FROM range(10)) + :p2"
       val args = Map("p1" -> 1, "p2" -> 2)
-      checkAnswer(spark.sql(sqlText, args), Row(12))
+      checkAnswer(
+        spark.sql(sqlText, args),
+        Row(12))
     }
   }
 
@@ -1415,7 +1469,9 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
       val sqlText = "SELECT (SELECT max(id) + ? FROM range(10)) + ?"
       val args = Array(1, 2)
-      checkAnswer(spark.sql(sqlText, args), Row(12))
+      checkAnswer(
+        spark.sql(sqlText, args),
+        Row(12))
     }
   }
 
@@ -1423,7 +1479,9 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
       val sqlText = "SELECT (SELECT (SELECT max(id) + :p1 FROM range(10)) + :p2) + :p3"
       val args = Map("p1" -> 1, "p2" -> 2, "p3" -> 3)
-      checkAnswer(spark.sql(sqlText, args), Row(15))
+      checkAnswer(
+        spark.sql(sqlText, args),
+        Row(15))
     }
   }
 
@@ -1431,7 +1489,9 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
       val sqlText = "SELECT (SELECT (SELECT max(id) + ? FROM range(10)) + ?) + ?"
       val args = Array(1, 2, 3)
-      checkAnswer(spark.sql(sqlText, args), Row(15))
+      checkAnswer(
+        spark.sql(sqlText, args),
+        Row(15))
     }
   }
 
@@ -1443,7 +1503,9 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
           |SELECT p + :p3 FROM w1
           |""".stripMargin
       val args = Map("p1" -> 1, "p2" -> 2, "p3" -> 3)
-      checkAnswer(spark.sql(sqlText, args), Row(15))
+      checkAnswer(
+        spark.sql(sqlText, args),
+        Row(15))
     }
   }
 
@@ -1455,7 +1517,9 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
           |SELECT p + ? FROM w1
           |""".stripMargin
       val args = Array(1, 2, 3)
-      checkAnswer(spark.sql(sqlText, args), Row(15))
+      checkAnswer(
+        spark.sql(sqlText, args),
+        Row(15))
     }
   }
 
@@ -1464,7 +1528,9 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       val sqlText =
         "SELECT IDENTIFIER('T.' || :p1 || '1') FROM VALUES(1) T(c1)"
       val args = Map("p1" -> "c")
-      checkAnswer(spark.sql(sqlText, args), Row(1))
+      checkAnswer(
+        spark.sql(sqlText, args),
+        Row(1))
     }
   }
 
@@ -1473,7 +1539,9 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       val sqlText =
         "SELECT IDENTIFIER('T.' || ? || '1') FROM VALUES(1) T(c1)"
       val args = Array("c")
-      checkAnswer(spark.sql(sqlText, args), Row(1))
+      checkAnswer(
+        spark.sql(sqlText, args),
+        Row(1))
     }
   }
 
@@ -1533,7 +1601,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         context = ExpectedContext(
           fragment = "CREATE VIEW v_legacy AS SELECT :p AS p",
           start = 0,
-          stop = 37))
+          stop = 37)
+      )
     }
   }
 
@@ -1551,26 +1620,32 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         context = ExpectedContext(
           fragment = "CREATE VIEW v_legacy_pos AS SELECT ? AS p",
           start = 0,
-          stop = 40))
+          stop = 40)
+      )
     }
   }
 
   test("legacy mode - arrays as parameters") {
     withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
       checkAnswer(
-        spark.sql(
-          "SELECT array_position(:arrParam, 'abc')",
+        spark.sql("SELECT array_position(:arrParam, 'abc')",
           Map("arrParam" -> Array.empty[String])),
         Row(0))
-      checkAnswer(spark.sql("SELECT array_position(?, 0.1D)", Array(Array.empty[Double])), Row(0))
+      checkAnswer(
+        spark.sql("SELECT array_position(?, 0.1D)", Array(Array.empty[Double])),
+        Row(0))
       checkAnswer(
         spark.sql("SELECT array_contains(:arrParam, 10)", Map("arrParam" -> Array(10, 20, 30))),
         Row(true))
       checkAnswer(
         spark.sql("SELECT array_contains(?, ?)", Array(Array("a", "b", "c"), "b")),
         Row(true))
-      checkAnswer(spark.sql("SELECT :arr[1]", Map("arr" -> Array(10, 20, 30))), Row(20))
-      checkAnswer(spark.sql("SELECT ?[?]", Array(Array(1f, 2f, 3f), 0)), Row(1f))
+      checkAnswer(
+        spark.sql("SELECT :arr[1]", Map("arr" -> Array(10, 20, 30))),
+        Row(20))
+      checkAnswer(
+        spark.sql("SELECT ?[?]", Array(Array(1f, 2f, 3f), 0)),
+        Row(1f))
     }
   }
 
@@ -1587,20 +1662,17 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
 
       Array(fromArr(_, _), createMap(_, _)).foreach { f =>
         checkAnswer(
-          spark.sql(
-            "SELECT map_contains_key(:mapParam, 0)",
+          spark.sql("SELECT map_contains_key(:mapParam, 0)",
             Map("mapParam" -> f(Array.empty[Int], Array.empty[String]))),
           Row(false))
         checkAnswer(
-          spark.sql(
-            "SELECT map_contains_key(?, 'a')",
+          spark.sql("SELECT map_contains_key(?, 'a')",
             Array(f(Array.empty[String], Array.empty[Double]))),
           Row(false))
       }
       Array(fromArr(_, _), createMap(_, _)).foreach { f =>
         checkAnswer(
-          spark.sql(
-            "SELECT element_at(:mapParam, 'a')",
+          spark.sql("SELECT element_at(:mapParam, 'a')",
             Map("mapParam" -> f(Array("a"), Array(0)))),
           Row(0))
         checkAnswer(
@@ -1627,7 +1699,11 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         },
         condition = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
         parameters = Map("statement" -> "DEFAULT"),
-        context = ExpectedContext(fragment = "default :parm", start = 37, stop = 49))
+        context = ExpectedContext(
+          fragment = "default :parm",
+          start = 37,
+          stop = 49)
+      )
     }
   }
 
@@ -1635,14 +1711,10 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
       withTable("testtab_legacy") {
         spark.sql("create table testtab_legacy (id int, name string)")
-        spark.sql(
-          "insert into identifier(:tab) values(1, 'test1')",
-          Map("tab" -> "testtab_legacy"))
-        checkAnswer(
-          spark.sql("select * from identifier(:tab)", Map("tab" -> "testtab_legacy")),
+        spark.sql("insert into identifier(:tab) values(1, 'test1')", Map("tab" -> "testtab_legacy"))
+        checkAnswer(spark.sql("select * from identifier(:tab)", Map("tab" -> "testtab_legacy")),
           Seq(Row(1, "test1")))
-        spark.sql(
-          "insert into identifier(:tab) values(2, :name)",
+        spark.sql("insert into identifier(:tab) values(2, :name)",
           Map("tab" -> "testtab_legacy", "name" -> "test2"))
         checkAnswer(sql("select * from testtab_legacy"), Seq(Row(1, "test1"), Row(2, "test2")))
       }
@@ -1654,12 +1726,11 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       withTable("testtab_legacy_pos") {
         spark.sql("create table testtab_legacy_pos (id int, name string)")
         spark.sql("insert into identifier(?) values(1, 'test1')", Array("testtab_legacy_pos"))
-        checkAnswer(
-          spark.sql("select * from identifier(?)", Array("testtab_legacy_pos")),
+        checkAnswer(spark.sql("select * from identifier(?)", Array("testtab_legacy_pos")),
           Seq(Row(1, "test1")))
-        spark.sql("insert into identifier(?) values(2, ?)", Array("testtab_legacy_pos", "test2"))
-        checkAnswer(
-          sql("select * from testtab_legacy_pos"),
+        spark.sql("insert into identifier(?) values(2, ?)",
+          Array("testtab_legacy_pos", "test2"))
+        checkAnswer(sql("select * from testtab_legacy_pos"),
           Seq(Row(1, "test1"), Row(2, "test2")))
       }
     }
@@ -1684,8 +1755,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
   // =============================================================================
 
   /**
-   * Verify that a parameterized SQL query that produces an error has the error context pointing
-   * to the original SQL text and correct positions.
+   * Verify that a parameterized SQL query that produces an error
+   * has the error context pointing to the original SQL text and correct positions.
    */
   private def checkParameterError[T <: Throwable](
       sql: String,
@@ -1707,42 +1778,36 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       case pe: ParseException =>
         if (pe.getQueryContext.nonEmpty) {
           val context = pe.getQueryContext.head.asInstanceOf[SQLQueryContext]
-          assert(
-            context.sqlText.exists(_.contains(sql)),
+          assert(context.sqlText.exists(_.contains(sql)),
             s"Parse error should reference original SQL.\n" +
-              s"Expected to contain: $sql\n" +
-              s"Actual context SQL: ${context.sqlText}")
+            s"Expected to contain: $sql\n" +
+            s"Actual context SQL: ${context.sqlText}")
 
           // Verify position mapping if expected positions are provided
           expectedStartPos.foreach { expectedStart =>
-            assert(
-              context.originStartIndex.contains(expectedStart),
+            assert(context.originStartIndex.contains(expectedStart),
               s"Start position should be $expectedStart, got: ${context.originStartIndex}")
           }
           expectedStopPos.foreach { expectedStop =>
-            assert(
-              context.originStopIndex.contains(expectedStop),
+            assert(context.originStopIndex.contains(expectedStop),
               s"Stop position should be $expectedStop, got: ${context.originStopIndex}")
           }
         }
       case ae: AnalysisException =>
         if (ae.context.nonEmpty) {
           val context = ae.context.head.asInstanceOf[SQLQueryContext]
-          assert(
-            context.sqlText.exists(_.contains(sql)),
+          assert(context.sqlText.exists(_.contains(sql)),
             s"Analysis error should reference original SQL.\n" +
-              s"Expected to contain: $sql\n" +
-              s"Actual context SQL: ${context.sqlText}")
+            s"Expected to contain: $sql\n" +
+            s"Actual context SQL: ${context.sqlText}")
 
           // Verify position mapping if expected positions are provided
           expectedStartPos.foreach { expectedStart =>
-            assert(
-              context.originStartIndex.contains(expectedStart),
+            assert(context.originStartIndex.contains(expectedStart),
               s"Start position should be $expectedStart, got: ${context.originStartIndex}")
           }
           expectedStopPos.foreach { expectedStop =>
-            assert(
-              context.originStopIndex.contains(expectedStop),
+            assert(context.originStopIndex.contains(expectedStop),
               s"Stop position should be $expectedStop, got: ${context.originStopIndex}")
           }
         }
@@ -1761,8 +1826,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       expectedStartPos: Int,
       expectedStopPos: Int,
       params: Map[String, Any] = Map.empty,
-      positionalParams: Array[Any] = Array.empty)(implicit
-      ct: scala.reflect.ClassTag[T]): Unit = {
+      positionalParams: Array[Any] = Array.empty)(implicit ct: scala.reflect.ClassTag[T]): Unit = {
 
     val exception = intercept[T] {
       if (positionalParams.nonEmpty) {
@@ -1785,26 +1849,23 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       val context = contexts.head.asInstanceOf[SQLQueryContext]
 
       // Verify the SQL text is the original
-      assert(
-        context.sqlText.contains(sql),
+      assert(context.sqlText.contains(sql),
         s"Context should reference original SQL.\n" +
-          s"Expected: $sql\n" +
-          s"Actual: ${context.sqlText}")
+        s"Expected: $sql\n" +
+        s"Actual: ${context.sqlText}")
 
-      // Verify position mapping
-      assert(
-        context.originStartIndex.contains(expectedStartPos),
-        s"Start position should be $expectedStartPos, got: ${context.originStartIndex}")
-      assert(
-        context.originStopIndex.contains(expectedStopPos),
-        s"Stop position should be $expectedStopPos, got: ${context.originStopIndex}")
-    }
+        // Verify position mapping
+        assert(context.originStartIndex.contains(expectedStartPos),
+          s"Start position should be $expectedStartPos, got: ${context.originStartIndex}")
+        assert(context.originStopIndex.contains(expectedStopPos),
+          s"Stop position should be $expectedStopPos, got: ${context.originStopIndex}")
+      }
   }
 
   /**
-   * Verify that EXECUTE IMMEDIATE errors correctly reference the inner query context. This is the
-   * correct behavior - errors should point to the actual inner query where the error occurred,
-   * similar to how views work.
+   * Verify that EXECUTE IMMEDIATE errors correctly reference the inner query context.
+   * This is the correct behavior - errors should point to the actual inner query where
+   * the error occurred, similar to how views work.
    */
   private def checkExecuteImmediateError[T <: Throwable](
       executeImmediateSQL: String,
@@ -1821,42 +1882,36 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       case pe: ParseException =>
         if (pe.getQueryContext.nonEmpty) {
           val context = pe.getQueryContext.head.asInstanceOf[SQLQueryContext]
-          assert(
-            context.sqlText.exists(_.contains(innerQuery)),
+          assert(context.sqlText.exists(_.contains(innerQuery)),
             s"Parse error should reference inner query SQL.\n" +
-              s"Expected to contain: $innerQuery\n" +
-              s"Actual context SQL: ${context.sqlText}")
+            s"Expected to contain: $innerQuery\n" +
+            s"Actual context SQL: ${context.sqlText}")
 
           // Verify position mapping if expected positions are provided
           expectedStartPos.foreach { expectedStart =>
-            assert(
-              context.originStartIndex.contains(expectedStart),
+            assert(context.originStartIndex.contains(expectedStart),
               s"Start position should be $expectedStart, got: ${context.originStartIndex}")
           }
           expectedStopPos.foreach { expectedStop =>
-            assert(
-              context.originStopIndex.contains(expectedStop),
+            assert(context.originStopIndex.contains(expectedStop),
               s"Stop position should be $expectedStop, got: ${context.originStopIndex}")
           }
         }
       case ae: AnalysisException =>
         if (ae.context.nonEmpty) {
           val context = ae.context.head.asInstanceOf[SQLQueryContext]
-          assert(
-            context.sqlText.exists(_.contains(innerQuery)),
+          assert(context.sqlText.exists(_.contains(innerQuery)),
             s"Analysis error should reference inner query SQL.\n" +
-              s"Expected to contain: $innerQuery\n" +
-              s"Actual context SQL: ${context.sqlText}")
+            s"Expected to contain: $innerQuery\n" +
+            s"Actual context SQL: ${context.sqlText}")
 
           // Verify position mapping if expected positions are provided
           expectedStartPos.foreach { expectedStart =>
-            assert(
-              context.originStartIndex.contains(expectedStart),
+            assert(context.originStartIndex.contains(expectedStart),
               s"Start position should be $expectedStart, got: ${context.originStartIndex}")
           }
           expectedStopPos.foreach { expectedStop =>
-            assert(
-              context.originStopIndex.contains(expectedStop),
+            assert(context.originStopIndex.contains(expectedStop),
               s"Stop position should be $expectedStop, got: ${context.originStopIndex}")
           }
         }
@@ -1875,7 +1930,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       "SELECT *** :param",
       expectedStartPos = Some(0),
       expectedStopPos = Some(16), // "SELECT *** :param".length - 1 = 17 - 1 = 16
-      params = Map("param" -> 42))
+      params = Map("param" -> 42)
+    )
   }
 
   test("position mapping - parse error with positional parameter") {
@@ -1883,7 +1939,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       "SELECT *** ?",
       expectedStartPos = Some(0),
       expectedStopPos = Some(11), // "SELECT *** ?".length - 1 = 12 - 1 = 11
-      positionalParams = Array(42))
+      positionalParams = Array(42)
+    )
   }
 
   test("position mapping - analysis error with named parameter") {
@@ -1891,7 +1948,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       "SELECT :param FROM nonexistent_table",
       expectedStartPos = Some(19), // Position of "nonexistent_table" in original SQL
       expectedStopPos = Some(35), // length - 1 = 36 - 1 = 35
-      params = Map("param" -> 42))
+      params = Map("param" -> 42)
+    )
   }
 
   test("position mapping - analysis error with positional parameter") {
@@ -1899,27 +1957,29 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       "SELECT ? FROM nonexistent_table",
       expectedStartPos = Some(14),
       expectedStopPos = Some(30), // "SELECT ? FROM nonexistent_table".length - 1 = 31 - 1 = 30
-      positionalParams = Array(42))
+      positionalParams = Array(42)
+    )
   }
 
   test("position mapping - parse error with identifier clause - SPARK-49757 regression test") {
     val sqlText = "SET CATALOG IDENTIFIER(:param)"
-    val exception =
-      checkParameterError[AnalysisException](sqlText, params = Map("param" -> "testcat.ns1"))
+    val exception = checkParameterError[AnalysisException](
+      sqlText,
+      params = Map("param" -> "testcat.ns1")
+    )
 
     // Verify specific context details for this test case
     val contexts = exception.getQueryContext
     // Some parse errors may not have query context - this is acceptable
     if (contexts.nonEmpty) {
       val context = contexts.head.asInstanceOf[SQLQueryContext]
-      assert(context.sqlText.contains(sqlText), s"Context should contain original SQL: $sqlText")
-      assert(
-        context.originStartIndex.contains(0),
+      assert(context.sqlText.contains(sqlText),
+        s"Context should contain original SQL: $sqlText")
+      assert(context.originStartIndex.contains(0),
         s"Start index should be 0, got: ${context.originStartIndex}")
-      assert(
-        context.originStopIndex.contains(sqlText.length - 1),
-        s"Stop index should be ${sqlText.length - 1}, got: ${context.originStopIndex}")
-    }
+        assert(context.originStopIndex.contains(sqlText.length - 1),
+          s"Stop index should be ${sqlText.length - 1}, got: ${context.originStopIndex}")
+      }
   }
 
   test("IDENTIFIER clause with parameter marker - multipart identifier error") {
@@ -1931,7 +1991,11 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         spark.sql(sqlText, Map("catalogName" -> "catalog.namespace"))
       },
       condition = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
-      parameters = Map("name" -> "`catalog`.`namespace`", "statement" -> "SET CATALOG"))
+      parameters = Map(
+        "name" -> "`catalog`.`namespace`",
+        "statement" -> "SET CATALOG"
+      )
+    )
   }
 
   test("IDENTIFIER clause with parameter marker - table reference") {
@@ -1941,15 +2005,17 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
 
       // Using IDENTIFIER with parameter marker for table name
       checkAnswer(
-        spark.sql(
-          "SELECT * FROM IDENTIFIER(:tableName) ORDER BY id",
+        spark.sql("SELECT * FROM IDENTIFIER(:tableName) ORDER BY id",
           Map("tableName" -> "test_table")),
-        Seq(Row(0), Row(1), Row(2), Row(3), Row(4)))
+        Seq(Row(0), Row(1), Row(2), Row(3), Row(4))
+      )
 
       // Test with positional parameter
       checkAnswer(
-        spark.sql("SELECT * FROM IDENTIFIER(?) ORDER BY id", Array("test_table")),
-        Seq(Row(0), Row(1), Row(2), Row(3), Row(4)))
+        spark.sql("SELECT * FROM IDENTIFIER(?) ORDER BY id",
+          Array("test_table")),
+        Seq(Row(0), Row(1), Row(2), Row(3), Row(4))
+      )
     }
   }
 
@@ -1961,15 +2027,17 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
 
       // Using IDENTIFIER with parameter marker for column name
       checkAnswer(
-        spark.sql(
-          "SELECT IDENTIFIER(:colName) FROM test_columns ORDER BY col1",
+        spark.sql("SELECT IDENTIFIER(:colName) FROM test_columns ORDER BY col1",
           Map("colName" -> "col2")),
-        Seq(Row("a"), Row("b"), Row("c")))
+        Seq(Row("a"), Row("b"), Row("c"))
+      )
 
       // Test with positional parameter
       checkAnswer(
-        spark.sql("SELECT IDENTIFIER(?) FROM test_columns ORDER BY col1", Array("col1")),
-        Seq(Row(1), Row(2), Row(3)))
+        spark.sql("SELECT IDENTIFIER(?) FROM test_columns ORDER BY col1",
+          Array("col1")),
+        Seq(Row(1), Row(2), Row(3))
+      )
     }
   }
 
@@ -1980,7 +2048,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       sqlText,
       expectedStartPos = Some(14), // Position of "IDENTIFIER(:tableName)" in original SQL
       expectedStopPos = Some(35), // End of "IDENTIFIER(:tableName)"
-      params = Map("tableName" -> "nonexistent_table"))
+      params = Map("tableName" -> "nonexistent_table")
+    )
   }
 
   test("mixed named and positional parameters - should fail") {
@@ -2003,7 +2072,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         spark.sql(sqlScriptText, Map("param" -> 5))
       },
       condition = "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
-      parameters = Map())
+      parameters = Map()
+    )
   }
 
   test("mixed parameters - positional in regular query with named in script") {
@@ -2014,7 +2084,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         spark.sql(sqlText, Map("param" -> 5))
       },
       condition = "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
-      parameters = Map())
+      parameters = Map()
+    )
   }
 
   test("mixed parameters - EXECUTE IMMEDIATE with both positional and named") {
@@ -2028,10 +2099,12 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           spark.sql(
             "EXECUTE IMMEDIATE 'SELECT * FROM test_mixed where ? = id " +
-              "and :first = name' USING 1 as x, 'name2' as first")
+            "and :first = name' USING 1 as x, 'name2' as first"
+          )
         },
         condition = "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
-        parameters = Map())
+        parameters = Map()
+      )
     }
   }
 
@@ -2040,7 +2113,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       "SELECT :param1, :param2 ***",
       expectedStartPos = Some(0),
       expectedStopPos = Some(27), // "SELECT :param1, :param2 ***".length - 1 = 28 - 1 = 27
-      params = Map("param1" -> 10, "param2" -> 20))
+      params = Map("param1" -> 10, "param2" -> 20)
+    )
   }
 
   test("position mapping - parameter substitution with different lengths") {
@@ -2048,7 +2122,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       "SELECT :a, :bb, :ccc FROM nonexistent",
       expectedStartPos = Some(26), // Position of "nonexistent" in original SQL
       expectedStopPos = Some(36), // length - 1 = 37 - 1 = 36
-      params = Map("a" -> 1, "bb" -> 22, "ccc" -> 333))
+      params = Map("a" -> 1, "bb" -> 22, "ccc" -> 333)
+    )
   }
 
   test("position mapping - complex expression with parameter") {
@@ -2056,7 +2131,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       "SELECT CASE WHEN :param > 0 THEN 'yes' *** END",
       expectedStartPos = Some(0),
       expectedStopPos = Some(46), // length - 1 = 47 - 1 = 46
-      params = Map("param" -> 5))
+      params = Map("param" -> 5)
+    )
   }
 
   test("position mapping - error at start of SQL") {
@@ -2065,7 +2141,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       "*** :param",
       expectedStartPos = 0,
       expectedStopPos = 9, // "*** :param".length - 1
-      params = Map("param" -> 42))
+      params = Map("param" -> 42)
+    )
   }
 
   test("position mapping - error after parameter") {
@@ -2074,7 +2151,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       "SELECT :param ***",
       expectedStartPos = 0,
       expectedStopPos = 16, // "SELECT :param ***".length - 1
-      params = Map("param" -> 42))
+      params = Map("param" -> 42)
+    )
   }
 
   test("position mapping - parameter length difference") {
@@ -2083,7 +2161,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       "SELECT :x ***",
       expectedStartPos = 0,
       expectedStopPos = 12, // "SELECT :x ***".length - 1
-      params = Map("x" -> 42))
+      params = Map("x" -> 42)
+    )
   }
 
   test("position mapping - long parameter name vs short value") {
@@ -2092,7 +2171,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       "SELECT :verylongparametername ***",
       expectedStartPos = 0,
       expectedStopPos = 32, // "SELECT :verylongparametername ***".length - 1
-      params = Map("verylongparametername" -> 1))
+      params = Map("verylongparametername" -> 1)
+    )
   }
 
   test("position mapping - short parameter name vs long value") {
@@ -2101,7 +2181,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       "SELECT :x ***",
       expectedStartPos = 0,
       expectedStopPos = 12, // "SELECT :x ***".length - 1
-      params = Map("x" -> "very long string value"))
+      params = Map("x" -> "very long string value")
+    )
   }
 
   test("position mapping - multiple parameters with different lengths") {
@@ -2110,7 +2191,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       "SELECT :a, :bb, :ccc ***",
       expectedStartPos = 0,
       expectedStopPos = 23, // "SELECT :a, :bb, :ccc ***".length - 1
-      params = Map("a" -> 1, "bb" -> 22, "ccc" -> 333))
+      params = Map("a" -> 1, "bb" -> 22, "ccc" -> 333)
+    )
   }
 
   test("position mapping - positional parameters") {
@@ -2119,7 +2201,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       "SELECT ? ***",
       expectedStartPos = 0,
       expectedStopPos = 11, // "SELECT ? ***".length - 1
-      positionalParams = Array(42))
+      positionalParams = Array(42)
+    )
   }
 
   test("position mapping - multiple positional parameters") {
@@ -2128,7 +2211,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       "SELECT ?, ?, ? ***",
       expectedStartPos = 0,
       expectedStopPos = 17, // "SELECT ?, ?, ? ***".length - 1
-      positionalParams = Array(1, 22, 333))
+      positionalParams = Array(1, 22, 333)
+    )
   }
 
   test("position mapping - analysis error with specific position") {
@@ -2137,7 +2221,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       "SELECT :param FROM nonexistent_table",
       expectedStartPos = 19, // Position of "nonexistent_table" in original SQL
       expectedStopPos = 35, // "SELECT :param FROM nonexistent_table".length - 1
-      params = Map("param" -> 42))
+      params = Map("param" -> 42)
+    )
   }
 
   test("position mapping - nested expression with parameter") {
@@ -2146,7 +2231,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       "SELECT (:param + 10) * *** FROM test",
       expectedStartPos = 32, // Actual position reported by analysis
       expectedStopPos = 35, // "SELECT (:param + 10) * *** FROM test".length - 1
-      params = Map("param" -> 5))
+      params = Map("param" -> 5)
+    )
   }
 
   test("position mapping - parameter in WHERE clause") {
@@ -2155,7 +2241,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       "SELECT * FROM test WHERE id = :param AND undefined_column = 1",
       expectedStartPos = 14, // Actual position reported by analysis
       expectedStopPos = 17, // Actual stop position reported by analysis
-      params = Map("param" -> 42))
+      params = Map("param" -> 42)
+    )
   }
 
   test("position mapping - string parameter with quotes") {
@@ -2164,7 +2251,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       "SELECT :param ***",
       expectedStartPos = 0,
       expectedStopPos = 16, // "SELECT :param ***".length - 1
-      params = Map("param" -> "string with 'quotes'"))
+      params = Map("param" -> "string with 'quotes'")
+    )
   }
 
   test("position mapping - null parameter") {
@@ -2173,7 +2261,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       "SELECT :param ***",
       expectedStartPos = 0,
       expectedStopPos = 16, // "SELECT :param ***".length - 1
-      params = Map("param" -> null))
+      params = Map("param" -> null)
+    )
   }
 
   test("position mapping - EXECUTE IMMEDIATE parse error with named parameter") {
@@ -2236,8 +2325,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     // Verify the error context references the inner query, not the EXECUTE IMMEDIATE statement
     if (exception.context.nonEmpty) {
       val context = exception.context.head.asInstanceOf[SQLQueryContext]
-      assert(
-        context.sqlText.exists(_.contains("SELECT :param FROM nonexistent_table")),
+      assert(context.sqlText.exists(_.contains("SELECT :param FROM nonexistent_table")),
         s"Context should reference inner query, got: ${context.sqlText}")
     }
   }
@@ -2245,16 +2333,16 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
   test("position mapping - EXECUTE IMMEDIATE nested parameter context") {
     // Test EXECUTE IMMEDIATE with parameters in both outer and inner contexts
     val exception = intercept[AnalysisException] {
-      spark.sql(
-        "EXECUTE IMMEDIATE :query USING :value AS param",
-        Map("query" -> "SELECT :param FROM nonexistent_table", "value" -> 42))
+      spark.sql("EXECUTE IMMEDIATE :query USING :value AS param", Map(
+        "query" -> "SELECT :param FROM nonexistent_table",
+        "value" -> 42
+      ))
     }
 
     // Verify the error context references the inner query
     if (exception.context.nonEmpty) {
       val context = exception.context.head.asInstanceOf[SQLQueryContext]
-      assert(
-        context.sqlText.exists(_.contains("SELECT :param FROM nonexistent_table")),
+      assert(context.sqlText.exists(_.contains("SELECT :param FROM nonexistent_table")),
         s"Context should reference inner query, got: ${context.sqlText}")
     }
   }
@@ -2291,7 +2379,10 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       exception = exception,
       condition = "UNBOUND_SQL_PARAMETER",
       parameters = Map("name" -> "param"),
-      context = ExpectedContext(fragment = ":param", start = 7, stop = 12))
+      context = ExpectedContext(
+        fragment = ":param",
+        start = 7,
+        stop = 12))
   }
 
   test("detect unbound positional parameter with empty array") {
@@ -2303,7 +2394,10 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       exception = exception,
       condition = "UNBOUND_SQL_PARAMETER",
       parameters = Map("name" -> "_7"),
-      context = ExpectedContext(fragment = "?", start = 7, stop = 7))
+      context = ExpectedContext(
+        fragment = "?",
+        start = 7,
+        stop = 7))
   }
 
   test("detect unbound named parameter with no arguments") {
@@ -2314,7 +2408,10 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       exception = exception,
       condition = "UNBOUND_SQL_PARAMETER",
       parameters = Map("name" -> "param"),
-      context = ExpectedContext(fragment = ":param", start = 7, stop = 12))
+      context = ExpectedContext(
+        fragment = ":param",
+        start = 7,
+        stop = 12))
   }
 
   test("detect unbound positional parameter with no arguments") {
@@ -2325,16 +2422,23 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       exception = exception,
       condition = "UNBOUND_SQL_PARAMETER",
       parameters = Map("name" -> "_7"),
-      context = ExpectedContext(fragment = "?", start = 7, stop = 7))
+      context = ExpectedContext(
+        fragment = "?",
+        start = 7,
+        stop = 7))
   }
 
   test("empty map with no parameters - should succeed") {
     // When there are no parameter markers, empty map should work fine
-    checkAnswer(spark.sql("SELECT 1", Map.empty[String, Any]), Row(1))
+    checkAnswer(
+      spark.sql("SELECT 1", Map.empty[String, Any]),
+      Row(1))
   }
 
   test("empty array with no parameters - should succeed") {
     // When there are no parameter markers, empty array should work fine
-    checkAnswer(spark.sql("SELECT 1", Array.empty[Any]), Row(1))
+    checkAnswer(
+      spark.sql("SELECT 1", Array.empty[Any]),
+      Row(1))
   }
 }

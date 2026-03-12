@@ -56,8 +56,8 @@ class ForeachBatchSinkSuite extends StreamTest {
     val ds = mem.toDF().selectExpr("value + 1 as value")
 
     val tester = new ForeachBatchTester[Row](mem)(ExpressionEncoder(ds.schema))
-    val writer =
-      (df: DataFrame, batchId: Long) => tester.record(batchId, df.selectExpr("value + 1"))
+    val writer = (df: DataFrame, batchId: Long) =>
+      tester.record(batchId, df.selectExpr("value + 1"))
 
     import tester._
     testWriter(ds, writer)(
@@ -68,13 +68,11 @@ class ForeachBatchSinkSuite extends StreamTest {
 
   test("foreachBatch with stateful query in update mode") {
     val mem = MemoryStream[Int]
-    val ds = mem
-      .toDF()
+    val ds = mem.toDF()
       .select($"value" % 2 as "key")
       .groupBy("key")
       .agg(count("*") as "value")
-      .toDF()
-      .as[KV]
+      .toDF().as[KV]
 
     val tester = new ForeachBatchTester[KV](mem)
     val writer = (batchDS: Dataset[KV], batchId: Long) => tester.record(batchId, batchDS)
@@ -88,13 +86,11 @@ class ForeachBatchSinkSuite extends StreamTest {
 
   test("foreachBatch with stateful query in complete mode") {
     val mem = MemoryStream[Int]
-    val ds = mem
-      .toDF()
+    val ds = mem.toDF()
       .select($"value" % 2 as "key")
       .groupBy("key")
       .agg(count("*") as "value")
-      .toDF()
-      .as[KV]
+      .toDF().as[KV]
 
     val tester = new ForeachBatchTester[KV](mem)
     val writer = (batchDS: Dataset[KV], batchId: Long) => tester.record(batchId, batchDS)
@@ -143,7 +139,9 @@ class ForeachBatchSinkSuite extends StreamTest {
     val writer = (ds: Dataset[Int], batchId: Long) => tester.record(batchId, ds.map(_ + 1))
 
     import tester._
-    testWriter(ds, writer)(check(in = 1, 2, 3)(out = 3, 4, 5), checkMetrics)
+    testWriter(ds, writer)(
+      check(in = 1, 2, 3)(out = 3, 4, 5),
+      checkMetrics)
   }
 
   test("throws errors in invalid situations") {
@@ -153,10 +151,8 @@ class ForeachBatchSinkSuite extends StreamTest {
     }
     assert(ex1.getMessage.contains("foreachBatch function cannot be null"))
     val ex2 = intercept[AnalysisException] {
-      ds.writeStream
-        .foreachBatch((_: Dataset[Int], _: Long) => {})
-        .trigger(Trigger.Continuous("1 second"))
-        .start()
+      ds.writeStream.foreachBatch((_: Dataset[Int], _: Long) => {})
+        .trigger(Trigger.Continuous("1 second")).start()
     }
     assert(ex2.getMessage.contains("'foreachBatch' is not supported with continuous trigger"))
     val ex3 = intercept[AnalysisException] {
@@ -170,11 +166,9 @@ class ForeachBatchSinkSuite extends StreamTest {
       var planAsserted = false
 
       val writer: (Dataset[T], Long) => Unit = { case (df, _) =>
-        assert(
-          !df.queryExecution.executedPlan.exists { p =>
-            p.isInstanceOf[SerializeFromObjectExec]
-          },
-          "Untyped Dataset should not introduce serialization on object!")
+        assert(!df.queryExecution.executedPlan.exists { p =>
+          p.isInstanceOf[SerializeFromObjectExec]
+        }, "Untyped Dataset should not introduce serialization on object!")
         planAsserted = true
       }
 
@@ -239,9 +233,11 @@ class ForeachBatchSinkSuite extends StreamTest {
             // Creates a table from streaming source with batch query. This should fail.
             df.sparkSession.sql("CREATE TABLE output USING csv AS SELECT * FROM s")
           }
-          assert(ex.getMessage.contains("Queries with streaming sources must be executed with " +
-            "writeStream.start(), or from a streaming table or flow definition within a Spark " +
-            "Declarative Pipeline."))
+          assert(
+            ex.getMessage.contains("Queries with streaming sources must be executed with " +
+              "writeStream.start(), or from a streaming table or flow definition within a Spark " +
+              "Declarative Pipeline.")
+          )
 
           // Creates a table from batch source (materialized RDD plan of streaming query).
           // This should be work properly.
@@ -274,8 +270,7 @@ class ForeachBatchSinkSuite extends StreamTest {
           .option("rowsPerSecond", 3)
           .load()
           .withColumn("pt_id", (rand() * 99 + 1).cast("int"))
-          .withColumn(
-            "event_time",
+          .withColumn("event_time",
             expr("timestampadd(SECOND, cast(rand() * 2 * 86400 - 86400 as int), timestamp)"))
           .withColumn("in_map", (rand() * 2).cast("int") === 1)
           .drop("value")
@@ -284,7 +279,10 @@ class ForeachBatchSinkSuite extends StreamTest {
         val windowedDF = streamingDF
           .withWatermark("event_time", "1 day")
           .groupBy("pt_id")
-          .agg(max("event_time").as("latest_event_time"), last("in_map").as("in_map"))
+          .agg(
+            max("event_time").as("latest_event_time"),
+            last("in_map").as("in_map")
+          )
           .withColumn("output_time", current_timestamp())
 
         // Define a foreachBatch function that uses show(), which only consumes some partitions
@@ -315,19 +313,15 @@ class ForeachBatchSinkSuite extends StreamTest {
         // The RPC framework wraps our exception, so check the cause of the cause
         val actualException = rootCause.getCause
         assert(actualException != null, "Expected a cause for the RPC exception")
-        assert(
-          actualException.isInstanceOf[StateStoreCommitValidationFailed],
+        assert(actualException.isInstanceOf[StateStoreCommitValidationFailed],
           s"Expected StateStoreCommitValidationFailed but got ${actualException.getClass.getName}")
 
         val errorMessage = actualException.getMessage
-        assert(
-          errorMessage.contains("[STATE_STORE_COMMIT_VALIDATION_FAILED]"),
+        assert(errorMessage.contains("[STATE_STORE_COMMIT_VALIDATION_FAILED]"),
           s"Expected STATE_STORE_COMMIT_VALIDATION_FAILED error, but got: $errorMessage")
-        assert(
-          errorMessage.contains("State store commit validation failed"),
+        assert(errorMessage.contains("State store commit validation failed"),
           s"Expected state store commit validation message, but got: $errorMessage")
-        assert(
-          errorMessage.contains("Missing commits"),
+        assert(errorMessage.contains("Missing commits"),
           s"Expected missing commits message, but got: $errorMessage")
 
         // Extract and validate the expected vs actual commit counts
@@ -341,14 +335,13 @@ class ForeachBatchSinkSuite extends StreamTest {
 
             // We should have fewer actual commits than expected due to show(2)
             // not processing all partitions
-            assert(
-              actualCommits < expectedCommits,
+            assert(actualCommits < expectedCommits,
               s"Expected fewer actual commits ($actualCommits)" +
                 s" than expected commits ($expectedCommits)")
-            assert(
-              actualCommits >= 1,
+            assert(actualCommits >= 1,
               s"Expected at least 1 actual commit from show(2), but got $actualCommits")
-            assert(expectedCommits == 5, s"Expected more than 5 commits but got $expectedCommits")
+            assert(expectedCommits == 5,
+              s"Expected more than 5 commits but got $expectedCommits")
 
           case None =>
             fail(s"Could not find expected/actual commit counts in error message: $errorMessage")
@@ -358,12 +351,10 @@ class ForeachBatchSinkSuite extends StreamTest {
         missingPattern.findFirstMatchIn(errorMessage) match {
           case Some(m) =>
             val missingCommits = m.group(1)
-            assert(
-              missingCommits.nonEmpty,
+            assert(missingCommits.nonEmpty,
               s"Expected non-empty missing commits list, but got: '$missingCommits'")
             // Should contain operator and partition information
-            assert(
-              missingCommits.contains("operator=") && missingCommits.contains("partition="),
+            assert(missingCommits.contains("operator=") && missingCommits.contains("partition="),
               s"Expected missing commits to contain operator and" +
                 s" partition info, but got: '$missingCommits'")
           case None =>
@@ -421,13 +412,12 @@ class ForeachBatchSinkSuite extends StreamTest {
         val rootCause = queryEx.getCause
         val actualException = if (rootCause != null) rootCause.getCause else null
 
-        val hasCommitValidationError = actualException != null && (actualException
-          .isInstanceOf[StateStoreCommitValidationFailed] ||
+        val hasCommitValidationError = actualException != null && (
+          actualException.isInstanceOf[StateStoreCommitValidationFailed] ||
           actualException.getMessage.contains("[STATE_STORE_COMMIT_VALIDATION_FAILED]"))
         val hasSimulatedError = queryEx.getMessage.contains("Simulated batch processing failure")
 
-        assert(
-          hasCommitValidationError || hasSimulatedError,
+        assert(hasCommitValidationError || hasSimulatedError,
           s"Expected StateStore commit validation error or simulated error," +
             s" but got: ${queryEx.getMessage}")
       }
@@ -441,8 +431,7 @@ class ForeachBatchSinkSuite extends StreamTest {
 
         // Create a temporary file with data
         val inputPath = new File(tempDir, "input").getCanonicalPath
-        val inputData = spark
-          .range(0, 100)
+        val inputData = spark.range(0, 100)
           .selectExpr("id", "id % 10 as key")
         inputData.write
           .mode("overwrite")
@@ -486,9 +475,8 @@ class ForeachBatchSinkSuite extends StreamTest {
         val actualException = rootCause.getCause
         assert(actualException != null, "Expected a cause for the RPC exception")
 
-        assert(
-          actualException.isInstanceOf[StateStoreCommitValidationFailed] ||
-            actualException.getMessage.contains("[STATE_STORE_COMMIT_VALIDATION_FAILED]"),
+        assert(actualException.isInstanceOf[StateStoreCommitValidationFailed] ||
+          actualException.getMessage.contains("[STATE_STORE_COMMIT_VALIDATION_FAILED]"),
           s"Expected STATE_STORE_COMMIT_VALIDATION_FAILED error," +
             s" but got: ${actualException.getMessage}")
       }
@@ -551,9 +539,8 @@ class ForeachBatchSinkSuite extends StreamTest {
         val actualException = rootCause.getCause
         assert(actualException != null, "Expected a cause for the RPC exception")
 
-        assert(
-          actualException.isInstanceOf[StateStoreCommitValidationFailed] ||
-            actualException.getMessage.contains("[STATE_STORE_COMMIT_VALIDATION_FAILED]"),
+        assert(actualException.isInstanceOf[StateStoreCommitValidationFailed] ||
+          actualException.getMessage.contains("[STATE_STORE_COMMIT_VALIDATION_FAILED]"),
           s"Expected STATE_STORE_COMMIT_VALIDATION_FAILED error," +
             s" but got: ${actualException.getMessage}")
       }
@@ -574,7 +561,11 @@ class ForeachBatchSinkSuite extends StreamTest {
         // Multiple aggregations to create multiple StateStores
         val aggregatedDF = streamingDF
           .groupBy("key")
-          .agg(count("*").as("count"), sum("value").as("sum"), avg("value").as("avg"))
+          .agg(
+            count("*").as("count"),
+            sum("value").as("sum"),
+            avg("value").as("avg")
+          )
 
         var processedCount = 0
 
@@ -630,9 +621,8 @@ class ForeachBatchSinkSuite extends StreamTest {
         val actualException = rootCause.getCause
         assert(actualException != null, "Expected a cause for the RPC exception")
 
-        assert(
-          actualException.isInstanceOf[StateStoreCommitValidationFailed] ||
-            actualException.getMessage.contains("[STATE_STORE_COMMIT_VALIDATION_FAILED]"),
+        assert(actualException.isInstanceOf[StateStoreCommitValidationFailed] ||
+          actualException.getMessage.contains("[STATE_STORE_COMMIT_VALIDATION_FAILED]"),
           s"Expected STATE_STORE_COMMIT_VALIDATION_FAILED error," +
             s" but got: ${actualException.getMessage}")
       }
@@ -676,8 +666,7 @@ class ForeachBatchSinkSuite extends StreamTest {
           // Wait for at least 2-3 batches to be processed
           eventually(timeout(streamingTimeout)) {
             assert(query.lastProgress != null, "Query should have made progress")
-            assert(
-              query.lastProgress.batchId >= 2,
+            assert(query.lastProgress.batchId >= 2,
               s"Query should have processed at least 3 batches, " +
                 s"but only processed ${query.lastProgress.batchId + 1}")
           }

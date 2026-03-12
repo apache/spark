@@ -24,15 +24,15 @@ import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.sql.{Encoders, FakeFileSystemRequiringDSOption}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.classic.{Dataset, SparkSession}
+import org.apache.spark.sql.classic .{Dataset, SparkSession}
 
 /**
- * The trait contains tests for all file-based data sources. The tests that are not applicable to
- * all file-based data sources should be placed to
+ * The trait contains tests for all file-based data sources.
+ * The tests that are not applicable to all file-based data sources should be placed to
  * [[org.apache.spark.sql.FileBasedDataSourceSuite]].
  */
 trait CommonFileDataSourceSuite extends SQLHelper {
-  self: AnyFunSuite => // scalastyle:ignore funsuite
+    self: AnyFunSuite => // scalastyle:ignore funsuite
 
   protected def spark: SparkSession
   protected def dataSourceFormat: String
@@ -46,12 +46,14 @@ trait CommonFileDataSourceSuite extends SQLHelper {
         withTempPath { dir =>
           val path = dir.getAbsolutePath
           val conf = Map("ds_option" -> "value", "mergeSchema" -> mergeSchema.toString)
-          inputDataset.write
+          inputDataset
+            .write
             .options(conf)
             .format(dataSourceFormat)
             .save(path)
           Seq(path, "file:" + path.stripPrefix("file:")).foreach { p =>
-            val readback = spark.read
+            val readback = spark
+              .read
               .options(conf)
               .format(dataSourceFormat)
               .load(p)

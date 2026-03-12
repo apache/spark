@@ -33,21 +33,21 @@ object DecimalPrecisionTypeCoercion extends SQLConfHelper {
 
   /**
    * Strength reduction for comparing integral expressions with decimal literals.
-   *   1. int_col > decimal_literal => int_col > floor(decimal_literal)
-   *   2. int_col >= decimal_literal => int_col >= ceil(decimal_literal)
-   *   3. int_col < decimal_literal => int_col < ceil(decimal_literal)
-   *   4. int_col <= decimal_literal => int_col <= floor(decimal_literal)
-   *   5. decimal_literal > int_col => ceil(decimal_literal) > int_col
-   *   6. decimal_literal >= int_col => floor(decimal_literal) >= int_col
-   *   7. decimal_literal < int_col => floor(decimal_literal) < int_col
-   *   8. decimal_literal <= int_col => ceil(decimal_literal) <= int_col
+   * 1. int_col > decimal_literal => int_col > floor(decimal_literal)
+   * 2. int_col >= decimal_literal => int_col >= ceil(decimal_literal)
+   * 3. int_col < decimal_literal => int_col < ceil(decimal_literal)
+   * 4. int_col <= decimal_literal => int_col <= floor(decimal_literal)
+   * 5. decimal_literal > int_col => ceil(decimal_literal) > int_col
+   * 6. decimal_literal >= int_col => floor(decimal_literal) >= int_col
+   * 7. decimal_literal < int_col => floor(decimal_literal) < int_col
+   * 8. decimal_literal <= int_col => ceil(decimal_literal) <= int_col
    *
-   * Note that technically this is an "optimization" and should go into the optimizer. However, by
-   * the time the optimizer runs, these comparison expressions would be pretty hard to pattern
+   * Note that technically this is an "optimization" and should go into the optimizer. However,
+   * by the time the optimizer runs, these comparison expressions would be pretty hard to pattern
    * match because there are multiple (at least 2) levels of casts involved.
    *
-   * There are a lot more possible rules we can implement, but we don't do them because we are not
-   * sure how common they are.
+   * There are a lot more possible rules we can implement, but we don't do them
+   * because we are not sure how common they are.
    */
   private val integralAndDecimalLiteral: PartialFunction[Expression, Expression] = {
 
@@ -128,8 +128,7 @@ object DecimalPrecisionTypeCoercion extends SQLConfHelper {
     decimalAndDecimal()
       .orElse(integralAndDecimalLiteral)
       .orElse(nondecimalAndDecimal(conf.literalPickMinimumPrecision))
-      .lift(expression)
-      .getOrElse(expression)
+      .lift(expression).getOrElse(expression)
   }
 
   private def isFloat(t: DataType): Boolean = t == FloatType || t == DoubleType
@@ -166,13 +165,13 @@ object DecimalPrecisionTypeCoercion extends SQLConfHelper {
         // become DECIMAL(38, 16), safely having a much lower precision loss.
         case (l: Literal, r)
             if r.dataType.isInstanceOf[DecimalType] &&
-              l.dataType.isInstanceOf[IntegralType] &&
-              literalPickMinimumPrecision =>
+            l.dataType.isInstanceOf[IntegralType] &&
+            literalPickMinimumPrecision =>
           b.withNewChildren(Seq(Cast(l, DataTypeUtils.fromLiteral(l)), r))
         case (l, r: Literal)
             if l.dataType.isInstanceOf[DecimalType] &&
-              r.dataType.isInstanceOf[IntegralType] &&
-              literalPickMinimumPrecision =>
+            r.dataType.isInstanceOf[IntegralType] &&
+            literalPickMinimumPrecision =>
           b.withNewChildren(Seq(l, Cast(r, DataTypeUtils.fromLiteral(r))))
         // Promote integers inside a binary expression with fixed-precision decimals to decimals,
         // and fixed-precision decimals in an expression with floats / doubles to doubles

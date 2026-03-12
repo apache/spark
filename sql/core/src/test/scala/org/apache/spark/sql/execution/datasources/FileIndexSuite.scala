@@ -73,9 +73,8 @@ class FileIndexSuite extends SharedSparkSession {
       val schema = StructType(Seq(StructField("a", StringType, false)))
       val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
       val partitionValues = fileIndex.partitionSpec().partitions.map(_.values)
-      assert(
-        partitionValues.length == 1 && partitionValues(0).numFields == 1 &&
-          partitionValues(0).getString(0) == "4d")
+      assert(partitionValues.length == 1 && partitionValues(0).numFields == 1 &&
+        partitionValues(0).getString(0) == "4d")
     }
   }
 
@@ -89,8 +88,7 @@ class FileIndexSuite extends SharedSparkSession {
       val schema = StructType(Seq(StructField("A", StringType, false)))
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
         val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
-        assert(
-          fileIndex.partitionSchema.length == 1 && fileIndex.partitionSchema.head.name == "A")
+        assert(fileIndex.partitionSchema.length == 1 && fileIndex.partitionSchema.head.name == "A")
       }
     }
   }
@@ -125,8 +123,7 @@ class FileIndexSuite extends SharedSparkSession {
     }
   }
 
-  test(
-    "SPARK-26263: Throw exception when partition value can't be casted to user-specified type") {
+  test("SPARK-26263: Throw exception when partition value can't be casted to user-specified type") {
     withTempDir { dir =>
       val partitionDirectory = new File(dir, "a=foo")
       partitionDirectory.mkdir()
@@ -141,15 +138,15 @@ class FileIndexSuite extends SharedSparkSession {
             fileIndex.partitionSpec()
           },
           condition = "INVALID_PARTITION_VALUE",
-          parameters = Map("value" -> "'foo'", "dataType" -> "\"INT\"", "columnName" -> "`a`"))
+          parameters = Map("value" -> "'foo'", "dataType" -> "\"INT\"", "columnName" -> "`a`")
+        )
       }
 
       withSQLConf(SQLConf.VALIDATE_PARTITION_COLUMNS.key -> "false") {
         val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
         val partitionValues = fileIndex.partitionSpec().partitions.map(_.values)
-        assert(
-          partitionValues.length == 1 && partitionValues(0).numFields == 1 &&
-            partitionValues(0).isNullAt(0))
+        assert(partitionValues.length == 1 && partitionValues(0).numFields == 1 &&
+          partitionValues(0).isNullAt(0))
       }
     }
   }
@@ -168,10 +165,12 @@ class FileIndexSuite extends SharedSparkSession {
       val qualifiedFilePath = fs.makeQualified(new Path(file.getCanonicalPath))
       require(qualifiedFilePath.toString.startsWith("file:"))
 
-      val catalog1 = new InMemoryFileIndex(spark, Seq(unqualifiedDirPath), Map.empty, None)
+      val catalog1 = new InMemoryFileIndex(
+        spark, Seq(unqualifiedDirPath), Map.empty, None)
       assert(catalog1.allFiles().map(_.getPath) === Seq(qualifiedFilePath))
 
-      val catalog2 = new InMemoryFileIndex(spark, Seq(unqualifiedFilePath), Map.empty, None)
+      val catalog2 = new InMemoryFileIndex(
+        spark, Seq(unqualifiedFilePath), Map.empty, None)
       assert(catalog2.allFiles().map(_.getPath) === Seq(qualifiedFilePath))
 
     }
@@ -182,10 +181,7 @@ class FileIndexSuite extends SharedSparkSession {
       val deletedFolder = new File(dir, "deleted")
       assert(!deletedFolder.exists())
       val catalog1 = new InMemoryFileIndex(
-        spark,
-        Seq(new Path(deletedFolder.getCanonicalPath)),
-        Map.empty,
-        None)
+        spark, Seq(new Path(deletedFolder.getCanonicalPath)), Map.empty, None)
       // doesn't throw an exception
       assert(catalog1.listLeafFiles(catalog1.rootPaths).isEmpty)
     }
@@ -193,27 +189,32 @@ class FileIndexSuite extends SharedSparkSession {
 
   test("SPARK-27676: InMemoryFileIndex respects ignoreMissingFiles config for non-root paths") {
     import DeletionRaceFileSystem._
-    for (raceCondition <- Seq(
+    for (
+      raceCondition <- Seq(
         classOf[SubdirectoryDeletionRaceFileSystem],
-        classOf[FileDeletionRaceFileSystem]);
+        classOf[FileDeletionRaceFileSystem]
+      );
       (ignoreMissingFiles, sqlConf, options) <- Seq(
         (true, "true", Map.empty[String, String]),
         // Explicitly set sqlConf to false, but data source options should take precedence
         (true, "false", Map("ignoreMissingFiles" -> "true")),
         (false, "false", Map.empty[String, String]),
         // Explicitly set sqlConf to true, but data source options should take precedence
-        (false, "true", Map("ignoreMissingFiles" -> "false")));
-      parDiscoveryThreshold <- Seq(0, 100)) {
-      withClue(
-        s"raceCondition=$raceCondition, ignoreMissingFiles=$ignoreMissingFiles, " +
-          s"parDiscoveryThreshold=$parDiscoveryThreshold, sqlConf=$sqlConf, options=$options") {
+        (false, "true", Map("ignoreMissingFiles" -> "false"))
+      );
+      parDiscoveryThreshold <- Seq(0, 100)
+    ) {
+      withClue(s"raceCondition=$raceCondition, ignoreMissingFiles=$ignoreMissingFiles, " +
+        s"parDiscoveryThreshold=$parDiscoveryThreshold, sqlConf=$sqlConf, options=$options"
+      ) {
         withSQLConf(
           SQLConf.IGNORE_MISSING_FILES.key -> sqlConf,
           SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> parDiscoveryThreshold.toString,
           "fs.mockFs.impl" -> raceCondition.getName,
-          "fs.mockFs.impl.disable.cache" -> "true") {
-          def makeCatalog(): InMemoryFileIndex =
-            new InMemoryFileIndex(spark, Seq(rootDirPath), options, None)
+          "fs.mockFs.impl.disable.cache" -> "true"
+        ) {
+          def makeCatalog(): InMemoryFileIndex = new InMemoryFileIndex(
+            spark, Seq(rootDirPath), options, None)
           if (ignoreMissingFiles) {
             // We're ignoring missing files, so catalog construction should succeed
             val catalog = makeCatalog()
@@ -322,8 +323,7 @@ class FileIndexSuite extends SharedSparkSession {
     }
   }
 
-  test(
-    "SPARK-45452: PartitioningAwareFileIndex listing parallelized with large, deeply nested " +
+  test("SPARK-45452: PartitioningAwareFileIndex listing parallelized with large, deeply nested " +
       "child dirs") {
     withSQLConf(SQLConf.USE_LISTFILES_FILESYSTEM_LIST.key -> "file") {
       for (scale <- Seq(10, 50)) {
@@ -349,16 +349,19 @@ class FileIndexSuite extends SharedSparkSession {
   }
 
   test("SPARK-17613 - PartitioningAwareFileIndex: base path w/o '/' at end") {
-    class MockCatalog(override val rootPaths: Seq[Path])
-        extends PartitioningAwareFileIndex(spark, Map.empty, None) {
+    class MockCatalog(
+      override val rootPaths: Seq[Path])
+      extends PartitioningAwareFileIndex(spark, Map.empty, None) {
 
       override def refresh(): Unit = {}
 
-      override def leafFiles: mutable.LinkedHashMap[Path, FileStatus] =
-        mutable.LinkedHashMap(new Path("mockFs://some-bucket/file1.json") -> new FileStatus())
+      override def leafFiles: mutable.LinkedHashMap[Path, FileStatus] = mutable.LinkedHashMap(
+        new Path("mockFs://some-bucket/file1.json") -> new FileStatus()
+      )
 
-      override def leafDirToChildrenFiles: Map[Path, Array[FileStatus]] =
-        Map(new Path("mockFs://some-bucket/") -> Array(new FileStatus()))
+      override def leafDirToChildrenFiles: Map[Path, Array[FileStatus]] = Map(
+        new Path("mockFs://some-bucket/") -> Array(new FileStatus())
+      )
 
       override def partitionSpec(): PartitionSpec = {
         PartitionSpec.emptySpec
@@ -366,8 +369,8 @@ class FileIndexSuite extends SharedSparkSession {
     }
 
     withSQLConf(
-      "fs.mockFs.impl" -> classOf[FakeParentPathFileSystem].getName,
-      "fs.mockFs.impl.disable.cache" -> "true") {
+        "fs.mockFs.impl" -> classOf[FakeParentPathFileSystem].getName,
+        "fs.mockFs.impl.disable.cache" -> "true") {
       val pathWithSlash = new Path("mockFs://some-bucket/")
       assert(pathWithSlash.getParent === null)
       val pathWithoutSlash = new Path("mockFs://some-bucket")
@@ -379,9 +382,8 @@ class FileIndexSuite extends SharedSparkSession {
     }
   }
 
-  test(
-    "InMemoryFileIndex with empty rootPaths when PARALLEL_PARTITION_DISCOVERY_THRESHOLD" +
-      "is a nonpositive number") {
+  test("InMemoryFileIndex with empty rootPaths when PARALLEL_PARTITION_DISCOVERY_THRESHOLD" +
+    "is a nonpositive number") {
     withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "0") {
       new InMemoryFileIndex(spark, Seq.empty, Map.empty, None)
     }
@@ -391,12 +393,11 @@ class FileIndexSuite extends SharedSparkSession {
         new InMemoryFileIndex(spark, Seq.empty, Map.empty, None)
       }
     }.getMessage
-    assert(
-      e.contains("The maximum number of paths allowed for listing files at " +
-        "driver side must not be negative"))
+    assert(e.contains("The maximum number of paths allowed for listing files at " +
+      "driver side must not be negative"))
   }
 
-  test("SPARK-29537: throw exception when user defined a wrong base path") {
+  test ("SPARK-29537: throw exception when user defined a wrong base path") {
     withTempDir { dir =>
       val partitionDirectory = new File(dir, "a=foo")
       partitionDirectory.mkdir()
@@ -413,8 +414,7 @@ class FileIndexSuite extends SharedSparkSession {
           // trigger inferPartitioning()
           fileIndex.partitionSpec()
         }.getMessage
-        assert(
-          msg === s"Wrong basePath ${wrongBasePath.getCanonicalPath} for the root path: $path")
+        assert(msg === s"Wrong basePath ${wrongBasePath.getCanonicalPath} for the root path: $path")
       }
     }
   }
@@ -477,16 +477,13 @@ class FileIndexSuite extends SharedSparkSession {
       spark
         .range(1)
         .select(col("id").as(colToUnescape), col("id"))
-        .write
-        .partitionBy(colToUnescape)
-        .parquet(path.getAbsolutePath)
+        .write.partitionBy(colToUnescape).parquet(path.getAbsolutePath)
       assert(spark.read.parquet(path.getAbsolutePath).schema.exists(_.name == colToUnescape))
     }
   }
 
-  test(
-    "SPARK-25062 - InMemoryFileIndex stores BlockLocation objects no matter what subclass " +
-      "the FS returns") {
+  test("SPARK-25062 - InMemoryFileIndex stores BlockLocation objects no matter what subclass " +
+    "the FS returns") {
     withSQLConf("fs.file.impl" -> classOf[SpecialBlockLocationFileSystem].getName) {
       withTempDir { dir =>
         val file = new File(dir, "text.txt")
@@ -511,25 +508,20 @@ class FileIndexSuite extends SharedSparkSession {
       }
       val path = new Path(dir.getCanonicalPath)
       val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, None)
-      withSQLConf(
-        SQLConf.IGNORE_DATA_LOCALITY.key -> "false",
-        "fs.file.impl" -> classOf[SpecialBlockLocationFileSystem].getName) {
-        val withBlockLocations =
-          fileIndex.listLeafFiles(Seq(new Path(partitionDirectory.getPath)))
+      withSQLConf(SQLConf.IGNORE_DATA_LOCALITY.key -> "false",
+         "fs.file.impl" -> classOf[SpecialBlockLocationFileSystem].getName) {
+        val withBlockLocations = fileIndex.
+          listLeafFiles(Seq(new Path(partitionDirectory.getPath)))
 
         withSQLConf(SQLConf.IGNORE_DATA_LOCALITY.key -> "true") {
-          val withoutBlockLocations =
-            fileIndex.listLeafFiles(Seq(new Path(partitionDirectory.getPath)))
+          val withoutBlockLocations = fileIndex.
+            listLeafFiles(Seq(new Path(partitionDirectory.getPath)))
 
           assert(withBlockLocations.size == withoutBlockLocations.size)
-          assert(
-            withBlockLocations.forall(b =>
-              b.isInstanceOf[LocatedFileStatus] &&
-                b.asInstanceOf[LocatedFileStatus].getBlockLocations.nonEmpty))
-          assert(
-            withoutBlockLocations.forall(b =>
-              b.isInstanceOf[FileStatus] &&
-                !b.isInstanceOf[LocatedFileStatus]))
+          assert(withBlockLocations.forall(b => b.isInstanceOf[LocatedFileStatus] &&
+            b.asInstanceOf[LocatedFileStatus].getBlockLocations.nonEmpty))
+          assert(withoutBlockLocations.forall(b => b.isInstanceOf[FileStatus] &&
+            !b.isInstanceOf[LocatedFileStatus]))
           assert(withoutBlockLocations.forall(withBlockLocations.contains))
         }
       }
@@ -543,8 +535,9 @@ class FileIndexSuite extends SharedSparkSession {
     val statuses =
       Seq(
         new LocatedFileStatus(
-          new FileStatus(0, false, 0, 100, 0, new Path("file")),
-          Array(new BlockLocation())))
+          new FileStatus(0, false, 0, 100, 0,
+            new Path("file")), Array(new BlockLocation()))
+      )
     when(dfs.listLocatedStatus(path)).thenReturn(new RemoteIterator[LocatedFileStatus] {
       val iter = statuses.iterator
       override def hasNext: Boolean = iter.hasNext
@@ -559,9 +552,7 @@ class FileIndexSuite extends SharedSparkSession {
     // id   part_col
     //  1          1
     //  2          2
-    val df = spark
-      .range(1, 3, 1, 2)
-      .toDF("id")
+    val df = spark.range(1, 3, 1, 2).toDF("id")
       .withColumn("part_col", col("id"))
 
     withTempPath { directoryPath =>
@@ -641,13 +632,11 @@ class FileIndexSuite extends SharedSparkSession {
     }
   }
 
-  test(
-    "SPARK-38182: Fix NoSuchElementException if pushed filter does not contain any " +
-      "references") {
+  test("SPARK-38182: Fix NoSuchElementException if pushed filter does not contain any " +
+    "references") {
     withTable("t") {
-      withSQLConf(
-        SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
-          "org.apache.spark.sql.catalyst.optimizer.BooleanSimplification") {
+      withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+        "org.apache.spark.sql.catalyst.optimizer.BooleanSimplification") {
 
         sql("CREATE TABLE t (c1 int) USING PARQUET")
         assert(sql("SELECT * FROM t WHERE c1 = 1 AND 2 > 1").count() == 0)
@@ -686,8 +675,8 @@ class FileIndexSuite extends SharedSparkSession {
 
       // Verify that a different number of paths does matter
       val fileIndex2a = new InMemoryFileIndex(spark, Seq(path1, path1), Map.empty, Some(schema))
-      val fileIndex2b =
-        new InMemoryFileIndex(spark, Seq(path1, path1, path1), Map.empty, Some(schema))
+      val fileIndex2b = new InMemoryFileIndex(spark, Seq(path1, path1, path1),
+        Map.empty, Some(schema))
       assert(fileIndex2a != fileIndex2b)
     }
   }
@@ -768,7 +757,7 @@ class SpecialBlockLocationFileSystem extends RawLocalFileSystem {
       hosts: Array[String],
       offset: Long,
       length: Long)
-      extends BlockLocation(names, hosts, offset, length)
+    extends BlockLocation(names, hosts, offset, length)
 
   override def getFileBlockLocations(
       file: FileStatus,

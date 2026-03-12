@@ -24,7 +24,6 @@ import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.ArrayImplicits._
 
 class TransformExtractorSuite extends SparkFunSuite {
-
   /**
    * Creates a Literal using an anonymous class.
    */
@@ -63,7 +62,7 @@ class TransformExtractorSuite extends SparkFunSuite {
       case IdentityTransform(FieldReference(_)) =>
         fail("Matched unknown transform")
       case _ =>
-      // expected
+        // expected
     }
   }
 
@@ -79,7 +78,7 @@ class TransformExtractorSuite extends SparkFunSuite {
       case YearsTransform(FieldReference(_)) =>
         fail("Matched unknown transform")
       case _ =>
-      // expected
+        // expected
     }
   }
 
@@ -95,7 +94,7 @@ class TransformExtractorSuite extends SparkFunSuite {
       case MonthsTransform(FieldReference(_)) =>
         fail("Matched unknown transform")
       case _ =>
-      // expected
+        // expected
     }
   }
 
@@ -111,7 +110,7 @@ class TransformExtractorSuite extends SparkFunSuite {
       case DaysTransform(FieldReference(_)) =>
         fail("Matched unknown transform")
       case _ =>
-      // expected
+        // expected
     }
   }
 
@@ -127,7 +126,7 @@ class TransformExtractorSuite extends SparkFunSuite {
       case HoursTransform(FieldReference(_)) =>
         fail("Matched unknown transform")
       case _ =>
-      // expected
+        // expected
     }
   }
 

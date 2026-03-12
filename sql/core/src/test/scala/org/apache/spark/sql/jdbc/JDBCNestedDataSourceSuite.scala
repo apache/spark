@@ -43,8 +43,7 @@ class JDBCNestedDataSourceSuite extends NestedDataSourceSuiteBase {
     //     actual schema of `t1`.
     spark
       .range(1L)
-      .write
-      .mode("overwrite")
+      .write.mode("overwrite")
       .options(Map("url" -> url, "dbtable" -> "t1"))
       .format(format)
       .save()

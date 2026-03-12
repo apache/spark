@@ -26,72 +26,53 @@ class DescribeTableParserSuite extends SharedSparkSession with AnalysisTest {
   private def parsePlan(statement: String) = spark.sessionState.sqlParser.parsePlan(statement)
 
   test("SPARK-17328: Fix NPE with EXPLAIN DESCRIBE TABLE") {
-    comparePlans(
-      parsePlan("describe t"),
+    comparePlans(parsePlan("describe t"),
       DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
-        Map.empty,
-        isExtended = false))
-    comparePlans(
-      parsePlan("describe table t"),
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), Map.empty, isExtended = false))
+    comparePlans(parsePlan("describe table t"),
       DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
-        Map.empty,
-        isExtended = false))
-    comparePlans(
-      parsePlan("describe table extended t"),
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), Map.empty, isExtended = false))
+    comparePlans(parsePlan("describe table extended t"),
       DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
-        Map.empty,
-        isExtended = true))
-    comparePlans(
-      parsePlan("describe table formatted t"),
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), Map.empty, isExtended = true))
+    comparePlans(parsePlan("describe table formatted t"),
       DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
-        Map.empty,
-        isExtended = true))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), Map.empty, isExtended = true))
   }
 
   test("describe table column") {
-    comparePlans(
-      parsePlan("DESCRIBE t col"),
+    comparePlans(parsePlan("DESCRIBE t col"),
       DescribeColumn(
         UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
         UnresolvedAttribute(Seq("col")),
         isExtended = false))
-    comparePlans(
-      parsePlan("DESCRIBE t `abc.xyz`"),
+    comparePlans(parsePlan("DESCRIBE t `abc.xyz`"),
       DescribeColumn(
         UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
         UnresolvedAttribute(Seq("abc.xyz")),
         isExtended = false))
-    comparePlans(
-      parsePlan("DESCRIBE t abc.xyz"),
+    comparePlans(parsePlan("DESCRIBE t abc.xyz"),
       DescribeColumn(
         UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
         UnresolvedAttribute(Seq("abc", "xyz")),
         isExtended = false))
-    comparePlans(
-      parsePlan("DESCRIBE t `a.b`.`x.y`"),
+    comparePlans(parsePlan("DESCRIBE t `a.b`.`x.y`"),
       DescribeColumn(
         UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
         UnresolvedAttribute(Seq("a.b", "x.y")),
         isExtended = false))
 
-    comparePlans(
-      parsePlan("DESCRIBE TABLE t col"),
+    comparePlans(parsePlan("DESCRIBE TABLE t col"),
       DescribeColumn(
         UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
         UnresolvedAttribute(Seq("col")),
         isExtended = false))
-    comparePlans(
-      parsePlan("DESCRIBE TABLE EXTENDED t col"),
+    comparePlans(parsePlan("DESCRIBE TABLE EXTENDED t col"),
       DescribeColumn(
         UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
         UnresolvedAttribute(Seq("col")),
         isExtended = true))
-    comparePlans(
-      parsePlan("DESCRIBE TABLE FORMATTED t col"),
+    comparePlans(parsePlan("DESCRIBE TABLE FORMATTED t col"),
       DescribeColumn(
         UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
         UnresolvedAttribute(Seq("col")),
@@ -99,14 +80,19 @@ class DescribeTableParserSuite extends SharedSparkSession with AnalysisTest {
 
     val error = intercept[AnalysisException](parsePlan("DESCRIBE EXTENDED t col AS JSON"))
 
-    checkError(exception = error, condition = "UNSUPPORTED_FEATURE.DESC_TABLE_COLUMN_JSON")
+    checkError(
+      exception = error,
+      condition = "UNSUPPORTED_FEATURE.DESC_TABLE_COLUMN_JSON")
 
     val sql = "DESCRIBE TABLE t PARTITION (ds='1970-01-01') col"
     checkError(
       exception = parseException(parsePlan)(sql),
       condition = "UNSUPPORTED_FEATURE.DESC_TABLE_COLUMN_PARTITION",
       parameters = Map.empty,
-      context = ExpectedContext(fragment = sql, start = 0, stop = 47))
+      context = ExpectedContext(
+        fragment = sql,
+        start = 0,
+        stop = 47))
   }
 
   test("retain sql text position") {
@@ -118,6 +104,7 @@ class DescribeTableParserSuite extends SharedSparkSession with AnalysisTest {
       parsePlan(sqlStatement),
       "TABLE_OR_VIEW_NOT_FOUND",
       Map("relationName" -> s"`$tbl`"),
-      Array(ExpectedContext(tbl, startPos, startPos + tbl.length - 1)))
+      Array(ExpectedContext(tbl, startPos, startPos + tbl.length - 1))
+    )
   }
 }

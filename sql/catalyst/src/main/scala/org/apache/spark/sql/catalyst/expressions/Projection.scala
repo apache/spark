@@ -27,8 +27,8 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * A [[Projection]] that is calculated by calling the `eval` of each of the specified expressions.
  *
- * @param expressions
- *   a sequence of expressions that determine the value of each column of the output row.
+ * @param expressions a sequence of expressions that determine the value of each column of the
+ *                    output row.
  */
 class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
   def this(expressions: Seq[Expression], inputSchema: Seq[Attribute]) =
@@ -64,7 +64,7 @@ class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
  * will be bound to that schema.
  *
  * In contrast to a normal projection, a MutableProjection reuses the same underlying row object
- * each time an input row is added. This significantly reduces the cost of calculating the
+ * each time an input row is added.  This significantly reduces the cost of calculating the
  * projection, but means that it is not safe to hold on to a reference to a [[InternalRow]] after
  * `next()` has been called on the [[Iterator]] that produced it. Instead, the user must call
  * `InternalRow.copy()` and hold on to the returned [[InternalRow]] before calling `next()`.
@@ -185,8 +185,7 @@ object SafeProjection extends CodeGeneratorWithInterpretedFallback[Seq[Expressio
    * Returns a SafeProjection for given Array of DataTypes.
    */
   def create(fields: Array[DataType]): Projection = {
-    createObject(
-      fields.zipWithIndex.map(x => BoundReference(x._2, x._1, true)).toImmutableArraySeq)
+    createObject(fields.zipWithIndex.map(x => BoundReference(x._2, x._1, true)).toImmutableArraySeq)
   }
 
   /**

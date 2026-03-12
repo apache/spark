@@ -31,6 +31,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 class DatasetSerializerRegistratorSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
+
   override protected def sparkConf: SparkConf = {
     // Make sure we use the KryoRegistrator
     super.sparkConf.set(KRYO_USER_REGISTRATORS, Seq(TestRegistrator().getClass.getCanonicalName))

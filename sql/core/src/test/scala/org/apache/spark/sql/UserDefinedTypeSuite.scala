@@ -52,10 +52,7 @@ private[sql] class YearUDT extends UserDefinedType[Year] {
   private[spark] override def asNullable: YearUDT = this
 }
 
-class UserDefinedTypeSuite
-    extends QueryTest
-    with SharedSparkSession
-    with ParquetTest
+class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with ParquetTest
     with ExpressionEvalHelper {
   import testImplicits._
 
@@ -66,6 +63,7 @@ class UserDefinedTypeSuite
   private lazy val pointsRDD2 = Seq(
     MyLabeledPoint(1.0, new TestUDT.MyDenseVector(Array(0.1, 1.0))),
     MyLabeledPoint(0.0, new TestUDT.MyDenseVector(Array(0.3, 3.0)))).toDF()
+
 
   test("SPARK-32090: equal") {
     val udt1 = new ExampleBaseTypeUDT
@@ -101,11 +99,12 @@ class UserDefinedTypeSuite
 
   test("UDTs and UDFs") {
     withTempView("points") {
-      spark.udf.register(
-        "testType",
+      spark.udf.register("testType",
         (d: TestUDT.MyDenseVector) => d.isInstanceOf[TestUDT.MyDenseVector])
       pointsRDD.createOrReplaceTempView("points")
-      checkAnswer(sql("SELECT testType(features) from points"), Seq(Row(true), Row(true)))
+      checkAnswer(
+        sql("SELECT testType(features) from points"),
+        Seq(Row(true), Row(true)))
     }
   }
 
@@ -140,45 +139,47 @@ class UserDefinedTypeSuite
     assert(vec === df.collect()(0).getAs[TestUDT.MyDenseVector](1))
     assert(vec === df.take(1)(0).getAs[TestUDT.MyDenseVector](1))
     checkAnswer(df.limit(1).groupBy($"int").agg(first($"vec")), Row(1, vec))
-    checkAnswer(
-      df.orderBy($"int")
-        .limit(1)
-        .groupBy($"int")
-        .agg(first($"vec")),
-      Row(1, vec))
+    checkAnswer(df.orderBy($"int").limit(1).groupBy($"int")
+      .agg(first($"vec")), Row(1, vec))
   }
 
   test("UDTs with JSON") {
-    val data = Seq("{\"id\":1,\"vec\":[1.1,2.2,3.3,4.4]}", "{\"id\":2,\"vec\":[2.25,4.5,8.75]}")
-    val schema = StructType(
-      Seq(
-        StructField("id", IntegerType, false),
-        StructField("vec", new TestUDT.MyDenseVectorUDT, false)))
+    val data = Seq(
+      "{\"id\":1,\"vec\":[1.1,2.2,3.3,4.4]}",
+      "{\"id\":2,\"vec\":[2.25,4.5,8.75]}"
+    )
+    val schema = StructType(Seq(
+      StructField("id", IntegerType, false),
+      StructField("vec", new TestUDT.MyDenseVectorUDT, false)
+    ))
 
     val jsonRDD = spark.read.schema(schema).json(data.toDS())
     checkAnswer(
       jsonRDD,
       Row(1, new TestUDT.MyDenseVector(Array(1.1, 2.2, 3.3, 4.4))) ::
         Row(2, new TestUDT.MyDenseVector(Array(2.25, 4.5, 8.75))) ::
-        Nil)
+        Nil
+    )
   }
 
   test("UDTs with JSON and Dataset") {
-    val data = Seq("{\"id\":1,\"vec\":[1.1,2.2,3.3,4.4]}", "{\"id\":2,\"vec\":[2.25,4.5,8.75]}")
+    val data = Seq(
+      "{\"id\":1,\"vec\":[1.1,2.2,3.3,4.4]}",
+      "{\"id\":2,\"vec\":[2.25,4.5,8.75]}"
+    )
 
-    val schema = StructType(
-      Seq(
-        StructField("id", IntegerType, false),
-        StructField("vec", new TestUDT.MyDenseVectorUDT, false)))
+    val schema = StructType(Seq(
+      StructField("id", IntegerType, false),
+      StructField("vec", new TestUDT.MyDenseVectorUDT, false)
+    ))
 
-    val jsonDataset = spark.read
-      .schema(schema)
-      .json(data.toDS())
+    val jsonDataset = spark.read.schema(schema).json(data.toDS())
       .as[(Int, TestUDT.MyDenseVector)]
     checkDataset(
       jsonDataset,
       (1, new TestUDT.MyDenseVector(Array(1.1, 2.2, 3.3, 4.4))),
-      (2, new TestUDT.MyDenseVector(Array(2.25, 4.5, 8.75))))
+      (2, new TestUDT.MyDenseVector(Array(2.25, 4.5, 8.75)))
+    )
   }
 
   test("SPARK-10472 UserDefinedType.typeName") {
@@ -201,34 +202,25 @@ class UserDefinedTypeSuite
   }
 
   test("SPARK-19311: UDFs disregard UDT type hierarchy") {
-    UDTRegistration.register(
-      classOf[IExampleBaseType].getName,
+    UDTRegistration.register(classOf[IExampleBaseType].getName,
       classOf[ExampleBaseTypeUDT].getName)
-    UDTRegistration.register(classOf[IExampleSubType].getName, classOf[ExampleSubTypeUDT].getName)
+    UDTRegistration.register(classOf[IExampleSubType].getName,
+      classOf[ExampleSubTypeUDT].getName)
 
     // UDF that returns a base class object
-    sqlContext.udf.register(
-      "doUDF",
-      (param: Int) =>
-        {
-          new ExampleBaseClass(param)
-        }: IExampleBaseType)
+    sqlContext.udf.register("doUDF", (param: Int) => {
+      new ExampleBaseClass(param)
+    }: IExampleBaseType)
 
     // UDF that returns a derived class object
-    sqlContext.udf.register(
-      "doSubTypeUDF",
-      (param: Int) =>
-        {
-          new ExampleSubClass(param)
-        }: IExampleSubType)
+    sqlContext.udf.register("doSubTypeUDF", (param: Int) => {
+      new ExampleSubClass(param)
+    }: IExampleSubType)
 
     // UDF that takes a base class object as parameter
-    sqlContext.udf.register(
-      "doOtherUDF",
-      (obj: IExampleBaseType) =>
-        {
-          obj.field
-        }: Int)
+    sqlContext.udf.register("doOtherUDF", (obj: IExampleBaseType) => {
+      obj.field
+    }: Int)
 
     // this worked already before the fix SPARK-19311:
     // return type of doUDF equals parameter type of doOtherUDF
@@ -273,10 +265,9 @@ class UserDefinedTypeSuite
 
   test("typeof user defined type") {
     val schema = new StructType().add("a", new TestUDT.MyDenseVectorUDT())
-    val data =
-      Arrays.asList(RowFactory.create(new TestUDT.MyDenseVector(Array(1.0, 3.0, 5.0, 7.0, 9.0))))
-    checkAnswer(
-      spark.createDataFrame(data, schema).selectExpr("typeof(a)"),
+    val data = Arrays.asList(
+      RowFactory.create(new TestUDT.MyDenseVector(Array(1.0, 3.0, 5.0, 7.0, 9.0))))
+    checkAnswer(spark.createDataFrame(data, schema).selectExpr("typeof(a)"),
       Seq(Row("array<double>")))
   }
 
@@ -288,9 +279,8 @@ class UserDefinedTypeSuite
     UDTRegistration.register(classOf[Year].getName, classOf[YearUDT].getName)
 
     val year = Year.now()
-    val inputDS =
-      List(FooWithDate(year, "Foo", 1), FooWithDate(year, "Foo", 3), FooWithDate(year, "Foo", 3))
-        .toDS()
+    val inputDS = List(FooWithDate(year, "Foo", 1), FooWithDate(year, "Foo", 3),
+      FooWithDate(year, "Foo", 3)).toDS()
     val agg = inputDS.groupByKey(x => x.i).mapGroups((_, iter) => iter.reduce(concatFoo))
     val result = agg.collect()
 
@@ -298,9 +288,8 @@ class UserDefinedTypeSuite
   }
 
   test("Test unwrap_udt function") {
-    val unwrappedFeatures = pointsRDD.select(unwrap_udt(col("features"))).rdd.map { (row: Row) =>
-      row.getAs[Seq[Double]](0).toArray
-    }
+    val unwrappedFeatures = pointsRDD.select(unwrap_udt(col("features")))
+      .rdd.map { (row: Row) => row.getAs[Seq[Double]](0).toArray }
     val unwrappedFeaturesArrays: Array[Array[Double]] = unwrappedFeatures.collect()
     assert(unwrappedFeaturesArrays.length === 2)
 
@@ -315,8 +304,7 @@ class UserDefinedTypeSuite
     withTempView("v1") {
       pointsRDD.createOrReplaceTempView("v1")
       for ((wsSetting, cgSetting) <- settings) {
-        withSQLConf(
-          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wsSetting,
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wsSetting,
           SQLConf.CODEGEN_FACTORY_MODE.key -> cgSetting) {
           val df = sql("select label from v1 order by features")
           checkAnswer(df, Row(1.0) :: Row(0.0) :: Nil)

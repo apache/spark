@@ -21,6 +21,7 @@ import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.expressions._
 
+
 trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
 
   /**
@@ -55,9 +56,9 @@ trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
 trait ConstraintHelper {
 
   /**
-   * Infers an additional set of constraints from a given set of equality constraints. For e.g.,
-   * if an operator has constraints of the form (`a = 5`, `a = b`), this returns an additional
-   * constraint of the form `b = 5`.
+   * Infers an additional set of constraints from a given set of equality constraints.
+   * For e.g., if an operator has constraints of the form (`a = 5`, `a = b`), this returns an
+   * additional constraint of the form `b = 5`.
    */
   def inferAdditionalConstraints(constraints: ExpressionSet): ExpressionSet = {
     var inferredConstraints = ExpressionSet()
@@ -88,8 +89,8 @@ trait ConstraintHelper {
 
   /**
    * Infers a set of `isNotNull` constraints from null intolerant expressions as well as
-   * non-nullable attributes. For e.g., if an expression is of the form (`a > 5`), this returns a
-   * constraint of the form `isNotNull(a)`
+   * non-nullable attributes. For e.g., if an expression is of the form (`a > 5`), this
+   * returns a constraint of the form `isNotNull(a)`
    */
   def constructIsNotNullConstraints(
       constraints: ExpressionSet,
@@ -127,6 +128,7 @@ trait ConstraintHelper {
     case _: Attribute => true
     case _ => false
   }
+
 
   /**
    * Recursively explores the expressions which are null intolerant and returns all

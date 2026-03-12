@@ -32,8 +32,7 @@ case class OrcWrite(
     paths: Seq[String],
     formatName: String,
     supportsDataType: DataType => Boolean,
-    info: LogicalWriteInfo)
-    extends FileWrite {
+    info: LogicalWriteInfo) extends FileWrite {
 
   override def prepareWrite(
       sqlConf: SQLConf,
@@ -48,8 +47,7 @@ case class OrcWrite(
 
     conf.set(COMPRESS.getAttribute, orcOptions.compressionCodec)
 
-    conf
-      .asInstanceOf[JobConf]
+    conf.asInstanceOf[JobConf]
       .setOutputFormat(classOf[org.apache.orc.mapred.OrcOutputFormat[OrcStruct]])
 
     val batchSize = sqlConf.orcVectorizedWriterBatchSize

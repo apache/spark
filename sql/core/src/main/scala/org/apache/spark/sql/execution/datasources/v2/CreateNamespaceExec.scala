@@ -44,9 +44,8 @@ case class CreateNamespaceExec(
       catalog.createNamespace(ns, (properties ++ ownership).asJava)
     } catch {
       case _: NamespaceAlreadyExistsException if ifNotExists =>
-        logWarning(
-          log"Namespace ${MDC(NAMESPACE, namespace.quoted)} was created concurrently. " +
-            log"Ignoring.")
+        logWarning(log"Namespace ${MDC(NAMESPACE, namespace.quoted)} was created concurrently. " +
+          log"Ignoring.")
     }
 
     Seq.empty

@@ -31,8 +31,7 @@ import org.apache.spark.sql.types.{StringType, StructField, StructType}
 class PathFilterSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
-  test(
-    "SPARK-31962: modifiedBefore specified" +
+  test("SPARK-31962: modifiedBefore specified" +
       " and sharing same timestamp with file last modified time.") {
     withTempDir { dir =>
       val curTime = LocalDateTime.now(ZoneOffset.UTC)
@@ -40,8 +39,7 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test(
-    "SPARK-31962: modifiedAfter specified" +
+  test("SPARK-31962: modifiedAfter specified" +
       " and sharing same timestamp with file last modified time.") {
     withTempDir { dir =>
       val curTime = LocalDateTime.now(ZoneOffset.UTC)
@@ -49,48 +47,33 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test(
-    "SPARK-31962: modifiedBefore and modifiedAfter option" +
+  test("SPARK-31962: modifiedBefore and modifiedAfter option" +
       " share same timestamp with file last modified time.") {
     withTempDir { dir =>
       val curTime = LocalDateTime.now(ZoneOffset.UTC)
       val formattedTime = formatTime(curTime)
-      executeTest(
-        dir,
-        Seq(curTime),
-        0,
-        modifiedBefore = Some(formattedTime),
+      executeTest(dir, Seq(curTime), 0, modifiedBefore = Some(formattedTime),
         modifiedAfter = Some(formattedTime))
     }
   }
 
-  test(
-    "SPARK-31962: modifiedBefore and modifiedAfter option" +
+  test("SPARK-31962: modifiedBefore and modifiedAfter option" +
       " share same timestamp with earlier file last modified time.") {
     withTempDir { dir =>
       val curTime = LocalDateTime.now(ZoneOffset.UTC)
       val fileTime = curTime.minusDays(3)
       val formattedTime = formatTime(curTime)
-      executeTest(
-        dir,
-        Seq(fileTime),
-        0,
-        modifiedBefore = Some(formattedTime),
+      executeTest(dir, Seq(fileTime), 0, modifiedBefore = Some(formattedTime),
         modifiedAfter = Some(formattedTime))
     }
   }
 
-  test(
-    "SPARK-31962: modifiedBefore and modifiedAfter option" +
+  test("SPARK-31962: modifiedBefore and modifiedAfter option" +
       " share same timestamp with later file last modified time.") {
     withTempDir { dir =>
       val curTime = LocalDateTime.now(ZoneOffset.UTC)
       val formattedTime = formatTime(curTime)
-      executeTest(
-        dir,
-        Seq(curTime),
-        0,
-        modifiedBefore = Some(formattedTime),
+      executeTest(dir, Seq(curTime), 0, modifiedBefore = Some(formattedTime),
         modifiedAfter = Some(formattedTime))
     }
   }
@@ -197,8 +180,7 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
       Seq("The timestamp provided", "modifiedafter"))
   }
 
-  test(
-    "SPARK-31962: modifiedBefore/modifiedAfter filter takes into account local timezone " +
+  test("SPARK-31962: modifiedBefore/modifiedAfter filter takes into account local timezone " +
       "when specified as an option.") {
     Seq("modifiedbefore", "modifiedafter").foreach { filterName =>
       // CET = UTC + 1 hour, HST = UTC - 10 hours
@@ -297,7 +279,10 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
     val curTime = LocalDateTime.now(ZoneOffset.UTC)
     val zoneId: ZoneId = DateTimeUtils.getTimeZone(timezoneId).toZoneId
     val strategyTimeInMicros =
-      ModifiedDateFilter.toThreshold(curTime.toString, timezoneId, filterParamName)
+      ModifiedDateFilter.toThreshold(
+        curTime.toString,
+        timezoneId,
+        filterParamName)
     val strategyTimeInSeconds = strategyTimeInMicros / 1000 / 1000
 
     val curTimeAsSeconds = curTime.atZone(zoneId).toEpochSecond

@@ -24,20 +24,19 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_COMPARISON, EXPRESSION_WITH_RANDOM_SEED, LITERAL}
 
 /**
- * Rand() generates a random column with i.i.d. uniformly distributed values in [0, 1), so compare
- * double literal value with 1.0 or 0.0 could eliminate Rand() in binary comparison.
+ * Rand() generates a random column with i.i.d. uniformly distributed values in [0, 1), so
+ * compare double literal value with 1.0 or 0.0 could eliminate Rand() in binary comparison.
  *
- *   1. Converts the binary comparison to true literal when the comparison value must be true.
- *   2. Converts the binary comparison to false literal when the comparison value must be false.
+ * 1. Converts the binary comparison to true literal when the comparison value must be true.
+ * 2. Converts the binary comparison to false literal when the comparison value must be false.
  */
 object OptimizeRand extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan =
-    plan.transformAllExpressionsWithPruning(
-      _.containsAllPatterns(EXPRESSION_WITH_RANDOM_SEED, LITERAL, BINARY_COMPARISON),
-      ruleId) {
+    plan.transformAllExpressionsWithPruning(_.containsAllPatterns(
+      EXPRESSION_WITH_RANDOM_SEED, LITERAL, BINARY_COMPARISON), ruleId) {
       case op @ BinaryComparison(DoubleLiteral(_), _: Rand) => eliminateRand(swapComparison(op))
       case op @ BinaryComparison(_: Rand, DoubleLiteral(_)) => eliminateRand(op)
-    }
+  }
 
   /**
    * Swaps the left and right sides of some binary comparisons. e.g., transform "a < b" to "b > a"

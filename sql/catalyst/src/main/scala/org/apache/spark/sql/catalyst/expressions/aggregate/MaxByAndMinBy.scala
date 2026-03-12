@@ -63,7 +63,8 @@ abstract class MaxMinBy extends DeclarativeAggregate with BinaryLike[Expression]
 
   override lazy val initialValues: Seq[Literal] = Seq(
     /* valueWithExtremumOrdering = */ nullValue,
-    /* extremumOrdering = */ nullOrdering)
+    /* extremumOrdering = */ nullOrdering
+  )
 
   override lazy val updateExpressions: Seq[Expression] = Seq(
     /* valueWithExtremumOrdering = */
@@ -71,8 +72,10 @@ abstract class MaxMinBy extends DeclarativeAggregate with BinaryLike[Expression]
       (extremumOrdering.isNull && orderingExpr.isNull, nullValue) ::
         (extremumOrdering.isNull, valueExpr) ::
         (orderingExpr.isNull, valueWithExtremumOrdering) :: Nil,
-      If(predicate(extremumOrdering, orderingExpr), valueWithExtremumOrdering, valueExpr)),
-    /* extremumOrdering = */ orderingUpdater(extremumOrdering, orderingExpr))
+      If(predicate(extremumOrdering, orderingExpr), valueWithExtremumOrdering, valueExpr)
+    ),
+    /* extremumOrdering = */ orderingUpdater(extremumOrdering, orderingExpr)
+  )
 
   override lazy val mergeExpressions: Seq[Expression] = Seq(
     /* valueWithExtremumOrdering = */
@@ -80,11 +83,11 @@ abstract class MaxMinBy extends DeclarativeAggregate with BinaryLike[Expression]
       (extremumOrdering.left.isNull && extremumOrdering.right.isNull, nullValue) ::
         (extremumOrdering.left.isNull, valueWithExtremumOrdering.right) ::
         (extremumOrdering.right.isNull, valueWithExtremumOrdering.left) :: Nil,
-      If(
-        predicate(extremumOrdering.left, extremumOrdering.right),
-        valueWithExtremumOrdering.left,
-        valueWithExtremumOrdering.right)),
-    /* extremumOrdering = */ orderingUpdater(extremumOrdering.left, extremumOrdering.right))
+      If(predicate(extremumOrdering.left, extremumOrdering.right),
+        valueWithExtremumOrdering.left, valueWithExtremumOrdering.right)
+    ),
+    /* extremumOrdering = */ orderingUpdater(extremumOrdering.left, extremumOrdering.right)
+  )
 
   override lazy val evaluateExpression: AttributeReference = valueWithExtremumOrdering
 }
@@ -112,9 +115,7 @@ case class MaxBy(valueExpr: Expression, orderingExpr: Expression) extends MaxMin
   override protected def orderingUpdater(oldExpr: Expression, newExpr: Expression): Expression =
     greatest(oldExpr, newExpr)
 
-  override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): MaxBy =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): MaxBy =
     copy(valueExpr = newLeft, orderingExpr = newRight)
 }
 
@@ -141,8 +142,6 @@ case class MinBy(valueExpr: Expression, orderingExpr: Expression) extends MaxMin
   override protected def orderingUpdater(oldExpr: Expression, newExpr: Expression): Expression =
     least(oldExpr, newExpr)
 
-  override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): MinBy =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): MinBy =
     copy(valueExpr = newLeft, orderingExpr = newRight)
 }

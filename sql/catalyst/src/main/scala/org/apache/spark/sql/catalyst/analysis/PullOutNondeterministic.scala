@@ -26,8 +26,8 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 
 /**
- * Pulls out nondeterministic expressions from LogicalPlan which is not Project or Filter, put
- * them into an inner Project and finally project them away at the outer Project.
+ * Pulls out nondeterministic expressions from LogicalPlan which is not Project or Filter,
+ * put them into an inner Project and finally project them away at the outer Project.
  */
 object PullOutNondeterministic extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp applyLocally
@@ -39,23 +39,19 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
 
     case a: Aggregate if a.groupingExpressions.exists(!_.deterministic) =>
       val nondeterToAttr =
-        NondeterministicExpressionCollection.getNondeterministicToAttributes(
-          a.groupingExpressions)
+        NondeterministicExpressionCollection.getNondeterministicToAttributes(a.groupingExpressions)
       val newChild = Project(a.child.output ++ nondeterToAttr.values.asScala.toSeq, a.child)
-      val deterministicAggregate = a
-        .transformExpressions { case e =>
-          Option(nondeterToAttr.get(e.canonicalized)).map(_.toAttribute).getOrElse(e)
-        }
-        .copy(child = newChild)
+      val deterministicAggregate = a.transformExpressions { case e =>
+        Option(nondeterToAttr.get(e.canonicalized)).map(_.toAttribute).getOrElse(e)
+      }.copy(child = newChild)
 
-      deterministicAggregate.groupingExpressions.foreach(expr =>
-        if (!expr.deterministic) {
-          throw SparkException.internalError(
-            msg = s"Non-deterministic expression '${toSQLExpr(expr)}' should not appear in " +
-              "grouping expression.",
-            context = expr.origin.getQueryContext,
-            summary = expr.origin.context.summary)
-        })
+      deterministicAggregate.groupingExpressions.foreach(expr => if (!expr.deterministic) {
+        throw SparkException.internalError(
+          msg = s"Non-deterministic expression '${toSQLExpr(expr)}' should not appear in " +
+            "grouping expression.",
+          context = expr.origin.getQueryContext,
+          summary = expr.origin.context.summary)
+      })
 
       deterministicAggregate
 

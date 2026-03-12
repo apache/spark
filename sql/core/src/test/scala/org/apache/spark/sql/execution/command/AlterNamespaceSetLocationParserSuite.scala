@@ -25,14 +25,17 @@ class AlterNamespaceSetLocationParserSuite extends AnalysisTest {
   test("set namespace location") {
     comparePlans(
       parsePlan("ALTER DATABASE a.b.c SET LOCATION '/home/user/db'"),
-      SetNamespaceLocation(UnresolvedNamespace(Seq("a", "b", "c")), "/home/user/db"))
+      SetNamespaceLocation(
+        UnresolvedNamespace(Seq("a", "b", "c")), "/home/user/db"))
 
     comparePlans(
       parsePlan("ALTER SCHEMA a.b.c SET LOCATION '/home/user/db'"),
-      SetNamespaceLocation(UnresolvedNamespace(Seq("a", "b", "c")), "/home/user/db"))
+      SetNamespaceLocation(
+        UnresolvedNamespace(Seq("a", "b", "c")), "/home/user/db"))
 
     comparePlans(
       parsePlan("ALTER NAMESPACE a.b.c SET LOCATION '/home/user/db'"),
-      SetNamespaceLocation(UnresolvedNamespace(Seq("a", "b", "c")), "/home/user/db"))
+      SetNamespaceLocation(
+        UnresolvedNamespace(Seq("a", "b", "c")), "/home/user/db"))
   }
 }

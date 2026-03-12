@@ -40,13 +40,16 @@ object ViewResolution {
         throw QueryCompilationErrors.viewDepthExceedsMaxResolutionDepthError(
           view.desc.identifier,
           maxNestedViewDepth,
-          view)
+          view
+        )
       }
       SQLConf.withExistingConf(
         View.effectiveSQLConf(
           configs = view.desc.viewSQLConfigs,
           isTempView = view.isTempView,
-          createSparkVersion = view.desc.createVersion)) {
+          createSparkVersion = view.desc.createVersion
+        )
+      ) {
         resolveChild(view.child)
       }
     }

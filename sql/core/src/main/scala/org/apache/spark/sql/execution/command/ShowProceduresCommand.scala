@@ -25,8 +25,9 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.types.{ArrayType, StringType}
 
 /**
- * A command for users to get procedures. If a namespace is not given, the current namespace will
- * be used. The syntax of using this command in SQL is:
+ * A command for users to get procedures.
+ * If a namespace is not given, the current namespace will be used.
+ * The syntax of using this command in SQL is:
  * {{{
  *   SHOW PROCEDURES [(IN|FROM) namespace]]
  * }}}
@@ -37,8 +38,8 @@ case class ShowProceduresCommand(
       AttributeReference("catalog", StringType, nullable = false)(),
       AttributeReference("namespace", ArrayType(StringType, containsNull = false))(),
       AttributeReference("schema", StringType)(),
-      AttributeReference("procedure_name", StringType, nullable = false)()))
-    extends UnaryRunnableCommand {
+      AttributeReference("procedure_name", StringType, nullable = false)()
+    )) extends UnaryRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     child match {
@@ -46,7 +47,7 @@ case class ShowProceduresCommand(
         val procedureCatalog = catalog.asProcedureCatalog
         val procedures = procedureCatalog.listProcedures(ns.toArray)
 
-        procedures.toSeq.map { p =>
+        procedures.toSeq.map{ p =>
           val schema = if (p.namespace() != null && p.namespace().nonEmpty) {
             p.namespace().last
           } else {

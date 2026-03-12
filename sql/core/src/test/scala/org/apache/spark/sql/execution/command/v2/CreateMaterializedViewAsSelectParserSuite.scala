@@ -24,14 +24,13 @@ import org.apache.spark.sql.execution.command.CreatePipelineDatasetAsSelectParse
  * The class contains tests for the `CREATE MATERIALIZED VIEW ... AS ...` command
  */
 class CreateMaterializedViewAsSelectParserSuite
-    extends CreatePipelineDatasetAsSelectParserSuiteBase {
+  extends CreatePipelineDatasetAsSelectParserSuiteBase {
   override val datasetSqlSyntax: String = "MATERIALIZED VIEW"
 
   test("Cannot create materialized view without subquery") {
     val ex = intercept[ParseException] {
       parser.parsePlan(s"CREATE $datasetSqlSyntax table")
     }
-    assert(
-      ex.getMessage.contains(s"Unable to find query for CREATE $datasetSqlSyntax statement."))
+    assert(ex.getMessage.contains(s"Unable to find query for CREATE $datasetSqlSyntax statement."))
   }
 }

@@ -27,8 +27,8 @@ import org.apache.spark.sql.types.{DataType, IntegerType, MapType}
 /**
  * A test suite for testing [[ExpressionEvalHelper]].
  *
- * Yes, we should write test cases for test harnesses, in case they have behaviors that are easy
- * to break.
+ * Yes, we should write test cases for test harnesses, in case
+ * they have behaviors that are easy to break.
  */
 class ExpressionEvalHelperSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -59,7 +59,8 @@ case class BadCodegenExpression() extends LeafExpression {
   override def nullable: Boolean = false
   override def eval(input: InternalRow): Any = 10
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    ev.copy(code = code"""
+    ev.copy(code =
+      code"""
         |int some_variable = 11;
         |int ${ev.value} = 10;
       """.stripMargin)
@@ -88,7 +89,8 @@ case class BadCodegenAndEvalExpression() extends LeafExpression {
     throw new Exception("Cannot determine simple type name \"NoSuchElementException\"")
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // it should be java.util.NoSuchElementException in generated code.
-    ev.copy(code = code"""
+    ev.copy(code =
+      code"""
             |int ${ev.value} = 10;
             |throw new NoSuchElementException("compile failed!");
       """.stripMargin)

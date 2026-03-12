@@ -25,7 +25,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkSession {
+class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkSession  {
 
   private def withId(id: Int): Metadata =
     new MetadataBuilder().putLong(ParquetUtils.FIELD_ID_METADATA_KEY, id).build()
@@ -55,34 +55,20 @@ class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkS
       val readData = Seq(Row("text", 100), Row("more", 200))
       val readDataHalfMatched = Seq(Row(null, 100), Row(null, 200))
       val writeData = Seq(Row(100, "text"), Row(200, "more"))
-      spark
-        .createDataFrame(writeData.asJava, writeSchema)
-        .write
-        .mode("overwrite")
-        .parquet(dir.getCanonicalPath)
+      spark.createDataFrame(writeData.asJava, writeSchema)
+        .write.mode("overwrite").parquet(dir.getCanonicalPath)
 
       withAllParquetReaders {
         // read with schema
         checkAnswer(spark.read.schema(readSchema).parquet(dir.getCanonicalPath), readData)
-        checkAnswer(
-          spark.read
-            .schema(readSchema)
-            .parquet(dir.getCanonicalPath)
-            .where("b < 50"),
-          Seq.empty)
-        checkAnswer(
-          spark.read
-            .schema(readSchema)
-            .parquet(dir.getCanonicalPath)
-            .where("a >= 'oh'"),
-          Row("text", 100) :: Nil)
+        checkAnswer(spark.read.schema(readSchema).parquet(dir.getCanonicalPath)
+          .where("b < 50"), Seq.empty)
+        checkAnswer(spark.read.schema(readSchema).parquet(dir.getCanonicalPath)
+          .where("a >= 'oh'"), Row("text", 100) :: Nil)
         // read with mixed field-id/name schema
         checkAnswer(spark.read.schema(readSchemaMixed).parquet(dir.getCanonicalPath), readData)
-        checkAnswer(
-          spark.read
-            .schema(readSchemaMixedHalfMatched)
-            .parquet(dir.getCanonicalPath),
-          readDataHalfMatched)
+        checkAnswer(spark.read.schema(readSchemaMixedHalfMatched)
+          .parquet(dir.getCanonicalPath), readDataHalfMatched)
 
         // schema inference should pull into the schema with ids
         val reader = spark.read.parquet(dir.getCanonicalPath)
@@ -107,15 +93,11 @@ class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkS
 
       val writeData = Seq(Row(100, "text"), Row(200, "more"))
 
-      spark
-        .createDataFrame(writeData.asJava, writeSchema)
-        .write
-        .mode("overwrite")
-        .parquet(dir.getCanonicalPath)
+      spark.createDataFrame(writeData.asJava, writeSchema)
+        .write.mode("overwrite").parquet(dir.getCanonicalPath)
 
       withAllParquetReaders {
-        checkAnswer(
-          spark.read.schema(readSchema).parquet(dir.getCanonicalPath),
+        checkAnswer(spark.read.schema(readSchema).parquet(dir.getCanonicalPath),
           // 3 different cases for the 3 columns to read:
           //   - a: ID 1 is not found, but there is column with name `a`, still return null
           //   - b: ID 2 is not found, return null
@@ -143,15 +125,11 @@ class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkS
 
       val writeData = Seq(Row(100, "text"), Row(200, "more"))
 
-      spark
-        .createDataFrame(writeData.asJava, writeSchema)
-        .write
-        .mode("overwrite")
-        .parquet(dir.getCanonicalPath)
+      spark.createDataFrame(writeData.asJava, writeSchema)
+        .write.mode("overwrite").parquet(dir.getCanonicalPath)
 
       withAllParquetReaders {
-        checkAnswer(
-          spark.read.schema(readSchema).parquet(dir.getCanonicalPath),
+        checkAnswer(spark.read.schema(readSchema).parquet(dir.getCanonicalPath),
           // a, b, c, d all couldn't be found
           Row(null, null, null, null, 100) :: Row(null, null, null, null, 200) :: Nil)
       }
@@ -172,19 +150,15 @@ class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkS
 
       val writeData = Seq(Row(100, "text", "txt"), Row(200, "more", "mr"))
 
-      spark
-        .createDataFrame(writeData.asJava, writeSchema)
-        .write
-        .mode("overwrite")
-        .parquet(dir.getCanonicalPath)
+      spark.createDataFrame(writeData.asJava, writeSchema)
+        .write.mode("overwrite").parquet(dir.getCanonicalPath)
 
       withAllParquetReaders {
         val cause = intercept[SparkException] {
           spark.read.schema(readSchema).parquet(dir.getCanonicalPath).collect()
         }.getCause
-        assert(
-          cause.isInstanceOf[RuntimeException] &&
-            cause.getMessage.contains("Found duplicate field(s)"))
+        assert(cause.isInstanceOf[RuntimeException] &&
+          cause.getMessage.contains("Found duplicate field(s)"))
       }
     }
   }
@@ -202,19 +176,15 @@ class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkS
           .add("rand2", StringType, true)
 
       val writeData = Seq(Row(100, "text", "txt"), Row(200, "more", "mr"))
-      spark
-        .createDataFrame(writeData.asJava, writeSchema)
-        .write
-        .mode("overwrite")
-        .parquet(dir.getCanonicalPath)
+      spark.createDataFrame(writeData.asJava, writeSchema)
+        .write.mode("overwrite").parquet(dir.getCanonicalPath)
       withAllParquetReaders {
         Seq(readSchema, readSchema.add("b", StringType, true)).foreach { schema =>
           val cause = intercept[SparkException] {
             spark.read.schema(schema).parquet(dir.getCanonicalPath).collect()
           }.getCause
-          assert(
-            cause.isInstanceOf[RuntimeException] &&
-              cause.getMessage.contains("Parquet file schema doesn't contain any field Ids"))
+          assert(cause.isInstanceOf[RuntimeException] &&
+            cause.getMessage.contains("Parquet file schema doesn't contain any field Ids"))
           val expectedValues = (1 to schema.length).map(_ => null)
           withSQLConf(SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID.key -> "true") {
             checkAnswer(
@@ -235,42 +205,33 @@ class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkS
           .add("name", StringType, true, withId(3))
 
       val writeSchema =
-        new StructType()
-          .add("a", IntegerType, true, withId(1))
-          .add("rand1", StringType, true, withId(2))
-          .add("rand2", StringType, true, withId(3))
+          new StructType()
+            .add("a", IntegerType, true, withId(1))
+            .add("rand1", StringType, true, withId(2))
+            .add("rand2", StringType, true, withId(3))
 
       val writeData = Seq(Row(100, "text", "txt"), Row(200, "more", "mr"))
 
       val expectedResult = Seq(Row(null, null, null), Row(null, null, null))
 
-      withSQLConf(
-        SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key -> "false",
+      withSQLConf(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key -> "false",
         SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key -> "true") {
-        spark
-          .createDataFrame(writeData.asJava, writeSchema)
-          .write
-          .mode("overwrite")
-          .parquet(dir.getCanonicalPath)
+        spark.createDataFrame(writeData.asJava, writeSchema)
+          .write.mode("overwrite").parquet(dir.getCanonicalPath)
         withAllParquetReaders {
           // no field id found exception
           val cause = intercept[SparkException] {
             spark.read.schema(readSchema).parquet(dir.getCanonicalPath).collect()
           }.getCause
-          assert(
-            cause.isInstanceOf[RuntimeException] &&
-              cause.getMessage.contains("Parquet file schema doesn't contain any field Ids"))
+          assert(cause.isInstanceOf[RuntimeException] &&
+            cause.getMessage.contains("Parquet file schema doesn't contain any field Ids"))
         }
       }
 
-      withSQLConf(
-        SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key -> "true",
+      withSQLConf(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key -> "true",
         SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key -> "false") {
-        spark
-          .createDataFrame(writeData.asJava, writeSchema)
-          .write
-          .mode("overwrite")
-          .parquet(dir.getCanonicalPath)
+        spark.createDataFrame(writeData.asJava, writeSchema)
+          .write.mode("overwrite").parquet(dir.getCanonicalPath)
         withAllParquetReaders {
           // ids are there, but we don't use id for matching, so no results would be returned
           checkAnswer(spark.read.schema(readSchema).parquet(dir.getCanonicalPath), expectedResult)
@@ -286,25 +247,20 @@ class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkS
 
       withSQLConf(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key -> "true") {
         val writeData = Seq(Row(1), Row(2), Row(3))
-        spark
-          .createDataFrame(writeData.asJava, writeSchema)
-          .write
-          .mode("overwrite")
-          .parquet(dir.getCanonicalPath)
+        spark.createDataFrame(writeData.asJava, writeSchema)
+          .write.mode("overwrite").parquet(dir.getCanonicalPath)
       }
 
       withAllParquetReaders {
         withSQLConf(SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key -> "false") {
-          checkAnswer(
-            spark.read.schema(readSchema).parquet(dir.getCanonicalPath),
+          checkAnswer(spark.read.schema(readSchema).parquet(dir.getCanonicalPath),
             Seq(Row(null), Row(null), Row(null)))
         }
         // Without the fix, the result is unpredictable when PARQUET_FIELD_ID_READ_ENABLED is
         // enabled. It could cause NPE if OnHeapColumnVector is used in the scan. It could produce
         // incorrect results if OffHeapColumnVector is used.
         withSQLConf(SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key -> "true") {
-          checkAnswer(
-            spark.read.schema(readSchema).parquet(dir.getCanonicalPath),
+          checkAnswer(spark.read.schema(readSchema).parquet(dir.getCanonicalPath),
             Seq(Row(1L), Row(2L), Row(3L)))
         }
       }

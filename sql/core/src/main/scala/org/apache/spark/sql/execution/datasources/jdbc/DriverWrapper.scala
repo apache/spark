@@ -25,8 +25,8 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 /**
  * A wrapper for a JDBC Driver to work around SPARK-6913.
  *
- * The problem is in `java.sql.DriverManager` class that can't access drivers loaded by Spark
- * ClassLoader.
+ * The problem is in `java.sql.DriverManager` class that can't access drivers loaded by
+ * Spark ClassLoader.
  */
 class DriverWrapper(val wrapped: Driver) extends Driver {
   override def acceptsURL(url: String): Boolean = wrapped.acceptsURL(url)

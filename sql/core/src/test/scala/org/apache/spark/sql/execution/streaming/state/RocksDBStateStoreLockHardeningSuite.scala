@@ -40,11 +40,10 @@ import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.ThreadUtils.awaitResult
 
 /**
- * Comprehensive test cases for RocksDB State Store lock hardening implementation. These tests
- * verify the state machine behavior and prevent problematic concurrent executions.
+ * Comprehensive test cases for RocksDB State Store lock hardening implementation.
+ * These tests verify the state machine behavior and prevent problematic concurrent executions.
  */
-class RocksDBStateStoreLockHardeningSuite
-    extends SparkFunSuite
+class RocksDBStateStoreLockHardeningSuite extends SparkFunSuite
     with PlanTestBase
     with AlsoTestWithRocksDBFeatures
     with PrivateMethodTester
@@ -63,8 +62,8 @@ class RocksDBStateStoreLockHardeningSuite
     require(!StateStore.isMaintenanceRunning)
   }
 
-  protected def tryWithProviderResource[T](provider: RocksDBStateStoreProvider)(
-      f: RocksDBStateStoreProvider => T): T = {
+  protected def tryWithProviderResource[T](
+      provider: RocksDBStateStoreProvider)(f: RocksDBStateStoreProvider => T): T = {
     try {
       f(provider)
     } finally {
@@ -80,18 +79,14 @@ class RocksDBStateStoreLockHardeningSuite
     newStoreProvider(storeId, NoPrefixKeyStateEncoderSpec(keySchema))
   }
 
-  def newStoreProvider(
-      storeId: StateStoreId,
-      useColumnFamilies: Boolean): RocksDBStateStoreProvider = {
-    newStoreProvider(
-      storeId,
-      NoPrefixKeyStateEncoderSpec(keySchema),
+  def newStoreProvider(storeId: StateStoreId, useColumnFamilies: Boolean):
+  RocksDBStateStoreProvider = {
+    newStoreProvider(storeId, NoPrefixKeyStateEncoderSpec(keySchema),
       useColumnFamilies = useColumnFamilies)
   }
 
   def newStoreProvider(useColumnFamilies: Boolean): RocksDBStateStoreProvider = {
-    newStoreProvider(
-      StateStoreId(newDir(), Random.nextInt(), 0),
+    newStoreProvider(StateStoreId(newDir(), Random.nextInt(), 0),
       NoPrefixKeyStateEncoderSpec(keySchema),
       useColumnFamilies = useColumnFamilies)
   }
@@ -99,11 +94,11 @@ class RocksDBStateStoreLockHardeningSuite
   def newStoreProvider(
       useColumnFamilies: Boolean,
       useMultipleValuesPerKey: Boolean): RocksDBStateStoreProvider = {
-    newStoreProvider(
-      StateStoreId(newDir(), Random.nextInt(), 0),
+    newStoreProvider(StateStoreId(newDir(), Random.nextInt(), 0),
       NoPrefixKeyStateEncoderSpec(keySchema),
       useColumnFamilies = useColumnFamilies,
-      useMultipleValuesPerKey = useMultipleValuesPerKey)
+      useMultipleValuesPerKey = useMultipleValuesPerKey
+    )
   }
 
   def newStoreProvider(storeId: StateStoreId, conf: Configuration): RocksDBStateStoreProvider = {
@@ -114,8 +109,7 @@ class RocksDBStateStoreLockHardeningSuite
       keySchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       useColumnFamilies: Boolean): RocksDBStateStoreProvider = {
-    newStoreProvider(
-      StateStoreId(newDir(), Random.nextInt(), 0),
+    newStoreProvider(StateStoreId(newDir(), Random.nextInt(), 0),
       keyStateEncoderSpec = keyStateEncoderSpec,
       keySchema = keySchema,
       useColumnFamilies = useColumnFamilies)
@@ -145,8 +139,8 @@ class RocksDBStateStoreLockHardeningSuite
     provider
   }
 
-  override protected def test(testName: String, testTags: Tag*)(testBody: => Any)(implicit
-      pos: Position): Unit = {
+  override protected def test(testName: String, testTags: Tag*)(testBody: => Any)
+                             (implicit pos: Position): Unit = {
     super.test(s"$testName", testTags: _*) {
       withSQLConf("spark.sql.streaming.stateStore.rocksdb.lockAcquireTimeoutMs" -> "2000") {
         testBody
@@ -164,10 +158,10 @@ class RocksDBStateStoreLockHardeningSuite
     import scala.concurrent.ExecutionContext
 
     // Create separate execution contexts to simulate different threads
-    implicit val ec1: ExecutionContext =
-      ExecutionContext.fromExecutor(ThreadUtils.newDaemonSingleThreadExecutor("thread-1"))
-    implicit val ec2: ExecutionContext =
-      ExecutionContext.fromExecutor(ThreadUtils.newDaemonSingleThreadExecutor("thread-2"))
+    implicit val ec1: ExecutionContext = ExecutionContext.fromExecutor(
+      ThreadUtils.newDaemonSingleThreadExecutor("thread-1"))
+    implicit val ec2: ExecutionContext = ExecutionContext.fromExecutor(
+      ThreadUtils.newDaemonSingleThreadExecutor("thread-2"))
 
     tryWithProviderResource(newStoreProvider(useColumnFamilies = false)) { provider =>
       @volatile var thread1Metrics: StateStoreMetrics = null
@@ -208,13 +202,11 @@ class RocksDBStateStoreLockHardeningSuite
 
       // Verify each thread gets its own correct metrics
       // Thread 1 should see metrics reflecting its commit (1 key)
-      assert(
-        thread1Metrics.numKeys === 1,
+      assert(thread1Metrics.numKeys === 1,
         s"Thread 1 should see 1 key, but saw ${thread1Metrics.numKeys}")
 
       // Thread 2 should see metrics reflecting its commit (2 keys total)
-      assert(
-        thread2Metrics.numKeys === 2,
+      assert(thread2Metrics.numKeys === 2,
         s"Thread 2 should see 2 keys, but saw ${thread2Metrics.numKeys}")
 
       // This test verifies that:
@@ -240,10 +232,10 @@ class RocksDBStateStoreLockHardeningSuite
       checkError(
         exception,
         condition = "STATE_STORE_OPERATION_OUT_OF_ORDER",
-        parameters = Map(
-          "errorMsg" ->
-            ("Expected possible states (" +
-              "UPDATING, ABORTED) but found COMMITTED")))
+        parameters = Map("errorMsg" ->
+          ("Expected possible states (" +
+            "UPDATING, ABORTED) but found COMMITTED"))
+      )
     }
   }
 
@@ -406,8 +398,7 @@ class RocksDBStateStoreLockHardeningSuite
       val stateMachine = PrivateMethod[Any](Symbol("stateMachine"))
       val stateMachineObj = provider invokePrivate stateMachine()
       val currentStamp = stateMachineObj.asInstanceOf[RocksDBStateMachine].currentValidStamp.get()
-      assert(
-        currentStamp == -1,
+      assert(currentStamp == -1,
         s"State machine should be unlocked (stamp = -1) but was $currentStamp")
     }
   }
@@ -430,12 +421,8 @@ class RocksDBStateStoreLockHardeningSuite
             latch.await(5, TimeUnit.SECONDS) // Wait for all threads to be ready
 
             val store = provider.getStore(0)
-            put(
-              store,
-              s"key$threadId",
-              threadId,
-              threadId * 100,
-              StateStore.DEFAULT_COL_FAMILY_NAME)
+            put(store, s"key$threadId",
+              threadId, threadId * 100, StateStore.DEFAULT_COL_FAMILY_NAME)
 
             // Verify this thread has ownership
             assertAcquiredThreadIsCurrentThread(provider)
@@ -463,8 +450,7 @@ class RocksDBStateStoreLockHardeningSuite
 
       // Verify results
       assert(exceptions.isEmpty, s"Unexpected exceptions: ${exceptions.mkString(", ")}")
-      assert(
-        completedThreads == numThreads,
+      assert(completedThreads == numThreads,
         s"Expected $numThreads threads to complete, got $completedThreads")
       assert(results.forall(identity), "All threads should have completed successfully")
     }
@@ -538,9 +524,9 @@ class RocksDBStateStoreLockHardeningSuite
       checkError(
         exception,
         condition = "STATE_STORE_OPERATION_OUT_OF_ORDER",
-        parameters = Map(
-          "errorMsg" ->
-            "Cannot get metrics in UPDATING state"))
+        parameters = Map("errorMsg" ->
+          "Cannot get metrics in UPDATING state")
+      )
 
       // After commit, metrics should be accessible
       store.commit()
@@ -562,9 +548,9 @@ class RocksDBStateStoreLockHardeningSuite
       checkError(
         exception,
         condition = "STATE_STORE_OPERATION_OUT_OF_ORDER",
-        parameters = Map(
-          "errorMsg" ->
-            "Cannot get metrics in UPDATING state"))
+        parameters = Map("errorMsg" ->
+          "Cannot get metrics in UPDATING state")
+      )
 
       // After commit, checkpoint info should be accessible
       store.commit()
@@ -590,15 +576,15 @@ class RocksDBStateStoreLockHardeningSuite
 
         // Verify error message contains expected details
         val message = exception.getMessage
-        (message.contains("UNRELEASED_THREAD_ERROR"), endTime - startTime)
+        (message.contains("UNRELEASED_THREAD_ERROR"),
+          endTime - startTime)
       }
 
       val (hasCorrectError, duration) = awaitResult(concurrentFuture, timeout)
       assert(hasCorrectError, "Should get unreleased thread error or timeout waiting for lock")
 
       // Verify it actually waited (didn't fail immediately)
-      assert(
-        duration >= 2000,
+      assert(duration >= 2000,
         s"Should have waited at least 2 seconds but only waited $duration ms")
 
       store1.commit()
@@ -613,9 +599,7 @@ class RocksDBStateStoreLockHardeningSuite
       val validStamp = stateMachineObj.asInstanceOf[RocksDBStateMachine].currentValidStamp.get()
 
       // Simulate stamp verification with correct stamp
-      stateMachineObj
-        .asInstanceOf[RocksDBStateMachine]
-        .verifyStamp(validStamp) // Should not throw
+      stateMachineObj.asInstanceOf[RocksDBStateMachine].verifyStamp(validStamp) // Should not throw
 
       // Simulate stamp verification with incorrect stamp
       val incorrectStamp = validStamp + 1
@@ -706,9 +690,9 @@ class RocksDBStateStoreLockHardeningSuite
       awaitResult(closeFuture, 10.seconds)
 
       // Verify that commit completed successfully without exceptions
-      assert(commitCompletedLatch.await(1, TimeUnit.SECONDS), "Commit should have completed")
-      assert(
-        commitThreadException.isEmpty,
+      assert(commitCompletedLatch.await(1, TimeUnit.SECONDS),
+        "Commit should have completed")
+      assert(commitThreadException.isEmpty,
         s"Commit should not have thrown exception: ${commitThreadException.map(_.getMessage)}")
 
       // The state machine should have coordinated the close properly:
@@ -787,15 +771,14 @@ class RocksDBStateStoreLockHardeningSuite
       awaitResult(closeFuture, 10.seconds)
 
       // Verify operation completed successfully
-      assert(operationCompleted.await(1, TimeUnit.SECONDS), "Operation should have completed")
-      assert(
-        operationException.isEmpty,
+      assert(operationCompleted.await(1, TimeUnit.SECONDS),
+        "Operation should have completed")
+      assert(operationException.isEmpty,
         s"Operation should not have failed: ${operationException.map(_.getMessage)}")
 
       // Verify close waited for operation (should take at least 1 second)
       val closeDuration = closeEndTime - closeStartTime
-      assert(
-        closeDuration >= 900, // Allow some margin for timing
+      assert(closeDuration >= 900, // Allow some margin for timing
         s"Close should have waited for operation, but took only $closeDuration ms")
 
       // Verify provider is properly closed
@@ -811,7 +794,8 @@ class RocksDBStateStoreLockHardeningSuite
     val stateMachine = PrivateMethod[Any](Symbol("stateMachine"))
     val stateMachineObj = provider invokePrivate stateMachine()
     val threadInfo = stateMachineObj.asInstanceOf[RocksDBStateMachine].getAcquiredThreadInfo
-    assert(threadInfo.isDefined, "acquired thread info should not be null after load")
+    assert(threadInfo.isDefined,
+      "acquired thread info should not be null after load")
     val threadId = threadInfo.get.threadRef.get.get.getId
     assert(
       threadId == Thread.currentThread().getId,
@@ -824,5 +808,4 @@ class RocksDBStateStoreLockHardeningSuite
  * Test suite that runs all RocksDBStateStoreLockHardeningSuite tests with row checksum enabled.
  */
 class RocksDBStateStoreLockHardeningSuiteWithRowChecksum
-    extends RocksDBStateStoreLockHardeningSuite
-    with EnableStateStoreRowChecksum
+  extends RocksDBStateStoreLockHardeningSuite with EnableStateStoreRowChecksum

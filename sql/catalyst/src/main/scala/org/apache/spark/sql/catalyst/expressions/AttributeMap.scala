@@ -18,9 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions
 
 /**
- * Builds a map that is keyed by an Attribute's expression id. Using the expression id allows
- * values to be looked up even when the attributes used differ cosmetically (i.e., the
- * capitalization of the name, or the expected nullability).
+ * Builds a map that is keyed by an Attribute's expression id. Using the expression id allows values
+ * to be looked up even when the attributes used differ cosmetically (i.e., the capitalization
+ * of the name, or the expected nullability).
  */
 object AttributeMap {
   def apply[A](kvs: Map[Attribute, A]): AttributeMap[A] = {
@@ -39,8 +39,7 @@ object AttributeMap {
 }
 
 class AttributeMap[A](val baseMap: Map[ExprId, (Attribute, A)])
-    extends Map[Attribute, A]
-    with Serializable {
+  extends Map[Attribute, A] with Serializable {
 
   override def get(k: Attribute): Option[A] = baseMap.get(k.exprId).map(_._2)
 
@@ -48,7 +47,7 @@ class AttributeMap[A](val baseMap: Map[ExprId, (Attribute, A)])
 
   override def contains(k: Attribute): Boolean = get(k).isDefined
 
-  override def +[B1 >: A](kv: (Attribute, B1)): AttributeMap[B1] =
+  override def + [B1 >: A](kv: (Attribute, B1)): AttributeMap[B1] =
     new AttributeMap(baseMap + (kv._1.exprId -> kv))
 
   override def updated[B1 >: A](key: Attribute, value: B1): Map[Attribute, B1] =

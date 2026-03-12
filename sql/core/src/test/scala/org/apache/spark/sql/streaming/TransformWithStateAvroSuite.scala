@@ -41,8 +41,8 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
 
   import testImplicits._
 
-  override protected def test(testName: String, testTags: Tag*)(testBody: => Any)(implicit
-      pos: Position): Unit = {
+  override protected def test(testName: String, testTags: Tag*)(testBody: => Any)
+                             (implicit pos: Position): Unit = {
     super.test(s"$testName (encoding = Avro)", testTags: _*) {
       withSQLConf(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> "avro") {
         testBody
@@ -59,34 +59,39 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
         val inputData = MemoryStream[String]
 
         // First run with String field
-        val result1 = inputData
-          .toDS()
+        val result1 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(new ProcessorV1(), TimeMode.None(), OutputMode.Update())
+          .transformWithState(new ProcessorV1(),
+            TimeMode.None(),
+            OutputMode.Update())
 
         testStream(result1, OutputMode.Update())(
           StartStream(checkpointLocation = dir.getCanonicalPath),
           AddData(inputData, "test1"),
           CheckNewAnswer("test1"),
-          StopStream)
+          StopStream
+        )
 
         // Second run with Long field
-        val result2 = inputData
-          .toDS()
+        val result2 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(new ProcessorV2(), TimeMode.None(), OutputMode.Update())
+          .transformWithState(new ProcessorV2(),
+            TimeMode.None(),
+            OutputMode.Update())
 
         testStream(result2, OutputMode.Update())(
           StartStream(checkpointLocation = dir.getCanonicalPath),
           AddData(inputData, "test2"),
           CheckNewAnswer("test2"),
-          StopStream)
+          StopStream
+        )
 
         // Third run with Int field - should fail
-        val result3 = inputData
-          .toDS()
+        val result3 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(new ProcessorV3(), TimeMode.None(), OutputMode.Update())
+          .transformWithState(new ProcessorV3(),
+            TimeMode.None(),
+            OutputMode.Update())
 
         testStream(result3, OutputMode.Update())(
           StartStream(checkpointLocation = dir.getCanonicalPath),
@@ -97,27 +102,26 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
               condition = "STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION",
               parameters = Map(
                 "oldValueSchema" -> "StructType(StructField(value1,StringType,true))",
-                "newValueSchema" -> "StructType(StructField(value1,IntegerType,true))"))
-          })
+                "newValueSchema" -> "StructType(StructField(value1,IntegerType,true))")
+            )
+          }
+        )
       }
     }
   }
 
   test("transformWithState - value schema threshold exceeded") {
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName,
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
       SQLConf.STREAMING_VALUE_STATE_SCHEMA_EVOLUTION_THRESHOLD.key -> "0") {
       withTempDir { chkptDir =>
         val dirPath = chkptDir.getCanonicalPath
         val inputData = MemoryStream[String]
-        val result1 = inputData
-          .toDS()
+        val result1 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new RunningCountStatefulProcessorInt(),
+          .transformWithState(new RunningCountStatefulProcessorInt(),
             TimeMode.None(),
             OutputMode.Update())
 
@@ -134,11 +138,7 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
           CheckNewAnswer(("a", "2"), ("b", "1")),
           StopStream,
           StartStream(checkpointLocation = dirPath),
-          AddData(
-            inputData,
-            "a",
-            "b"
-          ), // should remove state for "a" and not return anything for a
+          AddData(inputData, "a", "b"), // should remove state for "a" and not return anything for a
           CheckNewAnswer(("b", "2")),
           StopStream,
           Execute { q =>
@@ -147,13 +147,12 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
           },
           StartStream(checkpointLocation = dirPath),
           AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1 and
-          CheckNewAnswer(("a", "1"), ("c", "1")))
+          CheckNewAnswer(("a", "1"), ("c", "1"))
+        )
 
-        val result2 = inputData
-          .toDS()
+        val result2 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new RunningCountStatefulProcessor(),
+          .transformWithState(new RunningCountStatefulProcessor(),
             TimeMode.None(),
             OutputMode.Update())
 
@@ -167,26 +166,26 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
               parameters = Map(
                 "numSchemaEvolutions" -> "1",
                 "maxSchemaEvolutions" -> "0",
-                "colFamilyName" -> "countState"))
-          })
+                "colFamilyName" -> "countState"
+              )
+            )
+          }
+        )
       }
     }
   }
 
   test("transformWithState - upcasting should succeed") {
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName,
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
       withTempDir { chkptDir =>
         val dirPath = chkptDir.getCanonicalPath
         val inputData = MemoryStream[String]
-        val result1 = inputData
-          .toDS()
+        val result1 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new RunningCountStatefulProcessorInt(),
+          .transformWithState(new RunningCountStatefulProcessorInt(),
             TimeMode.None(),
             OutputMode.Update())
 
@@ -203,11 +202,7 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
           CheckNewAnswer(("a", "2"), ("b", "1")),
           StopStream,
           StartStream(checkpointLocation = dirPath),
-          AddData(
-            inputData,
-            "a",
-            "b"
-          ), // should remove state for "a" and not return anything for a
+          AddData(inputData, "a", "b"), // should remove state for "a" and not return anything for a
           CheckNewAnswer(("b", "2")),
           StopStream,
           Execute { q =>
@@ -216,13 +211,12 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
           },
           StartStream(checkpointLocation = dirPath),
           AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1 and
-          CheckNewAnswer(("a", "1"), ("c", "1")))
+          CheckNewAnswer(("a", "1"), ("c", "1"))
+        )
 
-        val result2 = inputData
-          .toDS()
+        val result2 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new RunningCountStatefulProcessor(),
+          .transformWithState(new RunningCountStatefulProcessor(),
             TimeMode.None(),
             OutputMode.Update())
 
@@ -232,7 +226,8 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
           CheckNewAnswer(("a", "2")),
           AddData(inputData, "d"),
           CheckNewAnswer(("d", "1")),
-          StopStream)
+          StopStream
+        )
       }
     }
   }
@@ -248,11 +243,9 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
         val inputData = MemoryStream[String]
 
         // First run with initial field order
-        val result1 = inputData
-          .toDS()
+        val result1 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new RunningCountStatefulProcessorInitialOrder(),
+          .transformWithState(new RunningCountStatefulProcessorInitialOrder(),
             TimeMode.None(),
             OutputMode.Update())
 
@@ -260,14 +253,13 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
           StartStream(checkpointLocation = dirPath),
           AddData(inputData, "a"),
           CheckNewAnswer(("a", "1")),
-          StopStream)
+          StopStream
+        )
 
         // Second run with reordered fields
-        val result2 = inputData
-          .toDS()
+        val result2 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new RunningCountStatefulProcessorReorderedFields(),
+          .transformWithState(new RunningCountStatefulProcessorReorderedFields(),
             TimeMode.None(),
             OutputMode.Update())
 
@@ -275,7 +267,8 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
           StartStream(checkpointLocation = dirPath),
           AddData(inputData, "a"),
           CheckNewAnswer(("a", "2")), // Should continue counting from previous state
-          StopStream)
+          StopStream
+        )
       }
     }
   }
@@ -294,11 +287,9 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
 
         // Start with initial basic state schema
         val inputData = MemoryStream[String]
-        val result1 = inputData
-          .toDS()
+        val result1 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new DefaultValueInitialProcessor(),
+          .transformWithState(new DefaultValueInitialProcessor(),
             TimeMode.None(),
             OutputMode.Update())
 
@@ -311,30 +302,33 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
               q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
             }
           },
-          StopStream)
+          StopStream
+        )
 
         val hadoopConf = spark.sessionState.newHadoopConf()
-        val fm = CheckpointFileManager.create(new Path(chkptDir.toString), hadoopConf)
-        fm.mkdirs(new Path(new Path(chkptDir.toString, DIR_NAME_OFFSETS), "dummy_path_name"))
+        val fm = CheckpointFileManager.create(new Path(chkptDir.toString),
+          hadoopConf)
+        fm.mkdirs(new Path(new Path(chkptDir.toString, DIR_NAME_OFFSETS),
+          "dummy_path_name"))
         fm.mkdirs(
-          new Path(
-            OperatorStateMetadataV2.metadataDirPath(
-              new Path(new Path(new Path(chkptDir.toString), "state"), "0")),
-            "dummy_path_name"))
+          new Path(OperatorStateMetadataV2.metadataDirPath(
+            new Path(new Path(new Path(chkptDir.toString), "state"), "0")
+          ),
+            "dummy_path_name")
+        )
         val dummySchemaPath =
           new Path(stateSchemaPath, "__dummy_file_path")
         fm.mkdirs(dummySchemaPath)
+
 
         // Capture initial schema files (after first schema evolution)
         val initialSchemaFiles = getFiles(stateSchemaPath).length
         assert(initialSchemaFiles > 0, "Expected schema files after initial run")
 
         // Second run with evolved state (adding fields)
-        val result2 = inputData
-          .toDS()
+        val result2 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new DefaultValueEvolvedProcessor(),
+          .transformWithState(new DefaultValueEvolvedProcessor(),
             TimeMode.None(),
             OutputMode.Update())
 
@@ -347,21 +341,19 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
               q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
             }
           },
-          StopStream)
+          StopStream
+        )
 
         // Capture schema files after second evolution
         val afterAddingFieldsSchemaFiles = getFiles(stateSchemaPath).length
-        assert(
-          afterAddingFieldsSchemaFiles > initialSchemaFiles,
+        assert(afterAddingFieldsSchemaFiles > initialSchemaFiles,
           s"Expected more schema files after adding fields," +
             s" but had $initialSchemaFiles before and $afterAddingFieldsSchemaFiles after")
 
         // Third run with TwoLongs schema
-        val result3 = inputData
-          .toDS()
+        val result3 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new RunningCountStatefulProcessorTwoLongs(),
+          .transformWithState(new RunningCountStatefulProcessorTwoLongs(),
             TimeMode.None(),
             OutputMode.Update())
 
@@ -374,20 +366,18 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
               q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
             }
           },
-          StopStream)
+          StopStream
+        )
 
         // Capture schema files after third evolution
         val afterTwoLongsSchemaFiles = getFiles(stateSchemaPath).length
-        assert(
-          afterTwoLongsSchemaFiles > afterAddingFieldsSchemaFiles,
+        assert(afterTwoLongsSchemaFiles > afterAddingFieldsSchemaFiles,
           "Expected more schema files after TwoLongs schema change")
 
         // Fourth run with ReorderedLongs schema
-        val result4 = inputData
-          .toDS()
+        val result4 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new RunningCountStatefulProcessorReorderedFields(),
+          .transformWithState(new RunningCountStatefulProcessorReorderedFields(),
             TimeMode.None(),
             OutputMode.Update())
 
@@ -400,19 +390,20 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
               q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
             }
           },
-          StopStream)
+          StopStream
+        )
 
         // Capture schema files after fourth evolution
         val afterReorderedSchemaFiles = getFiles(stateSchemaPath).length
-        assert(
-          afterReorderedSchemaFiles > afterTwoLongsSchemaFiles,
+        assert(afterReorderedSchemaFiles > afterTwoLongsSchemaFiles,
           "Expected more schema files after ReorderedLongs schema change")
 
         // Fifth run with RenamedFields schema
-        val result5 = inputData
-          .toDS()
+        val result5 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(new RenameEvolvedProcessor(), TimeMode.None(), OutputMode.Update())
+          .transformWithState(new RenameEvolvedProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
 
         testStream(result5, OutputMode.Update())(
           StartStream(checkpointLocation = chkptDir.getCanonicalPath),
@@ -428,20 +419,19 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
               q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
             }
           },
-          StopStream)
+          StopStream
+        )
 
         // Verify metadata files were purged with MIN_BATCHES_TO_RETAIN=1
         val finalMetadataFiles = getFiles(metadataPath).length
         // We expect the dummy folder and 2 metadata files
-        assert(
-          finalMetadataFiles <= 3,
+        assert(finalMetadataFiles <= 3,
           s"Expected metadata files to be purged to at most 3, but found $finalMetadataFiles")
 
         // Verify schema files were NOT purged despite aggressive metadata purging
         val schemaFiles = getFiles(stateSchemaPath).map(_.getPath.getName)
         val finalSchemaFiles = schemaFiles.length
-        assert(
-          finalSchemaFiles >= 5,
+        assert(finalSchemaFiles >= 5,
           s"Expected at least 5 schema files to be retained" +
             s" (one per schema evolution), but found $finalSchemaFiles")
         assert(schemaFiles.contains(dummySchemaPath.getName))
@@ -461,27 +451,23 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
         val latestValueType = latestValueField.dataType.asInstanceOf[StructType]
 
         // Should have value4 field from RenamedFields
-        assert(
-          latestValueType.fields.exists(f => f.name == "value4"),
+        assert(latestValueType.fields.exists(f => f.name == "value4"),
           "Expected renamed schema with value4 field")
       }
     }
   }
 
   test("transformWithState - adding field should succeed") {
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName,
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
       withTempDir { chkptDir =>
         val dirPath = chkptDir.getCanonicalPath
         val inputData = MemoryStream[String]
-        val result1 = inputData
-          .toDS()
+        val result1 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new RunningCountStatefulProcessor(),
+          .transformWithState(new RunningCountStatefulProcessor(),
             TimeMode.None(),
             OutputMode.Update())
 
@@ -498,11 +484,7 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
           CheckNewAnswer(("a", "2"), ("b", "1")),
           StopStream,
           StartStream(checkpointLocation = dirPath),
-          AddData(
-            inputData,
-            "a",
-            "b"
-          ), // should remove state for "a" and not return anything for a
+          AddData(inputData, "a", "b"), // should remove state for "a" and not return anything for a
           CheckNewAnswer(("b", "2")),
           StopStream,
           Execute { q =>
@@ -511,13 +493,12 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
           },
           StartStream(checkpointLocation = dirPath),
           AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1 and
-          CheckNewAnswer(("a", "1"), ("c", "1")))
+          CheckNewAnswer(("a", "1"), ("c", "1"))
+        )
 
-        val result2 = inputData
-          .toDS()
+        val result2 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new RunningCountStatefulProcessorNestedLongs(),
+          .transformWithState(new RunningCountStatefulProcessorNestedLongs(),
             TimeMode.None(),
             OutputMode.Update())
 
@@ -525,7 +506,8 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
           StartStream(checkpointLocation = dirPath),
           AddData(inputData, "a"),
           CheckNewAnswer(("a", "2")),
-          StopStream)
+          StopStream
+        )
       }
     }
   }
@@ -538,11 +520,9 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
         val inputData = MemoryStream[String]
 
         // First run with original field names
-        val result1 = inputData
-          .toDS()
+        val result1 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new RunningCountStatefulProcessorInitialOrder(),
+          .transformWithState(new RunningCountStatefulProcessorInitialOrder(),
             TimeMode.None(),
             OutputMode.Update())
 
@@ -550,13 +530,15 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
           StartStream(checkpointLocation = dir.getCanonicalPath),
           AddData(inputData, "test1"),
           CheckNewAnswer(("test1", "1")),
-          StopStream)
+          StopStream
+        )
 
         // Second run with renamed field
-        val result2 = inputData
-          .toDS()
+        val result2 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(new RenameEvolvedProcessor(), TimeMode.None(), OutputMode.Update())
+          .transformWithState(new RenameEvolvedProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
 
         testStream(result2, OutputMode.Update())(
           StartStream(checkpointLocation = dir.getCanonicalPath),
@@ -566,7 +548,8 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
           // Verify we can write state with new field name
           AddData(inputData, "test2"),
           CheckNewAnswer(("test2", "1")),
-          StopStream)
+          StopStream
+        )
       }
     }
   }
@@ -583,11 +566,9 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
         val dirPath = chkptDir.getCanonicalPath
         val inputData = MemoryStream[String]
 
-        val result1 = inputData
-          .toDS()
+        val result1 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new RunningCountStatefulProcessorTwoLongs(),
+          .transformWithState(new RunningCountStatefulProcessorTwoLongs(),
             TimeMode.None(),
             OutputMode.Update())
 
@@ -599,12 +580,14 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
           CheckNewAnswer(("b", "1")),
           ProcessAllAvailable(),
           Execute { _ => Thread.sleep(5000) },
-          StopStream)
+          StopStream
+        )
 
-        val result2 = inputData
-          .toDS()
+        val result2 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(new RenameEvolvedProcessor(), TimeMode.None(), OutputMode.Update())
+          .transformWithState(new RenameEvolvedProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
 
         testStream(result2, OutputMode.Update())(
           StartStream(checkpointLocation = dirPath),
@@ -614,7 +597,8 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
           CheckNewAnswer(("d", "1")),
           ProcessAllAvailable(),
           Execute { _ => Thread.sleep(5000) },
-          StopStream)
+          StopStream
+        )
 
         val oldStateDf = spark.read
           .format("statestore")
@@ -625,8 +609,11 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
           .load(dirPath)
 
         checkAnswer(
-          oldStateDf.selectExpr("key.value AS groupingKey", "value.value1 AS count"),
-          Seq(Row("a", 1), Row("b", 1)))
+          oldStateDf.selectExpr(
+            "key.value AS groupingKey",
+            "value.value1 AS count"),
+          Seq(Row("a", 1), Row("b", 1))
+        )
 
         val evolvedStateDf1 = spark.read
           .format("statestore")
@@ -637,8 +624,16 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
           .load(dirPath)
 
         checkAnswer(
-          evolvedStateDf1.selectExpr("key.value AS groupingKey", "value.value4 AS count"),
-          Seq(Row("a", null), Row("b", null), Row("c", 1), Row("d", 1)))
+          evolvedStateDf1.selectExpr(
+            "key.value AS groupingKey",
+            "value.value4 AS count"),
+          Seq(
+            Row("a", null),
+            Row("b", null),
+            Row("c", 1),
+            Row("d", 1)
+          )
+        )
 
         val evolvedStateDf = spark.read
           .format("statestore")
@@ -648,8 +643,16 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
           .load(dirPath)
 
         checkAnswer(
-          evolvedStateDf.selectExpr("key.value AS groupingKey", "value.value4 AS count"),
-          Seq(Row("a", null), Row("b", null), Row("c", 1), Row("d", 1)))
+          evolvedStateDf.selectExpr(
+            "key.value AS groupingKey",
+            "value.value4 AS count"),
+          Seq(
+            Row("a", null),
+            Row("b", null),
+            Row("c", 1),
+            Row("d", 1)
+          )
+        )
       }
     }
   }
@@ -662,11 +665,9 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
         val inputData = MemoryStream[String]
 
         // First run with basic schema
-        val result1 = inputData
-          .toDS()
+        val result1 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new DefaultValueInitialProcessor(),
+          .transformWithState(new DefaultValueInitialProcessor(),
             TimeMode.None(),
             OutputMode.Update())
 
@@ -674,14 +675,13 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
           StartStream(checkpointLocation = dir.getCanonicalPath),
           AddData(inputData, "test1"),
           CheckNewAnswer(("test1", BasicState("test1".hashCode, "test1"))),
-          StopStream)
+          StopStream
+        )
 
         // Second run with evolved schema to check defaults
-        val result2 = inputData
-          .toDS()
+        val result2 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new DefaultValueEvolvedProcessor(),
+          .transformWithState(new DefaultValueEvolvedProcessor(),
             TimeMode.None(),
             OutputMode.Update())
 
@@ -691,46 +691,44 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
           // Check existing state - new fields should get default values
           AddData(inputData, "test1"),
           CheckNewAnswer(
-            (
-              "test1",
-              EvolvedState(
-                id = "test1".hashCode,
-                name = "test1",
-                count = 0L,
-                active = false,
-                score = 0.0))),
+            ("test1", EvolvedState(
+              id = "test1".hashCode,
+              name = "test1",
+              count = 0L,
+              active = false,
+              score = 0.0
+            ))
+          ),
 
           // New state should get initialized values, not defaults
           AddData(inputData, "test2"),
           CheckNewAnswer(
-            (
-              "test2",
-              EvolvedState(
-                id = "test2".hashCode,
-                name = "test2",
-                count = 100L,
-                active = true,
-                score = 99.9))),
-          StopStream)
+            ("test2", EvolvedState(
+              id = "test2".hashCode,
+              name = "test2",
+              count = 100L,
+              active = true,
+              score = 99.9
+            ))
+          ),
+          StopStream
+        )
       }
     }
   }
 
   test("transformWithState - removing field should succeed") {
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName,
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
       withTempDir { chkptDir =>
         val dirPath = chkptDir.getCanonicalPath
         val inputData = MemoryStream[String]
 
-        val result2 = inputData
-          .toDS()
+        val result2 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new RunningCountStatefulProcessorTwoLongs(),
+          .transformWithState(new RunningCountStatefulProcessorTwoLongs(),
             TimeMode.None(),
             OutputMode.Update())
 
@@ -738,13 +736,12 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
           StartStream(checkpointLocation = dirPath),
           AddData(inputData, "a"),
           CheckNewAnswer(("a", "1")),
-          StopStream)
+          StopStream
+        )
 
-        val result1 = inputData
-          .toDS()
+        val result1 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new RunningCountStatefulProcessor(),
+          .transformWithState(new RunningCountStatefulProcessor(),
             TimeMode.None(),
             OutputMode.Update())
 
@@ -752,26 +749,23 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
           StartStream(checkpointLocation = dirPath),
           AddData(inputData, "a"),
           CheckNewAnswer(("a", "1")),
-          StopStream)
+          StopStream
+        )
       }
     }
   }
 
-  test(
-    "test that invalid schema evolution " +
-      "fails query for column family") {
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName,
+  test("test that invalid schema evolution " +
+    "fails query for column family") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
       withTempDir { checkpointDir =>
         val inputData = MemoryStream[String]
-        val result1 = inputData
-          .toDS()
+        val result1 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new RunningCountStatefulProcessor(),
+          .transformWithState(new RunningCountStatefulProcessor(),
             TimeMode.None(),
             OutputMode.Update())
 
@@ -779,12 +773,11 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
           StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
           AddData(inputData, "a"),
           CheckNewAnswer(("a", "1")),
-          StopStream)
-        val result2 = inputData
-          .toDS()
+          StopStream
+        )
+        val result2 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new RunningCountStatefulProcessorInt(),
+          .transformWithState(new RunningCountStatefulProcessorInt(),
             TimeMode.None(),
             OutputMode.Update())
 
@@ -797,26 +790,25 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
               condition = "STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION",
               parameters = Map(
                 "oldValueSchema" -> "StructType(StructField(value,LongType,true))",
-                "newValueSchema" -> "StructType(StructField(value,IntegerType,true))"))
-          })
+                "newValueSchema" -> "StructType(StructField(value,IntegerType,true))")
+            )
+          }
+        )
       }
     }
   }
 
   test("test that introducing TTL after restart fails query") {
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName,
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
       withTempDir { checkpointDir =>
         val inputData = MemoryStream[String]
         val clock = new StreamManualClock
-        val result = inputData
-          .toDS()
+        val result = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new RunningCountStatefulProcessor(),
+          .transformWithState(new RunningCountStatefulProcessor(),
             TimeMode.ProcessingTime(),
             OutputMode.Update())
 
@@ -829,12 +821,11 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(("a", "1")),
           AdvanceManualClock(1 * 1000),
-          StopStream)
-        val result2 = inputData
-          .toDS()
+          StopStream
+        )
+        val result2 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new RunningCountStatefulProcessorWithTTL(),
+          .transformWithState(new RunningCountStatefulProcessorWithTTL(),
             TimeMode.ProcessingTime(),
             OutputMode.Update())
         testStream(result2, OutputMode.Update())(
@@ -851,8 +842,10 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
               parameters = Map(
                 "newValueSchema" -> ("StructType(StructField(value,StructType(StructField(" +
                   "value,LongType,true)),true),StructField(ttlExpirationMs,LongType,true))"),
-                "oldValueSchema" -> "StructType(StructField(value,LongType,true))"))
-          })
+                "oldValueSchema" -> "StructType(StructField(value,LongType,true))")
+            )
+          }
+        )
       }
     }
   }

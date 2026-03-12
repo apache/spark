@@ -28,10 +28,7 @@ import org.apache.spark.sql.types.MetadataBuilder
 import org.apache.spark.unsafe.types.CalendarInterval
 
 object EventTimeWatermark {
-
-  /**
-   * The [[org.apache.spark.sql.types.Metadata]] key used to hold the eventTime watermark delay.
-   */
+  /** The [[org.apache.spark.sql.types.Metadata]] key used to hold the eventTime watermark delay. */
   val delayKey = "spark.watermarkDelayMs"
 
   def getDelayMs(delay: CalendarInterval): Long = {
@@ -76,8 +73,7 @@ case class EventTimeWatermark(
     nodeId: UUID,
     eventTime: Attribute,
     delay: CalendarInterval,
-    child: LogicalPlan)
-    extends UnaryNode {
+    child: LogicalPlan) extends UnaryNode {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(EVENT_TIME_WATERMARK)
 
@@ -98,13 +94,13 @@ case class EventTimeWatermark(
 /**
  * Updates the event time column to [[eventTime]] in the child output.
  *
- * Any watermark calculations performed after this node will use the updated eventTimeColumn.
+ * Any watermark calculations performed after this node will use the
+ * updated eventTimeColumn.
  */
 case class UpdateEventTimeWatermarkColumn(
     eventTime: Attribute,
     delay: Option[CalendarInterval],
-    child: LogicalPlan)
-    extends UnaryNode {
+    child: LogicalPlan) extends UnaryNode {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UPDATE_EVENT_TIME_WATERMARK_COLUMN)
 

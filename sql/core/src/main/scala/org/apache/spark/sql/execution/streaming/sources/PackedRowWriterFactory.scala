@@ -26,8 +26,8 @@ import org.apache.spark.sql.connector.write.streaming.StreamingDataWriterFactory
 
 /**
  * A simple [[org.apache.spark.sql.connector.write.DataWriterFactory]] whose tasks just pack rows
- * into the commit message for delivery to a [[org.apache.spark.sql.connector.write.BatchWrite]]
- * on the driver.
+ * into the commit message for delivery to a
+ * [[org.apache.spark.sql.connector.write.BatchWrite]] on the driver.
  *
  * Note that, because it sends all rows to the driver, this factory will generally be unsuitable
  * for production-quality sinks. It's intended for use in tests.

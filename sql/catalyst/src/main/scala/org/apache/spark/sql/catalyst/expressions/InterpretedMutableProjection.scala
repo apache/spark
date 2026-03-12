@@ -23,12 +23,13 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils.avoidSetNullAt
 import org.apache.spark.sql.internal.SQLConf
 
+
 /**
  * A [[MutableProjection]] that is calculated by calling `eval` on each of the specified
  * expressions.
  *
- * @param expressions
- *   a sequence of expressions that determine the value of each column of the output row.
+ * @param expressions a sequence of expressions that determine the value of each column of the
+ *                    output row.
  */
 class InterpretedMutableProjection(expressions: Seq[Expression]) extends MutableProjection {
   def this(expressions: Seq[Expression], inputSchema: Seq[Attribute]) =
@@ -52,25 +53,21 @@ class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mutable
 
   override def target(row: InternalRow): MutableProjection = {
     // If `mutableRow` is `UnsafeRow`, `MutableProjection` accepts mutable types only
-    require(
-      !row.isInstanceOf[UnsafeRow] ||
-        validExprs.forall { case (e, _) => UnsafeRow.isMutable(e.dataType) },
+    require(!row.isInstanceOf[UnsafeRow] ||
+      validExprs.forall { case (e, _) => UnsafeRow.isMutable(e.dataType) },
       "MutableProjection cannot use UnsafeRow for output data types: " +
-        validExprs
-          .map(_._1.dataType)
-          .filterNot(UnsafeRow.isMutable)
-          .map(_.catalogString)
-          .mkString(", "))
+        validExprs.map(_._1.dataType).filterNot(UnsafeRow.isMutable)
+          .map(_.catalogString).mkString(", "))
     mutableRow = row
     this
   }
 
   private[this] val fieldWriters: Array[Any => Unit] = validExprs.map { case (e, i) =>
     val writer = InternalRow.getWriter(i, e.dataType)
-    if (!e.nullable || avoidSetNullAt(e.dataType)) { (v: Any) =>
-      writer(mutableRow, v)
-    } else { (v: Any) =>
-      {
+    if (!e.nullable || avoidSetNullAt(e.dataType)) {
+      (v: Any) => writer(mutableRow, v)
+    } else {
+      (v: Any) => {
         if (v == null) {
           mutableRow.setNullAt(i)
         } else {

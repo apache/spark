@@ -22,12 +22,15 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class EmptyInSuite extends QueryTest with SharedSparkSession {
+class EmptyInSuite extends QueryTest
+with SharedSparkSession {
   import testImplicits._
 
   val row = identity[(java.lang.Integer, java.lang.Double)](_)
 
-  lazy val t = Seq(row((1, 1.0)), row((null, 2.0))).toDF("a", "b")
+  lazy val t = Seq(
+    row((1, 1.0)),
+    row((null, 2.0))).toDF("a", "b")
 
   test("IN with empty list") {
     // This test has to be written in scala to construct a literal empty IN list, since that
@@ -49,7 +52,9 @@ class EmptyInSuite extends QueryTest with SharedSparkSession {
           val expectedResultForNullInEmpty =
             if (legacyNullInBehavior) null else false
           val df = t.select(col("a"), col("a").isin(emptylist: _*))
-          checkAnswer(df, Row(1, false) :: Row(null, expectedResultForNullInEmpty) :: Nil)
+          checkAnswer(
+            df,
+            Row(1, false) :: Row(null, expectedResultForNullInEmpty) :: Nil)
         }
       }
     }
@@ -67,7 +72,9 @@ class EmptyInSuite extends QueryTest with SharedSparkSession {
         val df = t.select(col("a"), col("a").isin(emptylist: _*))
         val expectedResultForNullInEmpty =
           if (legacyNullInBehavior) null else false
-        checkAnswer(df, Row(1, false) :: Row(null, expectedResultForNullInEmpty) :: Nil)
+        checkAnswer(
+          df,
+          Row(1, false) :: Row(null, expectedResultForNullInEmpty) :: Nil)
       }
     }
   }

@@ -31,8 +31,8 @@ import org.apache.spark.sql.types._
 
 /**
  * A helper trait used to create specialized setter and getter for types supported by
- * [[org.apache.spark.sql.execution.UnsafeFixedWidthAggregationMap]]'s buffer. (see
- * UnsafeFixedWidthAggregationMap.supportsAggregationBufferSchema).
+ * [[org.apache.spark.sql.execution.UnsafeFixedWidthAggregationMap]]'s buffer.
+ * (see UnsafeFixedWidthAggregationMap.supportsAggregationBufferSchema).
  */
 sealed trait BufferSetterGetterUtils {
 
@@ -237,8 +237,7 @@ private[aggregate] class MutableAggregationBufferImpl(
     toScalaConverters: Array[Any => Any],
     bufferOffset: Int,
     var underlyingBuffer: InternalRow)
-    extends MutableAggregationBuffer
-    with BufferSetterGetterUtils {
+  extends MutableAggregationBuffer with BufferSetterGetterUtils {
 
   private[this] val offsets: Array[Int] = {
     val newOffsets = new Array[Int](length)
@@ -300,8 +299,7 @@ private[aggregate] class InputAggregationBuffer(
     toScalaConverters: Array[Any => Any],
     bufferOffset: Int,
     var underlyingInputBuffer: InternalRow)
-    extends Row
-    with BufferSetterGetterUtils {
+  extends Row with BufferSetterGetterUtils {
 
   private[this] val offsets: Array[Int] = {
     val newOffsets = new Array[Int](length)
@@ -345,8 +343,8 @@ private[aggregate] class InputAggregationBuffer(
 }
 
 /**
- * The internal wrapper used to hook a [[UserDefinedAggregateFunction]] `udaf` in the internal
- * aggregation code path.
+ * The internal wrapper used to hook a [[UserDefinedAggregateFunction]] `udaf` in the
+ * internal aggregation code path.
  */
 case class ScalaUDAF(
     children: Seq[Expression],
@@ -354,14 +352,13 @@ case class ScalaUDAF(
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0,
     udafName: Option[String] = None)
-    extends ImperativeAggregate
-    with NonSQLExpression
-    with Logging
-    with ImplicitCastInputTypes
-    with UserDefinedExpression {
+  extends ImperativeAggregate
+  with NonSQLExpression
+  with Logging
+  with ImplicitCastInputTypes
+  with UserDefinedExpression {
 
-  override def withNewMutableAggBufferOffset(
-      newMutableAggBufferOffset: Int): ImperativeAggregate =
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
@@ -385,15 +382,17 @@ case class ScalaUDAF(
     aggBufferAttributes.map(_.newInstance())
 
   private[this] lazy val childrenSchema: StructType = {
-    val inputFields = children.zipWithIndex.map { case (child, index) =>
-      StructField(s"input$index", child.dataType, child.nullable, Metadata.empty)
+    val inputFields = children.zipWithIndex.map {
+      case (child, index) =>
+        StructField(s"input$index", child.dataType, child.nullable, Metadata.empty)
     }
     StructType(inputFields)
   }
 
   private lazy val inputProjection = {
     val inputAttributes = toAttributes(childrenSchema)
-    log.debug(s"Creating MutableProj: $children, inputSchema: $inputAttributes.")
+    log.debug(
+      s"Creating MutableProj: $children, inputSchema: $inputAttributes.")
     MutableProjection.create(children, inputAttributes)
   }
 
@@ -495,11 +494,11 @@ case class ScalaAggregator[IN, BUF, OUT](
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0,
     aggregatorName: Option[String] = None)
-    extends TypedImperativeAggregate[BUF]
-    with NonSQLExpression
-    with UserDefinedExpression
-    with ImplicitCastInputTypes
-    with Logging {
+  extends TypedImperativeAggregate[BUF]
+  with NonSQLExpression
+  with UserDefinedExpression
+  with ImplicitCastInputTypes
+  with Logging {
 
   // input and buffer encoders are resolved by ResolveEncodersInScalaAgg
   @transient private[this] lazy val inputDeserializer = inputEncoder.createDeserializer()
@@ -514,8 +513,7 @@ case class ScalaAggregator[IN, BUF, OUT](
 
   @transient override lazy val deterministic: Boolean = isDeterministic
 
-  def withNewMutableAggBufferOffset(
-      newMutableAggBufferOffset: Int): ScalaAggregator[IN, BUF, OUT] =
+  def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ScalaAggregator[IN, BUF, OUT] =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
   def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ScalaAggregator[IN, BUF, OUT] =
@@ -535,8 +533,7 @@ case class ScalaAggregator[IN, BUF, OUT](
     if (outputEncoder.isSerializedAsStructForTopLevel) row else row.get(0, dataType)
   }
 
-  @transient private[this] lazy val bufferRow = new UnsafeRow(
-    bufferEncoder.namedExpressions.length)
+  @transient private[this] lazy val bufferRow = new UnsafeRow(bufferEncoder.namedExpressions.length)
 
   def serialize(agg: BUF): Array[Byte] =
     bufferSerializer(agg).asInstanceOf[UnsafeRow].getBytes()
@@ -578,11 +575,11 @@ object ScalaAggregator {
 object ResolveEncodersInScalaAgg extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
     case p if !p.resolved => p
-    case p =>
-      p.transformExpressionsUp { case agg: ScalaAggregator[_, _, _] =>
+    case p => p.transformExpressionsUp {
+      case agg: ScalaAggregator[_, _, _] =>
         agg.copy(
           inputEncoder = agg.inputEncoder.resolveAndBind(),
           bufferEncoder = agg.bufferEncoder.resolveAndBind())
-      }
+    }
   }
 }

@@ -24,12 +24,10 @@ class SQLConfGetterSuite extends SparkFunSuite with LocalSparkSession {
 
   test("SPARK-25076: SQLConf should not be retrieved from a stopped SparkSession") {
     spark = SparkSession.builder().master("local").getOrCreate()
-    assert(
-      SQLConf.get eq spark.sessionState.conf,
+    assert(SQLConf.get eq spark.sessionState.conf,
       "SQLConf.get should get the conf from the active spark session.")
     spark.stop()
-    assert(
-      SQLConf.get eq SQLConf.getFallbackConf,
+    assert(SQLConf.get eq SQLConf.getFallbackConf,
       "SQLConf.get should not get conf from a stopped spark session.")
   }
 }

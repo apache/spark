@@ -31,7 +31,7 @@ import org.apache.spark.util.Utils
 class RowQueueSuite extends SparkFunSuite with EncryptionFunSuite {
 
   test("in-memory queue") {
-    val page = MemoryBlock.fromLongArray(new Array[Long](1 << 10))
+    val page = MemoryBlock.fromLongArray(new Array[Long](1<<10))
     val queue = new InMemoryRowQueue(page, 1) {
       override def close(): Unit = {}
     }
@@ -100,14 +100,14 @@ class RowQueueSuite extends SparkFunSuite with EncryptionFunSuite {
       if (isOffHeap) conf.set(MEMORY_OFFHEAP_SIZE, 1000L)
       val serManager = createSerializerManager(conf)
       val mem = new TestMemoryManager(conf)
-      mem.limit(4 << 10)
+      mem.limit(4<<10)
       val taskM = new TaskMemoryManager(mem, 0)
       val queue = HybridRowQueue(taskM, Utils.createTempDir().getCanonicalFile, 1, serManager)
       val mode = if (isOffHeap) MemoryMode.OFF_HEAP else MemoryMode.ON_HEAP
       assert(queue.getMode === mode)
       val row = new UnsafeRow(1)
       row.pointTo(new Array[Byte](16), 16)
-      val n = (4 << 10) / 16 * 3
+      val n = (4<<10) / 16 * 3
       var i = 0
       while (i < n) {
         row.setLong(0, i)
@@ -115,7 +115,7 @@ class RowQueueSuite extends SparkFunSuite with EncryptionFunSuite {
         i += 1
       }
       assert(queue.numQueues() > 1, "should have more than one queue")
-      queue.spill(1 << 20, null)
+      queue.spill(1<<20, null)
       i = 0
       while (i < n) {
         val row = queue.remove()
@@ -132,7 +132,7 @@ class RowQueueSuite extends SparkFunSuite with EncryptionFunSuite {
         i += 1
       }
       assert(queue.numQueues() > 1, "should have more than one queue")
-      queue.spill(1 << 20, null)
+      queue.spill(1<<20, null)
       assert(queue.numQueues() > 1, "should have more than one queue")
       i = 0
       while (i < n) {

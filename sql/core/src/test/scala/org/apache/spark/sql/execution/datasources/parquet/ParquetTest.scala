@@ -59,42 +59,39 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
   /**
    * Reads the parquet file at `path`
    */
-  protected def readParquetFile(path: String, testVectorized: Boolean = true)(
-      f: DataFrame => Unit) = readFile(path, testVectorized)(f)
+  protected def readParquetFile(path: String, testVectorized: Boolean = true)
+      (f: DataFrame => Unit) = readFile(path, testVectorized)(f)
 
   /**
    * Writes `data` to a Parquet file, which is then passed to `f` and will be deleted after `f`
    * returns.
    */
-  protected def withParquetFile[T <: Product: ClassTag: TypeTag](data: Seq[T])(
-      f: String => Unit): Unit = withDataSourceFile(data)(f)
+  protected def withParquetFile[T <: Product: ClassTag: TypeTag]
+      (data: Seq[T])
+      (f: String => Unit): Unit = withDataSourceFile(data)(f)
 
   /**
-   * Writes `data` to a Parquet file and reads it back as a [[DataFrame]], which is then passed to
-   * `f`. The Parquet file will be deleted after `f` returns.
+   * Writes `data` to a Parquet file and reads it back as a [[DataFrame]],
+   * which is then passed to `f`. The Parquet file will be deleted after `f` returns.
    */
-  protected def withParquetDataFrame[T <: Product: ClassTag: TypeTag](
-      data: Seq[T],
-      testVectorized: Boolean = true)(f: DataFrame => Unit): Unit =
-    withDataSourceDataFrame(data, testVectorized)(f)
+  protected def withParquetDataFrame[T <: Product: ClassTag: TypeTag]
+      (data: Seq[T], testVectorized: Boolean = true)
+      (f: DataFrame => Unit): Unit = withDataSourceDataFrame(data, testVectorized)(f)
 
   /**
    * Writes `data` to a Parquet file, reads it back as a [[DataFrame]] and registers it as a
    * temporary table named `tableName`, then call `f`. The temporary table together with the
    * Parquet file will be dropped/deleted after `f` returns.
    */
-  protected def withParquetTable[T <: Product: ClassTag: TypeTag](
-      data: Seq[T],
-      tableName: String,
-      testVectorized: Boolean = true)(f: => Unit): Unit =
-    withDataSourceTable(data, tableName, testVectorized)(f)
-
-  protected def makeParquetFile[T <: Product: ClassTag: TypeTag](data: Seq[T], path: File): Unit =
-    makeDataSourceFile(data, path)
+  protected def withParquetTable[T <: Product: ClassTag: TypeTag]
+      (data: Seq[T], tableName: String, testVectorized: Boolean = true)
+      (f: => Unit): Unit = withDataSourceTable(data, tableName, testVectorized)(f)
 
   protected def makeParquetFile[T <: Product: ClassTag: TypeTag](
-      df: DataFrame,
-      path: File): Unit = makeDataSourceFile(df, path)
+      data: Seq[T], path: File): Unit = makeDataSourceFile(data, path)
+
+  protected def makeParquetFile[T <: Product: ClassTag: TypeTag](
+      df: DataFrame, path: File): Unit = makeDataSourceFile(df, path)
 
   protected def makePartitionDir(
       basePath: File,
@@ -114,9 +111,7 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
   }
 
   protected def writeMetadata(
-      schema: StructType,
-      path: Path,
-      configuration: Configuration): Unit = {
+      schema: StructType, path: Path, configuration: Configuration): Unit = {
     val parquetSchema = new SparkToParquetSchemaConverter().convert(schema)
     val extraMetadata = Map(ParquetReadSupport.SPARK_METADATA_KEY -> schema.json).asJava
     val createdBy = s"Apache Spark ${org.apache.spark.SPARK_VERSION}"
@@ -127,13 +122,11 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
   }
 
   /**
-   * This is an overloaded version of `writeMetadata` above to allow writing customized Parquet
-   * schema.
+   * This is an overloaded version of `writeMetadata` above to allow writing customized
+   * Parquet schema.
    */
   protected def writeMetadata(
-      parquetSchema: MessageType,
-      path: Path,
-      configuration: Configuration,
+      parquetSchema: MessageType, path: Path, configuration: Configuration,
       extraMetadata: Map[String, String] = Map.empty[String, String]): Unit = {
     val extraMetadataAsJava = extraMetadata.asJava
     val createdBy = s"Apache Spark ${org.apache.spark.SPARK_VERSION}"
@@ -144,20 +137,15 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
   }
 
   protected def readAllFootersWithoutSummaryFiles(
-      path: Path,
-      configuration: Configuration): Seq[Footer] = {
+      path: Path, configuration: Configuration): Seq[Footer] = {
     val fs = path.getFileSystem(configuration)
-    ParquetFileReader
-      .readAllFootersInParallel(configuration, fs.getFileStatus(path))
-      .asScala
-      .toSeq
+    ParquetFileReader.readAllFootersInParallel(configuration, fs.getFileStatus(path)).asScala.toSeq
   }
 
   protected def readFooter(path: Path, configuration: Configuration): ParquetMetadata = {
     ParquetFooterReader.readFooter(
       HadoopInputFile.fromPath(
-        new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE),
-        configuration),
+        new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE), configuration),
       ParquetMetadataConverter.NO_FILTER)
   }
 
@@ -198,13 +186,11 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
 
   def withAllParquetWriters(code: => Unit): Unit = {
     // Parquet version 1
-    withSQLConf(
-      ParquetOutputFormat.WRITER_VERSION ->
-        ParquetProperties.WriterVersion.PARQUET_1_0.toString)(code)
+    withSQLConf(ParquetOutputFormat.WRITER_VERSION ->
+      ParquetProperties.WriterVersion.PARQUET_1_0.toString)(code)
     // Parquet version 2
-    withSQLConf(
-      ParquetOutputFormat.WRITER_VERSION ->
-        ParquetProperties.WriterVersion.PARQUET_2_0.toString)(code)
+    withSQLConf(ParquetOutputFormat.WRITER_VERSION ->
+      ParquetProperties.WriterVersion.PARQUET_2_0.toString)(code)
   }
 
   def getMetaData(dir: java.io.File): Map[String, String] = {
@@ -213,12 +199,11 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
     val hadoopInputFile = HadoopInputFile.fromPath(new Path(file), conf)
     val parquetReadOptions = HadoopReadOptions.builder(conf).build()
     val m = ParquetFileReader.open(hadoopInputFile, parquetReadOptions)
-    val metadata =
-      try {
-        m.getFileMetaData.getKeyValueMetaData
-      } finally {
-        m.close()
-      }
+    val metadata = try {
+      m.getFileMetaData.getKeyValueMetaData
+    } finally {
+      m.close()
+    }
     metadata.asScala.toMap
   }
 }

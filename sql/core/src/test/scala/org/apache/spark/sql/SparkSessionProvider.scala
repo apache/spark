@@ -18,11 +18,11 @@
 package org.apache.spark.sql
 
 /**
- * A common trait for test suites that require a [[SparkSession]]. It abstracts over the different
- * session types supported by Spark tests: Spark classic sessions, Hive sessions (backed by
- * [[org.apache.spark.sql.hive.test.TestHiveContext]]), and Spark Connect sessions. Concrete
- * implementations are responsible for managing the session lifecycle (creation, configuration,
- * and teardown).
+ * A common trait for test suites that require a [[SparkSession]]. It abstracts over the
+ * different session types supported by Spark tests: Spark classic sessions, Hive sessions
+ * (backed by [[org.apache.spark.sql.hive.test.TestHiveContext]]), and Spark Connect sessions.
+ * Concrete implementations are responsible for managing the session lifecycle (creation,
+ * configuration, and teardown).
  */
 trait SparkSessionProvider {
   protected def spark: SparkSession

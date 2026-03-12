@@ -18,7 +18,20 @@
 package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.analysis.{AnsiGetDateFieldOperationsTypeCoercion, AnsiStringPromotionTypeCoercion, AnsiTypeCoercion, BooleanEqualityTypeCoercion, CollationTypeCoercion, DecimalPrecisionTypeCoercion, DivisionTypeCoercion, IntegralDivisionTypeCoercion, StackTypeCoercion, StringLiteralTypeCoercion, StringPromotionTypeCoercion, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.{
+  AnsiGetDateFieldOperationsTypeCoercion,
+  AnsiStringPromotionTypeCoercion,
+  AnsiTypeCoercion,
+  BooleanEqualityTypeCoercion,
+  CollationTypeCoercion,
+  DecimalPrecisionTypeCoercion,
+  DivisionTypeCoercion,
+  IntegralDivisionTypeCoercion,
+  StackTypeCoercion,
+  StringLiteralTypeCoercion,
+  StringPromotionTypeCoercion,
+  TypeCoercion
+}
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 
@@ -34,17 +47,17 @@ trait CoercesExpressionTypes extends SQLConfHelper {
     CoercesExpressionTypes.DEFAULT_NON_ANSI_TYPE_COERCION_TRANSFORMATIONS
 
   /**
-   * Coerces the expression types by applying necessary transformations on the expression and its
-   * children. Because fixed-point sometimes resolves type coercion in multiple passes, we apply
-   * each provided transformation twice, cyclically, to ensure that types are resolved. For
+   * Coerces the expression types by applying necessary transformations on the expression
+   * and its children. Because fixed-point sometimes resolves type coercion in multiple passes, we
+   * apply each provided transformation twice, cyclically, to ensure that types are resolved. For
    * example in a query like:
    *
-   * {{{SELECT '1' + '1'}}}
+   * {{{ SELECT '1' + '1' }}}
    *
    * fixed-point analyzer requires two passes to resolve types.
    *
-   * In the end, we apply [[DefaultCollationTypeCoercion]]. See [[DefaultCollationTypeCoercion]]
-   * doc for more info.
+   * In the end, we apply [[DefaultCollationTypeCoercion]].
+   * See [[DefaultCollationTypeCoercion]] doc for more info.
    *
    * Additionally, we copy the tags and origin in case the call to this method didn't come from
    * [[ExpressionResolver]], where they are copied generically.
@@ -55,7 +68,8 @@ trait CoercesExpressionTypes extends SQLConfHelper {
     withOrigin(expression.origin) {
       val coercedExpressionOnce = applyTypeCoercion(
         expression = expression,
-        expressionTreeTraversal = expressionTreeTraversal)
+        expressionTreeTraversal = expressionTreeTraversal
+      )
 
       // If the expression isn't changed by the first iteration of type coercion,
       // second iteration won't be effective either.
@@ -67,7 +81,8 @@ trait CoercesExpressionTypes extends SQLConfHelper {
         // same node in order to ensure that types are resolved.
         applyTypeCoercion(
           expression = coercedExpressionOnce,
-          expressionTreeTraversal = expressionTreeTraversal)
+          expressionTreeTraversal = expressionTreeTraversal
+        )
       }
 
       val coercionResult = expressionTreeTraversal.defaultCollation match {
@@ -96,7 +111,8 @@ trait CoercesExpressionTypes extends SQLConfHelper {
 
     val withTypeCoercion = runCoercionTransformations(
       expression = expression,
-      ansiMode = expressionTreeTraversal.ansiMode)
+      ansiMode = expressionTreeTraversal.ansiMode
+    )
 
     val newChildren = withTypeCoercion.children.zip(oldChildren).map {
       case (newChild: Cast, oldChild) if !newChild.eq(oldChild) =>
@@ -108,17 +124,15 @@ trait CoercesExpressionTypes extends SQLConfHelper {
     withTypeCoercion.withNewChildren(newChildren)
   }
 
-  private def runCoercionTransformations(
-      expression: Expression,
-      ansiMode: Boolean): Expression = {
+  private def runCoercionTransformations(expression: Expression, ansiMode: Boolean): Expression = {
     val transformations = if (ansiMode) {
       ansiTransformations
     } else {
       nonAnsiTransformations
     }
 
-    transformations.foldLeft(expression) { case (intermediateResult, transformation) =>
-      transformation.apply(intermediateResult)
+    transformations.foldLeft(expression) {
+      case (intermediateResult, transformation) => transformation.apply(intermediateResult)
     }
   }
 }
@@ -144,7 +158,8 @@ object CoercesExpressionTypes {
     AnsiTypeCoercion.ImplicitTypeCoercion.apply,
     AnsiTypeCoercion.AnsiDateTimeOperationsTypeCoercion.apply,
     AnsiTypeCoercion.WindowFrameTypeCoercion.apply,
-    AnsiGetDateFieldOperationsTypeCoercion.apply)
+    AnsiGetDateFieldOperationsTypeCoercion.apply
+  )
 
   // Ordering in the list of type coercions should be in sync with the list in [[TypeCoercion]].
   val DEFAULT_NON_ANSI_TYPE_COERCION_TRANSFORMATIONS: Transformations = Seq(
@@ -165,5 +180,6 @@ object CoercesExpressionTypes {
     TypeCoercion.ImplicitTypeCoercion.apply,
     TypeCoercion.DateTimeOperationsTypeCoercion.apply,
     TypeCoercion.WindowFrameTypeCoercion.apply,
-    StringLiteralTypeCoercion.apply)
+    StringLiteralTypeCoercion.apply
+  )
 }

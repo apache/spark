@@ -37,9 +37,7 @@ case class ShowFunctionsExec(
     namespace: Seq[String],
     userScope: Boolean,
     systemScope: Boolean,
-    pattern: Option[String])
-    extends V2CommandExec
-    with LeafExecNode {
+    pattern: Option[String]) extends V2CommandExec with LeafExecNode {
 
   private def applyPattern(names: Seq[String]): Seq[String] = {
     StringUtils.filterPattern(names, pattern.getOrElse("*"))
@@ -50,9 +48,8 @@ case class ShowFunctionsExec(
     val systemFunctions = if (systemScope) {
       // All built-in functions, and operators such as "<>", "||"
       val builtinFunctions = FunctionRegistry.functionSet ++ TableFunctionRegistry.functionSet
-      applyPattern(
-        builtinFunctions.map(_.unquotedString).toSeq ++
-          FunctionRegistry.builtinOperators.keys.toSeq)
+      applyPattern(builtinFunctions.map(_.unquotedString).toSeq ++
+        FunctionRegistry.builtinOperators.keys.toSeq)
     } else Seq.empty
     val userFunctions = if (userScope) {
       // List all temporary functions in the session catalog

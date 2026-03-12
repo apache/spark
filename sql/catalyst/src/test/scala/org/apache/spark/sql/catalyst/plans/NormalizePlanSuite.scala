@@ -51,13 +51,9 @@ class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
 
   test("Normalize ordering in a project list of an inner Project under Aggregate") {
     val baselinePlan =
-      LocalRelation($"col1".int, $"col2".string)
-        .select($"col1", $"col2")
-        .groupBy($"col1")($"col1")
+      LocalRelation($"col1".int, $"col2".string).select($"col1", $"col2").groupBy($"col1")($"col1")
     val testPlan =
-      LocalRelation($"col1".int, $"col2".string)
-        .select($"col2", $"col1")
-        .groupBy($"col1")($"col1")
+      LocalRelation($"col1".int, $"col2".string).select($"col2", $"col1").groupBy($"col1")($"col1")
 
     assert(baselinePlan != testPlan)
     assert(NormalizePlan(baselinePlan) == NormalizePlan(testPlan))
@@ -104,7 +100,8 @@ class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
   }
 
   test(
-    "Normalize ordering in an aggregate list of an inner Aggregate under Project Sort and Filter") {
+    "Normalize ordering in an aggregate list of an inner Aggregate under Project Sort and Filter"
+  ) {
     val baselinePlan = LocalRelation($"col1".int, $"col2".string)
       .groupBy($"col1", $"col2")($"col1", $"col2")
       .where($"col1" === 1)
@@ -142,7 +139,7 @@ class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
 
     // Before applying timezone, no timezone is set.
     testPlan.expressions.foreach {
-      case _ @AssertTrue(firstCast: Cast, _, _ @If(secondCast: Cast, _, _)) =>
+      case _ @ AssertTrue(firstCast: Cast, _, _ @ If(secondCast: Cast, _, _)) =>
         assert(firstCast.timeZoneId.isEmpty)
         assert(secondCast.timeZoneId.isEmpty)
       case _ =>
@@ -153,7 +150,7 @@ class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
 
     // After applying timezone, only the second cast gets timezone.
     resolvedTestPlan.expressions.foreach {
-      case _ @AssertTrue(firstCast: Cast, _, _ @If(secondCast: Cast, _, _)) =>
+      case _ @ AssertTrue(firstCast: Cast, _, _ @ If(secondCast: Cast, _, _)) =>
         assert(firstCast.timeZoneId.isEmpty)
         assert(secondCast.timeZoneId.isDefined)
       case _ =>
@@ -202,9 +199,17 @@ class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
     val col2 = col1.newInstance()
 
     // Create two UnionLoopRefs with different loopIds
-    val baselineLoopRef = UnionLoopRef(loopId = 100L, output = Seq(col2), accumulated = false)
+    val baselineLoopRef = UnionLoopRef(
+      loopId = 100L,
+      output = Seq(col2),
+      accumulated = false
+    )
 
-    val testLoopRef = UnionLoopRef(loopId = 200L, output = Seq(col2), accumulated = false)
+    val testLoopRef = UnionLoopRef(
+      loopId = 200L,
+      output = Seq(col2),
+      accumulated = false
+    )
 
     // Before normalization, plans are different
     assert(baselineLoopRef != testLoopRef)
@@ -223,13 +228,15 @@ class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
       id = 100L,
       anchor = anchor,
       recursion = UnionLoopRef(loopId = 100L, output = Seq(col2), accumulated = false),
-      outputAttrIds = Seq(ExprId(1), ExprId(2)))
+      outputAttrIds = Seq(ExprId(1), ExprId(2))
+    )
 
     val unionLoop2 = UnionLoop(
       id = 200L,
       anchor = anchor,
       recursion = UnionLoopRef(loopId = 200L, output = Seq(col2), accumulated = false),
-      outputAttrIds = Seq(ExprId(1), ExprId(2)))
+      outputAttrIds = Seq(ExprId(1), ExprId(2))
+    )
 
     // Before normalization, plans are different
     assert(unionLoop1 != unionLoop2)
@@ -250,16 +257,20 @@ class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
         id = 100L,
         anchor = anchor,
         recursion = UnionLoopRef(loopId = 100L, output = Seq(col2), accumulated = false),
-        outputAttrIds = Seq(ExprId(1), ExprId(2))),
-      id = 100L)
+        outputAttrIds = Seq(ExprId(1), ExprId(2))
+      ),
+      id = 100L
+    )
 
     val recursiveCTE2 = CTERelationDef(
       child = UnionLoop(
         id = 200L,
         anchor = anchor,
         recursion = UnionLoopRef(loopId = 200L, output = Seq(col2), accumulated = false),
-        outputAttrIds = Seq(ExprId(1), ExprId(2))),
-      id = 200L)
+        outputAttrIds = Seq(ExprId(1), ExprId(2))
+      ),
+      id = 200L
+    )
 
     val normalizedRecursiveCTE = CTERelationDef(
       child = UnionLoop(
@@ -268,9 +279,12 @@ class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
         recursion = UnionLoopRef(
           loopId = 0L,
           output = Seq(col2.withExprId(ExprId(0))),
-          accumulated = false),
-        outputAttrIds = Seq(ExprId(0), ExprId(0))),
-      id = 0L)
+          accumulated = false
+        ),
+        outputAttrIds = Seq(ExprId(0), ExprId(0))
+      ),
+      id = 0L
+    )
 
     // Before normalization, plans are different
     assert(recursiveCTE1 != recursiveCTE2)

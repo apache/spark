@@ -26,15 +26,12 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 /**
- * Converts a binary column of Avro format into its corresponding Catalyst value. This is a thin
- * wrapper over the [[AvroDataToCatalyst]] class to create a SQL function.
+ * Converts a binary column of Avro format into its corresponding Catalyst value.
+ * This is a thin wrapper over the [[AvroDataToCatalyst]] class to create a SQL function.
  *
- * @param child
- *   the Catalyst binary input column.
- * @param jsonFormatSchema
- *   the Avro schema in JSON string format.
- * @param options
- *   the options to use when performing the conversion.
+ * @param child the Catalyst binary input column.
+ * @param jsonFormatSchema the Avro schema in JSON string format.
+ * @param options the options to use when performing the conversion.
  *
  * @since 4.0.0
  */
@@ -55,11 +52,11 @@ import org.apache.spark.util.Utils
     set via the corresponding option.
   """,
   group = "avro_funcs",
-  since = "4.0.0")
+  since = "4.0.0"
+)
 // scalastyle:on line.size.limit
 case class FromAvro(child: Expression, jsonFormatSchema: Expression, options: Expression)
-    extends TernaryExpression
-    with RuntimeReplaceable {
+  extends TernaryExpression with RuntimeReplaceable {
   override def first: Expression = child
   override def second: Expression = jsonFormatSchema
   override def third: Expression = options
@@ -68,15 +65,15 @@ case class FromAvro(child: Expression, jsonFormatSchema: Expression, options: Ex
     this(child, jsonFormatSchema, Literal.create(null))
 
   override def withNewChildrenInternal(
-      newFirst: Expression,
-      newSecond: Expression,
-      newThird: Expression): Expression = {
+      newFirst: Expression, newSecond: Expression, newThird: Expression): Expression = {
     copy(child = newFirst, jsonFormatSchema = newSecond, options = newThird)
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val schemaCheck = jsonFormatSchema.dataType match {
-      case _: StringType | _: NullType if jsonFormatSchema.foldable =>
+      case _: StringType |
+           _: NullType
+        if jsonFormatSchema.foldable =>
         None
       case _ =>
         Some(TypeCheckResult.TypeCheckFailure(
@@ -85,15 +82,19 @@ case class FromAvro(child: Expression, jsonFormatSchema: Expression, options: Ex
             "from AVRO format"))
     }
     val optionsCheck = options.dataType match {
-      case MapType(StringType, StringType, _) | MapType(NullType, NullType, _) | _: NullType
-          if options.foldable =>
+      case MapType(StringType, StringType, _) |
+           MapType(NullType, NullType, _) |
+           _: NullType
+        if options.foldable =>
         None
       case _ =>
         Some(TypeCheckResult.TypeCheckFailure(
           "The third argument of the FROM_AVRO SQL function must be a constant map of strings to " +
             "strings containing the options to use for converting the value from AVRO format"))
     }
-    schemaCheck.getOrElse(optionsCheck.getOrElse(TypeCheckResult.TypeCheckSuccess))
+    schemaCheck.getOrElse(
+      optionsCheck.getOrElse(
+        TypeCheckResult.TypeCheckSuccess))
   }
 
   override lazy val replacement: Expression = {
@@ -111,14 +112,12 @@ case class FromAvro(child: Expression, jsonFormatSchema: Expression, options: Ex
       case _ =>
         Map.empty
     }
-    val constructor =
-      try {
-        Utils.classForName("org.apache.spark.sql.avro.AvroDataToCatalyst").getConstructors().head
-      } catch {
-        case _: java.lang.ClassNotFoundException =>
-          throw QueryCompilationErrors.avroNotLoadedSqlFunctionsUnusable(functionName =
-            "FROM_AVRO")
-      }
+    val constructor = try {
+      Utils.classForName("org.apache.spark.sql.avro.AvroDataToCatalyst").getConstructors().head
+    } catch {
+      case _: java.lang.ClassNotFoundException =>
+        throw QueryCompilationErrors.avroNotLoadedSqlFunctionsUnusable(functionName = "FROM_AVRO")
+    }
     val expr = constructor.newInstance(child, schemaValue, optionsValue)
     expr.asInstanceOf[Expression]
   }
@@ -128,13 +127,11 @@ case class FromAvro(child: Expression, jsonFormatSchema: Expression, options: Ex
 }
 
 /**
- * Converts a Catalyst binary input value into its corresponding AvroAvro format result. This is a
- * thin wrapper over the [[CatalystDataToAvro]] class to create a SQL function.
+ * Converts a Catalyst binary input value into its corresponding AvroAvro format result.
+ * This is a thin wrapper over the [[CatalystDataToAvro]] class to create a SQL function.
  *
- * @param child
- *   the Catalyst binary input column.
- * @param jsonFormatSchema
- *   the Avro schema in JSON string format.
+ * @param child the Catalyst binary input column.
+ * @param jsonFormatSchema the Avro schema in JSON string format.
  *
  * @since 4.0.0
  */
@@ -152,11 +149,11 @@ case class FromAvro(child: Expression, jsonFormatSchema: Expression, options: Ex
        [true]
   """,
   group = "avro_funcs",
-  since = "4.0.0")
+  since = "4.0.0"
+)
 // scalastyle:on line.size.limit
 case class ToAvro(child: Expression, jsonFormatSchema: Expression)
-    extends BinaryExpression
-    with RuntimeReplaceable {
+  extends BinaryExpression with RuntimeReplaceable {
 
   def this(child: Expression) = this(child, Literal(null))
 
@@ -190,13 +187,12 @@ case class ToAvro(child: Expression, jsonFormatSchema: Expression)
       case s: UTF8String =>
         Some(s.toString)
     }
-    val constructor =
-      try {
-        Utils.classForName("org.apache.spark.sql.avro.CatalystDataToAvro").getConstructors().head
-      } catch {
-        case _: java.lang.ClassNotFoundException =>
-          throw QueryCompilationErrors.avroNotLoadedSqlFunctionsUnusable(functionName = "TO_AVRO")
-      }
+    val constructor = try {
+      Utils.classForName("org.apache.spark.sql.avro.CatalystDataToAvro").getConstructors().head
+    } catch {
+      case _: java.lang.ClassNotFoundException =>
+        throw QueryCompilationErrors.avroNotLoadedSqlFunctionsUnusable(functionName = "TO_AVRO")
+    }
     val expr = constructor.newInstance(child, schemaValue)
     expr.asInstanceOf[Expression]
   }
@@ -206,13 +202,11 @@ case class ToAvro(child: Expression, jsonFormatSchema: Expression)
 }
 
 /**
- * Returns schema in the DDL format of the avro schema in JSON string format. This is a thin
- * wrapper over the [[SchemaOfAvro]] class to create a SQL function.
+ * Returns schema in the DDL format of the avro schema in JSON string format.
+ * This is a thin wrapper over the [[SchemaOfAvro]] class to create a SQL function.
  *
- * @param jsonFormatSchema
- *   the Avro schema in JSON string format.
- * @param options
- *   the options to use when performing the conversion.
+ * @param jsonFormatSchema the Avro schema in JSON string format.
+ * @param options the options to use when performing the conversion.
  *
  * @since 4.0.0
  */
@@ -227,18 +221,17 @@ case class ToAvro(child: Expression, jsonFormatSchema: Expression)
        STRUCT<u: STRUCT<member0: INT, member1: STRING> NOT NULL>
   """,
   group = "avro_funcs",
-  since = "4.0.0")
+  since = "4.0.0"
+)
 // scalastyle:on line.size.limit
 case class SchemaOfAvro(jsonFormatSchema: Expression, options: Expression)
-    extends BinaryExpression
-    with RuntimeReplaceable {
+  extends BinaryExpression with RuntimeReplaceable {
 
   override def left: Expression = jsonFormatSchema
   override def right: Expression = options
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): Expression =
+      newLeft: Expression, newRight: Expression): Expression =
     copy(jsonFormatSchema = newLeft, options = newRight)
 
   def this(jsonFormatSchema: Expression) =
@@ -246,7 +239,9 @@ case class SchemaOfAvro(jsonFormatSchema: Expression, options: Expression)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val schemaCheck = jsonFormatSchema.dataType match {
-      case _: StringType | _: NullType if jsonFormatSchema.foldable =>
+      case _: StringType |
+           _: NullType
+        if jsonFormatSchema.foldable =>
         None
       case _ =>
         Some(TypeCheckResult.TypeCheckFailure("The first argument of the SCHEMA_OF_AVRO SQL " +
@@ -254,15 +249,19 @@ case class SchemaOfAvro(jsonFormatSchema: Expression, options: Expression)
           "to use for converting the value from AVRO format"))
     }
     val optionsCheck = options.dataType match {
-      case MapType(StringType, StringType, _) | MapType(NullType, NullType, _) | _: NullType
-          if options.foldable =>
+      case MapType(StringType, StringType, _) |
+           MapType(NullType, NullType, _) |
+           _: NullType
+        if options.foldable =>
         None
       case _ =>
         Some(TypeCheckResult.TypeCheckFailure("The second argument of the SCHEMA_OF_AVRO SQL " +
           "function must be a constant map of strings to strings containing the options to use " +
           "for converting the value from AVRO format"))
     }
-    schemaCheck.getOrElse(optionsCheck.getOrElse(TypeCheckResult.TypeCheckSuccess))
+    schemaCheck.getOrElse(
+      optionsCheck.getOrElse(
+        TypeCheckResult.TypeCheckSuccess))
   }
 
   override lazy val replacement: Expression = {
@@ -280,14 +279,13 @@ case class SchemaOfAvro(jsonFormatSchema: Expression, options: Expression)
       case _ =>
         Map.empty
     }
-    val constructor =
-      try {
-        Utils.classForName("org.apache.spark.sql.avro.SchemaOfAvro").getConstructors.head
-      } catch {
-        case _: java.lang.ClassNotFoundException =>
-          throw QueryCompilationErrors.avroNotLoadedSqlFunctionsUnusable(functionName =
-            "SCHEMA_OF_AVRO")
-      }
+    val constructor = try {
+      Utils.classForName("org.apache.spark.sql.avro.SchemaOfAvro").getConstructors.head
+    } catch {
+      case _: java.lang.ClassNotFoundException =>
+        throw QueryCompilationErrors.avroNotLoadedSqlFunctionsUnusable(
+          functionName = "SCHEMA_OF_AVRO")
+    }
     val expr = constructor.newInstance(schemaValue, optionsValue)
     expr.asInstanceOf[Expression]
   }

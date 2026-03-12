@@ -25,9 +25,9 @@ import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * This base suite contains unified tests for the `ALTER TABLE .. UNSET TBLPROPERTIES` command
- * that check V1 and V2 table catalogs. The tests that cannot run for all supported catalogs are
- * located in more specific test suites:
+ * This base suite contains unified tests for the `ALTER TABLE .. UNSET TBLPROPERTIES`
+ * command that check V1 and V2 table catalogs. The tests that cannot run for all supported
+ * catalogs are located in more specific test suites:
  *
  *   - V2 table catalog tests:
  *     `org.apache.spark.sql.execution.command.v2.AlterTableUnsetTblPropertiesSuite`
@@ -36,7 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
  *     - V1 In-Memory catalog:
  *       `org.apache.spark.sql.execution.command.v1.AlterTableUnsetTblPropertiesSuite`
  *     - V1 Hive External catalog:
- *       `org.apache.spark.sql.hive.execution.command.AlterTableUnsetTblPropertiesSuite`
+ *        `org.apache.spark.sql.hive.execution.command.AlterTableUnsetTblPropertiesSuite`
  */
 trait AlterTableUnsetTblPropertiesSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "ALTER TABLE .. UNSET TBLPROPERTIES"
@@ -54,7 +54,11 @@ trait AlterTableUnsetTblPropertiesSuiteBase extends QueryTest with DDLCommandTes
         },
         condition = "TABLE_OR_VIEW_NOT_FOUND",
         parameters = Map("relationName" -> toSQLId(t)),
-        context = ExpectedContext(fragment = t, start = 12, stop = 11 + t.length))
+        context = ExpectedContext(
+          fragment = t,
+          start = 12,
+          stop = 11 + t.length)
+      )
     }
   }
 
@@ -64,8 +68,7 @@ trait AlterTableUnsetTblPropertiesSuiteBase extends QueryTest with DDLCommandTes
       val tableIdent = TableIdentifier("tbl", Some("ns"), Some(catalog))
       checkTblProps(tableIdent, Map.empty[String, String])
 
-      sql(
-        s"ALTER TABLE $t SET TBLPROPERTIES ('k1' = 'v1', 'k2' = 'v2', 'k3' = 'v3', 'k4' = 'v4')")
+      sql(s"ALTER TABLE $t SET TBLPROPERTIES ('k1' = 'v1', 'k2' = 'v2', 'k3' = 'v3', 'k4' = 'v4')")
       checkTblProps(tableIdent, Map("k1" -> "v1", "k2" -> "v2", "k3" -> "v3", "k4" -> "v4"))
 
       // unset table properties
@@ -103,7 +106,8 @@ trait AlterTableUnsetTblPropertiesSuiteBase extends QueryTest with DDLCommandTes
       PROP_PROVIDER -> "please use the USING clause to specify it",
       PROP_LOCATION -> "please use the LOCATION clause to specify it",
       PROP_OWNER -> "it will be set to the current user",
-      PROP_EXTERNAL -> "please use CREATE EXTERNAL TABLE")
+      PROP_EXTERNAL -> "please use CREATE EXTERNAL TABLE"
+    )
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
       tableLegacyProperties.foreach { key =>
         withNamespaceAndTable("ns", "tbl") { t =>
@@ -116,10 +120,11 @@ trait AlterTableUnsetTblPropertiesSuiteBase extends QueryTest with DDLCommandTes
             parameters = Map(
               "property" -> key,
               "msg" -> keyParameters.getOrElse(
-                key,
-                "please remove it from the TBLPROPERTIES list.")),
-            context =
-              ExpectedContext(fragment = sqlText, start = 0, stop = 36 + t.length + key.length))
+                key, "please remove it from the TBLPROPERTIES list.")),
+            context = ExpectedContext(
+              fragment = sqlText,
+              start = 0,
+              stop = 36 + t.length + key.length))
         }
       }
     }
@@ -134,8 +139,7 @@ trait AlterTableUnsetTblPropertiesSuiteBase extends QueryTest with DDLCommandTes
             assert(originValue != "bar", "reserved properties should not have side effects")
 
             sql(s"ALTER TABLE $t UNSET TBLPROPERTIES ('$key')")
-            assert(
-              getTblPropertyValue(tableIdent, key) == originValue,
+            assert(getTblPropertyValue(tableIdent, key) == originValue,
               "reserved properties should not have side effects")
           }
         }

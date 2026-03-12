@@ -28,6 +28,7 @@ import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.python.PandasGroupUtils._
 import org.apache.spark.sql.types.StructType
 
+
 /**
  * Base class for Python-based FlatMapGroupsIn*Exec.
  */
@@ -69,9 +70,8 @@ trait FlatMapGroupsInBatchExec extends SparkPlan with UnaryExecNode with PythonS
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
     Seq(groupingAttributes.map(SortOrder(_, Ascending)))
 
-  protected def groupedData(
-      iter: Iterator[InternalRow],
-      attrs: Seq[Attribute]): Iterator[Iterator[InternalRow]] =
+  protected def groupedData(iter: Iterator[InternalRow], attrs: Seq[Attribute]):
+      Iterator[Iterator[InternalRow]] =
     groupAndProject(iter, groupingAttributes, child.output, attrs)
       .map { case (_, x) => x }
 
@@ -84,26 +84,23 @@ trait FlatMapGroupsInBatchExec extends SparkPlan with UnaryExecNode with PythonS
     val (dedupAttributes, argOffsets) = resolveArgOffsets(child.output, groupingAttributes)
 
     // Map grouped rows to ArrowPythonRunner results, Only execute if partition is not empty
-    inputRDD.mapPartitionsInternal { iter =>
-      if (iter.isEmpty) iter
-      else {
+    inputRDD.mapPartitionsInternal { iter => if (iter.isEmpty) iter else {
 
-        val data = groupedData(iter, dedupAttributes)
+      val data = groupedData(iter, dedupAttributes)
 
-        val runner = new ArrowPythonRunner(
-          chainedFunc,
-          pythonEvalType,
-          Array(argOffsets),
-          groupedSchema(dedupAttributes),
-          sessionLocalTimeZone,
-          largeVarTypes,
-          pythonRunnerConf,
-          pythonMetrics,
-          jobArtifactUUID,
-          sessionUUID) with GroupedPythonArrowInput
+      val runner = new ArrowPythonRunner(
+        chainedFunc,
+        pythonEvalType,
+        Array(argOffsets),
+        groupedSchema(dedupAttributes),
+        sessionLocalTimeZone,
+        largeVarTypes,
+        pythonRunnerConf,
+        pythonMetrics,
+        jobArtifactUUID,
+        sessionUUID) with GroupedPythonArrowInput
 
-        executePython(data, output, runner)
-      }
-    }
+      executePython(data, output, runner)
+    }}
   }
 }

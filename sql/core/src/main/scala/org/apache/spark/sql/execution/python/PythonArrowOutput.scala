@@ -33,14 +33,14 @@ import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 
 /**
- * A trait that can be mixed-in with [[BasePythonRunner]]. It implements the logic from Python
- * (Arrow) to JVM (output type being deserialized from ColumnarBatch).
+ * A trait that can be mixed-in with [[BasePythonRunner]]. It implements the logic from
+ * Python (Arrow) to JVM (output type being deserialized from ColumnarBatch).
  */
 private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[_, OUT] =>
 
   protected def pythonMetrics: Map[String, SQLMetric]
 
-  protected def handleMetadataAfterExec(stream: DataInputStream): Unit = {}
+  protected def handleMetadataAfterExec(stream: DataInputStream): Unit = { }
 
   protected def deserializeColumnarBatch(batch: ColumnarBatch, schema: StructType): OUT
 
@@ -63,12 +63,11 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
       releasedOrClosed: AtomicBoolean,
       context: TaskContext): Iterator[OUT] = {
 
-    new ReaderIterator(stream, writer, startTime, env, worker, pid, releasedOrClosed, context) {
+    new ReaderIterator(
+      stream, writer, startTime, env, worker, pid, releasedOrClosed, context) {
 
       private val allocator = ArrowUtils.rootAllocator.newChildAllocator(
-        s"stdin reader for $pythonExec",
-        0,
-        Long.MaxValue)
+        s"stdin reader for $pythonExec", 0, Long.MaxValue)
 
       private var reader: ArrowStreamReader = _
       private var root: VectorSchemaRoot = _
@@ -94,8 +93,7 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
 
       protected override def handleTimingData(): Unit = {
         // Get data size from pythonMetrics which is already being tracked
-        totalDataReceived = pythonMetrics
-          .get("pythonDataReceived")
+        totalDataReceived = pythonMetrics.get("pythonDataReceived")
           .map(_.value)
           .getOrElse(0L)
         super.handleTimingData()
@@ -128,14 +126,10 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
 
                 if (arrowMaxRecordsPerOutputBatch > 0) {
                   processor = new SliceRecordsArrowOutputProcessorImpl(
-                    reader,
-                    pythonMetrics,
-                    arrowMaxRecordsPerOutputBatch)
+                    reader, pythonMetrics, arrowMaxRecordsPerOutputBatch)
                 } else if (arrowMaxBytesPerOutputBatch > 0) {
                   processor = new SliceBytesArrowOutputProcessorImpl(
-                    reader,
-                    pythonMetrics,
-                    arrowMaxBytesPerOutputBatch)
+                    reader, pythonMetrics, arrowMaxBytesPerOutputBatch)
                 } else {
                   processor = new ArrowOutputProcessorImpl(reader, pythonMetrics)
                 }
@@ -177,13 +171,9 @@ class ArrowOutputProcessorImpl(reader: ArrowStreamReader, pythonMetrics: Map[Str
     extends ArrowOutputProcessor {
   protected val root = reader.getVectorSchemaRoot()
   protected val schema: StructType = ArrowUtils.fromArrowSchema(root.getSchema())
-  private val vectors: Array[ColumnVector] = root
-    .getFieldVectors()
-    .asScala
-    .map { vector =>
-      new ArrowColumnVector(vector)
-    }
-    .toArray[ColumnVector]
+  private val vectors: Array[ColumnVector] = root.getFieldVectors().asScala.map { vector =>
+    new ArrowColumnVector(vector)
+  }.toArray[ColumnVector]
 
   protected var rowCount = -1
 
@@ -217,7 +207,7 @@ class ArrowOutputProcessorImpl(reader: ArrowStreamReader, pythonMetrics: Map[Str
 abstract class BaseSliceArrowOutputProcessor(
     reader: ArrowStreamReader,
     pythonMetrics: Map[String, SQLMetric])
-    extends ArrowOutputProcessorImpl(reader, pythonMetrics) {
+  extends ArrowOutputProcessorImpl(reader, pythonMetrics) {
 
   protected var currentRowIdx = -1
   protected var prevRoot: VectorSchemaRoot = null
@@ -253,11 +243,9 @@ abstract class BaseSliceArrowOutputProcessor(
   }
 
   protected override def getVectors(root: VectorSchemaRoot): Array[ColumnVector] = {
-    root.getFieldVectors.asScala
-      .map { vector =>
-        new ArrowColumnVector(vector)
-      }
-      .toArray[ColumnVector]
+    root.getFieldVectors.asScala.map { vector =>
+      new ArrowColumnVector(vector)
+    }.toArray[ColumnVector]
   }
 
   override def close(): Unit = {
@@ -273,7 +261,7 @@ class SliceBytesArrowOutputProcessorImpl(
     reader: ArrowStreamReader,
     pythonMetrics: Map[String, SQLMetric],
     arrowMaxBytesPerOutputBatch: Int)
-    extends BaseSliceArrowOutputProcessor(reader, pythonMetrics) {
+  extends BaseSliceArrowOutputProcessor(reader, pythonMetrics) {
 
   protected override def getRoot: VectorSchemaRoot = {
     if (getBatchBytes(root) < arrowMaxBytesPerOutputBatch) {
@@ -322,7 +310,7 @@ class SliceRecordsArrowOutputProcessorImpl(
     reader: ArrowStreamReader,
     pythonMetrics: Map[String, SQLMetric],
     arrowMaxRecordsPerOutputBatch: Int)
-    extends BaseSliceArrowOutputProcessor(reader, pythonMetrics) {
+  extends BaseSliceArrowOutputProcessor(reader, pythonMetrics) {
 
   protected override def getRoot: VectorSchemaRoot = {
     val remainingRows = rowCount - currentRowIdx

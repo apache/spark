@@ -20,8 +20,8 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.Literal
 
 /**
- * Test suite for the new parameter substitution architecture. Tests the unified parameter
- * handling components.
+ * Test suite for the new parameter substitution architecture.
+ * Tests the unified parameter handling components.
  */
 class ParameterSubstitutionSuite extends SparkFunSuite {
 
@@ -52,34 +52,31 @@ class ParameterSubstitutionSuite extends SparkFunSuite {
   test("ParameterHandler - mixed parameter detection during substitution") {
 
     // Test that named parameters work
-    val (result1, _) = ParameterHandler.substituteParameters(
-      "SELECT :param1",
+    val (result1, _) = ParameterHandler.substituteParameters("SELECT :param1",
       NamedParameterContext(Map("param1" -> Literal("value"))))
     assert(result1.contains("'value'"))
 
     // Test that positional parameters work
-    val (result2, _) = ParameterHandler.substituteParameters(
-      "SELECT ?",
+    val (result2, _) = ParameterHandler.substituteParameters("SELECT ?",
       PositionalParameterContext(List(Literal(42))))
     assert(result2.contains("42"))
 
     // Test that no parameters works
-    val (result3, _) =
-      ParameterHandler.substituteParameters("SELECT 1", NamedParameterContext(Map.empty))
+    val (result3, _) = ParameterHandler.substituteParameters("SELECT 1",
+      NamedParameterContext(Map.empty))
     assert(result3 == "SELECT 1")
   }
 
   test("ParameterHandler - named parameters direct") {
 
-    val (result, _) =
-      ParameterHandler.substituteNamedParameters("SELECT :param1", Map("param1" -> Literal(42)))
+    val (result, _) = ParameterHandler.substituteNamedParameters("SELECT :param1",
+      Map("param1" -> Literal(42)))
     assert(result === "SELECT 42")
   }
 
   test("ParameterHandler - positional parameters direct") {
 
-    val (result, _) =
-      ParameterHandler.substitutePositionalParameters("SELECT ?", Seq(Literal(42)))
+    val (result, _) = ParameterHandler.substitutePositionalParameters("SELECT ?", Seq(Literal(42)))
     assert(result === "SELECT 42")
   }
 
@@ -98,12 +95,12 @@ class ParameterSubstitutionSuite extends SparkFunSuite {
     val arrayData = Array(1, 2, 3)
     val mapData = Map("status" -> "active")
 
-    val context = NamedParameterContext(
-      Map(
-        "id" -> Literal(42),
-        "name" -> Literal("John"),
-        "ids" -> Literal.create(arrayData, ArrayType(IntegerType)),
-        "metadata" -> Literal.create(mapData, MapType(StringType, StringType))))
+    val context = NamedParameterContext(Map(
+      "id" -> Literal(42),
+      "name" -> Literal("John"),
+      "ids" -> Literal.create(arrayData, ArrayType(IntegerType)),
+      "metadata" -> Literal.create(mapData, MapType(StringType, StringType))
+    ))
 
     val sql = "SELECT :id, :name WHERE id IN (SELECT explode(:ids)) AND meta = :metadata"
     val (result, _) = ParameterHandler.substituteParameters(sql, context)
@@ -119,8 +116,7 @@ class ParameterSubstitutionSuite extends SparkFunSuite {
 
     // Mixed parameters should be detected during substitution itself
     intercept[Exception] {
-      ParameterHandler.substituteParameters(
-        "SELECT :named, ?",
+      ParameterHandler.substituteParameters("SELECT :named, ?",
         NamedParameterContext(Map("named" -> Literal("value"))))
     }
   }

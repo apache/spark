@@ -34,9 +34,11 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
+
 @SlowSQLTest
 /** Test suite to inject some failures in RocksDB checkpoint */
-class RocksDBCheckpointFailureInjectionSuite extends StreamTest with SharedSparkSession {
+class RocksDBCheckpointFailureInjectionSuite extends StreamTest
+  with SharedSparkSession {
 
   private val fileManagerClassName = classOf[FailureInjectionCheckpointFileManager].getName
 
@@ -53,8 +55,7 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest with SharedSpark
   /**
    * create a temp dir and register it to failure injection file system and remove it in the end
    * The function can be moved to StreamTest if it is used by other tests too.
-   * @param f
-   *   the function to run with the temp dir and the injection state
+   * @param f the function to run with the temp dir and the injection state
    */
   def withTempDirAllowFailureInjection(f: (File, FailureInjectionState) => Unit): Unit = {
     withTempDir { dir =>
@@ -130,7 +131,10 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest with SharedSpark
               checkError(
                 ex,
                 condition = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE",
-                parameters = Map("fileToRead" -> s"$remoteDir/2.changelog"))
+                parameters = Map(
+                  "fileToRead" -> s"$remoteDir/2.changelog"
+                )
+              )
             }
 
             db.load(0)
@@ -145,14 +149,14 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest with SharedSpark
   }
 
   /**
-   * This test is to simulate the case where a previous task had connectivity problem that
-   * couldn't be killed or write zip file. Only after the later one is successfully committed, it
-   * comes back and write the zip file.
+   * This test is to simulate the case where a previous task had connectivity problem that couldn't
+   * be killed or write zip file. Only after the later one is successfully committed, it comes back
+   * and write the zip file.
    */
   Seq(true, false).foreach { ifEnableStateStoreCheckpointIds =>
     test(
       "Zip File Overwritten by Previous Task Checkpoint " +
-        s"ifEnableStateStoreCheckpointIds = $ifEnableStateStoreCheckpointIds") {
+      s"ifEnableStateStoreCheckpointIds = $ifEnableStateStoreCheckpointIds") {
       val hadoopConf = new Configuration()
       hadoopConf.set(STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key, fileManagerClassName)
       withTempDirAllowFailureInjection { (remoteDir, injectionState) =>
@@ -214,14 +218,14 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest with SharedSpark
   }
 
   /**
-   * This test is to simulate the case where a previous task had connectivity problem that
-   * couldn't be killed or write changelog file. Only after the later one is successfully
-   * committed, it comes back and write the changelog file.
-   */
+   * This test is to simulate the case where a previous task had connectivity problem that couldn't
+   * be killed or write changelog file. Only after the later one is successfully committed, it comes
+   * back and write the changelog file.
+   *  */
   Seq(false, true).foreach { ifEnableStateStoreCheckpointIds =>
     test(
       "Changelog File Overwritten by Previous Task With Changelog Checkpoint " +
-        s"ifEnableStateStoreCheckpointIds = $ifEnableStateStoreCheckpointIds") {
+      s"ifEnableStateStoreCheckpointIds = $ifEnableStateStoreCheckpointIds") {
       val hadoopConf = new Configuration()
       hadoopConf.set(STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key, fileManagerClassName)
       withTempDirAllowFailureInjection { (remoteDir, injectionState) =>
@@ -296,11 +300,12 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest with SharedSpark
 
   /**
    * This test is to simulate the case where
-   *   1. There is a snapshot checkpoint scheduled
-   *   2. The batch eventually failed
-   *   3. Query is retried and moved forward
-   *   4. The snapshot checkpoint succeeded In checkpoint V2, this snapshot shouldn't take effect.
-   *      Otherwise, it will break the strong consistency guaranteed by V2.
+   * 1. There is a snapshot checkpoint scheduled
+   * 2. The batch eventually failed
+   * 3. Query is retried and moved forward
+   * 4. The snapshot checkpoint succeeded
+   * In checkpoint V2, this snapshot shouldn't take effect. Otherwise, it will break the strong
+   * consistency guaranteed by V2.
    */
   test("Delay Snapshot V2") {
     val hadoopConf = new Configuration()
@@ -361,12 +366,11 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest with SharedSpark
 
   /**
    * An integrated test where a previous changelog from a failed batch come back and finish
-   * writing. In checkpoint V2, this changelog should be ignored. Test it with both file renaming
-   * overwrite and not renaming overwrite.
+   * writing. In checkpoint V2, this changelog should be ignored.
+   * Test it with both file renaming overwrite and not renaming overwrite.
    */
   Seq(false, true).foreach { ifAllowRenameOverwrite =>
-    test(
-      s"Job failure with changelog shows up ifAllowRenameOverwrite = $ifAllowRenameOverwrite") {
+    test(s"Job failure with changelog shows up ifAllowRenameOverwrite = $ifAllowRenameOverwrite") {
       val hadoopConf = new Configuration()
       hadoopConf.set(STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key, fileManagerClassName)
       val rocksdbChangelogCheckpointingConfKey =
@@ -379,8 +383,7 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest with SharedSpark
           SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "2") {
           val inputData = MemoryStream[Int]
           val aggregated =
-            inputData
-              .toDF()
+            inputData.toDF()
               .groupBy($"value")
               .agg(count("*"))
               .as[(Int, Long)]
@@ -401,7 +404,8 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest with SharedSpark
             // The second batch should fail to commit because the changelog file is not uploaded
             ExpectFailure[SparkException] { ex =>
               ex.getCause.getMessage.contains("CANNOT_WRITE_STATE_STORE.CANNOT_COMMIT")
-            })
+            }
+          )
           assert(injectionState.delayedStreams.nonEmpty)
           injectionState.delayedStreams.foreach(_.close())
           injectionState.delayedStreams = Seq.empty
@@ -416,7 +420,8 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest with SharedSpark
               additionalConfs = additionalConfs),
             AddData(inputData, 4),
             CheckLastBatch((3, 3), (1, 1), (4, 1)),
-            StopStream)
+            StopStream
+          )
         }
       }
     }
@@ -446,8 +451,7 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest with SharedSpark
           SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "2") {
           val inputData = MemoryStream[Int]
           val aggregated =
-            inputData
-              .toDF()
+            inputData.toDF()
               .groupBy($"value")
               .agg(count("*"))
               .as[(Int, Long)]
@@ -470,7 +474,8 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest with SharedSpark
             AddData(inputData, 3, 2),
             // We should categorize this error.
             // TODO after the error is categorized, we should check error class
-            ExpectFailure[IOException] { _ => () })
+            ExpectFailure[IOException] { _ => () }
+          )
 
           injectionState.createAtomicDelayCloseRegex = Seq.empty
 
@@ -493,7 +498,8 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest with SharedSpark
               CheckNewAnswer((3, 3), (1, 1), (4, 1), (2, 1))
 
             },
-            StopStream)
+            StopStream
+          )
         }
       }
     }
@@ -501,11 +507,11 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest with SharedSpark
 
   /**
    * An integrated test to cover this scenario:
-   *   1. A batch is running and a snapshot checkpoint is scheduled
-   *   2. The batch fails
-   *   3. The query restarts
-   *   4. The snapshot checkpoint succeeded and validate that the snapshot checkpoint is not used
-   *      in subsequent query restart.
+   * 1. A batch is running and a snapshot checkpoint is scheduled
+   * 2. The batch fails
+   * 3. The query restarts
+   * 4. The snapshot checkpoint succeeded
+   * and validate that the snapshot checkpoint is not used in subsequent query restart.
    */
   test("Previous Maintenance Snapshot Checkpoint Overwrite") {
     val hadoopConf = new Configuration()
@@ -518,8 +524,7 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest with SharedSpark
         SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "2") {
         val inputData = MemoryStream[Int]
         val aggregated =
-          inputData
-            .toDF()
+          inputData.toDF()
             .groupBy($"value")
             .agg(count("*"))
             .as[(Int, Long)]
@@ -527,8 +532,7 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest with SharedSpark
         injectionState.createAtomicDelayCloseRegex = Seq(".*/*zip")
 
         testStream(aggregated, Update)(
-          StartStream(
-            checkpointLocation = checkpointDir.getAbsolutePath,
+          StartStream(checkpointLocation = checkpointDir.getAbsolutePath,
             additionalConfs = Map(
               rocksdbChangelogCheckpointingConfKey -> "true",
               SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2",
@@ -552,20 +556,21 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest with SharedSpark
             // deadlock.
             StateStore.stopMaintenanceTaskWithoutLock()
           },
-          StopStream)
+          StopStream
+        )
         injectionState.createAtomicDelayCloseRegex = Seq.empty
 
         // Query should still be restarted successfully without losing any data.
         testStream(aggregated, Update)(
-          StartStream(
-            checkpointLocation = checkpointDir.getAbsolutePath,
+          StartStream(checkpointLocation = checkpointDir.getAbsolutePath,
             additionalConfs = Map(
               rocksdbChangelogCheckpointingConfKey -> "true",
               SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2",
               STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key -> fileManagerClassName)),
           AddData(inputData, 1),
           CheckAnswer((1, 3)),
-          StopStream)
+          StopStream
+        )
         assert(injectionState.delayedStreams.nonEmpty)
         // This will finish uploading the snapshot checkpoint
         injectionState.delayedStreams.foreach(_.close())
@@ -573,22 +578,22 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest with SharedSpark
 
         // After previous snapshot checkpoint succeeded, the query can still be restarted correctly.
         testStream(aggregated, Update)(
-          StartStream(
-            checkpointLocation = checkpointDir.getAbsolutePath,
+          StartStream(checkpointLocation = checkpointDir.getAbsolutePath,
             additionalConfs = Map(
               rocksdbChangelogCheckpointingConfKey -> "true",
               SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2",
               STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key -> fileManagerClassName)),
           AddData(inputData, 3, 1, 4),
           CheckAnswer((3, 4), (1, 4), (4, 1)),
-          StopStream)
+          StopStream
+        )
       }
     }
   }
 
   case class FailureConf3(
       skipCreationIfFileMissingChecksum: Boolean,
-      checkpointFormatVersion: String) {
+      checkpointFormatVersion : String) {
     override def toString: String = {
       s"skipCreationIfFileMissingChecksum = $skipCreationIfFileMissingChecksum, " +
         s"checkpointFormatVersion = $checkpointFormatVersion"
@@ -596,234 +601,232 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest with SharedSpark
   }
 
   private def versionsPresent(dir: File, suffix: String): Seq[(Long, Option[String])] = {
-    dir.listFiles
-      .filter(_.getName.endsWith(suffix))
-      .filter(!_.getName.startsWith("."))
-      .map(_.getName.stripSuffix(suffix).split("_"))
-      .map {
-        case Array(version, uniqueId) => (version.toLong, Some(uniqueId))
-        case Array(version) => (version.toLong, None)
-      }
-      .sorted
-      .distinct
-      .toSeq
+    dir.listFiles.filter(_.getName.endsWith(suffix))
+    .filter(!_.getName.startsWith("."))
+    .map(_.getName.stripSuffix(suffix).split("_"))
+    .map {
+      case Array(version, uniqueId) => (version.toLong, Some(uniqueId))
+      case Array(version) => (version.toLong, None)
+    }
+    .sorted
+    .distinct
+    .toSeq
   }
 
   /**
    * Test that verifies upgrading from checksum disabled to checksum enabled after state files are
    * written but before batch commit completes. The important part of this test is that files are
-   * not overwritten if they already exist. When checkpointFormatVersion is 2, we will not run
-   * into the checksum verification failure because each batch run uses unique changelog file
-   * names.
+   * not overwritten if they already exist. When checkpointFormatVersion is 2, we will not run into
+   * the checksum verification failure because each batch run uses unique changelog file names.
    *
    * Scenario:
-   *   1. Start with checksum verification disabled
-   *   2. Run batch 1 successfully (writes 1.changelog without .crc)
-   *   3. Start batch 2 - state store commits successfully (writes 2.changelog without .crc) but
-   *      the batch fails before the commit is complete (via UDF exception). This leaves
-   *      2.changelog on disk without a corresponding commit log file
-   *   4. Restart query with checksum verification enabled and with a query where the changelog
-   *      file contents will change from batch 2
-   *   5. Run batch 2 again and it succeeds and writes 2.changelog (and 2.changelog.crc if
-   *      STREAMING_CHECKPOINT_FILE_CHECKSUM_SKIP_CREATION_IF_FILE_MISSING_CHECKSUM is disabled)
-   *   6. Run batch 3 and it succeeds and writes 3.changelog and 3.changelog.crc
-   *   7. Query starts with
-   *      STREAMING_CHECKPOINT_FILE_CHECKSUM_SKIP_CREATION_IF_FILE_MISSING_CHECKSUM
-   *      enabled/disabled and the different behavior is shown in the test
+   * 1. Start with checksum verification disabled
+   * 2. Run batch 1 successfully (writes 1.changelog without .crc)
+   * 3. Start batch 2 - state store commits successfully (writes 2.changelog without .crc) but the
+   *    batch fails before the commit is complete (via UDF exception). This leaves 2.changelog on
+   *    disk without a corresponding commit log file
+   * 4. Restart query with checksum verification enabled and with a query where the changelog file
+   *    contents will change from batch 2
+   * 5. Run batch 2 again and it succeeds and writes 2.changelog (and 2.changelog.crc if
+   *    STREAMING_CHECKPOINT_FILE_CHECKSUM_SKIP_CREATION_IF_FILE_MISSING_CHECKSUM is disabled)
+   * 6. Run batch 3 and it succeeds and writes 3.changelog and 3.changelog.crc
+   * 7. Query starts with STREAMING_CHECKPOINT_FILE_CHECKSUM_SKIP_CREATION_IF_FILE_MISSING_CHECKSUM
+   *    enabled/disabled and the different behavior is shown in the test
    */
 
   Seq(
     FailureConf3(skipCreationIfFileMissingChecksum = false, checkpointFormatVersion = "1"),
     FailureConf3(skipCreationIfFileMissingChecksum = true, checkpointFormatVersion = "1"),
     FailureConf3(skipCreationIfFileMissingChecksum = false, checkpointFormatVersion = "2"),
-    FailureConf3(skipCreationIfFileMissingChecksum = true, checkpointFormatVersion = "2"))
-    .foreach { failureConf =>
-      test(
-        s"Upgrading from file checksum disabled to enabled " +
-          "after state commits without batch commit " + failureConf.toString) {
-        val hadoopConf = new Configuration()
-        hadoopConf.set(STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key, fileManagerClassName)
-        val rocksdbChangelogCheckpointingConfKey =
-          RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled"
+    FailureConf3(skipCreationIfFileMissingChecksum = true, checkpointFormatVersion = "2")
+  ).foreach { failureConf =>
+    test(s"Upgrading from file checksum disabled to enabled " +
+      "after state commits without batch commit " + failureConf.toString) {
+      val hadoopConf = new Configuration()
+      hadoopConf.set(STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key, fileManagerClassName)
+      val rocksdbChangelogCheckpointingConfKey =
+        RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled"
 
-        withTempDirAllowFailureInjection { (checkpointDir, injectionState) =>
-          var forceTaskFailure = false
+      withTempDirAllowFailureInjection { (checkpointDir, injectionState) =>
+        var forceTaskFailure = false
           val failUDF = udf((value: Int) => {
-            if (forceTaskFailure) {
-              // This will fail all close() call to trigger query failures in execution phase.
-              throw new RuntimeException("Ingest task failure")
-            }
-            value
-          })
-
-          val inputData = MemoryStream[Int]
-          val aggregated =
-            inputData
-              .toDF()
-              .groupBy($"value")
-              .agg(count("*").as("count"))
-              // would fail here after writing the changelog file for the agg
-              .select(failUDF($"value").as("value"), $"count")
-              .as[(Int, Long)]
-
-          val aggregated2 =
-            inputData
-              .toDF()
-              .select($"value" + 1000 as "value") // This is to make the changelog file different
-              .groupBy($"value")
-              .agg(count("*").as("count"))
-              // would fail here after writing the changelog file for the agg
-              .select(failUDF($"value").as("value"), $"count")
-              .as[(Int, Long)]
-
-          def getRunConf(checksumEnabled: Boolean): Map[String, String] = {
-            Map(
-              rocksdbChangelogCheckpointingConfKey -> "true",
-              SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key ->
-                failureConf.checkpointFormatVersion,
-              SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> checksumEnabled.toString,
-              SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_SKIP_CREATION_IF_FILE_MISSING_CHECKSUM.key ->
-                failureConf.skipCreationIfFileMissingChecksum.toString,
-              STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key -> fileManagerClassName,
-              SQLConf.SHUFFLE_PARTITIONS.key -> "1")
+          if (forceTaskFailure) {
+            // This will fail all close() call to trigger query failures in execution phase.
+            throw new RuntimeException("Ingest task failure")
           }
+          value
+        })
 
-          // Verify that the changelog files exists for a version
-          def verifyChangelogFileExists(version: Long): Boolean = {
-            versionsPresent(new File(checkpointDir, "state/0/0"), ".changelog").exists {
-              case (v, uniqueId) =>
-                if (failureConf.checkpointFormatVersion == "1") {
-                  v == version && uniqueId.isEmpty
-                } else {
-                  v == version && uniqueId.isDefined
-                }
-            }
+        val inputData = MemoryStream[Int]
+        val aggregated =
+          inputData.toDF()
+            .groupBy($"value")
+            .agg(count("*").as("count"))
+            // would fail here after writing the changelog file for the agg
+            .select(failUDF($"value").as("value"), $"count")
+            .as[(Int, Long)]
+
+        val aggregated2 =
+          inputData.toDF()
+            .select($"value" + 1000 as "value") // This is to make the changelog file different
+            .groupBy($"value")
+            .agg(count("*").as("count"))
+            // would fail here after writing the changelog file for the agg
+            .select(failUDF($"value").as("value"), $"count")
+            .as[(Int, Long)]
+
+        def getRunConf(checksumEnabled: Boolean) : Map[String, String] = {
+          Map(
+            rocksdbChangelogCheckpointingConfKey -> "true",
+            SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key ->
+              failureConf.checkpointFormatVersion,
+            SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> checksumEnabled.toString,
+            SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_SKIP_CREATION_IF_FILE_MISSING_CHECKSUM.key ->
+              failureConf.skipCreationIfFileMissingChecksum.toString,
+            STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key -> fileManagerClassName,
+            SQLConf.SHUFFLE_PARTITIONS.key -> "1")
+        }
+
+        // Verify that the changelog files exists for a version
+        def verifyChangelogFileExists(version: Long) : Boolean = {
+          versionsPresent(new File(checkpointDir, "state/0/0"), ".changelog").exists {
+            case (v, uniqueId) =>
+              if (failureConf.checkpointFormatVersion == "1") {
+                v == version && uniqueId.isEmpty
+              } else {
+                v == version && uniqueId.isDefined
+              }
           }
+        }
 
-          // Verify that the changelog checksum files exists for a version
-          def verifyChangelogFileChecksumExists(version: Long): Boolean = {
-            versionsPresent(new File(checkpointDir, "state/0/0"), ".changelog.crc").exists {
-              case (v, uniqueId) =>
-                if (failureConf.checkpointFormatVersion == "1") {
-                  v == version && uniqueId.isEmpty
-                } else {
-                  v == version && uniqueId.isDefined
-                }
-            }
+        // Verify that the changelog checksum files exists for a version
+        def verifyChangelogFileChecksumExists(version: Long) : Boolean = {
+          versionsPresent(new File(checkpointDir, "state/0/0"), ".changelog.crc").exists {
+            case (v, uniqueId) =>
+              if (failureConf.checkpointFormatVersion == "1") {
+                v == version && uniqueId.isEmpty
+              } else {
+                v == version && uniqueId.isDefined
+              }
           }
+        }
 
-          // First run: file checksum disabled
-          val firstRunConfs = getRunConf(checksumEnabled = false)
+        // First run: file checksum disabled
+        val firstRunConfs = getRunConf(checksumEnabled = false)
 
-          testStream(aggregated, Update)(
-            StartStream(
-              checkpointLocation = checkpointDir.getAbsolutePath,
-              additionalConfs = firstRunConfs),
-            AddData(inputData, 3),
-            CheckLastBatch((3, 1)),
-            Execute { _ =>
-              forceTaskFailure = true
-            },
-            AddData(inputData, 3, 2),
-            ExpectFailure[SparkException] { ex =>
-              ex.getCause.getMessage.contains("FAILED_EXECUTE_UDF")
-            })
+        testStream(aggregated, Update)(
+          StartStream(
+            checkpointLocation = checkpointDir.getAbsolutePath,
+            additionalConfs = firstRunConfs),
+          AddData(inputData, 3),
+          CheckLastBatch((3, 1)),
+          Execute { _ =>
+            forceTaskFailure = true
+          },
+          AddData(inputData, 3, 2),
+          ExpectFailure[SparkException] { ex =>
+            ex.getCause.getMessage.contains("FAILED_EXECUTE_UDF")
+          }
+        )
 
-          // Verify that the changelog file was written
-          assert(verifyChangelogFileExists(2))
-          // Verify that the changelog file checksum was NOT written since it was disabled
-          assert(!verifyChangelogFileChecksumExists(2))
+        // Verify that the changelog file was written
+        assert(verifyChangelogFileExists(2))
+        // Verify that the changelog file checksum was NOT written since it was disabled
+        assert(!verifyChangelogFileChecksumExists(2))
 
-          // Verify that the commit file was written
-          assert((new File(checkpointDir, "commits/0")).exists())
-          // Verify that the commit file was NOT written
-          assert(!(new File(checkpointDir, "commits/1")).exists())
+        // Verify that the commit file was written
+        assert((new File(checkpointDir, "commits/0")).exists())
+        // Verify that the commit file was NOT written
+        assert(!(new File(checkpointDir, "commits/1")).exists())
 
-          // Second run: STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED enabled with
-          // allowOverwriteInRename = false. This simulates an upgrade to a new version where the
-          // file checksum is enabled. The allowOverwriteInRename is set to false to test the case
-          // when overwriting the changelog file fails. This is to simulate the case where the
-          // changelog file is not overwritten but the checksum file is written.
-          injectionState.allowOverwriteInRename = false
-          forceTaskFailure = false
+        // Second run: STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED enabled with
+        // allowOverwriteInRename = false. This simulates an upgrade to a new version where the
+        // file checksum is enabled. The allowOverwriteInRename is set to false to test the case
+        // when overwriting the changelog file fails. This is to simulate the case where the
+        // changelog file is not overwritten but the checksum file is written.
+        injectionState.allowOverwriteInRename = false
+        forceTaskFailure = false
 
-          val secondRunConfs = getRunConf(checksumEnabled = true)
+        val secondRunConfs = getRunConf(checksumEnabled = true)
 
-          inputData.addData(3, 1)
+        inputData.addData(3, 1)
 
-          // The query should restart successfully and handle files without checksums, whether
-          // skipCreationIfFileMissingChecksum is enabled or disabled. The problem
-          // arises on the load after this run.
+        // The query should restart successfully and handle files without checksums, whether
+        // skipCreationIfFileMissingChecksum is enabled or disabled. The problem
+        // arises on the load after this run.
+        testStream(aggregated2, Update)(
+          StartStream(
+            checkpointLocation = checkpointDir.getAbsolutePath,
+            additionalConfs = secondRunConfs),
+          AddData(inputData, 4),
+          CheckLastBatch((1003, 2), (1001, 1), (1004, 1)),
+          StopStream
+        )
+
+        assert(verifyChangelogFileExists(3))
+        assert(verifyChangelogFileChecksumExists(3))
+
+        // Verify that the commit files were written
+        assert((new File(checkpointDir, "commits/1")).exists())
+        assert((new File(checkpointDir, "commits/2")).exists())
+
+        val failureCase =
+          !failureConf.skipCreationIfFileMissingChecksum &&
+          failureConf.checkpointFormatVersion == "1"
+
+        if (failureCase) {
+          assert(verifyChangelogFileChecksumExists(2))
+
+          // The query does not succeed, since we load the old changelog file with the checksum from
+          // the new changelog file that did not overwrite the old one. This will lead to a checksum
+          // verification failure when we try to load the old changelog file with the checksum from
+          // the new changelog file that did not overwrite the old one.
           testStream(aggregated2, Update)(
             StartStream(
               checkpointLocation = checkpointDir.getAbsolutePath,
               additionalConfs = secondRunConfs),
             AddData(inputData, 4),
-            CheckLastBatch((1003, 2), (1001, 1), (1004, 1)),
-            StopStream)
+            ExpectFailure[SparkException] { ex =>
+              ex.getMessage.contains("CHECKPOINT_FILE_CHECKSUM_VERIFICATION_FAILED")
+              ex.getMessage.contains("2.changelog")
+            }
+          )
 
-          assert(verifyChangelogFileExists(3))
-          assert(verifyChangelogFileChecksumExists(3))
-
-          // Verify that the commit files were written
-          assert((new File(checkpointDir, "commits/1")).exists())
-          assert((new File(checkpointDir, "commits/2")).exists())
-
-          val failureCase =
-            !failureConf.skipCreationIfFileMissingChecksum &&
-              failureConf.checkpointFormatVersion == "1"
-
-          if (failureCase) {
-            assert(verifyChangelogFileChecksumExists(2))
-
-            // The query does not succeed, since we load the old changelog file with the checksum from
-            // the new changelog file that did not overwrite the old one. This will lead to a checksum
-            // verification failure when we try to load the old changelog file with the checksum from
-            // the new changelog file that did not overwrite the old one.
-            testStream(aggregated2, Update)(
-              StartStream(
-                checkpointLocation = checkpointDir.getAbsolutePath,
-                additionalConfs = secondRunConfs),
-              AddData(inputData, 4),
-              ExpectFailure[SparkException] { ex =>
-                ex.getMessage.contains("CHECKPOINT_FILE_CHECKSUM_VERIFICATION_FAILED")
-                ex.getMessage.contains("2.changelog")
-              })
-
-            // Verify that the commit file was not written
-            assert(!(new File(checkpointDir, "commits/3")).exists())
+          // Verify that the commit file was not written
+          assert(!(new File(checkpointDir, "commits/3")).exists())
+        } else {
+          if (failureConf.checkpointFormatVersion == "1") {
+            // With checkpointFormatVersion = 1, the changelog file checksum should not be written
+            assert(!verifyChangelogFileChecksumExists(2))
           } else {
-            if (failureConf.checkpointFormatVersion == "1") {
-              // With checkpointFormatVersion = 1, the changelog file checksum should not be written
-              assert(!verifyChangelogFileChecksumExists(2))
-            } else {
-              // With checkpointFormatVersion = 2, the changelog file checksum should be written
-              assert(verifyChangelogFileChecksumExists(2))
-            }
-
-            // The query should restart successfully
-            testStream(aggregated2, Update)(
-              StartStream(
-                checkpointLocation = checkpointDir.getAbsolutePath,
-                additionalConfs = secondRunConfs),
-              AddData(inputData, 4),
-              CheckLastBatch((1004, 2)),
-              StopStream)
-
-            // Verify again the 2.changelog file checksum exists or not
-            if (failureConf.checkpointFormatVersion == "1") {
-              assert(!verifyChangelogFileChecksumExists(2))
-            } else {
-              assert(verifyChangelogFileChecksumExists(2))
-            }
-
-            assert(verifyChangelogFileExists(4))
-            assert(verifyChangelogFileChecksumExists(4))
-            assert((new File(checkpointDir, "commits/3")).exists())
+            // With checkpointFormatVersion = 2, the changelog file checksum should be written
+            assert(verifyChangelogFileChecksumExists(2))
           }
+
+          // The query should restart successfully
+          testStream(aggregated2, Update)(
+            StartStream(
+              checkpointLocation = checkpointDir.getAbsolutePath,
+              additionalConfs = secondRunConfs),
+            AddData(inputData, 4),
+            CheckLastBatch((1004, 2)),
+            StopStream
+          )
+
+          // Verify again the 2.changelog file checksum exists or not
+          if (failureConf.checkpointFormatVersion == "1") {
+            assert(!verifyChangelogFileChecksumExists(2))
+          } else {
+            assert(verifyChangelogFileChecksumExists(2))
+          }
+
+          assert(verifyChangelogFileExists(4))
+          assert(verifyChangelogFileChecksumExists(4))
+          assert((new File(checkpointDir, "commits/3")).exists())
         }
       }
     }
+  }
 
   /**
    * Test that verifies that when a task is interrupted, the store's rollback() method does not
@@ -831,7 +834,10 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest with SharedSpark
    */
   test("SPARK-54585: Interrupted task calling rollback does not throw an exception") {
     val hadoopConf = new Configuration()
-    hadoopConf.set(STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key, fileManagerClassName)
+    hadoopConf.set(
+      STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key,
+      fileManagerClassName
+    )
     withTempDirAllowFailureInjection { (remoteDir, _) =>
       val sqlConf = new SQLConf()
       sqlConf.setConfString("spark.sql.streaming.checkpoint.fileChecksum.enabled", "true")
@@ -840,7 +846,12 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest with SharedSpark
       sqlConf.setConfString(rocksdbChangelogCheckpointingConfKey, "true")
       val conf = RocksDBConf(StateStoreConf(sqlConf))
 
-      withDB(remoteDir.getAbsolutePath, version = 0, conf = conf, hadoopConf = hadoopConf) { db =>
+      withDB(
+        remoteDir.getAbsolutePath,
+        version = 0,
+        conf = conf,
+        hadoopConf = hadoopConf
+      ) { db =>
         db.put("key0", "value0")
         val checkpointId1 = commitAndGetCheckpointId(db)
 
@@ -867,9 +878,8 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest with SharedSpark
         db.put("key3", "value3")
 
         // Verify the store has the correct values
-        assert(
-          db.iterator().map(toStr).toSet ===
-            Set(("key0", "value0"), ("key1", "value1"), ("key3", "value3")))
+        assert(db.iterator().map(toStr).toSet ===
+          Set(("key0", "value0"), ("key1", "value1"), ("key3", "value3")))
       }
     }
   }
@@ -885,7 +895,8 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest with SharedSpark
       conf: RocksDBConf,
       hadoopConf: Configuration = new Configuration(),
       enableStateStoreCheckpointIds: Boolean = false,
-      checkpointId: Option[String] = None)(func: RocksDB => T): T = {
+      checkpointId: Option[String] = None)(
+      func: RocksDB => T): T = {
     var db: RocksDB = null
     try {
       db = FailureInjectionRocksDBStateStoreProvider.createRocksDBWithFaultInjection(

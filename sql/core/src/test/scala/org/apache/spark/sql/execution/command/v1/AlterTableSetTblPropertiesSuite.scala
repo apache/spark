@@ -22,12 +22,12 @@ import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 
 /**
- * This base suite contains unified tests for the `ALTER TABLE .. SET TBLPROPERTIES` command that
- * check V1 table catalogs. The tests that cannot run for all V1 catalogs are located in more
- * specific test suites:
+ * This base suite contains unified tests for the `ALTER TABLE .. SET TBLPROPERTIES`
+ * command that check V1 table catalogs. The tests that cannot run for all V1 catalogs
+ * are located in more specific test suites:
  *
  *   - V1 In-Memory catalog:
- *     `org.apache.spark.sql.execution.command.v1.AlterTableSetTblPropertiesSuite`
+ *      `org.apache.spark.sql.execution.command.v1.AlterTableSetTblPropertiesSuite`
  *   - V1 Hive External catalog:
  *     `org.apache.spark.sql.hive.execution.command.AlterTableSetTblPropertiesSuite`
  */
@@ -47,8 +47,7 @@ trait AlterTableSetTblPropertiesSuiteBase extends command.AlterTableSetTblProper
     sessionCatalog.getTableMetadata(tableIdent).properties
   }
 
-  override def checkTblProps(
-      tableIdent: TableIdentifier,
+  override def checkTblProps(tableIdent: TableIdentifier,
       expectedTblProps: Map[String, String]): Unit = {
     val actualTblProps = getTableProperties(tableIdent)
     if (isUsingHiveMetastore) {
@@ -64,5 +63,4 @@ trait AlterTableSetTblPropertiesSuiteBase extends command.AlterTableSetTblProper
 }
 
 class AlterTableSetTblPropertiesSuite
-    extends AlterTableSetTblPropertiesSuiteBase
-    with CommandSuiteBase
+  extends AlterTableSetTblPropertiesSuiteBase with CommandSuiteBase

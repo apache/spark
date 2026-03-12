@@ -56,7 +56,8 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
 
     Seq(-1, 0, 100001).foreach(numBuckets => {
       val e = intercept[AnalysisException](df.write.bucketBy(numBuckets, "i").saveAsTable("tt"))
-      assert(e.getMessage.contains("Number of buckets should be greater than 0 but less than"))
+      assert(
+        e.getMessage.contains("Number of buckets should be greater than 0 but less than"))
     })
   }
 
@@ -76,9 +77,10 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
 
       // over the new limit
       withTable("t") {
-        val e =
-          intercept[AnalysisException](df.write.bucketBy(maxNrBuckets + 1, "i").saveAsTable("t"))
-        assert(e.getMessage.contains("Number of buckets should be greater than 0 but less than"))
+        val e = intercept[AnalysisException](
+          df.write.bucketBy(maxNrBuckets + 1, "i").saveAsTable("t"))
+        assert(
+          e.getMessage.contains("Number of buckets should be greater than 0 but less than"))
       }
     }
   }
@@ -152,7 +154,7 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
 
   /**
    * A helper method to check the bucket write functionality in low level, i.e. check the written
-   * bucket files to see if the data are correct. User should pass in a data dir that these bucket
+   * bucket files to see if the data are correct.  User should pass in a data dir that these bucket
    * files are written to, and the format of data(parquet, json, etc.), and the bucketing
    * information.
    */
@@ -165,8 +167,9 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
       inputDF: DataFrame = df,
       bucketIdExpression: (Seq[Expression], Int) => Expression = bucketIdExpression,
       getBucketIdFromFileName: String => Option[Int] = BucketingUtils.getBucketId): Unit = {
-    val allBucketFiles =
-      dataDir.listFiles().filterNot(f => f.getName.startsWith(".") || f.getName.startsWith("_"))
+    val allBucketFiles = dataDir.listFiles().filterNot(f =>
+      f.getName.startsWith(".") || f.getName.startsWith("_")
+    )
 
     for (bucketFile <- allBucketFiles) {
       val bucketId = getBucketIdFromFileName(bucketFile.getName).getOrElse {
@@ -179,13 +182,12 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
       // We may lose the type information after write(e.g. json format doesn't keep schema
       // information), here we get the types from the original dataframe.
       val types = inputDF.select(selectedColumns.map(col): _*).schema.map(_.dataType)
-      val columns = selectedColumns.zip(types).map { case (colName, dt) =>
-        col(colName).cast(dt)
+      val columns = selectedColumns.zip(types).map {
+        case (colName, dt) => col(colName).cast(dt)
       }
 
       // Read the bucket file into a dataframe, so that it's easier to test.
-      val readBack = spark.read
-        .format(source)
+      val readBack = spark.read.format(source)
         .load(bucketFile.getAbsolutePath)
         .select(columns: _*)
 
@@ -245,22 +247,20 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
 
   test("write bucketed data with the overlapping bucketBy/sortBy and partitionBy columns") {
     checkError(
-      exception = intercept[AnalysisException](
-        df.write
-          .partitionBy("i", "j")
-          .bucketBy(8, "j", "k")
-          .sortBy("k")
-          .saveAsTable("bucketed_table")),
+      exception = intercept[AnalysisException](df.write
+        .partitionBy("i", "j")
+        .bucketBy(8, "j", "k")
+        .sortBy("k")
+        .saveAsTable("bucketed_table")),
       condition = "_LEGACY_ERROR_TEMP_1166",
       parameters = Map("bucketCol" -> "j", "normalizedPartCols" -> "i, j"))
 
     checkError(
-      exception = intercept[AnalysisException](
-        df.write
-          .partitionBy("i", "j")
-          .bucketBy(8, "k")
-          .sortBy("i")
-          .saveAsTable("bucketed_table")),
+      exception = intercept[AnalysisException](df.write
+        .partitionBy("i", "j")
+        .bucketBy(8, "k")
+        .sortBy("i")
+        .saveAsTable("bucketed_table")),
       condition = "_LEGACY_ERROR_TEMP_1167",
       parameters = Map("sortCol" -> "i", "normalizedPartCols" -> "i, j"))
   }

@@ -29,8 +29,7 @@ import org.apache.spark.sql.types.{StringType, StructType}
  *   - V2 table catalog tests: `org.apache.spark.sql.execution.command.v2.DropNamespaceSuite`
  *   - V1 table catalog tests: `org.apache.spark.sql.execution.command.v1.DropNamespaceSuiteBase`
  *     - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.DropNamespaceSuite`
- *     - V1 Hive External catalog:
- *       `org.apache.spark.sql.hive.execution.command.DropNamespaceSuite`
+ *     - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.DropNamespaceSuite`
  */
 trait DropNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "DROP NAMESPACE"
@@ -64,8 +63,7 @@ trait DropNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
     val e = intercept[AnalysisException] {
       sql(s"DROP NAMESPACE $catalog.unknown")
     }
-    checkError(
-      e,
+    checkError(e,
       condition = "SCHEMA_NOT_FOUND",
       parameters = Map("schemaName" -> s"`$catalog`.`unknown`"))
   }
@@ -79,7 +77,9 @@ trait DropNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
     val e = intercept[AnalysisException] {
       sql(s"DROP NAMESPACE $catalog.ns")
     }
-    checkError(e, condition = "SCHEMA_NOT_EMPTY", parameters = Map("schemaName" -> "`ns`"))
+    checkError(e,
+      condition = "SCHEMA_NOT_EMPTY",
+      parameters = Map("schemaName" -> "`ns`"))
     sql(s"DROP TABLE $catalog.ns.table")
 
     // Now that $catalog.ns is empty, it can be dropped.

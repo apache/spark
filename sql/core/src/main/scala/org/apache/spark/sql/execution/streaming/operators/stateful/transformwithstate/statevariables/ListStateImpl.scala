@@ -39,14 +39,14 @@ import org.apache.spark.sql.types.StructType
  * @tparam S - data type of object that will be stored in the list
  */
 class ListStateImpl[S](
-    store: StateStore,
-    stateName: String,
-    keyExprEnc: ExpressionEncoder[Any],
-    valEncoder: ExpressionEncoder[Any],
-    metrics: Map[String, SQLMetric] = Map.empty)
-    extends ListStateMetricsImpl
-    with ListState[S]
-    with Logging {
+     store: StateStore,
+     stateName: String,
+     keyExprEnc: ExpressionEncoder[Any],
+     valEncoder: ExpressionEncoder[Any],
+     metrics: Map[String, SQLMetric] = Map.empty)
+  extends ListStateMetricsImpl
+  with ListState[S]
+  with Logging {
 
   override def stateStore: StateStore = store
   override def baseStateName: String = stateName
@@ -54,96 +54,93 @@ class ListStateImpl[S](
 
   private val stateTypesEncoder = StateTypesEncoder(keyExprEnc, valEncoder, stateName)
 
-  store.createColFamilyIfAbsent(
-    stateName,
-    keyExprEnc.schema,
-    valEncoder.schema,
-    NoPrefixKeyStateEncoderSpec(keyExprEnc.schema),
-    useMultipleValuesPerKey = true)
+  store.createColFamilyIfAbsent(stateName, keyExprEnc.schema, valEncoder.schema,
+    NoPrefixKeyStateEncoderSpec(keyExprEnc.schema), useMultipleValuesPerKey = true)
 
   /** Whether state exists or not. */
-  override def exists(): Boolean = {
-    val encodedGroupingKey = stateTypesEncoder.encodeGroupingKey()
-    val stateValue = store.get(encodedGroupingKey, stateName)
-    stateValue != null
-  }
+   override def exists(): Boolean = {
+     val encodedGroupingKey = stateTypesEncoder.encodeGroupingKey()
+     val stateValue = store.get(encodedGroupingKey, stateName)
+     stateValue != null
+   }
 
-  /**
-   * Get the state value if it exists. If the state does not exist in state store, an empty
-   * iterator is returned.
-   */
-  override def get(): Iterator[S] = {
-    val encodedKey = stateTypesEncoder.encodeGroupingKey()
-    val unsafeRowValuesIterator = store.valuesIterator(encodedKey, stateName)
-    new Iterator[S] {
-      override def hasNext: Boolean = {
-        unsafeRowValuesIterator.hasNext
-      }
+   /**
+    * Get the state value if it exists. If the state does not exist in state store, an
+    * empty iterator is returned.
+    */
+   override def get(): Iterator[S] = {
+     val encodedKey = stateTypesEncoder.encodeGroupingKey()
+     val unsafeRowValuesIterator = store.valuesIterator(encodedKey, stateName)
+     new Iterator[S] {
+       override def hasNext: Boolean = {
+         unsafeRowValuesIterator.hasNext
+       }
 
-      override def next(): S = {
-        val valueUnsafeRow = unsafeRowValuesIterator.next()
-        stateTypesEncoder.decodeValue(valueUnsafeRow).asInstanceOf[S]
-      }
-    }
-  }
+       override def next(): S = {
+         val valueUnsafeRow = unsafeRowValuesIterator.next()
+         stateTypesEncoder.decodeValue(valueUnsafeRow).asInstanceOf[S]
+       }
+     }
+   }
 
-  /** Update the value of the list. */
-  override def put(newState: Array[S]): Unit = {
-    validateNewState(newState)
+   /** Update the value of the list. */
+   override def put(newState: Array[S]): Unit = {
+     validateNewState(newState)
 
-    val encodedKey = stateTypesEncoder.encodeGroupingKey()
-    var entryCount = 0L
-    TWSMetricsUtils.resetMetric(metrics, "numUpdatedStateRows")
+     val encodedKey = stateTypesEncoder.encodeGroupingKey()
+     var entryCount = 0L
+     TWSMetricsUtils.resetMetric(metrics, "numUpdatedStateRows")
 
-    val encodedValues = newState.map { v =>
-      entryCount += 1
-      TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
-      stateTypesEncoder.encodeValue(v).copy()
-    }
-    store.putList(encodedKey, encodedValues, stateName)
-    updateEntryCount(encodedKey, entryCount)
-  }
+     val encodedValues = newState.map { v =>
+       entryCount += 1
+       TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
+       stateTypesEncoder.encodeValue(v).copy()
+     }
+     store.putList(encodedKey, encodedValues, stateName)
+     updateEntryCount(encodedKey, entryCount)
+   }
 
-  /** Append an entry to the list. */
-  override def appendValue(newState: S): Unit = {
-    StateStoreErrors.requireNonNullStateValue(newState, stateName)
-    val encodedKey = stateTypesEncoder.encodeGroupingKey()
-    val entryCount = getEntryCount(encodedKey)
-    store.merge(encodedKey, stateTypesEncoder.encodeValue(newState), stateName)
-    TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
-    updateEntryCount(encodedKey, entryCount + 1)
-  }
+   /** Append an entry to the list. */
+   override def appendValue(newState: S): Unit = {
+     StateStoreErrors.requireNonNullStateValue(newState, stateName)
+     val encodedKey = stateTypesEncoder.encodeGroupingKey()
+     val entryCount = getEntryCount(encodedKey)
+     store.merge(encodedKey,
+         stateTypesEncoder.encodeValue(newState), stateName)
+     TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
+     updateEntryCount(encodedKey, entryCount + 1)
+   }
 
-  /** Append an entire list to the existing value. */
-  override def appendList(newState: Array[S]): Unit = {
-    validateNewState(newState)
+   /** Append an entire list to the existing value. */
+   override def appendList(newState: Array[S]): Unit = {
+     validateNewState(newState)
 
-    val encodedKey = stateTypesEncoder.encodeGroupingKey()
-    var entryCount = getEntryCount(encodedKey)
-    val encodedValues = newState.map { v =>
-      entryCount += 1
-      TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
-      stateTypesEncoder.encodeValue(v).copy()
-    }
-    store.mergeList(encodedKey, encodedValues, stateName)
-    updateEntryCount(encodedKey, entryCount)
-  }
+     val encodedKey = stateTypesEncoder.encodeGroupingKey()
+     var entryCount = getEntryCount(encodedKey)
+     val encodedValues = newState.map { v =>
+       entryCount += 1
+       TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
+       stateTypesEncoder.encodeValue(v).copy()
+     }
+     store.mergeList(encodedKey, encodedValues, stateName)
+     updateEntryCount(encodedKey, entryCount)
+   }
 
-  /** Remove this state. */
-  override def clear(): Unit = {
-    val encodedKey = stateTypesEncoder.encodeGroupingKey()
-    store.remove(encodedKey, stateName)
-    val entryCount = getEntryCount(encodedKey)
-    TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows", entryCount)
-    removeEntryCount(encodedKey)
-  }
+   /** Remove this state. */
+   override def clear(): Unit = {
+     val encodedKey = stateTypesEncoder.encodeGroupingKey()
+     store.remove(encodedKey, stateName)
+     val entryCount = getEntryCount(encodedKey)
+     TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows", entryCount)
+     removeEntryCount(encodedKey)
+   }
 
-  private def validateNewState(newState: Array[S]): Unit = {
-    StateStoreErrors.requireNonNullStateValue(newState, stateName)
-    StateStoreErrors.requireNonEmptyListStateValue(newState, stateName)
+   private def validateNewState(newState: Array[S]): Unit = {
+     StateStoreErrors.requireNonNullStateValue(newState, stateName)
+     StateStoreErrors.requireNonEmptyListStateValue(newState, stateName)
 
-    newState.foreach { v =>
-      StateStoreErrors.requireNonNullStateValue(v, stateName)
-    }
-  }
-}
+     newState.foreach { v =>
+       StateStoreErrors.requireNonNullStateValue(v, stateName)
+     }
+   }
+ }

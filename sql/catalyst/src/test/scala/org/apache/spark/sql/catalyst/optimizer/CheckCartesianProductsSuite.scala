@@ -50,11 +50,10 @@ class CheckCartesianProductsSuite extends PlanTest {
     }
   }
 
-  test(
-    "CheckCartesianProducts throws an exception for join types that require a join condition") {
+  test("CheckCartesianProducts throws an exception for join types that require a join condition") {
     withSQLConf(CROSS_JOINS_ENABLED.key -> "false") {
       for (joinType <- joinTypesWithRequiredCondition) {
-        val thrownException = the[AnalysisException] thrownBy {
+        val thrownException = the [AnalysisException] thrownBy {
           performCartesianProductCheck(joinType)
         }
         assert(thrownException.message.contains("Detected implicit cartesian product"))
@@ -72,8 +71,7 @@ class CheckCartesianProductsSuite extends PlanTest {
     }
   }
 
-  test(
-    "CheckCartesianProducts doesn't throw an exception if join types don't require conditions") {
+  test("CheckCartesianProducts doesn't throw an exception if join types don't require conditions") {
     withSQLConf(CROSS_JOINS_ENABLED.key -> "false") {
       for (joinType <- joinTypesWithoutRequiredCondition) {
         noException should be thrownBy {

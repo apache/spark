@@ -27,7 +27,8 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
 /**
- * Benchmark ExternalAppendOnlyUnsafeRowArray. To run this benchmark:
+ * Benchmark ExternalAppendOnlyUnsafeRowArray.
+ * To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class> --jars <spark core test jar> <spark sql test jar>
@@ -72,8 +73,8 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark extends BenchmarkBase {
   def testAgainstRawArrayBuffer(numSpillThreshold: Int, numRows: Int, iterations: Int): Unit = {
     val rows = testRows(numRows)
 
-    val benchmark =
-      new Benchmark(s"Array with $numRows rows", iterations * numRows, output = output)
+    val benchmark = new Benchmark(s"Array with $numRows rows", iterations * numRows,
+      output = output)
 
     // Internally, `ExternalAppendOnlyUnsafeRowArray` will create an
     // in-memory buffer of size `numSpillThreshold`. This will mimic that
@@ -131,8 +132,8 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark extends BenchmarkBase {
       iterations: Int): Unit = {
     val rows = testRows(numRows)
 
-    val benchmark =
-      new Benchmark(s"Spilling with $numRows rows", iterations * numRows, output = output)
+    val benchmark = new Benchmark(s"Spilling with $numRows rows", iterations * numRows,
+      output = output)
 
     benchmark.addCase("UnsafeExternalSorter") { _: Int =>
       var sum = 0L
@@ -151,7 +152,12 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark extends BenchmarkBase {
           false)
 
         rows.foreach(x =>
-          array.insertRecord(x.getBaseObject, x.getBaseOffset, x.getSizeInBytes, 0, false))
+          array.insertRecord(
+            x.getBaseObject,
+            x.getBaseOffset,
+            x.getSizeInBytes,
+            0,
+            false))
 
         val unsafeRow = new UnsafeRow(1)
         val iter = array.getIterator(0)
@@ -198,9 +204,7 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark extends BenchmarkBase {
     runBenchmark("WITH SPILL") {
       testAgainstRawUnsafeExternalSorter(100 * 1000, 1000, 1 << 18)
       testAgainstRawUnsafeExternalSorter(
-        config.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get,
-        10 * 1000,
-        1 << 4)
+        config.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get, 10 * 1000, 1 << 4)
     }
   }
 }

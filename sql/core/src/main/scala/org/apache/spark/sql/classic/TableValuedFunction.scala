@@ -20,7 +20,8 @@ import org.apache.spark.sql
 import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedTableValuedFunction
 
-class TableValuedFunction(sparkSession: SparkSession) extends sql.TableValuedFunction {
+class TableValuedFunction(sparkSession: SparkSession)
+  extends sql.TableValuedFunction {
 
   /** @inheritdoc */
   override def range(end: Long): Dataset[java.lang.Long] = {
@@ -39,10 +40,7 @@ class TableValuedFunction(sparkSession: SparkSession) extends sql.TableValuedFun
 
   /** @inheritdoc */
   override def range(
-      start: Long,
-      end: Long,
-      step: Long,
-      numPartitions: Int): Dataset[java.lang.Long] = {
+      start: Long, end: Long, step: Long, numPartitions: Int): Dataset[java.lang.Long] = {
     sparkSession.range(start, end, step, numPartitions)
   }
 

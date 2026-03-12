@@ -25,7 +25,8 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Synthetic benchmark for interval functions. To run this benchmark:
+ * Synthetic benchmark for interval functions.
+ * To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class> --jars <spark core test jar> <sql core test jar>
@@ -78,6 +79,7 @@ object IntervalBenchmark extends SqlBasedBenchmark {
     benchmark.addCase(name, numIters = 3) { _ => doBenchmarkExpr(cardinality, exprs: _*) }
   }
 
+
   private def buildString(withPrefix: Boolean, units: Seq[String] = Seq.empty): Column = {
     val init = lit(if (withPrefix) "interval" else "") ::
       ($"id" % 10000).cast("string") ::
@@ -98,16 +100,9 @@ object IntervalBenchmark extends SqlBasedBenchmark {
 
   private def benchmarkIntervalStringParsing(cardinality: Long): Unit = {
     val timeUnits = Seq(
-      "13 months",
-      "                      1                     months",
-      "100 weeks",
-      "9 days",
-      "12 hours",
-      "-                    3 hours",
-      "5 minutes",
-      "45 seconds",
-      "123 milliseconds",
-      "567 microseconds")
+      "13 months", "                      1                     months",
+      "100 weeks", "9 days", "12 hours", "-                    3 hours",
+      "5 minutes", "45 seconds", "123 milliseconds", "567 microseconds")
     val intervalToTest = ListBuffer[String]()
 
     val benchmark = new Benchmark("cast strings to intervals", cardinality, output = output)
@@ -132,7 +127,11 @@ object IntervalBenchmark extends SqlBasedBenchmark {
     val wdExpr = Seq("((id % 54) + 1)", "((id % 1000) + 1)")
     val args = ymExprs ++ wdExpr ++ hmsExprs
 
-    addCaseExpr(benchmark, cardinality, "prepare make_interval()", args: _*)
+    addCaseExpr(
+      benchmark,
+      cardinality,
+      "prepare make_interval()",
+      args: _*)
     val foldableExpr = "make_interval(0, 1, 2, 3, 4, 5, 50.123456)"
     addCaseExpr(benchmark, cardinality, foldableExpr, foldableExpr)
     addCaseExpr(

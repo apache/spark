@@ -24,8 +24,8 @@ import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.util.RpcUtils
 
 /**
- * A global manual clock that is backed by a singleton. Should use if the whole query is running
- * in one process
+ * A global manual clock that is backed by a singleton.
+ * Should use if the whole query is running in one process
  */
 class GlobalSingletonManualClock extends StreamManualClock with Serializable {
   override def getTimeMillis(): Long = {
@@ -46,14 +46,12 @@ object GlobalSingletonManualClock {
 }
 
 /**
- * Creates a manual clock that can be synced across driver and workers in separate processes. A
- * clock server is started on the driver and workers will connect to that server to get the
+ * Creates a manual clock that can be synced across driver and workers in separate processes.
+ * A clock server is started on the driver and workers will connect to that server to get the
  * current time.
  */
 class GlobalManualClock(endpointName: String)
-    extends StreamManualClock
-    with Serializable
-    with Logging {
+  extends StreamManualClock with Serializable with Logging {
 
   private var clockServer: Option[GlobalSyncClockServer] = None
   private var clockClient: Option[GlobalSyncClockClient] = None
@@ -89,15 +87,14 @@ class GlobalManualClock(endpointName: String)
 }
 
 class GlobalSyncClockServer(endpointName: String)
-    extends StreamManualClock
-    with Serializable
-    with Logging {
+  extends StreamManualClock with Serializable with Logging {
   @volatile var currentTime: Long = 0
 
   def setup(): Unit = {
     val endpoint = new GlobalClockEndpoint(this)
     val endpointRef = endpoint.rpcEnv.setupEndpoint(endpointName, endpoint)
   }
+
 
   override def getTimeMillis(): Long = {
     currentTime
@@ -109,13 +106,13 @@ class GlobalSyncClockServer(endpointName: String)
 }
 
 class GlobalSyncClockClient(driverEndpointName: String)
-    extends StreamManualClock
-    with Serializable
-    with Logging {
+  extends StreamManualClock with Serializable with Logging {
   @volatile var currentTime: Long = 0
 
-  private lazy val endpoint =
-    RpcUtils.makeDriverRef(driverEndpointName, SparkEnv.get.conf, SparkEnv.get.rpcEnv)
+  private lazy val endpoint = RpcUtils.makeDriverRef(
+    driverEndpointName,
+    SparkEnv.get.conf,
+    SparkEnv.get.rpcEnv)
 
   override def getTimeMillis(): Long = {
     val result = endpoint.askSync[Long](())
@@ -130,13 +127,12 @@ class GlobalSyncClockClient(driverEndpointName: String)
 }
 
 class GlobalClockEndpoint(clock: GlobalSyncClockServer)
-    extends ThreadSafeRpcEndpoint
-    with Logging
-    with Serializable {
+  extends ThreadSafeRpcEndpoint with Logging with Serializable {
 
   override val rpcEnv: RpcEnv = SparkEnv.get.rpcEnv
 
-  override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = { case _ =>
-    context.reply(clock.getTimeMillis())
+  override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+    case _ =>
+      context.reply(clock.getTimeMillis())
   }
 }

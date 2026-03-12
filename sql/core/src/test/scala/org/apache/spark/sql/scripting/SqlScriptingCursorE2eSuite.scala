@@ -26,8 +26,8 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
- * End-to-end tests for SQL Cursors. Complete transcription of cursors.sql - all 87 tests with
- * inline expected results.
+ * End-to-end tests for SQL Cursors.
+ * Complete transcription of cursors.sql - all 87 tests with inline expected results.
  */
 class SqlScriptingCursorE2eSuite extends QueryTest with SharedSparkSession {
 
@@ -57,7 +57,8 @@ class SqlScriptingCursorE2eSuite extends QueryTest with SharedSparkSession {
 END;""")
         },
         condition = "UNSUPPORTED_FEATURE.SQL_CURSOR",
-        parameters = Map.empty)
+        parameters = Map.empty
+      )
     }
   }
 
@@ -70,7 +71,8 @@ END;""")
 END;""")
         },
         condition = "UNSUPPORTED_FEATURE.SQL_CURSOR",
-        parameters = Map.empty)
+        parameters = Map.empty
+      )
     }
   }
 
@@ -84,7 +86,8 @@ END;""")
 END;""")
         },
         condition = "UNSUPPORTED_FEATURE.SQL_CURSOR",
-        parameters = Map.empty)
+        parameters = Map.empty
+      )
     }
   }
 
@@ -97,7 +100,8 @@ END;""")
 END;""")
         },
         condition = "UNSUPPORTED_FEATURE.SQL_CURSOR",
-        parameters = Map.empty)
+        parameters = Map.empty
+      )
     }
   }
 
@@ -111,7 +115,8 @@ END;""")
   VALUES (x); -- Should return 1
   CLOSE x;
 END;""")
-    checkAnswer(result, Seq(Row(1)))
+    checkAnswer(result, Seq(
+      Row(1)))
   }
 
   test("Test 6: Duplicate cursor names in same compound statement are not...") {
@@ -124,7 +129,8 @@ END;""")
 END;""")
       },
       condition = "CURSOR_ALREADY_EXISTS",
-      parameters = Map("cursorName" -> "`c1`"))
+      parameters = Map("cursorName" -> "`c1`")
+    )
   }
 
   test("Test 7: Inner scope cursors shadow outer scope cursors") {
@@ -145,7 +151,8 @@ END;""")
   VALUES (y); -- Should return 1
   CLOSE c1;
 END;""")
-    checkAnswer(result, Seq(Row(1)))
+    checkAnswer(result, Seq(
+      Row(1)))
   }
 
   test("Test 8: A cursor cannot be opened twice") {
@@ -159,7 +166,8 @@ END;""")
 END;""")
       },
       condition = "CURSOR_ALREADY_OPEN",
-      parameters = Map("cursorName" -> "`c1`"))
+      parameters = Map("cursorName" -> "`c1`")
+    )
   }
 
   test("Test 9: A cursor can be closed and then re-opened") {
@@ -176,7 +184,8 @@ END;""")
   VALUES (x); -- Should return 1
   CLOSE c1;
 END;""")
-    checkAnswer(result, Seq(Row(1)))
+    checkAnswer(result, Seq(
+      Row(1)))
   }
 
   test("Test 10: A cursor that is not open cannot be closed") {
@@ -189,7 +198,8 @@ END;""")
 END;""")
       },
       condition = "CURSOR_NOT_OPEN",
-      parameters = Map("cursorName" -> "`c1`"))
+      parameters = Map("cursorName" -> "`c1`")
+    )
   }
 
   test("Test 11: A cursor cannot be closed twice") {
@@ -204,7 +214,8 @@ END;""")
 END;""")
       },
       condition = "CURSOR_NOT_OPEN",
-      parameters = Map("cursorName" -> "`c1`"))
+      parameters = Map("cursorName" -> "`c1`")
+    )
   }
 
   test("Test 12: A cursor that is not open cannot be fetched") {
@@ -218,7 +229,8 @@ END;""")
 END;""")
       },
       condition = "CURSOR_NOT_OPEN",
-      parameters = Map("cursorName" -> "`c1`"))
+      parameters = Map("cursorName" -> "`c1`")
+    )
   }
 
   test("Test 13: Cannot fetch after closing") {
@@ -235,7 +247,8 @@ END;""")
 END;""")
       },
       condition = "CURSOR_NOT_OPEN",
-      parameters = Map("cursorName" -> "`c1`"))
+      parameters = Map("cursorName" -> "`c1`")
+    )
   }
 
   test("Test 14: Cursor is implicitly closed when it goes out of scope.") {
@@ -252,7 +265,8 @@ END;""")
   UNTIL step = 10 END REPEAT;
   VALUES(step);
 END;""")
-    checkAnswer(result, Seq(Row(10)))
+    checkAnswer(result, Seq(
+      Row(10)))
   }
 
   test("Test 15: Invalid declaration order - cursor before variable") {
@@ -265,7 +279,8 @@ END;""")
 END;""")
       },
       condition = "INVALID_VARIABLE_DECLARATION.ONLY_AT_BEGINNING",
-      parameters = Map("varName" -> "`result`"))
+      parameters = Map("varName" -> "`result`")
+    )
   }
 
   test("Test 16: Invalid declaration order - cursor after handler") {
@@ -279,7 +294,8 @@ END;""")
 END;""")
       },
       condition = "INVALID_CURSOR_DECLARATION",
-      parameters = Map.empty)
+      parameters = Map.empty
+    )
   }
 
   test("Test 17: Invalid declaration - cursor after statement") {
@@ -293,7 +309,8 @@ END;""")
 END;""")
       },
       condition = "INVALID_CURSOR_DECLARATION",
-      parameters = Map.empty)
+      parameters = Map.empty
+    )
   }
 
   test("Test 18: Cursor implicitly closed when exiting DECLARE scope (not ...") {
@@ -316,7 +333,8 @@ END;""")
     -- Cursor will be implicitly closed when exiting outer scope
   END;
 END;""")
-    checkAnswer(result, Seq(Row(42)))
+    checkAnswer(result, Seq(
+      Row(42)))
   }
 
   test("Test 19: Verify cursor closed when exiting DECLARE scope, not OPEN...") {
@@ -337,7 +355,8 @@ END;""")
 END;""")
       },
       condition = "CURSOR_NOT_FOUND",
-      parameters = Map("cursorName" -> "cur"))
+      parameters = Map("cursorName" -> "cur")
+    )
   }
 
   test("Test 20: Cursor sensitivity - INSENSITIVE cursors capture snapshot at OPEN") {
@@ -400,7 +419,8 @@ END;""")
 
   CLOSE cur;
 END;""")
-    checkAnswer(result, Seq(Row(4, 6)))
+    checkAnswer(result, Seq(
+      Row(4, 6)))
   }
 
   test("Test 21: Basic parameterized cursor with positional parameters") {
@@ -426,7 +446,8 @@ END;""")
   CLOSE cur;
   VALUES (result);
 END;""")
-    checkAnswer(result, Seq(Row("bcd")))
+    checkAnswer(result, Seq(
+      Row("bcd")))
   }
 
   test("Test 22: Parameterized cursor with named parameters") {
@@ -451,7 +472,8 @@ END;""")
   CLOSE cur;
   VALUES (id_sum);
 END;""")
-    checkAnswer(result, Seq(Row(7)))
+    checkAnswer(result, Seq(
+      Row(7)))
   }
 
   test("Test 23: Parameterized cursor - reopen with different parameters") {
@@ -486,7 +508,8 @@ END;""")
 
   VALUES (count1, count2);
 END;""")
-    checkAnswer(result, Seq(Row(2, 5)))
+    checkAnswer(result, Seq(
+      Row(2, 5)))
   }
 
   test("Test 24: Parameterized cursor with expressions") {
@@ -511,7 +534,8 @@ END;""")
   CLOSE cur;
   VALUES (sum); -- Should be 20 + 25 = 45
 END;""")
-    checkAnswer(result, Seq(Row(45)))
+    checkAnswer(result, Seq(
+      Row(45)))
   }
 
   test("Test 25: USING clause - various data types (matching EXECUTE IMMED...") {
@@ -553,7 +577,8 @@ END;""")
   CLOSE cur_bool;
   VALUES ('BOOLEAN', bool_val);
 END;""")
-    checkAnswer(result, Seq(Row("BOOLEAN", true)))
+    checkAnswer(result, Seq(
+      Row("BOOLEAN", true)))
   }
 
   test("Test 26: USING clause - positional vs named parameters") {
@@ -585,7 +610,8 @@ END;""")
   CLOSE cur_var;
   VALUES ('variable', result); -- Should be 101
 END;""")
-    checkAnswer(result, Seq(Row("variable", 101)))
+    checkAnswer(result, Seq(
+      Row("variable", 101)))
   }
 
   test("Test 27: USING clause - expressions (matching EXECUTE IMMEDIATE)") {
@@ -610,7 +636,8 @@ END;""")
   CLOSE cur2;
   VALUES ('variable_expr', result); -- Should be 10
 END;""")
-    checkAnswer(result, Seq(Row("variable_expr", 10)))
+    checkAnswer(result, Seq(
+      Row("variable_expr", 10)))
   }
 
   test("Test 28: USING clause with MORE expressions than needed (allowed -...") {
@@ -625,7 +652,8 @@ END;""")
 
   VALUES (result);  -- Should return 15 (5 + 10)
 END;""")
-    checkAnswer(result, Seq(Row(15)))
+    checkAnswer(result, Seq(
+      Row(15)))
   }
 
   test("Test 29: USING clause with TOO FEW expressions for positional para...") {
@@ -643,7 +671,8 @@ END;""")
       },
       condition = "UNBOUND_SQL_PARAMETER",
       parameters = Map("name" -> "_11"),
-      queryContext = Array(ExpectedContext("?")))
+      queryContext = Array(ExpectedContext("?"))
+    )
   }
 
   test("Test 30: USING clause missing a named parameter") {
@@ -661,7 +690,8 @@ END;""")
       },
       condition = "UNBOUND_SQL_PARAMETER",
       parameters = Map("name" -> "y"),
-      queryContext = Array(ExpectedContext(":y")))
+      queryContext = Array(ExpectedContext(":y"))
+    )
   }
 
   test("Test 31: USING clause with named parameters but wrong name") {
@@ -679,7 +709,8 @@ END;""")
       },
       condition = "UNBOUND_SQL_PARAMETER",
       parameters = Map("name" -> "beta"),
-      queryContext = Array(ExpectedContext(":beta")))
+      queryContext = Array(ExpectedContext(":beta"))
+    )
   }
 
   test("Test 32: DECLARE mixes named and unnamed parameter markers") {
@@ -696,7 +727,8 @@ END;""")
 END;""")
       },
       condition = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "')'", "hint" -> ""))
+      parameters = Map("error" -> "')'", "hint" -> "")
+    )
   }
 
   test("Test 33: Local variable with same name as named parameter (implici...") {
@@ -714,7 +746,8 @@ END;""")
 
   VALUES (result);  -- Should return 300 (100 + 200)
 END;""")
-    checkAnswer(result, Seq(Row(300)))
+    checkAnswer(result, Seq(
+      Row(300)))
   }
 
   test("Test 34: Named parameters with expressions (not just variable refe...") {
@@ -730,7 +763,8 @@ END;""")
 
   VALUES (result);  -- Should return 300 (20 * 15)
 END;""")
-    checkAnswer(result, Seq(Row(300)))
+    checkAnswer(result, Seq(
+      Row(300)))
   }
 
   test("Test 35: Positional parameters with complex expressions") {
@@ -747,7 +781,8 @@ END;""")
 
   VALUES (result);  -- Should return 50
 END;""")
-    checkAnswer(result, Seq(Row(50)))
+    checkAnswer(result, Seq(
+      Row(50)))
   }
 
   test("Test 36: Reopen cursor with different parameter values (positional)") {
@@ -769,7 +804,8 @@ END;""")
 
   VALUES (result1, result2);  -- Should return (50, 80)
 END;""")
-    checkAnswer(result, Seq(Row(50, 80)))
+    checkAnswer(result, Seq(
+      Row(50, 80)))
   }
 
   test("Test 37: Reopen cursor with different parameter values (named)") {
@@ -791,7 +827,8 @@ END;""")
 
   VALUES (result1, result2);  -- Should return (30, 70)
 END;""")
-    checkAnswer(result, Seq(Row(30, 70)))
+    checkAnswer(result, Seq(
+      Row(30, 70)))
   }
 
   test("Test 38: ALL_PARAMETERS_MUST_BE_NAMED - Mix of named and positiona...") {
@@ -809,7 +846,8 @@ END;""")
 END;""")
       },
       condition = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "')'", "hint" -> ""))
+      parameters = Map("error" -> "')'", "hint" -> "")
+    )
   }
 
   test("Test 39: Verify variable name inference for parameters (without ex...") {
@@ -827,7 +865,8 @@ END;""")
 
   VALUES (result);  -- Should return 46 (4 * 10 + 6)
 END;""")
-    checkAnswer(result, Seq(Row(46)))
+    checkAnswer(result, Seq(
+      Row(46)))
   }
 
   test("Test 40: Label-qualified cursor - basic case") {
@@ -842,7 +881,8 @@ END;""")
     CLOSE outer.c1;
   END;
 END;""")
-    checkAnswer(result, Seq(Row(42)))
+    checkAnswer(result, Seq(
+      Row(42)))
   }
 
   test("Test 41: Label-qualified cursor - nested scopes") {
@@ -874,7 +914,8 @@ END;""")
     VALUES (x, y);
   END;
 END;""")
-    checkAnswer(result, Seq(Row(2, 1)))
+    checkAnswer(result, Seq(
+      Row(2, 1)))
   }
 
   test("Test 42: Label-qualified cursor with parameterized query") {
@@ -898,7 +939,8 @@ END;""")
     VALUES (result); -- Should be '34'
   END;
 END;""")
-    checkAnswer(result, Seq(Row("34")))
+    checkAnswer(result, Seq(
+      Row("34")))
   }
 
   test("Test 43: Case insensitivity - DECLARE lowercase, OPEN uppercase") {
@@ -911,7 +953,8 @@ END;""")
   CLOSE MY_CURSOR;
   VALUES (result);  -- Should return 42
 END;""")
-    checkAnswer(result, Seq(Row(42)))
+    checkAnswer(result, Seq(
+      Row(42)))
   }
 
   test("Test 44: Case insensitivity - DECLARE MixedCase, OPEN lowercase") {
@@ -924,7 +967,8 @@ END;""")
   CLOSE mycursor;
   VALUES (result);  -- Should return 99
 END;""")
-    checkAnswer(result, Seq(Row(99)))
+    checkAnswer(result, Seq(
+      Row(99)))
   }
 
   test("Test 45: Case insensitivity - Label-qualified cursor with differen...") {
@@ -941,7 +985,8 @@ END;""")
     VALUES (result);  -- Should return 123
   END;
 END;""")
-    checkAnswer(result, Seq(Row(123)))
+    checkAnswer(result, Seq(
+      Row(123)))
   }
 
   test("Test 46: Case insensitivity with IDENTIFIER() - resolution still c...") {
@@ -954,7 +999,8 @@ END;""")
   CLOSE IDENTIFIER('MyCaSe');  -- Yet another variation
   VALUES (result);  -- Should return 42
 END;""")
-    checkAnswer(result, Seq(Row(42)))
+    checkAnswer(result, Seq(
+      Row(42)))
   }
 
   test("Test 47: FETCH INTO with duplicate variable names") {
@@ -969,7 +1015,8 @@ END;""")
 END;""")
       },
       condition = "DUPLICATE_ASSIGNMENTS",
-      parameters = Map("nameList" -> "`x`"))
+      parameters = Map("nameList" -> "`x`")
+    )
   }
 
   test("Test 48: FETCH INTO with type casting (store assignment)") {
@@ -985,7 +1032,8 @@ END;""")
 
   VALUES (int_var, str_var);  -- Should be (100, '42') with ANSI rounding
 END;""")
-    checkAnswer(result, Seq(Row(100, "42")))
+    checkAnswer(result, Seq(
+      Row(100, "42")))
   }
 
   test("Test 49: FETCH INTO with arity mismatch - too few variables") {
@@ -1000,7 +1048,8 @@ END;""")
 END;""")
       },
       condition = "ASSIGNMENT_ARITY_MISMATCH",
-      parameters = Map("numExpr" -> "3", "numTarget" -> "1"))
+      parameters = Map("numExpr" -> "3", "numTarget" -> "1")
+    )
   }
 
   test("Test 50: FETCH INTO with arity mismatch - too many variables") {
@@ -1015,7 +1064,8 @@ END;""")
 END;""")
       },
       condition = "ASSIGNMENT_ARITY_MISMATCH",
-      parameters = Map("numExpr" -> "2", "numTarget" -> "4"))
+      parameters = Map("numExpr" -> "2", "numTarget" -> "4")
+    )
   }
 
   test("Test 51: FETCH INTO single STRUCT variable - basic case") {
@@ -1028,7 +1078,8 @@ END;""")
   CLOSE cur;
   VALUES (person_record.name, person_record.age); -- Should return 'Alice', 30
 END;""")
-    checkAnswer(result, Seq(Row("Alice", 30)))
+    checkAnswer(result, Seq(
+      Row("Alice", 30)))
   }
 
   test("Test 52: FETCH INTO STRUCT with type casting") {
@@ -1041,7 +1092,8 @@ END;""")
   CLOSE cur;
   VALUES (record_var.id, record_var.value); -- Should return 42, '100' (with casting)
 END;""")
-    checkAnswer(result, Seq(Row(42, "100")))
+    checkAnswer(result, Seq(
+      Row(42, "100")))
   }
 
   test("Test 53: FETCH INTO STRUCT - field count mismatch") {
@@ -1056,7 +1108,8 @@ END;""")
 END;""")
       },
       condition = "ASSIGNMENT_ARITY_MISMATCH",
-      parameters = Map("numExpr" -> "3", "numTarget" -> "2"))
+      parameters = Map("numExpr" -> "3", "numTarget" -> "2")
+    )
   }
 
   test("Test 54: FETCH INTO non-STRUCT single variable with multiple columns") {
@@ -1071,7 +1124,8 @@ END;""")
 END;""")
       },
       condition = "ASSIGNMENT_ARITY_MISMATCH",
-      parameters = Map("numExpr" -> "2", "numTarget" -> "1"))
+      parameters = Map("numExpr" -> "2", "numTarget" -> "1")
+    )
   }
 
   test("Test 55: FETCH INTO STRUCT with complex types") {
@@ -1084,7 +1138,8 @@ END;""")
   CLOSE cur;
   VALUES (complex_record); -- Should return struct(100, 'test', 99.5)
 END;""")
-    checkAnswer(result, Seq(Row(Row(100L, "test", 99.5))))
+    checkAnswer(result, Seq(
+      Row(Row(100L, "test", 99.5))))
   }
 
   test("Test 56: FETCH INTO with session variables") {
@@ -1111,7 +1166,8 @@ END;""")
   CLOSE cur;
   VALUES (session_var, local_var);  -- Should return 100, 'world'
 END;""")
-    checkAnswer(result, Seq(Row(100, "world")))
+    checkAnswer(result, Seq(
+      Row(100, "world")))
   }
 
   test("Test 58: FETCH INTO session variables with type casting") {
@@ -1139,7 +1195,8 @@ END;""")
 END;""")
       },
       condition = "DUPLICATE_ASSIGNMENTS",
-      parameters = Map("nameList" -> "`session_dup`"))
+      parameters = Map("nameList" -> "`session_dup`")
+    )
   }
 
   test("Test 60: FETCH INTO mixing with duplicate across local and session") {
@@ -1155,7 +1212,8 @@ END;""")
 END;""")
       },
       condition = "DUPLICATE_ASSIGNMENTS",
-      parameters = Map("nameList" -> "`dup_var`"))
+      parameters = Map("nameList" -> "`dup_var`")
+    )
   }
 
   test("Test 61: DECLARE CURSOR with INSENSITIVE keyword") {
@@ -1168,7 +1226,8 @@ END;""")
   CLOSE cur;
   VALUES (x); -- Should return 42
 END;""")
-    checkAnswer(result, Seq(Row(42)))
+    checkAnswer(result, Seq(
+      Row(42)))
   }
 
   test("Test 62: DECLARE CURSOR with ASENSITIVE keyword") {
@@ -1181,7 +1240,8 @@ END;""")
   CLOSE cur;
   VALUES (y); -- Should return 99
 END;""")
-    checkAnswer(result, Seq(Row(99)))
+    checkAnswer(result, Seq(
+      Row(99)))
   }
 
   test("Test 63: DECLARE CURSOR with FOR READ ONLY clause") {
@@ -1194,7 +1254,8 @@ END;""")
   CLOSE cur;
   VALUES (z); -- Should return 77
 END;""")
-    checkAnswer(result, Seq(Row(77)))
+    checkAnswer(result, Seq(
+      Row(77)))
   }
 
   test("Test 64: DECLARE CURSOR with all optional keywords") {
@@ -1207,7 +1268,8 @@ END;""")
   CLOSE cur;
   VALUES (w); -- Should return 123
 END;""")
-    checkAnswer(result, Seq(Row(123)))
+    checkAnswer(result, Seq(
+      Row(123)))
   }
 
   test("Test 65: FETCH with NEXT FROM keywords") {
@@ -1220,7 +1282,8 @@ END;""")
   CLOSE cur;
   VALUES (a); -- Should return 55
 END;""")
-    checkAnswer(result, Seq(Row(55)))
+    checkAnswer(result, Seq(
+      Row(55)))
   }
 
   test("Test 66: FETCH with FROM keyword") {
@@ -1233,7 +1296,8 @@ END;""")
   CLOSE cur;
   VALUES (b); -- Should return 66
 END;""")
-    checkAnswer(result, Seq(Row(66)))
+    checkAnswer(result, Seq(
+      Row(66)))
   }
 
   test("Test 67: FETCH with NEXT FROM keywords") {
@@ -1246,7 +1310,8 @@ END;""")
   CLOSE cur;
   VALUES (c); -- Should return 88
 END;""")
-    checkAnswer(result, Seq(Row(88)))
+    checkAnswer(result, Seq(
+      Row(88)))
   }
 
   test("Test 68: IDENTIFIER() clause for cursor names - basic case") {
@@ -1259,7 +1324,8 @@ END;""")
   CLOSE IDENTIFIER('my_cursor');
   VALUES (x); -- Should return 99
 END;""")
-    checkAnswer(result, Seq(Row(99)))
+    checkAnswer(result, Seq(
+      Row(99)))
   }
 
   test("Test 69: IDENTIFIER() clause for cursor names - preserves literal ...") {
@@ -1272,7 +1338,8 @@ END;""")
   CLOSE IDENTIFIER('MixedCase');
   VALUES (result); -- Should return 42
 END;""")
-    checkAnswer(result, Seq(Row(42)))
+    checkAnswer(result, Seq(
+      Row(42)))
   }
 
   test("Test 70: IDENTIFIER() clause in FETCH INTO statement") {
@@ -1285,7 +1352,8 @@ END;""")
   CLOSE my_cursor;
   VALUES (IDENTIFIER('my_result')); -- Should return 123
 END;""")
-    checkAnswer(result, Seq(Row(123)))
+    checkAnswer(result, Seq(
+      Row(123)))
   }
 
   test("Test 71: IDENTIFIER() in FETCH INTO with multiple variables") {
@@ -1299,7 +1367,8 @@ END;""")
   CLOSE cur;
   VALUES (IDENTIFIER('val1'), IDENTIFIER('val2')); -- Should return 42, 'test'
 END;""")
-    checkAnswer(result, Seq(Row(42, "test")))
+    checkAnswer(result, Seq(
+      Row(42, "test")))
   }
 
   test("Test 72: Complex SQL in DECLARE - Recursive CTE") {
@@ -1328,7 +1397,8 @@ END;""")
 
   VALUES (sum_result); -- Should return 15 (1+2+3+4+5)
 END;""")
-    checkAnswer(result, Seq(Row(15)))
+    checkAnswer(result, Seq(
+      Row(15)))
   }
 
   test("Test 73: Complex SQL in DECLARE - Subqueries and joins") {
@@ -1370,7 +1440,8 @@ BEGIN
 END;""")
       },
       condition = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'CREATE'", "hint" -> ": extra input 'CREATE'"))
+      parameters = Map("error" -> "'CREATE'", "hint" -> ": extra input 'CREATE'")
+    )
   }
 
   test("Test 74: Nested cursors (3 levels)") {
@@ -1428,7 +1499,8 @@ END;""")
 END;""")
       },
       condition = "INVALID_VARIABLE_DECLARATION.NOT_ALLOWED_IN_SCOPE",
-      parameters = Map("varName" -> "`j`"))
+      parameters = Map("varName" -> "`j`")
+    )
   }
 
   test("Test 75: Unhandled CURSOR_NO_MORE_ROWS continues execution (SQL St...") {
@@ -1452,7 +1524,8 @@ END;""")
 
   VALUES (result);  -- Should return '42-after-fetch', proving execution continued
 END;""")
-    checkAnswer(result, Seq(Row("42-after-fetch")))
+    checkAnswer(result, Seq(
+      Row("42-after-fetch")))
   }
 
   test("Test 76: Verify unhandled exception conditions still throw (not co...") {
@@ -1468,7 +1541,8 @@ END;""")
       },
       condition = "DIVIDE_BY_ZERO",
       parameters = Map("config" -> "\"spark.sql.ansi.enabled\""),
-      queryContext = Array(ExpectedContext("1 / 0")))
+      queryContext = Array(ExpectedContext("1 / 0"))
+    )
   }
 
   test("Test 77: Unhandled NO DATA condition - should continue silently pe...") {
@@ -1488,7 +1562,8 @@ END;""")
   VALUES ('After second fetch - script continued', x);  -- Should execute, x still = 1
   CLOSE cur;
 END;""")
-    checkAnswer(result, Seq(Row("After second fetch - script continued", 1)))
+    checkAnswer(result, Seq(
+      Row("After second fetch - script continued", 1)))
   }
 
   test("Test 78: CONTINUE HANDLER for specific CURSOR_NO_MORE_ROWS condition") {
@@ -1510,7 +1585,8 @@ END;""")
 
   CLOSE cur;
 END;""")
-    checkAnswer(result, Seq(Row("After no data", 10, true)))
+    checkAnswer(result, Seq(
+      Row("After no data", 10, true)))
   }
 
   test("Test 79: CONTINUE HANDLER for generic NOT FOUND class") {
@@ -1532,7 +1608,8 @@ END;""")
 
   CLOSE cur;
 END;""")
-    checkAnswer(result, Seq(Row("After NOT FOUND", 20, false)))
+    checkAnswer(result, Seq(
+      Row("After NOT FOUND", 20, false)))
   }
 
   test("Test 80: EXIT HANDLER for NOT FOUND - exits immediately") {
@@ -1556,7 +1633,8 @@ END;""")
 
   VALUES ('After handler');  -- Should NOT execute (handler exits)
 END;""")
-    checkAnswer(result, Seq(Row("In EXIT handler", 30)))
+    checkAnswer(result, Seq(
+      Row("In EXIT handler", 30)))
   }
 
   test("Test 81: EXIT HANDLER vs CONTINUE HANDLER precedence with loops") {
@@ -1583,7 +1661,8 @@ END;""")
   VALUES ('Total rows', row_count);  -- Should be 3
   CLOSE cur;
 END;""")
-    checkAnswer(result, Seq(Row("Total rows", 3)))
+    checkAnswer(result, Seq(
+      Row("Total rows", 3)))
   }
 
   test("Test 82: Multiple handlers - specific condition takes precedence o...") {
@@ -1609,7 +1688,8 @@ END;""")
 
   CLOSE cur;
 END;""")
-    checkAnswer(result, Seq(Row("Generic ran", false)))
+    checkAnswer(result, Seq(
+      Row("Generic ran", false)))
   }
 
   test("Test 83: Nested blocks with different NOT FOUND handlers") {
@@ -1647,7 +1727,8 @@ END;""")
 
   CLOSE outer_cur;
 END;""")
-    checkAnswer(result, Seq(Row("Outer fetch 2", 50, true)))
+    checkAnswer(result, Seq(
+      Row("Outer fetch 2", 50, true)))
   }
 
   test("Test 84: Variable access in CONTINUE handler BEGIN...END (no cursors)") {
@@ -1667,7 +1748,8 @@ END;""")
 
   SELECT x AS after_handler;  -- Should be 11 (handler incremented it)
 END;""")
-    checkAnswer(result, Seq(Row(11)))
+    checkAnswer(result, Seq(
+      Row(11)))
   }
 
   test("Test 85: CLOSE cursor in CONTINUE handler (cross-frame cursor access)") {
@@ -1697,7 +1779,8 @@ END;""")
 END;""")
       },
       condition = "CURSOR_NOT_OPEN",
-      parameters = Map("cursorName" -> "`cur`"))
+      parameters = Map("cursorName" -> "`cur`")
+    )
   }
 
   test("Test 86: FETCH and CLOSE in handler BEGIN block (cross-frame curso...") {
@@ -1728,7 +1811,8 @@ END;""")
 END;""")
       },
       condition = "CURSOR_NOT_OPEN",
-      parameters = Map("cursorName" -> "`cur`"))
+      parameters = Map("cursorName" -> "`cur`")
+    )
   }
 
   test("Test 87: Cursor shadowing in handler - handler's cursor should sha...") {
@@ -1750,7 +1834,8 @@ END;""")
 
   VALUES (x);  -- Should return 999 (from handler's cursor, not script's)
 END;""")
-    checkAnswer(result, Seq(Row(999)))
+    checkAnswer(result, Seq(
+      Row(999)))
   }
 
   test("Test 88: Triple nested EXIT handlers with cursors - scope resolution") {

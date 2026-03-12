@@ -30,9 +30,8 @@ import org.apache.spark.sql.types.{DataType, DoubleType, IntegerType}
 class HyperLogLogPlusPlusSuite extends SparkFunSuite {
 
   /** Create a HLL++ instance and an input and output buffer. */
-  def createEstimator(
-      rsd: Double,
-      dt: DataType = IntegerType): (HyperLogLogPlusPlus, InternalRow, InternalRow) = {
+  def createEstimator(rsd: Double, dt: DataType = IntegerType):
+      (HyperLogLogPlusPlus, InternalRow, InternalRow) = {
     val input = new SpecificInternalRow(Seq(dt))
     val hll = new HyperLogLogPlusPlus(new BoundReference(0, dt, true), rsd)
     val buffer = createBuffer(hll)
@@ -73,18 +72,19 @@ class HyperLogLogPlusPlusSuite extends SparkFunSuite {
       ns: Seq[Int],
       f: Int => Int,
       c: Int => Int): Unit = {
-    rsds.flatMap(rsd => ns.map(n => (rsd, n))).foreach { case (rsd, n) =>
-      val (hll, input, buffer) = createEstimator(rsd)
-      var i = 0
-      while (i < n) {
-        input.setInt(0, f(i))
-        hll.update(buffer, input)
-        i += 1
-      }
-      val estimate = hll.eval(buffer).asInstanceOf[Long].toDouble
-      val cardinality = c(n)
-      val error = math.abs((estimate / cardinality.toDouble) - 1.0d)
-      assert(error < hll.hllppHelper.trueRsd * 3.0d, "Error should be within 3 std. errors.")
+    rsds.flatMap(rsd => ns.map(n => (rsd, n))).foreach {
+      case (rsd, n) =>
+        val (hll, input, buffer) = createEstimator(rsd)
+        var i = 0
+        while (i < n) {
+          input.setInt(0, f(i))
+          hll.update(buffer, input)
+          i += 1
+        }
+        val estimate = hll.eval(buffer).asInstanceOf[Long].toDouble
+        val cardinality = c(n)
+        val error = math.abs((estimate / cardinality.toDouble) - 1.0d)
+        assert(error < hll.hllppHelper.trueRsd * 3.0d, "Error should be within 3 std. errors.")
     }
   }
 
@@ -110,7 +110,11 @@ class HyperLogLogPlusPlusSuite extends SparkFunSuite {
       seen.clear()
       cardinality
     }
-    testCardinalityEstimates(Seq(0.05, 0.01), Seq(100, 10000, 500000), update, eval)
+    testCardinalityEstimates(
+      Seq(0.05, 0.01),
+      Seq(100, 10000, 500000),
+      update,
+      eval)
   }
 
   // Test merging

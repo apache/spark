@@ -18,12 +18,12 @@
 package org.apache.spark.sql.catalyst.expressions
 
 /**
- * Extracts and processes grouping expressions from GROUP BY clauses that may contain grouping
- * analytics operations (GROUPING SETS, ROLLUP, CUBE).
+ * Extracts and processes grouping expressions from GROUP BY clauses that may contain
+ * grouping analytics operations (GROUPING SETS, ROLLUP, CUBE).
  *
  * This object analyzes a sequence of expressions to compute:
- *   1. The cartesian product of selected group-by expressions from all grouping sets
- *   2. A distinct list of all group-by expressions used across all grouping sets
+ *  1. The cartesian product of selected group-by expressions from all grouping sets
+ *  2. A distinct list of all group-by expressions used across all grouping sets
  */
 object GroupingAnalyticsExtractor {
 

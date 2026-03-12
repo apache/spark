@@ -31,9 +31,7 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, Datet
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class ToNumberBase(left: Expression, right: Expression, errorOnFail: Boolean)
-    extends BinaryExpression
-    with Serializable
-    with ImplicitCastInputTypes {
+  extends BinaryExpression with Serializable with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
 
   private lazy val numberFormatter = {
@@ -56,6 +54,7 @@ abstract class ToNumberBase(left: Expression, right: Expression, errorOnFail: Bo
       StringTypeWithCollation(supportsTrimCollation = true),
       StringTypeWithCollation(supportsTrimCollation = true))
 
+
   override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -67,7 +66,9 @@ abstract class ToNumberBase(left: Expression, right: Expression, errorOnFail: Bo
           messageParameters = Map(
             "inputName" -> toSQLId(right.prettyName),
             "inputType" -> toSQLType(right.dataType),
-            "inputExpr" -> toSQLExpr(right)))
+            "inputExpr" -> toSQLExpr(right)
+          )
+        )
       } else if (numberFormatter == null) {
         TypeCheckResult.TypeCheckSuccess
       } else {
@@ -87,11 +88,11 @@ abstract class ToNumberBase(left: Expression, right: Expression, errorOnFail: Bo
     val builder =
       ctx.addReferenceObj("builder", numberFormatter, classOf[ToNumberParser].getName)
     val eval = left.genCode(ctx)
-    ev.copy(code = code"""
+    ev.copy(code =
+      code"""
         |${eval.code}
         |boolean ${ev.isNull} = ${eval.isNull} || ($builder == null);
-        |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(
-                          dataType)};
+        |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         |if (!${ev.isNull}) {
         |  ${ev.value} = $builder.parse(${eval.value});
         |  ${ev.isNull} = ${ev.isNull} || (${ev.value} == null);
@@ -141,13 +142,13 @@ abstract class ToNumberBase(left: Expression, right: Expression, errorOnFail: Bo
   """,
   since = "3.3.0",
   group = "string_funcs")
-case class ToNumber(left: Expression, right: Expression) extends ToNumberBase(left, right, true) {
+case class ToNumber(left: Expression, right: Expression)
+  extends ToNumberBase(left, right, true) {
 
   override def prettyName: String = "to_number"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): ToNumber =
+      newLeft: Expression, newRight: Expression): ToNumber =
     copy(left = newLeft, right = newRight)
 }
 
@@ -177,7 +178,7 @@ case class ToNumber(left: Expression, right: Expression) extends ToNumberBase(le
   since = "3.3.0",
   group = "string_funcs")
 case class TryToNumber(left: Expression, right: Expression)
-    extends ToNumberBase(left, right, false) {
+  extends ToNumberBase(left, right, false) {
 
   override def nullable: Boolean = true
 
@@ -190,8 +191,8 @@ case class TryToNumber(left: Expression, right: Expression)
 }
 
 /**
- * A function that converts decimal/datetime values to strings, returning NULL if the value fails
- * to match the format string.
+ * A function that converts decimal/datetime values to strings, returning NULL if the value fails to
+ * match the format string.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -255,9 +256,7 @@ object ToCharacterBuilder extends ExpressionBuilder {
         case _: DatetimeType => DateFormatClass(inputExpr, format)
         case _: BinaryType =>
           if (!(format.dataType.isInstanceOf[StringType] && format.foldable)) {
-            throw QueryCompilationErrors.nonFoldableArgumentError(
-              funcName,
-              "format",
+            throw QueryCompilationErrors.nonFoldableArgumentError(funcName, "format",
               format.dataType)
           }
           val fmt = format.eval()
@@ -279,9 +278,7 @@ object ToCharacterBuilder extends ExpressionBuilder {
 }
 
 case class ToCharacter(left: Expression, right: Expression)
-    extends BinaryExpression
-    with ImplicitCastInputTypes
-    with DefaultStringProducingExpression {
+  extends BinaryExpression with ImplicitCastInputTypes with DefaultStringProducingExpression {
   override def nullIntolerant: Boolean = true
 
   private lazy val numberFormatter = {
@@ -304,7 +301,9 @@ case class ToCharacter(left: Expression, right: Expression)
           messageParameters = Map(
             "inputName" -> toSQLId(right.prettyName),
             "inputType" -> toSQLType(right.dataType),
-            "inputExpr" -> toSQLExpr(right)))
+            "inputExpr" -> toSQLExpr(right)
+          )
+        )
       } else if (numberFormatter == null) {
         TypeCheckResult.TypeCheckSuccess
       } else {
@@ -328,8 +327,7 @@ case class ToCharacter(left: Expression, right: Expression)
       code"""
          |${eval.code}
          |boolean ${ev.isNull} = ${eval.isNull} || ($builder == null);
-         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(
-          dataType)};
+         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
          |if (!${ev.isNull}) {
          |  ${ev.value} = $builder.format(${eval.value});
          |}
@@ -338,7 +336,6 @@ case class ToCharacter(left: Expression, right: Expression)
     ev.copy(code = stripped)
   }
   override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): ToCharacter =
+      newLeft: Expression, newRight: Expression): ToCharacter =
     copy(left = newLeft, right = newRight)
 }

@@ -62,7 +62,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   /**
    * Writes `data` to a Parquet file, reads it back and check file contents.
    */
-  protected def checkParquetFile[T <: Product: ClassTag: TypeTag](data: Seq[T]): Unit = {
+  protected def checkParquetFile[T <: Product : ClassTag: TypeTag](data: Seq[T]): Unit = {
     withParquetDataFrame(data)(r => checkAnswer(r, data.map(Row.fromTuple)))
   }
 
@@ -83,7 +83,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("SPARK-11694 Parquet logical types are not being tested properly") {
-    val parquetSchema = MessageTypeParser.parseMessageType("""message root {
+    val parquetSchema = MessageTypeParser.parseMessageType(
+      """message root {
         |  required int32 a(INT_8);
         |  required int32 b(INT_16);
         |  required int32 c(DATE);
@@ -99,19 +100,9 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         |}
       """.stripMargin)
 
-    val expectedSparkTypes = Seq(
-      ByteType,
-      ShortType,
-      DateType,
-      DecimalType(1, 0),
-      DecimalType(10, 0),
-      StringType,
-      StringType,
-      DecimalType(32, 0),
-      DecimalType(32, 0),
-      TimestampType,
-      TimestampType,
-      TimeType(TimeType.MICROS_PRECISION))
+    val expectedSparkTypes = Seq(ByteType, ShortType, DateType, DecimalType(1, 0),
+      DecimalType(10, 0), StringType, StringType, DecimalType(32, 0), DecimalType(32, 0),
+      TimestampType, TimestampType, TimeType(TimeType.MICROS_PRECISION))
 
     withTempPath { location =>
       val path = new Path(location.getCanonicalPath)
@@ -151,10 +142,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         makeRawParquetFile(path)
         Seq(true, false).foreach { vectorizedReaderEnabled =>
           readParquetFile(path.toString, vectorizedReaderEnabled) { df =>
-            checkAnswer(
-              df,
-              (48 until 58).map(n => // char '0' is 48 in ascii
-                Row(Array(n), Array(n, n, n))))
+            checkAnswer(df, (48 until 58).map(n => // char '0' is 48 in ascii
+              Row(Array(n), Array(n, n, n))))
           }
         }
       }
@@ -180,7 +169,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("Read TimestampNTZ and TimestampLTZ for various logical TIMESTAMP types") {
-    val schema = MessageTypeParser.parseMessageType("""message root {
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
         |  required int64 timestamp_ltz_millis_depr(TIMESTAMP_MILLIS);
         |  required int64 timestamp_ltz_micros_depr(TIMESTAMP_MICROS);
         |  required int64 timestamp_ltz_millis(TIMESTAMP(MILLIS,true));
@@ -215,29 +205,26 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
               assertResult(df.schema) {
                 StructType(
                   StructField("timestamp_ltz_millis_depr", TimestampType, nullable = true) ::
-                    StructField("timestamp_ltz_micros_depr", TimestampType, nullable = true) ::
-                    StructField("timestamp_ltz_millis", TimestampType, nullable = true) ::
-                    StructField("timestamp_ltz_micros", TimestampType, nullable = true) ::
-                    StructField("timestamp_ntz_millis", timestampNTZType, nullable = true) ::
-                    StructField("timestamp_ntz_micros", timestampNTZType, nullable = true) ::
-                    Nil)
+                  StructField("timestamp_ltz_micros_depr", TimestampType, nullable = true) ::
+                  StructField("timestamp_ltz_millis", TimestampType, nullable = true) ::
+                  StructField("timestamp_ltz_micros", TimestampType, nullable = true) ::
+                  StructField("timestamp_ntz_millis", timestampNTZType, nullable = true) ::
+                  StructField("timestamp_ntz_micros", timestampNTZType, nullable = true) ::
+                  Nil
+                )
               }
 
               val ltz_value = new java.sql.Timestamp(1000L)
               val ntz_value = LocalDateTime.of(1970, 1, 1, 0, 0, 1)
 
               val exp = if (inferTimestampNTZ) {
-                (0 until numRecords)
-                  .map { _ =>
-                    (ltz_value, ltz_value, ltz_value, ltz_value, ntz_value, ntz_value)
-                  }
-                  .toDF()
+                (0 until numRecords).map { _ =>
+                  (ltz_value, ltz_value, ltz_value, ltz_value, ntz_value, ntz_value)
+                }.toDF()
               } else {
-                (0 until numRecords)
-                  .map { _ =>
-                    (ltz_value, ltz_value, ltz_value, ltz_value, ltz_value, ltz_value)
-                  }
-                  .toDF()
+                (0 until numRecords).map { _ =>
+                  (ltz_value, ltz_value, ltz_value, ltz_value, ltz_value, ltz_value)
+                }.toDF()
               }
 
               checkAnswer(df, exp)
@@ -258,7 +245,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
           assertResult(spark.read.parquet(dir.getCanonicalPath).schema) {
             StructType(
               StructField("col", TimestampNTZType, nullable = true) ::
-                Nil)
+                Nil
+            )
           }
         }
       }
@@ -279,17 +267,15 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     // If ANSI mode is on, the combination (1, 1) will cause a runtime error. Otherwise, the
     // decimal RDD contains all null values and should be able to read back from Parquet.
     if (!SQLConf.get.ansiEnabled) {
-      combinations = combinations ++ Seq((1, 1))
+      combinations = combinations++ Seq((1, 1))
     }
     for ((precision, scale) <- combinations) {
       withTempPath { dir =>
         val data = makeDecimalRDD(DecimalType(precision, scale))
         data.write.parquet(dir.getCanonicalPath)
-        readParquetFile(dir.getCanonicalPath) { df =>
-          {
-            checkAnswer(df, data.collect().toSeq)
-          }
-        }
+        readParquetFile(dir.getCanonicalPath) { df => {
+          checkAnswer(df, data.collect().toSeq)
+        }}
       }
     }
   }
@@ -313,19 +299,14 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
 
   test("SPARK-54220: NullType") {
     val data = (1 to 5)
-      .map(_ => Row(null, Row(null, null), Seq(null, null), Map(Row(null) -> null)))
-      .asJava
+      .map(_ => Row(null, Row(null, null), Seq(null, null), Map(Row(null) -> null))).asJava
     val dataSchema = new StructType()
       .add("_1", NullType)
-      .add(
-        "_2",
-        new StructType()
-          .add("_1", NullType)
-          .add("_2", NullType))
+      .add("_2", new StructType()
+        .add("_1", NullType)
+        .add("_2", NullType))
       .add("_3", ArrayType(NullType, containsNull = true))
-      .add(
-        "_4",
-        MapType(new StructType().add("_1", NullType), NullType, valueContainsNull = true))
+      .add("_4", MapType(new StructType().add("_1", NullType), NullType, valueContainsNull = true))
     val expected = data.asScala.toArray
 
     withAllParquetWriters {
@@ -360,39 +341,45 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     val data = (1 to 4).map(i => Tuple1((i, s"val_$i")))
     withParquetDataFrame(data) { df =>
       // Structs are converted to `Row`s
-      checkAnswer(
-        df,
-        data.map { case Tuple1(struct) =>
-          Row(Row(struct.productIterator.toSeq: _*))
-        })
+      checkAnswer(df, data.map { case Tuple1(struct) =>
+        Row(Row(struct.productIterator.toSeq: _*))
+      })
     }
   }
 
   testStandardAndLegacyModes("array of struct") {
     val data = (1 to 4).map { i =>
-      Tuple1(Seq(Tuple1(s"1st_val_$i"), Tuple1(s"2nd_val_$i")))
+      Tuple1(
+        Seq(
+          Tuple1(s"1st_val_$i"),
+          Tuple1(s"2nd_val_$i")
+        )
+      )
     }
     withParquetDataFrame(data) { df =>
       // Structs are converted to `Row`s
-      checkAnswer(
-        df,
-        data.map { case Tuple1(array) =>
-          Row(array.map(struct => Row(struct.productIterator.toSeq: _*)))
-        })
+      checkAnswer(df, data.map { case Tuple1(array) =>
+        Row(array.map(struct => Row(struct.productIterator.toSeq: _*)))
+      })
     }
   }
 
   testStandardAndLegacyModes("array of nested struct") {
     val data = (1 to 4).map { i =>
-      Tuple1(Seq(Tuple1(Tuple1(s"1st_val_$i")), Tuple1(Tuple1(s"2nd_val_$i"))))
+      Tuple1(
+        Seq(
+          Tuple1(
+            Tuple1(s"1st_val_$i")),
+          Tuple1(
+            Tuple1(s"2nd_val_$i"))
+        )
+      )
     }
     withParquetDataFrame(data) { df =>
       // Structs are converted to `Row`s
-      checkAnswer(
-        df,
-        data.map { case Tuple1(array) =>
-          Row(array.map { case Tuple1(Tuple1(str)) => Row(Row(str)) })
-        })
+      checkAnswer(df, data.map { case Tuple1(array) =>
+        Row(array.map { case Tuple1(Tuple1(str)) => Row(Row(str))})
+      })
     }
   }
 
@@ -400,39 +387,43 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     val data = (1 to 4).map(i => Tuple1((i, Seq(Seq(s"val_$i")))))
     withParquetDataFrame(data) { df =>
       // Structs are converted to `Row`s
-      checkAnswer(
-        df,
-        data.map { case Tuple1(struct) =>
-          Row(Row(struct.productIterator.toSeq: _*))
-        })
+      checkAnswer(df, data.map { case Tuple1(struct) =>
+        Row(Row(struct.productIterator.toSeq: _*))
+      })
     }
   }
 
   testStandardAndLegacyModes("nested map with struct as key type") {
     val data = (1 to 4).map { i =>
-      Tuple1(Map((i, s"kA_$i") -> s"vA_$i", (i, s"kB_$i") -> s"vB_$i"))
+      Tuple1(
+        Map(
+          (i, s"kA_$i") -> s"vA_$i",
+          (i, s"kB_$i") -> s"vB_$i"
+        )
+      )
     }
     withParquetDataFrame(data) { df =>
       // Structs are converted to `Row`s
-      checkAnswer(
-        df,
-        data.map { case Tuple1(m) =>
-          Row(m.map { case (k, v) => Row(k.productIterator.toSeq: _*) -> v })
-        })
+      checkAnswer(df, data.map { case Tuple1(m) =>
+        Row(m.map { case (k, v) => Row(k.productIterator.toSeq: _*) -> v })
+      })
     }
   }
 
   testStandardAndLegacyModes("nested map with struct as value type") {
     val data = (1 to 4).map { i =>
-      Tuple1(Map(s"kA_$i" -> ((i, s"vA_$i")), s"kB_$i" -> ((i, s"vB_$i"))))
+      Tuple1(
+        Map(
+          s"kA_$i" -> ((i, s"vA_$i")),
+          s"kB_$i" -> ((i, s"vB_$i"))
+        )
+      )
     }
     withParquetDataFrame(data) { df =>
       // Structs are converted to `Row`s
-      checkAnswer(
-        df,
-        data.map { case Tuple1(m) =>
-          Row(m.transform((_, struct) => Row(struct.productIterator.toSeq: _*)))
-        })
+      checkAnswer(df, data.map { case Tuple1(m) =>
+        Row(m.transform((_, struct) => Row(struct.productIterator.toSeq: _*)))
+      })
     }
   }
 
@@ -465,13 +456,18 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("vectorized reader: array") {
-    val data = Seq(Tuple1(null), Tuple1(Seq()), Tuple1(Seq("a", "b", "c")), Tuple1(Seq(null)))
+    val data = Seq(
+      Tuple1(null),
+      Tuple1(Seq()),
+      Tuple1(Seq("a", "b", "c")),
+      Tuple1(Seq(null))
+    )
 
     withParquetFile(data) { file =>
       readParquetFile(file) { df =>
-        checkAnswer(
-          df.sort("_1"),
-          Row(null) :: Row(Seq()) :: Row(Seq(null)) :: Row(Seq("a", "b", "c")) :: Nil)
+        checkAnswer(df.sort("_1"),
+          Row(null) :: Row(Seq()) :: Row(Seq(null)) :: Row(Seq("a", "b", "c")) :: Nil
+        )
       }
     }
   }
@@ -479,33 +475,40 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   test("vectorized reader: missing array") {
     Seq(true, false).foreach { offheapEnabled =>
       withSQLConf(
-        SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
-        SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString) {
-        val data = Seq(Tuple1(null), Tuple1(Seq()), Tuple1(Seq("a", "b", "c")), Tuple1(Seq(null)))
+          SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
+          SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString) {
+        val data = Seq(
+          Tuple1(null),
+          Tuple1(Seq()),
+          Tuple1(Seq("a", "b", "c")),
+          Tuple1(Seq(null))
+        )
 
-        val readSchema = new StructType().add(
-          "_2",
-          new ArrayType(
-            new StructType().add("a", LongType, nullable = true),
-            containsNull = true))
+        val readSchema = new StructType().add("_2", new ArrayType(
+          new StructType().add("a", LongType, nullable = true),
+          containsNull = true)
+        )
 
         withParquetFile(data) { file =>
-          checkAnswer(
-            spark.read.schema(readSchema).parquet(file),
-            Row(null) :: Row(null) :: Row(null) :: Row(null) :: Nil)
+          checkAnswer(spark.read.schema(readSchema).parquet(file),
+            Row(null) :: Row(null) :: Row(null) :: Row(null) :: Nil
+          )
         }
       }
     }
   }
 
   test("vectorized reader: array of array") {
-    val data = Seq(Tuple1(Seq(Seq(0, 1), Seq(2, 3))), Tuple1(Seq(Seq(4, 5), Seq(6, 7))))
+    val data = Seq(
+      Tuple1(Seq(Seq(0, 1), Seq(2, 3))),
+      Tuple1(Seq(Seq(4, 5), Seq(6, 7)))
+    )
 
     withParquetFile(data) { file =>
       readParquetFile(file) { df =>
-        checkAnswer(
-          df.sort("_1"),
-          Row(Seq(Seq(0, 1), Seq(2, 3))) :: Row(Seq(Seq(4, 5), Seq(6, 7))) :: Nil)
+        checkAnswer(df.sort("_1"),
+          Row(Seq(Seq(0, 1), Seq(2, 3))) :: Row(Seq(Seq(4, 5), Seq(6, 7))) :: Nil
+        )
       }
     }
   }
@@ -517,14 +520,15 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       Tuple1(Tuple2(null, null)),
       Tuple1(Tuple2(null, Seq("b", "c"))),
       Tuple1(Tuple2("d", Seq("e", "f"))),
-      Tuple1(null))
+      Tuple1(null)
+    )
 
     withParquetFile(data) { file =>
       readParquetFile(file) { df =>
-        checkAnswer(
-          df,
+        checkAnswer(df,
           Row(Row("a", null)) :: Row(null) :: Row(Row(null, null)) ::
-            Row(Row(null, Seq("b", "c"))) :: Row(Row("d", Seq("e", "f"))) :: Row(null) :: Nil)
+              Row(Row(null, Seq("b", "c"))) :: Row(Row("d", Seq("e", "f"))) :: Row(null) :: Nil
+        )
       }
     }
   }
@@ -536,22 +540,23 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       Tuple1(Seq(Tuple2("a", null), Tuple2(null, "b"))),
       Tuple1(Seq(null)),
       Tuple1(Seq(Tuple2(null, null), Tuple2("c", null), null)),
-      Tuple1(Seq()))
+      Tuple1(Seq())
+    )
 
     withParquetFile(data) { file =>
       readParquetFile(file) { df =>
-        checkAnswer(
-          df,
+        checkAnswer(df,
           Row(null) ::
-            Row(Seq()) ::
-            Row(Seq(Row("a", null), Row(null, "b"))) ::
-            Row(Seq(null)) ::
-            Row(Seq(Row(null, null), Row("c", null), null)) ::
-            Row(Seq()) ::
-            Nil)
+              Row(Seq()) ::
+              Row(Seq(Row("a", null), Row(null, "b"))) ::
+              Row(Seq(null)) ::
+              Row(Seq(Row(null, null), Row("c", null), null)) ::
+              Row(Seq()) ::
+              Nil)
       }
     }
   }
+
 
   test("vectorized reader: array of nested struct") {
     val data = Seq(
@@ -563,22 +568,22 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       Tuple1(Tuple2(null, Seq(null))),
       Tuple1(Tuple2(null, Seq(Tuple2(null, null), Tuple2("h", null), null))),
       Tuple1(Tuple2("i", Seq())),
-      Tuple1(null))
+      Tuple1(null)
+    )
 
     withParquetFile(data) { file =>
       readParquetFile(file) { df =>
-        checkAnswer(
-          df,
+        checkAnswer(df,
           Row(Row("a", null)) ::
-            Row(Row("b", Seq(Row("c", "d")))) ::
-            Row(null) ::
-            Row(Row("e", Seq(Row("f", null), Row(null, "g")))) ::
-            Row(Row(null, null)) ::
-            Row(Row(null, Seq(null))) ::
-            Row(Row(null, Seq(Row(null, null), Row("h", null), null))) ::
-            Row(Row("i", Seq())) ::
-            Row(null) ::
-            Nil)
+              Row(Row("b", Seq(Row("c", "d")))) ::
+              Row(null) ::
+              Row(Row("e", Seq(Row("f", null), Row(null, "g")))) ::
+              Row(Row(null, null)) ::
+              Row(Row(null, Seq(null))) ::
+              Row(Row(null, Seq(Row(null, null), Row("h", null), null))) ::
+              Row(Row("i", Seq())) ::
+              Row(null) ::
+              Nil)
       }
     }
   }
@@ -744,15 +749,19 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("vectorized reader: struct") {
-    val data =
-      Seq(Tuple1(null), Tuple1((1, "a")), Tuple1((2, null)), Tuple1((3, "b")), Tuple1(null))
+    val data = Seq(
+      Tuple1(null),
+      Tuple1((1, "a")),
+      Tuple1((2, null)),
+      Tuple1((3, "b")),
+      Tuple1(null)
+    )
 
     withParquetFile(data) { file =>
       readParquetFile(file) { df =>
-        checkAnswer(
-          df.sort("_1"),
-          Row(null) :: Row(null) :: Row(Row(1, "a")) :: Row(Row(2, null)) :: Row(
-            Row(3, "b")) :: Nil)
+        checkAnswer(df.sort("_1"),
+          Row(null) :: Row(null) :: Row(Row(1, "a")) :: Row(Row(2, null)) :: Row(Row(3, "b")) :: Nil
+        )
       }
     }
   }
@@ -763,17 +772,20 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       returnNullStructIfAllFieldsMissing <- Seq(true, false)
     } {
       withSQLConf(
-        SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
-        SQLConf.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING.key ->
-          returnNullStructIfAllFieldsMissing.toString,
-        SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString) {
-        val data = Seq(Tuple1((1, "a")), Tuple1((2, null)), Tuple1(null))
+          SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
+          SQLConf.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING.key ->
+              returnNullStructIfAllFieldsMissing.toString,
+          SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString) {
+        val data = Seq(
+          Tuple1((1, "a")),
+          Tuple1((2, null)),
+          Tuple1(null)
+        )
 
-        val readSchema = new StructType().add(
-          "_1",
+        val readSchema = new StructType().add("_1",
           new StructType()
-            .add("_3", IntegerType, nullable = true)
-            .add("_4", LongType, nullable = true),
+              .add("_3", IntegerType, nullable = true)
+              .add("_4", LongType, nullable = true),
           nullable = true)
 
         val expectedAnswer = if (!returnNullStructIfAllFieldsMissing) {
@@ -796,30 +808,23 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     val data = Seq(
       Row(Row(Seq(11, 12, null, 14), Row("21", 22), Row(true)), 100),
       Row(Row(Seq(11, 12, null, 14), Row("21", 22), Row(false)), 100),
-      Row(null, 100))
+      Row(null, 100)
+    )
 
     val tableSchema = new StructType()
-      .add(
-        "_1",
-        new StructType()
-          .add("_1", ArrayType(IntegerType, containsNull = true))
-          .add(
-            "_2",
-            new StructType()
-              .add("_1", StringType)
-              .add("_2", IntegerType))
-          .add(
-            "_3",
-            new StructType()
-              .add("_1", BooleanType)))
+      .add("_1", new StructType()
+        .add("_1", ArrayType(IntegerType, containsNull = true))
+        .add("_2", new StructType()
+          .add("_1", StringType)
+          .add("_2", IntegerType))
+        .add("_3", new StructType()
+          .add("_1", BooleanType)))
       .add("_2", IntegerType)
 
     val readSchema = new StructType()
-      .add(
-        "_1",
-        new StructType()
-          .add("_101", IntegerType)
-          .add("_102", LongType))
+      .add("_1", new StructType()
+        .add("_101", IntegerType)
+        .add("_102", LongType))
 
     withTempPath { path =>
       val file = path.getCanonicalPath
@@ -833,7 +838,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
           SQLConf.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING.key ->
             returnNullStructIfAllFieldsMissing.toString,
           SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
-          SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString) {
+          SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString
+        ) {
           val expectedAnswer = if (!returnNullStructIfAllFieldsMissing) {
             Row(Row(null, null), 100) :: Row(Row(null, null), 100) :: Row(null, 100) :: Nil
           } else {
@@ -854,21 +860,20 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("SPARK-53535: vectorized reader: missing all struct fields, struct with map field only") {
-    val data =
-      Seq(Row(Row(Map("key1" -> 1)), 100), Row(Row(Map("key2" -> 2)), 100), Row(null, 100))
+    val data = Seq(
+      Row(Row(Map("key1" -> 1)), 100),
+      Row(Row(Map("key2" -> 2)), 100),
+      Row(null, 100)
+    )
 
     val tableSchema = new StructType()
-      .add(
-        "_1",
-        new StructType()
-          .add("_1", MapType(StringType, IntegerType, valueContainsNull = true)))
+      .add("_1", new StructType()
+        .add("_1", MapType(StringType, IntegerType, valueContainsNull = true)))
       .add("_2", IntegerType)
 
     val readSchema = new StructType()
-      .add(
-        "_1",
-        new StructType()
-          .add("_101", IntegerType))
+      .add("_1", new StructType()
+        .add("_101", IntegerType))
 
     withTempPath { path =>
       val file = path.getCanonicalPath
@@ -879,10 +884,11 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         returnNullStructIfAllFieldsMissing <- Seq(true, false)
       } {
         withSQLConf(
-          SQLConf.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING.key ->
-            returnNullStructIfAllFieldsMissing.toString,
-          SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
-          SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString) {
+            SQLConf.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING.key ->
+              returnNullStructIfAllFieldsMissing.toString,
+            SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
+            SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString
+        ) {
           val expectedAnswer = if (!returnNullStructIfAllFieldsMissing) {
             Row(Row(null), 100) :: Row(Row(null), 100) :: Row(null, 100) :: Nil
           } else {
@@ -897,34 +903,28 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
-  test(
-    "SPARK-53535: vectorized reader: missing all struct fields, " +
+  test("SPARK-53535: vectorized reader: missing all struct fields, " +
       "struct with cheap map and more expensive array field") {
     val data = Seq(
       Row(Row(Map(false -> Row("expensive", 1)), Seq("test1")), 100),
       Row(Row(Map(true -> Row("expensive", 2)), Seq("test2")), 100),
-      Row(null, 100))
+      Row(null, 100)
+    )
 
     val tableSchema = new StructType()
-      .add(
-        "_1",
-        new StructType()
-          .add(
-            "_1",
-            MapType(
-              BooleanType,
-              new StructType()
-                .add("_1", StringType)
-                .add("_2", IntegerType),
-              valueContainsNull = true))
-          .add("_2", ArrayType(StringType, containsNull = true)))
+      .add("_1", new StructType()
+        .add("_1", MapType(
+          BooleanType,
+          new StructType()
+            .add("_1", StringType)
+            .add("_2", IntegerType),
+          valueContainsNull = true))
+        .add("_2", ArrayType(StringType, containsNull = true)))
       .add("_2", IntegerType)
 
     val readSchema = new StructType()
-      .add(
-        "_1",
-        new StructType()
-          .add("_101", IntegerType))
+      .add("_1", new StructType()
+        .add("_101", IntegerType))
 
     withTempPath { path =>
       val file = path.getCanonicalPath
@@ -935,10 +935,11 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         returnNullStructIfAllFieldsMissing <- Seq(true, false)
       } {
         withSQLConf(
-          SQLConf.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING.key ->
-            returnNullStructIfAllFieldsMissing.toString,
-          SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
-          SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString) {
+            SQLConf.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING.key ->
+              returnNullStructIfAllFieldsMissing.toString,
+            SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
+            SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString
+        ) {
           val expectedAnswer = if (!returnNullStructIfAllFieldsMissing) {
             Row(Row(null), 100) :: Row(Row(null), 100) :: Row(null, 100) :: Nil
           } else {
@@ -954,21 +955,24 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("SPARK-54220: vectorized reader: missing all struct fields, struct with NullType only") {
-    val data = Seq(Tuple1((null, null)), Tuple1((null, null)), Tuple1(null))
-    val readSchema = new StructType().add(
-      "_1",
+    val data = Seq(
+      Tuple1((null, null)),
+      Tuple1((null, null)),
+      Tuple1(null)
+    )
+    val readSchema = new StructType().add("_1",
       new StructType()
-        .add("_3", IntegerType, nullable = true)
-        .add("_4", StringType, nullable = true),
+          .add("_3", IntegerType, nullable = true)
+          .add("_4", StringType, nullable = true),
       nullable = true)
     val expectedAnswer = Row(Row(null, null)) :: Row(Row(null, null)) :: Row(null) :: Nil
 
     withParquetFile(data) { file =>
       for (offheapEnabled <- Seq(true, false)) {
         withSQLConf(
-          SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
-          SQLConf.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING.key -> "false",
-          SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString) {
+            SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
+            SQLConf.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING.key -> "false",
+            SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString) {
           withAllParquetReaders {
             val df = spark.read.schema(readSchema).parquet(file)
             val scanNode = df.queryExecution.executedPlan.collectLeaves().head
@@ -985,28 +989,32 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   test("vectorized reader: missing some struct fields") {
     Seq(true, false).foreach { offheapEnabled =>
       withSQLConf(
-        SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
-        SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString) {
-        val data = Seq(Tuple1((1, "a")), Tuple1((2, null)), Tuple1(null))
+          SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
+          SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString) {
+        val data = Seq(
+          Tuple1((1, "a")),
+          Tuple1((2, null)),
+          Tuple1(null)
+        )
 
-        val readSchema = new StructType().add(
-          "_1",
+        val readSchema = new StructType().add("_1",
           new StructType()
-            .add("_1", IntegerType, nullable = true)
-            .add("_3", LongType, nullable = true),
+              .add("_1", IntegerType, nullable = true)
+              .add("_3", LongType, nullable = true),
           nullable = true)
 
         withParquetFile(data) { file =>
-          checkAnswer(
-            spark.read.schema(readSchema).parquet(file),
-            Row(null) :: Row(Row(1, null)) :: Row(Row(2, null)) :: Nil)
+          checkAnswer(spark.read.schema(readSchema).parquet(file),
+            Row(null) :: Row(Row(1, null)) :: Row(Row(2, null)) :: Nil
+          )
         }
       }
     }
   }
 
   test("SPARK-34817: Support for unsigned Parquet logical types") {
-    val parquetSchema = MessageTypeParser.parseMessageType("""message root {
+    val parquetSchema = MessageTypeParser.parseMessageType(
+      """message root {
         |  required INT32 a(UINT_8);
         |  required INT32 b(UINT_16);
         |  required INT32 c(UINT_32);
@@ -1026,7 +1034,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("SPARK-11692 Support for Parquet logical types, JSON and BSON (embedded types)") {
-    val parquetSchema = MessageTypeParser.parseMessageType("""message root {
+    val parquetSchema = MessageTypeParser.parseMessageType(
+      """message root {
         |  required binary a(JSON);
         |  required binary b(BSON);
         |}
@@ -1114,12 +1123,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         """.stripMargin
 
       val schema = MessageTypeParser.parseMessageType(schemaStr)
-      val writer = createParquetWriter(
-        schema,
-        path,
-        dictionaryEnabled = dictionaryEnabled,
-        pageSize = pageSize,
-        dictionaryPageSize = pageSize)
+      val writer = createParquetWriter(schema, path,
+        dictionaryEnabled = dictionaryEnabled, pageSize = pageSize, dictionaryPageSize = pageSize)
 
       val rand = scala.util.Random
       val expected = (0 until n).map { i =>
@@ -1153,14 +1158,12 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
           val path = new Path(dir.toURI.toString, "part-r-0.parquet")
           val expected = makeRawParquetFile(path, dictionaryEnabled, 1000, pageSize)
           readParquetFile(path.toString) { df =>
-            checkAnswer(
-              df,
-              expected.map {
-                case None =>
-                  Row(null, null, null, null, null)
-                case Some(i) =>
-                  Row(i % 2 == 0, i, i.toLong, i.toFloat, i.toDouble)
-              })
+            checkAnswer(df, expected.map {
+              case None =>
+                Row(null, null, null, null, null)
+              case Some(i) =>
+                Row(i % 2 == 0, i, i.toLong, i.toFloat, i.toDouble)
+            })
           }
         }
       }
@@ -1181,6 +1184,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         """.stripMargin
       val schema = MessageTypeParser.parseMessageType(schemaStr)
 
+
       val writer = createParquetWriter(schema, path)
 
       (0 until 10).foreach { i =>
@@ -1200,11 +1204,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       val path = new Path(dir.toURI.toString, "part-r-0.parquet")
       makeRawParquetFile(path)
       readParquetFile(path.toString) { df =>
-        checkAnswer(
-          df,
-          (0 until 10).map { i =>
-            Row(i % 2 == 0, i, i.toLong, i.toFloat, i.toDouble)
-          })
+        checkAnswer(df, (0 until 10).map { i =>
+          Row(i % 2 == 0, i, i.toLong, i.toFloat, i.toDouble) })
       }
     }
   }
@@ -1225,8 +1226,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
 
         val factory = new SimpleGroupFactory(schema)
         (0 until 1000).foreach { i =>
-          val group = factory
-            .newGroup()
+          val group = factory.newGroup()
             .append("a", i % 100 + Byte.MaxValue)
             .append("b", i % 100 + Short.MaxValue)
             .append("c", i % 100 + Int.MaxValue)
@@ -1239,14 +1239,11 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         val path = new Path(dir.toURI.toString, "part-r-0.parquet")
         makeRawParquetFile(path)
         readParquetFile(path.toString) { df =>
-          checkAnswer(
-            df,
-            (0 until 1000).map { i =>
-              Row(
-                i % 100 + Byte.MaxValue,
-                i % 100 + Short.MaxValue,
-                i % 100 + Int.MaxValue.toLong)
-            })
+          checkAnswer(df, (0 until 1000).map { i =>
+            Row(i % 100 + Byte.MaxValue,
+              i % 100 + Short.MaxValue,
+              i % 100 + Int.MaxValue.toLong)
+          })
         }
       }
     }
@@ -1267,8 +1264,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         val factory = new SimpleGroupFactory(schema)
         // Original range retained to avoid regression
         (-500 until 500).foreach { i =>
-          val group = factory
-            .newGroup()
+          val group = factory.newGroup()
             .append("a", i % 100L)
           writer.write(group)
         }
@@ -1310,7 +1306,9 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
           "path" -> ".*",
           "column" -> "\\[_1\\]",
           "expectedType" -> "timestamp",
-          "actualType" -> "BINARY"))
+          "actualType" -> "BINARY"
+        )
+      )
     }
   }
 
@@ -1388,7 +1386,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     // Parquet data source simply falls back to the Parquet schema once it fails to parse the Spark
     // schema.  By making these two different, we are able to assert the old style case class string
     // is parsed successfully.
-    val parquetSchema = MessageTypeParser.parseMessageType("""message root {
+    val parquetSchema = MessageTypeParser.parseMessageType(
+      """message root {
         |  required int32 c;
         |}
       """.stripMargin)
@@ -1411,13 +1410,13 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("SPARK-8121: spark.sql.parquet.output.committer.class shouldn't be overridden") {
-    withSQLConf(
-      SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+    withSQLConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
         classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName) {
       val extraOptions = Map(
         SQLConf.OUTPUT_COMMITTER_CLASS.key -> classOf[ParquetOutputCommitter].getCanonicalName,
         SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key ->
-          classOf[JobCommitFailureParquetOutputCommitter].getCanonicalName)
+          classOf[JobCommitFailureParquetOutputCommitter].getCanonicalName
+      )
       withTempPath { dir =>
         val message = intercept[RuntimeException] {
           spark.range(0, 1).write.options(extraOptions).parquet(dir.getCanonicalPath)
@@ -1436,20 +1435,19 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     val errorMessage = intercept[Throwable] {
       spark.read.parquet("hdfs://nonexistent")
     }.toString
-    assert(
-      errorMessage.contains("UnknownHostException") ||
+    assert(errorMessage.contains("UnknownHostException") ||
         errorMessage.contains("is not a valid DFS filename"))
   }
 
   test("SPARK-7837 Do not close output writer twice when commitTask() fails") {
-    withSQLConf(
-      SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
-        classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName) {
+    withSQLConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+      classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName) {
       // Using a output committer that always fail when committing a task, so that both
       // `commitTask()` and `abortTask()` are invoked.
       val extraOptions = Map[String, String](
         SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key ->
-          classOf[TaskCommitFailureParquetOutputCommitter].getCanonicalName)
+          classOf[TaskCommitFailureParquetOutputCommitter].getCanonicalName
+      )
 
       // Before fixing SPARK-7837, the following code results in an NPE because both
       // `commitTask()` and `abortTask()` try to close output writers.
@@ -1464,9 +1462,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
 
       withTempPath { dir =>
         val m2 = intercept[SparkException] {
-          val df = spark
-            .range(1)
-            .select($"id" as Symbol("a"), $"id" as Symbol("b"))
+          val df = spark.range(1).select($"id" as Symbol("a"), $"id" as Symbol("b"))
             .coalesce(1)
           df.write.partitionBy("a").options(extraOptions).parquet(dir.getCanonicalPath)
         }
@@ -1481,8 +1477,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("SPARK-11044 Parquet writer version fixed as version1 ") {
-    withSQLConf(
-      SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+    withSQLConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
         classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName) {
       // For dictionary encoding, Parquet changes the encoding types according to its writer
       // version. So, this test checks one of the encoding types in order to ensure that
@@ -1492,21 +1487,16 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         ParquetOutputFormat.WRITER_VERSION -> ParquetProperties.WriterVersion.PARQUET_2_0.toString,
         // By default, dictionary encoding is enabled from Parquet 1.2.0 but
         // it is enabled just in case.
-        ParquetOutputFormat.ENABLE_DICTIONARY -> "true")
+        ParquetOutputFormat.ENABLE_DICTIONARY -> "true"
+      )
 
       val hadoopConf = spark.sessionState.newHadoopConfWithOptions(extraOptions)
 
       withSQLConf(ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL") {
         withTempPath { dir =>
           val path = s"${dir.getCanonicalPath}/part-r-0.parquet"
-          spark
-            .range(1 << 16)
-            .selectExpr("(id % 4) AS i")
-            .coalesce(1)
-            .write
-            .options(extraOptions)
-            .mode("overwrite")
-            .parquet(path)
+          spark.range(1 << 16).selectExpr("(id % 4) AS i")
+            .coalesce(1).write.options(extraOptions).mode("overwrite").parquet(path)
 
           val blockMetadata = readFooter(new Path(path), hadoopConf).getBlocks.asScala.head
           val columnChunkMetadata = blockMetadata.getColumns.asScala.head
@@ -1522,11 +1512,10 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   test("null and non-null strings") {
     // Create a dataset where the first values are NULL and then some non-null values. The
     // number of non-nulls needs to be bigger than the ParquetReader batch size.
-    val data: Dataset[String] = spark
-      .range(200)
-      .map(i =>
-        if (i < 150) null
-        else "a")
+    val data: Dataset[String] = spark.range(200).map (i =>
+      if (i < 150) null
+      else "a"
+    )
     val df = data.toDF("col")
     assert(df.agg("col" -> "count").collect().head.getLong(0) == 50)
 
@@ -1573,8 +1562,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       checkAnswer(
         // Decimal column in this file is encoded using plain dictionary
         readResourceParquetFile("test-data/dec-in-fixed-len.parquet"),
-        spark
-          .range(1 << 4)
+        spark.range(1 << 4)
           .select($"id" % 10 cast DecimalType(10, 2) as Symbol("fixed_len_dec")))
     }
   }
@@ -1601,7 +1589,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
 
   test("SPARK-12589 copy() on rows returned from reader works for strings") {
     withTempPath { dir =>
-      val data = (1, "abc") :: (2, "helloabcde") :: Nil
+      val data = (1, "abc") ::(2, "helloabcde") :: Nil
       data.toDF().write.parquet(dir.getCanonicalPath)
       var hash1: Int = 0
       var hash2: Int = 0
@@ -1636,8 +1624,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       {
         val conf = spark.sessionState.conf
         val reader = new VectorizedParquetRecordReader(
-          conf.offHeapColumnVectorEnabled,
-          conf.parquetVectorizedReaderBatchSize)
+          conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         try {
           reader.initialize(file, null)
           val result = mutable.ArrayBuffer.empty[(Int, String)]
@@ -1656,8 +1643,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       {
         val conf = spark.sessionState.conf
         val reader = new VectorizedParquetRecordReader(
-          conf.offHeapColumnVectorEnabled,
-          conf.parquetVectorizedReaderBatchSize)
+          conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         try {
           reader.initialize(file, ("_2" :: Nil).asJava)
           val result = mutable.ArrayBuffer.empty[(String)]
@@ -1675,8 +1661,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       {
         val conf = spark.sessionState.conf
         val reader = new VectorizedParquetRecordReader(
-          conf.offHeapColumnVectorEnabled,
-          conf.parquetVectorizedReaderBatchSize)
+          conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         try {
           reader.initialize(file, ("_2" :: "_1" :: Nil).asJava)
           val result = mutable.ArrayBuffer.empty[(String, Int)]
@@ -1695,8 +1680,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       {
         val conf = spark.sessionState.conf
         val reader = new VectorizedParquetRecordReader(
-          conf.offHeapColumnVectorEnabled,
-          conf.parquetVectorizedReaderBatchSize)
+          conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         try {
           reader.initialize(file, List[String]().asJava)
           var result = 0
@@ -1716,19 +1700,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       Seq(1).toDF().repartition(1).write.parquet(dir.getCanonicalPath)
 
       val dataTypes =
-        Seq(
-          StringType,
-          BooleanType,
-          ByteType,
-          BinaryType,
-          ShortType,
-          IntegerType,
-          LongType,
-          FloatType,
-          DoubleType,
-          DecimalType(25, 5),
-          DateType,
-          TimestampType)
+        Seq(StringType, BooleanType, ByteType, BinaryType, ShortType, IntegerType, LongType,
+          FloatType, DoubleType, DecimalType(25, 5), DateType, TimestampType)
 
       val constantValues =
         Seq(
@@ -1740,7 +1713,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
           3,
           Long.MaxValue,
           0.25.toFloat,
-          0.75d,
+          0.75D,
           Decimal("1234.23456"),
           DateTimeUtils.fromJavaDate(java.sql.Date.valueOf("2015-01-01")),
           DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf("2015-01-01 23:50:59.123")))
@@ -1749,8 +1722,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         val schema = StructType(StructField("pcol", dt) :: Nil)
         val conf = spark.sessionState.conf
         val vectorizedReader = new VectorizedParquetRecordReader(
-          conf.offHeapColumnVectorEnabled,
-          conf.parquetVectorizedReaderBatchSize)
+          conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         val partitionValues = new GenericInternalRow(Array(v))
         val file = TestUtils.listDirectory(dir).head
 
@@ -1765,8 +1737,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
           val actual = row.copy().get(1, dt)
           val expected = v
           if (dt.isInstanceOf[BinaryType]) {
-            assert(
-              actual.asInstanceOf[Array[Byte]] sameElements expected.asInstanceOf[Array[Byte]])
+            assert(actual.asInstanceOf[Array[Byte]] sameElements expected.asInstanceOf[Array[Byte]])
           } else {
             assert(actual == expected)
           }
@@ -1797,8 +1768,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     assert(ParquetOptions.isValidOption("int96RebaseMode"))
   }
 
-  test(
-    "SPARK-23173 Writing a file with data converted from JSON with and incorrect user schema") {
+  test("SPARK-23173 Writing a file with data converted from JSON with and incorrect user schema") {
     withTempPath { file =>
       val jsonData =
         """{
@@ -1810,11 +1780,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         .add("a", LongType, nullable = false)
         .add("b", StringType, nullable = false)
         .add("c", StringType, nullable = false)
-      spark
-        .range(1)
-        .select(from_json(lit(jsonData), jsonSchema) as "input")
-        .write
-        .parquet(file.getAbsolutePath)
+      spark.range(1).select(from_json(lit(jsonData), jsonSchema) as "input")
+        .write.parquet(file.getAbsolutePath)
       checkAnswer(spark.read.parquet(file.getAbsolutePath), Seq(Row(Row(1, null, "foo"))))
     }
   }
@@ -1835,32 +1802,29 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
           assert(10 == df.collect().length)
           val first10Df = df.head(10)
           assert(
-            Seq(792059492, 986842987, 540247998, null, 357991078, 494131059, 92536396, 426847157,
-              -999999999, 204486094)
-              .zip(first10Df)
-              .forall(d =>
-                d._2.isNullAt(0) && d._1 == null ||
-                  d._1 == d._2.getDecimal(0).unscaledValue().intValue()))
+            Seq(792059492, 986842987, 540247998, null, 357991078,
+              494131059, 92536396, 426847157, -999999999, 204486094)
+              .zip(first10Df).forall(d =>
+              d._2.isNullAt(0) && d._1 == null ||
+                d._1 == d._2.getDecimal(0).unscaledValue().intValue()
+            ))
       }
       // decimal32-written-as-64-bit-dict.snappy.parquet was generated using a 3rd-party library. It
       // has 2048 rows of Decimal(3, 1) written as LongDecimal instead of an IntDecimal
       readParquetFile(
-        testFile("test-data/decimal32-written-as-64-bit-dict.snappy.parquet"),
-        vec) { df =>
-        assert(2048 == df.collect().length)
-        val first10Df = df.head(10)
-        assert(
-          Seq(751, 937, 511, null, 337, 467, 84, 403, -999, 190)
-            .zip(first10Df)
-            .forall(d =>
-              d._2.isNullAt(0) && d._1 == null ||
-                d._1 == d._2.getDecimal(0).unscaledValue().intValue()))
+        testFile("test-data/decimal32-written-as-64-bit-dict.snappy.parquet"), vec) {
+        df =>
+          assert(2048 == df.collect().length)
+          val first10Df = df.head(10)
+          assert(Seq(751, 937, 511, null, 337, 467, 84, 403, -999, 190)
+            .zip(first10Df).forall(d =>
+            d._2.isNullAt(0) && d._1 == null ||
+              d._1 == d._2.getDecimal(0).unscaledValue().intValue()))
 
-        val last10Df = df.tail(10)
-        assert(
-          Seq(866, 20, 492, 76, 824, 604, 343, 820, 864, 243)
-            .zip(last10Df)
-            .forall(d => d._1 == d._2.getDecimal(0).unscaledValue().intValue()))
+          val last10Df = df.tail(10)
+          assert(Seq(866, 20, 492, 76, 824, 604, 343, 820, 864, 243)
+            .zip(last10Df).forall(d =>
+            d._1 == d._2.getDecimal(0).unscaledValue().intValue()))
       }
     }
   }
@@ -1877,7 +1841,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("Read TimeType for the logical TIME type") {
-    val schema = MessageTypeParser.parseMessageType("""message root {
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
         |  required int64 time_micros(TIME(MICROS,false));
         |}""".stripMargin)
 
@@ -1907,7 +1872,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
 }
 
 class JobCommitFailureParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)
-    extends ParquetOutputCommitter(outputPath, context) {
+  extends ParquetOutputCommitter(outputPath, context) {
 
   override def commitJob(jobContext: JobContext): Unit = {
     sys.error("Intentional exception for testing purposes")
@@ -1915,7 +1880,7 @@ class JobCommitFailureParquetOutputCommitter(outputPath: Path, context: TaskAtte
 }
 
 class TaskCommitFailureParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)
-    extends ParquetOutputCommitter(outputPath, context) {
+  extends ParquetOutputCommitter(outputPath, context) {
 
   override def commitTask(context: TaskAttemptContext): Unit = {
     sys.error("Intentional exception for testing purposes")
@@ -1928,8 +1893,7 @@ case class VerifyNoAdditionalScanOutputExec(override val child: SparkPlan) exten
     child.executeColumnar().foreachPartition { batches =>
       batches.foreach { input =>
         0.until(input.numCols).foreach { index =>
-          assert(
-            childOutputTypes(index) == input.column(index).dataType,
+          assert(childOutputTypes(index) == input.column(index).dataType,
             "Found additional columns in the ColumnarBatch that are not present in output schema")
         }
       }

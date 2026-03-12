@@ -35,8 +35,7 @@ class CodegenSubexpressionEliminationSuite extends SparkFunSuite {
       val leaf4 = ExprWithEvaluatedState()
 
       val cond = Or(And(leaf1, leaf2), And(leaf3, leaf4))
-      val instance =
-        GeneratePredicate.generate(cond, useSubexprElimination = useSubexprElimination)
+      val instance = GeneratePredicate.generate(cond, useSubexprElimination = useSubexprElimination)
       instance.initialize(0)
       assert(instance.eval(null) === false)
 

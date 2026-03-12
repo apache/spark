@@ -46,9 +46,8 @@ class ApproxCountDistinctForIntervalsQuerySuite extends QueryTest with SharedSpa
       val aggFunc = ApproxCountDistinctForIntervals(attr, CreateArray(endpoints.map(Literal(_))))
       val aggExpr = aggFunc.toAggregateExpression()
       val namedExpr = Alias(aggExpr, aggExpr.toString)()
-      val ndvsRow = new QueryExecution(
-        spark,
-        Aggregate(Nil, Seq(namedExpr), relation)).executedPlan.executeTake(1).head
+      val ndvsRow = new QueryExecution(spark, Aggregate(Nil, Seq(namedExpr), relation))
+        .executedPlan.executeTake(1).head
       val ndvArray = ndvsRow.getArray(0).toLongArray()
       assert(endpoints.length == ndvArray.length + 1)
 
@@ -65,12 +64,10 @@ class ApproxCountDistinctForIntervalsQuerySuite extends QueryTest with SharedSpa
   test("SPARK-37138: Support Ansi Interval type in ApproxCountDistinctForIntervals") {
     val table = "approx_count_distinct_for_ansi_intervals_tbl"
     withTable(table) {
-      Seq(
-        (Period.ofMonths(100), Duration.ofSeconds(100L)),
+      Seq((Period.ofMonths(100), Duration.ofSeconds(100L)),
         (Period.ofMonths(200), Duration.ofSeconds(200L)),
         (Period.ofMonths(300), Duration.ofSeconds(300L)))
-        .toDF("col1", "col2")
-        .createOrReplaceTempView(table)
+        .toDF("col1", "col2").createOrReplaceTempView(table)
       val endpoints = (0 to 5).map(_ / 10)
 
       val relation = spark.table(table).logicalPlan
@@ -85,8 +82,9 @@ class ApproxCountDistinctForIntervalsQuerySuite extends QueryTest with SharedSpa
         ApproxCountDistinctForIntervals(dtAttr, CreateArray(endpoints.map(Literal(_))))
       val dtAggExpr = dtAggFunc.toAggregateExpression()
       val dtNamedExpr = Alias(dtAggExpr, dtAggExpr.toString)()
-      val result =
-        classic.Dataset.ofRows(spark, Aggregate(Nil, Seq(ymNamedExpr, dtNamedExpr), relation))
+      val result = classic.Dataset.ofRows(
+        spark,
+        Aggregate(Nil, Seq(ymNamedExpr, dtNamedExpr), relation))
       checkAnswer(result, Row(Array(1, 1, 1, 1, 1), Array(1, 1, 1, 1, 1)))
     }
   }

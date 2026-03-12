@@ -25,7 +25,6 @@ import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types._
 
 object JacksonUtils extends QueryErrorsBase {
-
   /**
    * Advance the parser until a null or a specific token is found
    */
@@ -56,7 +55,9 @@ object JacksonUtils extends QueryErrorsBase {
       case _ =>
         DataTypeMismatch(
           errorSubClass = "CANNOT_CONVERT_TO_JSON",
-          messageParameters = Map("name" -> toSQLId(name), "type" -> toSQLType(dataType)))
+          messageParameters = Map(
+            "name" -> toSQLId(name),
+            "type" -> toSQLType(dataType)))
     }
   }
 }

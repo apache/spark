@@ -28,23 +28,21 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
 
 /**
  * Inlines CTE definitions into corresponding references if either of the conditions satisfies:
- *   1. The CTE definition does not contain any non-deterministic expressions or contains
- *      attribute references to an outer query. If this CTE definition references another CTE
- *      definition that has non-deterministic expressions, it is still OK to inline the current
- *      CTE definition.
- *   2. The CTE definition is only referenced once throughout the main query and all the
- *      subqueries.
+ * 1. The CTE definition does not contain any non-deterministic expressions or contains attribute
+ *    references to an outer query. If this CTE definition references another CTE definition that
+ *    has non-deterministic expressions, it is still OK to inline the current CTE definition.
+ * 2. The CTE definition is only referenced once throughout the main query and all the subqueries.
  *
  * CTE definitions that appear in subqueries and are not inlined will be pulled up to the main
  * query level.
  *
- * @param alwaysInline
- *   if true, inline all CTEs in the query plan.
- * @param keepDanglingRelations
- *   if true, dangling CTE relations will be kept in the original `WithCTE` node.
+ * @param alwaysInline if true, inline all CTEs in the query plan.
+ * @param keepDanglingRelations if true, dangling CTE relations will be kept in the original
+ *                              `WithCTE` node.
  */
-case class InlineCTE(alwaysInline: Boolean = false, keepDanglingRelations: Boolean = false)
-    extends Rule[LogicalPlan] {
+case class InlineCTE(
+    alwaysInline: Boolean = false,
+    keepDanglingRelations: Boolean = false) extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (!plan.isInstanceOf[Subquery] && plan.containsPattern(CTE)) {
@@ -63,19 +61,18 @@ case class InlineCTE(alwaysInline: Boolean = false, keepDanglingRelations: Boole
     // 1) It is fine to inline a CTE if it references another CTE that is non-deterministic;
     // 2) Any `CTERelationRef` that contains `OuterReference` would have been inlined first.
     refCount == 1 ||
-    cteDef.deterministic ||
-    cteDef.child.exists(_.expressions.exists(_.isInstanceOf[OuterReference]))
+      cteDef.deterministic ||
+      cteDef.child.exists(_.expressions.exists(_.isInstanceOf[OuterReference]))
   }
 
   /**
    * Accumulates all the CTEs from a plan into a special map.
    *
-   * @param plan
-   *   The plan to collect the CTEs from
-   * @param cteMap
-   *   A mutable map that accumulates the CTEs and their reference information by CTE ids.
-   * @param outerCTEId
-   *   While collecting the map we use this optional CTE id to identify the current outer CTE.
+   * @param plan The plan to collect the CTEs from
+   * @param cteMap A mutable map that accumulates the CTEs and their reference information by CTE
+   *               ids.
+   * @param outerCTEId While collecting the map we use this optional CTE id to identify the
+   *                   current outer CTE.
    */
   private def buildCTEMap(
       plan: LogicalPlan,
@@ -99,7 +96,8 @@ case class InlineCTE(alwaysInline: Boolean = false, keepDanglingRelations: Boole
               refCount = 0,
               outgoingRefs = mutable.Map.empty.withDefaultValue(0),
               shouldInline = true,
-              container = outerCTEId)
+              container = outerCTEId
+            )
           }
 
           cteDefs.foreach { cteDef =>
@@ -143,9 +141,8 @@ case class InlineCTE(alwaysInline: Boolean = false, keepDanglingRelations: Boole
    * Cleans the CTE map by removing those CTEs that are not referenced at all and corrects those
    * CTE's reference counts where the removed CTE referred to.
    *
-   * @param cteMap
-   *   A mutable map that accumulates the CTEs and their reference information by CTE ids. Needs
-   *   to be sorted to speed up cleaning.
+   * @param cteMap A mutable map that accumulates the CTEs and their reference information by CTE
+   *               ids. Needs to be sorted to speed up cleaning.
    */
   private def cleanCTEMap(cteMap: mutable.SortedMap[Long, CTEReferenceInfo]): Unit = {
     cteMap.keys.toSeq.reverse.foreach { currentCTEId =>
@@ -163,13 +160,14 @@ case class InlineCTE(alwaysInline: Boolean = false, keepDanglingRelations: Boole
       cteMap: mutable.Map[Long, CTEReferenceInfo]): LogicalPlan = {
     plan match {
       case WithCTE(child, cteDefs) =>
-        val notInlined = cteDefs.flatMap { cteDef =>
+        val notInlined = cteDefs.flatMap {cteDef =>
           val refInfo = cteMap(cteDef.id)
           if (refInfo.refCount > 0) {
             val newDef = refInfo.cteDef.copy(child = inlineCTE(refInfo.cteDef.child, cteMap))
             val inlineDecision = shouldInline(newDef, refInfo.refCount)
-            cteMap(cteDef.id) =
-              cteMap(cteDef.id).copy(cteDef = newDef, shouldInline = inlineDecision)
+            cteMap(cteDef.id) = cteMap(cteDef.id).copy(
+              cteDef = newDef, shouldInline = inlineDecision
+            )
             if (!inlineDecision) {
               Seq(newDef)
             } else {
@@ -202,7 +200,14 @@ case class InlineCTE(alwaysInline: Boolean = false, keepDanglingRelations: Boole
             cteBody
           } else {
             val ctePlan = DeduplicateRelations(
-              Join(cteBody, cteBody, Inner, None, JoinHint(None, None))).children(1)
+              Join(
+                cteBody,
+                cteBody,
+                Inner,
+                None,
+                JoinHint(None, None)
+              )
+            ).children(1)
             val projectList = ref.output.zip(ctePlan.output).map { case (tgtAttr, srcAttr) =>
               if (srcAttr.semanticEquals(tgtAttr)) {
                 tgtAttr
@@ -244,18 +249,13 @@ case class InlineCTE(alwaysInline: Boolean = false, keepDanglingRelations: Boole
 /**
  * The bookkeeping information for tracking CTE relation references.
  *
- * @param cteDef
- *   The CTE relation definition
- * @param refCount
- *   The number of incoming references to this CTE relation. This includes references from other
- *   CTE relations and regular places.
- * @param outgoingRefs
- *   A mutable map that tracks outgoing reference counts to other CTE relations.
- * @param shouldInline
- *   If true, this CTE relation should be inlined in the places that reference it.
- * @param container
- *   The container of a CTE definition is another CTE definition in which the `WithCTE` node of
- *   the definition resides.
+ * @param cteDef The CTE relation definition
+ * @param refCount The number of incoming references to this CTE relation. This includes references
+ *                 from other CTE relations and regular places.
+ * @param outgoingRefs A mutable map that tracks outgoing reference counts to other CTE relations.
+ * @param shouldInline If true, this CTE relation should be inlined in the places that reference it.
+ * @param container The container of a CTE definition is another CTE definition in which the
+ *                  `WithCTE` node of the definition resides.
  */
 case class CTEReferenceInfo(
     cteDef: CTERelationDef,

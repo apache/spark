@@ -101,44 +101,36 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
     var inferSchema = new CSVInferSchema(options)
 
     assert(
-      inferSchema
-        .mergeRowTypes(Array(StringType), Array(DoubleType))
-        .sameElements(Array(StringType)))
+      inferSchema.mergeRowTypes(Array(StringType),
+        Array(DoubleType)).sameElements(Array(StringType)))
     assert(
-      inferSchema
-        .mergeRowTypes(Array(IntegerType), Array(LongType))
-        .sameElements(Array(LongType)))
+      inferSchema.mergeRowTypes(Array(IntegerType),
+        Array(LongType)).sameElements(Array(LongType)))
     assert(
-      inferSchema
-        .mergeRowTypes(Array(DoubleType), Array(LongType))
-        .sameElements(Array(DoubleType)))
+      inferSchema.mergeRowTypes(Array(DoubleType),
+        Array(LongType)).sameElements(Array(DoubleType)))
 
     // Can merge DateType and TimestampType into TimestampType when no timestamp format specified
     assert(
-      inferSchema
-        .mergeRowTypes(Array(DateType), Array(TimestampNTZType))
-        .sameElements(Array(TimestampNTZType)))
+      inferSchema.mergeRowTypes(Array(DateType),
+        Array(TimestampNTZType)).sameElements(Array(TimestampNTZType)))
     assert(
-      inferSchema
-        .mergeRowTypes(Array(DateType), Array(TimestampType))
-        .sameElements(Array(TimestampType)))
+      inferSchema.mergeRowTypes(Array(DateType),
+        Array(TimestampType)).sameElements(Array(TimestampType)))
 
     // Merge DateType and TimestampType into StringType when there are timestamp formats specified
     options = new CSVOptions(
-      Map(
-        "timestampFormat" -> "yyyy-MM-dd HH:mm:ss",
+      Map("timestampFormat" -> "yyyy-MM-dd HH:mm:ss",
         "timestampNTZFormat" -> "yyyy/MM/dd HH:mm:ss"),
       false,
       "UTC")
     inferSchema = new CSVInferSchema(options)
     assert(
-      inferSchema
-        .mergeRowTypes(Array(DateType), Array(TimestampNTZType))
-        .sameElements(Array(StringType)))
+      inferSchema.mergeRowTypes(Array(DateType),
+        Array(TimestampNTZType)).sameElements(Array(StringType)))
     assert(
-      inferSchema
-        .mergeRowTypes(Array(DateType), Array(TimestampType))
-        .sameElements(Array(StringType)))
+      inferSchema.mergeRowTypes(Array(DateType),
+        Array(TimestampType)).sameElements(Array(StringType)))
   }
 
   test("Null fields are handled properly when a nullValue is specified") {
@@ -180,9 +172,8 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
 
     withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
       // 9.03E+12 is Decimal(3, -10) and 1.19E+11 is Decimal(3, -9).
-      assert(
-        inferSchema.inferField(DecimalType(3, -10), "1.19E11") ==
-          DecimalType(4, -9))
+      assert(inferSchema.inferField(DecimalType(3, -10), "1.19E11") ==
+        DecimalType(4, -9))
     }
 
     // BigDecimal("12345678901234567890.01234567890123456789") is precision 40 and scale 20.
@@ -191,16 +182,13 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
 
     // Seq(s"${Long.MaxValue}1", "2015-12-01 00:00:00") should be StringType
     assert(inferSchema.inferField(NullType, s"${Long.MaxValue}1") == DecimalType(20, 0))
-    assert(
-      inferSchema.inferField(DecimalType(20, 0), "2015-12-01 00:00:00")
-        == StringType)
+    assert(inferSchema.inferField(DecimalType(20, 0), "2015-12-01 00:00:00")
+      == StringType)
   }
 
   test("DoubleType should be inferred when user defined nan/inf are provided") {
-    val options = new CSVOptions(
-      Map("nanValue" -> "nan", "negativeInf" -> "-inf", "positiveInf" -> "inf"),
-      false,
-      "UTC")
+    val options = new CSVOptions(Map("nanValue" -> "nan", "negativeInf" -> "-inf",
+      "positiveInf" -> "inf"), false, "UTC")
     val inferSchema = new CSVInferSchema(options)
 
     assert(inferSchema.inferField(NullType, "nan") == DoubleType)
@@ -229,11 +217,13 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
 
   test("SPARK-39469: inferring date type") {
     // "yyyy/MM/dd" format
-    var options = new CSVOptions(Map("dateFormat" -> "yyyy/MM/dd"), false, "UTC")
+    var options = new CSVOptions(Map("dateFormat" -> "yyyy/MM/dd"),
+      false, "UTC")
     var inferSchema = new CSVInferSchema(options)
     assert(inferSchema.inferField(NullType, "2018/12/02") == DateType)
     // "MMM yyyy" format
-    options = new CSVOptions(Map("dateFormat" -> "MMM yyyy"), false, "GMT")
+    options = new CSVOptions(Map("dateFormat" -> "MMM yyyy"),
+      false, "GMT")
     inferSchema = new CSVInferSchema(options)
     assert(inferSchema.inferField(NullType, "Dec 2018") == DateType)
     // Field should strictly match date format to infer as date
@@ -248,9 +238,7 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
 
   test("SPARK-39469: inferring the schema of columns with mixing dates and timestamps properly") {
     var options = new CSVOptions(
-      Map(
-        "dateFormat" -> "yyyy_MM_dd",
-        "timestampFormat" -> "yyyy|MM|dd",
+      Map("dateFormat" -> "yyyy_MM_dd", "timestampFormat" -> "yyyy|MM|dd",
         "timestampNTZFormat" -> "yyyy/MM/dd"),
       columnPruning = false,
       defaultTimeZoneId = "UTC")
@@ -276,9 +264,8 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
     assert(inferSchema.inferField(DateType, "2012_12_12") == DateType)
   }
 
-  test(
-    "SPARK-45433: inferring the schema when timestamps do not match specified timestampFormat" +
-      " with only one row") {
+  test("SPARK-45433: inferring the schema when timestamps do not match specified timestampFormat" +
+    " with only one row") {
     val options = new CSVOptions(
       Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss"),
       columnPruning = false,

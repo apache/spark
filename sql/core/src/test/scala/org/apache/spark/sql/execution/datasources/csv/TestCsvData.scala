@@ -23,15 +23,13 @@ private[csv] trait TestCsvData {
   protected def spark: SparkSession
 
   def sampledTestData: Dataset[String] = {
-    spark
-      .range(0, 100, 1)
-      .map { index =>
-        val predefinedSample = Set[Long](3, 18, 20, 24, 50, 60, 87, 99)
-        if (predefinedSample.contains(index)) {
-          index.toString
-        } else {
-          (index.toDouble + 0.1).toString
-        }
-      }(Encoders.STRING)
+    spark.range(0, 100, 1).map { index =>
+      val predefinedSample = Set[Long](3, 18, 20, 24, 50, 60, 87, 99)
+      if (predefinedSample.contains(index)) {
+        index.toString
+      } else {
+        (index.toDouble + 0.1).toString
+      }
+    }(Encoders.STRING)
   }
 }

@@ -17,8 +17,36 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Abs, BinaryOperator, Cast, DateAdd, DateSub, Expression, Literal, SubtractDates, SubtractTimestamps, TimestampAddInterval, UnaryMinus, UnaryPositive}
-import org.apache.spark.sql.types.{AnsiIntervalType, AtomicType, DataType, DateType, DoubleType, FractionalType, IntegerType, IntegralType, LongType, NullType, StringHelper, StringType, StringTypeExpression, TimestampType}
+import org.apache.spark.sql.catalyst.expressions.{
+  Abs,
+  BinaryOperator,
+  Cast,
+  DateAdd,
+  DateSub,
+  Expression,
+  Literal,
+  SubtractDates,
+  SubtractTimestamps,
+  TimestampAddInterval,
+  UnaryMinus,
+  UnaryPositive
+}
+import org.apache.spark.sql.types.{
+  AnsiIntervalType,
+  AtomicType,
+  DataType,
+  DateType,
+  DoubleType,
+  FractionalType,
+  IntegerType,
+  IntegralType,
+  LongType,
+  NullType,
+  StringHelper,
+  StringType,
+  StringTypeExpression,
+  TimestampType
+}
 
 /**
  * ANSI type coercion helper that matches against expressions in order to type coerce children to

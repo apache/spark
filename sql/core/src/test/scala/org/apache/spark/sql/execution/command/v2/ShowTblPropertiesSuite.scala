@@ -22,4 +22,5 @@ import org.apache.spark.sql.execution.command
 /**
  * The class contains tests for the `SHOW TBLPROPERTIES` command to check V2 table catalogs.
  */
-class ShowTblPropertiesSuite extends command.ShowTblPropertiesSuiteBase with CommandSuiteBase {}
+class ShowTblPropertiesSuite extends command.ShowTblPropertiesSuiteBase with CommandSuiteBase {
+}

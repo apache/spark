@@ -49,8 +49,7 @@ class SaveIntoDataSourceCommandSuite extends QueryTest with SharedSparkSession {
     val provider = classOf[FakeV1DataSource].getName
 
     def saveIntoDataSource(data: Int): Unit = {
-      spark
-        .range(data)
+      spark.range(data)
         .write
         .mode("append")
         .format(provider)
@@ -81,26 +80,20 @@ class SaveIntoDataSourceCommandSuite extends QueryTest with SharedSparkSession {
       partitionColumns = Nil,
       options = Map())
 
-    val df = spark
-      .range(1)
-      .selectExpr(
-        "cast('a' as binary) a",
-        "true b",
-        "cast(1 as byte) c",
-        "1.23 d",
-        "'abc'",
+    val df = spark.range(1).selectExpr(
+        "cast('a' as binary) a", "true b", "cast(1 as byte) c", "1.23 d", "'abc'",
         "'abc' COLLATE UTF8_LCASE")
     dataSource.planForWriting(SaveMode.ErrorIfExists, df.logicalPlan)
 
     // Variant and Interval types are disallowed by default.
     val unsupportedTypes = Seq(
-      ("parse_json('1') col", "VARIANT"),
-      ("array(parse_json('1')) col", "ARRAY<VARIANT>"),
-      ("struct(1, parse_json('1')) col", "STRUCT<col1: INT NOT NULL, col2: VARIANT NOT NULL>"),
-      ("map(1, parse_json('1')) col", "MAP<INT, VARIANT>"),
-      ("INTERVAL '1' MONTH col", "INTERVAL MONTH"),
-      ("make_ym_interval(1, 2) col", "INTERVAL YEAR TO MONTH"),
-      ("make_dt_interval(1, 2, 3, 4) col", "INTERVAL DAY TO SECOND"))
+        ("parse_json('1') col", "VARIANT"),
+        ("array(parse_json('1')) col", "ARRAY<VARIANT>"),
+        ("struct(1, parse_json('1')) col", "STRUCT<col1: INT NOT NULL, col2: VARIANT NOT NULL>"),
+        ("map(1, parse_json('1')) col", "MAP<INT, VARIANT>"),
+        ("INTERVAL '1' MONTH col", "INTERVAL MONTH"),
+        ("make_ym_interval(1, 2) col", "INTERVAL YEAR TO MONTH"),
+        ("make_dt_interval(1, 2, 3, 4) col", "INTERVAL DAY TO SECOND"))
 
     unsupportedTypes.foreach { testCase =>
       val df = spark.range(1).selectExpr(testCase._1)
@@ -109,11 +102,10 @@ class SaveIntoDataSourceCommandSuite extends QueryTest with SharedSparkSession {
           dataSource.planForWriting(SaveMode.ErrorIfExists, df.logicalPlan)
         },
         condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-        parameters = Map(
-          "columnName" -> "`col`",
-          "columnType" -> s"\"${testCase._2}\"",
+        parameters = Map("columnName" -> "`col`", "columnType" -> s"\"${testCase._2}\"",
           "format" -> ".*JdbcRelationProvider.*"),
-        matchPVals = true)
+        matchPVals = true
+      )
     }
   }
 }
@@ -124,16 +116,16 @@ object FakeV1DataSource {
 
 class FakeV1DataSource extends RelationProvider with CreatableRelationProvider {
   override def createRelation(
-      sqlContext: SQLContext,
-      parameters: Map[String, String]): BaseRelation = {
+     sqlContext: SQLContext,
+     parameters: Map[String, String]): BaseRelation = {
     FakeRelation()
   }
 
   override def createRelation(
-      sqlContext: SQLContext,
-      mode: SaveMode,
-      parameters: Map[String, String],
-      data: DataFrame): BaseRelation = {
+     sqlContext: SQLContext,
+     mode: SaveMode,
+     parameters: Map[String, String],
+     data: DataFrame): BaseRelation = {
     FakeV1DataSource.data = data.rdd
     FakeRelation()
   }

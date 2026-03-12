@@ -31,55 +31,49 @@ import org.apache.spark.util.ArrayImplicits._
 object StatFunctions extends Logging {
 
   /**
-   * Calculates the approximate quantiles of multiple numerical columns of a DataFrame in one
-   * pass.
+   * Calculates the approximate quantiles of multiple numerical columns of a DataFrame in one pass.
    *
-   * The result of this algorithm has the following deterministic bound: If the DataFrame has N
-   * elements and if we request the quantile at probability `p` up to error `err`, then the
-   * algorithm will return a sample `x` from the DataFrame so that the *exact* rank of `x` is
-   * close to (p * N). More precisely,
+   * The result of this algorithm has the following deterministic bound:
+   * If the DataFrame has N elements and if we request the quantile at probability `p` up to error
+   * `err`, then the algorithm will return a sample `x` from the DataFrame so that the *exact* rank
+   * of `x` is close to (p * N).
+   * More precisely,
    *
-   * floor((p - err) * N) <= rank(x) <= ceil((p + err) * N).
+   *   floor((p - err) * N) <= rank(x) <= ceil((p + err) * N).
    *
    * This method implements a variation of the Greenwald-Khanna algorithm (with some speed
-   * optimizations). The algorithm was first present in <a
-   * href="https://doi.org/10.1145/375663.375670"> Space-efficient Online Computation of Quantile
-   * Summaries</a> by Greenwald and Khanna.
+   * optimizations).
+   * The algorithm was first present in <a href="https://doi.org/10.1145/375663.375670">
+   * Space-efficient Online Computation of Quantile Summaries</a> by Greenwald and Khanna.
    *
-   * @param df
-   *   the dataframe
-   * @param cols
-   *   numerical columns of the dataframe
-   * @param probabilities
-   *   a list of quantile probabilities Each number must belong to [0, 1]. For example 0 is the
-   *   minimum, 0.5 is the median, 1 is the maximum.
-   * @param relativeError
-   *   The relative target precision to achieve (greater than or equal 0). If set to zero, the
-   *   exact quantiles are computed, which could be very expensive. Note that values greater than
-   *   1 are accepted but give the same result as 1.
+   * @param df the dataframe
+   * @param cols numerical columns of the dataframe
+   * @param probabilities a list of quantile probabilities
+   *   Each number must belong to [0, 1].
+   *   For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
+   * @param relativeError The relative target precision to achieve (greater than or equal 0).
+   *   If set to zero, the exact quantiles are computed, which could be very expensive.
+   *   Note that values greater than 1 are accepted but give the same result as 1.
    *
-   * @return
-   *   for each column, returns the requested approximations
+   * @return for each column, returns the requested approximations
    *
-   * @note
-   *   null and NaN values will be ignored in numerical columns before calculation. For a column
-   *   only containing null or NaN values, an empty array is returned.
+   * @note null and NaN values will be ignored in numerical columns before calculation. For
+   *   a column only containing null or NaN values, an empty array is returned.
    */
   def multipleApproxQuantiles(
       df: DataFrame,
       cols: Seq[String],
       probabilities: Seq[Double],
       relativeError: Double): Seq[Seq[Double]] = {
-    require(relativeError >= 0, s"Relative Error must be non-negative but got $relativeError")
-    require(
-      probabilities.forall(p => p >= 0 && p <= 1.0),
+    require(relativeError >= 0,
+      s"Relative Error must be non-negative but got $relativeError")
+    require(probabilities.forall(p => p >= 0 && p <= 1.0),
       "percentile should be in the range [0.0, 1.0]")
     val columns: Seq[Column] = cols.map { colName =>
       val field = df.resolve(colName)
-      require(
-        field.dataType.isInstanceOf[NumericType],
+      require(field.dataType.isInstanceOf[NumericType],
         s"Quantile calculation for column $colName with data type ${field.dataType}" +
-          " is not supported.")
+        " is not supported.")
       col(colName).cast(DoubleType)
     }
 
@@ -110,21 +104,17 @@ object StatFunctions extends Logging {
   }
 
   private[sql] def calculateCorrImpl(
-      df: DataFrame,
-      cols: Seq[String],
-      method: String = "pearson"): DataFrame = {
-    require(
-      method == "pearson",
-      "Currently only the calculation of the Pearson Correlation " +
-        "coefficient is supported.")
-    require(
-      cols.length == 2,
+    df: DataFrame,
+    cols: Seq[String],
+    method: String = "pearson"): DataFrame = {
+    require(method == "pearson", "Currently only the calculation of the Pearson Correlation " +
+      "coefficient is supported.")
+    require(cols.length == 2,
       "Currently correlation calculation is supported between two columns.")
 
     val Seq(col1, col2) = cols.map { c =>
       val dataType = df.resolve(c).dataType
-      require(
-        dataType.isInstanceOf[NumericType],
+      require(dataType.isInstanceOf[NumericType],
         "Currently correlation calculation for columns with dataType " +
           s"${dataType.catalogString} not supported.")
       when(isnull(col(c)), lit(0.0))
@@ -134,30 +124,26 @@ object StatFunctions extends Logging {
     df.select(
       when(isnull(correlation), lit(Double.NaN))
         .otherwise(correlation)
-        .as("corr"))
+        .as("corr")
+    )
   }
 
   /**
    * Calculate the covariance of two numerical columns of a DataFrame.
-   * @param df
-   *   The DataFrame
-   * @param cols
-   *   the column names
-   * @return
-   *   the covariance of the two columns.
+   * @param df The DataFrame
+   * @param cols the column names
+   * @return the covariance of the two columns.
    */
   def calculateCov(df: DataFrame, cols: Seq[String]): Double = {
     calculateCovImpl(df, cols).head().getDouble(0)
   }
 
   private[sql] def calculateCovImpl(df: DataFrame, cols: Seq[String]): DataFrame = {
-    require(
-      cols.length == 2,
+    require(cols.length == 2,
       "Currently covariance calculation is supported between two columns.")
     val Seq(col1, col2) = cols.map { c =>
       val dataType = df.resolve(c).dataType
-      require(
-        dataType.isInstanceOf[NumericType],
+      require(dataType.isInstanceOf[NumericType],
         "Currently covariance calculation for columns with dataType " +
           s"${dataType.catalogString} not supported.")
       when(isnull(col(c)), lit(0.0))
@@ -167,7 +153,8 @@ object StatFunctions extends Logging {
     df.select(
       when(isnull(covariance), lit(0.0))
         .otherwise(covariance)
-        .as("cov"))
+        .as("cov")
+    )
   }
 
   /** Generate a table of frequencies for the elements of two columns. */
@@ -175,12 +162,11 @@ object StatFunctions extends Logging {
     df.groupBy(
       when(isnull(col(col1)), "null")
         .otherwise(col(col1).cast("string"))
-        .as(s"${col1}_$col2"))
-      .pivot(when(isnull(col(col2)), "null")
-        .otherwise(regexp_replace(col(col2).cast("string"), "`", "")))
-      .count()
-      .na
-      .fill(0L)
+        .as(s"${col1}_$col2")
+    ).pivot(
+      when(isnull(col(col2)), "null")
+        .otherwise(regexp_replace(col(col2).cast("string"), "`", ""))
+    ).count().na.fill(0L)
   }
 
   /** Calculate selected summary statistics for a dataset */
@@ -213,9 +199,7 @@ object StatFunctions extends Logging {
         }
 
         val percentilesCol = if (percentiles.nonEmpty) {
-          percentile_approx(
-            casted,
-            lit(percentiles),
+          percentile_approx(casted, lit(percentiles),
             lit(ApproximatePercentile.DEFAULT_PERCENTILE_ACCURACY))
         } else null
 
@@ -254,8 +238,7 @@ object StatFunctions extends Logging {
     }
 
     if (mapColumns.isEmpty) {
-      ds.sparkSession
-        .createDataFrame(selectedStatistics.map(Tuple1.apply).toImmutableArraySeq)
+      ds.sparkSession.createDataFrame(selectedStatistics.map(Tuple1.apply).toImmutableArraySeq)
         .withColumnRenamed("_1", "summary")
     } else {
       val valueColumns = columnNames.map { columnName =>

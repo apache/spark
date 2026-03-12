@@ -23,7 +23,7 @@ import org.apache.spark.sql.internal.SQLConf
  *   - LEGACY: the default evaluation mode, which is compliant to Hive SQL.
  *   - ANSI: a evaluation mode which is compliant to ANSI SQL standard.
  *   - TRY: a evaluation mode for `try_*` functions. It is identical to ANSI evaluation mode
- *     except for returning null result on errors.
+ *          except for returning null result on errors.
  */
 
 object EvalMode extends Enumeration {

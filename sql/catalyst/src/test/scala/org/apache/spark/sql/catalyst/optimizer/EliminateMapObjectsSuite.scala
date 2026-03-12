@@ -30,9 +30,7 @@ import org.apache.spark.sql.types._
 class EliminateMapObjectsSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = {
-      Batch(
-        "EliminateMapObjects",
-        FixedPoint(50),
+      Batch("EliminateMapObjects", FixedPoint(50),
         NullPropagation,
         SimplifyCasts,
         EliminateMapObjects) :: Nil
@@ -51,8 +49,7 @@ class EliminateMapObjectsSuite extends PlanTest {
     val intOptimized = Optimize.execute(intQuery)
     val intExpected = DeserializeToObject(
       Invoke(intInput.output(0), "toIntArray", intObjType, Nil, Nil, true, false),
-      AttributeReference("obj", intObjType, true)(),
-      intInput)
+      AttributeReference("obj", intObjType, true)(), intInput)
     comparePlans(intOptimized, intExpected)
 
     val doubleObjType = ObjectType(classOf[Array[Double]])
@@ -61,8 +58,7 @@ class EliminateMapObjectsSuite extends PlanTest {
     val doubleOptimized = Optimize.execute(doubleQuery)
     val doubleExpected = DeserializeToObject(
       Invoke(doubleInput.output(0), "toDoubleArray", doubleObjType, Nil, Nil, true, false),
-      AttributeReference("obj", doubleObjType, true)(),
-      doubleInput)
+      AttributeReference("obj", doubleObjType, true)(), doubleInput)
     comparePlans(doubleOptimized, doubleExpected)
   }
 }

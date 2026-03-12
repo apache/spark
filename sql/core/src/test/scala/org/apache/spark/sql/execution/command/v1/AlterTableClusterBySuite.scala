@@ -23,16 +23,15 @@ import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.execution.command
 
 /**
- * This base suite contains unified tests for the `ALTER TABLE ... CLUSTER BY` command that checks
- * V1 table catalogs. The tests that cannot run for all V1 catalogs are located in more specific
- * test suites:
+ * This base suite contains unified tests for the `ALTER TABLE ... CLUSTER BY` command that
+ * checks V1 table catalogs. The tests that cannot run for all V1 catalogs are located in more
+ * specific test suites:
  *
  *   - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.AlterTableClusterBySuite`
  *   - V1 Hive External catalog:
  *     `org.apache.spark.sql.hive.execution.command.AlterTableClusterBySuite`
  */
-trait AlterTableClusterBySuiteBase
-    extends command.AlterTableClusterBySuiteBase
+trait AlterTableClusterBySuiteBase extends command.AlterTableClusterBySuiteBase
     with command.TestsV1AndV2Commands {
   override def validateClusterBy(tableName: String, clusteringColumns: Seq[String]): Unit = {
     val catalog = spark.sessionState.catalog
@@ -46,6 +45,7 @@ trait AlterTableClusterBySuiteBase
  * The class contains tests for the `ALTER TABLE ... CLUSTER BY` command to check V1 In-Memory
  * table catalog.
  */
-class AlterTableClusterBySuite extends AlterTableClusterBySuiteBase with CommandSuiteBase {
+class AlterTableClusterBySuite extends AlterTableClusterBySuiteBase
+    with CommandSuiteBase {
   override def commandVersion: String = super[AlterTableClusterBySuiteBase].commandVersion
 }

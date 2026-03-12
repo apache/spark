@@ -45,13 +45,13 @@ import org.apache.spark.util.collection.BitSet
  * defines some basic properties of a query plan node, as well as some new transform APIs to
  * transform the expressions of the plan node.
  *
- * Note that, the query plan is a mutually recursive structure: QueryPlan -> Expression (subquery)
- * -> QueryPlan The tree traverse APIs like `transform`, `foreach`, `collect`, etc. that are
+ * Note that, the query plan is a mutually recursive structure:
+ *   QueryPlan -> Expression (subquery) -> QueryPlan
+ * The tree traverse APIs like `transform`, `foreach`, `collect`, etc. that are
  * inherited from `TreeNode`, do not traverse into query plans inside subqueries.
  */
 abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
-    extends TreeNode[PlanType]
-    with SQLConfHelper {
+  extends TreeNode[PlanType] with SQLConfHelper {
   self: PlanType =>
 
   def output: Seq[Attribute]
@@ -59,11 +59,11 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   /**
    * Returns a string representation of this node with output column information appended,
    * including each column's nullability. If `output` has more than `maxColumns` entries, only the
-   * first `maxColumns` are shown with a count of the remaining ones. If we encounter a
-   * [[NonFatal]], it's high likely that the call of `this.output` ([[UnresolvedException]] by
-   * calling e.g. `dataType` on unresolved expression or [[CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE]]
-   * by calling `Union.output` before type coercing it) throws it. In this case, falls back to
-   * showing just the node name.
+   * first `maxColumns` are shown with a count of the remaining ones.
+   * If we encounter a [[NonFatal]], it's high likely that the call of `this.output`
+   * ([[UnresolvedException]] by calling e.g. `dataType` on unresolved expression or
+   * [[CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE]] by calling `Union.output` before type coercing it)
+   * throws it. In this case, falls back to showing just the node name.
    */
   override def nodeWithOutputColumnsString(maxColumns: Int): String = {
     try {
@@ -73,9 +73,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
             attr.toString + s"[nullable=${attr.nullable}]"
           }
 
-          outputWithNullability.mkString(
-            " <output=",
-            ", ",
+          outputWithNullability.mkString(" <output=", ", ",
             s" ... ${this.output.length - maxColumns} more columns>")
         } else {
           val outputWithNullability = this.output.map { attr =>
@@ -99,9 +97,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   private val _outputSet = new TransientBestEffortLazyVal(() => AttributeSet(output))
 
   /**
-   * Returns the output ordering that this plan generates, although the semantics differ in
-   * logical and physical plans. In the logical plan it means global ordering of the data while in
-   * physical it means ordering in each partition.
+   * Returns the output ordering that this plan generates, although the semantics differ in logical
+   * and physical plans. In the logical plan it means global ordering of the data while in physical
+   * it means ordering in each partition.
    */
   def outputOrdering: Seq[SortOrder] = Nil
 
@@ -134,14 +132,13 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   def producedAttributes: AttributeSet = AttributeSet.empty
 
   /**
-   * All Attributes that appear in expressions from this operator. Note that this set does not
-   * include attributes that are implicitly referenced by being passed through to the output
-   * tuple.
+   * All Attributes that appear in expressions from this operator.  Note that this set does not
+   * include attributes that are implicitly referenced by being passed through to the output tuple.
    */
   def references: AttributeSet = _references()
 
-  private val _references =
-    new TransientBestEffortLazyVal(() => AttributeSet(expressions) -- producedAttributes)
+  private val _references = new TransientBestEffortLazyVal(() =>
+    AttributeSet(expressions) -- producedAttributes)
 
   /**
    * Returns true when the all the expressions in the current node as well as all of its children
@@ -164,46 +161,43 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   }
 
   /**
-   * Runs [[transformExpressionsDown]] with `rule` on all expressions present in this query
-   * operator. Users should not expect a specific directionality. If a specific directionality is
-   * needed, transformExpressionsDown or transformExpressionsUp should be used.
+   * Runs [[transformExpressionsDown]] with `rule` on all expressions present
+   * in this query operator.
+   * Users should not expect a specific directionality. If a specific directionality is needed,
+   * transformExpressionsDown or transformExpressionsUp should be used.
    *
-   * @param rule
-   *   the rule to be applied to every expression in this operator.
+   * @param rule the rule to be applied to every expression in this operator.
    */
   def transformExpressions(rule: PartialFunction[Expression, Expression]): this.type = {
     transformExpressionsWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
   }
 
   /**
-   * Runs [[transformExpressionsDownWithPruning]] with `rule` on all expressions present in this
-   * query operator. Users should not expect a specific directionality. If a specific
-   * directionality is needed, transformExpressionsDown or transformExpressionsUp should be used.
+   * Runs [[transformExpressionsDownWithPruning]] with `rule` on all expressions present
+   * in this query operator.
+   * Users should not expect a specific directionality. If a specific directionality is needed,
+   * transformExpressionsDown or transformExpressionsUp should be used.
    *
-   * @param rule
-   *   the rule to be applied to every expression in this operator.
-   * @param cond
-   *   a Lambda expression to prune tree traversals. If `cond.apply` returns false on an
-   *   expression T, skips processing T and its subtree; otherwise, processes T and its subtree
-   *   recursively.
-   * @param ruleId
-   *   is a unique Id for `rule` to prune unnecessary tree traversals. When it is UnknownRuleId,
-   *   no pruning happens. Otherwise, if `rule`(with id `ruleId`) has been marked as in effective
-   *   on an expression T, skips processing T and its subtree. Do not pass it if the rule is not
-   *   purely functional and reads a varying initial state for different invocations.
+   * @param rule the rule to be applied to every expression in this operator.
+   * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
+   *               on an expression T, skips processing T and its subtree; otherwise, processes
+   *               T and its subtree recursively.
+   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
+   *               UnknownRuleId, no pruning happens. Otherwise, if `rule`(with id `ruleId`)
+   *               has been marked as in effective on an expression T, skips processing T and its
+   *               subtree. Do not pass it if the rule is not purely functional and reads a
+   *               varying initial state for different invocations.
    */
-  def transformExpressionsWithPruning(
-      cond: TreePatternBits => Boolean,
-      ruleId: RuleId = UnknownRuleId)(
-      rule: PartialFunction[Expression, Expression]): this.type = {
+  def transformExpressionsWithPruning(cond: TreePatternBits => Boolean,
+    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[Expression, Expression])
+  : this.type = {
     transformExpressionsDownWithPruning(cond, ruleId)(rule)
   }
 
   /**
    * Runs [[transformDown]] with `rule` on all expressions present in this query operator.
    *
-   * @param rule
-   *   the rule to be applied to every expression in this operator.
+   * @param rule the rule to be applied to every expression in this operator.
    */
   def transformExpressionsDown(rule: PartialFunction[Expression, Expression]): this.type = {
     transformExpressionsDownWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
@@ -213,30 +207,26 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * Runs [[transformDownWithPruning]] with `rule` on all expressions present in this query
    * operator.
    *
-   * @param rule
-   *   the rule to be applied to every expression in this operator.
-   * @param cond
-   *   a Lambda expression to prune tree traversals. If `cond.apply` returns false on an
-   *   expression T, skips processing T and its subtree; otherwise, processes T and its subtree
-   *   recursively.
-   * @param ruleId
-   *   is a unique Id for `rule` to prune unnecessary tree traversals. When it is UnknownRuleId,
-   *   no pruning happens. Otherwise, if `rule` (with id `ruleId`) has been marked as in effective
-   *   on an expression T, skips processing T and its subtree. Do not pass it if the rule is not
-   *   purely functional and reads a varying initial state for different invocations.
+   * @param rule   the rule to be applied to every expression in this operator.
+   * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
+   *               on an expression T, skips processing T and its subtree; otherwise, processes
+   *               T and its subtree recursively.
+   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
+   *               UnknownRuleId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
+   *               has been marked as in effective on an expression T, skips processing T and its
+   *               subtree. Do not pass it if the rule is not purely functional and reads a
+   *               varying initial state for different invocations.
    */
-  def transformExpressionsDownWithPruning(
-      cond: TreePatternBits => Boolean,
-      ruleId: RuleId = UnknownRuleId)(
-      rule: PartialFunction[Expression, Expression]): this.type = {
+  def transformExpressionsDownWithPruning(cond: TreePatternBits => Boolean,
+    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[Expression, Expression])
+  : this.type = {
     mapExpressions(_.transformDownWithPruning(cond, ruleId)(rule))
   }
 
   /**
    * Runs [[transformUp]] with `rule` on all expressions present in this query operator.
    *
-   * @param rule
-   *   the rule to be applied to every expression in this operator.
+   * @param rule the rule to be applied to every expression in this operator.
    */
   def transformExpressionsUp(rule: PartialFunction[Expression, Expression]): this.type = {
     transformExpressionsUpWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
@@ -246,22 +236,19 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * Runs [[transformExpressionsUpWithPruning]] with `rule` on all expressions present in this
    * query operator.
    *
-   * @param rule
-   *   the rule to be applied to every expression in this operator.
-   * @param cond
-   *   a Lambda expression to prune tree traversals. If `cond.apply` returns false on an
-   *   expression T, skips processing T and its subtree; otherwise, processes T and its subtree
-   *   recursively.
-   * @param ruleId
-   *   is a unique Id for `rule` to prune unnecessary tree traversals. When it is UnknownRuleId,
-   *   no pruning happens. Otherwise, if `rule` (with id `ruleId`) has been marked as in effective
-   *   on an expression T, skips processing T and its subtree. Do not pass it if the rule is not
-   *   purely functional and reads a varying initial state for different invocations.
+   * @param rule the rule to be applied to every expression in this operator.
+   * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
+   *               on an expression T, skips processing T and its subtree; otherwise, processes
+   *               T and its subtree recursively.
+   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
+   *               UnknownRuleId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
+   *               has been marked as in effective on an expression T, skips processing T and its
+   *               subtree. Do not pass it if the rule is not purely functional and reads a
+   *               varying initial state for different invocations.
    */
-  def transformExpressionsUpWithPruning(
-      cond: TreePatternBits => Boolean,
-      ruleId: RuleId = UnknownRuleId)(
-      rule: PartialFunction[Expression, Expression]): this.type = {
+  def transformExpressionsUpWithPruning(cond: TreePatternBits => Boolean,
+    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[Expression, Expression])
+  : this.type = {
     mapExpressions(_.transformUpWithPruning(cond, ruleId)(rule))
   }
 
@@ -303,34 +290,33 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   }
 
   /**
-   * Returns the result of running [[transformExpressions]] on this node and all its children.
-   * Note that this method skips expressions inside subqueries.
+   * Returns the result of running [[transformExpressions]] on this node
+   * and all its children. Note that this method skips expressions inside subqueries.
    */
   def transformAllExpressions(rule: PartialFunction[Expression, Expression]): this.type = {
     transformAllExpressionsWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
   }
 
   /**
-   * A variant of [[transformAllExpressions]] which considers plan nodes inside subqueries as
-   * well.
+   * A variant of [[transformAllExpressions]] which considers plan nodes inside subqueries as well.
    */
   def transformAllExpressionsWithSubqueries(
-      rule: PartialFunction[Expression, Expression]): this.type = {
-    transformWithSubqueries { case q =>
-      q.transformExpressions(rule)
+    rule: PartialFunction[Expression, Expression]): this.type = {
+    transformWithSubqueries {
+      case q => q.transformExpressions(rule)
     }.asInstanceOf[this.type]
   }
 
   /**
-   * Returns the result of running [[transformExpressionsWithPruning]] on this node and all its
-   * children. Note that this method skips expressions inside subqueries.
+   * Returns the result of running [[transformExpressionsWithPruning]] on this node
+   * and all its children. Note that this method skips expressions inside subqueries.
    */
-  def transformAllExpressionsWithPruning(
-      cond: TreePatternBits => Boolean,
-      ruleId: RuleId = UnknownRuleId)(
-      rule: PartialFunction[Expression, Expression]): this.type = {
-    transformWithPruning(cond, ruleId) { case q: QueryPlan[_] =>
-      q.transformExpressionsWithPruning(cond, ruleId)(rule).asInstanceOf[PlanType]
+  def transformAllExpressionsWithPruning(cond: TreePatternBits => Boolean,
+    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[Expression, Expression])
+  : this.type = {
+    transformWithPruning(cond, ruleId) {
+      case q: QueryPlan[_] =>
+        q.transformExpressionsWithPruning(cond, ruleId)(rule).asInstanceOf[PlanType]
     }.asInstanceOf[this.type]
   }
 
@@ -358,16 +344,14 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * with a new one that has different output expr IDs, by updating the attribute references in
    * the parent nodes accordingly.
    *
-   * @param rule
-   *   the function to transform plan nodes, and return new nodes with attributes mapping from old
-   *   attributes to new attributes. The attribute mapping will be used to rewrite attribute
-   *   references in the parent nodes.
-   * @param skipCond
-   *   a boolean condition to indicate if we can skip transforming a plan node to save time.
-   * @param canGetOutput
-   *   a boolean condition to indicate if we can get the output of a plan node to prune the
-   *   attributes mapping to be propagated. The default value is true as only unresolved logical
-   *   plan can't get output.
+   * @param rule the function to transform plan nodes, and return new nodes with attributes mapping
+   *             from old attributes to new attributes. The attribute mapping will be used to
+   *             rewrite attribute references in the parent nodes.
+   * @param skipCond a boolean condition to indicate if we can skip transforming a plan node to save
+   *                 time.
+   * @param canGetOutput a boolean condition to indicate if we can get the output of a plan node
+   *                     to prune the attributes mapping to be propagated. The default value is true
+   *                     as only unresolved logical plan can't get output.
    */
   def transformUpWithNewOutput(
       rule: PartialFunction[PlanType, (PlanType, Seq[(Attribute, Attribute)])],
@@ -386,8 +370,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
 
         plan match {
           case _: ReferenceAllColumns[_] =>
-          // It's dangerous to call `references` on an unresolved `ReferenceAllColumns`, and
-          // it's unnecessary to rewrite its attributes that all of references come from children
+            // It's dangerous to call `references` on an unresolved `ReferenceAllColumns`, and
+            // it's unnecessary to rewrite its attributes that all of references come from children
 
           case _ =>
             val attrMappingForCurrentPlan = attrMapping.filter {
@@ -397,10 +381,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
             }
 
             if (attrMappingForCurrentPlan.nonEmpty) {
-              assert(
-                !attrMappingForCurrentPlan
-                  .groupBy(_._1.exprId)
-                  .exists(_._2.map(_._2.exprId).distinct.length > 1),
+              assert(!attrMappingForCurrentPlan.groupBy(_._1.exprId)
+                .exists(_._2.map(_._2.exprId).distinct.length > 1),
                 s"Found duplicate rewrite attributes.\n$plan")
 
               val attributeRewrites = AttributeMap(attrMappingForCurrentPlan)
@@ -414,8 +396,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
           rule.applyOrElse(newPlan, (plan: PlanType) => plan -> Nil)
         }
 
-        val newValidAttrMapping = newAttrMapping.filter { case (a1, a2) =>
-          a1.exprId != a2.exprId
+        val newValidAttrMapping = newAttrMapping.filter {
+          case (a1, a2) => a1.exprId != a2.exprId
         }
 
         // Updates the `attrMapping` entries that are obsoleted by generated entries in `rule`.
@@ -423,16 +405,16 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
         // generates a new entry 'id#2 -> id#3'. In this case, we need to update
         // the corresponding old entry from 'id#1 -> id#2' to '#id#1 -> #id#3'.
         val updatedAttrMap = AttributeMap(newValidAttrMapping)
-        val transferAttrMapping = attrMapping.map { case (a1, a2) =>
-          (a1, updatedAttrMap.getOrElse(a2, a2))
+        val transferAttrMapping = attrMapping.map {
+          case (a1, a2) => (a1, updatedAttrMap.getOrElse(a2, a2))
         }
         val newOtherAttrMapping = {
           val existingAttrMappingSet = transferAttrMapping.map(_._2).toSet
           newValidAttrMapping.filterNot { case (_, a) => existingAttrMappingSet.contains(a) }
         }
         val resultAttrMapping = if (canGetOutput(plan)) {
-          (transferAttrMapping ++ newOtherAttrMapping).filter { case (_, newAttr) =>
-            planAfterRule.outputSet.contains(newAttr)
+          (transferAttrMapping ++ newOtherAttrMapping).filter {
+            case (_, newAttr) => planAfterRule.outputSet.contains(newAttr)
           }
         } else {
           transferAttrMapping ++ newOtherAttrMapping
@@ -470,8 +452,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   }
 
   /**
-   * The outer plan may have old references and the function below updates the outer references to
-   * refer to the new attributes.
+   * The outer plan may have old references and the function below updates the
+   * outer references to refer to the new attributes.
    */
   protected def updateOuterReferencesInSubquery(
       plan: PlanType,
@@ -488,8 +470,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
 
   def schema: StructType = _schema()
 
-  private val _schema =
-    new BestEffortLazyVal[StructType](() => DataTypeUtils.fromAttributes(output))
+  private val _schema = new BestEffortLazyVal[StructType](() =>
+    DataTypeUtils.fromAttributes(output))
 
   /** Returns the output schema in the tree format. */
   def schemaString: String = schema.treeString
@@ -511,8 +493,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   override def verboseString(maxFields: Int): String = simpleString(maxFields)
 
   override def simpleStringWithNodeId(): String = {
-    val operatorId = Option(QueryPlan.localIdMap.get().get(this))
-      .map(id => s"$id")
+    val operatorId = Option(QueryPlan.localIdMap.get().get(this)).map(id => s"$id")
       .getOrElse("unknown")
     s"$nodeName ($operatorId)".trim
   }
@@ -533,8 +514,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   }
 
   protected def formattedNodeName: String = {
-    val opId = Option(QueryPlan.localIdMap.get().get(this))
-      .map(id => s"$id")
+    val opId = Option(QueryPlan.localIdMap.get().get(this)).map(id => s"$id")
       .getOrElse("unknown")
     val codegenId =
       getTagValue(QueryPlan.CODEGEN_ID_TAG).map(id => s" [codegen id : $id]").getOrElse("")
@@ -547,11 +527,10 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   def subqueries: Seq[PlanType] = _subqueries()
 
   private val _subqueries = new TransientBestEffortLazyVal(() =>
-    expressions
-      .filter(_.containsPattern(PLAN_EXPRESSION))
-      .flatMap(_.collect { case e: PlanExpression[_] =>
-        e.plan.asInstanceOf[PlanType]
-      }))
+    expressions.filter(_.containsPattern(PLAN_EXPRESSION)).flatMap(_.collect {
+      case e: PlanExpression[_] => e.plan.asInstanceOf[PlanType]
+    })
+  )
 
   /**
    * All the subqueries of the current plan node and all its children. Nested subqueries are also
@@ -564,17 +543,17 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
 
   /**
    * This method is similar to the transform method, but also applies the given partial function
-   * also to all the plans in the subqueries of a node. This method is useful when we want to
-   * rewrite the whole plan, include its subqueries, in one go.
+   * also to all the plans in the subqueries of a node. This method is useful when we want
+   * to rewrite the whole plan, include its subqueries, in one go.
    */
   def transformWithSubqueries(f: PartialFunction[PlanType, PlanType]): PlanType =
     transformDownWithSubqueries(f)
 
   /**
    * Returns a copy of this node where the given partial function has been recursively applied
-   * first to the subqueries in this node's children, then this node's children, and finally this
-   * node itself (post-order). When the partial function does not apply to a given node, it is
-   * left unchanged.
+   * first to the subqueries in this node's children, then this node's children, and finally
+   * this node itself (post-order). When the partial function does not apply to a given node,
+   * it is left unchanged.
    */
   def transformUpWithSubqueries(f: PartialFunction[PlanType, PlanType]): PlanType = {
     transformUp { case plan =>
@@ -588,10 +567,10 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   }
 
   /**
-   * This method is the top-down (pre-order) counterpart of transformUpWithSubqueries. Returns a
-   * copy of this node where the given partial function has been recursively applied first to this
-   * node, then this node's subqueries and finally this node's children. When the partial function
-   * does not apply to a given node, it is left unchanged.
+   * This method is the top-down (pre-order) counterpart of transformUpWithSubqueries.
+   * Returns a copy of this node where the given partial function has been recursively applied
+   * first to this node, then this node's subqueries and finally this node's children.
+   * When the partial function does not apply to a given node, it is left unchanged.
    */
   def transformDownWithSubqueries(f: PartialFunction[PlanType, PlanType]): PlanType = {
     transformDownWithSubqueriesAndPruning(AlwaysProcess.fn, UnknownRuleId)(f)
@@ -601,15 +580,16 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * Same as `transformUpWithSubqueries` except allows for pruning opportunities.
    */
   def transformUpWithSubqueriesAndPruning(
-      cond: TreePatternBits => Boolean,
-      ruleId: RuleId = UnknownRuleId)(f: PartialFunction[PlanType, PlanType]): PlanType = {
+    cond: TreePatternBits => Boolean,
+    ruleId: RuleId = UnknownRuleId)
+    (f: PartialFunction[PlanType, PlanType]): PlanType = {
     val g: PartialFunction[PlanType, PlanType] = new PartialFunction[PlanType, PlanType] {
       override def isDefinedAt(x: PlanType): Boolean = true
 
       override def apply(plan: PlanType): PlanType = {
         val transformed = plan.transformExpressionsUpWithPruning(t =>
           t.containsPattern(PLAN_EXPRESSION) && cond(t)) {
-          case planExpression: PlanExpression[PlanType @unchecked] =>
+          case planExpression: PlanExpression[PlanType@unchecked] =>
             val newPlan = planExpression.plan.transformUpWithSubqueriesAndPruning(cond, ruleId)(f)
             planExpression.withNewPlan(newPlan)
         }
@@ -621,14 +601,15 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   }
 
   /**
-   * This method is the top-down (pre-order) counterpart of transformUpWithSubqueries. Returns a
-   * copy of this node where the given partial function has been recursively applied first to this
-   * node, then this node's subqueries and finally this node's children. When the partial function
-   * does not apply to a given node, it is left unchanged.
+   * This method is the top-down (pre-order) counterpart of transformUpWithSubqueries.
+   * Returns a copy of this node where the given partial function has been recursively applied
+   * first to this node, then this node's subqueries and finally this node's children.
+   * When the partial function does not apply to a given node, it is left unchanged.
    */
   def transformDownWithSubqueriesAndPruning(
       cond: TreePatternBits => Boolean,
-      ruleId: RuleId = UnknownRuleId)(f: PartialFunction[PlanType, PlanType]): PlanType = {
+      ruleId: RuleId = UnknownRuleId)
+      (f: PartialFunction[PlanType, PlanType]): PlanType = {
     val g: PartialFunction[PlanType, PlanType] = new PartialFunction[PlanType, PlanType] {
       override def isDefinedAt(x: PlanType): Boolean = true
 
@@ -636,8 +617,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
         val transformed = f.applyOrElse[PlanType, PlanType](plan, identity)
         transformed transformExpressionsDown {
           case planExpression: PlanExpression[PlanType @unchecked] =>
-            val newPlan =
-              planExpression.plan.transformDownWithSubqueriesAndPruning(cond, ruleId)(f)
+            val newPlan = planExpression.plan.transformDownWithSubqueriesAndPruning(cond, ruleId)(f)
             planExpression.withNewPlan(newPlan)
         }
       }
@@ -656,11 +636,11 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   }
 
   /**
-   * A variant of [[foreachWithSubqueries]] with pruning support. Only traverses nodes that match
-   * the given condition.
+   * A variant of [[foreachWithSubqueries]] with pruning support.
+   * Only traverses nodes that match the given condition.
    */
-  def foreachWithSubqueriesAndPruning(cond: TreePatternBits => Boolean)(
-      f: PlanType => Unit): Unit = {
+  def foreachWithSubqueriesAndPruning(
+      cond: TreePatternBits => Boolean)(f: PlanType => Unit): Unit = {
     if (!cond.apply(this)) {
       return
     }
@@ -690,23 +670,23 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
 
   /**
    * A private mutable variable to indicate whether this plan is the result of canonicalization.
-   * This is used solely for making sure we wouldn't execute a canonicalized plan. See
-   * [[canonicalized]] on how this is set.
+   * This is used solely for making sure we wouldn't execute a canonicalized plan.
+   * See [[canonicalized]] on how this is set.
    */
   @transient private var _isCanonicalizedPlan: Boolean = false
 
   protected def isCanonicalizedPlan: Boolean = _isCanonicalizedPlan
 
   /**
-   * Returns a plan where a best effort attempt has been made to transform `this` in a way that
-   * preserves the result but removes cosmetic variations (case sensitivity, ordering for
+   * Returns a plan where a best effort attempt has been made to transform `this` in a way
+   * that preserves the result but removes cosmetic variations (case sensitivity, ordering for
    * commutative operations, expression id, etc.)
    *
    * Plans where `this.canonicalized == other.canonicalized` will always evaluate to the same
    * result.
    *
-   * Plan nodes that require special canonicalization should override [[doCanonicalize()]]. They
-   * should remove expressions cosmetic variations themselves.
+   * Plan nodes that require special canonicalization should override [[doCanonicalize()]].
+   * They should remove expressions cosmetic variations themselves.
    */
   def canonicalized: PlanType = _canonicalized()
 
@@ -751,9 +731,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * Returns true when the given query plan will return the same results as this query plan.
    *
    * Since its likely undecidable to generally determine if two given plans will produce the same
-   * results, it is okay for this function to return false, even if the results are actually the
-   * same. Such behavior will not affect correctness, only the application of performance
-   * enhancements like caching. However, it is not acceptable to return true if the results could
+   * results, it is okay for this function to return false, even if the results are actually
+   * the same.  Such behavior will not affect correctness, only the application of performance
+   * enhancements like caching.  However, it is not acceptable to return true if the results could
    * possibly be different.
    *
    * This function performs a modified version of equality that is tolerant of cosmetic
@@ -770,11 +750,11 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   /**
    * All the attributes that are used for this plan.
    *
-   * `def` instead of a `lazy val` to avoid holding references to a large number of attributes,
-   * thereby reducing memory pressure on the driver. The number of attributes referenced here can
-   * be very large, especially for logical plans with wide schemas where the column pruning hasn't
-   * happened yet. Holding references to all of them can lead to significant memory overhead on
-   * the driver.
+   * `def` instead of a `lazy val` to avoid holding references to a large number of
+   * attributes, thereby reducing memory pressure on the driver. The number of attributes
+   * referenced here can be very large, especially for logical plans with wide schemas where the
+   * column pruning hasn't happened yet. Holding references to all of them can lead to
+   * significant memory overhead on the driver.
    */
   def allAttributes: AttributeSeq = children.flatMap(_.output)
 
@@ -800,28 +780,28 @@ object QueryPlan extends PredicateHelper {
   val CODEGEN_ID_TAG = new TreeNodeTag[Int]("wholeStageCodegenId")
 
   /**
-   * A thread local map to store the mapping between the query plan and the query plan id. The
-   * scope of this thread local is within ExplainUtils.processPlan. The reason we define it here
-   * is because [[QueryPlan]] also needs this, and it doesn't have access to `execution` package
+   * A thread local map to store the mapping between the query plan and the query plan id.
+   * The scope of this thread local is within ExplainUtils.processPlan. The reason we define it here
+   * is because [[ QueryPlan ]] also needs this, and it doesn't have access to `execution` package
    * from `catalyst`.
    */
-  val localIdMap: ThreadLocal[java.util.Map[QueryPlan[_], Int]] =
-    ThreadLocal.withInitial(() => new IdentityHashMap[QueryPlan[_], Int]())
+  val localIdMap: ThreadLocal[java.util.Map[QueryPlan[_], Int]] = ThreadLocal.withInitial(() =>
+    new IdentityHashMap[QueryPlan[_], Int]())
 
   /**
    * Normalize the exprIds in the given expression, by updating the exprId in `AttributeReference`
-   * with its referenced ordinal from input attributes. It's similar to `BindReferences` but we do
-   * not use `BindReferences` here as the plan may take the expression as a parameter with type
+   * with its referenced ordinal from input attributes. It's similar to `BindReferences` but we
+   * do not use `BindReferences` here as the plan may take the expression as a parameter with type
    * `Attribute`, and replace it with `BoundReference` will cause error.
    */
   def normalizeExpressions[T <: Expression](e: T, input: AttributeSeq): T = {
     e.transformUp {
       case s: PlanExpression[QueryPlan[_] @unchecked] =>
         // Normalize the outer references in the subquery plan.
-        val normalizedPlan =
-          s.plan.transformAllExpressionsWithPruning(_.containsPattern(OUTER_REFERENCE)) {
-            case OuterReference(r) => OuterReference(QueryPlan.normalizeExpressions(r, input))
-          }
+        val normalizedPlan = s.plan.transformAllExpressionsWithPruning(
+          _.containsPattern(OUTER_REFERENCE)) {
+          case OuterReference(r) => OuterReference(QueryPlan.normalizeExpressions(r, input))
+        }
         s.withNewPlan(normalizedPlan)
 
       case ar: AttributeReference =>
@@ -836,17 +816,13 @@ object QueryPlan extends PredicateHelper {
       // doesn't matter and we normalize it to 0 here.
       case a: Alias =>
         Alias(a.child, a.name)(
-          ExprId(0),
-          a.qualifier,
-          a.explicitMetadata,
-          a.nonInheritableMetadataKeys)
-    }.canonicalized
-      .asInstanceOf[T]
+          ExprId(0), a.qualifier, a.explicitMetadata, a.nonInheritableMetadataKeys)
+    }.canonicalized.asInstanceOf[T]
   }
 
   /**
-   * Composes the given predicates into a conjunctive predicate, which is normalized and
-   * reordered. Then returns a new sequence of predicates by splitting the conjunctive predicate.
+   * Composes the given predicates into a conjunctive predicate, which is normalized and reordered.
+   * Then returns a new sequence of predicates by splitting the conjunctive predicate.
    */
   def normalizePredicates(predicates: Seq[Expression], output: AttributeSeq): Seq[Expression] = {
     if (predicates.nonEmpty) {
@@ -881,8 +857,10 @@ object QueryPlan extends PredicateHelper {
    * sequences converts to square brackets-enclosed, comma-separated values, prefixed with a
    * sequence length. An empty string converts to None, while a non-empty string is verbatim
    * outputted. In all four cases, user-provided fieldName prefixes the output. Examples:
-   * List("Hello", "World") -> <fieldName>: [2]: [Hello, World] List() -> <fieldName>: []
-   * "hello_world" -> <fieldName>: hello_world "" -> <fieldName>: None
+   * List("Hello", "World") -> <fieldName>: [2]: [Hello, World]
+   * List()                 -> <fieldName>: []
+   * "hello_world"          -> <fieldName>: hello_world
+   * ""                     -> <fieldName>: None
    */
   def generateFieldString(fieldName: String, values: Any): String = values match {
     case iter: Iterable[_] if iter.isEmpty => s"${fieldName}: []"

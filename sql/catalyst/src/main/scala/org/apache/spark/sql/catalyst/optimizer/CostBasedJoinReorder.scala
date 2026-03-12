@@ -27,9 +27,11 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.INNER_LIKE_JOIN
 import org.apache.spark.sql.internal.SQLConf
 
+
 /**
- * Cost-based join reorder. We may have several join reorder algorithms in the future. This class
- * is the entry of these algorithms, and chooses which one to use.
+ * Cost-based join reorder.
+ * We may have several join reorder algorithms in the future. This class is the entry of these
+ * algorithms, and chooses which one to use.
  */
 object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
 
@@ -43,12 +45,12 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
         case j @ Join(_, _, _: InnerLike, Some(cond), JoinHint.NONE) =>
           reorder(j, j.output)
         case p @ Project(projectList, Join(_, _, _: InnerLike, Some(cond), JoinHint.NONE))
-            if projectList.forall(_.isInstanceOf[Attribute]) =>
+          if projectList.forall(_.isInstanceOf[Attribute]) =>
           reorder(p, p.output)
       }
       // After reordering is finished, convert OrderedJoin back to Join.
-      result transform { case OrderedJoin(left, right, jt, cond) =>
-        Join(left, right, jt, cond, JoinHint.NONE)
+      result transform {
+        case OrderedJoin(left, right, jt, cond) => Join(left, right, jt, cond, JoinHint.NONE)
       }
     }
   }
@@ -59,7 +61,7 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
       // Do reordering if the number of items is appropriate and join conditions exist.
       // We also need to check if costs of all items can be evaluated.
       if (items.size > 2 && items.size <= conf.joinReorderDPThreshold && conditions.nonEmpty &&
-        items.forall(_.stats.rowCount.isDefined)) {
+          items.forall(_.stats.rowCount.isDefined)) {
         JoinReorderDP.search(conf, items, conditions, output)
       } else {
         plan
@@ -69,20 +71,18 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   /**
-   * Extracts items of consecutive inner joins and join conditions. This method works for bushy
-   * trees and left/right deep trees.
+   * Extracts items of consecutive inner joins and join conditions.
+   * This method works for bushy trees and left/right deep trees.
    */
   private def extractInnerJoins(plan: LogicalPlan): (Seq[LogicalPlan], ExpressionSet) = {
     plan match {
       case Join(left, right, _: InnerLike, Some(cond), JoinHint.NONE) =>
         val (leftPlans, leftConditions) = extractInnerJoins(left)
         val (rightPlans, rightConditions) = extractInnerJoins(right)
-        (
-          leftPlans ++ rightPlans,
-          leftConditions ++ rightConditions ++
-            splitConjunctivePredicates(cond))
+        (leftPlans ++ rightPlans, leftConditions ++ rightConditions ++
+          splitConjunctivePredicates(cond))
       case Project(projectList, j @ Join(_, _, _: InnerLike, Some(cond), JoinHint.NONE))
-          if projectList.forall(_.isInstanceOf[Attribute]) =>
+        if projectList.forall(_.isInstanceOf[Attribute]) =>
         extractInnerJoins(j)
       case _ =>
         (Seq(plan), ExpressionSet())
@@ -106,12 +106,10 @@ case class OrderedJoin(
     left: LogicalPlan,
     right: LogicalPlan,
     joinType: JoinType,
-    condition: Option[Expression])
-    extends BinaryNode {
+    condition: Option[Expression]) extends BinaryNode {
   override def output: Seq[Attribute] = left.output ++ right.output
   override protected def withNewChildrenInternal(
-      newLeft: LogicalPlan,
-      newRight: LogicalPlan): OrderedJoin =
+      newLeft: LogicalPlan, newRight: LogicalPlan): OrderedJoin =
     copy(left = newLeft, right = newRight)
 }
 
@@ -120,20 +118,24 @@ case class OrderedJoin(
  * paper: Access Path Selection in a Relational Database Management System.
  * https://dl.acm.org/doi/10.1145/582095.582099
  *
- * First we put all items (basic joined nodes) into level 0, then we build all two-way joins at
- * level 1 from plans at level 0 (single items), then build all 3-way joins from plans at previous
- * levels (two-way joins and single items), then 4-way joins ... etc, until we build all n-way
- * joins and pick the best plan among them.
+ * First we put all items (basic joined nodes) into level 0, then we build all two-way joins
+ * at level 1 from plans at level 0 (single items), then build all 3-way joins from plans
+ * at previous levels (two-way joins and single items), then 4-way joins ... etc, until we
+ * build all n-way joins and pick the best plan among them.
  *
  * When building m-way joins, we only keep the best plan (with the lowest cost) for the same set
- * of m items. E.g., for 3-way joins, we keep only the best plan for items {A, B, C} among plans
- * (A J B) J C, (A J C) J B and (B J C) J A. We also prune cartesian product candidates when
- * building a new plan if there exists no join condition involving references from both left and
- * right. This pruning strategy significantly reduces the search space. E.g., given A J B J C J D
- * with join conditions A.k1 = B.k1 and B.k2 = C.k2 and C.k3 = D.k3, plans maintained for each
- * level are as follows: level 0: p({A}), p({B}), p({C}), p({D}) level 1: p({A, B}), p({B, C}),
- * p({C, D}) level 2: p({A, B, C}), p({B, C, D}) level 3: p({A, B, C, D}) where p({A, B, C, D}) is
- * the final output plan.
+ * of m items. E.g., for 3-way joins, we keep only the best plan for items {A, B, C} among
+ * plans (A J B) J C, (A J C) J B and (B J C) J A.
+ * We also prune cartesian product candidates when building a new plan if there exists no join
+ * condition involving references from both left and right. This pruning strategy significantly
+ * reduces the search space.
+ * E.g., given A J B J C J D with join conditions A.k1 = B.k1 and B.k2 = C.k2 and C.k3 = D.k3,
+ * plans maintained for each level are as follows:
+ * level 0: p({A}), p({B}), p({C}), p({D})
+ * level 1: p({A, B}), p({B, C}), p({C, D})
+ * level 2: p({A, B, C}), p({B, C, D})
+ * level 3: p({A, B, C, D})
+ * where p({A, B, C, D}) is the final output plan.
  *
  * For cost evaluation, since physical costs for operators are not available currently, we use
  * cardinalities and sizes to compute costs.
@@ -154,8 +156,9 @@ object JoinReorderDP extends PredicateHelper with Logging {
       // SPARK-32687: Change to use `LinkedHashMap` to make sure that items are
       // inserted and iterated in the same order.
       val joinPlanMap = new JoinPlanMap
-      itemIndex.foreach { case (item, id) =>
-        joinPlanMap.put(Set(id), JoinPlan(Set(id), item, ExpressionSet(), Cost(0, 0)))
+      itemIndex.foreach {
+        case (item, id) =>
+          joinPlanMap.put(Set(id), JoinPlan(Set(id), item, ExpressionSet(), Cost(0, 0)))
       }
       joinPlanMap
     })
@@ -172,9 +175,8 @@ object JoinReorderDP extends PredicateHelper with Logging {
     }
 
     val durationInMs = (System.nanoTime() - startTime) / (1000 * 1000)
-    logDebug(
-      s"Join reordering finished. Duration: $durationInMs ms, number of items: " +
-        s"${items.length}, number of plans in memo: ${foundPlans.map(_.size).sum}")
+    logDebug(s"Join reordering finished. Duration: $durationInMs ms, number of items: " +
+      s"${items.length}, number of plans in memo: ${foundPlans.map(_.size).sum}")
 
     // The last level must have one and only one plan, because all items are joinable.
     assert(foundPlans.size == items.length && foundPlans.last.size == 1)
@@ -243,26 +245,20 @@ object JoinReorderDP extends PredicateHelper with Logging {
 
   /**
    * Builds a new JoinPlan if the following conditions hold:
-   *   - the sets of items contained in left and right sides do not overlap.
-   *   - there exists at least one join condition involving references from both sides.
-   *   - if star-join filter is enabled, allow the following combinations: 1) (oneJoinPlan U
-   *     otherJoinPlan) is a subset of star-join 2) star-join is a subset of (oneJoinPlan U
-   *     otherJoinPlan) 3) (oneJoinPlan U otherJoinPlan) is a subset of non star-join
+   * - the sets of items contained in left and right sides do not overlap.
+   * - there exists at least one join condition involving references from both sides.
+   * - if star-join filter is enabled, allow the following combinations:
+   *         1) (oneJoinPlan U otherJoinPlan) is a subset of star-join
+   *         2) star-join is a subset of (oneJoinPlan U otherJoinPlan)
+   *         3) (oneJoinPlan U otherJoinPlan) is a subset of non star-join
    *
-   * @param oneJoinPlan
-   *   One side JoinPlan for building a new JoinPlan.
-   * @param otherJoinPlan
-   *   The other side JoinPlan for building a new join node.
-   * @param conf
-   *   SQLConf for statistics computation.
-   * @param conditions
-   *   The overall set of join conditions.
-   * @param topOutput
-   *   The output attributes of the final plan.
-   * @param filters
-   *   Join graph info to be used as filters by the search algorithm.
-   * @return
-   *   Builds and returns a new JoinPlan if both conditions hold. Otherwise, returns None.
+   * @param oneJoinPlan One side JoinPlan for building a new JoinPlan.
+   * @param otherJoinPlan The other side JoinPlan for building a new join node.
+   * @param conf SQLConf for statistics computation.
+   * @param conditions The overall set of join conditions.
+   * @param topOutput The output attributes of the final plan.
+   * @param filters Join graph info to be used as filters by the search algorithm.
+   * @return Builds and returns a new JoinPlan if both conditions hold. Otherwise, returns None.
    */
   private def buildJoin(
       oneJoinPlan: JoinPlan,
@@ -285,9 +281,7 @@ object JoinReorderDP extends PredicateHelper with Logging {
       // 2. star-join is a subset of (oneJoinPlan U otherJoinPlan)
       // 3. (oneJoinPlan U otherJoinPlan) is a subset of non star-join
       val isValidJoinCombination =
-        JoinReorderDPFilters.starJoinFilter(
-          oneJoinPlan.itemIds,
-          otherJoinPlan.itemIds,
+        JoinReorderDPFilters.starJoinFilter(oneJoinPlan.itemIds, otherJoinPlan.itemIds,
           filters.get)
       if (!isValidJoinCombination) return None
     }
@@ -336,14 +330,10 @@ object JoinReorderDP extends PredicateHelper with Logging {
   /**
    * Partial join order in a specific level.
    *
-   * @param itemIds
-   *   Set of item ids participating in this partial plan.
-   * @param plan
-   *   The plan tree with the lowest cost for these items found so far.
-   * @param joinConds
-   *   Join conditions included in the plan.
-   * @param planCost
-   *   The cost of this plan tree is the sum of costs of all intermediate joins.
+   * @param itemIds Set of item ids participating in this partial plan.
+   * @param plan The plan tree with the lowest cost for these items found so far.
+   * @param joinConds Join conditions included in the plan.
+   * @param planCost The cost of this plan tree is the sum of costs of all intermediate joins.
    */
   case class JoinPlan(
       itemIds: Set[Int],
@@ -363,16 +353,18 @@ object JoinReorderDP extends PredicateHelper with Logging {
     }
 
     /**
-     * To identify the plan with smaller computational cost, we use the weighted geometric mean of
-     * ratio of rows and the ratio of sizes in bytes.
+     * To identify the plan with smaller computational cost,
+     * we use the weighted geometric mean of ratio of rows and the ratio of sizes in bytes.
      *
-     * There are other ways to combine these values as a cost comparison function. Some of these,
-     * that we have experimented with, but have gotten worse result, than with the current one: 1)
-     * Weighted arithmetic mean of these two ratios - adding up fractions puts less emphasis on
-     * ratios between 0 and 1. Ratios 10 and 0.1 should be considered to be just as strong
-     * evidences in opposite directions. The arithmetic mean of these would be heavily biased
-     * towards the 10. 2) Absolute cost (cost = weight * rowCount + (1 - weight) * size) - when
-     * adding up two numeric measurements that have different units we can easily end up with one
+     * There are other ways to combine these values as a cost comparison function.
+     * Some of these, that we have experimented with, but have gotten worse result,
+     * than with the current one:
+     * 1) Weighted arithmetic mean of these two ratios - adding up fractions puts
+     * less emphasis on ratios between 0 and 1. Ratios 10 and 0.1 should be considered
+     * to be just as strong evidences in opposite directions. The arithmetic mean of these
+     * would be heavily biased towards the 10.
+     * 2) Absolute cost (cost = weight * rowCount + (1 - weight) * size) - when adding up
+     * two numeric measurements that have different units we can easily end up with one
      * overwhelming the other.
      */
     def betterThan(other: JoinPlan, conf: SQLConf): Boolean = {
@@ -390,10 +382,8 @@ object JoinReorderDP extends PredicateHelper with Logging {
 
 /**
  * This class defines the cost model for a plan.
- * @param card
- *   Cardinality (number of rows).
- * @param size
- *   Size in bytes.
+ * @param card Cardinality (number of rows).
+ * @param size Size in bytes.
  */
 case class Cost(card: BigInt, size: BigInt) {
   def +(other: Cost): Cost = Cost(this.card + other.card, this.size + other.size)
@@ -402,19 +392,21 @@ case class Cost(card: BigInt, size: BigInt) {
 /**
  * Implements optional filters to reduce the search space for join enumeration.
  *
- * 1) Star-join filters: Plan star-joins together since they are assumed to have an optimal
- * execution based on their RI relationship. 2) Cartesian products: Defer their planning later in
- * the graph to avoid large intermediate results (expanding joins, in general). 3) Composite
- * inners: Don't generate "bushy tree" plans to avoid materializing intermediate results.
+ * 1) Star-join filters: Plan star-joins together since they are assumed
+ *    to have an optimal execution based on their RI relationship.
+ * 2) Cartesian products: Defer their planning later in the graph to avoid
+ *    large intermediate results (expanding joins, in general).
+ * 3) Composite inners: Don't generate "bushy tree" plans to avoid materializing
+ *   intermediate results.
  *
  * Filters (2) and (3) are not implemented.
  */
 object JoinReorderDPFilters {
-
   /**
-   * Builds join graph information to be used by the filtering strategies. Currently, it builds
-   * the sets of star/non-star joins. It can be extended with the sets of connected/unconnected
-   * joins, which can be used to filter Cartesian products.
+   * Builds join graph information to be used by the filtering strategies.
+   * Currently, it builds the sets of star/non-star joins.
+   * It can be extended with the sets of connected/unconnected joins, which
+   * can be used to filter Cartesian products.
    */
   def buildJoinGraphInfo(
       conf: SQLConf,
@@ -478,26 +470,27 @@ object JoinReorderDPFilters {
   def starJoinFilter(
       oneSideJoinPlan: Set[Int],
       otherSideJoinPlan: Set[Int],
-      filters: JoinGraphInfo): Boolean = {
+      filters: JoinGraphInfo) : Boolean = {
     val starJoins = filters.starJoins
     val nonStarJoins = filters.nonStarJoins
     val join = oneSideJoinPlan.union(otherSideJoinPlan)
 
     // Disjoint sets
     oneSideJoinPlan.intersect(otherSideJoinPlan).isEmpty &&
-    // Either star or non-star is empty
-    (starJoins.isEmpty || nonStarJoins.isEmpty ||
-      // Join is a subset of the star-join
-      join.subsetOf(starJoins) ||
-      // Star-join is a subset of join
-      starJoins.subsetOf(join) ||
-      // Join is a subset of non-star
-      join.subsetOf(nonStarJoins))
+      // Either star or non-star is empty
+      (starJoins.isEmpty || nonStarJoins.isEmpty ||
+        // Join is a subset of the star-join
+        join.subsetOf(starJoins) ||
+        // Star-join is a subset of join
+        starJoins.subsetOf(join) ||
+        // Join is a subset of non-star
+        join.subsetOf(nonStarJoins))
   }
 }
 
 /**
- * Helper class that keeps information about the join graph as sets of item/plan ids. It currently
- * stores the star/non-star plans. It can be extended with the set of connected/unconnected plans.
+ * Helper class that keeps information about the join graph as sets of item/plan ids.
+ * It currently stores the star/non-star plans. It can be
+ * extended with the set of connected/unconnected plans.
  */
-case class JoinGraphInfo(starJoins: Set[Int], nonStarJoins: Set[Int])
+case class JoinGraphInfo (starJoins: Set[Int], nonStarJoins: Set[Int])

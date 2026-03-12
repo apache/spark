@@ -29,16 +29,14 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
   import testImplicits._
 
   test("update table containing added column with default value") {
-    createAndInitTable(
-      "pk INT NOT NULL, salary INT, dep STRING",
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }
         |{ "pk": 2, "salary": 200, "dep": "software" }
         |""".stripMargin)
 
     sql(s"ALTER TABLE $tableNameAsString ADD COLUMN txt STRING DEFAULT 'initial-text'")
 
-    append(
-      "pk INT, salary INT, dep STRING, txt STRING",
+    append("pk INT, salary INT, dep STRING, txt STRING",
       """{ "pk": 3, "salary": 300, "dep": "hr", "txt": "explicit-text" }
         |{ "pk": 4, "salary": 400, "dep": "software", "txt": "explicit-text" }
         |{ "pk": 5, "salary": 500, "dep": "hr" }
@@ -75,8 +73,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     val tableInfo = new TableInfo.Builder().withColumns(columns).build()
     catalog.createTable(ident, tableInfo)
 
-    append(
-      "pk INT, salary INT, dep STRING",
+    append("pk INT, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }
         |{ "pk": 2, "salary": 200, "dep": "software" }
         |{ "pk": 3, "salary": 300, "dep": "hr" }
@@ -95,8 +92,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
         LiteralValue(123, IntegerType)))
     catalog.alterTable(ident, addColumn)
 
-    append(
-      "pk INT, salary INT, dep STRING, value INT",
+    append("pk INT, salary INT, dep STRING, value INT",
       """{ "pk": 4, "salary": 400, "dep": "hr", "value": -4 }
         |{ "pk": 5, "salary": 500, "dep": "hr", "value": -5 }
         |""".stripMargin)
@@ -127,7 +123,9 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
 
     sql(s"EXPLAIN UPDATE $tableNameAsString SET dep = 'invalid' WHERE pk = 1")
 
-    checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, "hr") :: Nil)
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, "hr") :: Nil)
   }
 
   test("update empty tables") {
@@ -139,8 +137,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
   }
 
   test("update with basic filters") {
-    createAndInitTable(
-      "pk INT NOT NULL, salary INT, dep STRING",
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }
         |{ "pk": 2, "salary": 200, "dep": "software" }
         |{ "pk": 3, "salary": 300, "dep": "hr" }
@@ -154,8 +151,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
   }
 
   test("update with aliases") {
-    createAndInitTable(
-      "pk INT NOT NULL, salary INT, dep STRING",
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }
         |{ "pk": 2, "salary": 200, "dep": "software" }
         |{ "pk": 3, "salary": 300, "dep": "hr" }
@@ -169,8 +165,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
   }
 
   test("update aligns assignments") {
-    createAndInitTable(
-      "pk INT NOT NULL, c1 INT, c2 INT, dep STRING",
+    createAndInitTable("pk INT NOT NULL, c1 INT, c2 INT, dep STRING",
       """{ "pk": 1, "c1": 11, "c2": 111, "dep": "hr" }
         |{ "pk": 2, "c1": 22, "c2": 222, "dep": "hr" }
         |""".stripMargin)
@@ -183,8 +178,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
   }
 
   test("update non-existing records") {
-    createAndInitTable(
-      "pk INT NOT NULL, salary INT, dep STRING",
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }
         |{ "pk": 2, "salary": 200, "dep": "hardware" }
         |{ "pk": 3, "salary": null, "dep": "hr" }
@@ -198,8 +192,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
   }
 
   test("update without condition") {
-    createAndInitTable(
-      "pk INT NOT NULL, salary INT, dep STRING",
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }
         |{ "pk": 2, "salary": 200, "dep": "hardware" }
         |{ "pk": 3, "salary": null, "dep": "hr" }
@@ -213,8 +206,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
   }
 
   test("update with NULL conditions on partition columns") {
-    createAndInitTable(
-      "pk INT NOT NULL, salary INT, dep STRING",
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": null }
         |{ "pk": 2, "salary": 200, "dep": "hr" }
         |{ "pk": 3, "salary": 300, "dep": "hardware" }
@@ -234,8 +226,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
   }
 
   test("update with NULL conditions on data columns") {
-    createAndInitTable(
-      "pk INT NOT NULL, salary INT, dep STRING",
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": null, "dep": "hr" }
         |{ "pk": 2, "salary": 200, "dep": "hr" }
         |{ "pk": 3, "salary": 300, "dep": "hardware" }
@@ -255,8 +246,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
   }
 
   test("update with IN and NOT IN predicates") {
-    createAndInitTable(
-      "pk INT NOT NULL, salary INT, dep STRING",
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }
         |{ "pk": 2, "salary": 200, "dep": "hardware" }
         |{ "pk": 3, "salary": null, "dep": "hr" }
@@ -293,10 +283,13 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
 
     // set primitive, array, map columns to NULL (proper casts should be in inserted)
     sql(s"UPDATE $tableNameAsString SET s.c1 = NULL, s.c2 = NULL WHERE pk = 1")
-    checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, Row(null, null), "hr") :: Nil)
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, Row(null, null), "hr") :: Nil)
 
     // assign an entire struct
-    sql(s"""UPDATE $tableNameAsString
+    sql(
+      s"""UPDATE $tableNameAsString
          |SET s = named_struct('c1', 1, 'c2', named_struct('a', array(1), 'm', null))
          |""".stripMargin)
     checkAnswer(
@@ -305,20 +298,20 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
   }
 
   test("update fields inside NULL structs") {
-    createAndInitTable(
-      "pk INT NOT NULL, s STRUCT<n1: INT, n2: INT>, dep STRING",
+    createAndInitTable("pk INT NOT NULL, s STRUCT<n1: INT, n2: INT>, dep STRING",
       """{ "pk": 1, "s": null, "dep": "hr" }""")
 
     sql(s"UPDATE $tableNameAsString SET s.n1 = -1 WHERE pk = 1")
 
-    checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, Row(-1, null), "hr") :: Nil)
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, Row(-1, null), "hr") :: Nil)
   }
 
   test("update refreshes relation cache") {
     withTempView("temp") {
       withCache("temp") {
-        createAndInitTable(
-          "pk INT NOT NULL, salary INT, dep STRING",
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
           """{ "pk": 1, "salary": 100, "dep": "hr" }
             |{ "pk": 2, "salary": 100, "dep": "hr" }
             |{ "pk": 3, "salary": 200, "dep": "hardware" }
@@ -333,7 +326,9 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
         sql("CACHE TABLE temp")
 
         // verify the view returns expected results
-        checkAnswer(sql("SELECT * FROM temp"), Row(1, 100, "hr") :: Row(2, 100, "hr") :: Nil)
+        checkAnswer(
+          sql("SELECT * FROM temp"),
+          Row(1, 100, "hr") :: Row(2, 100, "hr") :: Nil)
 
         // update some records in the table
         sql(s"UPDATE $tableNameAsString SET salary = salary + 10 WHERE salary <= 100")
@@ -353,8 +348,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
   }
 
   test("update with conditions on nested columns") {
-    createAndInitTable(
-      "pk INT NOT NULL, salary INT, complex STRUCT<c1:INT,c2:STRING>, dep STRING",
+    createAndInitTable("pk INT NOT NULL, salary INT, complex STRUCT<c1:INT,c2:STRING>, dep STRING",
       """{ "pk": 1, "salary": 100, "complex": { "c1": 300, "c2": "v1" }, "dep": "hr" }
         |{ "pk": 2, "salary": 200, "complex": { "c1": 200, "c2": "v2" }, "dep": "software" }
         |""".stripMargin)
@@ -368,8 +362,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
 
   test("update with IN subqueries") {
     withTempView("updated_id", "updated_dep") {
-      createAndInitTable(
-        "pk INT NOT NULL, id INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
         """{ "pk": 1, "id": 1, "dep": "hr" }
           |{ "pk": 2, "id": 2, "dep": "hardware" }
           |{ "pk": 3, "id": null, "dep": "hr" }
@@ -381,7 +374,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       val updatedDepDF = Seq("software", "hr").toDF()
       updatedDepDF.createOrReplaceTempView("updated_dep")
 
-      sql(s"""UPDATE $tableNameAsString
+      sql(
+        s"""UPDATE $tableNameAsString
            |SET dep = 'invalid'
            |WHERE
            | id IN (SELECT * FROM updated_id)
@@ -392,7 +386,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "invalid") :: Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
 
-      sql(s"""UPDATE $tableNameAsString
+      sql(
+        s"""UPDATE $tableNameAsString
            |SET dep = 'invalid'
            |WHERE
            | id IS NULL
@@ -407,8 +402,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
 
   test("update with multi-column IN subqueries") {
     withTempView("updated_employee") {
-      createAndInitTable(
-        "pk INT NOT NULL, id INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
         """{ "pk": 1, "id": 1, "dep": "hr" }
           |{ "pk": 2, "id": 2, "dep": "hardware" }
           |{ "pk": 3, "id": null, "dep": "hr" }
@@ -417,7 +411,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       val updatedEmployeeDF = Seq((None, "hr"), (Some(1), "hr")).toDF()
       updatedEmployeeDF.createOrReplaceTempView("updated_employee")
 
-      sql(s"""UPDATE $tableNameAsString
+      sql(
+        s"""UPDATE $tableNameAsString
            |SET dep = 'invalid'
            |WHERE
            | (id, dep) IN (SELECT * FROM updated_employee)
@@ -431,8 +426,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
 
   test("update with NOT IN subqueries") {
     withTempView("updated_id", "updated_dep") {
-      createAndInitTable(
-        "pk INT NOT NULL, id INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
         """{ "pk": 1, "id": 1, "dep": "hr" }
           |{ "pk": 2, "id": 2, "dep": "hardware" }
           |{ "pk": 3, "id": null, "dep": "hr" }
@@ -444,7 +438,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       val updatedDepDF = Seq("software", "hr").toDF()
       updatedDepDF.createOrReplaceTempView("updated_dep")
 
-      sql(s"""UPDATE $tableNameAsString
+      sql(
+        s"""UPDATE $tableNameAsString
            |SET dep = 'invalid'
            |WHERE
            | id NOT IN (SELECT * FROM updated_id)
@@ -453,7 +448,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "hr") :: Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
 
-      sql(s"""UPDATE $tableNameAsString
+      sql(
+        s"""UPDATE $tableNameAsString
            |SET dep = 'invalid'
            |WHERE
            | id NOT IN (SELECT * FROM updated_id WHERE value IS NOT NULL)
@@ -462,7 +458,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "invalid") :: Row(2, 2, "invalid") :: Row(3, null, "hr") :: Nil)
 
-      sql(s"""UPDATE $tableNameAsString
+      sql(
+        s"""UPDATE $tableNameAsString
            |SET dep = 'hr'
            |WHERE
            | id NOT IN (SELECT * FROM updated_id)
@@ -477,8 +474,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
 
   test("update with EXISTS subquery") {
     withTempView("updated_id", "updated_dep") {
-      createAndInitTable(
-        "pk INT NOT NULL, id INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
         """{ "pk": 1, "id": 1, "dep": "hr" }
           |{ "pk": 2, "id": 2, "dep": "hardware" }
           |{ "pk": 3, "id": null, "dep": "hr" }
@@ -490,7 +486,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       val updatedDepDF = Seq("software", "hr").toDF()
       updatedDepDF.createOrReplaceTempView("updated_dep")
 
-      sql(s"""UPDATE $tableNameAsString t
+      sql(
+        s"""UPDATE $tableNameAsString t
            |SET dep = 'invalid'
            |WHERE
            | EXISTS (SELECT 1 FROM updated_id d WHERE t.id = d.value)
@@ -499,7 +496,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "hr") :: Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
 
-      sql(s"""UPDATE $tableNameAsString t
+      sql(
+        s"""UPDATE $tableNameAsString t
            |SET dep = 'invalid'
            |WHERE
            | EXISTS (SELECT 1 FROM updated_id d WHERE t.id = d.value + 2)
@@ -508,7 +506,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "invalid") :: Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
 
-      sql(s"""UPDATE $tableNameAsString t
+      sql(
+        s"""UPDATE $tableNameAsString t
            |SET dep = 'invalid'
            |WHERE
            | EXISTS (SELECT 1 FROM updated_id d WHERE t.id = d.value) OR t.id IS NULL
@@ -517,7 +516,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "invalid") :: Row(2, 2, "hardware") :: Row(3, null, "invalid") :: Nil)
 
-      sql(s"""UPDATE $tableNameAsString t
+      sql(
+        s"""UPDATE $tableNameAsString t
            |SET dep = 'invalid'
            |WHERE
            | EXISTS (SELECT 1 FROM updated_id di WHERE t.id = di.value)
@@ -532,8 +532,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
 
   test("update with NOT EXISTS subquery") {
     withTempView("updated_id", "updated_dep") {
-      createAndInitTable(
-        "pk INT NOT NULL, id INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
         """{ "pk": 1, "id": 1, "dep": "hr" }
           |{ "pk": 2, "id": 2, "dep": "hardware" }
           |{ "pk": 3, "id": null, "dep": "hr" }
@@ -545,7 +544,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       val updatedDepDF = Seq("software", "hr").toDF()
       updatedDepDF.createOrReplaceTempView("updated_dep")
 
-      sql(s"""UPDATE $tableNameAsString t
+      sql(
+        s"""UPDATE $tableNameAsString t
            |SET dep = 'invalid'
            |WHERE
            | NOT EXISTS (SELECT 1 FROM updated_id di WHERE t.id = di.value + 2)
@@ -556,7 +556,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "hr") :: Row(2, 2, "invalid") :: Row(3, null, "hr") :: Nil)
 
-      sql(s"""UPDATE $tableNameAsString t
+      sql(
+        s"""UPDATE $tableNameAsString t
            |SET dep = 'invalid'
            |WHERE
            | NOT EXISTS (SELECT 1 FROM updated_id d WHERE t.id = d.value + 2)
@@ -565,7 +566,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "hr") :: Row(2, 2, "invalid") :: Row(3, null, "invalid") :: Nil)
 
-      sql(s"""UPDATE $tableNameAsString t
+      sql(
+        s"""UPDATE $tableNameAsString t
            |SET dep = 'invalid'
            |WHERE
            | NOT EXISTS (SELECT 1 FROM updated_id d WHERE t.id = d.value + 2)
@@ -580,8 +582,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
 
   test("update with a scalar subquery") {
     withTempView("updated_id") {
-      createAndInitTable(
-        "pk INT NOT NULL, id INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
         """{ "pk": 1, "id": 1, "dep": "hr" }
           |{ "pk": 2, "id": 2, "dep": "hardware" }
           |{ "pk": 3, "id": null, "dep": "hr" }
@@ -590,7 +591,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       val updatedIdDF = Seq(Some(1), Some(100), None).toDF()
       updatedIdDF.createOrReplaceTempView("updated_id")
 
-      sql(s"""UPDATE $tableNameAsString t
+      sql(
+        s"""UPDATE $tableNameAsString t
            |SET dep = 'invalid'
            |WHERE
            | id <= (SELECT min(value) FROM updated_id)
@@ -603,8 +605,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
   }
 
   test("update with nondeterministic assignments") {
-    createAndInitTable(
-      "pk INT NOT NULL, id INT, value DOUBLE, dep STRING",
+    createAndInitTable("pk INT NOT NULL, id INT, value DOUBLE, dep STRING",
       """{ "pk": 1, "id": 1, "value": 2.0, "dep": "hr" }
         |{ "pk": 2, "id": 2, "value": 2.0,  "dep": "software" }
         |{ "pk": 3, "id": 3, "value": 2.0, "dep": "hr" }
@@ -613,26 +614,28 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     // rand() always generates values in [0, 1) range
     sql(s"UPDATE $tableNameAsString SET value = rand() WHERE id <= 2")
 
-    checkAnswer(sql(s"SELECT count(*) FROM $tableNameAsString WHERE value < 2.0"), Row(2) :: Nil)
+    checkAnswer(
+      sql(s"SELECT count(*) FROM $tableNameAsString WHERE value < 2.0"),
+      Row(2) :: Nil)
   }
 
   test("SPARK-53538: update with nondeterministic assignments and no wholestage codegen") {
     val extraColCount = SQLConf.get.wholeStageMaxNumFields - 4
     val schema = "pk INT NOT NULL, id INT, value DOUBLE, dep STRING, " +
       ((1 to extraColCount).map(i => s"col$i INT").mkString(", "))
-    val data = (1 to 3)
-      .map { i =>
-        s"""{ "pk": $i, "id": $i, "value": 2.0, "dep": "hr", """ +
-          ((1 to extraColCount).map(j => s""""col$j": $i""").mkString(", ")) +
-          "}"
-      }
-      .mkString("\n")
+    val data = (1 to 3).map { i =>
+      s"""{ "pk": $i, "id": $i, "value": 2.0, "dep": "hr", """ +
+        ((1 to extraColCount).map(j => s""""col$j": $i""").mkString(", ")) +
+      "}"
+    }.mkString("\n")
     createAndInitTable(schema, data)
 
     // rand() always generates values in [0, 1) range
     sql(s"UPDATE $tableNameAsString SET value = rand() WHERE id <= 2")
 
-    checkAnswer(sql(s"SELECT count(*) FROM $tableNameAsString WHERE value < 2.0"), Row(2) :: Nil)
+    checkAnswer(
+      sql(s"SELECT count(*) FROM $tableNameAsString WHERE value < 2.0"),
+      Row(2) :: Nil)
   }
 
   test("update with default values") {
@@ -644,8 +647,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
 
     createTable(columns)
 
-    append(
-      "pk INT NOT NULL, id INT, dep STRING",
+    append("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
         |{ "pk": 2, "id": 2, "dep": "software" }
         |{ "pk": 3, "id": 3, "dep": "hr" }
@@ -661,8 +663,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
   test("update with current_timestamp default value using DEFAULT keyword") {
     sql(s"""CREATE TABLE $tableNameAsString
       | (pk INT NOT NULL, current_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""".stripMargin)
-    append(
-      "pk INT NOT NULL, current_timestamp TIMESTAMP",
+    append("pk INT NOT NULL, current_timestamp TIMESTAMP",
       """{ "pk": 1, "i": false, "current_timestamp": "2023-01-01 10:00:00" }
         |{ "pk": 2, "i": true, "current_timestamp": "2023-01-01 11:00:00" }
         |""".stripMargin)
@@ -689,8 +690,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
   test("update char/varchar columns") {
     createTable("pk INT NOT NULL, s STRUCT<n_c: CHAR(3), n_vc: VARCHAR(5)>, dep STRING")
 
-    append(
-      "pk INT NOT NULL, s STRUCT<n_c: STRING, n_vc: STRING>, dep STRING",
+    append("pk INT NOT NULL, s STRUCT<n_c: STRING, n_vc: STRING>, dep STRING",
       """{ "pk": 1, "s": { "n_c": "aaa", "n_vc": "aaa" }, "dep": "hr" }
         |{ "pk": 2, "s": { "n_c": "bbb", "n_vc": "bbb" }, "dep": "software" }
         |{ "pk": 3, "s": { "n_c": "ccc", "n_vc": "ccc" }, "dep": "hr" }
@@ -706,8 +706,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
   }
 
   test("update with NOT NULL checks") {
-    createAndInitTable(
-      "pk INT NOT NULL, s STRUCT<n_i: INT NOT NULL, n_l: LONG>, dep STRING",
+    createAndInitTable("pk INT NOT NULL, s STRUCT<n_i: INT NOT NULL, n_l: LONG>, dep STRING",
       """{ "pk": 1, "s": { "n_i": 1, "n_l": 11 }, "dep": "hr" }
         |{ "pk": 2, "s": { "n_i": 2, "n_l": 22 }, "dep": "software" }
         |{ "pk": 3, "s": { "n_i": 3, "n_l": 33 }, "dep": "hr" }
@@ -715,38 +714,52 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
 
     checkError(
       exception = intercept[SparkRuntimeException] {
-        sql(
-          s"UPDATE $tableNameAsString SET s = named_struct('n_i', null, 'n_l', -1L) WHERE pk = 1")
+        sql(s"UPDATE $tableNameAsString SET s = named_struct('n_i', null, 'n_l', -1L) WHERE pk = 1")
       },
       condition = "NOT_NULL_ASSERT_VIOLATION",
       sqlState = "42000",
       parameters = Map("walkedTypePath" -> "\ns\nn_i\n"))
   }
 
+
+
   test("update table with recursive CTE") {
     withTempView("source") {
-      sql(s"""CREATE TABLE $tableNameAsString (
+      sql(
+        s"""CREATE TABLE $tableNameAsString (
            | val INT)
            |""".stripMargin)
 
-      append(
-        "val INT",
+      append("val INT",
         """{ "val": 1 }
           |{ "val": 9 }
           |{ "val": 8 }
           |{ "val": 4 }
           |""".stripMargin)
 
-      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Seq(Row(1), Row(9), Row(8), Row(4)))
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1),
+          Row(9),
+          Row(8),
+          Row(4)))
 
-      sql(s"""WITH RECURSIVE s(val) AS (
+      sql(
+        s"""WITH RECURSIVE s(val) AS (
            |  SELECT 1
            |  UNION ALL
            |  SELECT val + 1 FROM s WHERE val < 5
            |) UPDATE $tableNameAsString SET val = val + 1 WHERE val IN (SELECT val FROM s)
            |""".stripMargin)
 
-      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Seq(Row(2), Row(9), Row(8), Row(5)))
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(2),
+          Row(9),
+          Row(8),
+          Row(5)))
     }
   }
 }

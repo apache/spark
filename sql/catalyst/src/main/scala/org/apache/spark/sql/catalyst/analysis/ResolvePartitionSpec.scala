@@ -35,34 +35,36 @@ import org.apache.spark.util.ArrayImplicits._
  */
 object ResolvePartitionSpec extends Rule[LogicalPlan] {
 
-  def apply(plan: LogicalPlan): LogicalPlan =
-    plan.resolveOperatorsWithPruning(_.containsPattern(COMMAND)) {
-      case command: V2PartitionCommand if command.childrenResolved && !command.resolved =>
-        command.table match {
-          case r @ ResolvedTable(_, _, table: SupportsPartitionManagement, _) =>
-            command.transformExpressions { case partSpecs: UnresolvedPartitionSpec =>
+  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+    _.containsPattern(COMMAND)) {
+    case command: V2PartitionCommand if command.childrenResolved && !command.resolved =>
+      command.table match {
+        case r @ ResolvedTable(_, _, table: SupportsPartitionManagement, _) =>
+          command.transformExpressions {
+            case partSpecs: UnresolvedPartitionSpec =>
               val partitionSchema = table.partitionSchema()
               resolvePartitionSpec(
                 r.name,
                 partSpecs,
                 partitionSchema,
                 command.allowPartialPartitionSpec)
-            }
-          case _ => command
-        }
-    }
+          }
+        case _ => command
+      }
+  }
 
   private def resolvePartitionSpec(
       tableName: String,
       partSpec: UnresolvedPartitionSpec,
       partSchema: StructType,
       allowPartitionSpec: Boolean): ResolvedPartitionSpec = {
-    val normalizedSpec =
-      normalizePartitionSpec(partSpec.spec, partSchema, tableName, conf.resolver)
+    val normalizedSpec = normalizePartitionSpec(
+      partSpec.spec,
+      partSchema,
+      tableName,
+      conf.resolver)
     if (!allowPartitionSpec) {
-      requireExactMatchedPartitionSpec(
-        tableName,
-        normalizedSpec,
+      requireExactMatchedPartitionSpec(tableName, normalizedSpec,
         partSchema.fieldNames.toImmutableArraySeq)
     }
     val partitionNames = normalizedSpec.keySet

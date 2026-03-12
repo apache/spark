@@ -22,10 +22,7 @@ private[xml] object TestUtils {
 
   def buildSchema(fields: StructField*): StructType = StructType(fields)
 
-  def field(
-      name: String,
-      dataType: DataType = StringType,
-      nullable: Boolean = true): StructField =
+  def field(name: String, dataType: DataType = StringType, nullable: Boolean = true): StructField =
     StructField(name, dataType, nullable)
 
   def structField(fields: StructField*): StructType = buildSchema(fields: _*)

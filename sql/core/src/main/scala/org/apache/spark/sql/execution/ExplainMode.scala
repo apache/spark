@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution
 import java.util.Locale
 
 sealed trait ExplainMode {
-
   /**
    * String name of the explain mode.
    */
@@ -28,14 +27,14 @@ sealed trait ExplainMode {
 }
 
 /**
- * Simple mode means that when printing explain for a DataFrame, only a physical plan is expected
- * to be printed to the console.
+ * Simple mode means that when printing explain for a DataFrame, only a physical plan is
+ * expected to be printed to the console.
  */
 case object SimpleMode extends ExplainMode { val name = "simple" }
 
 /**
- * Extended mode means that when printing explain for a DataFrame, both logical and physical plans
- * are expected to be printed to the console.
+ * Extended mode means that when printing explain for a DataFrame, both logical and physical
+ * plans are expected to be printed to the console.
  */
 case object ExtendedMode extends ExplainMode { val name = "extended" }
 
@@ -52,13 +51,12 @@ case object CodegenMode extends ExplainMode { val name = "codegen" }
 case object CostMode extends ExplainMode { val name = "cost" }
 
 /**
- * Formatted mode means that when printing explain for a DataFrame, explain output is expected to
- * be split into two sections: a physical plan outline and node details.
+ * Formatted mode means that when printing explain for a DataFrame, explain output is
+ * expected to be split into two sections: a physical plan outline and node details.
  */
 case object FormattedMode extends ExplainMode { val name = "formatted" }
 
 object ExplainMode {
-
   /**
    * Returns the explain mode from the given string.
    */
@@ -68,9 +66,7 @@ object ExplainMode {
     case CodegenMode.name => CodegenMode
     case CostMode.name => CostMode
     case FormattedMode.name => FormattedMode
-    case _ =>
-      throw new IllegalArgumentException(
-        s"Unknown explain mode: $mode. Accepted " +
-          "explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted'.")
+    case _ => throw new IllegalArgumentException(s"Unknown explain mode: $mode. Accepted " +
+      "explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted'.")
   }
 }

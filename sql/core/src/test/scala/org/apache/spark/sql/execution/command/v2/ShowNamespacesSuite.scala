@@ -45,7 +45,8 @@ class ShowNamespacesSuite extends command.ShowNamespacesSuiteBase with CommandSu
           sql("SHOW NAMESPACES")
         },
         condition = "MISSING_CATALOG_ABILITY.NAMESPACES",
-        parameters = Map("plugin" -> "testcat_no_namespace"))
+        parameters = Map("plugin" -> "testcat_no_namespace")
+      )
     }
   }
 
@@ -55,6 +56,7 @@ class ShowNamespacesSuite extends command.ShowNamespacesSuiteBase with CommandSu
         sql("SHOW NAMESPACES in testcat_no_namespace")
       },
       condition = "MISSING_CATALOG_ABILITY.NAMESPACES",
-      parameters = Map("plugin" -> "testcat_no_namespace"))
+      parameters = Map("plugin" -> "testcat_no_namespace")
+    )
   }
 }

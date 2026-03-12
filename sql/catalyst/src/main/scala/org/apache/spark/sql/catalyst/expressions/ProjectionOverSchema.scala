@@ -21,15 +21,14 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.types._
 
 /**
- * A Scala extractor that projects an expression over a given schema. Data types, field indexes
- * and field counts of complex type extractors and attributes are adjusted to fit the schema. All
- * other expressions are left as-is. This class is motivated by columnar nested schema pruning.
+ * A Scala extractor that projects an expression over a given schema. Data types,
+ * field indexes and field counts of complex type extractors and attributes
+ * are adjusted to fit the schema. All other expressions are left as-is. This
+ * class is motivated by columnar nested schema pruning.
  *
- * @param schema
- *   nested column schema
- * @param output
- *   output attributes of the data source relation. They are used to filter out attributes in the
- *   schema that do not belong to the current relation.
+ * @param schema nested column schema
+ * @param output output attributes of the data source relation. They are used to filter out
+ *               attributes in the schema that do not belong to the current relation.
  */
 case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
   private val fieldNames = schema.fieldNames.toSet
@@ -41,8 +40,8 @@ case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
       case a: AttributeReference if fieldNames.contains(a.name) && output.contains(a) =>
         Some(a.copy(dataType = schema(a.name).dataType)(a.exprId, a.qualifier))
       case GetArrayItem(child, arrayItemOrdinal, failOnError) =>
-        getProjection(child).map { projection =>
-          GetArrayItem(projection, arrayItemOrdinal, failOnError)
+        getProjection(child).map {
+          projection => GetArrayItem(projection, arrayItemOrdinal, failOnError)
         }
       case a: GetArrayStructFields =>
         getProjection(a.child).map(p => (p, p.dataType)).map {
@@ -50,20 +49,18 @@ case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
             // For case-sensitivity aware field resolution, we should take `ordinal` which
             // points to correct struct field, because `ExtractValue` actually does column
             // name resolving correctly.
-            val selectedField = a.child.dataType
-              .asInstanceOf[ArrayType]
-              .elementType
-              .asInstanceOf[StructType](a.ordinal)
+            val selectedField = a.child.dataType.asInstanceOf[ArrayType]
+              .elementType.asInstanceOf[StructType](a.ordinal)
             val prunedField = projSchema(selectedField.name)
-            GetArrayStructFields(
-              projection,
+            GetArrayStructFields(projection,
               prunedField.copy(name = a.field.name),
               projSchema.fieldIndex(selectedField.name),
               projSchema.size,
               a.containsNull)
           case (_, projSchema) =>
             throw SparkException.internalError(
-              s"unmatched child schema for GetArrayStructFields: ${projSchema.toString}")
+              s"unmatched child schema for GetArrayStructFields: ${projSchema.toString}"
+            )
         }
       case MapKeys(child) =>
         getProjection(child).map { projection => MapKeys(projection) }
@@ -77,7 +74,8 @@ case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
             GetStructField(projection, projSchema.fieldIndex(field.name))
           case (_, projSchema) =>
             throw SparkException.internalError(
-              s"unmatched child schema for GetStructField: ${projSchema.toString}")
+              s"unmatched child schema for GetStructField: ${projSchema.toString}"
+            )
         }
       case ElementAt(left, right, defaultValueOutOfBound, failOnError) if right.foldable =>
         getProjection(left).map(p => ElementAt(p, right, defaultValueOutOfBound, failOnError))

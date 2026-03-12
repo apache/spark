@@ -37,8 +37,8 @@ object TypeCoercionValidation extends QueryErrorsBase {
         val extraHint = operator.map(getHintForExpressionCoercion(_)).getOrElse("")
         e.failAnalysis(
           errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
-          messageParameters =
-            Map("sqlExpr" -> toSQLExpr(e), "msg" -> message, "hint" -> extraHint))
+          messageParameters = Map("sqlExpr" -> toSQLExpr(e), "msg" -> message, "hint" -> extraHint)
+        )
       case checkRes: TypeCheckResult.InvalidFormat =>
         e.invalidFormat(checkRes)
     }
@@ -56,13 +56,15 @@ object TypeCoercionValidation extends QueryErrorsBase {
 
           val ref = dataTypes(nonAnsiPlan.children.head)
           val dataTypesAreCompatibleFn = getDataTypesAreCompatibleFn(nonAnsiPlan)
-          nonAnsiPlan.children.tail.zipWithIndex.foreach { case (child, ti) =>
-            // Check if the data types match.
-            dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
-              if (!dataTypesAreCompatibleFn(dt1, dt2)) {
-                issueFixedIfAnsiOff = false
+          nonAnsiPlan.children.tail.zipWithIndex.foreach {
+            case (child, ti) =>
+              // Check if the data types match.
+              dataTypes(child).zip(ref).zipWithIndex.foreach {
+                case ((dt1, dt2), ci) =>
+                  if (!dataTypesAreCompatibleFn(dt1, dt2)) {
+                    issueFixedIfAnsiOff = false
+                  }
               }
-            }
           }
 
         case _ =>
@@ -108,7 +110,7 @@ object TypeCoercionValidation extends QueryErrorsBase {
   private def extraHintMessage(issueFixedIfAnsiOff: Boolean): String = {
     if (issueFixedIfAnsiOff) {
       "\nTo fix the error, you might need to add explicit type casts. If necessary set " +
-        s"${SQLConf.ANSI_ENABLED.key} to false to bypass this error."
+      s"${SQLConf.ANSI_ENABLED.key} to false to bypass this error."
     } else {
       ""
     }

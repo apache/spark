@@ -38,9 +38,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * @since 2.0.0
  */
 @Evolving
-final class DataStreamReader private[sql] (sparkSession: SparkSession)
-    extends streaming.DataStreamReader {
-
+final class DataStreamReader private[sql](sparkSession: SparkSession)
+  extends streaming.DataStreamReader {
   /** @inheritdoc */
   def format(source: String): this.type = {
     this.source = source
@@ -69,11 +68,10 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession)
   }
 
   /**
-   * Specifies a name for the streaming source. This name is used to identify the source in
-   * checkpoint metadata and enables stable checkpoint locations for source evolution.
+   * Specifies a name for the streaming source. This name is used to identify the source
+   * in checkpoint metadata and enables stable checkpoint locations for source evolution.
    *
-   * @param sourceName
-   *   the name to assign to this streaming source
+   * @param sourceName the name to assign to this streaming source
    * @since 4.2.0
    */
   @Experimental
@@ -92,7 +90,8 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession)
       userSpecifiedSchema,
       extraOptions,
       isStreaming = true,
-      path.toSeq)
+      path.toSeq
+    )
     val plan = NamedStreamingRelation.withUserProvidedName(unresolved, userProvidedSourceName)
     Dataset.ofRows(sparkSession, plan)
   }
@@ -100,7 +99,7 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession)
   /** @inheritdoc */
   def load(path: String): DataFrame = {
     if (!sparkSession.sessionState.conf.legacyPathOptionBehavior &&
-      extraOptions.contains("path")) {
+        extraOptions.contains("path")) {
       throw QueryCompilationErrors.setPathOptionAndCallWithPathParameterError("load")
     }
     loadInternal(Some(path))

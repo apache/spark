@@ -34,7 +34,7 @@ case class CollectMetricsExec(
     name: String,
     metricExpressions: Seq[NamedExpression],
     child: SparkPlan)
-    extends UnaryExecNode {
+  extends UnaryExecNode {
 
   private lazy val accumulator: AggregatingAccumulator = {
     val acc = AggregatingAccumulator(metricExpressions, child.output)
@@ -52,8 +52,7 @@ case class CollectMetricsExec(
 
   // This is not used very frequently (once a query); it is not useful to use code generation here.
   private lazy val toRowConverter: InternalRow => Row = {
-    CatalystTypeConverters
-      .createToScalaConverter(metricsSchema)
+    CatalystTypeConverters.createToScalaConverter(metricsSchema)
       .asInstanceOf[InternalRow => Row]
   }
 

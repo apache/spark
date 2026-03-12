@@ -27,18 +27,26 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, TableCapability}
-import org.apache.spark.sql.connector.write.{LogicalWriteInfo, PhysicalWriteInfo, Write, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{
+  LogicalWriteInfo,
+  PhysicalWriteInfo,
+  Write,
+  WriteBuilder,
+  WriterCommitMessage
+}
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
 import org.apache.spark.sql.types.StructType
 
 /**
- * A sink that stores the results in memory. This
- * [[org.apache.spark.sql.execution.streaming.Sink]] is primarily intended for use in unit tests
- * and does not provide durability. This is mostly copied from MemorySink, except that the data
- * needs to be available not in commit() but after each write.
+ * A sink that stores the results in memory. This [[org.apache.spark.sql.execution.streaming.Sink]]
+ * is primarily intended for use in unit tests and does not provide durability.
+ * This is mostly copied from MemorySink, except that the data needs to be available not in
+ * commit() but after each write.
  */
-class ContinuousMemorySink extends MemorySink with SupportsWrite {
+class ContinuousMemorySink
+    extends MemorySink
+    with SupportsWrite {
 
   private val batches = new ArrayBuffer[Row]()
   override def name(): String = "ContinuousMemorySink"
@@ -74,13 +82,15 @@ class ContinuousMemorySink extends MemorySink with SupportsWrite {
   override def latestBatchData: Seq[Row] = {
     throw new SparkUnsupportedOperationException(
       errorClass = "UNSUPPORTED_OPERATION_FOR_CONTINUOUS_MEMORY_SINK",
-      messageParameters = Map("operation" -> "latestBatchData"))
+      messageParameters = Map("operation" -> "latestBatchData")
+    )
   }
 
   override def dataSinceBatch(sinceBatchId: Long): Seq[Row] = {
     throw new SparkUnsupportedOperationException(
       errorClass = "UNSUPPORTED_OPERATION_FOR_CONTINUOUS_MEMORY_SINK",
-      messageParameters = Map("operation" -> "dataSinceBatch"))
+      messageParameters = Map("operation" -> "dataSinceBatch")
+    )
   }
 
   override def toDebugString: String = {
@@ -90,7 +100,8 @@ class ContinuousMemorySink extends MemorySink with SupportsWrite {
   override def write(batchId: Long, needTruncate: Boolean, newRows: Array[Row]): Unit = {
     throw new SparkUnsupportedOperationException(
       errorClass = "UNSUPPORTED_OPERATION_FOR_CONTINUOUS_MEMORY_SINK",
-      messageParameters = Map("operation" -> "write"))
+      messageParameters = Map("operation" -> "write")
+    )
   }
 
   override def clear(): Unit = synchronized {
@@ -116,17 +127,18 @@ class ContinuousMemoryWrite(batches: ArrayBuffer[Row], schema: StructType) exten
 class MemoryRealTimeRpcEndpoint(
     override val rpcEnv: RpcEnv,
     schema: StructType,
-    batches: ArrayBuffer[Row])
-    extends ThreadSafeRpcEndpoint {
+    batches: ArrayBuffer[Row]
+) extends ThreadSafeRpcEndpoint {
   private val encoder = ExpressionEncoder(schema).resolveAndBind().createDeserializer()
 
-  override def receive: PartialFunction[Any, Unit] = { case rows: Array[InternalRow] =>
-    // synchronized block is optional here since ThreadSafeRpcEndpoint already, just to be safe
-    batches.synchronized {
-      rows.foreach { row =>
-        batches += encoder(row)
+  override def receive: PartialFunction[Any, Unit] = {
+    case rows: Array[InternalRow] =>
+      // synchronized block is optional here since ThreadSafeRpcEndpoint already, just to be safe
+      batches.synchronized {
+        rows.foreach { row =>
+          batches += encoder(row)
+        }
       }
-    }
   }
 }
 
@@ -134,11 +146,14 @@ class ContinuousMemoryStreamingWrite(val batches: ArrayBuffer[Row], schema: Stru
     extends StreamingWrite {
 
   private val memoryEndpoint =
-    new MemoryRealTimeRpcEndpoint(SparkEnv.get.rpcEnv, schema, batches)
+    new MemoryRealTimeRpcEndpoint(
+      SparkEnv.get.rpcEnv,
+      schema,
+      batches
+    )
   @volatile private var endpointRef: RpcEndpointRef = _
 
-  override def createStreamingWriterFactory(
-      info: PhysicalWriteInfo): StreamingDataWriterFactory = {
+  override def createStreamingWriterFactory(info: PhysicalWriteInfo): StreamingDataWriterFactory = {
     val endpointName = s"MemoryRealTimeRpcEndpoint-${java.util.UUID.randomUUID()}"
     endpointRef = memoryEndpoint.rpcEnv.setupEndpoint(endpointName, memoryEndpoint)
     RealTimeRowWriterFactory(endpointName, endpointRef.address)

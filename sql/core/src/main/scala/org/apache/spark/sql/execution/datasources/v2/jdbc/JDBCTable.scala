@@ -38,11 +38,11 @@ case class JDBCTable(
     override val schema: StructType,
     jdbcOptions: JDBCOptions,
     additionalMetrics: Map[String, SQLMetric] = Map())
-    extends Table
-    with SupportsRead
-    with SupportsWrite
-    with SupportsIndex
-    with DataTypeErrorsBase {
+  extends Table
+  with SupportsRead
+  with SupportsWrite
+  with SupportsIndex
+  with DataTypeErrorsBase {
 
   override def hashCode(): Int = (ident, schema, jdbcOptions).##
 
@@ -86,13 +86,7 @@ case class JDBCTable(
         description = s"Failed to create index $indexName in ${name()}",
         isRuntime = false) {
         JdbcUtils.createIndex(
-          conn,
-          indexName,
-          ident,
-          columns,
-          columnsProperties,
-          properties,
-          jdbcOptions)
+          conn, indexName, ident, columns, columnsProperties, properties, jdbcOptions)
       }
     }
   }

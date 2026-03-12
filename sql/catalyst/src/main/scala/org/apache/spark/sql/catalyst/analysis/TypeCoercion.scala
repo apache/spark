@@ -35,12 +35,12 @@ import org.apache.spark.sql.types.UpCastRule.numericPrecedence
  * A collection of [[Rule]] that can be used to coerce differing types that participate in
  * operations into compatible ones.
  *
- * Notes about type widening / tightest common types: Broadly, there are two cases when we need to
- * widen data types (e.g. union, binary comparison). In case 1, we are looking for a common data
- * type for two or more data types, and in this case no loss of precision is allowed. Examples
+ * Notes about type widening / tightest common types: Broadly, there are two cases when we need
+ * to widen data types (e.g. union, binary comparison). In case 1, we are looking for a common
+ * data type for two or more data types, and in this case no loss of precision is allowed. Examples
  * include type inference in JSON (e.g. what's the column's data type if one row is an integer
- * while the other row is a long?). In case 2, we are looking for a widened data type with some
- * acceptable loss of precision (e.g. there is no common type for double and decimal because
+ * while the other row is a long?). In case 2, we are looking for a widened data type with
+ * some acceptable loss of precision (e.g. there is no common type for double and decimal because
  * double's range is larger than decimal, and yet decimal is more precise than double, but in
  * union we would cast the decimal into double).
  */
@@ -48,64 +48,64 @@ object TypeCoercion extends TypeCoercionBase {
 
   override def typeCoercionRules: List[Rule[LogicalPlan]] =
     UnpivotCoercion ::
-      WidenSetOperationTypes ::
-      ProcedureArgumentCoercion ::
-      DefaultValueExpressionCoercion ::
-      new CombinedTypeCoercionRule(
-        CollationTypeCasts ::
-          InConversion ::
-          PromoteStrings ::
-          DecimalPrecision ::
-          BooleanEquality ::
-          FunctionArgumentConversion ::
-          ConcatCoercion ::
-          MapZipWithCoercion ::
-          EltCoercion ::
-          CaseWhenCoercion ::
-          IfCoercion ::
-          StackCoercion ::
-          Division ::
-          IntegralDivision ::
-          ImplicitTypeCasts ::
-          DateTimeOperations ::
-          WindowFrameCoercion ::
-          StringLiteralCoercion :: Nil) :: Nil
+    WidenSetOperationTypes ::
+    ProcedureArgumentCoercion ::
+    DefaultValueExpressionCoercion ::
+    new CombinedTypeCoercionRule(
+      CollationTypeCasts ::
+      InConversion ::
+      PromoteStrings ::
+      DecimalPrecision ::
+      BooleanEquality ::
+      FunctionArgumentConversion ::
+      ConcatCoercion ::
+      MapZipWithCoercion ::
+      EltCoercion ::
+      CaseWhenCoercion ::
+      IfCoercion ::
+      StackCoercion ::
+      Division ::
+      IntegralDivision ::
+      ImplicitTypeCasts ::
+      DateTimeOperations ::
+      WindowFrameCoercion ::
+      StringLiteralCoercion :: Nil) :: Nil
 
   override def canCast(from: DataType, to: DataType): Boolean = Cast.canCast(from, to)
 
   override val findTightestCommonType: (DataType, DataType) => Option[DataType] = {
-    case (t1, t2) if t1 == t2 => Some(t1)
-    case (NullType, t1) => Some(t1)
-    case (t1, NullType) => Some(t1)
+      case (t1, t2) if t1 == t2 => Some(t1)
+      case (NullType, t1) => Some(t1)
+      case (t1, NullType) => Some(t1)
 
-    case (s1: StringType, s2: StringType) => StringHelper.tightestCommonString(s1, s2)
+      case(s1: StringType, s2: StringType) => StringHelper.tightestCommonString(s1, s2)
 
-    case (t1: IntegralType, t2: DecimalType) if t2.isWiderThan(t1) =>
-      Some(t2)
-    case (t1: DecimalType, t2: IntegralType) if t1.isWiderThan(t2) =>
-      Some(t1)
+      case (t1: IntegralType, t2: DecimalType) if t2.isWiderThan(t1) =>
+        Some(t2)
+      case (t1: DecimalType, t2: IntegralType) if t1.isWiderThan(t2) =>
+        Some(t1)
 
-    // Promote numeric types to the highest of the two
-    case (t1: NumericType, t2: NumericType)
-        if !t1.isInstanceOf[DecimalType] && !t2.isInstanceOf[DecimalType] =>
-      val index = numericPrecedence.lastIndexWhere(t => t == t1 || t == t2)
-      Some(numericPrecedence(index))
+      // Promote numeric types to the highest of the two
+      case (t1: NumericType, t2: NumericType)
+          if !t1.isInstanceOf[DecimalType] && !t2.isInstanceOf[DecimalType] =>
+        val index = numericPrecedence.lastIndexWhere(t => t == t1 || t == t2)
+        Some(numericPrecedence(index))
 
-    case (d1: DatetimeType, d2: DatetimeType) => findWiderDateTimeType(d1, d2)
+      case (d1: DatetimeType, d2: DatetimeType) => findWiderDateTimeType(d1, d2)
 
-    case (t1: DayTimeIntervalType, t2: DayTimeIntervalType) =>
-      Some(DayTimeIntervalType(t1.startField.min(t2.startField), t1.endField.max(t2.endField)))
-    case (t1: YearMonthIntervalType, t2: YearMonthIntervalType) =>
-      Some(YearMonthIntervalType(t1.startField.min(t2.startField), t1.endField.max(t2.endField)))
+      case (t1: DayTimeIntervalType, t2: DayTimeIntervalType) =>
+        Some(DayTimeIntervalType(t1.startField.min(t2.startField), t1.endField.max(t2.endField)))
+      case (t1: YearMonthIntervalType, t2: YearMonthIntervalType) =>
+        Some(YearMonthIntervalType(t1.startField.min(t2.startField), t1.endField.max(t2.endField)))
 
-    // We allow coercion from GEOGRAPHY(<srid>) types (i.e. fixed SRID types) to the
-    // GEOGRAPHY(ANY) type (i.e. mixed SRID type). This coercion is always safe to do.
-    case (t1: GeographyType, t2: GeographyType) if t1 != t2 => Some(GeographyType("ANY"))
-    // We allow coercion from GEOMETRY(<srid>) types (i.e. fixed SRID types) to the
-    // GEOMETRY(ANY) type (i.e. mixed SRID type). This coercion is always safe to do.
-    case (t1: GeometryType, t2: GeometryType) if t1 != t2 => Some(GeometryType("ANY"))
+      // We allow coercion from GEOGRAPHY(<srid>) types (i.e. fixed SRID types) to the
+      // GEOGRAPHY(ANY) type (i.e. mixed SRID type). This coercion is always safe to do.
+      case (t1: GeographyType, t2: GeographyType) if t1 != t2 => Some(GeographyType("ANY"))
+      // We allow coercion from GEOMETRY(<srid>) types (i.e. fixed SRID types) to the
+      // GEOMETRY(ANY) type (i.e. mixed SRID type). This coercion is always safe to do.
+      case (t1: GeometryType, t2: GeometryType) if t1 != t2 => Some(GeometryType("ANY"))
 
-    case (t1, t2) => findTypeForComplex(t1, t2, findTightestCommonType)
+      case (t1, t2) => findTypeForComplex(t1, t2, findTightestCommonType)
   }
 
   /** Promotes all the way to StringType. */
@@ -131,20 +131,20 @@ object TypeCoercion extends TypeCoercionBase {
   }
 
   /**
-   * This function determines the target type of a comparison operator when one operand is a
-   * String and the other is not. It also handles when one op is a Date and the other is a
-   * Timestamp by making the target type to be String.
+   * This function determines the target type of a comparison operator when one operand
+   * is a String and the other is not. It also handles when one op is a Date and the
+   * other is a Timestamp by making the target type to be String.
    */
   def findCommonTypeForBinaryComparison(
-      dt1: DataType,
-      dt2: DataType,
-      conf: SQLConf): Option[DataType] = (dt1, dt2) match {
-    case (st: StringType, DateType) => if (conf.castDatetimeToString) Some(st) else Some(DateType)
-    case (DateType, st: StringType) => if (conf.castDatetimeToString) Some(st) else Some(DateType)
-    case (st: StringType, TimestampType) =>
-      if (conf.castDatetimeToString) Some(st) else Some(TimestampType)
-    case (TimestampType, st: StringType) =>
-      if (conf.castDatetimeToString) Some(st) else Some(TimestampType)
+      dt1: DataType, dt2: DataType, conf: SQLConf): Option[DataType] = (dt1, dt2) match {
+    case (st: StringType, DateType)
+      => if (conf.castDatetimeToString) Some(st) else Some(DateType)
+    case (DateType, st: StringType)
+      => if (conf.castDatetimeToString) Some(st) else Some(DateType)
+    case (st: StringType, TimestampType)
+      => if (conf.castDatetimeToString) Some(st) else Some(TimestampType)
+    case (TimestampType, st: StringType)
+      => if (conf.castDatetimeToString) Some(st) else Some(TimestampType)
     case (st: StringType, NullType) => Some(st)
     case (NullType, st: StringType) => Some(st)
 
@@ -231,7 +231,8 @@ object TypeCoercion extends TypeCoercionBase {
       case (_: StringType, BinaryType) => BinaryType
       // Cast any atomic type to string except if there are strings with different collations.
       case (any: AtomicType, st: StringType) if !any.isInstanceOf[StringType] => st
-      case (any: AtomicType, st: AbstractStringType) if !any.isInstanceOf[StringType] =>
+      case (any: AtomicType, st: AbstractStringType)
+        if !any.isInstanceOf[StringType] =>
         st.defaultConcreteType
 
       // When we reach here, input type is not acceptable for any types in this type collection,
@@ -295,8 +296,8 @@ object TypeCoercion extends TypeCoercionBase {
 
   /**
    * The method finds a common type for data types that differ only in nullable flags, including
-   * `nullable`, `containsNull` of [[ArrayType]] and `valueContainsNull` of [[MapType]]. If the
-   * input types are different besides nullable flags, None is returned.
+   * `nullable`, `containsNull` of [[ArrayType]] and `valueContainsNull` of [[MapType]].
+   * If the input types are different besides nullable flags, None is returned.
    */
   def findCommonTypeDifferentOnlyInNullFlags(t1: DataType, t2: DataType): Option[DataType] = {
     if (t1 == t2) {
@@ -361,10 +362,9 @@ object TypeCoercion extends TypeCoercionBase {
 }
 
 trait TypeCoercionRule extends Rule[LogicalPlan] with Logging {
-
   /**
-   * Applies any changes to [[AttributeReference]] data types that are made by the transform
-   * method to instances higher in the query tree.
+   * Applies any changes to [[AttributeReference]] data types that are made by the transform method
+   * to instances higher in the query tree.
    */
   def apply(plan: LogicalPlan): LogicalPlan = {
     val typeCoercionFn = transform
@@ -379,8 +379,8 @@ trait TypeCoercionRule extends Rule[LogicalPlan] with Logging {
           } else {
             beforeMapChildren
           }
-          withPropagatedTypes.transformExpressionsUpWithPruning(AlwaysProcess.fn, ruleId)(
-            typeCoercionFn)
+          withPropagatedTypes.transformExpressionsUpWithPruning(
+            AlwaysProcess.fn, ruleId)(typeCoercionFn)
         }
     }
   }
@@ -403,8 +403,9 @@ trait TypeCoercionRule extends Rule[LogicalPlan] with Logging {
       plan
     } else {
       // Update the references if the dataType/nullability has changed.
-      plan transformExpressions { case a: AttributeReference =>
-        inputMap.getOrElse(a, a)
+      plan transformExpressions {
+        case a: AttributeReference =>
+          inputMap.getOrElse(a, a)
       }
     }
   }

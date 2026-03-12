@@ -130,7 +130,8 @@ case class XmlToStructsEvaluator(
     nullableSchema: DataType,
     nameOfCorruptRecord: String,
     timeZoneId: Option[String],
-    child: Expression) {
+    child: Expression
+) {
   @transient lazy val parsedOptions = new XmlOptions(options, timeZoneId.get, nameOfCorruptRecord)
 
   // This converts parsed rows to the desired output by the given schema.

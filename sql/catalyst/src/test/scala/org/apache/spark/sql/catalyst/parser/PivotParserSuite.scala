@@ -34,7 +34,8 @@ class PivotParserSuite extends AnalysisTest {
   test("pivot - alias") {
     Seq(
       "SELECT pv.* FROM t PIVOT (sum(a) FOR b IN (1, 2)) pv",
-      "SELECT pv.* FROM t PIVOT (sum(a) FOR b IN (1, 2)) AS pv").foreach { sql =>
+      "SELECT pv.* FROM t PIVOT (sum(a) FOR b IN (1, 2)) AS pv"
+    ).foreach { sql =>
       withClue(sql) {
         assertEqual(
           sql,
@@ -45,7 +46,8 @@ class PivotParserSuite extends AnalysisTest {
             Seq(UnresolvedFunction("sum", Seq(UnresolvedAttribute("a")), isDistinct = false)),
             table("t"))
             .subquery("pv")
-            .select(star("pv")))
+            .select(star("pv"))
+        )
       }
     }
   }
@@ -59,13 +61,15 @@ class PivotParserSuite extends AnalysisTest {
         Seq(Literal(1), Literal(2)),
         Seq(UnresolvedFunction("sum", Seq(UnresolvedAttribute("a")), isDistinct = false)),
         table("t"))
-        .select(star()))
+        .select(star())
+    )
   }
 
   test("pivot - alias with qualified column references") {
     Seq(
       "SELECT pv.x, pv.y FROM t PIVOT (sum(a) FOR b IN (1, 2)) pv",
-      "SELECT pv.x, pv.y FROM t PIVOT (sum(a) FOR b IN (1, 2)) AS pv").foreach { sql =>
+      "SELECT pv.x, pv.y FROM t PIVOT (sum(a) FOR b IN (1, 2)) AS pv"
+    ).foreach { sql =>
       withClue(sql) {
         assertEqual(
           sql,
@@ -76,7 +80,8 @@ class PivotParserSuite extends AnalysisTest {
             Seq(UnresolvedFunction("sum", Seq(UnresolvedAttribute("a")), isDistinct = false)),
             table("t"))
             .subquery("pv")
-            .select($"pv.x", $"pv.y"))
+            .select($"pv.x", $"pv.y")
+        )
       }
     }
   }
@@ -84,7 +89,8 @@ class PivotParserSuite extends AnalysisTest {
   test("pivot - alias with multiple aggregations") {
     Seq(
       "SELECT pv.* FROM t PIVOT (sum(a) s, avg(a) v FOR b IN (1, 2)) pv",
-      "SELECT pv.* FROM t PIVOT (sum(a) s, avg(a) v FOR b IN (1, 2)) AS pv").foreach { sql =>
+      "SELECT pv.* FROM t PIVOT (sum(a) s, avg(a) v FOR b IN (1, 2)) AS pv"
+    ).foreach { sql =>
       withClue(sql) {
         assertEqual(
           sql,
@@ -93,13 +99,12 @@ class PivotParserSuite extends AnalysisTest {
             UnresolvedAttribute("b"),
             Seq(Literal(1), Literal(2)),
             Seq(
-              UnresolvedFunction("sum", Seq(UnresolvedAttribute("a")), isDistinct = false).as(
-                "s"),
-              UnresolvedFunction("avg", Seq(UnresolvedAttribute("a")), isDistinct = false).as(
-                "v")),
+              UnresolvedFunction("sum", Seq(UnresolvedAttribute("a")), isDistinct = false).as("s"),
+              UnresolvedFunction("avg", Seq(UnresolvedAttribute("a")), isDistinct = false).as("v")),
             table("t"))
             .subquery("pv")
-            .select(star("pv")))
+            .select(star("pv"))
+        )
       }
     }
   }

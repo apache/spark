@@ -25,29 +25,23 @@ import org.apache.spark.sql.classic.SparkSession
 /**
  * Utility trait for SQL scripting context manager initialization in test suites.
  *
- * This trait provides common functionality for setting up SQL scripting execution contexts and
- * context managers.
+ * This trait provides common functionality for setting up SQL scripting execution contexts
+ * and context managers.
  */
 trait SqlScriptingTestUtils {
 
   /**
-   * Creates and initializes a SQL scripting context manager with the given compound body and
-   * arguments, then executes the provided body function within that context.
+   * Creates and initializes a SQL scripting context manager with the given compound body
+   * and arguments, then executes the provided body function within that context.
    *
    * Context needs to be initialized so scopes can be entered correctly.
    *
-   * @param spark
-   *   SparkSession to use
-   * @param compoundBody
-   *   The compound body to execute
-   * @param args
-   *   Arguments to pass to the execution plan
-   * @param body
-   *   Function to execute within the scripting context
-   * @tparam R
-   *   Return type of the body function
-   * @return
-   *   Result of executing the body function
+   * @param spark SparkSession to use
+   * @param compoundBody The compound body to execute
+   * @param args Arguments to pass to the execution plan
+   * @param body Function to execute within the scripting context
+   * @tparam R Return type of the body function
+   * @return Result of executing the body function
    */
   def withSqlScriptingContextManager[R](
       spark: SparkSession,
@@ -59,10 +53,13 @@ trait SqlScriptingTestUtils {
     val context = new SqlScriptingExecutionContext()
     val executionPlan = interpreter.buildExecutionPlan(compoundBody, args, context)
     context.frames.append(
-      new SqlScriptingExecutionFrame(executionPlan, SqlScriptingFrameType.SQL_SCRIPT))
+      new SqlScriptingExecutionFrame(executionPlan, SqlScriptingFrameType.SQL_SCRIPT)
+    )
     executionPlan.enterScope()
 
-    val handle = SqlScriptingContextManager.create(new SqlScriptingContextManagerImpl(context))
+    val handle = SqlScriptingContextManager.create(
+      new SqlScriptingContextManagerImpl(context)
+    )
     handle.runWith {
       body(executionPlan)
     }

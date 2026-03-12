@@ -29,8 +29,8 @@ import org.apache.spark.sql.types.{DataType, MetadataBuilder}
 
 /**
  * The [[SetOperationLikeResolver]] performs [[Union]], [[Intersect]] or [[Except]] operator
- * resolution. These operators have 2+ children. Resolution involves checking and normalizing
- * child output attributes (data types and nullability).
+ * resolution. These operators have 2+ children. Resolution involves checking and normalizing child
+ * output attributes (data types and nullability).
  */
 class SetOperationLikeResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
     extends TreeNodeResolver[LogicalPlan, LogicalPlan] {
@@ -41,31 +41,32 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
 
   /**
    * Resolve the [[Union]], [[Intersect]] or [[Except]] operators:
-   *   - Resolve each child in the context of a) New [[NameScope]] b) New [[ExpressionIdAssigner]]
-   *     mapping c) CTE scope. Collect child outputs to coerce them later.
-   *   - Create a new mapping in [[ExpressionIdAssigner]] for the current operator. We only need
-   *     the left child mapping, because that's the only child whose expression IDs get propagated
-   *     upwards for [[Union]], [[Intersect]] or [[Except]]. This is an optimization.
-   *   - Compute widened data types for child output attributes using
-   *     [[getTypeCoercion.findWiderTypeForTwo]] or throw "INCOMPATIBLE_COLUMN_TYPE" if coercion
-   *     fails.
-   *   - Perform individual output deduplication to handle the distinct union case described in
-   *     [[performIndividualOutputExpressionIdDeduplication]] scaladoc.
-   *   - Validate that child outputs have same length or throw "NUM_COLUMNS_MISMATCH" otherwise.
-   *   - Add [[Project]] with [[Cast]] on children needing attribute data type widening.
-   *   - Assert that coerced outputs don't have conflicting expression IDs.
-   *   - Merge transformed outputs using a separate logic for each operator type.
-   *   - Store merged output in current [[NameScope]].
-   *   - Validate that the operator doesn't have unsupported data types in the output
-   *   - Create a new mapping in [[ExpressionIdAssigner]] using the coerced and validated outputs.
-   *   - Return the resolved operator with new children optionally wrapped in [[WithCTE]]. See
-   *     [[CteScope]] scaladoc for more info.
+   *  - Resolve each child in the context of a) New [[NameScope]] b) New [[ExpressionIdAssigner]]
+   *    mapping c) CTE scope. Collect child outputs to coerce them later.
+   *  - Create a new mapping in [[ExpressionIdAssigner]] for the current operator. We only need the
+   *    left child mapping, because that's the only child whose expression IDs get propagated
+   *    upwards for [[Union]], [[Intersect]] or [[Except]]. This is an optimization.
+   *  - Compute widened data types for child output attributes using
+   *    [[getTypeCoercion.findWiderTypeForTwo]] or throw "INCOMPATIBLE_COLUMN_TYPE" if coercion
+   *    fails.
+   *  - Perform individual output deduplication to handle the distinct union case described in
+   *    [[performIndividualOutputExpressionIdDeduplication]] scaladoc.
+   *  - Validate that child outputs have same length or throw "NUM_COLUMNS_MISMATCH" otherwise.
+   *  - Add [[Project]] with [[Cast]] on children needing attribute data type widening.
+   *  - Assert that coerced outputs don't have conflicting expression IDs.
+   *  - Merge transformed outputs using a separate logic for each operator type.
+   *  - Store merged output in current [[NameScope]].
+   *  - Validate that the operator doesn't have unsupported data types in the output
+   *  - Create a new mapping in [[ExpressionIdAssigner]] using the coerced and validated outputs.
+   *  - Return the resolved operator with new children optionally wrapped in [[WithCTE]]. See
+   *    [[CteScope]] scaladoc for more info.
    */
   override def resolve(unresolvedOperator: LogicalPlan): LogicalPlan = {
     val (resolvedChildren, childScopes) = resolveChildren(unresolvedOperator)
 
-    expressionIdAssigner.createMappingFromChildMappings(newOutputIds =
-      childScopes.head.getOutputIds)
+    expressionIdAssigner.createMappingFromChildMappings(
+      newOutputIds = childScopes.head.getOutputIds
+    )
 
     val childOutputs = childScopes.map(_.output)
 
@@ -74,7 +75,8 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
         coerceChildOutputs(
           resolvedChildren,
           childOutputs,
-          validateAndDeduceTypes(unresolvedOperator, childOutputs))
+          validateAndDeduceTypes(unresolvedOperator, childOutputs)
+        )
       } else {
         (resolvedChildren, childOutputs)
       }
@@ -83,7 +85,8 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
       performIndividualOutputExpressionIdDeduplication(
         coercedChildren,
         coercedChildOutputs,
-        unresolvedOperator)
+        unresolvedOperator
+      )
 
     ExpressionIdAssigner.assertOutputsHaveNoConflictingExpressionIds(newChildOutputs)
 
@@ -96,7 +99,8 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
 
     cteRegistry.currentScope.tryPutWithCTE(
       unresolvedOperator = unresolvedOperator,
-      resolvedOperator = resolvedOperator)
+      resolvedOperator = resolvedOperator
+    )
   }
 
   /**
@@ -104,26 +108,28 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
    * [[ExpressionIdAssigner]] mapping and [[CteScope]].
    *
    * [[ExpressionIdAssigner]] child mapping is collected just or the left child, because that's
-   * the only child whose expression IDs get propagated upwards through [[Union]], [[Intersect]]
-   * or [[Except]]. This is an optimization to avoid fast-growing expression ID mappings.
+   * the only child whose expression IDs get propagated upwards through [[Union]], [[Intersect]] or
+   * [[Except]]. This is an optimization to avoid fast-growing expression ID mappings.
    */
   private def resolveChildren(
       unresolvedOperator: LogicalPlan): (Seq[LogicalPlan], Seq[NameScope]) = {
-    unresolvedOperator.children.zipWithIndex.map { case (unresolvedChild, childIndex) =>
-      expressionIdAssigner.pushMapping()
-      scopes.pushScope()
-      cteRegistry.pushScopeForMultiChildOperator(
-        unresolvedOperator = unresolvedOperator,
-        unresolvedChild = unresolvedChild)
+    unresolvedOperator.children.zipWithIndex.map {
+      case (unresolvedChild, childIndex) =>
+        expressionIdAssigner.pushMapping()
+        scopes.pushScope()
+        cteRegistry.pushScopeForMultiChildOperator(
+          unresolvedOperator = unresolvedOperator,
+          unresolvedChild = unresolvedChild
+        )
 
-      try {
-        val resolvedChild = resolver.resolve(unresolvedChild)
-        (resolvedChild, scopes.current)
-      } finally {
-        cteRegistry.popScope()
-        scopes.popScope()
-        expressionIdAssigner.popMapping(collectChildMapping = childIndex == 0)
-      }
+        try {
+          val resolvedChild = resolver.resolve(unresolvedChild)
+          (resolvedChild, scopes.current)
+        } finally {
+          cteRegistry.popScope()
+          scopes.popScope()
+          expressionIdAssigner.popMapping(collectChildMapping = childIndex == 0)
+        }
     }.unzip
   }
 
@@ -145,10 +151,10 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
    *   VALUES (1, 1), (1, 2) AS t2 (a, b)
    * }}}
    *
-   * Putting [[Alias]] introduces a new expression ID for the attribute duplicates in the output.
-   * We also add `__is_duplicate` metadata so that [[AttributeSeq.getCandidatesForResolution]]
-   * doesn't produce conflicting candidates when resolving names in the upper [[Project]] - this
-   * is technically still the same attribute.
+   * Putting [[Alias]] introduces a new expression ID for the attribute duplicates in the output. We
+   * also add `__is_duplicate` metadata so that [[AttributeSeq.getCandidatesForResolution]] doesn't
+   * produce conflicting candidates when resolving names in the upper [[Project]] - this is
+   * technically still the same attribute.
    *
    * Probably there's a better way to do that, but we want to stay compatible with the fixed-point
    * [[Analyzer]].
@@ -158,7 +164,8 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
   private def performIndividualOutputExpressionIdDeduplication(
       children: Seq[LogicalPlan],
       childOutputs: Seq[Seq[Attribute]],
-      unresolvedOperator: LogicalPlan): (Seq[LogicalPlan], Seq[Seq[Attribute]]) = {
+      unresolvedOperator: LogicalPlan
+  ): (Seq[LogicalPlan], Seq[Seq[Attribute]]) = {
     unresolvedOperator match {
       case _: Union => doPerformIndividualOutputExpressionIdDeduplication(children, childOutputs)
       case _ => (children, childOutputs)
@@ -167,48 +174,50 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
 
   private def doPerformIndividualOutputExpressionIdDeduplication(
       children: Seq[LogicalPlan],
-      childOutputs: Seq[Seq[Attribute]]): (Seq[LogicalPlan], Seq[Seq[Attribute]]) = {
+      childOutputs: Seq[Seq[Attribute]]
+  ): (Seq[LogicalPlan], Seq[Seq[Attribute]]) = {
     children
       .zip(childOutputs)
-      .map { case (child, childOutput) =>
-        var outputChanged = false
+      .map {
+        case (child, childOutput) =>
+          var outputChanged = false
 
-        val expressionIds = new HashSet[ExprId]
-        val newOutput = childOutput.map { attribute =>
-          if (expressionIds.contains(attribute.exprId)) {
-            outputChanged = true
+          val expressionIds = new HashSet[ExprId]
+          val newOutput = childOutput.map { attribute =>
+            if (expressionIds.contains(attribute.exprId)) {
+              outputChanged = true
 
-            val newMetadata = new MetadataBuilder()
-              .withMetadata(attribute.metadata)
-              .putNull("__is_duplicate")
-              .build()
-            autoGeneratedAliasProvider.newAlias(
-              child = attribute,
-              name = Some(attribute.name),
-              explicitMetadata = Some(newMetadata))
-          } else {
-            expressionIds.add(attribute.exprId)
+              val newMetadata = new MetadataBuilder()
+                .withMetadata(attribute.metadata)
+                .putNull("__is_duplicate")
+                .build()
+              autoGeneratedAliasProvider.newAlias(
+                child = attribute,
+                name = Some(attribute.name),
+                explicitMetadata = Some(newMetadata)
+              )
+            } else {
+              expressionIds.add(attribute.exprId)
 
-            attribute
+              attribute
+            }
           }
-        }
 
-        if (outputChanged) {
-          (Project(projectList = newOutput, child = child), newOutput.map(_.toAttribute))
-        } else {
-          (child, childOutput)
-        }
+          if (outputChanged) {
+            (Project(projectList = newOutput, child = child), newOutput.map(_.toAttribute))
+          } else {
+            (child, childOutput)
+          }
       }
       .unzip
   }
 
   /**
    * Check if we need to coerce child output attributes to wider types. We need to do this if:
-   *   - Output length differs between children. We will throw an appropriate error later during
-   *     type coercion with more diagnostics.
-   *   - Output data types differ between children. We don't care about nullability for type
-   *     coercion, it will be correctly assigned later by
-   *     [[SetOperationLikeResolver.mergeChildOutputs]].
+   * - Output length differs between children. We will throw an appropriate error later during type
+   *   coercion with more diagnostics.
+   * - Output data types differ between children. We don't care about nullability for type coercion,
+   *   it will be correctly assigned later by [[SetOperationLikeResolver.mergeChildOutputs]].
    */
   private def needToCoerceChildOutputs(
       childOutputs: Seq[Seq[Attribute]],
@@ -216,11 +225,13 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
     val firstChildOutput = childOutputs.head
     childOutputs.tail.exists { childOutput =>
       childOutput.length != firstChildOutput.length ||
-      childOutput.zip(firstChildOutput).exists { case (lhsAttribute, rhsAttribute) =>
-        !areDataTypesCompatibleInTheContextOfOperator(
-          unresolvedOperator,
-          lhsAttribute.dataType,
-          rhsAttribute.dataType)
+      childOutput.zip(firstChildOutput).exists {
+        case (lhsAttribute, rhsAttribute) =>
+          !areDataTypesCompatibleInTheContextOfOperator(
+            unresolvedOperator,
+            lhsAttribute.dataType,
+            rhsAttribute.dataType
+          )
       }
     }
   }
@@ -229,8 +240,8 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
    * This method returns whether types are compatible in the context of the specified operator.
    *
    * In fixed-point we only use [[DataType.equalsStructurally]] for [[Union]] type coercion. For
-   * [[Except]] and [[Intersect]] we use [[DataTypeUtils.sameType]]. This method ensures we
-   * perform the check for whether coercion is needed in the compatible way to the fixed-point.
+   * [[Except]] and [[Intersect]] we use [[DataTypeUtils.sameType]]. This method ensures we perform
+   * the check for whether coercion is needed in the compatible way to the fixed-point.
    */
   private def areDataTypesCompatibleInTheContextOfOperator(
       unresolvedPlan: LogicalPlan,
@@ -241,15 +252,16 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
       case _: Except | _: Intersect => DataTypeUtils.sameType(lhs, rhs)
       case other =>
         throw SparkException.internalError(
-          s"Set operation resolver should not be used for ${other.nodeName}")
+          s"Set operation resolver should not be used for ${other.nodeName}"
+        )
     }
   }
 
   /**
    * Returns a sequence of data types representing the widened data types for each column:
-   *   - Validates that the number of columns in each child of the set operator is equal.
-   *   - Validates that the data types of columns can be widened to a common type.
-   *   - Deduces the widened data types for each column.
+   *  - Validates that the number of columns in each child of the set operator is equal.
+   *  - Validates that the data types of columns can be widened to a common type.
+   *  - Deduces the widened data types for each column.
    */
   private def validateAndDeduceTypes(
       unresolvedOperator: LogicalPlan,
@@ -265,7 +277,8 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
             expectedNumColumns = expectedNumColumns,
             childColumnTypes = childColumnTypes,
             columnIndex = childIndex,
-            unresolvedOperator = unresolvedOperator)
+            unresolvedOperator = unresolvedOperator
+          )
         }
 
         widenedTypes.zip(childColumnTypes).zipWithIndex.map {
@@ -278,7 +291,8 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
                   columnIndex = columnIndex,
                   childIndex = childIndex,
                   widenedColumnType = widenedColumnType,
-                  columnTypeForCurrentRow = columnTypeForCurrentRow)
+                  columnTypeForCurrentRow = columnTypeForCurrentRow
+                )
               }
         }
     }
@@ -297,29 +311,32 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
 
     children
       .zip(childOutputs)
-      .map { case (child, output) =>
-        var outputChanged = false
-        val newExpressions = output.zip(widenedTypes).map { case (attribute, widenedType) =>
-          /**
-           * Probably more correct way to compare data types here would be to call
-           * [[DataType.equalsStructurally]] but fixed-point [[Analyzer]] rule
-           * [[WidenSetOperationTypes]] uses `==`, so we do the same to stay compatible.
-           */
-          if (attribute.dataType == widenedType) {
-            attribute
-          } else {
-            outputChanged = true
-            autoGeneratedAliasProvider.newAlias(
-              child = Cast(attribute, widenedType, Some(sessionLocalTimeZone)),
-              name = Some(attribute.name))
+      .map {
+        case (child, output) =>
+          var outputChanged = false
+          val newExpressions = output.zip(widenedTypes).map {
+            case (attribute, widenedType) =>
+              /**
+               * Probably more correct way to compare data types here would be to call
+               * [[DataType.equalsStructurally]] but fixed-point [[Analyzer]] rule
+               * [[WidenSetOperationTypes]] uses `==`, so we do the same to stay compatible.
+               */
+              if (attribute.dataType == widenedType) {
+                attribute
+              } else {
+                outputChanged = true
+                autoGeneratedAliasProvider.newAlias(
+                  child = Cast(attribute, widenedType, Some(sessionLocalTimeZone)),
+                  name = Some(attribute.name)
+                )
+              }
           }
-        }
 
-        if (outputChanged) {
-          (Project(newExpressions, child), newExpressions.map(_.toAttribute))
-        } else {
-          (child, output)
-        }
+          if (outputChanged) {
+            (Project(newExpressions, child), newExpressions.map(_.toAttribute))
+          } else {
+            (child, output)
+          }
       }
       .unzip
   }
@@ -336,7 +353,8 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
       case _: Intersect => Intersect.mergeChildOutputs(childOutputs)
       case other =>
         throw SparkException.internalError(
-          s"Set operation resolver should not be used for ${other.nodeName}")
+          s"Set operation resolver should not be used for ${other.nodeName}"
+        )
     }
   }
 
@@ -358,7 +376,8 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
       firstNumColumns = expectedNumColumns,
       invalidOrdinalNum = columnIndex + 1,
       invalidNumColumns = childColumnTypes.length,
-      origin = unresolvedOperator.origin)
+      origin = unresolvedOperator.origin
+    )
   }
 
   private def throwIncompatibleColumnTypeError(
@@ -374,6 +393,7 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
       dataType1 = columnTypeForCurrentRow,
       dataType2 = widenedColumnType,
       hint = "",
-      origin = unresolvedOperator.origin)
+      origin = unresolvedOperator.origin
+    )
   }
 }

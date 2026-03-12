@@ -21,7 +21,8 @@ import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Benchmark to measure performance for interval sort. To run this benchmark:
+ * Benchmark to measure performance for interval sort.
+ * To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class> --jars <spark core test jar> <sql core test jar>

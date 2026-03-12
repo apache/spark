@@ -38,8 +38,7 @@ import org.apache.spark.util.ThreadUtils
  *
  * This will be instantiated once per partition - successive calls to compute() in the
  * [[ContinuousDataSourceRDD]] will reuse the same reader. This is required to get continuity of
- * offsets across epochs. Each compute() should call the next() method here until null is
- * returned.
+ * offsets across epochs. Each compute() should call the next() method here until null is returned.
  */
 class ContinuousQueuedDataReader(
     partitionIndex: Int,
@@ -47,8 +46,7 @@ class ContinuousQueuedDataReader(
     schema: StructType,
     context: TaskContext,
     dataQueueSize: Int,
-    epochPollIntervalMs: Long)
-    extends Closeable {
+    epochPollIntervalMs: Long) extends Closeable {
   // Important sequencing - we must get our starting point before the provider threads start running
   private var currentOffset: PartitionOffset = reader.getOffset
 
@@ -63,20 +61,15 @@ class ContinuousQueuedDataReader(
 
   private val queue = new ArrayBlockingQueue[ContinuousRecord](dataQueueSize)
 
-  private val coordinatorId =
-    context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY)
+  private val coordinatorId = context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY)
   private val epochCoordEndpoint = EpochCoordinatorRef.get(
-    context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
-    SparkEnv.get)
+    context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY), SparkEnv.get)
 
   private val epochMarkerExecutor = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
     s"epoch-poll--$coordinatorId--${context.partitionId()}")
   private val epochMarkerGenerator = new EpochMarkerGenerator
   epochMarkerExecutor.scheduleWithFixedDelay(
-    epochMarkerGenerator,
-    0,
-    epochPollIntervalMs,
-    TimeUnit.MILLISECONDS)
+    epochMarkerGenerator, 0, epochPollIntervalMs, TimeUnit.MILLISECONDS)
 
   private val dataReaderThread = new DataReaderThread(schema)
   dataReaderThread.setDaemon(true)
@@ -93,8 +86,8 @@ class ContinuousQueuedDataReader(
   /**
    * Return the next row to be read in the current epoch, or null if the epoch is done.
    *
-   * After returning null, the [[ContinuousDataSourceRDD]] compute() for the following epoch will
-   * call next() again to start getting rows.
+   * After returning null, the [[ContinuousDataSourceRDD]] compute() for the following epoch
+   * will call next() again to start getting rows.
    */
   def next(): InternalRow = {
     val POLL_TIMEOUT_MS = 1000
@@ -123,8 +116,8 @@ class ContinuousQueuedDataReader(
 
     currentEntry match {
       case EpochMarker =>
-        epochCoordEndpoint.send(
-          ReportPartitionOffset(partitionIndex, EpochTracker.getCurrentEpoch.get, currentOffset))
+        epochCoordEndpoint.send(ReportPartitionOffset(
+          partitionIndex, EpochTracker.getCurrentEpoch.get, currentOffset))
         null
       case ContinuousRow(row, offset) =>
         currentOffset = offset
@@ -141,11 +134,9 @@ class ContinuousQueuedDataReader(
    * The data component of [[ContinuousQueuedDataReader]]. Pushes (row, offset) to the queue when
    * a new row arrives to the [[ContinuousPartitionReader]].
    */
-  class DataReaderThread(schema: StructType)
-      extends Thread(
-        s"continuous-reader--${context.partitionId()}--" +
-          s"${context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY)}")
-      with Logging {
+  class DataReaderThread(schema: StructType) extends Thread(
+      s"continuous-reader--${context.partitionId()}--" +
+        s"${context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY)}") with Logging {
     @volatile private[continuous] var failureReason: Throwable = _
     private val toUnsafe = UnsafeProjection.create(schema)
 
@@ -169,15 +160,14 @@ class ContinuousQueuedDataReader(
       } catch {
         case _: InterruptedException =>
           // Continuous shutdown always involves an interrupt; do nothing and shut down quietly.
-          logInfo(
-            log"shutting down interrupted data reader thread " +
-              log"${MDC(THREAD_NAME, getName)}")
+          logInfo(log"shutting down interrupted data reader thread " +
+            log"${MDC(THREAD_NAME, getName)}")
 
         case NonFatal(t) =>
           failureReason = t
           logWarning("data reader thread failed", t)
-        // If we throw from this thread, we may kill the executor. Let the parent thread handle
-        // it.
+          // If we throw from this thread, we may kill the executor. Let the parent thread handle
+          // it.
 
         case t: Throwable =>
           failureReason = t
@@ -196,13 +186,11 @@ class ContinuousQueuedDataReader(
     @volatile private[continuous] var failureReason: Throwable = _
 
     private val epochCoordEndpoint = EpochCoordinatorRef.get(
-      context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
-      SparkEnv.get)
+      context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY), SparkEnv.get)
     // Note that this is *not* the same as the currentEpoch in [[ContinuousWriteRDD]]! That
     // field represents the epoch wrt the data being processed. The currentEpoch here is just a
     // counter to ensure we send the appropriate number of markers if we fall behind the driver.
-    private var currentEpoch =
-      context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
+    private var currentEpoch = context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
 
     override def run(): Unit = {
       try {

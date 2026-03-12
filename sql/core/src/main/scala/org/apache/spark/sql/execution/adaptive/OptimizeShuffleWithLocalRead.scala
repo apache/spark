@@ -25,13 +25,13 @@ import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * A rule to optimize the shuffle read to local read iff no additional shuffles will be
- * introduced:
- *   1. if the input plan is a shuffle, add local read directly as we can never introduce extra
- *      shuffles in this case.
- *   2. otherwise, add local read to the probe side of broadcast hash join and then run
- *      `EnsureRequirements` to check whether additional shuffle introduced. If introduced, we
- *      will revert all the local reads.
+ * A rule to optimize the shuffle read to local read iff no additional shuffles
+ * will be introduced:
+ * 1. if the input plan is a shuffle, add local read directly as we can never introduce
+ * extra shuffles in this case.
+ * 2. otherwise, add local read to the probe side of broadcast hash join and
+ * then run `EnsureRequirements` to check whether additional shuffle introduced.
+ * If introduced, we will revert all the local reads.
  */
 object OptimizeShuffleWithLocalRead extends AQEShuffleReadRule {
 
@@ -81,14 +81,14 @@ object OptimizeShuffleWithLocalRead extends AQEShuffleReadRule {
     }
     if (expectedParallelism >= numMappers) {
       (0 until numMappers).flatMap { mapIndex =>
-        (splitPoints :+ numReducers).sliding(2).map { case Seq(start, end) =>
-          PartialMapperPartitionSpec(mapIndex, start, end)
+        (splitPoints :+ numReducers).sliding(2).map {
+          case Seq(start, end) => PartialMapperPartitionSpec(mapIndex, start, end)
         }
       }
     } else {
       (0 until 1).flatMap { _ =>
-        (splitPoints :+ numMappers).sliding(2).map { case Seq(start, end) =>
-          CoalescedMapperPartitionSpec(start, end, numReducers)
+        (splitPoints :+ numMappers).sliding(2).map {
+          case Seq(start, end) => CoalescedMapperPartitionSpec(start, end, numReducers)
         }
       }
     }
@@ -96,8 +96,8 @@ object OptimizeShuffleWithLocalRead extends AQEShuffleReadRule {
 
   /**
    * To equally divide n elements into m buckets, basically each bucket should have n/m elements,
-   * for the remaining n%m elements, add one more element to the first n%m buckets each. Returns a
-   * sequence with length numBuckets and each value represents the start index of each bucket.
+   * for the remaining n%m elements, add one more element to the first n%m buckets each. Returns
+   * a sequence with length numBuckets and each value represents the start index of each bucket.
    */
   private def equallyDivide(numElements: Int, numBuckets: Int): Seq[Int] = {
     val elementsPerBucket = numElements / numBuckets
@@ -141,7 +141,7 @@ object OptimizeShuffleWithLocalRead extends AQEShuffleReadRule {
       s.mapStats.isDefined && isSupported(s.shuffle)
     case AQEShuffleReadExec(s: ShuffleQueryStageExec, _) =>
       s.mapStats.isDefined && isSupported(s.shuffle) &&
-      s.shuffle.shuffleOrigin == ENSURE_REQUIREMENTS
+        s.shuffle.shuffleOrigin == ENSURE_REQUIREMENTS
     case _ => false
   }
 }

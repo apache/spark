@@ -21,12 +21,12 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.command
 
 /**
- * The class contains tests for the `ALTER TABLE .. RECOVER PARTITIONS` command to check V2 table
- * catalogs.
+ * The class contains tests for the `ALTER TABLE .. RECOVER PARTITIONS` command
+ * to check V2 table catalogs.
  */
 class AlterTableRecoverPartitionsSuite
-    extends command.AlterTableRecoverPartitionsSuiteBase
-    with CommandSuiteBase {
+  extends command.AlterTableRecoverPartitionsSuiteBase
+  with CommandSuiteBase {
 
   test("partition recovering of v2 tables is not supported") {
     withNamespaceAndTable("ns", "tbl") { t =>
@@ -36,7 +36,8 @@ class AlterTableRecoverPartitionsSuite
           sql(s"ALTER TABLE $t RECOVER PARTITIONS")
         },
         condition = "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE",
-        parameters = Map("cmd" -> "ALTER TABLE ... RECOVER PARTITIONS"))
+        parameters = Map("cmd" -> "ALTER TABLE ... RECOVER PARTITIONS")
+      )
     }
   }
 }

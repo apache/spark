@@ -45,8 +45,7 @@ import org.apache.spark.util.collection.Utils.createArray
 
 /**
  * A test suite on the vectorized Parquet reader. Unlike `ParquetIOSuite`, this focuses on
- * low-level decoding logic covering column index, dictionary, different batch and page sizes,
- * etc.
+ * low-level decoding logic covering column index, dictionary, different batch and page sizes, etc.
  */
 class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSparkSession {
   private val VALUES: Seq[String] = ('a' to 'z').map(_.toString)
@@ -60,12 +59,7 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
     BATCH_SIZE_CONFIGS.foreach { batchSize =>
       PAGE_SIZE_CONFIGS.foreach { pageSizes =>
         Seq(true, false).foreach { dictionaryEnabled =>
-          testPrimitiveString(
-            None,
-            None,
-            pageSizes,
-            VALUES,
-            batchSize,
+          testPrimitiveString(None, None, pageSizes, VALUES, batchSize,
             dictionaryEnabled = dictionaryEnabled)
         }
       }
@@ -77,49 +71,25 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
       PAGE_SIZE_CONFIGS.foreach { pageSizes =>
         Seq(true, false).foreach { dictionaryEnabled =>
           var ranges = Seq((0L, 9L))
-          testPrimitiveString(
-            None,
-            Some(ranges),
-            pageSizes,
-            0 to 9,
-            batchSize,
+          testPrimitiveString(None, Some(ranges), pageSizes, 0 to 9, batchSize,
             dictionaryEnabled = dictionaryEnabled)
 
           ranges = Seq((30, 50))
-          testPrimitiveString(
-            None,
-            Some(ranges),
-            pageSizes,
-            Seq.empty,
-            batchSize,
+          testPrimitiveString(None, Some(ranges), pageSizes, Seq.empty, batchSize,
             dictionaryEnabled = dictionaryEnabled)
 
           ranges = Seq((15, 25))
-          testPrimitiveString(
-            None,
-            Some(ranges),
-            pageSizes,
-            15 to 19,
-            batchSize,
+          testPrimitiveString(None, Some(ranges), pageSizes, 15 to 19, batchSize,
             dictionaryEnabled = dictionaryEnabled)
 
           ranges = Seq((19, 20))
-          testPrimitiveString(
-            None,
-            Some(ranges),
-            pageSizes,
-            19 to 20,
-            batchSize,
+          testPrimitiveString(None, Some(ranges), pageSizes, 19 to 20, batchSize,
             dictionaryEnabled = dictionaryEnabled)
 
           ranges = Seq((0, 3), (5, 7), (15, 18))
-          testPrimitiveString(
-            None,
-            Some(ranges),
-            pageSizes,
+          testPrimitiveString(None, Some(ranges), pageSizes,
             toStrings(Seq(0, 1, 2, 3, 5, 6, 7, 15, 16, 17, 18)),
-            batchSize,
-            dictionaryEnabled = dictionaryEnabled)
+            batchSize, dictionaryEnabled = dictionaryEnabled)
         }
       }
     }
@@ -129,27 +99,15 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
     BATCH_SIZE_CONFIGS.foreach { batchSize =>
       PAGE_SIZE_CONFIGS.foreach { pageSizes =>
         Seq(true, false).foreach { dictionaryEnabled =>
-          val valuesWithNulls = VALUES.zipWithIndex.map { case (v, i) =>
-            if (i % 2 == 0) null else v
+          val valuesWithNulls = VALUES.zipWithIndex.map {
+            case (v, i) => if (i % 2 == 0) null else v
           }
-          testPrimitiveString(
-            None,
-            None,
-            pageSizes,
-            valuesWithNulls,
-            batchSize,
-            valuesWithNulls,
+          testPrimitiveString(None, None, pageSizes, valuesWithNulls, batchSize, valuesWithNulls,
             dictionaryEnabled)
 
           val ranges = Seq((5L, 7L))
-          testPrimitiveString(
-            None,
-            Some(ranges),
-            pageSizes,
-            Seq("f", null, "h"),
-            batchSize,
-            valuesWithNulls,
-            dictionaryEnabled)
+          testPrimitiveString(None, Some(ranges), pageSizes, Seq("f", null, "h"),
+            batchSize, valuesWithNulls, dictionaryEnabled)
         }
       }
     }
@@ -161,40 +119,20 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
         // Single page
         val firstRowIndex = 10
         var ranges = Seq((0L, 9L))
-        testPrimitiveString(
-          Some(Seq(firstRowIndex)),
-          Some(ranges),
-          Seq(VALUES.length),
-          Seq.empty,
-          batchSize,
-          dictionaryEnabled = dictionaryEnabled)
+        testPrimitiveString(Some(Seq(firstRowIndex)), Some(ranges), Seq(VALUES.length),
+          Seq.empty, batchSize, dictionaryEnabled = dictionaryEnabled)
 
         ranges = Seq((15, 25))
-        testPrimitiveString(
-          Some(Seq(firstRowIndex)),
-          Some(ranges),
-          Seq(VALUES.length),
-          5 to 15,
-          batchSize,
-          dictionaryEnabled = dictionaryEnabled)
+        testPrimitiveString(Some(Seq(firstRowIndex)), Some(ranges), Seq(VALUES.length),
+          5 to 15, batchSize, dictionaryEnabled = dictionaryEnabled)
 
         ranges = Seq((15, 35))
-        testPrimitiveString(
-          Some(Seq(firstRowIndex)),
-          Some(ranges),
-          Seq(VALUES.length),
-          5 to 19,
-          batchSize,
-          dictionaryEnabled = dictionaryEnabled)
+        testPrimitiveString(Some(Seq(firstRowIndex)), Some(ranges), Seq(VALUES.length),
+          5 to 19, batchSize, dictionaryEnabled = dictionaryEnabled)
 
         ranges = Seq((15, 39))
-        testPrimitiveString(
-          Some(Seq(firstRowIndex)),
-          Some(ranges),
-          Seq(VALUES.length),
-          5 to 19,
-          batchSize,
-          dictionaryEnabled = dictionaryEnabled)
+        testPrimitiveString(Some(Seq(firstRowIndex)), Some(ranges), Seq(VALUES.length),
+          5 to 19, batchSize, dictionaryEnabled = dictionaryEnabled)
 
         // Row indexes:  [ [10, 16), [20, 26), [30, 37), [40, 47) ]
         // Values:       [ [0,  6),  [6,  12), [12, 19), [19, 26) ]
@@ -202,48 +140,24 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
         var firstRowIndexes = Seq(10L, 20, 30, 40)
 
         ranges = Seq((0L, 9L))
-        testPrimitiveString(
-          Some(firstRowIndexes),
-          Some(ranges),
-          pageSizes,
-          Seq.empty,
-          batchSize,
-          dictionaryEnabled = dictionaryEnabled)
+        testPrimitiveString(Some(firstRowIndexes), Some(ranges), pageSizes,
+          Seq.empty, batchSize, dictionaryEnabled = dictionaryEnabled)
 
         ranges = Seq((15, 25))
-        testPrimitiveString(
-          Some(firstRowIndexes),
-          Some(ranges),
-          pageSizes,
-          5 to 9,
-          batchSize,
-          dictionaryEnabled = dictionaryEnabled)
+        testPrimitiveString(Some(firstRowIndexes), Some(ranges), pageSizes,
+          5 to 9, batchSize, dictionaryEnabled = dictionaryEnabled)
 
         ranges = Seq((15, 35))
-        testPrimitiveString(
-          Some(firstRowIndexes),
-          Some(ranges),
-          pageSizes,
-          5 to 14,
-          batchSize,
-          dictionaryEnabled = dictionaryEnabled)
+        testPrimitiveString(Some(firstRowIndexes), Some(ranges), pageSizes,
+          5 to 14, batchSize, dictionaryEnabled = dictionaryEnabled)
 
         ranges = Seq((15, 60))
-        testPrimitiveString(
-          Some(firstRowIndexes),
-          Some(ranges),
-          pageSizes,
-          5 to 19,
-          batchSize,
-          dictionaryEnabled = dictionaryEnabled)
+        testPrimitiveString(Some(firstRowIndexes), Some(ranges), pageSizes,
+          5 to 19, batchSize, dictionaryEnabled = dictionaryEnabled)
 
         ranges = Seq((12, 22), (28, 38))
-        testPrimitiveString(
-          Some(firstRowIndexes),
-          Some(ranges),
-          pageSizes,
-          toStrings(Seq(2, 3, 4, 5, 6, 7, 8, 12, 13, 14, 15, 16, 17, 18)),
-          batchSize,
+        testPrimitiveString(Some(firstRowIndexes), Some(ranges), pageSizes,
+          toStrings(Seq(2, 3, 4, 5, 6, 7, 8, 12, 13, 14, 15, 16, 17, 18)), batchSize,
           dictionaryEnabled = dictionaryEnabled)
 
         // Row indexes: [ [10, 11), [40, 52), [100, 112), [200, 201) ]
@@ -251,63 +165,33 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
         pageSizes = Seq(1, 12, 12, 1)
         firstRowIndexes = Seq(10L, 40, 100, 200)
         ranges = Seq((0L, 9L))
-        testPrimitiveString(
-          Some(firstRowIndexes),
-          Some(ranges),
-          pageSizes,
-          Seq.empty,
-          batchSize,
-          dictionaryEnabled = dictionaryEnabled)
+        testPrimitiveString(Some(firstRowIndexes), Some(ranges), pageSizes,
+          Seq.empty, batchSize, dictionaryEnabled = dictionaryEnabled)
 
         ranges = Seq((300, 350))
-        testPrimitiveString(
-          Some(firstRowIndexes),
-          Some(ranges),
-          pageSizes,
-          Seq.empty,
-          batchSize,
-          dictionaryEnabled = dictionaryEnabled)
+        testPrimitiveString(Some(firstRowIndexes), Some(ranges), pageSizes,
+          Seq.empty, batchSize, dictionaryEnabled = dictionaryEnabled)
 
         ranges = Seq((50, 80))
-        testPrimitiveString(
-          Some(firstRowIndexes),
-          Some(ranges),
-          pageSizes,
-          (11 to 12),
-          batchSize,
-          dictionaryEnabled = dictionaryEnabled)
+        testPrimitiveString(Some(firstRowIndexes), Some(ranges), pageSizes,
+          (11 to 12), batchSize, dictionaryEnabled = dictionaryEnabled)
 
         ranges = Seq((0, 150))
-        testPrimitiveString(
-          Some(firstRowIndexes),
-          Some(ranges),
-          pageSizes,
-          0 to 24,
-          batchSize,
-          dictionaryEnabled = dictionaryEnabled)
+        testPrimitiveString(Some(firstRowIndexes), Some(ranges), pageSizes,
+          0 to 24, batchSize, dictionaryEnabled = dictionaryEnabled)
 
         // with nulls
-        val valuesWithNulls = VALUES.zipWithIndex.map { case (v, i) =>
-          if (i % 2 == 0) null else v
+        val valuesWithNulls = VALUES.zipWithIndex.map {
+          case (v, i) => if (i % 2 == 0) null else v
         }
         ranges = Seq((20, 45)) // select values in [1, 5]
-        testPrimitiveString(
-          Some(firstRowIndexes),
-          Some(ranges),
-          pageSizes,
-          Seq("b", null, "d", null, "f"),
-          batchSize,
-          valuesWithNulls,
+        testPrimitiveString(Some(firstRowIndexes), Some(ranges), pageSizes,
+          Seq("b", null, "d", null, "f"), batchSize, valuesWithNulls,
           dictionaryEnabled = dictionaryEnabled)
 
         ranges = Seq((8, 12), (80, 104))
-        testPrimitiveString(
-          Some(firstRowIndexes),
-          Some(ranges),
-          pageSizes,
-          Seq(null, "n", null, "p", null, "r"),
-          batchSize,
-          valuesWithNulls,
+        testPrimitiveString(Some(firstRowIndexes), Some(ranges), pageSizes,
+          Seq(null, "n", null, "p", null, "r"), batchSize, valuesWithNulls,
           dictionaryEnabled = dictionaryEnabled)
       }
     }
@@ -316,81 +200,40 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
   test("nested type - single page, no column index") {
     (1 to 4).foreach { batchSize =>
       Seq(true, false).foreach { dictionaryEnabled =>
-        testNestedStringArrayOneLevel(
-          None,
-          None,
-          Seq(4),
+        testNestedStringArrayOneLevel(None, None, Seq(4),
           Seq(Seq("a", "b", "c", "d")),
-          Seq(0, 1, 1, 1),
-          Seq(3, 3, 3, 3),
-          Seq("a", "b", "c", "d"),
-          batchSize,
+          Seq(0, 1, 1, 1), Seq(3, 3, 3, 3), Seq("a", "b", "c", "d"), batchSize,
           dictionaryEnabled = dictionaryEnabled)
 
-        testNestedStringArrayOneLevel(
-          None,
-          None,
-          Seq(4),
+        testNestedStringArrayOneLevel(None, None, Seq(4),
           Seq(Seq("a", "b"), Seq("c", "d")),
-          Seq(0, 1, 0, 1),
-          Seq(3, 3, 3, 3),
-          Seq("a", "b", "c", "d"),
-          batchSize,
+          Seq(0, 1, 0, 1), Seq(3, 3, 3, 3), Seq("a", "b", "c", "d"), batchSize,
           dictionaryEnabled = dictionaryEnabled)
 
-        testNestedStringArrayOneLevel(
-          None,
-          None,
-          Seq(4),
+        testNestedStringArrayOneLevel(None, None, Seq(4),
           Seq(Seq("a"), Seq("b"), Seq("c"), Seq("d")),
-          Seq(0, 0, 0, 0),
-          Seq(3, 3, 3, 3),
-          Seq("a", "b", "c", "d"),
-          batchSize,
+          Seq(0, 0, 0, 0), Seq(3, 3, 3, 3), Seq("a", "b", "c", "d"), batchSize,
           dictionaryEnabled = dictionaryEnabled)
 
-        testNestedStringArrayOneLevel(
-          None,
-          None,
-          Seq(4),
+        testNestedStringArrayOneLevel(None, None, Seq(4),
           Seq(Seq("a"), Seq(null), Seq("c"), Seq(null)),
-          Seq(0, 0, 0, 0),
-          Seq(3, 2, 3, 2),
-          Seq("a", null, "c", null),
-          batchSize,
+          Seq(0, 0, 0, 0), Seq(3, 2, 3, 2), Seq("a", null, "c", null), batchSize,
           dictionaryEnabled = dictionaryEnabled)
 
-        testNestedStringArrayOneLevel(
-          None,
-          None,
-          Seq(4),
+        testNestedStringArrayOneLevel(None, None, Seq(4),
           Seq(Seq("a"), Seq(null, null, null)),
-          Seq(0, 0, 1, 1),
-          Seq(3, 2, 2, 2),
-          Seq("a", null, null, null),
-          batchSize,
+          Seq(0, 0, 1, 1), Seq(3, 2, 2, 2), Seq("a", null, null, null), batchSize,
           dictionaryEnabled = dictionaryEnabled)
 
-        testNestedStringArrayOneLevel(
-          None,
-          None,
-          Seq(6),
+        testNestedStringArrayOneLevel(None, None, Seq(6),
           Seq(Seq("a"), Seq(null, null, null), null, Seq()),
-          Seq(0, 0, 1, 1, 0, 0),
-          Seq(3, 2, 2, 2, 0, 1),
-          Seq("a", null, null, null, null, null),
-          batchSize,
-          dictionaryEnabled = dictionaryEnabled)
+          Seq(0, 0, 1, 1, 0, 0), Seq(3, 2, 2, 2, 0, 1), Seq("a", null, null, null, null, null),
+          batchSize, dictionaryEnabled = dictionaryEnabled)
 
-        testNestedStringArrayOneLevel(
-          None,
-          None,
-          Seq(8),
+        testNestedStringArrayOneLevel(None, None, Seq(8),
           Seq(Seq("a"), Seq(), Seq(), null, Seq("b", null, "c"), null),
-          Seq(0, 0, 0, 0, 0, 1, 1, 0),
-          Seq(3, 1, 1, 0, 3, 2, 3, 0),
-          Seq("a", null, null, null, "b", null, "c", null),
-          batchSize,
+          Seq(0, 0, 0, 0, 0, 1, 1, 0), Seq(3, 1, 1, 0, 3, 2, 3, 0),
+          Seq("a", null, null, null, "b", null, "c", null), batchSize,
           dictionaryEnabled = dictionaryEnabled)
       }
     }
@@ -400,15 +243,10 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
     BATCH_SIZE_CONFIGS.foreach { batchSize =>
       Seq(Seq(2, 3, 2, 3)).foreach { pageSizes =>
         Seq(true, false).foreach { dictionaryEnabled =>
-          testNestedStringArrayOneLevel(
-            None,
-            None,
-            pageSizes,
+          testNestedStringArrayOneLevel(None, None, pageSizes,
             Seq(Seq("a"), Seq(), Seq("b", null, "c"), Seq("d", "e"), Seq(null), Seq(), null),
-            Seq(0, 0, 0, 1, 1, 0, 1, 0, 0, 0),
-            Seq(3, 1, 3, 2, 3, 3, 3, 2, 1, 0),
-            Seq("a", null, "b", null, "c", "d", "e", null, null, null),
-            batchSize,
+            Seq(0, 0, 0, 1, 1, 0, 1, 0, 0, 0), Seq(3, 1, 3, 2, 3, 3, 3, 2, 1, 0),
+            Seq("a", null, "b", null, "c", "d", "e", null, null, null), batchSize,
             dictionaryEnabled = dictionaryEnabled)
         }
       }
@@ -419,37 +257,19 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
     (1 to 6).foreach { batchSize =>
       Seq(true, false).foreach { dictionaryEnabled =>
         // a list across multiple pages
-        testNestedStringArrayOneLevel(
-          None,
-          None,
-          Seq(1, 5),
+        testNestedStringArrayOneLevel(None, None, Seq(1, 5),
           Seq(Seq("a"), Seq("b", "c", "d", "e", "f")),
-          Seq(0, 0, 1, 1, 1, 1),
-          Seq.fill(6)(3),
-          Seq("a", "b", "c", "d", "e", "f"),
-          batchSize,
+          Seq(0, 0, 1, 1, 1, 1), Seq.fill(6)(3), Seq("a", "b", "c", "d", "e", "f"), batchSize,
           dictionaryEnabled = dictionaryEnabled)
 
-        testNestedStringArrayOneLevel(
-          None,
-          None,
-          Seq(1, 3, 2),
+        testNestedStringArrayOneLevel(None, None, Seq(1, 3, 2),
           Seq(Seq("a"), Seq("b", "c", "d"), Seq("e", "f")),
-          Seq(0, 0, 1, 1, 0, 1),
-          Seq.fill(6)(3),
-          Seq("a", "b", "c", "d", "e", "f"),
-          batchSize,
+          Seq(0, 0, 1, 1, 0, 1), Seq.fill(6)(3), Seq("a", "b", "c", "d", "e", "f"), batchSize,
           dictionaryEnabled = dictionaryEnabled)
 
-        testNestedStringArrayOneLevel(
-          None,
-          None,
-          Seq(2, 2, 2),
+        testNestedStringArrayOneLevel(None, None, Seq(2, 2, 2),
           Seq(Seq("a", "b"), Seq("c", "d"), Seq("e", "f")),
-          Seq(0, 1, 0, 1, 0, 1),
-          Seq.fill(6)(3),
-          Seq("a", "b", "c", "d", "e", "f"),
-          batchSize,
+          Seq(0, 1, 0, 1, 0, 1), Seq.fill(6)(3), Seq("a", "b", "c", "d", "e", "f"), batchSize,
           dictionaryEnabled = dictionaryEnabled)
       }
     }
@@ -459,17 +279,12 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
     (1 to 8).foreach { batchSize =>
       Seq(Seq(26), Seq(4, 3, 11, 4, 4), Seq(18, 8)).foreach { pageSizes =>
         Seq(true, false).foreach { dictionaryEnabled =>
-          testNestedStringArrayOneLevel(
-            None,
-            None,
-            pageSizes,
+          testNestedStringArrayOneLevel(None, None, pageSizes,
             (0 to 6).map(i => Seq(('a' + i).toChar.toString)) ++
-              Seq((7 to 17).map(i => ('a' + i).toChar.toString)) ++
-              (18 to 25).map(i => Seq(('a' + i).toChar.toString)),
-            Seq.fill(8)(0) ++ Seq.fill(10)(1) ++ Seq.fill(8)(0),
-            Seq.fill(26)(3),
-            batchSize = batchSize,
-            dictionaryEnabled = dictionaryEnabled)
+                Seq((7 to 17).map(i => ('a' + i).toChar.toString)) ++
+                (18 to 25).map(i => Seq(('a' + i).toChar.toString)),
+            Seq.fill(8)(0) ++ Seq.fill(10)(1) ++ Seq.fill(8)(0), Seq.fill(26)(3),
+            batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
         }
       }
     }
@@ -480,40 +295,25 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
       Seq(Seq(8), Seq(6, 2), Seq(1, 5, 2)).foreach { pageSizes =>
         Seq(true, false).foreach { dictionaryEnabled =>
           var ranges = Seq((1L, 2L))
-          testNestedStringArrayOneLevel(
-            None,
-            Some(ranges),
-            pageSizes,
+          testNestedStringArrayOneLevel(None, Some(ranges), pageSizes,
             Seq(Seq("b", "c", "d", "e", "f"), Seq("g", "h")),
-            Seq(0, 0, 1, 1, 1, 1, 0, 1),
-            Seq.fill(8)(3),
+            Seq(0, 0, 1, 1, 1, 1, 0, 1), Seq.fill(8)(3),
             Seq("a", "b", "c", "d", "e", "f", "g", "h"),
-            batchSize,
-            dictionaryEnabled = dictionaryEnabled)
+            batchSize, dictionaryEnabled = dictionaryEnabled)
 
           ranges = Seq((3L, 5L))
-          testNestedStringArrayOneLevel(
-            None,
-            Some(ranges),
-            pageSizes,
+          testNestedStringArrayOneLevel(None, Some(ranges), pageSizes,
             Seq(),
-            Seq(0, 0, 1, 1, 1, 1, 0, 1),
-            Seq.fill(8)(3),
+            Seq(0, 0, 1, 1, 1, 1, 0, 1), Seq.fill(8)(3),
             Seq("a", "b", "c", "d", "e", "f", "g", "h"),
-            batchSize,
-            dictionaryEnabled = dictionaryEnabled)
+            batchSize, dictionaryEnabled = dictionaryEnabled)
 
           ranges = Seq((0L, 0L))
-          testNestedStringArrayOneLevel(
-            None,
-            Some(ranges),
-            pageSizes,
+          testNestedStringArrayOneLevel(None, Some(ranges), pageSizes,
             Seq(Seq("a")),
-            Seq(0, 0, 1, 1, 1, 1, 0, 1),
-            Seq.fill(8)(3),
+            Seq(0, 0, 1, 1, 1, 1, 0, 1), Seq.fill(8)(3),
             Seq("a", "b", "c", "d", "e", "f", "g", "h"),
-            batchSize,
-            dictionaryEnabled = dictionaryEnabled)
+            batchSize, dictionaryEnabled = dictionaryEnabled)
         }
       }
     }
@@ -524,49 +324,29 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
       Seq(Seq(26), Seq(4, 3, 11, 4, 4), Seq(18, 8)).foreach { pageSizes =>
         Seq(true, false).foreach { dictionaryEnabled =>
           var ranges = Seq((0L, 2L))
-          testNestedStringArrayOneLevel(
-            None,
-            Some(ranges),
-            pageSizes,
+          testNestedStringArrayOneLevel(None, Some(ranges), pageSizes,
             Seq(Seq("a"), Seq("b"), Seq("c")),
-            Seq.fill(8)(0) ++ Seq.fill(10)(1) ++ Seq.fill(8)(0),
-            Seq.fill(26)(3),
-            batchSize = batchSize,
-            dictionaryEnabled = dictionaryEnabled)
+            Seq.fill(8)(0) ++ Seq.fill(10)(1) ++ Seq.fill(8)(0), Seq.fill(26)(3),
+            batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
 
           ranges = Seq((4L, 6L))
-          testNestedStringArrayOneLevel(
-            None,
-            Some(ranges),
-            pageSizes,
+          testNestedStringArrayOneLevel(None, Some(ranges), pageSizes,
             Seq(Seq("e"), Seq("f"), Seq("g")),
-            Seq.fill(8)(0) ++ Seq.fill(10)(1) ++ Seq.fill(8)(0),
-            Seq.fill(26)(3),
-            batchSize = batchSize,
-            dictionaryEnabled = dictionaryEnabled)
+            Seq.fill(8)(0) ++ Seq.fill(10)(1) ++ Seq.fill(8)(0), Seq.fill(26)(3),
+            batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
 
           ranges = Seq((6L, 9L))
-          testNestedStringArrayOneLevel(
-            None,
-            Some(ranges),
-            pageSizes,
+          testNestedStringArrayOneLevel(None, Some(ranges), pageSizes,
             Seq(Seq("g")) ++ Seq((7 to 17).map(i => ('a' + i).toChar.toString)) ++
-              Seq(Seq("s"), Seq("t")),
-            Seq.fill(8)(0) ++ Seq.fill(10)(1) ++ Seq.fill(8)(0),
-            Seq.fill(26)(3),
-            batchSize = batchSize,
-            dictionaryEnabled = dictionaryEnabled)
+                Seq(Seq("s"), Seq("t")),
+            Seq.fill(8)(0) ++ Seq.fill(10)(1) ++ Seq.fill(8)(0), Seq.fill(26)(3),
+            batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
 
           ranges = Seq((4L, 6L), (14L, 20L))
-          testNestedStringArrayOneLevel(
-            None,
-            Some(ranges),
-            pageSizes,
+          testNestedStringArrayOneLevel(None, Some(ranges), pageSizes,
             Seq(Seq("e"), Seq("f"), Seq("g"), Seq("y"), Seq("z")),
-            Seq.fill(8)(0) ++ Seq.fill(10)(1) ++ Seq.fill(8)(0),
-            Seq.fill(26)(3),
-            batchSize = batchSize,
-            dictionaryEnabled = dictionaryEnabled)
+            Seq.fill(8)(0) ++ Seq.fill(10)(1) ++ Seq.fill(8)(0), Seq.fill(26)(3),
+            batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
         }
       }
     }
@@ -576,106 +356,62 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
     BATCH_SIZE_CONFIGS.foreach { batchSize =>
       Seq(Seq(16), Seq(8, 8), Seq(4, 4, 4, 4), Seq(2, 6, 4, 4)).foreach { pageSizes =>
         Seq(true, false).foreach { dictionaryEnabled =>
-          testNestedStringArrayOneLevel(
-            None,
-            None,
-            pageSizes,
-            Seq(
-              Seq("a", null),
-              Seq("c", "d"),
-              Seq(),
-              Seq("f", null, "h"),
-              Seq("i", "j", "k", null),
-              Seq(),
-              null,
-              null,
-              Seq()),
+          testNestedStringArrayOneLevel(None, None, pageSizes,
+            Seq(Seq("a", null), Seq("c", "d"), Seq(), Seq("f", null, "h"),
+              Seq("i", "j", "k", null), Seq(), null, null, Seq()),
             Seq(0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0),
             Seq(3, 2, 3, 3, 1, 3, 2, 3, 3, 3, 3, 2, 1, 0, 0, 1),
             (0 to 15),
-            batchSize = batchSize,
-            dictionaryEnabled = dictionaryEnabled)
+            batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
 
           var ranges = Seq((0L, 15L))
-          testNestedStringArrayOneLevel(
-            None,
-            Some(ranges),
-            pageSizes,
-            Seq(
-              Seq("a", null),
-              Seq("c", "d"),
-              Seq(),
-              Seq("f", null, "h"),
-              Seq("i", "j", "k", null),
-              Seq(),
-              null,
-              null,
-              Seq()),
+          testNestedStringArrayOneLevel(None, Some(ranges), pageSizes,
+            Seq(Seq("a", null), Seq("c", "d"), Seq(), Seq("f", null, "h"),
+              Seq("i", "j", "k", null), Seq(), null, null, Seq()),
             Seq(0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0),
             Seq(3, 2, 3, 3, 1, 3, 2, 3, 3, 3, 3, 2, 1, 0, 0, 1),
             (0 to 15),
-            batchSize = batchSize,
-            dictionaryEnabled = dictionaryEnabled)
+            batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
 
           ranges = Seq((0L, 2L))
-          testNestedStringArrayOneLevel(
-            None,
-            Some(ranges),
-            pageSizes,
+          testNestedStringArrayOneLevel(None, Some(ranges), pageSizes,
             Seq(Seq("a", null), Seq("c", "d"), Seq()),
             Seq(0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0),
             Seq(3, 2, 3, 3, 1, 3, 2, 3, 3, 3, 3, 2, 1, 0, 0, 1),
             (0 to 15),
-            batchSize = batchSize,
-            dictionaryEnabled = dictionaryEnabled)
+            batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
 
           ranges = Seq((3L, 7L))
-          testNestedStringArrayOneLevel(
-            None,
-            Some(ranges),
-            pageSizes,
+          testNestedStringArrayOneLevel(None, Some(ranges), pageSizes,
             Seq(Seq("f", null, "h"), Seq("i", "j", "k", null), Seq(), null, null),
             Seq(0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0),
             Seq(3, 2, 3, 3, 1, 3, 2, 3, 3, 3, 3, 2, 1, 0, 0, 1),
             (0 to 15),
-            batchSize = batchSize,
-            dictionaryEnabled = dictionaryEnabled)
+            batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
 
           ranges = Seq((5, 12L))
-          testNestedStringArrayOneLevel(
-            None,
-            Some(ranges),
-            pageSizes,
+          testNestedStringArrayOneLevel(None, Some(ranges), pageSizes,
             Seq(Seq(), null, null, Seq()),
             Seq(0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0),
             Seq(3, 2, 3, 3, 1, 3, 2, 3, 3, 3, 3, 2, 1, 0, 0, 1),
             (0 to 15),
-            batchSize = batchSize,
-            dictionaryEnabled = dictionaryEnabled)
+            batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
 
           ranges = Seq((5, 12L))
-          testNestedStringArrayOneLevel(
-            None,
-            Some(ranges),
-            pageSizes,
+          testNestedStringArrayOneLevel(None, Some(ranges), pageSizes,
             Seq(Seq(), null, null, Seq()),
             Seq(0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0),
             Seq(3, 2, 3, 3, 1, 3, 2, 3, 3, 3, 3, 2, 1, 0, 0, 1),
             (0 to 15),
-            batchSize = batchSize,
-            dictionaryEnabled = dictionaryEnabled)
+            batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
 
           ranges = Seq((0L, 0L), (2, 3), (5, 7), (8, 10))
-          testNestedStringArrayOneLevel(
-            None,
-            Some(ranges),
-            pageSizes,
+          testNestedStringArrayOneLevel(None, Some(ranges), pageSizes,
             Seq(Seq("a", null), Seq(), Seq("f", null, "h"), Seq(), null, null, Seq()),
             Seq(0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0),
             Seq(3, 2, 3, 3, 1, 3, 2, 3, 3, 3, 3, 2, 1, 0, 0, 1),
             (0 to 15),
-            batchSize = batchSize,
-            dictionaryEnabled = dictionaryEnabled)
+            batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
         }
       }
     }
@@ -687,236 +423,209 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
         val pageSizes = Seq(4, 4, 4, 4)
         val firstRowIndexes = Seq(10L, 20, 30, 40)
         var ranges = Seq((0L, 5L))
-        testNestedStringArrayOneLevel(
-          Some(firstRowIndexes),
-          Some(ranges),
-          pageSizes,
+        testNestedStringArrayOneLevel(Some(firstRowIndexes), Some(ranges), pageSizes,
           Seq(),
           Seq(0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0),
           Seq(3, 2, 3, 3, 1, 3, 2, 3, 3, 3, 3, 2, 1, 0, 0, 1),
           (0 to 15),
-          batchSize = batchSize,
-          dictionaryEnabled = dictionaryEnabled)
+          batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
 
         ranges = Seq((5L, 15))
-        testNestedStringArrayOneLevel(
-          Some(firstRowIndexes),
-          Some(ranges),
-          pageSizes,
+        testNestedStringArrayOneLevel(Some(firstRowIndexes), Some(ranges), pageSizes,
           Seq(Seq("a", null), Seq("c", "d")),
           Seq(0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0),
           Seq(3, 2, 3, 3, 1, 3, 2, 3, 3, 3, 3, 2, 1, 0, 0, 1),
           (0 to 15),
-          batchSize = batchSize,
-          dictionaryEnabled = dictionaryEnabled)
+          batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
 
         ranges = Seq((25, 28))
-        testNestedStringArrayOneLevel(
-          Some(firstRowIndexes),
-          Some(ranges),
-          pageSizes,
+        testNestedStringArrayOneLevel(Some(firstRowIndexes), Some(ranges), pageSizes,
           Seq(),
           Seq(0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0),
           Seq(3, 2, 3, 3, 1, 3, 2, 3, 3, 3, 3, 2, 1, 0, 0, 1),
           (0 to 15),
-          batchSize = batchSize,
-          dictionaryEnabled = dictionaryEnabled)
+          batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
 
         ranges = Seq((35, 45))
-        testNestedStringArrayOneLevel(
-          Some(firstRowIndexes),
-          Some(ranges),
-          pageSizes,
+        testNestedStringArrayOneLevel(Some(firstRowIndexes), Some(ranges), pageSizes,
           Seq(Seq(), null, null, Seq()),
           Seq(0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0),
           Seq(3, 2, 3, 3, 1, 3, 2, 3, 3, 3, 3, 2, 1, 0, 0, 1),
           (0 to 15),
-          batchSize = batchSize,
-          dictionaryEnabled = dictionaryEnabled)
+          batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
 
         ranges = Seq((45, 55))
-        testNestedStringArrayOneLevel(
-          Some(firstRowIndexes),
-          Some(ranges),
-          pageSizes,
+        testNestedStringArrayOneLevel(Some(firstRowIndexes), Some(ranges), pageSizes,
           Seq(),
           Seq(0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0),
           Seq(3, 2, 3, 3, 1, 3, 2, 3, 3, 3, 3, 2, 1, 0, 0, 1),
           (0 to 15),
-          batchSize = batchSize,
-          dictionaryEnabled = dictionaryEnabled)
+          batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
 
         ranges = Seq((45, 55))
-        testNestedStringArrayOneLevel(
-          Some(firstRowIndexes),
-          Some(ranges),
-          pageSizes,
+        testNestedStringArrayOneLevel(Some(firstRowIndexes), Some(ranges), pageSizes,
           Seq(),
           Seq(0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0),
           Seq(3, 2, 3, 3, 1, 3, 2, 3, 3, 3, 3, 2, 1, 0, 0, 1),
           (0 to 15),
-          batchSize = batchSize,
-          dictionaryEnabled = dictionaryEnabled)
+          batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
 
         ranges = Seq((15, 29), (31, 35))
-        testNestedStringArrayOneLevel(
-          Some(firstRowIndexes),
-          Some(ranges),
-          pageSizes,
+        testNestedStringArrayOneLevel(Some(firstRowIndexes), Some(ranges), pageSizes,
           Seq(Seq(), Seq("f", null, "h")),
           Seq(0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0),
           Seq(3, 2, 3, 3, 1, 3, 2, 3, 3, 3, 3, 2, 1, 0, 0, 1),
           (0 to 15),
-          batchSize = batchSize,
-          dictionaryEnabled = dictionaryEnabled)
+          batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
       }
     }
   }
 
   truncateTypeTest("primitive type", IntegerType, LongType, IntegerType)
 
-  truncateTypeTest(
-    "basic struct",
-    readType = StructType(
-      Seq(
-        StructField("a", IntegerType),
-        StructField("b", StringType),
-        StructField("c", BooleanType))),
-    requestedType = StructType(Seq(StructField("a", LongType), StructField("b", StringType))),
-    expectedType = StructType(Seq(StructField("a", IntegerType), StructField("b", StringType))))
+  truncateTypeTest("basic struct",
+    readType = StructType(Seq(
+      StructField("a", IntegerType),
+      StructField("b", StringType),
+      StructField("c", BooleanType)
+    )),
+    requestedType = StructType(Seq(
+      StructField("a", LongType),
+      StructField("b", StringType)
+    )),
+    expectedType = StructType(Seq(
+      StructField("a", IntegerType),
+      StructField("b", StringType)
+    ))
+  )
 
-  truncateTypeTest(
-    "nested struct",
-    readType = StructType(
-      Seq(
-        StructField(
-          "nested",
-          StructType(
-            Seq(
-              StructField("x", IntegerType),
-              StructField("y", StringType),
-              StructField("z", DoubleType)))),
-        StructField("extra", BooleanType))),
-    requestedType = StructType(
-      Seq(
-        StructField(
-          "nested",
-          StructType(Seq(StructField("x", IntegerType), StructField("y", StringType)))),
-        StructField("extra", BooleanType))),
-    expectedType = StructType(
-      Seq(
-        StructField(
-          "nested",
-          StructType(Seq(StructField("x", IntegerType), StructField("y", StringType)))),
-        StructField("extra", BooleanType))))
+  truncateTypeTest("nested struct",
+    readType = StructType(Seq(
+      StructField("nested", StructType(Seq(
+        StructField("x", IntegerType),
+        StructField("y", StringType),
+        StructField("z", DoubleType)
+      ))),
+      StructField("extra", BooleanType)
+    )),
+    requestedType = StructType(Seq(
+      StructField("nested", StructType(Seq(
+        StructField("x", IntegerType),
+        StructField("y", StringType)
+      ))),
+      StructField("extra", BooleanType)
+    )),
+    expectedType = StructType(Seq(
+      StructField("nested", StructType(Seq(
+        StructField("x", IntegerType),
+        StructField("y", StringType)
+      ))),
+      StructField("extra", BooleanType)
+    ))
+  )
 
-  truncateTypeTest(
-    "empty structs",
+  truncateTypeTest("empty structs",
     readType = StructType(Seq.empty),
     requestedType = StructType(Seq.empty),
-    expectedType = StructType(Seq.empty))
+    expectedType = StructType(Seq.empty)
+  )
 
-  truncateTypeTest(
-    "simple arrays",
+  truncateTypeTest("simple arrays",
     readType = ArrayType(IntegerType),
     requestedType = ArrayType(LongType),
-    expectedType = ArrayType(IntegerType))
+    expectedType = ArrayType(IntegerType)
+  )
 
-  truncateTypeTest(
-    "structs in arrays",
-    readType = ArrayType(
-      StructType(
-        Seq(
-          StructField("a", IntegerType),
-          StructField("b", StringType),
-          StructField("c", BooleanType)))),
-    requestedType =
-      ArrayType(StructType(Seq(StructField("a", IntegerType), StructField("b", StringType)))),
-    expectedType =
-      ArrayType(StructType(Seq(StructField("a", IntegerType), StructField("b", StringType)))))
+  truncateTypeTest("structs in arrays",
+    readType = ArrayType(StructType(Seq(
+      StructField("a", IntegerType),
+      StructField("b", StringType),
+      StructField("c", BooleanType)
+    ))),
+    requestedType = ArrayType(StructType(Seq(
+      StructField("a", IntegerType),
+      StructField("b", StringType)
+    ))),
+    expectedType = ArrayType(StructType(Seq(
+      StructField("a", IntegerType),
+      StructField("b", StringType)
+    )))
+  )
 
-  truncateTypeTest(
-    "nested array, containsNull is preserved",
+  truncateTypeTest("nested array, containsNull is preserved",
     readType = ArrayType(ArrayType(IntegerType, containsNull = false)),
     requestedType = ArrayType(ArrayType(IntegerType, containsNull = true)),
-    expectedType = ArrayType(ArrayType(IntegerType, containsNull = false)))
+    expectedType = ArrayType(ArrayType(IntegerType, containsNull = false))
+  )
 
-  truncateTypeTest(
-    "map with primitive key/value types",
+  truncateTypeTest("map with primitive key/value types",
     readType = MapType(StringType, IntegerType),
     requestedType = MapType(StringType, LongType),
-    expectedType = MapType(StringType, IntegerType))
+    expectedType = MapType(StringType, IntegerType)
+  )
 
-  truncateTypeTest(
-    "map with struct values needing truncation",
-    readType = MapType(
-      StringType,
-      StructType(
-        Seq(
-          StructField("a", IntegerType),
-          StructField("b", StringType),
-          StructField("c", DoubleType)))),
-    requestedType = MapType(
-      StringType,
-      StructType(Seq(StructField("a", IntegerType), StructField("b", StringType)))),
-    expectedType = MapType(
-      StringType,
-      StructType(Seq(StructField("a", IntegerType), StructField("b", StringType)))))
+  truncateTypeTest("map with struct values needing truncation",
+    readType = MapType(StringType, StructType(Seq(
+      StructField("a", IntegerType),
+      StructField("b", StringType),
+      StructField("c", DoubleType)
+    ))),
+    requestedType = MapType(StringType, StructType(Seq(
+      StructField("a", IntegerType),
+      StructField("b", StringType)
+    ))),
+    expectedType = MapType(StringType, StructType(Seq(
+      StructField("a", IntegerType),
+      StructField("b", StringType)
+    )))
+  )
 
-  truncateTypeTest(
-    "map with struct keys needing truncation",
-    readType = MapType(
-      StructType(
-        Seq(
-          StructField("a", IntegerType),
-          StructField("b", DoubleType),
-          StructField("c", StringType))),
-      IntegerType),
-    requestedType = MapType(
-      StructType(Seq(StructField("a", IntegerType), StructField("b", FloatType))),
-      IntegerType),
-    expectedType = MapType(
-      StructType(Seq(StructField("a", IntegerType), StructField("b", DoubleType))),
-      IntegerType))
+  truncateTypeTest("map with struct keys needing truncation",
+    readType = MapType(StructType(Seq(
+      StructField("a", IntegerType),
+      StructField("b", DoubleType),
+      StructField("c", StringType)
+    )), IntegerType),
+    requestedType = MapType(StructType(Seq(
+      StructField("a", IntegerType),
+      StructField("b", FloatType)
+    )), IntegerType),
+    expectedType = MapType(StructType(Seq(
+      StructField("a", IntegerType),
+      StructField("b", DoubleType)
+    )), IntegerType)
+  )
 
-  truncateTypeTest(
-    "map valueContainsNull is preserved",
+  truncateTypeTest("map valueContainsNull is preserved",
     readType = MapType(StringType, IntegerType, valueContainsNull = false),
     requestedType = MapType(StringType, IntegerType, valueContainsNull = true),
-    expectedType = MapType(StringType, IntegerType, valueContainsNull = false))
+    expectedType = MapType(StringType, IntegerType, valueContainsNull = false)
+  )
 
-  truncateTypeTest(
-    "all complex types",
-    readType = StructType(
-      Seq(
-        StructField(
-          "complexField",
-          ArrayType(
-            MapType(
-              StringType,
-              StructType(
-                Seq(
-                  StructField("x", IntegerType),
-                  StructField("y", StringType),
-                  StructField("z", BooleanType)))))),
-        StructField("extraTopLevel", DoubleType))),
-    requestedType = StructType(
-      Seq(
-        StructField(
-          "complexField",
-          ArrayType(MapType(
-            StringType,
-            StructType(Seq(StructField("x", IntegerType), StructField("y", StringType)))))))),
-    expectedType = StructType(
-      Seq(
-        StructField(
-          "complexField",
-          ArrayType(MapType(
-            StringType,
-            StructType(Seq(StructField("x", IntegerType), StructField("y", StringType)))))))))
+  truncateTypeTest("all complex types",
+    readType = StructType(Seq(
+      StructField("complexField", ArrayType(MapType(StringType, StructType(Seq(
+        StructField("x", IntegerType),
+        StructField("y", StringType),
+        StructField("z", BooleanType)
+      ))))),
+      StructField("extraTopLevel", DoubleType)
+    )),
+    requestedType = StructType(Seq(
+      StructField("complexField", ArrayType(MapType(StringType, StructType(Seq(
+        StructField("x", IntegerType),
+        StructField("y", StringType)
+      )))))
+    )),
+    expectedType = StructType(Seq(
+      StructField("complexField", ArrayType(MapType(StringType, StructType(Seq(
+        StructField("x", IntegerType),
+        StructField("y", StringType)
+      )))))
+    ))
+  )
 
-  truncateTypeTest(
-    "struct UDT",
+  truncateTypeTest("struct UDT",
     readType = new StructType()
       .add("_1", LongType)
       .add("_2", IntegerType)
@@ -924,13 +633,15 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
     requestedType = new TestStructUDT(),
     expectedType = new StructType()
       .add("_1", LongType)
-      .add("_2", IntegerType))
+      .add("_2", IntegerType)
+  )
 
   private def truncateTypeTest(
-      testName: String,
-      readType: DataType,
-      requestedType: DataType,
-      expectedType: DataType): Unit = {
+    testName: String,
+    readType: DataType,
+    requestedType: DataType,
+    expectedType: DataType
+  ): Unit = {
     test(s"truncateType - $testName") {
       val result = VectorizedParquetRecordReader.truncateType(readType, requestedType)
       assert(result === expectedType)
@@ -949,10 +660,12 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
     firstRowIndexesOpt.foreach(a => assert(pageSizes.length == a.length))
 
     val isRequiredStr = if (!expectedValues.contains(null)) "required" else "optional"
-    val parquetSchema: MessageType = MessageTypeParser.parseMessageType(s"""message root {
+    val parquetSchema: MessageType = MessageTypeParser.parseMessageType(
+      s"""message root {
          | $isRequiredStr binary a(UTF8);
          |}
-         |""".stripMargin)
+         |""".stripMargin
+    )
     val maxDef = if (inputValues.contains(null)) 1 else 0
     val ty = parquetSchema.asGroupType().getType("a").asPrimitiveType()
     val cd = new ColumnDescriptor(Seq("a").toArray, ty, 0, maxDef)
@@ -965,26 +678,15 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
     val pageFirstRowIndexes = ArrayBuffer.empty[Long]
     pageSizes.foreach { size =>
       pageFirstRowIndexes += i
-      writeDataPage(
-        cd,
-        memPageStore,
-        repetitionLevels.slice(i, i + size).toImmutableArraySeq,
-        definitionLevels.slice(i, i + size),
-        inputValues.slice(i, i + size),
-        maxDef,
+      writeDataPage(cd, memPageStore, repetitionLevels.slice(i, i + size).toImmutableArraySeq,
+        definitionLevels.slice(i, i + size), inputValues.slice(i, i + size), maxDef,
         dictionaryEnabled)
       i += size
     }
 
-    checkAnswer(
-      expectedValues.length,
-      parquetSchema,
-      TestPageReadStore(
-        memPageStore,
-        firstRowIndexesOpt.getOrElse(pageFirstRowIndexes).toSeq,
-        rangesOpt),
-      expectedValues.map(i => Row(i)),
-      batchSize)
+    checkAnswer(expectedValues.length, parquetSchema,
+      TestPageReadStore(memPageStore, firstRowIndexesOpt.getOrElse(pageFirstRowIndexes).toSeq,
+        rangesOpt), expectedValues.map(i => Row(i)), batchSize)
   }
 
   private def testNestedStringArrayOneLevel(
@@ -1000,14 +702,16 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
     assert(pageSizes.sum == rls.length && rls.length == dls.length)
     firstRowIndexesOpt.foreach(a => assert(pageSizes.length == a.length))
 
-    val parquetSchema = MessageTypeParser.parseMessageType(s"""message root {
+    val parquetSchema = MessageTypeParser.parseMessageType(
+      s"""message root {
          |  optional group _1 (LIST) {
          |    repeated group list {
          |      optional binary a(UTF8);
          |    }
          |  }
          |}
-         |""".stripMargin)
+         |""".stripMargin
+    )
 
     val maxRepLevel = 1
     val maxDefLevel = 3
@@ -1021,26 +725,14 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
     pageSizes.foreach { size =>
       pageFirstRowIndexes += numRows
       numRows += rls.slice(i, i + size).count(_ == 0)
-      writeDataPage(
-        cd,
-        memPageStore,
-        rls.slice(i, i + size),
-        dls.slice(i, i + size),
-        values.slice(i, i + size),
-        maxDefLevel,
-        dictionaryEnabled)
+      writeDataPage(cd, memPageStore, rls.slice(i, i + size), dls.slice(i, i + size),
+        values.slice(i, i + size), maxDefLevel, dictionaryEnabled)
       i += size
     }
 
-    checkAnswer(
-      expected.length,
-      parquetSchema,
-      TestPageReadStore(
-        memPageStore,
-        firstRowIndexesOpt.getOrElse(pageFirstRowIndexes).toSeq,
-        rangesOpt),
-      expected.map(i => Row(i)),
-      batchSize)
+    checkAnswer(expected.length, parquetSchema,
+      TestPageReadStore(memPageStore, firstRowIndexesOpt.getOrElse(pageFirstRowIndexes).toSeq,
+        rangesOpt), expected.map(i => Row(i)), batchSize)
   }
 
   /**
@@ -1057,13 +749,11 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
       values: Seq[Any],
       maxDefinitionLevel: Int,
       dictionaryEnabled: Boolean = false): Unit = {
-    val columnWriterStore = new ColumnWriteStoreV1(
-      pageWriteStore,
-      ParquetProperties
-        .builder()
-        .withPageSize(4096)
-        .withDictionaryEncoding(dictionaryEnabled)
-        .build())
+    val columnWriterStore = new ColumnWriteStoreV1(pageWriteStore,
+      ParquetProperties.builder()
+          .withPageSize(4096)
+          .withDictionaryEncoding(dictionaryEnabled)
+          .build())
     val columnWriter = columnWriterStore.getColumnWriter(columnDesc)
 
     repetitionLevels.zip(definitionLevels).zipWithIndex.foreach { case ((rl, dl), i) =>
@@ -1084,8 +774,7 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
           case PrimitiveTypeName.BINARY =>
             columnWriter.write(Binary.fromString(values(i).asInstanceOf[String]), rl, dl)
           case _ =>
-            throw new IllegalStateException(
-              s"Unexpected type: " +
+            throw new IllegalStateException(s"Unexpected type: " +
                 s"${columnDesc.getPrimitiveType.getPrimitiveTypeName}")
         }
       }
@@ -1110,29 +799,24 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
       "UTC",
       true,
       batchSize)
-    recordReader.initialize(
-      fileSchema,
-      fileSchema,
-      TestParquetRowGroupReader(Seq(readStore)),
-      totalRowCount)
+    recordReader.initialize(fileSchema, fileSchema,
+      TestParquetRowGroupReader(Seq(readStore)), totalRowCount)
 
     // convert both actual and expected rows into collections
     val schema = recordReader.sparkSchema
-    val expectedRowIt = ColumnVectorUtils
-      .toBatch(schema, MemoryMode.ON_HEAP, expected.iterator.asJava)
-      .rowIterator()
+    val expectedRowIt = ColumnVectorUtils.toBatch(
+      schema, MemoryMode.ON_HEAP, expected.iterator.asJava).rowIterator()
 
     val rowOrdering = RowOrdering.createNaturalAscendingOrdering(schema.map(_.dataType))
     var i = 0
     while (expectedRowIt.hasNext && recordReader.nextKeyValue()) {
       val expectedRow = expectedRowIt.next()
       val actualRow = recordReader.getCurrentValue.asInstanceOf[InternalRow]
-      assert(
-        rowOrdering.compare(expectedRow, actualRow) == 0, {
-          val expectedRowStr = toDebugString(schema, expectedRow)
-          val actualRowStr = toDebugString(schema, actualRow)
-          s"at index $i, expected row: $expectedRowStr doesn't match actual row: $actualRowStr"
-        })
+      assert(rowOrdering.compare(expectedRow, actualRow) == 0, {
+        val expectedRowStr = toDebugString(schema, expectedRow)
+        val actualRowStr = toDebugString(schema, actualRow)
+        s"at index $i, expected row: $expectedRowStr doesn't match actual row: $actualRowStr"
+      })
       i += 1
     }
   }
@@ -1179,8 +863,7 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
   private case class TestPageReadStore(
       wrapped: PageReadStore,
       firstRowIndexes: Seq[Long],
-      rowIndexRangesOpt: Option[Seq[(Long, Long)]] = None)
-      extends PageReadStore {
+      rowIndexRangesOpt: Option[Seq[(Long, Long)]] = None) extends PageReadStore {
 
     override def getPageReader(descriptor: ColumnDescriptor): PageReader = {
       val originalReader = wrapped.getPageReader(descriptor)
@@ -1190,54 +873,52 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
     override def getRowCount: Long = wrapped.getRowCount
 
     override def getRowIndexes: Optional[PrimitiveIterator.OfLong] = {
-      rowIndexRangesOpt
-        .map { ranges =>
-          Optional.of(new PrimitiveIterator.OfLong {
-            private var currentRangeIdx: Int = 0
-            private var currentRowIdx: Long = -1
+      rowIndexRangesOpt.map { ranges =>
+        Optional.of(new PrimitiveIterator.OfLong {
+          private var currentRangeIdx: Int = 0
+          private var currentRowIdx: Long = -1
 
-            override def nextLong(): Long = {
-              if (!hasNext) throw new NoSuchElementException("No more element")
-              val res = currentRowIdx
-              currentRowIdx += 1
-              res
-            }
+          override def nextLong(): Long = {
+            if (!hasNext) throw new NoSuchElementException("No more element")
+            val res = currentRowIdx
+            currentRowIdx += 1
+            res
+          }
 
-            override def hasNext: Boolean = {
-              while (currentRangeIdx < ranges.length) {
-                if (currentRowIdx > ranges(currentRangeIdx)._2) {
-                  // we've exhausted the current range - move to the next range
-                  currentRangeIdx += 1
-                  currentRowIdx = -1
-                } else {
-                  if (currentRowIdx == -1) {
-                    currentRowIdx = ranges(currentRangeIdx)._1
-                  }
-                  return true
+          override def hasNext: Boolean = {
+            while (currentRangeIdx < ranges.length) {
+              if (currentRowIdx > ranges(currentRangeIdx)._2) {
+                // we've exhausted the current range - move to the next range
+                currentRangeIdx += 1
+                currentRowIdx = -1
+              } else {
+                if (currentRowIdx == -1) {
+                  currentRowIdx = ranges(currentRangeIdx)._1
                 }
+                return true
               }
-              false
             }
-          })
-        }
-        .getOrElse(Optional.empty())
+            false
+          }
+        })
+      }.getOrElse(Optional.empty())
     }
   }
 
-  private case class TestPageReader(wrapped: PageReader, firstRowIndexes: Seq[Long])
-      extends PageReader {
+  private case class TestPageReader(
+      wrapped: PageReader,
+      firstRowIndexes: Seq[Long]) extends PageReader {
     private var index = 0
 
     override def readDictionaryPage(): DictionaryPage = wrapped.readDictionaryPage()
     override def getTotalValueCount: Long = wrapped.getTotalValueCount
     override def readPage(): DataPage = {
-      val wrappedPage =
-        try {
-          wrapped.readPage()
-        } catch {
-          case _: ParquetDecodingException =>
-            null
-        }
+      val wrappedPage = try {
+        wrapped.readPage()
+      } catch {
+        case _: ParquetDecodingException =>
+          null
+      }
       if (wrappedPage == null) {
         wrappedPage
       } else {
@@ -1268,10 +949,9 @@ class TestStructUDT extends UserDefinedType[TestStruct] {
 
   override def deserialize(datum: Any): TestStruct = {
     datum match {
-      case row: InternalRow =>
-        TestStruct(
-          if (row.isNullAt(0)) null else row.getInt(0),
-          if (row.isNullAt(1)) null else row.getLong(1))
+      case row: InternalRow => TestStruct(
+        if (row.isNullAt(0)) null else row.getInt(0),
+        if (row.isNullAt(1)) null else row.getLong(1))
     }
   }
 }

@@ -42,10 +42,7 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
   test("foreach() with `append` output mode") {
     withTempDir { checkpointDir =>
       val input = MemoryStream[Int]
-      val query = input
-        .toDS()
-        .repartition(2)
-        .writeStream
+      val query = input.toDS().repartition(2).writeStream
         .option("checkpointLocation", checkpointDir.getCanonicalPath)
         .outputMode(OutputMode.Append)
         .foreach(new TestForeachWriter())
@@ -88,12 +85,8 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
     withTempDir { checkpointDir =>
       val input = MemoryStream[Int]
 
-      val query = input
-        .toDS()
-        .groupBy()
-        .count()
-        .as[Long]
-        .map(_.toInt)
+      val query = input.toDS()
+        .groupBy().count().as[Long].map(_.toInt)
         .writeStream
         .option("checkpointLocation", checkpointDir.getCanonicalPath)
         .outputMode(OutputMode.Complete)
@@ -109,7 +102,8 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
       var expectedEvents = Seq(
         ForeachWriterSuite.Open(partition = 0, version = 0),
         ForeachWriterSuite.Process(value = 4),
-        ForeachWriterSuite.Close(None))
+        ForeachWriterSuite.Close(None)
+      )
       assert(allEvents === Seq(expectedEvents))
 
       ForeachWriterSuite.clear()
@@ -123,7 +117,8 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
       expectedEvents = Seq(
         ForeachWriterSuite.Open(partition = 0, version = 1),
         ForeachWriterSuite.Process(value = 8),
-        ForeachWriterSuite.Close(None))
+        ForeachWriterSuite.Close(None)
+      )
       assert(allEvents === Seq(expectedEvents))
 
       query.stop()
@@ -135,18 +130,14 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
       val input = MemoryStream[Int]
 
       val funcEx = new RuntimeException("ForeachSinkSuite error")
-      val query = input
-        .toDS()
-        .repartition(1)
-        .writeStream
+      val query = input.toDS().repartition(1).writeStream
         .option("checkpointLocation", checkpointDir.getCanonicalPath)
         .foreach(new TestForeachWriter() {
           override def process(value: Int): Unit = {
             super.process(value)
             throw funcEx
           }
-        })
-        .start()
+        }).start()
       input.addData(1, 2, 3, 4)
 
       // Error in `process` should fail the Spark job
@@ -176,33 +167,27 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
 
       val sparkEx = ExecutorDeadException("network error")
       val e2 = intercept[StreamingQueryException] {
-        val query2 = input
-          .toDS()
-          .repartition(1)
-          .writeStream
+        val query2 = input.toDS().repartition(1).writeStream
           .foreach(new TestForeachWriter() {
             override def process(value: Int): Unit = {
               super.process(value)
               throw sparkEx
             }
-          })
-          .start()
+          }).start()
         query2.processAllAvailable()
       }
 
       // we didn't wrap the spark exception
       assert(!e2.getMessage.contains(errClass))
-      assert(
-        e2.getCause.getCause.asInstanceOf[ExecutorDeadException].getMessage
-          == sparkEx.getMessage)
+      assert(e2.getCause.getCause.asInstanceOf[ExecutorDeadException].getMessage
+        == sparkEx.getMessage)
     }
   }
 
   test("foreach with watermark: complete") {
     val inputData = MemoryStream[Int]
 
-    val windowedAggregation = inputData
-      .toDF()
+    val windowedAggregation = inputData.toDF()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
       .groupBy(window($"eventTime", "5 seconds") as Symbol("window"))
@@ -211,7 +196,8 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
       .map(_.toInt)
       .repartition(1)
 
-    val query = windowedAggregation.writeStream
+    val query = windowedAggregation
+      .writeStream
       .outputMode(OutputMode.Complete)
       .foreach(new TestForeachWriter())
       .start()
@@ -224,7 +210,8 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
       val expectedEvents = Seq(
         ForeachWriterSuite.Open(partition = 0, version = 0),
         ForeachWriterSuite.Process(value = 3),
-        ForeachWriterSuite.Close(None))
+        ForeachWriterSuite.Close(None)
+      )
       assert(allEvents === Seq(expectedEvents))
     } finally {
       query.stop()
@@ -234,8 +221,7 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
   test("foreach with watermark: append") {
     val inputData = MemoryStream[Int]
 
-    val windowedAggregation = inputData
-      .toDF()
+    val windowedAggregation = inputData.toDF()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
       .groupBy(window($"eventTime", "5 seconds") as Symbol("window"))
@@ -244,7 +230,8 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
       .map(_.toInt)
       .repartition(1)
 
-    val query = windowedAggregation.writeStream
+    val query = windowedAggregation
+      .writeStream
       .outputMode(OutputMode.Append)
       .foreach(new TestForeachWriter())
       .start()
@@ -258,13 +245,24 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
       val allEvents = ForeachWriterSuite.allEvents()
       assert(allEvents.size === 4)
       val expectedEvents = Seq(
-        Seq(ForeachWriterSuite.Open(partition = 0, version = 0), ForeachWriterSuite.Close(None)),
-        Seq(ForeachWriterSuite.Open(partition = 0, version = 1), ForeachWriterSuite.Close(None)),
-        Seq(ForeachWriterSuite.Open(partition = 0, version = 2), ForeachWriterSuite.Close(None)),
+        Seq(
+          ForeachWriterSuite.Open(partition = 0, version = 0),
+          ForeachWriterSuite.Close(None)
+        ),
+        Seq(
+          ForeachWriterSuite.Open(partition = 0, version = 1),
+          ForeachWriterSuite.Close(None)
+        ),
+        Seq(
+          ForeachWriterSuite.Open(partition = 0, version = 2),
+          ForeachWriterSuite.Close(None)
+        ),
         Seq(
           ForeachWriterSuite.Open(partition = 0, version = 3),
           ForeachWriterSuite.Process(value = 3),
-          ForeachWriterSuite.Close(None)))
+          ForeachWriterSuite.Close(None)
+        )
+      )
       assert(allEvents === expectedEvents)
     } finally {
       query.stop()
@@ -273,8 +271,7 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
 
   test("foreach sink should support metrics") {
     val inputData = MemoryStream[Int]
-    val query = inputData
-      .toDS()
+    val query = inputData.toDS()
       .writeStream
       .foreach(new TestForeachWriter())
       .start()
@@ -282,8 +279,7 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
       inputData.addData(10, 11, 12)
       query.processAllAvailable()
       val recentProgress = query.recentProgress.filter(_.numInputRows != 0).headOption
-      assert(
-        recentProgress.isDefined && recentProgress.get.numInputRows === 3,
+      assert(recentProgress.isDefined && recentProgress.get.numInputRows === 3,
         s"recentProgress[${query.recentProgress.toList}] doesn't contain correct metrics")
     } finally {
       query.stop()
@@ -293,11 +289,7 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
   test("foreach with error not caused by ForeachWriter") {
     withTempDir { checkpointDir =>
       val input = MemoryStream[Int]
-      val query = input
-        .toDS()
-        .repartition(1)
-        .map(_ / 0)
-        .writeStream
+      val query = input.toDS().repartition(1).map(_ / 0).writeStream
         .option("checkpointLocation", checkpointDir.getCanonicalPath)
         .foreach(new TestForeachWriter)
         .start()
@@ -319,7 +311,8 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
       checkError(
         exception = errorEvent.error.get.asInstanceOf[SparkException],
         condition = "_LEGACY_ERROR_TEMP_2256",
-        parameters = Map.empty)
+        parameters = Map.empty
+      )
     }
   }
 }

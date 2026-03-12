@@ -36,9 +36,7 @@ class UnwrapCastInComparisonEndToEndSuite extends QueryTest with SharedSparkSess
         (3, Short.MinValue, Float.PositiveInfinity),
         (4, 0.toShort, Float.MaxValue),
         (5, null, null))
-        .toDF("c1", "c2", "c3")
-        .write
-        .saveAsTable(t)
+        .toDF("c1", "c2", "c3").write.saveAsTable(t)
       val df = spark.table(t)
 
       val lit = Short.MaxValue.toInt
@@ -47,20 +45,15 @@ class UnwrapCastInComparisonEndToEndSuite extends QueryTest with SharedSparkSess
       checkAnswer(df.where(s"c2 == $lit").select("c1"), Row(2))
       checkAnswer(df.where(s"c2 <=> $lit").select("c1"), Row(2))
       checkAnswer(df.where(s"c2 != $lit").select("c1"), Row(1) :: Row(3) :: Row(4) :: Nil)
-      checkAnswer(
-        df.where(s"c2 <= $lit").select("c1"),
-        Row(1) :: Row(2) :: Row(3) :: Row(4) :: Nil)
+      checkAnswer(df.where(s"c2 <= $lit").select("c1"), Row(1) :: Row(2) :: Row(3) :: Row(4) :: Nil)
       checkAnswer(df.where(s"c2 < $lit").select("c1"), Row(1) :: Row(3) :: Row(4) :: Nil)
 
       checkAnswer(df.where(s"c3 > double('nan')").select("c1"), Seq.empty)
       checkAnswer(df.where(s"c3 >= double('nan')").select("c1"), Row(2))
       checkAnswer(df.where(s"c3 == double('nan')").select("c1"), Row(2))
       checkAnswer(df.where(s"c3 <=> double('nan')").select("c1"), Row(2))
-      checkAnswer(
-        df.where(s"c3 != double('nan')").select("c1"),
-        Row(1) :: Row(3) :: Row(4) :: Nil)
-      checkAnswer(
-        df.where(s"c3 <= double('nan')").select("c1"),
+      checkAnswer(df.where(s"c3 != double('nan')").select("c1"), Row(1) :: Row(3) :: Row(4) :: Nil)
+      checkAnswer(df.where(s"c3 <= double('nan')").select("c1"),
         Row(1) :: Row(2) :: Row(3) :: Row(4) :: Nil)
       checkAnswer(df.where(s"c3 < double('nan')").select("c1"), Row(1) :: Row(3) :: Row(4) :: Nil)
     }
@@ -68,10 +61,11 @@ class UnwrapCastInComparisonEndToEndSuite extends QueryTest with SharedSparkSess
 
   test("cases when literal is > max") {
     withTable(t) {
-      Seq[(Integer, java.lang.Short)]((1, 100.toShort), (2, Short.MaxValue), (3, null))
-        .toDF("c1", "c2")
-        .write
-        .saveAsTable(t)
+      Seq[(Integer, java.lang.Short)](
+        (1, 100.toShort),
+        (2, Short.MaxValue),
+        (3, null))
+        .toDF("c1", "c2").write.saveAsTable(t)
       val df = spark.table(t)
       val lit = positiveInt
       checkAnswer(df.where(s"c2 > $lit").select("c1"), Seq.empty)
@@ -93,9 +87,7 @@ class UnwrapCastInComparisonEndToEndSuite extends QueryTest with SharedSparkSess
         (2, Short.MinValue, Float.NegativeInfinity),
         (3, Short.MaxValue, Float.MinValue),
         (4, null, null))
-        .toDF("c1", "c2", "c3")
-        .write
-        .saveAsTable(t)
+        .toDF("c1", "c2", "c3").write.saveAsTable(t)
       val df = spark.table(t)
 
       val lit = Short.MinValue.toInt
@@ -108,9 +100,7 @@ class UnwrapCastInComparisonEndToEndSuite extends QueryTest with SharedSparkSess
       checkAnswer(df.where(s"c2 < $lit").select("c1"), Seq.empty)
 
       checkAnswer(df.where(s"c3 > double('-inf')").select("c1"), Row(1) :: Row(3) :: Nil)
-      checkAnswer(
-        df.where(s"c3 >= double('-inf')").select("c1"),
-        Row(1) :: Row(2) :: Row(3) :: Nil)
+      checkAnswer(df.where(s"c3 >= double('-inf')").select("c1"), Row(1) :: Row(2) :: Row(3) :: Nil)
       checkAnswer(df.where(s"c3 == double('-inf')").select("c1"), Row(2))
       checkAnswer(df.where(s"c3 <=> double('-inf')").select("c1"), Row(2))
       checkAnswer(df.where(s"c3 != double('-inf')").select("c1"), Row(1) :: Row(3) :: Nil)
@@ -122,10 +112,11 @@ class UnwrapCastInComparisonEndToEndSuite extends QueryTest with SharedSparkSess
   test("cases when literal is < min") {
     val t = "test_table"
     withTable(t) {
-      Seq[(Integer, java.lang.Short)]((1, 100.toShort), (2, Short.MinValue), (3, null))
-        .toDF("c1", "c2")
-        .write
-        .saveAsTable(t)
+      Seq[(Integer, java.lang.Short)](
+        (1, 100.toShort),
+        (2, Short.MinValue),
+        (3, null))
+        .toDF("c1", "c2").write.saveAsTable(t)
       val df = spark.table(t)
 
       val lit = negativeInt
@@ -174,9 +165,7 @@ class UnwrapCastInComparisonEndToEndSuite extends QueryTest with SharedSparkSess
   test("cases when literal is within range (min, max) and has rounding up or down") {
     withTable(t) {
       Seq((1, 100, 3.14.toFloat, decimal(200.12)))
-        .toDF("c1", "c2", "c3", "c4")
-        .write
-        .saveAsTable(t)
+        .toDF("c1", "c2", "c3", "c4").write.saveAsTable(t)
       val df = spark.table(t)
 
       checkAnswer(df.where("c2 > 99.6").select("c1"), Row(1))
@@ -225,9 +214,7 @@ class UnwrapCastInComparisonEndToEndSuite extends QueryTest with SharedSparkSess
   test("SPARK-39476: Should not unwrap cast from Long to Double/Float") {
     withTable(t) {
       Seq((6470759586864300301L))
-        .toDF("c1")
-        .write
-        .saveAsTable(t)
+        .toDF("c1").write.saveAsTable(t)
       val df = spark.table(t)
 
       checkAnswer(
@@ -245,9 +232,7 @@ class UnwrapCastInComparisonEndToEndSuite extends QueryTest with SharedSparkSess
   test("SPARK-39476: Should not unwrap cast from Integer to Float") {
     withTable(t) {
       Seq((33554435))
-        .toDF("c1")
-        .write
-        .saveAsTable(t)
+        .toDF("c1").write.saveAsTable(t)
       val df = spark.table(t)
 
       checkAnswer(
@@ -266,15 +251,16 @@ class UnwrapCastInComparisonEndToEndSuite extends QueryTest with SharedSparkSess
       Seq(ts1, ts2, ts3).toDF("ts").write.saveAsTable(t)
       val df = spark.table(t)
 
-      checkAnswer(df.where("cast(ts as date) > date'2023-01-01'"), Seq(ts3).map(Row(_)))
       checkAnswer(
-        df.where("cast(ts as date) >= date'2023-01-01'"),
-        Seq(ts1, ts2, ts3).map(Row(_)))
-      checkAnswer(df.where("cast(ts as date) < date'2023-01-02'"), Seq(ts1, ts2).map(Row(_)))
+        df.where("cast(ts as date) > date'2023-01-01'"), Seq(ts3).map(Row(_)))
       checkAnswer(
-        df.where("cast(ts as date) <= date'2023-01-02'"),
-        Seq(ts1, ts2, ts3).map(Row(_)))
-      checkAnswer(df.where("cast(ts as date) = date'2023-01-01'"), Seq(ts1, ts2).map(Row(_)))
+        df.where("cast(ts as date) >= date'2023-01-01'"), Seq(ts1, ts2, ts3).map(Row(_)))
+      checkAnswer(
+        df.where("cast(ts as date) < date'2023-01-02'"), Seq(ts1, ts2).map(Row(_)))
+      checkAnswer(
+        df.where("cast(ts as date) <= date'2023-01-02'"), Seq(ts1, ts2, ts3).map(Row(_)))
+      checkAnswer(
+        df.where("cast(ts as date) = date'2023-01-01'"), Seq(ts1, ts2).map(Row(_)))
     }
   }
 

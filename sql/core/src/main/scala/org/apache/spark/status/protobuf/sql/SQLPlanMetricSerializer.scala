@@ -36,6 +36,7 @@ private[protobuf] object SQLPlanMetricSerializer {
     SQLPlanMetric(
       name = getStringField(metrics.hasName, () => weakIntern(metrics.getName)),
       accumulatorId = metrics.getAccumulatorId,
-      metricType = getStringField(metrics.hasMetricType, () => weakIntern(metrics.getMetricType)))
+      metricType = getStringField(metrics.hasMetricType, () => weakIntern(metrics.getMetricType))
+    )
   }
 }

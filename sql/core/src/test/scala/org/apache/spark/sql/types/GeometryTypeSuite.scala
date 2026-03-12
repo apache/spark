@@ -38,7 +38,8 @@ class GeometryTypeSuite extends SparkFunSuite {
         },
         condition = "ST_INVALID_SRID_VALUE",
         sqlState = "22023",
-        parameters = Map("srid" -> srid.toString))
+        parameters = Map("srid" -> srid.toString)
+      )
     }
   }
 
@@ -125,7 +126,10 @@ class GeometryTypeSuite extends SparkFunSuite {
   // These tests verify the JSON parsing of different GEOMETRY types.
 
   test("GEOMETRY data type JSON parsing with valid CRS") {
-    val validGeometries = Seq("\"geometry\"", "\"geometry(OGC:CRS84)\"")
+    val validGeometries = Seq(
+      "\"geometry\"",
+      "\"geometry(OGC:CRS84)\""
+    )
     validGeometries.foreach { geom =>
       DataType.fromJson(geom).isInstanceOf[GeometryType]
     }
@@ -144,20 +148,30 @@ class GeometryTypeSuite extends SparkFunSuite {
       "\"geometry(EPSG:123)\"",
       "\"geometry(ESRI:123)\"",
       "\"geometry(OCG:123)\"",
-      "\"geometry(OCG:CRS123)\"")
+      "\"geometry(OCG:CRS123)\""
+    )
     invalidGeometries.foreach { geom =>
       val exception = intercept[SparkIllegalArgumentException] {
         DataType.fromJson(geom)
       }
       assert(
-        Seq("INVALID_JSON_DATA_TYPE", "ST_INVALID_CRS_VALUE").contains(exception.getCondition))
+        Seq(
+          "INVALID_JSON_DATA_TYPE",
+          "ST_INVALID_CRS_VALUE"
+        ).contains(exception.getCondition)
+      )
     }
   }
 
   // These tests verify the SQL parsing of different GEOMETRY types.
 
   test("GEOMETRY data type SQL parsing with valid SRID") {
-    val validGeometries = Seq("GEOMETRY(ANY)", "GEOMETRY(0)", "GEOMETRY(3857)", "GEOMETRY(4326)")
+    val validGeometries = Seq(
+      "GEOMETRY(ANY)",
+      "GEOMETRY(0)",
+      "GEOMETRY(3857)",
+      "GEOMETRY(4326)"
+    )
     validGeometries.foreach { geom =>
       val dt = DataType.fromDDL(geom)
       assert(dt.isInstanceOf[GeometryType])
@@ -171,7 +185,8 @@ class GeometryTypeSuite extends SparkFunSuite {
       "GEOMETRY(-4326)",
       "GEOMETRY(99999)",
       "GEOMETRY(SRID)",
-      "GEOMETRY(MIXED)")
+      "GEOMETRY(MIXED)"
+    )
     invalidGeometries.foreach { geom =>
       val exception = intercept[Exception] {
         DataType.fromDDL(geom)
@@ -188,8 +203,12 @@ class GeometryTypeSuite extends SparkFunSuite {
   }
 
   test("PhysicalDataType maps GeometryType to PhysicalGeometryType") {
-    val geometryTypes: Seq[DataType] =
-      Seq(GeometryType(0), GeometryType(3857), GeometryType(4326), GeometryType("ANY"))
+    val geometryTypes: Seq[DataType] = Seq(
+      GeometryType(0),
+      GeometryType(3857),
+      GeometryType(4326),
+      GeometryType("ANY")
+    )
     geometryTypes.foreach { geometryType =>
       val pdt = PhysicalDataType(geometryType)
       assert(pdt.isInstanceOf[PhysicalGeometryType])

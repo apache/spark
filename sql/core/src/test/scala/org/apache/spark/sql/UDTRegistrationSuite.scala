@@ -20,13 +20,17 @@ package org.apache.spark.sql
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.types._
 
-private[sql] class TestUserClass {}
+private[sql] class TestUserClass {
+}
 
-private[sql] class TestUserClass2 {}
+private[sql] class TestUserClass2 {
+}
 
-private[sql] class TestUserClass3 {}
+private[sql] class TestUserClass3 {
+}
 
-private[sql] class NonUserDefinedType {}
+private[sql] class NonUserDefinedType {
+}
 
 private[sql] class TestUserClassUDT extends UserDefinedType[TestUserClass] {
 
@@ -50,8 +54,7 @@ private[sql] class TestUserClassUDT extends UserDefinedType[TestUserClass] {
 class UDTRegistrationSuite extends SparkFunSuite {
 
   test("register non-UserDefinedType") {
-    UDTRegistration.register(
-      classOf[TestUserClass].getName,
+    UDTRegistration.register(classOf[TestUserClass].getName,
       "org.apache.spark.sql.NonUserDefinedType")
     intercept[SparkException] {
       UDTRegistration.getUDTFor(classOf[TestUserClass].getName)
@@ -60,12 +63,12 @@ class UDTRegistrationSuite extends SparkFunSuite {
 
   test("default UDTs") {
     val userClasses = Seq(
-      "org.apache.spark.ml.linalg.Vector",
-      "org.apache.spark.ml.linalg.DenseVector",
-      "org.apache.spark.ml.linalg.SparseVector",
-      "org.apache.spark.ml.linalg.Matrix",
-      "org.apache.spark.ml.linalg.DenseMatrix",
-      "org.apache.spark.ml.linalg.SparseMatrix")
+    "org.apache.spark.ml.linalg.Vector",
+    "org.apache.spark.ml.linalg.DenseVector",
+    "org.apache.spark.ml.linalg.SparseVector",
+    "org.apache.spark.ml.linalg.Matrix",
+    "org.apache.spark.ml.linalg.DenseMatrix",
+    "org.apache.spark.ml.linalg.SparseMatrix")
     userClasses.foreach { c =>
       assert(UDTRegistration.exists(c))
     }
@@ -75,8 +78,8 @@ class UDTRegistrationSuite extends SparkFunSuite {
     UDTRegistration.register(classOf[TestUserClass2].getName, classOf[TestUserClassUDT].getName)
     assert(UDTRegistration.exists(classOf[TestUserClass2].getName))
     assert(
-      classOf[UserDefinedType[_]]
-        .isAssignableFrom((UDTRegistration.getUDTFor(classOf[TestUserClass2].getName).get)))
+      classOf[UserDefinedType[_]].isAssignableFrom((
+        UDTRegistration.getUDTFor(classOf[TestUserClass2].getName).get)))
   }
 
   test("query unregistered user class") {

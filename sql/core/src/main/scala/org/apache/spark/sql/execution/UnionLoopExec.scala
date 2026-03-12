@@ -31,9 +31,10 @@ import org.apache.spark.sql.execution.LogicalRDD.rewriteStatsAndConstraints
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 
+
 /**
- * The physical node for recursion. Currently only UNION ALL case is supported. For the details
- * about the execution, look at the comment above doExecute function.
+ * The physical node for recursion. Currently only UNION ALL case is supported.
+ * For the details about the execution, look at the comment above doExecute function.
  *
  * A simple recursive query:
  * {{{
@@ -62,23 +63,23 @@ import org.apache.spark.sql.internal.SQLConf
  *     +- CTERelationRef 0, true, [n#3], false, false
  * }}}
  *
- * @param loopId
- *   This is id of the CTERelationDef containing the recursive query. Its value is first passed
- *   down to UnionLoop when creating it, and then to UnionLoopExec in SparkStrategies.
- * @param anchor
- *   The logical plan of the initial element of the loop.
- * @param recursion
- *   The logical plan that describes the recursion with an [[UnionLoopRef]] node. CTERelationRef,
- *   which is marked as recursive, gets substituted with [[UnionLoopRef]] in ResolveWithCTE. Both
- *   anchor and recursion are marked with @transient annotation, so that they are not serialized.
- * @param output
- *   The output attributes of this loop.
- * @param limit
- *   If defined, the total number of rows output by this operator will be bounded by limit. Its
- *   value is pushed down to UnionLoop in Optimizer in case LocalLimit node is present in the
- *   logical plan and then transferred to UnionLoopExec in SparkStrategies. Note here: limit can
- *   be applied in the main query calling the recursive CTE, and not inside the recursive term of
- *   recursive CTE.
+ * @param loopId This is id of the CTERelationDef containing the recursive query. Its value is
+ *               first passed down to UnionLoop when creating it, and then to UnionLoopExec in
+ *               SparkStrategies.
+ * @param anchor The logical plan of the initial element of the loop.
+ * @param recursion The logical plan that describes the recursion with an [[UnionLoopRef]] node.
+ *                  CTERelationRef, which is marked as recursive, gets substituted with
+ *                  [[UnionLoopRef]] in ResolveWithCTE.
+ *                  Both anchor and recursion are marked with @transient annotation, so that they
+ *                  are not serialized.
+ * @param output The output attributes of this loop.
+ * @param limit If defined, the total number of rows output by this operator will be bounded by
+ *              limit.
+ *              Its value is pushed down to UnionLoop in Optimizer in case LocalLimit node is
+ *              present in the logical plan and then transferred to UnionLoopExec in
+ *              SparkStrategies.
+ *              Note here: limit can be applied in the main query calling the recursive CTE, and not
+ *              inside the recursive term of recursive CTE.
  */
 case class UnionLoopExec(
     loopId: Long,
@@ -86,17 +87,14 @@ case class UnionLoopExec(
     @transient recursion: LogicalPlan,
     override val output: Seq[Attribute],
     limit: Option[Int] = None,
-    maxDepth: Option[Int] = None)
-    extends LeafExecNode {
+    maxDepth: Option[Int] = None) extends LeafExecNode {
 
   override def innerChildren: Seq[QueryPlan[_]] = Seq(anchor, recursion)
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "numIterations" -> SQLMetrics.createMetric(sparkContext, "number of recursive iterations"),
-    "numAnchorOutputRows" -> SQLMetrics.createMetric(
-      sparkContext,
-      "number of anchor output rows"))
+    "numAnchorOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of anchor output rows"))
 
   private val localRelationLimit =
     conf.getConf(SQLConf.CTE_RECURSION_ANCHOR_ROWS_LIMIT_TO_CONVERT_TO_LOCAL_RELATION)
@@ -122,8 +120,8 @@ case class UnionLoopExec(
         if (localRelationLimit != 0 && !projectList.exists(hasUnevaluableExpr)) {
           val projection = new InterpretedMutableProjection(projectList, Nil)
           projection.initialize(0)
-          val local =
-            LocalRelation(projectList.map(_.toAttribute), Seq(projection(InternalRow.empty)))
+          val local = LocalRelation(projectList.map(_.toAttribute),
+            Seq(projection(InternalRow.empty)))
           (Dataset.ofRows(session, local), 1.toLong)
         } else {
           (df, 1.toLong)
@@ -137,9 +135,9 @@ case class UnionLoopExec(
         // reference any external tables, we are able to calculate everything in the optimizer,
         // using the ConvertToLocalRelation rule, which significantly improves runtime.
         if (count <= localRelationLimit) {
-          val local =
-            LocalRelation.fromExternalRows(df.logicalPlan.output, df.collect().toIndexedSeq)
-          (Dataset.ofRows(session, local), count)
+          val local = LocalRelation.fromExternalRows(df.logicalPlan.output,
+            df.collect().toIndexedSeq)
+         (Dataset.ofRows(session, local), count)
         } else {
           (materializedDF, count)
         }
@@ -147,11 +145,12 @@ case class UnionLoopExec(
   }
 
   /**
-   * In the first iteration, anchor term is executed. Then, in each following iteration, the
-   * UnionLoopRef node is substituted with the plan from the previous iteration, and such plan is
-   * executed. After every iteration, the dataframe is materialized. The recursion stops when the
-   * generated dataframe is empty, or either the limit or the specified maximum depth from the
-   * config is reached.
+   * In the first iteration, anchor term is executed.
+   * Then, in each following iteration, the UnionLoopRef node is substituted with the plan from the
+   * previous iteration, and such plan is executed.
+   * After every iteration, the dataframe is materialized.
+   * The recursion stops when the generated dataframe is empty, or either the limit or
+   * the specified maximum depth from the config is reached.
    */
   override protected def doExecute(): RDD[InternalRow] = {
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
@@ -197,8 +196,9 @@ case class UnionLoopExec(
       val recursionReseeded = if (currentLevel == 1 || recursion.deterministic) {
         recursion
       } else {
-        recursion.transformAllExpressionsWithSubqueries { case e: ExpressionWithRandomSeed =>
-          e.withShiftedSeed(currentLevel - 1)
+        recursion.transformAllExpressionsWithSubqueries {
+          case e: ExpressionWithRandomSeed =>
+            e.withShiftedSeed(currentLevel - 1)
         }
       }
 
@@ -218,18 +218,17 @@ case class UnionLoopExec(
             // optimize the case when the flag is set to 0.
             case p @ Project(projectList, _: OneRowRelation) if p.subqueries.isEmpty =>
               prevPlan = p
-              val prevPlanToRefMapping = projectList.zip(r.output).map { case (fa: Alias, ta) =>
-                fa.withExprId(ta.exprId).withName(ta.name)
+              val prevPlanToRefMapping = projectList.zip(r.output).map {
+                case (fa: Alias, ta) => fa.withExprId(ta.exprId).withName(ta.name)
               }
               p.copy(projectList = prevPlanToRefMapping)
             case _ =>
-              val logicalRDD = LogicalRDD
-                .fromDataset(prevDF.queryExecution.toRdd, prevDF, prevDF.isStreaming)
-                .newInstance()
+              val logicalRDD = LogicalRDD.fromDataset(prevDF.queryExecution.toRdd, prevDF,
+                  prevDF.isStreaming).newInstance()
               prevPlan = logicalRDD
               val optimizedPlan = prevDF.queryExecution.optimizedPlan
-              val (stats, constraints) =
-                rewriteStatsAndConstraints(r, optimizedPlan, sameOutput = false)
+              val (stats, constraints) = rewriteStatsAndConstraints(r, optimizedPlan,
+                sameOutput = false)
               logicalRDD.copy(output = r.output)(prevDF.sparkSession, stats, constraints)
           }
       }
@@ -289,9 +288,7 @@ case class UnionLoopExec(
   }
 
   override def doCanonicalize(): SparkPlan =
-    super
-      .doCanonicalize()
-      .asInstanceOf[UnionLoopExec]
+    super.doCanonicalize().asInstanceOf[UnionLoopExec]
       .copy(anchor = anchor.canonicalized, recursion = recursion.canonicalized)
 
   override def verboseStringWithOperatorId(): String = {

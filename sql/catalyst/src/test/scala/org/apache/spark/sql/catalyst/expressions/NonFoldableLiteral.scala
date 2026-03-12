@@ -21,9 +21,10 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
 
+
 /**
- * A literal value that is not foldable. Used in expression codegen testing to test code path that
- * behave differently based on foldable values.
+ * A literal value that is not foldable. Used in expression codegen testing to test code path
+ * that behave differently based on foldable values.
  */
 case class NonFoldableLiteral(value: Any, dataType: DataType) extends LeafExpression {
 
@@ -38,6 +39,7 @@ case class NonFoldableLiteral(value: Any, dataType: DataType) extends LeafExpres
     Literal.create(value, dataType).doGenCode(ctx, ev)
   }
 }
+
 
 object NonFoldableLiteral {
   def apply(value: Any): NonFoldableLiteral = {

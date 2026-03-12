@@ -26,10 +26,13 @@ import org.apache.spark.sql.internal.SQLConf
  * output statistics, which can avoid data skew that hurt performance.
  *
  * We use ADVISORY_PARTITION_SIZE_IN_BYTES size to decide if a partition should be optimized.
- * Let's say we have 3 maps with 3 shuffle partitions, and assuming r1 has data skew issue. the
- * map side looks like: m0:[b0, b1, b2], m1:[b0, b1, b2], m2:[b0, b1, b2] and the reduce side
- * looks like: (without this rule) r1[m0-b1, m1-b1, m2-b1] / \ r0:[m0-b0, m1-b0, m2-b0],
- * r1-0:[m0-b1], r1-1:[m1-b1], r1-2:[m2-b1], r2[m0-b2, m1-b2, m2-b2]
+ * Let's say we have 3 maps with 3 shuffle partitions, and assuming r1 has data skew issue.
+ * the map side looks like:
+ *   m0:[b0, b1, b2], m1:[b0, b1, b2], m2:[b0, b1, b2]
+ * and the reduce side looks like:
+ *                            (without this rule) r1[m0-b1, m1-b1, m2-b1]
+ *                              /                                     \
+ *   r0:[m0-b0, m1-b0, m2-b0], r1-0:[m0-b1], r1-1:[m1-b1], r1-2:[m2-b1], r2[m0-b2, m1-b2, m2-b2]
  */
 object OptimizeSkewInRebalancePartitions extends AQEShuffleReadRule {
 
@@ -37,9 +40,9 @@ object OptimizeSkewInRebalancePartitions extends AQEShuffleReadRule {
     Seq(REBALANCE_PARTITIONS_BY_NONE, REBALANCE_PARTITIONS_BY_COL)
 
   /**
-   * Splits the skewed partition based on the map size and the target partition size after split.
-   * Create a list of `PartialReducerPartitionSpec` for skewed partition and create
-   * `CoalescedPartition` for normal partition.
+   * Splits the skewed partition based on the map size and the target partition size
+   * after split. Create a list of `PartialReducerPartitionSpec` for skewed partition and
+   * create `CoalescedPartition` for normal partition.
    */
   private def optimizeSkewedPartitions(
       shuffleId: Int,
@@ -51,16 +54,12 @@ object OptimizeSkewInRebalancePartitions extends AQEShuffleReadRule {
       val bytes = bytesByPartitionId(reduceIndex)
       if (bytes > targetSize) {
         val newPartitionSpec = ShufflePartitionsUtil.createSkewPartitionSpecs(
-          shuffleId,
-          reduceIndex,
-          targetSize,
-          smallPartitionFactor)
+          shuffleId, reduceIndex, targetSize, smallPartitionFactor)
         if (newPartitionSpec.isEmpty) {
           CoalescedPartitionSpec(reduceIndex, reduceIndex + 1, bytes) :: Nil
         } else {
-          logDebug(
-            s"For shuffle $shuffleId, partition $reduceIndex is skew, " +
-              s"split it into ${newPartitionSpec.get.size} parts.")
+          logDebug(s"For shuffle $shuffleId, partition $reduceIndex is skew, " +
+            s"split it into ${newPartitionSpec.get.size} parts.")
           newPartitionSpec.get
         }
       } else {
@@ -79,9 +78,7 @@ object OptimizeSkewInRebalancePartitions extends AQEShuffleReadRule {
     }
 
     val newPartitionsSpec = optimizeSkewedPartitions(
-      mapStats.get.shuffleId,
-      mapStats.get.bytesByPartitionId,
-      advisorySize)
+      mapStats.get.shuffleId, mapStats.get.bytesByPartitionId, advisorySize)
     // return origin plan if we can not optimize partitions
     if (newPartitionsSpec.length == mapStats.get.bytesByPartitionId.length) {
       shuffle

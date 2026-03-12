@@ -34,18 +34,17 @@ class TableLocationSuite extends QueryTest with SharedSparkSession {
           // table creation in catalog. Otherwise, the data could be polluted accidentally.
           sql("CREATE TABLE ctas2 USING parquet LOCATION 'ctas1' AS SELECT 1 AS ID")
         }.getMessage
-        assert(
-          m.contains("CREATE-TABLE-AS-SELECT cannot create table with location to a " +
-            "non-empty directory"))
+        assert(m.contains("CREATE-TABLE-AS-SELECT cannot create table with location to a " +
+          "non-empty directory"))
       }
     }
   }
 
+
   test("SPARK-44185: relative LOCATION with Append SaveMode shall check the qualified path") {
     withTable("ctas1", "ctas2") {
       sql("CREATE TABLE ctas1 USING parquet AS SELECT 1L AS ID")
-      spark
-        .range(10)
+      spark.range(10)
         .write
         .mode("append")
         .option("path", "ctas1")
@@ -55,9 +54,8 @@ class TableLocationSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test(
-    "SPARK-44185: relative LOCATION in CREATE TABLE shall lookup the path qualified with" +
-      " warehouse for consistency") {
+  test("SPARK-44185: relative LOCATION in CREATE TABLE shall lookup the path qualified with" +
+    " warehouse for consistency") {
     withTable("ct2", "ct1") {
       try {
         sql("CREATE TABLE ct1 USING parquet SELECT 1 AS ID")

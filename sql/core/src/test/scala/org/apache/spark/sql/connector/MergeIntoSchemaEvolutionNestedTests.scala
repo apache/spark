@@ -21,5 +21,5 @@ package org.apache.spark.sql.connector
  * Composite trait that includes all nested struct/array schema evolution tests.
  */
 trait MergeIntoSchemaEvolutionNestedTests
-    extends MergeIntoSchemaEvolutionTypeWideningAndExtraFieldTests
-    with MergeIntoSchemaEvolutionMissingFieldAndNullStructTests
+  extends MergeIntoSchemaEvolutionTypeWideningAndExtraFieldTests
+  with MergeIntoSchemaEvolutionMissingFieldAndNullStructTests

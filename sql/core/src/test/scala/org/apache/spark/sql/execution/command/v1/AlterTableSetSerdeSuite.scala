@@ -25,8 +25,8 @@ import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 
 /**
  * This base suite contains unified tests for the `ALTER TABLE .. SET [SERDE|SERDEPROPERTIES]`
- * command that check V1 table catalogs. The tests that cannot run for all V1 catalogs are located
- * in more specific test suites:
+ * command that check V1 table catalogs. The tests that cannot run for all V1 catalogs
+ * are located in more specific test suites:
  *
  *   - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.AlterTableSetSerdeSuite`
  *   - V1 Hive External catalog:
@@ -44,9 +44,8 @@ trait AlterTableSetSerdeSuiteBase extends command.AlterTableSetSerdeSuiteBase {
     props.filterNot(p => Seq("serialization.format", "path").contains(p._1))
   }
 
-  private[sql] def checkSerdeProps(
-      tableIdent: TableIdentifier,
-      expectedSerdeProps: Map[String, String]): Unit = {
+  private[sql] def checkSerdeProps(tableIdent: TableIdentifier,
+    expectedSerdeProps: Map[String, String]): Unit = {
     val serdeProp = sessionCatalog.getTableMetadata(tableIdent).storage.properties
     if (isUsingHiveMetastore) {
       assert(normalizeSerdeProp(serdeProp) == expectedSerdeProps)
@@ -56,9 +55,9 @@ trait AlterTableSetSerdeSuiteBase extends command.AlterTableSetSerdeSuiteBase {
   }
 
   private[sql] def checkPartitionSerdeProps(
-      tableIdent: TableIdentifier,
-      spec: Map[String, String],
-      expectedSerdeProps: Map[String, String]): Unit = {
+    tableIdent: TableIdentifier,
+    spec: Map[String, String],
+    expectedSerdeProps: Map[String, String]): Unit = {
     val serdeProp = sessionCatalog.getPartition(tableIdent, spec).storage.properties
     if (isUsingHiveMetastore) {
       assert(normalizeSerdeProp(serdeProp) == expectedSerdeProps)
@@ -76,9 +75,8 @@ class AlterTableSetSerdeSuite extends AlterTableSetSerdeSuiteBase with CommandSu
 
   test("In-Memory catalog - datasource table: alter table set serde") {
     withNamespaceAndTable("ns", "tbl") { t =>
-      sql(
-        s"CREATE TABLE $t (col1 int, col2 string, a int, b int) $defaultUsing " +
-          s"PARTITIONED BY (a, b)")
+      sql(s"CREATE TABLE $t (col1 int, col2 string, a int, b int) $defaultUsing " +
+        s"PARTITIONED BY (a, b)")
 
       val tableIdent = TableIdentifier("tbl", Some("ns"))
       assert(sessionCatalog.getTableMetadata(tableIdent).storage.serde.isEmpty)
@@ -93,9 +91,8 @@ class AlterTableSetSerdeSuite extends AlterTableSetSerdeSuiteBase with CommandSu
         parameters = Map("tableName" -> toSQLId(t)))
       checkError(
         exception = intercept[AnalysisException] {
-          sql(
-            s"ALTER TABLE $t SET SERDE 'org.apache.madoop' " +
-              "WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')")
+          sql(s"ALTER TABLE $t SET SERDE 'org.apache.madoop' " +
+            "WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')")
         },
         condition = "UNSUPPORTED_FEATURE.ALTER_TABLE_SERDE_FOR_DATASOURCE_TABLE",
         parameters = Map("tableName" -> toSQLId(t)))
@@ -113,18 +110,15 @@ class AlterTableSetSerdeSuite extends AlterTableSetSerdeSuiteBase with CommandSu
       val e3 = intercept[AnalysisException] {
         sql("ALTER TABLE does_not_exist SET SERDEPROPERTIES ('x' = 'y')")
       }
-      checkErrorTableNotFound(
-        e3,
-        "`does_not_exist`",
+      checkErrorTableNotFound(e3, "`does_not_exist`",
         ExpectedContext("does_not_exist", 12, 11 + "does_not_exist".length))
     }
   }
 
   test("In-Memory catalog - datasource table: alter table set serde partition") {
     withNamespaceAndTable("ns", "tbl") { t =>
-      sql(
-        s"CREATE TABLE $t (col1 int, col2 string, a int, b int) $defaultUsing " +
-          s"PARTITIONED BY (a, b)")
+      sql(s"CREATE TABLE $t (col1 int, col2 string, a int, b int) $defaultUsing " +
+        s"PARTITIONED BY (a, b)")
       sql(s"INSERT INTO $t PARTITION (a = '1', b = '2') SELECT 1, 'abc'")
       sql(s"INSERT INTO $t PARTITION (a = '1', b = '3') SELECT 2, 'def'")
       sql(s"INSERT INTO $t PARTITION (a = '2', b = '2') SELECT 3, 'ghi'")
@@ -144,9 +138,8 @@ class AlterTableSetSerdeSuite extends AlterTableSetSerdeSuiteBase with CommandSu
         parameters = Map.empty)
       checkError(
         exception = intercept[AnalysisException] {
-          sql(
-            s"ALTER TABLE $t PARTITION (a=1, b=2) SET SERDE 'org.apache.madoop' " +
-              "WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')")
+          sql(s"ALTER TABLE $t PARTITION (a=1, b=2) SET SERDE 'org.apache.madoop' " +
+            "WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')")
         },
         condition = "_LEGACY_ERROR_TEMP_1247",
         parameters = Map.empty)
@@ -154,9 +147,8 @@ class AlterTableSetSerdeSuite extends AlterTableSetSerdeSuiteBase with CommandSu
       // set serde properties only
       checkError(
         exception = intercept[AnalysisException] {
-          sql(
-            s"ALTER TABLE $t PARTITION (a=1, b=2) " +
-              "SET SERDEPROPERTIES ('k' = 'vvv', 'kay' = 'vee')")
+          sql(s"ALTER TABLE $t PARTITION (a=1, b=2) " +
+            "SET SERDEPROPERTIES ('k' = 'vvv', 'kay' = 'vee')")
         },
         condition = "_LEGACY_ERROR_TEMP_1247",
         parameters = Map.empty)
@@ -174,9 +166,7 @@ class AlterTableSetSerdeSuite extends AlterTableSetSerdeSuiteBase with CommandSu
       val e5 = intercept[AnalysisException] {
         sql("ALTER TABLE does_not_exist PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')")
       }
-      checkErrorTableNotFound(
-        e5,
-        "`does_not_exist`",
+      checkErrorTableNotFound(e5, "`does_not_exist`",
         ExpectedContext("does_not_exist", 12, 11 + "does_not_exist".length))
     }
   }

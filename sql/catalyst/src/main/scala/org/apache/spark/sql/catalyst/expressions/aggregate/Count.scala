@@ -46,7 +46,8 @@ import org.apache.spark.sql.types._
   group = "agg_funcs",
   since = "1.0.0")
 // scalastyle:on line.size.limit
-case class Count(children: Seq[Expression]) extends DeclarativeAggregate with QueryErrorsBase {
+case class Count(children: Seq[Expression]) extends DeclarativeAggregate
+  with QueryErrorsBase {
 
   override def nullable: Boolean = false
 
@@ -73,9 +74,13 @@ case class Count(children: Seq[Expression]) extends DeclarativeAggregate with Qu
 
   override lazy val aggBufferAttributes = count :: Nil
 
-  override lazy val initialValues = Seq( /* count = */ Literal(0L))
+  override lazy val initialValues = Seq(
+    /* count = */ Literal(0L)
+  )
 
-  override lazy val mergeExpressions = Seq( /* count = */ count.left + count.right)
+  override lazy val mergeExpressions = Seq(
+    /* count = */ count.left + count.right
+  )
 
   override lazy val evaluateExpression = count
 
@@ -84,9 +89,13 @@ case class Count(children: Seq[Expression]) extends DeclarativeAggregate with Qu
   override lazy val updateExpressions = {
     val nullableChildren = children.filter(_.nullable)
     if (nullableChildren.isEmpty) {
-      Seq( /* count = */ count + 1L)
+      Seq(
+        /* count = */ count + 1L
+      )
     } else {
-      Seq( /* count = */ If(nullableChildren.map(IsNull).reduce(Or), count, count + 1L))
+      Seq(
+        /* count = */ If(nullableChildren.map(IsNull).reduce(Or), count, count + 1L)
+      )
     }
   }
 

@@ -48,7 +48,8 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
       t: String,
       ifExists: String,
       specs: Map[String, Any]*): Unit = {
-    checkPartitions(t, specs.map(_.map { case (k, v) => (k, v.toString) }.toMap): _*)
+    checkPartitions(t,
+      specs.map(_.map { case (k, v) => (k, v.toString) }.toMap): _*)
     val specStr = specs.map(partSpecToString).mkString(", ")
     sql(s"ALTER TABLE $t DROP $ifExists $specStr")
     checkPartitions(t)
@@ -89,14 +90,13 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
 
   test("table to alter does not exist") {
     withNamespaceAndTable("ns", "does_not_exist") { t =>
-      val parsed = CatalystSqlParser
-        .parseMultipartIdentifier(t)
-        .map(part => quoteIdentifier(part))
-        .mkString(".")
+      val parsed = CatalystSqlParser.parseMultipartIdentifier(t)
+        .map(part => quoteIdentifier(part)).mkString(".")
       val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $t DROP PARTITION (a='4', b='9')")
       }
-      checkErrorTableNotFound(e, parsed, ExpectedContext(t, 12, 11 + t.length))
+      checkErrorTableNotFound(e, parsed,
+        ExpectedContext(t, 12, 11 + t.length))
     }
   }
 
@@ -114,7 +114,10 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
             sql(s"ALTER TABLE $t DROP PARTITION (ID=1)")
           },
           condition = "PARTITIONS_NOT_FOUND",
-          parameters = Map("partitionList" -> "`ID`", "tableName" -> expectedTableName))
+          parameters = Map(
+            "partitionList" -> "`ID`",
+            "tableName" -> expectedTableName)
+        )
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
@@ -135,9 +138,8 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
       val errMsg = intercept[AnalysisException] {
         sql(s"ALTER TABLE $t ADD PARTITION (part0 = 1)")
       }.getMessage
-      assert(
-        errMsg.contains("Partition spec is invalid. " +
-          "The spec (part0) must match the partition spec (part0, part1)"))
+      assert(errMsg.contains("Partition spec is invalid. " +
+        "The spec (part0) must match the partition spec (part0, part1)"))
     }
   }
 
@@ -154,11 +156,10 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
       } else {
         "`test_catalog`.`ns`.`tbl`"
       }
-      checkError(
-        e,
+      checkError(e,
         condition = "PARTITIONS_NOT_FOUND",
-        parameters =
-          Map("partitionList" -> "PARTITION (`id` = 2)", "tableName" -> expectedTableName))
+        parameters = Map("partitionList" -> "PARTITION (`id` = 2)",
+        "tableName" -> expectedTableName))
 
       checkPartitions(t, Map("id" -> "1"))
       sql(s"ALTER TABLE $t DROP IF EXISTS PARTITION (id=1), PARTITION (id=2)")

@@ -22,15 +22,19 @@ import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class PlanMergeSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
+class PlanMergeSuite extends QueryTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   setupTestData()
 
   test("Merge non-correlated scalar subqueries") {
     Seq(false, true).foreach { enableAQE =>
-      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
-        val df = sql("""
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
+        val df = sql(
+          """
             |SELECT
             |  (SELECT avg(key) FROM testData),
             |  (SELECT sum(key) FROM testData),
@@ -41,13 +45,12 @@ class PlanMergeSuite extends QueryTest with SharedSparkSession with AdaptiveSpar
 
         val plan = df.queryExecution.executedPlan
         val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
-        val reusedSubqueryIds = collectWithSubqueries(plan) { case rs: ReusedSubqueryExec =>
-          rs.child.id
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
         }
 
         assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
-        assert(
-          reusedSubqueryIds.size == 2,
+        assert(reusedSubqueryIds.size == 2,
           "Missing or unexpected reused ReusedSubqueryExec in the plan")
       }
     }
@@ -55,8 +58,10 @@ class PlanMergeSuite extends QueryTest with SharedSparkSession with AdaptiveSpar
 
   test("Merge non-correlated scalar subqueries in a subquery") {
     Seq(false, true).foreach { enableAQE =>
-      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
-        val df = sql("""
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
+        val df = sql(
+          """
             |SELECT (
             |  SELECT
             |    SUM(
@@ -71,13 +76,12 @@ class PlanMergeSuite extends QueryTest with SharedSparkSession with AdaptiveSpar
 
         val plan = df.queryExecution.executedPlan
         val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
-        val reusedSubqueryIds = collectWithSubqueries(plan) { case rs: ReusedSubqueryExec =>
-          rs.child.id
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
         }
 
         assert(subqueryIds.size == 2, "Missing or unexpected SubqueryExec in the plan")
-        assert(
-          reusedSubqueryIds.size == 5,
+        assert(reusedSubqueryIds.size == 5,
           "Missing or unexpected reused ReusedSubqueryExec in the plan")
       }
     }
@@ -85,8 +89,10 @@ class PlanMergeSuite extends QueryTest with SharedSparkSession with AdaptiveSpar
 
   test("Merge non-correlated scalar subqueries from different levels") {
     Seq(false, true).foreach { enableAQE =>
-      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
-        val df = sql("""
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
+        val df = sql(
+          """
             |SELECT
             |  (SELECT avg(key) FROM testData),
             |  (
@@ -102,13 +108,12 @@ class PlanMergeSuite extends QueryTest with SharedSparkSession with AdaptiveSpar
 
         val plan = df.queryExecution.executedPlan
         val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
-        val reusedSubqueryIds = collectWithSubqueries(plan) { case rs: ReusedSubqueryExec =>
-          rs.child.id
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
         }
 
         assert(subqueryIds.size == 2, "Missing or unexpected SubqueryExec in the plan")
-        assert(
-          reusedSubqueryIds.size == 2,
+        assert(reusedSubqueryIds.size == 2,
           "Missing or unexpected reused ReusedSubqueryExec in the plan")
       }
     }
@@ -116,8 +121,10 @@ class PlanMergeSuite extends QueryTest with SharedSparkSession with AdaptiveSpar
 
   test("Merge non-correlated scalar subqueries from different parent plans") {
     Seq(false, true).foreach { enableAQE =>
-      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
-        val df = sql("""
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
+        val df = sql(
+          """
             |SELECT
             |  (
             |    SELECT
@@ -139,13 +146,12 @@ class PlanMergeSuite extends QueryTest with SharedSparkSession with AdaptiveSpar
 
         val plan = df.queryExecution.executedPlan
         val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
-        val reusedSubqueryIds = collectWithSubqueries(plan) { case rs: ReusedSubqueryExec =>
-          rs.child.id
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
         }
 
         assert(subqueryIds.size == 2, "Missing or unexpected SubqueryExec in the plan")
-        assert(
-          reusedSubqueryIds.size == 4,
+        assert(reusedSubqueryIds.size == 4,
           "Missing or unexpected reused ReusedSubqueryExec in the plan")
       }
     }
@@ -153,8 +159,10 @@ class PlanMergeSuite extends QueryTest with SharedSparkSession with AdaptiveSpar
 
   test("Merge non-correlated scalar subqueries with conflicting names") {
     Seq(false, true).foreach { enableAQE =>
-      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
-        val df = sql("""
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
+        val df = sql(
+          """
             |SELECT
             |  (SELECT avg(key) AS key FROM testData),
             |  (SELECT sum(key) AS key FROM testData),
@@ -165,13 +173,12 @@ class PlanMergeSuite extends QueryTest with SharedSparkSession with AdaptiveSpar
 
         val plan = df.queryExecution.executedPlan
         val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
-        val reusedSubqueryIds = collectWithSubqueries(plan) { case rs: ReusedSubqueryExec =>
-          rs.child.id
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
         }
 
         assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
-        assert(
-          reusedSubqueryIds.size == 2,
+        assert(reusedSubqueryIds.size == 2,
           "Missing or unexpected reused ReusedSubqueryExec in the plan")
       }
     }
@@ -179,8 +186,10 @@ class PlanMergeSuite extends QueryTest with SharedSparkSession with AdaptiveSpar
 
   test("Merge non-grouping aggregates") {
     Seq(false, true).foreach { enableAQE =>
-      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
-        val df = sql("""
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
+        val df = sql(
+          """
             |SELECT *
             |FROM (SELECT avg(key) FROM testData)
             |JOIN (SELECT sum(key) FROM testData)
@@ -191,13 +200,12 @@ class PlanMergeSuite extends QueryTest with SharedSparkSession with AdaptiveSpar
 
         val plan = df.queryExecution.executedPlan
         val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
-        val reusedSubqueryIds = collectWithSubqueries(plan) { case rs: ReusedSubqueryExec =>
-          rs.child.id
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
         }
 
         assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
-        assert(
-          reusedSubqueryIds.size == 2,
+        assert(reusedSubqueryIds.size == 2,
           "Missing or unexpected reused ReusedSubqueryExec in the plan")
       }
     }
@@ -205,8 +213,10 @@ class PlanMergeSuite extends QueryTest with SharedSparkSession with AdaptiveSpar
 
   test("Merge non-grouping aggregates from different levels") {
     Seq(false, true).foreach { enableAQE =>
-      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
-        val df = sql("""
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
+        val df = sql(
+          """
             |SELECT
             |  first(avg_key),
             |  (
@@ -227,13 +237,12 @@ class PlanMergeSuite extends QueryTest with SharedSparkSession with AdaptiveSpar
         val plan = df.queryExecution.executedPlan
 
         val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
-        val reusedSubqueryIds = collectWithSubqueries(plan) { case rs: ReusedSubqueryExec =>
-          rs.child.id
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
         }
 
         assert(subqueryIds.size == 2, "Missing or unexpected SubqueryExec in the plan")
-        assert(
-          reusedSubqueryIds.size == 2,
+        assert(reusedSubqueryIds.size == 2,
           "Missing or unexpected reused ReusedSubqueryExec in the plan")
       }
     }
@@ -241,8 +250,10 @@ class PlanMergeSuite extends QueryTest with SharedSparkSession with AdaptiveSpar
 
   test("Merge non-grouping aggregate and subquery") {
     Seq(false, true).foreach { enableAQE =>
-      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
-        val df = sql("""
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
+        val df = sql(
+          """
             |SELECT
             |  first(avg_key),
             |  (
@@ -260,13 +271,12 @@ class PlanMergeSuite extends QueryTest with SharedSparkSession with AdaptiveSpar
         val plan = df.queryExecution.executedPlan
 
         val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
-        val reusedSubqueryIds = collectWithSubqueries(plan) { case rs: ReusedSubqueryExec =>
-          rs.child.id
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
         }
 
         assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
-        assert(
-          reusedSubqueryIds.size == 2,
+        assert(reusedSubqueryIds.size == 2,
           "Missing or unexpected reused ReusedSubqueryExec in the plan")
       }
     }
@@ -280,8 +290,8 @@ class PlanMergeSuite extends QueryTest with SharedSparkSession with AdaptiveSpar
       sql("create table t1(col int) using csv")
       checkAnswer(sql("select(select sum((select sum(col) from t1)) from t1)"), Row(null))
 
-      checkAnswer(
-        sql("""
+      checkAnswer(sql(
+        """
           |select
           |  (select sum(
           |    (select sum(
@@ -292,8 +302,8 @@ class PlanMergeSuite extends QueryTest with SharedSparkSession with AdaptiveSpar
         Row(null))
 
       sql("create table t2(col int) using csv")
-      checkAnswer(
-        sql("""
+      checkAnswer(sql(
+        """
           |select
           |  (select sum(
           |    (select sum(
@@ -309,8 +319,8 @@ class PlanMergeSuite extends QueryTest with SharedSparkSession with AdaptiveSpar
     withTempView("t1") {
       Seq((1, 2), (3, 4)).toDF("c1", "c2").createOrReplaceTempView("t1")
 
-      checkAnswer(
-        sql("""
+      checkAnswer(sql(
+        """
           |SELECT
           |  (SELECT count(distinct c1) FROM t1),
           |  (SELECT count(distinct c2) FROM t1)
@@ -320,8 +330,8 @@ class PlanMergeSuite extends QueryTest with SharedSparkSession with AdaptiveSpar
       // In this case we don't merge the subqueries as `RewriteDistinctAggregates` kicks off for the
       // 2 subqueries first but `MergeScalarSubqueries` is not prepared for the `Expand` nodes that
       // are inserted by the rewrite.
-      checkAnswer(
-        sql("""
+      checkAnswer(sql(
+        """
           |SELECT
           |  (SELECT count(distinct c1) + sum(distinct c2) FROM t1),
           |  (SELECT count(distinct c2) + sum(distinct c1) FROM t1)

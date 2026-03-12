@@ -25,8 +25,7 @@ import org.apache.spark.sql.types._
 
 class GeneratorExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   private def checkTuple(actual: Expression, expected: Seq[InternalRow]): Unit = {
-    assert(
-      actual.eval(null).asInstanceOf[IterableOnce[InternalRow]].iterator.to(Seq) === expected)
+    assert(actual.eval(null).asInstanceOf[IterableOnce[InternalRow]].iterator.to(Seq) === expected)
   }
 
   private final val empty_array = CreateArray(Seq.empty)
@@ -59,12 +58,11 @@ class GeneratorExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       Seq.empty)
 
     checkTuple(
-      Inline(
-        CreateArray(
-          Seq(
-            CreateStruct(Seq(Literal(0), Literal("a"))),
-            CreateStruct(Seq(Literal(1), Literal("b"))),
-            CreateStruct(Seq(Literal(2), Literal("c")))))),
+      Inline(CreateArray(Seq(
+        CreateStruct(Seq(Literal(0), Literal("a"))),
+        CreateStruct(Seq(Literal(1), Literal("b"))),
+        CreateStruct(Seq(Literal(2), Literal("c")))
+      ))),
       correct_answer)
   }
 
@@ -89,7 +87,8 @@ class GeneratorExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         "functionName" -> "`stack`",
         "expectedNum" -> "> 1",
         "actualNum" -> "1",
-        "docroot" -> SPARK_DOC_ROOT))
+        "docroot" -> SPARK_DOC_ROOT)
+    )
     checkError(
       exception = intercept[AnalysisException] {
         Stack(Seq(Literal(1.0))).checkInputDataTypes()
@@ -99,17 +98,20 @@ class GeneratorExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         "functionName" -> "`stack`",
         "expectedNum" -> "> 1",
         "actualNum" -> "1",
-        "docroot" -> SPARK_DOC_ROOT))
+        "docroot" -> SPARK_DOC_ROOT)
+    )
     assert(Stack(Seq(Literal(1), Literal(1), Literal(1.0))).checkInputDataTypes().isSuccess)
-    assert(
-      Stack(Seq(Literal(2), Literal(1), Literal(1.0))).checkInputDataTypes() ==
-        DataTypeMismatch(
-          errorSubClass = "STACK_COLUMN_DIFF_TYPES",
-          messageParameters = Map(
-            "rightParamIndex" -> "2",
-            "leftType" -> "\"INT\"",
-            "leftParamIndex" -> "1",
-            "columnIndex" -> "0",
-            "rightType" -> "\"DOUBLE\"")))
+    assert(Stack(Seq(Literal(2), Literal(1), Literal(1.0))).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "STACK_COLUMN_DIFF_TYPES",
+        messageParameters = Map(
+          "rightParamIndex" -> "2",
+          "leftType" -> "\"INT\"",
+          "leftParamIndex" -> "1",
+          "columnIndex" -> "0",
+          "rightType" -> "\"DOUBLE\""
+        )
+      )
+    )
   }
 }

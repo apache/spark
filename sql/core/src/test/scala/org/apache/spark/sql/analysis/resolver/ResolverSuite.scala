@@ -19,7 +19,11 @@ package org.apache.spark.sql.analysis.resolver
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.analysis.resolver.{LogicalPlanResolver, Resolver, ResolverExtension}
+import org.apache.spark.sql.catalyst.analysis.resolver.{
+  LogicalPlanResolver,
+  Resolver,
+  ResolverExtension
+}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.NormalizePlan
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Project}
@@ -30,48 +34,84 @@ class ResolverSuite extends QueryTest with SharedSparkSession {
   private val col1Integer = AttributeReference("col1", IntegerType)()
 
   test("Node matched the extension") {
-    val resolver = createResolver(Seq(new NoopResolver, new TestRelationResolver))
+    val resolver = createResolver(
+      Seq(
+        new NoopResolver,
+        new TestRelationResolver
+      )
+    )
 
     val result = resolver.lookupMetadataAndResolve(
       Project(
         Seq(UnresolvedAttribute("col1")),
-        TestRelation(resolutionDone = false, output = Seq(col1Integer))))
+        TestRelation(resolutionDone = false, output = Seq(col1Integer))
+      )
+    )
     assertPlansEqual(
       result,
-      Project(Seq(col1Integer), TestRelation(resolutionDone = true, output = Seq(col1Integer))))
+      Project(
+        Seq(col1Integer),
+        TestRelation(resolutionDone = true, output = Seq(col1Integer))
+      )
+    )
   }
 
   test("Node didn't match the extension") {
-    val resolver = createResolver(Seq(new NoopResolver, new TestRelationResolver))
-
-    checkError(
-      exception = intercept[AnalysisException](
-        resolver.lookupMetadataAndResolve(
-          Project(Seq(UnresolvedAttribute("col1")), UnknownRelation(output = Seq(col1Integer))))),
-      condition = "UNSUPPORTED_SINGLE_PASS_ANALYZER_FEATURE",
-      parameters = Map(
-        "feature" -> ("class " +
-          "org.apache.spark.sql.analysis.resolver.UnknownRelation operator resolution")))
-  }
-
-  test("Ambiguous extensions") {
     val resolver = createResolver(
-      Seq(new NoopResolver, new TestRelationResolver, new TestRelationOtherResolver))
+      Seq(
+        new NoopResolver,
+        new TestRelationResolver
+      )
+    )
 
     checkError(
       exception = intercept[AnalysisException](
         resolver.lookupMetadataAndResolve(
           Project(
             Seq(UnresolvedAttribute("col1")),
-            TestRelation(resolutionDone = false, output = Seq(col1Integer))))),
+            UnknownRelation(output = Seq(col1Integer))
+          )
+        )
+      ),
+      condition = "UNSUPPORTED_SINGLE_PASS_ANALYZER_FEATURE",
+      parameters = Map(
+        "feature" -> ("class " +
+        "org.apache.spark.sql.analysis.resolver.UnknownRelation operator resolution")
+      )
+    )
+  }
+
+  test("Ambiguous extensions") {
+    val resolver = createResolver(
+      Seq(
+        new NoopResolver,
+        new TestRelationResolver,
+        new TestRelationOtherResolver
+      )
+    )
+
+    checkError(
+      exception = intercept[AnalysisException](
+        resolver.lookupMetadataAndResolve(
+          Project(
+            Seq(UnresolvedAttribute("col1")),
+            TestRelation(resolutionDone = false, output = Seq(col1Integer))
+          )
+        )
+      ),
       condition = "AMBIGUOUS_RESOLVER_EXTENSION",
       parameters = Map(
         "operator" -> "org.apache.spark.sql.analysis.resolver.TestRelation",
-        "extensions" -> "TestRelationResolver, TestRelationOtherResolver"))
+        "extensions" -> "TestRelationResolver, TestRelationOtherResolver"
+      )
+    )
   }
 
   private def createResolver(extensions: Seq[ResolverExtension] = Seq.empty): Resolver = {
-    new Resolver(spark.sessionState.catalogManager, spark.sharedState.relationCache, extensions)
+    new Resolver(
+      spark.sessionState.catalogManager,
+      spark.sharedState.relationCache,
+      extensions)
   }
 
   private class TestRelationResolver extends ResolverExtension {

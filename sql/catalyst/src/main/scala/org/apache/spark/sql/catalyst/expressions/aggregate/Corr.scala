@@ -25,16 +25,14 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * Base class for computing Pearson correlation between two expressions. When applied on empty
- * data (i.e., count is zero), it returns NULL.
+ * Base class for computing Pearson correlation between two expressions.
+ * When applied on empty data (i.e., count is zero), it returns NULL.
  *
  * Definition of Pearson correlation can be found at
  * http://en.wikipedia.org/wiki/Pearson_product-moment_correlation_coefficient
  */
 abstract class PearsonCorrelation(x: Expression, y: Expression, nullOnDivideByZero: Boolean)
-    extends DeclarativeAggregate
-    with ImplicitCastInputTypes
-    with BinaryLike[Expression] {
+  extends DeclarativeAggregate with ImplicitCastInputTypes with BinaryLike[Expression] {
 
   override def left: Expression = x
   override def right: Expression = y
@@ -98,14 +96,15 @@ abstract class PearsonCorrelation(x: Expression, y: Expression, nullOnDivideByZe
       If(isNull, yAvg, newYAvg),
       If(isNull, ck, newCk),
       If(isNull, xMk, newXMk),
-      If(isNull, yMk, newYMk))
+      If(isNull, yMk, newYMk)
+    )
   }
 }
 
+
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage =
-    "_FUNC_(expr1, expr2) - Returns Pearson coefficient of correlation between a set of number pairs.",
+  usage = "_FUNC_(expr1, expr2) - Returns Pearson coefficient of correlation between a set of number pairs.",
   examples = """
     Examples:
       > SELECT _FUNC_(c1, c2) FROM VALUES (3, 2), (3, 3), (6, 4) as tab(c1, c2);
@@ -118,22 +117,18 @@ case class Corr(
     x: Expression,
     y: Expression,
     nullOnDivideByZero: Boolean = !SQLConf.get.legacyStatisticalAggregate)
-    extends PearsonCorrelation(x, y, nullOnDivideByZero) {
+  extends PearsonCorrelation(x, y, nullOnDivideByZero) {
 
   def this(x: Expression, y: Expression) =
     this(x, y, !SQLConf.get.legacyStatisticalAggregate)
 
   override val evaluateExpression: Expression = {
-    If(
-      n === 0.0,
-      Literal.create(null, DoubleType),
+    If(n === 0.0, Literal.create(null, DoubleType),
       If(n === 1.0, divideByZeroEvalResult, ck / sqrt(xMk * yMk)))
   }
 
   override def prettyName: String = "corr"
 
-  override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): Corr =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Corr =
     copy(x = newLeft, y = newRight)
 }

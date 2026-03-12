@@ -27,6 +27,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDataSource
 import org.apache.spark.util.Utils
 
+
 /**
  * A manager for user-defined data sources. It is used to register and lookup data sources by
  * their short names or fully qualified names.
@@ -42,26 +43,24 @@ class DataSourceManager extends Logging {
     new ConcurrentHashMap[String, UserDefinedPythonDataSource]()
 
   /**
-   * Register a data source builder for the given provider. Note that the provider name is
-   * case-insensitive.
+   * Register a data source builder for the given provider.
+   * Note that the provider name is case-insensitive.
    */
   def registerDataSource(name: String, source: UserDefinedPythonDataSource): Unit = {
     val normalizedName = normalize(name)
     val previousValue = runtimeDataSourceBuilders.put(normalizedName, source)
     if (previousValue != null) {
-      logWarning(
-        log"The data source ${MDC(DATA_SOURCE, name)} replaced a previously " +
-          log"registered data source.")
+      logWarning(log"The data source ${MDC(DATA_SOURCE, name)} replaced a previously " +
+        log"registered data source.")
     } else if (staticDataSourceBuilders.contains(normalizedName)) {
-      logWarning(
-        log"The data source ${MDC(DATA_SOURCE, name)} replaced a statically " +
-          log"registered data source.")
+      logWarning(log"The data source ${MDC(DATA_SOURCE, name)} replaced a statically " +
+        log"registered data source.")
     }
   }
 
   /**
-   * Returns a data source builder for the given provider and throw an exception if it does not
-   * exist.
+   * Returns a data source builder for the given provider and throw an exception if
+   * it does not exist.
    */
   def lookupDataSource(name: String): UserDefinedPythonDataSource = {
     getDataSource(name).getOrElse {
@@ -90,6 +89,7 @@ class DataSourceManager extends Logging {
   }
 }
 
+
 object DataSourceManager extends Logging {
   // Visible for testing
   private[spark] var dataSourceBuilders: Option[Map[String, UserDefinedPythonDataSource]] = None
@@ -103,35 +103,31 @@ object DataSourceManager extends Logging {
     if (shouldLoadPythonDataSources) this.synchronized {
       logInfo("Loading static Python Data Sources.")
       if (dataSourceBuilders.isEmpty) {
-        val maybeResult =
-          try {
-            Some(UserDefinedPythonDataSource.lookupAllDataSourcesInPython())
-          } catch {
-            case e: Throwable
-                if e.toString.contains("ModuleNotFoundError: No module named 'pyspark'") =>
-              // If PySpark is not in the Python path at all, suppress the warning
-              // To make it less noisy, see also SPARK-47311.
-              None
-            case e: Throwable =>
-              // Even if it fails for whatever reason, we shouldn't make the whole
-              // application fail.
-              logWarning("Skipping the lookup of Python Data Sources due to the failure.", e)
-              None
-          }
+        val maybeResult = try {
+          Some(UserDefinedPythonDataSource.lookupAllDataSourcesInPython())
+        } catch {
+          case e: Throwable if e.toString.contains(
+              "ModuleNotFoundError: No module named 'pyspark'") =>
+            // If PySpark is not in the Python path at all, suppress the warning
+            // To make it less noisy, see also SPARK-47311.
+            None
+          case e: Throwable =>
+            // Even if it fails for whatever reason, we shouldn't make the whole
+            // application fail.
+            logWarning(
+              "Skipping the lookup of Python Data Sources due to the failure.", e)
+            None
+        }
 
         dataSourceBuilders = maybeResult.map { result =>
-          result.names
-            .zip(result.dataSources)
-            .map { case (name, dataSource) =>
-              normalize(name) ->
-                UserDefinedPythonDataSource(PythonUtils.createPythonFunction(dataSource))
-            }
-            .toMap
+          result.names.zip(result.dataSources).map { case (name, dataSource) =>
+            normalize(name) ->
+              UserDefinedPythonDataSource(PythonUtils.createPythonFunction(dataSource))
+          }.toMap
         }
       }
       dataSourceBuilders.getOrElse(Map.empty)
-    }
-    else {
+    } else {
       Map.empty
     }
   }

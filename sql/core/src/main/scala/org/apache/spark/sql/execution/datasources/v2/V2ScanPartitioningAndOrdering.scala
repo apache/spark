@@ -33,7 +33,7 @@ import org.apache.spark.util.collection.Utils.sequenceToOption
  */
 object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with Logging {
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    val scanRules = Seq[LogicalPlan => LogicalPlan](partitioning, ordering)
+    val scanRules = Seq[LogicalPlan => LogicalPlan] (partitioning, ordering)
 
     scanRules.foldLeft(plan) { (newPlan, scanRule) =>
       scanRule(newPlan)
@@ -45,9 +45,7 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with Logging {
       val catalystPartitioning = scan.outputPartitioning() match {
         case kgp: KeyGroupedPartitioning =>
           val partitioning = sequenceToOption(
-            kgp
-              .keys()
-              .map(V2ExpressionUtils.toCatalystOpt(_, relation, relation.funCatalog))
+            kgp.keys().map(V2ExpressionUtils.toCatalystOpt(_, relation, relation.funCatalog))
               .toImmutableArraySeq)
           if (partitioning.isEmpty) {
             None

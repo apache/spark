@@ -47,10 +47,10 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
  * New ORC File Format based on Apache ORC.
  */
 class OrcFileFormat
-    extends FileFormat
-    with DataSourceRegister
-    with SessionStateHelper
-    with Serializable {
+  extends FileFormat
+  with DataSourceRegister
+  with SessionStateHelper
+  with Serializable {
 
   override def shortName(): String = "orc"
 
@@ -79,8 +79,7 @@ class OrcFileFormat
 
     conf.set(COMPRESS.getAttribute, orcOptions.compressionCodec)
 
-    conf
-      .asInstanceOf[JobConf]
+    conf.asInstanceOf[JobConf]
       .setOutputFormat(classOf[org.apache.orc.mapred.OrcOutputFormat[OrcStruct]])
 
     val batchSize = sqlConf.orcVectorizedWriterBatchSize
@@ -107,8 +106,8 @@ class OrcFileFormat
   override def supportBatch(sparkSession: SparkSession, schema: StructType): Boolean = {
     val sqlConf = getSqlConf(sparkSession)
     sqlConf.orcVectorizedReaderEnabled &&
-    schema.forall(s =>
-      OrcUtils.supportColumnarReads(s.dataType, sqlConf.orcVectorizedReaderNestedColumnEnabled))
+      schema.forall(s => OrcUtils.supportColumnarReads(
+        s.dataType, sqlConf.orcVectorizedReaderNestedColumnEnabled))
   }
 
   override def isSplitable(
@@ -121,12 +120,14 @@ class OrcFileFormat
   /**
    * Build the reader.
    *
-   * @note
-   *   It is required to pass FileFormat.OPTION_RETURNING_BATCH in options, to indicate whether
-   *   the reader should return row or columnar output. If the caller can handle both, pass
-   *   FileFormat.OPTION_RETURNING_BATCH -> supportBatch(sparkSession,
-   *   StructType(requiredSchema.fields ++ partitionSchema.fields)) as the option. It should be
-   *   set to "true" only if this reader can support it.
+   * @note It is required to pass FileFormat.OPTION_RETURNING_BATCH in options, to indicate whether
+   *       the reader should return row or columnar output.
+   *       If the caller can handle both, pass
+   *       FileFormat.OPTION_RETURNING_BATCH ->
+   *         supportBatch(sparkSession,
+   *           StructType(requiredSchema.fields ++ partitionSchema.fields))
+   *       as the option.
+   *       It should be set to "true" only if this reader can support it.
    */
   override def buildReaderWithPartitionValues(
       sparkSession: SparkSession,
@@ -144,12 +145,10 @@ class OrcFileFormat
     // Should always be set by FileSourceScanExec creating this.
     // Check conf before checking option, to allow working around an issue by changing conf.
     val enableVectorizedReader = sqlConf.orcVectorizedReaderEnabled &&
-      options
-        .getOrElse(
-          FileFormat.OPTION_RETURNING_BATCH,
-          throw new IllegalArgumentException(
-            "OPTION_RETURNING_BATCH should always be set for OrcFileFormat. " +
-              "To workaround this issue, set spark.sql.orc.enableVectorizedReader=false."))
+      options.getOrElse(FileFormat.OPTION_RETURNING_BATCH,
+        throw new IllegalArgumentException(
+          "OPTION_RETURNING_BATCH should always be set for OrcFileFormat. " +
+            "To workaround this issue, set spark.sql.orc.enableVectorizedReader=false."))
         .equals("true")
     if (enableVectorizedReader) {
       // If the passed option said that we are to return batches, we need to also be able to
@@ -163,12 +162,10 @@ class OrcFileFormat
       MemoryMode.ON_HEAP
     }
 
-    OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(
-      hadoopConf,
-      sqlConf.caseSensitiveAnalysis)
+    OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(hadoopConf, sqlConf.caseSensitiveAnalysis)
 
     val broadcastedConf =
-      SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
+        SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     val isCaseSensitive = sqlConf.caseSensitiveAnalysis
     val orcFilterPushDown = sqlConf.orcFilterPushDown
 
@@ -181,8 +178,8 @@ class OrcFileFormat
       val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
       val orcSchema =
         Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions))(_.getSchema)
-      val resultedColPruneInfo =
-        OrcUtils.requestedColumnIds(isCaseSensitive, dataSchema, requiredSchema, orcSchema, conf)
+      val resultedColPruneInfo = OrcUtils.requestedColumnIds(
+        isCaseSensitive, dataSchema, requiredSchema, orcSchema, conf)
 
       if (resultedColPruneInfo.isEmpty) {
         Iterator.empty
@@ -196,14 +193,9 @@ class OrcFileFormat
         }
 
         val (requestedColIds, canPruneCols) = resultedColPruneInfo.get
-        val resultSchemaString = OrcUtils.orcResultSchemaString(
-          canPruneCols,
-          dataSchema,
-          resultSchema,
-          partitionSchema,
-          conf)
-        assert(
-          requestedColIds.length == requiredSchema.length,
+        val resultSchemaString = OrcUtils.orcResultSchemaString(canPruneCols,
+          dataSchema, resultSchema, partitionSchema, conf)
+        assert(requestedColIds.length == requiredSchema.length,
           "[BUG] requested column IDs do not match required schema")
         val taskConf = new Configuration(conf)
 

@@ -31,8 +31,7 @@ case class MapPartitionsRWrapper(
     packageNames: Array[Byte],
     broadcastVars: Array[Broadcast[Object]],
     inputSchema: StructType,
-    outputSchema: StructType)
-    extends (Iterator[Any] => Iterator[Any]) {
+    outputSchema: StructType) extends (Iterator[Any] => Iterator[Any]) {
   def apply(iter: Iterator[Any]): Iterator[Any] = {
     // If the content of current DataFrame is serialized R data?
     val isSerializedRData = inputSchema == SERIALIZED_R_DATA_SCHEMA
@@ -40,10 +39,8 @@ case class MapPartitionsRWrapper(
     val (newIter, deserializer, colNames) =
       if (!isSerializedRData) {
         // Serialize each row into a byte array that can be deserialized in the R worker
-        (
-          iter.asInstanceOf[Iterator[Row]].map { row => rowToRBytes(row) },
-          SerializationFormats.ROW,
-          inputSchema.fieldNames)
+        (iter.asInstanceOf[Iterator[Row]].map {row => rowToRBytes(row)},
+         SerializationFormats.ROW, inputSchema.fieldNames)
       } else {
         (iter.asInstanceOf[Iterator[Row]].map { row => row(0) }, SerializationFormats.BYTE, null)
       }
@@ -55,14 +52,8 @@ case class MapPartitionsRWrapper(
     }
 
     val runner = new RRunner[Any, Array[Byte]](
-      func,
-      deserializer,
-      serializer,
-      packageNames,
-      broadcastVars,
-      isDataFrame = true,
-      colNames = colNames,
-      mode = RRunnerModes.DATAFRAME_DAPPLY)
+      func, deserializer, serializer, packageNames, broadcastVars,
+      isDataFrame = true, colNames = colNames, mode = RRunnerModes.DATAFRAME_DAPPLY)
     // Partition index is ignored. Dataset has no support for mapPartitionsWithIndex.
     val outputIter = runner.compute(newIter, -1)
 

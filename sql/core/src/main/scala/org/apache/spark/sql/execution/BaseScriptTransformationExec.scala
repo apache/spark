@@ -51,9 +51,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     child.output.map { in =>
       in.dataType match {
         case _: ArrayType | _: MapType | _: StructType =>
-          StructsToJson(
-            ioschema.inputSerdeProps.toMap,
-            in,
+          StructsToJson(ioschema.inputSerdeProps.toMap, in,
             Some(conf.sessionLocalTimeZone)).replacement
         case _ => Cast(in, StringType).withTimeZone(conf.sessionLocalTimeZone)
       }
@@ -122,13 +120,12 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       val reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
 
       val outputRowFormat = ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD")
-      val processRowWithoutSerde = if (!ioschema.schemaLess) { prevLine: String =>
-        new GenericInternalRow(
-          prevLine
-            .split(outputRowFormat, -1)
-            .padTo(outputFieldWriters.size, null)
-            .zip(outputFieldWriters)
-            .map { case (data, writer) => writer(data) })
+      val processRowWithoutSerde = if (!ioschema.schemaLess) {
+        prevLine: String =>
+          new GenericInternalRow(
+            prevLine.split(outputRowFormat, -1).padTo(outputFieldWriters.size, null)
+              .zip(outputFieldWriters)
+              .map { case (data, writer) => writer(data) })
       } else {
         // In schema less mode, hive will choose first two output column as output.
         // If output column size less than 2, it will return NULL for columns with missing values.
@@ -137,10 +134,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         val kvWriter = CatalystTypeConverters.createToCatalystConverter(StringType)
         prevLine: String =>
           new GenericInternalRow(
-            prevLine
-              .split(outputRowFormat, -1)
-              .slice(0, 2)
-              .padTo(2, null)
+            prevLine.split(outputRowFormat, -1).slice(0, 2).padTo(2, null)
               .map(kvWriter))
       }
 
@@ -217,74 +211,39 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       case DoubleType => wrapperConvertException(data => data.toDouble, converter)
       case _: DecimalType => wrapperConvertException(data => BigDecimal(data), converter)
       case DateType if conf.datetimeJava8ApiEnabled =>
-        wrapperConvertException(
-          data =>
-            DateTimeUtils
-              .stringToDate(UTF8String.fromString(data))
-              .map(DateTimeUtils.daysToLocalDate)
-              .orNull,
-          converter)
+        wrapperConvertException(data => DateTimeUtils.stringToDate(UTF8String.fromString(data))
+          .map(DateTimeUtils.daysToLocalDate).orNull, converter)
       case DateType =>
-        wrapperConvertException(
-          data =>
-            DateTimeUtils
-              .stringToDate(UTF8String.fromString(data))
-              .map(DateTimeUtils.toJavaDate)
-              .orNull,
-          converter)
+        wrapperConvertException(data => DateTimeUtils.stringToDate(UTF8String.fromString(data))
+          .map(DateTimeUtils.toJavaDate).orNull, converter)
       case TimestampType if conf.datetimeJava8ApiEnabled =>
-        wrapperConvertException(
-          data =>
-            DateTimeUtils
-              .stringToTimestamp(
-                UTF8String.fromString(data),
-                DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
-              .map(DateTimeUtils.microsToInstant)
-              .orNull,
-          converter)
-      case TimestampType =>
-        wrapperConvertException(
-          data =>
-            DateTimeUtils
-              .stringToTimestamp(
-                UTF8String.fromString(data),
-                DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
-              .map(DateTimeUtils.toJavaTimestamp)
-              .orNull,
-          converter)
+        wrapperConvertException(data => DateTimeUtils.stringToTimestamp(
+          UTF8String.fromString(data),
+          DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
+          .map(DateTimeUtils.microsToInstant).orNull, converter)
+      case TimestampType => wrapperConvertException(data => DateTimeUtils.stringToTimestamp(
+        UTF8String.fromString(data),
+        DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
+        .map(DateTimeUtils.toJavaTimestamp).orNull, converter)
       case TimestampNTZType =>
-        wrapperConvertException(
-          data =>
-            DateTimeUtils
-              .stringToTimestampWithoutTimeZone(UTF8String.fromString(data))
-              .map(DateTimeUtils.microsToLocalDateTime)
-              .orNull,
-          converter)
-      case CalendarIntervalType =>
-        wrapperConvertException(
-          data => IntervalUtils.stringToInterval(UTF8String.fromString(data)),
-          converter)
-      case YearMonthIntervalType(start, end) =>
-        wrapperConvertException(
-          data =>
-            IntervalUtils.monthsToPeriod(
-              IntervalUtils.castStringToYMInterval(UTF8String.fromString(data), start, end)),
-          converter)
-      case DayTimeIntervalType(start, end) =>
-        wrapperConvertException(
-          data =>
-            IntervalUtils.microsToDuration(
-              IntervalUtils.castStringToDTInterval(UTF8String.fromString(data), start, end)),
-          converter)
+        wrapperConvertException(data => DateTimeUtils.stringToTimestampWithoutTimeZone(
+          UTF8String.fromString(data)).map(DateTimeUtils.microsToLocalDateTime).orNull, converter)
+      case CalendarIntervalType => wrapperConvertException(
+        data => IntervalUtils.stringToInterval(UTF8String.fromString(data)),
+        converter)
+      case YearMonthIntervalType(start, end) => wrapperConvertException(
+        data => IntervalUtils.monthsToPeriod(
+          IntervalUtils.castStringToYMInterval(UTF8String.fromString(data), start, end)),
+        converter)
+      case DayTimeIntervalType(start, end) => wrapperConvertException(
+        data => IntervalUtils.microsToDuration(
+          IntervalUtils.castStringToDTInterval(UTF8String.fromString(data), start, end)),
+        converter)
       case _: ArrayType | _: MapType | _: StructType =>
-        val complexTypeFactory = JsonToStructs(
-          attr.dataType,
-          ioschema.outputSerdeProps.toMap,
-          Literal(null),
-          Some(conf.sessionLocalTimeZone))
-        wrapperConvertException(
-          data => complexTypeFactory.nullSafeEval(UTF8String.fromString(data)),
-          any => any)
+        val complexTypeFactory = JsonToStructs(attr.dataType,
+          ioschema.outputSerdeProps.toMap, Literal(null), Some(conf.sessionLocalTimeZone))
+        wrapperConvertException(data =>
+          complexTypeFactory.nullSafeEval(UTF8String.fromString(data)), any => any)
       case udt: UserDefinedType[_] =>
         wrapperConvertException(data => udt.deserialize(data), converter)
       case dt =>
@@ -295,18 +254,17 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
   // Keep consistent with Hive `LazySimpleSerde`, when there is a type case error, return null
   private val wrapperConvertException: (String => Any, Any => Any) => String => Any =
     (f: String => Any, converter: Any => Any) =>
-      (data: String) =>
-        converter {
-          if (data == ioschema.outputRowFormatMap("TOK_TABLEROWFORMATNULL")) {
-            null
-          } else {
-            try {
-              f(data)
-            } catch {
-              case NonFatal(_) => null
-            }
+      (data: String) => converter {
+        if (data == ioschema.outputRowFormatMap("TOK_TABLEROWFORMATNULL")) {
+          null
+        } else {
+          try {
+            f(data)
+          } catch {
+            case NonFatal(_) => null
           }
         }
+      }
 }
 
 abstract class BaseScriptTransformationWriterThread extends Thread with Logging {
@@ -376,10 +334,8 @@ abstract class BaseScriptTransformationWriterThread extends Thread with Logging 
         // Javadoc this call will not throw an exception:
         _exception = t
         proc.destroy()
-        logError(
-          log"Thread-${MDC(CLASS_NAME, this.getClass.getSimpleName)}-Feed " +
-            log"exit cause by: ",
-          t)
+        logError(log"Thread-${MDC(CLASS_NAME, this.getClass.getSimpleName)}-Feed " +
+          log"exit cause by: ", t)
     } finally {
       try {
         Utils.tryLogNonFatalError(outputStream.close())
@@ -410,8 +366,7 @@ case class ScriptTransformationIOSchema(
     outputSerdeProps: Seq[(String, String)],
     recordReaderClass: Option[String],
     recordWriterClass: Option[String],
-    schemaLess: Boolean)
-    extends Serializable {
+    schemaLess: Boolean) extends Serializable {
   import ScriptTransformationIOSchema._
 
   val inputRowFormatMap = inputRowFormat.toMap.withDefault((k) => defaultFormat(k))
@@ -422,7 +377,8 @@ object ScriptTransformationIOSchema {
   val defaultFormat = Map(
     ("TOK_TABLEROWFORMATFIELD", "\u0001"),
     ("TOK_TABLEROWFORMATLINES", "\n"),
-    ("TOK_TABLEROWFORMATNULL" -> "\\N"))
+    ("TOK_TABLEROWFORMATNULL" -> "\\N")
+  )
 
   val defaultIOSchema = ScriptTransformationIOSchema(
     inputRowFormat = Seq.empty,
@@ -433,7 +389,8 @@ object ScriptTransformationIOSchema {
     outputSerdeProps = Seq.empty,
     recordReaderClass = None,
     recordWriterClass = None,
-    schemaLess = false)
+    schemaLess = false
+  )
 
   def apply(input: ScriptInputOutputSchema): ScriptTransformationIOSchema = {
     ScriptTransformationIOSchema(

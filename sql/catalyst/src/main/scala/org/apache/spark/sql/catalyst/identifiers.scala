@@ -22,7 +22,8 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 /**
  * An identifier that optionally specifies a database.
  *
- * Format (unquoted): "name" or "db.name" Format (quoted): "`name`" or "`db`.`name`"
+ * Format (unquoted): "name" or "db.name"
+ * Format (quoted): "`name`" or "`db`.`name`"
  */
 sealed trait CatalystIdentifier {
   val identifier: String
@@ -92,12 +93,13 @@ object AliasIdentifier {
 }
 
 /**
- * Identifies a table in a database. If `database` is not defined, the current database is used.
- * When we register a permanent function in the FunctionRegistry, we use unquotedString as the
- * function name.
+ * Identifies a table in a database.
+ * If `database` is not defined, the current database is used.
+ * When we register a permanent function in the FunctionRegistry, we use
+ * unquotedString as the function name.
  */
 case class TableIdentifier(table: String, database: Option[String], catalog: Option[String])
-    extends CatalystIdentifier {
+  extends CatalystIdentifier {
   assert(catalog.isEmpty || database.isDefined)
 
   override val identifier: String = table
@@ -108,10 +110,11 @@ case class TableIdentifier(table: String, database: Option[String], catalog: Opt
 
 /** A fully qualified identifier for a table (i.e., database.tableName) */
 case class QualifiedTableName(catalog: String, database: String, name: String) {
-
   /** Two argument ctor for backward compatibility. */
-  def this(database: String, name: String) =
-    this(catalog = CatalogManager.SESSION_CATALOG_NAME, database = database, name = name)
+  def this(database: String, name: String) = this(
+    catalog = CatalogManager.SESSION_CATALOG_NAME,
+    database = database,
+    name = name)
 
   override def toString: String = s"$catalog.$database.$name"
 }
@@ -131,12 +134,13 @@ object TableIdentifier {
     new TableIdentifier(table, database)
 }
 
+
 /**
- * Identifies a function in a database. If `database` is not defined, the current database is
- * used.
+ * Identifies a function in a database.
+ * If `database` is not defined, the current database is used.
  */
 case class FunctionIdentifier(funcName: String, database: Option[String], catalog: Option[String])
-    extends CatalystIdentifier {
+  extends CatalystIdentifier {
   assert(catalog.isEmpty || database.isDefined)
 
   override val identifier: String = funcName

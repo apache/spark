@@ -33,7 +33,8 @@ class SQLFunctionSuite extends QueryTest with SharedSparkSession {
 
   test("SQL scalar function") {
     withUserDefinedFunction("area" -> false) {
-      sql("""
+      sql(
+        """
           |CREATE FUNCTION area(width DOUBLE, height DOUBLE)
           |RETURNS DOUBLE
           |RETURN width * height
@@ -47,7 +48,8 @@ class SQLFunctionSuite extends QueryTest with SharedSparkSession {
     withUserDefinedFunction("foo" -> false) {
       withTable("tbl") {
         sql("CREATE TABLE tbl AS SELECT * FROM VALUES (1, 2), (1, 3), (2, 3) t(a, b)")
-        sql("""
+        sql(
+          """
             |CREATE FUNCTION foo(x INT) RETURNS INT
             |RETURN SELECT SUM(b) FROM tbl WHERE x = a;
             |""".stripMargin)
@@ -59,23 +61,24 @@ class SQLFunctionSuite extends QueryTest with SharedSparkSession {
 
   test("SQL table function") {
     withUserDefinedFunction("foo" -> false) {
-      sql("""
+      sql(
+        """
           |CREATE FUNCTION foo(x INT)
           |RETURNS TABLE(a INT)
           |RETURN SELECT x + 1 AS x1
           |""".stripMargin)
       checkAnswer(sql("SELECT * FROM foo(1)"), Row(2))
-      checkAnswer(
-        sql("""
+      checkAnswer(sql(
+        """
           |SELECT t2.a FROM VALUES (1, 2), (3, 4) t1(a, b), LATERAL foo(a) t2
-          |""".stripMargin),
-        Seq(Row(2), Row(4)))
+          |""".stripMargin), Seq(Row(2), Row(4)))
     }
   }
 
   test("SQL scalar function with default value") {
     withUserDefinedFunction("bar" -> false) {
-      sql("""
+      sql(
+        """
           |CREATE FUNCTION bar(x INT DEFAULT 7)
           |RETURNS INT
           |RETURN x + 1
@@ -85,9 +88,11 @@ class SQLFunctionSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+
   test("SQL UDF in higher-order function should fail with clear error message") {
     withUserDefinedFunction("test_lower_udf" -> false) {
-      sql("""
+      sql(
+        """
           |CREATE FUNCTION test_lower_udf(s STRING)
           |RETURNS STRING
           |RETURN lower(s)
@@ -98,7 +103,12 @@ class SQLFunctionSuite extends QueryTest with SharedSparkSession {
         },
         condition = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_SQL_UDF",
         parameters = Map("funcName" -> "spark_catalog.default.test_lower_udf"),
-        context = ExpectedContext(fragment = "test_lower_udf(x)", start = 44, stop = 60))
+        context = ExpectedContext(
+          fragment = "test_lower_udf(x)",
+          start = 44,
+          stop = 60
+        )
+      )
     }
   }
 }

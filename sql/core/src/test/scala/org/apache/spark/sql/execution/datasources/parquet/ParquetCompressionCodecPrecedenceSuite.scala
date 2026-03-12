@@ -90,7 +90,8 @@ class ParquetCompressionCodecPrecedenceSuite extends ParquetTest with SharedSpar
         |'parquet.compression'='$compressionCodec')
        """.stripMargin
     val partitionCreate = if (isPartitioned) "PARTITIONED BY (p)" else ""
-    sql(s"""
+    sql(
+      s"""
         |CREATE TABLE $tableName USING Parquet $options $partitionCreate
         |AS SELECT 1 AS col1, 2 AS p
        """.stripMargin)

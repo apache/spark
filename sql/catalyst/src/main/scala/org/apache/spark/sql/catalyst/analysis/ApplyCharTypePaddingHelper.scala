@@ -17,7 +17,16 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, BinaryComparison, Expression, In, Literal, NamedExpression, OuterReference}
+import org.apache.spark.sql.catalyst.expressions.{
+  Alias,
+  Attribute,
+  BinaryComparison,
+  Expression,
+  In,
+  Literal,
+  NamedExpression,
+  OuterReference
+}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_COMPARISON, IN}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -26,8 +35,8 @@ import org.apache.spark.sql.types.{CharType, Metadata, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * Helper object used by the [[ApplyCharTypePadding]] rule. This object is under catalyst package
- * in order to make the methods accessible to single-pass [[Resolver]].
+ * Helper object used by the [[ApplyCharTypePadding]] rule. This object is under catalyst
+ * package in order to make the methods accessible to single-pass [[Resolver]].
  */
 object ApplyCharTypePaddingHelper {
 
@@ -102,9 +111,12 @@ object ApplyCharTypePaddingHelper {
               Some(
                 i.copy(
                   value = addPadding(e, c.length, targetLen, alwaysPad = padCharCol),
-                  list = list.zip(literalCharLengths).map { case (lit, charLength) =>
-                    addPadding(lit, charLength, targetLen, alwaysPad = false)
-                  } ++ nulls.map(Literal.create(_, StringType))))
+                  list = list.zip(literalCharLengths).map {
+                      case (lit, charLength) =>
+                        addPadding(lit, charLength, targetLen, alwaysPad = false)
+                    } ++ nulls.map(Literal.create(_, StringType))
+                )
+              )
             case _ => None
           }
           .getOrElse(i)
@@ -132,13 +144,12 @@ object ApplyCharTypePaddingHelper {
       case i @ In(e @ AttrOrOuterRef(attr), list) if list.forall(_.isInstanceOf[Attribute]) =>
         val newChildren = CharVarcharUtils.addPaddingInStringComparison(
           attr +: list.map(_.asInstanceOf[Attribute]),
-          padCharCol)
+          padCharCol
+        )
         if (e.isInstanceOf[OuterReference]) {
-          i.copy(
-            value = newChildren.head.transform {
-              case a: Attribute if a.semanticEquals(attr) => OuterReference(a)
-            },
-            list = newChildren.tail)
+          i.copy(value = newChildren.head.transform {
+            case a: Attribute if a.semanticEquals(attr) => OuterReference(a)
+          }, list = newChildren.tail)
         } else {
           i.copy(value = newChildren.head, list = newChildren.tail)
         }

@@ -29,8 +29,7 @@ class ReuseExchangeAndSubquerySuite extends SparkPlanTest with SharedSparkSessio
   test("SPARK-32041: No reuse interference inside ReuseExchange") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       withTable("df1", "df2") {
-        spark
-          .range(100)
+        spark.range(100)
           .select(col("id"), col("id").as("k"))
           .write
           .partitionBy("k")
@@ -38,15 +37,15 @@ class ReuseExchangeAndSubquerySuite extends SparkPlanTest with SharedSparkSessio
           .mode("overwrite")
           .saveAsTable("df1")
 
-        spark
-          .range(10)
+        spark.range(10)
           .select(col("id"), col("id").as("k"))
           .write
           .format(tableFormat)
           .mode("overwrite")
           .saveAsTable("df2")
 
-        val df = sql("""
+        val df = sql(
+          """
             |WITH t AS (
             |  SELECT df1.id, df2.k
             |  FROM df1 JOIN df2 ON df1.k = df2.k
@@ -58,12 +57,11 @@ class ReuseExchangeAndSubquerySuite extends SparkPlanTest with SharedSparkSessio
         val plan = df.queryExecution.executedPlan
 
         val exchangeIds = plan.collectWithSubqueries { case e: Exchange => e.id }
-        val reusedExchangeIds = plan.collectWithSubqueries { case re: ReusedExchangeExec =>
-          re.child.id
+        val reusedExchangeIds = plan.collectWithSubqueries {
+          case re: ReusedExchangeExec => re.child.id
         }
 
-        assert(
-          reusedExchangeIds.forall(exchangeIds.contains(_)),
+        assert(reusedExchangeIds.forall(exchangeIds.contains(_)),
           "ReusedExchangeExec should reuse an existing exchange")
       }
     }
@@ -72,8 +70,7 @@ class ReuseExchangeAndSubquerySuite extends SparkPlanTest with SharedSparkSessio
   test("SPARK-32041: No reuse interference between ReuseExchange and ReuseSubquery") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       withTable("df1", "df2") {
-        spark
-          .range(100)
+        spark.range(100)
           .select(col("id"), col("id").as("k"))
           .write
           .partitionBy("k")
@@ -81,15 +78,15 @@ class ReuseExchangeAndSubquerySuite extends SparkPlanTest with SharedSparkSessio
           .mode("overwrite")
           .saveAsTable("df1")
 
-        spark
-          .range(10)
+        spark.range(10)
           .select(col("id"), col("id").as("k"))
           .write
           .format(tableFormat)
           .mode("overwrite")
           .saveAsTable("df2")
 
-        val df = sql("""
+        val df = sql(
+          """
             |WITH t AS (
             |  SELECT df1.id, df2.k
             |  FROM df1 JOIN df2 ON df1.k = df2.k
@@ -106,12 +103,11 @@ class ReuseExchangeAndSubquerySuite extends SparkPlanTest with SharedSparkSessio
         val plan = df.queryExecution.executedPlan
 
         val exchangeIds = plan.collectWithSubqueries { case e: Exchange => e.id }
-        val reusedExchangeIds = plan.collectWithSubqueries { case re: ReusedExchangeExec =>
-          re.child.id
+        val reusedExchangeIds = plan.collectWithSubqueries {
+          case re: ReusedExchangeExec => re.child.id
         }
 
-        assert(
-          reusedExchangeIds.forall(exchangeIds.contains(_)),
+        assert(reusedExchangeIds.forall(exchangeIds.contains(_)),
           "ReusedExchangeExec should reuse an existing exchange")
       }
     }

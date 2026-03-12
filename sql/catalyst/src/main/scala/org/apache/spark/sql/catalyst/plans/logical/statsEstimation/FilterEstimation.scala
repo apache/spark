@@ -34,13 +34,13 @@ case class FilterEstimation(plan: Filter) extends Logging {
   private val colStatsMap = ColumnStatsMap(childStats.attributeStats)
 
   /**
-   * Returns an option of Statistics for a Filter logical plan node. For a given compound
-   * expression condition, this method computes filter selectivity (or the percentage of rows
-   * meeting the filter condition), which is used to compute row count, size in bytes, and the
-   * updated statistics after a given predicated is applied.
+   * Returns an option of Statistics for a Filter logical plan node.
+   * For a given compound expression condition, this method computes filter selectivity
+   * (or the percentage of rows meeting the filter condition), which
+   * is used to compute row count, size in bytes, and the updated statistics after a given
+   * predicated is applied.
    *
-   * @return
-   *   Option[Statistics] When there is no statistics collected, it returns None.
+   * @return Option[Statistics] When there is no statistics collected, it returns None.
    */
   def estimate: Option[Statistics] = {
     if (childStats.rowCount.isEmpty) return None
@@ -54,39 +54,32 @@ case class FilterEstimation(plan: Filter) extends Logging {
       // The output is empty, we don't need to keep column stats.
       AttributeMap[ColumnStat](Nil)
     } else {
-      colStatsMap.outputColumnStats(
-        rowsBeforeFilter = childStats.rowCount.get,
+      colStatsMap.outputColumnStats(rowsBeforeFilter = childStats.rowCount.get,
         rowsAfterFilter = filteredRowCount)
     }
     val filteredSizeInBytes: BigInt = getOutputSize(plan.output, filteredRowCount, newColStats)
 
-    Some(
-      childStats.copy(
-        sizeInBytes = filteredSizeInBytes,
-        rowCount = Some(filteredRowCount),
-        attributeStats = newColStats))
+    Some(childStats.copy(sizeInBytes = filteredSizeInBytes, rowCount = Some(filteredRowCount),
+      attributeStats = newColStats))
   }
 
   /**
-   * Returns a percentage of rows meeting a condition in Filter node. If it's a single condition,
-   * we calculate the percentage directly. If it's a compound condition, it is decomposed into
-   * multiple single conditions linked with AND, OR, NOT. For logical AND conditions, we need to
-   * update stats after a condition estimation so that the stats will be more accurate for
-   * subsequent estimation. This is needed for range condition such as (c > 40 AND c <= 50) For
-   * logical OR and NOT conditions, we do not update stats after a condition estimation.
+   * Returns a percentage of rows meeting a condition in Filter node.
+   * If it's a single condition, we calculate the percentage directly.
+   * If it's a compound condition, it is decomposed into multiple single conditions linked with
+   * AND, OR, NOT.
+   * For logical AND conditions, we need to update stats after a condition estimation
+   * so that the stats will be more accurate for subsequent estimation.  This is needed for
+   * range condition such as (c > 40 AND c <= 50)
+   * For logical OR and NOT conditions, we do not update stats after a condition estimation.
    *
-   * @param condition
-   *   the compound logical expression
-   * @param update
-   *   a boolean flag to specify if we need to update ColumnStat of a column for subsequent
-   *   conditions
-   * @return
-   *   an optional double value to show the percentage of rows meeting a given condition. It
-   *   returns None if the condition is not supported.
+   * @param condition the compound logical expression
+   * @param update a boolean flag to specify if we need to update ColumnStat of a column
+   *               for subsequent conditions
+   * @return an optional double value to show the percentage of rows meeting a given condition.
+   *         It returns None if the condition is not supported.
    */
-  def calculateFilterSelectivity(
-      condition: Expression,
-      update: Boolean = true): Option[Double] = {
+  def calculateFilterSelectivity(condition: Expression, update: Boolean = true): Option[Double] = {
     condition match {
       case And(cond1, cond2) =>
         val percent1 = calculateFilterSelectivity(cond1, update).getOrElse(1.0)
@@ -127,17 +120,15 @@ case class FilterEstimation(plan: Filter) extends Logging {
   }
 
   /**
-   * Returns a percentage of rows meeting a single condition in Filter node. Currently we only
-   * support binary predicates where one side is a column, and the other is a literal.
+   * Returns a percentage of rows meeting a single condition in Filter node.
+   * Currently we only support binary predicates where one side is a column,
+   * and the other is a literal.
    *
-   * @param condition
-   *   a single logical expression
-   * @param update
-   *   a boolean flag to specify if we need to update ColumnStat of a column for subsequent
-   *   conditions
-   * @return
-   *   an optional double value to show the percentage of rows meeting a given condition. It
-   *   returns None if the condition is not supported.
+   * @param condition a single logical expression
+   * @param update a boolean flag to specify if we need to update ColumnStat of a column
+   *               for subsequent conditions
+   * @return an optional double value to show the percentage of rows meeting a given condition.
+   *         It returns None if the condition is not supported.
    */
   def calculateSingleCondition(condition: Expression, update: Boolean): Option[Double] = {
     condition match {
@@ -173,7 +164,8 @@ case class FilterEstimation(plan: Filter) extends Logging {
       case op @ GreaterThanOrEqual(l: Literal, ar: Attribute) =>
         evaluateBinary(LessThanOrEqual(ar, l), ar, l, update)
 
-      case In(ar: Attribute, expList) if expList.forall(e => e.isInstanceOf[Literal]) =>
+      case In(ar: Attribute, expList)
+        if expList.forall(e => e.isInstanceOf[Literal]) =>
         // Expression [In (value, seq[Literal])] will be replaced with optimized version
         // [InSet (value, HashSet[Literal])] in Optimizer, but only for list.size > 10.
         // Here we convert In into InSet anyway, because they share the same processing logic.
@@ -222,18 +214,17 @@ case class FilterEstimation(plan: Filter) extends Logging {
   /**
    * Returns a percentage of rows meeting "IS NULL" or "IS NOT NULL" condition.
    *
-   * @param attr
-   *   an Attribute (or a column)
-   * @param isNull
-   *   set to true for "IS NULL" condition. set to false for "IS NOT NULL" condition
-   * @param update
-   *   a boolean flag to specify if we need to update ColumnStat of a given column for subsequent
-   *   conditions
-   * @return
-   *   an optional double value to show the percentage of rows meeting a given condition It
-   *   returns None if no statistics collected for a given column.
+   * @param attr an Attribute (or a column)
+   * @param isNull set to true for "IS NULL" condition.  set to false for "IS NOT NULL" condition
+   * @param update a boolean flag to specify if we need to update ColumnStat of a given column
+   *               for subsequent conditions
+   * @return an optional double value to show the percentage of rows meeting a given condition
+   *         It returns None if no statistics collected for a given column.
    */
-  def evaluateNullCheck(attr: Attribute, isNull: Boolean, update: Boolean): Option[Double] = {
+  def evaluateNullCheck(
+      attr: Attribute,
+      isNull: Boolean,
+      update: Boolean): Option[Double] = {
     if (!colStatsMap.contains(attr) || colStatsMap(attr).nullCount.isEmpty) {
       logDebug("[CBO] No statistics for " + attr)
       return None
@@ -269,18 +260,13 @@ case class FilterEstimation(plan: Filter) extends Logging {
   /**
    * Returns a percentage of rows meeting a binary comparison expression.
    *
-   * @param op
-   *   a binary comparison operator such as =, <, <=, >, >=
-   * @param attr
-   *   an Attribute (or a column)
-   * @param literal
-   *   a literal value (or constant)
-   * @param update
-   *   a boolean flag to specify if we need to update ColumnStat of a given column for subsequent
-   *   conditions
-   * @return
-   *   an optional double value to show the percentage of rows meeting a given condition It
-   *   returns None if no statistics exists for a given column or wrong value.
+   * @param op a binary comparison operator such as =, <, <=, >, >=
+   * @param attr an Attribute (or a column)
+   * @param literal a literal value (or constant)
+   * @param update a boolean flag to specify if we need to update ColumnStat of a given column
+   *               for subsequent conditions
+   * @return an optional double value to show the percentage of rows meeting a given condition
+   *         It returns None if no statistics exists for a given column or wrong value.
    */
   def evaluateBinary(
       op: BinaryComparison,
@@ -304,24 +290,23 @@ case class FilterEstimation(plan: Filter) extends Logging {
   }
 
   /**
-   * Returns a percentage of rows meeting an equality (=) expression. This method evaluates the
-   * equality predicate for all data types.
+   * Returns a percentage of rows meeting an equality (=) expression.
+   * This method evaluates the equality predicate for all data types.
    *
-   * For EqualNullSafe (<=>), if the literal is not null, result will be the same as EqualTo; if
-   * the literal is null, the condition will be changed to IsNull after optimization. So we don't
-   * need specific logic for EqualNullSafe here.
+   * For EqualNullSafe (<=>), if the literal is not null, result will be the same as EqualTo;
+   * if the literal is null, the condition will be changed to IsNull after optimization.
+   * So we don't need specific logic for EqualNullSafe here.
    *
-   * @param attr
-   *   an Attribute (or a column)
-   * @param literal
-   *   a literal value (or constant)
-   * @param update
-   *   a boolean flag to specify if we need to update ColumnStat of a given column for subsequent
-   *   conditions
-   * @return
-   *   an optional double value to show the percentage of rows meeting a given condition
+   * @param attr an Attribute (or a column)
+   * @param literal a literal value (or constant)
+   * @param update a boolean flag to specify if we need to update ColumnStat of a given column
+   *               for subsequent conditions
+   * @return an optional double value to show the percentage of rows meeting a given condition
    */
-  def evaluateEquality(attr: Attribute, literal: Literal, update: Boolean): Option[Double] = {
+  def evaluateEquality(
+      attr: Attribute,
+      literal: Literal,
+      update: Boolean): Option[Double] = {
     if (!colStatsMap.contains(attr)) {
       logDebug("[CBO] No statistics for " + attr)
       return None
@@ -341,11 +326,8 @@ case class FilterEstimation(plan: Filter) extends Logging {
           case StringType | BinaryType =>
             colStat.copy(distinctCount = Some(1), nullCount = Some(0))
           case _ =>
-            colStat.copy(
-              distinctCount = Some(1),
-              min = Some(literal.value),
-              max = Some(literal.value),
-              nullCount = Some(0))
+            colStat.copy(distinctCount = Some(1), min = Some(literal.value),
+              max = Some(literal.value), nullCount = Some(0))
         }
         colStatsMap.update(attr, newStats)
       }
@@ -361,22 +343,20 @@ case class FilterEstimation(plan: Filter) extends Logging {
         Some(computeEqualityPossibilityByHistogram(literal, colStat))
       }
 
-    } else { // not in interval
+    } else {  // not in interval
       Some(0.0)
     }
   }
 
   /**
-   * Returns a percentage of rows meeting a Literal expression. This method evaluates all the
-   * possible literal cases in Filter.
+   * Returns a percentage of rows meeting a Literal expression.
+   * This method evaluates all the possible literal cases in Filter.
    *
-   * FalseLiteral and TrueLiteral should be eliminated by optimizer, but null literal might be
-   * added by optimizer rule NullPropagation. For safety, we handle all the cases here.
+   * FalseLiteral and TrueLiteral should be eliminated by optimizer, but null literal might be added
+   * by optimizer rule NullPropagation. For safety, we handle all the cases here.
    *
-   * @param literal
-   *   a literal value (or constant)
-   * @return
-   *   an optional double value to show the percentage of rows meeting a given condition
+   * @param literal a literal value (or constant)
+   * @return an optional double value to show the percentage of rows meeting a given condition
    */
   def evaluateLiteral(literal: Literal): Option[Double] = {
     literal match {
@@ -389,22 +369,21 @@ case class FilterEstimation(plan: Filter) extends Logging {
   }
 
   /**
-   * Returns a percentage of rows meeting "IN" operator expression. This method evaluates the
-   * equality predicate for all data types.
+   * Returns a percentage of rows meeting "IN" operator expression.
+   * This method evaluates the equality predicate for all data types.
    *
-   * @param attr
-   *   an Attribute (or a column)
-   * @param hSet
-   *   a set of literal values
-   * @param update
-   *   a boolean flag to specify if we need to update ColumnStat of a given column for subsequent
-   *   conditions
-   * @return
-   *   an optional double value to show the percentage of rows meeting a given condition It
-   *   returns None if no statistics exists for a given column.
+   * @param attr an Attribute (or a column)
+   * @param hSet a set of literal values
+   * @param update a boolean flag to specify if we need to update ColumnStat of a given column
+   *               for subsequent conditions
+   * @return an optional double value to show the percentage of rows meeting a given condition
+   *         It returns None if no statistics exists for a given column.
    */
 
-  def evaluateInSet(attr: Attribute, hSet: Set[Any], update: Boolean): Option[Double] = {
+  def evaluateInSet(
+      attr: Attribute,
+      hSet: Set[Any],
+      update: Boolean): Option[Double] = {
     if (!colStatsMap.hasDistinctCount(attr)) {
       logDebug("[CBO] No statistics for " + attr)
       return None
@@ -418,7 +397,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
     // use [min, max] to filter the original hSet
     dataType match {
       case _: NumericType | BooleanType | DateType | TimestampType =>
-        if (ndv.toDouble == 0 || colStat.min.isEmpty || colStat.max.isEmpty) {
+        if (ndv.toDouble == 0 || colStat.min.isEmpty || colStat.max.isEmpty)  {
           return Some(0.0)
         }
 
@@ -438,17 +417,14 @@ case class FilterEstimation(plan: Filter) extends Logging {
         // 1 and 6. The predicate column IN (1, 2, 3, 4, 5). validQuerySet.size is 5.
         newNdv = ndv.min(BigInt(validQuerySet.size))
         if (update) {
-          val newStats = colStat.copy(
-            distinctCount = Some(newNdv),
-            min = Some(newMin),
-            max = Some(newMax),
-            nullCount = Some(0))
+          val newStats = colStat.copy(distinctCount = Some(newNdv), min = Some(newMin),
+            max = Some(newMax), nullCount = Some(0))
           colStatsMap.update(attr, newStats)
         }
 
       // We assume the whole set since there is no min/max information for String/Binary type
       case StringType | BinaryType =>
-        if (ndv.toDouble == 0) {
+        if (ndv.toDouble == 0)  {
           return Some(0.0)
         }
 
@@ -465,20 +441,15 @@ case class FilterEstimation(plan: Filter) extends Logging {
   }
 
   /**
-   * Returns a percentage of rows meeting a binary comparison expression. This method evaluate
-   * expression for Numeric/Date/Timestamp/Boolean columns.
+   * Returns a percentage of rows meeting a binary comparison expression.
+   * This method evaluate expression for Numeric/Date/Timestamp/Boolean columns.
    *
-   * @param op
-   *   a binary comparison operator such as =, <, <=, >, >=
-   * @param attr
-   *   an Attribute (or a column)
-   * @param literal
-   *   a literal value (or constant)
-   * @param update
-   *   a boolean flag to specify if we need to update ColumnStat of a given column for subsequent
-   *   conditions
-   * @return
-   *   an optional double value to show the percentage of rows meeting a given condition
+   * @param op a binary comparison operator such as =, <, <=, >, >=
+   * @param attr an Attribute (or a column)
+   * @param literal a literal value (or constant)
+   * @param update a boolean flag to specify if we need to update ColumnStat of a given column
+   *               for subsequent conditions
+   * @return an optional double value to show the percentage of rows meeting a given condition
    */
   def evaluateBinaryForNumeric(
       op: BinaryComparison,
@@ -568,11 +539,8 @@ case class FilterEstimation(plan: Filter) extends Logging {
             newMax = newValue
         }
 
-        val newStats = colStat.copy(
-          distinctCount = Some(ceil(ndv * percent)),
-          min = newMin,
-          max = newMax,
-          nullCount = Some(0))
+        val newStats = colStat.copy(distinctCount = Some(ceil(ndv * percent)),
+          min = newMin, max = newMax, nullCount = Some(0))
 
         colStatsMap.update(attr, newStats)
       }
@@ -585,8 +553,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
    * Computes the possibility of an equality predicate using histogram.
    */
   private def computeEqualityPossibilityByHistogram(
-      literal: Literal,
-      colStat: ColumnStat): Double = {
+      literal: Literal, colStat: ColumnStat): Double = {
     val datum = EstimationUtils.toDouble(literal.value, literal.dataType)
     val histogram = colStat.histogram.get
 
@@ -617,9 +584,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
    * Computes the possibility of a comparison predicate using histogram.
    */
   private def computeComparisonPossibilityByHistogram(
-      op: BinaryComparison,
-      literal: Literal,
-      colStat: ColumnStat): Double = {
+      op: BinaryComparison, literal: Literal, colStat: ColumnStat): Double = {
     val datum = EstimationUtils.toDouble(literal.value, literal.dataType)
     val histogram = colStat.histogram.get
 
@@ -630,11 +595,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
 
     // compute how many bins the column's current valid range [min, max] occupies.
     val numBinsHoldingEntireRange = EstimationUtils.numBinsHoldingRange(
-      max,
-      upperBoundInclusive = true,
-      min,
-      lowerBoundInclusive = true,
-      histogram.bins)
+      max, upperBoundInclusive = true, min, lowerBoundInclusive = true, histogram.bins)
 
     val numBinsHoldingRange = op match {
       // LessThan and LessThanOrEqual share the same logic, the only difference is whether to
@@ -677,22 +638,17 @@ case class FilterEstimation(plan: Filter) extends Logging {
 
   /**
    * Returns a percentage of rows meeting a binary comparison expression containing two columns.
-   * In SQL queries, we also see predicate expressions involving two columns such as "column-1
-   * (op) column-2" where column-1 and column-2 belong to same table. Note that, if column-1 and
-   * column-2 belong to different tables, then it is a join operator's work, NOT a filter
-   * operator's work.
+   * In SQL queries, we also see predicate expressions involving two columns
+   * such as "column-1 (op) column-2" where column-1 and column-2 belong to same table.
+   * Note that, if column-1 and column-2 belong to different tables, then it is a join
+   * operator's work, NOT a filter operator's work.
    *
-   * @param op
-   *   a binary comparison operator, including =, <=>, <, <=, >, >=
-   * @param attrLeft
-   *   the left Attribute (or a column)
-   * @param attrRight
-   *   the right Attribute (or a column)
-   * @param update
-   *   a boolean flag to specify if we need to update ColumnStat of the given columns for
-   *   subsequent conditions
-   * @return
-   *   an optional double value to show the percentage of rows meeting a given condition
+   * @param op a binary comparison operator, including =, <=>, <, <=, >, >=
+   * @param attrLeft the left Attribute (or a column)
+   * @param attrRight the right Attribute (or a column)
+   * @param update a boolean flag to specify if we need to update ColumnStat of the given columns
+   *               for subsequent conditions
+   * @return an optional double value to show the percentage of rows meeting a given condition
    */
   def evaluateBinaryForTwoColumns(
       op: BinaryComparison,
@@ -776,17 +732,17 @@ case class FilterEstimation(plan: Filter) extends Logging {
       //      minRight           maxRight
       // --------+------------------+------->
       case _: EqualTo =>
-        (
-          (maxLeft < minRight) || (maxRight < minLeft),
+        ((maxLeft < minRight) || (maxRight < minLeft),
           (minLeft == minRight) && (maxLeft == maxRight) && allNotNull
-            && (colStatLeft.distinctCount.get == colStatRight.distinctCount.get))
+          && (colStatLeft.distinctCount.get == colStatRight.distinctCount.get)
+        )
       case _: EqualNullSafe =>
         // For null-safe equality, we use a very restrictive condition to evaluate its overlap.
         // If null values exists, we set it to partial overlap.
-        (
-          ((maxLeft < minRight) || (maxRight < minLeft)) && allNotNull,
+        (((maxLeft < minRight) || (maxRight < minLeft)) && allNotNull,
           (minLeft == minRight) && (maxLeft == maxRight) && allNotNull
-            && (colStatLeft.distinctCount.get == colStatRight.distinctCount.get))
+            && (colStatLeft.distinctCount.get == colStatRight.distinctCount.get)
+        )
     }
 
     var percent = 1.0
@@ -876,24 +832,22 @@ case class FilterEstimation(plan: Filter) extends Logging {
             //         ^    filtered
             //         |
             //     newMaxLeft
-            if (minLeft < minRight) {
-              newMinLeft = colStatRight.min
-            } else {
-              newMinRight = colStatLeft.min
-            }
-            if (maxLeft < maxRight) {
-              newMaxRight = colStatLeft.max
-            } else {
-              newMaxLeft = colStatRight.max
-            }
+          if (minLeft < minRight) {
+            newMinLeft = colStatRight.min
+          } else {
+            newMinRight = colStatLeft.min
+          }
+          if (maxLeft < maxRight) {
+            newMaxRight = colStatLeft.max
+          } else {
+            newMaxLeft = colStatRight.max
+          }
         }
 
-        val newStatsLeft =
-          colStatLeft.copy(distinctCount = Some(newNdvLeft), min = newMinLeft, max = newMaxLeft)
+        val newStatsLeft = colStatLeft.copy(distinctCount = Some(newNdvLeft), min = newMinLeft,
+          max = newMaxLeft)
         colStatsMap(attrLeft) = newStatsLeft
-        val newStatsRight = colStatRight.copy(
-          distinctCount = Some(newNdvRight),
-          min = newMinRight,
+        val newStatsRight = colStatRight.copy(distinctCount = Some(newNdvRight), min = newMinRight,
           max = newMaxRight)
         colStatsMap(attrRight) = newStatsRight
       }
@@ -909,15 +863,14 @@ case class FilterEstimation(plan: Filter) extends Logging {
 }
 
 /**
- * This class contains the original column stats from child, and maintains the updated column
- * stats. We will update the corresponding ColumnStats for a column after we apply a predicate
- * condition. For example, column c has [min, max] value as [0, 100]. In a range condition such as
+ * This class contains the original column stats from child, and maintains the updated column stats.
+ * We will update the corresponding ColumnStats for a column after we apply a predicate condition.
+ * For example, column c has [min, max] value as [0, 100].  In a range condition such as
  * (c > 40 AND c <= 50), we need to set the column's [min, max] value to [40, 100] after we
- * evaluate the first condition c > 40. We also need to set the column's [min, max] value to [40,
- * 50] after we evaluate the second condition c <= 50.
+ * evaluate the first condition c > 40. We also need to set the column's [min, max] value to
+ * [40, 50] after we evaluate the second condition c <= 50.
  *
- * @param originalMap
- *   Original column stats from child.
+ * @param originalMap Original column stats from child.
  */
 case class ColumnStatsMap(originalMap: AttributeMap[ColumnStat]) {
 
@@ -927,8 +880,9 @@ case class ColumnStatsMap(originalMap: AttributeMap[ColumnStat]) {
   def contains(a: Attribute): Boolean = updatedMap.contains(a.exprId) || originalMap.contains(a)
 
   /**
-   * Gets an Option of column stat for the given attribute. Prefer the column stat in updatedMap
-   * than that in originalMap, because updatedMap has the latest (updated) column stats.
+   * Gets an Option of column stat for the given attribute.
+   * Prefer the column stat in updatedMap than that in originalMap,
+   * because updatedMap has the latest (updated) column stats.
    */
   def get(a: Attribute): Option[ColumnStat] = {
     if (updatedMap.contains(a.exprId)) {
@@ -959,17 +913,14 @@ case class ColumnStatsMap(originalMap: AttributeMap[ColumnStat]) {
   def update(a: Attribute, stats: ColumnStat): Unit = updatedMap.update(a.exprId, a -> stats)
 
   /**
-   * Collects updated column stats; scales down column count stats if the number of rows decreases
-   * after this Filter operator.
+   * Collects updated column stats; scales down column count stats if the
+   * number of rows decreases after this Filter operator.
    */
-  def outputColumnStats(
-      rowsBeforeFilter: BigInt,
-      rowsAfterFilter: BigInt): AttributeMap[ColumnStat] = {
+  def outputColumnStats(rowsBeforeFilter: BigInt, rowsAfterFilter: BigInt)
+    : AttributeMap[ColumnStat] = {
     val newColumnStats = originalMap.map { case (attr, oriColStat) =>
       attr -> oriColStat.updateCountStats(
-        rowsBeforeFilter,
-        rowsAfterFilter,
-        updatedMap.get(attr.exprId).map(_._2))
+        rowsBeforeFilter, rowsAfterFilter, updatedMap.get(attr.exprId).map(_._2))
     }
     AttributeMap(newColumnStats)
   }

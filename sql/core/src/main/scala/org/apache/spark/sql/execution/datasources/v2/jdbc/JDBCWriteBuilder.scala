@@ -24,9 +24,8 @@ import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.types.StructType
 
-case class JDBCWriteBuilder(schema: StructType, options: JdbcOptionsInWrite)
-    extends WriteBuilder
-    with SupportsTruncate {
+case class JDBCWriteBuilder(schema: StructType, options: JdbcOptionsInWrite) extends WriteBuilder
+  with SupportsTruncate {
 
   private var isTruncate = false
 

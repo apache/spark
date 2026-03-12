@@ -28,8 +28,9 @@ import org.apache.spark.sql.vectorized.ColumnVector
 import org.apache.spark.unsafe.UTF8StringBuilder
 
 /**
- * Benchmark for constant ColumnVector read and write, include `ConstantColumnVector`,
- * `OnHeapColumnVector` and `OffHeapColumnVector` To run this benchmark:
+ * Benchmark for constant ColumnVector read and write,
+ * include `ConstantColumnVector`, `OnHeapColumnVector` and `OffHeapColumnVector`
+ * To run this benchmark:
  * {{{
  *   1. without sbt: bin/spark-submit --class <this class>
  *        --jars <spark core test jar>,<spark catalyst test jar> <spark sql test jar>
@@ -41,10 +42,7 @@ import org.apache.spark.unsafe.UTF8StringBuilder
 object ConstantColumnVectorBenchmark extends BenchmarkBase {
 
   private def populate(
-      col: WritableColumnVector,
-      batchSize: Int,
-      row: InternalRow,
-      fieldIdx: Int): Unit = {
+      col: WritableColumnVector, batchSize: Int, row: InternalRow, fieldIdx: Int): Unit = {
     col.dataType() match {
       case IntegerType => col.putInts(0, batchSize, row.getInt(fieldIdx))
       case LongType => col.putLongs(0, batchSize, row.getLong(fieldIdx))
@@ -222,7 +220,10 @@ object ConstantColumnVectorBenchmark extends BenchmarkBase {
     constantColumnVector.close()
   }
 
-  def testIsNull(valuesPerIteration: Int, batchSize: Int, dataType: DataType): Unit = {
+  def testIsNull(
+      valuesPerIteration: Int,
+      batchSize: Int,
+      dataType: DataType): Unit = {
 
     val onHeapColumnVector = new OnHeapColumnVector(batchSize, dataType)
     val offHeapColumnVector = new OffHeapColumnVector(batchSize, dataType)
@@ -274,8 +275,9 @@ object ConstantColumnVectorBenchmark extends BenchmarkBase {
 
     testWrite(valuesPerIteration, batchSize, IntegerType, InternalRow(100))
     testWrite(valuesPerIteration, batchSize, LongType, InternalRow(100L))
-    testWrite(valuesPerIteration, batchSize, FloatType, InternalRow(100f))
-    testWrite(valuesPerIteration, batchSize, DoubleType, InternalRow(100d))
+    testWrite(valuesPerIteration, batchSize, FloatType, InternalRow(100F))
+    testWrite(valuesPerIteration, batchSize, DoubleType, InternalRow(100D))
+
 
     Seq(1, 5, 10, 15, 20, 30).foreach { length =>
       val builder = new UTF8StringBuilder()
@@ -286,8 +288,8 @@ object ConstantColumnVectorBenchmark extends BenchmarkBase {
 
     testRead(valuesPerIteration, batchSize, IntegerType, InternalRow(100))
     testRead(valuesPerIteration, batchSize, LongType, InternalRow(100L))
-    testRead(valuesPerIteration, batchSize, FloatType, InternalRow(100f))
-    testRead(valuesPerIteration, batchSize, DoubleType, InternalRow(100d))
+    testRead(valuesPerIteration, batchSize, FloatType, InternalRow(100F))
+    testRead(valuesPerIteration, batchSize, DoubleType, InternalRow(100D))
 
     Seq(1, 5, 10, 15, 20, 30).foreach { length =>
       val builder = new UTF8StringBuilder()
@@ -298,8 +300,8 @@ object ConstantColumnVectorBenchmark extends BenchmarkBase {
 
     testWriteAndRead(valuesPerIteration, batchSize, IntegerType, InternalRow(100))
     testWriteAndRead(valuesPerIteration, batchSize, LongType, InternalRow(100L))
-    testWriteAndRead(valuesPerIteration, batchSize, FloatType, InternalRow(100f))
-    testWriteAndRead(valuesPerIteration, batchSize, DoubleType, InternalRow(100d))
+    testWriteAndRead(valuesPerIteration, batchSize, FloatType, InternalRow(100F))
+    testWriteAndRead(valuesPerIteration, batchSize, DoubleType, InternalRow(100D))
 
     testIsNull(valuesPerIteration, batchSize, StringType)
     testIsNull(valuesPerIteration, batchSize, IntegerType)

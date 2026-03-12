@@ -45,20 +45,18 @@ import org.apache.spark.util.ArrayImplicits._
  *
  * References are placeholders for the latest table metadata and are replaced with actual table
  * versions during analysis, allowing Spark to reload tables with up-to-date metadata. The newly
- * loaded table metadata is validated against the original metadata depending on the context. For
- * instance, temporary views with fully resolved logical plans don't allow schema changes in
- * underlying tables.
+ * loaded table metadata is validated against the original metadata depending on the context.
+ * For instance, temporary views with fully resolved logical plans don't allow schema changes
+ * in underlying tables.
  */
-private[sql] case class V2TableReference private (
+private[sql] case class V2TableReference private(
     catalog: TableCatalog,
     identifier: Identifier,
     options: CaseInsensitiveStringMap,
     info: TableInfo,
     output: Seq[AttributeReference],
     context: Context)
-    extends LeafNode
-    with MultiInstanceRelation
-    with NamedRelation {
+  extends LeafNode with MultiInstanceRelation with NamedRelation {
 
   override def name: String = V2TableUtil.toQualifiedName(catalog, identifier)
 
@@ -80,14 +78,14 @@ private[sql] case class V2TableReference private (
 
 private[sql] object V2TableReference {
 
-  case class TableInfo(columns: Seq[Column], metadataColumns: Seq[MetadataColumn])
+  case class TableInfo(
+      columns: Seq[Column],
+      metadataColumns: Seq[MetadataColumn])
 
   sealed trait Context
   case class TemporaryViewContext(viewName: Seq[String]) extends Context
 
-  def createForTempView(
-      relation: DataSourceV2Relation,
-      viewName: Seq[String]): V2TableReference = {
+  def createForTempView(relation: DataSourceV2Relation, viewName: Seq[String]): V2TableReference = {
     create(relation, TemporaryViewContext(viewName))
   }
 

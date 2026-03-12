@@ -22,17 +22,16 @@ import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
 import org.apache.spark.sql.test.SharedSparkSession
 
 class FileFormatWriterSuite
-    extends QueryTest
-    with SharedSparkSession
-    with CodegenInterpretedPlanTest {
+  extends QueryTest
+  with SharedSparkSession
+  with CodegenInterpretedPlanTest {
 
   import testImplicits._
 
   test("empty file should be skipped while write to file") {
     withTempPath { path =>
       spark.range(100).repartition(10).where("id = 50").write.parquet(path.toString)
-      val partFiles = path
-        .listFiles()
+      val partFiles = path.listFiles()
         .filter(f => f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_"))
       assert(partFiles.length === 2)
     }
@@ -40,20 +39,15 @@ class FileFormatWriterSuite
 
   test("SPARK-22252: FileFormatWriter should respect the input query schema") {
     withTable("t1", "t2", "t3", "t4") {
-      spark
-        .range(1)
-        .select($"id" as Symbol("col1"), $"id" as Symbol("col2"))
-        .write
-        .saveAsTable("t1")
+      spark.range(1).select($"id" as Symbol("col1"), $"id" as Symbol("col2"))
+        .write.saveAsTable("t1")
       spark.sql("select COL1, COL2 from t1").write.saveAsTable("t2")
       checkAnswer(spark.table("t2"), Row(0, 0))
 
       // Test picking part of the columns when writing.
-      spark
-        .range(1)
+      spark.range(1)
         .select($"id", $"id" as Symbol("col1"), $"id" as Symbol("col2"))
-        .write
-        .saveAsTable("t3")
+        .write.saveAsTable("t3")
       spark.sql("select COL1, COL2 from t3").write.saveAsTable("t4")
       checkAnswer(spark.table("t4"), Row(0, 0))
     }
@@ -61,11 +55,8 @@ class FileFormatWriterSuite
 
   test("Null and '' values should not cause dynamic partition failure of string types") {
     withTable("t1", "t2") {
-      Seq((0, None), (1, Some("")), (2, None))
-        .toDF("id", "p")
-        .write
-        .partitionBy("p")
-        .saveAsTable("t1")
+      Seq((0, None), (1, Some("")), (2, None)).toDF("id", "p")
+        .write.partitionBy("p").saveAsTable("t1")
       checkAnswer(spark.table("t1").sort("id"), Seq(Row(0, null), Row(1, null), Row(2, null)))
 
       sql("create table t2(id long, p string) using parquet partitioned by (p)")

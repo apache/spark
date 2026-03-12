@@ -25,8 +25,8 @@ import org.apache.spark.sql.types._
 /**
  * This is a helper class to generate an append-only row-based hash map that can act as a 'cache'
  * for extremely fast key-value lookups while evaluating aggregates (and fall back to the
- * `BytesToBytesMap` if a given key isn't found). This is 'codegened' in HashAggregate to speed up
- * aggregates w/ key.
+ * `BytesToBytesMap` if a given key isn't found). This is 'codegened' in HashAggregate to speed
+ * up aggregates w/ key.
  *
  * NOTE: the generated hash map currently doesn't support nullable keys and falls back to the
  * `BytesToBytesMap` to store them.
@@ -44,8 +44,7 @@ abstract class HashMapGenerator(
   val groupingKeySignature =
     groupingKeys.map(key => s"${CodeGenerator.javaType(key.dataType)} ${key.name}").mkString(", ")
   val buffVars: Seq[ExprCode] = {
-    val functions =
-      aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
+    val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
     val initExpr = functions.flatMap(f => f.initialValues)
     initExpr.map { e =>
       val isNull = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "bufIsNull")
@@ -84,8 +83,8 @@ abstract class HashMapGenerator(
   protected def initializeAggregateHashMap(): String
 
   /**
-   * Generates a method that computes a hash by currently xor-ing all individual group-by keys.
-   * For instance, if we have 2 long group-by keys, the generated function would be of the form:
+   * Generates a method that computes a hash by currently xor-ing all individual group-by keys. For
+   * instance, if we have 2 long group-by keys, the generated function would be of the form:
    *
    * {{{
    * private long hash(long agg_key, long agg_key1) {
@@ -97,15 +96,13 @@ abstract class HashMapGenerator(
     val hash = ctx.freshName("hash")
 
     def genHashForKeys(groupingKeys: Seq[Buffer]): String = {
-      groupingKeys
-        .map { key =>
-          val result = ctx.freshName("result")
-          s"""
+      groupingKeys.map { key =>
+        val result = ctx.freshName("result")
+        s"""
            |${genComputeHash(ctx, key.name, key.dataType, result)}
            |$hash = ($hash ^ (0x9e3779b9)) + $result + ($hash << 6) + ($hash >>> 2);
           """.stripMargin
-        }
-        .mkString("\n")
+      }.mkString("\n")
     }
 
     s"""
@@ -123,9 +120,9 @@ abstract class HashMapGenerator(
   protected def generateEquals(): String
 
   /**
-   * Generates a method that returns a row which keeps track of the aggregate value(s) for a given
-   * set of keys. If the corresponding row doesn't exist, the generated method adds the
-   * corresponding row in the associated key value batch.
+   * Generates a method that returns a row which keeps track of the
+   * aggregate value(s) for a given set of keys. If the corresponding row doesn't exist, the
+   * generated method adds the corresponding row in the associated key value batch.
    */
   protected def generateFindOrInsert(): String
 
@@ -180,9 +177,8 @@ abstract class HashMapGenerator(
       case st: StringType if st.supportsBinaryEquality =>
         hashBytes(s"$input.getBytes()")
       case st: StringType if !st.supportsBinaryEquality =>
-        hashLong(
-          s"CollationFactory.fetchCollation(${st.collationId})" +
-            s".hashFunction.applyAsLong($input)")
+        hashLong(s"CollationFactory.fetchCollation(${st.collationId})" +
+          s".hashFunction.applyAsLong($input)")
       case CalendarIntervalType => hashInt(s"$input.hashCode()")
     }
   }

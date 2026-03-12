@@ -65,8 +65,8 @@ class ResolveNaturalJoinSuite extends AnalysisTest {
   test("natural/using full outer join") {
     val naturalPlan = r1.join(r2, NaturalJoin(FullOuter), None)
     val usingPlan = r1.join(r2, UsingJoin(FullOuter, Seq("a")), None)
-    val expected =
-      r1.join(r2, FullOuter, Some(EqualTo(a, a))).select(Alias(Coalesce(Seq(a, a)), "a")(), b, c)
+    val expected = r1.join(r2, FullOuter, Some(EqualTo(a, a))).select(
+      Alias(Coalesce(Seq(a, a)), "a")(), b, c)
     checkAnalysis(naturalPlan, expected)
     checkAnalysis(usingPlan, expected)
   }
@@ -74,8 +74,8 @@ class ResolveNaturalJoinSuite extends AnalysisTest {
   test("natural/using inner join with no nullability") {
     val naturalPlan = r3.join(r4, NaturalJoin(Inner), None)
     val usingPlan = r3.join(r4, UsingJoin(Inner, Seq("b")), None)
-    val expected =
-      r3.join(r4, Inner, Some(EqualTo(bNotNull, bNotNull))).select(bNotNull, aNotNull, cNotNull)
+    val expected = r3.join(r4, Inner, Some(EqualTo(bNotNull, bNotNull))).select(
+      bNotNull, aNotNull, cNotNull)
     checkAnalysis(naturalPlan, expected)
     checkAnalysis(usingPlan, expected)
   }
@@ -83,8 +83,8 @@ class ResolveNaturalJoinSuite extends AnalysisTest {
   test("natural/using left join with no nullability") {
     val naturalPlan = r3.join(r4, NaturalJoin(LeftOuter), None)
     val usingPlan = r3.join(r4, UsingJoin(LeftOuter, Seq("b")), None)
-    val expected =
-      r3.join(r4, LeftOuter, Some(EqualTo(bNotNull, bNotNull))).select(bNotNull, aNotNull, c)
+    val expected = r3.join(r4, LeftOuter, Some(EqualTo(bNotNull, bNotNull))).select(
+      bNotNull, aNotNull, c)
     checkAnalysis(naturalPlan, expected)
     checkAnalysis(usingPlan, expected)
   }
@@ -92,8 +92,8 @@ class ResolveNaturalJoinSuite extends AnalysisTest {
   test("natural/using right join with no nullability") {
     val naturalPlan = r3.join(r4, NaturalJoin(RightOuter), None)
     val usingPlan = r3.join(r4, UsingJoin(RightOuter, Seq("b")), None)
-    val expected =
-      r3.join(r4, RightOuter, Some(EqualTo(bNotNull, bNotNull))).select(bNotNull, a, cNotNull)
+    val expected = r3.join(r4, RightOuter, Some(EqualTo(bNotNull, bNotNull))).select(
+      bNotNull, a, cNotNull)
     checkAnalysis(naturalPlan, expected)
     checkAnalysis(usingPlan, expected)
   }
@@ -101,9 +101,8 @@ class ResolveNaturalJoinSuite extends AnalysisTest {
   test("natural/using full outer join with no nullability") {
     val naturalPlan = r3.join(r4, NaturalJoin(FullOuter), None)
     val usingPlan = r3.join(r4, UsingJoin(FullOuter, Seq("b")), None)
-    val expected = r3
-      .join(r4, FullOuter, Some(EqualTo(bNotNull, bNotNull)))
-      .select(Alias(Coalesce(Seq(b, b)), "b")(), a, c)
+    val expected = r3.join(r4, FullOuter, Some(EqualTo(bNotNull, bNotNull))).select(
+      Alias(Coalesce(Seq(b, b)), "b")(), a, c)
     checkAnalysis(naturalPlan, expected)
     checkAnalysis(usingPlan, expected)
   }
@@ -112,13 +111,13 @@ class ResolveNaturalJoinSuite extends AnalysisTest {
     assertAnalysisErrorCondition(
       r1.join(r2, UsingJoin(Inner, Seq("d"))),
       expectedErrorCondition = "UNRESOLVED_USING_COLUMN_FOR_JOIN",
-      expectedMessageParameters =
-        Map("colName" -> "`d`", "side" -> "left", "suggestion" -> "`a`, `b`"))
+      expectedMessageParameters = Map(
+        "colName" -> "`d`", "side" -> "left", "suggestion" -> "`a`, `b`"))
     assertAnalysisErrorCondition(
       r1.join(r2, UsingJoin(Inner, Seq("b"))),
       expectedErrorCondition = "UNRESOLVED_USING_COLUMN_FOR_JOIN",
-      expectedMessageParameters =
-        Map("colName" -> "`b`", "side" -> "right", "suggestion" -> "`a`, `c`"))
+      expectedMessageParameters = Map(
+        "colName" -> "`b`", "side" -> "right", "suggestion" -> "`a`, `c`"))
   }
 
   test("using join with a case sensitive analyzer") {
@@ -130,16 +129,16 @@ class ResolveNaturalJoinSuite extends AnalysisTest {
     assertAnalysisErrorCondition(
       r1.join(r2, UsingJoin(Inner, Seq("A"))),
       expectedErrorCondition = "UNRESOLVED_USING_COLUMN_FOR_JOIN",
-      expectedMessageParameters =
-        Map("colName" -> "`A`", "side" -> "left", "suggestion" -> "`a`, `b`"))
+      expectedMessageParameters = Map(
+        "colName" -> "`A`", "side" -> "left", "suggestion" -> "`a`, `b`"))
   }
 
   test("using join on nested fields") {
     assertAnalysisErrorCondition(
       r5.join(r6, UsingJoin(Inner, Seq("d.f1"))),
       expectedErrorCondition = "UNRESOLVED_USING_COLUMN_FOR_JOIN",
-      expectedMessageParameters =
-        Map("colName" -> "`d`.`f1`", "side" -> "left", "suggestion" -> "`d`"))
+      expectedMessageParameters = Map(
+        "colName" -> "`d`.`f1`", "side" -> "left", "suggestion" -> "`d`"))
   }
 
   test("using join with a case insensitive analyzer") {

@@ -20,8 +20,8 @@ package org.apache.spark.sql.test
 import org.scalatest.funspec.AnyFunSpec
 
 /**
- * The purpose of this suite is to make sure that generic FunSpec-based scala tests work with a
- * shared spark session
+ * The purpose of this suite is to make sure that generic FunSpec-based scala
+ * tests work with a shared spark session
  */
 class GenericFunSpecSuite extends AnyFunSpec with SharedSparkSessionBase {
   import testImplicits._

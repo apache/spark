@@ -23,6 +23,7 @@ import java.util.Locale
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.types._
 
+
 private case class TeradataDialect() extends JdbcDialect with NoLegacyJDBCError {
 
   override def canHandle(url: String): Boolean =
@@ -31,19 +32,8 @@ private case class TeradataDialect() extends JdbcDialect with NoLegacyJDBCError 
   // scalastyle:off line.size.limit
   // See https://docs.teradata.com/r/Teradata-VantageTM-SQL-Functions-Expressions-and-Predicates/March-2019/Aggregate-Functions
   // scalastyle:on line.size.limit
-  private val supportedAggregateFunctions = Set(
-    "MAX",
-    "MIN",
-    "SUM",
-    "COUNT",
-    "AVG",
-    "VAR_POP",
-    "VAR_SAMP",
-    "STDDEV_POP",
-    "STDDEV_SAMP",
-    "COVAR_POP",
-    "COVAR_SAMP",
-    "CORR")
+  private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
+    "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP", "COVAR_POP", "COVAR_SAMP", "CORR")
   private val supportedFunctions = supportedAggregateFunctions
 
   override def isSupportedFunction(funcName: String): Boolean =
@@ -73,14 +63,11 @@ private case class TeradataDialect() extends JdbcDialect with NoLegacyJDBCError 
   /**
    * The SQL query used to truncate a table. Teradata does not support the 'TRUNCATE' syntax that
    * other dialects use. Instead, we need to use a 'DELETE FROM' statement.
-   * @param table
-   *   The table to truncate.
-   * @param cascade
-   *   Whether or not to cascade the truncation. Default value is the value of
-   *   isCascadingTruncateTable(). Teradata does not support cascading a 'DELETE FROM' statement
-   *   (and as mentioned, does not support 'TRUNCATE' syntax)
-   * @return
-   *   The SQL query to use for truncating a table
+   * @param table The table to truncate.
+   * @param cascade Whether or not to cascade the truncation. Default value is the
+   *                value of isCascadingTruncateTable(). Teradata does not support cascading a
+   *                'DELETE FROM' statement (and as mentioned, does not support 'TRUNCATE' syntax)
+   * @return The SQL query to use for truncating a table
    */
   override def getTruncateQuery(
       table: String,
@@ -99,10 +86,7 @@ private case class TeradataDialect() extends JdbcDialect with NoLegacyJDBCError 
   }
 
   override def getCatalystType(
-      sqlType: Int,
-      typeName: String,
-      size: Int,
-      md: MetadataBuilder): Option[DataType] = {
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     sqlType match {
       case Types.NUMERIC =>
         if (md == null) {
@@ -124,7 +108,7 @@ private case class TeradataDialect() extends JdbcDialect with NoLegacyJDBCError 
             Some(DecimalType(size, scale.toInt))
           }
         }
-      case _ => None
+        case _ => None
     }
   }
 }

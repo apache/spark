@@ -30,9 +30,7 @@ import org.apache.spark.sql.types.IntegerType
 class OptimizeLimitZeroSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch(
-        "OptimizeLimitZero",
-        Once,
+      Batch("OptimizeLimitZero", Once,
         ReplaceIntersectWithSemiJoin,
         EliminateLimits,
         PropagateEmptyRelation) :: Nil
@@ -70,14 +68,12 @@ class OptimizeLimitZeroSuite extends PlanTest {
 
   Seq(
     (Inner, LocalRelation($"a".int, $"b".int)),
-    (
-      LeftOuter,
-      Project(Seq($"a", Literal(null).cast(IntegerType).as("b")), testRelation1).analyze),
+    (LeftOuter, Project(Seq($"a", Literal(null).cast(IntegerType).as("b")), testRelation1)
+      .analyze),
     (RightOuter, LocalRelation($"a".int, $"b".int)),
-    (
-      FullOuter,
-      Project(Seq($"a", Literal(null).cast(IntegerType).as("b")), testRelation1).analyze))
-    .foreach { case (jt, correctAnswer) =>
+    (FullOuter, Project(Seq($"a", Literal(null).cast(IntegerType).as("b")), testRelation1)
+      .analyze)
+  ).foreach { case (jt, correctAnswer) =>
       test(s"Limit 0: for join type $jt") {
         val query = testRelation1
           .join(testRelation2.limit(0), joinType = jt, condition = Some($"a".attr === $"b".attr))
@@ -86,7 +82,7 @@ class OptimizeLimitZeroSuite extends PlanTest {
 
         comparePlans(optimized, correctAnswer)
       }
-    }
+  }
 
   test("Limit 0: 3-way join") {
     val testRelation3 = LocalRelation.fromExternalRows(Seq($"c".int), data = Seq(Row(1)))

@@ -27,21 +27,16 @@ class DateTimeFormatterHelperSuite extends SparkFunSuite {
   }
 
   test("check incompatible pattern") {
-    assert(
-      convertIncompatiblePattern("yyyy-MM-dd'T'HH:mm:ss.SSSz")
-        === "uuuu-MM-dd'T'HH:mm:ss.SSSz")
-    assert(
-      convertIncompatiblePattern("yyyy-MM'y contains in quoted text'HH:mm:ss")
-        === "uuuu-MM'y contains in quoted text'HH:mm:ss")
-    assert(
-      convertIncompatiblePattern("yyyy-MM'u contains in quoted text'HH:mm:ss")
-        === "uuuu-MM'u contains in quoted text'HH:mm:ss")
-    assert(
-      convertIncompatiblePattern("yyyy-MM'u contains in quoted text'''''HH:mm:ss")
-        === "uuuu-MM'u contains in quoted text'''''HH:mm:ss")
-    assert(
-      convertIncompatiblePattern("yyyy-MM-dd'T'HH:mm:ss.SSSz G")
-        === "yyyy-MM-dd'T'HH:mm:ss.SSSz G")
+    assert(convertIncompatiblePattern("yyyy-MM-dd'T'HH:mm:ss.SSSz")
+      === "uuuu-MM-dd'T'HH:mm:ss.SSSz")
+    assert(convertIncompatiblePattern("yyyy-MM'y contains in quoted text'HH:mm:ss")
+      === "uuuu-MM'y contains in quoted text'HH:mm:ss")
+    assert(convertIncompatiblePattern("yyyy-MM'u contains in quoted text'HH:mm:ss")
+      === "uuuu-MM'u contains in quoted text'HH:mm:ss")
+    assert(convertIncompatiblePattern("yyyy-MM'u contains in quoted text'''''HH:mm:ss")
+      === "uuuu-MM'u contains in quoted text'''''HH:mm:ss")
+    assert(convertIncompatiblePattern("yyyy-MM-dd'T'HH:mm:ss.SSSz G")
+      === "yyyy-MM-dd'T'HH:mm:ss.SSSz G")
     weekBasedLetters.foreach { l =>
       checkError(
         exception = intercept[SparkIllegalArgumentException] {
@@ -56,7 +51,9 @@ class DateTimeFormatterHelperSuite extends SparkFunSuite {
           convertIncompatiblePattern(s"yyyy-MM-dd $l G")
         },
         condition = "INVALID_DATETIME_PATTERN.ILLEGAL_CHARACTER",
-        parameters = Map("c" -> l.toString, "pattern" -> s"yyyy-MM-dd $l G"))
+        parameters = Map(
+          "c" -> l.toString,
+          "pattern" -> s"yyyy-MM-dd $l G"))
     }
     unsupportedLettersForParsing.foreach { l =>
       checkError(
@@ -64,7 +61,9 @@ class DateTimeFormatterHelperSuite extends SparkFunSuite {
           DateTimeFormatterHelper.convertIncompatiblePattern(s"$l", isParsing = true)
         },
         condition = "INVALID_DATETIME_PATTERN.ILLEGAL_CHARACTER",
-        parameters = Map("c" -> l.toString, "pattern" -> s"$l"))
+        parameters = Map(
+          "c" -> l.toString,
+          "pattern" -> s"$l"))
     }
     unsupportedPatternLengths.foreach { style =>
       checkError(

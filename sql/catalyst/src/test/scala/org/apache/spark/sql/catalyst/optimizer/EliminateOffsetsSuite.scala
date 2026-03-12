@@ -33,7 +33,8 @@ class EliminateOffsetsSuite extends PlanTest {
 
   val testRelation = LocalRelation.fromExternalRows(
     Seq("a".attr.int, "b".attr.int, "c".attr.int),
-    1.to(10).map(_ => Row(1, 2, 3)))
+    1.to(10).map(_ => Row(1, 2, 3))
+  )
 
   test("Offsets: eliminate Offset operators if offset == 0") {
     val originalQuery =

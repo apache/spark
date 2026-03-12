@@ -25,7 +25,8 @@ class ExternalCatalogUtilsSuite extends SparkFunSuite {
   test("SPARK-48551: escapePathName") {
     ExternalCatalogUtils.charToEscape.stream().toArray.map(_.asInstanceOf[Char]).foreach { c =>
       // Check parity with old conversion technique:
-      assert(escapePathName(c.toString) === "%" + f"$c%02X", s"wrong escaping for $c")
+      assert(escapePathName(c.toString) === "%" + f"$c%02X",
+        s"wrong escaping for $c")
     }
     assert(escapePathName("") === "")
     assert(escapePathName(" ") === " ")
@@ -42,7 +43,8 @@ class ExternalCatalogUtilsSuite extends SparkFunSuite {
   test("SPARK-48551: unescapePathName") {
     ExternalCatalogUtils.charToEscape.stream().toArray.map(_.asInstanceOf[Char]).foreach { c =>
       // Check parity with old conversion technique:
-      assert(unescapePathName("%" + f"$c%02X") === c.toString, s"wrong unescaping for $c")
+      assert(unescapePathName("%" + f"$c%02X") === c.toString,
+        s"wrong unescaping for $c")
     }
     assert(unescapePathName(null) === null)
     assert(unescapePathName("") === "")

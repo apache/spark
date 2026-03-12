@@ -34,7 +34,8 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
       (true, null, 2, null),
       (false, 1, null, null),
       (null, null, 2, 2),
-      (null, 1, null, null))
+      (null, 1, null, null)
+    )
 
     // dataType must match T.
     def testIf(convert: (Integer => Any), dataType: DataType): Unit = {
@@ -44,8 +45,7 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
         val expectedConverted = if (expected == null) null else convert(expected)
 
         checkEvaluation(
-          If(
-            Literal.create(predicate, BooleanType),
+          If(Literal.create(predicate, BooleanType),
             Literal.create(trueValueConverted, dataType),
             Literal.create(falseValueConverted, dataType)),
           expectedConverted)
@@ -144,14 +144,10 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     val arrayCaseWhen2 = CaseWhen(Seq((Literal.FalseLiteral, arrayWithoutNulls)), arrayWithNulls)
     val arrayCaseWhen3 = CaseWhen(Seq((Literal.TrueLiteral, arrayWithNulls)), arrayWithoutNulls)
     val arrayCaseWhen4 = CaseWhen(Seq((Literal.TrueLiteral, arrayWithoutNulls)), arrayWithNulls)
-    val structCaseWhen1 =
-      CaseWhen(Seq((Literal.FalseLiteral, structWithNulls)), structWithoutNulls)
-    val structCaseWhen2 =
-      CaseWhen(Seq((Literal.FalseLiteral, structWithoutNulls)), structWithNulls)
-    val structCaseWhen3 =
-      CaseWhen(Seq((Literal.TrueLiteral, structWithNulls)), structWithoutNulls)
-    val structCaseWhen4 =
-      CaseWhen(Seq((Literal.TrueLiteral, structWithoutNulls)), structWithNulls)
+    val structCaseWhen1 = CaseWhen(Seq((Literal.FalseLiteral, structWithNulls)), structWithoutNulls)
+    val structCaseWhen2 = CaseWhen(Seq((Literal.FalseLiteral, structWithoutNulls)), structWithNulls)
+    val structCaseWhen3 = CaseWhen(Seq((Literal.TrueLiteral, structWithNulls)), structWithoutNulls)
+    val structCaseWhen4 = CaseWhen(Seq((Literal.TrueLiteral, structWithoutNulls)), structWithNulls)
     val mapCaseWhen1 = CaseWhen(Seq((Literal.FalseLiteral, mapWithNulls)), mapWithoutNulls)
     val mapCaseWhen2 = CaseWhen(Seq((Literal.FalseLiteral, mapWithoutNulls)), mapWithNulls)
     val mapCaseWhen3 = CaseWhen(Seq((Literal.TrueLiteral, mapWithNulls)), mapWithoutNulls)
@@ -218,51 +214,45 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
   test("case key when - internal pattern matching expects a List while apply takes a Seq") {
     val indexedSeq = IndexedSeq(Literal(1), Literal(42), Literal(42), Literal(1))
     val caseKeyWhen = CaseKeyWhen(Literal(12), indexedSeq)
-    assert(
-      caseKeyWhen.branches ==
-        IndexedSeq(
-          (Literal(12) === Literal(1), Literal(42)),
-          (Literal(12) === Literal(42), Literal(1))))
+    assert(caseKeyWhen.branches ==
+      IndexedSeq((Literal(12) === Literal(1), Literal(42)),
+        (Literal(12) === Literal(42), Literal(1))))
   }
 
   test("SPARK-22705: case when should use less global variables") {
     val ctx = new CodegenContext()
-    CaseWhen(
-      Seq(
-        (Literal.create(false, BooleanType), Literal(1)),
-        (Literal.create(false, BooleanType), Literal(2))),
-      Literal(-1)).genCode(ctx)
+    CaseWhen(Seq((Literal.create(false, BooleanType), Literal(1)),
+      (Literal.create(false, BooleanType), Literal(2))), Literal(-1)).genCode(ctx)
     assert(ctx.inlinedMutableStates.size == 1)
   }
 
   test("SPARK-27551: informative error message of mismatched types for case when") {
-    val caseVal1 =
-      Literal.create(create_row(1), StructType(Seq(StructField("x", IntegerType, false))))
-    val caseVal2 =
-      Literal.create(create_row(1), StructType(Seq(StructField("y", IntegerType, false))))
-    val elseVal =
-      Literal.create(create_row(1), StructType(Seq(StructField("z", IntegerType, false))))
+    val caseVal1 = Literal.create(
+      create_row(1),
+      StructType(Seq(StructField("x", IntegerType, false))))
+    val caseVal2 = Literal.create(
+      create_row(1),
+      StructType(Seq(StructField("y", IntegerType, false))))
+    val elseVal = Literal.create(
+      create_row(1),
+      StructType(Seq(StructField("z", IntegerType, false))))
 
-    val checkResult1 =
-      CaseWhen(Seq((Literal.FalseLiteral, caseVal1), (Literal.FalseLiteral, caseVal2)))
-        .checkInputDataTypes()
-    assert(
-      checkResult1 == DataTypeMismatch(
-        errorSubClass = "DATA_DIFF_TYPES",
-        messageParameters = Map(
-          "functionName" -> "`casewhen`",
-          "dataType" -> "[\"STRUCT<x: INT NOT NULL>\", \"STRUCT<y: INT NOT NULL>\"]")))
+    val checkResult1 = CaseWhen(Seq((Literal.FalseLiteral, caseVal1),
+      (Literal.FalseLiteral, caseVal2))).checkInputDataTypes()
+    assert(checkResult1 == DataTypeMismatch(
+      errorSubClass = "DATA_DIFF_TYPES",
+      messageParameters = Map(
+        "functionName" -> "`casewhen`",
+        "dataType" -> "[\"STRUCT<x: INT NOT NULL>\", \"STRUCT<y: INT NOT NULL>\"]")))
 
-    val checkResult2 = CaseWhen(
-      Seq((Literal.FalseLiteral, caseVal1), (Literal.FalseLiteral, caseVal2)),
-      Some(elseVal)).checkInputDataTypes()
-    assert(
-      checkResult2 == DataTypeMismatch(
-        errorSubClass = "DATA_DIFF_TYPES",
-        messageParameters = Map(
-          "functionName" -> "`casewhen`",
-          "dataType" -> ("[\"STRUCT<x: INT NOT NULL>\", " +
-            "\"STRUCT<y: INT NOT NULL>\", \"STRUCT<z: INT NOT NULL>\"]"))))
+    val checkResult2 = CaseWhen(Seq((Literal.FalseLiteral, caseVal1),
+      (Literal.FalseLiteral, caseVal2)), Some(elseVal)).checkInputDataTypes()
+    assert(checkResult2 == DataTypeMismatch(
+      errorSubClass = "DATA_DIFF_TYPES",
+      messageParameters = Map(
+        "functionName" -> "`casewhen`",
+        "dataType" -> ("[\"STRUCT<x: INT NOT NULL>\", " +
+          "\"STRUCT<y: INT NOT NULL>\", \"STRUCT<z: INT NOT NULL>\"]"))))
   }
 
   test("SPARK-27917 test semantic equals of CaseWhen") {
@@ -300,15 +290,11 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     assert(!withElseValue.nullable)
     val withNullableElseValue = CaseWhen(normalBranch :: trueBranch :: Nil, Some(nullLiteral))
     assert(!withNullableElseValue.nullable)
-    val firstTrueNonNullableSecondTrueNullable = CaseWhen(
-      trueBranch ::
-        (TrueLiteral, nullLiteral) :: Nil,
-      None)
+    val firstTrueNonNullableSecondTrueNullable = CaseWhen(trueBranch ::
+      (TrueLiteral, nullLiteral) :: Nil, None)
     assert(!firstTrueNonNullableSecondTrueNullable.nullable)
-    val firstTrueNullableSecondTrueNonNullable = CaseWhen(
-      (TrueLiteral, nullLiteral) ::
-        trueBranch :: Nil,
-      None)
+    val firstTrueNullableSecondTrueNonNullable = CaseWhen((TrueLiteral, nullLiteral) ::
+      trueBranch :: Nil, None)
     assert(firstTrueNullableSecondTrueNonNullable.nullable)
     val hasNullInNotTrueBranch = CaseWhen(trueBranch :: (FalseLiteral, nullLiteral) :: Nil, None)
     assert(!hasNullInNotTrueBranch.nullable)

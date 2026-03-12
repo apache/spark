@@ -29,33 +29,33 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 
 class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[LogicalPlan] {
 
-  override def apply(plan: LogicalPlan): LogicalPlan =
-    plan.resolveOperatorsWithPruning(_.containsPattern(COMMAND), ruleId) {
-      // Deleting a delta of rows from an existing table doesn't produce any new rows, thus enforcing
-      // check constraints is unnecessary.
-      case w: WriteDelta if w.operation.command() == RowLevelOperation.Command.DELETE =>
-        w
-      case v2Write: V2WriteCommand
-          if v2Write.table.resolved && v2Write.query.resolved &&
-            !containsCheckInvariant(v2Write.query) && v2Write.outputResolved =>
-        v2Write.table match {
-          case r: DataSourceV2Relation
-              if r.table.constraints != null && r.table.constraints.nonEmpty =>
-            // Check constraint is the only enforced constraint for DSV2 tables.
-            val checkInvariants = r.table.constraints.collect { case c: Check =>
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+    _.containsPattern(COMMAND), ruleId) {
+    // Deleting a delta of rows from an existing table doesn't produce any new rows, thus enforcing
+    // check constraints is unnecessary.
+    case w: WriteDelta if w.operation.command() == RowLevelOperation.Command.DELETE =>
+      w
+    case v2Write: V2WriteCommand
+      if v2Write.table.resolved && v2Write.query.resolved &&
+        !containsCheckInvariant(v2Write.query) && v2Write.outputResolved =>
+      v2Write.table match {
+        case r: DataSourceV2Relation
+          if r.table.constraints != null && r.table.constraints.nonEmpty =>
+          // Check constraint is the only enforced constraint for DSV2 tables.
+          val checkInvariants = r.table.constraints.collect {
+            case c: Check =>
               val unresolvedExpr = buildCatalystExpression(c)
               val columnExtractors = mutable.Map[String, Expression]()
               buildColumnExtractors(unresolvedExpr, columnExtractors)
               CheckInvariant(unresolvedExpr, columnExtractors.toSeq, c.name, c.predicateSql)
-            }
-            // Combine the check invariants into a single expression using conjunctive AND.
-            checkInvariants
-              .reduceOption(And)
-              .fold(v2Write)(condition => v2Write.withNewQuery(Filter(condition, v2Write.query)))
-          case _ =>
-            v2Write
-        }
-    }
+          }
+          // Combine the check invariants into a single expression using conjunctive AND.
+          checkInvariants.reduceOption(And).fold(v2Write)(
+            condition => v2Write.withNewQuery(Filter(condition, v2Write.query)))
+        case _ =>
+          v2Write
+      }
+  }
 
   private def containsCheckInvariant(plan: LogicalPlan): Boolean = {
     plan match {

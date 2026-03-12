@@ -24,8 +24,9 @@ import org.apache.spark.sql.streaming.TimerValues
  * @param currentProcessingTimeOpt - option to current processing time
  * @param currentWatermarkOpt - option to current watermark
  */
-class TimerValuesImpl(currentProcessingTimeOpt: Option[Long], currentWatermarkOpt: Option[Long])
-    extends TimerValues {
+class TimerValuesImpl(
+    currentProcessingTimeOpt: Option[Long],
+    currentWatermarkOpt: Option[Long]) extends TimerValues {
 
   // Return available processing time or -1 otherwise
   override def getCurrentProcessingTimeInMs(): Long = currentProcessingTimeOpt.getOrElse(-1L)

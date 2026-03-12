@@ -20,7 +20,6 @@ import org.apache.spark.sql.streaming
 
 /** @inheritdoc */
 trait StreamingQuery extends streaming.StreamingQuery {
-
   /** @inheritdoc */
   override def sparkSession: SparkSession
 }

@@ -49,28 +49,22 @@ class RateStreamProviderSuite extends StreamTest {
       }.head
 
       rateSource.clock.asInstanceOf[ManualClock].advance(TimeUnit.SECONDS.toMillis(seconds))
-      val offset = LongOffset(
-        TimeUnit.MILLISECONDS.toSeconds(
-          rateSource.clock.getTimeMillis() - rateSource.creationTimeMs))
+      val offset = LongOffset(TimeUnit.MILLISECONDS.toSeconds(
+        rateSource.clock.getTimeMillis() - rateSource.creationTimeMs))
       (rateSource, offset)
     }
   }
 
   test("RateStreamProvider in registry") {
-    val ds = DataSource
-      .lookupDataSource("rate", spark.sessionState.conf)
-      .getConstructor()
-      .newInstance()
+    val ds = DataSource.lookupDataSource("rate", spark.sessionState.conf)
+      .getConstructor().newInstance()
     assert(ds.isInstanceOf[RateStreamProvider], "Could not find rate source")
   }
 
   test("compatible with old path in registry") {
-    val ds = DataSource
-      .lookupDataSource(
-        "org.apache.spark.sql.execution.streaming.RateSourceProvider",
-        spark.sessionState.conf)
-      .getConstructor()
-      .newInstance()
+    val ds = DataSource.lookupDataSource(
+      "org.apache.spark.sql.execution.streaming.RateSourceProvider",
+      spark.sessionState.conf).getConstructor().newInstance()
     assert(ds.isInstanceOf[RateStreamProvider], "Could not find rate source")
   }
 
@@ -82,7 +76,8 @@ class RateStreamProviderSuite extends StreamTest {
       .load()
     testStream(input)(
       AdvanceRateManualClock(seconds = 1),
-      CheckLastBatch((0 until 10).map(v => new java.sql.Timestamp(v * 100L) -> v): _*))
+      CheckLastBatch((0 until 10).map(v => new java.sql.Timestamp(v * 100L) -> v): _*)
+    )
   }
 
   test("microbatch - restart") {
@@ -108,9 +103,8 @@ class RateStreamProviderSuite extends StreamTest {
     // We just need to compare for the saved stream duration here and hence
     // we only use those number of sorted elements from output rows.
     def expectedResultsFromDuration(rows: Seq[Row]): Unit = {
-      assert(
-        rows.map(_.getLong(0)).sorted.take(streamDuration * 10)
-          == (0 until (streamDuration * 10)))
+      assert(rows.map(_.getLong(0)).sorted.take(streamDuration * 10)
+        == (0 until (streamDuration * 10)))
     }
 
     testStream(input)(
@@ -123,7 +117,8 @@ class RateStreamProviderSuite extends StreamTest {
       Execute(_.awaitOffset(0, LongOffset(4), streamingTimeout.toMillis)),
       StopStream,
       Execute(updateStreamDurationFromOffset(_, 4)),
-      CheckAnswer(expectedResultsFromDuration _))
+      CheckAnswer(expectedResultsFromDuration _)
+    )
   }
 
   test("microbatch - uniform distribution of event timestamps") {
@@ -137,7 +132,10 @@ class RateStreamProviderSuite extends StreamTest {
     val expectedAnswer = (0 until 1500).map { v =>
       (math.round(v * (1000.0 / 1500)), v)
     }
-    testStream(input)(AdvanceRateManualClock(seconds = 1), CheckLastBatch(expectedAnswer: _*))
+    testStream(input)(
+      AdvanceRateManualClock(seconds = 1),
+      CheckLastBatch(expectedAnswer: _*)
+    )
   }
 
   test("microbatch - infer offsets") {
@@ -233,11 +231,10 @@ class RateStreamProviderSuite extends StreamTest {
         exception = e,
         condition = "INTERNAL_ERROR",
         parameters = Map(
-          (
-            "message" ->
-              ("Max offset with 100 rowsPerSecond is 92233720368547758, " +
-                "but it's 9223372036854775807 now.")
-          )))
+          ("message" ->
+            ("Max offset with 100 rowsPerSecond is 92233720368547758, " +
+            "but it's 9223372036854775807 now.")
+            )))
     }
   }
 
@@ -299,7 +296,10 @@ class RateStreamProviderSuite extends StreamTest {
       .load()
       .select(spark_partition_id())
       .distinct()
-    testStream(input)(AdvanceRateManualClock(1), CheckLastBatch((0 until 6): _*))
+    testStream(input)(
+      AdvanceRateManualClock(1),
+      CheckLastBatch((0 until 6): _*)
+    )
   }
 
   testQuietly("overflow") {
@@ -316,7 +316,8 @@ class RateStreamProviderSuite extends StreamTest {
         Seq("INTERNAL_ERROR", "rowsPerSecond").foreach { msg =>
           assert(t.getMessage.contains(msg))
         }
-      }))
+      })
+    )
   }
 
   testQuietly("illegal option values") {
@@ -364,23 +365,20 @@ class RateStreamProviderSuite extends StreamTest {
     val data = scala.collection.mutable.ListBuffer[InternalRow]()
     partitions.foreach {
       case t: RateStreamContinuousInputPartition =>
-        val startTimeMs = stream
-          .initialOffset()
+        val startTimeMs = stream.initialOffset()
           .asInstanceOf[RateStreamOffset]
           .partitionToValueAndRunTimeMs(t.partitionIndex)
           .runTimeMs
-        val r = readerFactory
-          .createReader(t)
+        val r = readerFactory.createReader(t)
           .asInstanceOf[RateStreamContinuousPartitionReader]
         for (rowIndex <- 0 to 9) {
           r.next()
           data.append(r.get())
-          assert(
-            r.getOffset() ==
-              RateStreamPartitionOffset(
-                t.partitionIndex,
-                t.partitionIndex + rowIndex * 2,
-                startTimeMs + (rowIndex + 1) * 100))
+          assert(r.getOffset() ==
+            RateStreamPartitionOffset(
+              t.partitionIndex,
+              t.partitionIndex + rowIndex * 2,
+              startTimeMs + (rowIndex + 1) * 100))
         }
         assert(System.currentTimeMillis() >= startTimeMs + 1000)
 

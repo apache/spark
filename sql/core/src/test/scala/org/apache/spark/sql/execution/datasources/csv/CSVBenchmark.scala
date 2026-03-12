@@ -27,7 +27,8 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
- * Benchmark to measure CSV read/write performance. To run this benchmark:
+ * Benchmark to measure CSV read/write performance.
+ * To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class> --jars <spark core test jar>,
@@ -48,11 +49,9 @@ object CSVBenchmark extends SqlBasedBenchmark {
     withTempPath { path =>
       val str = (0 until 10000).map(i => s""""$i"""").mkString(",")
 
-      spark
-        .range(rowsNum)
+      spark.range(rowsNum)
         .map(_ => str)
-        .write
-        .option("header", true)
+        .write.option("header", true)
         .csv(path.getAbsolutePath)
 
       val schema = new StructType().add("value", StringType)
@@ -77,11 +76,9 @@ object CSVBenchmark extends SqlBasedBenchmark {
       val values = (0 until colsNum).map(i => i.toString).mkString(",")
       val columnNames = schema.fieldNames
 
-      spark
-        .range(rowsNum)
+      spark.range(rowsNum)
         .select(Seq.tabulate(colsNum)(i => lit(i).as(s"col$i")): _*)
-        .write
-        .option("header", true)
+        .write.option("header", true)
         .csv(path.getAbsolutePath)
 
       val ds = spark.read.schema(schema).csv(path.getAbsolutePath)
@@ -100,9 +97,8 @@ object CSVBenchmark extends SqlBasedBenchmark {
         ds.count()
       }
 
-      val schemaErr1 = StructType(
-        StructField("col0", DateType) +:
-          (1 until colsNum).map(i => StructField(s"col$i", IntegerType)))
+      val schemaErr1 = StructType(StructField("col0", DateType) +:
+        (1 until colsNum).map(i => StructField(s"col$i", IntegerType)))
       val dsErr1 = spark.read.schema(schemaErr1).csv(path.getAbsolutePath)
       benchmark.addCase(s"Select 100 columns, one bad input field", numIters) { _ =>
         dsErr1.select(cols100.toImmutableArraySeq: _*).noop()
@@ -110,8 +106,7 @@ object CSVBenchmark extends SqlBasedBenchmark {
 
       val badRecColName = "badRecord"
       val schemaErr2 = schemaErr1.add(StructField(badRecColName, StringType))
-      val dsErr2 = spark.read
-        .schema(schemaErr2)
+      val dsErr2 = spark.read.schema(schemaErr2)
         .option("columnNameOfCorruptRecord", badRecColName)
         .csv(path.getAbsolutePath)
       benchmark.addCase(s"Select 100 columns, corrupt record field", numIters) { _ =>
@@ -131,8 +126,7 @@ object CSVBenchmark extends SqlBasedBenchmark {
       val fields = Seq.tabulate(colsNum)(i => StructField(s"col$i", IntegerType))
       val schema = StructType(fields)
 
-      spark
-        .range(rowsNum)
+      spark.range(rowsNum)
         .select(Seq.tabulate(colsNum)(i => lit(i).as(s"col$i")): _*)
         .write
         .csv(path.getAbsolutePath)
@@ -155,24 +149,19 @@ object CSVBenchmark extends SqlBasedBenchmark {
 
   private def datetimeBenchmark(rowsNum: Int, numIters: Int): Unit = {
     def timestamps = {
-      spark
-        .range(0, rowsNum, 1, 1)
-        .mapPartitions { iter =>
-          iter.map(Instant.ofEpochSecond(_))
-        }
-        .select($"value".as("timestamp"))
+      spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
+        iter.map(Instant.ofEpochSecond(_))
+      }.select($"value".as("timestamp"))
     }
 
     def dates = {
-      spark
-        .range(0, rowsNum, 1, 1)
-        .mapPartitions { iter =>
-          iter.map(d => LocalDate.ofEpochDay(d % (100 * 365)))
-        }
-        .select($"value".as("date"))
+      spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
+        iter.map(d => LocalDate.ofEpochDay(d % (100 * 365)))
+      }.select($"value".as("date"))
     }
 
     withTempPath { path =>
+
       val timestampDir = new File(path, "timestamp").getAbsolutePath
       val dateDir = new File(path, "date").getAbsolutePath
 
@@ -249,15 +238,11 @@ object CSVBenchmark extends SqlBasedBenchmark {
       }
 
       def timestampStr: Dataset[String] = {
-        spark
-          .range(0, rowsNum, 1, 1)
-          .mapPartitions { iter =>
-            iter.map { i =>
-              s"1970-01-01T01:02:03.${i % 200}Z".stripSuffix(".0Z")
-            }
+        spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
+          iter.map {
+            i => s"1970-01-01T01:02:03.${i % 200}Z".stripSuffix(".0Z")
           }
-          .select($"value".as("timestamp"))
-          .as[String]
+        }.select($"value".as("timestamp")).as[String]
       }
 
       readBench.addCase("timestamp strings", numIters) { _ =>
@@ -281,13 +266,9 @@ object CSVBenchmark extends SqlBasedBenchmark {
       }
 
       def dateStr: Dataset[String] = {
-        spark
-          .range(0, rowsNum, 1, 1)
-          .mapPartitions { iter =>
-            iter.map(i => LocalDate.ofEpochDay(i % 1000 * 365).toString)
-          }
-          .select($"value".as("date"))
-          .as[String]
+        spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
+          iter.map(i => LocalDate.ofEpochDay(i % 1000 * 365).toString)
+        }.select($"value".as("date")).as[String]
       }
 
       readBench.addCase("date strings", numIters) { _ =>
@@ -313,47 +294,32 @@ object CSVBenchmark extends SqlBasedBenchmark {
       }
 
       def errorTimestampStr: Dataset[String] = {
-        spark
-          .range(0, rowsNum, 1, 1)
-          .mapPartitions { iter =>
-            iter.map { i =>
-              s"data${i % 200}"
-            }
+        spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
+          iter.map {
+            i => s"data${i % 200}"
           }
-          .select($"value".as("timestamp"))
-          .as[String]
+        }.select($"value".as("timestamp")).as[String]
       }
 
-      readBench.addCase(
-        "infer error timestamps from Dataset[String] with default format",
+      readBench.addCase("infer error timestamps from Dataset[String] with default format",
         numIters) { _ =>
-        spark.read
-          .option("header", false)
+        spark.read.option("header", false)
           .option("inferSchema", true)
-          .csv(errorTimestampStr)
-          .noop()
+          .csv(errorTimestampStr).noop()
       }
 
-      readBench.addCase(
-        "infer error timestamps from Dataset[String] with user-provided format",
+      readBench.addCase("infer error timestamps from Dataset[String] with user-provided format",
         numIters) { _ =>
-        spark.read
-          .option("header", false)
-          .option("inferSchema", true)
-          .option("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
-          .csv(errorTimestampStr)
-          .noop()
+        spark.read.option("header", false)
+          .option("inferSchema", true).option("timestampFormat",
+          "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").csv(errorTimestampStr).noop()
       }
 
-      readBench.addCase(
-        "infer error timestamps from Dataset[String] with legacy format",
+      readBench.addCase("infer error timestamps from Dataset[String] with legacy format",
         numIters) { _ =>
         withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "LEGACY") {
-          spark.read
-            .option("header", false)
-            .option("inferSchema", true)
-            .csv(errorTimestampStr)
-            .noop()
+          spark.read.option("header", false)
+            .option("inferSchema", true).csv(errorTimestampStr).noop()
         }
       }
 
@@ -373,11 +339,8 @@ object CSVBenchmark extends SqlBasedBenchmark {
       ($"id" % 1000).as("key") +: ts
     }
     withTempPath { path =>
-      spark
-        .range(rowsNum)
-        .select(columns(): _*)
-        .write
-        .option("header", true)
+      spark.range(rowsNum).select(columns(): _*)
+        .write.option("header", true)
         .csv(path.getAbsolutePath)
       def readback = {
         spark.read
@@ -414,12 +377,11 @@ object CSVBenchmark extends SqlBasedBenchmark {
       spark
         .range(rowsNum)
         .map { i =>
-          (
-            s"${i % 1000}-${"%02d".format(i % 12)}",
+          (s"${i % 1000}-${"%02d".format(i % 12)}",
             s"${i % 1000} " +
-              s"${"%02d".format(i % 24)}:" +
-              s"${"%02d".format(i % 60)}:" +
-              s"${"%02d".format(i % 60)}.${i % 1000000}")
+            s"${"%02d".format(i % 24)}:" +
+            s"${"%02d".format(i % 60)}:" +
+            s"${"%02d".format(i % 60)}.${i % 1000000}")
         }
         .toDF("ym", "ds")
         .write
@@ -427,15 +389,13 @@ object CSVBenchmark extends SqlBasedBenchmark {
         .mode("overwrite")
         .csv(path.getAbsolutePath)
       benchmark.addCase("Read as Intervals", numIters) { _ =>
-        spark.read
-          .option("header", true)
+        spark.read.option("header", true)
           .schema("ym INTERVAL YEAR TO MONTH, ds INTERVAL DAY TO SECOND")
           .csv(path.getAbsolutePath)
           .noop()
       }
       benchmark.addCase("Read Raw Strings", numIters) { _ =>
-        spark.read
-          .option("header", true)
+        spark.read.option("header", true)
           .csv(path.getAbsolutePath)
           .noop()
       }

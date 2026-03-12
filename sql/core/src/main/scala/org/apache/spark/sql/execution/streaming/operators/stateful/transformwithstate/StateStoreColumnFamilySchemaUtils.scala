@@ -33,10 +33,9 @@ object StateStoreColumnFamilySchemaUtils {
    * we want to use big-endian encoding, so we need to convert the source schema to replace these
    * types with BinaryType.
    *
-   * @param schema
-   *   The schema to convert
-   * @param ordinals
-   *   If non-empty, only convert fields at these ordinals. If empty, convert all fields.
+   * @param schema The schema to convert
+   * @param ordinals If non-empty, only convert fields at these ordinals.
+   *                 If empty, convert all fields.
    */
   def convertForRangeScan(schema: StructType, ordinals: Seq[Int] = Seq.empty): StructType = {
     val ordinalSet = ordinals.toSet
@@ -50,7 +49,8 @@ object StateStoreColumnFamilySchemaUtils {
         // uses zig-zag encoding as opposed to big-endian for Ints
         Seq(
           StructField(s"${field.name}_marker", BinaryType, nullable = true),
-          field.copy(name = s"${field.name}_value", BinaryType))
+          field.copy(name = s"${field.name}_value", BinaryType)
+        )
       } else {
         Seq(field)
       }
@@ -59,8 +59,7 @@ object StateStoreColumnFamilySchemaUtils {
 
   private def isFixedSize(dataType: DataType): Boolean = dataType match {
     case _: ByteType | _: BooleanType | _: ShortType | _: IntegerType | _: LongType |
-        _: FloatType | _: DoubleType =>
-      true
+         _: FloatType | _: DoubleType => true
     case _ => false
   }
 
@@ -109,26 +108,21 @@ object StateStoreColumnFamilySchemaUtils {
    * Returns true if the column family is internal (starts with "$") and we are in testing mode.
    * This is used to allow internal column families to be read during tests.
    *
-   * @param colFamilyName
-   *   The name of the column family to check
-   * @return
-   *   true if this is an internal column family and Utils.isTesting is true
+   * @param colFamilyName The name of the column family to check
+   * @return true if this is an internal column family and Utils.isTesting is true
    */
   def isTestingInternalColFamily(colFamilyName: String): Boolean = {
     org.apache.spark.util.Utils.isTesting && isInternalColFamily(colFamilyName)
   }
 
   /**
-   * Extracts the base state variable name from internal column family names. Internal column
-   * families are auxiliary data structures (TTL index, min expiry index, count index, row
-   * counter) that are associated with a user-defined state variable.
+   * Extracts the base state variable name from internal column family names.
+   * Internal column families are auxiliary data structures (TTL index, min expiry index,
+   * count index, row counter) that are associated with a user-defined state variable.
    *
-   * @param colFamilyName
-   *   The internal column family name (must start with "$")
-   * @return
-   *   The base state variable name
-   * @throws IllegalArgumentException
-   *   if the column family name is not a recognized internal type
+   * @param colFamilyName The internal column family name (must start with "$")
+   * @return The base state variable name
+   * @throws IllegalArgumentException if the column family name is not a recognized internal type
    */
   private def getStateNameForInternalCF(colFamilyName: String): String = {
     if (isTtlColFamilyName(colFamilyName)) {
@@ -156,18 +150,16 @@ object StateStoreColumnFamilySchemaUtils {
   /**
    * Extracts the base state variable name from a column family name.
    *
-   * This is useful for looking up the stateVariableInfo associated with a column family, since
-   * stateVariableInfo is only stored for primary/user-facing column families.
+   * This is useful for looking up the stateVariableInfo associated with a column family,
+   * since stateVariableInfo is only stored for primary/user-facing column families.
    *
    * Returns:
    *   - For internal CFs (e.g., $ttl_*, $min_*, $count_*): the associated state variable name
    *   - For timer secondary index CFs: the corresponding primary index timer CF name
    *   - For all other CFs (regular state variables, timer primary index): the name as-is
    *
-   * @param colFamilyName
-   *   The column family name
-   * @return
-   *   The base state variable name for stateVariableInfo lookup
+   * @param colFamilyName The column family name
+   * @return The base state variable name for stateVariableInfo lookup
    */
   def getBaseStateName(colFamilyName: String): String = {
     if (isInternalColFamily(colFamilyName)) {
@@ -185,15 +177,13 @@ object StateStoreColumnFamilySchemaUtils {
     val schemas = mutable.Map[String, StateStoreColFamilySchema]()
 
     // Add main value state schema
-    schemas.put(
+    schemas.put(stateName, StateStoreColFamilySchema(
       stateName,
-      StateStoreColFamilySchema(
-        stateName,
-        keySchemaId = 0,
-        keyEncoder.schema,
-        valueSchemaId = 0,
-        getValueSchemaWithTTL(valEncoder.schema, hasTtl),
-        Some(NoPrefixKeyStateEncoderSpec(keyEncoder.schema))))
+      keySchemaId = 0,
+      keyEncoder.schema,
+      valueSchemaId = 0,
+      getValueSchemaWithTTL(valEncoder.schema, hasTtl),
+      Some(NoPrefixKeyStateEncoderSpec(keyEncoder.schema))))
 
     // Add TTL index if needed
     if (hasTtl) {
@@ -218,19 +208,16 @@ object StateStoreColumnFamilySchemaUtils {
     val schemas = mutable.Map[String, StateStoreColFamilySchema]()
 
     // Add main list state schema
-    schemas.put(
+    schemas.put(stateName, StateStoreColFamilySchema(
       stateName,
-      StateStoreColFamilySchema(
-        stateName,
-        keySchemaId = 0,
-        keyEncoder.schema,
-        valueSchemaId = 0,
-        getValueSchemaWithTTL(valEncoder.schema, hasTtl),
-        Some(NoPrefixKeyStateEncoderSpec(keyEncoder.schema))))
+      keySchemaId = 0,
+      keyEncoder.schema,
+      valueSchemaId = 0,
+      getValueSchemaWithTTL(valEncoder.schema, hasTtl),
+      Some(NoPrefixKeyStateEncoderSpec(keyEncoder.schema))))
     // Add row counter schema
     val counterSchema = StateStoreColFamilySchema(
-      getRowCounterCFName(stateName),
-      keySchemaId = 0,
+      getRowCounterCFName(stateName), keySchemaId = 0,
       keyEncoder.schema,
       valueSchemaId = 0,
       StructType(Seq(StructField("count", LongType, nullable = true))),
@@ -283,16 +270,14 @@ object StateStoreColumnFamilySchemaUtils {
     val compositeKeySchema = getCompositeKeySchema(keyEncoder.schema, userKeyEnc.schema)
 
     // Add main map state schema
-    schemas.put(
+    schemas.put(stateName, StateStoreColFamilySchema(
       stateName,
-      StateStoreColFamilySchema(
-        stateName,
-        keySchemaId = 0,
-        compositeKeySchema,
-        valueSchemaId = 0,
-        getValueSchemaWithTTL(valEncoder.schema, hasTtl),
-        Some(PrefixKeyScanStateEncoderSpec(compositeKeySchema, 1)),
-        Some(userKeyEnc.schema)))
+      keySchemaId = 0,
+      compositeKeySchema,
+      valueSchemaId = 0,
+      getValueSchemaWithTTL(valEncoder.schema, hasTtl),
+      Some(PrefixKeyScanStateEncoderSpec(compositeKeySchema, 1)),
+      Some(userKeyEnc.schema)))
 
     // Add TTL index if needed
     if (hasTtl) {

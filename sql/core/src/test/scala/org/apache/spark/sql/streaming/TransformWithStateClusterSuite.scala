@@ -25,10 +25,14 @@ import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.tags.SlowSQLTest
 
-case class FruitState(name: String, count: Long, family: String)
+case class FruitState(
+    name: String,
+    count: Long,
+    family: String
+)
 
 class FruitCountStatefulProcessor(useImplicits: Boolean)
-    extends StatefulProcessor[String, String, (String, Long, String)] {
+  extends StatefulProcessor[String, String, (String, Long, String)] {
   import implicits._
 
   @transient protected var _fruitState: ValueState[FruitState] = _
@@ -37,8 +41,8 @@ class FruitCountStatefulProcessor(useImplicits: Boolean)
     if (useImplicits) {
       _fruitState = getHandle.getValueState[FruitState]("fruitState", TTLConfig.NONE)
     } else {
-      _fruitState =
-        getHandle.getValueState("fruitState", Encoders.product[FruitState], TTLConfig.NONE)
+      _fruitState = getHandle.getValueState("fruitState", Encoders.product[FruitState],
+        TTLConfig.NONE)
     }
   }
 
@@ -50,10 +54,8 @@ class FruitCountStatefulProcessor(useImplicits: Boolean)
     }
   }
 
-  override def handleInputRows(
-      key: String,
-      inputRows: Iterator[String],
-      timerValues: TimerValues): Iterator[(String, Long, String)] = {
+  override def handleInputRows(key: String, inputRows: Iterator[String], timerValues: TimerValues):
+    Iterator[(String, Long, String)] = {
     val new_cnt = Option(_fruitState.get()).map(x => x.count).getOrElse(0L) + inputRows.size
     val family = getFamily(key)
     _fruitState.update(FruitState(key, new_cnt, family))
@@ -62,7 +64,7 @@ class FruitCountStatefulProcessor(useImplicits: Boolean)
 }
 
 class FruitCountStatefulProcessorWithInitialState(useImplicits: Boolean)
-    extends StatefulProcessorWithInitialState[String, String, (String, Long, String), String] {
+  extends StatefulProcessorWithInitialState[String, String, (String, Long, String), String] {
   import implicits._
 
   @transient protected var _fruitState: ValueState[FruitState] = _
@@ -71,8 +73,8 @@ class FruitCountStatefulProcessorWithInitialState(useImplicits: Boolean)
     if (useImplicits) {
       _fruitState = getHandle.getValueState[FruitState]("fruitState", TTLConfig.NONE)
     } else {
-      _fruitState =
-        getHandle.getValueState("fruitState", Encoders.product[FruitState], TTLConfig.NONE)
+      _fruitState = getHandle.getValueState("fruitState", Encoders.product[FruitState],
+        TTLConfig.NONE)
     }
   }
 
@@ -84,19 +86,15 @@ class FruitCountStatefulProcessorWithInitialState(useImplicits: Boolean)
     }
   }
 
-  override def handleInitialState(
-      key: String,
-      initialState: String,
-      timerValues: TimerValues): Unit = {
+  override def handleInitialState(key: String, initialState: String,
+    timerValues: TimerValues): Unit = {
     val new_cnt = Option(_fruitState.get()).map(x => x.count).getOrElse(0L) + 1
     val family = getFamily(key)
     _fruitState.update(FruitState(key, new_cnt, family))
   }
 
-  override def handleInputRows(
-      key: String,
-      inputRows: Iterator[String],
-      timerValues: TimerValues): Iterator[(String, Long, String)] = {
+  override def handleInputRows(key: String, inputRows: Iterator[String], timerValues: TimerValues):
+    Iterator[(String, Long, String)] = {
     val new_cnt = Option(_fruitState.get()).map(x => x.count).getOrElse(0L) + inputRows.size
     val family = getFamily(key)
     _fruitState.update(FruitState(key, new_cnt, family))
@@ -108,11 +106,9 @@ trait TransformWithStateClusterSuiteBase extends SparkFunSuite {
   def getSparkConf(): SparkConf = {
     val conf = new SparkConf()
       .setMaster("local-cluster[2, 2, 1024]")
-      .set(
-        SQLConf.STATE_STORE_PROVIDER_CLASS.key,
+      .set(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
         classOf[RocksDBStateStoreProvider].getCanonicalName)
-      .set(
-        SQLConf.SHUFFLE_PARTITIONS.key,
+      .set(SQLConf.SHUFFLE_PARTITIONS.key,
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString)
       .set(SQLConf.STREAMING_STOP_TIMEOUT, 5000L)
     conf
@@ -121,8 +117,8 @@ trait TransformWithStateClusterSuiteBase extends SparkFunSuite {
   // Start a new test with cluster containing two executors and streaming stop timeout set to 5s
   val testSparkConf = getSparkConf()
 
-  protected def testWithAndWithoutImplicitEncoders(name: String)(
-      func: (SparkSession, Boolean) => Any): Unit = {
+  protected def testWithAndWithoutImplicitEncoders(name: String)
+    (func: (SparkSession, Boolean) => Any): Unit = {
     Seq(false, true).foreach { useImplicits =>
       test(s"$name - useImplicits = $useImplicits") {
         withSparkSession(SparkSession.builder().config(testSparkConf).getOrCreate()) { spark =>
@@ -134,23 +130,21 @@ trait TransformWithStateClusterSuiteBase extends SparkFunSuite {
 }
 
 /**
- * Test suite spawning local cluster with multiple executors to test serde of stateful processors
- * along with use of implicit encoders, if applicable in transformWithState operator.
+ * Test suite spawning local cluster with multiple executors to test serde of stateful
+ * processors along with use of implicit encoders, if applicable in transformWithState operator.
  */
 @SlowSQLTest
 class TransformWithStateClusterSuite extends StreamTest with TransformWithStateClusterSuiteBase {
-  testWithAndWithoutImplicitEncoders(
-    "streaming with transformWithState - " +
-      "without initial state") { (spark, useImplicits) =>
+  testWithAndWithoutImplicitEncoders("streaming with transformWithState - " +
+   "without initial state") { (spark, useImplicits) =>
     import spark.implicits._
     val input = MemoryStream(Encoders.STRING, spark)
-    val agg = input
-      .toDS()
+    val agg = input.toDS()
       .groupByKey(x => x)
-      .transformWithState(
-        new FruitCountStatefulProcessor(useImplicits),
+      .transformWithState(new FruitCountStatefulProcessor(useImplicits),
         TimeMode.None(),
-        OutputMode.Update())
+        OutputMode.Update()
+      )
 
     val query = agg.writeStream
       .format("memory")
@@ -161,16 +155,14 @@ class TransformWithStateClusterSuite extends StreamTest with TransformWithStateC
     input.addData("apple", "apple", "orange", "orange", "orange")
     query.processAllAvailable()
 
-    checkAnswer(
-      spark.sql("select * from output"),
-      Seq(Row("apple", 2, "non-citrus"), Row("orange", 3, "citrus")))
+    checkAnswer(spark.sql("select * from output"),
+      Seq(Row("apple", 2, "non-citrus"),
+        Row("orange", 3, "citrus")))
 
     input.addData("lemon", "lime")
     query.processAllAvailable()
-    checkAnswer(
-      spark.sql("select * from output"),
-      Seq(
-        Row("apple", 2, "non-citrus"),
+    checkAnswer(spark.sql("select * from output"),
+      Seq(Row("apple", 2, "non-citrus"),
         Row("orange", 3, "citrus"),
         Row("lemon", 1, "citrus"),
         Row("lime", 1, "citrus")))
@@ -178,26 +170,22 @@ class TransformWithStateClusterSuite extends StreamTest with TransformWithStateC
     query.stop()
   }
 
-  testWithAndWithoutImplicitEncoders(
-    "streaming with transformWithState - " +
-      "with initial state") { (spark, useImplicits) =>
+  testWithAndWithoutImplicitEncoders("streaming with transformWithState - " +
+   "with initial state") { (spark, useImplicits) =>
     import spark.implicits._
 
-    val fruitCountInitialDS: Dataset[String] =
-      Seq("apple", "apple", "orange", "orange", "orange").toDS()
+    val fruitCountInitialDS: Dataset[String] = Seq(
+      "apple", "apple", "orange", "orange", "orange").toDS()
 
     val fruitCountInitial = fruitCountInitialDS
       .groupByKey(x => x)
 
     val input = MemoryStream(Encoders.STRING, spark)
-    val agg = input
-      .toDS()
+    val agg = input.toDS()
       .groupByKey(x => x)
-      .transformWithState(
-        new FruitCountStatefulProcessorWithInitialState(useImplicits),
+      .transformWithState(new FruitCountStatefulProcessorWithInitialState(useImplicits),
         TimeMode.None(),
-        OutputMode.Update(),
-        fruitCountInitial)
+        OutputMode.Update(), fruitCountInitial)
 
     val query = agg.writeStream
       .format("memory")
@@ -208,16 +196,14 @@ class TransformWithStateClusterSuite extends StreamTest with TransformWithStateC
     input.addData("apple", "apple", "orange", "orange", "orange")
     query.processAllAvailable()
 
-    checkAnswer(
-      spark.sql("select * from output"),
-      Seq(Row("apple", 4, "non-citrus"), Row("orange", 6, "citrus")))
+    checkAnswer(spark.sql("select * from output"),
+      Seq(Row("apple", 4, "non-citrus"),
+        Row("orange", 6, "citrus")))
 
     input.addData("lemon", "lime")
     query.processAllAvailable()
-    checkAnswer(
-      spark.sql("select * from output"),
-      Seq(
-        Row("apple", 4, "non-citrus"),
+    checkAnswer(spark.sql("select * from output"),
+      Seq(Row("apple", 4, "non-citrus"),
         Row("orange", 6, "citrus"),
         Row("lemon", 1, "citrus"),
         Row("lime", 1, "citrus")))

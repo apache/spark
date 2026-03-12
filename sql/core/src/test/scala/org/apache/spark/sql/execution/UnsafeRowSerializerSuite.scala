@@ -112,14 +112,12 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkSession {
 
     val shuffleExecutorComponents = new LocalDiskShuffleExecutorComponents(conf)
     shuffleExecutorComponents.initializeExecutor(
-      spark.sparkContext.applicationId,
-      "0",
-      new HashMap[String, String])
-    val mapOutputWriter = shuffleExecutorComponents.createMapOutputWriter(0, 0, 10)
+      spark.sparkContext.applicationId, "0", new HashMap[String, String])
+    val mapOutputWriter = shuffleExecutorComponents.createMapOutputWriter(
+      0, 0, 10)
 
     val taskMemoryManager = new TaskMemoryManager(spark.sparkContext.env.memoryManager, 0)
-    val taskContext =
-      new TaskContextImpl(0, 0, 0, 0, 0, 1, taskMemoryManager, new Properties, null)
+    val taskContext = new TaskContextImpl(0, 0, 0, 0, 0, 1, taskMemoryManager, new Properties, null)
 
     val sorter = new ExternalSorter[Int, UnsafeRow, UnsafeRow](
       taskContext,
@@ -132,10 +130,7 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkSession {
     assert(sorter.numSpills > 0)
 
     // Merging spilled files should not throw assertion error
-    sorter.writePartitionedMapOutput(
-      0,
-      0,
-      mapOutputWriter,
+    sorter.writePartitionedMapOutput(0, 0, mapOutputWriter,
       taskContext.taskMetrics.shuffleWriteMetrics)
   }
 
@@ -144,9 +139,9 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkSession {
     spark = SparkSession.builder().master("local").appName("test").config(conf).getOrCreate()
     val row = Row("Hello", 123)
     val unsafeRow = toUnsafeRow(row, Array(StringType, IntegerType))
-    val rowsRDD = spark.sparkContext
-      .parallelize(Seq((0, unsafeRow), (1, unsafeRow), (0, unsafeRow)))
-      .asInstanceOf[RDD[Product2[Int, InternalRow]]]
+    val rowsRDD = spark.sparkContext.parallelize(
+      Seq((0, unsafeRow), (1, unsafeRow), (0, unsafeRow))
+    ).asInstanceOf[RDD[Product2[Int, InternalRow]]]
     val dependency =
       new ShuffleDependency[Int, InternalRow, InternalRow](
         rowsRDD,

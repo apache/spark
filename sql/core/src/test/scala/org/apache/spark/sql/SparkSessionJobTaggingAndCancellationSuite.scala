@@ -37,9 +37,9 @@ import org.apache.spark.util.ThreadUtils
  */
 @ExtendedSQLTest
 class SparkSessionJobTaggingAndCancellationSuite
-    extends SparkFunSuite
-    with Eventually
-    with LocalSparkContext {
+  extends SparkFunSuite
+  with Eventually
+  with LocalSparkContext {
 
   override def afterEach(): Unit = {
     try {
@@ -101,22 +101,16 @@ class SparkSessionJobTaggingAndCancellationSuite
     assert(sem.tryAcquire(1, 1, TimeUnit.MINUTES))
     val activeJobsFuture =
       session.sparkContext.cancelJobsWithTagWithFuture(
-        session.managedJobTags.get()("one"),
-        "reason")
+        session.managedJobTags.get()("one"), "reason")
     val activeJob = ThreadUtils.awaitResult(activeJobsFuture, 60.seconds).head
-    val actualTags = activeJob.properties
-      .getProperty(SparkContext.SPARK_JOB_TAGS)
+    val actualTags = activeJob.properties.getProperty(SparkContext.SPARK_JOB_TAGS)
       .split(SparkContext.SPARK_JOB_TAGS_SEP)
-    assert(
-      actualTags.toSet == Set(
-        session.sessionJobTag,
-        s"${session.sessionJobTag}-thread-${session.threadUuid.get()}-one",
-        SQLExecution.executionIdJobTag(
-          session,
-          activeJob.properties
-            .get(SQLExecution.EXECUTION_ROOT_ID_KEY)
-            .asInstanceOf[String]
-            .toLong)))
+    assert(actualTags.toSet == Set(
+      session.sessionJobTag,
+      s"${session.sessionJobTag}-thread-${session.threadUuid.get()}-one",
+      SQLExecution.executionIdJobTag(
+        session,
+        activeJob.properties.get(SQLExecution.EXECUTION_ROOT_ID_KEY).asInstanceOf[String].toLong)))
   }
 
   test("Cancellation APIs in SparkSession are isolated") {
@@ -167,9 +161,8 @@ class SparkSessionJobTaggingAndCancellationSuite
         assert(sessionA.getTags() == Set())
         sessionA.addTag("one")
         realTagOneForSessionA = sessionA.managedJobTags.get()("one")
-        assert(
-          realTagOneForSessionA ==
-            s"${sessionA.sessionJobTag}-thread-${sessionA.threadUuid.get()}-one")
+        assert(realTagOneForSessionA ==
+          s"${sessionA.sessionJobTag}-thread-${sessionA.threadUuid.get()}-one")
         assert(sessionA.getTags() == Set("one"))
 
         // Create a child thread which inherits thread-local variables and tries to interrupt
@@ -227,21 +220,13 @@ class SparkSessionJobTaggingAndCancellationSuite
       assert(sem.tryAcquire(3, 1, TimeUnit.MINUTES))
 
       // Tags are applied
-      def realUserTag(s: String, t: String, ta: String): String =
-        s"spark-session-$s-thread-$t-$ta"
+      def realUserTag(s: String, t: String, ta: String): String = s"spark-session-$s-thread-$t-$ta"
       assert(jobProperties.size == 3)
       for (ss <- Seq(sessionA, sessionB, sessionC)) {
-        val jobProperty = jobProperties
-          .values()
-          .asScala
-          .filter(
-            _.get(SparkContext.SPARK_JOB_TAGS)
-              .asInstanceOf[String]
-              .contains(ss.sessionUUID))
+        val jobProperty = jobProperties.values().asScala.filter(_.get(SparkContext.SPARK_JOB_TAGS)
+          .asInstanceOf[String].contains(ss.sessionUUID))
         assert(jobProperty.size == 1)
-        val tags = jobProperty.head
-          .get(SparkContext.SPARK_JOB_TAGS)
-          .asInstanceOf[String]
+        val tags = jobProperty.head.get(SparkContext.SPARK_JOB_TAGS).asInstanceOf[String]
           .split(SparkContext.SPARK_JOB_TAGS_SEP)
 
         val executionRootIdTag = SQLExecution.executionIdJobTag(
@@ -249,25 +234,15 @@ class SparkSessionJobTaggingAndCancellationSuite
           jobProperty.head.get(SQLExecution.EXECUTION_ROOT_ID_KEY).asInstanceOf[String].toLong)
 
         ss match {
-          case s if s == sessionA =>
-            assert(
-              tags.toSet == Set(
-                s.sessionJobTag,
-                executionRootIdTag,
-                realUserTag(s.sessionUUID, threadUuidA, "one")))
-          case s if s == sessionB =>
-            assert(
-              tags.toSet == Set(
-                s.sessionJobTag,
-                executionRootIdTag,
-                realUserTag(s.sessionUUID, threadUuidB, "one"),
-                realUserTag(s.sessionUUID, threadUuidB, "two")))
-          case s if s == sessionC =>
-            assert(
-              tags.toSet == Set(
-                s.sessionJobTag,
-                executionRootIdTag,
-                realUserTag(s.sessionUUID, threadUuidC, "boo")))
+          case s if s == sessionA => assert(tags.toSet == Set(
+            s.sessionJobTag, executionRootIdTag, realUserTag(s.sessionUUID, threadUuidA, "one")))
+          case s if s == sessionB => assert(tags.toSet == Set(
+            s.sessionJobTag,
+            executionRootIdTag,
+            realUserTag(s.sessionUUID, threadUuidB, "one"),
+            realUserTag(s.sessionUUID, threadUuidB, "two")))
+          case s if s == sessionC => assert(tags.toSet == Set(
+            s.sessionJobTag, executionRootIdTag, realUserTag(s.sessionUUID, threadUuidC, "boo")))
         }
       }
 

@@ -48,38 +48,43 @@ object MemoryStream {
   protected val memoryStreamId = new AtomicInteger(0)
 
   /**
-   * Creates a MemoryStream with an implicit SQLContext (backward compatible). Usage:
-   * `MemoryStream[Int]`
+   * Creates a MemoryStream with an implicit SQLContext (backward compatible).
+   * Usage: `MemoryStream[Int]`
    */
   def apply[A: Encoder](implicit sqlContext: SQLContext): MemoryStream[A] =
     new MemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext.sparkSession)
 
   /**
-   * Creates a MemoryStream with specified partitions using implicit SQLContext. Usage:
-   * `MemoryStream[Int](numPartitions)`
+   * Creates a MemoryStream with specified partitions using implicit SQLContext.
+   * Usage: `MemoryStream[Int](numPartitions)`
    */
-  def apply[A: Encoder](numPartitions: Int)(implicit sqlContext: SQLContext): MemoryStream[A] =
+  def apply[A: Encoder](numPartitions: Int)(
+      implicit sqlContext: SQLContext): MemoryStream[A] =
     new MemoryStream[A](
       memoryStreamId.getAndIncrement(),
       sqlContext.sparkSession,
       Some(numPartitions))
 
   /**
-   * Creates a MemoryStream with explicit SparkSession. Usage: `MemoryStream[Int](spark)`
+   * Creates a MemoryStream with explicit SparkSession.
+   * Usage: `MemoryStream[Int](spark)`
    */
   def apply[A: Encoder](sparkSession: SparkSession): MemoryStream[A] =
     new MemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession)
 
   /**
-   * Creates a MemoryStream with specified partitions using explicit SparkSession. Usage:
-   * `MemoryStream[Int](spark, numPartitions)`
+   * Creates a MemoryStream with specified partitions using explicit SparkSession.
+   * Usage: `MemoryStream[Int](spark, numPartitions)`
    */
   def apply[A: Encoder](sparkSession: SparkSession, numPartitions: Int): MemoryStream[A] =
-    new MemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession, Some(numPartitions))
+    new MemoryStream[A](
+      memoryStreamId.getAndIncrement(),
+      sparkSession,
+      Some(numPartitions))
 
   /**
-   * Creates a MemoryStream with explicit encoder and SparkSession. Usage:
-   * `MemoryStream(Encoders.scalaInt, spark)`
+   * Creates a MemoryStream with explicit encoder and SparkSession.
+   * Usage: `MemoryStream(Encoders.scalaInt, spark)`
    */
   def apply[A](encoder: Encoder[A], sparkSession: SparkSession): MemoryStream[A] =
     new MemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession)(encoder)
@@ -88,7 +93,7 @@ object MemoryStream {
 /**
  * A base class for memory stream implementations. Supports adding data and resetting.
  */
-abstract class MemoryStreamBase[A: Encoder](sparkSession: SparkSession) extends SparkDataStream {
+abstract class MemoryStreamBase[A : Encoder](sparkSession: SparkSession) extends SparkDataStream {
   val encoder = encoderFor[A]
   protected val attributes = toAttributes(encoder.schema)
 
@@ -179,32 +184,33 @@ class MemoryStreamScanBuilder(stream: MemoryStreamBase[_]) extends ScanBuilder w
 }
 
 /**
- * A [[Source]] that produces value stored in memory as they are added by the user. This
- * [[Source]] is intended for use in unit tests as it can only replay data when the object is
- * still available.
+ * A [[Source]] that produces value stored in memory as they are added by the user.  This [[Source]]
+ * is intended for use in unit tests as it can only replay data when the object is still
+ * available.
  *
  * If numPartitions is provided, the rows will be redistributed to the given number of partitions.
  */
-case class MemoryStream[A: Encoder](
+case class MemoryStream[A : Encoder](
     id: Int,
     sparkSession: SparkSession,
     numPartitions: Option[Int] = None)
-    extends MemoryStreamBaseClass[A](id, sparkSession, numPartitions = numPartitions)
+  extends MemoryStreamBaseClass[A](
+    id, sparkSession, numPartitions = numPartitions)
 
 abstract class MemoryStreamBaseClass[A: Encoder](
     id: Int,
     sparkSession: SparkSession,
     numPartitions: Option[Int] = None)
-    extends MemoryStreamBase[A](sparkSession)
-    with MicroBatchStream
-    with SupportsTriggerAvailableNow
-    with Logging {
+  extends MemoryStreamBase[A](sparkSession)
+  with MicroBatchStream
+  with SupportsTriggerAvailableNow
+  with Logging {
 
   protected val output = logicalPlan.output
 
   /**
-   * All batches from `lastCommittedOffset + 1` to `currentOffset`, inclusive. Stored in a
-   * ListBuffer to facilitate removing committed batches.
+   * All batches from `lastCommittedOffset + 1` to `currentOffset`, inclusive.
+   * Stored in a ListBuffer to facilitate removing committed batches.
    */
   @GuardedBy("this")
   protected val batches = new ListBuffer[Array[UnsafeRow]]
@@ -222,11 +228,11 @@ abstract class MemoryStreamBaseClass[A: Encoder](
   private var availableNowEndOffset: OffsetV2 = _
 
   /**
-   * Last offset that was discarded, or -1 if no commits have occurred. Note that the value -1 is
-   * used in calculations below and isn't just an arbitrary constant.
+   * Last offset that was discarded, or -1 if no commits have occurred. Note that the value
+   * -1 is used in calculations below and isn't just an arbitrary constant.
    */
   @GuardedBy("this")
-  protected var lastOffsetCommitted: LongOffset = new LongOffset(-1)
+  protected var lastOffsetCommitted : LongOffset = new LongOffset(-1)
 
   def addData(data: IterableOnce[A]): Offset = {
     val objects = data.iterator.to(Seq)
@@ -283,11 +289,9 @@ abstract class MemoryStreamBaseClass[A: Encoder](
           // the given number of partition, via round-robin manner.
           val inputRows = newBlocks.flatten.toArray
           (0 until numParts).map { newPartIdx =>
-            val records = inputRows.zipWithIndex
-              .filter { case (_, idx) =>
-                idx % numParts == newPartIdx
-              }
-              .map(_._1)
+            val records = inputRows.zipWithIndex.filter { case (_, idx) =>
+              idx % numParts == newPartIdx
+            }.map(_._1)
             new MemoryStreamInputPartition(records)
           }.toArray
 
@@ -309,7 +313,7 @@ abstract class MemoryStreamBaseClass[A: Encoder](
       endOrdinal: Int): String = {
     val fromRow = encoder.resolveAndBind().createDeserializer()
     s"MemoryBatch [$startOrdinal, $endOrdinal]: " +
-      s"${rows.map(row => fromRow(row)).mkString(", ")}"
+        s"${rows.map(row => fromRow(row)).mkString(", ")}"
   }
 
   override def commit(end: OffsetV2): Unit = synchronized {
@@ -336,6 +340,7 @@ abstract class MemoryStreamBaseClass[A: Encoder](
     availableNowEndOffset = null
   }
 }
+
 
 class MemoryStreamInputPartition(val records: Array[UnsafeRow]) extends InputPartition
 

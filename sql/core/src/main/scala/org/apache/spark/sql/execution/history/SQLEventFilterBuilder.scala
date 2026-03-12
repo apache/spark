@@ -28,11 +28,11 @@ import org.apache.spark.sql.streaming.StreamingQueryListener
 
 /**
  * This class tracks live SQL executions, and pass the list to the [[SQLLiveEntitiesEventFilter]]
- * to help SQLLiveEntitiesEventFilter to accept live SQL executions as well as relevant jobs (+
- * stages/tasks/RDDs).
+ * to help SQLLiveEntitiesEventFilter to accept live SQL executions as well as relevant
+ * jobs (+ stages/tasks/RDDs).
  *
- * Note that this class only tracks the jobs which are relevant to SQL executions - cannot
- * classify between finished job and live job without relation of SQL execution.
+ * Note that this class only tracks the jobs which are relevant to SQL executions - cannot classify
+ * between finished job and live job without relation of SQL execution.
  */
 private[spark] class SQLEventFilterBuilder extends SparkListener with EventFilterBuilder {
   private val liveExecutionToJobs = new mutable.HashMap[Long, mutable.Set[Int]]
@@ -57,8 +57,8 @@ private[spark] class SQLEventFilterBuilder extends SparkListener with EventFilte
     val executionId = executionIdString.toLong
     val jobId = jobStart.jobId
 
-    val jobsForExecution =
-      liveExecutionToJobs.getOrElseUpdate(executionId, mutable.HashSet[Int]())
+    val jobsForExecution = liveExecutionToJobs.getOrElseUpdate(executionId,
+      mutable.HashSet[Int]())
     jobsForExecution += jobId
 
     jobToStages += jobStart.jobId -> jobStart.stageIds.toSet
@@ -108,10 +108,10 @@ private[spark] class SQLEventFilterBuilder extends SparkListener with EventFilte
  * This class accepts events which are related to the live SQL executions based on the given
  * information.
  *
- * Note that acceptFn will not match the event ("Don't mind") instead of returning false on job
- * related events, because it cannot determine whether the job is related to the finished SQL
- * executions, or job is NOT related to the SQL executions. For this case, it just gives up the
- * decision and let other filters decide it.
+ * Note that acceptFn will not match the event ("Don't mind") instead of returning false on
+ * job related events, because it cannot determine whether the job is related to the finished
+ * SQL executions, or job is NOT related to the SQL executions. For this case, it just gives up
+ * the decision and let other filters decide it.
  */
 private[spark] class SQLLiveEntitiesEventFilter(
     liveSQLExecutions: Set[Long],
@@ -119,8 +119,7 @@ private[spark] class SQLLiveEntitiesEventFilter(
     liveStages: Set[Int],
     liveTasks: Set[Long],
     liveRDDs: Set[Int])
-    extends JobEventFilter(None, liveJobs, liveStages, liveTasks, liveRDDs)
-    with Logging {
+  extends JobEventFilter(None, liveJobs, liveStages, liveTasks, liveRDDs) with Logging {
 
   logDebug(s"live SQL executions : $liveSQLExecutions")
 

@@ -31,11 +31,10 @@ trait RocksDBStateStoreTest extends SQLTestUtils {
   val rocksdbChangelogCheckpointingConfKey: String = RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX +
     ".changelogCheckpointing.enabled"
 
-  override protected def test(testName: String, testTags: Tag*)(testBody: => Any)(implicit
-      pos: Position): Unit = {
+  override protected def test(testName: String, testTags: Tag*)(testBody: => Any)
+                             (implicit pos: Position): Unit = {
     super.test(testName + " (RocksDBStateStore)", testTags: _*) {
-      withSQLConf(
-        rocksdbChangelogCheckpointingConfKey -> "false",
+      withSQLConf(rocksdbChangelogCheckpointingConfKey -> "false",
         SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName) {
         testBody
       }
@@ -46,8 +45,7 @@ trait RocksDBStateStoreTest extends SQLTestUtils {
     super.test(testName + " (RocksDBStateStore with changelog checkpointing)", testTags: _*) {
       // in case tests have any code that needs to execute before every test
       super.beforeEach()
-      withSQLConf(
-        rocksdbChangelogCheckpointingConfKey -> "true",
+      withSQLConf(rocksdbChangelogCheckpointingConfKey -> "true",
         SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName) {
         testBody
       }

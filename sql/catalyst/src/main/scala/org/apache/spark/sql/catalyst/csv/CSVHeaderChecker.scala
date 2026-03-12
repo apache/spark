@@ -27,25 +27,21 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
 /**
- * Checks that column names in a CSV header and field names in the schema are the same by taking
- * into account case sensitivity.
+ * Checks that column names in a CSV header and field names in the schema are the same
+ * by taking into account case sensitivity.
  *
- * @param schema
- *   provided (or inferred) schema to which CSV must conform.
- * @param options
- *   parsed CSV options.
- * @param source
- *   name of CSV source that are currently checked. It is used in error messages.
- * @param isStartOfFile
- *   indicates if the currently processing partition is the start of the file. if unknown or not
- *   applicable (for instance when the input is a dataset), can be omitted.
+ * @param schema provided (or inferred) schema to which CSV must conform.
+ * @param options parsed CSV options.
+ * @param source name of CSV source that are currently checked. It is used in error messages.
+ * @param isStartOfFile indicates if the currently processing partition is the start of the file.
+ *                      if unknown or not applicable (for instance when the input is a dataset),
+ *                      can be omitted.
  */
 class CSVHeaderChecker(
     schema: StructType,
     options: CSVOptions,
     source: String,
-    isStartOfFile: Boolean = false)
-    extends Logging {
+    isStartOfFile: Boolean = false) extends Logging {
 
   // Indicates if it is set to `false`, comparison of column names and schema field
   // names is not case sensitive.
@@ -63,11 +59,10 @@ class CSVHeaderChecker(
   var setHeaderForSingleVariantColumn: Option[Option[Array[String]] => Unit] = None
 
   /**
-   * Checks that column names in a CSV header and field names in the schema are the same by taking
-   * into account case sensitivity.
+   * Checks that column names in a CSV header and field names in the schema are the same
+   * by taking into account case sensitivity.
    *
-   * @param columnNames
-   *   names of CSV columns that must be checked against to the schema.
+   * @param columnNames names of CSV columns that must be checked against to the schema.
    */
   private def checkHeaderColumnNames(columnNames: Array[String]): Unit = {
     if (columnNames != null) {
@@ -92,12 +87,11 @@ class CSVHeaderChecker(
           }
           if (nameInHeader != nameInSchema) {
             // scalastyle:off line.size.limit
-            errorMessage = Some(log"""|CSV header does not conform to the schema.
+            errorMessage = Some(
+              log"""|CSV header does not conform to the schema.
                     | Header: ${MDC(CSV_HEADER_COLUMN_NAMES, columnNames.mkString(", "))}
                     | Schema: ${MDC(CSV_SCHEMA_FIELD_NAMES, fieldNames.mkString(", "))}
-                    |Expected: ${MDC(CSV_SCHEMA_FIELD_NAME, fieldNames(i))} but found: ${MDC(
-                                       CSV_HEADER_COLUMN_NAME,
-                                       columnNames(i))}
+                    |Expected: ${MDC(CSV_SCHEMA_FIELD_NAME, fieldNames(i))} but found: ${MDC(CSV_HEADER_COLUMN_NAME, columnNames(i))}
                     |${MDC(CSV_SOURCE, source)}""".stripMargin)
             // scalastyle:on line.size.limit
           }
@@ -107,11 +101,9 @@ class CSVHeaderChecker(
         errorMessage = Some(
           // scalastyle:off line.size.limit
           log"""|Number of column in CSV header is not equal to number of fields in the schema:
-                | Header length: ${MDC(CSV_HEADER_LENGTH, headerLen)}, schema size: ${MDC(
-                 NUM_COLUMNS,
-                 schemaSize)}
+                | Header length: ${MDC(CSV_HEADER_LENGTH, headerLen)}, schema size: ${MDC(NUM_COLUMNS, schemaSize)}
                 |${MDC(CSV_SOURCE, source)}""".stripMargin)
-        // scalastyle:on line.size.limit
+          // scalastyle:on line.size.limit
       }
 
       errorMessage.foreach { msg =>
@@ -146,8 +138,7 @@ class CSVHeaderChecker(
 
   // This is currently only used to parse CSV with non-multiLine mode.
   private[csv] def checkHeaderColumnNames(
-      lines: Iterator[String],
-      tokenizer: AbstractParser[CsvParserSettings]): Unit = {
+      lines: Iterator[String], tokenizer: AbstractParser[CsvParserSettings]): Unit = {
     assert(!options.multiLine, "This method should not be executed with multiline.")
     // Checking that column names in the header are matched to field names of the schema.
     // The header will be removed from lines.

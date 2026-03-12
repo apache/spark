@@ -27,10 +27,8 @@ import org.apache.spark.unsafe.Platform
 /**
  * A State store row and wrapper for [[UnsafeRow]] that includes the row checksum.
  *
- * @param row
- *   The UnsafeRow to be wrapped.
- * @param rowChecksum
- *   The checksum of the row.
+ * @param row The UnsafeRow to be wrapped.
+ * @param rowChecksum The checksum of the row.
  */
 class StateStoreRowWithChecksum(row: UnsafeRow, rowChecksum: Int) extends StateStoreRow(row) {
   def checksum: Int = rowChecksum
@@ -43,9 +41,9 @@ object StateStoreRowWithChecksum {
 }
 
 /**
- * Integrity verifier for a State store key and value pair. To ensure the key and value in the
- * state store isn't corrupt.
- */
+ * Integrity verifier for a State store key and value pair.
+ * To ensure the key and value in the state store isn't corrupt.
+ * */
 trait KeyValueIntegrityVerifier {
   def verify(key: UnsafeRow, value: UnsafeRowWrapper): Unit
   def verify(keyBytes: Array[Byte], valueBytes: Option[Array[Byte]], expectedChecksum: Int): Unit
@@ -70,22 +68,21 @@ object KeyValueIntegrityVerifier {
 }
 
 /**
- * Checksum based key value verifier. Computes the checksum of the key and value bytes and
- * compares it to the expected checksum. This also supports rate limiting the number of
+ * Checksum based key value verifier. Computes the checksum of the key and value bytes
+ * and compares it to the expected checksum. This also supports rate limiting the number of
  * verification performed via the [[verificationRatio]] parameter. Given that the verify method
- * can be called many times for different key and value pairs, this can be used to reduce the
- * number of key-value verified.
+ * can be called many times for different key and value pairs, this can be used to reduce the number
+ * of key-value verified.
  *
  * NOTE: Not thread safe and expected to be accessed one thread at a time.
  *
- * @param storeId
- *   The id of the state store, used for logging purpose.
- * @param verificationRatio
- *   How often should verification occur. Setting a value N means for every N verify call.
- */
-class KeyValueChecksumVerifier(storeId: String, verificationRatio: Long)
-    extends KeyValueIntegrityVerifier
-    with Logging {
+ * @param storeId The id of the state store, used for logging purpose.
+ * @param verificationRatio How often should verification occur.
+ *                          Setting a value N means for every N verify call.
+ * */
+class KeyValueChecksumVerifier(
+    storeId: String,
+    verificationRatio: Long) extends KeyValueIntegrityVerifier with Logging {
   assert(verificationRatio > 0, "Verification ratio must be greater than 0")
 
   // Number of verification requests received via verify method call
@@ -107,18 +104,15 @@ class KeyValueChecksumVerifier(storeId: String, verificationRatio: Long)
   }
 
   /**
-   * Computes the checksum of the key and value row, and compares it with the expected checksum
-   * included in the [[UnsafeRowWrapper]]. Might not do any checksum verification, depending on
-   * the [[verificationRatio]].
+   * Computes the checksum of the key and value row, and compares it with the
+   * expected checksum included in the [[UnsafeRowWrapper]]. Might not do any
+   * checksum verification, depending on the [[verificationRatio]].
    *
-   * @param key
-   *   The key row.
-   * @param value
-   *   The value row.
-   */
+   * @param key The key row.
+   * @param value The value row.
+   * */
   override def verify(key: UnsafeRow, value: UnsafeRowWrapper): Unit = {
-    assert(
-      value.isInstanceOf[StateStoreRowWithChecksum],
+    assert(value.isInstanceOf[StateStoreRowWithChecksum],
       s"Expected StateStoreRowWithChecksum, but got ${value.getClass.getName}")
 
     if (shouldVerify()) {
@@ -131,16 +125,13 @@ class KeyValueChecksumVerifier(storeId: String, verificationRatio: Long)
 
   /**
    * Computes the checksum of the key and value bytes (if present), and compares it with the
-   * expected checksum specified. Might not do any checksum verification, depending on the
-   * [[verificationRatio]].
+   * expected checksum specified. Might not do any checksum verification,
+   * depending on the [[verificationRatio]].
    *
-   * @param keyBytes
-   *   The key bytes.
-   * @param valueBytes
-   *   Optional value bytes.
-   * @param expectedChecksum
-   *   The expected checksum value.
-   */
+   * @param keyBytes The key bytes.
+   * @param valueBytes Optional value bytes.
+   * @param expectedChecksum The expected checksum value.
+   * */
   override def verify(
       keyBytes: Array[Byte],
       valueBytes: Option[Array[Byte]],
@@ -153,16 +144,14 @@ class KeyValueChecksumVerifier(storeId: String, verificationRatio: Long)
 
   /**
    * Computes the checksum of the key and value bytes (if present), and compares it with the
-   * expected checksum specified. Might not do any checksum verification, depending on the
-   * [[verificationRatio]].
+   * expected checksum specified. Might not do any checksum verification,
+   * depending on the [[verificationRatio]].
    *
-   * @param keyBytes
-   *   Specifies the index range of the key bytes in the underlying array.
-   * @param valueBytes
-   *   Optional, specifies the index range of the value bytes in the underlying array.
-   * @param expectedChecksum
-   *   The expected checksum value.
-   */
+   * @param keyBytes Specifies the index range of the key bytes in the underlying array.
+   * @param valueBytes Optional, specifies the index range of the value bytes
+   *                   in the underlying array.
+   * @param expectedChecksum The expected checksum value.
+   * */
   override def verify(
       keyBytes: ArrayIndexRange[Byte],
       valueBytes: Option[ArrayIndexRange[Byte]],
@@ -176,10 +165,9 @@ class KeyValueChecksumVerifier(storeId: String, verificationRatio: Long)
   private def verifyChecksum(expected: Int, computed: Int): Unit = {
     logDebug(s"Verifying row checksum, expected: $expected, computed: $computed")
     if (expected != computed) {
-      logError(
-        log"Row checksum verification failed for store ${MDC(STATE_STORE_ID, storeId)}, " +
-          log"Expected checksum: ${MDC(CHECKSUM, expected)}, " +
-          log"Computed checksum: ${MDC(CHECKSUM, computed)}")
+      logError(log"Row checksum verification failed for store ${MDC(STATE_STORE_ID, storeId)}, " +
+        log"Expected checksum: ${MDC(CHECKSUM, expected)}, " +
+        log"Computed checksum: ${MDC(CHECKSUM, computed)}")
       throw StateStoreErrors.rowChecksumVerificationFailed(storeId, expected, computed)
     }
   }
@@ -193,19 +181,18 @@ object KeyValueChecksumVerifier {
 
 /** For Key Value checksum creation */
 object KeyValueChecksum {
-
   /**
-   * Creates a checksum value using the bytes of the key and value row. If value row isn't
-   * specified, will create using key row bytes only.
-   */
+   * Creates a checksum value using the bytes of the key and value row.
+   * If value row isn't specified, will create using key row bytes only.
+   * */
   def create(keyRow: UnsafeRow, valueRow: Option[UnsafeRow]): Int = {
     create(keyRow.getBytes, valueRow.map(_.getBytes))
   }
 
   /**
-   * Creates a checksum value using the key and value bytes. If value bytes isn't specified, will
-   * create using key bytes only.
-   */
+   * Creates a checksum value using the key and value bytes.
+   * If value bytes isn't specified, will create using key bytes only.
+   * */
   def create(keyBytes: Array[Byte], valueBytes: Option[Array[Byte]]): Int = {
     create(
       ArrayIndexRange(keyBytes, 0, keyBytes.length),
@@ -216,11 +203,9 @@ object KeyValueChecksum {
    * Creates a checksum value using key bytes array index range and value bytes array index range.
    * If value bytes index range isn't specified, will create using key bytes only.
    *
-   * @param keyBytes
-   *   Specifies the index range of bytes to use in the underlying array.
-   * @param valueBytes
-   *   Optional, specifies the index range of bytes to use in the underlying array.
-   */
+   * @param keyBytes Specifies the index range of bytes to use in the underlying array.
+   * @param valueBytes Optional, specifies the index range of bytes to use in the underlying array.
+   * */
   def create(keyBytes: ArrayIndexRange[Byte], valueBytes: Option[ArrayIndexRange[Byte]]): Int = {
     // We can later make the checksum algorithm configurable
     val crc32c = new CRC32C()
@@ -236,9 +221,8 @@ object KeyValueChecksum {
 
 /**
  * Used to encode and decode checksum value with/from the row bytes.
- */
+ * */
 object KeyValueChecksumEncoder {
-
   /**
    * Encodes the value row bytes with a checksum value. This encodes the bytes in a way that
    * supports additional values to be later merged to it. If the value would only ever have a
@@ -246,13 +230,10 @@ object KeyValueChecksumEncoder {
    *
    * It is encoded as: checksum (4 bytes) + rowBytes.length (4 bytes) + rowBytes
    *
-   * @param rowBytes
-   *   Value row bytes.
-   * @param checksum
-   *   Checksum value to encode with the value row bytes.
-   * @return
-   *   The encoded value row bytes that includes the checksum.
-   */
+   * @param rowBytes Value row bytes.
+   * @param checksum Checksum value to encode with the value row bytes.
+   * @return The encoded value row bytes that includes the checksum.
+   * */
   def encodeValueRowWithChecksum(rowBytes: Array[Byte], checksum: Int): Array[Byte] = {
     val result = new Array[Byte](java.lang.Integer.BYTES * 2 + rowBytes.length)
     Platform.putInt(result, Platform.BYTE_ARRAY_OFFSET, checksum)
@@ -260,34 +241,28 @@ object KeyValueChecksumEncoder {
 
     // Write the actual data
     Platform.copyMemory(
-      rowBytes,
-      Platform.BYTE_ARRAY_OFFSET,
-      result,
-      Platform.BYTE_ARRAY_OFFSET + java.lang.Integer.BYTES * 2,
-      rowBytes.length)
+      rowBytes, Platform.BYTE_ARRAY_OFFSET,
+      result, Platform.BYTE_ARRAY_OFFSET + java.lang.Integer.BYTES * 2,
+      rowBytes.length
+    )
     result
   }
 
   /**
    * Decode and verify a value row bytes encoded with checksum via [[encodeValueRowWithChecksum]]
-   * back to the original value row bytes. Supports decoding both one or more values bytes (i.e.
-   * merged values). This copies each individual value and removes their encoded checksum to form
-   * the original value bytes. Because it does copy, it is more expensive than
-   * [[decodeAndVerifyMultiValueRowWithChecksum]] method which returns the index range instead of
-   * copy (preferred for multi-value bytes). This method is just used to support calling store.get
-   * for a key that has merged values.
+   * back to the original value row bytes. Supports decoding both one or more values bytes
+   * (i.e. merged values). This copies each individual value and removes their encoded checksum to
+   * form the original value bytes. Because it does copy, it is more expensive than
+   * [[decodeAndVerifyMultiValueRowWithChecksum]] method which returns
+   * the index range instead of copy (preferred for multi-value bytes). This method is just used
+   * to support calling store.get for a key that has merged values.
    *
-   * @param verifier
-   *   used for checksum verification.
-   * @param keyBytes
-   *   Key bytes for the value to decode, only used for checksum verification.
-   * @param valueBytes
-   *   The value bytes to decode.
-   * @param delimiterSize
-   *   Size of delimiter used between merged values (in bytes).
-   * @return
-   *   The original value row bytes, without the checksum.
-   */
+   * @param verifier used for checksum verification.
+   * @param keyBytes Key bytes for the value to decode, only used for checksum verification.
+   * @param valueBytes The value bytes to decode.
+   * @param delimiterSize Size of delimiter used between merged values (in bytes).
+   * @return The original value row bytes, without the checksum.
+   * */
   def decodeAndVerifyValueRowWithChecksum(
       verifier: Option[KeyValueIntegrityVerifier],
       keyBytes: Array[Byte],
@@ -339,7 +314,11 @@ object KeyValueChecksumEncoder {
       } else {
         valueRowSize
       }
-      Platform.copyMemory(valueBytes, currentPosition, result, resultPosition, copyLength)
+      Platform.copyMemory(
+        valueBytes, currentPosition,
+        result, resultPosition,
+        copyLength
+      )
 
       // move to the next value
       currentPosition += copyLength
@@ -350,22 +329,18 @@ object KeyValueChecksumEncoder {
   }
 
   /**
-   * Decode and verify a value row bytes, that might contain one or more values (merged) encoded
-   * with checksum via [[encodeValueRowWithChecksum]] back to the original value row bytes index.
-   * This returns an iterator of index range of the original individual value row bytes and
-   * verifies their checksum. Cheaper since it does not copy the value bytes unlike
+   * Decode and verify a value row bytes, that might contain one or more values (merged)
+   * encoded with checksum via [[encodeValueRowWithChecksum]] back to the original value
+   * row bytes index.
+   * This returns an iterator of index range of the original individual value row bytes
+   * and verifies their checksum. Cheaper since it does not copy the value bytes unlike
    * [[decodeAndVerifyValueRowWithChecksum]].
    *
-   * @param verifier
-   *   Used for checksum verification.
-   * @param keyBytes
-   *   Key bytes for the value to decode, only used for checksum verification.
-   * @param valueBytes
-   *   The value bytes to decode.
-   * @param delimiterSize
-   *   Size of delimiter used between merged values (in bytes).
-   * @return
-   *   Iterator of index range representing the original value row bytes, without checksum.
+   * @param verifier Used for checksum verification.
+   * @param keyBytes Key bytes for the value to decode, only used for checksum verification.
+   * @param valueBytes The value bytes to decode.
+   * @param delimiterSize Size of delimiter used between merged values (in bytes).
+   * @return Iterator of index range representing the original value row bytes, without checksum.
    */
   def decodeAndVerifyMultiValueRowWithChecksum(
       verifier: Option[KeyValueIntegrityVerifier],
@@ -395,24 +370,21 @@ object KeyValueChecksumEncoder {
   }
 
   /**
-   * Decodes one value row bytes encoded with checksum via [[encodeValueRowWithChecksum]] back to
-   * the original value row bytes. This is used for an encoded value row that currently only have
-   * one value. This returns the index range of the original value row bytes and the encoded
-   * checksum value. Cheaper since it does not copy the value bytes.
+   * Decodes one value row bytes encoded with checksum via [[encodeValueRowWithChecksum]]
+   * back to the original value row bytes. This is used for an encoded value row that
+   * currently only have one value. This returns the index range of the original value row bytes
+   * and the encoded checksum value. Cheaper since it does not copy the value bytes.
    *
-   * @param bytes
-   *   The value bytes to decode.
-   * @return
-   *   A tuple containing the index range of the original value row bytes and the checksum.
+   * @param bytes The value bytes to decode.
+   * @return A tuple containing the index range of the original value row bytes and the checksum.
    */
   def decodeOneValueRowIndexWithChecksum(bytes: Array[Byte]): (ArrayIndexRange[Byte], Int) = {
     getValueRowIndexAndChecksum(bytes, startingPosition = Platform.BYTE_ARRAY_OFFSET)
   }
 
-  /**
-   * Get the original value row index and checksum for a row encoded via
+  /** Get the original value row index and checksum for a row encoded via
    * [[encodeValueRowWithChecksum]]
-   */
+   * */
   private def getValueRowIndexAndChecksum(
       bytes: Array[Byte],
       startingPosition: Int): (ArrayIndexRange[Byte], Int) = {
@@ -428,44 +400,36 @@ object KeyValueChecksumEncoder {
   }
 
   /**
-   * Encodes the key row bytes with a checksum value. It is encoded as: checksum (4 bytes) +
-   * rowBytes
+   * Encodes the key row bytes with a checksum value.
+   * It is encoded as: checksum (4 bytes) + rowBytes
    *
-   * @param rowBytes
-   *   Key row bytes.
-   * @param checksum
-   *   Checksum value to encode with the key row bytes.
-   * @return
-   *   The encoded key row bytes that includes the checksum.
-   */
+   * @param rowBytes Key row bytes.
+   * @param checksum Checksum value to encode with the key row bytes.
+   * @return The encoded key row bytes that includes the checksum.
+   * */
   def encodeKeyRowWithChecksum(rowBytes: Array[Byte], checksum: Int): Array[Byte] = {
     encodeSingleValueRowWithChecksum(rowBytes, checksum)
   }
 
   /**
-   * Decodes the key row encoded with [[encodeKeyRowWithChecksum]] and returns the original key
-   * bytes and the checksum value.
+   * Decodes the key row encoded with [[encodeKeyRowWithChecksum]] and
+   * returns the original key bytes and the checksum value.
    *
-   * @param bytes
-   *   The encoded key bytes with checksum.
-   * @return
-   *   Tuple of the original key bytes and the checksum value.
-   */
+   * @param bytes The encoded key bytes with checksum.
+   * @return Tuple of the original key bytes and the checksum value.
+   * */
   def decodeKeyRowWithChecksum(bytes: Array[Byte]): (Array[Byte], Int) = {
     decodeSingleValueRowWithChecksum(bytes)
   }
 
   /**
-   * Decode and verify the key row encoded with [[encodeKeyRowWithChecksum]] and returns the
-   * original key bytes.
+   * Decode and verify the key row encoded with [[encodeKeyRowWithChecksum]] and
+   * returns the original key bytes.
    *
-   * @param verifier
-   *   Used for checksum verification.
-   * @param bytes
-   *   The encoded key bytes with checksum.
-   * @return
-   *   The original key bytes.
-   */
+   * @param verifier Used for checksum verification.
+   * @param bytes The encoded key bytes with checksum.
+   * @return The original key bytes.
+   * */
   def decodeAndVerifyKeyRowWithChecksum(
       verifier: Option[KeyValueIntegrityVerifier],
       bytes: Array[Byte]): Array[Byte] = {
@@ -475,63 +439,55 @@ object KeyValueChecksumEncoder {
   }
 
   /**
-   * Decodes a key row encoded with [[encodeKeyRowWithChecksum]] and returns the index range of
-   * the original key bytes and checksum value. This is cheaper than [[decodeKeyRowWithChecksum]],
-   * since it doesn't copy the key bytes.
+   * Decodes a key row encoded with [[encodeKeyRowWithChecksum]] and
+   * returns the index range of the original key bytes and checksum value. This is cheaper
+   * than [[decodeKeyRowWithChecksum]], since it doesn't copy the key bytes.
    *
-   * @param keyBytes
-   *   The encoded key bytes with checksum.
-   * @return
-   *   A tuple containing the index range of the original key row bytes and the checksum.
-   */
+   * @param keyBytes The encoded key bytes with checksum.
+   * @return A tuple containing the index range of the original key row bytes and the checksum.
+   * */
   def decodeKeyRowIndexWithChecksum(keyBytes: Array[Byte]): (ArrayIndexRange[Byte], Int) = {
     decodeSingleValueRowIndexWithChecksum(keyBytes)
   }
 
   /**
-   * Encodes a value row bytes that will only ever have a single value (no multi-value) with a
-   * checksum value. It is encoded as: checksum (4 bytes) + rowBytes. Since it will only ever have
-   * a single value, no need to encode the rowBytes length.
+   * Encodes a value row bytes that will only ever have a single value (no multi-value)
+   * with a checksum value.
+   * It is encoded as: checksum (4 bytes) + rowBytes.
+   * Since it will only ever have a single value, no need to encode the rowBytes length.
    *
-   * @param rowBytes
-   *   Value row bytes.
-   * @param checksum
-   *   Checksum value to encode with the value row bytes.
-   * @return
-   *   The encoded value row bytes that includes the checksum.
-   */
+   * @param rowBytes Value row bytes.
+   * @param checksum Checksum value to encode with the value row bytes.
+   * @return The encoded value row bytes that includes the checksum.
+   * */
   def encodeSingleValueRowWithChecksum(rowBytes: Array[Byte], checksum: Int): Array[Byte] = {
     val result = new Array[Byte](java.lang.Integer.BYTES + rowBytes.length)
     Platform.putInt(result, Platform.BYTE_ARRAY_OFFSET, checksum)
 
     // Write the actual data
     Platform.copyMemory(
-      rowBytes,
-      Platform.BYTE_ARRAY_OFFSET,
-      result,
-      Platform.BYTE_ARRAY_OFFSET + java.lang.Integer.BYTES,
-      rowBytes.length)
+      rowBytes, Platform.BYTE_ARRAY_OFFSET,
+      result, Platform.BYTE_ARRAY_OFFSET + java.lang.Integer.BYTES,
+      rowBytes.length
+    )
     result
   }
 
   /**
-   * Decodes a single value row encoded with [[encodeSingleValueRowWithChecksum]] and returns the
-   * original value bytes and checksum value.
+   * Decodes a single value row encoded with [[encodeSingleValueRowWithChecksum]] and
+   * returns the original value bytes and checksum value.
    *
-   * @param bytes
-   *   The encoded value bytes with checksum.
-   * @return
-   *   Tuple of the original value bytes and the checksum value.
-   */
+   * @param bytes The encoded value bytes with checksum.
+   * @return Tuple of the original value bytes and the checksum value.
+   * */
   def decodeSingleValueRowWithChecksum(bytes: Array[Byte]): (Array[Byte], Int) = {
     val checksum = Platform.getInt(bytes, Platform.BYTE_ARRAY_OFFSET)
     val row = new Array[Byte](bytes.length - java.lang.Integer.BYTES)
     Platform.copyMemory(
-      bytes,
-      Platform.BYTE_ARRAY_OFFSET + java.lang.Integer.BYTES,
-      row,
-      Platform.BYTE_ARRAY_OFFSET,
-      row.length)
+      bytes, Platform.BYTE_ARRAY_OFFSET + java.lang.Integer.BYTES,
+      row, Platform.BYTE_ARRAY_OFFSET,
+      row.length
+    )
 
     (row, checksum)
   }
@@ -540,15 +496,11 @@ object KeyValueChecksumEncoder {
    * Decode and verify a single value row encoded with [[encodeSingleValueRowWithChecksum]] and
    * returns the original value bytes.
    *
-   * @param verifier
-   *   used for checksum verification.
-   * @param keyBytes
-   *   Key bytes for the value to decode, only used for checksum verification.
-   * @param valueBytes
-   *   The value bytes to decode.
-   * @return
-   *   The original value row bytes, without the checksum.
-   */
+   * @param verifier used for checksum verification.
+   * @param keyBytes Key bytes for the value to decode, only used for checksum verification.
+   * @param valueBytes The value bytes to decode.
+   * @return The original value row bytes, without the checksum.
+   * */
   def decodeAndVerifySingleValueRowWithChecksum(
       verifier: Option[KeyValueIntegrityVerifier],
       keyBytes: Array[Byte],
@@ -559,15 +511,13 @@ object KeyValueChecksumEncoder {
   }
 
   /**
-   * Decodes a single value row encoded with [[encodeSingleValueRowWithChecksum]] and returns the
-   * index range of the original value bytes and checksum value. This is cheaper than
-   * [[decodeSingleValueRowWithChecksum]], since it doesn't copy the value bytes.
+   * Decodes a single value row encoded with [[encodeSingleValueRowWithChecksum]] and
+   * returns the index range of the original value bytes and checksum value. This is cheaper
+   * than [[decodeSingleValueRowWithChecksum]], since it doesn't copy the value bytes.
    *
-   * @param bytes
-   *   The encoded value bytes with checksum.
-   * @return
-   *   A tuple containing the index range of the original value row bytes and the checksum.
-   */
+   * @param bytes The encoded value bytes with checksum.
+   * @return A tuple containing the index range of the original value row bytes and the checksum.
+   * */
   def decodeSingleValueRowIndexWithChecksum(bytes: Array[Byte]): (ArrayIndexRange[Byte], Int) = {
     var position = Platform.BYTE_ARRAY_OFFSET
     val checksum = Platform.getInt(bytes, position)

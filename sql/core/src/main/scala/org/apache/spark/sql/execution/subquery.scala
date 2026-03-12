@@ -34,7 +34,6 @@ import org.apache.spark.sql.types.DataType
  * The base class for subquery that is used in SparkPlan.
  */
 abstract class ExecSubqueryExpression extends PlanExpression[BaseSubqueryExec] {
-
   /**
    * Fill the expression with collected result from executed plan.
    */
@@ -45,7 +44,6 @@ abstract class ExecSubqueryExpression extends PlanExpression[BaseSubqueryExec] {
 }
 
 object ExecSubqueryExpression {
-
   /**
    * Returns true when an expression contains a subquery
    */
@@ -62,10 +60,10 @@ object ExecSubqueryExpression {
  *
  * This is the physical copy of ScalarSubquery to be used inside SparkPlan.
  */
-case class ScalarSubquery(plan: BaseSubqueryExec, exprId: ExprId)
-    extends ExecSubqueryExpression
-    with LeafLike[Expression]
-    with SupportQueryContext {
+case class ScalarSubquery(
+    plan: BaseSubqueryExec,
+    exprId: ExprId)
+  extends ExecSubqueryExpression with LeafLike[Expression] with SupportQueryContext {
 
   override def dataType: DataType = plan.schema.fields.head.dataType
   override def nullable: Boolean = true
@@ -87,8 +85,7 @@ case class ScalarSubquery(plan: BaseSubqueryExec, exprId: ExprId)
       throw QueryExecutionErrors.multipleRowScalarSubqueryError(getContextOrNull())
     }
     if (rows.length == 1) {
-      assert(
-        rows(0).numFields == 1,
+      assert(rows(0).numFields == 1,
         s"Expects 1 field, but got ${rows(0).numFields}; something went wrong in analysis")
       result = rows(0).get(0, dataType)
     } else {
@@ -114,8 +111,8 @@ case class ScalarSubquery(plan: BaseSubqueryExec, exprId: ExprId)
 }
 
 /**
- * The physical node of in-subquery. When this is used for Dynamic Partition Pruning, as the
- * pruning happens at the driver side, we don't broadcast subquery result.
+ * The physical node of in-subquery. When this is used for Dynamic Partition Pruning, as the pruning
+ * happens at the driver side, we don't broadcast subquery result.
  */
 case class InSubqueryExec(
     child: Expression,
@@ -124,9 +121,7 @@ case class InSubqueryExec(
     isDynamicPruning: Boolean = true,
     private var resultBroadcast: Broadcast[Array[Any]] = null,
     @transient private var result: Array[Any] = null)
-    extends ExecSubqueryExpression
-    with UnaryLike[Expression]
-    with Predicate {
+  extends ExecSubqueryExpression with UnaryLike[Expression] with Predicate {
 
   @transient private lazy val inSet = InSet(child, result.toSet)
 
@@ -190,23 +185,21 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
         val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, subquery.plan)
         ScalarSubquery(
           SubqueryExec.createForScalarSubquery(
-            s"scalar-subquery#${subquery.exprId.id}",
-            executedPlan),
+            s"scalar-subquery#${subquery.exprId.id}", executedPlan),
           subquery.exprId)
       case expressions.InSubquery(values, ListQuery(query, _, exprId, _, _, _)) =>
         val expr = if (values.length == 1) {
           values.head
         } else {
-          CreateNamedStruct(values.zipWithIndex.flatMap { case (v, index) =>
-            Seq(Literal(s"col_$index"), v)
-          })
+          CreateNamedStruct(
+            values.zipWithIndex.flatMap { case (v, index) =>
+              Seq(Literal(s"col_$index"), v)
+            }
+          )
         }
         val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, query)
-        InSubqueryExec(
-          expr,
-          SubqueryExec(s"subquery#${exprId.id}", executedPlan),
-          exprId,
-          isDynamicPruning = false)
+        InSubqueryExec(expr, SubqueryExec(s"subquery#${exprId.id}", executedPlan),
+          exprId, isDynamicPruning = false)
     }
   }
 }

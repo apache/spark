@@ -28,11 +28,13 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types.{DataType, StructType}
 
+
 class ConvertToLocalRelationSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("LocalRelation", FixedPoint(100), ConvertToLocalRelation) :: Nil
+      Batch("LocalRelation", FixedPoint(100),
+        ConvertToLocalRelation) :: Nil
   }
 
   test("Project on LocalRelation should be turned into a single LocalRelation") {
@@ -58,8 +60,9 @@ class ConvertToLocalRelationSuite extends PlanTest {
       LocalRelation($"a".int, $"b".int).output,
       InternalRow(1, 2) :: InternalRow(4, 5) :: Nil)
 
-    val correctAnswer =
-      LocalRelation(LocalRelation($"a1".int, $"b1".int).output, InternalRow(1, 3) :: Nil)
+    val correctAnswer = LocalRelation(
+      LocalRelation($"a1".int, $"b1".int).output,
+      InternalRow(1, 3) :: Nil)
 
     val filterAndProjectOnLocal = testRelation
       .select(UnresolvedAttribute("a").as("a1"), (UnresolvedAttribute("b") + 1).as("b1"))
@@ -71,8 +74,9 @@ class ConvertToLocalRelationSuite extends PlanTest {
   }
 
   test("SPARK-27798: Expression reusing output shouldn't override values in local relation") {
-    val testRelation =
-      LocalRelation(LocalRelation($"a".int).output, InternalRow(1) :: InternalRow(2) :: Nil)
+    val testRelation = LocalRelation(
+      LocalRelation($"a".int).output,
+      InternalRow(1) :: InternalRow(2) :: Nil)
 
     val correctAnswer = LocalRelation(
       LocalRelation($"a".struct($"a1".int)).output,
@@ -84,6 +88,7 @@ class ConvertToLocalRelationSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 }
+
 
 // Dummy expression used for testing. It reuses output row. Assumes child expr outputs an integer.
 case class ExprReuseOutput(child: Expression) extends UnaryExpression {

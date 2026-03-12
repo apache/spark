@@ -28,6 +28,7 @@ import org.apache.spark.sql.execution.arrow.{ArrowWriter => SparkArrowWriter}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 
+
 case class ArrowWriterWrapper(
     var streamWriter: ArrowStreamWriter,
     var arrowWriter: SparkArrowWriter,
@@ -44,9 +45,9 @@ case class ArrowWriterWrapper(
   })
 
   /*
-   * Idempotent method to release the resources. Access to any member object is invalid
-   * after calling close().
-   */
+  * Idempotent method to release the resources. Access to any member object is invalid
+  * after calling close().
+  */
   def close(): Unit = {
     if (!isClosed) {
       root.close()
@@ -73,9 +74,7 @@ object ArrowWriterWrapper {
       context: TaskContext): ArrowWriterWrapper = {
     val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId, largeVarTypes)
     val allocator = ArrowUtils.rootAllocator.newChildAllocator(
-      s"stdout writer for $allocatorOwner",
-      0,
-      Long.MaxValue)
+      s"stdout writer for $allocatorOwner", 0, Long.MaxValue)
     val root = VectorSchemaRoot.create(arrowSchema, allocator)
     val arrowWriter = SparkArrowWriter.create(root)
 

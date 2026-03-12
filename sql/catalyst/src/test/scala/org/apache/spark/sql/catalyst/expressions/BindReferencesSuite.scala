@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types.IntegerType
 
-class BindReferencesSuite extends SparkFunSuite {
+class BindReferencesSuite extends SparkFunSuite{
   test("attribute not found exception") {
     val missing = AttributeReference("missing", IntegerType)(qualifier = Seq.empty)
     val input1 = AttributeReference("one", IntegerType)(qualifier = Seq.empty)
@@ -28,14 +28,16 @@ class BindReferencesSuite extends SparkFunSuite {
     val input3 = AttributeReference("three", IntegerType)(qualifier = Seq.empty)
 
     val e = BindReferences.attributeNotFoundException(
-      missingAttr = missing,
-      inputAttrs = Seq(input1, input2, input3))
+        missingAttr = missing,
+        inputAttrs = Seq(input1, input2, input3))
 
-    checkError(
-      e,
+    checkError(e,
       condition = "INTERNAL_ERROR_ATTRIBUTE_NOT_FOUND",
       sqlState = "XX000",
-      parameters =
-        Map("missingAttr" -> s"$missing", "inputAttrs" -> s"[$input1,$input2,$input3]"))
+      parameters = Map(
+        "missingAttr" -> s"$missing",
+        "inputAttrs" -> s"[$input1,$input2,$input3]"
+      )
+    )
   }
 }

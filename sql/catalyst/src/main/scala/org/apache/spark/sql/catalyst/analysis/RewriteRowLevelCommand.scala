@@ -91,8 +91,9 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       relation: DataSourceV2Relation,
       operation: SupportsDelta): Seq[AttributeReference] = {
 
-    val rowIdAttrs = V2ExpressionUtils
-      .resolveRefs[AttributeReference](operation.rowId.toImmutableArraySeq, relation)
+    val rowIdAttrs = V2ExpressionUtils.resolveRefs[AttributeReference](
+      operation.rowId.toImmutableArraySeq,
+      relation)
 
     val nullableRowIdAttrs = rowIdAttrs.filter(_.nullable)
     if (nullableRowIdAttrs.nonEmpty) {
@@ -156,8 +157,7 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       metadataAttrs: Seq[Attribute],
       originalRowIdValues: Seq[Expression] = Seq.empty): Seq[Expression] = {
     val rowValues = assignments.map(_.value)
-    val extraNullValues =
-      (metadataAttrs ++ originalRowIdValues).map(e => Literal(null, e.dataType))
+    val extraNullValues = (metadataAttrs ++ originalRowIdValues).map(e => Literal(null, e.dataType))
     Seq(Literal(INSERT_OPERATION)) ++ rowValues ++ extraNullValues
   }
 
@@ -191,8 +191,7 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       metadataAttrs: Seq[Attribute]): ReplaceDataProjections = {
     val outputs = extractOutputs(plan)
 
-    val outputsWithRow =
-      filterOutputs(outputs, Set(WRITE_WITH_METADATA_OPERATION, WRITE_OPERATION))
+    val outputsWithRow = filterOutputs(outputs, Set(WRITE_WITH_METADATA_OPERATION, WRITE_OPERATION))
     val rowProjection = newLazyProjection(plan, outputsWithRow, rowAttrs)
 
     val metadataProjection = if (metadataAttrs.nonEmpty) {

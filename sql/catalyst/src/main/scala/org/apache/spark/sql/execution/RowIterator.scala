@@ -30,10 +30,9 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
  * [[advanceNext()]] method.
  */
 abstract class RowIterator {
-
   /**
-   * Advance this iterator by a single row. Returns `false` if this iterator has no more rows and
-   * `true` otherwise. If this returns `true`, then the new row can be retrieved by calling
+   * Advance this iterator by a single row. Returns `false` if this iterator has no more rows
+   * and `true` otherwise. If this returns `true`, then the new row can be retrieved by calling
    * [[getRow]].
    */
   def advanceNext(): Boolean
@@ -60,8 +59,8 @@ object RowIterator {
 }
 
 private final class RowIteratorToScala(val rowIter: RowIterator) extends Iterator[InternalRow] {
-  private[this] var hasNextWasCalled: Boolean = false
-  private[this] var _hasNext: Boolean = false
+  private [this] var hasNextWasCalled: Boolean = false
+  private [this] var _hasNext: Boolean = false
   override def hasNext: Boolean = {
     // Idempotency:
     if (!hasNextWasCalled) {

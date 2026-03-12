@@ -174,8 +174,7 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
       checkEvaluation(Cast(Literal("134.12"), DecimalType(3, 2)), null)
       checkEvaluation(
-        Cast(Literal(Timestamp.valueOf("2019-07-25 22:04:36")), DecimalType(3, 2)),
-        null)
+        Cast(Literal(Timestamp.valueOf("2019-07-25 22:04:36")), DecimalType(3, 2)), null)
       checkEvaluation(Cast(Literal(BigDecimal(134.12)), DecimalType(3, 2)), null)
       checkEvaluation(Cast(Literal(134.12), DecimalType(3, 2)), null)
     }
@@ -192,19 +191,17 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
     assert(Cast.canCast(ArrayType(NullType, true), ArrayType(IntegerType, true)))
     assert(Cast.canCast(ArrayType(NullType, false), ArrayType(IntegerType, true)))
 
-    assert(
-      Cast.canCast(MapType(NullType, NullType, true), MapType(IntegerType, IntegerType, true)))
-    assert(
-      Cast.canCast(MapType(NullType, NullType, false), MapType(IntegerType, IntegerType, true)))
+    assert(Cast.canCast(
+      MapType(NullType, NullType, true), MapType(IntegerType, IntegerType, true)))
+    assert(Cast.canCast(
+      MapType(NullType, NullType, false), MapType(IntegerType, IntegerType, true)))
 
-    assert(
-      Cast.canCast(
-        StructType(StructField("a", NullType, true) :: Nil),
-        StructType(StructField("a", IntegerType, true) :: Nil)))
-    assert(
-      Cast.canCast(
-        StructType(StructField("a", NullType, false) :: Nil),
-        StructType(StructField("a", IntegerType, true) :: Nil)))
+    assert(Cast.canCast(
+      StructType(StructField("a", NullType, true) :: Nil),
+      StructType(StructField("a", IntegerType, true) :: Nil)))
+    assert(Cast.canCast(
+      StructType(StructField("a", NullType, false) :: Nil),
+      StructType(StructField("a", IntegerType, true) :: Nil)))
   }
 
   test("cast string to boolean II") {
@@ -213,10 +210,10 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
   }
 
   test("cast from array II") {
-    val array =
-      Literal.create(Seq("123", "true", "f", null), ArrayType(StringType, containsNull = true))
-    val array_notNull =
-      Literal.create(Seq("123", "true", "f"), ArrayType(StringType, containsNull = false))
+    val array = Literal.create(Seq("123", "true", "f", null),
+      ArrayType(StringType, containsNull = true))
+    val array_notNull = Literal.create(Seq("123", "true", "f"),
+      ArrayType(StringType, containsNull = false))
 
     {
       val ret = cast(array, ArrayType(BooleanType, containsNull = true))
@@ -274,8 +271,12 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
 
   test("cast from struct II") {
     checkNullCast(
-      StructType(Seq(StructField("a", StringType), StructField("b", IntegerType))),
-      StructType(Seq(StructField("a", StringType), StructField("b", StringType))))
+      StructType(Seq(
+        StructField("a", StringType),
+        StructField("b", IntegerType))),
+      StructType(Seq(
+        StructField("a", StringType),
+        StructField("b", StringType))))
 
     val struct = Literal.create(
       InternalRow(
@@ -283,82 +284,72 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
         UTF8String.fromString("true"),
         UTF8String.fromString("f"),
         null),
-      StructType(
-        Seq(
-          StructField("a", StringType, nullable = true),
-          StructField("b", StringType, nullable = true),
-          StructField("c", StringType, nullable = true),
-          StructField("d", StringType, nullable = true))))
+      StructType(Seq(
+        StructField("a", StringType, nullable = true),
+        StructField("b", StringType, nullable = true),
+        StructField("c", StringType, nullable = true),
+        StructField("d", StringType, nullable = true))))
     val struct_notNull = Literal.create(
       InternalRow(
         UTF8String.fromString("123"),
         UTF8String.fromString("true"),
         UTF8String.fromString("f")),
-      StructType(
-        Seq(
-          StructField("a", StringType, nullable = false),
-          StructField("b", StringType, nullable = false),
-          StructField("c", StringType, nullable = false))))
+      StructType(Seq(
+        StructField("a", StringType, nullable = false),
+        StructField("b", StringType, nullable = false),
+        StructField("c", StringType, nullable = false))))
 
     {
-      val ret = cast(
-        struct,
-        StructType(
-          Seq(
-            StructField("a", BooleanType, nullable = true),
-            StructField("b", BooleanType, nullable = true),
-            StructField("c", BooleanType, nullable = true),
-            StructField("d", BooleanType, nullable = true))))
+      val ret = cast(struct, StructType(Seq(
+        StructField("a", BooleanType, nullable = true),
+        StructField("b", BooleanType, nullable = true),
+        StructField("c", BooleanType, nullable = true),
+        StructField("d", BooleanType, nullable = true))))
       assert(ret.resolved)
       checkEvaluation(ret, InternalRow(null, true, false, null))
     }
 
     {
-      val ret = cast(
-        struct_notNull,
-        StructType(
-          Seq(
-            StructField("a", BooleanType, nullable = true),
-            StructField("b", BooleanType, nullable = true),
-            StructField("c", BooleanType, nullable = true))))
+      val ret = cast(struct_notNull, StructType(Seq(
+        StructField("a", BooleanType, nullable = true),
+        StructField("b", BooleanType, nullable = true),
+        StructField("c", BooleanType, nullable = true))))
       assert(ret.resolved)
       checkEvaluation(ret, InternalRow(null, true, false))
     }
 
     {
-      val ret = cast(
-        struct_notNull,
-        StructType(
-          Seq(
-            StructField("a", BooleanType, nullable = true),
-            StructField("b", BooleanType, nullable = true),
-            StructField("c", BooleanType, nullable = false))))
+      val ret = cast(struct_notNull, StructType(Seq(
+        StructField("a", BooleanType, nullable = true),
+        StructField("b", BooleanType, nullable = true),
+        StructField("c", BooleanType, nullable = false))))
       assert(ret.resolved === false)
     }
   }
 
   test("complex casting") {
     val complex = Literal.create(
-      Row(Seq("123", "true", "f"), Map("a" -> "123", "b" -> "true", "c" -> "f"), Row(0)),
-      StructType(
-        Seq(
-          StructField("a", ArrayType(StringType, containsNull = false), nullable = true),
-          StructField(
-            "m",
-            MapType(StringType, StringType, valueContainsNull = false),
-            nullable = true),
-          StructField("s", StructType(Seq(StructField("i", IntegerType, nullable = true)))))))
+      Row(
+        Seq("123", "true", "f"),
+        Map("a" -> "123", "b" -> "true", "c" -> "f"),
+        Row(0)),
+      StructType(Seq(
+        StructField("a",
+          ArrayType(StringType, containsNull = false), nullable = true),
+        StructField("m",
+          MapType(StringType, StringType, valueContainsNull = false), nullable = true),
+        StructField("s",
+          StructType(Seq(
+            StructField("i", IntegerType, nullable = true)))))))
 
-    val ret = cast(
-      complex,
-      StructType(
-        Seq(
-          StructField("a", ArrayType(IntegerType, containsNull = true), nullable = true),
-          StructField(
-            "m",
-            MapType(StringType, BooleanType, valueContainsNull = false),
-            nullable = true),
-          StructField("s", StructType(Seq(StructField("l", LongType, nullable = true)))))))
+    val ret = cast(complex, StructType(Seq(
+      StructField("a",
+        ArrayType(IntegerType, containsNull = true), nullable = true),
+      StructField("m",
+        MapType(StringType, BooleanType, valueContainsNull = false), nullable = true),
+      StructField("s",
+        StructType(Seq(
+          StructField("l", LongType, nullable = true)))))))
 
     assert(ret.resolved === false)
   }
@@ -367,12 +358,12 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
     TypeCoercionSuite.allTypes.foreach { t =>
       assert(Cast.canCast(ArrayType(NullType, false), ArrayType(t, false)))
 
-      assert(Cast.canCast(MapType(NullType, NullType, false), MapType(t, t, false)))
+      assert(Cast.canCast(
+        MapType(NullType, NullType, false), MapType(t, t, false)))
 
-      assert(
-        Cast.canCast(
-          StructType(StructField("a", NullType, false) :: Nil),
-          StructType(StructField("a", t, false) :: Nil)))
+      assert(Cast.canCast(
+        StructType(StructField("a", NullType, false) :: Nil),
+        StructType(StructField("a", t, false) :: Nil)))
     }
   }
 
@@ -382,10 +373,10 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
       checkEvaluation(cast("2012-12-11", DoubleType), null)
 
       // cast to array
-      val array =
-        Literal.create(Seq("123", "true", "f", null), ArrayType(StringType, containsNull = true))
-      val array_notNull =
-        Literal.create(Seq("123", "true", "f"), ArrayType(StringType, containsNull = false))
+      val array = Literal.create(Seq("123", "true", "f", null),
+        ArrayType(StringType, containsNull = true))
+      val array_notNull = Literal.create(Seq("123", "true", "f"),
+        ArrayType(StringType, containsNull = false))
 
       {
         val ret = cast(array, ArrayType(IntegerType, containsNull = true))
@@ -440,65 +431,51 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
           UTF8String.fromString("true"),
           UTF8String.fromString("f"),
           null),
-        StructType(
-          Seq(
-            StructField("a", StringType, nullable = true),
-            StructField("b", StringType, nullable = true),
-            StructField("c", StringType, nullable = true),
-            StructField("d", StringType, nullable = true))))
+        StructType(Seq(
+          StructField("a", StringType, nullable = true),
+          StructField("b", StringType, nullable = true),
+          StructField("c", StringType, nullable = true),
+          StructField("d", StringType, nullable = true))))
       val struct_notNull = Literal.create(
         InternalRow(
           UTF8String.fromString("123"),
           UTF8String.fromString("true"),
           UTF8String.fromString("f")),
-        StructType(
-          Seq(
-            StructField("a", StringType, nullable = false),
-            StructField("b", StringType, nullable = false),
-            StructField("c", StringType, nullable = false))))
+        StructType(Seq(
+          StructField("a", StringType, nullable = false),
+          StructField("b", StringType, nullable = false),
+          StructField("c", StringType, nullable = false))))
 
       {
-        val ret = cast(
-          struct,
-          StructType(
-            Seq(
-              StructField("a", IntegerType, nullable = true),
-              StructField("b", IntegerType, nullable = true),
-              StructField("c", IntegerType, nullable = true),
-              StructField("d", IntegerType, nullable = true))))
+        val ret = cast(struct, StructType(Seq(
+          StructField("a", IntegerType, nullable = true),
+          StructField("b", IntegerType, nullable = true),
+          StructField("c", IntegerType, nullable = true),
+          StructField("d", IntegerType, nullable = true))))
         assert(ret.resolved)
         checkEvaluation(ret, InternalRow(123, null, null, null))
       }
       {
-        val ret = cast(
-          struct,
-          StructType(
-            Seq(
-              StructField("a", IntegerType, nullable = true),
-              StructField("b", IntegerType, nullable = true),
-              StructField("c", IntegerType, nullable = false),
-              StructField("d", IntegerType, nullable = true))))
+        val ret = cast(struct, StructType(Seq(
+          StructField("a", IntegerType, nullable = true),
+          StructField("b", IntegerType, nullable = true),
+          StructField("c", IntegerType, nullable = false),
+          StructField("d", IntegerType, nullable = true))))
         assert(ret.resolved === false)
       }
       {
-        val ret = cast(
-          struct_notNull,
-          StructType(
-            Seq(
-              StructField("a", IntegerType, nullable = true),
-              StructField("b", IntegerType, nullable = true),
-              StructField("c", IntegerType, nullable = true))))
+        val ret = cast(struct_notNull, StructType(Seq(
+          StructField("a", IntegerType, nullable = true),
+          StructField("b", IntegerType, nullable = true),
+          StructField("c", IntegerType, nullable = true))))
         assert(ret.resolved)
         checkEvaluation(ret, InternalRow(123, null, null))
       }
       {
-        val ret = cast(
-          struct_notNull,
-          StructType(
-            Seq(
-              StructField("a", IntegerType, nullable = true),
-              StructField("b", IntegerType, nullable = true),
-              StructField("c", IntegerType, nullable = false))))
+        val ret = cast(struct_notNull, StructType(Seq(
+          StructField("a", IntegerType, nullable = true),
+          StructField("b", IntegerType, nullable = true),
+          StructField("c", IntegerType, nullable = false))))
         assert(ret.resolved === false)
       }
 
@@ -552,25 +529,21 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
   }
 
   test("Fast fail for cast string type to decimal type") {
-    checkEvaluation(
-      cast("12345678901234567890123456789012345678", DecimalType(38, 0)),
+    checkEvaluation(cast("12345678901234567890123456789012345678", DecimalType(38, 0)),
       Decimal("12345678901234567890123456789012345678"))
     checkEvaluation(cast("123456789012345678901234567890123456789", DecimalType(38, 0)), null)
     checkEvaluation(cast("12345678901234567890123456789012345678", DecimalType(38, 1)), null)
 
-    checkEvaluation(
-      cast("0.00000000000000000000000000000000000001", DecimalType(38, 0)),
+    checkEvaluation(cast("0.00000000000000000000000000000000000001", DecimalType(38, 0)),
       Decimal("0"))
-    checkEvaluation(
-      cast("0.00000000000000000000000000000000000000000001", DecimalType(38, 0)),
+    checkEvaluation(cast("0.00000000000000000000000000000000000000000001", DecimalType(38, 0)),
       Decimal("0"))
-    checkEvaluation(
-      cast("0.00000000000000000000000000000000000001", DecimalType(38, 18)),
+    checkEvaluation(cast("0.00000000000000000000000000000000000001", DecimalType(38, 18)),
       Decimal("0E-18"))
-    checkEvaluation(cast("6E-120", DecimalType(38, 0)), Decimal("0"))
+    checkEvaluation(cast("6E-120", DecimalType(38, 0)),
+      Decimal("0"))
 
-    checkEvaluation(
-      cast("6E+37", DecimalType(38, 0)),
+    checkEvaluation(cast("6E+37", DecimalType(38, 0)),
       Decimal("60000000000000000000000000000000000000"))
     checkEvaluation(cast("6E+38", DecimalType(38, 0)), null)
     checkEvaluation(cast("6E+37", DecimalType(38, 1)), null)
@@ -580,32 +553,16 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
 
   test("data type casting II") {
     checkEvaluation(
-      cast(
-        cast(
-          cast(
-            cast(cast(cast("5", ByteType), TimestampType), DecimalType.SYSTEM_DEFAULT),
-            LongType),
-          StringType),
-        ShortType),
-      5.toShort)
-    checkEvaluation(
-      cast(
-        cast(
-          cast(
-            cast(cast(cast("5", TimestampType, UTC_OPT), ByteType), DecimalType.SYSTEM_DEFAULT),
-            LongType),
-          StringType),
-        ShortType),
-      null)
-    checkEvaluation(
-      cast(
-        cast(
-          cast(
-            cast(cast(cast("5", DecimalType.SYSTEM_DEFAULT), ByteType), TimestampType),
-            LongType),
-          StringType),
-        ShortType),
-      5.toShort)
+      cast(cast(cast(cast(cast(cast("5", ByteType), TimestampType),
+        DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
+        5.toShort)
+      checkEvaluation(
+        cast(cast(cast(cast(cast(cast("5", TimestampType, UTC_OPT), ByteType),
+          DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
+        null)
+      checkEvaluation(cast(cast(cast(cast(cast(cast("5", DecimalType.SYSTEM_DEFAULT),
+        ByteType), TimestampType), LongType), StringType), ShortType),
+        5.toShort)
   }
 
   test("Cast from double II") {
@@ -629,16 +586,19 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
       val e3 = intercept[ArithmeticException] {
         Cast(Literal(Int.MaxValue + 1L), IntegerType).eval()
       }.getMessage
-      assert(
-        e3.contains("The value 2147483648L of the type \"BIGINT\" cannot be cast to \"INT\""))
+      assert(e3.contains("The value 2147483648L of the type \"BIGINT\" cannot be cast to \"INT\""))
     }
   }
 
   test("SPARK-35720: cast invalid string input to timestamp without time zone") {
-    Seq("00:00:00", "a", "123", "a2021-06-17", "2021-06-17abc", "2021-06-17 00:00:00ABC")
-      .foreach { invalidInput =>
-        checkEvaluation(cast(invalidInput, TimestampNTZType), null)
-      }
+    Seq("00:00:00",
+      "a",
+      "123",
+      "a2021-06-17",
+      "2021-06-17abc",
+      "2021-06-17 00:00:00ABC").foreach { invalidInput =>
+      checkEvaluation(cast(invalidInput, TimestampNTZType), null)
+    }
   }
 
   test("SPARK-36286: invalid string cast to timestamp") {
@@ -681,18 +641,15 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
           checkEvaluation(cast(v2, IntegerType), 25)
           checkEvaluation(cast(v2, LongType), 25L)
         case MINUTE =>
-          checkExceptionInExpression[ArithmeticException](
-            cast(v2, ByteType),
+          checkExceptionInExpression[ArithmeticException](cast(v2, ByteType),
             castOverflowErrMsg(ByteType))
           checkEvaluation(cast(v2, ShortType), (MINUTES_PER_HOUR * 25 + 1).toShort)
           checkEvaluation(cast(v2, IntegerType), (MINUTES_PER_HOUR * 25 + 1).toInt)
           checkEvaluation(cast(v2, LongType), MINUTES_PER_HOUR * 25 + 1)
         case SECOND =>
-          checkExceptionInExpression[ArithmeticException](
-            cast(v2, ByteType),
+          checkExceptionInExpression[ArithmeticException](cast(v2, ByteType),
             castOverflowErrMsg(ByteType))
-          checkExceptionInExpression[ArithmeticException](
-            cast(v2, ShortType),
+          checkExceptionInExpression[ArithmeticException](cast(v2, ShortType),
             castOverflowErrMsg(ShortType))
           checkEvaluation(cast(v2, IntegerType), num.toInt)
           checkEvaluation(cast(v2, LongType), num)
@@ -701,45 +658,34 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
       val v3 = Literal.create(Duration.of(Long.MaxValue, ChronoUnit.MICROS), dt)
       dt.endField match {
         case DAY =>
-          checkExceptionInExpression[ArithmeticException](
-            cast(v3, ByteType),
+          checkExceptionInExpression[ArithmeticException](cast(v3, ByteType),
             castOverflowErrMsg(ByteType))
-          checkExceptionInExpression[ArithmeticException](
-            cast(v3, ShortType),
+          checkExceptionInExpression[ArithmeticException](cast(v3, ShortType),
             castOverflowErrMsg(ShortType))
           checkEvaluation(cast(v3, IntegerType), (Long.MaxValue / MICROS_PER_DAY).toInt)
           checkEvaluation(cast(v3, LongType), Long.MaxValue / MICROS_PER_DAY)
         case HOUR =>
-          checkExceptionInExpression[ArithmeticException](
-            cast(v3, ByteType),
+          checkExceptionInExpression[ArithmeticException](cast(v3, ByteType),
             castOverflowErrMsg(ByteType))
-          checkExceptionInExpression[ArithmeticException](
-            cast(v3, ShortType),
+          checkExceptionInExpression[ArithmeticException](cast(v3, ShortType),
             castOverflowErrMsg(ShortType))
-          checkExceptionInExpression[ArithmeticException](
-            cast(v3, IntegerType),
+          checkExceptionInExpression[ArithmeticException](cast(v3, IntegerType),
             castOverflowErrMsg(IntegerType))
           checkEvaluation(cast(v3, LongType), Long.MaxValue / MICROS_PER_HOUR)
         case MINUTE =>
-          checkExceptionInExpression[ArithmeticException](
-            cast(v3, ByteType),
+          checkExceptionInExpression[ArithmeticException](cast(v3, ByteType),
             castOverflowErrMsg(ByteType))
-          checkExceptionInExpression[ArithmeticException](
-            cast(v3, ShortType),
+          checkExceptionInExpression[ArithmeticException](cast(v3, ShortType),
             castOverflowErrMsg(ShortType))
-          checkExceptionInExpression[ArithmeticException](
-            cast(v3, IntegerType),
+          checkExceptionInExpression[ArithmeticException](cast(v3, IntegerType),
             castOverflowErrMsg(IntegerType))
           checkEvaluation(cast(v3, LongType), Long.MaxValue / MICROS_PER_MINUTE)
         case SECOND =>
-          checkExceptionInExpression[ArithmeticException](
-            cast(v3, ByteType),
+          checkExceptionInExpression[ArithmeticException](cast(v3, ByteType),
             castOverflowErrMsg(ByteType))
-          checkExceptionInExpression[ArithmeticException](
-            cast(v3, ShortType),
+          checkExceptionInExpression[ArithmeticException](cast(v3, ShortType),
             castOverflowErrMsg(ShortType))
-          checkExceptionInExpression[ArithmeticException](
-            cast(v3, IntegerType),
+          checkExceptionInExpression[ArithmeticException](cast(v3, IntegerType),
             castOverflowErrMsg(IntegerType))
           checkEvaluation(cast(v3, LongType), Long.MaxValue / MICROS_PER_SECOND)
       }
@@ -747,45 +693,34 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
       val v4 = Literal.create(Duration.of(Long.MinValue, ChronoUnit.MICROS), dt)
       dt.endField match {
         case DAY =>
-          checkExceptionInExpression[ArithmeticException](
-            cast(v4, ByteType),
+          checkExceptionInExpression[ArithmeticException](cast(v4, ByteType),
             castOverflowErrMsg(ByteType))
-          checkExceptionInExpression[ArithmeticException](
-            cast(v4, ShortType),
+          checkExceptionInExpression[ArithmeticException](cast(v4, ShortType),
             castOverflowErrMsg(ShortType))
           checkEvaluation(cast(v4, IntegerType), (Long.MinValue / MICROS_PER_DAY).toInt)
           checkEvaluation(cast(v4, LongType), Long.MinValue / MICROS_PER_DAY)
         case HOUR =>
-          checkExceptionInExpression[ArithmeticException](
-            cast(v4, ByteType),
+          checkExceptionInExpression[ArithmeticException](cast(v4, ByteType),
             castOverflowErrMsg(ByteType))
-          checkExceptionInExpression[ArithmeticException](
-            cast(v4, ShortType),
+          checkExceptionInExpression[ArithmeticException](cast(v4, ShortType),
             castOverflowErrMsg(ShortType))
-          checkExceptionInExpression[ArithmeticException](
-            cast(v4, IntegerType),
+          checkExceptionInExpression[ArithmeticException](cast(v4, IntegerType),
             castOverflowErrMsg(IntegerType))
           checkEvaluation(cast(v4, LongType), Long.MinValue / MICROS_PER_HOUR)
         case MINUTE =>
-          checkExceptionInExpression[ArithmeticException](
-            cast(v4, ByteType),
+          checkExceptionInExpression[ArithmeticException](cast(v4, ByteType),
             castOverflowErrMsg(ByteType))
-          checkExceptionInExpression[ArithmeticException](
-            cast(v4, ShortType),
+          checkExceptionInExpression[ArithmeticException](cast(v4, ShortType),
             castOverflowErrMsg(ShortType))
-          checkExceptionInExpression[ArithmeticException](
-            cast(v4, IntegerType),
+          checkExceptionInExpression[ArithmeticException](cast(v4, IntegerType),
             castOverflowErrMsg(IntegerType))
           checkEvaluation(cast(v4, LongType), Long.MinValue / MICROS_PER_MINUTE)
         case SECOND =>
-          checkExceptionInExpression[ArithmeticException](
-            cast(v4, ByteType),
+          checkExceptionInExpression[ArithmeticException](cast(v4, ByteType),
             castOverflowErrMsg(ByteType))
-          checkExceptionInExpression[ArithmeticException](
-            cast(v4, ShortType),
+          checkExceptionInExpression[ArithmeticException](cast(v4, ShortType),
             castOverflowErrMsg(ShortType))
-          checkExceptionInExpression[ArithmeticException](
-            cast(v4, IntegerType),
+          checkExceptionInExpression[ArithmeticException](cast(v4, IntegerType),
             castOverflowErrMsg(IntegerType))
           checkEvaluation(cast(v4, LongType), Long.MinValue / MICROS_PER_SECOND)
       }
@@ -802,63 +737,48 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
       (1, ShortType, MICROS_PER_DAY, MICROS_PER_HOUR, MICROS_PER_MINUTE, MICROS_PER_SECOND),
       (1, IntegerType, MICROS_PER_DAY, MICROS_PER_HOUR, MICROS_PER_MINUTE, MICROS_PER_SECOND),
       (1, LongType, MICROS_PER_DAY, MICROS_PER_HOUR, MICROS_PER_MINUTE, MICROS_PER_SECOND),
-      (
-        Byte.MaxValue,
-        ByteType,
-        Byte.MaxValue * MICROS_PER_DAY,
-        Byte.MaxValue * MICROS_PER_HOUR,
-        Byte.MaxValue * MICROS_PER_MINUTE,
-        Byte.MaxValue * MICROS_PER_SECOND),
-      (
-        Byte.MinValue,
-        ByteType,
-        Byte.MinValue * MICROS_PER_DAY,
-        Byte.MinValue * MICROS_PER_HOUR,
-        Byte.MinValue * MICROS_PER_MINUTE,
-        Byte.MinValue * MICROS_PER_SECOND),
-      (
-        Short.MaxValue,
-        ShortType,
-        Short.MaxValue * MICROS_PER_DAY,
-        Short.MaxValue * MICROS_PER_HOUR,
-        Short.MaxValue * MICROS_PER_MINUTE,
-        Short.MaxValue * MICROS_PER_SECOND),
-      (
-        Short.MinValue,
-        ShortType,
-        Short.MinValue * MICROS_PER_DAY,
-        Short.MinValue * MICROS_PER_HOUR,
-        Short.MinValue * MICROS_PER_MINUTE,
-        Short.MinValue * MICROS_PER_SECOND)).foreach { case (v, dt, r1, r2, r3, r4) =>
-      checkEvaluation(cast(cast(v, dt), DayTimeIntervalType(DAY)), r1)
-      checkEvaluation(cast(cast(v, dt), DayTimeIntervalType(HOUR)), r2)
-      checkEvaluation(cast(cast(v, dt), DayTimeIntervalType(MINUTE)), r3)
-      checkEvaluation(cast(cast(v, dt), DayTimeIntervalType(SECOND)), r4)
+      (Byte.MaxValue, ByteType, Byte.MaxValue * MICROS_PER_DAY, Byte.MaxValue * MICROS_PER_HOUR,
+        Byte.MaxValue * MICROS_PER_MINUTE, Byte.MaxValue * MICROS_PER_SECOND),
+      (Byte.MinValue, ByteType, Byte.MinValue * MICROS_PER_DAY, Byte.MinValue * MICROS_PER_HOUR,
+        Byte.MinValue * MICROS_PER_MINUTE, Byte.MinValue * MICROS_PER_SECOND),
+      (Short.MaxValue, ShortType, Short.MaxValue * MICROS_PER_DAY, Short.MaxValue * MICROS_PER_HOUR,
+        Short.MaxValue * MICROS_PER_MINUTE, Short.MaxValue * MICROS_PER_SECOND),
+      (Short.MinValue, ShortType, Short.MinValue * MICROS_PER_DAY, Short.MinValue * MICROS_PER_HOUR,
+        Short.MinValue * MICROS_PER_MINUTE, Short.MinValue * MICROS_PER_SECOND)
+    ).foreach { case (v, dt, r1, r2, r3, r4) =>
+      checkEvaluation(cast(
+        cast(v, dt), DayTimeIntervalType(DAY)), r1)
+      checkEvaluation(cast(
+        cast(v, dt), DayTimeIntervalType(HOUR)), r2)
+      checkEvaluation(cast(
+        cast(v, dt), DayTimeIntervalType(MINUTE)), r3)
+      checkEvaluation(cast(
+        cast(v, dt), DayTimeIntervalType(SECOND)), r4)
     }
 
     Seq(
-      (
-        Int.MaxValue,
+      (Int.MaxValue,
         Math.multiplyExact(Int.MaxValue.toLong, MICROS_PER_HOUR),
         Math.multiplyExact(Int.MaxValue.toLong, MICROS_PER_MINUTE),
         Math.multiplyExact(Int.MaxValue.toLong, MICROS_PER_SECOND)),
-      (
-        Int.MinValue,
+      (Int.MinValue,
         Math.multiplyExact(Int.MinValue.toLong, MICROS_PER_HOUR),
         Math.multiplyExact(Int.MinValue.toLong, MICROS_PER_MINUTE),
-        Math.multiplyExact(Int.MinValue.toLong, MICROS_PER_SECOND))).foreach {
-      case (v, r1, r2, r3) =>
-        checkEvaluation(cast(v, DayTimeIntervalType(HOUR)), r1)
-        checkEvaluation(cast(v, DayTimeIntervalType(MINUTE)), r2)
-        checkEvaluation(cast(v, DayTimeIntervalType(SECOND)), r3)
+        Math.multiplyExact(Int.MinValue.toLong, MICROS_PER_SECOND))
+    ).foreach { case (v, r1, r2, r3) =>
+      checkEvaluation(cast(v, DayTimeIntervalType(HOUR)), r1)
+      checkEvaluation(cast(v, DayTimeIntervalType(MINUTE)), r2)
+      checkEvaluation(cast(v, DayTimeIntervalType(SECOND)), r3)
     }
 
-    Seq((Int.MaxValue, DayTimeIntervalType(DAY)), (Int.MinValue, DayTimeIntervalType(DAY)))
-      .foreach { case (v, toType) =>
-        checkExceptionInExpression[ArithmeticException](
-          cast(v, toType),
+    Seq(
+      (Int.MaxValue, DayTimeIntervalType(DAY)),
+      (Int.MinValue, DayTimeIntervalType(DAY))
+    ).foreach {
+      case (v, toType) =>
+        checkExceptionInExpression[ArithmeticException](cast(v, toType),
           castOverflowErrMsg(toType))
-      }
+    }
 
     Seq(
       (Long.MaxValue, DayTimeIntervalType(DAY)),
@@ -868,8 +788,11 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
       (Long.MaxValue, DayTimeIntervalType(MINUTE)),
       (Long.MinValue, DayTimeIntervalType(MINUTE)),
       (Long.MaxValue, DayTimeIntervalType(SECOND)),
-      (Long.MinValue, DayTimeIntervalType(SECOND))).foreach { case (v, toType) =>
-      checkExceptionInExpression[ArithmeticException](cast(v, toType), castOverflowErrMsg(toType))
+      (Long.MinValue, DayTimeIntervalType(SECOND))
+    ).foreach {
+      case (v, toType) =>
+        checkExceptionInExpression[ArithmeticException](cast(v, toType),
+          castOverflowErrMsg(toType))
     }
   }
 
@@ -880,13 +803,13 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
       (Period.ofYears(0), YearMonthIntervalType(YEAR, MONTH), 0.toByte, 0.toShort, 0, 0L),
       (Period.ofMonths(1), YearMonthIntervalType(YEAR, MONTH), 1.toByte, 1.toShort, 1, 1L),
       (Period.ofMonths(0), YearMonthIntervalType(MONTH), 0.toByte, 0.toShort, 0, 0L),
-      (Period.ofMonths(1), YearMonthIntervalType(MONTH), 1.toByte, 1.toShort, 1, 1L)).foreach {
-      case (v, dt, r1, r2, r3, r4) =>
-        val value = Literal.create(v, dt)
-        checkEvaluation(cast(value, ByteType), r1)
-        checkEvaluation(cast(value, ShortType), r2)
-        checkEvaluation(cast(value, IntegerType), r3)
-        checkEvaluation(cast(value, LongType), r4)
+      (Period.ofMonths(1), YearMonthIntervalType(MONTH), 1.toByte, 1.toShort, 1, 1L)
+    ).foreach { case (v, dt, r1, r2, r3, r4) =>
+      val value = Literal.create(v, dt)
+      checkEvaluation(cast(value, ByteType), r1)
+      checkEvaluation(cast(value, ShortType), r2)
+      checkEvaluation(cast(value, IntegerType), r3)
+      checkEvaluation(cast(value, LongType), r4)
     }
 
     Seq(
@@ -901,61 +824,35 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
       (Period.ofMonths(Int.MaxValue), YearMonthIntervalType(MONTH), ByteType),
       (Period.ofMonths(Int.MaxValue), YearMonthIntervalType(MONTH), ShortType),
       (Period.ofMonths(Int.MinValue), YearMonthIntervalType(MONTH), ByteType),
-      (Period.ofMonths(Int.MinValue), YearMonthIntervalType(MONTH), ShortType)).foreach {
+      (Period.ofMonths(Int.MinValue), YearMonthIntervalType(MONTH), ShortType)
+    ).foreach {
       case (v, dt, toType) =>
         val value = Literal.create(v, dt)
-        checkExceptionInExpression[ArithmeticException](
-          cast(value, toType),
+        checkExceptionInExpression[ArithmeticException](cast(value, toType),
           castOverflowErrMsg(toType))
     }
 
     Seq(
-      (
-        Period.ofMonths(Int.MaxValue),
-        YearMonthIntervalType(YEAR),
-        IntegerType,
-        Int.MaxValue / 12),
-      (Period.ofMonths(Int.MaxValue), YearMonthIntervalType(YEAR), LongType, Int.MaxValue / 12L),
-      (
-        Period.ofMonths(Int.MinValue),
-        YearMonthIntervalType(YEAR),
-        IntegerType,
-        Int.MinValue / 12),
-      (Period.ofMonths(Int.MinValue), YearMonthIntervalType(YEAR), LongType, Int.MinValue / 12L),
-      (
-        Period.ofMonths(Int.MaxValue),
-        YearMonthIntervalType(YEAR, MONTH),
-        IntegerType,
-        Int.MaxValue),
-      (
-        Period.ofMonths(Int.MaxValue),
-        YearMonthIntervalType(YEAR, MONTH),
-        LongType,
-        Int.MaxValue.toLong),
-      (
-        Period.ofMonths(Int.MinValue),
-        YearMonthIntervalType(YEAR, MONTH),
-        IntegerType,
-        Int.MinValue),
-      (
-        Period.ofMonths(Int.MinValue),
-        YearMonthIntervalType(YEAR, MONTH),
-        LongType,
-        Int.MinValue.toLong),
+      (Period.ofMonths(Int.MaxValue), YearMonthIntervalType(YEAR), IntegerType, Int.MaxValue / 12),
+      (Period.ofMonths(Int.MaxValue), YearMonthIntervalType(YEAR), LongType, Int.MaxValue /12L),
+      (Period.ofMonths(Int.MinValue), YearMonthIntervalType(YEAR), IntegerType, Int.MinValue / 12),
+      (Period.ofMonths(Int.MinValue), YearMonthIntervalType(YEAR), LongType, Int.MinValue /12L),
+      (Period.ofMonths(Int.MaxValue), YearMonthIntervalType(YEAR, MONTH),
+        IntegerType, Int.MaxValue),
+      (Period.ofMonths(Int.MaxValue), YearMonthIntervalType(YEAR, MONTH),
+        LongType, Int.MaxValue.toLong),
+      (Period.ofMonths(Int.MinValue), YearMonthIntervalType(YEAR, MONTH),
+        IntegerType, Int.MinValue),
+      (Period.ofMonths(Int.MinValue), YearMonthIntervalType(YEAR, MONTH),
+        LongType, Int.MinValue.toLong),
       (Period.ofMonths(Int.MaxValue), YearMonthIntervalType(MONTH), IntegerType, Int.MaxValue),
-      (
-        Period.ofMonths(Int.MaxValue),
-        YearMonthIntervalType(MONTH),
-        LongType,
-        Int.MaxValue.toLong),
+      (Period.ofMonths(Int.MaxValue), YearMonthIntervalType(MONTH), LongType, Int.MaxValue.toLong),
       (Period.ofMonths(Int.MinValue), YearMonthIntervalType(MONTH), IntegerType, Int.MinValue),
-      (
-        Period.ofMonths(Int.MinValue),
-        YearMonthIntervalType(MONTH),
-        LongType,
-        Int.MinValue.toLong)).foreach { case (v, dt, toType, expect) =>
-      val value = Literal.create(v, dt)
-      checkEvaluation(cast(value, toType), expect)
+      (Period.ofMonths(Int.MinValue), YearMonthIntervalType(MONTH), LongType, Int.MinValue.toLong)
+    ).foreach {
+      case (v, dt, toType, expect) =>
+        val value = Literal.create(v, dt)
+        checkEvaluation(cast(value, toType), expect)
     }
   }
 
@@ -972,28 +869,36 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
       (Short.MaxValue, Short.MaxValue * 12, Short.MaxValue.toInt, ShortType),
       (Short.MinValue, Short.MinValue * 12, Short.MinValue.toInt, ShortType),
       (1, 12, 1, IntegerType),
-      (1, 12, 1, LongType)).foreach { case (v, r1, r2, dt) =>
-      checkEvaluation(cast(cast(v, dt), YearMonthIntervalType(YEAR)), r1)
-      checkEvaluation(cast(cast(v, dt), YearMonthIntervalType(MONTH)), r2)
+      (1, 12, 1, LongType)
+    ).foreach { case (v, r1, r2, dt) =>
+      checkEvaluation(cast(
+        cast(v, dt), YearMonthIntervalType(YEAR)), r1)
+      checkEvaluation(cast(
+        cast(v, dt), YearMonthIntervalType(MONTH)), r2)
     }
 
     Seq(Int.MaxValue, Int.MinValue).foreach { v =>
       checkEvaluation(cast(v, YearMonthIntervalType(MONTH)), v)
     }
 
-    Seq((Int.MaxValue, YearMonthIntervalType(YEAR)), (Int.MinValue, YearMonthIntervalType(YEAR)))
-      .foreach { case (v, toType) =>
-        checkExceptionInExpression[ArithmeticException](
-          cast(v, toType),
+    Seq(
+      (Int.MaxValue, YearMonthIntervalType(YEAR)),
+      (Int.MinValue, YearMonthIntervalType(YEAR))
+    ).foreach {
+      case (v, toType) =>
+        checkExceptionInExpression[ArithmeticException](cast(v, toType),
           castOverflowErrMsg(toType))
-      }
+    }
 
     Seq(
       (Long.MaxValue, YearMonthIntervalType(YEAR)),
       (Long.MinValue, YearMonthIntervalType(YEAR)),
       (Long.MaxValue, YearMonthIntervalType(MONTH)),
-      (Long.MinValue, YearMonthIntervalType(MONTH))).foreach { case (v, toType) =>
-      checkExceptionInExpression[ArithmeticException](cast(v, toType), castOverflowErrMsg(toType))
+      (Long.MinValue, YearMonthIntervalType(MONTH))
+    ).foreach {
+      case (v, toType) =>
+        checkExceptionInExpression[ArithmeticException](cast(v, toType),
+          castOverflowErrMsg(toType))
     }
   }
 

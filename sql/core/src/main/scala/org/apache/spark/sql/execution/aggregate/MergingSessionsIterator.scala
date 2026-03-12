@@ -29,8 +29,8 @@ import org.apache.spark.sql.execution.metric.SQLMetric
  * input rows are sorted by "group keys + the start time of session window".
  *
  * When merging windows, it also applies aggregations on merged window, which eliminates the
- * necessity on buffering inputs (which requires copying rows) and update the session spec for
- * each input.
+ * necessity on buffering inputs (which requires copying rows) and update the session spec
+ * for each input.
  */
 class MergingSessionsIterator(
     partIndex: Int,
@@ -44,22 +44,23 @@ class MergingSessionsIterator(
     resultExpressions: Seq[NamedExpression],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
     numOutputRows: SQLMetric)
-    extends AggregationIterator(
-      partIndex,
-      groupingExpressions,
-      valueAttributes,
-      aggregateExpressions,
-      aggregateAttributes,
-      initialInputBufferOffset,
-      resultExpressions,
-      newMutableProjection) {
+  extends AggregationIterator(
+    partIndex,
+    groupingExpressions,
+    valueAttributes,
+    aggregateExpressions,
+    aggregateAttributes,
+    initialInputBufferOffset,
+    resultExpressions,
+    newMutableProjection) {
 
   val groupingWithoutSession: Seq[NamedExpression] =
     groupingExpressions.diff(Seq(sessionExpression))
   val groupingWithoutSessionAttributes: Seq[Attribute] = groupingWithoutSession.map(_.toAttribute)
 
   /**
-   * Creates a new aggregation buffer and initializes buffer values for all aggregate functions.
+   * Creates a new aggregation buffer and initializes buffer values
+   * for all aggregate functions.
    */
   private def newBuffer: InternalRow = {
     val bufferSchema = aggregateFunctions.flatMap(_.aggBufferAttributes)
@@ -244,8 +245,7 @@ class MergingSessionsIterator(
 
   private val join = new JoinedRow
 
-  private val groupingKeyProj = GenerateUnsafeProjection.generate(
-    groupingExpressions,
+  private val groupingKeyProj = GenerateUnsafeProjection.generate(groupingExpressions,
     groupingWithoutSessionAttributes :+ sessionExpression.toAttribute)
 
   private def generateGroupingKey(): UnsafeRow = {

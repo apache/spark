@@ -28,10 +28,19 @@ class DSLHintSuite extends AnalysisTest {
   lazy val r1 = LocalRelation(a, b, c)
 
   test("various hint parameters") {
-    comparePlans(r1.hint("hint1"), UnresolvedHint("hint1", Seq(), r1))
+    comparePlans(
+      r1.hint("hint1"),
+      UnresolvedHint("hint1", Seq(), r1)
+    )
 
-    comparePlans(r1.hint("hint1", 1, "a"), UnresolvedHint("hint1", Seq(1, "a"), r1))
+    comparePlans(
+      r1.hint("hint1", 1, "a"),
+      UnresolvedHint("hint1", Seq(1, "a"), r1)
+    )
 
-    comparePlans(r1.hint("hint1", 1, $"a"), UnresolvedHint("hint1", Seq(1, $"a"), r1))
+    comparePlans(
+      r1.hint("hint1", 1, $"a"),
+      UnresolvedHint("hint1", Seq(1, $"a"), r1)
+    )
   }
 }

@@ -27,13 +27,14 @@ class RemoveNoopUnionSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("CollapseProject", Once, CollapseProject) ::
-        Batch("RemoveNoopUnion", Once, RemoveNoopUnion) :: Nil
+      Batch("CollapseProject", Once,
+        CollapseProject) ::
+        Batch("RemoveNoopUnion", Once,
+          RemoveNoopUnion) :: Nil
   }
 
   val testRelation = LocalRelation($"a".int, $"b".int)
-  val testRelation2 =
-    LocalRelation(output = Seq($"a".int, $"b".int), data = Seq(InternalRow(1, 2)))
+  val testRelation2 = LocalRelation(output = Seq($"a".int, $"b".int), data = Seq(InternalRow(1, 2)))
 
   test("SPARK-34474: Remove redundant Union under Distinct") {
     val union = Union(testRelation :: testRelation :: Nil)
@@ -50,18 +51,10 @@ class RemoveNoopUnionSuite extends PlanTest {
   }
 
   test("SPARK-34474: Do not remove necessary Project 1") {
-    val child1 = Project(
-      Seq(
-        testRelation.output(0),
-        testRelation.output(1),
-        (testRelation.output(0) + 1).as("expr")),
-      testRelation)
-    val child2 = Project(
-      Seq(
-        testRelation.output(0),
-        testRelation.output(1),
-        (testRelation.output(0) + 2).as("expr")),
-      testRelation)
+    val child1 = Project(Seq(testRelation.output(0), testRelation.output(1),
+      (testRelation.output(0) + 1).as("expr")), testRelation)
+    val child2 = Project(Seq(testRelation.output(0), testRelation.output(1),
+      (testRelation.output(0) + 2).as("expr")), testRelation)
     val union = Union(child1 :: child2 :: Nil)
     val distinct = Distinct(union)
     val optimized = Optimize.execute(distinct)
@@ -85,8 +78,7 @@ class RemoveNoopUnionSuite extends PlanTest {
 
     val deduplicate = Deduplicate(testRelation.output, union)
     val optimized2 = Optimize.execute(deduplicate)
-    comparePlans(
-      optimized2,
+    comparePlans(optimized2,
       Deduplicate(testRelation.output, Union(testRelation :: testRelation2 :: Nil)))
   }
 }

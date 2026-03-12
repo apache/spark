@@ -54,7 +54,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkErrorInExpression[SparkRuntimeException](
         ResolveTimeZone.resolveTimeZones(
           StructsToJson(Map.empty, Literal(new VariantVal(value, metadata)))),
-        condition)
+        condition
+      )
     }
 
     val emptyMetadata = Array[Byte](VERSION, 0, 0)
@@ -63,10 +64,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // DECIMAL16 only has 15 byte content.
     check(Array(primitiveHeader(DECIMAL16)) ++ createArray[Byte](16, 0.toByte), emptyMetadata)
     // 1e38 has a precision of 39. Even if it still fits into 16 bytes, it is not a valid decimal.
-    check(
-      Array[Byte](primitiveHeader(DECIMAL16), 0) ++
-        BigDecimal(1e38).toBigInt.toByteArray.reverse,
-      emptyMetadata)
+    check(Array[Byte](primitiveHeader(DECIMAL16), 0) ++
+      BigDecimal(1e38).toBigInt.toByteArray.reverse, emptyMetadata)
     // Short string content too short.
     check(Array(shortStrHeader(2), 'x'), emptyMetadata)
     // Long string length too short (requires 4 bytes).
@@ -74,38 +73,23 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Long string content too short.
     check(Array(primitiveHeader(LONG_STR), 1, 0, 0, 0), emptyMetadata)
     // Size is 1 but no content.
-    check(
-      Array(
-        arrayHeader(false, 1),
-        /* size */ 1,
-        /* offset list */ 0),
-      emptyMetadata)
+    check(Array(arrayHeader(false, 1),
+      /* size */ 1,
+      /* offset list */ 0), emptyMetadata)
     // Requires 4-byte size is but the actual size only has one byte.
-    check(
-      Array(
-        arrayHeader(true, 1),
-        /* size */ 0,
-        /* offset list */ 0),
-      emptyMetadata)
+    check(Array(arrayHeader(true, 1),
+      /* size */ 0,
+      /* offset list */ 0), emptyMetadata)
     // Offset out of bound.
-    check(
-      Array(
-        arrayHeader(false, 1),
-        /* size */ 1,
-        /* offset list */ 1,
-        1),
-      emptyMetadata)
+    check(Array(arrayHeader(false, 1),
+      /* size */ 1,
+      /* offset list */ 1, 1), emptyMetadata)
     // Id out of bound.
-    check(
-      Array(
-        objectHeader(false, 1, 1),
-        /* size */ 1,
-        /* id list */ 0,
-        /* offset list */ 0,
-        2,
-        /* field data */ primitiveHeader(INT1),
-        1),
-      emptyMetadata)
+    check(Array(objectHeader(false, 1, 1),
+      /* size */ 1,
+      /* id list */ 0,
+      /* offset list */ 0, 2,
+      /* field data */ primitiveHeader(INT1), 1), emptyMetadata)
     // Variant version is not 1.
     check(Array(primitiveHeader(INT1), 0), Array[Byte](3, 0, 0))
     check(Array(primitiveHeader(INT1), 0), Array[Byte](2, 0, 0))
@@ -113,9 +97,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Construct binary values that are over SIZE_LIMIT bytes, but otherwise valid.
     val bigVersion = Array[Byte]((VERSION | (3 << 6)).toByte)
     val a = createArray[Byte](SIZE_LIMIT, 'a'.toByte)
-    val hugeMetadata =
-      bigVersion ++ Array[Byte](2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1) ++
-        a ++ Array[Byte]('b')
+    val hugeMetadata = bigVersion ++ Array[Byte](2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1) ++
+      a ++ Array[Byte]('b')
     check(Array(primitiveHeader(TRUE)), hugeMetadata, "VARIANT_CONSTRUCTOR_SIZE_LIMIT")
 
     // The keys are 'aaa....' and 'b'. Values are "yyy..." and 'true'.
@@ -127,11 +110,11 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       // value is 1 byte, so the one-past-the-end value is `6008`
       /* offset list */ Array[Byte](0, 0, 0, 0, 5, 0, 0, 8, 6, 0, 0, 8) ++
       /* field data */ Array[Byte](primitiveHeader(LONG_STR), 0, 0, 0, 1) ++ y ++ Array[Byte](
-        primitiveHeader(TRUE))
+        primitiveHeader(TRUE)
+      )
 
-    val smallMetadata =
-      bigVersion ++ Array[Byte](2, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0) ++
-        Array[Byte]('a', 'b')
+    val smallMetadata = bigVersion ++ Array[Byte](2, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0) ++
+      Array[Byte]('a', 'b')
     check(hugeObject, smallMetadata, "VARIANT_CONSTRUCTOR_SIZE_LIMIT")
     check(hugeObject, hugeMetadata, "VARIANT_CONSTRUCTOR_SIZE_LIMIT")
   }
@@ -141,7 +124,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     def check(expectedJson: String, value: Array[Byte], metadata: Array[Byte]): Unit = {
       checkEvaluation(
         StructsToJson(Map.empty, Literal(new VariantVal(value, metadata))),
-        expectedJson)
+        expectedJson
+      )
     }
     // Some valid metadata formats. Check that they aren't rejected.
     // Sorted string bit is set, and can be ignored.
@@ -164,7 +148,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     def check(expectedJson: String, value: Array[Byte], metadata: Array[Byte]): Unit = {
       checkEvaluation(
         StructsToJson(Map.empty, Literal(new VariantVal(value, metadata))),
-        expectedJson)
+        expectedJson
+      )
     }
 
     for {
@@ -181,29 +166,20 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       val arrayValue = Array[Byte](arrayHeader(largeSize, offsetSize)) ++
         /* size */ padded(Array(3), if (largeSize) 4 else 1) ++
         /* offset list */ padded(Array(0, 1, 4, 5), offsetSize) ++
-        Array[Byte](
-          /* values */ primitiveHeader(FALSE),
-          primitiveHeader(INT2),
-          2,
-          1,
-          primitiveHeader(NULL))
+        Array[Byte](/* values */ primitiveHeader(FALSE),
+            primitiveHeader(INT2), 2, 1, primitiveHeader(NULL))
       check("[false,258,null]", arrayValue, emptyMetadata)
 
       // Test object
       val metadata = version ++
-        padded(Array(3, 0, 1, 2, 3), metadataSize) ++
-        Array[Byte]('a', 'b', 'c')
+                     padded(Array(3, 0, 1, 2, 3), metadataSize) ++
+                     Array[Byte]('a', 'b', 'c')
       val objectValue = Array[Byte](objectHeader(largeSize, idSize, offsetSize)) ++
         /* size */ padded(Array(3), if (largeSize) 4 else 1) ++
         /* id list */ padded(Array(0, 1, 2), idSize) ++
         /* offset list */ padded(Array(0, 2, 4, 6), offsetSize) ++
-        /* field data */ Array[Byte](
-          primitiveHeader(INT1),
-          1,
-          primitiveHeader(INT1),
-          2,
-          shortStrHeader(1),
-          '3')
+        /* field data */ Array[Byte](primitiveHeader(INT1), 1,
+            primitiveHeader(INT1), 2, shortStrHeader(1), '3')
 
       check("""{"a":1,"b":2,"c":"3"}""", objectValue, metadata)
     }
@@ -213,7 +189,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     def check(expectedJson: String, value: Array[Byte], metadata: Array[Byte]): Unit = {
       checkEvaluation(
         StructsToJson(Map.empty, Literal(new VariantVal(value, metadata))),
-        expectedJson)
+        expectedJson
+      )
     }
 
     // Create a binary that uses the max 1 << 24 bytes for both metadata and value.
@@ -243,20 +220,15 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       // Second offset is (-26,-1,-1), plus 5 bytes for string header, so (-21,-1,-1)
       /* offset list */ Array[Byte](0, 0, 0, -21, -1, -1, -20, -1, -1) ++
       /* field data */ Array[Byte](primitiveHeader(LONG_STR), -26, -1, -1, 0) ++ y ++ Array[Byte](
-        primitiveHeader(TRUE))
+        primitiveHeader(TRUE)
+      )
     // Same as hugeObject, but with a short string.
     val smallObject = Array[Byte](objectHeader(false, 1, 1)) ++
       /* size */ Array[Byte](2) ++
       /* id list */ Array[Byte](0, 1) ++
       /* offset list */ Array[Byte](0, 6, 7) ++
-      /* field data */ Array[Byte](
-        primitiveHeader(LONG_STR),
-        1,
-        0,
-        0,
-        0,
-        'y',
-        primitiveHeader(TRUE))
+      /* field data */ Array[Byte](primitiveHeader(LONG_STR), 1, 0, 0, 0, 'y',
+          primitiveHeader(TRUE))
     val smallMetadata = bigVersion ++ Array[Byte](2, 0, 0, 0, 0, 0, 1, 0, 0, 2, 0, 0) ++
       Array[Byte]('a', 'b')
 
@@ -278,7 +250,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("is_variant_null invalid input") {
     checkErrorInExpression[SparkRuntimeException](
       IsVariantNull(Literal(new VariantVal(Array(), Array(1, 2, 3)))),
-      "MALFORMED_VARIANT")
+      "MALFORMED_VARIANT"
+    )
   }
 
   private def parseJson(input: String): VariantVal =
@@ -290,19 +263,12 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   private def tryVariantGet(input: String, path: String, dataType: DataType): VariantGet =
     VariantGet(Literal(parseJson(input)), Literal(path), dataType, failOnError = false)
 
-  private def testVariantGet(
-      input: String,
-      path: String,
-      dataType: DataType,
-      output: Any): Unit = {
+  private def testVariantGet(input: String, path: String, dataType: DataType, output: Any): Unit = {
     checkEvaluation(variantGet(input, path, dataType), output)
     checkEvaluation(
-      VariantGet(
-        variantGet(input, path, VariantType),
-        Literal("$"),
-        dataType,
-        failOnError = true),
-      output)
+      VariantGet(variantGet(input, path, VariantType), Literal("$"), dataType, failOnError = true),
+      output
+    )
     checkEvaluation(tryVariantGet(input, path, dataType), output)
   }
 
@@ -318,7 +284,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       variantGet(input, path, dataType),
       "INVALID_VARIANT_CAST",
       Option(parameters).getOrElse(
-        Map("value" -> input, "dataType" -> ("\"" + dataType.sql + "\""))))
+        Map("value" -> input, "dataType" -> ("\"" + dataType.sql + "\"")))
+    )
     checkEvaluation(tryVariantGet(input, path, dataType), tryOutput)
   }
 
@@ -380,7 +347,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       "128E0",
       "$",
       ByteType,
-      Map("value" -> "128.0", "dataType" -> "\"TINYINT\""))
+      Map("value" -> "128.0", "dataType" -> "\"TINYINT\"")
+    )
     testVariantGet("-9.223372036854776E18", "$", LongType, Long.MinValue)
     testInvalidVariantGet("-9.223372036854778E18", "$", LongType)
     testVariantGet("1E308", "$", FloatType, Float.PositiveInfinity)
@@ -390,13 +358,15 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       "100000000E0",
       "$",
       DecimalType(38, 30),
-      Map("value" -> "1.0E8", "dataType" -> "\"DECIMAL(38,30)\""))
+      Map("value" -> "1.0E8", "dataType" -> "\"DECIMAL(38,30)\"")
+    )
     testVariantGet("9223372036854.5E0", "$", TimestampType, 9223372036854500352L)
     testInvalidVariantGet(
       "9223372036855E0",
       "$",
       TimestampType,
-      Map("value" -> "9.223372036855E12", "dataType" -> "\"TIMESTAMP\""))
+      Map("value" -> "9.223372036855E12", "dataType" -> "\"TIMESTAMP\"")
+    )
 
     // Source type is decimal.
     testVariantGet("1.0", "$", BooleanType, true)
@@ -412,7 +382,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       "0.0000000009999999994",
       "$",
       DecimalType(18, 18),
-      Decimal("0.000000000999999999"))
+      Decimal("0.000000000999999999")
+    )
     testVariantGet("0.0000000009999999995", "$", DecimalType(18, 18), Decimal("0.000000001"))
     testInvalidVariantGet("9.5", "$", DecimalType(1, 0))
     testVariantGet("9999999999999999999.9999999999999999999", "$", FloatType, 1e19f)
@@ -421,7 +392,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       "9999999999999999999.9999999999999999999",
       "$",
       StringType,
-      "9999999999999999999.9999999999999999999")
+      "9999999999999999999.9999999999999999999"
+    )
     // Input doesn't fit into decimal, use double instead, which causes a loss of precision.
     testVariantGet("9999999999999999999.99999999999999999999", "$", StringType, "1.0E19")
     // Input fits into `decimal(38, 38)`.
@@ -429,7 +401,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       "0.99999999999999999999999999999999999999",
       "$",
       DecimalType(38, 38),
-      Decimal("0.99999999999999999999999999999999999999"))
+      Decimal("0.99999999999999999999999999999999999999")
+    )
     testVariantGet("1.10", "$", StringType, "1.1")
     testVariantGet("-1.00", "$", StringType, "-1")
     // Test Decimal(N, 0).
@@ -438,7 +411,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       "99999999999999999999000000000000000000",
       "$",
       StringType,
-      "99999999999999999999000000000000000000")
+      "99999999999999999999000000000000000000"
+    )
 
     // Source type is null.
     testVariantGet("null", "$", BooleanType, null)
@@ -454,28 +428,20 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val resolver = ResolveTimeZone
     // int to variant year-month interval
-    assert(
-      !resolver
-        .resolveTimeZones(variantGet(2147483647.toString, "$", YearMonthIntervalType(0, 1)))
-        .resolved)
+    assert(!resolver.resolveTimeZones(variantGet(2147483647.toString, "$",
+      YearMonthIntervalType(0, 1))).resolved)
 
     // decimal to variant day-time interval
-    assert(
-      !resolver
-        .resolveTimeZones(variantGet("9223372036854.775807", "$", DayTimeIntervalType(0, 3)))
-        .resolved)
+    assert(!resolver.resolveTimeZones(variantGet("9223372036854.775807", "$",
+      DayTimeIntervalType(0, 3))).resolved)
 
     // year-month interval to variant
-    assert(
-      !resolver
-        .resolveTimeZones(Cast(Cast(Literal(0), YearMonthIntervalType(0, 0)), VariantType))
-        .resolved)
+    assert(!resolver.resolveTimeZones(Cast(Cast(Literal(0), YearMonthIntervalType(0, 0)),
+      VariantType)).resolved)
 
     // day-time interval to variant
-    assert(
-      !resolver
-        .resolveTimeZones(Cast(Cast(Literal(0L), DayTimeIntervalType(0, 0)), VariantType))
-        .resolved)
+    assert(!resolver.resolveTimeZones(Cast(Cast(Literal(0L), DayTimeIntervalType(0, 0)),
+      VariantType)).resolved)
   }
 
   test("variant_get path extraction") {
@@ -498,8 +464,10 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         tryVariantGet(json, "$.store.bicycle", VariantType),
         Literal("$"),
         StringType,
-        failOnError = true),
-      """{"color":"red","price":19.95}""")
+        failOnError = true
+      ),
+      """{"color":"red","price":19.95}"""
+    )
     testVariantGet(json, "$.store.bicycle.color", StringType, "red")
     testVariantGet(json, "$.store.bicycle.price", DoubleType, 19.95)
     testVariantGet(json, "$[\"\"]", StringType, "empty string")
@@ -516,13 +484,15 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         |"Sayings of the Century"},{"author":"Herman Melville","category":"fiction","isbn":
         |"0-553-21311-3","price":8.99,"title":"Moby Dick"},{"author":"J. R. R. Tolkien","category":
         |"fiction","isbn":"0-395-19395-8","price":22.99,"reader":[{"age":25,"name":"bob"},{"age":26,
-        |"name":"jack"}],"title":"The Lord of the Rings"}]""".stripMargin.replace("\n", ""))
+        |"name":"jack"}],"title":"The Lord of the Rings"}]""".stripMargin.replace("\n", "")
+    )
     testVariantGet(
       json,
       "$.store.book[0]",
       StringType,
       """{"author":"Nigel Rees","category":"reference","price":8.95,"title":
-        |"Sayings of the Century"}""".stripMargin.replace("\n", ""))
+        |"Sayings of the Century"}""".stripMargin.replace("\n", "")
+    )
     testVariantGet(json, "$.store.book[0].category", StringType, "reference")
     testVariantGet(json, "$.store.book[1].price", DoubleType, 8.99)
     testVariantGet(json, "$.store.book[2].reader[0].name", StringType, "bob")
@@ -535,13 +505,14 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       json,
       "$.store.fruit",
       DataType.fromDDL("array<struct<weight int, type string>>"),
-      Array(Row(8, "apple"), Row(9, "pear")))
+      Array(Row(8, "apple"), Row(9, "pear"))
+    )
     testVariantGet(
       json,
       "$.store.book[0]",
-      DataType.fromDDL(
-        "struct<author string, title string, category string, price decimal(4, 2)>"),
-      Row("Nigel Rees", "Sayings of the Century", "reference", Decimal(8.95)))
+      DataType.fromDDL("struct<author string, title string, category string, price decimal(4, 2)>"),
+      Row("Nigel Rees", "Sayings of the Century", "reference", Decimal(8.95))
+    )
   }
 
   test("variant_get negative") {
@@ -555,7 +526,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       """{"a": 1}""",
       "$",
       IntegerType,
-      Map("value" -> "{\"a\":1}", "dataType" -> "\"INT\""))
+      Map("value" -> "{\"a\":1}", "dataType" -> "\"INT\"")
+    )
     testInvalidVariantGet("[1]", "$", IntegerType)
   }
 
@@ -599,7 +571,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
           """{"a": 2147483648}""",
           "$.a",
           IntegerType,
-          Map("value" -> "2147483648", "dataType" -> "\"INT\""))
+          Map("value" -> "2147483648", "dataType" -> "\"INT\"")
+        )
       }
     }
   }
@@ -609,32 +582,22 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     testVariantGet("{}", "$", DataType.fromDDL("a int"), Row(null))
     testVariantGet("""{"a": 1}""", "$", DataType.fromDDL("a int"), Row(1))
     testInvalidVariantGet("1", "$", DataType.fromDDL("a int"))
-    testVariantGet(
-      """{"a": 1, "b": "2"}""",
-      "$",
-      DataType.fromDDL("a int, b string"),
-      Row(1, "2"))
-    testVariantGet(
-      """{"a": 1, "b": "2"}""",
-      "$",
-      DataType.fromDDL("a string, b int"),
-      Row("1", 2))
-    testVariantGet(
-      """{"b": "2", "a": 1}""",
-      "$",
-      DataType.fromDDL("a string, b int"),
-      Row("1", 2))
+    testVariantGet("""{"a": 1, "b": "2"}""", "$", DataType.fromDDL("a int, b string"), Row(1, "2"))
+    testVariantGet("""{"a": 1, "b": "2"}""", "$", DataType.fromDDL("a string, b int"), Row("1", 2))
+    testVariantGet("""{"b": "2", "a": 1}""", "$", DataType.fromDDL("a string, b int"), Row("1", 2))
     testVariantGet(
       """{"a": 1, "d": 2, "c": 3}""",
       "$",
       DataType.fromDDL("a int, b int, c int"),
-      Row(1, null, 3))
+      Row(1, null, 3)
+    )
     testInvalidVariantGet(
       """{"a": 1, "b": "2"}""",
       "$",
       DataType.fromDDL("a int, b boolean"),
       Map("value" -> "\"2\"", "dataType" -> "\"BOOLEAN\""),
-      Row(1, null))
+      Row(1, null)
+    )
 
     testVariantGet("null", "$", DataType.fromDDL("array<int>"), null)
     testVariantGet("[]", "$", DataType.fromDDL("array<int>"), Array())
@@ -643,23 +606,27 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       """[1, 2, 3, null, "4", 5.0]""",
       "$",
       DataType.fromDDL("array<int>"),
-      Array(1, 2, 3, null, 4, 5))
+      Array(1, 2, 3, null, 4, 5)
+    )
     testVariantGet(
       """[1, 2, 3, null, "4", 5.0]""",
       "$",
       DataType.fromDDL("array<string>"),
-      Array("1", "2", "3", null, "4", "5"))
+      Array("1", "2", "3", null, "4", "5")
+    )
     testVariantGet(
       """[[1], [2, 3], [4, 5, 6], [7, 8, 9, 10]]""",
       "$",
       DataType.fromDDL("array<array<int>>"),
-      Array(Array(1), Array(2, 3), Array(4, 5, 6), Array(7, 8, 9, 10)))
+      Array(Array(1), Array(2, 3), Array(4, 5, 6), Array(7, 8, 9, 10))
+    )
     testInvalidVariantGet(
       """[1, 2, 3, "hello"]""",
       "$",
       DataType.fromDDL("array<int>"),
       Map("value" -> "\"hello\"", "dataType" -> "\"INT\""),
-      Array(1, 2, 3, null))
+      Array(1, 2, 3, null)
+    )
 
     testVariantGet("null", "$", DataType.fromDDL("map<string, int>"), null)
     testVariantGet("{}", "$", DataType.fromDDL("map<string, int>"), Map())
@@ -668,29 +635,34 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       """{"a": 1, "b": "2", "c": null}""",
       "$",
       DataType.fromDDL("map<string, int>"),
-      Map("a" -> 1, "b" -> 2, "c" -> null))
+      Map("a" -> 1, "b" -> 2, "c" -> null)
+    )
     testVariantGet(
       """{"a": {}, "b": {"c": "d"}, "e": {"f": "g"}}""",
       "$",
       DataType.fromDDL("map<string, map<string, string>>"),
-      Map("a" -> Map(), "b" -> Map("c" -> "d"), "e" -> Map("f" -> "g")))
+      Map("a" -> Map(), "b" -> Map("c" -> "d"), "e" -> Map("f" -> "g"))
+    )
     testInvalidVariantGet(
       """{"a": 1, "b": "2", "c": {}}""",
       "$",
       DataType.fromDDL("map<string, int>"),
       Map("value" -> "{}", "dataType" -> "\"INT\""),
-      Map("a" -> 1, "b" -> 2, "c" -> null))
+      Map("a" -> 1, "b" -> 2, "c" -> null)
+    )
 
     testVariantGet(
       """[{"a": 1}, {"b": 2}, null, {}]""",
       "$",
       DataType.fromDDL("array<struct<a int, b int>>"),
-      Array(Row(1, null), Row(null, 2), null, Row(null, null)))
+      Array(Row(1, null), Row(null, 2), null, Row(null, null))
+    )
     testVariantGet(
       """[{"a": 1}, {"b": 2}, null, {}]""",
       "$",
       DataType.fromDDL("array<map<string, int>>"),
-      Array(Map("a" -> 1), Map("b" -> 2), null, Map()))
+      Array(Map("a" -> 1), Map("b" -> 2), null, Map())
+    )
   }
 
   test("variant_get path") {
@@ -698,7 +670,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkErrorInExpression[SparkRuntimeException](
         variantGet("0", path, IntegerType),
         "INVALID_VARIANT_GET_PATH",
-        Map("path" -> path, "functionName" -> "`variant_get`"))
+        Map("path" -> path, "functionName" -> "`variant_get`")
+      )
     }
 
     testVariantGet("""{"1": {"2": {"3": [4]}}}""", "$.1.2.3[0]", IntegerType, 4)
@@ -732,7 +705,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       for (mode <- Seq(EvalMode.LEGACY, EvalMode.ANSI)) {
         checkExceptionInExpression[SparkRuntimeException](
           Cast(Literal(input), dataType, evalMode = mode),
-          "INVALID_VARIANT_CAST")
+          "INVALID_VARIANT_CAST"
+        )
       }
       checkEvaluation(Cast(Literal(input), dataType, evalMode = EvalMode.TRY), tryOutput)
     }
@@ -750,12 +724,14 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkCast(
       Array(null, parseJson("false"), parseJson("null")),
       ArrayType(StringType),
-      Array(null, "false", null))
+      Array(null, "false", null)
+    )
     checkCast(Array(parseJson("[1]")), ArrayType(ArrayType(IntegerType)), Array(Array(1)))
     checkInvalidCast(
       Array(parseJson("\"hello\""), null, parseJson("\"1\"")),
       ArrayType(IntegerType),
-      Array(null, null, 1))
+      Array(null, null, 1)
+    )
   }
 
   test("atomic types that are not produced by parse_json") {
@@ -772,8 +748,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       val input = Literal(new VariantVal(value, emptyMetadata))
       checkErrorInExpression[SparkRuntimeException](
         ResolveTimeZone.resolveTimeZones(StructsToJson(Map.empty, input)),
-        "UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT",
-        Map("id" -> id.toString))
+        "UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT", Map("id" -> id.toString)
+      )
     }
 
     def checkCast(value: Array[Byte], dataType: DataType, expected: Any): Unit = {
@@ -790,9 +766,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
       checkCast(Array(primitiveHeader(DATE), 0, 0, 0, 0), TimestampType, 8 * MICROS_PER_HOUR)
-      checkCast(
-        Array(primitiveHeader(DATE), 1, 0, 0, 0),
-        TimestampType,
+      checkCast(Array(primitiveHeader(DATE), 1, 0, 0, 0), TimestampType,
         MICROS_PER_DAY + 8 * MICROS_PER_HOUR)
     }
 
@@ -863,54 +837,26 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkCast(timestampHeader ++ time6, DateType, -719894)
     }
 
-    checkToJson(
-      Array(primitiveHeader(FLOAT)) ++
-        BigInt(java.lang.Float.floatToIntBits(1.23f)).toByteArray.reverse,
-      "1.23")
-    checkToJson(
-      Array(primitiveHeader(FLOAT)) ++
-        BigInt(java.lang.Float.floatToIntBits(-0.0f)).toByteArray.reverse,
-      "-0.0")
+    checkToJson(Array(primitiveHeader(FLOAT)) ++
+      BigInt(java.lang.Float.floatToIntBits(1.23F)).toByteArray.reverse, "1.23")
+    checkToJson(Array(primitiveHeader(FLOAT)) ++
+      BigInt(java.lang.Float.floatToIntBits(-0.0F)).toByteArray.reverse, "-0.0")
     // Note: 1.23F.toDouble != 1.23.
-    checkCast(
-      Array(primitiveHeader(FLOAT)) ++
-        BigInt(java.lang.Float.floatToIntBits(1.23f)).toByteArray.reverse,
-      DoubleType,
-      1.23f.toDouble)
+    checkCast(Array(primitiveHeader(FLOAT)) ++
+      BigInt(java.lang.Float.floatToIntBits(1.23F)).toByteArray.reverse, DoubleType, 1.23F.toDouble)
 
     checkToJson(Array(primitiveHeader(BINARY), 0, 0, 0, 0), "\"\"")
     checkToJson(Array(primitiveHeader(BINARY), 1, 0, 0, 0, 1), "\"AQ==\"")
     checkToJson(Array(primitiveHeader(BINARY), 2, 0, 0, 0, 1, 2), "\"AQI=\"")
     checkToJson(Array(primitiveHeader(BINARY), 3, 0, 0, 0, 1, 2, 3), "\"AQID\"")
-    checkCast(
-      Array(primitiveHeader(BINARY), 3, 0, 0, 0, 1, 2, 3),
-      StringType,
+    checkCast(Array(primitiveHeader(BINARY), 3, 0, 0, 0, 1, 2, 3), StringType,
       "\u0001\u0002\u0003")
-    checkCast(
-      Array(primitiveHeader(BINARY), 5, 0, 0, 0, 72, 101, 108, 108, 111),
-      StringType,
+    checkCast(Array(primitiveHeader(BINARY), 5, 0, 0, 0, 72, 101, 108, 108, 111), StringType,
       "Hello")
 
     // UUID
-    checkToJson(
-      Array(
-        primitiveHeader(UUID),
-        0,
-        17,
-        34,
-        51,
-        68,
-        85,
-        102,
-        119,
-        -120,
-        -103,
-        -86,
-        -69,
-        -52,
-        -35,
-        -18,
-        -1),
+    checkToJson(Array(primitiveHeader(UUID),
+      0, 17, 34, 51, 68, 85, 102, 119, -120, -103, -86, -69, -52, -35, -18, -1),
       "\"00112233-4455-6677-8899-aabbccddeeff\"")
     // Test cast to string. Incidentally, also test construction of UUID via VariantBuilder
     // interface, since we can't currently do it as a Spark cast.
@@ -918,20 +864,22 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     val builder = new VariantBuilder(false)
     builder.appendUuid(uuid)
     val bytes = builder.result().getValue
-    checkCast(bytes, StringType, "01020304-0506-0708-090a-0b0c0d0e0f10")
+    checkCast(bytes, StringType,
+      "01020304-0506-0708-090a-0b0c0d0e0f10")
   }
 
   test("SPARK-48150: ParseJson expression nullability") {
     assert(!ParseJson(Literal("["), failOnError = true).replacement.nullable)
     assert(ParseJson(Literal("["), failOnError = false).replacement.nullable)
-    checkEvaluation(ParseJson(Literal("["), failOnError = false).replacement, null)
+    checkEvaluation(
+      ParseJson(Literal("["), failOnError = false).replacement,
+      null
+    )
   }
 
   test("cast to variant/to_variant_object") {
-    def check[T: TypeTag](
-        input: T,
-        expectedJson: String,
-        toVariantObject: Boolean = false): Unit = {
+    def check[T : TypeTag](input: T, expectedJson: String,
+                           toVariantObject: Boolean = false): Unit = {
       val expr =
         if (toVariantObject) ToVariantObject(Literal.create(input))
         else Cast(Literal.create(input), VariantType, evalMode = EvalMode.ANSI)
@@ -949,7 +897,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // cast to variant - success cases
     check(null.asInstanceOf[String], null)
     // The following tests cover all allowed scalar types.
-    for (input <- Seq[Any](false, true, 0.toByte, 1.toShort, 2, 3L, 4.0f, 5.0d)) {
+    for (input <- Seq[Any](false, true, 0.toByte, 1.toShort, 2, 3L, 4.0F, 5.0D)) {
       check(input, input.toString)
     }
     for (precision <- Seq(9, 18, 38)) {
@@ -974,10 +922,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     check(Array(null, "a", "b", "c"), """[null,"a","b","c"]""")
-    check(
-      Array(
-        parseJson("""{"a": 1,"b": [1, 2, 3]}"""),
-        parseJson("""{"c": true,"d": {"e": "str"}}""")),
+    check(Array(parseJson("""{"a": 1,"b": [1, 2, 3]}"""),
+      parseJson("""{"c": true,"d": {"e": "str"}}""")),
       """[{"a":1,"b":[1,2,3]},{"c":true,"d":{"e":"str"}}]""")
 
     // cast to variant - failure cases - struct and map types
@@ -987,7 +933,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkFailure(mp)
     checkFailure(arrayMp)
     checkFailure(arrayArrayMp)
-    val struct = Literal.create(create_row(1), StructType(Array(StructField("a", IntegerType))))
+    val struct = Literal.create(create_row(1),
+      StructType(Array(StructField("a", IntegerType))))
     checkFailure(struct)
     val arrayStruct = Literal.create(
       Array(create_row(1)),
@@ -1007,13 +954,11 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         Map("a" -> "123", "b" -> "true", "c" -> "f"),
         Map("a" -> Row(132)),
         Row(0)),
-      StructType.fromDDL(
-        "c ARRAY<STRING>,b MAP<STRING, STRING>,d MAP<STRING, STRUCT<i: INT>>," +
-          "a STRUCT<i: INT>"))
-    check(
-      complexStruct,
+      StructType.fromDDL("c ARRAY<STRING>,b MAP<STRING, STRING>,d MAP<STRING, STRUCT<i: INT>>," +
+        "a STRUCT<i: INT>"))
+    check(complexStruct,
       """{"a":{"i":0},"b":{"a":"123","b":"true","c":"f"},"c":["123","true","f"],""" +
-        """"d":{"a":{"i":132}}}""",
+      """"d":{"a":{"i":132}}}""",
       toVariantObject = true)
 
     // to_variant_object - failure cases - non-nested types or map with non-string key
@@ -1030,8 +975,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       val input = Literal(new VariantVal(value, emptyMetadata))
       checkErrorInExpression[SparkRuntimeException](
         ResolveTimeZone.resolveTimeZones(SchemaOfVariant(input).replacement),
-        "UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT",
-        Map("id" -> id.toString))
+        "UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT", Map("id" -> id.toString)
+      )
     }
     checkErrorInSchemaOf(Array(primitiveHeader(25)), 25)
   }
@@ -1069,22 +1014,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     val array2 = Literal(Array(0.0))
     val struct1 = Literal.default(StructType.fromDDL("a string"))
     val struct2 = Literal.default(StructType.fromDDL("a boolean, b bigint"))
-    val inputs = Seq(
-      nul,
-      boolean,
-      long,
-      string,
-      double,
-      date,
-      timestamp,
-      timestampNtz,
-      float,
-      binary,
-      decimal,
-      array1,
-      array2,
-      struct1,
-      struct2)
+    val inputs = Seq(nul, boolean, long, string, double, date, timestamp, timestampNtz, float,
+      binary, decimal, array1, array2, struct1, struct2)
 
     val results = mutable.HashMap.empty[(Literal, Literal), String]
     for (i <- inputs) {
@@ -1118,9 +1049,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
             ToVariantObject(i2)
           } else Cast(i2, VariantType)
         val array = CreateArray(Seq(elem1, elem2))
-        checkEvaluation(
-          SchemaOfVariant(Cast(array, VariantType)).replacement,
-          s"ARRAY<$expected>")
+        checkEvaluation(SchemaOfVariant(Cast(array, VariantType)).replacement, s"ARRAY<$expected>")
       }
     }
   }

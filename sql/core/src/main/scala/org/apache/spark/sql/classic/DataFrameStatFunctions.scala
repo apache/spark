@@ -36,22 +36,19 @@ import org.apache.spark.util.ArrayImplicits._
  * @since 1.4.0
  */
 @Stable
-final class DataFrameStatFunctions private[sql] (protected val df: DataFrame)
-    extends sql.DataFrameStatFunctions {
+final class DataFrameStatFunctions private[sql](protected val df: DataFrame)
+  extends sql.DataFrameStatFunctions {
 
   /** @inheritdoc */
   def approxQuantile(
       cols: Array[String],
       probabilities: Array[Double],
       relativeError: Double): Array[Array[Double]] = withOrigin {
-    StatFunctions
-      .multipleApproxQuantiles(
-        df.select(cols.map(col).toImmutableArraySeq: _*),
-        cols.toImmutableArraySeq,
-        probabilities.toImmutableArraySeq,
-        relativeError)
-      .map(_.toArray)
-      .toArray
+    StatFunctions.multipleApproxQuantiles(
+      df.select(cols.map(col).toImmutableArraySeq: _*),
+      cols.toImmutableArraySeq,
+      probabilities.toImmutableArraySeq,
+      relativeError).map(_.toArray).toArray
   }
 
   /**
@@ -62,9 +59,7 @@ final class DataFrameStatFunctions private[sql] (protected val df: DataFrame)
       probabilities: List[Double],
       relativeError: Double): java.util.List[java.util.List[Double]] = {
     approxQuantile(cols.toArray, probabilities.toArray, relativeError)
-      .map(_.toList.asJava)
-      .toList
-      .asJava
+      .map(_.toList.asJava).toList.asJava
   }
 
   /** @inheritdoc */
@@ -74,10 +69,8 @@ final class DataFrameStatFunctions private[sql] (protected val df: DataFrame)
 
   /** @inheritdoc */
   def corr(col1: String, col2: String, method: String): Double = withOrigin {
-    require(
-      method == "pearson",
-      "Currently only the calculation of the Pearson Correlation " +
-        "coefficient is supported.")
+    require(method == "pearson", "Currently only the calculation of the Pearson Correlation " +
+      "coefficient is supported.")
     StatFunctions.pearsonCorrelation(df, Seq(col1, col2))
   }
 
@@ -107,17 +100,13 @@ final class DataFrameStatFunctions private[sql] (protected val df: DataFrame)
   }
 
   /** @inheritdoc */
-  override def sampleBy[T](
-      col: String,
-      fractions: ju.Map[T, jl.Double],
-      seed: Long): DataFrame = {
+  override def sampleBy[T](col: String, fractions: ju.Map[T, jl.Double], seed: Long): DataFrame = {
     super.sampleBy(col, fractions, seed)
   }
 
   /** @inheritdoc */
   def sampleBy[T](col: Column, fractions: Map[T, Double], seed: Long): DataFrame = withOrigin {
-    require(
-      fractions.values.forall(p => p >= 0.0 && p <= 1.0),
+    require(fractions.values.forall(p => p >= 0.0 && p <= 1.0),
       s"Fractions must be in [0, 1], but got $fractions.")
     import org.apache.spark.sql.functions.{rand, udf}
     val r = rand(seed)
@@ -128,10 +117,7 @@ final class DataFrameStatFunctions private[sql] (protected val df: DataFrame)
   }
 
   /** @inheritdoc */
-  override def sampleBy[T](
-      col: Column,
-      fractions: ju.Map[T, jl.Double],
-      seed: Long): DataFrame = {
+  override def sampleBy[T](col: Column, fractions: ju.Map[T, jl.Double], seed: Long): DataFrame = {
     super.sampleBy(col, fractions, seed)
   }
 }

@@ -49,31 +49,37 @@ object TestRelations {
   val testRelation6 = LocalRelation(AttributeReference("the.id", LongType)())
 
   val nestedRelation = LocalRelation(
-    AttributeReference(
-      "top",
-      StructType(
+    AttributeReference("top", StructType(
+      StructField("duplicateField", StringType) ::
         StructField("duplicateField", StringType) ::
-          StructField("duplicateField", StringType) ::
-          StructField("differentCase", StringType) ::
-          StructField("differentcase", StringType) :: Nil))())
+        StructField("differentCase", StringType) ::
+        StructField("differentcase", StringType) :: Nil
+    ))())
 
   val nestedRelation2 = LocalRelation(
-    AttributeReference(
-      "top",
-      StructType(
-        StructField("aField", StringType) ::
-          StructField("bField", StringType) ::
-          StructField("cField", StringType) :: Nil))())
+    AttributeReference("top", StructType(
+      StructField("aField", StringType) ::
+        StructField("bField", StringType) ::
+        StructField("cField", StringType) :: Nil
+    ))())
 
-  val listRelation = LocalRelation(AttributeReference("list", ArrayType(IntegerType))())
+  val listRelation = LocalRelation(
+    AttributeReference("list", ArrayType(IntegerType))())
 
-  val mapRelation = LocalRelation(AttributeReference("map", MapType(IntegerType, IntegerType))())
+  val mapRelation = LocalRelation(
+    AttributeReference("map", MapType(IntegerType, IntegerType))())
 
   val streamingRelation = LocalRelation(
-    Seq(AttributeReference("a", IntegerType)(), AttributeReference("ts", TimestampType)()),
+    Seq(
+      AttributeReference("a", IntegerType)(),
+      AttributeReference("ts", TimestampType)()
+    ),
     isStreaming = true)
 
   val batchRelationWithTs = LocalRelation(
-    Seq(AttributeReference("a", IntegerType)(), AttributeReference("ts", TimestampType)()),
+    Seq(
+      AttributeReference("a", IntegerType)(),
+      AttributeReference("ts", TimestampType)()
+    ),
     isStreaming = false)
 }

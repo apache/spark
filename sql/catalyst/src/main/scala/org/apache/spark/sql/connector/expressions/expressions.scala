@@ -53,10 +53,8 @@ private[sql] object LogicalExpressions {
       numBuckets: Int,
       references: Array[NamedReference],
       sortedCols: Array[NamedReference]): SortedBucketTransform =
-    SortedBucketTransform(
-      literal(numBuckets, IntegerType),
-      references.toImmutableArraySeq,
-      sortedCols.toImmutableArraySeq)
+    SortedBucketTransform(literal(numBuckets, IntegerType),
+      references.toImmutableArraySeq, sortedCols.toImmutableArraySeq)
 
   def clusterBy(references: Array[NamedReference]): ClusterByTransform =
     ClusterByTransform(references.toImmutableArraySeq)
@@ -83,7 +81,6 @@ private[sql] object LogicalExpressions {
  * Allows Spark to rewrite the given references of the transform during analysis.
  */
 private[sql] sealed trait RewritableTransform extends Transform {
-
   /** Creates a copy of this transform with the new analyzed references. */
   def withReferences(newReferences: Seq[NamedReference]): Transform
 }
@@ -91,8 +88,7 @@ private[sql] sealed trait RewritableTransform extends Transform {
 /**
  * Base class for simple transforms of a single column.
  */
-private[sql] abstract class SingleColumnTransform(ref: NamedReference)
-    extends RewritableTransform {
+private[sql] abstract class SingleColumnTransform(ref: NamedReference) extends RewritableTransform {
 
   def reference: NamedReference = ref
 
@@ -105,8 +101,7 @@ private[sql] abstract class SingleColumnTransform(ref: NamedReference)
   protected def withNewRef(ref: NamedReference): Transform
 
   override def withReferences(newReferences: Seq[NamedReference]): Transform = {
-    assert(
-      newReferences.length == 1,
+    assert(newReferences.length == 1,
       s"Tried rewriting a single column transform (${this}) with multiple references.")
     withNewRef(newReferences.head)
   }
@@ -114,8 +109,7 @@ private[sql] abstract class SingleColumnTransform(ref: NamedReference)
 
 private[sql] final case class BucketTransform(
     numBuckets: Literal[Int],
-    columns: Seq[NamedReference])
-    extends RewritableTransform {
+    columns: Seq[NamedReference]) extends RewritableTransform {
 
   override val name: String = "bucket"
 
@@ -136,45 +130,39 @@ private[sql] final case class BucketTransform(
 
 private[sql] object BucketTransform {
   def unapply(transform: Transform): Option[(Int, Seq[NamedReference], Seq[NamedReference])] =
-    transform match {
-      case NamedTransform("sorted_bucket", arguments) =>
-        var posOfLit: Int = -1
-        var numOfBucket: Int = -1
-        arguments.zipWithIndex.foreach {
-          case (Lit(value: Int, IntegerType), i) =>
-            numOfBucket = value
-            posOfLit = i
-          case _ =>
-        }
-        Some(
-          numOfBucket,
-          arguments.take(posOfLit).map(_.asInstanceOf[NamedReference]),
-          arguments.drop(posOfLit + 1).map(_.asInstanceOf[NamedReference]))
-      case NamedTransform("bucket", arguments) =>
-        var numOfBucket: Int = -1
-        arguments(0) match {
-          case Lit(value: Int, IntegerType) =>
-            numOfBucket = value
-          case _ =>
-            throw new SparkException(
-              "The first element in BucketTransform arguments " +
-                "should be an Integer Literal.")
-        }
-        Some(
-          numOfBucket,
-          arguments.drop(1).map(_.asInstanceOf[NamedReference]),
-          Seq.empty[FieldReference])
-      case _ =>
-        None
-    }
+      transform match {
+    case NamedTransform("sorted_bucket", arguments) =>
+      var posOfLit: Int = -1
+      var numOfBucket: Int = -1
+      arguments.zipWithIndex.foreach {
+        case (Lit(value: Int, IntegerType), i) =>
+          numOfBucket = value
+          posOfLit = i
+        case _ =>
+      }
+      Some(numOfBucket, arguments.take(posOfLit).map(_.asInstanceOf[NamedReference]),
+        arguments.drop(posOfLit + 1).map(_.asInstanceOf[NamedReference]))
+    case NamedTransform("bucket", arguments) =>
+      var numOfBucket: Int = -1
+      arguments(0) match {
+        case Lit(value: Int, IntegerType) =>
+          numOfBucket = value
+        case _ => throw new SparkException("The first element in BucketTransform arguments " +
+          "should be an Integer Literal.")
+      }
+      Some(numOfBucket, arguments.drop(1).map(_.asInstanceOf[NamedReference]),
+        Seq.empty[FieldReference])
+    case _ =>
+      None
+  }
 }
 
 /**
- * This class represents a transform for `ClusterBySpec`. This is used to bundle ClusterBySpec in
- * CreateTable's partitioning transforms to pass it down to analyzer.
+ * This class represents a transform for `ClusterBySpec`. This is used to bundle
+ * ClusterBySpec in CreateTable's partitioning transforms to pass it down to analyzer.
  */
-final case class ClusterByTransform(columnNames: Seq[NamedReference])
-    extends RewritableTransform {
+final case class ClusterByTransform(
+    columnNames: Seq[NamedReference]) extends RewritableTransform {
 
   override val name: String = "cluster_by"
 
@@ -205,8 +193,7 @@ object ClusterByTransform {
 private[sql] final case class SortedBucketTransform(
     numBuckets: Literal[Int],
     columns: Seq[NamedReference],
-    sortedColumns: Seq[NamedReference] = Seq.empty[NamedReference])
-    extends RewritableTransform {
+    sortedColumns: Seq[NamedReference] = Seq.empty[NamedReference]) extends RewritableTransform {
 
   override val name: String = "sorted_bucket"
 
@@ -219,14 +206,14 @@ private[sql] final case class SortedBucketTransform(
   override def toString: String = s"$name(${arguments.map(_.describe).mkString(", ")})"
 
   override def withReferences(newReferences: Seq[NamedReference]): Transform = {
-    this.copy(
-      columns = newReferences.take(columns.length),
+    this.copy(columns = newReferences.take(columns.length),
       sortedColumns = newReferences.drop(columns.length))
   }
 }
 
-private[sql] final case class ApplyTransform(name: String, args: Seq[Expression])
-    extends Transform {
+private[sql] final case class ApplyTransform(
+    name: String,
+    args: Seq[Expression]) extends Transform {
 
   override def arguments: Array[Expression] = args.toArray
 
@@ -264,8 +251,8 @@ private[sql] object NamedTransform {
   }
 }
 
-private[sql] final case class IdentityTransform(ref: NamedReference)
-    extends SingleColumnTransform(ref) {
+private[sql] final case class IdentityTransform(
+    ref: NamedReference) extends SingleColumnTransform(ref) {
   override val name: String = "identity"
   override def describe: String = ref.describe
   override protected def withNewRef(ref: NamedReference): Transform = this.copy(ref)
@@ -292,8 +279,8 @@ private[sql] object IdentityTransform {
   }
 }
 
-private[sql] final case class YearsTransform(ref: NamedReference)
-    extends SingleColumnTransform(ref) {
+private[sql] final case class YearsTransform(
+    ref: NamedReference) extends SingleColumnTransform(ref) {
   override val name: String = "years"
   override protected def withNewRef(ref: NamedReference): Transform = this.copy(ref)
 }
@@ -319,8 +306,8 @@ private[sql] object YearsTransform {
   }
 }
 
-private[sql] final case class MonthsTransform(ref: NamedReference)
-    extends SingleColumnTransform(ref) {
+private[sql] final case class MonthsTransform(
+    ref: NamedReference) extends SingleColumnTransform(ref) {
   override val name: String = "months"
   override protected def withNewRef(ref: NamedReference): Transform = this.copy(ref)
 }
@@ -346,8 +333,8 @@ private[sql] object MonthsTransform {
   }
 }
 
-private[sql] final case class DaysTransform(ref: NamedReference)
-    extends SingleColumnTransform(ref) {
+private[sql] final case class DaysTransform(
+    ref: NamedReference) extends SingleColumnTransform(ref) {
   override val name: String = "days"
   override protected def withNewRef(ref: NamedReference): Transform = this.copy(ref)
 }
@@ -373,8 +360,8 @@ private[sql] object DaysTransform {
   }
 }
 
-private[sql] final case class HoursTransform(ref: NamedReference)
-    extends SingleColumnTransform(ref) {
+private[sql] final case class HoursTransform(
+    ref: NamedReference) extends SingleColumnTransform(ref) {
   override val name: String = "hours"
   override protected def withNewRef(ref: NamedReference): Transform = this.copy(ref)
 }
@@ -422,7 +409,7 @@ private[sql] object FieldReference {
     LogicalExpressions.parseReference(column)
   }
 
-  def column(name: String): NamedReference = {
+  def column(name: String) : NamedReference = {
     FieldReference(Seq(name))
   }
 }
@@ -430,8 +417,7 @@ private[sql] object FieldReference {
 private[sql] final case class SortValue(
     expression: Expression,
     direction: SortDirection,
-    nullOrdering: NullOrdering)
-    extends SortOrder {
+    nullOrdering: NullOrdering) extends SortOrder {
 
   override def toString(): String = s"$expression $direction $nullOrdering"
 }

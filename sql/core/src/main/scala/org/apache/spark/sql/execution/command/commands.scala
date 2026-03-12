@@ -38,8 +38,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * A logical command that is executed for its side-effects. `RunnableCommand`s are wrapped in
- * `ExecutedCommand` during execution.
+ * A logical command that is executed for its side-effects.  `RunnableCommand`s are
+ * wrapped in `ExecutedCommand` during execution.
  */
 trait RunnableCommand extends Command {
 
@@ -56,11 +56,10 @@ trait LeafRunnableCommand extends RunnableCommand with LeafLike[LogicalPlan]
 trait UnaryRunnableCommand extends RunnableCommand with UnaryLike[LogicalPlan]
 
 /**
- * A physical operator that executes the run method of a `RunnableCommand` and saves the result to
- * prevent multiple executions.
+ * A physical operator that executes the run method of a `RunnableCommand` and
+ * saves the result to prevent multiple executions.
  *
- * @param cmd
- *   the `RunnableCommand` this operator will run.
+ * @param cmd the `RunnableCommand` this operator will run.
  */
 case class ExecutedCommandExec(cmd: RunnableCommand) extends LeafExecNode {
 
@@ -68,13 +67,12 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends LeafExecNode {
 
   /**
    * A concrete command should override this lazy field to wrap up any side effects caused by the
-   * command or any other computation that should be evaluated exactly once. The value of this
-   * field can be used as the contents of the corresponding RDD generated from the physical plan
-   * of this command.
+   * command or any other computation that should be evaluated exactly once. The value of this field
+   * can be used as the contents of the corresponding RDD generated from the physical plan of this
+   * command.
    *
-   * The `execute()` method of all the physical command classes should reference
-   * `sideEffectResult` so that the command can be executed eagerly right after the command query
-   * is created.
+   * The `execute()` method of all the physical command classes should reference `sideEffectResult`
+   * so that the command can be executed eagerly right after the command query is created.
    */
   protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
     val converter = CatalystTypeConverters.createToCatalystConverter(schema)
@@ -103,16 +101,14 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends LeafExecNode {
 }
 
 /**
- * A physical operator that executes the run method of a `DataWritingCommand` and saves the result
- * to prevent multiple executions.
+ * A physical operator that executes the run method of a `DataWritingCommand` and
+ * saves the result to prevent multiple executions.
  *
- * @param cmd
- *   the `DataWritingCommand` this operator will run.
- * @param child
- *   the physical plan child ran by the `DataWritingCommand`.
+ * @param cmd the `DataWritingCommand` this operator will run.
+ * @param child the physical plan child ran by the `DataWritingCommand`.
  */
 case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
-    extends UnaryExecNode {
+  extends UnaryExecNode {
 
   override lazy val metrics: Map[String, SQLMetric] = cmd.metrics
 
@@ -151,21 +147,20 @@ case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
 /**
  * An explain command for users to see how a command will be executed.
  *
- * Note that this command takes in a logical plan, runs the optimizer on the logical plan (but do
- * NOT actually execute it).
+ * Note that this command takes in a logical plan, runs the optimizer on the logical plan
+ * (but do NOT actually execute it).
  *
  * {{{
  *   EXPLAIN (EXTENDED | CODEGEN | COST | FORMATTED) SELECT * FROM ...
  * }}}
  *
- * @param logicalPlan
- *   plan to explain
- * @param mode
- *   explain mode
+ * @param logicalPlan plan to explain
+ * @param mode explain mode
  */
-case class ExplainCommand(logicalPlan: LogicalPlan, mode: ExplainMode)
-    extends RunnableCommand
-    with SupervisingCommand {
+case class ExplainCommand(
+    logicalPlan: LogicalPlan,
+    mode: ExplainMode)
+  extends RunnableCommand with SupervisingCommand {
 
   override val output: Seq[Attribute] =
     Seq(AttributeReference("plan", StringType, nullable = true)())
@@ -176,12 +171,9 @@ case class ExplainCommand(logicalPlan: LogicalPlan, mode: ExplainMode)
     val qe = sparkSession.sessionState.executePlan(stagedLogicalPlan, CommandExecutionMode.SKIP)
     val outputString = qe.explainString(mode)
     Seq(Row(outputString))
-  } catch {
-    case NonFatal(cause) =>
-      ("Error occurred during query planning: \n" + cause.getMessage)
-        .split("\n")
-        .map(Row(_))
-        .toImmutableArraySeq
+  } catch { case NonFatal(cause) =>
+    ("Error occurred during query planning: \n" + cause.getMessage).split("\n")
+      .map(Row(_)).toImmutableArraySeq
   }
 
   private def stageForAnalysis(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -193,8 +185,9 @@ case class ExplainCommand(logicalPlan: LogicalPlan, mode: ExplainMode)
 }
 
 /** An explain command for users to see how a streaming batch is executed. */
-case class StreamingExplainCommand(queryExecution: IncrementalExecution, extended: Boolean)
-    extends LeafRunnableCommand {
+case class StreamingExplainCommand(
+    queryExecution: IncrementalExecution,
+    extended: Boolean) extends LeafRunnableCommand {
 
   override val output: Seq[Attribute] =
     Seq(AttributeReference("plan", StringType, nullable = true)())
@@ -208,24 +201,20 @@ case class StreamingExplainCommand(queryExecution: IncrementalExecution, extende
         queryExecution.simpleString
       }
     Seq(Row(outputString))
-  } catch {
-    case NonFatal(cause) =>
-      ("Error occurred during query planning: \n" + cause.getMessage)
-        .split("\n")
-        .map(Row(_))
-        .toImmutableArraySeq
+  } catch { case NonFatal(cause) =>
+    ("Error occurred during query planning: \n" + cause.getMessage).split("\n")
+      .map(Row(_)).toImmutableArraySeq
   }
 }
 
 /**
- * Used to execute an arbitrary string command inside an external execution engine rather than
- * Spark. Please check [[ExternalCommandRunner]] for more details.
+ * Used to execute an arbitrary string command inside an external execution engine
+ * rather than Spark. Please check [[ExternalCommandRunner]] for more details.
  */
 case class ExternalCommandExecutor(
     runner: ExternalCommandRunner,
     command: String,
-    options: Map[String, String])
-    extends LeafRunnableCommand {
+    options: Map[String, String]) extends LeafRunnableCommand {
 
   override def output: Seq[Attribute] =
     Seq(AttributeReference("command_output", StringType)())

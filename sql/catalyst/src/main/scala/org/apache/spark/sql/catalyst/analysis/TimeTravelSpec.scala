@@ -39,7 +39,7 @@ object TimeTravelSpec {
   def create(
       timestamp: Option[Expression],
       version: Option[String],
-      sessionLocalTimeZone: String): Option[TimeTravelSpec] = {
+      sessionLocalTimeZone: String) : Option[TimeTravelSpec] = {
     if (timestamp.nonEmpty && version.nonEmpty) {
       throw QueryCompilationErrors.invalidTimeTravelSpecError()
     } else if (timestamp.nonEmpty) {
@@ -47,27 +47,20 @@ object TimeTravelSpec {
       assert(ts.resolved && ts.references.isEmpty && !SubqueryExpression.hasSubquery(ts))
       if (!Cast.canAnsiCast(ts.dataType, TimestampType)) {
         throw QueryCompilationErrors.invalidTimestampExprForTimeTravel(
-          "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.INPUT",
-          ts)
+          "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.INPUT", ts)
       }
       val tsToEval = {
         val fakeProject = Project(Seq(Alias(ts, "ts")()), OneRowRelation())
-        ComputeCurrentTime(ReplaceExpressions(fakeProject))
-          .asInstanceOf[Project]
-          .expressions
-          .head
-          .asInstanceOf[Alias]
-          .child
+        ComputeCurrentTime(ReplaceExpressions(fakeProject)).asInstanceOf[Project]
+          .expressions.head.asInstanceOf[Alias].child
       }
       tsToEval.foreach {
         case _: Unevaluable =>
           throw QueryCompilationErrors.invalidTimestampExprForTimeTravel(
-            "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.UNEVALUABLE",
-            ts)
+            "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.UNEVALUABLE", ts)
         case e if !e.deterministic =>
           throw QueryCompilationErrors.invalidTimestampExprForTimeTravel(
-            "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.NON_DETERMINISTIC",
-            ts)
+            "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.NON_DETERMINISTIC", ts)
         case _ =>
       }
       val tz = Some(sessionLocalTimeZone)
@@ -76,8 +69,7 @@ object TimeTravelSpec {
       val value = Cast(tsToEval, TimestampType, tz, ansiEnabled = false).eval()
       if (value == null) {
         throw QueryCompilationErrors.invalidTimestampExprForTimeTravel(
-          "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.INPUT",
-          ts)
+          "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.INPUT", ts)
       }
       Some(AsOfTimestamp(value.asInstanceOf[Long]))
     } else if (version.nonEmpty) {
@@ -101,11 +93,13 @@ object TimeTravelSpec {
           Literal(timestampStr),
           TimestampType,
           Some(sessionLocalTimeZone),
-          ansiEnabled = false).eval()
+          ansiEnabled = false
+        ).eval()
         if (timestampValue == null) {
           throw new AnalysisException(
             "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.OPTION",
-            Map("expr" -> s"'$timestampStr'"))
+            Map("expr" -> s"'$timestampStr'")
+          )
         }
         Some(AsOfTimestamp(timestampValue.asInstanceOf[Long]))
 

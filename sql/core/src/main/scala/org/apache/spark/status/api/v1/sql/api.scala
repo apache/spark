@@ -36,7 +36,7 @@ class ExecutionData private[spark] (
     val errorMessage: String = null,
     val rootExecutionId: Long = -1)
 
-case class Node private[spark] (
+case class Node private[spark](
     nodeId: Long,
     nodeName: String,
     wholeStageCodegenId: Option[Long] = None,

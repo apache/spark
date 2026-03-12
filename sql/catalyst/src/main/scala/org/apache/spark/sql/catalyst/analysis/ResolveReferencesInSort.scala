@@ -23,40 +23,39 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * A virtual rule to resolve [[UnresolvedAttribute]] in [[Sort]]. It's only used by the real rule
- * `ResolveReferences`. The column resolution order for [[Sort]] is:
- *   1. Checks whether there are [[UnresolvedOrdinal]]s in the sort order list. In case there are
- *      delay the resolution until we resolve all the ordinals. Without this check, we proceed to
- *      resolve the following query correctly:
- *      {{{SELECT col1 FROM VALUES(1, 2) ORDER BY 2, col2;}}} That's because we add missing input
- *      in `ResolveReferencesInSort` to the underlying operator and then successfully resolve the
- *      ordinal because at that point there are two elements below.
- *   2. Resolves the column to [[AttributeReference]] with the output of the child plan. This
- *      includes metadata columns as well.
- *   3. Resolves the column to a literal function which is allowed to be invoked without braces,
- *      e.g. `SELECT col, current_date FROM t`.
- *   4. If the child plan is Aggregate or Filter(_, Aggregate), resolves the column to
- *      [[TempResolvedColumn]] with the output of Aggregate's child plan. This is to allow Sort to
- *      host grouping expressions and aggregate functions, which can be pushed down to the
- *      Aggregate later. For example,
- *      `SELECT max(a) FROM t GROUP BY b HAVING max(a) > 1 ORDER BY min(a)`.
- *   5. Resolves the column to [[AttributeReference]] with the output of a descendant plan node.
- *      Spark will propagate the missing attributes from the descendant plan node to the Sort
- *      node. This is to allow users to ORDER BY columns that are not in the SELECT clause, which
- *      is widely supported in other SQL dialects. For example, `SELECT a FROM t ORDER BY b`.
- *   6. If the order by expressions only have one single unresolved column named ALL, expanded it
- *      to include all columns in the SELECT list. This is to support SQL pattern like
- *      `SELECT col1, col2 FROM t ORDER BY ALL`. This should also support specifying asc/desc, and
- *      nulls first/last.
- *   7. Resolves the column to outer references with the outer plan if we are resolving subquery
- *      expressions.
+ * A virtual rule to resolve [[UnresolvedAttribute]] in [[Sort]]. It's only used by the real
+ * rule `ResolveReferences`. The column resolution order for [[Sort]] is:
+ * 1. Checks whether there are [[UnresolvedOrdinal]]s in the sort order list. In case there are
+ *    delay the resolution until we resolve all the ordinals. Without this check, we proceed to
+ *    resolve the following query correctly:
+ *    {{{ SELECT col1 FROM VALUES(1, 2) ORDER BY 2, col2; }}}
+ *    That's because we add missing input in `ResolveReferencesInSort` to the underlying operator
+ *    and then successfully resolve the ordinal because at that point there are two elements below.
+ * 2. Resolves the column to [[AttributeReference]] with the output of the child plan. This
+ *    includes metadata columns as well.
+ * 3. Resolves the column to a literal function which is allowed to be invoked without braces, e.g.
+ *    `SELECT col, current_date FROM t`.
+ * 4. If the child plan is Aggregate or Filter(_, Aggregate), resolves the column to
+ *    [[TempResolvedColumn]] with the output of Aggregate's child plan.
+ *    This is to allow Sort to host grouping expressions and aggregate functions, which can
+ *    be pushed down to the Aggregate later. For example,
+ *    `SELECT max(a) FROM t GROUP BY b HAVING max(a) > 1 ORDER BY min(a)`.
+ * 5. Resolves the column to [[AttributeReference]] with the output of a descendant plan node.
+ *    Spark will propagate the missing attributes from the descendant plan node to the Sort node.
+ *    This is to allow users to ORDER BY columns that are not in the SELECT clause, which is
+ *    widely supported in other SQL dialects. For example, `SELECT a FROM t ORDER BY b`.
+ * 6. If the order by expressions only have one single unresolved column named ALL, expanded it to
+ *    include all columns in the SELECT list. This is to support SQL pattern like
+ *    `SELECT col1, col2 FROM t ORDER BY ALL`. This should also support specifying asc/desc, and
+ *    nulls first/last.
+ * 7. Resolves the column to outer references with the outer plan if we are resolving subquery
+ *    expressions.
  *
- * Note, 4 and 5 are actually orthogonal. If the child plan is Aggregate, 5 can only resolve
- * columns as the grouping columns, which is completely covered by 4.
+ * Note, 4 and 5 are actually orthogonal. If the child plan is Aggregate, 5 can only resolve columns
+ * as the grouping columns, which is completely covered by 4.
  */
 class ResolveReferencesInSort(val catalogManager: CatalogManager)
-    extends SQLConfHelper
-    with ColumnResolutionHelper {
+  extends SQLConfHelper with ColumnResolutionHelper {
 
   def apply(s: Sort): LogicalPlan = {
     if (conf.getConf(SQLConf.PRIORITIZE_ORDINAL_RESOLUTION_IN_SORT) && hasUnresolvedOrdinals(s)) {
@@ -83,8 +82,8 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
     }
     val (missingAttrResolved, newChild) =
       resolveExprsAndAddMissingAttrs(resolvedWithAgg, sort.child)
-    val orderByAllResolved =
-      resolveOrderByAll(sort.global, newChild, missingAttrResolved.map(_.asInstanceOf[SortOrder]))
+    val orderByAllResolved = resolveOrderByAll(
+      sort.global, newChild, missingAttrResolved.map(_.asInstanceOf[SortOrder]))
     val resolvedFinal = orderByAllResolved
       .map(e => resolveColsLastResort(e).asInstanceOf[SortOrder])
     if (sort.child.output == newChild.output) {

@@ -37,16 +37,16 @@ class FilteredScanSource extends RelationProvider {
 }
 
 case class SimpleFilteredScan(from: Int, to: Int)(@transient val sparkSession: SparkSession)
-    extends BaseRelation
-    with PrunedFilteredScan {
+  extends BaseRelation
+  with PrunedFilteredScan {
 
   override def sqlContext: SQLContext = sparkSession.sqlContext
 
   override def schema: StructType =
     StructType(
       StructField("a", IntegerType, nullable = false) ::
-        StructField("b", IntegerType, nullable = false) ::
-        StructField("c", StringType, nullable = false) :: Nil)
+      StructField("b", IntegerType, nullable = false) ::
+      StructField("c", StringType, nullable = false) :: Nil)
 
   override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {
     def unhandled(filter: Filter): Boolean = {
@@ -74,10 +74,9 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sparkSession: S
     val rowBuilders = requiredColumns.map {
       case "a" => (i: Int) => Seq(i)
       case "b" => (i: Int) => Seq(i * 2)
-      case "c" =>
-        (i: Int) =>
-          val c = (i - 1 + 'a').toChar.toString
-          Seq(c * 5 + c.toUpperCase(Locale.ROOT) * 5)
+      case "c" => (i: Int) =>
+        val c = (i - 1 + 'a').toChar.toString
+        Seq(c * 5 + c.toUpperCase(Locale.ROOT) * 5)
     }
 
     FiltersPushed.list = filters.toImmutableArraySeq
@@ -95,10 +94,10 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sparkSession: S
       case IsNull("a") => (a: Int) => false // Int can't be null
       case IsNotNull("a") => (a: Int) => true
       case Not(pred) => (a: Int) => !translateFilterOnA(pred)(a)
-      case And(left, right) =>
-        (a: Int) => translateFilterOnA(left)(a) && translateFilterOnA(right)(a)
-      case Or(left, right) =>
-        (a: Int) => translateFilterOnA(left)(a) || translateFilterOnA(right)(a)
+      case And(left, right) => (a: Int) =>
+        translateFilterOnA(left)(a) && translateFilterOnA(right)(a)
+      case Or(left, right) => (a: Int) =>
+        translateFilterOnA(left)(a) || translateFilterOnA(right)(a)
       case _ => (a: Int) => true
     }
 
@@ -119,10 +118,8 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sparkSession: S
       filters.forall(translateFilterOnA(_)(a)) && filters.forall(translateFilterOnC(_)(c))
     }
 
-    sparkSession.sparkContext
-      .parallelize(from to to)
-      .filter(eval)
-      .map(i => Row.fromSeq(rowBuilders.map(_(i)).reduceOption(_ ++ _).getOrElse(Seq.empty)))
+    sparkSession.sparkContext.parallelize(from to to).filter(eval).map(i =>
+      Row.fromSeq(rowBuilders.map(_(i)).reduceOption(_ ++ _).getOrElse(Seq.empty)))
   }
 }
 
@@ -141,7 +138,8 @@ class FilteredScanSuite extends DataSourceTest with SharedSparkSession {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    sql("""
+    sql(
+      """
         |CREATE TEMPORARY VIEW oneToTenFiltered
         |USING org.apache.spark.sql.sources.FilteredScanSource
         |OPTIONS (
@@ -153,24 +151,32 @@ class FilteredScanSuite extends DataSourceTest with SharedSparkSession {
 
   sqlTest(
     "SELECT * FROM oneToTenFiltered",
-    (1 to 10).map(i =>
-      Row(
-        i,
-        i * 2,
-        (i - 1 + 'a').toChar.toString * 5
-          + (i - 1 + 'a').toChar.toString.toUpperCase(Locale.ROOT) * 5)))
+    (1 to 10).map(i => Row(i, i * 2, (i - 1 + 'a').toChar.toString * 5
+      + (i - 1 + 'a').toChar.toString.toUpperCase(Locale.ROOT) * 5)))
 
-  sqlTest("SELECT a, b FROM oneToTenFiltered", (1 to 10).map(i => Row(i, i * 2)))
+  sqlTest(
+    "SELECT a, b FROM oneToTenFiltered",
+    (1 to 10).map(i => Row(i, i * 2)))
 
-  sqlTest("SELECT b, a FROM oneToTenFiltered", (1 to 10).map(i => Row(i * 2, i)))
+  sqlTest(
+    "SELECT b, a FROM oneToTenFiltered",
+    (1 to 10).map(i => Row(i * 2, i)))
 
-  sqlTest("SELECT a FROM oneToTenFiltered", (1 to 10).map(i => Row(i)))
+  sqlTest(
+    "SELECT a FROM oneToTenFiltered",
+    (1 to 10).map(i => Row(i)))
 
-  sqlTest("SELECT b FROM oneToTenFiltered", (1 to 10).map(i => Row(i * 2)))
+  sqlTest(
+    "SELECT b FROM oneToTenFiltered",
+    (1 to 10).map(i => Row(i * 2)))
 
-  sqlTest("SELECT a * 2 FROM oneToTenFiltered", (1 to 10).map(i => Row(i * 2)))
+  sqlTest(
+    "SELECT a * 2 FROM oneToTenFiltered",
+    (1 to 10).map(i => Row(i * 2)))
 
-  sqlTest("SELECT A AS b FROM oneToTenFiltered", (1 to 10).map(i => Row(i)))
+  sqlTest(
+    "SELECT A AS b FROM oneToTenFiltered",
+    (1 to 10).map(i => Row(i)))
 
   sqlTest(
     "SELECT x.b, y.a FROM oneToTenFiltered x JOIN oneToTenFiltered y ON x.a = y.b",
@@ -180,17 +186,25 @@ class FilteredScanSuite extends DataSourceTest with SharedSparkSession {
     "SELECT x.a, y.b FROM oneToTenFiltered x JOIN oneToTenFiltered y ON x.a = y.b",
     (2 to 10 by 2).map(i => Row(i, i)))
 
-  sqlTest("SELECT a, b FROM oneToTenFiltered WHERE a = 1", Seq(1).map(i => Row(i, i * 2)))
+  sqlTest(
+    "SELECT a, b FROM oneToTenFiltered WHERE a = 1",
+    Seq(1).map(i => Row(i, i * 2)))
 
   sqlTest(
     "SELECT a, b FROM oneToTenFiltered WHERE a IN (1,3,5)",
     Seq(1, 3, 5).map(i => Row(i, i * 2)))
 
-  sqlTest("SELECT a, b FROM oneToTenFiltered WHERE A = 1", Seq(1).map(i => Row(i, i * 2)))
+  sqlTest(
+    "SELECT a, b FROM oneToTenFiltered WHERE A = 1",
+    Seq(1).map(i => Row(i, i * 2)))
 
-  sqlTest("SELECT a, b FROM oneToTenFiltered WHERE b = 2", Seq(1).map(i => Row(i, i * 2)))
+  sqlTest(
+    "SELECT a, b FROM oneToTenFiltered WHERE b = 2",
+    Seq(1).map(i => Row(i, i * 2)))
 
-  sqlTest("SELECT a, b FROM oneToTenFiltered WHERE a IS NULL", Seq.empty[Row])
+  sqlTest(
+    "SELECT a, b FROM oneToTenFiltered WHERE a IS NULL",
+    Seq.empty[Row])
 
   sqlTest(
     "SELECT a, b FROM oneToTenFiltered WHERE a IS NOT NULL",
@@ -283,17 +297,17 @@ class FilteredScanSuite extends DataSourceTest with SharedSparkSession {
     Set(LessThan("b", 16)))
 
   def testPushDown(
-      sqlString: String,
-      expectedCount: Int,
-      requiredColumnNames: Set[String]): Unit = {
+    sqlString: String,
+    expectedCount: Int,
+    requiredColumnNames: Set[String]): Unit = {
     testPushDown(sqlString, expectedCount, requiredColumnNames, Set.empty[Filter])
   }
 
   def testPushDown(
-      sqlString: String,
-      expectedCount: Int,
-      requiredColumnNames: Set[String],
-      expectedUnhandledFilters: Set[Filter]): Unit = {
+    sqlString: String,
+    expectedCount: Int,
+    requiredColumnNames: Set[String],
+    expectedUnhandledFilters: Set[Filter]): Unit = {
 
     test(s"PushDown Returns $expectedCount: $sqlString") {
       // These tests check a particular plan, disable whole stage codegen.
@@ -310,14 +324,12 @@ class FilteredScanSuite extends DataSourceTest with SharedSparkSession {
         assert(ColumnsRequired.set === requiredColumnNames)
 
         val table = spark.table("oneToTenFiltered")
-        val relation = table.queryExecution.analyzed.collectFirst { case l: LogicalRelation =>
-          l.relation
+        val relation = table.queryExecution.analyzed.collectFirst {
+          case l: LogicalRelation => l.relation
         }.get
 
         assert(
-          relation
-            .unhandledFilters(FiltersPushed.list.toArray)
-            .toSet === expectedUnhandledFilters)
+          relation.unhandledFilters(FiltersPushed.list.toArray).toSet === expectedUnhandledFilters)
 
         if (rawCount != expectedCount) {
           fail(
@@ -326,8 +338,7 @@ class FilteredScanSuite extends DataSourceTest with SharedSparkSession {
               queryExecution)
         }
       } finally {
-        spark.conf.set(
-          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key,
+        spark.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key,
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.defaultValue.get)
       }
     }

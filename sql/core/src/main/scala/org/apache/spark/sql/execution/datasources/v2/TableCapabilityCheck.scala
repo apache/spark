@@ -50,19 +50,20 @@ object TableCapabilityCheck extends (LogicalPlan => Unit) {
         throw QueryCompilationErrors.unsupportedAppendInBatchModeError(r.name)
 
       case OverwritePartitionsDynamic(r: DataSourceV2Relation, _, _, _, _)
-          if !r.table.supports(BATCH_WRITE) || !r.table.supports(OVERWRITE_DYNAMIC) =>
+        if !r.table.supports(BATCH_WRITE) || !r.table.supports(OVERWRITE_DYNAMIC) =>
         throw QueryCompilationErrors.unsupportedDynamicOverwriteInBatchModeError(r.table)
 
       case OverwriteByExpression(r: DataSourceV2Relation, expr, _, _, _, _, _) =>
         expr match {
           case Literal(true, BooleanType) =>
             if (!supportsBatchWrite(r.table) ||
-              !r.table.supportsAny(TRUNCATE, OVERWRITE_BY_FILTER)) {
+                !r.table.supportsAny(TRUNCATE, OVERWRITE_BY_FILTER)) {
               throw QueryCompilationErrors.unsupportedTruncateInBatchModeError(r.table)
             }
           case _ =>
             if (!supportsBatchWrite(r.table) || !r.table.supports(OVERWRITE_BY_FILTER)) {
-              throw QueryCompilationErrors.unsupportedOverwriteByFilterInBatchModeError(r.name)
+              throw QueryCompilationErrors.unsupportedOverwriteByFilterInBatchModeError(
+               r.name)
             }
         }
 
@@ -71,11 +72,11 @@ object TableCapabilityCheck extends (LogicalPlan => Unit) {
 
     // The streaming sources in a query should all support micro-batch scan, or all support
     // continuous scan.
-    val streamingSources = plan.collect { case r: StreamingRelationV2 =>
-      r.table
+    val streamingSources = plan.collect {
+      case r: StreamingRelationV2 => r.table
     }
-    val v1StreamingRelations = plan.collect { case r: StreamingRelation =>
-      r
+    val v1StreamingRelations = plan.collect {
+      case r: StreamingRelation => r
     }
 
     if (streamingSources.length + v1StreamingRelations.length > 1) {
@@ -89,8 +90,7 @@ object TableCapabilityCheck extends (LogicalPlan => Unit) {
             v1StreamingRelations.map(_.sourceName)
         val continuousSources = streamingSources.filter(_.supports(CONTINUOUS_READ)).map(_.name())
         throw QueryCompilationErrors.streamingSourcesDoNotSupportCommonExecutionModeError(
-          microBatchSources,
-          continuousSources)
+          microBatchSources, continuousSources)
       }
     }
   }

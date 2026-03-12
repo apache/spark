@@ -33,8 +33,8 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
 class DataSourceV2DataFrameSessionCatalogSuite
-    extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = false)
-    with SessionCatalogTest[InMemoryTable, InMemoryTableSessionCatalog] {
+  extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = false)
+  with SessionCatalogTest[InMemoryTable, InMemoryTableSessionCatalog] {
 
   override protected def doInsert(tableName: String, insert: DataFrame, mode: SaveMode): Unit = {
     val dfw = insert.write.format(v2Format)
@@ -53,9 +53,8 @@ class DataSourceV2DataFrameSessionCatalogSuite
 
   override protected val catalogAndNamespace: String = ""
 
-  test(
-    "saveAsTable: Append mode should not fail if the table already exists " +
-      "and a same-name temp view exist") {
+  test("saveAsTable: Append mode should not fail if the table already exists " +
+    "and a same-name temp view exist") {
     withTable("same_name") {
       withTempView("same_name") {
         sql(s"CREATE TABLE same_name(id LONG) USING $v2Format")
@@ -67,9 +66,8 @@ class DataSourceV2DataFrameSessionCatalogSuite
     }
   }
 
-  test(
-    "saveAsTable with mode Overwrite should not fail if the table already exists " +
-      "and a same-name temp view exist") {
+  test("saveAsTable with mode Overwrite should not fail if the table already exists " +
+    "and a same-name temp view exist") {
     withTable("same_name") {
       withTempView("same_name") {
         sql(s"CREATE TABLE same_name(id LONG) USING $v2Format")
@@ -142,8 +140,12 @@ class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable
         val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
         val provider = Option(properties.get("provider"))
 
-        val schema =
-          CatalogV2Util.applySchemaChanges(table.schema, changes, provider, "ALTER TABLE")
+        val schema = CatalogV2Util.applySchemaChanges(
+          table.schema,
+          changes,
+          provider,
+          "ALTER TABLE"
+        )
 
         // fail if the last column in the schema was dropped
         if (schema.fields.isEmpty) {
@@ -165,7 +167,9 @@ class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable
 object InMemoryTableSessionCatalog {
   private var customIdentifierResolution: Identifier => Identifier = _
 
-  def withCustomIdentifierResolver(resolver: Identifier => Identifier)(f: => Unit): Unit = {
+  def withCustomIdentifierResolver(
+      resolver: Identifier => Identifier)(
+      f: => Unit): Unit = {
     try {
       customIdentifierResolution = resolver
       f
@@ -175,10 +179,10 @@ object InMemoryTableSessionCatalog {
   }
 }
 
-private[connector] trait SessionCatalogTest[T <: Table, Catalog <: TestV2SessionCatalogBase[T]]
-    extends QueryTest
-    with SharedSparkSession
-    with BeforeAndAfter {
+private [connector] trait SessionCatalogTest[T <: Table, Catalog <: TestV2SessionCatalogBase[T]]
+  extends QueryTest
+  with SharedSparkSession
+  with BeforeAndAfter {
 
   protected def catalog(name: String): CatalogPlugin = {
     spark.sessionState.catalogManager.catalog(name)
@@ -222,9 +226,8 @@ private[connector] trait SessionCatalogTest[T <: Table, Catalog <: TestV2Session
     verifyTable(t1, df)
   }
 
-  test(
-    "saveAsTable: Append mode should not fail if the table not exists " +
-      "but a same-name temp view exist") {
+  test("saveAsTable: Append mode should not fail if the table not exists " +
+    "but a same-name temp view exist") {
     withTable("same_name") {
       withTempView("same_name") {
         spark.range(10).createTempView("same_name")
@@ -265,9 +268,8 @@ private[connector] trait SessionCatalogTest[T <: Table, Catalog <: TestV2Session
     verifyTable(t1, df)
   }
 
-  test(
-    "saveAsTable: Overwrite mode should not drop the temp view if the table not exists " +
-      "but a same-name temp view exist") {
+  test("saveAsTable: Overwrite mode should not drop the temp view if the table not exists " +
+    "but a same-name temp view exist") {
     withTable("same_name") {
       withTempView("same_name") {
         spark.range(10).createTempView("same_name")

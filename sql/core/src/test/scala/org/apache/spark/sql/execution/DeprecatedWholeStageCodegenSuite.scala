@@ -25,24 +25,20 @@ import org.apache.spark.sql.test.SharedSparkSession
 
 // Disable AQE because the WholeStageCodegenExec is added when running QueryStageExec
 @deprecated("This test suite will be removed.", "3.0.0")
-class DeprecatedWholeStageCodegenSuite
-    extends QueryTest
-    with SharedSparkSession
-    with DisableAdaptiveExecutionSuite {
+class DeprecatedWholeStageCodegenSuite extends QueryTest
+  with SharedSparkSession
+  with DisableAdaptiveExecutionSuite {
 
   test("simple typed UDAF should be included in WholeStageCodegen") {
     import testImplicits._
 
-    val ds = Seq(("a", 10), ("b", 1), ("b", 2), ("c", 1))
-      .toDS()
-      .groupByKey(_._1)
-      .agg(typed.sum(_._2))
+    val ds = Seq(("a", 10), ("b", 1), ("b", 2), ("c", 1)).toDS()
+      .groupByKey(_._1).agg(typed.sum(_._2))
 
     val plan = ds.queryExecution.executedPlan
-    assert(
-      plan.exists(p =>
-        p.isInstanceOf[WholeStageCodegenExec] &&
-          p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[HashAggregateExec]))
+    assert(plan.exists(p =>
+      p.isInstanceOf[WholeStageCodegenExec] &&
+        p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[HashAggregateExec]))
     assert(ds.collect() === Array(("a", 10.0), ("b", 3.0), ("c", 1.0)))
   }
 }

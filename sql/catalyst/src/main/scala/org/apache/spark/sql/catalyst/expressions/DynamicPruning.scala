@@ -30,19 +30,14 @@ trait DynamicPruning extends Predicate
  * join with a filter from the other side of the join. It is inserted in cases where partition
  * pruning can be applied.
  *
- * @param pruningKey
- *   the filtering key of the plan to be pruned.
- * @param buildQuery
- *   the build side of the join.
- * @param buildKeys
- *   the join keys corresponding to the build side of the join
- * @param onlyInBroadcast
- *   when set to false it indicates that the pruning filter is likely to be beneficial and so it
- *   should be executed even if it cannot reuse the results of the broadcast through
- *   ReuseExchange; otherwise, it will use the filter only if it can reuse the results of the
- *   broadcast through ReuseExchange
- * @param broadcastKeyIndices
- *   the indices of the filtering keys collected from the broadcast
+ * @param pruningKey the filtering key of the plan to be pruned.
+ * @param buildQuery the build side of the join.
+ * @param buildKeys the join keys corresponding to the build side of the join
+ * @param onlyInBroadcast when set to false it indicates that the pruning filter is likely to be
+ *  beneficial and so it should be executed even if it cannot reuse the results of the
+ *  broadcast through ReuseExchange; otherwise, it will use the filter only if it
+ *  can reuse the results of the broadcast through ReuseExchange
+ * @param broadcastKeyIndices the indices of the filtering keys collected from the broadcast
  */
 case class DynamicPruningSubquery(
     pruningKey: Expression,
@@ -52,10 +47,10 @@ case class DynamicPruningSubquery(
     onlyInBroadcast: Boolean,
     exprId: ExprId = NamedExpression.newExprId,
     hint: Option[HintInfo] = None)
-    extends SubqueryExpression(buildQuery, Seq(pruningKey), exprId, Seq.empty, hint)
-    with DynamicPruning
-    with Unevaluable
-    with UnaryLike[Expression] {
+  extends SubqueryExpression(buildQuery, Seq(pruningKey), exprId, Seq.empty, hint)
+  with DynamicPruning
+  with Unevaluable
+  with UnaryLike[Expression] {
 
   override def child: Expression = pruningKey
 
@@ -76,15 +71,15 @@ case class DynamicPruningSubquery(
 
   override lazy val resolved: Boolean = {
     pruningKey.resolved &&
-    buildQuery.resolved &&
-    buildKeys.nonEmpty &&
-    buildKeys.forall(_.resolved) &&
-    broadcastKeyIndices.forall(idx => idx >= 0 && idx < buildKeys.size) &&
-    buildKeys.forall(_.references.subsetOf(buildQuery.outputSet)) &&
-    // DynamicPruningSubquery should only have a single broadcasting key since
-    // there are no usage for multiple broadcasting keys at the moment.
-    broadcastKeyIndices.size == 1 &&
-    child.dataType == buildKeys(broadcastKeyIndices.head).dataType
+      buildQuery.resolved &&
+      buildKeys.nonEmpty &&
+      buildKeys.forall(_.resolved) &&
+      broadcastKeyIndices.forall(idx => idx >= 0 && idx < buildKeys.size) &&
+      buildKeys.forall(_.references.subsetOf(buildQuery.outputSet)) &&
+      // DynamicPruningSubquery should only have a single broadcasting key since
+      // there are no usage for multiple broadcasting keys at the moment.
+      broadcastKeyIndices.size == 1 &&
+      child.dataType == buildKeys(broadcastKeyIndices.head).dataType
   }
 
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(DYNAMIC_PRUNING_SUBQUERY)
@@ -104,15 +99,14 @@ case class DynamicPruningSubquery(
 }
 
 /**
- * Marker for a planned [[DynamicPruning]] expression. The expression is created during planning,
- * and it defers to its child for evaluation.
+ * Marker for a planned [[DynamicPruning]] expression.
+ * The expression is created during planning, and it defers to its child for evaluation.
  *
- * @param child
- *   underlying predicate.
+ * @param child underlying predicate.
  */
 case class DynamicPruningExpression(child: Expression)
-    extends UnaryExpression
-    with DynamicPruning {
+  extends UnaryExpression
+  with DynamicPruning {
   override def eval(input: InternalRow): Any = child.eval(input)
   final override val nodePatterns: Seq[TreePattern] = Seq(DYNAMIC_PRUNING_EXPRESSION)
 

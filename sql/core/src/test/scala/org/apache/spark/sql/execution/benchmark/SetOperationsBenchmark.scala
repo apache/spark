@@ -20,7 +20,8 @@ package org.apache.spark.sql.execution.benchmark
 import org.apache.spark.benchmark.Benchmark
 
 /**
- * Benchmark to measure performance for set operations. To run this benchmark:
+ * Benchmark to measure performance for set operations.
+ * To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class>
@@ -43,7 +44,8 @@ object SetOperationsBenchmark extends SqlBasedBenchmark {
         new Benchmark(
           "Parsing + Analysis",
           valuesPerIteration = numOperations * numValues,
-          output = output)
+          output = output
+        )
 
       for (operation <- setOperations) {
         benchmark.addCase(operation) { _ =>
@@ -52,7 +54,9 @@ object SetOperationsBenchmark extends SqlBasedBenchmark {
               generateQuery(
                 operation = operation,
                 numOperations = numOperations,
-                numValues = numValues))
+                numValues = numValues
+              )
+            )
             .queryExecution
             .analyzed
           ()
@@ -69,9 +73,10 @@ object SetOperationsBenchmark extends SqlBasedBenchmark {
       *
     FROM
       ${generateOperations(
-        operation = operation,
-        numOperations = numOperations,
-        numValues = numValues)}
+      operation = operation,
+      numOperations = numOperations,
+      numValues = numValues
+    )}
       """
   }
 

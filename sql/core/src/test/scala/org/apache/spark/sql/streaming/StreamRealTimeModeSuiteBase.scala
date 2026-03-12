@@ -42,7 +42,8 @@ trait StreamRealTimeModeSuiteBase extends StreamTest with Matchers {
 
   override protected def sparkConf: SparkConf = {
     super.sparkConf
-      .set(SQLConf.STREAMING_REAL_TIME_MODE_MIN_BATCH_DURATION, defaultTrigger.batchDurationMs)
+      .set(SQLConf.STREAMING_REAL_TIME_MODE_MIN_BATCH_DURATION,
+        defaultTrigger.batchDurationMs)
   }
 
   override def beforeAll(): Unit = {
@@ -62,16 +63,16 @@ trait StreamRealTimeModeSuiteBase extends StreamTest with Matchers {
    */
   def waitForTasksToStart(numTasks: Int): Unit = {
     eventually(timeout(60.seconds)) {
-      val tasksRunning =
-        spark.sparkContext.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum
+      val tasksRunning = spark.sparkContext.statusTracker
+        .getExecutorInfos.map(_.numRunningTasks()).sum
       assert(tasksRunning == numTasks, s"tasksRunning: ${tasksRunning}")
     }
   }
 }
 
 /**
- * Must be a singleton object to ensure serializable when used in ForeachWriter. Users must make
- * sure different test suites use different sink names to avoid race conditions.
+ * Must be a singleton object to ensure serializable when used in ForeachWriter.
+ * Users must make sure different test suites use different sink names to avoid race conditions.
  */
 object ResultsCollector extends ConcurrentHashMap[String, ConcurrentLinkedQueue[String]] {
   def reset(): Unit = {
@@ -83,12 +84,12 @@ object ResultsCollector extends ConcurrentHashMap[String, ConcurrentLinkedQueue[
  * Base class that contains helper methods to test Real-Time Mode streaming queries.
  *
  * The general procedure to use this suite is as follows:
- *   1. Call createMemoryStream to create a memory stream with manual clock.
- *   2. Call runStreamingQuery to start a streaming query with custom logic.
- *   3. Call processBatches to add data to the memory stream and validate results.
+ * 1. Call createMemoryStream to create a memory stream with manual clock.
+ * 2. Call runStreamingQuery to start a streaming query with custom logic.
+ * 3. Call processBatches to add data to the memory stream and validate results.
  *
- * It uses foreach to collect results into [[ResultsCollector]]. It also tests whether results are
- * emitted in real-time by having longer batch durations than the waiting time.
+ * It uses foreach to collect results into [[ResultsCollector]]. It also tests whether
+ * results are emitted in real-time by having longer batch durations than the waiting time.
  */
 trait StreamRealTimeModeE2ESuiteBase extends StreamRealTimeModeSuiteBase {
   import testImplicits._
@@ -194,3 +195,4 @@ abstract class StreamRealTimeModeManualClockSuiteBase extends StreamRealTimeMode
     }
   }
 }
+

@@ -35,20 +35,23 @@ class CollationSQLFunctionsSuite extends QueryTest with SharedSparkSession {
       assert(transformedSchema === expectedSchema)
     }
 
-    Seq(StringType, StringType("UTF8_BINARY"), StringType("UNICODE"), StringType("UNICODE_CI_AI"))
-      .foreach { stringType =>
-        val dataSchema = StructType(Seq(StructField("fieldName", stringType)))
-        val expectedSchema = StructType(Seq(StructField("result", dataSchema)))
+    Seq(
+      StringType,
+      StringType("UTF8_BINARY"),
+      StringType("UNICODE"),
+      StringType("UNICODE_CI_AI")).foreach { stringType =>
+      val dataSchema = StructType(Seq(StructField("fieldName", stringType)))
+      val expectedSchema = StructType(Seq(StructField("result", dataSchema)))
 
-        // JSON Test
-        val jsonData = Seq("""{"fieldName": "fieldValue"}""")
-        val jsonDataset = spark.createDataset(jsonData)
-        checkSchema(jsonDataset, from_json($"value", dataSchema), expectedSchema)
+      // JSON Test
+      val jsonData = Seq("""{"fieldName": "fieldValue"}""")
+      val jsonDataset = spark.createDataset(jsonData)
+      checkSchema(jsonDataset, from_json($"value", dataSchema), expectedSchema)
 
-        // XML Test
-        val xmlData = Seq("<root><fieldName>fieldValue</fieldName></root>")
-        val xmlDataset = spark.createDataset(xmlData)
-        checkSchema(xmlDataset, from_xml($"value", dataSchema), expectedSchema)
-      }
+      // XML Test
+      val xmlData = Seq("<root><fieldName>fieldValue</fieldName></root>")
+      val xmlDataset = spark.createDataset(xmlData)
+      checkSchema(xmlDataset, from_xml($"value", dataSchema), expectedSchema)
+    }
   }
 }

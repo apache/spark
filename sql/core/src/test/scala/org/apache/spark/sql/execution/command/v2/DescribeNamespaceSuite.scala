@@ -31,25 +31,28 @@ class DescribeNamespaceSuite extends command.DescribeNamespaceSuiteBase with Com
 
   test("DescribeNamespace using v2 catalog") {
     withNamespace(s"$catalog.ns1.ns2") {
-      sql(s"""
+      sql(
+        s"""
            | CREATE NAMESPACE IF NOT EXISTS $catalog.ns1.ns2
            | COMMENT 'test namespace'
            | LOCATION '/tmp/ns_test'
            | WITH DBPROPERTIES (password = 'password')
            """.stripMargin)
       val descriptionDf = sql(s"DESCRIBE NAMESPACE EXTENDED $catalog.ns1.ns2")
-      assert(
-        descriptionDf.schema.map(field => (field.name, field.dataType)) ===
-          Seq(("info_name", StringType), ("info_value", StringType)))
+      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) ===
+        Seq(
+          ("info_name", StringType),
+          ("info_value", StringType)
+        ))
       val description = descriptionDf.collect()
-      assert(
-        description === Seq(
-          Row("Catalog Name", catalog),
-          Row("Namespace Name", "ns1.ns2"),
-          Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
-          Row(SupportsNamespaces.PROP_LOCATION.capitalize, "file:/tmp/ns_test"),
-          Row(SupportsNamespaces.PROP_OWNER.capitalize, Utils.getCurrentUserName()),
-          Row("Properties", "((password,*********(redacted)))")))
+      assert(description === Seq(
+        Row("Catalog Name", catalog),
+        Row("Namespace Name", "ns1.ns2"),
+        Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
+        Row(SupportsNamespaces.PROP_LOCATION.capitalize, "file:/tmp/ns_test"),
+        Row(SupportsNamespaces.PROP_OWNER.capitalize, Utils.getCurrentUserName()),
+        Row("Properties", "((password,*********(redacted)))"))
+      )
     }
   }
 
@@ -64,8 +67,7 @@ class DescribeNamespaceSuite extends command.DescribeNamespaceSuiteBase with Com
           dataType = StringType,
           nullable = true,
           metadata = new MetadataBuilder()
-            .putString("comment", "value of the namespace info")
-            .build())
+            .putString("comment", "value of the namespace info").build())
       assert(noCommentDataset.schema === expectedSchema)
       val isNullDataset = noCommentDataset
         .withColumn("is_null", noCommentDataset("info_value").isNull)

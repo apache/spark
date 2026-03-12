@@ -26,14 +26,15 @@ import org.apache.spark.sql.catalyst.types.{PhysicalArrayType, PhysicalMapType, 
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.types._
 
-class TestNullableColumnAccessor[JvmType](buffer: ByteBuffer, columnType: ColumnType[JvmType])
-    extends BasicColumnAccessor(buffer, columnType)
-    with NullableColumnAccessor
+class TestNullableColumnAccessor[JvmType](
+    buffer: ByteBuffer,
+    columnType: ColumnType[JvmType])
+  extends BasicColumnAccessor(buffer, columnType)
+  with NullableColumnAccessor
 
 object TestNullableColumnAccessor {
-  def apply[JvmType](
-      buffer: ByteBuffer,
-      columnType: ColumnType[JvmType]): TestNullableColumnAccessor[JvmType] = {
+  def apply[JvmType](buffer: ByteBuffer, columnType: ColumnType[JvmType])
+    : TestNullableColumnAccessor[JvmType] = {
     new TestNullableColumnAccessor(buffer, columnType)
   }
 }
@@ -47,17 +48,8 @@ class NullableColumnAccessorSuite extends SparkFunSuite {
     STRING(StringType("UNICODE")),
     STRING(StringType("UNICODE_CI")))
   val otherTypes = Seq(
-    NULL,
-    BOOLEAN,
-    BYTE,
-    SHORT,
-    INT,
-    LONG,
-    FLOAT,
-    DOUBLE,
-    BINARY,
-    COMPACT_DECIMAL(15, 10),
-    LARGE_DECIMAL(20, 10),
+    NULL, BOOLEAN, BYTE, SHORT, INT, LONG, FLOAT, DOUBLE,
+    BINARY, COMPACT_DECIMAL(15, 10), LARGE_DECIMAL(20, 10),
     STRUCT(PhysicalStructType(Array(StructField("a", StringType)))),
     ARRAY(PhysicalArrayType(IntegerType, true)),
     MAP(PhysicalMapType(IntegerType, StringType, true)),
@@ -88,8 +80,8 @@ class NullableColumnAccessorSuite extends SparkFunSuite {
     test(s"Nullable $typeName column accessor: access null values") {
       val builder = TestNullableColumnBuilder(columnType)
       val randomRow = makeRandomRow(columnType)
-      val proj = UnsafeProjection.create(
-        Array[DataType](ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType)))
+      val proj = UnsafeProjection.create(Array[DataType](
+        ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType)))
 
       (0 until 4).foreach { _ =>
         builder.appendFrom(proj(randomRow), 0)
@@ -104,10 +96,10 @@ class NullableColumnAccessorSuite extends SparkFunSuite {
       (0 until 4).foreach { _ =>
         assert(accessor.hasNext)
         accessor.extractTo(row, 0)
-        assert(
-          converter(row.get(0, ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType)))
-            === converter(
-              randomRow.get(0, ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType))))
+        assert(converter(row.get(0,
+          ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType)))
+          === converter(randomRow.get(0,
+          ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType))))
 
         assert(accessor.hasNext)
         accessor.extractTo(row, 0)

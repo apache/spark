@@ -28,17 +28,24 @@ class DeprecatedAPISuite extends QueryTest with SharedSparkSession {
   private lazy val doubleData = (1 to 10).map(i => DoubleData(i * 0.2 - 1, i * -0.2 + 1)).toDF()
 
   private def testOneToOneMathFunction[
-      @specialized(Int, Long, Float, Double) T,
-      @specialized(Int, Long, Float, Double) U](c: Column => Column, f: T => U): Unit = {
+    @specialized(Int, Long, Float, Double) T,
+    @specialized(Int, Long, Float, Double) U](
+        c: Column => Column,
+        f: T => U): Unit = {
     checkAnswer(
       doubleData.select(c($"a")),
-      (1 to 10).map(n => Row(f((n * 0.2 - 1).asInstanceOf[T]))))
+      (1 to 10).map(n => Row(f((n * 0.2 - 1).asInstanceOf[T])))
+    )
 
     checkAnswer(
       doubleData.select(c($"b")),
-      (1 to 10).map(n => Row(f((-n * 0.2 + 1).asInstanceOf[T]))))
+      (1 to 10).map(n => Row(f((-n * 0.2 + 1).asInstanceOf[T])))
+    )
 
-    checkAnswer(doubleData.select(c(lit(null))), (1 to 10).map(_ => Row(null)))
+    checkAnswer(
+      doubleData.select(c(lit(null))),
+      (1 to 10).map(_ => Row(null))
+    )
   }
 
   test("functions.toDegrees") {
@@ -49,8 +56,12 @@ class DeprecatedAPISuite extends QueryTest with SharedSparkSession {
 
       checkAnswer(
         sql("SELECT degrees(0), degrees(1), degrees(1.5)"),
-        Seq(0).toDF().select(toDegrees(lit(0)), toDegrees(lit(1)), toDegrees(lit(1.5))))
-      checkAnswer(sql("SELECT degrees(a) FROM t"), df.select(toDegrees("a")))
+        Seq(0).toDF().select(toDegrees(lit(0)), toDegrees(lit(1)), toDegrees(lit(1.5)))
+      )
+      checkAnswer(
+        sql("SELECT degrees(a) FROM t"),
+        df.select(toDegrees("a"))
+      )
     }
   }
 
@@ -62,8 +73,12 @@ class DeprecatedAPISuite extends QueryTest with SharedSparkSession {
 
       checkAnswer(
         sql("SELECT radians(0), radians(1), radians(1.5)"),
-        Seq(0).toDF().select(toRadians(lit(0)), toRadians(lit(1)), toRadians(lit(1.5))))
-      checkAnswer(sql("SELECT radians(a) FROM t"), df.select(toRadians("a")))
+        Seq(0).toDF().select(toRadians(lit(0)), toRadians(lit(1)), toRadians(lit(1.5)))
+      )
+      checkAnswer(
+        sql("SELECT radians(a) FROM t"),
+        df.select(toRadians("a"))
+      )
     }
   }
 
@@ -79,28 +94,30 @@ class DeprecatedAPISuite extends QueryTest with SharedSparkSession {
 
   test("functions.monotonicallyIncreasingId") {
     // Make sure we have 2 partitions, each with 2 records.
-    val df = sparkContext
-      .parallelize(Seq[Int](), 2)
-      .mapPartitions { _ =>
-        Iterator(Tuple1(1), Tuple1(2))
-      }
-      .toDF("a")
+    val df = sparkContext.parallelize(Seq[Int](), 2).mapPartitions { _ =>
+      Iterator(Tuple1(1), Tuple1(2))
+    }.toDF("a")
     checkAnswer(
       df.select(monotonicallyIncreasingId(), expr("monotonically_increasing_id()")),
       Row(0L, 0L) ::
         Row(1L, 1L) ::
         Row((1L << 33) + 0L, (1L << 33) + 0L) ::
-        Row((1L << 33) + 1L, (1L << 33) + 1L) :: Nil)
+        Row((1L << 33) + 1L, (1L << 33) + 1L) :: Nil
+    )
   }
 
   test("Column.!==") {
-    val nullData =
-      Seq((Some(1), Some(1)), (Some(1), Some(2)), (Some(1), None), (None, None)).toDF("a", "b")
-    checkAnswer(nullData.filter($"b" !== 1), Row(1, 2) :: Nil)
+    val nullData = Seq(
+      (Some(1), Some(1)), (Some(1), Some(2)), (Some(1), None), (None, None)).toDF("a", "b")
+    checkAnswer(
+      nullData.filter($"b" !== 1),
+      Row(1, 2) :: Nil)
 
     checkAnswer(nullData.filter($"b" !== null), Nil)
 
-    checkAnswer(nullData.filter($"a" !== $"b"), Row(1, 2) :: Nil)
+    checkAnswer(
+      nullData.filter($"a" !== $"b"),
+      Row(1, 2) :: Nil)
   }
 
   test("Dataset.registerTempTable") {
@@ -121,15 +138,11 @@ class DeprecatedAPISuite extends QueryTest with SharedSparkSession {
 
   test("SQLContext.applySchema") {
     val rowRdd = sparkContext.parallelize(Seq(Row("Jack", 20), Row("Marry", 18)))
-    val schema = StructType(
-      StructField("name", StringType, false) ::
-        StructField("age", IntegerType, true) :: Nil)
+    val schema = StructType(StructField("name", StringType, false) ::
+      StructField("age", IntegerType, true) :: Nil)
     val sqlContext = spark.sqlContext
-    checkAnswer(
-      sqlContext.applySchema(rowRdd, schema),
-      Row("Jack", 20) :: Row("Marry", 18) :: Nil)
-    checkAnswer(
-      sqlContext.applySchema(rowRdd.toJavaRDD(), schema),
+    checkAnswer(sqlContext.applySchema(rowRdd, schema), Row("Jack", 20) :: Row("Marry", 18) :: Nil)
+    checkAnswer(sqlContext.applySchema(rowRdd.toJavaRDD(), schema),
       Row("Jack", 20) :: Row("Marry", 18) :: Nil)
   }
 
@@ -162,20 +175,20 @@ class DeprecatedAPISuite extends QueryTest with SharedSparkSession {
       jsonDF = sqlContext.jsonFile(jsonFile, 0.9)
       checkAnswer(jsonDF, expectDF)
 
-      val jsonRDD = sparkContext.parallelize(
-        Seq("{\"name\":\"Jack\",\"age\":20}", "{\"name\":\"Marry\",\"age\":18}"))
+      val jsonRDD = sparkContext.parallelize(Seq("{\"name\":\"Jack\",\"age\":20}",
+        "{\"name\":\"Marry\",\"age\":18}"))
       jsonDF = sqlContext.jsonRDD(jsonRDD)
       checkAnswer(jsonDF, Row(18, "Marry") :: Row(20, "Jack") :: Nil)
       jsonDF = sqlContext.jsonRDD(jsonRDD.toJavaRDD())
       checkAnswer(jsonDF, Row(18, "Marry") :: Row(20, "Jack") :: Nil)
 
-      schema = StructType(
-        StructField("name", StringType, false) ::
-          StructField("age", IntegerType, false) :: Nil)
+      schema = StructType(StructField("name", StringType, false) ::
+        StructField("age", IntegerType, false) :: Nil)
       jsonDF = sqlContext.jsonRDD(jsonRDD, schema)
       checkAnswer(jsonDF, Row("Jack", 20) :: Row("Marry", 18) :: Nil)
       jsonDF = sqlContext.jsonRDD(jsonRDD.toJavaRDD(), schema)
       checkAnswer(jsonDF, Row("Jack", 20) :: Row("Marry", 18) :: Nil)
+
 
       jsonDF = sqlContext.jsonRDD(jsonRDD, 0.9)
       checkAnswer(jsonDF, Row(18, "Marry") :: Row(20, "Jack") :: Nil)

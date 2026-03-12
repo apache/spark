@@ -45,12 +45,12 @@ import org.apache.spark.sql.util.ExecutionListenerManager
 /**
  * Builder class that coordinates construction of a new [[SessionState]].
  *
- * The builder explicitly defines all components needed by the session state, and creates a
- * session state when `build` is called. Components should only be initialized once. This is not a
- * problem for most components as they are only used in the `build` function. However some
- * components (`conf`, `catalog`, `functionRegistry`, `experimentalMethods` & `sqlParser`) are as
- * dependencies for other components and are shared as a result. These components are defined as
- * lazy vals to make sure the component is created only once.
+ * The builder explicitly defines all components needed by the session state, and creates a session
+ * state when `build` is called. Components should only be initialized once. This is not a problem
+ * for most components as they are only used in the `build` function. However some components
+ * (`conf`, `catalog`, `functionRegistry`, `experimentalMethods` & `sqlParser`) are as dependencies
+ * for other components and are shared as a result. These components are defined as lazy vals to
+ * make sure the component is created only once.
  *
  * A developer can modify the builder by providing custom versions of components, or by using the
  * hooks provided for the analyzer, optimizer & planner. There are some dependencies between the
@@ -82,8 +82,8 @@ abstract class BaseSessionStateBuilder(
   /**
    * SQL-specific key-value configurations.
    *
-   * Uses the SQLConf from the SparkSession, which is initialized before sessionState to avoid
-   * recursive access during sessionState initialization.
+   * Uses the SQLConf from the SparkSession, which is initialized before sessionState
+   * to avoid recursive access during sessionState initialization.
    */
   protected def conf: SQLConf = session.sqlConf
 
@@ -93,8 +93,7 @@ abstract class BaseSessionStateBuilder(
    * This either gets cloned from a pre-existing version or cloned from the built-in registry.
    */
   protected lazy val functionRegistry: FunctionRegistry = {
-    parentState
-      .map(_.functionRegistry.clone())
+    parentState.map(_.functionRegistry.clone())
       .getOrElse(extensions.registerFunctions(FunctionRegistry.builtin.clone()))
   }
 
@@ -104,8 +103,7 @@ abstract class BaseSessionStateBuilder(
    * This either gets cloned from a pre-existing version or cloned from the built-in registry.
    */
   protected lazy val tableFunctionRegistry: TableFunctionRegistry = {
-    parentState
-      .map(_.tableFunctionRegistry.clone())
+    parentState.map(_.tableFunctionRegistry.clone())
       .getOrElse(extensions.registerTableFunctions(TableFunctionRegistry.builtin.clone()))
   }
 
@@ -169,8 +167,8 @@ abstract class BaseSessionStateBuilder(
   /**
    * Interface exposed to the user for registering user-defined functions.
    *
-   * Note 1: The user-defined functions must be deterministic. Note 2: This depends on the
-   * `functionRegistry` field.
+   * Note 1: The user-defined functions must be deterministic.
+   * Note 2: This depends on the `functionRegistry` field.
    */
   protected def udfRegistration: UDFRegistration = new UDFRegistration(session, functionRegistry)
 
@@ -192,31 +190,35 @@ abstract class BaseSessionStateBuilder(
       customHintResolutionRules
 
     override val singlePassResolverExtensions: Seq[ResolverExtension] = Seq(
-      new LogicalRelationResolver)
+      new LogicalRelationResolver
+    )
 
-    override val singlePassMetadataResolverExtensions: Seq[ResolverExtension] =
-      Seq(new DataSourceResolver(session), new FileResolver(session))
+    override val singlePassMetadataResolverExtensions: Seq[ResolverExtension] = Seq(
+      new DataSourceResolver(session),
+      new FileResolver(session)
+    )
 
     override val singlePassPostHocResolutionRules: Seq[Rule[LogicalPlan]] =
       DetectAmbiguousSelfJoin +:
-        ApplyCharTypePadding +:
-        singlePassCustomPostHocResolutionRules
+      ApplyCharTypePadding +:
+      singlePassCustomPostHocResolutionRules
 
     override val singlePassExtendedResolutionChecks: Seq[LogicalPlan => Unit] = {
-      val heavyChecks =
-        if (session.conf.get(
-            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_RUN_HEAVY_EXTENDED_RESOLUTION_CHECKS)) {
-          Seq(
-            // [[ViewSyncSchemaToMetaStore]] calls `alterTable` if the view schema needs to be
-            // updated.
-            ViewSyncSchemaToMetaStore)
-        } else {
-          Nil
-        }
+      val heavyChecks = if (session.conf.get(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_RUN_HEAVY_EXTENDED_RESOLUTION_CHECKS
+        )) {
+        Seq(
+          // [[ViewSyncSchemaToMetaStore]] calls `alterTable` if the view schema needs to be
+          // updated.
+          ViewSyncSchemaToMetaStore
+        )
+      } else {
+        Nil
+      }
 
       PreReadCheck +:
-        heavyChecks ++:
-        singlePassCustomResolutionChecks
+      heavyChecks ++:
+      singlePassCustomResolutionChecks
     }
 
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
@@ -299,8 +301,8 @@ abstract class BaseSessionStateBuilder(
   }
 
   /**
-   * Custom check rules to add to the Analyzer. Prefer overriding this instead of creating your
-   * own Analyzer.
+   * Custom check rules to add to the Analyzer. Prefer overriding this instead of creating
+   * your own Analyzer.
    *
    * Note that this may NOT depend on the `analyzer` function.
    */
@@ -327,8 +329,8 @@ abstract class BaseSessionStateBuilder(
   }
 
   /**
-   * Custom operator optimization rules to add to the Optimizer. Prefer overriding this instead of
-   * creating your own Optimizer.
+   * Custom operator optimization rules to add to the Optimizer. Prefer overriding this instead
+   * of creating your own Optimizer.
    *
    * Note that this may NOT depend on the `optimizer` function.
    */
@@ -337,16 +339,16 @@ abstract class BaseSessionStateBuilder(
   }
 
   /**
-   * Custom early scan push down rules to add to the Optimizer. Prefer overriding this instead of
-   * creating your own Optimizer.
+   * Custom early scan push down rules to add to the Optimizer. Prefer overriding this instead
+   * of creating your own Optimizer.
    *
    * Note that this may NOT depend on the `optimizer` function.
    */
   protected def customEarlyScanPushDownRules: Seq[Rule[LogicalPlan]] = Nil
 
   /**
-   * Custom rules for rewriting plans after operator optimization and before CBO. Prefer
-   * overriding this instead of creating your own Optimizer.
+   * Custom rules for rewriting plans after operator optimization and before CBO.
+   * Prefer overriding this instead of creating your own Optimizer.
    *
    * Note that this may NOT depend on the `optimizer` function.
    */
@@ -367,8 +369,8 @@ abstract class BaseSessionStateBuilder(
   }
 
   /**
-   * Custom strategies to add to the planner. Prefer overriding this instead of creating your own
-   * Planner.
+   * Custom strategies to add to the planner. Prefer overriding this instead of creating
+   * your own Planner.
    *
    * Note that this may NOT depend on the `planner` function.
    */
@@ -390,21 +392,17 @@ abstract class BaseSessionStateBuilder(
 
   protected def planNormalizationRules: Seq[Rule[LogicalPlan]] = {
     NormalizeCTEIds +:
-      extensions.buildPlanNormalizationRules(session)
+    extensions.buildPlanNormalizationRules(session)
   }
 
   /**
    * Create a query execution object.
    */
-  protected def createQueryExecution
-      : (LogicalPlan, CommandExecutionMode.Value) => QueryExecution =
-    (plan, mode) =>
-      new QueryExecution(
-        session,
-        plan,
-        mode = mode,
-        shuffleCleanupModeOpt = Some(
-          QueryExecution.determineShuffleCleanupMode(session.sessionState.conf)))
+  protected def createQueryExecution:
+    (LogicalPlan, CommandExecutionMode.Value) => QueryExecution =
+      (plan, mode) => new QueryExecution(session, plan, mode = mode,
+        shuffleCleanupModeOpt =
+          Some(QueryExecution.determineShuffleCleanupMode(session.sessionState.conf)))
 
   /**
    * Interface to start and stop streaming queries.
@@ -419,15 +417,14 @@ abstract class BaseSessionStateBuilder(
     new StreamingCheckpointManager(session, conf)
 
   /**
-   * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s that
-   * listen for execution metrics.
+   * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
+   * that listen for execution metrics.
    *
    * This gets cloned from parent if available, otherwise a new instance is created.
    */
   protected def listenerManager: ExecutionListenerManager = {
-    parentState
-      .map(_.listenerManager.clone(session, conf))
-      .getOrElse(new ExecutionListenerManager(session, conf, loadExtensions = true))
+    parentState.map(_.listenerManager.clone(session, conf)).getOrElse(
+      new ExecutionListenerManager(session, conf, loadExtensions = true))
   }
 
   /**
@@ -479,10 +476,7 @@ abstract class BaseSessionStateBuilder(
 }
 
 class SparkUDFExpressionBuilder extends FunctionExpressionBuilder {
-  override def makeExpression(
-      name: String,
-      clazz: Class[_],
-      input: Seq[Expression]): Expression = {
+  override def makeExpression(name: String, clazz: Class[_], input: Seq[Expression]): Expression = {
     if (classOf[UserDefinedAggregateFunction].isAssignableFrom(clazz)) {
       val expr = ScalaUDAF(
         input,
@@ -491,9 +485,7 @@ class SparkUDFExpressionBuilder extends FunctionExpressionBuilder {
       // Check input argument size
       if (expr.inputTypes.size != input.size) {
         throw QueryCompilationErrors.wrongNumArgsError(
-          name,
-          expr.inputTypes.size.toString,
-          input.size)
+          name, expr.inputTypes.size.toString, input.size)
       }
       expr
     } else {

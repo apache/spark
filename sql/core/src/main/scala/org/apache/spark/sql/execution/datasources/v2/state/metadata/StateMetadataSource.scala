@@ -54,8 +54,7 @@ case class StateMetadataTableEntry(
     stateSchemaFilePaths: List[String]) {
   def toRow(): InternalRow = {
     new GenericInternalRow(
-      Array[Any](
-        operatorId,
+      Array[Any](operatorId,
         UTF8String.fromString(operatorName),
         UTF8String.fromString(stateStoreName),
         numPartitions,
@@ -95,6 +94,7 @@ class StateMetadataSource extends TableProvider with DataSourceRegister {
   }
 }
 
+
 class StateMetadataTable extends Table with SupportsRead with SupportsMetadataColumns {
   override def name(): String = "state-metadata-table"
 
@@ -102,8 +102,8 @@ class StateMetadataTable extends Table with SupportsRead with SupportsMetadataCo
 
   override def capabilities(): util.Set[TableCapability] = Set(TableCapability.BATCH_READ).asJava
 
-  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = { () =>
-    {
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+    () => {
       if (!options.containsKey("path")) {
         throw StateDataSourceErrors.requiredOptionUnspecified(PATH)
       }
@@ -113,10 +113,8 @@ class StateMetadataTable extends Table with SupportsRead with SupportsMetadataCo
       val batchIdOpt = Option(options.get("batchId")).map(_.toLong)
       // if a batchId is provided, use it. Otherwise, use the last committed batch. If there is no
       // committed batch, use batchId 0.
-      val batchId = batchIdOpt.getOrElse(
-        OperatorStateMetadataUtils
-          .getLastCommittedBatch(SparkSession.active, checkpointLocation)
-          .getOrElse(0L))
+      val batchId = batchIdOpt.getOrElse(OperatorStateMetadataUtils
+        .getLastCommittedBatch(SparkSession.active, checkpointLocation).getOrElse(0L))
 
       new StateMetadataScan(options.get("path"), batchId)
     }
@@ -153,23 +151,18 @@ class StateMetadataScan(checkpointLocation: String, batchId: Long) extends Scan 
 
 case class StateMetadataPartitionReaderFactory(
     hadoopConf: SerializableConfiguration,
-    batchId: Long)
-    extends PartitionReaderFactory {
+    batchId: Long) extends PartitionReaderFactory {
 
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     new StateMetadataPartitionReader(
-      partition.asInstanceOf[StateMetadataInputPartition].checkpointLocation,
-      hadoopConf,
-      batchId)
+      partition.asInstanceOf[StateMetadataInputPartition].checkpointLocation, hadoopConf, batchId)
   }
 }
 
 class StateMetadataPartitionReader(
     checkpointLocation: String,
     serializedHadoopConf: SerializableConfiguration,
-    batchId: Long)
-    extends PartitionReader[InternalRow]
-    with Logging {
+    batchId: Long) extends PartitionReader[InternalRow] with Logging {
 
   override def next(): Boolean = {
     stateMetadata.hasNext
@@ -209,9 +202,7 @@ class StateMetadataPartitionReader(
     val commitLog = new Path(checkpointLocation, "commits")
     if (fileManager.exists(commitLog)) {
       fileManager
-        .list(commitLog, pathNameCanBeParsedAsLongFilter)
-        .map(f => pathToLong(f.getPath))
-        .sorted
+        .list(commitLog, pathNameCanBeParsedAsLongFilter).map(f => pathToLong(f.getPath)).sorted
     } else Array.empty
   }
 
@@ -220,9 +211,7 @@ class StateMetadataPartitionReader(
     try {
       val stateDir = new Path(checkpointLocation, "state")
       val opIds = fileManager
-        .list(stateDir, pathNameCanBeParsedAsLongFilter)
-        .map(f => pathToLong(f.getPath))
-        .sorted
+        .list(stateDir, pathNameCanBeParsedAsLongFilter).map(f => pathToLong(f.getPath)).sorted
       opIds.map { opId =>
         val operatorIdPath = new Path(stateDir, opId.toString)
         // check if OperatorStateMetadataV2 path exists, if it does, read it
@@ -233,27 +222,21 @@ class StateMetadataPartitionReader(
         } else {
           1
         }
-        OperatorStateMetadataReader
-          .createReader(
-            operatorIdPath,
-            hadoopConf,
-            operatorStateMetadataVersion,
-            batchId,
-            createMetadataDir = false)
-          .read() match {
+        OperatorStateMetadataReader.createReader(
+          operatorIdPath, hadoopConf, operatorStateMetadataVersion, batchId,
+          createMetadataDir = false).read() match {
           case Some(metadata) => metadata
-          case None =>
-            throw StateDataSourceErrors.failedToReadOperatorMetadata(checkpointLocation, batchId)
+          case None => throw StateDataSourceErrors.failedToReadOperatorMetadata(checkpointLocation,
+            batchId)
         }
       }
     } catch {
       // if the operator metadata is not present, catch the exception
       // and return an empty array
       case ex: FileNotFoundException =>
-        logWarning(
-          log"Failed to find operator metadata for " +
-            log"path=${MDC(LogKeys.CHECKPOINT_LOCATION, checkpointLocation)} " +
-            log"with exception=${MDC(LogKeys.EXCEPTION, ex)}")
+        logWarning(log"Failed to find operator metadata for " +
+          log"path=${MDC(LogKeys.CHECKPOINT_LOCATION, checkpointLocation)} " +
+          log"with exception=${MDC(LogKeys.EXCEPTION, ex)}")
         Array.empty
     }
   }
@@ -266,8 +249,7 @@ class StateMetadataPartitionReader(
       operatorStateMetadata match {
         case v1: OperatorStateMetadataV1 =>
           v1.stateStoreInfo.map { stateStoreMetadata =>
-            StateMetadataTableEntry(
-              v1.operatorInfo.operatorId,
+            StateMetadataTableEntry(v1.operatorInfo.operatorId,
               v1.operatorInfo.operatorName,
               stateStoreMetadata.storeName,
               stateStoreMetadata.numPartitions,
@@ -276,12 +258,12 @@ class StateMetadataPartitionReader(
               operatorStateMetadata.version,
               null,
               stateStoreMetadata.numColsPrefixKey,
-              List.empty)
+              List.empty
+            )
           }
         case v2: OperatorStateMetadataV2 =>
           v2.stateStoreInfo.map { stateStoreMetadata =>
-            StateMetadataTableEntry(
-              v2.operatorInfo.operatorId,
+            StateMetadataTableEntry(v2.operatorInfo.operatorId,
               v2.operatorInfo.operatorName,
               stateStoreMetadata.storeName,
               stateStoreMetadata.numPartitions,
@@ -290,9 +272,10 @@ class StateMetadataPartitionReader(
               operatorStateMetadata.version,
               v2.operatorPropertiesJson,
               -1, // numColsPrefixKey is not available in OperatorStateMetadataV2
-              stateStoreMetadata.stateSchemaFilePaths)
+              stateStoreMetadata.stateSchemaFilePaths
+            )
           }
+        }
       }
-    }
-  }.iterator
+    }.iterator
 }

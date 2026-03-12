@@ -42,17 +42,12 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
 abstract class RowLevelOperationSuiteBase
-    extends QueryTest
-    with SharedSparkSession
-    with BeforeAndAfter
-    with AdaptiveSparkPlanHelper {
+  extends QueryTest with SharedSparkSession with BeforeAndAfter with AdaptiveSparkPlanHelper {
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   before {
-    spark.conf.set(
-      "spark.sql.catalog.cat",
-      classOf[InMemoryRowLevelOperationTableCatalog].getName)
+    spark.conf.set("spark.sql.catalog.cat", classOf[InMemoryRowLevelOperationTableCatalog].getName)
   }
 
   after {
@@ -146,10 +141,8 @@ abstract class RowLevelOperationSuiteBase
       override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
         executedPlan = qe.executedPlan
       }
-      override def onFailure(
-          funcName: String,
-          qe: QueryExecution,
-          exception: Exception): Unit = {}
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
+      }
     }
     spark.listenerManager.register(listener)
 
@@ -163,12 +156,10 @@ abstract class RowLevelOperationSuiteBase
   // executes an operation and extracts conditions from ReplaceData or WriteDelta
   protected def executeAndKeepConditions(func: => Unit): (Expression, Option[Expression]) = {
     val Seq(qe) = withQueryExecutionsCaptured(spark)(func)
-    qe.optimizedPlan
-      .collectFirst {
-        case rd: ReplaceData => (rd.condition, rd.groupFilterCondition)
-        case wd: WriteDelta => (wd.condition, None)
-      }
-      .getOrElse(fail("couldn't find row-level operation in optimized plan"))
+    qe.optimizedPlan.collectFirst {
+      case rd: ReplaceData => (rd.condition, rd.groupFilterCondition)
+      case wd: WriteDelta => (wd.condition, None)
+    }.getOrElse(fail("couldn't find row-level operation in optimized plan"))
   }
 
   protected def assertNoScanPlanning(plan: LogicalPlan): Unit = {
@@ -178,14 +169,16 @@ abstract class RowLevelOperationSuiteBase
     assert(scans.isEmpty, "plan must not contain scan relations")
   }
 
-  protected def executeAndCheckScan(query: String, expectedScanSchema: String): Unit = {
+  protected def executeAndCheckScan(
+      query: String,
+      expectedScanSchema: String): Unit = {
 
     val executedPlan = executeAndKeepPlan {
       sql(query)
     }
 
-    val scan = collect(executedPlan) { case s: BatchScanExec =>
-      s
+    val scan = collect(executedPlan) {
+      case s: BatchScanExec => s
     }.head
     assert(DataTypeUtils.sameType(scan.schema, StructType.fromDDL(expectedScanSchema)))
   }
@@ -199,8 +192,8 @@ abstract class RowLevelOperationSuiteBase
       sql(query)
     }
 
-    val primaryScan = collect(executedPlan) { case s: BatchScanExec =>
-      s
+    val primaryScan = collect(executedPlan) {
+      case s: BatchScanExec => s
     }.head
     assert(DataTypeUtils.sameType(primaryScan.schema, StructType.fromDDL(primaryScanSchema)))
 
@@ -217,8 +210,7 @@ abstract class RowLevelOperationSuiteBase
     groupFilterScanSchema match {
       case Some(filterSchema) =>
         assert(groupFilterScan.isDefined, "could not find group filter scan")
-        assert(
-          DataTypeUtils.sameType(groupFilterScan.get.schema, StructType.fromDDL(filterSchema)))
+        assert(DataTypeUtils.sameType(groupFilterScan.get.schema, StructType.fromDDL(filterSchema)))
 
       case None =>
         assert(groupFilterScan.isEmpty, "should not be any group filter scans")
@@ -229,7 +221,7 @@ abstract class RowLevelOperationSuiteBase
     val actualPartitions = table.replacedPartitions.map {
       case Seq(partValue: UTF8String) => partValue.toString
       case Seq(partValue) => partValue
-      case other => fail(s"expected only one partition value: $other")
+      case other => fail(s"expected only one partition value: $other" )
     }
     assert(actualPartitions.toSet == expectedPartitions.toSet, "replaced partitions must match")
   }
@@ -250,11 +242,11 @@ abstract class RowLevelOperationSuiteBase
     val entryType = new StructType()
       .add(StructField("operation", StringType))
       .add(StructField("id", IntegerType))
-      .add(
-        StructField(
-          "metadata",
-          new StructType(
-            Array(StructField("_partition", StringType), StructField("_index", IntegerType)))))
+      .add(StructField(
+        "metadata",
+        new StructType(Array(
+          StructField("_partition", StringType),
+          StructField("_index", IntegerType)))))
       .add(StructField("data", table.schema))
 
     val expectedEntriesAsRows = expectedEntries.map { entry =>

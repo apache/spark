@@ -40,7 +40,7 @@ import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
 
 /** Physical plan for Project. */
 case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
-    extends UnaryExecNode
+  extends UnaryExecNode
     with CodegenSupport
     with PartitioningPreservingUnaryExecNode
     with OrderPreservingUnaryExecNode {
@@ -58,8 +58,8 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   override def usedInputs: AttributeSet = {
     // only the attributes those are used at least twice should be evaluated before this plan,
     // otherwise we could defer the evaluation until output attribute is actually used.
-    val usedExprIds = projectList.flatMap(_.collect { case a: Attribute =>
-      a.exprId
+    val usedExprIds = projectList.flatMap(_.collect {
+      case a: Attribute => a.exprId
     })
     val usedMoreThanOnce = usedExprIds.groupBy(id => id).filter(_._2.size > 1).keySet
     references.filter(a => usedMoreThanOnce.contains(a.exprId))
@@ -73,9 +73,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
       val genVars = ctx.withSubExprEliminationExprs(subExprs.states) {
         exprs.map(_.genCode(ctx))
       }
-      (
-        ctx.evaluateSubExprEliminationState(subExprs.states.values),
-        genVars,
+      (ctx.evaluateSubExprEliminationState(subExprs.states.values), genVars,
         subExprs.exprCodesNeedEvaluate)
     } else {
       ("", exprs.map(_.genCode(ctx)), Seq.empty)
@@ -95,16 +93,16 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   protected override def doExecute(): RDD[InternalRow] = {
     val evaluatorFactory = new ProjectEvaluatorFactory(projectList, child.output)
     if (conf.usePartitionEvaluator) {
-      child.execute().mapPartitionsWithEvaluator(evaluatorFactory, preservesPartitionSizes = true)
+      child.execute().mapPartitionsWithEvaluator(
+        evaluatorFactory, preservesPartitionSizes = true
+      )
     } else {
-      child
-        .execute()
-        .mapPartitionsWithIndexInternal(
-          f = (index, iter) => {
-            val evaluator = evaluatorFactory.createEvaluator()
-            evaluator.eval(index, iter)
-          },
-          preservesPartitionSizes = true)
+      child.execute().mapPartitionsWithIndexInternal(
+        f = (index, iter) => {
+          val evaluator = evaluatorFactory.createEvaluator()
+          evaluator.eval(index, iter)
+        }, preservesPartitionSizes = true
+      )
     }
   }
 
@@ -139,12 +137,7 @@ trait GeneratePredicateHelper extends PredicateHelper {
     val nonNullAttrExprIds = notNullPreds.flatMap(_.references).distinct.map(_.exprId)
     val outputAttrs = outputWithNullability(inputAttrs, nonNullAttrExprIds)
     generatePredicateCode(
-      ctx,
-      inputAttrs,
-      inputExprCode,
-      outputAttrs,
-      notNullPreds,
-      otherPreds,
+      ctx, inputAttrs, inputExprCode, outputAttrs, notNullPreds, otherPreds,
       nonNullAttrExprIds)
   }
 
@@ -156,7 +149,6 @@ trait GeneratePredicateHelper extends PredicateHelper {
       notNullPreds: Seq[Expression],
       otherPreds: Seq[Expression],
       nonNullAttrExprIds: Seq[ExprId]): String = {
-
     /**
      * Generates code for `c`, using `in` for input attributes and `attrs` for nullability.
      */
@@ -190,46 +182,36 @@ trait GeneratePredicateHelper extends PredicateHelper {
     // TODO: revisit this. We can consider reordering predicates as well.
     val generatedIsNotNullChecks = new Array[Boolean](notNullPreds.length)
     val extraIsNotNullAttrs = mutable.Set[Attribute]()
-    val generated = otherPreds
-      .map { c =>
-        val nullChecks = c.references
-          .map { r =>
-            val idx = notNullPreds.indexWhere { n =>
-              n.asInstanceOf[IsNotNull].child.semanticEquals(r)
-            }
-            if (idx != -1 && !generatedIsNotNullChecks(idx)) {
-              generatedIsNotNullChecks(idx) = true
-              // Use the child's output. The nullability is what the child produced.
-              genPredicate(notNullPreds(idx), inputExprCode, inputAttrs)
-            } else if (nonNullAttrExprIds.contains(r.exprId) && !extraIsNotNullAttrs.contains(
-                r)) {
-              extraIsNotNullAttrs += r
-              genPredicate(IsNotNull(r), inputExprCode, inputAttrs)
-            } else {
-              ""
-            }
-          }
-          .mkString("\n")
-          .trim
-
-        // Here we use *this* operator's output with this output's nullability since we already
-        // enforced them with the IsNotNull checks above.
-        s"""
-         |$nullChecks
-         |${genPredicate(c, inputExprCode, outputAttrs)}
-       """.stripMargin.trim
-      }
-      .mkString("\n")
-
-    val nullChecks = notNullPreds.zipWithIndex
-      .map { case (c, idx) =>
-        if (!generatedIsNotNullChecks(idx)) {
-          genPredicate(c, inputExprCode, inputAttrs)
+    val generated = otherPreds.map { c =>
+      val nullChecks = c.references.map { r =>
+        val idx = notNullPreds.indexWhere { n => n.asInstanceOf[IsNotNull].child.semanticEquals(r)}
+        if (idx != -1 && !generatedIsNotNullChecks(idx)) {
+          generatedIsNotNullChecks(idx) = true
+          // Use the child's output. The nullability is what the child produced.
+          genPredicate(notNullPreds(idx), inputExprCode, inputAttrs)
+        } else if (nonNullAttrExprIds.contains(r.exprId) && !extraIsNotNullAttrs.contains(r)) {
+          extraIsNotNullAttrs += r
+          genPredicate(IsNotNull(r), inputExprCode, inputAttrs)
         } else {
           ""
         }
+      }.mkString("\n").trim
+
+      // Here we use *this* operator's output with this output's nullability since we already
+      // enforced them with the IsNotNull checks above.
+      s"""
+         |$nullChecks
+         |${genPredicate(c, inputExprCode, outputAttrs)}
+       """.stripMargin.trim
+    }.mkString("\n")
+
+    val nullChecks = notNullPreds.zipWithIndex.map { case (c, idx) =>
+      if (!generatedIsNotNullChecks(idx)) {
+        genPredicate(c, inputExprCode, inputAttrs)
+      } else {
+        ""
       }
-      .mkString("\n")
+    }.mkString("\n")
 
     s"""
        |$generated
@@ -240,9 +222,7 @@ trait GeneratePredicateHelper extends PredicateHelper {
 
 /** Physical plan for Filter. */
 case class FilterExec(condition: Expression, child: SparkPlan)
-    extends UnaryExecNode
-    with CodegenSupport
-    with GeneratePredicateHelper {
+  extends UnaryExecNode with CodegenSupport with GeneratePredicateHelper {
 
   // Split out all the IsNotNulls from condition.
   private val (notNullPreds, otherPreds) = splitConjunctivePredicates(condition).partition {
@@ -274,13 +254,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     val predicateCode = generatePredicateCode(
-      ctx,
-      child.output,
-      input,
-      output,
-      notNullPreds,
-      otherPreds,
-      notNullAttributes)
+      ctx, child.output, input, output, notNullPreds, otherPreds, notNullAttributes)
 
     // Reset the isNull to false for the not-null columns, then the followed operators could
     // generate better code (remove dead branches).
@@ -333,25 +307,19 @@ case class FilterExec(condition: Expression, child: SparkPlan)
 /**
  * Physical plan for sampling the dataset.
  *
- * @param lowerBound
- *   Lower-bound of the sampling probability (usually 0.0)
- * @param upperBound
- *   Upper-bound of the sampling probability. The expected fraction sampled will be ub - lb.
- * @param withReplacement
- *   Whether to sample with replacement.
- * @param seed
- *   the random seed
- * @param child
- *   the SparkPlan
+ * @param lowerBound Lower-bound of the sampling probability (usually 0.0)
+ * @param upperBound Upper-bound of the sampling probability. The expected fraction sampled
+ *                   will be ub - lb.
+ * @param withReplacement Whether to sample with replacement.
+ * @param seed the random seed
+ * @param child the SparkPlan
  */
 case class SampleExec(
     lowerBound: Double,
     upperBound: Double,
     withReplacement: Boolean,
     seed: Long,
-    child: SparkPlan)
-    extends UnaryExecNode
-    with CodegenSupport {
+    child: SparkPlan) extends UnaryExecNode with CodegenSupport {
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
@@ -365,9 +333,7 @@ case class SampleExec(
       // requiring us to copy the row, which is more expensive than the random number generator.
       new PartitionwiseSampledRDD[InternalRow, InternalRow](
         child.execute(),
-        new PoissonSampler[InternalRow](
-          upperBound - lowerBound,
-          useGapSamplingIfPossible = false),
+        new PoissonSampler[InternalRow](upperBound - lowerBound, useGapSamplingIfPossible = false),
         preservesPartitioning = true,
         seed)
     } else {
@@ -399,12 +365,9 @@ case class SampleExec(
       val initSampler = ctx.freshName("initSampler")
 
       // Inline mutable state since not many Sample operations in a task
-      val sampler = ctx.addMutableState(
-        s"$samplerClass<UnsafeRow>",
-        "sampleReplace",
+      val sampler = ctx.addMutableState(s"$samplerClass<UnsafeRow>", "sampleReplace",
         v => {
-          val initSamplerFuncName = ctx.addNewFunction(
-            initSampler,
+          val initSamplerFuncName = ctx.addNewFunction(initSampler,
             s"""
               | private void $initSampler() {
               |   $v = new $samplerClass<UnsafeRow>($upperBound - $lowerBound, false);
@@ -419,8 +382,7 @@ case class SampleExec(
               | }
            """.stripMargin.trim)
           s"$initSamplerFuncName();"
-        },
-        forceInline = true)
+        }, forceInline = true)
 
       val samplingCount = ctx.freshName("samplingCount")
       s"""
@@ -432,9 +394,7 @@ case class SampleExec(
        """.stripMargin.trim
     } else {
       val samplerClass = classOf[BernoulliCellSampler[UnsafeRow]].getName
-      val sampler = ctx.addMutableState(
-        s"$samplerClass<UnsafeRow>",
-        "sampler",
+      val sampler = ctx.addMutableState(s"$samplerClass<UnsafeRow>", "sampler",
         v => s"""
           | $v = new $samplerClass<UnsafeRow>($lowerBound, $upperBound, false);
           | $v.setSeed(${seed}L + partitionIndex);
@@ -453,12 +413,12 @@ case class SampleExec(
     copy(child = newChild)
 }
 
+
 /**
  * Physical plan for range (generating a range of 64 bit numbers).
  */
 case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
-    extends LeafExecNode
-    with CodegenSupport {
+  extends LeafExecNode with CodegenSupport {
 
   val start: Long = range.start
   val end: Long = range.end
@@ -510,16 +470,10 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     val BigInt = classOf[java.math.BigInteger].getName
 
     // Inline mutable state since not many Range operations in a task
-    val taskContext = ctx.addMutableState(
-      "TaskContext",
-      "taskContext",
-      v => s"$v = TaskContext.get();",
-      forceInline = true)
-    val inputMetrics = ctx.addMutableState(
-      "InputMetrics",
-      "inputMetrics",
-      v => s"$v = $taskContext.taskMetrics().inputMetrics();",
-      forceInline = true)
+    val taskContext = ctx.addMutableState("TaskContext", "taskContext",
+      v => s"$v = TaskContext.get();", forceInline = true)
+    val inputMetrics = ctx.addMutableState("InputMetrics", "inputMetrics",
+      v => s"$v = $taskContext.taskMetrics().inputMetrics();", forceInline = true)
 
     // In order to periodically update the metrics without inflicting performance penalty, this
     // operator produces elements in batches. After a batch is complete, the metrics are updated
@@ -540,8 +494,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     // The default size of a batch, which must be positive integer
     val batchSize = 1000
 
-    val initRangeFuncName = ctx.addNewFunction(
-      "initRange",
+    val initRangeFuncName = ctx.addNewFunction("initRange",
       s"""
         | private void initRange(int idx) {
         |   $BigInt index = $BigInt.valueOf(idx);
@@ -745,15 +698,14 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
         firstAttr.withNullability(nullable)
       } else {
         AttributeReference(firstAttr.name, newDt, nullable, firstAttr.metadata)(
-          firstAttr.exprId,
-          firstAttr.qualifier)
+          firstAttr.exprId, firstAttr.qualifier)
       }
     }
   }
 
   /**
-   * Returns the output partitionings of the children, with the attributes converted to the first
-   * child's attributes at the same position.
+   * Returns the output partitionings of the children, with the attributes converted to
+   * the first child's attributes at the same position.
    */
   private def prepareOutputPartitioning(): Seq[Partitioning] = {
     // Create a map of attributes from the other children to the first child.
@@ -821,10 +773,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
       // in semantics so this union can choose not to change the partitioning by using a
       // custom partitioning aware union RDD.
       val nonEmptyRdds = children.map(_.execute()).filter(!_.partitions.isEmpty)
-      new SQLPartitioningAwareUnionRDD(
-        sparkContext,
-        nonEmptyRdds,
-        outputPartitioning.numPartitions)
+      new SQLPartitioningAwareUnionRDD(sparkContext, nonEmptyRdds, outputPartitioning.numPartitions)
     }
   }
 
@@ -841,17 +790,18 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
 }
 
 /**
- * Physical plan for returning a new RDD that has exactly `numPartitions` partitions. Similar to
- * coalesce defined on an [[RDD]], this operation results in a narrow dependency, e.g. if you go
- * from 1000 partitions to 100 partitions, there will not be a shuffle, instead each of the 100
- * new partitions will claim 10 of the current partitions. If a larger number of partitions is
- * requested, it will stay at the current number of partitions.
+ * Physical plan for returning a new RDD that has exactly `numPartitions` partitions.
+ * Similar to coalesce defined on an [[RDD]], this operation results in a narrow dependency, e.g.
+ * if you go from 1000 partitions to 100 partitions, there will not be a shuffle, instead each of
+ * the 100 new partitions will claim 10 of the current partitions.  If a larger number of partitions
+ * is requested, it will stay at the current number of partitions.
  *
- * However, if you're doing a drastic coalesce, e.g. to numPartitions = 1, this may result in your
- * computation taking place on fewer nodes than you like (e.g. one node in the case of
- * numPartitions = 1). To avoid this, you see ShuffleExchange. This will add a shuffle step, but
- * means the current upstream partitions will be executed in parallel (per whatever the current
- * partitioning is).
+ * However, if you're doing a drastic coalesce, e.g. to numPartitions = 1,
+ * this may result in your computation taking place on fewer nodes than
+ * you like (e.g. one node in the case of numPartitions = 1). To avoid this,
+ * you see ShuffleExchange. This will add a shuffle step, but means the
+ * current upstream partitions will be executed in parallel (per whatever
+ * the current partitioning is).
  */
 case class CoalesceExec(numPartitions: Int, child: SparkPlan) extends UnaryExecNode {
   override def output: Seq[Attribute] = child.output
@@ -877,10 +827,10 @@ case class CoalesceExec(numPartitions: Int, child: SparkPlan) extends UnaryExecN
 }
 
 object CoalesceExec {
-
   /** A simple RDD with no data, but with the given number of partitions. */
-  class EmptyRDDWithPartitions(@transient private val sc: SparkContext, numPartitions: Int)
-      extends RDD[InternalRow](sc, Nil) {
+  class EmptyRDDWithPartitions(
+      @transient private val sc: SparkContext,
+      numPartitions: Int) extends RDD[InternalRow](sc, Nil) {
 
     override def getPartitions: Array[Partition] =
       Array.tabulate(numPartitions)(i => EmptyPartition(i))
@@ -917,11 +867,11 @@ abstract class BaseSubqueryExec extends SparkPlan {
       printNodeId: Boolean,
       printOutputColumns: Boolean,
       indent: Int = 0): Unit = {
-
     /**
-     * In the new explain mode `EXPLAIN FORMATTED`, the subqueries are not shown in the main plan
-     * and are printed separately along with correlation information with its parent plan. The
-     * condition below makes sure that subquery plans are excluded from the main plan.
+     * In the new explain mode `EXPLAIN FORMATTED`, the subqueries are not shown in the
+     * main plan and are printed separately along with correlation information with
+     * its parent plan. The condition below makes sure that subquery plans are
+     * excluded from the main plan.
      */
     if (!printNodeId) {
       super.generateTreeString(
@@ -943,8 +893,7 @@ abstract class BaseSubqueryExec extends SparkPlan {
  * Physical plan for a subquery.
  */
 case class SubqueryExec(name: String, child: SparkPlan, maxNumRows: Option[Int] = None)
-    extends BaseSubqueryExec
-    with UnaryExecNode {
+  extends BaseSubqueryExec with UnaryExecNode {
 
   override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
@@ -954,27 +903,28 @@ case class SubqueryExec(name: String, child: SparkPlan, maxNumRows: Option[Int] 
   private lazy val relationFuture: JFuture[Array[InternalRow]] = {
     // relationFuture is used in "doExecute". Therefore we can get the execution id correctly here.
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    SQLExecution
-      .withThreadLocalCaptured[Array[InternalRow]](session, SubqueryExec.executionContext) {
-        // This will run in another thread. Set the execution id so that we can connect these jobs
-        // with the correct execution.
-        SQLExecution.withExecutionId(session, executionId) {
-          val beforeCollect = System.nanoTime()
-          // Note that we use .executeCollect() because we don't want to convert data to Scala types
-          val rows: Array[InternalRow] = if (maxNumRows.isDefined) {
-            child.executeTake(maxNumRows.get)
-          } else {
-            child.executeCollect()
-          }
-          val beforeBuild = System.nanoTime()
-          longMetric("collectTime") += NANOSECONDS.toMillis(beforeBuild - beforeCollect)
-          val dataSize = rows.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
-          longMetric("dataSize") += dataSize
-
-          SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
-          rows
+    SQLExecution.withThreadLocalCaptured[Array[InternalRow]](
+      session,
+      SubqueryExec.executionContext) {
+      // This will run in another thread. Set the execution id so that we can connect these jobs
+      // with the correct execution.
+      SQLExecution.withExecutionId(session, executionId) {
+        val beforeCollect = System.nanoTime()
+        // Note that we use .executeCollect() because we don't want to convert data to Scala types
+        val rows: Array[InternalRow] = if (maxNumRows.isDefined) {
+          child.executeTake(maxNumRows.get)
+        } else {
+          child.executeCollect()
         }
+        val beforeBuild = System.nanoTime()
+        longMetric("collectTime") += NANOSECONDS.toMillis(beforeBuild - beforeCollect)
+        val dataSize = rows.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
+        longMetric("dataSize") += dataSize
+
+        SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
+        rows
       }
+    }
   }
 
   protected override def doCanonicalize(): SparkPlan = {
@@ -1012,8 +962,7 @@ case class SubqueryExec(name: String, child: SparkPlan, maxNumRows: Option[Int] 
 
 object SubqueryExec {
   private[execution] val executionContext = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonCachedThreadPool(
-      "subquery",
+    ThreadUtils.newDaemonCachedThreadPool("subquery",
       SQLConf.get.getConf(StaticSQLConf.SUBQUERY_MAX_THREAD_THRESHOLD)))
 
   def createForScalarSubquery(name: String, child: SparkPlan): SubqueryExec = {
@@ -1027,8 +976,7 @@ object SubqueryExec {
  * A wrapper for reused [[BaseSubqueryExec]].
  */
 case class ReusedSubqueryExec(child: BaseSubqueryExec)
-    extends BaseSubqueryExec
-    with LeafExecNode {
+  extends BaseSubqueryExec with LeafExecNode {
 
   override def name: String = child.name
 

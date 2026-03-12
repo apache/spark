@@ -27,12 +27,12 @@ import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNes
 
 /**
  * Strategy for plans containing [[LogicalQueryStage]] nodes:
- *   1. Transforms [[LogicalQueryStage]] to its corresponding physical plan that is either being
- *      executed or has already completed execution.
- *   2. Transforms [[Join]] which has one child relation already planned and executed as a
- *      [[BroadcastQueryStageExec]]. This is to prevent reversing a broadcast stage into a shuffle
- *      stage in case of the larger join child relation finishes before the smaller relation. Note
- *      that this rule needs to be applied before regular join strategies.
+ * 1. Transforms [[LogicalQueryStage]] to its corresponding physical plan that is either being
+ *    executed or has already completed execution.
+ * 2. Transforms [[Join]] which has one child relation already planned and executed as a
+ *    [[BroadcastQueryStageExec]]. This is to prevent reversing a broadcast stage into a shuffle
+ *    stage in case of the larger join child relation finishes before the smaller relation. Note
+ *    that this rule needs to be applied before regular join strategies.
  */
 object LogicalQueryStageStrategy extends Strategy {
 
@@ -42,41 +42,24 @@ object LogicalQueryStageStrategy extends Strategy {
   }
 
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, otherCondition, _, left, right, hint)
+    case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, otherCondition, _,
+          left, right, hint)
         if isBroadcastStage(left) || isBroadcastStage(right) =>
       val buildSide = if (isBroadcastStage(left)) BuildLeft else BuildRight
-      Seq(
-        BroadcastHashJoinExec(
-          leftKeys,
-          rightKeys,
-          joinType,
-          buildSide,
-          otherCondition,
-          planLater(left),
-          planLater(right)))
+      Seq(BroadcastHashJoinExec(
+        leftKeys, rightKeys, joinType, buildSide, otherCondition, planLater(left),
+        planLater(right)))
 
     case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys)
         if isBroadcastStage(j.right) =>
-      Seq(
-        joins.BroadcastHashJoinExec(
-          leftKeys,
-          rightKeys,
-          LeftAnti,
-          BuildRight,
-          None,
-          planLater(j.left),
-          planLater(j.right),
-          isNullAwareAntiJoin = true))
+      Seq(joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
+        None, planLater(j.left), planLater(j.right), isNullAwareAntiJoin = true))
 
     case j @ Join(left, right, joinType, condition, _)
         if isBroadcastStage(left) || isBroadcastStage(right) =>
       val buildSide = if (isBroadcastStage(left)) BuildLeft else BuildRight
       BroadcastNestedLoopJoinExec(
-        planLater(left),
-        planLater(right),
-        buildSide,
-        joinType,
-        condition) :: Nil
+        planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
 
     case q: LogicalQueryStage =>
       q.physicalPlan :: Nil

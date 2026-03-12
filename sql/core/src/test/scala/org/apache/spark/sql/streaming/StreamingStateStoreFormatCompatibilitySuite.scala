@@ -31,22 +31,20 @@ import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
 /**
- * An integrated test for streaming state store format compatibility. For each PR breaks this
- * test, we need to pay attention to the underlying unsafe row format changing. All the checkpoint
- * dirs were generated based on Spark version 2.4.5. If we accept the changes, it means the
- * checkpoint for Structured Streaming will become non-reusable. Please add a new test for the
- * issue, just like the test suite "SPARK-28067 changed the sum decimal unsafe row format".
+ * An integrated test for streaming state store format compatibility.
+ * For each PR breaks this test, we need to pay attention to the underlying unsafe row format
+ * changing. All the checkpoint dirs were generated based on Spark version 2.4.5. If we accept the
+ * changes, it means the checkpoint for Structured Streaming will become non-reusable. Please add
+ * a new test for the issue, just like the test suite "SPARK-28067 changed the sum decimal unsafe
+ * row format".
  */
 @SlowSQLTest
 class StreamingStateStoreFormatCompatibilitySuite extends StreamTest {
   import testImplicits._
 
   private def prepareCheckpointDir(testName: String): File = {
-    val resourceUri = this.getClass
-      .getResource(
-        "/structured-streaming/" +
-          s"checkpoint-version-2.4.5-for-compatibility-test-${testName}")
-      .toURI
+    val resourceUri = this.getClass.getResource("/structured-streaming/" +
+      s"checkpoint-version-2.4.5-for-compatibility-test-${testName}").toURI
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     Utils.copyDirectory(new File(resourceUri), checkpointDir)
     checkpointDir
@@ -55,56 +53,39 @@ class StreamingStateStoreFormatCompatibilitySuite extends StreamTest {
   test("common functions") {
     val inputData = MemoryStream[Int]
     val aggregated =
-      inputData
-        .toDF()
-        .toDF("value")
-        .selectExpr(
-          "value",
-          "value % 5 AS id",
-          "CAST(value AS STRING) as str",
-          "CAST(value AS FLOAT) as f",
-          "CAST(value AS DOUBLE) as d",
-          "CAST(value AS DECIMAL) as dec",
-          "value % 3 AS mod",
-          "named_struct('key', CAST(value AS STRING), 'value', value) AS s")
-        .groupBy($"id")
-        .agg(
-          avg($"value").as("avg_v"),
-          avg($"f").as("avg_f"),
-          avg($"d").as("avg_d"),
-          avg($"dec").as("avg_dec"),
-          count($"value").as("cnt"),
-          first($"value").as("first_v"),
-          first($"s").as("first_s"),
-          last($"value").as("last_v"),
-          last($"s").as("last_s"),
-          min(struct("value", "str")).as("min_struct"),
-          max($"value").as("max_v"),
-          sum($"value").as("sum_v"),
-          sum($"f").as("sum_f"),
-          sum($"d").as("sum_d"),
-          // The test for sum decimal broke by SPARK-28067, use separated test for it
-          // sum($"dec").as("sum_dec"),
-          collect_list($"value").as("col_list"),
-          collect_set($"mod").as("col_set"))
-        .select(
-          "id",
-          "avg_v",
-          "avg_f",
-          "avg_d",
-          "avg_dec",
-          "cnt",
-          "first_v",
-          "first_s.value",
-          "last_v",
-          "last_s.value",
-          "min_struct.value",
-          "max_v",
-          "sum_v",
-          "sum_f",
-          "sum_d",
-          "col_list",
-          "col_set")
+      inputData.toDF().toDF("value")
+      .selectExpr(
+        "value",
+        "value % 5 AS id",
+        "CAST(value AS STRING) as str",
+        "CAST(value AS FLOAT) as f",
+        "CAST(value AS DOUBLE) as d",
+        "CAST(value AS DECIMAL) as dec",
+        "value % 3 AS mod",
+        "named_struct('key', CAST(value AS STRING), 'value', value) AS s")
+      .groupBy($"id")
+      .agg(
+        avg($"value").as("avg_v"),
+        avg($"f").as("avg_f"),
+        avg($"d").as("avg_d"),
+        avg($"dec").as("avg_dec"),
+        count($"value").as("cnt"),
+        first($"value").as("first_v"),
+        first($"s").as("first_s"),
+        last($"value").as("last_v"),
+        last($"s").as("last_s"),
+        min(struct("value", "str")).as("min_struct"),
+        max($"value").as("max_v"),
+        sum($"value").as("sum_v"),
+        sum($"f").as("sum_f"),
+        sum($"d").as("sum_d"),
+        // The test for sum decimal broke by SPARK-28067, use separated test for it
+        // sum($"dec").as("sum_dec"),
+        collect_list($"value").as("col_list"),
+        collect_set($"mod").as("col_set"))
+      .select("id", "avg_v", "avg_f", "avg_d", "avg_dec", "cnt", "first_v", "first_s.value",
+        "last_v", "last_s.value", "min_struct.value", "max_v", "sum_v", "sum_f", "sum_d",
+        "col_list", "col_set")
 
     val checkpointDir = prepareCheckpointDir("common-functions")
     inputData.addData(0 to 9: _*)
@@ -128,104 +109,23 @@ class StreamingStateStoreFormatCompatibilitySuite extends StreamTest {
        */
       AddData(inputData, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19),
       CheckAnswer(
-        Row(
-          0,
-          7.5,
-          7.5,
-          7.5,
-          7.5000,
-          4,
-          0,
-          0,
-          15,
-          15,
-          0,
-          15,
-          30,
-          30.0,
-          30.0,
-          Seq(0, 5, 10, 15),
-          Seq(0, 1, 2)),
-        Row(
-          1,
-          8.5,
-          8.5,
-          8.5,
-          8.5000,
-          4,
-          1,
-          1,
-          16,
-          16,
-          1,
-          16,
-          34,
-          34.0,
-          34.0,
-          Seq(1, 6, 11, 16),
-          Seq(0, 1, 2)),
-        Row(
-          2,
-          9.5,
-          9.5,
-          9.5,
-          9.5000,
-          4,
-          2,
-          2,
-          17,
-          17,
-          2,
-          17,
-          38,
-          38.0,
-          38.0,
-          Seq(2, 7, 12, 17),
-          Seq(0, 1, 2)),
-        Row(
-          3,
-          10.5,
-          10.5,
-          10.5,
-          10.5000,
-          4,
-          3,
-          3,
-          18,
-          18,
-          3,
-          18,
-          42,
-          42.0,
-          42.0,
-          Seq(3, 8, 13, 18),
-          Seq(0, 1, 2)),
-        Row(
-          4,
-          11.5,
-          11.5,
-          11.5,
-          11.5000,
-          4,
-          4,
-          4,
-          19,
-          19,
-          4,
-          19,
-          46,
-          46.0,
-          46.0,
-          Seq(4, 9, 14, 19),
-          Seq(0, 1, 2))))
+        Row(0, 7.5, 7.5, 7.5, 7.5000, 4, 0, 0, 15, 15, 0, 15, 30, 30.0, 30.0,
+          Seq(0, 5, 10, 15), Seq(0, 1, 2)),
+        Row(1, 8.5, 8.5, 8.5, 8.5000, 4, 1, 1, 16, 16, 1, 16, 34, 34.0, 34.0,
+          Seq(1, 6, 11, 16), Seq(0, 1, 2)),
+        Row(2, 9.5, 9.5, 9.5, 9.5000, 4, 2, 2, 17, 17, 2, 17, 38, 38.0, 38.0,
+          Seq(2, 7, 12, 17), Seq(0, 1, 2)),
+        Row(3, 10.5, 10.5, 10.5, 10.5000, 4, 3, 3, 18, 18, 3, 18, 42, 42.0, 42.0,
+          Seq(3, 8, 13, 18), Seq(0, 1, 2)),
+        Row(4, 11.5, 11.5, 11.5, 11.5000, 4, 4, 4, 19, 19, 4, 19, 46, 46.0, 46.0,
+          Seq(4, 9, 14, 19), Seq(0, 1, 2)))
+    )
   }
 
   test("statistical functions") {
     val inputData = MemoryStream[Long]
     val aggregated =
-      inputData
-        .toDF()
-        .toDF("value")
+      inputData.toDF().toDF("value")
         .selectExpr(
           "value",
           "value % 5 AS id",
@@ -250,22 +150,9 @@ class StreamingStateStoreFormatCompatibilitySuite extends StreamTest {
           covar_pop($"value", $"mod").as("covar_pop"),
           covar_samp($"value", $"mod").as("covar_samp"),
           corr($"value", $"mod").as("corr"))
-        .select(
-          "id",
-          "kts",
-          "skew",
-          "approx_cnt",
-          "approx_cnt_f",
-          "approx_cnt_d",
-          "approx_cnt_dec",
-          "approx_cnt_str",
-          "stddev_pop",
-          "stddev_samp",
-          "var_pop",
-          "var_samp",
-          "covar_pop",
-          "covar_samp",
-          "corr")
+        .select("id", "kts", "skew", "approx_cnt", "approx_cnt_f", "approx_cnt_d",
+          "approx_cnt_dec", "approx_cnt_str", "stddev_pop", "stddev_samp", "var_pop", "var_samp",
+          "covar_pop", "covar_samp", "corr")
 
     val checkpointDir = prepareCheckpointDir("statistical-functions")
     inputData.addData(0L to 9L: _*)
@@ -294,14 +181,13 @@ class StreamingStateStoreFormatCompatibilitySuite extends StreamTest {
         Row(3, -1.36, 0.0, 3, 4, 4, 4, 4, 5.5901699437494745, 6.454972243679028, 31.25,
           41.666666666666664, -0.625, -0.8333333333333334, -0.13483997249264842),
         Row(4, -1.36, 0.0, 3, 4, 4, 4, 4, 5.5901699437494745, 6.454972243679028, 31.25,
-          41.666666666666664, 1.25, 1.6666666666666667, 0.31622776601683794)))
+          41.666666666666664, 1.25, 1.6666666666666667, 0.31622776601683794))
+    )
   }
 
   test("deduplicate with all columns") {
     val inputData = MemoryStream[Long]
-    val result = inputData
-      .toDF()
-      .toDF("value")
+    val result = inputData.toDF().toDF("value")
       .selectExpr(
         "value",
         "value + 10 AS key",
@@ -327,16 +213,20 @@ class StreamingStateStoreFormatCompatibilitySuite extends StreamTest {
           Row(14, 4, "4", 104, 9))
        */
       AddData(inputData, 3L, 4L, 5L, 6L),
-      CheckLastBatch(Row(15, 5, "5", 105, 10), Row(16, 6, "6", 106, 11)))
+      CheckLastBatch(
+        Row(15, 5, "5", 105, 10),
+        Row(16, 6, "6", 106, 11))
+    )
   }
 
   test("SPARK-28067 changed the sum decimal unsafe row format") {
     val inputData = MemoryStream[Int]
     val aggregated =
-      inputData
-        .toDF()
-        .toDF("value")
-        .selectExpr("value", "value % 2 AS id", "CAST(value AS DECIMAL) as dec")
+      inputData.toDF().toDF("value")
+        .selectExpr(
+          "value",
+          "value % 2 AS id",
+          "CAST(value AS DECIMAL) as dec")
         .groupBy($"id")
         .agg(sum($"dec").as("sum_dec"), collect_list($"value").as("col_list"))
         .select("id", "sum_dec", "col_list")
@@ -354,7 +244,8 @@ class StreamingStateStoreFormatCompatibilitySuite extends StreamTest {
       AddData(inputData, 10 to 19: _*),
       ExpectFailure[SparkException] { e =>
         assert(findStateSchemaException(e))
-      })
+      }
+    )
   }
 
   @tailrec

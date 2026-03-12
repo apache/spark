@@ -28,7 +28,8 @@ class EliminateWindowPartitionsSuite extends PlanTest {
 
   private object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("Eliminate window partitions", FixedPoint(20), EliminateWindowPartitions) :: Nil
+      Batch("Eliminate window partitions", FixedPoint(20),
+        EliminateWindowPartitions) :: Nil
   }
 
   val testRelation = LocalRelation($"a".int, $"b".int)
@@ -39,46 +40,39 @@ class EliminateWindowPartitionsSuite extends PlanTest {
   test("Remove foldable window partitions") {
     val originalQuery =
       testRelation
-        .select(
-          a,
-          b,
-          windowExpr(RowNumber(), windowSpec(Literal(1) :: Nil, b.desc :: Nil, windowFrame))
-            .as("rn"))
+        .select(a, b,
+          windowExpr(RowNumber(),
+            windowSpec(Literal(1) :: Nil, b.desc :: Nil, windowFrame)).as("rn"))
 
     val correctAnswer =
       testRelation
-        .select(
-          a,
-          b,
-          windowExpr(RowNumber(), windowSpec(Nil, b.desc :: Nil, windowFrame)).as("rn"))
+        .select(a, b,
+          windowExpr(RowNumber(),
+            windowSpec(Nil, b.desc :: Nil, windowFrame)).as("rn"))
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
 
   test("Remove part of window partitions which is foldable") {
     val originalQuery =
       testRelation
-        .select(
-          a,
-          b,
-          windowExpr(RowNumber(), windowSpec(a :: Literal(1) :: Nil, b.desc :: Nil, windowFrame))
-            .as("rn"))
+        .select(a, b,
+          windowExpr(RowNumber(),
+            windowSpec(a :: Literal(1) :: Nil, b.desc :: Nil, windowFrame)).as("rn"))
 
     val correctAnswer =
       testRelation
-        .select(
-          a,
-          b,
-          windowExpr(RowNumber(), windowSpec(a :: Nil, b.desc :: Nil, windowFrame)).as("rn"))
+        .select(a, b,
+          windowExpr(RowNumber(),
+            windowSpec(a :: Nil, b.desc :: Nil, windowFrame)).as("rn"))
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
 
   test("Can't remove non-foldable window partitions") {
     val originalQuery =
       testRelation
-        .select(
-          a,
-          b,
-          windowExpr(RowNumber(), windowSpec(a :: Nil, b.desc :: Nil, windowFrame)).as("rn"))
+        .select(a, b,
+          windowExpr(RowNumber(),
+            windowSpec(a :: Nil, b.desc :: Nil, windowFrame)).as("rn"))
 
     val correctAnswer = originalQuery
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)

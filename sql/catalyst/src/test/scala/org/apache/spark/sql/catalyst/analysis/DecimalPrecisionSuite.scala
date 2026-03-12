@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project, Unio
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
+
 class DecimalPrecisionSuite extends AnalysisTest with BeforeAndAfter {
   private val catalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry)
   private val analyzer = new Analyzer(catalog)
@@ -38,7 +39,8 @@ class DecimalPrecisionSuite extends AnalysisTest with BeforeAndAfter {
     AttributeReference("d2", DecimalType(5, 2))(),
     AttributeReference("u", DecimalType.SYSTEM_DEFAULT)(),
     AttributeReference("f", FloatType)(),
-    AttributeReference("b", DoubleType)())
+    AttributeReference("b", DoubleType)()
+  )
 
   private val i: Expression = UnresolvedAttribute("i")
   private val d1: Expression = UnresolvedAttribute("d1")
@@ -54,12 +56,9 @@ class DecimalPrecisionSuite extends AnalysisTest with BeforeAndAfter {
 
   private def checkComparison(expression: Expression, expectedType: DataType): Unit = {
     val plan = Project(Alias(expression, "c")() :: Nil, relation)
-    val comparison = analyzer
-      .execute(plan)
-      .collect { case Project(Alias(e: BinaryComparison, _) :: Nil, _) =>
-        e
-      }
-      .head
+    val comparison = analyzer.execute(plan).collect {
+      case Project(Alias(e: BinaryComparison, _) :: Nil, _) => e
+    }.head
     // Only add necessary cast.
     assert(comparison.left.children.forall(_.dataType !== expectedType))
     assert(comparison.right.children.forall(_.dataType !== expectedType))
@@ -69,15 +68,11 @@ class DecimalPrecisionSuite extends AnalysisTest with BeforeAndAfter {
 
   private def checkUnion(left: Expression, right: Expression, expectedType: DataType): Unit = {
     val plan =
-      Union(
-        Project(Seq(Alias(left, "l")()), relation),
+      Union(Project(Seq(Alias(left, "l")()), relation),
         Project(Seq(Alias(right, "r")()), relation))
-    val (l, r) = analyzer
-      .execute(plan)
-      .collect { case Union(Seq(child1, child2), _, _) =>
-        (child1.output.head, child2.output.head)
-      }
-      .head
+    val (l, r) = analyzer.execute(plan).collect {
+      case Union(Seq(child1, child2), _, _) => (child1.output.head, child2.output.head)
+    }.head
     assert(l.dataType === expectedType)
     assert(r.dataType === expectedType)
   }

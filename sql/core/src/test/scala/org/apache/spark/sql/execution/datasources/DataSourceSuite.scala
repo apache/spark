@@ -35,74 +35,119 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
 
   test("test glob and non glob paths") {
     val resultPaths = DataSource.checkAndGlobPathIfNecessary(
-      Seq(path1.toString, path2.toString, globPath1.toString, globPath2.toString),
+      Seq(
+        path1.toString,
+        path2.toString,
+        globPath1.toString,
+        globPath2.toString
+      ),
       hadoopConf,
       checkEmptyGlobPath = true,
       checkFilesExist = true,
-      enableGlobbing = true)
+      enableGlobbing = true
+    )
 
     assert(resultPaths.toSet === allPathsInFs.toSet)
   }
 
   test("test glob paths") {
     val resultPaths = DataSource.checkAndGlobPathIfNecessary(
-      Seq(globPath1.toString, globPath2.toString),
+      Seq(
+        globPath1.toString,
+        globPath2.toString
+      ),
       hadoopConf,
       checkEmptyGlobPath = true,
       checkFilesExist = true,
-      enableGlobbing = true)
+      enableGlobbing = true
+    )
 
     assert(
       resultPaths.toSet === Set(
         globPath1Result1,
         globPath1Result2,
         globPath2Result1,
-        globPath2Result2))
+        globPath2Result2
+      )
+    )
   }
 
   test("test non glob paths") {
     val resultPaths = DataSource.checkAndGlobPathIfNecessary(
-      Seq(path1.toString, path2.toString),
+      Seq(
+        path1.toString,
+        path2.toString
+      ),
       hadoopConf,
       checkEmptyGlobPath = true,
       checkFilesExist = true,
-      enableGlobbing = true)
+      enableGlobbing = true
+    )
 
-    assert(resultPaths.toSet === Set(path1, path2))
+    assert(
+      resultPaths.toSet === Set(
+        path1,
+        path2
+      )
+    )
   }
 
   test("test non glob paths checkFilesExist=false") {
     val resultPaths = DataSource.checkAndGlobPathIfNecessary(
-      Seq(path1.toString, path2.toString, nonExistentPath.toString),
+      Seq(
+        path1.toString,
+        path2.toString,
+        nonExistentPath.toString
+      ),
       hadoopConf,
       checkEmptyGlobPath = true,
       checkFilesExist = false,
-      enableGlobbing = true)
+      enableGlobbing = true
+    )
 
-    assert(resultPaths.toSet === Set(path1, path2, nonExistentPath))
+    assert(
+      resultPaths.toSet === Set(
+        path1,
+        path2,
+        nonExistentPath
+      )
+    )
   }
 
   test("test non existent paths") {
     checkError(
       exception = intercept[AnalysisException](
         DataSource.checkAndGlobPathIfNecessary(
-          Seq(path1.toString, path2.toString, nonExistentPath.toString),
+          Seq(
+            path1.toString,
+            path2.toString,
+            nonExistentPath.toString
+          ),
           hadoopConf,
           checkEmptyGlobPath = true,
           checkFilesExist = true,
-          enableGlobbing = true)),
+          enableGlobbing = true
+        )
+      ),
       condition = "PATH_NOT_FOUND",
-      parameters = Map("path" -> nonExistentPath.toString))
+      parameters = Map("path" -> nonExistentPath.toString)
+    )
   }
 
   test("test non existent glob paths") {
     assertThrows[AnalysisException](
       DataSource.checkAndGlobPathIfNecessary(
-        Seq(globPath1.toString, globPath2.toString, nonExistentGlobPath.toString),
+        Seq(
+          globPath1.toString,
+          globPath2.toString,
+          nonExistentGlobPath.toString
+        ),
         hadoopConf,
         checkEmptyGlobPath = true,
         checkFilesExist = true,
-        enableGlobbing = true))
+        enableGlobbing = true
+      )
+    )
   }
 
   test("Data source options should be propagated in method checkAndGlobPathIfNecessary") {
@@ -123,18 +168,16 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
     val baseDir = Utils.createTempDir()
     checkError(
       exception = intercept[AnalysisException] {
-        spark.read
-          .format("csv")
-          .load(
-            new File(baseDir, "file").getAbsolutePath,
-            new File(baseDir, "file2").getAbsolutePath,
-            new File(uuid, "file3").getAbsolutePath,
-            uuid)
-          .rdd
+        spark.read.format("csv").load(
+          new File(baseDir, "file").getAbsolutePath,
+          new File(baseDir, "file2").getAbsolutePath,
+          new File(uuid, "file3").getAbsolutePath,
+          uuid).rdd
       },
       condition = "PATH_NOT_FOUND",
       parameters = Map("path" -> "file:.*"),
-      matchPVals = true)
+      matchPVals = true
+    )
   }
 
   test("SPARK-13774: Check error message for not existent globbed paths") {
@@ -146,7 +189,8 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
         spark.read.format("text").load(s"$nonExistentBasePath/*")
       },
       condition = "PATH_NOT_FOUND",
-      parameters = Map("path" -> s"file:$nonExistentBasePath/*"))
+      parameters = Map("path" -> s"file:$nonExistentBasePath/*")
+    )
 
     // Existent initial path component, but no matching files:
     val baseDir = Utils.createTempDir()
@@ -158,7 +202,8 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
           spark.read.json(s"${baseDir.getAbsolutePath}/*/*-xyz.json").rdd
         },
         condition = "PATH_NOT_FOUND",
-        parameters = Map("path" -> s"file:${baseDir.getAbsolutePath}/*/*-xyz.json"))
+        parameters = Map("path" -> s"file:${baseDir.getAbsolutePath}/*/*-xyz.json")
+      )
     } finally {
       Utils.deleteRecursively(baseDir)
     }
@@ -167,9 +212,8 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
   test("SPARK-50458: Proper error handling for unsupported file system") {
     val loc = "https://raw.githubusercontent.com/apache/spark/refs/heads/master/examples/" +
       "src/main/resources/employees.json"
-    checkError(
-      exception = intercept[SparkUnsupportedOperationException](
-        sql(s"CREATE TABLE HTTP USING JSON LOCATION '$loc'")),
+    checkError(exception = intercept[SparkUnsupportedOperationException](
+      sql(s"CREATE TABLE HTTP USING JSON LOCATION '$loc'")),
       condition = "FAILED_READ_FILE.UNSUPPORTED_FILE_SYSTEM",
       parameters = Map(
         "path" -> loc,
@@ -177,28 +221,24 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
         "method" -> "listStatus"))
   }
 
-  test(
-    "SPARK-51182: DataFrameWriter should throw dataPathNotSpecifiedError when path is not " +
-      "specified") {
+  test("SPARK-51182: DataFrameWriter should throw dataPathNotSpecifiedError when path is not " +
+    "specified") {
     val df = new DataSource(spark, "parquet")
-    checkError(
-      exception = intercept[SparkIllegalArgumentException](
-        df.planForWriting(SaveMode.ErrorIfExists, spark.range(0).logicalPlan)),
+    checkError(exception = intercept[SparkIllegalArgumentException](
+      df.planForWriting(SaveMode.ErrorIfExists, spark.range(0).logicalPlan)),
       condition = "_LEGACY_ERROR_TEMP_2047")
   }
 
-  test(
-    "SPARK-51182: DataFrameWriter should throw multiplePathsSpecifiedError when more than " +
-      "one path is specified") {
+  test("SPARK-51182: DataFrameWriter should throw multiplePathsSpecifiedError when more than " +
+    "one path is specified") {
     val dataSources: List[DataSource] = List(
       new DataSource(spark, "parquet", Seq("/path1"), options = Map("path" -> "/path2")),
       new DataSource(spark, "parquet", Seq("/path1", "/path2")))
-    dataSources.foreach(df =>
-      checkError(
-        exception = intercept[SparkIllegalArgumentException](
-          df.planForWriting(SaveMode.ErrorIfExists, spark.range(0).logicalPlan)),
-        condition = "_LEGACY_ERROR_TEMP_2050",
-        parameters = Map("paths" -> "/path1, /path2")))
+    dataSources.foreach(df => checkError(exception = intercept[SparkIllegalArgumentException](
+      df.planForWriting(SaveMode.ErrorIfExists, spark.range(0).logicalPlan)),
+      condition = "_LEGACY_ERROR_TEMP_2050",
+      parameters = Map("paths" -> "/path1, /path2"))
+    )
   }
 }
 
@@ -219,18 +259,27 @@ object TestPaths {
   val globPath2Result1 = new Path("mockFs://mockFs/globpath2/path1")
   val globPath2Result2 = new Path("mockFs://mockFs/globpath2/path2")
 
-  val allPathsInFs =
-    Seq(path1, path2, globPath1Result1, globPath1Result2, globPath2Result1, globPath2Result2)
+  val allPathsInFs = Seq(
+    path1,
+    path2,
+    globPath1Result1,
+    globPath1Result2,
+    globPath2Result1,
+    globPath2Result2
+  )
 
   val mockGlobResults: Map[Path, Array[FileStatus]] = Map(
     globPath1 ->
       Array(
         createMockFileStatus(globPath1Result1.toString),
-        createMockFileStatus(globPath1Result2.toString)),
+        createMockFileStatus(globPath1Result2.toString)
+      ),
     globPath2 ->
       Array(
         createMockFileStatus(globPath2Result1.toString),
-        createMockFileStatus(globPath2Result2.toString)))
+        createMockFileStatus(globPath2Result2.toString)
+      )
+  )
 
   def createMockFileStatus(path: String): FileStatus = {
     val fileStatus = new FileStatus()

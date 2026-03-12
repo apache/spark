@@ -81,8 +81,8 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
   }
 
   /**
-   * The columns names that following dialect's SQL syntax. e.g. The column name is the raw name
-   * or quoted name.
+   * The columns names that following dialect's SQL syntax.
+   * e.g. The column name is the raw name or quoted name.
    */
   def withColumns(columns: Array[String]): JdbcSQLQueryBuilder = {
     if (columns.nonEmpty) {
@@ -95,16 +95,12 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
       columns: Array[String],
       aliases: Array[Option[String]]): JdbcSQLQueryBuilder = {
     if (columns.nonEmpty) {
-      assert(
-        columns.length == aliases.length,
+      assert(columns.length == aliases.length,
         "Number of columns does not match the number of provided aliases")
 
-      columnList = columns
-        .zip(aliases)
-        .map { case (column, alias) =>
-          if (alias.isDefined) s"$column AS ${alias.get}" else column
-        }
-        .mkString(",")
+      columnList = columns.zip(aliases).map {
+        case (column, alias) => if (alias.isDefined) s"$column AS ${alias.get}" else column
+      }.mkString(",")
     }
     this
   }
@@ -183,8 +179,8 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
   }
 
   /**
-   * Represents JOIN subquery in case Join has been pushed down. This value should be used instead
-   * of options.tableOrQuery if join has been pushed down.
+   * Represents JOIN subquery in case Join has been pushed down. This value should be used
+   * instead of options.tableOrQuery if join has been pushed down.
    */
   private var joinQuery: Option[String] = None
 
@@ -197,13 +193,15 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
       joinType: String,
       joinCondition: String): JdbcSQLQueryBuilder = {
     columnList = columns.mkString(",")
-    joinQuery = Some(s"""(
+    joinQuery = Some(
+      s"""(
        |SELECT ${columns.mkString(",")} FROM
        |(${left.build()}) $leftSideQualifier
        |$joinType
        |(${right.build()}) $rightSideQualifier
        |ON $joinCondition
-       |) ${JoinPushdownAliasGenerator.getSubqueryQualifier}""".stripMargin)
+       |) ${JoinPushdownAliasGenerator.getSubqueryQualifier}""".stripMargin
+    )
 
     this
   }

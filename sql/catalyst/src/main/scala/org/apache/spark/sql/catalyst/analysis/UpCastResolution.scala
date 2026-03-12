@@ -29,14 +29,16 @@ object UpCastResolution extends SQLConfHelper {
   def resolve(unresolvedUpCast: UpCast): Expression = unresolvedUpCast match {
     case UpCast(_, target, _) if target != DecimalType && !target.isInstanceOf[DataType] =>
       throw SparkException.internalError(
-        s"UpCast only supports DecimalType as AbstractDataType yet, but got: $target")
+        s"UpCast only supports DecimalType as AbstractDataType yet, but got: $target"
+      )
 
     case UpCast(child, target, walkedTypePath)
         if target == DecimalType
-          && child.dataType.isInstanceOf[DecimalType] =>
+        && child.dataType.isInstanceOf[DecimalType] =>
       assert(
         walkedTypePath.nonEmpty,
-        "object DecimalType should only be used inside ExpressionEncoder")
+        "object DecimalType should only be used inside ExpressionEncoder"
+      )
 
       // SPARK-31750: if we want to upcast to the general decimal type, and the `child` is
       // already decimal type, we can remove the `Upcast` and accept any precision/scale.
@@ -45,7 +47,7 @@ object UpCastResolution extends SQLConfHelper {
 
     case UpCast(child, target: AtomicType, _)
         if conf.getConf(SQLConf.LEGACY_LOOSE_UPCAST) &&
-          child.dataType == StringType =>
+        child.dataType == StringType =>
       Cast(child, target.asNullable)
 
     case unresolvedUpCast @ UpCast(child, _, walkedTypePath)

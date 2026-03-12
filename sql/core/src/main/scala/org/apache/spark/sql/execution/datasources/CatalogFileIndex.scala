@@ -27,31 +27,25 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogTable, ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.StructType
 
+
 /**
  * A [[FileIndex]] for a metastore catalog table.
  *
- * @param sparkSession
- *   a [[SparkSession]]
- * @param table
- *   the metadata of the table
- * @param sizeInBytes
- *   the table's data size in bytes
+ * @param sparkSession a [[SparkSession]]
+ * @param table the metadata of the table
+ * @param sizeInBytes the table's data size in bytes
  */
 class CatalogFileIndex(
     sparkSession: SparkSession,
     val table: CatalogTable,
-    override val sizeInBytes: Long)
-    extends FileIndex {
+    override val sizeInBytes: Long) extends FileIndex {
 
   protected val hadoopConf: Configuration = sparkSession.sessionState.newHadoopConf()
 
-  /**
-   * Globally shared (not exclusive to this table) cache for file statuses to speed up listing.
-   */
+  /** Globally shared (not exclusive to this table) cache for file statuses to speed up listing. */
   private val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
 
-  assert(
-    table.identifier.database.isDefined,
+  assert(table.identifier.database.isDefined,
     "The table identifier must be qualified in CatalogFileIndex")
 
   private val baseLocation: Option[URI] = table.storage.locationUri
@@ -61,8 +55,7 @@ class CatalogFileIndex(
   override def rootPaths: Seq[Path] = baseLocation.map(new Path(_)).toSeq
 
   override def listFiles(
-      partitionFilters: Seq[Expression],
-      dataFilters: Seq[Expression]): Seq[PartitionDirectory] = {
+      partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): Seq[PartitionDirectory] = {
     filterPartitions(partitionFilters).listFiles(Nil, dataFilters)
   }
 
@@ -72,17 +65,13 @@ class CatalogFileIndex(
    * Returns a [[InMemoryFileIndex]] for this table restricted to the subset of partitions
    * specified by the given partition-pruning filters.
    *
-   * @param filters
-   *   partition-pruning filters
+   * @param filters partition-pruning filters
    */
   def filterPartitions(filters: Seq[Expression]): InMemoryFileIndex = {
     if (table.partitionColumnNames.nonEmpty) {
       val startTime = System.nanoTime()
       val selectedPartitions = ExternalCatalogUtils.listPartitionsByFilter(
-        sparkSession.sessionState.conf,
-        sparkSession.sessionState.catalog,
-        table,
-        filters)
+        sparkSession.sessionState.conf, sparkSession.sessionState.catalog, table, filters)
       val partitions = selectedPartitions.map { p =>
         val path = new Path(p.location)
         val fs = path.getFileSystem(hadoopConf)
@@ -92,8 +81,7 @@ class CatalogFileIndex(
       }
       val partitionSpec = PartitionSpec(partitionSchema, partitions)
       val timeNs = System.nanoTime() - startTime
-      new InMemoryFileIndex(
-        sparkSession,
+      new InMemoryFileIndex(sparkSession,
         rootPathsSpecified = partitionSpec.partitions.map(_.path),
         parameters = Map.empty,
         userSpecifiedSchema = Some(partitionSpec.partitionColumns),
@@ -101,12 +89,8 @@ class CatalogFileIndex(
         userSpecifiedPartitionSpec = Some(partitionSpec),
         metadataOpsTimeNs = Some(timeNs))
     } else {
-      new InMemoryFileIndex(
-        sparkSession,
-        rootPaths,
-        parameters = table.storage.properties,
-        userSpecifiedSchema = None,
-        fileStatusCache = fileStatusCache)
+      new InMemoryFileIndex(sparkSession, rootPaths, parameters = table.storage.properties,
+        userSpecifiedSchema = None, fileStatusCache = fileStatusCache)
     }
   }
 

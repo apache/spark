@@ -29,9 +29,11 @@ import org.apache.spark.util.Utils
 /**
  * Test how BasicWriteTaskStatsTracker handles files.
  *
- * Two different datasets are written (alongside 0), one of length 10, one of 3. They were chosen
- * to be distinct enough that it is straightforward to determine which file lengths were added
- * from the sum of all files added. Lengths like "10" and "5" would be less informative.
+ * Two different datasets are written (alongside 0), one of
+ * length 10, one of 3. They were chosen to be distinct enough
+ * that it is straightforward to determine which file lengths were added
+ * from the sum of all files added. Lengths like "10" and "5" would
+ * be less informative.
  */
 class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
 
@@ -57,14 +59,14 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
 
   /**
    * Assert that the stats match that expected.
-   * @param tracker
-   *   tracker to check
-   * @param files
-   *   number of files expected
-   * @param bytes
-   *   total number of bytes expected
+   * @param tracker tracker to check
+   * @param files number of files expected
+   * @param bytes total number of bytes expected
    */
-  private def assertStats(tracker: BasicWriteTaskStatsTracker, files: Int, bytes: Int): Unit = {
+  private def assertStats(
+      tracker: BasicWriteTaskStatsTracker,
+      files: Int,
+      bytes: Int): Unit = {
     val stats = finalStatus(tracker)
     assert(files === stats.numFiles, "Wrong number of files")
     assert(bytes === stats.numBytes, "Wrong byte count of file size")
@@ -193,8 +195,7 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
 
   /**
    * Write a 0-byte file.
-   * @param file
-   *   file path
+   * @param file file path
    */
   private def touch(file: Path): Unit = {
     localfs.create(file, true).close()
@@ -202,12 +203,9 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
 
   /**
    * Write a byte array.
-   * @param file
-   *   path to file
-   * @param data
-   *   data
-   * @return
-   *   bytes written
+   * @param file path to file
+   * @param data data
+   * @return bytes written
    */
   private def write(file: Path, data: Array[Byte]): Integer = {
     val stream = localfs.create(file, true)
@@ -221,8 +219,7 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
 
   /**
    * Write a data1 array.
-   * @param file
-   *   file
+   * @param file file
    */
   private def write1(file: Path): Unit = {
     write(file, data1)
@@ -231,8 +228,7 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
   /**
    * Write a data2 array.
    *
-   * @param file
-   *   file
+   * @param file file
    */
   private def write2(file: Path): Unit = {
     write(file, data2)
@@ -248,13 +244,13 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
     val bigLong = 34359738368L
     xattrFS.set(FILE_LENGTH_XATTR, s"$bigLong")
     val tracker = new BasicWriteTaskStatsTracker(conf)
-    assert(
-      Some(bigLong) === tracker.getFileSize(xattrFS, file),
+    assert(Some(bigLong) === tracker.getFileSize(xattrFS, file),
       "Size not collected from XAttr entry")
   }
 
   /**
-   * If a file is non-empty then the XAttr size declaration is not used.
+   * If a file is non-empty then the XAttr size declaration
+   * is not used.
    */
   test("XAttr sourced length only used for 0-byte-files") {
     val file = new Path(tempDirPath, "file")
@@ -263,14 +259,14 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
     val bigLong = 34359738368L
     xattrFS.set(FILE_LENGTH_XATTR, s"$bigLong")
     val tracker = new BasicWriteTaskStatsTracker(conf)
-    assert(
-      Some(len2) === tracker.getFileSize(xattrFS, file),
+    assert(Some(len2) === tracker.getFileSize(xattrFS, file),
       "Size not collected from XAttr entry")
   }
 
   /**
-   * Any FS which supports XAttr must raise an FNFE if the file is missing. This verifies
-   * resilience on a path which the local FS would not normally take.
+   * Any FS which supports XAttr must raise an FNFE if the
+   * file is missing. This verifies resilience on a path
+   * which the local FS would not normally take.
    */
   test("Missing File with XAttr") {
     val missing = new Path(tempDirPath, "missing")
@@ -281,8 +277,8 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
   }
 
   /**
-   * If there are any problems parsing/validating the header attribute, fall back to the file
-   * length.
+   * If there are any problems parsing/validating the
+   * header attribute, fall back to the file length.
    */
   test("XAttr error recovery") {
     val file = new Path(tempDirPath, "file")
@@ -307,13 +303,15 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
     assert(Some(0) === tracker.getFileSize(xattrFS, file))
 
     // then a zero byte array
-    xattrFS.setXAttr(file, FILE_LENGTH_XATTR, new Array[Byte](0))
+    xattrFS.setXAttr(file, FILE_LENGTH_XATTR,
+      new Array[Byte](0))
     assert(Some(0) === tracker.getFileSize(xattrFS, file))
   }
 
   /**
-   * Extend any FS with a mock get/setXAttr. A map of attributes is used, these are returned on a
-   * getXAttr(path, key) call to any path; the other XAttr list/get calls are not implemented.
+   * Extend any FS with a mock get/setXAttr.
+   * A map of attributes is used, these are returned on a getXAttr(path, key)
+   * call to any path; the other XAttr list/get calls are not implemented.
    */
   class FsWithFakeXAttrs(fs: FileSystem) extends FilterFileSystem(fs) {
 
@@ -322,14 +320,14 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
     /**
      * Mock implementation of setAttr.
      *
-     * @param path
-     *   path (ignored)
-     * @param name
-     *   attribute name.
-     * @param value
-     *   byte array value
+     * @param path path (ignored)
+     * @param name attribute name.
+     * @param value byte array value
      */
-    override def setXAttr(path: Path, name: String, value: Array[Byte]): Unit = {
+    override def setXAttr(
+      path: Path,
+      name: String,
+      value: Array[Byte]): Unit = {
 
       xattrs.put(name, value)
     }
@@ -337,10 +335,8 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
     /**
      * Set an attribute to the UTF-8 byte value of a string.
      *
-     * @param name
-     *   attribute name.
-     * @param value
-     *   string value
+     * @param name  attribute name.
+     * @param value string value
      */
     def set(name: String, value: String): Unit = {
       setXAttr(null, name, value.getBytes(StandardCharsets.UTF_8))
@@ -348,14 +344,13 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
 
     /**
      * Get any attribute if it is found in the map, else null.
-     * @param path
-     *   path (ignored)
-     * @param name
-     *   attribute name.
-     * @return
-     *   the byte[] value or null.
+     * @param path path (ignored)
+     * @param name attribute name.
+     * @return the byte[] value or null.
      */
-    override def getXAttr(path: Path, name: String): Array[Byte] = {
+    override def getXAttr(
+      path: Path,
+      name: String): Array[Byte] = {
       // force a check for the file and raise an FNFE if not found
       getFileStatus(path)
 

@@ -31,9 +31,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 class MergingSessionsIteratorSuite extends SharedSparkSession {
 
-  private val rowSchema = new StructType()
-    .add("key1", StringType)
-    .add("key2", IntegerType)
+  private val rowSchema = new StructType().add("key1", StringType).add("key2", IntegerType)
     .add("session", new StructType().add("start", LongType).add("end", LongType))
     .add("count", LongType)
   private val rowAttributes = toAttributes(rowSchema)
@@ -96,7 +94,8 @@ class MergingSessionsIteratorSuite extends SharedSparkSession {
       createRow("a", 2, 110, 120),
       createRow("a", 2, 115, 125),
       createRow("a", 2, 117, 127),
-      createRow("a", 2, 125, 135))
+      createRow("a", 2, 125, 135)
+    )
 
     val iterator = createTestIterator(rows.iterator)
     assert(iterator.hasNext)
@@ -120,7 +119,8 @@ class MergingSessionsIteratorSuite extends SharedSparkSession {
 
       // session 2
       createRow("a", 1, 125, 135),
-      createRow("a", 1, 127, 137))
+      createRow("a", 1, 127, 137)
+    )
 
     val iterator = createTestIterator(rows.iterator)
     assert(iterator.hasNext)
@@ -152,7 +152,8 @@ class MergingSessionsIteratorSuite extends SharedSparkSession {
 
       // session 4
       createRow("a", 2, 127, 137),
-      createRow("a", 2, 135, 145))
+      createRow("a", 2, 135, 145)
+    )
 
     val iterator = createTestIterator(rows.iterator)
     assert(iterator.hasNext)
@@ -183,7 +184,8 @@ class MergingSessionsIteratorSuite extends SharedSparkSession {
       createRow("a", 1, 100, 110),
       createRow("a", 1, 100, 110),
       createRow("a", 1, 95, 105),
-      createRow("a", 1, 113, 123))
+      createRow("a", 1, 113, 123)
+    )
 
     val iterator = createTestIterator(rows.iterator)
 
@@ -219,7 +221,8 @@ class MergingSessionsIteratorSuite extends SharedSparkSession {
       createNoKeyRow(100, 110),
       createNoKeyRow(100, 110),
       createNoKeyRow(105, 115),
-      createNoKeyRow(113, 123))
+      createNoKeyRow(113, 123)
+    )
 
     val iterator = createNoKeyTestIterator(rows.iterator)
     assert(iterator.hasNext)
@@ -234,8 +237,7 @@ class MergingSessionsIteratorSuite extends SharedSparkSession {
     createTestIterator(iterator, isNoKey = false)
   }
 
-  private def createNoKeyTestIterator(
-      iterator: Iterator[InternalRow]): MergingSessionsIterator = {
+  private def createNoKeyTestIterator(iterator: Iterator[InternalRow]): MergingSessionsIterator = {
     createTestIterator(iterator, isNoKey = true)
   }
 
@@ -270,7 +272,8 @@ class MergingSessionsIteratorSuite extends SharedSparkSession {
       resultExpressions = resultExpressions,
       newMutableProjection = (expressions, inputSchema) =>
         MutableProjection.create(expressions, inputSchema),
-      numOutputRows = SQLMetrics.createMetric(sparkContext, "output rows"))
+      numOutputRows = SQLMetrics.createMetric(sparkContext, "output rows")
+    )
   }
 
   private def createRow(

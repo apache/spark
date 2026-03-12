@@ -20,11 +20,11 @@ package org.apache.spark.sql.connector
 import org.apache.spark.sql.types._
 
 /**
- * Evolution control, source-missing-fields, and null struct semantics tests for nested
- * struct/array schema evolution.
+ * Evolution control, source-missing-fields, and null struct semantics tests
+ * for nested struct/array schema evolution.
  */
 trait MergeIntoSchemaEvolutionMissingFieldAndNullStructTests
-    extends MergeIntoSchemaEvolutionSuiteBase {
+  extends MergeIntoSchemaEvolutionSuiteBase {
 
   import testImplicits._
 
@@ -61,13 +61,13 @@ trait MergeIntoSchemaEvolutionMissingFieldAndNullStructTests
       confs = confs,
       partitionCols = partitionCols,
       disableAutoSchemaEvolution = disableAutoSchemaEvolution,
-      requiresNestedTypeCoercion = requiresNestedTypeCoercion)
+      requiresNestedTypeCoercion = requiresNestedTypeCoercion
+    )
   }
   // scalastyle:on argcount
 
   // Null target struct should become struct of nulls because source had a missing field
-  testNestedStructsEvolution(
-    "source has missing field in nested struct containing array - " +
+  testNestedStructsEvolution("source has missing field in nested struct containing array - " +
       "target null struct becomes struct of nulls")(
     target = Seq(
       // Target has struct with array and extra field 'c2' at nested struct level
@@ -75,55 +75,71 @@ trait MergeIntoSchemaEvolutionMissingFieldAndNullStructTests
         | "dep": "sales" }""".stripMargin.replace("\n", ""),
       // c2 is null in this row
       """{ "pk": 1, "s": { "c1": 2, "arr": [{ "x": 200 }, { "x": 201 }], "c2": null },
-        | "dep": "hr" }""".stripMargin.replace("\n", "")),
+        | "dep": "hr" }""".stripMargin.replace("\n", "")
+    ),
     source = Seq(
       // Source has null struct, schema missing field 'c2'
-      """{ "pk": 1, "s": null, "dep": "engineering" }"""),
-    targetSchema = StructType(
-      Seq(
-        StructField("pk", IntegerType, nullable = false),
-        StructField(
-          "s",
-          StructType(Seq(
-            StructField("c1", IntegerType),
-            StructField("arr", ArrayType(StructType(Seq(StructField("x", IntegerType))))),
-            StructField("c2", StringType) // extra field at nested struct level
-          ))),
-        StructField("dep", StringType))),
-    sourceSchema = StructType(
-      Seq(
-        StructField("pk", IntegerType, nullable = false),
-        StructField(
-          "s",
-          StructType(
-            Seq(
-              StructField("c1", IntegerType),
-              StructField("arr", ArrayType(StructType(Seq(StructField("x", IntegerType)))))
-              // missing field 'c2'
-            ))),
-        StructField("dep", StringType))),
+      """{ "pk": 1, "s": null, "dep": "engineering" }"""
+    ),
+    targetSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("s", StructType(Seq(
+        StructField("c1", IntegerType),
+        StructField("arr", ArrayType(StructType(Seq(
+          StructField("x", IntegerType)
+        )))),
+        StructField("c2", StringType) // extra field at nested struct level
+      ))),
+      StructField("dep", StringType)
+    )),
+    sourceSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("s", StructType(Seq(
+        StructField("c1", IntegerType),
+        StructField("arr", ArrayType(StructType(Seq(
+          StructField("x", IntegerType)
+        ))))
+        // missing field 'c2'
+      ))),
+      StructField("dep", StringType)
+    )),
     clauses = Seq(updateAll(), insertAll()),
     result = Seq(
       """{ "pk": 0, "s": { "c1": 1, "arr": [{ "x": 100 }, { "x": 101 }], "c2": "foo" },
         | "dep": "sales" }""".stripMargin.replace("\n", ""),
       // Target had extra field 'c2', preserve struct of nulls
-      """{ "pk": 1, "s": { "c1": null, "arr": null, "c2": null }, "dep": "engineering" }"""),
+      """{ "pk": 1, "s": { "c1": null, "arr": null, "c2": null }, "dep": "engineering" }"""
+    ),
     expectErrorWithoutEvolutionContains = "Cannot find data for the output column",
-    requiresNestedTypeCoercion = true)
+    requiresNestedTypeCoercion = true
+  )
 
   // Both with/without evolution fail - non-existent column errors regardless of evolution
   testEvolution("error on non-existent column in UPDATE")(
-    targetData = Seq((1, 100, "hr"), (2, 200, "software")).toDF("pk", "salary", "dep"),
-    sourceData = Seq((2, 250, "engineering"), (3, 300, "finance")).toDF("pk", "salary", "dep"),
+    targetData = Seq(
+      (1, 100, "hr"),
+      (2, 200, "software")
+    ).toDF("pk", "salary", "dep"),
+    sourceData = Seq(
+      (2, 250, "engineering"),
+      (3, 300, "finance")
+    ).toDF("pk", "salary", "dep"),
     clauses = Seq(update("non_existent = s.nonexistent_column")),
     expectErrorContains = "cannot be resolved",
-    expectErrorWithoutEvolutionContains = "cannot be resolved")
+    expectErrorWithoutEvolutionContains = "cannot be resolved"
+  )
 
   testEvolution("error on non-existent column in INSERT")(
-    targetData = Seq((1, 100, "hr"), (2, 200, "software")).toDF("pk", "salary", "dep"),
-    sourceData = Seq((2, 250, "engineering"), (3, 300, "finance")).toDF("pk", "salary", "dep"),
-    clauses =
-      Seq(insert("(pk, salary, dep, non_existent) VALUES (s.pk, s.salary, s.dep, s.dep)")),
+    targetData = Seq(
+      (1, 100, "hr"),
+      (2, 200, "software")
+    ).toDF("pk", "salary", "dep"),
+    sourceData = Seq(
+      (2, 250, "engineering"),
+      (3, 300, "finance")
+    ).toDF("pk", "salary", "dep"),
+    clauses = Seq(insert("(pk, salary, dep, non_existent) VALUES (s.pk, s.salary, s.dep, s.dep)")),
     expectErrorContains = "cannot be resolved",
-    expectErrorWithoutEvolutionContains = "cannot be resolved")
+    expectErrorWithoutEvolutionContains = "cannot be resolved"
+  )
 }

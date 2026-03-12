@@ -29,10 +29,11 @@ import org.apache.spark.sql.execution.python.UserDefinedPythonTableFunction
  */
 @Evolving
 private[sql] class UDTFRegistration private[sql] (tableFunctionRegistry: TableFunctionRegistry)
-    extends Logging {
+  extends Logging {
 
   protected[sql] def registerPython(name: String, udtf: UserDefinedPythonTableFunction): Unit = {
-    log.debug(s"""
+    log.debug(
+      s"""
          | Registering new PythonUDTF:
          | name: $name
          | command: ${udtf.func.command}
@@ -44,8 +45,7 @@ private[sql] class UDTFRegistration private[sql] (tableFunctionRegistry: TableFu
       """.stripMargin)
 
     tableFunctionRegistry.createOrReplaceTempFunction(
-      name,
-      udtf.builder(_, SparkSession.getActiveSession.get.sessionState.sqlParser),
+      name, udtf.builder(_, SparkSession.getActiveSession.get.sessionState.sqlParser),
       source = "python_udtf")
   }
 }

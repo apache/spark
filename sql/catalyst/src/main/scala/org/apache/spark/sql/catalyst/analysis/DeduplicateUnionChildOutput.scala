@@ -47,10 +47,10 @@ object DeduplicateUnionChildOutput {
    *   VALUES (1, 1), (1, 2) AS t2 (a, b)
    * }}}
    *
-   * Putting [[Alias]] introduces a new expression ID for the attribute duplicates in the output.
-   * We also add `__is_duplicate` metadata so that [[AttributeSeq.getCandidatesForResolution]]
-   * doesn't produce conflicting candidates when resolving names in the upper [[Project]] - this
-   * is technically still the same attribute.
+   * Putting [[Alias]] introduces a new expression ID for the attribute duplicates in the output. We
+   * also add `__is_duplicate` metadata so that [[AttributeSeq.getCandidatesForResolution]] doesn't
+   * produce conflicting candidates when resolving names in the upper [[Project]] - this is
+   * technically still the same attribute.
    *
    * See SPARK-37865 for more details.
    */

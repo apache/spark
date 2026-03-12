@@ -46,34 +46,23 @@ import org.apache.spark.util.ArrayImplicits._
  * properties(e.g. view default database, view query output column names) and store them as
  * properties in metastore, if we need to create a permanent view.
  *
- * @param name
- *   the name of this view.
- * @param userSpecifiedColumns
- *   the output column names and optional comments specified by users, can be Nil if not
- *   specified.
- * @param comment
- *   the comment of this view.
- * @param collation
- *   the collation of this view.
- * @param properties
- *   the properties of this view.
- * @param originalText
- *   the original SQL text of this view, can be None if this view is created via Dataset API.
- * @param plan
- *   the logical plan that represents the view; this is used to generate the logical plan for
- *   temporary view and the view schema.
- * @param allowExisting
- *   if true, and if the view already exists, noop; if false, and if the view already exists,
- *   throws analysis exception.
- * @param replace
- *   if true, and if the view already exists, updates it; if false, and if the view already
- *   exists, throws analysis exception.
- * @param viewType
- *   the expected view type to be created with this command.
- * @param viewSchemaMode
- *   the tolerance of the view towards schema changes
- * @param isAnalyzed
- *   whether this command is analyzed or not.
+ * @param name the name of this view.
+ * @param userSpecifiedColumns the output column names and optional comments specified by users,
+ *                             can be Nil if not specified.
+ * @param comment the comment of this view.
+ * @param collation the collation of this view.
+ * @param properties the properties of this view.
+ * @param originalText the original SQL text of this view, can be None if this view is created via
+ *                     Dataset API.
+ * @param plan the logical plan that represents the view; this is used to generate the logical
+ *             plan for temporary view and the view schema.
+ * @param allowExisting if true, and if the view already exists, noop; if false, and if the view
+ *                already exists, throws analysis exception.
+ * @param replace if true, and if the view already exists, updates it; if false, and if the view
+ *                already exists, throws analysis exception.
+ * @param viewType the expected view type to be created with this command.
+ * @param viewSchemaMode the tolerance of the view towards schema changes
+ * @param isAnalyzed whether this command is analyzed or not.
  */
 case class CreateViewCommand(
     name: TableIdentifier,
@@ -89,10 +78,10 @@ case class CreateViewCommand(
     viewSchemaMode: ViewSchemaMode = SchemaUnsupported,
     isAnalyzed: Boolean = false,
     referredTempFunctions: Seq[String] = Seq.empty)
-    extends RunnableCommand
-    with AnalysisOnlyCommand
-    with CTEInChildren
-    with CreateTempView {
+  extends RunnableCommand
+  with AnalysisOnlyCommand
+  with CTEInChildren
+  with CreateTempView {
 
   import ViewHelper._
 
@@ -123,14 +112,10 @@ case class CreateViewCommand(
     if (userSpecifiedColumns.nonEmpty) {
       if (userSpecifiedColumns.length > analyzedPlan.output.length) {
         throw QueryCompilationErrors.cannotCreateViewNotEnoughColumnsError(
-          name,
-          userSpecifiedColumns.map(_._1),
-          analyzedPlan)
+          name, userSpecifiedColumns.map(_._1), analyzedPlan)
       } else if (userSpecifiedColumns.length < analyzedPlan.output.length) {
         throw QueryCompilationErrors.cannotCreateViewTooManyColumnsError(
-          name,
-          userSpecifiedColumns.map(_._1),
-          analyzedPlan)
+          name, userSpecifiedColumns.map(_._1), analyzedPlan)
       }
       if (viewSchemaMode == SchemaEvolution) {
         throw SparkException.internalError(
@@ -195,16 +180,8 @@ case class CreateViewCommand(
         catalog.dropTable(viewIdent, ignoreIfNotExists = false, purge = false)
         catalog.createTable(
           prepareTable(
-            sparkSession,
-            name,
-            originalText,
-            analyzedPlan,
-            userSpecifiedColumns,
-            properties,
-            viewSchemaMode,
-            comment,
-            collation),
-          ignoreIfExists = false)
+            sparkSession, name, originalText, analyzedPlan, userSpecifiedColumns, properties,
+            viewSchemaMode, comment, collation), ignoreIfExists = false)
       } else {
         // Handles `CREATE VIEW v0 AS SELECT ...`. Throws exception when the target view already
         // exists.
@@ -214,16 +191,8 @@ case class CreateViewCommand(
       // Create the view if it doesn't exist.
       catalog.createTable(
         prepareTable(
-          sparkSession,
-          name,
-          originalText,
-          analyzedPlan,
-          userSpecifiedColumns,
-          properties,
-          viewSchemaMode,
-          comment,
-          collation),
-        ignoreIfExists = allowExisting)
+          sparkSession, name, originalText, analyzedPlan, userSpecifiedColumns, properties,
+          viewSchemaMode, comment, collation), ignoreIfExists = allowExisting)
     }
     Seq.empty[Row]
   }
@@ -234,18 +203,16 @@ case class CreateViewCommand(
 }
 
 /**
- * Alter a view with given query plan. If the view name contains database prefix, this command
- * will alter a permanent view matching the given name, or throw an exception if view not exist.
- * Else, this command will try to alter a temporary view first, if view not exist, try permanent
- * view next, if still not exist, throw an exception.
+ * Alter a view with given query plan. If the view name contains database prefix, this command will
+ * alter a permanent view matching the given name, or throw an exception if view not exist. Else,
+ * this command will try to alter a temporary view first, if view not exist, try permanent view
+ * next, if still not exist, throw an exception.
  *
- * @param name
- *   the name of this view.
- * @param originalText
- *   the original SQL text of this view. Note that we can only alter a view by SQL API, which
- *   means we always have originalText.
- * @param query
- *   the logical plan that represents the view; this is used to generate the new view schema.
+ * @param name the name of this view.
+ * @param originalText the original SQL text of this view. Note that we can only alter a view by
+ *                     SQL API, which means we always have originalText.
+ * @param query the logical plan that represents the view; this is used to generate the new view
+ *              schema.
  */
 case class AlterViewAsCommand(
     name: TableIdentifier,
@@ -253,9 +220,7 @@ case class AlterViewAsCommand(
     query: LogicalPlan,
     isAnalyzed: Boolean = false,
     referredTempFunctions: Seq[String] = Seq.empty)
-    extends RunnableCommand
-    with AnalysisOnlyCommand
-    with CTEInChildren {
+  extends RunnableCommand with AnalysisOnlyCommand with CTEInChildren {
 
   import ViewHelper._
 
@@ -344,13 +309,11 @@ case class AlterViewAsCommand(
  * Else, this command will try to alter a temporary view first, if view not exist, try permanent
  * view next, if still not exist, throw an exception.
  *
- * @param name
- *   the name of this view.
- * @param viewSchemaMode
- *   The new schema binding mode.
+ * @param name the name of this view.
+ * @param viewSchemaMode The new schema binding mode.
  */
 case class AlterViewSchemaBindingCommand(name: TableIdentifier, viewSchemaMode: ViewSchemaMode)
-    extends LeafRunnableCommand {
+  extends LeafRunnableCommand {
 
   import ViewHelper._
 
@@ -385,8 +348,9 @@ case class AlterViewSchemaBindingCommand(name: TableIdentifier, viewSchemaMode: 
 }
 
 /**
- * A command for users to get views in the given database. If a databaseName is not given, the
- * current database will be used. The syntax of using this command in SQL is:
+ * A command for users to get views in the given database.
+ * If a databaseName is not given, the current database will be used.
+ * The syntax of using this command in SQL is:
  * {{{
  *   SHOW VIEWS [(IN|FROM) database_name] [[LIKE] 'identifier_with_wildcards'];
  * }}}
@@ -394,15 +358,13 @@ case class AlterViewSchemaBindingCommand(name: TableIdentifier, viewSchemaMode: 
 case class ShowViewsCommand(
     databaseName: String,
     tableIdentifierPattern: Option[String],
-    override val output: Seq[Attribute])
-    extends LeafRunnableCommand {
+    override val output: Seq[Attribute]) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
 
     // Show the information of views.
-    val views = tableIdentifierPattern
-      .map(catalog.listViews(databaseName, _))
+    val views = tableIdentifierPattern.map(catalog.listViews(databaseName, _))
       .getOrElse(catalog.listViews(databaseName, "*"))
     views.map { tableIdent =>
       val namespace = tableIdent.database.toArray.quoted
@@ -454,8 +416,8 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
   }
 
   /**
-   * Convert the viewSchemaMode to `properties`. If the mode UNSUPPORTED do not store anything for
-   * backward compatibility.
+   * Convert the viewSchemaMode to `properties`.
+   * If the mode UNSUPPORTED do not store anything for backward compatibility.
    */
   private def viewSchemaModeToProps(viewSchemaMode: ViewSchemaMode): Map[String, String] = {
     if (viewSchemaMode == SchemaUnsupported) {
@@ -495,27 +457,23 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
     // while `CatalogTable` should be serializable.
     properties.filterNot { case (key, _) =>
       key.startsWith(VIEW_REFERRED_TEMP_VIEW_NAMES) ||
-      key.startsWith(VIEW_REFERRED_TEMP_FUNCTION_NAMES) ||
-      key.startsWith(VIEW_REFERRED_TEMP_VARIABLE_NAMES)
+        key.startsWith(VIEW_REFERRED_TEMP_FUNCTION_NAMES) ||
+        key.startsWith(VIEW_REFERRED_TEMP_VARIABLE_NAMES)
     }
   }
 
+
   /**
    * Generate the view properties in CatalogTable, including:
-   *   1. view default database that is used to provide the default database name on view
-   *      resolution.
-   *   2. the output column names of the query that creates a view, this is used to map the output
-   *      of the view child to the view output during view resolution.
-   *   3. the SQL configs when creating the view.
+   * 1. view default database that is used to provide the default database name on view resolution.
+   * 2. the output column names of the query that creates a view, this is used to map the output of
+   *    the view child to the view output during view resolution.
+   * 3. the SQL configs when creating the view.
    *
-   * @param properties
-   *   the `properties` in CatalogTable.
-   * @param session
-   *   the spark session.
-   * @param analyzedPlan
-   *   the analyzed logical plan that represents the child of a view.
-   * @return
-   *   new view properties including view default database and query column names properties.
+   * @param properties the `properties` in CatalogTable.
+   * @param session the spark session.
+   * @param analyzedPlan the analyzed logical plan that represents the child of a view.
+   * @return new view properties including view default database and query column names properties.
    */
   def generateViewProperties(
       properties: Map[String, String],
@@ -545,8 +503,7 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
     val manager = session.sessionState.catalogManager
     removeReferredTempNames(removeSQLConfigs(removeQueryColumnNames(properties))) ++
       catalogAndNamespaceToProps(
-        manager.currentCatalog.name,
-        manager.currentNamespace.toImmutableArraySeq) ++
+        manager.currentCatalog.name, manager.currentNamespace.toImmutableArraySeq) ++
       sqlConfigsToProps(conf, VIEW_SQL_CONFIG_PREFIX) ++
       queryColumnNameProps ++
       referredTempNamesToProps(tempViewNames, tempFunctionNames, tempVariableNames) ++
@@ -558,17 +515,17 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
    * AnalysisException if cycle detected.
    *
    * A cyclic view reference is a cycle of reference dependencies, for example, if the following
-   * statements are executed: CREATE VIEW testView AS SELECT id FROM tbl CREATE VIEW testView2 AS
-   * SELECT id FROM testView ALTER VIEW testView AS SELECT * FROM testView2 The view `testView`
-   * references `testView2`, and `testView2` also references `testView`, therefore a reference
-   * cycle (testView -> testView2 -> testView) exists.
+   * statements are executed:
+   * CREATE VIEW testView AS SELECT id FROM tbl
+   * CREATE VIEW testView2 AS SELECT id FROM testView
+   * ALTER VIEW testView AS SELECT * FROM testView2
+   * The view `testView` references `testView2`, and `testView2` also references `testView`,
+   * therefore a reference cycle (testView -> testView2 -> testView) exists.
    *
-   * @param plan
-   *   the logical plan we detect cyclic view references from.
-   * @param path
-   *   the path between the altered view and current node.
-   * @param viewIdent
-   *   the table identifier of the altered view, we compare two views by the `desc.identifier`.
+   * @param plan the logical plan we detect cyclic view references from.
+   * @param path the path between the altered view and current node.
+   * @param viewIdent the table identifier of the altered view, we compare two views by the
+   *                  `desc.identifier`.
    */
   def checkCyclicViewReference(
       plan: LogicalPlan,
@@ -602,9 +559,7 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
   }
 
   def verifyAutoGeneratedAliasesNotExists(
-      child: LogicalPlan,
-      isTemporary: Boolean,
-      name: TableIdentifier): Unit = {
+      child: LogicalPlan, isTemporary: Boolean, name: TableIdentifier): Unit = {
     if (!isTemporary && !conf.allowAutoGeneratedAliasForView) {
       child.output.foreach { attr =>
         if (attr.metadata.contains("__autoGeneratedAlias")) {
@@ -628,19 +583,16 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
       val tempViews = collectTemporaryViews(child)
       tempViews.foreach { nameParts =>
         throw QueryCompilationErrors.notAllowedToCreatePermanentViewByReferencingTempViewError(
-          name,
-          nameParts.quoted)
+          name, nameParts.quoted)
       }
       referredTempFunctions.foreach { funcName =>
         throw QueryCompilationErrors.notAllowedToCreatePermanentViewByReferencingTempFuncError(
-          name,
-          funcName)
+          name, funcName)
       }
       val tempVars = collectTemporaryVariables(child)
       tempVars.foreach { nameParts =>
         throw QueryCompilationErrors.notAllowedToCreatePermanentViewByReferencingTempVarError(
-          name.nameParts,
-          nameParts)
+          name.nameParts, nameParts)
       }
     }
   }
@@ -654,11 +606,10 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
         case view: View if view.isTempView =>
           val ident = view.desc.identifier
           Seq(ident.database.toSeq :+ ident.table)
-        case plan =>
-          plan.expressions.flatMap(_.flatMap {
-            case e: SubqueryExpression => collectTempViews(e.plan)
-            case _ => Seq.empty
-          })
+        case plan => plan.expressions.flatMap(_.flatMap {
+          case e: SubqueryExpression => collectTempViews(e.plan)
+          case _ => Seq.empty
+        })
       }.distinct
     }
     collectTempViews(child)
@@ -681,27 +632,21 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
   }
 
   /**
-   * Returns a [[TemporaryViewRelation]] that contains information about a temporary view to
-   * create, given an analyzed plan of the view. If a temp view is to be replaced and it is
+   * Returns a [[TemporaryViewRelation]] that contains information about a temporary view
+   * to create, given an analyzed plan of the view. If a temp view is to be replaced and it is
    * cached, it will be uncached before being replaced.
    *
-   * @param name
-   *   the name of the temporary view to create/replace.
-   * @param session
-   *   the spark session.
-   * @param replace
-   *   if true and the existing view is cached, it will be uncached.
-   * @param getRawTempView
-   *   the function that returns an optional raw plan of the local or global temporary view.
-   * @param originalText
-   *   the original SQL text of this view, can be None if this view is created via Dataset API or
-   *   spark.sql.legacy.storeAnalyzedPlanForView is set to true.
-   * @param analyzedPlan
-   *   the logical plan that represents the view; this is used to generate the logical plan for
-   *   temporary view and the view schema.
-   * @param aliasedPlan
-   *   the aliased logical plan based on the user specified columns. If there are no user
-   *   specified plans, this should be same as `analyzedPlan`.
+   * @param name the name of the temporary view to create/replace.
+   * @param session the spark session.
+   * @param replace if true and the existing view is cached, it will be uncached.
+   * @param getRawTempView the function that returns an optional raw plan of the local or
+   *                       global temporary view.
+   * @param originalText the original SQL text of this view, can be None if this view is created via
+   *                     Dataset API or spark.sql.legacy.storeAnalyzedPlanForView is set to true.
+   * @param analyzedPlan the logical plan that represents the view; this is used to generate the
+   *                     logical plan for temporary view and the view schema.
+   * @param aliasedPlan the aliased logical plan based on the user specified columns. If there are
+   *                    no user specified plans, this should be same as `analyzedPlan`.
    */
   def createTemporaryViewRelation(
       name: TableIdentifier,
@@ -714,11 +659,9 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
       referredTempFunctions: Seq[String],
       collation: Option[String] = None): TemporaryViewRelation = {
     val rawTempView = getRawTempView(name.table)
-    val uncache = rawTempView
-      .map { r =>
-        needsToUncache(r, aliasedPlan)
-      }
-      .getOrElse(false)
+    val uncache = rawTempView.map { r =>
+      needsToUncache(r, aliasedPlan)
+    }.getOrElse(false)
     val storeAnalyzedPlanForView = session.sessionState.conf.storeAnalyzedPlanForView ||
       originalText.isEmpty
     if (replace && uncache) {
@@ -781,10 +724,10 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
   }
 
   /**
-   * Returns a [[CatalogTable]] that contains information for temporary view. Generate the
-   * view-specific properties(e.g. view default database, view query output column names) and
-   * store them as properties in the CatalogTable, and also creates the proper schema for the
-   * view.
+   * Returns a [[CatalogTable]] that contains information for temporary view.
+   * Generate the view-specific properties(e.g. view default database, view query output
+   * column names) and store them as properties in the CatalogTable, and also creates
+   * the proper schema for the view.
    */
   private def prepareTemporaryView(
       viewName: TableIdentifier,
@@ -800,14 +743,8 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
     // TBLPROPERTIES is not allowed for temporary view, so we don't use it for
     // generating temporary view properties
     val newProperties = generateViewProperties(
-      Map.empty,
-      session,
-      analyzedPlan.schema.fieldNames,
-      viewSchema.fieldNames,
-      SchemaUnsupported,
-      tempViews,
-      tempFunctions,
-      tempVariables)
+      Map.empty, session, analyzedPlan.schema.fieldNames, viewSchema.fieldNames, SchemaUnsupported,
+      tempViews, tempFunctions, tempVariables)
 
     CatalogTable(
       identifier = viewName,
@@ -821,8 +758,8 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
   }
 
   /**
-   * Returns a [[CatalogTable]] that contains information for the temporary view storing an
-   * analyzed plan.
+   * Returns a [[CatalogTable]] that contains information for the temporary view storing
+   * an analyzed plan.
    */
   private def prepareTemporaryViewStoringAnalyzedPlan(
       viewName: TableIdentifier,
@@ -837,11 +774,11 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
       collation = collation)
   }
 
+
   /**
-   * Returns a [[CatalogTable]] that can be used to save in the catalog. Generate the
-   * view-specific properties(e.g. view default database, view query output column names) and
-   * store them as properties in the CatalogTable, and also creates the proper schema for the
-   * view.
+   * Returns a [[CatalogTable]] that can be used to save in the catalog. Generate the view-specific
+   * properties(e.g. view default database, view query output column names) and store them as
+   * properties in the CatalogTable, and also creates the proper schema for the view.
    */
   def prepareTable(
       session: SparkSession,
@@ -858,14 +795,9 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
       throw QueryCompilationErrors.createPersistedViewFromDatasetAPINotAllowedError()
     }
     val aliasedSchema = CharVarcharUtils.getRawSchema(
-      aliasPlan(session, analyzedPlan, userSpecifiedColumns).schema,
-      session.sessionState.conf)
+      aliasPlan(session, analyzedPlan, userSpecifiedColumns).schema, session.sessionState.conf)
     val newProperties = generateViewProperties(
-      properties,
-      session,
-      analyzedPlan.schema.fieldNames,
-      aliasedSchema.fieldNames,
-      viewSchemaMode)
+      properties, session, analyzedPlan.schema.fieldNames, aliasedSchema.fieldNames, viewSchemaMode)
 
     // Add property to indicate if this is a metric view
     val finalProperties = if (isMetricView) {
@@ -883,7 +815,8 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
       viewOriginalText = originalText,
       viewText = originalText,
       comment = comment,
-      collation = collation)
+      collation = collation
+    )
   }
 
   /**

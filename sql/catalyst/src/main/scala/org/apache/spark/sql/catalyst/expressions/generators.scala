@@ -39,16 +39,16 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * An expression that produces zero or more rows given a single input row.
  *
- * Generators produce multiple output rows instead of a single value like other expressions, and
- * thus they must have a schema to associate with the rows that are output.
+ * Generators produce multiple output rows instead of a single value like other expressions,
+ * and thus they must have a schema to associate with the rows that are output.
  *
  * However, unlike row producing relational operators, which are either leaves or determine their
  * output schema functionally from their input, generators can contain other expressions that
- * might result in their modification by rules. This structure means that they might be copied
- * multiple times after first determining their output schema. If a new output schema is created
- * for each copy references up the tree might be rendered invalid. As a result generators must
+ * might result in their modification by rules.  This structure means that they might be copied
+ * multiple times after first determining their output schema. If a new output schema is created for
+ * each copy references up the tree might be rendered invalid. As a result generators must
  * instead define a function `makeOutput` which is called only once when the schema is first
- * requested. The attributes produced by this function will be automatically copied anytime rules
+ * requested.  The attributes produced by this function will be automatically copied anytime rules
  * result in changes to the Generator or its children.
  */
 trait Generator extends Expression {
@@ -70,8 +70,8 @@ trait Generator extends Expression {
   override def eval(input: InternalRow): IterableOnce[InternalRow]
 
   /**
-   * Notifies that there are no more rows to process, clean up code, and additional rows can be
-   * made here.
+   * Notifies that there are no more rows to process, clean up code, and additional
+   * rows can be made here.
    */
   def terminate(): IterableOnce[InternalRow] = Nil
 
@@ -86,7 +86,6 @@ trait Generator extends Expression {
  * by allowing code generation to return either an [[ArrayData]] or a [[MapData]] object.
  */
 trait CollectionGenerator extends Generator {
-
   /** The position of an element within the collection should also be returned. */
   def position: Boolean
 
@@ -104,8 +103,7 @@ case class UserDefinedGenerator(
     elementSchema: StructType,
     function: Row => IterableOnce[InternalRow],
     children: Seq[Expression])
-    extends Generator
-    with CodegenFallback {
+  extends Generator with CodegenFallback {
 
   @transient private[this] var inputRow: InterpretedProjection = _
   @transient private[this] var convertToScala: (InternalRow) => Row = _
@@ -131,7 +129,7 @@ case class UserDefinedGenerator(
   override def toString: String = s"UserDefinedGenerator(${children.mkString(",")})"
 
   override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[Expression]): UserDefinedGenerator = copy(children = newChildren)
+    newChildren: IndexedSeq[Expression]): UserDefinedGenerator = copy(children = newChildren)
 }
 
 /**
@@ -144,8 +142,7 @@ case class UserDefinedGenerator(
  */
 // scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
-  usage =
-    "_FUNC_(n, expr1, ..., exprk) - Separates `expr1`, ..., `exprk` into `n` rows. Uses column names col0, col1, etc. by default unless specified otherwise.",
+  usage = "_FUNC_(n, expr1, ..., exprk) - Separates `expr1`, ..., `exprk` into `n` rows. Uses column names col0, col1, etc. by default unless specified otherwise.",
   examples = """
     Examples:
       > SELECT _FUNC_(2, 1, 2, 3);
@@ -170,9 +167,8 @@ case class Stack(children: Seq[Expression]) extends Generator {
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length <= 1) {
       throw QueryCompilationErrors.wrongNumArgsError(
-        toSQLId(prettyName),
-        Seq("> 1"),
-        children.length)
+        toSQLId(prettyName), Seq("> 1"), children.length
+      )
     } else if (children.head.dataType != IntegerType) {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
@@ -180,21 +176,26 @@ case class Stack(children: Seq[Expression]) extends Generator {
           "paramIndex" -> ordinalNumber(0),
           "requiredType" -> toSQLType(IntegerType),
           "inputSql" -> toSQLExpr(children.head),
-          "inputType" -> toSQLType(children.head.dataType)))
+          "inputType" -> toSQLType(children.head.dataType))
+      )
     } else if (!children.head.foldable) {
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
           "inputName" -> toSQLId("n"),
           "inputType" -> toSQLType(IntegerType),
-          "inputExpr" -> toSQLExpr(children.head)))
+          "inputExpr" -> toSQLExpr(children.head)
+        )
+      )
     } else if (numRows < 1) {
       DataTypeMismatch(
         errorSubClass = "VALUE_OUT_OF_RANGE",
         messageParameters = Map(
           "exprName" -> toSQLId("n"),
           "valueRange" -> s"(0, ${Int.MaxValue}]",
-          "currentValue" -> toSQLValue(numRows, children.head.dataType)))
+          "currentValue" -> toSQLValue(numRows, children.head.dataType)
+        )
+      )
     } else {
       for (i <- 1 until children.length) {
         val j = (i - 1) % numFields
@@ -206,7 +207,9 @@ case class Stack(children: Seq[Expression]) extends Generator {
               "leftParamIndex" -> (j + 1).toString,
               "leftType" -> toSQLType(elementSchema.fields(j).dataType),
               "rightParamIndex" -> i.toString,
-              "rightType" -> toSQLType(children(i).dataType)))
+              "rightType" -> toSQLType(children(i).dataType)
+            )
+          )
         }
       }
       TypeCheckResult.TypeCheckSuccess
@@ -226,8 +229,8 @@ case class Stack(children: Seq[Expression]) extends Generator {
   }
 
   override def elementSchema: StructType =
-    StructType(children.tail.take(numFields).zipWithIndex.map { case (e, index) =>
-      StructField(s"col$index", e.dataType)
+    StructType(children.tail.take(numFields).zipWithIndex.map {
+      case (e, index) => StructField(s"col$index", e.dataType)
     })
 
   override def eval(input: InternalRow): IterableOnce[InternalRow] = {
@@ -251,8 +254,8 @@ case class Stack(children: Seq[Expression]) extends Generator {
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Rows - we write these into an array.
-    val rowData =
-      ctx.addMutableState("InternalRow[]", "rows", v => s"$v = new InternalRow[$numRows];")
+    val rowData = ctx.addMutableState("InternalRow[]", "rows",
+      v => s"$v = new InternalRow[$numRows];")
     val values = children.tail
     val dataTypes = values.take(numFields).map(_.dataType)
     val code = ctx.splitExpressionsWithCurrentInputs(Seq.tabulate(numRows) { row =>
@@ -266,12 +269,11 @@ case class Stack(children: Seq[Expression]) extends Generator {
 
     // Create the collection.
     val wrapperClass = classOf[mutable.ArraySeq[_]].getName
-    ev.copy(
-      code = code"""
+    ev.copy(code =
+      code"""
          |$code
          |$wrapperClass<InternalRow> ${ev.value} = $wrapperClass$$.MODULE$$.make($rowData);
-       """.stripMargin,
-      isNull = FalseLiteral)
+       """.stripMargin, isNull = FalseLiteral)
   }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Stack =
@@ -279,15 +281,16 @@ case class Stack(children: Seq[Expression]) extends Generator {
 }
 
 /**
- * Replicate the row N times. N is specified as the first argument to the function. This is an
- * internal function solely used by optimizer to rewrite EXCEPT ALL AND INTERSECT ALL queries.
+ * Replicate the row N times. N is specified as the first argument to the function.
+ * This is an internal function solely used by optimizer to rewrite EXCEPT ALL AND
+ * INTERSECT ALL queries.
  */
 case class ReplicateRows(children: Seq[Expression]) extends Generator with CodegenFallback {
   private lazy val numColumns = children.length - 1 // remove the multiplier value from output.
 
   override def elementSchema: StructType =
-    StructType(children.tail.zipWithIndex.map { case (e, index) =>
-      StructField(s"col$index", e.dataType)
+    StructType(children.tail.zipWithIndex.map {
+      case (e, index) => StructField(s"col$index", e.dataType)
     })
 
   override def eval(input: InternalRow): IterableOnce[InternalRow] = {
@@ -305,7 +308,7 @@ case class ReplicateRows(children: Seq[Expression]) extends Generator with Codeg
   }
 
   override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[Expression]): ReplicateRows = copy(children = newChildren)
+    newChildren: IndexedSeq[Expression]): ReplicateRows = copy(children = newChildren)
 }
 
 /**
@@ -343,7 +346,8 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
           "paramIndex" -> ordinalNumber(0),
           "requiredType" -> toSQLType(TypeCollection(ArrayType, MapType)),
           "inputSql" -> toSQLExpr(child),
-          "inputType" -> toSQLType(child.dataType)))
+          "inputType" -> toSQLType(child.dataType))
+      )
   }
 
   // hive-compatible default alias for explode function ("col" for array, "key", "value" for map)
@@ -378,11 +382,9 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
           Nil
         } else {
           val rows = new Array[InternalRow](inputArray.numElements())
-          inputArray.foreach(
-            et,
-            (i, e) => {
-              rows(i) = if (position) InternalRow(i, e) else InternalRow(e)
-            })
+          inputArray.foreach(et, (i, e) => {
+            rows(i) = if (position) InternalRow(i, e) else InternalRow(e)
+          })
           rows
         }
       case MapType(kt, vt, _) =>
@@ -392,13 +394,10 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
         } else {
           val rows = new Array[InternalRow](inputMap.numElements())
           var i = 0
-          inputMap.foreach(
-            kt,
-            vt,
-            (k, v) => {
-              rows(i) = if (position) InternalRow(i, k, v) else InternalRow(k, v)
-              i += 1
-            })
+          inputMap.foreach(kt, vt, (k, v) => {
+            rows(i) = if (position) InternalRow(i, k, v) else InternalRow(k, v)
+            i += 1
+          })
           rows
         }
     }
@@ -437,8 +436,7 @@ trait ExplodeGeneratorBuilderBase extends GeneratorBuilder {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage =
-    "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows, or the elements of map `expr` into multiple rows and columns. Unless specified otherwise, uses the default column name `col` for elements of the array or `key` and `value` for the elements of the map.",
+  usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows, or the elements of map `expr` into multiple rows and columns. Unless specified otherwise, uses the default column name `col` for elements of the array or `key` and `value` for the elements of the map.",
   examples = """
     Examples:
       > SELECT _FUNC_(array(10, 20));
@@ -455,14 +453,13 @@ object ExplodeExpressionBuilder extends ExpressionBuilder {
   override def functionSignature: Option[FunctionSignature] =
     Some(FunctionSignature(Seq(InputParameter("collection"))))
 
-  override def build(funcName: String, expressions: Seq[Expression]): Expression =
+  override def build(funcName: String, expressions: Seq[Expression]) : Expression =
     Explode(expressions(0))
 }
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage =
-    "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows, or the elements of map `expr` into multiple rows and columns. Unless specified otherwise, uses the default column name `col` for elements of the array or `key` and `value` for the elements of the map.",
+  usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows, or the elements of map `expr` into multiple rows and columns. Unless specified otherwise, uses the default column name `col` for elements of the array or `key` and `value` for the elements of the map.",
   examples = """
     Examples:
       > SELECT * FROM _FUNC_(array(10, 20));
@@ -481,8 +478,7 @@ object ExplodeGeneratorBuilder extends ExplodeGeneratorBuilderBase {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage =
-    "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows, or the elements of map `expr` into multiple rows and columns. Unless specified otherwise, uses the default column name `col` for elements of the array or `key` and `value` for the elements of the map.",
+  usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows, or the elements of map `expr` into multiple rows and columns. Unless specified otherwise, uses the default column name `col` for elements of the array or `key` and `value` for the elements of the map.",
   examples = """
     Examples:
       > SELECT * FROM _FUNC_(array(10, 20));
@@ -525,8 +521,7 @@ trait PosExplodeGeneratorBuilderBase extends GeneratorBuilder {
 
 // scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
-  usage =
-    "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows with positions, or the elements of map `expr` into multiple rows and columns with positions. Unless specified otherwise, uses the column name `pos` for position, `col` for elements of the array or `key` and `value` for elements of the map.",
+  usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows with positions, or the elements of map `expr` into multiple rows and columns with positions. Unless specified otherwise, uses the column name `pos` for position, `col` for elements of the array or `key` and `value` for elements of the map.",
   examples = """
     Examples:
       > SELECT _FUNC_(array(10,20));
@@ -543,14 +538,13 @@ object PosExplodeExpressionBuilder extends ExpressionBuilder {
   override def functionSignature: Option[FunctionSignature] =
     Some(FunctionSignature(Seq(InputParameter("collection"))))
 
-  override def build(funcName: String, expressions: Seq[Expression]): Expression =
+  override def build(funcName: String, expressions: Seq[Expression]) : Expression =
     PosExplode(expressions(0))
 }
 
 // scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
-  usage =
-    "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows with positions, or the elements of map `expr` into multiple rows and columns with positions. Unless specified otherwise, uses the column name `pos` for position, `col` for elements of the array or `key` and `value` for elements of the map.",
+  usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows with positions, or the elements of map `expr` into multiple rows and columns with positions. Unless specified otherwise, uses the column name `pos` for position, `col` for elements of the array or `key` and `value` for elements of the map.",
   examples = """
     Examples:
       > SELECT * FROM _FUNC_(array(10,20));
@@ -569,8 +563,7 @@ object PosExplodeGeneratorBuilder extends PosExplodeGeneratorBuilderBase {
 
 // scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
-  usage =
-    "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows with positions, or the elements of map `expr` into multiple rows and columns with positions. Unless specified otherwise, uses the column name `pos` for position, `col` for elements of the array or `key` and `value` for elements of the map.",
+  usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows with positions, or the elements of map `expr` into multiple rows and columns with positions. Unless specified otherwise, uses the column name `pos` for position, `col` for elements of the array or `key` and `value` for elements of the map.",
   examples = """
     Examples:
       > SELECT * FROM _FUNC_(array(10,20));
@@ -604,7 +597,8 @@ case class Inline(child: Expression) extends UnaryExpression with CollectionGene
           "paramIndex" -> ordinalNumber(0),
           "requiredType" -> toSQLType("ARRAY<STRUCT>"),
           "inputSql" -> toSQLExpr(child),
-          "inputType" -> toSQLType(child.dataType)))
+          "inputType" -> toSQLType(child.dataType))
+      )
   }
 
   override def elementSchema: StructType = child.dataType match {
@@ -634,8 +628,7 @@ case class Inline(child: Expression) extends UnaryExpression with CollectionGene
     child.genCode(ctx)
   }
 
-  override protected def withNewChildInternal(newChild: Expression): Inline =
-    copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Inline = copy(child = newChild)
 }
 
 trait InlineGeneratorBuilderBase extends GeneratorBuilder {
@@ -649,8 +642,7 @@ trait InlineGeneratorBuilderBase extends GeneratorBuilder {
 
 // scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
-  usage =
-    "_FUNC_(expr) - Explodes an array of structs into a table. Uses column names col1, col2, etc. by default unless specified otherwise.",
+  usage = "_FUNC_(expr) - Explodes an array of structs into a table. Uses column names col1, col2, etc. by default unless specified otherwise.",
   examples = """
     Examples:
       > SELECT _FUNC_(array(struct(1, 'a'), struct(2, 'b')));
@@ -667,14 +659,13 @@ object InlineExpressionBuilder extends ExpressionBuilder {
   override def functionSignature: Option[FunctionSignature] =
     Some(FunctionSignature(Seq(InputParameter("input"))))
 
-  override def build(funcName: String, expressions: Seq[Expression]): Expression =
+  override def build(funcName: String, expressions: Seq[Expression]) : Expression =
     Inline(expressions(0))
 }
 
 // scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
-  usage =
-    "_FUNC_(expr) - Explodes an array of structs into a table. Uses column names col1, col2, etc. by default unless specified otherwise.",
+  usage = "_FUNC_(expr) - Explodes an array of structs into a table. Uses column names col1, col2, etc. by default unless specified otherwise.",
   examples = """
     Examples:
       > SELECT * FROM _FUNC_(array(struct(1, 'a'), struct(2, 'b')));
@@ -693,8 +684,7 @@ object InlineGeneratorBuilder extends InlineGeneratorBuilderBase {
 
 // scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
-  usage =
-    "_FUNC_(expr) - Explodes an array of structs into a table. Uses column names col1, col2, etc. by default unless specified otherwise.",
+  usage = "_FUNC_(expr) - Explodes an array of structs into a table. Uses column names col1, col2, etc. by default unless specified otherwise.",
   examples = """
     Examples:
       > SELECT * FROM _FUNC_(array(struct(1, 'a'), struct(2, 'b')));
@@ -767,7 +757,8 @@ case class Collations() extends LeafExpression with Generator with CodegenFallba
         UTF8String.fromString(m.country),
         UTF8String.fromString(
           if (m.accentSensitivity) "ACCENT_SENSITIVE" else "ACCENT_INSENSITIVE"),
-        UTF8String.fromString(if (m.caseSensitivity) "CASE_SENSITIVE" else "CASE_INSENSITIVE"),
+        UTF8String.fromString(
+          if (m.caseSensitivity) "CASE_SENSITIVE" else "CASE_INSENSITIVE"),
         UTF8String.fromString(m.padAttribute),
         UTF8String.fromString(m.icuVersion))
     }

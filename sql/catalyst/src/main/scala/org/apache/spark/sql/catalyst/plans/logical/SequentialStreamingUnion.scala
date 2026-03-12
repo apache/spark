@@ -31,26 +31,25 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
  *
  * Unlike [[Union]] which processes all children concurrently in streaming queries,
  * SequentialStreamingUnion processes each child source sequentially:
- *   1. First child processes until complete (bounded sources reach their end)
- *   2. Second child begins processing
- *   3. And so on...
+ * 1. First child processes until complete (bounded sources reach their end)
+ * 2. Second child begins processing
+ * 3. And so on...
  *
- * IMPORTANT: Child ordering IS semantically significant. Children are processed sequentially in
- * the exact order specified. Optimizer rules must preserve this ordering.
+ * IMPORTANT: Child ordering IS semantically significant. Children are processed sequentially
+ * in the exact order specified. Optimizer rules must preserve this ordering.
  *
  * Requirements:
- *   - Minimum 2 children required
- *   - All children must be streaming sources
- *   - All non-final children (i.e., all children except the last) must support bounded execution
- *     (SupportsTriggerAvailableNow). The last child typically remains unbounded for live
- *     streaming.
- *   - All children must have explicit names when used in streaming queries
- *   - Children cannot contain stateful operations (aggregations, joins, etc.)
- *   - Schema compatibility is enforced via UnionBase
+ * - Minimum 2 children required
+ * - All children must be streaming sources
+ * - All non-final children (i.e., all children except the last) must support bounded execution
+ *   (SupportsTriggerAvailableNow). The last child typically remains unbounded for live streaming.
+ * - All children must have explicit names when used in streaming queries
+ * - Children cannot contain stateful operations (aggregations, joins, etc.)
+ * - Schema compatibility is enforced via UnionBase
  *
  * State preservation: Stateful operators applied AFTER SequentialStreamingUnion (aggregations,
- * watermarks, deduplication, joins) preserve their state across source transitions, enabling
- * seamless backfill-to-live scenarios.
+ * watermarks, deduplication, joins) preserve their state across source transitions,
+ * enabling seamless backfill-to-live scenarios.
  *
  * Example:
  * {{{
@@ -63,36 +62,35 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
  *   // historical.groupBy("key").count().followedBy(live.groupBy("key").count()) // Not allowed
  * }}}
  *
- * @param children
- *   The logical plans to union sequentially (must be streaming sources)
- * @param byName
- *   Whether to resolve columns by name (vs. by position)
- * @param allowMissingCol
- *   When true (requires byName = true), allows children to have different columns. Missing
- *   columns in any child are filled with nulls. When false, all children must have the same set
- *   of columns.
+ * @param children        The logical plans to union sequentially (must be streaming sources)
+ * @param byName          Whether to resolve columns by name (vs. by position)
+ * @param allowMissingCol When true (requires byName = true), allows children to have different
+ *                        columns. Missing columns in any child are filled with nulls. When false,
+ *                        all children must have the same set of columns.
  */
 case class SequentialStreamingUnion(
     children: Seq[LogicalPlan],
     byName: Boolean,
-    allowMissingCol: Boolean)
-    extends UnionBase {
-  assert(!allowMissingCol || byName, "`allowMissingCol` can be true only if `byName` is true.")
+    allowMissingCol: Boolean) extends UnionBase {
+  assert(!allowMissingCol || byName,
+    "`allowMissingCol` can be true only if `byName` is true.")
 
   final override val nodePatterns: Seq[TreePattern] = Seq(SEQUENTIAL_STREAMING_UNION)
 
   /**
    * This node is considered resolved when:
-   *   1. children.length >= 2: Has at least 2 children (cannot create sequential union with < 2
-   *      sources)
-   *   2. !(byName || allowMissingCol): Column resolution is by position (default). When byName or
-   *      allowMissingCol is true, the ResolveUnion rule must first transform this into a resolved
-   *      form with schema alignment projections.
-   *   3. childrenResolved: All child nodes have been resolved by the analyzer
-   *   4. allChildrenCompatible: All children have compatible schemas (enforced by UnionBase)
+   * 1. children.length >= 2: Has at least 2 children (cannot create sequential union
+   *    with < 2 sources)
+   * 2. !(byName || allowMissingCol): Column resolution is by position (default). When
+   *    byName or allowMissingCol is true, the ResolveUnion rule must first transform
+   *    this into a resolved form with schema alignment projections.
+   * 3. childrenResolved: All child nodes have been resolved by the analyzer
+   * 4. allChildrenCompatible: All children have compatible schemas (enforced by
+   *    UnionBase)
    *
    * This matches Union's resolution logic but without duplicate column checking, since
-   * SequentialStreamingUnion is validated separately for streaming-specific constraints.
+   * SequentialStreamingUnion is validated separately for streaming-specific
+   * constraints.
    */
   override lazy val resolved: Boolean = {
     children.length >= 2 &&
@@ -113,20 +111,20 @@ object SequentialStreamingUnion {
   }
 
   /**
-   * Recursively flattens direct SequentialStreamingUnion children. This enables chaining:
-   * df1.followedBy(df2).followedBy(df3).followedBy(df4)
+   * Recursively flattens direct SequentialStreamingUnion children.
+   * This enables chaining: df1.followedBy(df2).followedBy(df3).followedBy(df4)
    *
-   * Example: SequentialStreamingUnion(SequentialStreamingUnion(df1, df2), df3) Flattens to:
-   * SequentialStreamingUnion(df1, df2, df3)
+   * Example:
+   *   SequentialStreamingUnion(SequentialStreamingUnion(df1, df2), df3)
+   * Flattens to:
+   *   SequentialStreamingUnion(df1, df2, df3)
    *
-   * Note: This only handles direct children. SequentialStreamingUnions nested through other
-   * operators (e.g., Project(SequentialStreamingUnion(...))) are not flattened and will be caught
-   * by validation as invalid.
+   * Note: This only handles direct children. SequentialStreamingUnions nested
+   * through other operators (e.g., Project(SequentialStreamingUnion(...))) are
+   * not flattened and will be caught by validation as invalid.
    *
-   * @param plans
-   *   The plans to flatten
-   * @return
-   *   Flattened sequence of plans
+   * @param plans The plans to flatten
+   * @return Flattened sequence of plans
    */
   def flatten(plans: Seq[LogicalPlan]): Seq[LogicalPlan] = {
     plans.flatMap {

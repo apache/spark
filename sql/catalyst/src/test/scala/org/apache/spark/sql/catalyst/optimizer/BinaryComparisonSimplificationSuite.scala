@@ -32,17 +32,18 @@ class BinaryComparisonSimplificationSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("AnalysisNodes", Once, EliminateSubqueryAliases) ::
-        Batch("Infer Filters", Once, InferFiltersFromConstraints) ::
-        Batch("Compute current time", Once, ComputeCurrentTime) ::
-        Batch(
-          "Constant Folding",
-          FixedPoint(50),
-          NullPropagation,
-          ConstantFolding,
-          BooleanSimplification,
-          SimplifyBinaryComparison,
-          PruneFilters) :: Nil
+      Batch("AnalysisNodes", Once,
+        EliminateSubqueryAliases) ::
+      Batch("Infer Filters", Once,
+          InferFiltersFromConstraints) ::
+      Batch("Compute current time", Once,
+        ComputeCurrentTime) ::
+      Batch("Constant Folding", FixedPoint(50),
+        NullPropagation,
+        ConstantFolding,
+        BooleanSimplification,
+        SimplifyBinaryComparison,
+        PruneFilters) :: Nil
   }
 
   private def checkCondition(rel: LocalRelation, input: Expression, expected: Expression): Unit =
@@ -51,6 +52,7 @@ class BinaryComparisonSimplificationSuite extends PlanTest {
   val nullableRelation = LocalRelation($"a".int.withNullability(true))
   val nonNullableRelation = LocalRelation($"a".int.withNullability(false))
   val boolRelation = LocalRelation($"a".boolean, $"b".boolean)
+
 
   test("Preserve nullable exprs when constraintPropagation is false") {
     withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
@@ -66,8 +68,7 @@ class BinaryComparisonSimplificationSuite extends PlanTest {
 
   test("Preserve non-deterministic exprs") {
     val plan = nonNullableRelation
-      .where(Rand(0) === Rand(0) && Rand(1) <=> Rand(1))
-      .analyze
+      .where(Rand(0) === Rand(0) && Rand(1) <=> Rand(1)).analyze
     val actual = Optimize.execute(plan)
     val correctAnswer = plan
     comparePlans(actual, correctAnswer)
@@ -98,10 +99,9 @@ class BinaryComparisonSimplificationSuite extends PlanTest {
   }
 
   test("Expression Normalization") {
-    val plan = nonNullableRelation
-      .where(
-        $"a" * Literal(100) + Pi() === Pi() + Literal(100) * $"a" &&
-          DateAdd(CurrentDate(), $"a" + Literal(2)) <= DateAdd(CurrentDate(), Literal(2) + $"a"))
+    val plan = nonNullableRelation.where(
+      $"a" * Literal(100) + Pi() === Pi() + Literal(100) * $"a" &&
+      DateAdd(CurrentDate(), $"a" + Literal(2)) <= DateAdd(CurrentDate(), Literal(2) + $"a"))
       .analyze
     val actual = Optimize.execute(plan)
     val correctAnswer = nonNullableRelation.analyze
@@ -117,17 +117,13 @@ class BinaryComparisonSimplificationSuite extends PlanTest {
     val fieldA1 = GetStructField(
       GetStructField(
         AttributeReference("data1", structType, false)(expId, qualifier),
-        0,
-        Some("a1")),
-      0,
-      Some("b1"))
+        0, Some("a1")),
+      0, Some("b1"))
     val fieldA2 = GetStructField(
       GetStructField(
         AttributeReference("data2", structType, false)(expId, qualifier),
-        0,
-        Some("a2")),
-      0,
-      Some("b2"))
+        0, Some("a2")),
+      0, Some("b2"))
 
     // GetStructField with different names are semantically equal; thus, `EqualTo(fieldA1, fieldA2)`
     // will be optimized to `TrueLiteral` by `SimplifyBinaryComparison`.
@@ -167,21 +163,22 @@ class BinaryComparisonSimplificationSuite extends PlanTest {
   test("Simplify nullable without constraints propagation") {
     withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
       val a = $"a"
-      Seq(And(a === a, a.isNotNull), And(a <= a, a.isNotNull), And(a >= a, a.isNotNull)).foreach {
-        condition =>
-          val plan = nullableRelation.where(condition).analyze
-          val actual = Optimize.execute(plan)
-          val correctAnswer = nullableRelation.where($"a".isNotNull).analyze
-          comparePlans(actual, correctAnswer)
+      Seq(And(a === a, a.isNotNull),
+        And(a <= a, a.isNotNull),
+        And(a >= a, a.isNotNull)).foreach { condition =>
+        val plan = nullableRelation.where(condition).analyze
+        val actual = Optimize.execute(plan)
+        val correctAnswer = nullableRelation.where($"a".isNotNull).analyze
+        comparePlans(actual, correctAnswer)
       }
 
       Seq(And(a < a, a.isNotNull), And(a > a, a.isNotNull))
         .foreach { condition =>
-          val plan = nullableRelation.where(condition).analyze
-          val actual = Optimize.execute(plan)
-          val correctAnswer = nullableRelation.analyze
-          comparePlans(actual, correctAnswer)
-        }
+        val plan = nullableRelation.where(condition).analyze
+        val actual = Optimize.execute(plan)
+        val correctAnswer = nullableRelation.analyze
+        comparePlans(actual, correctAnswer)
+      }
     }
   }
 
@@ -193,8 +190,8 @@ class BinaryComparisonSimplificationSuite extends PlanTest {
       $"d".int.withNullability(true))
 
     comparePlans(
-      Optimize.execute(
-        testRelation.select(Coalesce(Seq($"a", $"b", $"c", $"d")).as("out")).analyze),
+      Optimize.execute(testRelation.select(Coalesce(Seq($"a", $"b", $"c", $"d")).as("out"))
+        .analyze),
       testRelation.select($"a".as("out")).analyze)
     comparePlans(
       Optimize.execute(testRelation.select(Coalesce(Seq($"a", $"c")).as("out")).analyze),
@@ -220,14 +217,8 @@ class BinaryComparisonSimplificationSuite extends PlanTest {
     // Should not optimize for nullable <=> Literal
     checkCondition(boolRelation, And($"a", $"b") <=> TrueLiteral, And($"a", $"b") <=> TrueLiteral)
     checkCondition(boolRelation, TrueLiteral <=> And($"a", $"b"), TrueLiteral <=> And($"a", $"b"))
-    checkCondition(
-      boolRelation,
-      And($"a", $"b") <=> FalseLiteral,
-      And($"a", $"b") <=> FalseLiteral)
-    checkCondition(
-      boolRelation,
-      FalseLiteral <=> And($"a", $"b"),
-      FalseLiteral <=> And($"a", $"b"))
+    checkCondition(boolRelation, And($"a", $"b") <=> FalseLiteral, And($"a", $"b") <=> FalseLiteral)
+    checkCondition(boolRelation, FalseLiteral <=> And($"a", $"b"), FalseLiteral <=> And($"a", $"b"))
   }
 
   test("Simplify binary comparison when literal is null") {
@@ -245,29 +236,24 @@ class BinaryComparisonSimplificationSuite extends PlanTest {
     // Cases we should not optimize because the IN subquery is nullable
     Seq(
       // IN subquery right-hand-side (ListQuery) is nullable
-      (
-        nonNullableRelation,
+      (nonNullableRelation,
         InSubquery(Seq($"a"), ListQuery(nullableRelation.select($"a"))) <=> TrueLiteral),
-      (
-        nonNullableRelation,
+      (nonNullableRelation,
         InSubquery(Seq($"a"), ListQuery(nullableRelation.select($"a"))) <=> FalseLiteral),
       // Left-hand-side of the IN is nullable
-      (
-        nullableRelation,
+      (nullableRelation,
         InSubquery(Seq($"a"), ListQuery(nonNullableRelation.select($"a"))) <=> TrueLiteral),
-      (
-        nullableRelation,
+      (nullableRelation,
         InSubquery(Seq($"a"), ListQuery(nonNullableRelation.select($"a"))) <=> FalseLiteral),
       // Both sides of the IN are nullable
-      (
-        nullableRelation,
+      (nullableRelation,
         InSubquery(Seq($"a"), ListQuery(nullableRelation.select($"a"))) <=> TrueLiteral),
-      (
-        nullableRelation,
-        InSubquery(Seq($"a"), ListQuery(nullableRelation.select($"a"))) <=> FalseLiteral))
-      .foreach { case (relation, expr) =>
-        checkCondition(relation, expr, expr)
-      }
+      (nullableRelation,
+        InSubquery(Seq($"a"), ListQuery(nullableRelation.select($"a"))) <=> FalseLiteral)
+    ).foreach {
+      case (relation, expr) =>
+      checkCondition(relation, expr, expr)
+    }
 
     // Should optimize, since the IN is non-nullable
     val inExpr = InSubquery(Seq($"a"), ListQuery(nonNullableRelation.select($"a")))

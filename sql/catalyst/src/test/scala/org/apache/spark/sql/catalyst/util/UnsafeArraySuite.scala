@@ -44,12 +44,10 @@ class UnsafeArraySuite extends SparkFunSuite {
     DateTimeUtils.stringToDate(UTF8String.fromString("2016-7-26")).get)
   private def defaultZoneId = ZoneId.systemDefault()
   val timestampArray = Array(
-    DateTimeUtils
-      .stringToTimestamp(UTF8String.fromString("1970-1-1 00:00:00"), defaultZoneId)
-      .get,
-    DateTimeUtils
-      .stringToTimestamp(UTF8String.fromString("2016-7-26 00:00:00"), defaultZoneId)
-      .get)
+    DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("1970-1-1 00:00:00"), defaultZoneId).get,
+    DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2016-7-26 00:00:00"), defaultZoneId).get)
   val decimalArray4_1 = Array(
     BigDecimal("123.4").setScale(1, BigDecimal.RoundingMode.FLOOR),
     BigDecimal("567.8").setScale(1, BigDecimal.RoundingMode.FLOOR))
@@ -57,12 +55,12 @@ class UnsafeArraySuite extends SparkFunSuite {
     BigDecimal("1.2345678901234567890123456").setScale(21, BigDecimal.RoundingMode.FLOOR),
     BigDecimal("2.3456789012345678901234567").setScale(21, BigDecimal.RoundingMode.FLOOR))
 
-  val calendarintervalArray =
-    Array(new CalendarInterval(3, 2, 321), new CalendarInterval(1, 2, 123))
+  val calendarintervalArray = Array(
+    new CalendarInterval(3, 2, 321), new CalendarInterval(1, 2, 123))
 
   val intMultiDimArray = Array(Array(1), Array(2, 20), Array(3, 30, 300))
-  val doubleMultiDimArray =
-    Array(Array(1.1, 11.1), Array(2.2, 22.2, 222.2), Array(3.3, 33.3, 333.3, 3333.3))
+  val doubleMultiDimArray = Array(
+    Array(1.1, 11.1), Array(2.2, 22.2, 222.2), Array(3.3, 33.3, 333.3, 3333.3))
 
   val serialArray = {
     val offset = 32
@@ -128,8 +126,8 @@ class UnsafeArraySuite extends SparkFunSuite {
 
     Seq(decimalArray4_1, decimalArray20_20).map { decimalArray =>
       val decimal = decimalArray(0)
-      val schema =
-        new StructType().add("array", ArrayType(DecimalType(decimal.precision, decimal.scale)))
+      val schema = new StructType().add(
+        "array", ArrayType(DecimalType(decimal.precision, decimal.scale)))
       val encoder = ExpressionEncoder(schema).resolveAndBind()
       val externalRow = Row(decimalArray)
       val ir = encoder.createSerializer().apply(externalRow)
@@ -177,18 +175,16 @@ class UnsafeArraySuite extends SparkFunSuite {
   test("from primitive array") {
     val unsafeInt = UnsafeArrayData.fromPrimitiveArray(intArray)
     assert(unsafeInt.numElements == 3)
-    assert(
-      unsafeInt.getSizeInBytes ==
-        ((8 + scala.math.ceil(3 / 64.toDouble) * 8 + 4 * 3 + 7).toInt / 8) * 8)
+    assert(unsafeInt.getSizeInBytes ==
+      ((8 + scala.math.ceil(3/64.toDouble) * 8 + 4 * 3 + 7).toInt / 8) * 8)
     intArray.zipWithIndex.map { case (e, i) =>
       assert(unsafeInt.getInt(i) == e)
     }
 
     val unsafeDouble = UnsafeArrayData.fromPrimitiveArray(doubleArray)
     assert(unsafeDouble.numElements == 3)
-    assert(
-      unsafeDouble.getSizeInBytes ==
-        ((8 + scala.math.ceil(3 / 64.toDouble) * 8 + 8 * 3 + 7).toInt / 8) * 8)
+    assert(unsafeDouble.getSizeInBytes ==
+      ((8 + scala.math.ceil(3/64.toDouble) * 8 + 8 * 3 + 7).toInt / 8) * 8)
     doubleArray.zipWithIndex.map { case (e, i) =>
       assert(unsafeDouble.getDouble(i) == e)
     }

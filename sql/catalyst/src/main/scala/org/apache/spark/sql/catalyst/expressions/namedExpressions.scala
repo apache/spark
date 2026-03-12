@@ -38,16 +38,15 @@ object NamedExpression {
   private val curId = new java.util.concurrent.atomic.AtomicLong()
   private[expressions] val jvmId = UUID.randomUUID()
   def newExprId: ExprId = ExprId(curId.getAndIncrement(), jvmId)
-  def unapply(expr: NamedExpression): Option[(String, DataType)] = Some(
-    (expr.name, expr.dataType))
+  def unapply(expr: NamedExpression): Option[(String, DataType)] = Some((expr.name, expr.dataType))
 }
 
 /**
- * A globally unique id for a given named expression. Used to identify which attribute output by a
- * relation is being referenced in a subsequent computation.
+ * A globally unique id for a given named expression.
+ * Used to identify which attribute output by a relation is being
+ * referenced in a subsequent computation.
  *
- * The `id` field is unique within a given JVM, while the `uuid` is used to uniquely identify
- * JVMs.
+ * The `id` field is unique within a given JVM, while the `uuid` is used to uniquely identify JVMs.
  */
 case class ExprId(id: Long, jvmId: UUID) {
 
@@ -76,32 +75,31 @@ trait NamedExpression extends Expression {
   def exprId: ExprId
 
   /**
-   * Returns a dot separated fully qualified name for this attribute. If the name or any qualifier
-   * contains `dots`, it is quoted to avoid confusion. Given that there can be multiple
-   * qualifiers, it is possible that there are other possible way to refer to this attribute.
+   * Returns a dot separated fully qualified name for this attribute.  If the name or any qualifier
+   * contains `dots`, it is quoted to avoid confusion.  Given that there can be multiple qualifiers,
+   * it is possible that there are other possible way to refer to this attribute.
    */
   def qualifiedName: String = (qualifier :+ name).map(quoteIfNeeded).mkString(".")
 
   /**
-   * Optional qualifier for the expression. Qualifier can also contain the fully qualified
-   * information, for e.g, Sequence of string containing the database and the table name
+   * Optional qualifier for the expression.
+   * Qualifier can also contain the fully qualified information, for e.g, Sequence of string
+   * containing the database and the table name
    *
    * For now, since we do not allow using original table name to qualify a column name once the
    * table is aliased, this can only be:
    *
-   *   1. Empty Seq: when an attribute doesn't have a qualifier, e.g. top level attributes aliased
-   *      in the SELECT clause, or column from a LocalRelation.
-   *   2. Seq with a Single element: either the table name or the alias name of the table.
-   *   3. Seq with 2 elements: database name and table name
-   *   4. Seq with 3 elements: catalog name, database name and table name
+   * 1. Empty Seq: when an attribute doesn't have a qualifier,
+   *    e.g. top level attributes aliased in the SELECT clause, or column from a LocalRelation.
+   * 2. Seq with a Single element: either the table name or the alias name of the table.
+   * 3. Seq with 2 elements: database name and table name
+   * 4. Seq with 3 elements: catalog name, database name and table name
    */
   def qualifier: Seq[String]
 
   def toAttribute: Attribute
 
-  /**
-   * Returns the metadata when an expression is a reference to another expression with metadata.
-   */
+  /** Returns the metadata when an expression is a reference to another expression with metadata. */
   def metadata: Metadata = Metadata.empty
 
   /** Returns a copy of this expression with a new `exprId`. */
@@ -127,39 +125,33 @@ abstract class Attribute extends LeafExpression with NamedExpression {
 }
 
 /**
- * Used to assign a new name to a computation. For example the SQL expression "1 + 1 AS a" could
- * be represented as follows: Alias(Add(Literal(1), Literal(1)), "a")()
+ * Used to assign a new name to a computation.
+ * For example the SQL expression "1 + 1 AS a" could be represented as follows:
+ *  Alias(Add(Literal(1), Literal(1)), "a")()
  *
- * Note that exprId and qualifiers are in a separate parameter list because we only pattern match
- * on child and name.
+ * Note that exprId and qualifiers are in a separate parameter list because
+ * we only pattern match on child and name.
  *
- * Note that when creating a new Alias, all the [[AttributeReference]] that refer to the original
- * alias should be updated to the new one.
+ * Note that when creating a new Alias, all the [[AttributeReference]] that refer to
+ * the original alias should be updated to the new one.
  *
- * @param child
- *   The computation being performed
- * @param name
- *   The name to be associated with the result of computing [[child]].
- * @param exprId
- *   A globally unique id used to check if an [[AttributeReference]] refers to this alias.
- *   Auto-assigned if left blank.
- * @param qualifier
- *   An optional Seq of string that can be used to refer to this attribute in a fully qualified
- *   way. Consider the examples tableName.name, subQueryAlias.name. tableName and subQueryAlias
- *   are possible qualifiers.
- * @param explicitMetadata
- *   Explicit metadata associated with this alias that overwrites child's.
- * @param nonInheritableMetadataKeys
- *   Keys of metadata entries that are supposed to be removed when inheriting the metadata from
- *   the child.
+ * @param child The computation being performed
+ * @param name The name to be associated with the result of computing [[child]].
+ * @param exprId A globally unique id used to check if an [[AttributeReference]] refers to this
+ *               alias. Auto-assigned if left blank.
+ * @param qualifier An optional Seq of string that can be used to refer to this attribute in a
+ *                  fully qualified way. Consider the examples tableName.name, subQueryAlias.name.
+ *                  tableName and subQueryAlias are possible qualifiers.
+ * @param explicitMetadata Explicit metadata associated with this alias that overwrites child's.
+ * @param nonInheritableMetadataKeys Keys of metadata entries that are supposed to be removed when
+ *                                   inheriting the metadata from the child.
  */
 case class Alias(child: Expression, name: String)(
     val exprId: ExprId = NamedExpression.newExprId,
     val qualifier: Seq[String] = Seq.empty,
     val explicitMetadata: Option[Metadata] = None,
     val nonInheritableMetadataKeys: Seq[String] = Seq.empty)
-    extends UnaryExpression
-    with NamedExpression {
+  extends UnaryExpression with NamedExpression {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(ALIAS)
 
@@ -252,8 +244,8 @@ case class Alias(child: Expression, name: String)(
   override def equals(other: Any): Boolean = other match {
     case a: Alias =>
       name == a.name && exprId == a.exprId && child == a.child && qualifier == a.qualifier &&
-      explicitMetadata == a.explicitMetadata &&
-      nonInheritableMetadataKeys == a.nonInheritableMetadataKeys
+        explicitMetadata == a.explicitMetadata &&
+        nonInheritableMetadataKeys == a.nonInheritableMetadataKeys
     case _ => false
   }
 
@@ -280,21 +272,15 @@ object AttributeReferenceTreeBits {
 /**
  * A reference to an attribute produced by another operator in the tree.
  *
- * @param name
- *   The name of this attribute, should only be used during analysis or for debugging.
- * @param dataType
- *   The [[DataType]] of this attribute.
- * @param nullable
- *   True if null is a valid value for this attribute.
- * @param metadata
- *   The metadata of this attribute.
- * @param exprId
- *   A globally unique id used to check if different AttributeReferences refer to the same
- *   attribute.
- * @param qualifier
- *   An optional string that can be used to referred to this attribute in a fully qualified way.
- *   Consider the examples tableName.name, subQueryAlias.name. tableName and subQueryAlias are
- *   possible qualifiers.
+ * @param name The name of this attribute, should only be used during analysis or for debugging.
+ * @param dataType The [[DataType]] of this attribute.
+ * @param nullable True if null is a valid value for this attribute.
+ * @param metadata The metadata of this attribute.
+ * @param exprId A globally unique id used to check if different AttributeReferences refer to the
+ *               same attribute.
+ * @param qualifier An optional string that can be used to referred to this attribute in a fully
+ *                  qualified way. Consider the examples tableName.name, subQueryAlias.name.
+ *                  tableName and subQueryAlias are possible qualifiers.
  */
 case class AttributeReference(
     name: String,
@@ -303,8 +289,7 @@ case class AttributeReference(
     override val metadata: Metadata = Metadata.empty)(
     val exprId: ExprId = NamedExpression.newExprId,
     val qualifier: Seq[String] = Seq.empty[String])
-    extends Attribute
-    with Unevaluable {
+  extends Attribute with Unevaluable {
 
   override lazy val treePatternBits: BitSet = AttributeReferenceTreeBits.bits
 
@@ -316,7 +301,7 @@ case class AttributeReference(
   override def equals(other: Any): Boolean = other match {
     case ar: AttributeReference =>
       name == ar.name && dataType == ar.dataType && nullable == ar.nullable &&
-      metadata == ar.metadata && exprId == ar.exprId && qualifier == ar.qualifier
+        metadata == ar.metadata && exprId == ar.exprId && qualifier == ar.qualifier
     case _ => false
   }
 
@@ -419,17 +404,16 @@ case class AttributeReference(
  * A place holder used when printing expressions without debugging information such as the
  * expression id or the unresolved indicator.
  */
-case class PrettyAttribute(name: String, dataType: DataType = NullType)
-    extends Attribute
-    with Unevaluable {
+case class PrettyAttribute(
+    name: String,
+    dataType: DataType = NullType)
+  extends Attribute with Unevaluable {
 
-  def this(attribute: Attribute) = this(
-    attribute.name,
-    attribute match {
-      case a: AttributeReference => a.dataType
-      case a: PrettyAttribute => a.dataType
-      case _ => NullType
-    })
+  def this(attribute: Attribute) = this(attribute.name, attribute match {
+    case a: AttributeReference => a.dataType
+    case a: PrettyAttribute => a.dataType
+    case _ => NullType
+  })
 
   override def toString: String = name
   override def sql: String = {
@@ -470,13 +454,11 @@ case class PrettyAttribute(name: String, dataType: DataType = NullType)
 }
 
 /**
- * A place holder used to hold a reference that has been resolved to a field outside of the
- * current plan. This is used for correlated subqueries.
+ * A place holder used to hold a reference that has been resolved to a field outside of the current
+ * plan. This is used for correlated subqueries.
  */
 case class OuterReference(e: NamedExpression)
-    extends LeafExpression
-    with NamedExpression
-    with Unevaluable {
+  extends LeafExpression with NamedExpression with Unevaluable {
   override def dataType: DataType = e.dataType
   override def nullable: Boolean = e.nullable
   override def prettyName: String = "outer"
@@ -497,18 +479,16 @@ case class OuterReference(e: NamedExpression)
 }
 
 /**
- * A place holder used to hold a reference that has been resolved to a field outside of the
- * subquery plan. We use it only for queries containing nested correlation and only in the
- * SubqueryExpression#outerAttrs to indicate that the correlated columns referenced by this
- * subquery expression are from the outer scopes, not the subquery plan or the immediate outer
- * plan of the subquery plan. For example, SubqueryExpression(outerAttrs=[OuterScopeReference(a)]
- * means a cannot be resolved by the SubqueryExpression.plan or the plan holding this
- * SubqueryExpression.
+ * A place holder used to hold a reference that has been resolved to a field outside of the subquery
+ * plan. We use it only for queries containing nested correlation and only in the
+ * SubqueryExpression#outerAttrs to indicate that the correlated columns referenced by
+ * this subquery expression are from the outer scopes, not the subquery plan or
+ * the immediate outer plan of the subquery plan. For example,
+ * SubqueryExpression(outerAttrs=[OuterScopeReference(a)] means a cannot be resolved by the
+ * SubqueryExpression.plan or the plan holding this SubqueryExpression.
  */
 case class OuterScopeReference(e: NamedExpression)
-    extends LeafExpression
-    with NamedExpression
-    with Unevaluable {
+  extends LeafExpression with NamedExpression with Unevaluable {
   override def dataType: DataType = e.dataType
   override def nullable: Boolean = e.nullable
   override def prettyName: String = "outerScope"
@@ -523,26 +503,21 @@ case class OuterScopeReference(e: NamedExpression)
 
 /**
  * A placeholder used to hold a [[NamedExpression]] that has been temporarily resolved as the
- * reference to a lateral column alias. It will be restored back to [[UnresolvedAttribute]] if the
- * lateral column alias can't be resolved, or become a normal resolved column in the rewritten
+ * reference to a lateral column alias. It will be restored back to [[UnresolvedAttribute]] if
+ * the lateral column alias can't be resolved, or become a normal resolved column in the rewritten
  * plan after lateral column resolution. There should be no [[LateralColumnAliasReference]] beyond
- * analyzer: if the plan passes all analysis check, then all [[LateralColumnAliasReference]]
- * should already be removed.
+ * analyzer: if the plan passes all analysis check, then all [[LateralColumnAliasReference]] should
+ * already be removed.
  *
- * @param ne
- *   the [[NamedExpression]] produced by column resolution. Can be [[UnresolvedAttribute]] if the
- *   referenced lateral column alias is not resolved yet.
- * @param nameParts
- *   the name parts of the original [[UnresolvedAttribute]]. Used to restore back to
- *   [[UnresolvedAttribute]] when needed
- * @param a
- *   the attribute of referenced lateral column alias. Used to match alias when unwrapping and
- *   resolving lateral column aliases and rewriting the query plan.
+ * @param ne the [[NamedExpression]] produced by column resolution. Can be [[UnresolvedAttribute]]
+ *           if the referenced lateral column alias is not resolved yet.
+ * @param nameParts the name parts of the original [[UnresolvedAttribute]]. Used to restore back
+ *                  to [[UnresolvedAttribute]] when needed
+ * @param a the attribute of referenced lateral column alias. Used to match alias when unwrapping
+ *          and resolving lateral column aliases and rewriting the query plan.
  */
 case class LateralColumnAliasReference(ne: NamedExpression, nameParts: Seq[String], a: Attribute)
-    extends LeafExpression
-    with NamedExpression
-    with Unevaluable {
+  extends LeafExpression with NamedExpression with Unevaluable {
   assert(ne.resolved || ne.isInstanceOf[UnresolvedAttribute])
   override def name: String = ne.name
   override def exprId: ExprId = ne.exprId
@@ -581,13 +556,15 @@ object OuterReference {
    *
    * Fixed-point analyzer will output:
    *
-   * Filter cast(scalar-subquery#x [alias#x] as boolean) : +- Project [(outer(alias#x) = 1) AS
-   * (outer(col1) = 1)#x] : +- OneRowRelation +- Aggregate [col1#x], [col1#x AS alias#x] +-
-   * LocalRelation [col1#x]
+   * Filter cast(scalar-subquery#x [alias#x] as boolean)
+   * :  +- Project [(outer(alias#x) = 1) AS (outer(col1) = 1)#x]
+   * :     +- OneRowRelation
+   * +- Aggregate [col1#x], [col1#x AS alias#x]
+   *    +- LocalRelation [col1#x]
    *
    * Notice that the expression in the subquery is `(outer(alias#x) = 1) AS (outer(col1) = 1)`.
-   * This is because the initial underlying expression is `outer(col1) = 1` which we alias, but we
-   * later update the actual outer reference to `outer(alias)`.
+   * This is because the initial underlying expression is `outer(col1) = 1` which we alias, but
+   * we later update the actual outer reference to `outer(alias)`.
    */
   val SINGLE_PASS_SQL_STRING_OVERRIDE =
     TreeNodeTag[String]("single_pass_sql_string_override")
@@ -628,10 +605,10 @@ object VirtualColumn {
 }
 
 /**
- * The internal representation of the MetadataAttribute, it sets `__metadata_col` to `true` in
- * AttributeReference metadata
- *   - apply() will create a metadata attribute reference
- *   - unapply() will check if an attribute reference is the metadata attribute reference
+ * The internal representation of the MetadataAttribute,
+ * it sets `__metadata_col` to `true` in AttributeReference metadata
+ * - apply() will create a metadata attribute reference
+ * - unapply() will check if an attribute reference is the metadata attribute reference
  */
 object MetadataAttribute {
 
@@ -686,8 +663,8 @@ object MetadataAttribute {
  * A [[MetadataAttribute]] that works even if the attribute was renamed to avoid a conflict with
  * some column name in the schema. See also [[LogicalPlan.getMetadataAttributeByName]].
  *
- *   - apply() creates a logically-named attribute with the given physical name.
- *   - unapply() matches a [[MetadataAttribute]] and also returns its logical name.
+ * - apply() creates a logically-named attribute with the given physical name.
+ * - unapply() matches a [[MetadataAttribute]] and also returns its logical name.
  */
 object MetadataAttributeWithLogicalName {
   def unapply(attr: AttributeReference): Option[(AttributeReference, String)] = attr match {
@@ -697,20 +674,19 @@ object MetadataAttributeWithLogicalName {
 }
 
 object MetadataStructFieldWithLogicalName {
-  def unapply(field: StructField): Option[(StructField, String)] =
-    MetadataAttributeWithLogicalName
-      .unapply(DataTypeUtils.toAttribute(field))
-      .map { case (_, name) => field -> name }
+  def unapply(field: StructField): Option[(StructField, String)] = MetadataAttributeWithLogicalName
+    .unapply(DataTypeUtils.toAttribute(field))
+    .map { case (_, name) => field -> name }
 }
 
 /**
- * The internal representation of the FileSourceMetadataAttribute, it sets `__metadata_col` and
- * `__file_source_metadata_col` to `true` in AttributeReference's metadata. This is a super type
- * of [[FileSourceConstantMetadataAttribute]] and [[FileSourceGeneratedMetadataAttribute]].
+ * The internal representation of the FileSourceMetadataAttribute, it sets `__metadata_col`
+ * and `__file_source_metadata_col` to `true` in AttributeReference's metadata.
+ * This is a super type of [[FileSourceConstantMetadataAttribute]] and
+ * [[FileSourceGeneratedMetadataAttribute]].
  *
- *   - apply() will create a file source metadata attribute reference
- *   - unapply() will check if an attribute reference is any file source metadata attribute
- *     reference
+ * - apply() will create a file source metadata attribute reference
+ * - unapply() will check if an attribute reference is any file source metadata attribute reference
  */
 object FileSourceMetadataAttribute {
 
@@ -777,9 +753,9 @@ object FileSourceMetadataAttribute {
 }
 
 /**
- * A [[StructField]] that describes a file source constant metadata struct field -- a member of
- * the `_metadata` struct whose value is constant for a whole file (e.g. file name). Values are
- * usually appended to the output and not generated per row.
+ * A [[StructField]] that describes a file source constant metadata struct field -- a member of the
+ * `_metadata` struct whose value is constant for a whole file (e.g. file name). Values are usually
+ * appended to the output and not generated per row.
  */
 object FileSourceConstantMetadataStructField {
 
@@ -787,11 +763,7 @@ object FileSourceConstantMetadataStructField {
 
   /** Constructs a new metadata struct field of the given type; nullable by default */
   def apply(name: String, dataType: DataType, nullable: Boolean = true): StructField =
-    StructField(
-      name,
-      FileSourceMetadataAttribute.validateType(dataType),
-      nullable,
-      metadata(name))
+    StructField(name, FileSourceMetadataAttribute.validateType(dataType), nullable, metadata(name))
 
   def unapply(field: StructField): Option[StructField] =
     if (isValid(field.dataType, field.metadata)) Some(field) else None
@@ -822,12 +794,11 @@ object FileSourceConstantMetadataAttribute {
 }
 
 /**
- * A [[StructField]] that describes a file source generated metadata struct field -- a member of
- * the `metadata` struct that maps to some internal column the scanner returns.
+ * A [[StructField]] that describes a file source generated metadata struct field -- a member of the
+ * `metadata` struct that maps to some internal column the scanner returns.
  *
- *   - apply() wil create a file source generated metadata struct field
- *   - unapply() matches a file source generated metadata struct field, and returns its internal
- *     name
+ * - apply() wil create a file source generated metadata struct field
+ * - unapply() matches a file source generated metadata struct field, and returns its internal name
  */
 object FileSourceGeneratedMetadataStructField {
 
@@ -835,12 +806,13 @@ object FileSourceGeneratedMetadataStructField {
 
   /**
    * We keep generated metadata attributes nullability configurable here:
-   *   1. Before passing to readers, we create generated metadata attributes as nullable; Because,
-   *      for row_index, the readers do not consider the column required. row_index can be
-   *      generated with null in the process by readers.
-   *   2. When applying the projection, we restore the nullability specified here; For row_index,
-   *      it is generated with nulls which are then replaced, so it will not be null in the
-   *      returned output. See `FileSourceStrategy` for more information
+   * 1. Before passing to readers, we create generated metadata attributes as nullable;
+   *    Because, for row_index, the readers do not consider the column required.
+   *    row_index can be generated with null in the process by readers.
+   * 2. When applying the projection, we restore the nullability specified here;
+   *    For row_index, it is generated with nulls which are then replaced,
+   *    so it will not be null in the returned output.
+   *    See `FileSourceStrategy` for more information
    */
   def apply(
       name: String,
@@ -873,8 +845,8 @@ object FileSourceGeneratedMetadataStructField {
 }
 
 /**
- * Matches the internal representation of a file source generated metadata attribute -- a member
- * of the `metadata` struct that maps to some internal column the scanner returns.
+ * Matches the internal representation of a file source generated metadata attribute -- a member of
+ * the `metadata` struct that maps to some internal column the scanner returns.
  */
 object FileSourceGeneratedMetadataAttribute {
   def unapply(attr: AttributeReference): Option[(AttributeReference, String)] = {

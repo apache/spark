@@ -24,6 +24,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 
 case class WindowData(month: Int, area: String, product: Int)
 
+
 /**
  * Test suite for SQL window functions.
  */
@@ -38,52 +39,71 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
       WindowData(3, "b", 7),
       WindowData(4, "b", 8),
       WindowData(5, "c", 9),
-      WindowData(6, "c", 10))
+      WindowData(6, "c", 10)
+    )
     withTempView("windowData") {
       sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
 
       checkAnswer(
-        sql("""
+        sql(
+          """
             |select area, sum(product), sum(sum(product)) over (partition by area)
             |from windowData group by month, area
           """.stripMargin),
-        Seq(("a", 5, 11), ("a", 6, 11), ("b", 7, 15), ("b", 8, 15), ("c", 9, 19), ("c", 10, 19))
-          .map(i => Row(i._1, i._2, i._3)))
+        Seq(
+          ("a", 5, 11),
+          ("a", 6, 11),
+          ("b", 7, 15),
+          ("b", 8, 15),
+          ("c", 9, 19),
+          ("c", 10, 19)
+        ).map(i => Row(i._1, i._2, i._3)))
 
       checkAnswer(
-        sql("""
+        sql(
+          """
             |select area, sum(product) - 1, sum(sum(product)) over (partition by area)
             |from windowData group by month, area
           """.stripMargin),
-        Seq(("a", 4, 11), ("a", 5, 11), ("b", 6, 15), ("b", 7, 15), ("c", 8, 19), ("c", 9, 19))
-          .map(i => Row(i._1, i._2, i._3)))
+        Seq(
+          ("a", 4, 11),
+          ("a", 5, 11),
+          ("b", 6, 15),
+          ("b", 7, 15),
+          ("c", 8, 19),
+          ("c", 9, 19)
+        ).map(i => Row(i._1, i._2, i._3)))
 
       checkAnswer(
-        sql("""
+        sql(
+          """
             |select area, sum(product), sum(product) / sum(sum(product)) over (partition by area)
             |from windowData group by month, area
           """.stripMargin),
         Seq(
-          ("a", 5, 5d / 11),
-          ("a", 6, 6d / 11),
-          ("b", 7, 7d / 15),
-          ("b", 8, 8d / 15),
-          ("c", 10, 10d / 19),
-          ("c", 9, 9d / 19)).map(i => Row(i._1, i._2, i._3)))
+          ("a", 5, 5d/11),
+          ("a", 6, 6d/11),
+          ("b", 7, 7d/15),
+          ("b", 8, 8d/15),
+          ("c", 10, 10d/19),
+          ("c", 9, 9d/19)
+        ).map(i => Row(i._1, i._2, i._3)))
 
       checkAnswer(
-        sql("""
+        sql(
+          """
             |select area, sum(product), sum(product) / sum(sum(product) - 1) over
             |(partition by area)
             |from windowData group by month, area
           """.stripMargin),
         Seq(
-          ("a", 5, 5d / 9),
-          ("a", 6, 6d / 9),
-          ("b", 7, 7d / 13),
-          ("b", 8, 8d / 13),
-          ("c", 10, 10d / 17),
-          ("c", 9, 9d / 17)).map(i => Row(i._1, i._2, i._3)))
+          ("a", 5, 5d/9),
+          ("a", 6, 6d/9),
+          ("b", 7, 7d/13),
+          ("b", 8, 8d/13),
+          ("c", 10, 10d/17),
+          ("c", 9, 9d/17)
+        ).map(i => Row(i._1, i._2, i._3)))
     }
   }
 
@@ -94,16 +114,25 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
       WindowData(3, "b", 7),
       WindowData(4, "b", 8),
       WindowData(5, "c", 9),
-      WindowData(6, "c", 10))
+      WindowData(6, "c", 10)
+    )
     withTempView("windowData") {
       sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
 
       checkAnswer(
-        sql("""
+        sql(
+          """
             |select area, rank() over (partition by area order by tmp.month) + tmp.tmp1 as c1
             |from (select month, area, product, 1 as tmp1 from windowData) tmp
           """.stripMargin),
-        Seq(("a", 2), ("a", 3), ("b", 2), ("b", 3), ("c", 2), ("c", 3)).map(i => Row(i._1, i._2)))
+        Seq(
+          ("a", 2),
+          ("a", 3),
+          ("b", 2),
+          ("b", 3),
+          ("c", 2),
+          ("c", 3)
+        ).map(i => Row(i._1, i._2)))
     }
   }
 
@@ -114,12 +143,14 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
       WindowData(3, "b", 7),
       WindowData(4, "b", 8),
       WindowData(5, "c", 9),
-      WindowData(6, "c", 10))
+      WindowData(6, "c", 10)
+    )
     withTempView("windowData") {
       sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
 
       checkAnswer(
-        sql("""
+        sql(
+          """
             |select month, area, product, sum(product + 1) over (partition by 1 order by 2)
             |from windowData
           """.stripMargin),
@@ -129,10 +160,12 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
           (3, "b", 7, 51),
           (4, "b", 8, 51),
           (5, "c", 9, 51),
-          (6, "c", 10, 51)).map(i => Row(i._1, i._2, i._3, i._4)))
+          (6, "c", 10, 51)
+        ).map(i => Row(i._1, i._2, i._3, i._4)))
 
       checkAnswer(
-        sql("""
+        sql(
+          """
             |select month, area, product, sum(product)
             |over (partition by month % 2 order by 10 - product)
             |from windowData
@@ -143,7 +176,8 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
           (3, "b", 7, 16),
           (4, "b", 8, 18),
           (5, "c", 9, 9),
-          (6, "c", 10, 10)).map(i => Row(i._1, i._2, i._3, i._4)))
+          (6, "c", 10, 10)
+        ).map(i => Row(i._1, i._2, i._3, i._4)))
     }
   }
 
@@ -154,12 +188,14 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
       WindowData(3, "b", 7),
       WindowData(4, "b", 8),
       WindowData(5, "c", 9),
-      WindowData(6, "c", 10))
+      WindowData(6, "c", 10)
+    )
     withTempView("windowData") {
       sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
 
       val e = intercept[AnalysisException] {
-        sql("""
+        sql(
+          """
             |select month, area, product, sum(distinct product + 1) over (partition by 1 order by 2)
             |from windowData
           """.stripMargin)
@@ -175,12 +211,14 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
       WindowData(3, "b", 7),
       WindowData(4, "b", 8),
       WindowData(5, "c", 9),
-      WindowData(6, "c", 10))
+      WindowData(6, "c", 10)
+    )
     withTempView("windowData") {
       sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
 
       checkAnswer(
-        sql("""
+        sql(
+          """
             |select month, area, month % 2,
             |lag(product, 1 + 1, product) over (partition by month % 2 order by area)
             |from windowData
@@ -191,9 +229,11 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
           (3, "b", 1, 7),
           (4, "b", 0, 8),
           (5, "c", 1, 5),
-          (6, "c", 0, 6)).map(i => Row(i._1, i._2, i._3, i._4)))
+          (6, "c", 0, 6)
+        ).map(i => Row(i._1, i._2, i._3, i._4)))
     }
   }
+
 
   test("window function: Sorting columns are not in Project") {
     val data = Seq(
@@ -202,31 +242,55 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
       WindowData(3, "b", 7),
       WindowData(4, "b", 8),
       WindowData(5, "c", 9),
-      WindowData(6, "c", 11))
+      WindowData(6, "c", 11)
+    )
     withTempView("windowData") {
       sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
 
       checkAnswer(
         sql("select month, product, sum(product + 1) over() from windowData order by area"),
-        Seq((2, 6, 57), (3, 7, 57), (4, 8, 57), (5, 9, 57), (6, 11, 57), (1, 10, 57)).map(i =>
-          Row(i._1, i._2, i._3)))
+        Seq(
+          (2, 6, 57),
+          (3, 7, 57),
+          (4, 8, 57),
+          (5, 9, 57),
+          (6, 11, 57),
+          (1, 10, 57)
+        ).map(i => Row(i._1, i._2, i._3)))
 
       checkAnswer(
-        sql("""
+        sql(
+          """
             |select area, rank() over (partition by area order by tmp.month) + tmp.tmp1 as c1
             |from (select month, area, product as p, 1 as tmp1 from windowData) tmp order by p
           """.stripMargin),
-        Seq(("a", 2), ("b", 2), ("b", 3), ("c", 2), ("d", 2), ("c", 3)).map(i => Row(i._1, i._2)))
+        Seq(
+          ("a", 2),
+          ("b", 2),
+          ("b", 3),
+          ("c", 2),
+          ("d", 2),
+          ("c", 3)
+        ).map(i => Row(i._1, i._2)))
 
       checkAnswer(
-        sql("""
+        sql(
+          """
             |select area, rank() over (partition by area order by month) as c1
             |from windowData group by product, area, month order by product, area
           """.stripMargin),
-        Seq(("a", 1), ("b", 1), ("b", 2), ("c", 1), ("d", 1), ("c", 2)).map(i => Row(i._1, i._2)))
+        Seq(
+          ("a", 1),
+          ("b", 1),
+          ("b", 2),
+          ("c", 1),
+          ("d", 1),
+          ("c", 2)
+        ).map(i => Row(i._1, i._2)))
 
       checkAnswer(
-        sql("""
+        sql(
+          """
             |select area, sum(product) / sum(sum(product)) over (partition by area) as c1
             |from windowData group by area, month order by month, c1
           """.stripMargin),
@@ -236,7 +300,8 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
           ("b", 0.4666666666666667),
           ("b", 0.5333333333333333),
           ("c", 0.45),
-          ("c", 0.55)).map(i => Row(i._1, i._2)))
+          ("c", 0.55)
+        ).map(i => Row(i._1, i._2)))
     }
   }
 
@@ -248,18 +313,26 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
       WindowData(3, "b", 7),
       WindowData(4, "b", 8),
       WindowData(5, "c", 9),
-      WindowData(6, "c", 11))
+      WindowData(6, "c", 11)
+    )
     withTempView("windowData") {
       sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
 
       checkAnswer(
-        sql("""
+        sql(
+          """
             |select area, sum(product) over () as c from windowData
             |where product > 3 group by area, product
             |having avg(month) > 0 order by avg(month), product
           """.stripMargin),
-        Seq(("a", 51), ("b", 51), ("b", 51), ("c", 51), ("c", 51), ("d", 51)).map(i =>
-          Row(i._1, i._2)))
+        Seq(
+          ("a", 51),
+          ("b", 51),
+          ("b", 51),
+          ("c", 51),
+          ("c", 51),
+          ("d", 51)
+        ).map(i => Row(i._1, i._2)))
     }
   }
 
@@ -279,7 +352,8 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
         Row(1, 9, 45, 55, 25, 125) ::
         Row(0, 10, 55, 55, 30, 140) :: Nil
 
-    val actual = sql("""
+    val actual = sql(
+      """
         |SELECT
         |  y,
         |  x,
@@ -315,7 +389,8 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
           Row(0, 10, 30, 18, 14, null, 10) ::
           Nil
 
-      val actual = sql("""
+      val actual = sql(
+        """
           |SELECT
           |  y,
           |  x,
@@ -331,27 +406,27 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
           |  w3 AS (PARTITION BY y ORDER BY x RANGE BETWEEN 4 PRECEDING AND 2 PRECEDING ),
           |  w4 AS (PARTITION BY y ORDER BY x RANGE BETWEEN 2 FOLLOWING AND 4 FOLLOWING),
           |  w5 AS (PARTITION BY y ORDER BY x RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
-        """.stripMargin)
+        """.stripMargin
+      )
       checkAnswer(actual, expected)
     }
   }
 
   test("SPARK-7595: Window will cause resolve failed with self join") {
-    checkAnswer(
-      sql("""
+    checkAnswer(sql(
+      """
         |with
         | v0 as (select 0 as key, 1 as value),
         | v1 as (select key, count(value) over (partition by key) cnt_val from v0),
         | v2 as (select v1.key, v1_lag.cnt_val from v1 cross join v1 v1_lag
         |        where v1.key = v1_lag.key)
         | select key, cnt_val from v2 order by key limit 1
-      """.stripMargin),
-      Row(0, 1))
+      """.stripMargin), Row(0, 1))
   }
 
   test("SPARK-16633: lead/lag should return the default value if the offset row does not exist") {
-    checkAnswer(
-      sql("""
+    checkAnswer(sql(
+      """
         |SELECT
         |  lag(123, 100, 321) OVER (ORDER BY id) as lag,
         |  lead(123, 100, 321) OVER (ORDER BY id) as lead
@@ -359,8 +434,8 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
       """.stripMargin),
       Row(321, 321))
 
-    checkAnswer(
-      sql("""
+    checkAnswer(sql(
+      """
         |SELECT
         |  lag(123, 100, a) OVER (ORDER BY id) as lag,
         |  lead(123, 100, a) OVER (ORDER BY id) as lead
@@ -370,8 +445,8 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("lead/lag should respect null values") {
-    checkAnswer(
-      sql("""
+    checkAnswer(sql(
+      """
         |SELECT
         |  b,
         |  lag(a, 1, 321) OVER (ORDER BY b) as lag,
@@ -382,8 +457,8 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
       """.stripMargin),
       Row(1, 321, null) :: Row(2, null, 321) :: Nil)
 
-    checkAnswer(
-      sql("""
+    checkAnswer(sql(
+      """
         |SELECT
         |  b,
         |  lag(a, 1, c) OVER (ORDER BY b) as lag,
@@ -411,14 +486,14 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
         Row(1, 9, 45) ::
         Row(0, 10, 55) :: Nil
 
-    val actual = sql("""
+    val actual = sql(
+      """
         |SELECT y, x, sum(x) OVER w1 AS running_sum
         |FROM nums
         |WINDOW w1 AS (ORDER BY x ROWS BETWEEN UNBOUNDED PRECEDiNG AND CURRENT RoW)
       """.stripMargin)
 
-    withSQLConf(
-      WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
+    withSQLConf(WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
       WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "2") {
       assertSpilled(sparkContext, "test with low buffer spill threshold") {
         checkAnswer(actual, expected)
@@ -435,8 +510,16 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
       WindowData(3, "b", 7),
       WindowData(4, "b", 8),
       WindowData(5, "c", 9),
-      WindowData(6, "c", 11))
-    val expected = Seq(Row(11), Row(12), Row(15), Row(6), Row(6), Row(9))
+      WindowData(6, "c", 11)
+    )
+    val expected = Seq(
+      Row(11),
+      Row(12),
+      Row(15),
+      Row(6),
+      Row(6),
+      Row(9)
+    )
 
     withTempView("windowData") {
       sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")

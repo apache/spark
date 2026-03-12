@@ -43,8 +43,8 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ThreadUtils
 
 /**
- * Python runner with no initial state in TransformWithStateInPySpark. Write input data as one
- * single InternalRow in each row in arrow batch.
+ * Python runner with no initial state in TransformWithStateInPySpark.
+ * Write input data as one single InternalRow in each row in arrow batch.
  */
 class TransformWithStateInPySparkPythonRunner(
     funcs: Seq[(ChainedPythonFunctions, Long)],
@@ -59,20 +59,11 @@ class TransformWithStateInPySparkPythonRunner(
     groupingKeySchema: StructType,
     batchTimestampMs: Option[Long],
     eventTimeWatermarkForEviction: Option[Long])
-    extends TransformWithStateInPySparkPythonBaseRunner[InType](
-      funcs,
-      evalType,
-      argOffsets,
-      schema,
-      processorHandle,
-      timeZoneId,
-      initialRunnerConf,
-      pythonMetrics,
-      jobArtifactUUID,
-      groupingKeySchema,
-      batchTimestampMs,
-      eventTimeWatermarkForEviction)
-    with PythonArrowInput[InType] {
+  extends TransformWithStateInPySparkPythonBaseRunner[InType](
+    funcs, evalType, argOffsets, schema, processorHandle, timeZoneId,
+    initialRunnerConf, pythonMetrics, jobArtifactUUID, groupingKeySchema,
+    batchTimestampMs, eventTimeWatermarkForEviction)
+  with PythonArrowInput[InType] {
 
   private var pandasWriter: BaseStreamingArrowWriter = _
 
@@ -85,8 +76,12 @@ class TransformWithStateInPySparkPythonRunner(
       dataOut: DataOutputStream,
       inputIterator: Iterator[InType]): Boolean = {
     if (pandasWriter == null) {
-      pandasWriter =
-        new BaseStreamingArrowWriter(root, writer, arrowMaxRecordsPerBatch, arrowMaxBytesPerBatch)
+      pandasWriter = new BaseStreamingArrowWriter(
+        root,
+        writer,
+        arrowMaxRecordsPerBatch,
+        arrowMaxBytesPerBatch
+      )
     }
 
     // If we don't have data left for the current group, move to the next group.
@@ -121,8 +116,8 @@ class TransformWithStateInPySparkPythonRunner(
 }
 
 /**
- * Python runner with initial state in TransformWithStateInPySpark. Write input data as one
- * InternalRow(inputRow, initialState) in each row in arrow batch.
+ * Python runner with initial state in TransformWithStateInPySpark.
+ * Write input data as one InternalRow(inputRow, initialState) in each row in arrow batch.
  */
 class TransformWithStateInPySparkPythonInitialStateRunner(
     funcs: Seq[(ChainedPythonFunctions, Long)],
@@ -138,20 +133,11 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
     groupingKeySchema: StructType,
     batchTimestampMs: Option[Long],
     eventTimeWatermarkForEviction: Option[Long])
-    extends TransformWithStateInPySparkPythonBaseRunner[GroupedInType](
-      funcs,
-      evalType,
-      argOffsets,
-      dataSchema,
-      processorHandle,
-      timeZoneId,
-      initialRunnerConf,
-      pythonMetrics,
-      jobArtifactUUID,
-      groupingKeySchema,
-      batchTimestampMs,
-      eventTimeWatermarkForEviction)
-    with PythonArrowInput[GroupedInType] {
+  extends TransformWithStateInPySparkPythonBaseRunner[GroupedInType](
+    funcs, evalType, argOffsets, dataSchema, processorHandle, timeZoneId,
+    initialRunnerConf, pythonMetrics, jobArtifactUUID, groupingKeySchema,
+    batchTimestampMs, eventTimeWatermarkForEviction)
+  with PythonArrowInput[GroupedInType] {
 
   override protected val schema: StructType = new StructType()
     .add("inputData", dataSchema)
@@ -168,9 +154,14 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
       dataOut: DataOutputStream,
       inputIterator: Iterator[GroupedInType]): Boolean = {
     if (pandasWriter == null) {
-      pandasWriter =
-        new BaseStreamingArrowWriter(root, writer, arrowMaxRecordsPerBatch, arrowMaxBytesPerBatch)
+      pandasWriter = new BaseStreamingArrowWriter(
+        root,
+        writer,
+        arrowMaxRecordsPerBatch,
+        arrowMaxBytesPerBatch
+      )
     }
+
 
     // If we don't have data left for the current group, move to the next group.
     if (currentDataIterator == null && inputIterator.hasNext) {
@@ -237,16 +228,12 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
     groupingKeySchema: StructType,
     batchTimestampMs: Option[Long],
     eventTimeWatermarkForEviction: Option[Long])
-    extends BasePythonRunner[I, ColumnarBatch](
-      funcs.map(_._1),
-      evalType,
-      argOffsets,
-      jobArtifactUUID,
-      pythonMetrics)
-    with PythonArrowInput[I]
-    with BasicPythonArrowOutput
-    with TransformWithStateInPySparkPythonRunnerUtils
-    with Logging {
+  extends BasePythonRunner[I, ColumnarBatch](
+    funcs.map(_._1), evalType, argOffsets, jobArtifactUUID, pythonMetrics)
+  with PythonArrowInput[I]
+  with BasicPythonArrowOutput
+  with TransformWithStateInPySparkPythonRunnerUtils
+  with Logging {
   ArrowUtils.failDuplicatedFieldNames(schema)
 
   protected val sqlConf = SQLConf.get
@@ -256,13 +243,15 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
   override protected def runnerConf: Map[String, String] =
     super.runnerConf ++ initialRunnerConf ++ Map(
       SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> arrowMaxRecordsPerBatch.toString,
-      SQLConf.ARROW_EXECUTION_MAX_BYTES_PER_BATCH.key -> arrowMaxBytesPerBatch.toString)
+      SQLConf.ARROW_EXECUTION_MAX_BYTES_PER_BATCH.key -> arrowMaxBytesPerBatch.toString
+    )
 
   override protected def evalConf: Map[String, String] =
     super.evalConf ++ Map(
       "grouping_key_schema" -> groupingKeySchema.json,
       "state_server_socket_port" ->
-        (if (isUnixDomainSock) stateServerSocketPath else stateServerSocketPort.toString))
+        (if (isUnixDomainSock) stateServerSocketPath else stateServerSocketPort.toString)
+    )
 
   override protected val largeVarTypes: Boolean = sqlConf.arrowUseLargeVarTypes
 
@@ -276,13 +265,10 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
     val executionContext = ExecutionContext.fromExecutor(executor)
 
     executionContext.execute(
-      new TransformWithStateInPySparkStateServer(
-        stateServerSocket,
-        processorHandle,
+      new TransformWithStateInPySparkStateServer(stateServerSocket, processorHandle,
         groupingKeySchema,
         sqlConf.arrowTransformWithStateInPySparkMaxStateRecordsPerBatch,
-        batchTimestampMs,
-        eventTimeWatermarkForEviction))
+        batchTimestampMs, eventTimeWatermarkForEviction))
 
     context.addTaskCompletionListener[Unit] { _ =>
       logInfo(log"completion listener called")
@@ -299,17 +285,17 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
 }
 
 /**
- * TransformWithStateInPySpark driver side Python runner. Similar as executor side runner, will
- * start a new daemon thread on the Python runner to run state server.
+ * TransformWithStateInPySpark driver side Python runner. Similar as executor side runner,
+ * will start a new daemon thread on the Python runner to run state server.
  */
 class TransformWithStateInPySparkPythonPreInitRunner(
     func: PythonFunction,
     workerModule: String,
     groupingKeySchema: StructType,
     processorHandleImpl: DriverStatefulProcessorHandleImpl)
-    extends StreamingPythonRunner(func, "", "", workerModule)
-    with TransformWithStateInPySparkPythonRunnerUtils
-    with Logging {
+  extends StreamingPythonRunner(func, "", "", workerModule)
+  with TransformWithStateInPySparkPythonRunnerUtils
+  with Logging {
   protected val sqlConf = SQLConf.get
 
   private var dataOut: DataOutputStream = _
@@ -357,17 +343,13 @@ class TransformWithStateInPySparkPythonPreInitRunner(
     daemonThread = new Thread {
       override def run(): Unit = {
         try {
-          new TransformWithStateInPySparkStateServer(
-            stateServerSocket,
-            processorHandleImpl,
+          new TransformWithStateInPySparkStateServer(stateServerSocket, processorHandleImpl,
             groupingKeySchema,
             sqlConf.arrowTransformWithStateInPySparkMaxStateRecordsPerBatch).run()
         } catch {
           case e: Exception =>
-            throw new SparkException(
-              "TransformWithStateInPySpark state server " +
-                "daemon thread exited unexpectedly (crashed)",
-              e)
+            throw new SparkException("TransformWithStateInPySpark state server " +
+              "daemon thread exited unexpectedly (crashed)", e)
         }
       }
     }
@@ -378,12 +360,11 @@ class TransformWithStateInPySparkPythonPreInitRunner(
 }
 
 /**
- * TransformWithStateInPySpark Python runner utils functions for handling a state server in a new
- * daemon thread.
+ * TransformWithStateInPySpark Python runner utils functions for handling a state server
+ * in a new daemon thread.
  */
 trait TransformWithStateInPySparkPythonRunnerUtils extends Logging {
-  protected val isUnixDomainSock: Boolean =
-    SparkEnv.get.conf.get(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED)
+  protected val isUnixDomainSock: Boolean = SparkEnv.get.conf.get(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED)
   protected var stateServerSocketPort: Int = -1
   protected var stateServerSocketPath: String = null
   protected var stateServerSocket: ServerSocketChannel = null
@@ -392,8 +373,7 @@ trait TransformWithStateInPySparkPythonRunnerUtils extends Logging {
     try {
       if (isUnixDomainSock) {
         val sockPath = new File(
-          SparkEnv.get.conf
-            .get(PYTHON_UNIX_DOMAIN_SOCKET_DIR)
+          SparkEnv.get.conf.get(PYTHON_UNIX_DOMAIN_SOCKET_DIR)
             .getOrElse(System.getProperty("java.io.tmpdir")),
           s".${UUID.randomUUID()}.sock")
         stateServerSocket = ServerSocketChannel.open(StandardProtocolFamily.UNIX)
@@ -401,8 +381,7 @@ trait TransformWithStateInPySparkPythonRunnerUtils extends Logging {
         sockPath.deleteOnExit()
         stateServerSocketPath = sockPath.getPath
       } else {
-        stateServerSocket = ServerSocketChannel
-          .open()
+        stateServerSocket = ServerSocketChannel.open()
           .bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 1)
         stateServerSocketPort = stateServerSocket.socket().getLocalPort
       }

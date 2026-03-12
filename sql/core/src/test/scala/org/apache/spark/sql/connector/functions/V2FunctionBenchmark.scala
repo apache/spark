@@ -46,7 +46,7 @@ import org.apache.spark.sql.types.{AbstractDataType, DataType, LongType, Numeric
  *      Results will be written to "benchmarks/V2FunctionBenchmark-results.txt".
  * }}}
  * '''NOTE''': to update the result of this benchmark, please use Github benchmark action:
- * https://spark.apache.org/developer-tools.html#github-workflow-benchmarks
+ *   https://spark.apache.org/developer-tools.html#github-workflow-benchmarks
  */
 object V2FunctionBenchmark extends SqlBasedBenchmark {
   val catalogName: String = "benchmark_catalog"
@@ -55,9 +55,7 @@ object V2FunctionBenchmark extends SqlBasedBenchmark {
     val N = 500L * 1000 * 1000
     Seq(true, false).foreach { codegenEnabled =>
       Seq(true, false).foreach { resultNullable =>
-        scalarFunctionBenchmark(
-          N,
-          codegenEnabled = codegenEnabled,
+        scalarFunctionBenchmark(N, codegenEnabled = codegenEnabled,
           resultNullable = resultNullable)
       }
     }
@@ -70,37 +68,28 @@ object V2FunctionBenchmark extends SqlBasedBenchmark {
     val classicSession = castToImpl(spark)
     import classicSession.toRichColumn
     withSQLConf(s"spark.sql.catalog.$catalogName" -> classOf[InMemoryCatalog].getName) {
-      createFunction(
-        "java_long_add_default",
+      createFunction("java_long_add_default",
         new JavaLongAdd(new JavaLongAddDefault(resultNullable)))
       createFunction("java_long_add_magic", new JavaLongAdd(new JavaLongAddMagic(resultNullable)))
-      createFunction(
-        "java_long_add_static_magic",
+      createFunction("java_long_add_static_magic",
         new JavaLongAdd(new JavaLongAddStaticMagic(resultNullable)))
-      createFunction(
-        "scala_long_add_default",
+      createFunction("scala_long_add_default",
         LongAddUnbound(new LongAddWithProduceResult(resultNullable)))
       createFunction("scala_long_add_magic", LongAddUnbound(new LongAddWithMagic(resultNullable)))
 
       val codeGenFactoryMode = if (codegenEnabled) FALLBACK else NO_CODEGEN
-      withSQLConf(
-        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled.toString,
-        SQLConf.CODEGEN_FACTORY_MODE.key -> codeGenFactoryMode.toString) {
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled.toString,
+          SQLConf.CODEGEN_FACTORY_MODE.key -> codeGenFactoryMode.toString) {
         val name = s"scalar function (long + long) -> long, result_nullable = $resultNullable " +
-          s"codegen = $codegenEnabled"
+            s"codegen = $codegenEnabled"
         val benchmark = new Benchmark(name, N, output = output)
         benchmark.addCase(s"native_long_add", numIters = 3) { _ =>
-          spark
-            .range(N)
+          spark.range(N)
             .select(Column(NativeAdd(col("id").expr, col("id").expr, resultNullable)))
             .noop()
         }
-        Seq(
-          "java_long_add_default",
-          "java_long_add_magic",
-          "java_long_add_static_magic",
-          "scala_long_add_default",
-          "scala_long_add_magic").foreach { functionName =>
+        Seq("java_long_add_default", "java_long_add_magic", "java_long_add_static_magic",
+            "scala_long_add_default", "scala_long_add_magic").foreach { functionName =>
           benchmark.addCase(s"$functionName", numIters = 3) { _ =>
             spark.range(N).selectExpr(s"$catalogName.$functionName(id, id)").noop()
           }
@@ -121,7 +110,7 @@ object V2FunctionBenchmark extends SqlBasedBenchmark {
       right: Expression,
       override val nullable: Boolean,
       override val evalContext: NumericEvalContext = NumericEvalContext(EvalMode.LEGACY))
-      extends BinaryArithmetic {
+    extends BinaryArithmetic {
 
     override def inputType: AbstractDataType = NumericType
     override def symbol: String = "+"
@@ -161,3 +150,4 @@ object V2FunctionBenchmark extends SqlBasedBenchmark {
     override def name(): String = "long_add_magic"
   }
 }
+

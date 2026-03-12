@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetSeqMetadata
 import org.apache.spark.util.Clock
 
 /**
- * Holds the mutable state and metrics for a single batch for streaming query.
+ *  Holds the mutable state and metrics for a single batch for streaming query.
  */
 abstract class StreamExecutionContext(
     val id: UUID,
@@ -40,36 +40,39 @@ abstract class StreamExecutionContext(
     progressReporter: ProgressReporter,
     var batchId: Long,
     sparkSession: SparkSession)
-    extends ProgressContext(id, runId, name, triggerClock, sources, sink, progressReporter) {
+  extends ProgressContext(id, runId, name, triggerClock, sources, sink, progressReporter) {
 
   /** Metadata associated with the offset seq of a batch in the query. */
   @volatile
-  var offsetSeqMetadata: OffsetSeqMetadataBase =
-    OffsetSeqMetadata(batchWatermarkMs = 0, batchTimestampMs = 0, sparkSession.conf)
+  var offsetSeqMetadata: OffsetSeqMetadataBase = OffsetSeqMetadata(
+    batchWatermarkMs = 0, batchTimestampMs = 0, sparkSession.conf)
 
   /** Holds the most recent input data for each source. */
   var newData: Map[SparkDataStream, LogicalPlan] = _
 
   /**
-   * Stores the start offset for this batch. Only the scheduler thread should modify this field,
-   * and only in atomic steps. Other threads should make a shallow copy if they are going to
-   * access this field more than once, since the field's value may change at any time.
+   * Stores the start offset for this batch.
+   * Only the scheduler thread should modify this field, and only in atomic steps.
+   * Other threads should make a shallow copy if they are going to access this field more than
+   * once, since the field's value may change at any time.
    */
   @volatile
   var startOffsets = new StreamProgress
 
   /**
-   * Stores the end offsets for this batch. Only the scheduler thread should modify this field,
-   * and only in atomic steps. Other threads should make a shallow copy if they are going to
-   * access this field more than once, since the field's value may change at any time.
+   * Stores the end offsets for this batch.
+   * Only the scheduler thread should modify this field, and only in atomic steps.
+   * Other threads should make a shallow copy if they are going to access this field more than
+   * once, since the field's value may change at any time.
    */
   @volatile
   var endOffsets = new StreamProgress
 
   /**
-   * Tracks the latest offsets for each input source. Only the scheduler thread should modify this
-   * field, and only in atomic steps. Other threads should make a shallow copy if they are going
-   * to access this field more than once, since the field's value may change at any time.
+   * Tracks the latest offsets for each input source.
+   * Only the scheduler thread should modify this field, and only in atomic steps.
+   * Other threads should make a shallow copy if they are going to access this field more than
+   * once, since the field's value may change at any time.
    */
   @volatile
   var latestOffsets = new StreamProgress
@@ -96,25 +99,23 @@ class ContinuousExecutionContext(
     progressReporter: ProgressReporter,
     epochId: Long,
     sparkSession: SparkSession)
-    extends StreamExecutionContext(
-      id,
-      runId,
-      name,
-      triggerClock,
-      sources,
-      sink,
-      progressReporter,
-      epochId,
-      sparkSession)
+  extends StreamExecutionContext(
+    id,
+    runId,
+    name,
+    triggerClock,
+    sources,
+    sink,
+    progressReporter,
+    epochId,
+    sparkSession)
 
 /**
- * Holds the all the mutable state and processing metrics for a single micro-batch when using
- * micro batch execution mode.
+ * Holds the all the mutable state and processing metrics for a single micro-batch
+ * when using micro batch execution mode.
  *
- * @param _batchId
- *   the id of this batch
- * @param previousContext
- *   the execution context of the previous micro-batch
+ * @param _batchId the id of this batch
+ * @param previousContext the execution context of the previous micro-batch
  */
 class MicroBatchExecutionContext(
     id: UUID,
@@ -128,17 +129,16 @@ class MicroBatchExecutionContext(
     sparkSession: SparkSession,
     val offsetLogFormatVersionOpt: Option[Int],
     var previousContext: Option[MicroBatchExecutionContext])
-    extends StreamExecutionContext(
-      id,
-      runId,
-      name,
-      triggerClock,
-      sources,
-      sink,
-      progressReporter,
-      _batchId,
-      sparkSession)
-    with Logging {
+  extends StreamExecutionContext(
+    id,
+    runId,
+    name,
+    triggerClock,
+    sources,
+    sink,
+    progressReporter,
+    _batchId,
+    sparkSession) with Logging {
 
   /**
    * Signifies whether current batch (i.e. for the batch `currentBatchId`) has been constructed

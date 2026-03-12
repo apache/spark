@@ -30,6 +30,7 @@ import org.apache.spark.internal.LogKeys.{CACHED_TABLE_PARTITION_METADATA_SIZE, 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.util.SizeEstimator
 
+
 /**
  * Use [[FileStatusCache.getOrCreate()]] to construct a globally shared file status cache.
  */
@@ -37,9 +38,8 @@ object FileStatusCache {
   private var sharedCache: SharedInMemoryCache = _
 
   /**
-   * @return
-   *   a new FileStatusCache based on session configuration. Cache memory quota is shared across
-   *   all clients.
+   * @return a new FileStatusCache based on session configuration. Cache memory quota is
+   *         shared across all clients.
    */
   def getOrCreate(session: SparkSession): FileStatusCache = synchronized {
     if (session.sessionState.conf.manageFilesourcePartitions &&
@@ -47,7 +47,8 @@ object FileStatusCache {
       if (sharedCache == null) {
         sharedCache = new SharedInMemoryCache(
           session.sessionState.conf.filesourcePartitionFileCacheSize,
-          session.sessionState.conf.metadataCacheTTL)
+          session.sessionState.conf.metadataCacheTTL
+        )
       }
       sharedCache.createForNewClient()
     } else {
@@ -60,19 +61,18 @@ object FileStatusCache {
   }
 }
 
+
 /**
- * A cache of the leaf files of partition directories. We cache these files in order to speed up
- * iterated queries over the same set of partitions. Otherwise, each query would have to hit
- * remote storage in order to gather file statistics for physical planning.
+ * A cache of the leaf files of partition directories. We cache these files in order to speed
+ * up iterated queries over the same set of partitions. Otherwise, each query would have to
+ * hit remote storage in order to gather file statistics for physical planning.
  *
  * Each resolved catalog table has its own FileStatusCache. When the backing relation for the
  * table is refreshed via refreshTable() or refreshByPath(), this cache will be invalidated.
  */
 abstract class FileStatusCache {
-
   /**
-   * @return
-   *   the leaf files for the specified path from this cache, or None if not cached.
+   * @return the leaf files for the specified path from this cache, or None if not cached.
    */
   def getLeafFiles(path: Path): Option[Array[FileStatus]] = None
 
@@ -87,16 +87,17 @@ abstract class FileStatusCache {
   def invalidateAll(): Unit
 }
 
+
 /**
  * An implementation that caches partition file statuses in memory.
  *
- * @param maxSizeInBytes
- *   max allowable cache size before entries start getting evicted
+ * @param maxSizeInBytes max allowable cache size before entries start getting evicted
  */
 private class SharedInMemoryCache(maxSizeInBytes: Long, cacheTTL: Long) extends Logging {
 
   // Opaque object that uniquely identifies a shared cache user
   private type ClientId = Object
+
 
   private val warnedAboutEviction = new AtomicBoolean(false)
 
@@ -121,7 +122,8 @@ private class SharedInMemoryCache(maxSizeInBytes: Long, cacheTTL: Long) extends 
     }
     val removalListener = new RemovalListener[(ClientId, Path), Array[FileStatus]]() {
       override def onRemoval(
-          removed: RemovalNotification[(ClientId, Path), Array[FileStatus]]): Unit = {
+          removed: RemovalNotification[(ClientId, Path),
+          Array[FileStatus]]): Unit = {
         if (removed.getCause == RemovalCause.SIZE &&
           warnedAboutEviction.compareAndSet(false, true)) {
           logWarning(
@@ -133,8 +135,7 @@ private class SharedInMemoryCache(maxSizeInBytes: Long, cacheTTL: Long) extends 
       }
     }
 
-    var builder = CacheBuilder
-      .newBuilder()
+    var builder = CacheBuilder.newBuilder()
       .weigher(weigher)
       .removalListener(removalListener)
       .maximumWeight(maxSizeInBytes / weightScale)
@@ -146,10 +147,10 @@ private class SharedInMemoryCache(maxSizeInBytes: Long, cacheTTL: Long) extends 
     builder.build[(ClientId, Path), Array[FileStatus]]()
   }
 
+
   /**
-   * @return
-   *   a FileStatusCache that does not share any entries with any other client, but does share
-   *   memory resources for the purpose of cache eviction.
+   * @return a FileStatusCache that does not share any entries with any other client, but does
+   *         share memory resources for the purpose of cache eviction.
    */
   def createForNewClient(): FileStatusCache = new FileStatusCache {
     val clientId = new Object()

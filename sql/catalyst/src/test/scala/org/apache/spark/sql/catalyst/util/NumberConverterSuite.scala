@@ -38,9 +38,8 @@ class NumberConverterSuite extends SparkFunSuite {
       toBase: Int,
       expected: String,
       ansiEnabled: Boolean): Unit = {
-    assert(
-      convert(UTF8String.fromString(n).getBytes, fromBase, toBase, ansiEnabled, null) ===
-        UTF8String.fromString(expected))
+    assert(convert(UTF8String.fromString(n).getBytes, fromBase, toBase, ansiEnabled, null) ===
+      UTF8String.fromString(expected))
   }
 
   test("convert") {

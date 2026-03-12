@@ -32,8 +32,7 @@ case class AlterTableExec(
     catalog: TableCatalog,
     ident: Identifier,
     changes: Seq[TableChange],
-    refreshCache: () => Unit)
-    extends LeafV2CommandExec {
+    refreshCache: () => Unit) extends LeafV2CommandExec {
 
   override def output: Seq[Attribute] = Seq.empty
 
@@ -57,20 +56,17 @@ case class AddCheckConstraintExec(
     ident: Identifier,
     change: TableChange,
     condition: String,
-    child: SparkPlan)
-    extends V2CommandExec
-    with UnaryExecNode {
+    child: SparkPlan) extends V2CommandExec with UnaryExecNode {
 
   override def output: Seq[Attribute] = Seq.empty
 
   override protected def run(): Seq[InternalRow] = {
     if (child.executeTake(1).nonEmpty) {
       throw QueryExecutionErrors.newCheckViolation(
-        condition,
-        ident.toQualifiedNameParts(catalog).quoted)
+        condition, ident.toQualifiedNameParts(catalog).quoted)
     }
     try {
-      catalog.alterTable(ident, change)
+     catalog.alterTable(ident, change)
     } catch {
       case e: IllegalArgumentException if !e.isInstanceOf[SparkThrowable] =>
         throw QueryExecutionErrors.unsupportedTableChangeError(e)

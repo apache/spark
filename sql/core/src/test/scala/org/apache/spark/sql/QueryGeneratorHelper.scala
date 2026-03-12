@@ -18,45 +18,45 @@
 package org.apache.spark.sql
 
 /**
- * Simple implementation of Expressions and Operators that can be used to generate SQL for
- * testing. For example, to construct a simple SELECT query using the defined classes, follow
- * these steps:
+ * Simple implementation of Expressions and Operators that can be used to generate SQL for testing.
+ * For example, to construct a simple SELECT query using the defined classes, follow these steps:
  *
- *   1. Define a table name, and some column names for your table.
- *      {{{
+ * 1. Define a table name, and some column names for your table.
+ * {{{
  *   val tableName = "t1"
  *   val col1 = "col1"
  *   val col2 = "col2"
- *      }}}
- *   2. Define named expressions representing the columns to select using the Attribute class, and
- *      define the table relation with TableRelation.
- *      {{{
+ * }}}
+ * 2. Define named expressions representing the columns to select using the Attribute class, and
+ *    define the table relation with TableRelation.
+ * {{{
  *   val col1Attr = Attribute("col1", qualifier = Some(tableName))
  *   val col2Attr = Attribute("col2", qualifier = Some(tableName))
  *   val table = TableRelation(tableName, Seq(col1Attr, col2Attr))
- *      }}}
- *   3. Create a SELECT clause using the SelectClause class, and specify the FROM clause with the
- *      table relations using the FromClause class.
- *      {{{
+ * }}}
+ * 3. Create a SELECT clause using the SelectClause class, and specify the FROM clause with the
+ *    table relations using the FromClause class.
+ * {{{
  *   val selectClause = SelectClause(Seq(col1Attr))
  *   val fromClause = FromClause(Seq(table))
- *      }}}
- *   4. (Optional) Add a WHERE clause using the WhereClause class for predicates. The OrderBy,
- *      Limit clauses are also optional.
- *      {{{
+ * }}}
+ * 4. (Optional) Add a WHERE clause using the WhereClause class for predicates. The OrderBy, Limit
+ * clauses are also optional.
+ * {{{
  *   val condition = Equals(col1Attr, col2Attr)
  *   val whereClause = WhereClause(Seq(condition))
- *      }}}
- *   5. Construct the final query using the Query class:
- *      {{{
+ * }}}
+ * 5. Construct the final query using the Query class:
+ * {{{
  *   val myQuery = Query(selectClause, fromClause, Some(whereClause))()
- *      }}}
- *   6. Print or use the generated SQL query:
- *      {{{
+ * }}}
+ * 6. Print or use the generated SQL query:
+ * {{{
  *   println(myQuery.toString)
- *      }}}
+ * }}}
  *
  * Output: SELECT t1.col1 FROM t1 WHERE t1.col1 = t1.col2
+ *
  */
 trait QueryGeneratorHelper {
 
@@ -67,10 +67,10 @@ trait QueryGeneratorHelper {
   }
 
   case class Attribute(name: String, qualifier: Option[String] = None) extends NamedExpression {
-    override def toString: String =
-      f"${if (qualifier.isDefined) qualifier.get + "." else ""}$name"
+    override def toString: String = f"${if (qualifier.isDefined) qualifier.get + "." else ""}$name"
   }
-  case class Alias(child: Expression, name: String) extends NamedExpression {
+  case class Alias(child: Expression, name: String)
+    extends NamedExpression {
     override def toString: String = f"$child AS $name"
   }
 
@@ -98,7 +98,8 @@ trait QueryGeneratorHelper {
     override def toString: String = f"$expr >= $rightSideExpr"
   }
 
-  case class In(expr: Expression, inner: Operator) extends Predicate {
+  case class In(expr: Expression, inner: Operator)
+    extends Predicate {
     override def toString: String = f"$expr IN ($inner)"
   }
 
@@ -108,9 +109,10 @@ trait QueryGeneratorHelper {
     // Subquery to be treated as a Relation.
     val RELATION = Value
     // Subquery is a Predicate - types of predicate subqueries.
-    val SCALAR_PREDICATE_EQUALS, SCALAR_PREDICATE_NOT_EQUALS, SCALAR_PREDICATE_LESS_THAN,
-        SCALAR_PREDICATE_LESS_THAN_OR_EQUALS, SCALAR_PREDICATE_GREATER_THAN,
-        SCALAR_PREDICATE_GREATER_THAN_OR_EQUALS, IN, NOT_IN, EXISTS, NOT_EXISTS = Value
+    val SCALAR_PREDICATE_EQUALS, SCALAR_PREDICATE_NOT_EQUALS,
+      SCALAR_PREDICATE_LESS_THAN, SCALAR_PREDICATE_LESS_THAN_OR_EQUALS,
+      SCALAR_PREDICATE_GREATER_THAN, SCALAR_PREDICATE_GREATER_THAN_OR_EQUALS,
+      IN, NOT_IN, EXISTS, NOT_EXISTS = Value
   }
 
   trait SubqueryExpression extends Expression {
@@ -144,8 +146,7 @@ trait QueryGeneratorHelper {
     override def toString: String = name
   }
   case class SubqueryRelation(name: String, output: Seq[Attribute], inner: Operator)
-      extends Relation
-      with SubqueryExpression {
+    extends Relation with SubqueryExpression {
     override def toString: String = f"($inner) AS $name"
   }
 
@@ -158,8 +159,7 @@ trait QueryGeneratorHelper {
       leftRelation: Relation,
       rightRelation: Relation,
       condition: Expression,
-      joinType: JoinType.Value)
-      extends Relation {
+      joinType: JoinType.Value) extends Relation {
 
     val output: Seq[Attribute] = leftRelation.output ++ rightRelation.output
 
@@ -173,29 +173,22 @@ trait QueryGeneratorHelper {
     val UNION = Value("UNION")
     val EXCEPT = Value("EXCEPT")
   }
-  case class SetOperation(
-      leftRelation: Query,
-      rightRelation: Query,
-      setOperationType: SetOperationType.Value)
-      extends Operator {
+  case class SetOperation(leftRelation: Query,
+      rightRelation: Query, setOperationType: SetOperationType.Value) extends Operator {
     override def toString: String = f"$leftRelation $setOperationType $rightRelation"
   }
 
   case class Aggregate(
       resultExpressions: Seq[NamedExpression],
-      groupingExpressions: Seq[Expression])
-      extends Operator {
-    override def toString: String =
-      f"AGGREGATE(resultExpr=[${resultExpressions.mkString(",")}]," +
-        f"groupingExpr=[${groupingExpressions.mkString(",")}])"
+      groupingExpressions: Seq[Expression]) extends Operator {
+    override def toString: String = f"AGGREGATE(resultExpr=[${resultExpressions.mkString(",")}]," +
+      f"groupingExpr=[${groupingExpressions.mkString(",")}])"
   }
 
   case class LimitAndOffset(limitValue: Int, offsetValue: Int) extends Operator with Clause {
     override def toString: String = {
-      val limitClause = if (limitValue > 0) { s"LIMIT $limitValue" }
-      else { "" }
-      val offsetClause = if (offsetValue > 0) { s"OFFSET $offsetValue" }
-      else { "" }
+      val limitClause = if (limitValue > 0) { s"LIMIT $limitValue" } else { "" }
+      val offsetClause = if (offsetValue > 0) { s"OFFSET $offsetValue" } else { "" }
       if (limitClause.nonEmpty && offsetClause.nonEmpty) {
         s"$limitClause $offsetClause"
       } else {
@@ -211,9 +204,9 @@ trait QueryGeneratorHelper {
   trait Clause
 
   case class SelectClause(projection: Seq[NamedExpression], isDistinct: Boolean = false)
-      extends Clause {
+    extends Clause {
     override def toString: String =
-      f"SELECT${if (isDistinct) " DISTINCT " else { " " }}${projection.mkString(", ")}"
+      f"SELECT${if (isDistinct) " DISTINCT " else {" "}}${projection.mkString(", ")}"
   }
   case class FromClause(relations: Seq[Operator]) extends Clause {
     override def toString: String = f"FROM ${relations.mkString(", ")}"
@@ -238,13 +231,12 @@ trait QueryGeneratorHelper {
       whereClause: Option[WhereClause] = None,
       groupByClause: Option[GroupByClause] = None,
       orderByClause: Option[OrderByClause] = None,
-      limitAndOffsetClause: Option[LimitAndOffset] = None)
-      extends Operator {
+      limitAndOffsetClause: Option[LimitAndOffset] = None
+  ) extends Operator {
 
     override def toString: String = {
       def getOptionClauseString(optionalClause: Option[Clause]): String =
-        if (optionalClause.isDefined) { " " + optionalClause.get.toString }
-        else { "" }
+        if (optionalClause.isDefined) { " " + optionalClause.get.toString } else { "" }
 
       f"$selectClause $fromClause${getOptionClauseString(whereClause)}" +
         f"${getOptionClauseString(groupByClause)}${getOptionClauseString(orderByClause)}" +

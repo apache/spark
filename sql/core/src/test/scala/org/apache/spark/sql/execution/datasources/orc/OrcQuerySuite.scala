@@ -75,7 +75,9 @@ abstract class OrcQueryTest extends OrcTest {
     }
 
     withOrcFile(data) { file =>
-      checkAnswer(spark.read.orc(file), data.toDF().collect())
+      checkAnswer(
+        spark.read.orc(file),
+        data.toDF().collect())
     }
   }
 
@@ -89,14 +91,7 @@ abstract class OrcQueryTest extends OrcTest {
   test("Read/write all types with non-primitive type") {
     val data: Seq[AllDataTypesWithNonPrimitiveType] = (0 to 255).map { i =>
       AllDataTypesWithNonPrimitiveType(
-        s"$i",
-        i,
-        i.toLong,
-        i.toFloat,
-        i.toDouble,
-        i.toShort,
-        i.toByte,
-        i % 2 == 0,
+        s"$i", i, i.toLong, i.toFloat, i.toDouble, i.toShort, i.toByte, i % 2 == 0,
         0 until i,
         (0 until i).map(Option(_).filter(_ % 3 == 0)),
         (0 until i).map(i => i -> i.toLong).toMap,
@@ -105,7 +100,9 @@ abstract class OrcQueryTest extends OrcTest {
     }
 
     withOrcFile(data) { file =>
-      checkAnswer(spark.read.orc(file), data.toDF().collect())
+      checkAnswer(
+        spark.read.orc(file),
+        data.toDF().collect())
     }
   }
 
@@ -142,7 +139,8 @@ abstract class OrcQueryTest extends OrcTest {
       // leaf-0 = (LESS_THAN_EQUALS age 5)
       // expr = (not leaf-0)
       assertResult(10) {
-        sql("SELECT name, contacts FROM t where age > 5").rdd
+        sql("SELECT name, contacts FROM t where age > 5")
+          .rdd
           .flatMap(_.getAs[scala.collection.Seq[_]]("contacts"))
           .count()
       }
@@ -179,19 +177,20 @@ abstract class OrcQueryTest extends OrcTest {
       Option.empty[Long],
       Option.empty[Float],
       Option.empty[Double],
-      Option.empty[Boolean]) :: Nil
+      Option.empty[Boolean]
+    ) :: Nil
 
     withOrcFile(data) { file =>
-      checkAnswer(spark.read.orc(file), Row(Seq.fill(5)(null): _*))
+      checkAnswer(
+        spark.read.orc(file),
+        Row(Seq.fill(5)(null): _*))
     }
   }
 
   test("SPARK-16610: Respect orc.compress (i.e., OrcConf.COMPRESS) when compression is unset") {
     // Respect `orc.compress` (i.e., OrcConf.COMPRESS).
     withTempPath { file =>
-      spark
-        .range(0, 10)
-        .write
+      spark.range(0, 10).write
         .option(COMPRESS.getAttribute, OrcCompressionCodec.ZLIB.name())
         .orc(file.getCanonicalPath)
 
@@ -207,9 +206,7 @@ abstract class OrcQueryTest extends OrcTest {
 
     // `compression` overrides `orc.compress`.
     withTempPath { file =>
-      spark
-        .range(0, 10)
-        .write
+      spark.range(0, 10).write
         .option("compression", OrcCompressionCodec.ZLIB.name())
         .option(COMPRESS.getAttribute, OrcCompressionCodec.SNAPPY.name())
         .orc(file.getCanonicalPath)
@@ -227,9 +224,7 @@ abstract class OrcQueryTest extends OrcTest {
 
   test("Compression options for writing to an ORC file (SNAPPY, ZLIB and NONE)") {
     withTempPath { file =>
-      spark
-        .range(0, 10)
-        .write
+      spark.range(0, 10).write
         .option("compression", OrcCompressionCodec.ZLIB.name())
         .orc(file.getCanonicalPath)
 
@@ -244,9 +239,7 @@ abstract class OrcQueryTest extends OrcTest {
     }
 
     withTempPath { file =>
-      spark
-        .range(0, 10)
-        .write
+      spark.range(0, 10).write
         .option("compression", OrcCompressionCodec.SNAPPY.name())
         .orc(file.getCanonicalPath)
 
@@ -261,9 +254,7 @@ abstract class OrcQueryTest extends OrcTest {
     }
 
     withTempPath { file =>
-      spark
-        .range(0, 10)
-        .write
+      spark.range(0, 10).write
         .option("compression", OrcCompressionCodec.NONE.name())
         .orc(file.getCanonicalPath)
 
@@ -280,7 +271,9 @@ abstract class OrcQueryTest extends OrcTest {
 
   test("simple select queries") {
     withOrcTable((0 until 10).map(i => (i, i.toString)), "t") {
-      checkAnswer(sql("SELECT `_1` FROM t where t.`_1` > 5"), (6 until 10).map(Row.apply(_)))
+      checkAnswer(
+        sql("SELECT `_1` FROM t where t.`_1` > 5"),
+        (6 until 10).map(Row.apply(_)))
 
       checkAnswer(
         sql("SELECT `_1` FROM t as tmp where tmp.`_1` < 5"),
@@ -343,22 +336,18 @@ abstract class OrcQueryTest extends OrcTest {
   test("nested data - struct with array field") {
     val data = (1 to 10).map(i => Tuple1((i, Seq(s"val_$i"))))
     withOrcTable(data, "t") {
-      checkAnswer(
-        sql("SELECT `_1`.`_2`[0] FROM t"),
-        data.map { case Tuple1((_, Seq(string))) =>
-          Row(string)
-        })
+      checkAnswer(sql("SELECT `_1`.`_2`[0] FROM t"), data.map {
+        case Tuple1((_, Seq(string))) => Row(string)
+      })
     }
   }
 
   test("nested data - array of struct") {
     val data = (1 to 10).map(i => Tuple1(Seq(i -> s"val_$i")))
     withOrcTable(data, "t") {
-      checkAnswer(
-        sql("SELECT `_1`[0].`_2` FROM t"),
-        data.map { case Tuple1(Seq((_, string))) =>
-          Row(string)
-        })
+      checkAnswer(sql("SELECT `_1`[0].`_2` FROM t"), data.map {
+        case Tuple1(Seq((_, string))) => Row(string)
+      })
     }
   }
 
@@ -389,7 +378,8 @@ abstract class OrcQueryTest extends OrcTest {
       intercept[IllegalArgumentException] {
         spark.read.orc(path).schema("acol")
       }
-      checkAnswer(spark.read.orc(path).select("acol").sort("acol"), (0 until 10).map(Row(_)))
+      checkAnswer(spark.read.orc(path).select("acol").sort("acol"),
+        (0 until 10).map(Row(_)))
     }
   }
 
@@ -449,7 +439,8 @@ abstract class OrcQueryTest extends OrcTest {
     withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
       val data = (0 until 10).map(i => Tuple1(Array(i)))
       withOrcFile(data) { file =>
-        val actual = spark.read
+        val actual = spark
+          .read
           .orc(file)
           .where("_1 is not null")
         val expected = data.toDF()
@@ -565,12 +556,10 @@ abstract class OrcQueryTest extends OrcTest {
         spark.range(1).toDF("a").write.orc(new Path(basePath, "first").toString)
         spark.range(1, 2).toDF("a").write.orc(new Path(basePath, "second").toString)
         spark.range(2, 3).toDF("a").write.json(new Path(basePath, "third").toString)
-        val df = spark.read
-          .schema("a long")
-          .orc(
-            new Path(basePath, "first").toString,
-            new Path(basePath, "second").toString,
-            new Path(basePath, "third").toString)
+        val df = spark.read.schema("a long").orc(
+          new Path(basePath, "first").toString,
+          new Path(basePath, "second").toString,
+          new Path(basePath, "third").toString)
         checkAnswer(df, Seq(Row(0), Row(1)))
       }
     }
@@ -592,9 +581,9 @@ abstract class OrcQueryTest extends OrcTest {
         val basePath = dir.getCanonicalPath
         spark.range(1).toDF("a").write.json(new Path(basePath, "first").toString)
         spark.range(1, 2).toDF("a").write.json(new Path(basePath, "second").toString)
-        val df = spark.read
-          .schema("a long")
-          .orc(new Path(basePath, "first").toString, new Path(basePath, "second").toString)
+        val df = spark.read.schema("a long").orc(
+          new Path(basePath, "first").toString,
+          new Path(basePath, "second").toString)
         assert(df.count() == 0)
       }
     }
@@ -607,7 +596,8 @@ abstract class OrcQueryTest extends OrcTest {
           testAllCorruptFiles()
         },
         condition = "UNABLE_TO_INFER_SCHEMA",
-        parameters = Map("format" -> "ORC"))
+        parameters = Map("format" -> "ORC")
+      )
       testAllCorruptFilesWithoutSchemaInfer()
     }
 
@@ -616,32 +606,30 @@ abstract class OrcQueryTest extends OrcTest {
         testIgnoreCorruptFiles()
       }
       assert(e1.getCondition.startsWith("FAILED_READ_FILE"))
-      assert(
-        e1.getCause.getMessage.contains("Malformed ORC file") ||
-          // Hive ORC table scan uses a different code path and has one more error stack
-          e1.getCause.getCause.getMessage.contains("Malformed ORC file"))
+      assert(e1.getCause.getMessage.contains("Malformed ORC file") ||
+        // Hive ORC table scan uses a different code path and has one more error stack
+        e1.getCause.getCause.getMessage.contains("Malformed ORC file"))
       val e2 = intercept[SparkException] {
         testIgnoreCorruptFilesWithoutSchemaInfer()
       }
       assert(e2.getCondition.startsWith("FAILED_READ_FILE"))
-      assert(
-        e2.getCause.getMessage.contains("Malformed ORC file") ||
-          // Hive ORC table scan uses a different code path and has one more error stack
-          e2.getCause.getCause.getMessage.contains("Malformed ORC file"))
+      assert(e2.getCause.getMessage.contains("Malformed ORC file") ||
+        // Hive ORC table scan uses a different code path and has one more error stack
+        e2.getCause.getCause.getMessage.contains("Malformed ORC file"))
       checkErrorMatchPVals(
         exception = intercept[SparkException] {
           testAllCorruptFiles()
         },
         condition = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
-        parameters = Map("path" -> "file:.*"))
+        parameters = Map("path" -> "file:.*")
+      )
       val e4 = intercept[SparkException] {
         testAllCorruptFilesWithoutSchemaInfer()
       }
       assert(e4.getCondition.startsWith("FAILED_READ_FILE"))
-      assert(
-        e4.getCause.getMessage.contains("Malformed ORC file") ||
-          // Hive ORC table scan uses a different code path and has one more error stack
-          e4.getCause.getCause.getMessage.contains("Malformed ORC file"))
+      assert(e4.getCause.getMessage.contains("Malformed ORC file") ||
+        // Hive ORC table scan uses a different code path and has one more error stack
+        e4.getCause.getCause.getMessage.contains("Malformed ORC file"))
     }
   }
 
@@ -650,9 +638,7 @@ abstract class OrcQueryTest extends OrcTest {
       withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
         val path = dir.getCanonicalPath
         Seq(BigDecimal(0.1), BigDecimal(0.2), BigDecimal(-0.3))
-          .toDF("x")
-          .write
-          .orc(path)
+          .toDF("x").write.orc(path)
         val df = spark.read.orc(path)
         checkAnswer(df.filter("x >= 0.1"), Seq(Row(0.1), Row(0.2)))
         checkAnswer(df.filter("x > 0.1"), Seq(Row(0.2)))
@@ -669,9 +655,7 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
 
   test("LZO compression options for writing to an ORC file") {
     withTempPath { file =>
-      spark
-        .range(0, 10)
-        .write
+      spark.range(0, 10).write
         .option("compression", OrcCompressionCodec.LZO.name())
         .orc(file.getCanonicalPath)
 
@@ -693,7 +677,8 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
 
       withTable("empty_orc") {
         withTempView("empty", "single") {
-          spark.sql(s"""CREATE TABLE empty_orc(key INT, value STRING)
+          spark.sql(
+            s"""CREATE TABLE empty_orc(key INT, value STRING)
                |USING ORC
                |LOCATION '${dir.toURI}'
              """.stripMargin)
@@ -703,7 +688,8 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
 
           // This creates 1 empty ORC file with ORC SerDe.  We are using this trick because
           // Spark SQL ORC data source always avoids write empty ORC files.
-          spark.sql(s"""INSERT INTO TABLE empty_orc
+          spark.sql(
+            s"""INSERT INTO TABLE empty_orc
                |SELECT key, value FROM empty
              """.stripMargin)
 
@@ -751,19 +737,16 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
   test("SPARK-34862: Support ORC vectorized reader for nested column") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      val df = spark
-        .range(10)
-        .map { x =>
-          val stringColumn = s"$x".repeat(10)
-          val structColumn = (x, s"$x".repeat(100))
-          val arrayColumn = (0 until 5).map(i => (x + i, s"$x".repeat(5)))
-          val mapColumn = Map(
-            s"$x" -> (x * 0.1, (x, s"$x".repeat(100))),
-            (s"$x".repeat(2)) -> (x * 0.2, (x, s"$x".repeat(200))),
-            (s"$x".repeat(3)) -> (x * 0.3, (x, s"$x".repeat(300))))
-          (x, stringColumn, structColumn, arrayColumn, mapColumn)
-        }
-        .toDF("int_col", "string_col", "struct_col", "array_col", "map_col")
+      val df = spark.range(10).map { x =>
+        val stringColumn = s"$x".repeat(10)
+        val structColumn = (x, s"$x".repeat(100))
+        val arrayColumn = (0 until 5).map(i => (x + i, s"$x".repeat(5)))
+        val mapColumn = Map(
+          s"$x" -> (x * 0.1, (x, s"$x".repeat(100))),
+          (s"$x".repeat(2)) -> (x * 0.2, (x, s"$x".repeat(200))),
+          (s"$x".repeat(3)) -> (x * 0.3, (x, s"$x".repeat(300))))
+        (x, stringColumn, structColumn, arrayColumn, mapColumn)
+      }.toDF("int_col", "string_col", "struct_col", "array_col", "map_col")
       df.write.format("orc").save(path)
 
       withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
@@ -778,19 +761,14 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     }
   }
 
-  test(
-    "SPARK-37728: Reading nested columns with ORC vectorized reader should not " +
-      "cause ArrayIndexOutOfBoundsException") {
+  test("SPARK-37728: Reading nested columns with ORC vectorized reader should not " +
+    "cause ArrayIndexOutOfBoundsException") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      val df = spark
-        .range(100)
-        .map { _ =>
-          val arrayColumn = (0 until 50).map(_ => (0 until 1000).map(k => k.toString))
-          arrayColumn
-        }
-        .toDF("record")
-        .repartition(1)
+      val df = spark.range(100).map { _ =>
+        val arrayColumn = (0 until 50).map(_ => (0 until 1000).map(k => k.toString))
+        arrayColumn
+      }.toDF("record").repartition(1)
       df.write.format("orc").save(path)
 
       withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
@@ -808,28 +786,25 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
   test("SPARK-36594: ORC vectorized reader should properly check maximal number of fields") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      val df = spark
-        .range(10)
-        .map { x =>
-          val stringColumn = s"$x".repeat(10)
-          val structColumn = (x, s"$x".repeat(100))
-          val arrayColumn = (0 until 5).map(i => (x + i, s"$x".repeat(5)))
-          val mapColumn = Map(s"$x" -> (x * 0.1, (x, s"$x".repeat(100))))
-          (x, stringColumn, structColumn, arrayColumn, mapColumn)
-        }
-        .toDF("int_col", "string_col", "struct_col", "array_col", "map_col")
+      val df = spark.range(10).map { x =>
+        val stringColumn = s"$x".repeat(10)
+        val structColumn = (x, s"$x".repeat(100))
+        val arrayColumn = (0 until 5).map(i => (x + i, s"$x".repeat(5)))
+        val mapColumn = Map(s"$x" -> (x * 0.1, (x, s"$x".repeat(100))))
+        (x, stringColumn, structColumn, arrayColumn, mapColumn)
+      }.toDF("int_col", "string_col", "struct_col", "array_col", "map_col")
       df.write.format("orc").save(path)
 
-      Seq(("5", false), ("10", true)).foreach { case (maxNumFields, vectorizedEnabled) =>
-        withSQLConf(
-          SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
-          SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> maxNumFields) {
-          val scanPlan = spark.read.orc(path).queryExecution.executedPlan
-          assert(scanPlan.exists {
-            case scan @ (_: FileSourceScanExec | _: BatchScanExec) => scan.supportsColumnar
-            case _ => false
-          } == vectorizedEnabled)
-        }
+      Seq(("5", false), ("10", true)).foreach {
+        case (maxNumFields, vectorizedEnabled) =>
+          withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
+            SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> maxNumFields) {
+            val scanPlan = spark.read.orc(path).queryExecution.executedPlan
+            assert(scanPlan.exists {
+              case scan @ (_: FileSourceScanExec | _: BatchScanExec) => scan.supportsColumnar
+              case _ => false
+            } == vectorizedEnabled)
+          }
       }
     }
   }
@@ -879,14 +854,11 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
   ignore("SPARK-39387: BytesColumnVector should not throw RuntimeException due to overflow") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      val df = spark
-        .range(1, 22, 1, 1)
-        .map { _ =>
-          val byteData = createArray[Byte](1024 * 1024, 'X')
-          val mapData = (1 to 100).map(i => (i, byteData))
-          mapData
-        }
-        .toDF()
+      val df = spark.range(1, 22, 1, 1).map { _ =>
+        val byteData = createArray[Byte](1024 * 1024, 'X')
+        val mapData = (1 to 100).map(i => (i, byteData))
+        mapData
+      }.toDF()
       df.write.format("orc").save(path)
     }
   }
@@ -896,13 +868,10 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
       withSQLConf(SQLConf.ORC_VECTORIZED_WRITER_BATCH_SIZE.key -> batchSize.toString) {
         withTempPath { dir =>
           val path = dir.getCanonicalPath
-          val df = spark
-            .range(1, 1024, 1, 1)
-            .map { _ =>
-              val byteData = createArray[Byte](5 * 1024 * 1024, 'X')
-              byteData
-            }
-            .toDF()
+          val df = spark.range(1, 1024, 1, 1).map { _ =>
+            val byteData = createArray[Byte](5 * 1024 * 1024, 'X')
+            byteData
+          }.toDF()
           df.write.format("orc").save(path)
         }
       }
@@ -910,22 +879,18 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
   }
 
   test("SPARK-39830: Reading ORC table that requires type promotion may throw AIOOBE") {
-    withSQLConf(
-      SQLConf.ORC_VECTORIZED_WRITER_BATCH_SIZE.key -> "1",
+    withSQLConf(SQLConf.ORC_VECTORIZED_WRITER_BATCH_SIZE.key -> "1",
       "orc.stripe.size" -> "10240",
       "orc.rows.between.memory.checks" -> "1") {
       withTempPath { dir =>
         val path = dir.getCanonicalPath
-        val df = spark
-          .range(1, 1 + 512, 1, 1)
-          .map { i =>
-            if (i == 1) {
-              (i, createArray[Byte](5 * 1024 * 1024, 'X'))
-            } else {
-              (i, createArray[Byte](1, 'X'))
-            }
+        val df = spark.range(1, 1 + 512, 1, 1).map { i =>
+          if (i == 1) {
+            (i, createArray[Byte](5 * 1024 * 1024, 'X'))
+          } else {
+            (i, createArray[Byte](1, 'X'))
           }
-          .toDF("c1", "c2")
+        }.toDF("c1", "c2")
         df.write.format("orc").save(path)
         withTable("t1") {
           spark.sql(s"create table t1 (c1 string,c2 binary) using orc location '$path'")
@@ -986,12 +951,14 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
 
 class OrcV1QuerySuite extends OrcQuerySuite {
   override protected def sparkConf: SparkConf =
-    super.sparkConf
+    super
+      .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "orc")
 }
 
 class OrcV2QuerySuite extends OrcQuerySuite {
   override protected def sparkConf: SparkConf =
-    super.sparkConf
+    super
+      .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
 }

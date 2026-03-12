@@ -49,10 +49,11 @@ object PathGlobFilter extends StrategyBuilder {
 }
 
 /**
- * Provide modifiedAfter and modifiedBefore options when filtering from a batch-based file data
- * source.
+ * Provide modifiedAfter and modifiedBefore options when
+ * filtering from a batch-based file data source.
  *
- * Example Usages Load all CSV files modified after date:
+ * Example Usages
+ * Load all CSV files modified after date:
  * {{{
  *   spark.read.format("csv").option("modifiedAfter","2020-06-15T05:00:00").load()
  * }}}

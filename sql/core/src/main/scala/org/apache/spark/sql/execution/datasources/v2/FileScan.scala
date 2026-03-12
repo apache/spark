@@ -39,14 +39,12 @@ import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
-trait FileScan
-    extends Scan
-    with Batch
-    with SupportsReportStatistics
-    with SupportsMetadata
-    with SQLConfHelper
-    with Logging {
-
+trait FileScan extends Scan
+  with Batch
+  with SupportsReportStatistics
+  with SupportsMetadata
+  with SQLConfHelper
+  with Logging {
   /**
    * Returns whether a file with `path` could be split or not.
    */
@@ -81,8 +79,8 @@ trait FileScan
   def dataFilters: Seq[Expression]
 
   /**
-   * If a file with `path` is unsplittable, return the unsplittable reason, otherwise return
-   * `None`.
+   * If a file with `path` is unsplittable, return the unsplittable reason,
+   * otherwise return `None`.
    */
   def getFileUnSplittableReason(path: Path): String = {
     assert(!isSplitable(path))
@@ -93,27 +91,21 @@ trait FileScan
 
   private lazy val (normalizedPartitionFilters, normalizedDataFilters) = {
     val partitionFilterAttributes = AttributeSet(partitionFilters).map(a => a.name -> a).toMap
-    val normalizedPartitionFilters = ExpressionSet(
-      partitionFilters.map(
-        QueryPlan.normalizeExpressions(
-          _,
-          toAttributes(fileIndex.partitionSchema)
-            .map(a => partitionFilterAttributes.getOrElse(a.name, a)))))
+    val normalizedPartitionFilters = ExpressionSet(partitionFilters.map(
+      QueryPlan.normalizeExpressions(_, toAttributes(fileIndex.partitionSchema)
+        .map(a => partitionFilterAttributes.getOrElse(a.name, a)))))
     val dataFiltersAttributes = AttributeSet(dataFilters).map(a => a.name -> a).toMap
-    val normalizedDataFilters = ExpressionSet(
-      dataFilters.map(
-        QueryPlan.normalizeExpressions(
-          _,
-          toAttributes(dataSchema)
-            .map(a => dataFiltersAttributes.getOrElse(a.name, a)))))
+    val normalizedDataFilters = ExpressionSet(dataFilters.map(
+      QueryPlan.normalizeExpressions(_, toAttributes(dataSchema)
+        .map(a => dataFiltersAttributes.getOrElse(a.name, a)))))
     (normalizedPartitionFilters, normalizedDataFilters)
   }
 
   override def equals(obj: Any): Boolean = obj match {
     case f: FileScan =>
       fileIndex == f.fileIndex && readSchema == f.readSchema &&
-      normalizedPartitionFilters == f.normalizedPartitionFilters &&
-      normalizedDataFilters == f.normalizedDataFilters
+        normalizedPartitionFilters == f.normalizedPartitionFilters &&
+        normalizedDataFilters == f.normalizedDataFilters
 
     case _ => false
   }
@@ -125,13 +117,12 @@ trait FileScan
   val maxMetadataValueLength = conf.maxMetadataStringLength
 
   override def description(): String = {
-    val metadataStr = getMetaData().toSeq.sorted
-      .map { case (key, value) =>
+    val metadataStr = getMetaData().toSeq.sorted.map {
+      case (key, value) =>
         val redactedValue =
           Utils.redact(conf.stringRedactionPattern, value)
         key + ": " + Utils.abbreviate(redactedValue, maxMetadataValueLength)
-      }
-      .mkString(", ")
+    }.mkString(", ")
     s"${this.getClass.getSimpleName} $metadataStr"
   }
 
@@ -153,11 +144,10 @@ trait FileScan
     val partitionAttributes = toAttributes(fileIndex.partitionSchema)
     val attributeMap = partitionAttributes.map(a => normalizeName(a.name) -> a).toMap
     val readPartitionAttributes = readPartitionSchema.map { readField =>
-      attributeMap.getOrElse(
-        normalizeName(readField.name),
+      attributeMap.getOrElse(normalizeName(readField.name),
         throw QueryCompilationErrors.cannotFindPartitionColumnInPartitionSchemaError(
-          readField,
-          fileIndex.partitionSchema))
+          readField, fileIndex.partitionSchema)
+      )
     }
     lazy val partitionValueProject =
       GenerateUnsafeProjection.generate(readPartitionAttributes, partitionAttributes)
@@ -168,27 +158,24 @@ trait FileScan
       } else {
         partition.values
       }
-      partition.files
-        .flatMap { file =>
-          val filePath = file.getPath
-          PartitionedFileUtil.splitFiles(
-            file = file,
-            filePath = filePath,
-            isSplitable = isSplitable(filePath),
-            maxSplitBytes = maxSplitBytes,
-            partitionValues = partitionValues)
-        }
-        .toArray
-        .sortBy(_.length)(implicitly[Ordering[Long]].reverse)
+      partition.files.flatMap { file =>
+        val filePath = file.getPath
+        PartitionedFileUtil.splitFiles(
+          file = file,
+          filePath = filePath,
+          isSplitable = isSplitable(filePath),
+          maxSplitBytes = maxSplitBytes,
+          partitionValues = partitionValues
+        )
+      }.toArray.sortBy(_.length)(implicitly[Ordering[Long]].reverse)
     }
 
     if (splitFiles.length == 1) {
       val path = splitFiles(0).toPath
       if (!isSplitable(path) && splitFiles(0).length >
-          SessionStateHelper.getSparkConf(sparkSession).get(IO_WARNING_LARGEFILETHRESHOLD)) {
-        logWarning(
-          log"Loading one large unsplittable file ${MDC(PATH, path.toString)} with only " +
-            log"one partition, the reason is: ${MDC(REASON, getFileUnSplittableReason(path))}")
+        SessionStateHelper.getSparkConf(sparkSession).get(IO_WARNING_LARGEFILETHRESHOLD)) {
+        logWarning(log"Loading one large unsplittable file ${MDC(PATH, path.toString)} with only " +
+          log"one partition, the reason is: ${MDC(REASON, getFileUnSplittableReason(path))}")
       }
     }
 

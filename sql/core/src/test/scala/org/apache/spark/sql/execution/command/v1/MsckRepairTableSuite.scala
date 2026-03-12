@@ -24,11 +24,12 @@ import org.apache.spark.sql.execution.command
 import org.apache.spark.util.Utils
 
 /**
- * This base suite contains unified tests for the `MSCK REPAIR TABLE` command that check V1 table
- * catalogs. The tests that cannot run for all V1 catalogs are located in more specific test
- * suites:
+ * This base suite contains unified tests for the `MSCK REPAIR TABLE` command that
+ * check V1 table catalogs. The tests that cannot run for all V1 catalogs are located in more
+ * specific test suites:
  *
- *   - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.MsckRepairTableSuite`
+ *   - V1 In-Memory catalog:
+ *     `org.apache.spark.sql.execution.command.v1.MsckRepairTableSuite`
  *   - V1 Hive External catalog:
  *     `org.apache.spark.sql.hive.execution.command.MsckRepairTableSuite`
  */
@@ -69,7 +70,7 @@ trait MsckRepairTableSuiteBase extends command.MsckRepairTableSuiteBase {
 }
 
 /**
- * The class contains tests for the `MSCK REPAIR TABLE` command to check V1 In-Memory table
- * catalog.
+ * The class contains tests for the `MSCK REPAIR TABLE` command to check
+ * V1 In-Memory table catalog.
  */
 class MsckRepairTableSuite extends MsckRepairTableSuiteBase with CommandSuiteBase

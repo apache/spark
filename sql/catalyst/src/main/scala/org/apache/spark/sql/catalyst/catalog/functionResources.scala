@@ -49,9 +49,9 @@ object FunctionResourceType {
 case class FunctionResource(resourceType: FunctionResourceType, uri: String)
 
 /**
- * A simple trait representing a class that can be used to load resources used by a function.
- * Because only a SQLContext can load resources, we create this trait to avoid of explicitly
- * passing SQLContext around.
+ * A simple trait representing a class that can be used to load resources used by
+ * a function. Because only a SQLContext can load resources, we create this trait
+ * to avoid of explicitly passing SQLContext around.
  */
 trait FunctionResourceLoader {
   def loadResource(resource: FunctionResource): Unit

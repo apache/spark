@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+
 package org.apache.spark.sql.execution.python.streaming
 
 import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream}
@@ -63,14 +64,15 @@ object PythonStreamingSourceRunner {
 }
 
 /**
- * This class is a proxy to invoke methods in Python DataSourceStreamReader from JVM. A runner
- * spawns a python worker process. In the main function, set up communication between JVM and
- * python process through socket and create a DataSourceStreamReader instance. In an infinite
- * loop, the python worker process poll information(function name and parameters) from the socket,
- * invoke the corresponding method of StreamReader and send return value to JVM.
+ * This class is a proxy to invoke methods in Python DataSourceStreamReader from JVM.
+ * A runner spawns a python worker process. In the main function, set up communication
+ * between JVM and python process through socket and create a DataSourceStreamReader instance.
+ * In an infinite loop, the python worker process poll information(function name and parameters)
+ * from the socket, invoke the corresponding method of StreamReader and send return value to JVM.
  */
-class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType)
-    extends Logging {
+class PythonStreamingSourceRunner(
+    func: PythonFunction,
+    outputSchema: StructType) extends Logging  {
   val workerModule = "pyspark.sql.streaming.python_streaming_source_runner"
 
   private val conf = SparkEnv.get.conf
@@ -108,8 +110,8 @@ class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType
     pythonWorker = Some(worker)
     pythonWorkerFactory = Some(workerFactory)
 
-    val stream =
-      new BufferedOutputStream(Channels.newOutputStream(pythonWorker.get.channel), bufferSize)
+    val stream = new BufferedOutputStream(
+      Channels.newOutputStream(pythonWorker.get.channel), bufferSize)
     dataOut = new DataOutputStream(stream)
 
     PythonWorkerUtils.writePythonVersion(pythonVer, dataOut)
@@ -134,9 +136,7 @@ class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType
     if (initStatus == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryCompilationErrors.pythonDataSourceError(
-        action = "plan",
-        tpe = "initialize source",
-        msg = msg)
+        action = "plan", tpe = "initialize source", msg = msg)
     }
   }
 
@@ -148,8 +148,7 @@ class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType
     if (featureBits == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "checkSupportedFeatures",
-        msg)
+        action = "checkSupportedFeatures", msg)
     }
     val admissionControl = (featureBits & (1 << 0)) == 1
     val availableNow = (featureBits & (1 << 1)) == (1 << 1)
@@ -165,8 +164,7 @@ class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType
     if (len == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "getDefaultReadLimit",
-        msg)
+        action = "getDefaultReadLimit", msg)
     }
 
     PythonWorkerUtils.readUTF(len, dataIn)
@@ -180,8 +178,7 @@ class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType
     if (len == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "reportLatestOffset",
-        msg)
+        action = "reportLatestOffset", msg)
     }
 
     if (len == 0) {
@@ -198,8 +195,7 @@ class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType
     if (status == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "prepareForTriggerAvailableNow",
-        msg)
+        action = "prepareForTriggerAvailableNow", msg)
     }
   }
 
@@ -213,8 +209,7 @@ class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType
     if (len == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "latestOffset",
-        msg)
+        action = "latestOffset", msg)
     }
     PythonWorkerUtils.readUTF(len, dataIn)
   }
@@ -233,17 +228,15 @@ class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType
         PythonWorkerUtils.writeUTF(p.json, dataOut)
 
       case _ =>
-        throw new UnsupportedOperationException(
-          "Unsupported ReadLimit type: " +
-            s"${limit.getClass.getName}")
+        throw new UnsupportedOperationException("Unsupported ReadLimit type: " +
+          s"${limit.getClass.getName}")
     }
     dataOut.flush()
     val len = dataIn.readInt()
     if (len == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "latestOffset",
-        msg)
+        action = "latestOffset", msg)
     }
     PythonWorkerUtils.readUTF(len, dataIn)
   }
@@ -258,8 +251,7 @@ class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType
     if (len == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "initialOffset",
-        msg)
+        action = "initialOffset", msg)
     }
     PythonWorkerUtils.readUTF(len, dataIn)
   }
@@ -267,9 +259,8 @@ class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType
   /**
    * Invokes partitions(start, end) function of the stream reader and receive the return value.
    */
-  def partitions(
-      start: String,
-      end: String): (Array[Array[Byte]], Option[Iterator[InternalRow]]) = {
+  def partitions(start: String, end: String): (Array[Array[Byte]], Option[Iterator[InternalRow]]) =
+  {
     dataOut.writeInt(PARTITIONS_FUNC_ID)
     PythonWorkerUtils.writeUTF(start, dataOut)
     PythonWorkerUtils.writeUTF(end, dataOut)
@@ -280,8 +271,7 @@ class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType
     if (numPartitions == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "planPartitions",
-        msg)
+        action = "planPartitions", msg)
     }
     for (_ <- 0 until numPartitions) {
       val pickledPartition: Array[Byte] = PythonWorkerUtils.readBytes(dataIn)
@@ -295,12 +285,10 @@ class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType
       case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
         val msg = PythonWorkerUtils.readUTF(dataIn)
         throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-          action = "planPartitions",
-          msg)
+          action = "planPartitions", msg)
       case _ =>
         throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-          action = "planPartitions",
-          s"unknown status code $prefetchedRecordsStatus")
+          action = "planPartitions", s"unknown status code $prefetchedRecordsStatus")
     }
     (pickledPartitions.toArray, iter)
   }
@@ -316,8 +304,7 @@ class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType
     if (status == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "commitSource",
-        msg)
+        action = "commitSource", msg)
     }
   }
 
@@ -325,9 +312,8 @@ class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType
    * Stop the python worker process and invoke stop() on stream reader.
    */
   def stop(): Unit = {
-    logInfo(
-      log"Stopping streaming runner for module: " +
-        log"${MDC(LogKeys.MODULE_NAME, workerModule)}.")
+    logInfo(log"Stopping streaming runner for module: " +
+      log"${MDC(LogKeys.MODULE_NAME, workerModule)}.")
     try {
       pythonWorkerFactory.foreach { factory =>
         pythonWorker.foreach { worker =>
@@ -341,8 +327,8 @@ class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType
     }
   }
 
-  private val allocator =
-    ArrowUtils.rootAllocator.newChildAllocator(s"stream reader for $pythonExec", 0, Long.MaxValue)
+  private val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+    s"stream reader for $pythonExec", 0, Long.MaxValue)
 
   def readArrowRecordBatches(): Iterator[InternalRow] = {
     val status = dataIn.readInt()
@@ -350,13 +336,11 @@ class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType
       case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
         val msg = PythonWorkerUtils.readUTF(dataIn)
         throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-          action = "prefetchArrowBatches",
-          msg)
+        action = "prefetchArrowBatches", msg)
       case SpecialLengths.START_ARROW_STREAM =>
       case _ =>
         throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-          action = "prefetchArrowBatches",
-          s"unknown status code $status")
+          action = "prefetchArrowBatches", s"unknown status code $status")
     }
     val reader = new ArrowStreamReader(dataIn, allocator)
     val root = reader.getVectorSchemaRoot()
@@ -364,18 +348,12 @@ class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType
     val schema = ArrowUtils.fromArrowSchema(root.getSchema())
     if (schema != outputSchema) {
       throw QueryExecutionErrors.arrowDataTypeMismatchError(
-        "Python streaming data source read",
-        Seq(outputSchema),
-        Seq(schema))
+        "Python streaming data source read", Seq(outputSchema), Seq(schema))
     }
 
-    val vectors = root
-      .getFieldVectors()
-      .asScala
-      .map { vector =>
-        new ArrowColumnVector(vector)
-      }
-      .toArray[ColumnVector]
+    val vectors = root.getFieldVectors().asScala.map { vector =>
+      new ArrowColumnVector(vector)
+    }.toArray[ColumnVector]
     val rows = ArrayBuffer[InternalRow]()
     while (reader.loadNextBatch()) {
       val batch = new ColumnarBatch(vectors)

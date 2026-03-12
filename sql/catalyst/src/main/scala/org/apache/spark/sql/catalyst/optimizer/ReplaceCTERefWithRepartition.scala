@@ -30,8 +30,8 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
  * Replaces CTE references that have not been previously inlined with [[Repartition]] operations
  * which will then be planned as shuffles and reused across different reference points.
  *
- * Note that this rule should be called at the very end of the optimization phase to best
- * guarantee that CTE repartition shuffles are reused.
+ * Note that this rule should be called at the very end of the optimization phase to best guarantee
+ * that CTE repartition shuffles are reused.
  */
 object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
 

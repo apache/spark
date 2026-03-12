@@ -44,14 +44,11 @@ class ArrowPythonUDTFRunner(
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String])
-    extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](
-      Seq(ChainedPythonFunctions(Seq(udtf.func))),
-      evalType,
-      Array(argMetas.map(_.offset)),
-      jobArtifactUUID,
-      pythonMetrics)
-    with BatchedPythonArrowInput
-    with BasicPythonArrowOutput {
+  extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](
+      Seq(ChainedPythonFunctions(Seq(udtf.func))), evalType, Array(argMetas.map(_.offset)),
+      jobArtifactUUID, pythonMetrics)
+  with BatchedPythonArrowInput
+  with BasicPythonArrowOutput {
   ArrowUtils.failDuplicatedFieldNames(schema)
 
   override protected def runnerConf: Map[String, String] = super.runnerConf ++ pythonRunnerConf
@@ -82,7 +79,8 @@ class ArrowPythonUDTFRunner(
     envVars
   }
   override val pythonExec: String =
-    SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(funcs.head.funcs.head.pythonExec)
+    SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
+      funcs.head.funcs.head.pythonExec)
 
   override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
   override val idleTimeoutSeconds: Long = SQLConf.get.pythonUDFWorkerIdleTimeoutSeconds

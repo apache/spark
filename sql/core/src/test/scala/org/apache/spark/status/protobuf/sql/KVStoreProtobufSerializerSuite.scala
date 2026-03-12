@@ -52,7 +52,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       jobs = normal.jobs,
       stages = normal.stages,
       metricValues = normal.metricValues,
-      queryId = null)
+      queryId = null
+    )
     Seq(normal, withNull).foreach { input =>
       val bytes = serializer.serialize(input)
       val result = serializer.deserialize(bytes, classOf[SQLExecutionUIData])
@@ -90,7 +91,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       jobs = templateData.jobs,
       stages = templateData.stages,
       metricValues = Map.empty,
-      queryId = templateData.queryId)
+      queryId = templateData.queryId
+    )
     val bytes1 = serializer.serialize(input1)
     val result1 = serializer.deserialize(bytes1, classOf[SQLExecutionUIData])
     // input.metricValues is empty map, result.metricValues is empty map.
@@ -110,7 +112,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       jobs = templateData.jobs,
       stages = templateData.stages,
       metricValues = null,
-      queryId = templateData.queryId)
+      queryId = templateData.queryId
+    )
     val bytes2 = serializer.serialize(input2)
     val result2 = serializer.deserialize(bytes2, classOf[SQLExecutionUIData])
     // input.metricValues is null, result.metricValues is null.
@@ -124,17 +127,36 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         name = "name_12",
         desc = "desc_12",
         metrics = Seq(
-          SQLPlanMetric(name = "name_13", accumulatorId = 13, metricType = "metric_13"),
-          SQLPlanMetric(name = "name_14", accumulatorId = 14, metricType = "metric_14"))),
-      cluster = null)
+          SQLPlanMetric(
+            name = "name_13",
+            accumulatorId = 13,
+            metricType = "metric_13"
+          ),
+          SQLPlanMetric(
+            name = "name_14",
+            accumulatorId = 14,
+            metricType = "metric_14"
+          )
+        )
+      ),
+      cluster = null
+    )
 
     val node1: SparkPlanGraphNodeWrapper = new SparkPlanGraphNodeWrapper(
       node = new SparkPlanGraphNode(
         id = 13,
         name = null,
         desc = null,
-        metrics = Seq(SQLPlanMetric(name = null, accumulatorId = 13, metricType = null))),
-      cluster = null)
+        metrics = Seq(
+          SQLPlanMetric(
+            name = null,
+            accumulatorId = 13,
+            metricType = null
+          )
+        )
+      ),
+      cluster = null
+    )
 
     val node2: SparkPlanGraphNodeWrapper = new SparkPlanGraphNodeWrapper(
       node = null,
@@ -143,7 +165,9 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         name = null,
         desc = null,
         nodes = Seq.empty,
-        metrics = Seq.empty))
+        metrics = Seq.empty
+      )
+    )
 
     val cluster = new SparkPlanGraphClusterWrapper(
       id = 5,
@@ -151,13 +175,30 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       desc = "desc_5",
       nodes = Seq(node0, node1, node2),
       metrics = Seq(
-        SQLPlanMetric(name = "name_6", accumulatorId = 6, metricType = "metric_6"),
-        SQLPlanMetric(name = "name_7 d", accumulatorId = 7, metricType = "metric_7")))
-    val node = new SparkPlanGraphNodeWrapper(node = null, cluster = cluster)
+        SQLPlanMetric(
+          name = "name_6",
+          accumulatorId = 6,
+          metricType = "metric_6"
+        ),
+        SQLPlanMetric(
+          name = "name_7 d",
+          accumulatorId = 7,
+          metricType = "metric_7"
+        )
+      )
+    )
+    val node = new SparkPlanGraphNodeWrapper(
+      node = null,
+      cluster = cluster
+    )
     val input = new SparkPlanGraphWrapper(
       executionId = 1,
       nodes = Seq(node),
-      edges = Seq(SparkPlanGraphEdge(8, 9), SparkPlanGraphEdge(10, 11)))
+      edges = Seq(
+        SparkPlanGraphEdge(8, 9),
+        SparkPlanGraphEdge(10, 11)
+      )
+    )
 
     val bytes = serializer.serialize(input)
     val result = serializer.deserialize(bytes, classOf[SparkPlanGraphWrapper])
@@ -194,9 +235,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         }
       }
       val metrics = Map(6L -> "a", 7L -> "b", 13L -> "c", 14L -> "d")
-      assert(
-        n1.toSparkPlanGraphNode().makeDotNode(metrics) ==
-          n2.toSparkPlanGraphNode().makeDotNode(metrics))
+      assert(n1.toSparkPlanGraphNode().makeDotNode(metrics) ==
+        n2.toSparkPlanGraphNode().makeDotNode(metrics))
     }
 
     result.nodes.zip(input.nodes).foreach { case (n1, n2) =>
@@ -219,7 +259,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       isActive = false,
       exception = Some("Some Exception"),
       startTimestamp = 1L,
-      endTimestamp = Some(2L))
+      endTimestamp = Some(2L)
+    )
     val withNull = new StreamingQueryData(
       name = null,
       id = null,
@@ -227,7 +268,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       isActive = false,
       exception = None,
       startTimestamp = 1L,
-      endTimestamp = None)
+      endTimestamp = None
+    )
     Seq(normal, withNull).foreach { input =>
       val bytes = serializer.serialize(input)
       val result = serializer.deserialize(bytes, classOf[StreamingQueryData])
@@ -257,7 +299,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         numStateStoreInstances = 10L,
         customMetrics = Map(
           "custom-metrics-00" -> JLong.valueOf("10"),
-          "custom-metrics-01" -> JLong.valueOf("11")).asJava)
+          "custom-metrics-01" -> JLong.valueOf("11")).asJava
+      )
       val stateOperatorProgress1 = new StateOperatorProgress(
         operatorName = null,
         numRowsTotal = 11L,
@@ -272,7 +315,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         numStateStoreInstances = 20L,
         customMetrics = Map(
           "custom-metrics-10" -> JLong.valueOf("20"),
-          "custom-metrics-11" -> JLong.valueOf("21")).asJava)
+          "custom-metrics-11" -> JLong.valueOf("21")).asJava
+      )
       val source0 = new SourceProgress(
         description = "description-0",
         startOffset = "startOffset-0",
@@ -281,7 +325,10 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         numInputRows = 10L,
         inputRowsPerSecond = 11.0,
         processedRowsPerSecond = 12.0,
-        metrics = Map("metrics-00" -> "10", "metrics-01" -> "11").asJava)
+        metrics = Map(
+          "metrics-00" -> "10",
+          "metrics-01" -> "11").asJava
+      )
       val source1 = new SourceProgress(
         description = "description-1",
         startOffset = "startOffset-1",
@@ -290,11 +337,17 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         numInputRows = 20L,
         inputRowsPerSecond = 21.0,
         processedRowsPerSecond = 22.0,
-        metrics = Map("metrics-10" -> "20", "metrics-11" -> "21").asJava)
+        metrics = Map(
+          "metrics-10" -> "20",
+          "metrics-11" -> "21").asJava
+      )
       val sink = new SinkProgress(
         description = "sink-0",
         numOutputRows = 30,
-        metrics = Map("metrics-20" -> "30", "metrics-21" -> "31").asJava)
+        metrics = Map(
+          "metrics-20" -> "30",
+          "metrics-21" -> "31").asJava
+      )
       val schema1 = new StructType()
         .add("c1", "long")
         .add("c2", "double")
@@ -304,7 +357,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         .add("max_q", "string")
       val observedMetrics = Map[String, Row](
         "event1" -> new GenericRowWithSchema(Array(1L, 3.0d), schema1),
-        "event2" -> new GenericRowWithSchema(Array(1L, "hello", "world"), schema2)).asJava
+        "event2" -> new GenericRowWithSchema(Array(1L, "hello", "world"), schema2)
+      ).asJava
       val progress = new StreamingQueryProgress(
         id = UUID.randomUUID(),
         runId = UUID.randomUUID(),
@@ -312,13 +366,17 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         timestamp = "2023-01-03T09:14:04.175Z",
         batchId = 1L,
         batchDuration = 2L,
-        durationMs =
-          Map("duration-0" -> JLong.valueOf("10"), "duration-1" -> JLong.valueOf("11")).asJava,
-        eventTime = Map("eventTime-0" -> "20", "eventTime-1" -> "21").asJava,
+        durationMs = Map(
+          "duration-0" -> JLong.valueOf("10"),
+          "duration-1" -> JLong.valueOf("11")).asJava,
+        eventTime = Map(
+          "eventTime-0" -> "20",
+          "eventTime-1" -> "21").asJava,
         stateOperators = Array(stateOperatorProgress0, stateOperatorProgress1),
         sources = Array(source0, source1),
         sink = sink,
-        observedMetrics = observedMetrics)
+        observedMetrics = observedMetrics
+      )
       new StreamingQueryProgressWrapper(progress)
     }
 
@@ -335,7 +393,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         numRowsDroppedByWatermark = 8L,
         numShufflePartitions = 9L,
         numStateStoreInstances = 10L,
-        customMetrics = null)
+        customMetrics = null
+      )
       val stateOperatorProgress1 = new StateOperatorProgress(
         operatorName = null,
         numRowsTotal = 11L,
@@ -348,7 +407,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         numRowsDroppedByWatermark = 18L,
         numShufflePartitions = 19L,
         numStateStoreInstances = 20L,
-        customMetrics = null)
+        customMetrics = null
+      )
       val source0 = new SourceProgress(
         description = null,
         startOffset = null,
@@ -357,7 +417,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         numInputRows = 10L,
         inputRowsPerSecond = 11.0,
         processedRowsPerSecond = 12.0,
-        metrics = null)
+        metrics = null
+      )
       val source1 = new SourceProgress(
         description = null,
         startOffset = null,
@@ -366,8 +427,13 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         numInputRows = 10L,
         inputRowsPerSecond = 11.0,
         processedRowsPerSecond = 12.0,
-        metrics = null)
-      val sink = new SinkProgress(description = null, numOutputRows = 30, metrics = null)
+        metrics = null
+      )
+      val sink = new SinkProgress(
+        description = null,
+        numOutputRows = 30,
+        metrics = null
+      )
       val progress = new StreamingQueryProgress(
         id = null,
         runId = null,
@@ -380,7 +446,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         stateOperators = Array(stateOperatorProgress0, stateOperatorProgress1),
         sources = Array(source0, source1),
         sink = sink,
-        observedMetrics = null)
+        observedMetrics = null
+      )
       new StreamingQueryProgressWrapper(progress)
     }
 
@@ -406,48 +473,51 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         assert(progress.eventTime == resultProcess.eventTime)
       }
 
-      progress.stateOperators.zip(resultProcess.stateOperators).foreach { case (o1, o2) =>
-        assert(o1.operatorName == o2.operatorName)
-        assert(o1.numRowsTotal == o2.numRowsTotal)
-        assert(o1.numRowsUpdated == o2.numRowsUpdated)
-        assert(o1.allUpdatesTimeMs == o2.allUpdatesTimeMs)
-        assert(o1.numRowsRemoved == o2.numRowsRemoved)
-        assert(o1.allRemovalsTimeMs == o2.allRemovalsTimeMs)
-        assert(o1.commitTimeMs == o2.commitTimeMs)
-        assert(o1.memoryUsedBytes == o2.memoryUsedBytes)
-        assert(o1.numRowsDroppedByWatermark == o2.numRowsDroppedByWatermark)
-        assert(o1.numShufflePartitions == o2.numShufflePartitions)
-        assert(o1.numStateStoreInstances == o2.numStateStoreInstances)
-        if (hasNullValue) {
-          assert(o2.customMetrics.isEmpty)
-        } else {
-          assert(o1.customMetrics == o2.customMetrics)
-        }
+      progress.stateOperators.zip(resultProcess.stateOperators).foreach {
+        case (o1, o2) =>
+          assert(o1.operatorName == o2.operatorName)
+          assert(o1.numRowsTotal == o2.numRowsTotal)
+          assert(o1.numRowsUpdated == o2.numRowsUpdated)
+          assert(o1.allUpdatesTimeMs == o2.allUpdatesTimeMs)
+          assert(o1.numRowsRemoved == o2.numRowsRemoved)
+          assert(o1.allRemovalsTimeMs == o2.allRemovalsTimeMs)
+          assert(o1.commitTimeMs == o2.commitTimeMs)
+          assert(o1.memoryUsedBytes == o2.memoryUsedBytes)
+          assert(o1.numRowsDroppedByWatermark == o2.numRowsDroppedByWatermark)
+          assert(o1.numShufflePartitions == o2.numShufflePartitions)
+          assert(o1.numStateStoreInstances == o2.numStateStoreInstances)
+          if (hasNullValue) {
+            assert(o2.customMetrics.isEmpty)
+          } else {
+            assert(o1.customMetrics == o2.customMetrics)
+          }
       }
 
-      progress.sources.zip(resultProcess.sources).foreach { case (s1, s2) =>
-        assert(s1.description == s2.description)
-        assert(s1.startOffset == s2.startOffset)
-        assert(s1.endOffset == s2.endOffset)
-        assert(s1.latestOffset == s2.latestOffset)
-        assert(s1.numInputRows == s2.numInputRows)
-        assert(s1.inputRowsPerSecond == s2.inputRowsPerSecond)
-        assert(s1.processedRowsPerSecond == s2.processedRowsPerSecond)
-        if (hasNullValue) {
-          assert(s2.metrics.isEmpty)
-        } else {
-          assert(s1.metrics == s2.metrics)
-        }
+      progress.sources.zip(resultProcess.sources).foreach {
+        case (s1, s2) =>
+          assert(s1.description == s2.description)
+          assert(s1.startOffset == s2.startOffset)
+          assert(s1.endOffset == s2.endOffset)
+          assert(s1.latestOffset == s2.latestOffset)
+          assert(s1.numInputRows == s2.numInputRows)
+          assert(s1.inputRowsPerSecond == s2.inputRowsPerSecond)
+          assert(s1.processedRowsPerSecond == s2.processedRowsPerSecond)
+          if (hasNullValue) {
+            assert(s2.metrics.isEmpty)
+          } else {
+            assert(s1.metrics == s2.metrics)
+          }
       }
 
-      Seq(progress.sink).zip(Seq(resultProcess.sink)).foreach { case (s1, s2) =>
-        assert(s1.description == s2.description)
-        assert(s1.numOutputRows == s2.numOutputRows)
-        if (hasNullValue) {
-          assert(s2.metrics.isEmpty)
-        } else {
-          assert(s1.metrics == s2.metrics)
-        }
+      Seq(progress.sink).zip(Seq(resultProcess.sink)).foreach {
+        case (s1, s2) =>
+          assert(s1.description == s2.description)
+          assert(s1.numOutputRows == s2.numOutputRows)
+          if (hasNullValue) {
+            assert(s2.metrics.isEmpty)
+          } else {
+            assert(s1.metrics == s2.metrics)
+          }
       }
 
       val resultObservedMetrics = resultProcess.observedMetrics

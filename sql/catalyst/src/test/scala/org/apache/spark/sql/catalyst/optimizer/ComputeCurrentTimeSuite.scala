@@ -39,8 +39,7 @@ class ComputeCurrentTimeSuite extends PlanTest {
   }
 
   test("analyzer should replace current_timestamp with literals") {
-    val in = Project(
-      Seq(Alias(CurrentTimestamp(), "a")(), Alias(CurrentTimestamp(), "b")()),
+    val in = Project(Seq(Alias(CurrentTimestamp(), "a")(), Alias(CurrentTimestamp(), "b")()),
       LocalRelation())
 
     val min = System.currentTimeMillis() * 1000
@@ -57,30 +56,37 @@ class ComputeCurrentTimeSuite extends PlanTest {
   test("analyzer should replace current_time with literals") {
     // logical plan that calls current_time() twice in the Project
     val planInput = Project(
-      Seq(Alias(CurrentTime(Literal(3)), "a")(), Alias(CurrentTime(Literal(3)), "b")()),
-      LocalRelation())
+      Seq(
+        Alias(CurrentTime(Literal(3)), "a")(),
+        Alias(CurrentTime(Literal(3)), "b")()
+      ),
+      LocalRelation()
+    )
 
     val analyzed = planInput.analyze
     val optimized = Optimize.execute(analyzed).asInstanceOf[Project]
 
     // We expect 2 literals in the final Project. Each literal is a Long
     // representing microseconds since midnight, truncated to precision=3.
-    val lits = literals[Long](optimized) // a helper that extracts all Literal values of type Long
+    val lits = literals[Long](optimized)  // a helper that extracts all Literal values of type Long
     assert(lits.size == 2, s"Expected two literal values, found ${lits.size}")
 
     // The rule should produce the same microsecond value for both columns "a" and "b".
-    assert(
-      lits(0) == lits(1),
+    assert(lits(0) == lits(1),
       s"Expected both current_time(3) calls to yield the same literal, " +
         s"but got ${lits(0)} vs ${lits(1)}")
   }
 
   test("analyzer should replace current_time with foldable child expressions") {
     // We build a plan that calls current_time(2 + 1) twice
-    val foldableExpr = Add(Literal(2), Literal(1)) // a foldable arithmetic expression => 3
+    val foldableExpr = Add(Literal(2), Literal(1))  // a foldable arithmetic expression => 3
     val planInput = Project(
-      Seq(Alias(CurrentTime(foldableExpr), "a")(), Alias(CurrentTime(foldableExpr), "b")()),
-      LocalRelation())
+      Seq(
+        Alias(CurrentTime(foldableExpr), "a")(),
+        Alias(CurrentTime(foldableExpr), "b")()
+      ),
+      LocalRelation()
+    )
 
     val analyzed = planInput.analyze
     val optimized = Optimize.execute(analyzed).asInstanceOf[Project]
@@ -91,10 +97,10 @@ class ComputeCurrentTimeSuite extends PlanTest {
     assert(lits.size == 2, s"Expected two literal values, found ${lits.size}")
 
     // Both references to current_time(2 + 1) should be replaced by the same microsecond-of-day
-    assert(
-      lits(0) == lits(1),
+    assert(lits(0) == lits(1),
       s"Expected both current_time(2 + 1) calls to yield the same literal, " +
-        s"but got ${lits(0)} vs. ${lits(1)}")
+        s"but got ${lits(0)} vs. ${lits(1)}"
+    )
   }
 
   test("analyzer should replace current_time with foldable casted string-literal") {
@@ -103,8 +109,12 @@ class ComputeCurrentTimeSuite extends PlanTest {
 
     // Two references to current_time(castExpr) => so we can check they're replaced consistently
     val planInput = Project(
-      Seq(Alias(CurrentTime(castExpr), "a")(), Alias(CurrentTime(castExpr), "b")()),
-      LocalRelation())
+      Seq(
+        Alias(CurrentTime(castExpr), "a")(),
+        Alias(CurrentTime(castExpr), "b")()
+      ),
+      LocalRelation()
+    )
 
     val analyzed = planInput.analyze
     val optimized = Optimize.execute(analyzed).asInstanceOf[Project]
@@ -114,10 +124,11 @@ class ComputeCurrentTimeSuite extends PlanTest {
 
     // Both references to current_time(CAST(' 0005 ' AS INT)) in the same query
     // should produce the same microsecond-of-day literal.
-    assert(
-      lits(0) == lits(1),
-      s"Expected both references to yield the same literal, but got ${lits(0)} vs. ${lits(1)}")
+    assert(lits(0) == lits(1),
+      s"Expected both references to yield the same literal, but got ${lits(0)} vs. ${lits(1)}"
+    )
   }
+
 
   test("analyzer should respect time flow in current timestamp calls") {
     val in = Project(Alias(CurrentTimestamp(), "t1")() :: Nil, LocalRelation())
@@ -145,9 +156,9 @@ class ComputeCurrentTimeSuite extends PlanTest {
     assert(t2 > t1, s"Expected a newer time in the second analysis, but got t1=$t1, t2=$t2")
   }
 
+
   test("analyzer should replace current_date with literals") {
-    val in =
-      Project(Seq(Alias(CurrentDate(), "a")(), Alias(CurrentDate(), "b")()), LocalRelation())
+    val in = Project(Seq(Alias(CurrentDate(), "a")(), Alias(CurrentDate(), "b")()), LocalRelation())
 
     val min = DateTimeUtils.currentDate(ZoneId.systemDefault())
     val plan = Optimize.execute(in.analyze).asInstanceOf[Project]
@@ -169,8 +180,7 @@ class ComputeCurrentTimeSuite extends PlanTest {
   }
 
   test("analyzer should replace localtimestamp with literals") {
-    val in = Project(
-      Seq(Alias(LocalTimestamp(), "a")(), Alias(LocalTimestamp(), "b")()),
+    val in = Project(Seq(Alias(LocalTimestamp(), "a")(), Alias(LocalTimestamp(), "b")()),
       LocalRelation())
 
     val zoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
@@ -187,8 +197,7 @@ class ComputeCurrentTimeSuite extends PlanTest {
   }
 
   test("analyzer should use equal timestamps across subqueries") {
-    val timestampInSubQuery =
-      Project(Seq(Alias(LocalTimestamp(), "timestamp1")()), LocalRelation())
+    val timestampInSubQuery = Project(Seq(Alias(LocalTimestamp(), "timestamp1")()), LocalRelation())
     val listSubQuery = ListQuery(timestampInSubQuery)
     val valueSearchedInSubQuery = Seq(Alias(LocalTimestamp(), "timestamp2")())
     val inFilterWithSubQuery = InSubquery(valueSearchedInSubQuery, listSubQuery)
@@ -202,9 +211,8 @@ class ComputeCurrentTimeSuite extends PlanTest {
   }
 
   test("analyzer should use consistent timestamps for different timezones") {
-    val localTimestamps = ZoneId.SHORT_IDS.asScala.map { case (zoneId, _) =>
-      Alias(LocalTimestamp(Some(zoneId)), zoneId)()
-    }.toSeq
+    val localTimestamps = ZoneId.SHORT_IDS.asScala
+      .map { case (zoneId, _) => Alias(LocalTimestamp(Some(zoneId)), zoneId)() }.toSeq
     val input = Project(localTimestamps, LocalRelation())
 
     val plan = Optimize.execute(input).asInstanceOf[Project]
@@ -212,7 +220,7 @@ class ComputeCurrentTimeSuite extends PlanTest {
     val lits = literals[Long](plan)
     assert(lits.size === localTimestamps.size)
     // there are timezones with a 30 or 45 minute offset
-    val offsetsFromQuarterHour = lits.map(_ % Duration(15, MINUTES).toMicros).toSet
+    val offsetsFromQuarterHour = lits.map( _ % Duration(15, MINUTES).toMicros).toSet
     assert(offsetsFromQuarterHour.size == 1)
   }
 
@@ -220,7 +228,8 @@ class ComputeCurrentTimeSuite extends PlanTest {
     val differentTimestamps = Seq(
       Alias(CurrentTimestamp(), "currentTimestamp")(),
       Alias(Now(), "now")(),
-      Alias(LocalTimestamp(Some("PLT")), "localTimestampWithTimezone")())
+      Alias(LocalTimestamp(Some("PLT")), "localTimestampWithTimezone")()
+    )
     val input = Project(differentTimestamps, LocalRelation())
 
     val plan = Optimize.execute(input).asInstanceOf[Project]
@@ -228,7 +237,7 @@ class ComputeCurrentTimeSuite extends PlanTest {
     val lits = literals[Long](plan)
     assert(lits.size === differentTimestamps.size)
     // there are timezones with a 30 or 45 minute offset
-    val offsetsFromQuarterHour = lits.map(_ % Duration(15, MINUTES).toMicros).toSet
+    val offsetsFromQuarterHour = lits.map( _ % Duration(15, MINUTES).toMicros).toSet
     assert(offsetsFromQuarterHour.size == 1)
   }
 
@@ -255,12 +264,9 @@ class ComputeCurrentTimeSuite extends PlanTest {
 
     // Use unique ZoneIds count instead of SHORT_IDS.size because some short zone IDs
     // may map to the same ZoneId (e.g., in Java 25, MST and PNT both map to America/Phoenix)
-    val numUniqueZoneIds = ZoneId.SHORT_IDS.asScala
-      .map { case (zoneId, _) =>
-        ZoneId.of(zoneId, ZoneId.SHORT_IDS)
-      }
-      .toSet
-      .size
+    val numUniqueZoneIds = ZoneId.SHORT_IDS.asScala.map { case (zoneId, _) =>
+      ZoneId.of(zoneId, ZoneId.SHORT_IDS)
+    }.toSet.size
     checkLiterals({ _: String => CurrentTimestamp() }, 1)
     checkLiterals({ zoneId: String => LocalTimestamp(Some(zoneId)) }, numUniqueZoneIds)
     checkLiterals({ _: String => Now() }, 1)

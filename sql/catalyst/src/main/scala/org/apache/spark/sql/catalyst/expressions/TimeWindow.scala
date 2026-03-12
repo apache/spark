@@ -69,12 +69,11 @@ case class TimeWindow(
     timeColumn: Expression,
     windowDuration: Long,
     slideDuration: Long,
-    startTime: Long)
-    extends UnaryExpression
-    with ImplicitCastInputTypes
-    with Unevaluable
-    with NonSQLExpression
-    with QueryErrorsBase {
+    startTime: Long) extends UnaryExpression
+  with ImplicitCastInputTypes
+  with Unevaluable
+  with NonSQLExpression
+  with QueryErrorsBase {
 
   //////////////////////////
   // SQL Constructors
@@ -85,19 +84,13 @@ case class TimeWindow(
       windowDuration: Expression,
       slideDuration: Expression,
       startTime: Expression) = {
-    this(
-      timeColumn,
-      TimeWindow.parseExpression(windowDuration),
-      TimeWindow.parseExpression(slideDuration),
-      TimeWindow.parseExpression(startTime))
+    this(timeColumn, TimeWindow.parseExpression(windowDuration),
+      TimeWindow.parseExpression(slideDuration), TimeWindow.parseExpression(startTime))
   }
 
   def this(timeColumn: Expression, windowDuration: Expression, slideDuration: Expression) = {
-    this(
-      timeColumn,
-      TimeWindow.parseExpression(windowDuration),
-      TimeWindow.parseExpression(slideDuration),
-      0)
+    this(timeColumn, TimeWindow.parseExpression(windowDuration),
+      TimeWindow.parseExpression(slideDuration), 0)
   }
 
   def this(timeColumn: Expression, windowDuration: Expression) = {
@@ -114,7 +107,8 @@ case class TimeWindow(
         .add(StructField("end", TimestampType)),
       new StructType()
         .add(StructField("start", TimestampNTZType))
-        .add(StructField("end", TimestampNTZType)))
+        .add(StructField("end", TimestampNTZType))
+    )
   }
 
   // NOTE: if the window column is given as a time column, we resolve it to the point of time,
@@ -145,7 +139,9 @@ case class TimeWindow(
           messageParameters = Map(
             "exprName" -> toSQLId("window_duration"),
             "valueRange" -> s"(0, ${Long.MaxValue}]",
-            "currentValue" -> toSQLValue(windowDuration, LongType)))
+            "currentValue" -> toSQLValue(windowDuration, LongType)
+          )
+        )
       }
       if (slideDuration <= 0) {
         return DataTypeMismatch(
@@ -153,7 +149,9 @@ case class TimeWindow(
           messageParameters = Map(
             "exprName" -> toSQLId("slide_duration"),
             "valueRange" -> s"(0, ${Long.MaxValue}]",
-            "currentValue" -> toSQLValue(slideDuration, LongType)))
+            "currentValue" -> toSQLValue(slideDuration, LongType)
+          )
+        )
       }
       if (slideDuration > windowDuration) {
         return DataTypeMismatch(
@@ -163,7 +161,9 @@ case class TimeWindow(
             "leftExprValue" -> toSQLValue(slideDuration, LongType),
             "constraint" -> "<=",
             "rightExprName" -> toSQLId("window_duration"),
-            "rightExprValue" -> toSQLValue(windowDuration, LongType)))
+            "rightExprValue" -> toSQLValue(windowDuration, LongType)
+          )
+        )
       }
       if (startTime.abs >= slideDuration) {
         return DataTypeMismatch(
@@ -173,7 +173,9 @@ case class TimeWindow(
             "leftExprValue" -> toSQLValue(startTime.abs, LongType),
             "constraint" -> "<",
             "rightExprName" -> toSQLId("slide_duration"),
-            "rightExprValue" -> toSQLValue(slideDuration, LongType)))
+            "rightExprValue" -> toSQLValue(slideDuration, LongType)
+          )
+        )
       }
     }
     dataTypeCheck
@@ -188,14 +190,12 @@ object TimeWindow {
 
   /**
    * Parses the interval string for a valid time duration. CalendarInterval expects interval
-   * strings to start with the string `interval`. For usability, we prepend `interval` to the
-   * string if the user omitted it.
+   * strings to start with the string `interval`. For usability, we prepend `interval` to the string
+   * if the user omitted it.
    *
-   * @param interval
-   *   The interval string
-   * @return
-   *   The interval duration in microseconds. SparkSQL casts TimestampType has microsecond
-   *   precision.
+   * @param interval The interval string
+   * @return The interval duration in microseconds. SparkSQL casts TimestampType has microsecond
+   *         precision.
    */
   def getIntervalInMicroSeconds(interval: String): Long = {
     val cal = IntervalUtils.fromIntervalString(interval)
@@ -223,8 +223,7 @@ object TimeWindow {
       windowDuration: String,
       slideDuration: String,
       startTime: String): TimeWindow = {
-    TimeWindow(
-      timeColumn,
+    TimeWindow(timeColumn,
       getIntervalInMicroSeconds(windowDuration),
       getIntervalInMicroSeconds(slideDuration),
       getIntervalInMicroSeconds(startTime))
@@ -235,9 +234,10 @@ object TimeWindow {
  * Expression used internally to convert the TimestampType to Long and back without losing
  * precision, i.e. in microseconds. Used in time windowing.
  */
-case class PreciseTimestampConversion(child: Expression, fromType: DataType, toType: DataType)
-    extends UnaryExpression
-    with ExpectsInputTypes {
+case class PreciseTimestampConversion(
+    child: Expression,
+    fromType: DataType,
+    toType: DataType) extends UnaryExpression with ExpectsInputTypes {
   override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[AbstractDataType] = Seq(fromType)
   override def dataType: DataType = toType

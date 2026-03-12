@@ -63,10 +63,7 @@ abstract class InMemoryBaseTable(
     val advisoryPartitionSize: Option[Long] = None,
     val isDistributionStrictlyRequired: Boolean = true,
     val numRowsPerSplit: Int = Int.MaxValue)
-    extends Table
-    with SupportsRead
-    with SupportsWrite
-    with SupportsMetadataColumns {
+  extends Table with SupportsRead with SupportsWrite with SupportsMetadataColumns {
 
   // Tracks the current version number of the table.
   protected var tableVersion: Int = 0
@@ -138,8 +135,8 @@ abstract class InMemoryBaseTable(
     properties.getOrDefault("allow-unsupported-transforms", "false").toBoolean
 
   private val acceptAnySchema = properties.getOrDefault("accept-any-schema", "false").toBoolean
-  private val autoSchemaEvolution =
-    properties.getOrDefault("auto-schema-evolution", "true").toBoolean
+  private val autoSchemaEvolution = properties.getOrDefault("auto-schema-evolution", "true")
+    .toBoolean
 
   partitioning.foreach {
     case _: IdentityTransform =>
@@ -165,9 +162,7 @@ abstract class InMemoryBaseTable(
   def rows: Seq[InternalRow] = dataMap.values.flatten.flatMap(_.rows).toSeq
 
   val partCols: Array[Array[String]] = partitioning.flatMap(_.references).map { ref =>
-    schema.findNestedField(
-      ref.fieldNames().toImmutableArraySeq,
-      includeCollections = false) match {
+    schema.findNestedField(ref.fieldNames().toImmutableArraySeq, includeCollections = false) match {
       case Some(_) => ref.fieldNames()
       case None => throw new IllegalArgumentException(s"${ref.describe()} does not exist.")
     }
@@ -256,8 +251,7 @@ abstract class InMemoryBaseTable(
             case (value: Array[Byte], BinaryType) =>
               util.Arrays.hashCode(value).toLong
             case (v, t) =>
-              throw new IllegalArgumentException(
-                s"Match: unsupported argument(s) type - ($v, $t)")
+              throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
           }
           acc + valueHash
         }
@@ -346,49 +340,50 @@ abstract class InMemoryBaseTable(
     withData(data, CatalogV2Util.v2ColumnsToStructType(columns))
   }
 
-  def withData(data: Array[BufferedRows], writeSchema: StructType): InMemoryBaseTable =
-    dataMap.synchronized {
-      data.foreach(_.rows.foreach { row =>
-        val key = getKey(row, writeSchema)
-        dataMap += dataMap
-          .get(key)
+  def withData(
+      data: Array[BufferedRows],
+      writeSchema: StructType): InMemoryBaseTable = dataMap.synchronized {
+    data.foreach(_.rows.foreach { row =>
+      val key = getKey(row, writeSchema)
+      dataMap += dataMap.get(key)
           .map { splits =>
-            val newSplits =
-              if ((splits.last.rows.size >= numRowsPerSplit)
-                || (splits.last.schema != writeSchema)) {
-                splits :+ new BufferedRows(key, writeSchema)
-              } else {
-                splits
-              }
+            val newSplits = if ((splits.last.rows.size >= numRowsPerSplit)
+            || (splits.last.schema != writeSchema)) {
+              splits :+ new BufferedRows(key, writeSchema)
+            } else {
+              splits
+            }
             newSplits.last.withRow(row)
             key -> newSplits
           }
-          .getOrElse(key -> Seq(new BufferedRows(key, writeSchema).withRow(row)))
-        addPartitionKey(key)
-      })
-      this
-    }
+          .getOrElse(key -> Seq(
+            new BufferedRows(key, writeSchema).withRow(row)))
+      addPartitionKey(key)
+    })
+    this
+  }
 
-  def alterTableWithData(data: Array[BufferedRows], newSchema: StructType): InMemoryBaseTable = {
+  def alterTableWithData(
+      data: Array[BufferedRows],
+      newSchema: StructType): InMemoryBaseTable = {
     data.foreach { bufferedRow =>
       val oldSchema = bufferedRow.schema
       bufferedRow.rows.foreach { row =>
         // handle partition evolution by re-keying all data
         val key = getKey(row, newSchema)
-        dataMap += dataMap
-          .get(key)
+        dataMap += dataMap.get(key)
           .map { splits =>
-            val newSplits =
-              if ((splits.last.rows.size >= numRowsPerSplit) ||
+            val newSplits = if ((splits.last.rows.size >= numRowsPerSplit) ||
                 (splits.last.schema != oldSchema)) {
-                splits :+ new BufferedRows(key, oldSchema)
-              } else {
-                splits
-              }
+              splits :+ new BufferedRows(key, oldSchema)
+            } else {
+              splits
+            }
             newSplits.last.withRow(row)
             key -> newSplits
           }
-          .getOrElse(key -> Seq(new BufferedRows(key, oldSchema).withRow(row)))
+          .getOrElse(key -> Seq(
+            new BufferedRows(key, oldSchema).withRow(row)))
         addPartitionKey(key)
       }
     }
@@ -406,8 +401,8 @@ abstract class InMemoryBaseTable(
   override def capabilities(): util.Set[TableCapability] =
     (baseCapabiilities ++
       (if (acceptAnySchema) Seq(TableCapability.ACCEPT_ANY_SCHEMA) else Seq.empty) ++
-      (if (autoSchemaEvolution) Seq(TableCapability.AUTOMATIC_SCHEMA_EVOLUTION)
-       else Seq.empty)).asJava
+      (if (autoSchemaEvolution) Seq(TableCapability.AUTOMATIC_SCHEMA_EVOLUTION) else Seq.empty))
+      .asJava
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     new InMemoryScanBuilder(schema, options)
@@ -424,10 +419,10 @@ abstract class InMemoryBaseTable(
     }
   }
 
-  class InMemoryScanBuilder(tableSchema: StructType, options: CaseInsensitiveStringMap)
-      extends ScanBuilder
-      with SupportsPushDownRequiredColumns
-      with SupportsPushDownFilters {
+  class InMemoryScanBuilder(
+      tableSchema: StructType,
+      options: CaseInsensitiveStringMap) extends ScanBuilder
+    with SupportsPushDownRequiredColumns with SupportsPushDownFilters {
     private var schema: StructType = tableSchema
     private var postScanFilters: Array[Filter] = Array.empty
     private var evaluableFilters: Array[Filter] = Array.empty
@@ -435,10 +430,7 @@ abstract class InMemoryBaseTable(
 
     override def build: Scan = {
       val scan = InMemoryBatchScan(
-        data.map(_.asInstanceOf[InputPartition]).toImmutableArraySeq,
-        schema,
-        tableSchema,
-        options)
+        data.map(_.asInstanceOf[InputPartition]).toImmutableArraySeq, schema, tableSchema, options)
       if (evaluableFilters.nonEmpty) {
         scan.filter(evaluableFilters)
       }
@@ -471,12 +463,11 @@ abstract class InMemoryBaseTable(
       sizeInBytes: OptionalLong,
       numRows: OptionalLong,
       override val columnStats: util.Map[NamedReference, ColumnStatistics])
-      extends Statistics
+    extends Statistics
 
   case class InMemoryColumnStats(
       override val distinctCount: OptionalLong,
-      override val nullCount: OptionalLong)
-      extends ColumnStatistics
+      override val nullCount: OptionalLong) extends ColumnStatistics
 
   case class InMemoryHistogramBin(lo: Double, hi: Double, ndv: Long) extends HistogramBin
 
@@ -486,10 +477,7 @@ abstract class InMemoryBaseTable(
       var data: Seq[InputPartition],
       readSchema: StructType,
       tableSchema: StructType)
-      extends Scan
-      with Batch
-      with SupportsReportStatistics
-      with SupportsReportPartitioning {
+    extends Scan with Batch with SupportsReportStatistics with SupportsReportPartitioning {
 
     override def toBatch: Batch = this
 
@@ -525,7 +513,9 @@ abstract class InMemoryBaseTable(
             if (colValue == null) {
               numOfNulls(i) += 1
             }
-          }))
+          }
+        )
+      )
 
       val map = new util.HashMap[NamedReference, ColumnStatistics]()
       val colNames = tableSchema.fields.map(_.name)
@@ -575,13 +565,11 @@ abstract class InMemoryBaseTable(
       readSchema: StructType,
       tableSchema: StructType,
       options: CaseInsensitiveStringMap)
-      extends BatchScanBaseClass(_data, readSchema, tableSchema)
-      with SupportsRuntimeFiltering {
+    extends BatchScanBaseClass(_data, readSchema, tableSchema) with SupportsRuntimeFiltering {
 
     override def filterAttributes(): Array[NamedReference] = {
       val scanFields = readSchema.fields.map(_.name).toSet
-      partitioning
-        .flatMap(_.references)
+      partitioning.flatMap(_.references)
         .filter(ref => scanFields.contains(ref.fieldNames.mkString(".")))
     }
 
@@ -609,9 +597,7 @@ abstract class InMemoryBaseTable(
   }
 
   abstract class InMemoryWriterBuilder(val info: LogicalWriteInfo)
-      extends SupportsTruncate
-      with SupportsDynamicOverwrite
-      with SupportsStreamingUpdateAsAppend {
+    extends SupportsTruncate with SupportsDynamicOverwrite with SupportsStreamingUpdateAsAppend {
 
     protected var writer: BatchWrite = new Append(info)
     protected var streamingWriter: StreamingWrite = new StreamingAppend(info)
@@ -665,10 +651,10 @@ abstract class InMemoryBaseTable(
 
         // this does not override the old field with the new field with same name for now
         val nameToFieldMap = toFieldMap(oldFields)
-        val remainingNewFields = newFields.filterNot(f => nameToFieldMap.contains(f.name))
+        val remainingNewFields = newFields.filterNot (f => nameToFieldMap.contains (f.name) )
 
         // Create the merged struct with the new fields are appended at the end of the struct.
-        StructType(oldFields ++ remainingNewFields)
+        StructType (oldFields ++ remainingNewFields)
       }
 
       def toFieldMap(fields: Array[StructField]): Map[String, StructField] = {
@@ -725,8 +711,7 @@ abstract class InMemoryBaseTable(
   }
 
   protected class StreamingNotSupportedOperation(operation: String) extends TestStreamingWrite {
-    override def createStreamingWriterFactory(
-        info: PhysicalWriteInfo): StreamingDataWriterFactory =
+    override def createStreamingWriterFactory(info: PhysicalWriteInfo): StreamingDataWriterFactory =
       throwsException()
 
     override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit =
@@ -735,9 +720,8 @@ abstract class InMemoryBaseTable(
     override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit =
       throwsException()
 
-    def throwsException[T](): T = throw new IllegalStateException(
-      "The operation " +
-        s"${operation} isn't supported for streaming query.")
+    def throwsException[T](): T = throw new IllegalStateException("The operation " +
+      s"${operation} isn't supported for streaming query.")
   }
 
   class StreamingAppend(val info: LogicalWriteInfo) extends TestStreamingWrite {
@@ -765,7 +749,10 @@ abstract class InMemoryBaseTable(
 object InMemoryBaseTable {
   val SIMULATE_FAILED_WRITE_OPTION = "spark.sql.test.simulateFailedWrite"
 
-  def extractValue(attr: String, partFieldNames: Seq[String], partValues: Seq[Any]): Any = {
+  def extractValue(
+      attr: String,
+      partFieldNames: Seq[String],
+      partValues: Seq[Any]): Any = {
     partFieldNames.zipWithIndex.find(_._1 == attr) match {
       case Some((_, partIndex)) =>
         partValues(partIndex)
@@ -783,17 +770,12 @@ object InMemoryBaseTable {
 
 /**
  * Represent a set of rows buffered in memory for a given partition key.
- * @param key
- *   partition key
- * @param schema
- *   schema used to write the rows
+ * @param key partition key
+ * @param schema schema used to write the rows
  */
 class BufferedRows(val key: Seq[Any], val schema: StructType)
-    extends WriterCommitMessage
-    with InputPartition
-    with HasPartitionKey
-    with HasPartitionStatistics
-    with Serializable {
+  extends WriterCommitMessage
+    with InputPartition with HasPartitionKey with HasPartitionStatistics with Serializable {
   val log = new mutable.ArrayBuffer[InternalRow]()
   val rows = new mutable.ArrayBuffer[InternalRow]()
   val deletes = new mutable.ArrayBuffer[Int]()
@@ -820,12 +802,13 @@ object BufferedRows {
 }
 
 /**
- * Theoretically, [[InternalRow]] returned by [[HasPartitionKey#partitionKey()]] does not need to
- * implement equal and hashcode methods. But [[GenericInternalRow]] implements equals and hashcode
- * methods already. Here we override it to simulate that it has not been implemented to verify
- * codes correctness.
+ * Theoretically, [[InternalRow]] returned by [[HasPartitionKey#partitionKey()]]
+ * does not need to implement equal and hashcode methods.
+ * But [[GenericInternalRow]] implements equals and hashcode methods already. Here we override it
+ * to simulate that it has not been implemented to verify codes correctness.
  */
-case class PartitionInternalRow(keys: Array[Any]) extends GenericInternalRow(keys) {
+case class PartitionInternalRow(keys: Array[Any])
+  extends GenericInternalRow(keys) {
   override def equals(other: Any): Boolean = {
     if (!other.isInstanceOf[PartitionInternalRow]) {
       return false
@@ -841,14 +824,10 @@ case class PartitionInternalRow(keys: Array[Any]) extends GenericInternalRow(key
 private class BufferedRowsReaderFactory(
     metadataColumnNames: Seq[String],
     nonMetaDataColumns: Seq[StructField],
-    tableSchema: StructType)
-    extends PartitionReaderFactory {
+    tableSchema: StructType) extends PartitionReaderFactory {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
-    new BufferedRowsReader(
-      partition.asInstanceOf[BufferedRows],
-      metadataColumnNames,
-      nonMetaDataColumns,
-      tableSchema)
+    new BufferedRowsReader(partition.asInstanceOf[BufferedRows], metadataColumnNames,
+      nonMetaDataColumns, tableSchema)
   }
 }
 
@@ -856,8 +835,7 @@ private class BufferedRowsReader(
     partition: BufferedRows,
     metadataColumnNames: Seq[String],
     nonMetadataColumns: Seq[StructField],
-    tableSchema: StructType)
-    extends PartitionReader[InternalRow] {
+    tableSchema: StructType) extends PartitionReader[InternalRow] {
   private def addMetadata(row: InternalRow): InternalRow = {
     val metadataRow = new GenericInternalRow(metadataColumnNames.map {
       case "index" => index
@@ -880,7 +858,8 @@ private class BufferedRowsReader(
     val originalRow = partition.rows(index)
     val values = new Array[Any](nonMetadataColumns.length)
     nonMetadataColumns.zipWithIndex.foreach { case (col, idx) =>
-      values(idx) = extractFieldValue(col, tableSchema, partition.schema, originalRow)
+      values(idx) = extractFieldValue(col, tableSchema,
+        partition.schema, originalRow)
     }
     addMetadata(new GenericInternalRow(values))
   }
@@ -906,13 +885,12 @@ private class BufferedRowsReader(
               return null
             }
             val childRow = row.toSeq(writeSchema)(writeIndex).asInstanceOf[InternalRow]
-            val childWriteSchema =
-              writeSchema.fields(writeIndex).dataType.asInstanceOf[StructType]
+            val childWriteSchema = writeSchema.fields(writeIndex).dataType.asInstanceOf[StructType]
             val childReadSchema = readSchema.fields(writeIndex).dataType.asInstanceOf[StructType]
             val resultValue = new Array[Any](fields.length)
             fields.zipWithIndex.foreach { case (childField, idx) =>
-              val childValue =
-                extractFieldValue(childField, childReadSchema, childWriteSchema, childRow)
+              val childValue = extractFieldValue(childField, childReadSchema,
+                childWriteSchema, childRow)
               resultValue(idx) = childValue
             }
             new GenericInternalRow(resultValue)
@@ -923,12 +901,8 @@ private class BufferedRowsReader(
             if (mapData == null) {
               null
             } else {
-              extractMapValue(
-                mapData,
-                keyType,
-                valueType,
-                writeMapType.keyType,
-                writeMapType.valueType)
+              extractMapValue(mapData, keyType, valueType,
+                writeMapType.keyType, writeMapType.valueType)
             }
 
           case ArrayType(elementType, _) =>
@@ -945,10 +919,8 @@ private class BufferedRowsReader(
         }
       case (None, Some(_)) =>
         ResolveDefaultColumns.getExistenceDefaultValue(field)
-      case _ =>
-        throw new RuntimeException(
-          "Failed, " +
-            "field is not found in both read and write schema.")
+      case _ => throw new RuntimeException("Failed, " +
+        "field is not found in both read and write schema.")
     }
   }
 
@@ -975,7 +947,10 @@ private class BufferedRowsReader(
     ArrayBasedMapData(convertedKeys, convertedValues)
   }
 
-  private def extractCollection(elements: Array[Any], readType: DataType, writeType: DataType) = {
+  private def extractCollection(
+      elements: Array[Any],
+      readType: DataType,
+      writeType: DataType) = {
     (readType, writeType) match {
       case (readSt: StructType, writeSt: StructType) =>
         elements.map { elem =>
@@ -1001,12 +976,8 @@ private class BufferedRowsReader(
           if (elem == null) {
             null
           } else {
-            extractMapValue(
-              elem.asInstanceOf[MapData],
-              rKeyType,
-              rValueType,
-              wKeyType,
-              wValueType)
+            extractMapValue(elem.asInstanceOf[MapData], rKeyType, rValueType,
+              wKeyType, wValueType)
           }
         }
       case (readType: AtomicType, writeType: AtomicType) if readType != writeType =>
@@ -1042,8 +1013,7 @@ private class BufferedRowsReader(
 }
 
 private class BufferedRowsWriterFactory(schema: StructType)
-    extends DataWriterFactory
-    with StreamingDataWriterFactory {
+  extends DataWriterFactory with StreamingDataWriterFactory {
   override def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] = {
     new BufferWriter(schema)
   }

@@ -29,16 +29,14 @@ class XmlPartitioningSuite extends SparkFunSuite with Matchers {
   protected val legacyParserEnabled: Boolean = false
 
   protected def doPartitionTest(suffix: String, blockSize: Long, large: Boolean): Unit = {
-    val spark = SparkSession
-      .builder()
+    val spark = SparkSession.builder()
       .master("local[2]")
       .appName("XmlPartitioningSuite")
       .config("spark.hadoop.fs.local.block.size", blockSize)
       .config(SQLConf.LEGACY_XML_PARSER_ENABLED.key, legacyParserEnabled)
       .getOrCreate()
     try {
-      val fileName =
-        s"test-data/xml-resources/fias_house${if (large) ".large" else ""}.xml$suffix"
+      val fileName = s"test-data/xml-resources/fias_house${if (large) ".large" else ""}.xml$suffix"
       val xmlFile = getClass.getClassLoader.getResource(fileName).getFile
       val results = spark.read.option("rowTag", "House").option("mode", "FAILFAST").xml(xmlFile)
       // Test file has 37 records; large file is 20x the records

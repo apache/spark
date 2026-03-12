@@ -47,20 +47,19 @@ private[sql] class ObservationManager(session: SparkSession) {
   }
 
   def getOrNewObservation(name: String, dataFrameId: Long): Observation =
-    observations.computeIfAbsent(
-      (name, dataFrameId),
-      { _ =>
-        val observation = Observation(name)
-        observation.markRegistered()
-        observation
-      })
+    observations.computeIfAbsent((name, dataFrameId), { _ =>
+      val observation = Observation(name)
+      observation.markRegistered()
+      observation
+    })
 
   private[sql] def tryComplete(qe: QueryExecution): Unit = {
     // Use lazy val to defer collecting the observed metrics until it is needed so that tryComplete
     // can finish faster (e.g., when the logical plan doesn't contain CollectMetrics).
     // Wrap in Try to capture potential failures when collecting metrics.
     lazy val lazyObservedMetrics = Try(qe.observedMetrics)
-    qe.logical.foreachWithSubqueriesAndPruning(_.containsPattern(TreePattern.COLLECT_METRICS)) {
+    qe.logical.foreachWithSubqueriesAndPruning(
+      _.containsPattern(TreePattern.COLLECT_METRICS)) {
       case c: CollectMetrics =>
         val observation = observations.remove((c.name, c.dataframeId))
         if (observation != null) {

@@ -77,12 +77,12 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
     val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
     checkAnswer(
       rowsDf,
-      (child: SparkPlan) =>
-        createScriptTransformationExec(
-          script = "cat",
-          output = Seq(AttributeReference("a", StringType)()),
-          child = child,
-          ioschema = defaultIOSchema),
+      (child: SparkPlan) => createScriptTransformationExec(
+        script = "cat",
+        output = Seq(AttributeReference("a", StringType)()),
+        child = child,
+        ioschema = defaultIOSchema
+      ),
       rowsDf.collect().toImmutableArraySeq)
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
@@ -94,12 +94,12 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
     val e = intercept[TestFailedException] {
       checkAnswer(
         rowsDf,
-        (child: SparkPlan) =>
-          createScriptTransformationExec(
-            script = "cat",
-            output = Seq(AttributeReference("a", StringType)()),
-            child = ExceptionInjectingOperator(child),
-            ioschema = defaultIOSchema),
+        (child: SparkPlan) => createScriptTransformationExec(
+          script = "cat",
+          output = Seq(AttributeReference("a", StringType)()),
+          child = ExceptionInjectingOperator(child),
+          ioschema = defaultIOSchema
+        ),
         rowsDf.collect().toImmutableArraySeq)
     }
     assert(e.getMessage().contains("intentional exception"))
@@ -115,16 +115,12 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       val df = Seq(
         (1, "1", 1.0, BigDecimal(1.0), new Timestamp(1)),
         (2, "2", 2.0, BigDecimal(2.0), new Timestamp(2)),
-        (3, "3", 3.0, BigDecimal(3.0), new Timestamp(3))).toDF(
-        "a",
-        "b",
-        "c",
-        "d",
-        "e"
-      ) // Note column d's data type is Decimal(38, 18)
+        (3, "3", 3.0, BigDecimal(3.0), new Timestamp(3))
+      ).toDF("a", "b", "c", "d", "e") // Note column d's data type is Decimal(38, 18)
       df.createTempView("v")
 
-      val query = sql(s"""
+      val query = sql(
+        s"""
            |SELECT
            |TRANSFORM(a, b, c, d, e)
            |  ROW FORMAT DELIMITED
@@ -135,17 +131,12 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
            |FROM v
         """.stripMargin)
 
-      checkAnswer(
-        query,
-        identity,
-        df.select(
-          $"a".cast("string"),
-          $"b".cast("string"),
-          $"c".cast("string"),
-          $"d".cast("string"),
-          $"e".cast("string"))
-          .collect()
-          .toImmutableArraySeq)
+      checkAnswer(query, identity, df.select(
+        $"a".cast("string"),
+        $"b".cast("string"),
+        $"c".cast("string"),
+        $"d".cast("string"),
+        $"e".cast("string")).collect().toImmutableArraySeq)
     }
   }
 
@@ -154,53 +145,50 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       val df = Seq(
         (1, "1", 1.0, BigDecimal(1.0), new Timestamp(1)),
         (2, "2", 2.0, BigDecimal(2.0), new Timestamp(2)),
-        (3, "3", 3.0, BigDecimal(3.0), new Timestamp(3))).toDF(
-        "a",
-        "b",
-        "c",
-        "d",
-        "e"
-      ) // Note column d's data type is Decimal(38, 18)
+        (3, "3", 3.0, BigDecimal(3.0), new Timestamp(3))
+      ).toDF("a", "b", "c", "d", "e") // Note column d's data type is Decimal(38, 18)
 
       checkAnswer(
         df,
-        (child: SparkPlan) =>
-          createScriptTransformationExec(
-            script = "cat",
-            output = Seq(
-              AttributeReference("key", StringType)(),
-              AttributeReference("value", StringType)()),
-            child = child,
-            ioschema = defaultIOSchema.copy(schemaLess = true)),
-        df.select($"a".cast("string").as("key"), $"b".cast("string").as("value"))
-          .collect()
-          .toImmutableArraySeq)
+        (child: SparkPlan) => createScriptTransformationExec(
+          script = "cat",
+          output = Seq(
+            AttributeReference("key", StringType)(),
+            AttributeReference("value", StringType)()),
+          child = child,
+          ioschema = defaultIOSchema.copy(schemaLess = true)
+        ),
+        df.select(
+          $"a".cast("string").as("key"),
+          $"b".cast("string").as("value")).collect().toImmutableArraySeq)
 
       checkAnswer(
         df.select($"a", $"b"),
-        (child: SparkPlan) =>
-          createScriptTransformationExec(
-            script = "cat",
-            output = Seq(
-              AttributeReference("key", StringType)(),
-              AttributeReference("value", StringType)()),
-            child = child,
-            ioschema = defaultIOSchema.copy(schemaLess = true)),
-        df.select($"a".cast("string").as("key"), $"b".cast("string").as("value"))
-          .collect()
-          .toImmutableArraySeq)
+        (child: SparkPlan) => createScriptTransformationExec(
+          script = "cat",
+          output = Seq(
+            AttributeReference("key", StringType)(),
+            AttributeReference("value", StringType)()),
+          child = child,
+          ioschema = defaultIOSchema.copy(schemaLess = true)
+        ),
+        df.select(
+          $"a".cast("string").as("key"),
+          $"b".cast("string").as("value")).collect().toImmutableArraySeq)
 
       checkAnswer(
         df.select($"a"),
-        (child: SparkPlan) =>
-          createScriptTransformationExec(
-            script = "cat",
-            output = Seq(
-              AttributeReference("key", StringType)(),
-              AttributeReference("value", StringType)()),
-            child = child,
-            ioschema = defaultIOSchema.copy(schemaLess = true)),
-        df.select($"a".cast("string").as("key"), lit(null)).collect().toImmutableArraySeq)
+        (child: SparkPlan) => createScriptTransformationExec(
+          script = "cat",
+          output = Seq(
+            AttributeReference("key", StringType)(),
+            AttributeReference("value", StringType)()),
+          child = child,
+          ioschema = defaultIOSchema.copy(schemaLess = true)
+        ),
+        df.select(
+          $"a".cast("string").as("key"),
+          lit(null)).collect().toImmutableArraySeq)
     }
   }
 
@@ -226,90 +214,53 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       assume(TestUtils.testCommandAvailable("python3"))
       withTempView("v") {
         val df = Seq(
-          (
-            1,
-            "1",
-            1.0f,
-            1.0,
-            11.toByte,
-            BigDecimal(1.0),
-            new Timestamp(1),
-            new Date(2020, 7, 1),
-            true),
-          (
-            2,
-            "2",
-            2.0f,
-            2.0,
-            22.toByte,
-            BigDecimal(2.0),
-            new Timestamp(2),
-            new Date(2020, 7, 2),
-            true),
-          (
-            3,
-            "3",
-            3.0f,
-            3.0,
-            33.toByte,
-            BigDecimal(3.0),
-            new Timestamp(3),
-            new Date(2020, 7, 3),
-            false))
-          .toDF("a", "b", "c", "d", "e", "f", "g", "h", "i")
+          (1, "1", 1.0f, 1.0, 11.toByte, BigDecimal(1.0), new Timestamp(1),
+            new Date(2020, 7, 1), true),
+          (2, "2", 2.0f, 2.0, 22.toByte, BigDecimal(2.0), new Timestamp(2),
+            new Date(2020, 7, 2), true),
+          (3, "3", 3.0f, 3.0, 33.toByte, BigDecimal(3.0), new Timestamp(3),
+            new Date(2020, 7, 3), false)
+        ).toDF("a", "b", "c", "d", "e", "f", "g", "h", "i")
           .withColumn("j", lit("abc").cast("binary"))
 
         checkAnswer(
           df,
-          (child: SparkPlan) =>
-            createScriptTransformationExec(
-              script = "cat",
-              output = Seq(
-                AttributeReference("a", IntegerType)(),
-                AttributeReference("b", StringType)(),
-                AttributeReference("c", FloatType)(),
-                AttributeReference("d", DoubleType)(),
-                AttributeReference("e", ByteType)(),
-                AttributeReference("f", DecimalType(38, 18))(),
-                AttributeReference("g", TimestampType)(),
-                AttributeReference("h", DateType)(),
-                AttributeReference("i", BooleanType)(),
-                AttributeReference("j", BinaryType)()),
-              child = child,
-              ioschema = serde),
-          df.select($"a", $"b", $"c", $"d", $"e", $"f", $"g", $"h", $"i", $"j")
-            .collect()
-            .toImmutableArraySeq)
+          (child: SparkPlan) => createScriptTransformationExec(
+            script = "cat",
+            output = Seq(
+              AttributeReference("a", IntegerType)(),
+              AttributeReference("b", StringType)(),
+              AttributeReference("c", FloatType)(),
+              AttributeReference("d", DoubleType)(),
+              AttributeReference("e", ByteType)(),
+              AttributeReference("f", DecimalType(38, 18))(),
+              AttributeReference("g", TimestampType)(),
+              AttributeReference("h", DateType)(),
+              AttributeReference("i", BooleanType)(),
+              AttributeReference("j", BinaryType)()),
+            child = child,
+            ioschema = serde
+          ),
+          df.select($"a", $"b", $"c", $"d", $"e",
+            $"f", $"g", $"h", $"i", $"j").collect().toImmutableArraySeq)
       }
     }
   }
 
   testBasicInputDataTypesWith(defaultIOSchema, "no serde")
 
-  test(
-    "SPARK-32400: TRANSFORM should support more data types (interval, array, map, struct " +
-      "and udt) as input (no serde)") {
+  test("SPARK-32400: TRANSFORM should support more data types (interval, array, map, struct " +
+    "and udt) as input (no serde)") {
     assume(TestUtils.testCommandAvailable("python3"))
     withTempView("v") {
       val df = Seq(
-        (
-          new CalendarInterval(7, 1, 1000),
-          Array(0, 1, 2),
-          Map("a" -> 1),
-          (1, 2),
+        (new CalendarInterval(7, 1, 1000), Array(0, 1, 2), Map("a" -> 1), (1, 2),
           new SimpleTuple(1, 1L)),
-        (
-          new CalendarInterval(7, 2, 2000),
-          Array(3, 4, 5),
-          Map("b" -> 2),
-          (3, 4),
+        (new CalendarInterval(7, 2, 2000), Array(3, 4, 5), Map("b" -> 2), (3, 4),
           new SimpleTuple(1, 1L)),
-        (
-          new CalendarInterval(7, 3, 3000),
-          Array(6, 7, 8),
-          Map("c" -> 3),
-          (5, 6),
-          new SimpleTuple(1, 1L))).toDF("a", "b", "c", "d", "e")
+        (new CalendarInterval(7, 3, 3000), Array(6, 7, 8), Map("c" -> 3), (5, 6),
+          new SimpleTuple(1, 1L))
+      ).toDF("a", "b", "c", "d", "e")
 
       // Can't support convert script output data to ArrayType/MapType/StructType now,
       // return these column still as string.
@@ -318,20 +269,19 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       // will return null value as column.
       checkAnswer(
         df,
-        (child: SparkPlan) =>
-          createScriptTransformationExec(
-            script = "cat",
-            output = Seq(
-              AttributeReference("a", CalendarIntervalType)(),
-              AttributeReference("b", ArrayType(IntegerType))(),
-              AttributeReference("c", MapType(StringType, IntegerType))(),
-              AttributeReference(
-                "d",
-                StructType(
-                  Array(StructField("_1", IntegerType), StructField("_2", IntegerType))))(),
-              AttributeReference("e", new SimpleTupleUDT)()),
-            child = child,
-            ioschema = defaultIOSchema),
+        (child: SparkPlan) => createScriptTransformationExec(
+          script = "cat",
+          output = Seq(
+            AttributeReference("a", CalendarIntervalType)(),
+            AttributeReference("b", ArrayType(IntegerType))(),
+            AttributeReference("c", MapType(StringType, IntegerType))(),
+            AttributeReference("d", StructType(
+              Array(StructField("_1", IntegerType),
+                StructField("_2", IntegerType))))(),
+            AttributeReference("e", new SimpleTupleUDT)()),
+          child = child,
+          ioschema = defaultIOSchema
+        ),
         df.select($"a", $"b", $"c", $"d", $"e").collect().toImmutableArraySeq)
     }
   }
@@ -344,10 +294,12 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           val df = Seq(
             (new Timestamp(1), new Date(2020, 7, 1)),
             (new Timestamp(2), new Date(2020, 7, 2)),
-            (new Timestamp(3), new Date(2020, 7, 3))).toDF("a", "b")
+            (new Timestamp(3), new Date(2020, 7, 3))
+          ).toDF("a", "b")
           df.createTempView("v")
 
-          val query = sql("""
+          val query = sql(
+            """
               |SELECT TRANSFORM (a, b)
               |USING 'cat' AS (a timestamp, b date)
               |FROM v
@@ -363,18 +315,14 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       val df = Seq(
         (1, "1", 1.0, BigDecimal(1.0), new Timestamp(1)),
         (2, "2", 2.0, BigDecimal(2.0), new Timestamp(2)),
-        (3, "3", 3.0, BigDecimal(3.0), new Timestamp(3))).toDF(
-        "a",
-        "b",
-        "c",
-        "d",
-        "e"
-      ) // Note column d's data type is Decimal(38, 18)
+        (3, "3", 3.0, BigDecimal(3.0), new Timestamp(3))
+      ).toDF("a", "b", "c", "d", "e") // Note column d's data type is Decimal(38, 18)
       df.createTempView("v")
 
       // input/output with same delimit
       checkAnswer(
-        sql(s"""
+        sql(
+          s"""
              |SELECT TRANSFORM(a, b, c, d, e)
              |  ROW FORMAT DELIMITED
              |  FIELDS TERMINATED BY ','
@@ -390,20 +338,17 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
              |  LINES TERMINATED BY '\n'
              |  NULL DEFINED AS 'NULL'
              |FROM v
-        """.stripMargin),
-        identity,
-        df.select(
+        """.stripMargin), identity, df.select(
           $"a".cast("string"),
           $"b".cast("string"),
           $"c".cast("string"),
           $"d".cast("string"),
-          $"e".cast("string"))
-          .collect()
-          .toImmutableArraySeq)
+          $"e".cast("string")).collect().toImmutableArraySeq)
 
       // input/output with different delimit and show result
       checkAnswer(
-        sql(s"""
+        sql(
+          s"""
              |SELECT TRANSFORM(a, b, c, d, e)
              |  ROW FORMAT DELIMITED
              |  FIELDS TERMINATED BY ','
@@ -415,50 +360,40 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
              |  LINES TERMINATED BY '\n'
              |  NULL DEFINED AS 'NULL'
              |FROM v
-        """.stripMargin),
-        identity,
-        df.select(
-          concat_ws(
-            ",",
+        """.stripMargin), identity, df.select(
+          concat_ws(",",
             $"a".cast("string"),
             $"b".cast("string"),
             $"c".cast("string"),
             $"d".cast("string"),
-            $"e".cast("string")))
-          .collect()
-          .toImmutableArraySeq)
+            $"e".cast("string"))).collect().toImmutableArraySeq)
     }
   }
 
-  test(
-    "SPARK-32667: SCRIPT TRANSFORM pad null value to fill column" +
-      " when without schema less (no-serde)") {
+  test("SPARK-32667: SCRIPT TRANSFORM pad null value to fill column" +
+    " when without schema less (no-serde)") {
     val df = Seq(
       (1, "1", 1.0, BigDecimal(1.0), new Timestamp(1)),
       (2, "2", 2.0, BigDecimal(2.0), new Timestamp(2)),
-      (3, "3", 3.0, BigDecimal(3.0), new Timestamp(3))).toDF(
-      "a",
-      "b",
-      "c",
-      "d",
-      "e"
-    ) // Note column d's data type is Decimal(38, 18)
+      (3, "3", 3.0, BigDecimal(3.0), new Timestamp(3))
+    ).toDF("a", "b", "c", "d", "e") // Note column d's data type is Decimal(38, 18)
 
     checkAnswer(
       df.select($"a", $"b"),
-      (child: SparkPlan) =>
-        createScriptTransformationExec(
-          script = "cat",
-          output = Seq(
-            AttributeReference("a", StringType)(),
-            AttributeReference("b", StringType)(),
-            AttributeReference("c", StringType)(),
-            AttributeReference("d", StringType)()),
-          child = child,
-          ioschema = defaultIOSchema),
-      df.select($"a".cast("string").as("a"), $"b".cast("string").as("b"), lit(null), lit(null))
-        .collect()
-        .toImmutableArraySeq)
+      (child: SparkPlan) => createScriptTransformationExec(
+        script = "cat",
+        output = Seq(
+          AttributeReference("a", StringType)(),
+          AttributeReference("b", StringType)(),
+          AttributeReference("c", StringType)(),
+          AttributeReference("d", StringType)()),
+        child = child,
+        ioschema = defaultIOSchema
+      ),
+      df.select(
+        $"a".cast("string").as("a"),
+        $"b".cast("string").as("b"),
+        lit(null), lit(null)).collect().toImmutableArraySeq)
   }
 
   test("SPARK-32106: TRANSFORM with non-existent command/file") {
@@ -483,19 +418,23 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
 
   test("SPARK-33930: Script Transform default FIELD DELIMIT should be \u0001 (no serde)") {
     withTempView("v") {
-      val df = Seq((1, 2, 3), (2, 3, 4), (3, 4, 5)).toDF("a", "b", "c")
+      val df = Seq(
+        (1, 2, 3),
+        (2, 3, 4),
+        (3, 4, 5)
+      ).toDF("a", "b", "c")
       df.createTempView("v")
 
       checkAnswer(
-        sql(s"""
+        sql(
+          s"""
              |SELECT TRANSFORM(a, b, c)
              |  ROW FORMAT DELIMITED
              |  USING 'cat' AS (a)
              |  ROW FORMAT DELIMITED
              |  FIELDS TERMINATED BY '&'
              |FROM v
-        """.stripMargin),
-        identity,
+        """.stripMargin), identity,
         Row("1\u00012\u00013") ::
           Row("2\u00013\u00014") ::
           Row("3\u00014\u00015") :: Nil)
@@ -506,69 +445,46 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
     assume(TestUtils.testCommandAvailable("python3"))
     withTempView("v") {
       val df = Seq(
-        (
-          Array(0, 1, 2),
-          Array(Array(0, 1), Array(2)),
-          Map("a" -> 1),
-          Map("b" -> Array("a", "b"))),
-        (
-          Array(3, 4, 5),
-          Array(Array(3, 4), Array(5)),
-          Map("b" -> 2),
-          Map("c" -> Array("c", "d"))),
-        (
-          Array(6, 7, 8),
-          Array(Array(6, 7), Array(8)),
-          Map("c" -> 3),
-          Map("d" -> Array("e", "f"))))
-        .toDF("a", "b", "c", "d")
-        .select(
-          $"a",
-          $"b",
-          $"c",
-          $"d",
+        (Array(0, 1, 2), Array(Array(0, 1), Array(2)),
+          Map("a" -> 1), Map("b" -> Array("a", "b"))),
+        (Array(3, 4, 5), Array(Array(3, 4), Array(5)),
+          Map("b" -> 2), Map("c" -> Array("c", "d"))),
+        (Array(6, 7, 8), Array(Array(6, 7), Array(8)),
+          Map("c" -> 3), Map("d" -> Array("e", "f")))
+      ).toDF("a", "b", "c", "d")
+        .select($"a", $"b", $"c", $"d",
           struct($"a", $"b").as("e"),
           struct($"a", $"d").as("f"),
-          struct(struct($"a", $"b"), struct($"a", $"d")).as("g"))
+          struct(struct($"a", $"b"), struct($"a", $"d")).as("g")
+        )
 
       checkAnswer(
         df,
-        (child: SparkPlan) =>
-          createScriptTransformationExec(
-            script = "cat",
-            output = Seq(
-              AttributeReference("a", ArrayType(IntegerType))(),
-              AttributeReference("b", ArrayType(ArrayType(IntegerType)))(),
-              AttributeReference("c", MapType(StringType, IntegerType))(),
-              AttributeReference("d", MapType(StringType, ArrayType(StringType)))(),
-              AttributeReference(
-                "e",
-                StructType(
-                  Array(
-                    StructField("a", ArrayType(IntegerType)),
-                    StructField("b", ArrayType(ArrayType(IntegerType))))))(),
-              AttributeReference(
-                "f",
-                StructType(
-                  Array(
-                    StructField("a", ArrayType(IntegerType)),
-                    StructField("d", MapType(StringType, ArrayType(StringType))))))(),
-              AttributeReference(
-                "g",
-                StructType(Array(
-                  StructField(
-                    "col1",
-                    StructType(Array(
-                      StructField("a", ArrayType(IntegerType)),
-                      StructField("b", ArrayType(ArrayType(IntegerType)))))),
-                  StructField(
-                    "col2",
-                    StructType(Array(
-                      StructField("a", ArrayType(IntegerType)),
-                      StructField("d", MapType(StringType, ArrayType(StringType)))))))))()),
-            child = child,
-            ioschema = defaultIOSchema),
-        df.select($"a", $"b", $"c", $"d", $"e", $"f", $"g").collect().toImmutableArraySeq)
+        (child: SparkPlan) => createScriptTransformationExec(
+          script = "cat",
+          output = Seq(
+            AttributeReference("a", ArrayType(IntegerType))(),
+            AttributeReference("b", ArrayType(ArrayType(IntegerType)))(),
+            AttributeReference("c", MapType(StringType, IntegerType))(),
+            AttributeReference("d", MapType(StringType, ArrayType(StringType)))(),
+            AttributeReference("e", StructType(
+              Array(StructField("a", ArrayType(IntegerType)),
+                StructField("b", ArrayType(ArrayType(IntegerType))))))(),
+            AttributeReference("f", StructType(
+              Array(StructField("a", ArrayType(IntegerType)),
+                StructField("d", MapType(StringType, ArrayType(StringType))))))(),
+            AttributeReference("g", StructType(
+              Array(StructField("col1", StructType(
+                Array(StructField("a", ArrayType(IntegerType)),
+                  StructField("b", ArrayType(ArrayType(IntegerType)))))),
+                StructField("col2", StructType(
+                  Array(StructField("a", ArrayType(IntegerType)),
+                    StructField("d", MapType(StringType, ArrayType(StringType)))))))))()),
+          child = child,
+          ioschema = defaultIOSchema
+        ),
+        df.select($"a", $"b", $"c", $"d", $"e",
+          $"f", $"g").collect().toImmutableArraySeq)
     }
   }
 
@@ -579,18 +495,14 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       val df = Seq(
         (1, "1", 1.0, BigDecimal(1.0), new Timestamp(1)),
         (2, "2", 2.0, BigDecimal(2.0), new Timestamp(2)),
-        (3, "3", 3.0, BigDecimal(3.0), new Timestamp(3))).toDF(
-        "a",
-        "b",
-        "c",
-        "d",
-        "e"
-      ) // Note column d's data type is Decimal(38, 18)
+        (3, "3", 3.0, BigDecimal(3.0), new Timestamp(3))
+      ).toDF("a", "b", "c", "d", "e") // Note column d's data type is Decimal(38, 18)
       df.createTempView("v")
 
       // test 'python3 /path/to/script.py' with local file
       checkAnswer(
-        sql(s"""
+        sql(
+          s"""
              |SELECT
              |TRANSFORM(a, b, c, d, e)
              |  ROW FORMAT DELIMITED
@@ -599,21 +511,18 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
              |  ROW FORMAT DELIMITED
              |  FIELDS TERMINATED BY '\t'
              |FROM v
-        """.stripMargin),
-        identity,
-        df.select(
+        """.stripMargin), identity, df.select(
           $"a".cast("string"),
           $"b".cast("string"),
           $"c".cast("string"),
           $"d".cast("string"),
-          $"e".cast("string"))
-          .collect()
-          .toImmutableArraySeq)
+          $"e".cast("string")).collect().toImmutableArraySeq)
 
       // test '/path/to/script.py' with script not executable
       val e1 = intercept[TestFailedException] {
         checkAnswer(
-          sql(s"""
+          sql(
+            s"""
                |SELECT
                |TRANSFORM(a, b, c, d, e)
                |  ROW FORMAT DELIMITED
@@ -622,16 +531,12 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
                |  ROW FORMAT DELIMITED
                |  FIELDS TERMINATED BY '\t'
                |FROM v
-        """.stripMargin),
-          identity,
-          df.select(
+        """.stripMargin), identity, df.select(
             $"a".cast("string"),
             $"b".cast("string"),
             $"c".cast("string"),
             $"d".cast("string"),
-            $"e".cast("string"))
-            .collect()
-            .toImmutableArraySeq)
+            $"e".cast("string")).collect().toImmutableArraySeq)
       }.getMessage
       // Check with status exit code since in GA test, it may lose detail failed root cause.
       // Different root cause's exitcode is not same.
@@ -641,7 +546,8 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       // test `/path/to/script.py' with script executable
       scriptFilePath.setExecutable(true)
       checkAnswer(
-        sql(s"""
+        sql(
+          s"""
              |SELECT
              |TRANSFORM(a, b, c, d, e)
              |  ROW FORMAT DELIMITED
@@ -650,23 +556,20 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
              |  ROW FORMAT DELIMITED
              |  FIELDS TERMINATED BY '\t'
              |FROM v
-        """.stripMargin),
-        identity,
-        df.select(
+        """.stripMargin), identity, df.select(
           $"a".cast("string"),
           $"b".cast("string"),
           $"c".cast("string"),
           $"d".cast("string"),
-          $"e".cast("string"))
-          .collect()
-          .toImmutableArraySeq)
+          $"e".cast("string")).collect().toImmutableArraySeq)
 
       scriptFilePath.setExecutable(false)
       sql(s"ADD FILE ${scriptFilePath.getAbsolutePath}")
 
       // test `script.py` when file added
       checkAnswer(
-        sql(s"""
+        sql(
+          s"""
              |SELECT TRANSFORM(a, b, c, d, e)
              |  ROW FORMAT DELIMITED
              |  FIELDS TERMINATED BY '\t'
@@ -674,20 +577,17 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
              |  ROW FORMAT DELIMITED
              |  FIELDS TERMINATED BY '\t'
              |FROM v
-        """.stripMargin),
-        identity,
-        df.select(
+        """.stripMargin), identity, df.select(
           $"a".cast("string"),
           $"b".cast("string"),
           $"c".cast("string"),
           $"d".cast("string"),
-          $"e".cast("string"))
-          .collect()
-          .toImmutableArraySeq)
+          $"e".cast("string")).collect().toImmutableArraySeq)
 
       // test `python3 script.py` when file added
       checkAnswer(
-        sql(s"""
+        sql(
+          s"""
              |SELECT TRANSFORM(a, b, c, d, e)
              |  ROW FORMAT DELIMITED
              |  FIELDS TERMINATED BY '\t'
@@ -695,30 +595,27 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
              |  ROW FORMAT DELIMITED
              |  FIELDS TERMINATED BY '\t'
              |FROM v
-        """.stripMargin),
-        identity,
-        df.select(
+        """.stripMargin), identity, df.select(
           $"a".cast("string"),
           $"b".cast("string"),
           $"c".cast("string"),
           $"d".cast("string"),
-          $"e".cast("string"))
-          .collect()
-          .toImmutableArraySeq)
+          $"e".cast("string")).collect().toImmutableArraySeq)
     }
   }
 
-  test(
-    "SPARK-35220: DayTimeIntervalType/YearMonthIntervalType show different " +
-      "between hive serde and row format delimited\t") {
+  test("SPARK-35220: DayTimeIntervalType/YearMonthIntervalType show different " +
+    "between hive serde and row format delimited\t") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     withTempView("v") {
-      val df = Seq((Duration.ofDays(1), Period.ofMonths(10))).toDF("a", "b")
+      val df = Seq(
+        (Duration.ofDays(1), Period.ofMonths(10))
+      ).toDF("a", "b")
       df.createTempView("v")
 
       if (defaultSerDe() == "hive-serde") {
-        checkAnswer(
-          sql("""
+        checkAnswer(sql(
+          """
             |SELECT TRANSFORM(a, b)
             |  USING 'cat' AS (a, b)
             |FROM v
@@ -726,8 +623,8 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           identity,
           Row("1 00:00:00.000000000", "0-10") :: Nil)
       } else {
-        checkAnswer(
-          sql("""
+        checkAnswer(sql(
+          """
             |SELECT TRANSFORM(a, b)
             |  USING 'cat' AS (a, b)
             |FROM v
@@ -741,20 +638,20 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
   test("SPARK-36208: TRANSFORM should support ANSI interval (no serde)") {
     assume(TestUtils.testCommandAvailable("python3"))
     withTempView("v") {
-      val df =
-        Seq((Period.of(1, 2, 0), Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4)))
-          .toDF("ym", "dt")
+      val df = Seq(
+        (Period.of(1, 2, 0), Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4))
+      ).toDF("ym", "dt")
 
       checkAnswer(
         df,
-        (child: SparkPlan) =>
-          createScriptTransformationExec(
-            script = "cat",
-            output = Seq(
-              AttributeReference("ym", YearMonthIntervalType())(),
-              AttributeReference("dt", DayTimeIntervalType())()),
-            child = child,
-            ioschema = defaultIOSchema),
+        (child: SparkPlan) => createScriptTransformationExec(
+          script = "cat",
+          output = Seq(
+            AttributeReference("ym", YearMonthIntervalType())(),
+            AttributeReference("dt", DayTimeIntervalType())()),
+          child = child,
+          ioschema = defaultIOSchema
+        ),
         df.select($"ym", $"dt").collect().toImmutableArraySeq)
     }
   }
@@ -763,12 +660,13 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
     val df = spark.sql("SELECT timestamp_ntz'2021-09-06 20:19:13' col")
     checkAnswer(
       df,
-      (child: SparkPlan) =>
-        createScriptTransformationExec(
-          script = "cat",
-          output = Seq(AttributeReference("col", TimestampNTZType)()),
-          child = child,
-          ioschema = defaultIOSchema),
+      (child: SparkPlan) => createScriptTransformationExec(
+        script = "cat",
+        output = Seq(
+          AttributeReference("col", TimestampNTZType)()),
+        child = child,
+        ioschema = defaultIOSchema
+      ),
       df.select($"col").collect().toImmutableArraySeq)
   }
 }
@@ -801,10 +699,10 @@ private class SimpleTuple(val id: Int, val size: Long) extends Serializable {
   }
 
   override def toString: String =
-    compact(
-      render(
-        ("id" -> id) ~
-          ("size" -> size)))
+    compact(render(
+      ("id" -> id) ~
+        ("size" -> size)
+    ))
 }
 
 private class SimpleTupleUDT extends UserDefinedType[SimpleTuple] {

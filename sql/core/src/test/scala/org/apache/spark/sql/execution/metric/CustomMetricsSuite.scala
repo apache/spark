@@ -28,9 +28,8 @@ class CustomMetricsSuite extends SparkFunSuite {
 
       assert(metricType == CustomMetrics.V2_CUSTOM + "_" + customMetric.getClass.getCanonicalName)
       assert(CustomMetrics.parseV2CustomMetricType(metricType).isDefined)
-      assert(
-        CustomMetrics.parseV2CustomMetricType(metricType).get ==
-          customMetric.getClass.getCanonicalName)
+      assert(CustomMetrics.parseV2CustomMetricType(metricType).get ==
+        customMetric.getClass.getCanonicalName)
     }
   }
 

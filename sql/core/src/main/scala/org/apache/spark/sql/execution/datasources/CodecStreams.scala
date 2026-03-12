@@ -49,7 +49,9 @@ object CodecStreams {
       context: JobContext,
       file: Option[Path] = None): Option[CompressionCodec] = {
     if (FileOutputFormat.getCompressOutput(context)) {
-      val compressorClass = FileOutputFormat.getOutputCompressorClass(context, classOf[GzipCodec])
+      val compressorClass = FileOutputFormat.getOutputCompressorClass(
+        context,
+        classOf[GzipCodec])
 
       Some(ReflectionUtils.newInstance(compressorClass, context.getConfiguration))
     } else {
@@ -61,9 +63,9 @@ object CodecStreams {
   }
 
   /**
-   * Create a new file and open it for writing. If compression is enabled in the [[JobContext]]
-   * the stream will write compressed data to disk. An exception will be thrown if the file
-   * already exists.
+   * Create a new file and open it for writing.
+   * If compression is enabled in the [[JobContext]] the stream will write compressed data to disk.
+   * An exception will be thrown if the file already exists.
    */
   def createOutputStream(context: JobContext, file: Path): OutputStream = {
     val fs = file.getFileSystem(context.getConfiguration)

@@ -26,19 +26,21 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  * The command for `SET CATALOG XXX`.
  *
  * Supports the following expression forms:
- *   - Session temp variable: SET CATALOG var_name (where var_name is a declared variable)
- *   - Simple identifier: SET CATALOG my_catalog (tries to resolve as session temp variable first,
- *     then uses as literal catalog name)
+*   - Session temp variable: SET CATALOG var_name (where var_name is a declared variable)
+*   - Simple identifier: SET CATALOG my_catalog
+*     (tries to resolve as session temp variable first, then uses as literal catalog name)
  *   - String literal: SET CATALOG 'my_catalog'
  *   - identifier() function: SET CATALOG identifier('my_catalog')
- *   - CAST, CONCAT, or other foldable expressions: SET CATALOG CAST('my_catalog' AS STRING)
+ *   - CAST, CONCAT, or other foldable expressions:
+ *     SET CATALOG CAST('my_catalog' AS STRING)
  */
-case class SetCatalogCommand(catalogNameExpr: Expression) extends LeafRunnableCommand {
+case class SetCatalogCommand(catalogNameExpr: Expression)
+  extends LeafRunnableCommand {
   override def output: Seq[Attribute] = Seq.empty
 
   /**
-   * Extracts the catalog name from the catalogNameExpr. This method evaluates the expression and
-   * returns the catalog name string.
+   * Extracts the catalog name from the catalogNameExpr.
+   * This method evaluates the expression and returns the catalog name string.
    */
   def getCatalogName(): String = {
     // Use IdentifierResolution to evaluate and validate the expression.

@@ -32,7 +32,10 @@ import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.internal.SQLConf.CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE
 import org.apache.spark.sql.test.TestSparkSession
 
-class EpochCoordinatorSuite extends SparkFunSuite with LocalSparkSession with MockitoSugar {
+class EpochCoordinatorSuite
+  extends SparkFunSuite
+    with LocalSparkSession
+    with MockitoSugar {
 
   private var epochCoordinator: RpcEndpointRef = _
 
@@ -48,15 +51,13 @@ class EpochCoordinatorSuite extends SparkFunSuite with LocalSparkSession with Mo
     orderVerifier = inOrder(writeSupport, query)
 
     spark = new TestSparkSession(
-      new SparkContext(
-        "local[2]",
-        "test-sql-context",
-        new SparkConf()
-          .set("spark.sql.testkey", "true")
-          .set(CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE, epochBacklogQueueSize)))
+    new SparkContext(
+      "local[2]", "test-sql-context",
+      new SparkConf().set("spark.sql.testkey", "true")
+        .set(CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE, epochBacklogQueueSize)))
 
-    epochCoordinator =
-      EpochCoordinatorRef.create(writeSupport, stream, query, "test", 1, spark, SparkEnv.get)
+    epochCoordinator
+      = EpochCoordinatorRef.create(writeSupport, stream, query, "test", 1, spark, SparkEnv.get)
   }
 
   test("single epoch") {

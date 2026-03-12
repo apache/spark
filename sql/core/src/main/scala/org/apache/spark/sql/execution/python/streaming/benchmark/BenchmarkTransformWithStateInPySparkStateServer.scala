@@ -49,11 +49,13 @@ import org.apache.spark.sql.types.StructType
  * This is a benchmark purposed implementation of StatefulProcessorHandleImplBase that stores
  * state in memory. This leverages Scala collection types.
  *
- * NOTE: TTL is not supported in this implementation since it complicates the thing a lot and this
- * is the benchmark purposed implementation.
+ * NOTE: TTL is not supported in this implementation since it complicates the thing a lot and
+ * this is the benchmark purposed implementation.
  */
-class InMemoryStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: ExpressionEncoder[Any])
-    extends StatefulProcessorHandleImplBase(timeMode, keyExprEnc) {
+class InMemoryStatefulProcessorHandleImpl(
+    timeMode: TimeMode,
+    keyExprEnc: ExpressionEncoder[Any])
+  extends StatefulProcessorHandleImplBase(timeMode, keyExprEnc) {
 
   class InMemoryValueState[T] extends ValueState[T] {
     private val keyToStateValue = mutable.Map[Any, T]()
@@ -93,14 +95,16 @@ class InMemoryStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expres
     override def put(newState: Array[T]): Unit = {
       keyToStateValue.put(
         ImplicitGroupingKeyTracker.getImplicitKeyOption.get,
-        mutable.ArrayBuffer.empty[T] ++ newState)
+        mutable.ArrayBuffer.empty[T] ++ newState
+      )
     }
 
     override def appendValue(newState: T): Unit = {
       if (!exists()) {
         keyToStateValue.put(
           ImplicitGroupingKeyTracker.getImplicitKeyOption.get,
-          mutable.ArrayBuffer.empty[T])
+          mutable.ArrayBuffer.empty[T]
+        )
       }
       keyToStateValue(ImplicitGroupingKeyTracker.getImplicitKeyOption.get) += newState
     }
@@ -109,7 +113,8 @@ class InMemoryStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expres
       if (!exists()) {
         keyToStateValue.put(
           ImplicitGroupingKeyTracker.getImplicitKeyOption.get,
-          mutable.ArrayBuffer.empty[T])
+          mutable.ArrayBuffer.empty[T]
+        )
       }
       keyToStateValue(ImplicitGroupingKeyTracker.getImplicitKeyOption.get) ++= newState
     }
@@ -146,7 +151,8 @@ class InMemoryStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expres
       if (!exists()) {
         keyToStateValue.put(
           ImplicitGroupingKeyTracker.getImplicitKeyOption.get,
-          mutable.HashMap.empty[K, V])
+          mutable.HashMap.empty[K, V]
+        )
       }
 
       keyToStateValue(ImplicitGroupingKeyTracker.getImplicitKeyOption.get) += (key -> value)
@@ -222,9 +228,7 @@ class InMemoryStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expres
     new InMemoryValueState[T]
   }
 
-  override def getValueState[T: Encoder](
-      stateName: String,
-      ttlConfig: TTLConfig): ValueState[T] = {
+  override def getValueState[T: Encoder](stateName: String, ttlConfig: TTLConfig): ValueState[T] = {
     getValueState(stateName, implicitly[Encoder[T]], ttlConfig)
   }
 
@@ -286,17 +290,16 @@ class InMemoryStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expres
  * implementation leveraging RocksDB).
  *
  * The instruction to run this benchmark:
- *   1. Build Spark with `./dev/make-distribution.sh`
- *   2. `cd dist`
- *   3. `java -classpath "./jars&#47;*" org.apache.spark.sql.execution.python.streaming.benchmark.BenchmarkTransformWithStateInPySparkStateServer`
- *      To run this with Unix Domain Socket, set the environment variable `PYSPARK_UDS_MODE=true`
+ * 1. Build Spark with `./dev/make-distribution.sh`
+ * 2. `cd dist`
+ * 3. `java -classpath "./jars&#47;*" org.apache.spark.sql.execution.python.streaming.benchmark.BenchmarkTransformWithStateInPySparkStateServer`
+ *    To run this with Unix Domain Socket, set the environment variable `PYSPARK_UDS_MODE=true`
  *
  * The app will show the port number of the server, which is needed to connect to the server.
  */
 // scalastyle:on line.size.limit
 object BenchmarkTransformWithStateInPySparkStateServer extends App {
-  val spark = SparkSession
-    .builder()
+  val spark = SparkSession.builder()
     .master("local[*]")
     .getOrCreate()
 
@@ -305,12 +308,17 @@ object BenchmarkTransformWithStateInPySparkStateServer extends App {
   // configurations for TransformWithStateInPySparkStateServer
   val timeZoneId: String = sqlConf.get(SQLConf.SESSION_LOCAL_TIMEZONE)
   val errorOnDuplicatedFieldNames: Boolean = true
-  val largeVarTypes: Boolean = sqlConf.get(SQLConf.ARROW_EXECUTION_USE_LARGE_VAR_TYPES)
+  val largeVarTypes: Boolean = sqlConf.get(
+    SQLConf.ARROW_EXECUTION_USE_LARGE_VAR_TYPES)
   val arrowTransformWithStateInPySparkMaxRecordsPerBatch =
     sqlConf.get(SQLConf.ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH)
 
   // key schema
-  val groupingKeySchema = StructType(Array(StructField("groupingKey", StringType)))
+  val groupingKeySchema = StructType(
+    Array(
+      StructField("groupingKey", StringType)
+    )
+  )
 
   // Start with a socket - using random port
   var serverSocketChannel: ServerSocketChannel = _
@@ -321,16 +329,14 @@ object BenchmarkTransformWithStateInPySparkStateServer extends App {
 
   if (isUnixDomainSock) {
     sockPath = new File(
-      spark.sparkContext.conf
-        .get(PYTHON_UNIX_DOMAIN_SOCKET_DIR)
+      spark.sparkContext.conf.get(PYTHON_UNIX_DOMAIN_SOCKET_DIR)
         .getOrElse(System.getProperty("java.io.tmpdir")),
       s".${UUID.randomUUID()}.sock")
     serverSocketChannel = ServerSocketChannel.open(StandardProtocolFamily.UNIX)
     sockPath.deleteOnExit()
     serverSocketChannel.bind(UnixDomainSocketAddress.of(sockPath.getPath))
   } else {
-    serverSocketChannel = ServerSocketChannel
-      .open()
+    serverSocketChannel = ServerSocketChannel.open()
       .bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 1)
     stateServerSocketPort = serverSocketChannel.socket().getLocalPort
   }
@@ -338,16 +344,19 @@ object BenchmarkTransformWithStateInPySparkStateServer extends App {
   val stateHandleImpl = new InMemoryStatefulProcessorHandleImpl(
     TimeMode.None(),
     // NOTE: This is actually not used, so no need to worry about its validity
-    null)
+    null
+  )
 
   val stateServer = new TransformWithStateInPySparkStateServer(
     serverSocketChannel,
     stateHandleImpl,
     groupingKeySchema,
-    arrowTransformWithStateInPySparkMaxRecordsPerBatch)
+    arrowTransformWithStateInPySparkMaxRecordsPerBatch
+  )
   // scalastyle:off println
   if (stateServerSocketPort >= 0) {
-    println(s"TransformWithStateInPySparkStateServer is starting on port $stateServerSocketPort")
+    println(
+      s"TransformWithStateInPySparkStateServer is starting on port $stateServerSocketPort")
   } else {
     println(
       s"TransformWithStateInPySparkStateServer is starting with UDS at " +

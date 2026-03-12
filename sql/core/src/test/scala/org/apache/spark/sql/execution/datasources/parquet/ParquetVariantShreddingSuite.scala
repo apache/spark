@@ -48,8 +48,7 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
 
   test("timestamp physical type") {
     ParquetOutputTimestampType.values.foreach { timestampParquetType =>
-      withSQLConf(
-        SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> timestampParquetType.toString,
+      withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> timestampParquetType.toString,
         SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.key -> "true") {
         withTempDir { dir =>
           val schema = "t timestamp, st struct<t timestamp>, at array<timestamp>"
@@ -58,10 +57,11 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
             "st struct<" +
             "value binary, typed_value struct<t struct<value binary, typed_value timestamp>>>," +
             "at struct<" +
-            "value binary, typed_value array<struct<value binary, typed_value timestamp>>>" +
+              "value binary, typed_value array<struct<value binary, typed_value timestamp>>>" +
             ">>, " +
             "t1 timestamp, st1 struct<t1 timestamp>"
-          val df = spark.sql("""
+          val df = spark.sql(
+            """
               | select
               |   to_variant_object(
               |     named_struct('t', 1::timestamp, 'st', named_struct('t', 2::timestamp),
@@ -69,28 +69,33 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
               |   ) v, 3::timestamp t1, named_struct('t1', 4::timestamp) st1
               | from range(1)
               |""".stripMargin)
-          withSQLConf(
-            SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> true.toString,
+          withSQLConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> true.toString,
             SQLConf.VARIANT_ALLOW_READING_SHREDDED.key -> true.toString,
             SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST.key -> schema) {
             df.write.mode("overwrite").parquet(dir.getAbsolutePath)
             checkAnswer(
               spark.read.parquet(dir.getAbsolutePath).selectExpr("to_json(v)"),
-              df.selectExpr("to_json(v)").collect())
+              df.selectExpr("to_json(v)").collect()
+            )
             val shreddedDf = spark.read.schema(fullSchema).parquet(dir.getAbsolutePath)
-            checkAnswer(shreddedDf.selectExpr("v.typed_value.t.typed_value::long"), Seq(Row(1)))
+            checkAnswer(
+              shreddedDf.selectExpr("v.typed_value.t.typed_value::long"),
+              Seq(Row(1)))
             checkAnswer(
               shreddedDf.selectExpr("v.typed_value.st.typed_value.t.typed_value::long"),
               Seq(Row(2)))
-            checkAnswer(shreddedDf.selectExpr("t1::long"), Seq(Row(3)))
-            checkAnswer(shreddedDf.selectExpr("st1.t1::long"), Seq(Row(4)))
+            checkAnswer(
+              shreddedDf.selectExpr("t1::long"),
+              Seq(Row(3)))
+            checkAnswer(
+              shreddedDf.selectExpr("st1.t1::long"),
+              Seq(Row(4)))
             checkAnswer(
               shreddedDf.selectExpr("v.typed_value.at.typed_value[0].typed_value::long"),
               Seq(Row(5)))
             val file = dir.listFiles().find(_.getName.endsWith(".parquet")).get
             val parquetFilePath = file.getAbsolutePath
-            val inputFile =
-              HadoopInputFile.fromPath(new Path(parquetFilePath), new Configuration())
+            val inputFile = HadoopInputFile.fromPath(new Path(parquetFilePath), new Configuration())
             val reader = ParquetFileReader.open(inputFile)
             val footer = reader.getFooter
             val schema = footer.getFileMetaData.getSchema
@@ -100,9 +105,8 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
             val tGroup = typedValueGroup.getType("t").asGroupType()
             val typedValue1 = tGroup.getType("typed_value").asPrimitiveType()
             assert(typedValue1.getPrimitiveTypeName == PrimitiveTypeName.INT64)
-            assert(
-              typedValue1.getLogicalTypeAnnotation == LogicalTypeAnnotation
-                .timestampType(true, LogicalTypeAnnotation.TimeUnit.MICROS))
+            assert(typedValue1.getLogicalTypeAnnotation == LogicalTypeAnnotation.timestampType(
+              true, LogicalTypeAnnotation.TimeUnit.MICROS))
 
             // v.typed_value.st.typed_value.t.typed_value
             val stGroup = typedValueGroup.getType("st").asGroupType()
@@ -110,9 +114,8 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
             val stTGroup = stTypedValueGroup.getType("t").asGroupType()
             val typedValue2 = stTGroup.getType("typed_value").asPrimitiveType()
             assert(typedValue2.getPrimitiveTypeName == PrimitiveTypeName.INT64)
-            assert(
-              typedValue2.getLogicalTypeAnnotation == LogicalTypeAnnotation
-                .timestampType(true, LogicalTypeAnnotation.TimeUnit.MICROS))
+            assert(typedValue2.getLogicalTypeAnnotation == LogicalTypeAnnotation.timestampType(
+              true, LogicalTypeAnnotation.TimeUnit.MICROS))
 
             // v.typed_value.at.typed_value[0].typed_value
             val atGroup = typedValueGroup.getType("at").asGroupType()
@@ -121,9 +124,8 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
             val atLEGroup = atLGroup.getType("element").asGroupType()
             val typedValue3 = atLEGroup.getType("typed_value").asPrimitiveType()
             assert(typedValue3.getPrimitiveTypeName == PrimitiveTypeName.INT64)
-            assert(
-              typedValue3.getLogicalTypeAnnotation == LogicalTypeAnnotation
-                .timestampType(true, LogicalTypeAnnotation.TimeUnit.MICROS))
+            assert(typedValue3.getLogicalTypeAnnotation == LogicalTypeAnnotation.timestampType(
+              true, LogicalTypeAnnotation.TimeUnit.MICROS))
 
             def verifyNonVariantTimestampType(t: PrimitiveType): Unit = {
               timestampParquetType match {
@@ -132,14 +134,12 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
                   assert(t.getLogicalTypeAnnotation == null)
                 case ParquetOutputTimestampType.TIMESTAMP_MICROS =>
                   assert(t.getPrimitiveTypeName == PrimitiveTypeName.INT64)
-                  assert(
-                    t.getLogicalTypeAnnotation == LogicalTypeAnnotation
-                      .timestampType(true, LogicalTypeAnnotation.TimeUnit.MICROS))
+                  assert(t.getLogicalTypeAnnotation == LogicalTypeAnnotation.timestampType(
+                    true, LogicalTypeAnnotation.TimeUnit.MICROS))
                 case ParquetOutputTimestampType.TIMESTAMP_MILLIS =>
                   assert(t.getPrimitiveTypeName == PrimitiveTypeName.INT64)
-                  assert(
-                    t.getLogicalTypeAnnotation == LogicalTypeAnnotation
-                      .timestampType(true, LogicalTypeAnnotation.TimeUnit.MILLIS))
+                  assert(t.getLogicalTypeAnnotation == LogicalTypeAnnotation.timestampType(
+                    true, LogicalTypeAnnotation.TimeUnit.MILLIS))
               }
             }
 
@@ -163,8 +163,7 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
       Seq(false, true).foreach { shredVariant =>
         Seq(false, true).foreach { allowReadingShredded =>
           Seq(false, true).foreach { ignoreVariantAnnotation =>
-            withSQLConf(
-              SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> shredVariant.toString,
+            withSQLConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> shredVariant.toString,
               SQLConf.VARIANT_INFER_SHREDDING_SCHEMA.key -> shredVariant.toString,
               SQLConf.VARIANT_ALLOW_READING_SHREDDED.key ->
                 (allowReadingShredded || shredVariant).toString,
@@ -180,7 +179,8 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
               }
               withTempDir { dir =>
                 // write parquet file
-                val df = spark.sql("""
+                val df = spark.sql(
+                  """
                     | select
                     |  id * 2 i,
                     |  to_variant_object(named_struct('id', id)) v,
@@ -192,20 +192,15 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
                 df.write.mode("overwrite").parquet(dir.getAbsolutePath)
                 val file = dir.listFiles().find(_.getName.endsWith(".parquet")).get
                 val parquetFilePath = file.getAbsolutePath
-                val inputFile =
-                  HadoopInputFile.fromPath(new Path(parquetFilePath), new Configuration())
+                val inputFile = HadoopInputFile.fromPath(new Path(parquetFilePath),
+                  new Configuration())
                 val reader = ParquetFileReader.open(inputFile)
                 val footer = reader.getFooter
                 val schema = footer.getFileMetaData.getSchema
                 val vGroup = schema.getType(schema.getFieldIndex("v"))
                 validateAnnotation(vGroup)
-                assert(
-                  vGroup
-                    .asGroupType()
-                    .getFields
-                    .asScala
-                    .toSeq
-                    .exists(_.getName == "typed_value") == shredVariant)
+                assert(vGroup.asGroupType().getFields.asScala.toSeq
+                  .exists(_.getName == "typed_value") == shredVariant)
                 val nsGroup = schema.getType(schema.getFieldIndex("ns")).asGroupType()
                 val nvGroup = nsGroup.getType(nsGroup.getFieldIndex("nv"))
                 validateAnnotation(nvGroup)
@@ -218,19 +213,14 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
                 val mvValue = mvList.getType(mvList.getFieldIndex("value"))
                 validateAnnotation(mvValue)
                 // verify result
-                val result = spark.read
-                  .format("parquet")
+                val result = spark.read.format("parquet")
                   .schema("v variant, ns struct<nv variant>, av array<variant>, " +
                     "mv map<string, variant>")
                   .load(dir.getAbsolutePath)
-                  .selectExpr(
-                    "v:id::int i1",
-                    "ns.nv:id::int i2",
-                    "av[0]:id::int i3",
+                  .selectExpr("v:id::int i1", "ns.nv:id::int i2", "av[0]:id::int i3",
                     "mv['v2']:id::int i4")
-                checkAnswer(
-                  result,
-                  Array(Row(0, 30, 10, 20), Row(1, 31, 11, 21), Row(2, 32, 12, 22)))
+                checkAnswer(result, Array(Row(0, 30, 10, 20), Row(1, 31, 11, 21),
+                  Row(2, 32, 12, 22)))
                 reader.close()
               }
             }
@@ -242,13 +232,14 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
 
   test("variant logical type annotation - ignore variant annotation") {
     Seq(true, false).foreach { ignoreVariantAnnotation =>
-      withSQLConf(
-        SQLConf.PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE.key -> "true",
+      withSQLConf(SQLConf.PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE.key -> "true",
         SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.key -> ignoreVariantAnnotation.toString,
-        SQLConf.VARIANT_INFER_SHREDDING_SCHEMA.key -> "false") {
+        SQLConf.VARIANT_INFER_SHREDDING_SCHEMA.key -> "false"
+      ) {
         withTempDir { dir =>
           // write parquet file
-          val df = spark.sql("""
+          val df = spark.sql(
+            """
               | select
               |  id * 2 i,
               |  1::variant v,
@@ -258,40 +249,40 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
               |  from range(0,1,1,1)""".stripMargin)
           df.write.mode("overwrite").parquet(dir.getAbsolutePath)
           // verify result
-          val normal_result = spark.read
-            .format("parquet")
+          val normal_result = spark.read.format("parquet")
             .schema("v variant, ns struct<nv variant>, av array<variant>, " +
               "mv map<string, variant>")
             .load(dir.getAbsolutePath)
-            .selectExpr("v::int i1", "ns.nv::int i2", "av[0]::int i3", "mv['v2']::int i4")
+            .selectExpr("v::int i1", "ns.nv::int i2", "av[0]::int i3",
+              "mv['v2']::int i4")
           checkAnswer(normal_result, Array(Row(1, 1, 1, 1)))
-          val struct_result = spark.read
-            .format("parquet")
-            .schema(
-              "v struct<value binary, metadata binary>, " +
-                "ns struct<nv struct<value binary, metadata binary>>, " +
-                "av array<struct<value binary, metadata binary>>, " +
-                "mv map<string, struct<value binary, metadata binary>>")
+          val struct_result = spark.read.format("parquet")
+            .schema("v struct<value binary, metadata binary>, " +
+              "ns struct<nv struct<value binary, metadata binary>>, " +
+              "av array<struct<value binary, metadata binary>>, " +
+              "mv map<string, struct<value binary, metadata binary>>")
             .load(dir.getAbsolutePath)
             .selectExpr("v", "ns.nv", "av[0]", "mv['v2']")
           if (ignoreVariantAnnotation) {
             checkAnswer(
               struct_result,
-              Seq(
-                Row(
-                  Row(Array[Byte](12, 1), Array[Byte](1, 0, 0)),
-                  Row(Array[Byte](12, 1), Array[Byte](1, 0, 0)),
-                  Row(Array[Byte](12, 1), Array[Byte](1, 0, 0)),
-                  Row(Array[Byte](12, 1), Array[Byte](1, 0, 0)))))
+              Seq(Row(
+                Row(Array[Byte](12, 1), Array[Byte](1, 0, 0)),
+                Row(Array[Byte](12, 1), Array[Byte](1, 0, 0)),
+                Row(Array[Byte](12, 1), Array[Byte](1, 0, 0)),
+                Row(Array[Byte](12, 1), Array[Byte](1, 0, 0))
+              ))
+            )
           } else {
-            val exception = intercept[SparkException] {
+            val exception = intercept[SparkException]{
               struct_result.collect()
             }
             checkError(
               exception = exception.getCause.asInstanceOf[AnalysisException],
               condition = "_LEGACY_ERROR_TEMP_3071",
               parameters = Map("msg" -> "Invalid Spark read type[\\s\\S]*"),
-              matchPVals = true)
+              matchPVals = true
+            )
           }
         }
       }
@@ -300,7 +291,8 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
 
   testWithTempDir("write shredded variant basic") { dir =>
     val schema = "a int, b string, c decimal(15, 1)"
-    val df = spark.sql("""
+    val df = spark.sql(
+      """
         | select case
         | when id = 0 then parse_json('{"a": 1, "b": "2", "c": 3.3, "d": 4.4}')
         | when id = 1 then parse_json('{"a": [1,2,3], "b": "hello", "c": {"x": 0}}')
@@ -310,26 +302,27 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
     val fullSchema = "v struct<metadata binary, value binary, typed_value struct<" +
       "a struct<value binary, typed_value int>, b struct<value binary, typed_value string>," +
       "c struct<value binary, typed_value decimal(15, 1)>>>"
-    withSQLConf(
-      SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> true.toString,
+    withSQLConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> true.toString,
       SQLConf.VARIANT_ALLOW_READING_SHREDDED.key -> true.toString,
       SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST.key -> schema,
       SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.key -> true.toString) {
       df.write.mode("overwrite").parquet(dir.getAbsolutePath)
 
+
       // Verify that we can read the full variant. The exact binary layout can change before and
       // after shredding, so just check that the JSON representation matches.
       checkAnswer(
         spark.read.parquet(dir.getAbsolutePath).selectExpr("to_json(v)"),
-        df.selectExpr("to_json(v)").collect())
+        df.selectExpr("to_json(v)").collect()
+      )
 
       // Verify that it was shredded to the expected fields.
 
       val shreddedDf = spark.read.schema(fullSchema).parquet(dir.getAbsolutePath)
       // Metadata should be unchanaged.
-      checkAnswer(
-        shreddedDf.selectExpr("v.metadata"),
-        df.collect().map(v => Row(v.get(0).asInstanceOf[VariantVal].getMetadata)))
+      checkAnswer(shreddedDf.selectExpr("v.metadata"),
+        df.collect().map(v => Row(v.get(0).asInstanceOf[VariantVal].getMetadata))
+      )
 
       // Check typed values.
       // Second row is not an integer, and third is A, not a
@@ -373,7 +366,8 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
 
   testWithTempDir("write shredded variant array") { dir =>
     val schema = "array<int>"
-    val df = spark.sql("""
+    val df = spark.sql(
+      """
         | select case
         | when id = 0 then parse_json('[1, "2", 3.5, null, 5]')
         | when id = 1 then parse_json('{"a": [1, 2, 3]}')
@@ -383,8 +377,7 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
         |""".stripMargin)
     val fullSchema = "v struct<metadata binary, value binary, typed_value array<" +
       "struct<value binary, typed_value int>>>"
-    withSQLConf(
-      SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> true.toString,
+    withSQLConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> true.toString,
       SQLConf.VARIANT_ALLOW_READING_SHREDDED.key -> true.toString,
       SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST.key -> schema,
       SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.key -> true.toString) {
@@ -393,15 +386,16 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
       // Verify that we can read the full variant.
       checkAnswer(
         spark.read.parquet(dir.getAbsolutePath).selectExpr("to_json(v)"),
-        df.selectExpr("to_json(v)").collect())
+        df.selectExpr("to_json(v)").collect()
+      )
 
       // Verify that it was shredded to the expected fields.
 
       val shreddedDf = spark.read.schema(fullSchema).parquet(dir.getAbsolutePath)
       // Metadata should be unchanaged.
-      checkAnswer(
-        shreddedDf.selectExpr("v.metadata"),
-        df.collect().map(v => Row(v.get(0).asInstanceOf[VariantVal].getMetadata)))
+      checkAnswer(shreddedDf.selectExpr("v.metadata"),
+        df.collect().map(v => Row(v.get(0).asInstanceOf[VariantVal].getMetadata))
+      )
 
       // Check typed values.
       checkAnswer(
@@ -424,13 +418,16 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
     // Check that we can write and read normally when shredding is enabled if
     // we don't provide a shredding schema.
     withSQLConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> true.toString) {
-      val df = spark.sql("""
+      val df = spark.sql(
+        """
           | select parse_json('{"a": ' || id || ', "b": 2}') as v,
           | array(parse_json('{"c": 3}'), 123::variant) as a
           | from range(1, 3, 1, 1)
           |""".stripMargin)
       df.write.mode("overwrite").parquet(dir.getAbsolutePath)
-      checkAnswer(spark.read.parquet(dir.getAbsolutePath), df.collect())
+      checkAnswer(
+        spark.read.parquet(dir.getAbsolutePath), df.collect()
+      )
     }
   }
 
@@ -438,15 +435,15 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
     // Check that we don't try to shred array or map elements, even if a shredding schema
     // is specified.
     val schema = "a int"
-    val df = spark.sql(""" select v, array(v) as arr, map('myKey', v) as m from
+    val df = spark.sql(
+      """ select v, array(v) as arr, map('myKey', v) as m from
         | (select parse_json('{"a":' || id || '}') v from range(3))
         |""".stripMargin)
     val fullSchema = "v struct<metadata binary, value binary, typed_value struct<" +
       "a struct<value binary, typed_value int>>>, " +
       "arr array<struct<metadata binary, value binary>>, " +
       "m map<string, struct<metadata binary, value binary>>"
-    withSQLConf(
-      SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> true.toString,
+    withSQLConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> true.toString,
       SQLConf.VARIANT_ALLOW_READING_SHREDDED.key -> true.toString,
       SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST.key -> schema,
       SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.key -> true.toString) {
@@ -455,33 +452,37 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
       // Verify that we can read the full variant.
       checkAnswer(
         spark.read.parquet(dir.getAbsolutePath).selectExpr("to_json(v)"),
-        df.selectExpr("to_json(v)").collect())
+        df.selectExpr("to_json(v)").collect()
+      )
 
       // Verify that it was shredded to the expected fields.
 
       val shreddedDf = spark.read.schema(fullSchema).parquet(dir.getAbsolutePath)
       // Metadata should be unchanaged.
-      checkAnswer(
-        shreddedDf.selectExpr("v.metadata"),
-        df.selectExpr("v").collect().map(v => Row(v.get(0).asInstanceOf[VariantVal].getMetadata)))
-      checkAnswer(
-        shreddedDf.selectExpr("arr[0].metadata"),
-        df.selectExpr("arr[0]")
-          .collect()
-          .map(v => Row(v.get(0).asInstanceOf[VariantVal].getMetadata)))
-      checkAnswer(
-        shreddedDf.selectExpr("m['myKey'].metadata"),
-        df.selectExpr("m['myKey']")
-          .collect()
-          .map(v => Row(v.get(0).asInstanceOf[VariantVal].getMetadata)))
+      checkAnswer(shreddedDf.selectExpr("v.metadata"),
+        df.selectExpr("v").collect().map(v => Row(v.get(0).asInstanceOf[VariantVal].getMetadata))
+      )
+      checkAnswer(shreddedDf.selectExpr("arr[0].metadata"),
+        df.selectExpr("arr[0]").collect().map(v =>
+          Row(v.get(0).asInstanceOf[VariantVal].getMetadata))
+      )
+      checkAnswer(shreddedDf.selectExpr("m['myKey'].metadata"),
+        df.selectExpr("m['myKey']").collect().map(
+          v => Row(v.get(0).asInstanceOf[VariantVal].getMetadata))
+      )
 
       // v should be fully shredded, but the array and map should not be.
-      checkAnswer(shreddedDf.selectExpr("v.value is null"), Seq(Row(true), Row(true), Row(true)))
       checkAnswer(
-        shreddedDf.selectExpr("arr[0].value is null"),
+        shreddedDf.selectExpr(
+          "v.value is null"),
+        Seq(Row(true), Row(true), Row(true)))
+      checkAnswer(
+        shreddedDf.selectExpr(
+          "arr[0].value is null"),
         Seq(Row(false), Row(false), Row(false)))
       checkAnswer(
-        shreddedDf.selectExpr("m['myKey'].value is null"),
+        shreddedDf.selectExpr(
+          "m['myKey'].value is null"),
         Seq(Row(false), Row(false), Row(false)))
     }
   }

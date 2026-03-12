@@ -42,23 +42,22 @@ import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.Utils
 
 /** Information about the creator of the checksum file. Useful for debugging */
-case class ChecksumFileCreatorInfo(executorId: String, taskInfo: String)
+case class ChecksumFileCreatorInfo(
+    executorId: String,
+    taskInfo: String)
 
 object ChecksumFileCreatorInfo {
   def apply(): ChecksumFileCreatorInfo = {
     val executorId = Option(SparkEnv.get).map(_.executorId).getOrElse("")
-    val taskInfo = Option(TaskContext.get())
-      .map(tc =>
-        s"Task= ${tc.partitionId()}.${tc.attemptNumber()}, " +
-          s"Stage= ${tc.stageId()}.${tc.stageAttemptNumber()}")
-      .getOrElse("")
+    val taskInfo = Option(TaskContext.get()).map(tc =>
+      s"Task= ${tc.partitionId()}.${tc.attemptNumber()}, " +
+        s"Stage= ${tc.stageId()}.${tc.stageAttemptNumber()}").getOrElse("")
     new ChecksumFileCreatorInfo(executorId, taskInfo)
   }
 }
 
-/**
- * This is the content of the checksum file. Holds the checksum value and additional information
- */
+/** This is the content of the checksum file.
+ * Holds the checksum value and additional information */
 case class Checksum(
     algorithm: String,
     // We can make this a byte array later to be agnostic of algorithm used.
@@ -103,57 +102,56 @@ case class ChecksumFile(path: Path) {
 }
 
 /**
- * A [[CheckpointFileManager]] that creates a checksum file for the main file. This wraps another
- * [[CheckpointFileManager]] and adds checksum functionality on top of it. Under the hood, when a
- * file is created, it also creates a checksum file with the same name as the main file but adds a
- * suffix. It returns [[ChecksumCancellableFSDataOutputStream]] which handles the writing of the
- * main file and checksum file.
+ * A [[CheckpointFileManager]] that creates a checksum file for the main file.
+ * This wraps another [[CheckpointFileManager]] and adds checksum functionality on top of it.
+ * Under the hood, when a file is created, it also creates a checksum file with the same name as
+ * the main file but adds a suffix. It returns [[ChecksumCancellableFSDataOutputStream]]
+ * which handles the writing of the main file and checksum file.
  *
- * When a file is opened, it returns [[ChecksumFSDataInputStream]], which handles reading the main
- * file and checksum file and does the checksum verification.
+ * When a file is opened, it returns [[ChecksumFSDataInputStream]], which handles reading
+ * the main file and checksum file and does the checksum verification.
  *
- * In order to reduce the impact of reading/writing 2 files instead of 1, it uses a threadpool to
- * read/write both files concurrently.
+ * In order to reduce the impact of reading/writing 2 files instead of 1, it uses a threadpool
+ * to read/write both files concurrently.
  *
  * @note
- *   It is able to read files written by other [[CheckpointFileManager]], that don't have
- *   checksum. It automatically deletes the checksum file when the main file is deleted. If you
- *   delete the main file with a different type of manager, then the checksum file will be left
- *   behind (i.e. orphan checksum file), since they don't know about it. It would be your
- *   responsibility to delete the orphan checksum files.
+ * It is able to read files written by other [[CheckpointFileManager]], that don't have checksum.
+ * It automatically deletes the checksum file when the main file is deleted.
+ * If you delete the main file with a different type of manager, then the checksum file will be
+ * left behind (i.e. orphan checksum file), since they don't know about it. It would be your
+ * responsibility to delete the orphan checksum files.
  *
- * @param underlyingFileMgr
- *   The file manager to use under the hood
- * @param allowConcurrentDelete
- *   If true, allows deleting the main and checksum file concurrently. This is a perf
- *   optimization, but can potentially lead to orphan checksum files. If using this, it is your
- *   responsibility to clean up the potential orphan checksum files.
- * @param numThreads
- *   This is the number of threads to use for the thread pool, for reading/writing files. To avoid
- *   blocking, if the file manager instance is being used by a single thread, then you can set
- *   this to 2 (one thread for main file, another for checksum file). If file manager is shared by
- *   multiple threads, you can set it to number of threads using file manager * 2. Setting this
- *   differently can lead to file operation being blocked waiting for a free thread.
- * @param skipCreationIfFileMissingChecksum
- *   (ES-1629547): If true, when a file already exists but its checksum file does not exist, fall
- *   back to using the underlying file manager directly instead of creating with checksum. This is
- *   useful for compatibility with files created before checksums were enabled. Consider the case
- *   when a batch fails but state files are written. If on the next run, we try to upload both a
- *   new file and a checksum file, the file could fail to be uploaded but the checksum file is
- *   uploaded successfully. This would lead to a situation where the old file could be loaded and
- *   compared with the new file checksum, which would fail the checksum verification.
+ * @param underlyingFileMgr The file manager to use under the hood
+ * @param allowConcurrentDelete If true, allows deleting the main and checksum file concurrently.
+ *                              This is a perf optimization, but can potentially lead to
+ *                              orphan checksum files. If using this, it is your responsibility
+ *                              to clean up the potential orphan checksum files.
+ * @param numThreads This is the number of threads to use for the thread pool, for reading/writing
+ *                   files. To avoid blocking, if the file manager instance is being used by a
+ *                   single thread, then you can set this to 2 (one thread for main file, another
+ *                   for checksum file).
+ *                   If file manager is shared by multiple threads, you can set it to
+ *                   number of threads using file manager * 2.
+ *                   Setting this differently can lead to file operation being blocked waiting for
+ *                   a free thread.
+ * @param skipCreationIfFileMissingChecksum (ES-1629547): If true, when a file already exists
+ *                   but its checksum file does not exist, fall back to using the underlying
+ *                   file manager directly instead of creating with checksum. This is useful
+ *                   for compatibility with files created before checksums were enabled. Consider
+ *                   the case when a batch fails but state files are written. If on the next run,
+ *                   we try to upload both a new file and a checksum file, the file could fail to be
+ *                   uploaded but the checksum file is uploaded successfully. This would lead to a
+ *                   situation where the old file could be loaded and compared with the new file
+ *                   checksum, which would fail the checksum verification.
  */
 class ChecksumCheckpointFileManager(
     private val underlyingFileMgr: CheckpointFileManager,
     val allowConcurrentDelete: Boolean = false,
     val numThreads: Int,
     val skipCreationIfFileMissingChecksum: Boolean)
-    extends CheckpointFileManager
-    with Logging {
-  assert(
-    numThreads % 2 == 0,
-    "numThreads must be a multiple of 2, we need 1 for the main file" +
-      "and another for the checksum file")
+  extends CheckpointFileManager with Logging {
+  assert(numThreads % 2 == 0, "numThreads must be a multiple of 2, we need 1 for the main file" +
+    "and another for the checksum file")
 
   import ChecksumCheckpointFileManager._
 
@@ -175,11 +173,10 @@ class ChecksumCheckpointFileManager(
 
   private def shouldSkipChecksumCreation(path: Path): Boolean = {
     skipCreationIfFileMissingChecksum &&
-    underlyingFileMgr.exists(path) && !underlyingFileMgr.exists(getChecksumPath(path))
+      underlyingFileMgr.exists(path) && !underlyingFileMgr.exists(getChecksumPath(path))
   }
 
-  override def createAtomic(
-      path: Path,
+  override def createAtomic(path: Path,
       overwriteIfPossible: Boolean): CancellableFSDataOutputStream = {
     if (shouldSkipChecksumCreation(path)) {
       underlyingFileMgr.createAtomic(path, overwriteIfPossible)
@@ -188,8 +185,8 @@ class ChecksumCheckpointFileManager(
     }
   }
 
-  private def createWithChecksum(path: Path, createFunc: Path => CancellableFSDataOutputStream)
-      : ChecksumCancellableFSDataOutputStream = {
+  private def createWithChecksum(path: Path,
+      createFunc: Path => CancellableFSDataOutputStream): ChecksumCancellableFSDataOutputStream = {
     assert(!isChecksumFile(path), "Cannot directly create a checksum file")
 
     val mainFileFuture = Future {
@@ -204,7 +201,8 @@ class ChecksumCheckpointFileManager(
       awaitResult(mainFileFuture, Duration.Inf),
       path,
       awaitResult(checksumFileFuture, Duration.Inf),
-      threadPool)
+      threadPool
+    )
   }
 
   override def open(path: Path): FSDataInputStream = {
@@ -217,9 +215,8 @@ class ChecksumCheckpointFileManager(
         // In case the client previously had file checksum disabled.
         // Then previously created files won't have checksum.
         case _: FileNotFoundException =>
-          logWarning(
-            log"No checksum file found for ${MDC(PATH, path)}, " +
-              log"hence no checksum verification.")
+          logWarning(log"No checksum file found for ${MDC(PATH, path)}, " +
+            log"hence no checksum verification.")
           None
       }
     }(threadPool)
@@ -231,11 +228,9 @@ class ChecksumCheckpointFileManager(
     val mainStream = awaitResult(mainInputStreamFuture, Duration.Inf)
     val checksumStream = awaitResult(checksumInputStreamFuture, Duration.Inf)
 
-    checksumStream
-      .map { chkStream =>
-        new ChecksumFSDataInputStream(mainStream, path, chkStream, threadPool)
-      }
-      .getOrElse(mainStream)
+    checksumStream.map { chkStream =>
+      new ChecksumFSDataInputStream(mainStream, path, chkStream, threadPool)
+    }.getOrElse(mainStream)
   }
 
   override def exists(path: Path): Boolean = underlyingFileMgr.exists(path)
@@ -289,9 +284,8 @@ class ChecksumCheckpointFileManager(
     // Can consider making this timeout configurable, if needed
     val timeoutMs = 500
     if (!threadPool.awaitTermination(timeoutMs, TimeUnit.MILLISECONDS)) {
-      logWarning(
-        log"Thread pool did not shutdown after ${MDC(TIMEOUT, timeoutMs)} ms," +
-          log" forcing shutdown")
+      logWarning(log"Thread pool did not shutdown after ${MDC(TIMEOUT, timeoutMs)} ms," +
+        log" forcing shutdown")
       threadPool.shutdownNow() // stop the executing tasks
 
       // Wait a bit for the threads to respond
@@ -324,32 +318,26 @@ private[streaming] object ChecksumCheckpointFileManager {
   }
 }
 
-/**
- * An implementation of [[FSDataInputStream]] that calculates the checksum of the file that the
- * client is reading (main file) incrementally, while it is being read. It then does checksum
- * verification on close, to verify that the computed checksum matches the expected checksum in
- * the checksum file.
+/** An implementation of [[FSDataInputStream]] that calculates the checksum of the file
+ * that the client is reading (main file) incrementally, while it is being read.
+ * It then does checksum verification on close, to verify that the computed checksum
+ * matches the expected checksum in the checksum file.
  *
- * Computing the checksum incrementally and doing the verification after file read is complete is
- * for better performance, instead of first reading the entire file and doing verification before
- * the client starts reading the file.
+ * Computing the checksum incrementally and doing the verification after file read is complete
+ * is for better performance, instead of first reading the entire file and doing verification
+ * before the client starts reading the file.
  *
- * @param mainStream
- *   Input stream for the main file the client wants to read
- * @param path
- *   The path of the main file
- * @param expectedChecksumStream
- *   The input stream for the checksum file
- * @param threadPool
- *   Thread pool to use for concurrently operating on the main and checksum file
- */
+ * @param mainStream Input stream for the main file the client wants to read
+ * @param path The path of the main file
+ * @param expectedChecksumStream The input stream for the checksum file
+ * @param threadPool Thread pool to use for concurrently operating on the main and checksum file
+ * */
 class ChecksumFSDataInputStream(
     private val mainStream: FSDataInputStream,
     path: Path,
     private val expectedChecksumStream: FSDataInputStream,
     private val threadPool: ExecutionContext)
-    extends FSDataInputStream(new CheckedSequentialInputStream(mainStream))
-    with Logging {
+  extends FSDataInputStream(new CheckedSequentialInputStream(mainStream)) with Logging {
 
   import ChecksumCheckpointFileManager._
 
@@ -367,11 +355,11 @@ class ChecksumFSDataInputStream(
     }
   }
 
-  /**
-   * This is used to skip checksum verification on close. Avoid using this, and it is only used
-   * for a situation where the file is opened, read, then closed multiple times, and we want to
-   * avoid doing verification each time and only want to do it once.
-   */
+  /** This is used to skip checksum verification on close.
+   * Avoid using this, and it is only used for a situation where the file is opened, read,
+   * then closed multiple times, and we want to avoid doing verification each time
+   * and only want to do it once.
+   * */
   def closeWithoutChecksumVerification(): Unit = {
     if (!closed) {
       // Ideally this should be warning, but if a file is doing this frequently
@@ -414,27 +402,25 @@ class ChecksumFSDataInputStream(
       if (remainingBytesRead > 0) {
         // Making this debug log since most of our files are not read exactly to the end
         // and don't want to cause unnecessary noise in the logs.
-        logDebug(
-          log"File ${MDC(PATH, path)} was not read till the end by reader. " +
-            log"Finished reading the rest of the file for checksum verification. " +
-            log"Remaining bytes read: ${MDC(NUM_BYTES, remainingBytesRead)}, " +
-            log"total size: ${MDC(NUM_BYTES, computedFileSize)}.")
+        logDebug(log"File ${MDC(PATH, path)} was not read till the end by reader. " +
+          log"Finished reading the rest of the file for checksum verification. " +
+          log"Remaining bytes read: ${MDC(NUM_BYTES, remainingBytesRead)}, " +
+          log"total size: ${MDC(NUM_BYTES, computedFileSize)}.")
       }
 
       // Read the expected checksum from the checksum file
-      val expectedChecksumJson =
-        Source.fromInputStream(expectedChecksumStream, StandardCharsets.UTF_8.name()).mkString
+      val expectedChecksumJson = Source.fromInputStream(
+        expectedChecksumStream, StandardCharsets.UTF_8.name()).mkString
       val expectedChecksum = Checksum.fromJson(expectedChecksumJson)
       // Get what we computed while the main file was being read locally
       // `in` is the CheckedSequentialInputStream we created
       val computedChecksumValue = in.asInstanceOf[CheckedInputStream].getChecksum.getValue.toInt
 
-      logInfo(
-        log"Verifying checksum for file ${MDC(PATH, path)}, " +
-          log"remainingBytesRead= ${MDC(NUM_BYTES, remainingBytesRead)}. " +
-          log"Computed(checksum= ${MDC(CHECKSUM, computedChecksumValue)}, " +
-          log"fileSize= ${MDC(NUM_BYTES, computedFileSize)})." +
-          log"Checksum file content: ${MDC(CHECKSUM, expectedChecksumJson)}")
+      logInfo(log"Verifying checksum for file ${MDC(PATH, path)}, " +
+        log"remainingBytesRead= ${MDC(NUM_BYTES, remainingBytesRead)}. " +
+        log"Computed(checksum= ${MDC(CHECKSUM, computedChecksumValue)}, " +
+        log"fileSize= ${MDC(NUM_BYTES, computedFileSize)})." +
+        log"Checksum file content: ${MDC(CHECKSUM, expectedChecksumJson)}")
 
       verified = true
 
@@ -452,16 +438,14 @@ class ChecksumFSDataInputStream(
   }
 }
 
-/**
- * This implements [[CheckedInputStream]] that allows us to compute the checksum as the file is
- * being read. [[FSDataInputStream]] needs the passed in input stream to implement Seekable and
- * PositionedReadable. We want the file to be read sequentially only to allow us to correctly
- * compute the checksum. This is blocking the seekable apis from being used in the underlying
- * stream
- */
+/** This implements [[CheckedInputStream]] that allows us to compute the checksum as the file
+ * is being read. [[FSDataInputStream]] needs the passed in input stream to implement Seekable
+ * and PositionedReadable. We want the file to be read sequentially only to allow us to correctly
+ * compute the checksum. This is blocking the seekable apis from being used in the underlying stream
+ * */
 private class CheckedSequentialInputStream(data: InputStream)
-// TODO(SPARK-52009): Make the checksum algo configurable
-    extends CheckedInputStream(data, new CRC32C())
+  // TODO(SPARK-52009): Make the checksum algo configurable
+  extends CheckedInputStream(data, new CRC32C())
     with Seekable
     with PositionedReadable {
 
@@ -492,29 +476,24 @@ private class CheckedSequentialInputStream(data: InputStream)
   }
 }
 
-/**
- * An implementation of [[CancellableFSDataOutputStream]] that calculates the checksum of the file
- * that the client is writing (main file) incrementally, while it is being written. It then writes
- * the main file and an additional checksum file, which will be used for verification by
- * [[ChecksumFSDataInputStream]] on file read.
+/** An implementation of [[CancellableFSDataOutputStream]] that calculates the checksum of the file
+ * that the client is writing (main file) incrementally, while it is being written.
+ * It then writes the main file and an additional checksum file, which will be used for verification
+ * by [[ChecksumFSDataInputStream]] on file read.
  *
- * @param mainStream
- *   Output stream for the main file the client wants to write to
- * @param path
- *   The path of the main file
- * @param checksumStream
- *   Output stream for the checksum file to write the computed checksum
- * @param uploadThreadPool
- *   Thread pool used to concurrently upload the main and checksum file
- */
+ * @param mainStream Output stream for the main file the client wants to write to
+ * @param path The path of the main file
+ * @param checksumStream Output stream for the checksum file to write the computed checksum
+ * @param uploadThreadPool Thread pool used to concurrently upload the main and checksum file
+ * */
 class ChecksumCancellableFSDataOutputStream(
     private val mainStream: CancellableFSDataOutputStream,
     path: Path,
     private val checksumStream: CancellableFSDataOutputStream,
     private val uploadThreadPool: ExecutionContext)
-// TODO(SPARK-52009): make the checksum algo configurable
-// CheckedOutputStream creates the checksum value as we write to the stream
-    extends CancellableFSDataOutputStream(new CheckedOutputStream(mainStream, new CRC32C()))
+  // TODO(SPARK-52009): make the checksum algo configurable
+  // CheckedOutputStream creates the checksum value as we write to the stream
+  extends CancellableFSDataOutputStream(new CheckedOutputStream(mainStream, new CRC32C()))
     with Logging {
 
   import ChecksumCheckpointFileManager._

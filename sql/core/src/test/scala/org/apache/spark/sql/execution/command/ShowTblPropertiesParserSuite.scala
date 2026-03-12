@@ -32,7 +32,6 @@ class ShowTblPropertiesParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("SHOW TBLPROPERTIES a.b.c('propKey1')"),
       ShowTableProperties(
-        UnresolvedTableOrView(Seq("a", "b", "c"), "SHOW TBLPROPERTIES", true),
-        Some("propKey1")))
+        UnresolvedTableOrView(Seq("a", "b", "c"), "SHOW TBLPROPERTIES", true), Some("propKey1")))
   }
 }

@@ -44,12 +44,12 @@ import org.apache.spark.sql.types.StructType
 /**
  * This class is used to handle the state requests from the Python side. It runs on a separate
  * thread spawned by TransformWithStateInPySparkStateRunner per task. It opens a dedicated socket
- * to process/transfer state related info which is shut down when task finishes or there's an
- * error on opening the socket. It processes following state requests and return responses to the
+ * to process/transfer state related info which is shut down when task finishes or there's an error
+ * on opening the socket. It processes following state requests and return responses to the
  * Python side:
- *   - Requests for managing explicit grouping key.
- *   - Stateful processor requests.
- *   - Requests for managing state variables (e.g. valueState).
+ * - Requests for managing explicit grouping key.
+ * - Stateful processor requests.
+ * - Requests for managing state variables (e.g. valueState).
  */
 class TransformWithStateInPySparkStateServer(
     stateServerSocket: ServerSocketChannel,
@@ -61,14 +61,13 @@ class TransformWithStateInPySparkStateServer(
     outputStreamForTest: DataOutputStream = null,
     valueStateMapForTest: mutable.HashMap[String, ValueStateInfo] = null,
     deserializerForTest: TransformWithStateInPySparkDeserializer = null,
-    listStatesMapForTest: mutable.HashMap[String, ListStateInfo] = null,
+    listStatesMapForTest : mutable.HashMap[String, ListStateInfo] = null,
     iteratorMapForTest: mutable.HashMap[String, Iterator[Row]] = null,
-    mapStatesMapForTest: mutable.HashMap[String, MapStateInfo] = null,
+    mapStatesMapForTest : mutable.HashMap[String, MapStateInfo] = null,
     keyValueIteratorMapForTest: mutable.HashMap[String, Iterator[(Row, Row)]] = null,
     expiryTimerIterForTest: mutable.HashMap[String, Iterator[(Row, Long)]] = null,
     listTimerMapForTest: mutable.HashMap[String, Iterator[Long]] = null)
-    extends Runnable
-    with Logging {
+  extends Runnable with Logging {
 
   import PythonResponseWriterUtils._
 
@@ -155,7 +154,8 @@ class TransformWithStateInPySparkStateServer(
     inputStream = new DataInputStream(
       new BufferedInputStream(Channels.newInputStream(listeningSocket)))
     outputStream = new DataOutputStream(
-      new BufferedOutputStream(Channels.newOutputStream(listeningSocket)))
+      new BufferedOutputStream(Channels.newOutputStream(listeningSocket))
+    )
 
     while (listeningSocket.isConnected &&
       statefulProcessorHandle.getHandleState != StatefulProcessorHandleState.CLOSED) {
@@ -173,7 +173,7 @@ class TransformWithStateInPySparkStateServer(
           statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
           return
         case _: InterruptedException | _: InterruptedIOException |
-            _: ClosedByInterruptException =>
+             _: ClosedByInterruptException =>
           // InterruptedIOException - thrown when an I/O operation is interrupted
           // ClosedByInterruptException - thrown when an I/O operation upon a channel is interrupted
           logInfo(log"Thread interrupted, shutting down state server")
@@ -190,15 +190,12 @@ class TransformWithStateInPySparkStateServer(
             // ClosedByInterruptException - thrown when an I/O operation upon a
             //                              channel is interrupted
             case _: InterruptedException | _: InterruptedIOException |
-                _: ClosedByInterruptException =>
-              logInfo(
-                log"Thread is interrupted during flushing error response, " +
-                  log"shutting down state server")
+                 _: ClosedByInterruptException =>
+              logInfo(log"Thread is interrupted during flushing error response, " +
+                log"shutting down state server")
             case e: Throwable =>
-              logError(
-                log"Failed to flush with errorMsg=" +
-                  log"${MDC(LogKeys.ERROR, e.getMessage)}",
-                e)
+              logError(log"Failed to flush with errorMsg=" +
+                log"${MDC(LogKeys.ERROR, e.getMessage)}", e)
               throw e
           }
           statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
@@ -274,12 +271,11 @@ class TransformWithStateInPySparkStateServer(
         var iteratorOption = expiryTimestampIters.get(iteratorId)
         if (iteratorOption.isEmpty) {
           iteratorOption = Some(
-            statefulProcessorHandle
-              .asInstanceOf[StatefulProcessorHandleImpl]
-              .getExpiredTimers(expiryTimestamp)
-              .map { case (k, ts) =>
+            statefulProcessorHandle.asInstanceOf[StatefulProcessorHandleImpl]
+              .getExpiredTimers(expiryTimestamp).map { case (k, ts) =>
                 (k.asInstanceOf[Row], ts)
-              })
+              }
+          )
           expiryTimestampIters.put(iteratorId, iteratorOption.get)
         }
         if (!iteratorOption.get.hasNext) {
@@ -356,7 +352,7 @@ class TransformWithStateInPySparkStateServer(
         val ttlDurationMs = if (message.getGetListState.hasTtl) {
           Some(message.getGetListState.getTtl.getDurationMs)
         } else {
-          None
+            None
         }
         initializeStateVariable(stateName, schema, StateVariableType.ListState, ttlDurationMs)
       case StatefulProcessorCall.MethodCase.GETMAPSTATE =>
@@ -366,11 +362,7 @@ class TransformWithStateInPySparkStateServer(
         val ttlDurationMs = if (message.getGetMapState.hasTtl) {
           Some(message.getGetMapState.getTtl.getDurationMs)
         } else None
-        initializeStateVariable(
-          stateName,
-          userKeySchema,
-          StateVariableType.MapState,
-          ttlDurationMs,
+        initializeStateVariable(stateName, userKeySchema, StateVariableType.MapState, ttlDurationMs,
           valueSchema)
       case StatefulProcessorCall.MethodCase.TIMERSTATECALL =>
         message.getTimerStateCall.getMethodCase match {
@@ -455,16 +447,15 @@ class TransformWithStateInPySparkStateServer(
           val byteString = ByteString.copyFrom(valueBytes)
           sendResponse(0, null, byteString)
         } else {
-          logWarning(
-            log"Value state ${MDC(LogKeys.STATE_NAME, stateName)} doesn't contain" +
-              log" a value.")
+          logWarning(log"Value state ${MDC(LogKeys.STATE_NAME, stateName)} doesn't contain" +
+            log" a value.")
           sendResponse(0)
         }
       case ValueStateCall.MethodCase.VALUESTATEUPDATE =>
         val byteArray = message.getValueStateUpdate.getValue.toByteArray
         // The value row is serialized as a byte array, we need to convert it back to a Row
-        val valueRow =
-          PythonSQLUtils.toJVMRow(byteArray, valueStateInfo.schema, valueStateInfo.deserializer)
+        val valueRow = PythonSQLUtils.toJVMRow(byteArray, valueStateInfo.schema,
+          valueStateInfo.deserializer)
         valueStateInfo.valueState.update(valueRow)
         sendResponse(0)
       case ValueStateCall.MethodCase.CLEAR =>
@@ -584,23 +575,22 @@ class TransformWithStateInPySparkStateServer(
         }
       case MapStateCall.MethodCase.GETVALUE =>
         val keyBytes = message.getGetValue.getUserKey.toByteArray
-        val keyRow =
-          PythonSQLUtils.toJVMRow(keyBytes, mapStateInfo.keySchema, mapStateInfo.keyDeserializer)
+        val keyRow = PythonSQLUtils.toJVMRow(keyBytes, mapStateInfo.keySchema,
+          mapStateInfo.keyDeserializer)
         val value = mapStateInfo.mapState.getValue(keyRow)
         if (value != null) {
           val valueBytes = PythonSQLUtils.toPyRow(value)
           val byteString = ByteString.copyFrom(valueBytes)
           sendResponse(0, null, byteString)
         } else {
-          logWarning(
-            log"Map state ${MDC(LogKeys.STATE_NAME, stateName)} doesn't contain" +
-              log" key ${MDC(LogKeys.KEY, keyRow.toString)}.")
+          logWarning(log"Map state ${MDC(LogKeys.STATE_NAME, stateName)} doesn't contain" +
+            log" key ${MDC(LogKeys.KEY, keyRow.toString)}.")
           sendResponse(0)
         }
       case MapStateCall.MethodCase.CONTAINSKEY =>
         val keyBytes = message.getContainsKey.getUserKey.toByteArray
-        val keyRow =
-          PythonSQLUtils.toJVMRow(keyBytes, mapStateInfo.keySchema, mapStateInfo.keyDeserializer)
+        val keyRow = PythonSQLUtils.toJVMRow(keyBytes, mapStateInfo.keySchema,
+          mapStateInfo.keyDeserializer)
         if (mapStateInfo.mapState.containsKey(keyRow)) {
           sendResponse(0)
         } else {
@@ -608,12 +598,10 @@ class TransformWithStateInPySparkStateServer(
         }
       case MapStateCall.MethodCase.UPDATEVALUE =>
         val keyBytes = message.getUpdateValue.getUserKey.toByteArray
-        val keyRow =
-          PythonSQLUtils.toJVMRow(keyBytes, mapStateInfo.keySchema, mapStateInfo.keyDeserializer)
+        val keyRow = PythonSQLUtils.toJVMRow(keyBytes, mapStateInfo.keySchema,
+          mapStateInfo.keyDeserializer)
         val valueBytes = message.getUpdateValue.getValue.toByteArray
-        val valueRow = PythonSQLUtils.toJVMRow(
-          valueBytes,
-          mapStateInfo.valueSchema,
+        val valueRow = PythonSQLUtils.toJVMRow(valueBytes, mapStateInfo.valueSchema,
           mapStateInfo.valueDeserializer)
         mapStateInfo.mapState.updateValue(keyRow, valueRow)
         sendResponse(0)
@@ -655,8 +643,8 @@ class TransformWithStateInPySparkStateServer(
         }
       case MapStateCall.MethodCase.REMOVEKEY =>
         val keyBytes = message.getRemoveKey.getUserKey.toByteArray
-        val keyRow =
-          PythonSQLUtils.toJVMRow(keyBytes, mapStateInfo.keySchema, mapStateInfo.keyDeserializer)
+        val keyRow = PythonSQLUtils.toJVMRow(keyBytes, mapStateInfo.keySchema,
+          mapStateInfo.keyDeserializer)
         mapStateInfo.mapState.removeKey(keyRow)
         sendResponse(0)
       case MapStateCall.MethodCase.CLEAR =>
@@ -676,79 +664,55 @@ class TransformWithStateInPySparkStateServer(
     val schema = StructType.fromString(schemaString)
     val expressionEncoder = ExpressionEncoder(schema).resolveAndBind()
     stateType match {
-      case StateVariableType.ValueState =>
-        if (!valueStates.contains(stateName)) {
-          val state = if (ttlDurationMs.isEmpty) {
-            statefulProcessorHandle
-              .getValueState[Row](stateName, Encoders.row(schema), TTLConfig.NONE)
+      case StateVariableType.ValueState => if (!valueStates.contains(stateName)) {
+        val state = if (ttlDurationMs.isEmpty) {
+          statefulProcessorHandle.getValueState[Row](stateName, Encoders.row(schema),
+            TTLConfig.NONE)
           } else {
             statefulProcessorHandle.getValueState(
-              stateName,
-              Encoders.row(schema),
-              TTLConfig(Duration.ofMillis(ttlDurationMs.get)))
+              stateName, Encoders.row(schema), TTLConfig(Duration.ofMillis(ttlDurationMs.get)))
           }
-          valueStates.put(
-            stateName,
+          valueStates.put(stateName,
             ValueStateInfo(state, schema, expressionEncoder.createDeserializer()))
           sendResponse(0)
         } else {
           sendResponse(1, s"Value state $stateName already exists")
         }
 
-      case StateVariableType.ListState =>
-        if (!listStates.contains(stateName)) {
-          val state = if (ttlDurationMs.isEmpty) {
-            statefulProcessorHandle
-              .getListState[Row](stateName, Encoders.row(schema), TTLConfig.NONE)
-          } else {
-            statefulProcessorHandle.getListState(
-              stateName,
-              Encoders.row(schema),
-              TTLConfig(Duration.ofMillis(ttlDurationMs.get)))
-          }
-          listStates.put(
-            stateName,
-            ListStateInfo(
-              state,
-              schema,
-              expressionEncoder.createDeserializer(),
-              expressionEncoder.createSerializer()))
-          sendResponse(0)
+      case StateVariableType.ListState => if (!listStates.contains(stateName)) {
+        val state = if (ttlDurationMs.isEmpty) {
+          statefulProcessorHandle.getListState[Row](stateName, Encoders.row(schema),
+            TTLConfig.NONE)
         } else {
-          sendResponse(1, s"List state $stateName already exists")
+          statefulProcessorHandle.getListState(
+            stateName, Encoders.row(schema), TTLConfig(Duration.ofMillis(ttlDurationMs.get)))
         }
+        listStates.put(stateName,
+          ListStateInfo(state, schema, expressionEncoder.createDeserializer(),
+            expressionEncoder.createSerializer()))
+        sendResponse(0)
+      } else {
+        sendResponse(1, s"List state $stateName already exists")
+      }
 
-      case StateVariableType.MapState =>
-        if (!mapStates.contains(stateName)) {
-          val valueSchema = StructType.fromString(mapStateValueSchemaString)
-          val valueExpressionEncoder = ExpressionEncoder(valueSchema).resolveAndBind()
-          val state = if (ttlDurationMs.isEmpty) {
-            statefulProcessorHandle.getMapState[Row, Row](
-              stateName,
-              Encoders.row(schema),
-              Encoders.row(valueSchema),
-              TTLConfig.NONE)
-          } else {
-            statefulProcessorHandle.getMapState[Row, Row](
-              stateName,
-              Encoders.row(schema),
-              Encoders.row(valueSchema),
-              TTLConfig(Duration.ofMillis(ttlDurationMs.get)))
-          }
-          mapStates.put(
-            stateName,
-            MapStateInfo(
-              state,
-              schema,
-              valueSchema,
-              expressionEncoder.createDeserializer(),
-              expressionEncoder.createSerializer(),
-              valueExpressionEncoder.createDeserializer(),
-              valueExpressionEncoder.createSerializer()))
-          sendResponse(0)
+      case StateVariableType.MapState => if (!mapStates.contains(stateName)) {
+        val valueSchema = StructType.fromString(mapStateValueSchemaString)
+        val valueExpressionEncoder = ExpressionEncoder(valueSchema).resolveAndBind()
+        val state = if (ttlDurationMs.isEmpty) {
+          statefulProcessorHandle.getMapState[Row, Row](stateName,
+            Encoders.row(schema), Encoders.row(valueSchema), TTLConfig.NONE)
         } else {
-          sendResponse(1, s"Map state $stateName already exists")
+          statefulProcessorHandle.getMapState[Row, Row](stateName, Encoders.row(schema),
+            Encoders.row(valueSchema), TTLConfig(Duration.ofMillis(ttlDurationMs.get)))
         }
+        mapStates.put(stateName,
+          MapStateInfo(state, schema, valueSchema, expressionEncoder.createDeserializer(),
+            expressionEncoder.createSerializer(), valueExpressionEncoder.createDeserializer(),
+            valueExpressionEncoder.createSerializer()))
+        sendResponse(0)
+      } else {
+        sendResponse(1, s"Map state $stateName already exists")
+      }
     }
   }
 
@@ -772,7 +736,10 @@ class TransformWithStateInPySparkStateServer(
       outputStream.write(responseMessageBytes)
     }
 
-    def sendResponseWithLongVal(status: Int, errorMessage: String = null, longVal: Long): Unit = {
+    def sendResponseWithLongVal(
+        status: Int,
+        errorMessage: String = null,
+        longVal: Long): Unit = {
       val responseMessageBuilder = StateResponseWithLongTypeVal.newBuilder().setStatusCode(status)
       if (status != 0 && errorMessage != null) {
         responseMessageBuilder.setErrorMessage(errorMessage)
@@ -789,8 +756,7 @@ class TransformWithStateInPySparkStateServer(
         status: Int,
         errorMessage: String = null,
         stringVal: String): Unit = {
-      val responseMessageBuilder =
-        StateResponseWithStringTypeVal.newBuilder().setStatusCode(status)
+      val responseMessageBuilder = StateResponseWithStringTypeVal.newBuilder().setStatusCode(status)
       if (status != 0 && errorMessage != null) {
         responseMessageBuilder.setErrorMessage(errorMessage)
       }
@@ -806,8 +772,7 @@ class TransformWithStateInPySparkStateServer(
         status: Int,
         errorMessage: String = null,
         iter: Iterator[Row] = null): Unit = {
-      val responseMessageBuilder = StateResponseWithListGet
-        .newBuilder()
+      val responseMessageBuilder = StateResponseWithListGet.newBuilder()
         .setStatusCode(status)
       if (status != 0 && errorMessage != null) {
         responseMessageBuilder.setErrorMessage(errorMessage)
@@ -830,10 +795,8 @@ class TransformWithStateInPySparkStateServer(
           rowCount += 1
         }
 
-        assert(
-          rowCount > 0,
-          s"rowCount should be greater than 0 when status code is 0, " +
-            s"iter.hasNext ${iter.hasNext}")
+        assert(rowCount > 0, s"rowCount should be greater than 0 when status code is 0, " +
+          s"iter.hasNext ${iter.hasNext}")
 
         responseMessageBuilder.setRequireNextFetch(iter.hasNext)
       }
@@ -849,8 +812,7 @@ class TransformWithStateInPySparkStateServer(
         status: Int,
         errorMessage: String = null,
         iter: Iterator[Row] = null): Unit = {
-      val responseMessageBuilder = StateResponseWithMapKeysOrValues
-        .newBuilder()
+      val responseMessageBuilder = StateResponseWithMapKeysOrValues.newBuilder()
         .setStatusCode(status)
       if (status != 0 && errorMessage != null) {
         responseMessageBuilder.setErrorMessage(errorMessage)
@@ -873,10 +835,8 @@ class TransformWithStateInPySparkStateServer(
           rowCount += 1
         }
 
-        assert(
-          rowCount > 0,
-          s"rowCount should be greater than 0 when status code is 0, " +
-            s"iter.hasNext ${iter.hasNext}")
+        assert(rowCount > 0, s"rowCount should be greater than 0 when status code is 0, " +
+          s"iter.hasNext ${iter.hasNext}")
 
         responseMessageBuilder.setRequireNextFetch(iter.hasNext)
       }
@@ -892,8 +852,7 @@ class TransformWithStateInPySparkStateServer(
         status: Int,
         errorMessage: String = null,
         iter: Iterator[(Row, Row)] = null): Unit = {
-      val responseMessageBuilder = StateResponseWithMapIterator
-        .newBuilder()
+      val responseMessageBuilder = StateResponseWithMapIterator.newBuilder()
         .setStatusCode(status)
       if (status != 0 && errorMessage != null) {
         responseMessageBuilder.setErrorMessage(errorMessage)
@@ -922,10 +881,8 @@ class TransformWithStateInPySparkStateServer(
           rowCount += 1
         }
 
-        assert(
-          rowCount > 0,
-          s"rowCount should be greater than 0 when status code is 0, " +
-            s"iter.hasNext ${iter.hasNext}")
+        assert(rowCount > 0, s"rowCount should be greater than 0 when status code is 0, " +
+          s"iter.hasNext ${iter.hasNext}")
 
         responseMessageBuilder.setRequireNextFetch(iter.hasNext)
       }
@@ -941,8 +898,7 @@ class TransformWithStateInPySparkStateServer(
         status: Int,
         errorMessage: String = null,
         iter: Iterator[T] = null)(fn: T => (Row, Long)): Unit = {
-      val responseMessageBuilder = StateResponseWithTimer
-        .newBuilder()
+      val responseMessageBuilder = StateResponseWithTimer.newBuilder()
         .setStatusCode(status)
       if (status != 0 && errorMessage != null) {
         responseMessageBuilder.setErrorMessage(errorMessage)
@@ -961,7 +917,8 @@ class TransformWithStateInPySparkStateServer(
           val keyTimestampPair = fn(data)
 
           if (keyTimestampPair._1 != null) {
-            timerBuilder.setKey(ByteString.copyFrom(PythonSQLUtils.toPyRow(keyTimestampPair._1)))
+            timerBuilder.setKey(
+              ByteString.copyFrom(PythonSQLUtils.toPyRow(keyTimestampPair._1)))
           }
 
           timerBuilder.setTimestampMs(keyTimestampPair._2)
@@ -971,10 +928,8 @@ class TransformWithStateInPySparkStateServer(
           rowCount += 1
         }
 
-        assert(
-          rowCount > 0,
-          s"rowCount should be greater than 0 when status code is 0, " +
-            s"iter.hasNext ${iter.hasNext}")
+        assert(rowCount > 0, s"rowCount should be greater than 0 when status code is 0, " +
+          s"iter.hasNext ${iter.hasNext}")
 
         responseMessageBuilder.setRequireNextFetch(iter.hasNext)
       }

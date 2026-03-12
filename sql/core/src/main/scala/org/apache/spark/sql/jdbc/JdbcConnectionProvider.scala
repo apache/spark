@@ -22,18 +22,18 @@ import java.sql.{Connection, Driver}
 import org.apache.spark.annotation.{DeveloperApi, Unstable}
 
 /**
- * ::DeveloperApi:: Connection provider which opens connection toward various databases (database
- * specific instance needed). If any authentication required then it's the provider's
- * responsibility to set all the parameters. Important to mention connection providers within a
- * JVM used from multiple threads so adding internal state is not advised. If any state added then
- * it must be synchronized properly.
+ * ::DeveloperApi::
+ * Connection provider which opens connection toward various databases (database specific instance
+ * needed). If any authentication required then it's the provider's responsibility to set all
+ * the parameters.
+ * Important to mention connection providers within a JVM used from multiple threads so adding
+ * internal state is not advised. If any state added then it must be synchronized properly.
  *
  * @since 3.1.0
  */
 @DeveloperApi
 @Unstable
 abstract class JdbcConnectionProvider {
-
   /**
    * Name of the service to provide JDBC connections. This name should be unique. Spark will
    * internally use this name to differentiate JDBC connection providers.
@@ -41,17 +41,14 @@ abstract class JdbcConnectionProvider {
   val name: String
 
   /**
-   * Checks if this connection provider instance can handle the connection initiated by the
-   * driver. There must be exactly one active connection provider which can handle the connection
-   * for a specific driver. If this requirement doesn't met then `IllegalArgumentException` will
-   * be thrown by the provider framework.
+   * Checks if this connection provider instance can handle the connection initiated by the driver.
+   * There must be exactly one active connection provider which can handle the connection for a
+   * specific driver. If this requirement doesn't met then `IllegalArgumentException`
+   * will be thrown by the provider framework.
    *
-   * @param driver
-   *   Java driver which initiates the connection
-   * @param options
-   *   Driver options which initiates the connection
-   * @return
-   *   True if the connection provider can handle the driver with the given options.
+   * @param driver  Java driver which initiates the connection
+   * @param options Driver options which initiates the connection
+   * @return True if the connection provider can handle the driver with the given options.
    */
   def canHandle(driver: Driver, options: Map[String, String]): Boolean
 
@@ -60,12 +57,9 @@ abstract class JdbcConnectionProvider {
    * needed this API is called synchronized by `SecurityConfigurationLock` to avoid race when
    * `modifiesSecurityContext` returns true for the given driver with the given options.
    *
-   * @param driver
-   *   Java driver which initiates the connection
-   * @param options
-   *   Driver options which initiates the connection
-   * @return
-   *   a `Connection` object that represents a connection to the URL
+   * @param driver  Java driver which initiates the connection
+   * @param options Driver options which initiates the connection
+   * @return a `Connection` object that represents a connection to the URL
    */
   def getConnection(driver: Driver, options: Map[String, String]): Connection
 
@@ -74,13 +68,10 @@ abstract class JdbcConnectionProvider {
    * handle authentication and thus should synchronize access to the security configuration while
    * the given driver is initiating a connection with the given options.
    *
-   * @param driver
-   *   Java driver which initiates the connection
-   * @param options
-   *   Driver options which initiates the connection
-   * @return
-   *   True if the connection provider will need to modify the security configuration when
-   *   initiating a connection with the given driver with the given options.
+   * @param driver  Java driver which initiates the connection
+   * @param options Driver options which initiates the connection
+   * @return True if the connection provider will need to modify the security configuration when
+   * initiating a connection with the given driver with the given options.
    *
    * @since 3.1.3
    */

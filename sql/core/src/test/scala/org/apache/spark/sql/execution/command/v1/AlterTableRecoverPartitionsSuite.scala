@@ -40,9 +40,7 @@ trait AlterTableRecoverPartitionsSuiteBase extends command.AlterTableRecoverPart
     val e = intercept[AnalysisException] {
       sql("ALTER TABLE does_not_exist RECOVER PARTITIONS")
     }
-    checkErrorTableNotFound(
-      e,
-      "`does_not_exist`",
+    checkErrorTableNotFound(e, "`does_not_exist`",
       ExpectedContext("does_not_exist", 12, 11 + "does_not_exist".length))
   }
 
@@ -53,19 +51,18 @@ trait AlterTableRecoverPartitionsSuiteBase extends command.AlterTableRecoverPart
 
       withTableDir(t) { case (fs, root) =>
         fs.mkdirs(new Path(new Path(new Path(root, "a=1"), "b=5"), "c=19"))
-        fs.createNewFile(new Path(new Path(root, "a=1/b=5/c=19"), "a.csv")) // file
-        fs.createNewFile(new Path(new Path(root, "a=1/b=5/c=19"), "_SUCCESS")) // file
+        fs.createNewFile(new Path(new Path(root, "a=1/b=5/c=19"), "a.csv"))  // file
+        fs.createNewFile(new Path(new Path(root, "a=1/b=5/c=19"), "_SUCCESS"))  // file
 
         fs.mkdirs(new Path(new Path(new Path(root, "A=2"), "B=6"), "C=31"))
-        fs.createNewFile(new Path(new Path(root, "A=2/B=6/C=31"), "b.csv")) // file
-        fs.createNewFile(new Path(new Path(root, "A=2/B=6/C=31"), "c.csv")) // file
-        fs.createNewFile(new Path(new Path(root, "A=2/B=6/C=31"), ".hiddenFile")) // file
+        fs.createNewFile(new Path(new Path(root, "A=2/B=6/C=31"), "b.csv"))  // file
+        fs.createNewFile(new Path(new Path(root, "A=2/B=6/C=31"), "c.csv"))  // file
+        fs.createNewFile(new Path(new Path(root, "A=2/B=6/C=31"), ".hiddenFile"))  // file
         fs.mkdirs(new Path(new Path(root, "A=2/B=6/C=31"), "_temporary"))
       }
 
       sql(s"ALTER TABLE $t RECOVER PARTITIONS")
-      checkPartitions(
-        t,
+      checkPartitions(t,
         Map("a" -> "1", "b" -> "5", "c" -> "19"),
         Map("a" -> "2", "b" -> "6", "c" -> "31"))
     }
@@ -78,13 +75,13 @@ trait AlterTableRecoverPartitionsSuiteBase extends command.AlterTableRecoverPart
       checkPartitions(t, Map("a" -> "0", "b" -> "1", "c" -> "2"))
 
       withTableDir(t) { case (fs, root) =>
-        fs.mkdirs(new Path(new Path(root, "a"), "b")) // bad name
-        fs.mkdirs(new Path(new Path(root, "b=1"), "a=1")) // wrong order
+        fs.mkdirs(new Path(new Path(root, "a"), "b"))  // bad name
+        fs.mkdirs(new Path(new Path(root, "b=1"), "a=1"))  // wrong order
         fs.mkdirs(new Path(root, "a=4")) // not enough columns
-        fs.createNewFile(new Path(new Path(root, "a=1"), "b=4")) // file
-        fs.createNewFile(new Path(new Path(root, "a=1"), "_SUCCESS")) // _SUCCESS
-        fs.mkdirs(new Path(new Path(root, "a=1"), "_temporary")) // _temporary
-        fs.mkdirs(new Path(new Path(root, "a=1"), ".b=4")) // start with .
+        fs.createNewFile(new Path(new Path(root, "a=1"), "b=4"))  // file
+        fs.createNewFile(new Path(new Path(root, "a=1"), "_SUCCESS"))  // _SUCCESS
+        fs.mkdirs(new Path(new Path(root, "a=1"), "_temporary"))  // _temporary
+        fs.mkdirs(new Path(new Path(root, "a=1"), ".b=4"))  // start with .
       }
 
       sql(s"ALTER TABLE $t RECOVER PARTITIONS")
@@ -104,7 +101,7 @@ trait AlterTableRecoverPartitionsSuiteBase extends command.AlterTableRecoverPart
           val part = Map("a" -> a.toString, "b" -> "5", "c" -> "42")
           fs.mkdirs(new Path(new Path(new Path(root, s"a=$a"), "b=5"), "c=42"))
           val loc = s"a=$a/b=5/c=42"
-          fs.createNewFile(new Path(new Path(root, loc), "a.csv")) // file
+          fs.createNewFile(new Path(new Path(root, loc), "a.csv"))  // file
           if (a >= 10) {
             sql(s"ALTER TABLE $t ADD ${partSpecToString(part)} LOCATION '$loc'")
           }
@@ -129,30 +126,31 @@ trait AlterTableRecoverPartitionsSuiteBase extends command.AlterTableRecoverPart
         condition = "NOT_A_PARTITIONED_TABLE",
         parameters = Map(
           "operation" -> "ALTER TABLE RECOVER PARTITIONS",
-          "tableIdentWithDB" -> "`spark_catalog`.`default`.`tbl`"))
+          "tableIdentWithDB" -> "`spark_catalog`.`default`.`tbl`")
+      )
     }
   }
 }
 
 /**
- * The class contains tests for the `ALTER TABLE .. RECOVER PARTITIONS` command to check V1
- * In-Memory table catalog (sequential).
+ * The class contains tests for the `ALTER TABLE .. RECOVER PARTITIONS` command to check
+ * V1 In-Memory table catalog (sequential).
  */
 class AlterTableRecoverPartitionsSuite
-    extends AlterTableRecoverPartitionsSuiteBase
-    with CommandSuiteBase {
+  extends AlterTableRecoverPartitionsSuiteBase
+  with CommandSuiteBase {
 
   override protected def sparkConf = super.sparkConf
     .set(RDD_PARALLEL_LISTING_THRESHOLD, 0)
 }
 
 /**
- * The class contains tests for the `ALTER TABLE .. RECOVER PARTITIONS` command to check V1
- * In-Memory table catalog (parallel).
+ * The class contains tests for the `ALTER TABLE .. RECOVER PARTITIONS` command to check
+ * V1 In-Memory table catalog (parallel).
  */
 class AlterTableRecoverPartitionsParallelSuite
-    extends AlterTableRecoverPartitionsSuiteBase
-    with CommandSuiteBase {
+  extends AlterTableRecoverPartitionsSuiteBase
+  with CommandSuiteBase {
 
   override protected def sparkConf = super.sparkConf
     .set(RDD_PARALLEL_LISTING_THRESHOLD, 10)

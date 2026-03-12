@@ -30,6 +30,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
+
 /**
  * Generates bytecode for an [[Ordering]] of rows for a given set of expressions.
  */
@@ -51,17 +52,13 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], BaseOrdering] with
   }
 
   /**
-   * Generates the code for comparing a struct type according to its natural ordering (i.e.
-   * ascending order by field 1, then field 2, ..., then field n.
+   * Generates the code for comparing a struct type according to its natural ordering
+   * (i.e. ascending order by field 1, then field 2, ..., then field n.
    */
   def genComparisons(ctx: CodegenContext, schema: StructType): String = {
-    val ordering = schema.fields
-      .map(_.dataType)
-      .zipWithIndex
-      .map { case (dt, index) =>
-        SortOrder(BoundReference(index, dt, nullable = true), Ascending)
-      }
-      .toImmutableArraySeq
+    val ordering = schema.fields.map(_.dataType).zipWithIndex.map {
+      case(dt, index) => SortOrder(BoundReference(index, dt, nullable = true), Ascending)
+    }.toImmutableArraySeq
     genComparisons(ctx, ordering)
   }
 
@@ -184,8 +181,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], BaseOrdering] with
  * A lazily generated row ordering comparator.
  */
 class LazilyGeneratedOrdering(val ordering: Seq[SortOrder])
-    extends Ordering[InternalRow]
-    with KryoSerializable {
+  extends Ordering[InternalRow] with KryoSerializable {
 
   def this(ordering: Seq[SortOrder], inputSchema: Seq[Attribute]) =
     this(bindReferences(ordering, inputSchema))
@@ -218,8 +214,9 @@ object LazilyGeneratedOrdering {
    * Creates a [[LazilyGeneratedOrdering]] for the given schema, in natural ascending order.
    */
   def forSchema(schema: StructType): LazilyGeneratedOrdering = {
-    new LazilyGeneratedOrdering(schema.zipWithIndex.map { case (field, ordinal) =>
-      SortOrder(BoundReference(ordinal, field.dataType, nullable = true), Ascending)
+    new LazilyGeneratedOrdering(schema.zipWithIndex.map {
+      case (field, ordinal) =>
+        SortOrder(BoundReference(ordinal, field.dataType, nullable = true), Ascending)
     })
   }
 }

@@ -31,7 +31,8 @@ import org.apache.spark.sql.types.IntegerType
 class LimitLikeExpressionValidator extends QueryErrorsBase {
   def validateLimitLikeExpr(
       limitLikeExpression: Expression,
-      partiallyResolvedLimitLike: LogicalPlan): Expression = {
+      partiallyResolvedLimitLike: LogicalPlan
+  ): Expression = {
     val evaluatedExpression =
       evaluateLimitLikeExpression(limitLikeExpression, partiallyResolvedLimitLike)
 
@@ -59,11 +60,12 @@ class LimitLikeExpressionValidator extends QueryErrorsBase {
    *   - The evaluated expression has to be non-null
    *   - The evaluated expression has to be positive
    *
-   * The `foldable` check is implemented in some expressions as a recursive expression tree
-   * traversal. It is not an ideal approach for the single-pass [[ExpressionResolver]], but __is__
-   * practical, since:
-   *   - We have to call `eval` here anyway, and it's recursive
-   *   - In practice `LIMIT`, `OFFSET` and `TAIL` expression trees are very small
+   * The `foldable` check is implemented in some expressions
+   * as a recursive expression tree traversal.
+   * It is not an ideal approach for the single-pass [[ExpressionResolver]],
+   * but __is__ practical, since:
+   *  - We have to call `eval` here anyway, and it's recursive
+   *  - In practice `LIMIT`, `OFFSET` and `TAIL` expression trees are very small
    *
    * The return type of evaluation is Int, as we perform check that the expression has
    * IntegerType.
@@ -75,7 +77,8 @@ class LimitLikeExpressionValidator extends QueryErrorsBase {
       case _: LocalLimit | _: GlobalLimit => "limit"
       case other =>
         throw SparkException.internalError(
-          s"Unexpected limit like operator type: ${other.getClass.getName}")
+          s"Unexpected limit like operator type: ${other.getClass.getName}"
+        )
     }
     if (!expression.foldable) {
       throwInvalidLimitLikeExpressionIsUnfoldable(operatorName, expression)
@@ -100,7 +103,8 @@ class LimitLikeExpressionValidator extends QueryErrorsBase {
     throw new AnalysisException(
       errorClass = "SUM_OF_LIMIT_AND_OFFSET_EXCEEDS_MAX_INT",
       messageParameters = Map("limit" -> limit.toString, "offset" -> offset.toString),
-      origin = plan.origin)
+      origin = plan.origin
+    )
 
   private def throwInvalidLimitLikeExpressionIsUnfoldable(
       name: String,
@@ -108,7 +112,8 @@ class LimitLikeExpressionValidator extends QueryErrorsBase {
     throw new AnalysisException(
       errorClass = "INVALID_LIMIT_LIKE_EXPRESSION.IS_UNFOLDABLE",
       messageParameters = Map("name" -> name, "expr" -> toSQLExpr(expression)),
-      origin = expression.origin)
+      origin = expression.origin
+    )
 
   private def throwInvalidLimitLikeExpressionDataType(
       name: String,
@@ -118,16 +123,20 @@ class LimitLikeExpressionValidator extends QueryErrorsBase {
       messageParameters = Map(
         "name" -> name,
         "expr" -> toSQLExpr(expression),
-        "dataType" -> toSQLType(expression.dataType)),
-      origin = expression.origin)
+        "dataType" -> toSQLType(expression.dataType)
+      ),
+      origin = expression.origin
+    )
 
-  private def throwInvalidLimitLikeExpressionIsNull(
-      name: String,
-      expression: Expression): Nothing =
+  private def throwInvalidLimitLikeExpressionIsNull(name: String, expression: Expression): Nothing =
     throw new AnalysisException(
       errorClass = "INVALID_LIMIT_LIKE_EXPRESSION.IS_NULL",
-      messageParameters = Map("name" -> name, "expr" -> toSQLExpr(expression)),
-      origin = expression.origin)
+      messageParameters = Map(
+        "name" -> name,
+        "expr" -> toSQLExpr(expression)
+      ),
+      origin = expression.origin
+    )
 
   private def throwInvalidLimitLikeExpressionIsNegative(
       name: String,
@@ -135,9 +144,8 @@ class LimitLikeExpressionValidator extends QueryErrorsBase {
       value: Int): Nothing =
     throw new AnalysisException(
       errorClass = "INVALID_LIMIT_LIKE_EXPRESSION.IS_NEGATIVE",
-      messageParameters = Map(
-        "name" -> name,
-        "expr" -> toSQLExpr(expression),
-        "v" -> toSQLValue(value, IntegerType)),
-      origin = expression.origin)
+      messageParameters =
+        Map("name" -> name, "expr" -> toSQLExpr(expression), "v" -> toSQLValue(value, IntegerType)),
+      origin = expression.origin
+    )
 }

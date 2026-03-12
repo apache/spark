@@ -20,9 +20,9 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 
 /**
- * This base suite contains unified tests for the `DROP TABLE` command that check V1 and V2 table
- * catalogs. The tests that cannot run for all supported catalogs are located in more specific
- * test suites:
+ * This base suite contains unified tests for the `DROP TABLE` command that check V1 and V2
+ * table catalogs. The tests that cannot run for all supported catalogs are located in more
+ * specific test suites:
  *
  *   - V2 table catalog tests: `org.apache.spark.sql.execution.command.v2.DropTableSuite`
  *   - V1 table catalog tests: `org.apache.spark.sql.execution.command.v1.DropTableSuiteBase`
@@ -86,7 +86,8 @@ trait DropTableSuiteBase extends QueryTest with DDLCommandTestUtils {
         sql(s"DROP TABLE $catalog.non_existent_db.tbl")
       },
       condition = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relationName" -> s"`$catalog`.`non_existent_db`.`tbl`"))
+      parameters = Map("relationName" -> s"`$catalog`.`non_existent_db`.`tbl`")
+    )
   }
 
   test("SPARK-33174: DROP TABLE should resolve to a temporary view first") {
@@ -125,7 +126,9 @@ trait DropTableSuiteBase extends QueryTest with DDLCommandTestUtils {
         sql(s"CREATE TABLE $t $defaultUsing AS SELECT id, data FROM source")
         sql(s"CACHE TABLE $view AS SELECT id FROM $t")
         checkAnswer(sql(s"SELECT * FROM $t"), spark.table("source").collect())
-        checkAnswer(sql(s"SELECT * FROM $view"), spark.table("source").select("id").collect())
+        checkAnswer(
+          sql(s"SELECT * FROM $view"),
+          spark.table("source").select("id").collect())
 
         val oldTable = spark.table(view)
         assert(spark.sharedState.cacheManager.lookupCachedData(oldTable).isDefined)

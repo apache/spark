@@ -39,9 +39,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 class TextSocketSourceProvider extends SimpleTableProvider with DataSourceRegister with Logging {
 
   private def checkParameters(params: CaseInsensitiveStringMap): Unit = {
-    logWarning(
-      "The socket source should not be used for production applications! " +
-        "It does not support recovery.")
+    logWarning("The socket source should not be used for production applications! " +
+      "It does not support recovery.")
     if (!params.containsKey("host")) {
       throw QueryCompilationErrors.hostOptionNotSetError()
     }
@@ -71,8 +70,7 @@ class TextSocketSourceProvider extends SimpleTableProvider with DataSourceRegist
 }
 
 class TextSocketTable(host: String, port: Int, numPartitions: Int, includeTimestamp: Boolean)
-    extends Table
-    with SupportsRead {
+  extends Table with SupportsRead {
 
   override def name(): String = s"Socket[$host:$port]"
 
@@ -88,30 +86,29 @@ class TextSocketTable(host: String, port: Int, numPartitions: Int, includeTimest
     util.EnumSet.of(TableCapability.MICRO_BATCH_READ, TableCapability.CONTINUOUS_READ)
   }
 
-  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = () =>
-    new Scan {
-      override def readSchema(): StructType = {
-        import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-        columns.asSchema
-      }
-
-      override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
-        new TextSocketMicroBatchStream(host, port, numPartitions)
-      }
-
-      override def toContinuousStream(checkpointLocation: String): ContinuousStream = {
-        new TextSocketContinuousStream(host, port, numPartitions, options)
-      }
-
-      override def columnarSupportMode(): Scan.ColumnarSupportMode =
-        Scan.ColumnarSupportMode.UNSUPPORTED
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = () => new Scan {
+    override def readSchema(): StructType = {
+      import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+      columns.asSchema
     }
+
+    override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
+      new TextSocketMicroBatchStream(host, port, numPartitions)
+    }
+
+    override def toContinuousStream(checkpointLocation: String): ContinuousStream = {
+      new TextSocketContinuousStream(host, port, numPartitions, options)
+    }
+
+    override def columnarSupportMode(): Scan.ColumnarSupportMode =
+      Scan.ColumnarSupportMode.UNSUPPORTED
+  }
 }
 
 object TextSocketReader {
   val SCHEMA_REGULAR = StructType(Array(StructField("value", StringType)))
-  val SCHEMA_TIMESTAMP = StructType(
-    Array(StructField("value", StringType), StructField("timestamp", TimestampType)))
+  val SCHEMA_TIMESTAMP = StructType(Array(StructField("value", StringType),
+    StructField("timestamp", TimestampType)))
   val DATE_TIME_FORMATTER =
     DateTimeFormatter
       .ofPattern("yyyy-MM-dd HH:mm:ss", Locale.US)

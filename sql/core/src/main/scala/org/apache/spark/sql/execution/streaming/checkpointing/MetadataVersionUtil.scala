@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.streaming.checkpointing
 import org.apache.spark.sql.errors.QueryExecutionErrors
 
 object MetadataVersionUtil {
-
   /**
    * Parse the log version from the given `text` -- will throw exception when the parsed version
    * exceeds `maxSupportedVersion`, or when `text` is malformed.

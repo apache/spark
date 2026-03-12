@@ -32,12 +32,10 @@ import org.apache.spark.util.{NextIterator, SerializableConfiguration}
 
 /**
  * Information used specifically by StatePartitionAllColumnFamiliesReader
- * @param colFamilySchemas
- *   a set of ColFamilySchema for all column families in an operator. The reader relies on this
- *   field to read data for all column family
- * @param stateVariableInfos
- *   a list of TransformWithStateVariableInfo for state variables in TWS operator. The reader
- *   relies on this to check variable type
+ * @param colFamilySchemas a set of ColFamilySchema for all column families in an operator.
+ *                         The reader relies on this field to read data for all column family
+ * @param stateVariableInfos a list of TransformWithStateVariableInfo for state variables
+ *                           in TWS operator. The reader relies on this to check variable type
  */
 case class AllColumnFamiliesReaderInfo(
     colFamilySchemas: Set[StateStoreColFamilySchema] = Set.empty,
@@ -48,9 +46,9 @@ case class AllColumnFamiliesReaderInfo(
 /**
  * An implementation of [[PartitionReaderFactory]] for State data source. This is used to support
  * general read from a state store instance, rather than specific to the operator.
- * @param stateSchemaProviderOpt
- *   Optional provider that maintains mapping between schema IDs and their corresponding schemas,
- *   enabling reading of state data written with older schema versions
+ * @param stateSchemaProviderOpt Optional provider that maintains mapping between schema IDs and
+ *                               their corresponding schemas, enabling reading of state data
+ *                               written with older schema versions
  */
 class StatePartitionReaderFactory(
     storeConf: StateStoreConf,
@@ -62,50 +60,30 @@ class StatePartitionReaderFactory(
     stateSchemaProviderOpt: Option[StateSchemaProvider],
     joinColFamilyOpt: Option[String],
     allColumnFamiliesReaderInfo: Option[AllColumnFamiliesReaderInfo])
-    extends PartitionReaderFactory {
+  extends PartitionReaderFactory {
 
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val stateStoreInputPartition = partition.asInstanceOf[StateStoreInputPartition]
     if (stateStoreInputPartition.sourceOptions.internalOnlyReadAllColumnFamilies) {
       require(allColumnFamiliesReaderInfo.isDefined)
-      new StatePartitionAllColumnFamiliesReader(
-        storeConf,
-        hadoopConf,
-        stateStoreInputPartition,
-        schema,
-        keyStateEncoderSpec,
-        stateStoreColFamilySchemaOpt,
-        stateSchemaProviderOpt,
-        allColumnFamiliesReaderInfo.get)
+      new StatePartitionAllColumnFamiliesReader(storeConf, hadoopConf,
+        stateStoreInputPartition, schema, keyStateEncoderSpec, stateStoreColFamilySchemaOpt,
+        stateSchemaProviderOpt, allColumnFamiliesReaderInfo.get)
     } else if (stateStoreInputPartition.sourceOptions.readChangeFeed) {
-      new StateStoreChangeDataPartitionReader(
-        storeConf,
-        hadoopConf,
-        stateStoreInputPartition,
-        schema,
-        keyStateEncoderSpec,
-        stateVariableInfoOpt,
-        stateStoreColFamilySchemaOpt,
-        stateSchemaProviderOpt,
-        joinColFamilyOpt)
+      new StateStoreChangeDataPartitionReader(storeConf, hadoopConf,
+        stateStoreInputPartition, schema, keyStateEncoderSpec, stateVariableInfoOpt,
+        stateStoreColFamilySchemaOpt, stateSchemaProviderOpt, joinColFamilyOpt)
     } else {
-      new StatePartitionReader(
-        storeConf,
-        hadoopConf,
-        stateStoreInputPartition,
-        schema,
-        keyStateEncoderSpec,
-        stateVariableInfoOpt,
-        stateStoreColFamilySchemaOpt,
-        stateSchemaProviderOpt,
-        joinColFamilyOpt)
+      new StatePartitionReader(storeConf, hadoopConf,
+        stateStoreInputPartition, schema, keyStateEncoderSpec, stateVariableInfoOpt,
+        stateStoreColFamilySchemaOpt, stateSchemaProviderOpt, joinColFamilyOpt)
     }
   }
 }
 
 /**
- * An implementation of [[PartitionReader]] for State data source. This is used to support general
- * read from a state store instance, rather than specific to the operator.
+ * An implementation of [[PartitionReader]] for State data source. This is used to support
+ * general read from a state store instance, rather than specific to the operator.
  */
 abstract class StatePartitionReaderBase(
     storeConf: StateStoreConf,
@@ -117,14 +95,13 @@ abstract class StatePartitionReaderBase(
     stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema],
     stateSchemaProviderOpt: Option[StateSchemaProvider],
     joinColFamilyOpt: Option[String])
-    extends PartitionReader[InternalRow]
-    with Logging {
+  extends PartitionReader[InternalRow] with Logging {
   // Used primarily as a placeholder for the value schema in the context of
   // state variables used within the transformWithState operator.
   private val schemaForValueRow: StructType =
     StructType(Array(StructField("__dummy__", NullType)))
 
-  protected val keySchema: StructType = {
+  protected val keySchema : StructType = {
     if (SchemaUtil.checkVariableType(stateVariableInfoOpt, StateVariableType.MapState)) {
       SchemaUtil.getCompositeKeySchema(schema, partition.sourceOptions)
     } else if (partition.sourceOptions.internalOnlyReadAllColumnFamilies) {
@@ -135,17 +112,18 @@ abstract class StatePartitionReaderBase(
     }
   }
 
-  protected val valueSchema: StructType = if (stateVariableInfoOpt.isDefined) {
+  protected val valueSchema : StructType = if (stateVariableInfoOpt.isDefined) {
     schemaForValueRow
   } else if (partition.sourceOptions.internalOnlyReadAllColumnFamilies) {
     require(stateStoreColFamilySchemaOpt.isDefined)
     stateStoreColFamilySchemaOpt.map(_.valueSchema).get
   } else {
-    SchemaUtil.getSchemaAsDataType(schema, "value").asInstanceOf[StructType]
+    SchemaUtil.getSchemaAsDataType(
+      schema, "value").asInstanceOf[StructType]
   }
 
   protected def getStoreUniqueId(
-      operatorStateUniqueIds: Option[Array[Array[String]]]): Option[String] = {
+    operatorStateUniqueIds: Option[Array[Array[String]]]) : Option[String] = {
     SymmetricHashJoinStateManager.getStateStoreCheckpointId(
       storeName = partition.sourceOptions.storeName,
       partitionId = partition.partition,
@@ -161,31 +139,24 @@ abstract class StatePartitionReaderBase(
   }
 
   protected lazy val provider: StateStoreProvider = {
-    val stateStoreId = StateStoreId(
-      partition.sourceOptions.stateCheckpointLocation.toString,
-      partition.sourceOptions.operatorId,
-      partition.partition,
-      partition.sourceOptions.storeName)
+    val stateStoreId = StateStoreId(partition.sourceOptions.stateCheckpointLocation.toString,
+      partition.sourceOptions.operatorId, partition.partition, partition.sourceOptions.storeName)
     val stateStoreProviderId = StateStoreProviderId(stateStoreId, partition.queryId)
 
     val useColFamilies = stateVariableInfoOpt.isDefined || joinColFamilyOpt.isDefined
 
-    val useMultipleValuesPerKey =
-      SchemaUtil.checkVariableType(stateVariableInfoOpt, StateVariableType.ListState)
+    val useMultipleValuesPerKey = SchemaUtil.checkVariableType(stateVariableInfoOpt,
+      StateVariableType.ListState)
 
     val provider = StateStoreProvider.createAndInit(
-      stateStoreProviderId,
-      keySchema,
-      valueSchema,
-      keyStateEncoderSpec,
-      useColumnFamilies = useColFamilies,
-      storeConf,
-      hadoopConf.value,
-      useMultipleValuesPerKey = useMultipleValuesPerKey,
-      stateSchemaProviderOpt)
+      stateStoreProviderId, keySchema, valueSchema, keyStateEncoderSpec,
+      useColumnFamilies = useColFamilies, storeConf, hadoopConf.value,
+      useMultipleValuesPerKey = useMultipleValuesPerKey, stateSchemaProviderOpt)
 
     if (useColFamilies) {
-      val store = provider.getStore(partition.sourceOptions.batchId + 1, getEndStoreUniqueId)
+      val store = provider.getStore(
+        partition.sourceOptions.batchId + 1,
+        getEndStoreUniqueId)
       require(stateStoreColFamilySchemaOpt.isDefined)
       val stateStoreColFamilySchema = stateStoreColFamilySchemaOpt.get
       val isInternal = partition.sourceOptions.readRegisteredTimers ||
@@ -227,8 +198,8 @@ abstract class StatePartitionReaderBase(
 }
 
 /**
- * An implementation of [[StatePartitionReaderBase]] for the normal mode of State Data Source. It
- * reads the state at a particular batchId.
+ * An implementation of [[StatePartitionReaderBase]] for the normal mode of State Data
+ * Source. It reads the state at a particular batchId.
  */
 class StatePartitionReader(
     storeConf: StateStoreConf,
@@ -240,32 +211,26 @@ class StatePartitionReader(
     stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema],
     stateSchemaProviderOpt: Option[StateSchemaProvider],
     joinColFamilyOpt: Option[String])
-    extends StatePartitionReaderBase(
-      storeConf,
-      hadoopConf,
-      partition,
-      schema,
-      keyStateEncoderSpec,
-      stateVariableInfoOpt,
-      stateStoreColFamilySchemaOpt,
-      stateSchemaProviderOpt,
-      joinColFamilyOpt) {
+  extends StatePartitionReaderBase(storeConf, hadoopConf, partition, schema,
+    keyStateEncoderSpec, stateVariableInfoOpt, stateStoreColFamilySchemaOpt,
+    stateSchemaProviderOpt, joinColFamilyOpt) {
 
   private lazy val store: ReadStateStore = {
     partition.sourceOptions.fromSnapshotOptions match {
       case None =>
-        assert(
-          getStartStoreUniqueId == getEndStoreUniqueId,
+        assert(getStartStoreUniqueId == getEndStoreUniqueId,
           "Start and end store unique IDs must be the same when not reading from snapshot")
-        provider.getReadStore(partition.sourceOptions.batchId + 1, getStartStoreUniqueId)
+        provider.getReadStore(
+          partition.sourceOptions.batchId + 1,
+          getStartStoreUniqueId
+        )
 
       case Some(fromSnapshotOptions) =>
         if (!provider.isInstanceOf[SupportsFineGrainedReplay]) {
           throw StateStoreErrors.stateStoreProviderDoesNotSupportFineGrainedReplay(
             provider.getClass.toString)
         }
-        provider
-          .asInstanceOf[SupportsFineGrainedReplay]
+        provider.asInstanceOf[SupportsFineGrainedReplay]
           .replayReadStateFromSnapshot(
             fromSnapshotOptions.snapshotStartBatchId + 1,
             partition.sourceOptions.batchId + 1,
@@ -276,19 +241,14 @@ class StatePartitionReader(
 
   override lazy val iter: Iterator[InternalRow] = {
     val colFamilyName = stateStoreColFamilySchemaOpt
-      .map(_.colFamilyName)
-      .getOrElse(joinColFamilyOpt.getOrElse(StateStore.DEFAULT_COL_FAMILY_NAME))
+      .map(_.colFamilyName).getOrElse(
+        joinColFamilyOpt.getOrElse(StateStore.DEFAULT_COL_FAMILY_NAME))
 
     if (stateVariableInfoOpt.isDefined) {
       val stateVariableInfo = stateVariableInfoOpt.get
       val stateVarType = stateVariableInfo.stateVariableType
-      SchemaUtil.processStateEntries(
-        stateVarType,
-        colFamilyName,
-        store,
-        keySchema,
-        partition.partition,
-        partition.sourceOptions)
+      SchemaUtil.processStateEntries(stateVarType, colFamilyName, store,
+        keySchema, partition.partition, partition.sourceOptions)
     } else {
       store
         .iterator(colFamilyName)
@@ -305,10 +265,10 @@ class StatePartitionReader(
 }
 
 /**
- * An implementation of [[StatePartitionReaderBase]] for reading all column families in binary
- * format. This reader returns raw key and value bytes along with column family names. We are
- * returning key/value bytes because each column family can have different schema It will also
- * return the partition key
+ * An implementation of [[StatePartitionReaderBase]] for reading all column families
+ * in binary format. This reader returns raw key and value bytes along with column family names.
+ * We are returning key/value bytes because each column family can have different schema
+ * It will also return the partition key
  */
 class StatePartitionAllColumnFamiliesReader(
     storeConf: StateStoreConf,
@@ -319,16 +279,12 @@ class StatePartitionAllColumnFamiliesReader(
     defaultStateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema],
     stateSchemaProviderOpt: Option[StateSchemaProvider],
     allColumnFamiliesReaderInfo: AllColumnFamiliesReaderInfo)
-    extends StatePartitionReaderBase(
-      storeConf,
-      hadoopConf,
-      partition,
-      schema,
-      keyStateEncoderSpec,
-      None,
-      defaultStateStoreColFamilySchemaOpt,
-      stateSchemaProviderOpt,
-      None) {
+  extends StatePartitionReaderBase(
+    storeConf,
+    hadoopConf, partition, schema,
+    keyStateEncoderSpec, None,
+    defaultStateStoreColFamilySchemaOpt,
+    stateSchemaProviderOpt, None) {
 
   private val stateStoreColFamilySchemas = allColumnFamiliesReaderInfo.colFamilySchemas
   private val stateVariableInfos = allColumnFamiliesReaderInfo.stateVariableInfos
@@ -368,8 +324,7 @@ class StatePartitionAllColumnFamiliesReader(
           stateFormatVersion,
           stateVariableInfoOpt)
         cfSchema.colFamilyName -> extractor
-      }
-      .toMap
+      }.toMap
   }
 
   private def isListType(colFamilyName: String): Boolean = {
@@ -379,27 +334,19 @@ class StatePartitionAllColumnFamiliesReader(
   }
 
   override protected lazy val provider: StateStoreProvider = {
-    val stateStoreId = StateStoreId(
-      partition.sourceOptions.stateCheckpointLocation.toString,
-      partition.sourceOptions.operatorId,
-      partition.partition,
-      partition.sourceOptions.storeName)
+    val stateStoreId = StateStoreId(partition.sourceOptions.stateCheckpointLocation.toString,
+      partition.sourceOptions.operatorId, partition.partition, partition.sourceOptions.storeName)
     val stateStoreProviderId = StateStoreProviderId(stateStoreId, partition.queryId)
     StateStoreProvider.createAndInit(
-      stateStoreProviderId,
-      keySchema,
-      valueSchema,
-      keyStateEncoderSpec,
-      useColumnFamilies,
-      storeConf,
-      hadoopConf.value,
-      useMultipleValuesPerKey = false,
-      stateSchemaProviderOpt)
+      stateStoreProviderId, keySchema, valueSchema, keyStateEncoderSpec,
+      useColumnFamilies, storeConf, hadoopConf.value,
+      useMultipleValuesPerKey = false, stateSchemaProviderOpt)
   }
 
   private def checkAllColFamiliesExist(
       colFamilyNames: List[String],
-      stateStore: StateStore): Unit = {
+      stateStore: StateStore
+    ): Unit = {
     // Filter out DEFAULT column family from validation for two reasons:
     // 1. Some operators (e.g., stream-stream join v3) don't include DEFAULT in their schema
     //    because the underlying RocksDB creates "default" column family automatically
@@ -414,8 +361,7 @@ class StatePartitionAllColumnFamiliesReader(
     // column families have no data yet in the checkpoint
     // (they'll be created during registration).
     // However, if the checkpoint contains CFs not in the schema, it indicates a mismatch.
-    require(
-      expectedCFs.subsetOf(actualCFs),
+    require(expectedCFs.subsetOf(actualCFs),
       s"Some column families are present in the state store but missing in the metadata. " +
         s"Column families in state store but not in metadata: ${expectedCFs.diff(actualCFs)}")
   }
@@ -424,10 +370,12 @@ class StatePartitionAllColumnFamiliesReader(
   // We cannot abort and then get a read store because abort() invalidates the loaded version,
   // causing getReadStore() to reload from checkpoint and clear the column family registrations.
   private lazy val store: StateStore = {
-    assert(
-      getStartStoreUniqueId == getEndStoreUniqueId,
+    assert(getStartStoreUniqueId == getEndStoreUniqueId,
       "Start and end store unique IDs must be the same when reading all column families")
-    val stateStore = provider.getStore(partition.sourceOptions.batchId + 1, getStartStoreUniqueId)
+    val stateStore = provider.getStore(
+      partition.sourceOptions.batchId + 1,
+      getStartStoreUniqueId
+    )
 
     // Register all column families from the schema
     if (useColumnFamilies) {
@@ -439,8 +387,7 @@ class StatePartitionAllColumnFamiliesReader(
             val isInternal =
               StateStoreColumnFamilySchemaUtils.isInternalColFamily(cfSchema.colFamilyName)
             val useMultipleValuesPerKey = isListType(cfSchema.colFamilyName)
-            require(
-              cfSchema.keyStateEncoderSpec.isDefined,
+            require(cfSchema.keyStateEncoderSpec.isDefined,
               s"keyStateEncoderSpec must be defined for column family ${cfSchema.colFamilyName}")
             stateStore.createColFamilyIfAbsent(
               cfSchema.colFamilyName,
@@ -464,24 +411,21 @@ class StatePartitionAllColumnFamiliesReader(
       .flatMap { cfSchema =>
         val extractor = cfPartitionKeyExtractors(cfSchema.colFamilyName)
         if (isListType(cfSchema.colFamilyName)) {
-          store
-            .iterator(cfSchema.colFamilyName)
-            .flatMap(pair =>
-              store.valuesIterator(pair.key, cfSchema.colFamilyName).map { value =>
-                SchemaUtil.unifyStateRowPairAsRawBytes(
-                  (pair.key, value),
-                  cfSchema.colFamilyName,
-                  extractor)
-              })
+          store.iterator(cfSchema.colFamilyName).flatMap(
+            pair =>
+              store.valuesIterator(pair.key, cfSchema.colFamilyName).map {
+                value =>
+                  SchemaUtil.unifyStateRowPairAsRawBytes(
+                    (pair.key, value), cfSchema.colFamilyName, extractor)
+              }
+          )
         } else {
           store.iterator(cfSchema.colFamilyName).map { pair =>
             SchemaUtil.unifyStateRowPairAsRawBytes(
-              (pair.key, pair.value),
-              cfSchema.colFamilyName,
-              extractor)
+              (pair.key, pair.value), cfSchema.colFamilyName, extractor)
           }
         }
-      }
+    }
   }
 
   override def close(): Unit = {
@@ -504,19 +448,12 @@ class StateStoreChangeDataPartitionReader(
     stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema],
     stateSchemaProviderOpt: Option[StateSchemaProvider],
     joinColFamilyOpt: Option[String])
-    extends StatePartitionReaderBase(
-      storeConf,
-      hadoopConf,
-      partition,
-      schema,
-      keyStateEncoderSpec,
-      stateVariableInfoOpt,
-      stateStoreColFamilySchemaOpt,
-      stateSchemaProviderOpt,
-      joinColFamilyOpt) {
+  extends StatePartitionReaderBase(storeConf, hadoopConf, partition, schema,
+    keyStateEncoderSpec, stateVariableInfoOpt, stateStoreColFamilySchemaOpt,
+    stateSchemaProviderOpt, joinColFamilyOpt) {
 
-  private lazy val changeDataReader
-      : NextIterator[(RecordType.Value, UnsafeRow, UnsafeRow, Long)] = {
+  private lazy val changeDataReader:
+    NextIterator[(RecordType.Value, UnsafeRow, UnsafeRow, Long)] = {
     if (!provider.isInstanceOf[SupportsFineGrainedReplay]) {
       throw StateStoreErrors.stateStoreProviderDoesNotSupportFineGrainedReplay(
         provider.getClass.toString)
@@ -530,8 +467,7 @@ class StateStoreChangeDataPartitionReader(
       None
     }
 
-    provider
-      .asInstanceOf[SupportsFineGrainedReplay]
+    provider.asInstanceOf[SupportsFineGrainedReplay]
       .getStateStoreChangeDataReader(
         partition.sourceOptions.readChangeFeedOptions.get.changeStartBatchId + 1,
         partition.sourceOptions.readChangeFeedOptions.get.changeEndBatchId + 1,
@@ -541,20 +477,17 @@ class StateStoreChangeDataPartitionReader(
 
   override lazy val iter: Iterator[InternalRow] = {
     if (SchemaUtil.checkVariableType(stateVariableInfoOpt, StateVariableType.MapState)) {
-      val groupingKeySchema =
-        SchemaUtil.getSchemaAsDataType(keySchema, "key").asInstanceOf[StructType]
-      val userKeySchema =
-        SchemaUtil.getSchemaAsDataType(keySchema, "userKey").asInstanceOf[StructType]
+      val groupingKeySchema = SchemaUtil.getSchemaAsDataType(
+        keySchema, "key"
+      ).asInstanceOf[StructType]
+      val userKeySchema = SchemaUtil.getSchemaAsDataType(
+        keySchema, "userKey"
+      ).asInstanceOf[StructType]
       changeDataReader.iterator.map { entry =>
         val groupingKey = entry._2.get(0, groupingKeySchema).asInstanceOf[UnsafeRow]
         val userMapKey = entry._2.get(1, userKeySchema).asInstanceOf[UnsafeRow]
-        createFlattenedRowForMapState(
-          entry._4,
-          entry._1,
-          groupingKey,
-          userMapKey,
-          entry._3,
-          partition.partition)
+        createFlattenedRowForMapState(entry._4, entry._1,
+          groupingKey, userMapKey, entry._3, partition.partition)
       }
     } else {
       changeDataReader.iterator.map(unifyStateChangeDataRow)
@@ -566,8 +499,8 @@ class StateStoreChangeDataPartitionReader(
     super.close()
   }
 
-  private def unifyStateChangeDataRow(
-      row: (RecordType, UnsafeRow, UnsafeRow, Long)): InternalRow = {
+  private def unifyStateChangeDataRow(row: (RecordType, UnsafeRow, UnsafeRow, Long)):
+    InternalRow = {
     val result = new GenericInternalRow(5)
     result.update(0, row._4)
     result.update(1, UTF8String.fromString(getRecordTypeAsString(row._1)))

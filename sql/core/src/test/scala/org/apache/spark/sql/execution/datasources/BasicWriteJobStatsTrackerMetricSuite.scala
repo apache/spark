@@ -28,13 +28,11 @@ class BasicWriteJobStatsTrackerMetricSuite extends SparkFunSuite with LocalSpark
       spark = SparkSession.builder().master("local[4]").getOrCreate()
       val statusStore = spark.sharedState.statusStore
 
-      spark.sql(
-        "create table dynamic_partition(i bigint, part bigint) " +
-          "using parquet partitioned by (part)")
+      spark.sql("create table dynamic_partition(i bigint, part bigint) " +
+        "using parquet partitioned by (part)")
       val oldExecutionsSize = statusStore.executionsList().size
-      spark.sql(
-        "insert overwrite table dynamic_partition partition(part) " +
-          s"select id, id % $partitions as part from range(10000)")
+      spark.sql("insert overwrite table dynamic_partition partition(part) " +
+        s"select id, id % $partitions as part from range(10000)")
 
       // Wait for listener to finish computing the metrics for the executions.
       while (statusStore.executionsList().size - oldExecutionsSize < 1 ||

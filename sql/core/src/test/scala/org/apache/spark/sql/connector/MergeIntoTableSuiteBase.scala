@@ -31,9 +31,8 @@ import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNes
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
-abstract class MergeIntoTableSuiteBase
-    extends RowLevelOperationSuiteBase
-    with AdaptiveSparkPlanHelper {
+abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
+  with AdaptiveSparkPlanHelper {
 
   import testImplicits._
 
@@ -59,12 +58,15 @@ abstract class MergeIntoTableSuiteBase
     catalog.createTable(ident, tableInfo)
 
     withTempView("source") {
-      val sourceRows = Seq((1, 500, "eng"), (2, 600, "hr"))
+      val sourceRows = Seq(
+        (1, 500, "eng"),
+        (2, 600, "hr"))
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
       sql(s"INSERT INTO $tableNameAsString (pk, salary, dep, value) VALUES (1, 200, 'eng', 999)")
 
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source s
            |ON t.pk = s.pk
            |WHEN MATCHED THEN
@@ -77,23 +79,21 @@ abstract class MergeIntoTableSuiteBase
         sql(s"SELECT * FROM $tableNameAsString"),
         Seq(
           Row(1, 200, "eng", 123), // update
-          Row(2, 600, "hr", 123)
-        )
-      ) // insert
+          Row(2, 600, "hr", 123))) // insert
     }
   }
 
   test("merge into table containing added column with default value") {
     withTempView("source") {
-      sql(s"""CREATE TABLE $tableNameAsString (
+      sql(
+        s"""CREATE TABLE $tableNameAsString (
            | pk INT NOT NULL,
            | salary INT NOT NULL DEFAULT -1,
            | dep STRING)
            |PARTITIONED BY (dep)
            |""".stripMargin)
 
-      append(
-        "pk INT NOT NULL, dep STRING",
+      append("pk INT NOT NULL, dep STRING",
         """{ "pk": 1, "dep": "hr" }
           |{ "pk": 2, "dep": "hr" }
           |{ "pk": 3, "dep": "hr" }
@@ -108,10 +108,13 @@ abstract class MergeIntoTableSuiteBase
           Row(2, -1, "hr", "initial-text"),
           Row(3, -1, "hr", "initial-text")))
 
-      val sourceRows = Seq((1, 100, "hr"), (4, 400, "hr"))
+      val sourceRows = Seq(
+        (1, 100, "hr"),
+        (4, 400, "hr"))
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source s
            |ON t.pk = s.pk
            |WHEN MATCHED THEN
@@ -136,12 +139,16 @@ abstract class MergeIntoTableSuiteBase
     val tableName: String = "cat.ns1.non_partitioned_table"
     withTable(tableName) {
       withTempView("source") {
-        val sourceRows = Seq((1, 100, "hr"), (2, 200, "finance"), (3, 300, "hr"))
+        val sourceRows = Seq(
+          (1, 100, "hr"),
+          (2, 200, "finance"),
+          (3, 300, "hr"))
         sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
         sql(s"CREATE TABLE $tableName (pk INT NOT NULL, salary INT, dep STRING)".stripMargin)
 
-        val df = sql(s"""MERGE INTO $tableName t
+        val df = sql(
+          s"""MERGE INTO $tableName t
              |USING (select * from source) s
              |ON t.pk = s.pk
              |WHEN MATCHED THEN
@@ -155,9 +162,7 @@ abstract class MergeIntoTableSuiteBase
           Seq(
             Row(1, 100, "hr"), // insert
             Row(2, 200, "finance"), // insert
-            Row(3, 300, "hr")
-          )
-        ) // insert
+            Row(3, 300, "hr"))) // insert
       }
     }
   }
@@ -166,10 +171,14 @@ abstract class MergeIntoTableSuiteBase
     withTempView("source") {
       createTable("pk INT NOT NULL, salary INT, dep STRING")
 
-      val sourceRows = Seq((1, 100, "hr"), (2, 200, "finance"), (3, 300, "hr"))
+      val sourceRows = Seq(
+        (1, 100, "hr"),
+        (2, 200, "finance"),
+        (3, 300, "hr"))
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source s
            |ON t.pk = s.pk
            |WHEN NOT MATCHED THEN
@@ -181,9 +190,7 @@ abstract class MergeIntoTableSuiteBase
         Seq(
           Row(1, 100, "hr"), // insert
           Row(2, 200, "finance"), // insert
-          Row(3, 300, "hr")
-        )
-      ) // insert
+          Row(3, 300, "hr"))) // insert
     }
   }
 
@@ -191,10 +198,14 @@ abstract class MergeIntoTableSuiteBase
     withTempView("source") {
       createTable("pk INT NOT NULL, salary INT, dep STRING")
 
-      val sourceRows = Seq((1, 100, "hr"), (2, 200, "finance"), (3, 300, "hr"))
+      val sourceRows = Seq(
+        (1, 100, "hr"),
+        (2, 200, "finance"),
+        (3, 300, "hr"))
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source s
            |ON t.pk = s.pk
            |WHEN NOT MATCHED AND s.pk >= 2 THEN
@@ -205,9 +216,7 @@ abstract class MergeIntoTableSuiteBase
         sql(s"SELECT * FROM $tableNameAsString"),
         Seq(
           Row(2, 200, "finance"), // insert
-          Row(3, 300, "hr")
-        )
-      ) // insert
+          Row(3, 300, "hr"))) // insert
     }
   }
 
@@ -215,10 +224,14 @@ abstract class MergeIntoTableSuiteBase
     withTempView("source") {
       createTable("pk INT NOT NULL, salary INT, dep STRING")
 
-      val sourceRows = Seq((1, 100, "hr"), (2, 200, "finance"), (3, 300, "hr"))
+      val sourceRows = Seq(
+        (1, 100, "hr"),
+        (2, 200, "finance"),
+        (3, 300, "hr"))
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source s
            |ON t.pk = s.pk
            |WHEN NOT MATCHED AND s.pk >= 2 THEN
@@ -232,24 +245,25 @@ abstract class MergeIntoTableSuiteBase
         Seq(
           Row(1, 100, "hr"), // insert
           Row(2, 200, "finance"), // insert
-          Row(3, 300, "hr")
-        )
-      ) // insert
+          Row(3, 300, "hr"))) // insert
     }
   }
 
   test("merge into with conditional WHEN MATCHED clause (update)") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "corrupted" }
           |""".stripMargin)
 
-      val sourceRows = Seq((1, 100, "software"), (2, 200, "finance"), (3, 300, "software"))
+      val sourceRows = Seq(
+        (1, 100, "software"),
+        (2, 200, "finance"),
+        (3, 300, "software"))
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source s
            |ON t.pk = s.pk
            |WHEN MATCHED AND s.pk = 2 THEN
@@ -260,45 +274,47 @@ abstract class MergeIntoTableSuiteBase
         sql(s"SELECT * FROM $tableNameAsString"),
         Seq(
           Row(1, 100, "hr"), // unchanged
-          Row(2, 200, "finance")
-        )
-      ) // update
+          Row(2, 200, "finance"))) // update
     }
   }
 
   test("merge into with conditional WHEN MATCHED clause (delete)") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "corrupted" }
           |""".stripMargin)
 
       Seq(1, 2, 3).toDF("pk").createOrReplaceTempView("source")
 
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source s
            |ON t.pk = s.pk
            |WHEN MATCHED AND t.salary = 200 THEN
            | DELETE
            |""".stripMargin)
 
-      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Seq(Row(1, 100, "hr"))) // unchanged
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(Row(1, 100, "hr"))) // unchanged
     }
   }
 
   test("merge into with assignments to primary key in NOT MATCHED BY SOURCE") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "finance" }
           |""".stripMargin)
 
-      val sourceRows = Seq((1, 100, "software"), (5, 500, "finance"))
+      val sourceRows = Seq(
+        (1, 100, "software"),
+        (5, 500, "finance"))
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source s
            |ON t.pk = s.pk
            |WHEN MATCHED THEN
@@ -311,24 +327,24 @@ abstract class MergeIntoTableSuiteBase
         sql(s"SELECT * FROM $tableNameAsString"),
         Seq(
           Row(1, -1, "hr"), // update (matched)
-          Row(-1, 200, "finance")
-        )
-      ) // update (not matched by source)
+          Row(-1, 200, "finance"))) // update (not matched by source)
     }
   }
 
   test("merge into with assignments to primary key in MATCHED") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "finance" }
           |""".stripMargin)
 
-      val sourceRows = Seq((1, 100, "software"), (5, 500, "finance"))
+      val sourceRows = Seq(
+        (1, 100, "software"),
+        (5, 500, "finance"))
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source s
            |ON t.pk = s.pk
            |WHEN MATCHED THEN
@@ -341,16 +357,13 @@ abstract class MergeIntoTableSuiteBase
         sql(s"SELECT * FROM $tableNameAsString"),
         Seq(
           Row(-1, 100, "hr"), // update (matched)
-          Row(2, -1, "finance")
-        )
-      ) // update (not matched by source)
+          Row(2, -1, "finance"))) // update (not matched by source)
     }
   }
 
   test("merge with all types of clauses") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "software" }
           |{ "pk": 3, "salary": 300, "dep": "hr" }
@@ -361,7 +374,8 @@ abstract class MergeIntoTableSuiteBase
       val sourceDF = Seq(3, 4, 5, 6).toDF("pk")
       sourceDF.createOrReplaceTempView("source")
 
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source s
            |ON t.pk = s.pk
            |WHEN MATCHED THEN
@@ -378,26 +392,27 @@ abstract class MergeIntoTableSuiteBase
           Row(3, 301, "hr"), // update
           Row(4, 401, "hr"), // update
           Row(5, 501, "hr"), // update
-          Row(6, 0, "new")
-        )
-      ) // insert
+          Row(6, 0, "new"))) // insert
     }
   }
 
   test("merge with all types of clauses (update and insert star)") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "software" }
           |{ "pk": 3, "salary": 300, "dep": "software" }
           |""".stripMargin)
 
-      val sourceRows =
-        Seq((1, 101, "support"), (2, 201, "support"), (4, 401, "support"), (5, 501, "support"))
+      val sourceRows = Seq(
+        (1, 101, "support"),
+        (2, 201, "support"),
+        (4, 401, "support"),
+        (5, 501, "support"))
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source s
            |ON t.pk = s.pk
            |WHEN MATCHED AND t.pk = 1 THEN
@@ -413,16 +428,13 @@ abstract class MergeIntoTableSuiteBase
         Seq(
           Row(1, 101, "support"), // update
           Row(2, 200, "software"), // unchanged
-          Row(4, 401, "support")
-        )
-      ) // insert
+          Row(4, 401, "support"))) // insert
     }
   }
 
   test("merge with all types of conditional clauses") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "software" }
           |{ "pk": 3, "salary": 300, "dep": "hr" }
@@ -433,7 +445,8 @@ abstract class MergeIntoTableSuiteBase
       val sourceDF = Seq(3, 4, 5, 6, 7).toDF("pk")
       sourceDF.createOrReplaceTempView("source")
 
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source s
            |ON t.pk = s.pk
            |WHEN MATCHED AND t.pk = 4 THEN
@@ -451,16 +464,13 @@ abstract class MergeIntoTableSuiteBase
           Row(3, 300, "hr"), // unchanged
           Row(4, 401, "hr"), // update
           Row(5, 500, "hr"), // unchanged
-          Row(6, 0, "new")
-        )
-      ) // insert
+          Row(6, 0, "new"))) // insert
     }
   }
 
   test("merge with one NOT MATCHED BY SOURCE clause") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "software" }
           |{ "pk": 3, "salary": 300, "dep": "hr" }
@@ -469,7 +479,8 @@ abstract class MergeIntoTableSuiteBase
       val sourceDF = Seq(1, 2).toDF("pk")
       sourceDF.createOrReplaceTempView("source")
 
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source s
            |ON t.pk = s.pk
            |WHEN NOT MATCHED BY SOURCE THEN
@@ -480,16 +491,13 @@ abstract class MergeIntoTableSuiteBase
         sql(s"SELECT * FROM $tableNameAsString"),
         Seq(
           Row(1, 100, "hr"), // unchanged
-          Row(2, 200, "software")
-        )
-      ) // unchanged
+          Row(2, 200, "software"))) // unchanged
     }
   }
 
   test("merge with one conditional NOT MATCHED BY SOURCE clause") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "software" }
           |{ "pk": 3, "salary": 300, "dep": "hr" }
@@ -498,7 +506,8 @@ abstract class MergeIntoTableSuiteBase
       val sourceDF = Seq(2).toDF("pk")
       sourceDF.createOrReplaceTempView("source")
 
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source s
            |ON t.pk = s.pk
            |WHEN NOT MATCHED BY SOURCE AND salary = 100 THEN
@@ -510,16 +519,13 @@ abstract class MergeIntoTableSuiteBase
         Seq(
           Row(1, -1, "hr"), // updated
           Row(2, 200, "software"), // unchanged
-          Row(3, 300, "hr")
-        )
-      ) // unchanged
+          Row(3, 300, "hr"))) // unchanged
     }
   }
 
   test("merge with MATCHED and NOT MATCHED BY SOURCE clauses") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "software" }
           |{ "pk": 3, "salary": 300, "dep": "hr" }
@@ -528,7 +534,8 @@ abstract class MergeIntoTableSuiteBase
       val sourceDF = Seq(2).toDF("pk")
       sourceDF.createOrReplaceTempView("source")
 
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source s
            |ON t.pk = s.pk
            |WHEN MATCHED THEN
@@ -541,16 +548,13 @@ abstract class MergeIntoTableSuiteBase
         sql(s"SELECT * FROM $tableNameAsString"),
         Seq(
           Row(1, -1, "hr"), // updated
-          Row(3, 300, "hr")
-        )
-      ) // unchanged
+          Row(3, 300, "hr"))) // unchanged
     }
   }
 
   test("merge with NOT MATCHED and NOT MATCHED BY SOURCE clauses") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "software" }
           |{ "pk": 3, "salary": 300, "dep": "hr" }
@@ -559,7 +563,8 @@ abstract class MergeIntoTableSuiteBase
       val sourceDF = Seq(2, 3, 4).toDF("pk")
       sourceDF.createOrReplaceTempView("source")
 
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source s
            |ON t.pk = s.pk
            |WHEN NOT MATCHED THEN
@@ -573,16 +578,13 @@ abstract class MergeIntoTableSuiteBase
         Seq(
           Row(2, 200, "software"), // unchanged
           Row(3, 300, "hr"), // unchanged
-          Row(4, -1, "new")
-        )
-      ) // insert
+          Row(4, -1, "new"))) // insert
     }
   }
 
   test("merge with multiple NOT MATCHED BY SOURCE clauses") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "software" }
           |{ "pk": 3, "salary": 300, "dep": "hr" }
@@ -591,7 +593,8 @@ abstract class MergeIntoTableSuiteBase
       val sourceDF = Seq(5, 6, 7).toDF("pk")
       sourceDF.createOrReplaceTempView("source")
 
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source s
            |ON t.pk = s.pk
            |WHEN NOT MATCHED BY SOURCE AND salary = 100 THEN
@@ -604,25 +607,26 @@ abstract class MergeIntoTableSuiteBase
         sql(s"SELECT * FROM $tableNameAsString"),
         Seq(
           Row(1, 101, "hr"), // update
-          Row(2, 200, "software")
-        )
-      ) // unchanged
+          Row(2, 200, "software"))) // unchanged
     }
   }
 
   test("merge with MATCHED BY SOURCE clause and NULL values") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, id INT, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, id INT, salary INT, dep STRING",
         """{ "pk": 1, "id": null, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "id": 2, "salary": 200, "dep": "software" }
           |{ "pk": 3, "id": 3, "salary": 300, "dep": "hr" }
           |""".stripMargin)
 
-      val sourceRows = Seq((2, 2, 201, "support"), (1, 1, 101, "support"), (3, 3, 301, "support"))
+      val sourceRows = Seq(
+        (2, 2, 201, "support"),
+        (1, 1, 101, "support"),
+        (3, 3, 301, "support"))
       sourceRows.toDF("pk", "id", "salary", "dep").createOrReplaceTempView("source")
 
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source s
            |ON t.id = s.id AND t.id < 3
            |WHEN MATCHED THEN
@@ -634,24 +638,24 @@ abstract class MergeIntoTableSuiteBase
         Seq(
           Row(1, null, 100, "hr"), // unchanged
           Row(2, 2, 201, "support"), // update
-          Row(3, 3, 300, "hr")
-        )
-      ) // unchanged
+          Row(3, 3, 300, "hr"))) // unchanged
     }
   }
 
   test("merge with CTE") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "software" }
           |""".stripMargin)
 
-      val sourceRows = Seq((0, 101, "support"), (2, 301, "support"))
+      val sourceRows = Seq(
+        (0, 101, "support"),
+        (2, 301, "support"))
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
-      sql(s"""WITH cte1 AS (SELECT pk + 1 as pk, salary, dep FROM source)
+      sql(
+        s"""WITH cte1 AS (SELECT pk + 1 as pk, salary, dep FROM source)
            |MERGE INTO $tableNameAsString AS t
            |USING cte1 AS s
            |ON t.pk = s.pk
@@ -663,22 +667,22 @@ abstract class MergeIntoTableSuiteBase
         sql(s"SELECT * FROM $tableNameAsString"),
         Seq(
           Row(1, 101, "support"), // unchanged
-          Row(2, 200, "software")
-        )
-      ) // unchanged
+          Row(2, 200, "software"))) // unchanged
     }
   }
 
   test("merge with subquery as source") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 6, "salary": 600, "dep": "software" }
           |""".stripMargin)
 
-      val sourceRows =
-        Seq((2, 201, "support"), (1, 101, "support"), (3, 301, "support"), (6, 601, "support"))
+      val sourceRows = Seq(
+        (2, 201, "support"),
+        (1, 101, "support"),
+        (3, 301, "support"),
+        (6, 601, "support"))
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
       val subquery =
@@ -688,7 +692,8 @@ abstract class MergeIntoTableSuiteBase
            |SELECT * FROM source WHERE pk = 1 OR pk = 6
            |""".stripMargin
 
-      sql(s"""MERGE INTO $tableNameAsString AS t
+      sql(
+        s"""MERGE INTO $tableNameAsString AS t
            |USING ($subquery) AS s
            |ON t.pk = s.pk
            |WHEN MATCHED THEN
@@ -702,24 +707,25 @@ abstract class MergeIntoTableSuiteBase
         Seq(
           Row(1, 101, "support"), // update
           Row(2, 201, "support"), // insert
-          Row(6, 601, "support")
-        )
-      ) // update
+          Row(6, 601, "support"))) // update
     }
   }
 
   test("merge cardinality check with conditional MATCHED clause (delete)") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 6, "salary": 600, "dep": "software" }
           |""".stripMargin)
 
-      val sourceRows = Seq((1, 101, "support"), (1, 102, "support"), (2, 201, "support"))
+      val sourceRows = Seq(
+        (1, 101, "support"),
+        (1, 102, "support"),
+        (2, 201, "support"))
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
-      assertCardinalityError(s"""MERGE INTO $tableNameAsString AS t
+      assertCardinalityError(
+        s"""MERGE INTO $tableNameAsString AS t
            |USING source AS s
            |ON t.pk = s.pk
            |WHEN MATCHED AND s.salary = 101 THEN
@@ -730,16 +736,19 @@ abstract class MergeIntoTableSuiteBase
 
   test("merge cardinality check with unconditional MATCHED clause (delete)") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 6, "salary": 600, "dep": "software" }
           |""".stripMargin)
 
-      val sourceRows = Seq((1, 101, "support"), (1, 102, "support"), (2, 201, "support"))
+      val sourceRows = Seq(
+        (1, 101, "support"),
+        (1, 102, "support"),
+        (2, 201, "support"))
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
-      sql(s"""MERGE INTO $tableNameAsString AS t
+      sql(
+        s"""MERGE INTO $tableNameAsString AS t
            |USING source AS s
            |ON t.pk = s.pk
            |WHEN MATCHED THEN
@@ -748,23 +757,25 @@ abstract class MergeIntoTableSuiteBase
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
-        Seq(Row(6, 600, "software"))
-      ) // unchanged
+        Seq(Row(6, 600, "software"))) // unchanged
     }
   }
 
   test("merge cardinality check with only NOT MATCHED clauses") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 6, "salary": 600, "dep": "software" }
           |""".stripMargin)
 
-      val sourceRows = Seq((1, 101, "support"), (1, 102, "support"), (2, 201, "support"))
+      val sourceRows = Seq(
+        (1, 101, "support"),
+        (1, 102, "support"),
+        (2, 201, "support"))
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
-      sql(s"""MERGE INTO $tableNameAsString AS t
+      sql(
+        s"""MERGE INTO $tableNameAsString AS t
            |USING source AS s
            |ON t.pk = s.pk
            |WHEN NOT MATCHED THEN
@@ -776,16 +787,13 @@ abstract class MergeIntoTableSuiteBase
         Seq(
           Row(1, 100, "hr"), // unchanged
           Row(2, 201, "support"), // insert
-          Row(6, 600, "software")
-        )
-      ) // unchanged
+          Row(6, 600, "software"))) // unchanged
     }
   }
 
   test("merge cardinality check with small target and large source (broadcast enabled)") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "software" }
           |""".stripMargin)
@@ -794,14 +802,16 @@ abstract class MergeIntoTableSuiteBase
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString) {
-        assertCardinalityError(s"""MERGE INTO $tableNameAsString AS t
+        assertCardinalityError(
+          s"""MERGE INTO $tableNameAsString AS t
              |USING (SELECT * FROM source UNION ALL SELECT * FROM source) AS s
              |ON t.pk = s.pk
              |WHEN MATCHED THEN
              | UPDATE SET *
              |""".stripMargin)
 
-        assertNoLeftBroadcastOrReplication(s"""MERGE INTO $tableNameAsString AS t
+        assertNoLeftBroadcastOrReplication(
+          s"""MERGE INTO $tableNameAsString AS t
              |USING source AS s
              |ON t.pk = s.pk
              |WHEN MATCHED THEN
@@ -815,8 +825,7 @@ abstract class MergeIntoTableSuiteBase
 
   test("merge cardinality check with small target and large source (broadcast disabled)") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "software" }
           |""".stripMargin)
@@ -825,14 +834,16 @@ abstract class MergeIntoTableSuiteBase
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-        assertCardinalityError(s"""MERGE INTO $tableNameAsString AS t
+        assertCardinalityError(
+          s"""MERGE INTO $tableNameAsString AS t
              |USING (SELECT * FROM source UNION ALL SELECT * FROM source) AS s
              |ON t.pk = s.pk
              |WHEN MATCHED THEN
              | UPDATE SET *
              |""".stripMargin)
 
-        assertNoLeftBroadcastOrReplication(s"""MERGE INTO $tableNameAsString AS t
+        assertNoLeftBroadcastOrReplication(
+          s"""MERGE INTO $tableNameAsString AS t
              |USING source AS s
              |ON t.pk = s.pk
              |WHEN MATCHED THEN
@@ -846,8 +857,7 @@ abstract class MergeIntoTableSuiteBase
 
   test("merge cardinality check with small target and large source (shuffle hash enabled)") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "software" }
           |""".stripMargin)
@@ -856,17 +866,19 @@ abstract class MergeIntoTableSuiteBase
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
       withSQLConf(
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-        SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
 
-        assertCardinalityError(s"""MERGE INTO $tableNameAsString AS t
+        assertCardinalityError(
+          s"""MERGE INTO $tableNameAsString AS t
              |USING (SELECT * FROM source UNION ALL SELECT * FROM source) AS s
              |ON t.pk = s.pk
              |WHEN MATCHED THEN
              | UPDATE SET *
              |""".stripMargin)
 
-        assertNoLeftBroadcastOrReplication(s"""MERGE INTO $tableNameAsString AS t
+        assertNoLeftBroadcastOrReplication(
+          s"""MERGE INTO $tableNameAsString AS t
              |USING source AS s
              |ON t.pk = s.pk
              |WHEN MATCHED THEN
@@ -880,8 +892,7 @@ abstract class MergeIntoTableSuiteBase
 
   test("merge cardinality check without equality condition and only MATCHED clauses") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "software" }
           |""".stripMargin)
@@ -890,7 +901,8 @@ abstract class MergeIntoTableSuiteBase
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-        assertCardinalityError(s"""MERGE INTO $tableNameAsString AS t
+        assertCardinalityError(
+          s"""MERGE INTO $tableNameAsString AS t
              |USING (SELECT * FROM source UNION ALL SELECT * FROM source) AS s
              |ON t.pk > s.pk
              |WHEN MATCHED THEN
@@ -904,8 +916,7 @@ abstract class MergeIntoTableSuiteBase
 
   test("merge cardinality check without equality condition") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "software" }
           |""".stripMargin)
@@ -914,7 +925,8 @@ abstract class MergeIntoTableSuiteBase
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-        assertCardinalityError(s"""MERGE INTO $tableNameAsString AS t
+        assertCardinalityError(
+          s"""MERGE INTO $tableNameAsString AS t
              |USING (SELECT * FROM source UNION ALL SELECT * FROM source) AS s
              |ON t.pk > s.pk
              |WHEN MATCHED THEN
@@ -929,14 +941,14 @@ abstract class MergeIntoTableSuiteBase
   }
 
   test("self merge") {
-    createAndInitTable(
-      "pk INT NOT NULL, salary INT, dep STRING",
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }
         |{ "pk": 2, "salary": 200, "dep": "software" }
         |{ "pk": 3, "salary": 300, "dep": "hr" }
         |""".stripMargin)
 
-    sql(s"""MERGE INTO $tableNameAsString t
+    sql(
+      s"""MERGE INTO $tableNameAsString t
          |USING $tableNameAsString s
          |ON t.pk = s.pk
          |WHEN MATCHED AND t.salary = 100 THEN
@@ -950,15 +962,12 @@ abstract class MergeIntoTableSuiteBase
       Seq(
         Row(1, 101, "hr"), // update
         Row(2, 200, "software"), // unchanged
-        Row(3, 300, "hr")
-      )
-    ) // unchanged
+        Row(3, 300, "hr"))) // unchanged
   }
 
   test("merge with self subquery") {
     withTempView("ids") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "software" }
           |{ "pk": 3, "salary": 300, "dep": "hr" }
@@ -966,7 +975,8 @@ abstract class MergeIntoTableSuiteBase
 
       Seq(1, 2).toDF("value").createOrReplaceTempView("ids")
 
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING (SELECT pk FROM $tableNameAsString r JOIN ids ON r.pk = ids.value) s
            |ON t.pk = s.pk
            |WHEN MATCHED AND t.salary = 100 THEN
@@ -980,26 +990,26 @@ abstract class MergeIntoTableSuiteBase
         Seq(
           Row(1, 101, "hr"), // update
           Row(2, 200, "software"), // unchanged
-          Row(3, 300, "hr")
-        )
-      ) // unchanged
+          Row(3, 300, "hr"))) // unchanged
     }
   }
 
   test("merge with extra columns in source") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "software" }
           |{ "pk": 3, "salary": 300, "dep": "hr" }
           |""".stripMargin)
 
-      val sourceRows =
-        Seq((1, "smth", 101, "support"), (2, "smth", 201, "support"), (4, "smth", 401, "support"))
+      val sourceRows = Seq(
+        (1, "smth", 101, "support"),
+        (2, "smth", 201, "support"),
+        (4, "smth", 401, "support"))
       sourceRows.toDF("pk", "extra", "salary", "dep").createOrReplaceTempView("source")
 
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source s
            |ON t.pk = s.pk
            |WHEN MATCHED THEN
@@ -1015,24 +1025,24 @@ abstract class MergeIntoTableSuiteBase
         Seq(
           Row(1, 102, "hr"), // update
           Row(2, 202, "software"), // update
-          Row(4, 401, "support")
-        )
-      ) // insert
+          Row(4, 401, "support"))) // insert
     }
   }
 
   test("merge with NULL values in target and source") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, id INT, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, id INT, salary INT, dep STRING",
         """{ "pk": 1, "id": null, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "id": 2, "salary": 200, "dep": "software" }
           |""".stripMargin)
 
-      val sourceRows = Seq((5, None, 501, "support"), (6, Some(6), 601, "support"))
+      val sourceRows = Seq(
+        (5, None, 501, "support"),
+        (6, Some(6), 601, "support"))
       sourceRows.toDF("pk", "id", "salary", "dep").createOrReplaceTempView("source")
 
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source s
            |ON t.id = s.id
            |WHEN MATCHED THEN
@@ -1047,24 +1057,24 @@ abstract class MergeIntoTableSuiteBase
           Row(1, null, 100, "hr"), // unchanged
           Row(2, 2, 200, "software"), // unchanged
           Row(5, null, 501, "support"), // insert
-          Row(6, 6, 601, "support")
-        )
-      ) // insert
+          Row(6, 6, 601, "support"))) // insert
     }
   }
 
   test("merge with <=>") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, id INT, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, id INT, salary INT, dep STRING",
         """{ "pk": 1, "id": null, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "id": 2, "salary": 200, "dep": "software" }
           |""".stripMargin)
 
-      val sourceRows = Seq((5, None, 501, "support"), (6, Some(6), 601, "support"))
+      val sourceRows = Seq(
+        (5, None, 501, "support"),
+        (6, Some(6), 601, "support"))
       sourceRows.toDF("pk", "id", "salary", "dep").createOrReplaceTempView("source")
 
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source s
            |ON t.id <=> s.id
            |WHEN MATCHED THEN
@@ -1078,24 +1088,24 @@ abstract class MergeIntoTableSuiteBase
         Seq(
           Row(2, 2, 200, "software"), // unchanged
           Row(5, null, 501, "support"), // updated
-          Row(6, 6, 601, "support")
-        )
-      ) // insert
+          Row(6, 6, 601, "support"))) // insert
     }
   }
 
   test("merge with NULL ON condition") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, id INT, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, id INT, salary INT, dep STRING",
         """{ "pk": 1, "id": null, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "id": 2, "salary": 200, "dep": "software" }
           |""".stripMargin)
 
-      val sourceRows = Seq((5, None, 501, "support"), (6, Some(2), 201, "support"))
+      val sourceRows = Seq(
+        (5, None, 501, "support"),
+        (6, Some(2), 201, "support"))
       sourceRows.toDF("pk", "id", "salary", "dep").createOrReplaceTempView("source")
 
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source s
            |ON t.id = s.id AND NULL
            |WHEN MATCHED THEN
@@ -1110,24 +1120,24 @@ abstract class MergeIntoTableSuiteBase
           Row(1, null, 100, "hr"), // unchanged
           Row(2, 2, 200, "software"), // unchanged
           Row(5, null, 501, "support"), // new
-          Row(6, 2, 201, "support")
-        )
-      ) // new
+          Row(6, 2, 201, "support"))) // new
     }
   }
 
   test("merge with NULL clause conditions") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "software" }
           |""".stripMargin)
 
-      val sourceRows = Seq((1, 101, "support"), (3, 301, "support"))
+      val sourceRows = Seq(
+        (1, 101, "support"),
+        (3, 301, "support"))
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source s
            |ON t.pk = s.pk
            |WHEN MATCHED AND NULL THEN
@@ -1142,24 +1152,24 @@ abstract class MergeIntoTableSuiteBase
         sql(s"SELECT * FROM $tableNameAsString"),
         Seq(
           Row(1, 100, "hr"), // unchanged
-          Row(2, 200, "software")
-        )
-      ) // unchanged
+          Row(2, 200, "software"))) // unchanged
     }
   }
 
   test("merge with multiple matching clauses") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "software" }
           |""".stripMargin)
 
-      val sourceRows = Seq((1, 101, "support"), (3, 301, "support"))
+      val sourceRows = Seq(
+        (1, 101, "support"),
+        (3, 301, "support"))
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source s
            |ON t.pk = s.pk
            |WHEN MATCHED AND t.pk = 1 THEN
@@ -1176,24 +1186,24 @@ abstract class MergeIntoTableSuiteBase
         sql(s"SELECT * FROM $tableNameAsString"),
         Seq(
           Row(1, 105, "hr"), // updated (matched)
-          Row(2, 199, "software")
-        )
-      ) // updated (not matched by source)
+          Row(2, 199, "software"))) // updated (not matched by source)
     }
   }
 
   test("merge resolves and aligns columns by name") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "software" }
           |""".stripMargin)
 
-      val sourceRows = Seq(("support", 1, 101), ("support", 3, 301))
+      val sourceRows = Seq(
+        ("support", 1, 101),
+        ("support", 3, 301))
       sourceRows.toDF("dep", "pk", "salary").createOrReplaceTempView("source")
 
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source s
            |ON t.pk = s.pk
            |WHEN MATCHED THEN
@@ -1207,17 +1217,14 @@ abstract class MergeIntoTableSuiteBase
         Seq(
           Row(1, 101, "support"), // update
           Row(2, 200, "software"), // unchanged
-          Row(3, 301, "support")
-        )
-      ) // insert
+          Row(3, 301, "support"))) // insert
     }
   }
 
   test("merge refreshed relation cache") {
     withTempView("temp", "source") {
       withCache("temp") {
-        createAndInitTable(
-          "pk INT NOT NULL, salary INT, dep STRING",
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
           """{ "pk": 1, "salary": 100, "dep": "hr" }
             |{ "pk": 2, "salary": 100, "dep": "software" }
             |{ "pk": 3, "salary": 300, "dep": "hr" }
@@ -1235,11 +1242,14 @@ abstract class MergeIntoTableSuiteBase
           sql("SELECT * FROM temp"),
           Row(1, 100, "hr") :: Row(2, 100, "software") :: Nil)
 
-        val sourceRows = Seq(("support", 1, 101), ("support", 3, 301))
+        val sourceRows = Seq(
+          ("support", 1, 101),
+          ("support", 3, 301))
         sourceRows.toDF("dep", "pk", "salary").createOrReplaceTempView("source")
 
         // merge changes into the table
-        sql(s"""MERGE INTO $tableNameAsString t
+        sql(
+          s"""MERGE INTO $tableNameAsString t
              |USING source s
              |ON t.pk = s.pk
              |WHEN MATCHED THEN
@@ -1254,9 +1264,7 @@ abstract class MergeIntoTableSuiteBase
           Seq(
             Row(1, 101, "support"), // update
             Row(2, 100, "software"), // unchanged
-            Row(3, 301, "support")
-          )
-        ) // insert
+            Row(3, 301, "support"))) // insert
 
         // verify the view reflects the changes in the table
         checkAnswer(sql("SELECT * FROM temp"), Row(2, 100, "software") :: Nil)
@@ -1275,7 +1283,8 @@ abstract class MergeIntoTableSuiteBase
       Seq(1, 3).toDF("pk").createOrReplaceTempView("source")
 
       // update primitive, array, map columns inside a struct
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source src
            |ON t.pk = src.pk
            |WHEN MATCHED THEN
@@ -1286,16 +1295,20 @@ abstract class MergeIntoTableSuiteBase
         Seq(Row(1, Row(-1, Row(Seq(-1), Map("k" -> "v"))), "hr")))
 
       // set primitive, array, map columns to NULL (proper casts should be in inserted)
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source src
            |ON t.pk = src.pk
            |WHEN MATCHED THEN
            | UPDATE SET s.c1 = NULL, s.c2 = NULL
            |""".stripMargin)
-      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, Row(null, null), "hr") :: Nil)
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(1, Row(null, null), "hr") :: Nil)
 
       // assign an entire struct
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source src
            |ON t.pk = src.pk
            |WHEN MATCHED THEN
@@ -1318,7 +1331,8 @@ abstract class MergeIntoTableSuiteBase
       Seq(2, 4).toDF("pk").createOrReplaceTempView("source")
 
       // update primitive, array, map columns inside a struct
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source src
            |ON t.pk = src.pk
            |WHEN NOT MATCHED BY SOURCE THEN
@@ -1329,16 +1343,20 @@ abstract class MergeIntoTableSuiteBase
         Seq(Row(1, Row(-1, Row(Seq(-1), Map("k" -> "v"))), "hr")))
 
       // set primitive, array, map columns to NULL (proper casts should be in inserted)
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source src
            |ON t.pk = src.pk
            |WHEN NOT MATCHED BY SOURCE THEN
            | UPDATE SET s.c1 = NULL, s.c2 = NULL
            |""".stripMargin)
-      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, Row(null, null), "hr") :: Nil)
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(1, Row(null, null), "hr") :: Nil)
 
       // assign an entire struct
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source src
            |ON t.pk = src.pk
            |WHEN NOT MATCHED BY SOURCE THEN
@@ -1360,8 +1378,7 @@ abstract class MergeIntoTableSuiteBase
 
       createTable(columns)
 
-      append(
-        "pk INT NOT NULL, id INT, dep STRING",
+      append("pk INT NOT NULL, id INT, dep STRING",
         """{ "pk": 1, "id": 1, "dep": "hr" }
           |{ "pk": 2, "id": 2, "dep": "software" }
           |{ "pk": 3, "id": 3, "dep": "hr" }
@@ -1369,7 +1386,8 @@ abstract class MergeIntoTableSuiteBase
 
       Seq(1, 2, 4).toDF("pk").createOrReplaceTempView("source")
 
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source s
            |ON t.pk = s.pk
            |WHEN MATCHED THEN
@@ -1386,9 +1404,7 @@ abstract class MergeIntoTableSuiteBase
           Row(1, 42, "hr"), // update (matched)
           Row(2, 42, "software"), // update (matched)
           Row(3, 42, "hr"), // update (not matched by source)
-          Row(4, 42, "new")
-        )
-      ) // insert
+          Row(4, 42, "new"))) // insert
     }
   }
 
@@ -1396,8 +1412,7 @@ abstract class MergeIntoTableSuiteBase
     withTempView("source") {
       createTable("pk INT NOT NULL, s STRUCT<n_c: CHAR(3), n_vc: VARCHAR(5)>, dep STRING")
 
-      append(
-        "pk INT NOT NULL, s STRUCT<n_c: STRING, n_vc: STRING>, dep STRING",
+      append("pk INT NOT NULL, s STRUCT<n_c: STRING, n_vc: STRING>, dep STRING",
         """{ "pk": 1, "s": { "n_c": "aaa", "n_vc": "aaa" }, "dep": "hr" }
           |{ "pk": 2, "s": { "n_c": "bbb", "n_vc": "bbb" }, "dep": "software" }
           |{ "pk": 3, "s": { "n_c": "ccc", "n_vc": "ccc" }, "dep": "hr" }
@@ -1405,7 +1420,8 @@ abstract class MergeIntoTableSuiteBase
 
       Seq(1, 2, 4).toDF("pk").createOrReplaceTempView("source")
 
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source s
            |ON t.pk = s.pk
            |WHEN MATCHED THEN
@@ -1419,16 +1435,13 @@ abstract class MergeIntoTableSuiteBase
         Seq(
           Row(1, Row("x1 ", "x2"), "hr"), // update (matched)
           Row(2, Row("x1 ", "x2"), "software"), // update (matched)
-          Row(3, Row("y1 ", "y2"), "hr")
-        )
-      ) // update (not matched by source)
+          Row(3, Row("y1 ", "y2"), "hr"))) // update (not matched by source)
     }
   }
 
   test("merge with NOT NULL checks") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, s STRUCT<n_i: INT NOT NULL, n_l: LONG>, dep STRING",
+      createAndInitTable("pk INT NOT NULL, s STRUCT<n_i: INT NOT NULL, n_l: LONG>, dep STRING",
         """{ "pk": 1, "s": { "n_i": 1, "n_l": 11 }, "dep": "hr" }
           |{ "pk": 2, "s": { "n_i": 2, "n_l": 22 }, "dep": "software" }
           |{ "pk": 3, "s": { "n_i": 3, "n_l": 33 }, "dep": "hr" }
@@ -1437,7 +1450,8 @@ abstract class MergeIntoTableSuiteBase
       Seq(1, 4).toDF("pk").createOrReplaceTempView("source")
 
       val e1 = intercept[SparkRuntimeException] {
-        sql(s"""MERGE INTO $tableNameAsString t
+        sql(
+          s"""MERGE INTO $tableNameAsString t
              |USING source s
              |ON t.pk = s.pk
              |WHEN MATCHED THEN
@@ -1447,7 +1461,8 @@ abstract class MergeIntoTableSuiteBase
       assert(e1.getCondition == "NOT_NULL_ASSERT_VIOLATION")
 
       val e2 = intercept[SparkRuntimeException] {
-        sql(s"""MERGE INTO $tableNameAsString t
+        sql(
+          s"""MERGE INTO $tableNameAsString t
              |USING source s
              |ON t.pk = s.pk
              |WHEN NOT MATCHED BY SOURCE THEN
@@ -1457,7 +1472,8 @@ abstract class MergeIntoTableSuiteBase
       assert(e2.getCondition == "NOT_NULL_ASSERT_VIOLATION")
 
       val e3 = intercept[SparkRuntimeException] {
-        sql(s"""MERGE INTO $tableNameAsString t
+        sql(
+          s"""MERGE INTO $tableNameAsString t
              |USING source s
              |ON t.pk = s.pk
              |WHEN NOT MATCHED THEN
@@ -1472,7 +1488,10 @@ abstract class MergeIntoTableSuiteBase
     withTempView("source") {
       createTable("pk INT NOT NULL, salary INT, dep STRING")
 
-      val sourceRows = Seq((1, 100, "hr"), (2, 200, "finance"), (3, 300, "hr"))
+      val sourceRows = Seq(
+        (1, 100, "hr"),
+        (2, 200, "finance"),
+        (3, 300, "hr"))
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
       val unsupportedSourceExprs = Map(
@@ -1482,7 +1501,8 @@ abstract class MergeIntoTableSuiteBase
 
       unsupportedSourceExprs.map { case (expr, errMsg) =>
         val e1 = intercept[AnalysisException] {
-          sql(s"""MERGE INTO $tableNameAsString t
+          sql(
+            s"""MERGE INTO $tableNameAsString t
                |USING source s
                |ON t.pk = s.pk AND $expr
                |WHEN MATCHED THEN
@@ -1492,7 +1512,8 @@ abstract class MergeIntoTableSuiteBase
         assert(e1.message.contains("unsupported SEARCH condition") && e1.message.contains(errMsg))
 
         val e2 = intercept[AnalysisException] {
-          sql(s"""MERGE INTO $tableNameAsString t
+          sql(
+            s"""MERGE INTO $tableNameAsString t
                |USING source s
                |ON t.pk = s.pk
                |WHEN MATCHED AND $expr THEN
@@ -1502,7 +1523,8 @@ abstract class MergeIntoTableSuiteBase
         assert(e2.message.contains("unsupported UPDATE condition") && e2.message.contains(errMsg))
 
         val e3 = intercept[AnalysisException] {
-          sql(s"""MERGE INTO $tableNameAsString t
+          sql(
+            s"""MERGE INTO $tableNameAsString t
                |USING source s
                |ON t.pk = s.pk
                |WHEN MATCHED AND $expr THEN
@@ -1512,7 +1534,8 @@ abstract class MergeIntoTableSuiteBase
         assert(e3.message.contains("unsupported DELETE condition") && e3.message.contains(errMsg))
 
         val e4 = intercept[AnalysisException] {
-          sql(s"""MERGE INTO $tableNameAsString t
+          sql(
+            s"""MERGE INTO $tableNameAsString t
                |USING source s
                |ON t.pk = s.pk
                |WHEN NOT MATCHED AND $expr THEN
@@ -1529,7 +1552,8 @@ abstract class MergeIntoTableSuiteBase
 
       unsupportedTargetExprs.map { case (expr, errMsg) =>
         val e1 = intercept[AnalysisException] {
-          sql(s"""MERGE INTO $tableNameAsString t
+          sql(
+            s"""MERGE INTO $tableNameAsString t
                |USING source s
                |ON t.pk = s.pk AND $expr
                |WHEN MATCHED THEN
@@ -1539,7 +1563,8 @@ abstract class MergeIntoTableSuiteBase
         assert(e1.message.contains("unsupported SEARCH condition") && e1.message.contains(errMsg))
 
         val e2 = intercept[AnalysisException] {
-          sql(s"""MERGE INTO $tableNameAsString t
+          sql(
+            s"""MERGE INTO $tableNameAsString t
                |USING source s
                |ON t.pk = s.pk
                |WHEN NOT MATCHED BY SOURCE AND $expr THEN
@@ -1549,7 +1574,8 @@ abstract class MergeIntoTableSuiteBase
         assert(e2.message.contains("unsupported UPDATE condition") && e2.message.contains(errMsg))
 
         val e3 = intercept[AnalysisException] {
-          sql(s"""MERGE INTO $tableNameAsString t
+          sql(
+            s"""MERGE INTO $tableNameAsString t
                |USING source s
                |ON t.pk = s.pk
                |WHEN NOT MATCHED BY SOURCE AND $expr THEN
@@ -1563,8 +1589,7 @@ abstract class MergeIntoTableSuiteBase
 
   test("all target filters are evaluated on data source side") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "hr" }
           |{ "pk": 3, "salary": 300, "dep": "hr" }
@@ -1576,7 +1601,8 @@ abstract class MergeIntoTableSuiteBase
       sourceDF.createOrReplaceTempView("source")
 
       val executedPlan = executeAndKeepPlan {
-        sql(s"""MERGE INTO $tableNameAsString t
+        sql(
+          s"""MERGE INTO $tableNameAsString t
              |USING source s
              |ON t.pk = s.pk AND t.DeP IN ('hr', 'software')
              |WHEN MATCHED THEN
@@ -1601,16 +1627,13 @@ abstract class MergeIntoTableSuiteBase
           Row(3, 301, "hr"), // update
           Row(4, 400, "software"), // unchanged
           Row(5, 500, "software"), // unchanged
-          Row(6, 0, "hr")
-        )
-      ) // insert
+          Row(6, 0, "hr"))) // insert
     }
   }
 
   test("some target filters are evaluated on data source side") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "hr" }
           |{ "pk": 3, "salary": 300, "dep": "hr" }
@@ -1622,7 +1645,8 @@ abstract class MergeIntoTableSuiteBase
       sourceDF.createOrReplaceTempView("source")
 
       val executedPlan = executeAndKeepPlan {
-        sql(s"""MERGE INTO $tableNameAsString t
+        sql(
+          s"""MERGE INTO $tableNameAsString t
              |USING source s
              |ON t.pk = s.pk AND t.dep IN ('hr', 'software') AND t.salary != -1
              |WHEN MATCHED THEN
@@ -1654,16 +1678,13 @@ abstract class MergeIntoTableSuiteBase
           Row(3, 301, "hr"), // update
           Row(4, 400, "software"), // unchanged
           Row(5, 500, "software"), // unchanged
-          Row(6, 0, "hr")
-        )
-      ) // insert
+          Row(6, 0, "hr"))) // insert
     }
   }
 
   test("pushable target filters are preserved with NOT MATCHED BY SOURCE clause") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "hr" }
           |{ "pk": 3, "salary": 300, "dep": "hr" }
@@ -1675,7 +1696,8 @@ abstract class MergeIntoTableSuiteBase
       sourceDF.createOrReplaceTempView("source")
 
       val executedPlan = executeAndKeepPlan {
-        sql(s"""MERGE INTO $tableNameAsString t
+        sql(
+          s"""MERGE INTO $tableNameAsString t
              |USING source s
              |ON t.pk = s.pk AND DeP IN ('hr', 'software')
              |WHEN MATCHED THEN
@@ -1700,29 +1722,34 @@ abstract class MergeIntoTableSuiteBase
           Row(1, 101, "hr"), // update
           Row(2, 201, "hr"), // update
           Row(3, 301, "hr"), // update
-          Row(6, 0, "hr")
-        )
-      ) // insert
+          Row(6, 0, "hr"))) // insert
     }
   }
 
   test("merge into table with recursive CTE") {
     withTempView("source") {
-      sql(s"""CREATE TABLE $tableNameAsString (
+      sql(
+        s"""CREATE TABLE $tableNameAsString (
            | val INT)
            |""".stripMargin)
 
-      append(
-        "val INT",
+      append("val INT",
         """{ "val": 1 }
           |{ "val": 9 }
           |{ "val": 8 }
           |{ "val": 4 }
           |""".stripMargin)
 
-      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Seq(Row(1), Row(9), Row(8), Row(4)))
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1),
+          Row(9),
+          Row(8),
+          Row(4)))
 
-      sql(s"""WITH RECURSIVE s(val) AS (
+      sql(
+        s"""WITH RECURSIVE s(val) AS (
            |  SELECT 1
            |  UNION ALL
            |  SELECT val + 1 FROM s WHERE val < 5
@@ -1739,14 +1766,20 @@ abstract class MergeIntoTableSuiteBase
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
-        Seq(Row(0), Row(10), Row(9), Row(3), Row(-2), Row(-3), Row(-5)))
+        Seq(
+          Row(0),
+          Row(10),
+          Row(9),
+          Row(3),
+          Row(-2),
+          Row(-3),
+          Row(-5)))
     }
   }
 
   test("Merge metrics with matched clause") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "software" }
           |{ "pk": 3, "salary": 300, "dep": "hr" }
@@ -1794,17 +1827,17 @@ abstract class MergeIntoTableSuiteBase
 
   test("Merge metrics with matched and not matched clause") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "software" }
           |{ "pk": 3, "salary": 300, "dep": "hr" }
           |""".stripMargin)
 
-      val sourceDF = Seq((4, 100, "marketing"), (5, 400, "executive"), (6, 100, "hr")).toDF(
-        "pk",
-        "salary",
-        "dep")
+      val sourceDF = Seq(
+        (4, 100, "marketing"),
+        (5, 400, "executive"),
+        (6, 100, "hr")
+      ).toDF("pk", "salary", "dep")
       sourceDF.createOrReplaceTempView("source")
 
       val mergeExec = findMergeExec {
@@ -1833,9 +1866,7 @@ abstract class MergeIntoTableSuiteBase
           Row(1, 100, "hr"),
           Row(2, 200, "software"),
           Row(3, 300, "hr"),
-          Row(5, 400, "executive")
-        )
-      ) // inserted
+          Row(5, 400, "executive"))) // inserted
 
       val mergeSummary = getMergeSummary()
       assert(mergeSummary.numTargetRowsCopied === 0L)
@@ -1851,8 +1882,7 @@ abstract class MergeIntoTableSuiteBase
 
   test("Merge metrics with matched and not matched by source clauses: update") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "software" }
           |{ "pk": 3, "salary": 300, "dep": "hr" }
@@ -1890,9 +1920,7 @@ abstract class MergeIntoTableSuiteBase
           Row(2, 200, "software"),
           Row(3, 300, "hr"),
           Row(4, 400, "marketing"),
-          Row(5, -1, "executive")
-        )
-      ) // updated
+          Row(5, -1, "executive"))) // updated
 
       val mergeSummary = getMergeSummary()
       assert(mergeSummary.numTargetRowsCopied === (if (deltaMerge) 0L else 3L))
@@ -1908,8 +1936,7 @@ abstract class MergeIntoTableSuiteBase
 
   test("Merge metrics with matched and not matched by source clauses: delete") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "software" }
           |{ "pk": 3, "salary": 300, "dep": "hr" }
@@ -1931,6 +1958,7 @@ abstract class MergeIntoTableSuiteBase
            |""".stripMargin
       }
 
+
       assertMetric(mergeExec, "numTargetRowsCopied", if (deltaMerge) 0 else 3)
       assertMetric(mergeExec, "numTargetRowsInserted", 0)
       assertMetric(mergeExec, "numTargetRowsUpdated", 0)
@@ -1947,7 +1975,7 @@ abstract class MergeIntoTableSuiteBase
           Row(2, 200, "software"),
           Row(3, 300, "hr"),
           Row(4, 400, "marketing"))
-        // Row(5, 500, "executive") deleted
+          // Row(5, 500, "executive") deleted
       )
 
       val mergeSummary = getMergeSummary()
@@ -1964,8 +1992,7 @@ abstract class MergeIntoTableSuiteBase
 
   test("Merge metrics with matched, not matched, and not matched by source clauses: update") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "software" }
           |{ "pk": 3, "salary": 300, "dep": "hr" }
@@ -2006,9 +2033,7 @@ abstract class MergeIntoTableSuiteBase
           Row(3, 300, "hr"),
           Row(4, 400, "marketing"),
           Row(5, -1, "executive"), // updated
-          Row(6, -1, "dummy")
-        )
-      ) // inserted
+          Row(6, -1, "dummy"))) // inserted
 
       val mergeSummary = getMergeSummary()
       assert(mergeSummary.numTargetRowsCopied === (if (deltaMerge) 0L else 3L))
@@ -2024,8 +2049,7 @@ abstract class MergeIntoTableSuiteBase
 
   test("Merge metrics with matched, not matched, and not matched by source clauses: delete") {
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "software" }
           |{ "pk": 3, "salary": 300, "dep": "hr" }
@@ -2066,9 +2090,7 @@ abstract class MergeIntoTableSuiteBase
           Row(3, 300, "hr"),
           Row(4, 400, "marketing"),
           // Row(5, 500, "executive") deleted
-          Row(6, -1, "dummy")
-        )
-      ) // inserted
+          Row(6, -1, "dummy"))) // inserted
 
       val mergeSummary = getMergeSummary()
       assert(mergeSummary.numTargetRowsCopied === (if (deltaMerge) 0L else 3L))
@@ -2086,8 +2108,7 @@ abstract class MergeIntoTableSuiteBase
     Seq("true", "false").foreach { aqeEnabled: String =>
       withTempView("source") {
         withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled) {
-          createAndInitTable(
-            "pk INT NOT NULL, salary INT, dep STRING",
+          createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
             """{ "pk": 1, "salary": 100, "dep": "hr" }
               |{ "pk": 2, "salary": 200, "dep": "software" }
               |{ "pk": 3, "salary": 300, "dep": "hr" }
@@ -2098,7 +2119,8 @@ abstract class MergeIntoTableSuiteBase
           val sourceDF = Seq(1, 2, 6, 10).toDF("pk")
           sourceDF.createOrReplaceTempView("source")
 
-          sql(s"""MERGE INTO $tableNameAsString t
+          sql(
+            s"""MERGE INTO $tableNameAsString t
                |USING source s
                |ON t.pk = s.pk
                |WHEN MATCHED AND salary < 200 THEN
@@ -2107,7 +2129,8 @@ abstract class MergeIntoTableSuiteBase
                | INSERT (pk, salary, dep) VALUES (s.pk, -1, "dummy")
                |WHEN NOT MATCHED BY SOURCE AND salary > 400 THEN
                | DELETE
-               |""".stripMargin)
+               |""".stripMargin
+          )
 
           val mergeMetrics = getMergeSummary()
           assert(mergeMetrics.numTargetRowsCopied === (if (deltaMerge) 0L else 3L))
@@ -2129,8 +2152,7 @@ abstract class MergeIntoTableSuiteBase
     // INT -> STRING is allowed in ANSI mode, merge should succeed via type coercion
     // without requiring schema evolution
     withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, value STRING, dep STRING",
+      createAndInitTable("pk INT NOT NULL, value STRING, dep STRING",
         """{ "pk": 1, "value": "100", "dep": "hr" }
           |{ "pk": 2, "value": "200", "dep": "finance" }
           |{ "pk": 3, "value": "300", "dep": "engineering" }
@@ -2141,7 +2163,8 @@ abstract class MergeIntoTableSuiteBase
         .toDF("pk", "value", "dep")
         .createOrReplaceTempView("source")
 
-      sql(s"""MERGE INTO $tableNameAsString t
+      sql(
+        s"""MERGE INTO $tableNameAsString t
            |USING source s
            |ON t.pk = s.pk
            |WHEN MATCHED THEN
@@ -2156,9 +2179,7 @@ abstract class MergeIntoTableSuiteBase
           Row(1, "100", "hr"),
           Row(2, "999", "finance"), // updated, INT 999 coerced to STRING "999"
           Row(3, "300", "engineering"),
-          Row(4, "400", "marketing")
-        )
-      ) // inserted, INT 400 coerced to STRING "400"
+          Row(4, "400", "marketing"))) // inserted, INT 400 coerced to STRING "400"
     }
   }
 
@@ -2166,8 +2187,8 @@ abstract class MergeIntoTableSuiteBase
     val plan = executeAndKeepPlan {
       sql(query)
     }
-    collectFirst(plan) { case m: MergeRowsExec =>
-      m
+    collectFirst(plan) {
+      case m: MergeRowsExec => m
     } match {
       case Some(m) => m
       case None =>
@@ -2177,12 +2198,7 @@ abstract class MergeIntoTableSuiteBase
 
   private def getMergeSummary(): MergeSummary = {
     val table = catalog.loadTable(ident)
-    table
-      .asInstanceOf[InMemoryTable]
-      .commits
-      .last
-      .writeSummary
-      .get
+    table.asInstanceOf[InMemoryTable].commits.last.writeSummary.get
       .asInstanceOf[MergeSummary]
   }
 
@@ -2209,11 +2225,13 @@ abstract class MergeIntoTableSuiteBase
     assert(e.getMessage.contains("ON search condition of the MERGE statement"))
   }
 
-  private def assertMetric(mergeExec: MergeRowsExec, metricName: String, expected: Long): Unit = {
+  private def assertMetric(
+      mergeExec: MergeRowsExec,
+      metricName: String,
+      expected: Long): Unit = {
     mergeExec.metrics.get(metricName) match {
       case Some(metric) =>
-        assert(
-          metric.value == expected,
+        assert(metric.value == expected,
           s"Expected $metricName to be $expected, but got ${metric.value}")
       case None => fail(s"$metricName metric not found")
     }

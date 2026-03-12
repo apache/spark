@@ -86,8 +86,7 @@ class FileDataSourceV2FallBackSuite extends QueryTest with SharedSparkSession {
   private val dummyReadOnlyFileSourceV2 = classOf[DummyReadOnlyFileDataSourceV2].getName
   private val dummyWriteOnlyFileSourceV2 = classOf[DummyWriteOnlyFileDataSourceV2].getName
 
-  override protected def sparkConf: SparkConf =
-    super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "")
+  override protected def sparkConf: SparkConf = super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "")
 
   test("Fall back to v1 when writing to file with read only FileDataSourceV2") {
     val df = spark.range(10).toDF()
@@ -114,13 +113,16 @@ class FileDataSourceV2FallBackSuite extends QueryTest with SharedSparkSession {
     withTempPath { file =>
       val path = file.getCanonicalPath
       df.write.parquet(path)
-      Seq("foo,parquet,bar", "ParQuet,bar,foo", s"foobar,$dummyReadOnlyFileSourceV2").foreach {
-        fallbackReaders =>
-          withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> fallbackReaders) {
-            // Reading file should fall back to v1 and succeed.
-            checkAnswer(spark.read.format(dummyReadOnlyFileSourceV2).load(path), df)
-            checkAnswer(sql(s"SELECT * FROM parquet.`$path`"), df)
-          }
+      Seq(
+        "foo,parquet,bar",
+        "ParQuet,bar,foo",
+        s"foobar,$dummyReadOnlyFileSourceV2"
+      ).foreach { fallbackReaders =>
+        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> fallbackReaders) {
+          // Reading file should fall back to v1 and succeed.
+          checkAnswer(spark.read.format(dummyReadOnlyFileSourceV2).load(path), df)
+          checkAnswer(sql(s"SELECT * FROM parquet.`$path`"), df)
+        }
       }
 
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "foo,bar") {
@@ -181,14 +183,12 @@ class FileDataSourceV2FallBackSuite extends QueryTest with SharedSparkSession {
             assert(commands.length == 1)
             assert(commands.head._1 == "command")
             assert(commands.head._2.isInstanceOf[InsertIntoHadoopFsRelationCommand])
-            assert(
-              commands.head._2
-                .asInstanceOf[InsertIntoHadoopFsRelationCommand]
-                .fileFormat
-                .isInstanceOf[ParquetFileFormat])
+            assert(commands.head._2.asInstanceOf[InsertIntoHadoopFsRelationCommand]
+              .fileFormat.isInstanceOf[ParquetFileFormat])
             val df = spark.read.format(format).load(path.getCanonicalPath)
             checkAnswer(df, inputData.toDF())
-            assert(df.queryExecution.executedPlan.exists(_.isInstanceOf[FileSourceScanExec]))
+            assert(
+              df.queryExecution.executedPlan.exists(_.isInstanceOf[FileSourceScanExec]))
           }
         } finally {
           spark.listenerManager.unregister(listener)

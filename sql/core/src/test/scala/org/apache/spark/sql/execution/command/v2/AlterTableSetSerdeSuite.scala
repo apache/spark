@@ -23,8 +23,8 @@ import org.apache.spark.sql.connector.catalog.InMemoryCatalog
 import org.apache.spark.sql.execution.command
 
 /**
- * The class contains tests for the `ALTER TABLE .. SET [SERDE|SERDEPROPERTIES]` command to check
- * V2 table catalogs.
+ * The class contains tests for the `ALTER TABLE .. SET [SERDE|SERDEPROPERTIES]` command to
+ * check V2 table catalogs.
  */
 class AlterTableSetSerdeSuite extends command.AlterTableSetSerdeSuiteBase with CommandSuiteBase {
 
@@ -34,16 +34,16 @@ class AlterTableSetSerdeSuite extends command.AlterTableSetSerdeSuiteBase with C
   test("v2 catalog doesn't support ALTER TABLE SerDe properties") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
-      spark.sql(
-        s"CREATE TABLE $t (id bigint, data string) " +
-          s"USING foo PARTITIONED BY (id)")
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) " +
+        s"USING foo PARTITIONED BY (id)")
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $t SET SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')")
         },
         condition = "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE",
         sqlState = "0A000",
-        parameters = Map("cmd" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"))
+        parameters = Map("cmd" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]")
+      )
     }
   }
 }

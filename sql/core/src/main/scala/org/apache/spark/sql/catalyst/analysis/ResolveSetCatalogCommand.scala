@@ -24,7 +24,8 @@ import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.execution.command.SetCatalogCommand
 
 /**
- * Replaces unresolved catalog name attributes in SetCatalogCommand with a string literal.
+ * Replaces unresolved catalog name attributes in SetCatalogCommand
+ * with a string literal.
  */
 object ResolveSetCatalogCommand extends Rule[LogicalPlan] {
 

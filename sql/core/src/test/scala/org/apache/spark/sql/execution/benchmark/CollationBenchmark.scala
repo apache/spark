@@ -30,9 +30,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
 
   def generateSeqInput(n: Long): Seq[UTF8String]
 
-  def benchmarkUTFStringEquals(
-      collationTypes: Seq[String],
-      utf8Strings: Seq[UTF8String]): Unit = {
+  def benchmarkUTFStringEquals(collationTypes: Seq[String], utf8Strings: Seq[UTF8String]): Unit = {
     val sublistStrings = utf8Strings
 
     val benchmark = new Benchmark(
@@ -40,26 +38,23 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       utf8Strings.size * 10,
       warmupTime = 10.seconds,
       output = output)
-    collationTypes.foreach { collationType =>
-      {
-        val collation = CollationFactory.fetchCollation(collationType)
-        benchmark.addCase(s"$collationType") { _ =>
-          sublistStrings.foreach { s1 =>
-            utf8Strings.foreach { s =>
-              (0 to 3).foreach { _ =>
-                collation.equalsFunction(s, s1).booleanValue()
-              }
+    collationTypes.foreach { collationType => {
+      val collation = CollationFactory.fetchCollation(collationType)
+      benchmark.addCase(s"$collationType") { _ =>
+        sublistStrings.foreach { s1 =>
+          utf8Strings.foreach { s =>
+            (0 to 3).foreach { _ =>
+              collation.equalsFunction(s, s1).booleanValue()
             }
           }
         }
       }
     }
+    }
     benchmark.run(relativeTime = true)
   }
 
-  def benchmarkUTFStringCompare(
-      collationTypes: Seq[String],
-      utf8Strings: Seq[UTF8String]): Unit = {
+  def benchmarkUTFStringCompare(collationTypes: Seq[String], utf8Strings: Seq[UTF8String]): Unit = {
     val sublistStrings = utf8Strings
 
     val benchmark = new Benchmark(
@@ -67,19 +62,18 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       utf8Strings.size * 10,
       warmupTime = 10.seconds,
       output = output)
-    collationTypes.foreach { collationType =>
-      {
-        val collation = CollationFactory.fetchCollation(collationType)
-        benchmark.addCase(s"$collationType") { _ =>
-          sublistStrings.foreach { s1 =>
-            utf8Strings.foreach { s =>
-              (0 to 3).foreach { _ =>
-                collation.comparator.compare(s, s1)
-              }
+    collationTypes.foreach { collationType => {
+      val collation = CollationFactory.fetchCollation(collationType)
+      benchmark.addCase(s"$collationType") { _ =>
+        sublistStrings.foreach { s1 =>
+          utf8Strings.foreach { s =>
+            (0 to 3).foreach { _ =>
+              collation.comparator.compare(s, s1)
             }
           }
         }
       }
+    }
     }
     benchmark.run(relativeTime = true)
   }
@@ -94,24 +88,25 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       utf8Strings.size * 10,
       warmupTime = 10.seconds,
       output = output)
-    collationTypes.foreach { collationType =>
-      {
-        val collation = CollationFactory.fetchCollation(collationType)
-        benchmark.addCase(s"$collationType") { _ =>
-          sublistStrings.foreach { _ =>
-            utf8Strings.foreach { s =>
-              (0 to 3).foreach { _ =>
-                Murmur3HashFunction.hash(s, StringType(collationType), 42L, true, false).toInt
-              }
+    collationTypes.foreach { collationType => {
+      val collation = CollationFactory.fetchCollation(collationType)
+      benchmark.addCase(s"$collationType") { _ =>
+        sublistStrings.foreach { _ =>
+          utf8Strings.foreach { s =>
+            (0 to 3).foreach { _ =>
+              Murmur3HashFunction.hash(s, StringType(collationType), 42L, true, false).toInt
             }
           }
         }
       }
     }
+    }
     benchmark.run(relativeTime = true)
   }
 
-  def benchmarkContains(collationTypes: Seq[String], utf8Strings: Seq[UTF8String]): Unit = {
+  def benchmarkContains(
+      collationTypes: Seq[String],
+      utf8Strings: Seq[UTF8String]): Unit = {
     val sublistStrings = utf8Strings
 
     val benchmark = new Benchmark(
@@ -119,24 +114,27 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       utf8Strings.size * 10,
       warmupTime = 10.seconds,
       output = output)
-    collationTypes.foreach { collationType =>
-      {
-        val collationId = CollationFactory.collationNameToId(collationType)
-        benchmark.addCase(s"$collationType") { _ =>
-          sublistStrings.foreach { s1 =>
-            utf8Strings.foreach { s =>
-              (0 to 3).foreach { _ =>
-                CollationSupport.Contains.exec(s, s1, collationId)
-              }
+    collationTypes.foreach { collationType => {
+      val collationId = CollationFactory.collationNameToId(collationType)
+      benchmark.addCase(s"$collationType") { _ =>
+        sublistStrings.foreach { s1 =>
+          utf8Strings.foreach { s =>
+            (0 to 3).foreach { _ =>
+              CollationSupport.Contains.exec(
+                s, s1, collationId
+              )
             }
           }
         }
       }
     }
+    }
     benchmark.run(relativeTime = true)
   }
 
-  def benchmarkStartsWith(collationTypes: Seq[String], utf8Strings: Seq[UTF8String]): Unit = {
+  def benchmarkStartsWith(
+      collationTypes: Seq[String],
+      utf8Strings: Seq[UTF8String]): Unit = {
     val sublistStrings = utf8Strings
 
     val benchmark = new Benchmark(
@@ -144,24 +142,27 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       utf8Strings.size * 10,
       warmupTime = 10.seconds,
       output = output)
-    collationTypes.foreach { collationType =>
-      {
-        val collationId = CollationFactory.collationNameToId(collationType)
-        benchmark.addCase(s"$collationType") { _ =>
-          sublistStrings.foreach { s1 =>
-            utf8Strings.foreach { s =>
-              (0 to 3).foreach { _ =>
-                CollationSupport.StartsWith.exec(s, s1, collationId)
-              }
+    collationTypes.foreach { collationType => {
+      val collationId = CollationFactory.collationNameToId(collationType)
+      benchmark.addCase(s"$collationType") { _ =>
+        sublistStrings.foreach { s1 =>
+          utf8Strings.foreach { s =>
+            (0 to 3).foreach { _ =>
+              CollationSupport.StartsWith.exec(
+                s, s1, collationId
+              )
             }
           }
         }
       }
     }
+    }
     benchmark.run(relativeTime = true)
   }
 
-  def benchmarkEndsWith(collationTypes: Seq[String], utf8Strings: Seq[UTF8String]): Unit = {
+  def benchmarkEndsWith(
+      collationTypes: Seq[String],
+      utf8Strings: Seq[UTF8String]): Unit = {
     val sublistStrings = utf8Strings
 
     val benchmark = new Benchmark(
@@ -169,24 +170,27 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       utf8Strings.size * 10,
       warmupTime = 10.seconds,
       output = output)
-    collationTypes.foreach { collationType =>
-      {
-        val collationId = CollationFactory.collationNameToId(collationType)
-        benchmark.addCase(s"$collationType") { _ =>
-          sublistStrings.foreach { s1 =>
-            utf8Strings.foreach { s =>
-              (0 to 3).foreach { _ =>
-                CollationSupport.EndsWith.exec(s, s1, collationId)
-              }
+    collationTypes.foreach { collationType => {
+      val collationId = CollationFactory.collationNameToId(collationType)
+      benchmark.addCase(s"$collationType") { _ =>
+        sublistStrings.foreach { s1 =>
+          utf8Strings.foreach { s =>
+            (0 to 3).foreach { _ =>
+              CollationSupport.EndsWith.exec(
+                s, s1, collationId
+              )
             }
           }
         }
       }
     }
+    }
     benchmark.run(relativeTime = true)
   }
 
-  def benchmarkInitCap(collationTypes: Seq[String], utf8Strings: Seq[UTF8String]): Unit = {
+  def benchmarkInitCap(
+      collationTypes: Seq[String],
+      utf8Strings: Seq[UTF8String]): Unit = {
     type CollationId = Int
     type InitCapEstimator = (UTF8String, CollationId) => Unit
     def skipCollationTypeFilter: Any => Boolean = _ => true
@@ -199,15 +203,14 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
         utf8Strings.size * 10,
         warmupTime = 10.seconds,
         output = output)
-      collationTypes.filter(collationTypeFilter).foreach { collationType =>
-        {
-          val collationId = CollationFactory.collationNameToId(collationType)
-          benchmark.addCase(collationType) { _ =>
-            utf8Strings.foreach { s =>
-              impl(s.repeat(1_000), collationId)
-            }
+      collationTypes.filter(collationTypeFilter).foreach { collationType => {
+        val collationId = CollationFactory.collationNameToId(collationType)
+        benchmark.addCase(collationType) { _ =>
+          utf8Strings.foreach { s =>
+            impl(s.repeat(1_000), collationId)
           }
         }
+      }
       }
       benchmark.run(relativeTime = true)
     }
@@ -218,22 +221,18 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       collationType => CollationFactory.fetchCollation(collationType).getCollator != null)
     createBenchmark(
       "execBinaryICU",
-      (s, _) => CollationSupport.InitCap.execBinaryICU(s),
-      skipCollationTypeFilter)
+      (s, _) => CollationSupport.InitCap.execBinaryICU(s), skipCollationTypeFilter)
     createBenchmark(
       "execBinary",
-      (s, _) => CollationSupport.InitCap.execBinary(s),
-      skipCollationTypeFilter)
+      (s, _) => CollationSupport.InitCap.execBinary(s), skipCollationTypeFilter)
     createBenchmark(
       "execLowercase",
-      (s, _) => CollationSupport.InitCap.execLowercase(s),
-      skipCollationTypeFilter)
+      (s, _) => CollationSupport.InitCap.execLowercase(s), skipCollationTypeFilter)
   }
 }
 
 /**
- * Benchmark to measure performance for comparisons between collated strings. To run this
- * benchmark:
+ * Benchmark to measure performance for comparisons between collated strings. To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class>
@@ -247,52 +246,10 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
 object CollationBenchmark extends CollationBenchmarkBase {
 
   override def generateSeqInput(n: Long): Seq[UTF8String] = {
-    val input = Seq(
-      "ABC",
-      "ABC",
-      "aBC",
-      "aBC",
-      "abc",
-      "abc",
-      "DEF",
-      "DEF",
-      "def",
-      "def",
-      "GHI",
-      "ghi",
-      "JKL",
-      "jkl",
-      "MNO",
-      "mno",
-      "PQR",
-      "pqr",
-      "STU",
-      "stu",
-      "VWX",
-      "vwx",
-      "ABC",
-      "ABC",
-      "aBC",
-      "aBC",
-      "abc",
-      "abc",
-      "DEF",
-      "DEF",
-      "def",
-      "def",
-      "GHI",
-      "ghi",
-      "JKL",
-      "jkl",
-      "MNO",
-      "mno",
-      "PQR",
-      "pqr",
-      "STU",
-      "stu",
-      "VWX",
-      "vwx",
-      "YZ")
+    val input = Seq("ABC", "ABC", "aBC", "aBC", "abc", "abc", "DEF", "DEF", "def", "def",
+      "GHI", "ghi", "JKL", "jkl", "MNO", "mno", "PQR", "pqr", "STU", "stu", "VWX", "vwx",
+      "ABC", "ABC", "aBC", "aBC", "abc", "abc", "DEF", "DEF", "def", "def", "GHI", "ghi",
+      "JKL", "jkl", "MNO", "mno", "PQR", "pqr", "STU", "stu", "VWX", "vwx", "YZ")
       .map(UTF8String.fromString)
     val inputLong: Seq[UTF8String] = (0L until n).map(i => input(i.toInt % input.size))
     inputLong
@@ -322,8 +279,7 @@ object CollationNonASCIIBenchmark extends CollationBenchmarkBase {
     val input = (for {
       x <- inputSet
       y <- inputSet
-      z <- inputSet
-    } yield x + y + z).map(UTF8String.fromString)
+      z <- inputSet } yield x + y + z).map(UTF8String.fromString)
     val inputLong: Seq[UTF8String] = (0L until n).map(i => input(i.toInt % input.size))
     inputLong
     // scalastyle:on nonascii

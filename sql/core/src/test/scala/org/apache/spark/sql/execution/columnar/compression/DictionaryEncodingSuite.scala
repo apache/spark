@@ -31,7 +31,9 @@ class DictionaryEncodingSuite extends SparkFunSuite {
   val nullValue = -1
   testDictionaryEncoding(new IntColumnStats, INT)
   testDictionaryEncoding(new LongColumnStats, LONG)
-  Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI").foreach(collation => {
+  Seq(
+    "UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI"
+  ).foreach(collation => {
     val dt = StringType(collation)
     val typeName = if (collation == "UTF8_BINARY") "STRING" else s"STRING($collation)"
     testDictionaryEncoding(new StringColumnStats(dt), STRING(dt), false, Some(typeName))
@@ -148,8 +150,7 @@ class DictionaryEncodingSuite extends SparkFunSuite {
       assertResult(DictionaryEncoding.typeId, "Wrong compression scheme ID")(buffer.getInt())
 
       val decoder = DictionaryEncoding.decoder(buffer, columnType)
-      val columnVector = new OnHeapColumnVector(
-        inputSeq.length,
+      val columnVector = new OnHeapColumnVector(inputSeq.length,
         ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType))
       decoder.decompress(columnVector, inputSeq.length)
 
@@ -197,8 +198,7 @@ class DictionaryEncodingSuite extends SparkFunSuite {
     }
 
     test(s"$DictionaryEncoding with $typeName: dictionary overflow for decompress()") {
-      skeletonForDecompress(
-        DictionaryEncoding.MAX_DICT_SIZE + 2,
+      skeletonForDecompress(DictionaryEncoding.MAX_DICT_SIZE + 2,
         Seq(nullValue) ++ (0 to DictionaryEncoding.MAX_DICT_SIZE - 1) ++ Seq(nullValue))
     }
   }

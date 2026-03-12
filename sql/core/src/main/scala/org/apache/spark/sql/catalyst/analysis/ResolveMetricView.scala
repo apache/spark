@@ -34,19 +34,19 @@ import org.apache.spark.sql.types.{DataType, Metadata, MetadataBuilder}
 /**
  * Analysis rule for resolving metric view operations (CREATE and SELECT).
  *
- * ==Background==
+ * == Background ==
  * A metric view is a special type of view that defines a semantic layer over raw data by
- * declaring dimensions (grouping columns) and measures (pre-aggregated metrics). Users can query
- * metric views using the MEASURE() function to access pre-defined aggregations without needing to
- * know the underlying aggregation logic.
+ * declaring dimensions (grouping columns) and measures (pre-aggregated metrics). Users can
+ * query metric views using the MEASURE() function to access pre-defined aggregations without
+ * needing to know the underlying aggregation logic.
  *
- * ==Metric View Definition (YAML)==
+ * == Metric View Definition (YAML) ==
  * A metric view is defined using YAML syntax that specifies:
- *   - source: The underlying table or SQL query
- *   - where: Optional filter condition applied to the source
- *   - select: List of columns, each being either a dimension or measure
- *     - Dimensions: Expressions used for grouping (e.g., "region", "upper(region)")
- *     - Measures: Aggregate expressions (e.g., "sum(count)", "avg(price)")
+ * - source: The underlying table or SQL query
+ * - where: Optional filter condition applied to the source
+ * - select: List of columns, each being either a dimension or measure
+ *   - Dimensions: Expressions used for grouping (e.g., "region", "upper(region)")
+ *   - Measures: Aggregate expressions (e.g., "sum(count)", "avg(price)")
  *
  * Example YAML definition:
  * {{{
@@ -67,7 +67,7 @@ import org.apache.spark.sql.types.{DataType, Metadata, MetadataBuilder}
  *
  * This rule handles two distinct workflows:
  *
- * ==Workflow 1: CREATE METRIC VIEW==
+ * == Workflow 1: CREATE METRIC VIEW ==
  * Purpose: Analyze the metric view definition and derive the output schema for catalog storage.
  *
  * SQL Example:
@@ -79,10 +79,10 @@ import org.apache.spark.sql.types.{DataType, Metadata, MetadataBuilder}
  * }}}
  *
  * Processing steps:
- *   1. Detect [[MetricViewPlaceholder]] nodes marked for creation (isCreate = true)
- *   2. Parse the YAML definition to extract dimensions and measures
- *   3. Build an [[Aggregate]] logical plan:
- *      {{{
+ * 1. Detect [[MetricViewPlaceholder]] nodes marked for creation (isCreate = true)
+ * 2. Parse the YAML definition to extract dimensions and measures
+ * 3. Build an [[Aggregate]] logical plan:
+ *    {{{
  *      Aggregate(
  *        groupingExpressions = [region, upper(region)],  // all dimensions
  *        aggregateExpressions = [
@@ -93,14 +93,14 @@ import org.apache.spark.sql.types.{DataType, Metadata, MetadataBuilder}
  *        ],
  *        child = Filter(product = 'product_1', sales_table)
  *      )
- *      }}}
- *   4. The analyzer resolves this plan to derive column data types
- *   5. The resolved schema (with metadata about dimensions/measures) is stored in the catalog
+ *    }}}
+ * 4. The analyzer resolves this plan to derive column data types
+ * 5. The resolved schema (with metadata about dimensions/measures) is stored in the catalog
  *
- * Key insight: We construct an Aggregate node even though it won't be executed. This allows the
- * analyzer to infer proper data types for measures (e.g., sum(int) -> long).
+ * Key insight: We construct an Aggregate node even though it won't be executed. This allows
+ * the analyzer to infer proper data types for measures (e.g., sum(int) -> long).
  *
- * ==Workflow 2: SELECT FROM METRIC VIEW==
+ * == Workflow 2: SELECT FROM METRIC VIEW ==
  * Purpose: Rewrite user queries to replace MEASURE() function calls with actual aggregations.
  *
  * SQL Example:
@@ -112,15 +112,15 @@ import org.apache.spark.sql.types.{DataType, Metadata, MetadataBuilder}
  * }}}
  *
  * Processing steps:
- *   1. Detect queries against metric views (identified by [[MetricViewReadOperation]])
- *   2. Load and parse the stored metric view definition from catalog metadata
- *   3. Build a [[Project]] node that:
- *      - Projects dimension expressions: [region, upper(region) AS region_upper]
- *      - Includes non-conflicting source columns for measure aggregate functions to reference
- *      - Result: The metric view now exposes dimensions as queryable columns
- *   4. Locate [[Aggregate]] nodes containing MEASURE() function calls
- *   5. Substitute each MEASURE() call with its corresponding aggregate expression:
- *      {{{
+ * 1. Detect queries against metric views (identified by [[MetricViewReadOperation]])
+ * 2. Load and parse the stored metric view definition from catalog metadata
+ * 3. Build a [[Project]] node that:
+ *    - Projects dimension expressions: [region, upper(region) AS region_upper]
+ *    - Includes non-conflicting source columns for measure aggregate functions to reference
+ *    - Result: The metric view now exposes dimensions as queryable columns
+ * 4. Locate [[Aggregate]] nodes containing MEASURE() function calls
+ * 5. Substitute each MEASURE() call with its corresponding aggregate expression:
+ *    {{{
  *      Before substitution:
  *        Aggregate(
  *          groupingExpressions = [region],
@@ -136,14 +136,14 @@ import org.apache.spark.sql.types.{DataType, Metadata, MetadataBuilder}
  *                   Project([upper(region) AS region_upper, region, amount, price],
  *                     Filter(product = 'product_1', sales_table)))
  *        )
- *      }}}
- *   6. Return the rewritten plan for further optimization and execution
+ *    }}}
+ * 6. Return the rewritten plan for further optimization and execution
  *
  * Key behaviors:
- *   - Dimensions can be used directly in SELECT, WHERE, GROUP BY, ORDER BY
- *   - Measures must be accessed via MEASURE() function and can only appear in aggregate context
- *   - The WHERE clause from the metric view definition is automatically applied
- *   - Source table columns are hidden from the metric view
+ * - Dimensions can be used directly in SELECT, WHERE, GROUP BY, ORDER BY
+ * - Measures must be accessed via MEASURE() function and can only appear in aggregate context
+ * - The WHERE clause from the metric view definition is automatically applied
+ * - Source table columns are hidden from the metric view
  *
  * Example query patterns:
  * {{{
@@ -161,8 +161,8 @@ import org.apache.spark.sql.types.{DataType, Metadata, MetadataBuilder}
  *      WHERE product = 'product_1' GROUP BY region
  * }}}
  *
- * The rule operates on unresolved plans and transforms [[MetricViewPlaceholder]] nodes into
- * resolved logical plans that can be further optimized and executed.
+ * The rule operates on unresolved plans and transforms [[MetricViewPlaceholder]] nodes
+ * into resolved logical plans that can be further optimized and executed.
  */
 case class ResolveMetricView(session: SparkSession) extends Rule[LogicalPlan] {
   private def parser: ParserInterface = session.sessionState.sqlParser
@@ -182,7 +182,8 @@ case class ResolveMetricView(session: SparkSession) extends Rule[LogicalPlan] {
           dimensions.map(_.toAttribute).toSeq,
           // select all dimensions and measures to get the final output (mostly data types)
           (dimensions ++ measures).toSeq,
-          mvp.child)
+          mvp.child
+        )
 
       // SELECT PATH: to read a metric view, user will use the `MEASURE` aggregate function
       // to read the measures, so it'll lead to an Aggregate node. This way, we only need to
@@ -200,39 +201,42 @@ case class ResolveMetricView(session: SparkSession) extends Rule[LogicalPlan] {
         // 1. hide the column conflict with dimensions
         // 2. add an alias to the source column so they are stable with DeduplicateRelation
         // 3. metric view output should use the same exprId
-        val dimensionAttrs =
-          metricView.outputMetrics.filter(a => dimensions.exists(_.exprId == a.exprId))
-        val sourceProjList = sourceOutput
-          .filterNot { attr =>
-            // conflict with dimensions
-            dimensionAttrs
-              .resolve(Seq(attr.name), session.sessionState.conf.resolver)
-              .nonEmpty
-          }
-          .map { attr =>
-            // add an alias to the source column so they are stable with DeduplicateRelation
-            Alias(attr, attr.name)()
-          }
-        val withDimensions =
-          node.transformDownWithPruning(_.containsPattern(METRIC_VIEW_PLACEHOLDER)) {
-            case mv: MetricViewPlaceholder
-                if mv.metadata.identifier == metricView.metadata.identifier =>
-              ResolvedMetricView(
-                mv.metadata.identifier,
-                Project(sourceProjList ++ dimensionExprs, mv.child))
-          }
+        val dimensionAttrs = metricView.outputMetrics.filter(a =>
+          dimensions.exists(_.exprId == a.exprId)
+        )
+        val sourceProjList = sourceOutput.filterNot { attr =>
+          // conflict with dimensions
+          dimensionAttrs
+            .resolve(Seq(attr.name), session.sessionState.conf.resolver)
+            .nonEmpty
+        }.map { attr =>
+          // add an alias to the source column so they are stable with DeduplicateRelation
+          Alias(attr, attr.name)()
+        }
+        val withDimensions = node.transformDownWithPruning(
+          _.containsPattern(METRIC_VIEW_PLACEHOLDER)) {
+          case mv: MetricViewPlaceholder
+            if mv.metadata.identifier == metricView.metadata.identifier =>
+            ResolvedMetricView(
+              mv.metadata.identifier,
+              Project(sourceProjList ++ dimensionExprs, mv.child)
+            )
+        }
 
         // step 3: resolve the measure references in Aggregate node
         withDimensions match {
-          case aggregate: Aggregate => transformAggregateWithMeasures(aggregate, measures)
+          case aggregate: Aggregate => transformAggregateWithMeasures(
+            aggregate,
+            measures
+          )
           case other =>
             throw SparkException.internalError("ran into unexpected node: " + other)
         }
     }
   }
 
-  private def buildMetricViewOutput(
-      metricView: CanonicalMetricView): (Seq[NamedExpression], Seq[NamedExpression]) = {
+  private def buildMetricViewOutput(metricView: CanonicalMetricView)
+  : (Seq[NamedExpression], Seq[NamedExpression]) = {
     val dimensions = new mutable.ArrayBuffer[NamedExpression]()
     val measures = new mutable.ArrayBuffer[NamedExpression]()
     metricView.select.foreach { col =>
@@ -253,7 +257,8 @@ case class ResolveMetricView(session: SparkSession) extends Rule[LogicalPlan] {
 
   private def parseMetricViewColumns(
       metricViewOutput: Seq[Attribute],
-      columns: Seq[CanonicalColumn]): (Seq[MetricViewDimension], Seq[MetricViewMeasure]) = {
+      columns: Seq[CanonicalColumn]
+  ): (Seq[MetricViewDimension], Seq[MetricViewMeasure]) = {
     val dimensions = new mutable.ArrayBuffer[MetricViewDimension]()
     val measures = new mutable.ArrayBuffer[MetricViewMeasure]()
     metricViewOutput.zip(columns).foreach { case (attr, column) =>
@@ -264,14 +269,16 @@ case class ResolveMetricView(session: SparkSession) extends Rule[LogicalPlan] {
               attr.name,
               parser.parseExpression(expr),
               attr.exprId,
-              attr.dataType))
+              attr.dataType)
+          )
         case MeasureExpression(expr) =>
           measures.append(
             MetricViewMeasure(
               attr.name,
               parser.parseExpression(expr),
               attr.exprId,
-              attr.dataType))
+              attr.dataType)
+          )
       }
     }
     (dimensions.toSeq, measures.toSeq)
@@ -282,11 +289,10 @@ case class ResolveMetricView(session: SparkSession) extends Rule[LogicalPlan] {
       measures: Seq[MetricViewMeasure]): LogicalPlan = {
     val measuresMap = measures.map(m => m.exprId -> m).toMap
     val newAggExprs = aggregate.aggregateExpressions.map { expr =>
-      expr
-        .transform { case AggregateExpression(Measure(a: AttributeReference), _, _, _, _) =>
+      expr.transform {
+        case AggregateExpression(Measure(a: AttributeReference), _, _, _, _) =>
           measuresMap(a.exprId).expr
-        }
-        .asInstanceOf[NamedExpression]
+      }.asInstanceOf[NamedExpression]
     }
     aggregate.copy(aggregateExpressions = newAggExprs)
   }
@@ -325,8 +331,14 @@ sealed trait MetricViewColumn {
   }
 }
 
-case class MetricViewDimension(name: String, expr: Expression, exprId: ExprId, dataType: DataType)
-    extends MetricViewColumn
+case class MetricViewDimension(
+    name: String,
+    expr: Expression,
+    exprId: ExprId,
+    dataType: DataType) extends MetricViewColumn
 
-case class MetricViewMeasure(name: String, expr: Expression, exprId: ExprId, dataType: DataType)
-    extends MetricViewColumn
+case class MetricViewMeasure(
+    name: String,
+    expr: Expression,
+    exprId: ExprId,
+    dataType: DataType) extends MetricViewColumn

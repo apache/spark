@@ -32,7 +32,9 @@ import org.apache.spark.util.Utils
 /**
  * Helper classes for reading/writing state schema.
  */
-case class StateSchemaFormatV3(stateStoreColFamilySchema: List[StateStoreColFamilySchema])
+case class StateSchemaFormatV3(
+    stateStoreColFamilySchema: List[StateStoreColFamilySchema]
+)
 
 object SchemaHelper {
 
@@ -51,7 +53,8 @@ object SchemaHelper {
 
   object SchemaReader {
     def createSchemaReader(versionStr: String): SchemaReader = {
-      val version = MetadataVersionUtil.validateVersion(versionStr, 3)
+      val version = MetadataVersionUtil.validateVersion(versionStr,
+        3)
       version match {
         case 1 => new SchemaV1Reader
         case 2 => new SchemaV2Reader
@@ -66,13 +69,11 @@ object SchemaHelper {
     override def read(inputStream: FSDataInputStream): List[StateStoreColFamilySchema] = {
       val keySchemaStr = inputStream.readUTF()
       val valueSchemaStr = inputStream.readUTF()
-      List(
-        StateStoreColFamilySchema(
-          StateStore.DEFAULT_COL_FAMILY_NAME,
-          0,
-          StructType.fromString(keySchemaStr),
-          0,
-          StructType.fromString(valueSchemaStr)))
+      List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+        0,
+        StructType.fromString(keySchemaStr),
+        0,
+        StructType.fromString(valueSchemaStr)))
     }
   }
 
@@ -83,13 +84,11 @@ object SchemaHelper {
       val keySchemaStr = readJsonSchema(inputStream)
       val valueSchemaStr = readJsonSchema(inputStream)
 
-      List(
-        StateStoreColFamilySchema(
-          StateStore.DEFAULT_COL_FAMILY_NAME,
-          0,
-          StructType.fromString(keySchemaStr),
-          0,
-          StructType.fromString(valueSchemaStr)))
+      List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+        0,
+        StructType.fromString(keySchemaStr),
+        0,
+        StructType.fromString(valueSchemaStr)))
     }
   }
 
@@ -117,8 +116,7 @@ object SchemaHelper {
         val userKeyEncoderSchemaStr = readJsonSchema(inputStream)
         val userKeyEncoderSchema = Try(StructType.fromString(userKeyEncoderSchemaStr)).toOption
 
-        StateStoreColFamilySchema(
-          colFamilyName,
+        StateStoreColFamilySchema(colFamilyName,
           keySchemaId,
           keySchema,
           valSchemaId,
@@ -150,7 +148,9 @@ object SchemaHelper {
         stateStoreColFamilySchema: List[StateStoreColFamilySchema],
         outputStream: FSDataOutputStream): Unit
 
-    protected def writeJsonSchema(outputStream: FSDataOutputStream, jsonSchema: String): Unit = {
+    protected def writeJsonSchema(
+        outputStream: FSDataOutputStream,
+        jsonSchema: String): Unit = {
       // DataOutputStream.writeUTF can't write a string at once
       // if the size exceeds 65535 (2^16 - 1) bytes.
       // So a key as well as a value consist of multiple chunks in schema version 2 and above.

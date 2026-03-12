@@ -29,11 +29,10 @@ case class ColumnFamilyMetadata(
     valueSchema: StructType,
     encoderSpec: KeyStateEncoderSpec,
     useMultipleValuePerKey: Boolean = false)
-
 /**
- * Test utility object providing schema definitions and constants for TTL state tests. The schema
- * is based on ListStateTTLProcessor, MapStateTTLProcessor, ValueStateTTLProcessor defined in the
- * test suite
+ * Test utility object providing schema definitions and constants for TTL state tests.
+ * The schema is based on ListStateTTLProcessor, MapStateTTLProcessor, ValueStateTTLProcessor
+ * defined in the test suite
  */
 // TODO: Move the corresponding TTLProcessors to this file
 object TTLProcessorUtils {
@@ -42,8 +41,9 @@ object TTLProcessorUtils {
   val LIST_STATE_TTL_INDEX = "$ttl_listState"
   val LIST_STATE_MIN = "$min_listState"
   val LIST_STATE_COUNT = "$count_listState"
-  val LIST_STATE_ALL: Set[String] =
-    Set(LIST_STATE, LIST_STATE_TTL_INDEX, LIST_STATE_MIN, LIST_STATE_COUNT)
+  val LIST_STATE_ALL: Set[String] = Set(
+    LIST_STATE, LIST_STATE_TTL_INDEX, LIST_STATE_MIN, LIST_STATE_COUNT
+  )
 
   // Map state column families
   val MAP_STATE = "mapState"
@@ -62,20 +62,25 @@ object TTLProcessorUtils {
   }
 
   def getListStateTTLSchemasWithMetadata(): Map[String, ColumnFamilyMetadata] = {
-    val groupByKeySchema = StructType(Array(StructField("value", StringType, nullable = true)))
-    val listStateValueSchema = StructType(
-      Array(
-        StructField(
-          "value",
-          StructType(Array(StructField("value", IntegerType, nullable = true))),
-          nullable = false),
-        StructField("ttlExpirationMs", LongType, nullable = false)))
-    val ttlIndexKeySchema = StructType(
-      Array(
-        StructField("expirationMs", LongType, nullable = false),
-        StructField("elementKey", groupByKeySchema)))
-    val minExpiryValueSchema = StructType(Array(StructField("minExpiry", LongType)))
-    val countValueSchema = StructType(Array(StructField("count", LongType)))
+    val groupByKeySchema = StructType(Array(
+      StructField("value", StringType, nullable = true)
+    ))
+    val listStateValueSchema = StructType(Array(
+      StructField("value", StructType(Array(
+        StructField("value", IntegerType, nullable = true)
+      )), nullable = false),
+      StructField("ttlExpirationMs", LongType, nullable = false)
+    ))
+    val ttlIndexKeySchema = StructType(Array(
+      StructField("expirationMs", LongType, nullable = false),
+      StructField("elementKey", groupByKeySchema)
+    ))
+    val minExpiryValueSchema = StructType(Array(
+      StructField("minExpiry", LongType)
+    ))
+    val countValueSchema = StructType(Array(
+      StructField("count", LongType)
+    ))
     val dummyValueSchema = StructType(Array(StructField("__dummy__", NullType)))
     val defaultValueSchema = StructType(Array(StructField("value", BinaryType, nullable = true)))
 
@@ -84,20 +89,16 @@ object TTLProcessorUtils {
 
     Map(
       StateStore.DEFAULT_COL_FAMILY_NAME -> ColumnFamilyMetadata(
-        groupByKeySchema,
-        defaultValueSchema,
-        encoderSpec),
+        groupByKeySchema, defaultValueSchema, encoderSpec),
       LIST_STATE -> ColumnFamilyMetadata(
-        groupByKeySchema,
-        listStateValueSchema,
-        encoderSpec,
-        useMultipleValuePerKey = true),
+        groupByKeySchema, listStateValueSchema, encoderSpec, useMultipleValuePerKey = true),
       LIST_STATE_TTL_INDEX -> ColumnFamilyMetadata(
-        ttlIndexKeySchema,
-        dummyValueSchema,
-        ttlIndexEncoderSpec),
-      LIST_STATE_MIN -> ColumnFamilyMetadata(groupByKeySchema, minExpiryValueSchema, encoderSpec),
-      LIST_STATE_COUNT -> ColumnFamilyMetadata(groupByKeySchema, countValueSchema, encoderSpec))
+        ttlIndexKeySchema, dummyValueSchema, ttlIndexEncoderSpec),
+      LIST_STATE_MIN -> ColumnFamilyMetadata(
+        groupByKeySchema, minExpiryValueSchema, encoderSpec),
+      LIST_STATE_COUNT -> ColumnFamilyMetadata(
+        groupByKeySchema, countValueSchema, encoderSpec)
+    )
   }
 
   def getMapStateTTLSchemas(): Map[String, (StructType, StructType)] = {
@@ -107,21 +108,26 @@ object TTLProcessorUtils {
   }
 
   def getMapStateTTLSchemasWithMetadata(): Map[String, ColumnFamilyMetadata] = {
-    val groupByKeySchema = StructType(Array(StructField("value", StringType, nullable = true)))
-    val userKeySchema = StructType(Array(StructField("value", StringType, nullable = true)))
-    val compositeKeySchema = StructType(
-      Array(StructField("key", groupByKeySchema), StructField("userKey", userKeySchema)))
-    val mapStateValueSchema = StructType(
-      Array(
-        StructField(
-          "value",
-          StructType(Array(StructField("value", IntegerType, nullable = true))),
-          nullable = false),
-        StructField("ttlExpirationMs", LongType, nullable = false)))
-    val ttlIndexKeySchema = StructType(
-      Array(
-        StructField("expirationMs", LongType, nullable = false),
-        StructField("elementKey", compositeKeySchema)))
+    val groupByKeySchema = StructType(Array(
+      StructField("value", StringType, nullable = true)
+    ))
+    val userKeySchema = StructType(Array(
+      StructField("value", StringType, nullable = true)
+    ))
+    val compositeKeySchema = StructType(Array(
+      StructField("key", groupByKeySchema),
+      StructField("userKey", userKeySchema)
+    ))
+    val mapStateValueSchema = StructType(Array(
+      StructField("value", StructType(Array(
+        StructField("value", IntegerType, nullable = true)
+      )), nullable = false),
+      StructField("ttlExpirationMs", LongType, nullable = false)
+    ))
+    val ttlIndexKeySchema = StructType(Array(
+      StructField("expirationMs", LongType, nullable = false),
+      StructField("elementKey", compositeKeySchema)
+    ))
     val dummyValueSchema = StructType(Array(StructField("__empty__", NullType)))
     val defaultValueSchema = StructType(Array(StructField("value", BinaryType, nullable = true)))
 
@@ -131,17 +137,12 @@ object TTLProcessorUtils {
 
     Map(
       StateStore.DEFAULT_COL_FAMILY_NAME -> ColumnFamilyMetadata(
-        groupByKeySchema,
-        defaultValueSchema,
-        encoderSpec),
+        groupByKeySchema, defaultValueSchema, encoderSpec),
       MAP_STATE -> ColumnFamilyMetadata(
-        compositeKeySchema,
-        mapStateValueSchema,
-        mapStateEncoderSpec),
+        compositeKeySchema, mapStateValueSchema, mapStateEncoderSpec),
       MAP_STATE_TTL_INDEX -> ColumnFamilyMetadata(
-        ttlIndexKeySchema,
-        dummyValueSchema,
-        ttlIndexEncoderSpec))
+        ttlIndexKeySchema, dummyValueSchema, ttlIndexEncoderSpec)
+    )
   }
 
   def getValueStateTTLSchemas(): Map[String, (StructType, StructType)] = {
@@ -151,18 +152,19 @@ object TTLProcessorUtils {
   }
 
   def getValueStateTTLSchemasWithMetadata(): Map[String, ColumnFamilyMetadata] = {
-    val groupByKeySchema = StructType(Array(StructField("value", StringType, nullable = true)))
-    val valueStateValueSchema = StructType(
-      Array(
-        StructField(
-          "value",
-          StructType(Array(StructField("value", IntegerType, nullable = true))),
-          nullable = false),
-        StructField("ttlExpirationMs", LongType, nullable = false)))
-    val ttlIndexKeySchema = StructType(
-      Array(
-        StructField("expirationMs", LongType, nullable = false),
-        StructField("elementKey", groupByKeySchema)))
+    val groupByKeySchema = StructType(Array(
+      StructField("value", StringType, nullable = true)
+    ))
+    val valueStateValueSchema = StructType(Array(
+      StructField("value", StructType(Array(
+        StructField("value", IntegerType, nullable = true)
+      )), nullable = false),
+      StructField("ttlExpirationMs", LongType, nullable = false)
+    ))
+    val ttlIndexKeySchema = StructType(Array(
+      StructField("expirationMs", LongType, nullable = false),
+      StructField("elementKey", groupByKeySchema)
+    ))
     val dummyValueSchema = StructType(Array(StructField("__empty__", NullType)))
     val defaultValueSchema = StructType(Array(StructField("value", BinaryType, nullable = true)))
 
@@ -171,20 +173,19 @@ object TTLProcessorUtils {
 
     Map(
       StateStore.DEFAULT_COL_FAMILY_NAME -> ColumnFamilyMetadata(
-        groupByKeySchema,
-        defaultValueSchema,
-        encoderSpec),
-      VALUE_STATE -> ColumnFamilyMetadata(groupByKeySchema, valueStateValueSchema, encoderSpec),
+        groupByKeySchema, defaultValueSchema, encoderSpec),
+      VALUE_STATE -> ColumnFamilyMetadata(
+        groupByKeySchema, valueStateValueSchema, encoderSpec),
       VALUE_STATE_TTL_INDEX -> ColumnFamilyMetadata(
-        ttlIndexKeySchema,
-        dummyValueSchema,
-        ttlIndexEncoderSpec))
+        ttlIndexKeySchema, dummyValueSchema, ttlIndexEncoderSpec)
+    )
   }
 
   def getTTLSelectExpressions(columnFamilyName: String): Seq[String] = {
     columnFamilyName match {
       case MAP_STATE =>
-        Seq("partition_id", "STRUCT(key, user_map_key) AS KEY", "user_map_value AS value")
+        Seq("partition_id", "STRUCT(key, user_map_key) AS KEY",
+          "user_map_value AS value")
       case LIST_STATE =>
         Seq("partition_id", "key", "list_element")
       case _ =>
@@ -200,8 +201,8 @@ object TTLProcessorUtils {
 }
 
 /**
- * Stateful processor with multiple state variables (value + list + map) for testing
- * transformWithState operator.
+ * Stateful processor with multiple state variables (value + list + map)
+ * for testing transformWithState operator.
  */
 class MultiStateVarProcessor
     extends StatefulProcessor[String, String, (String, String, String, String)] {
@@ -213,10 +214,7 @@ class MultiStateVarProcessor
     _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong, TTLConfig.NONE)
     _itemsList = getHandle.getListState[String]("itemsList", Encoders.STRING, TTLConfig.NONE)
     _itemsMap = getHandle.getMapState[String, SimpleMapValue](
-      "itemsMap",
-      Encoders.STRING,
-      Encoders.product[SimpleMapValue],
-      TTLConfig.NONE)
+      "itemsMap", Encoders.STRING, Encoders.product[SimpleMapValue], TTLConfig.NONE)
   }
 
   override def handleInputRows(
@@ -251,7 +249,9 @@ object MultiStateVarProcessorTestUtils {
   val ITEMS_MAP = "itemsMap"
   val ROW_COUNTER = "$rowCounter_itemsList"
 
-  val ALL_COLUMN_FAMILIES: Set[String] = Set(COUNT_STATE, ITEMS_LIST, ITEMS_MAP, ROW_COUNTER)
+  val ALL_COLUMN_FAMILIES: Set[String] = Set(
+    COUNT_STATE, ITEMS_LIST, ITEMS_MAP, ROW_COUNTER
+  )
 
   def getSchemas(): Map[String, (StructType, StructType, KeyStateEncoderSpec)] = {
     getSchemasWithMetadata().view.mapValues { metadata =>
@@ -260,44 +260,44 @@ object MultiStateVarProcessorTestUtils {
   }
 
   def getSchemasWithMetadata(): Map[String, ColumnFamilyMetadata] = {
-    val groupByKeySchema = StructType(Array(StructField("value", StringType, nullable = true)))
-    val defaultValueSchema = StructType(Array(StructField("value", BinaryType, nullable = true)))
-    val countStateValueSchema = StructType(
-      Array(StructField("value", LongType, nullable = false)))
-    val itemsListValueSchema = StructType(
-      Array(StructField("value", StringType, nullable = true)))
-    val rowCounterValueSchema = StructType(Array(StructField("count", LongType, nullable = true)))
-    val itemsMapKeySchema = StructType(
-      Array(
-        StructField("key", groupByKeySchema),
-        StructField("user_map_key", groupByKeySchema, nullable = true)))
-    val itemsMapValueSchema = StructType(
-      Array(StructField("user_map_value", IntegerType, nullable = true)))
+    val groupByKeySchema = StructType(Array(
+      StructField("value", StringType, nullable = true)
+    ))
+    val defaultValueSchema = StructType(Array(
+      StructField("value", BinaryType, nullable = true)
+    ))
+    val countStateValueSchema = StructType(Array(
+      StructField("value", LongType, nullable = false)
+    ))
+    val itemsListValueSchema = StructType(Array(
+      StructField("value", StringType, nullable = true)
+    ))
+    val rowCounterValueSchema = StructType(Array(
+      StructField("count", LongType, nullable = true)
+    ))
+    val itemsMapKeySchema = StructType(Array(
+      StructField("key", groupByKeySchema),
+      StructField("user_map_key", groupByKeySchema, nullable = true)
+    ))
+    val itemsMapValueSchema = StructType(Array(
+      StructField("user_map_value", IntegerType, nullable = true)
+    ))
     val countStateEncoderSpec = NoPrefixKeyStateEncoderSpec(groupByKeySchema)
     val itemsMapEncoderSpec = PrefixKeyScanStateEncoderSpec(itemsMapKeySchema, 1)
 
     Map(
       StateStore.DEFAULT_COL_FAMILY_NAME -> ColumnFamilyMetadata(
-        groupByKeySchema,
-        defaultValueSchema,
-        countStateEncoderSpec),
+        groupByKeySchema, defaultValueSchema, countStateEncoderSpec),
       COUNT_STATE -> ColumnFamilyMetadata(
-        groupByKeySchema,
-        countStateValueSchema,
-        countStateEncoderSpec),
+        groupByKeySchema, countStateValueSchema, countStateEncoderSpec),
       ITEMS_LIST -> ColumnFamilyMetadata(
-        groupByKeySchema,
-        itemsListValueSchema,
-        countStateEncoderSpec,
+        groupByKeySchema, itemsListValueSchema, countStateEncoderSpec,
         useMultipleValuePerKey = true),
       ROW_COUNTER -> ColumnFamilyMetadata(
-        groupByKeySchema,
-        rowCounterValueSchema,
-        countStateEncoderSpec),
+        groupByKeySchema, rowCounterValueSchema, countStateEncoderSpec),
       ITEMS_MAP -> ColumnFamilyMetadata(
-        itemsMapKeySchema,
-        itemsMapValueSchema,
-        itemsMapEncoderSpec))
+        itemsMapKeySchema, itemsMapValueSchema, itemsMapEncoderSpec)
+    )
   }
 
   def getSelectExpressions(columnFamilyName: String): Seq[String] = {
@@ -305,7 +305,8 @@ object MultiStateVarProcessorTestUtils {
       case ITEMS_LIST =>
         Seq("partition_id", "key", "list_element")
       case ITEMS_MAP =>
-        Seq("partition_id", "STRUCT(key, user_map_key) AS KEY", "user_map_value AS value")
+        Seq("partition_id", "STRUCT(key, user_map_key) AS KEY",
+            "user_map_value AS value")
       case _ =>
         Seq("partition_id", "key", "value")
     }
@@ -314,12 +315,13 @@ object MultiStateVarProcessorTestUtils {
   def getColumnFamilyToSelectExprs(): Map[String, Seq[String]] = {
     Map(
       ITEMS_LIST -> getSelectExpressions(ITEMS_LIST),
-      ITEMS_MAP -> getSelectExpressions(ITEMS_MAP))
+      ITEMS_MAP -> getSelectExpressions(ITEMS_MAP)
+    )
   }
 }
 
 class EventTimeTimerProcessor
-    extends StatefulProcessor[String, (String, Timestamp), (String, String)] {
+  extends StatefulProcessor[String, (String, Timestamp), (String, String)] {
   @transient var _valueState: ValueState[Long] = _
 
   override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
@@ -350,25 +352,29 @@ class EventTimeTimerProcessor
 }
 
 /**
- * Test utility providing schema definitions and constants for EventTimeTimerProcessor and
- * RunningCountStatefulProcessorWithProcTimeTimer in TransformWithStateSuite
+ * Test utility providing schema definitions and constants for EventTimeTimerProcessor
+ * and RunningCountStatefulProcessorWithProcTimeTimer in TransformWithStateSuite
  */
 object TimerTestUtils {
   def getCountStateSchemas(): (StructType, StructType) = {
-    val groupByKeySchema = StructType(Array(StructField("key", StringType, nullable = true)))
-    val stateValueSchema = StructType(Array(StructField("value", LongType, nullable = true)))
+    val groupByKeySchema = StructType(Array(
+      StructField("key", StringType, nullable = true)
+    ))
+    val stateValueSchema = StructType(Array(
+      StructField("value", LongType, nullable = true)
+    ))
     (groupByKeySchema, stateValueSchema)
   }
 
   def getTimerKeySchemas(groupingKeySchema: StructType): (StructType, StructType) = {
-    val keyToTimestampKeySchema = StructType(
-      Array(
-        StructField("key", groupingKeySchema),
-        StructField("expiryTimestampMs", LongType, nullable = false)))
-    val timestampToKeyKeySchema = StructType(
-      Array(
-        StructField("expiryTimestampMs", LongType, nullable = false),
-        StructField("key", groupingKeySchema)))
+    val keyToTimestampKeySchema = StructType(Array(
+      StructField("key", groupingKeySchema),
+      StructField("expiryTimestampMs", LongType, nullable = false)
+    ))
+    val timestampToKeyKeySchema = StructType(Array(
+      StructField("expiryTimestampMs", LongType, nullable = false),
+      StructField("key", groupingKeySchema)
+    ))
 
     (keyToTimestampKeySchema, timestampToKeyKeySchema)
   }
@@ -389,31 +395,25 @@ object TimerTestUtils {
 
     Map(
       StateStore.DEFAULT_COL_FAMILY_NAME -> ColumnFamilyMetadata(
-        groupByKeySchema,
-        defaultValueSchema,
-        encoderSpec),
-      "countState" -> ColumnFamilyMetadata(groupByKeySchema, stateValueSchema, encoderSpec),
+        groupByKeySchema, defaultValueSchema, encoderSpec),
+      "countState" -> ColumnFamilyMetadata(
+        groupByKeySchema, stateValueSchema, encoderSpec),
       keyToTimestampCF -> ColumnFamilyMetadata(
-        keyToTimestampKeySchema,
-        dummyValueSchema,
-        keyToTimestampEncoderSpec),
+        keyToTimestampKeySchema, dummyValueSchema, keyToTimestampEncoderSpec),
       timestampToKeyCF -> ColumnFamilyMetadata(
-        timestampToKeyKeySchema,
-        dummyValueSchema,
-        timestampToKeyEncoderSpec))
+        timestampToKeyKeySchema, dummyValueSchema, timestampToKeyEncoderSpec)
+    )
   }
 
   def getTimerSelectExpressions(columnFamilyName: String): Seq[String] = {
     if (columnFamilyName.endsWith(TimerStateUtils.KEY_TO_TIMESTAMP_CF)) {
-      Seq(
-        "partition_id",
-        "STRUCT(key AS groupingKey, expiration_timestamp_ms AS key)",
-        "NULL AS value")
+      Seq("partition_id",
+          "STRUCT(key AS groupingKey, expiration_timestamp_ms AS key)",
+          "NULL AS value")
     } else if (columnFamilyName.endsWith(TimerStateUtils.TIMESTAMP_TO_KEY_CF)) {
-      Seq(
-        "partition_id",
-        "STRUCT(expiration_timestamp_ms AS key, key AS groupingKey)",
-        "NULL AS value")
+      Seq("partition_id",
+          "STRUCT(expiration_timestamp_ms AS key, key AS groupingKey)",
+          "NULL AS value")
     } else {
       // For countState or other regular column families
       Seq("partition_id", "key", "value")
@@ -424,6 +424,8 @@ object TimerTestUtils {
     val (keyToTimeCF, timeToKeyCF) = TimerStateUtils.getTimerStateVarNames(timeMode.toString)
     Map(
       keyToTimeCF -> getTimerSelectExpressions(keyToTimeCF),
-      timeToKeyCF -> getTimerSelectExpressions(timeToKeyCF))
+      timeToKeyCF -> getTimerSelectExpressions(timeToKeyCF)
+    )
   }
 }
+

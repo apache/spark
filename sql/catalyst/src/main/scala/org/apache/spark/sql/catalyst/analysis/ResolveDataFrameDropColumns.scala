@@ -23,35 +23,34 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.DF_DROP_COLUMNS
 import org.apache.spark.sql.connector.catalog.CatalogManager
 
 /**
- * A rule that rewrites DataFrameDropColumns to Project. Note that DataFrameDropColumns allows and
- * ignores non-existing columns.
+ * A rule that rewrites DataFrameDropColumns to Project.
+ * Note that DataFrameDropColumns allows and ignores non-existing columns.
  */
 class ResolveDataFrameDropColumns(val catalogManager: CatalogManager)
-    extends SQLConfHelper
-    with ColumnResolutionHelper {
+  extends SQLConfHelper with ColumnResolutionHelper  {
 
-  def apply(plan: LogicalPlan): LogicalPlan =
-    plan.resolveOperatorsWithPruning(_.containsPattern(DF_DROP_COLUMNS)) {
-      case d: DataFrameDropColumns if d.childrenResolved =>
-        // expressions in dropList can be unresolved, e.g.
-        //   df.drop(col("non-existing-column"))
-        val dropped = d.dropList.flatMap {
-          case u: UnresolvedAttribute =>
-            if (u.containsTag(LogicalPlan.PLAN_ID_TAG)) {
-              // Plan Id comes from Spark Connect,
-              // Here we ignore the `UnresolvedAttribute` if its Plan Id can be found
-              // but column not found.
-              tryResolveColumnByPlanChildren(u, d)
-            } else {
-              Some(resolveExpressionByPlanChildren(u, d))
-            }
-          case e => Some(e)
-        }
-        val remaining = d.child.output.filterNot(attr => dropped.exists(_.semanticEquals(attr)))
-        if (remaining.size == d.child.output.size) {
-          d.child
-        } else {
-          Project(remaining, d.child)
-        }
-    }
+  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+    _.containsPattern(DF_DROP_COLUMNS)) {
+    case d: DataFrameDropColumns if d.childrenResolved =>
+      // expressions in dropList can be unresolved, e.g.
+      //   df.drop(col("non-existing-column"))
+      val dropped = d.dropList.flatMap {
+        case u: UnresolvedAttribute =>
+          if (u.containsTag(LogicalPlan.PLAN_ID_TAG)) {
+            // Plan Id comes from Spark Connect,
+            // Here we ignore the `UnresolvedAttribute` if its Plan Id can be found
+            // but column not found.
+            tryResolveColumnByPlanChildren(u, d)
+          } else {
+            Some(resolveExpressionByPlanChildren(u, d))
+          }
+        case e => Some(e)
+      }
+      val remaining = d.child.output.filterNot(attr => dropped.exists(_.semanticEquals(attr)))
+      if (remaining.size == d.child.output.size) {
+        d.child
+      } else {
+        Project(remaining, d.child)
+      }
+  }
 }

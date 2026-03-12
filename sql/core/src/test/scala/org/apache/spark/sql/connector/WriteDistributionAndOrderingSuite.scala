@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector
 
+
 import java.sql.Date
 import java.util.Collections
 
@@ -141,12 +142,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
         Seq(true, false).foreach { coalesce =>
           partitionSizes(dataSkewed, coalesce).foreach { partitionSize =>
             checkOrderedDistributionAndSortWithSameExprs(
-              cmd,
-              None,
-              partitionSize,
-              distributionStrictlyRequired,
-              dataSkewed,
-              coalesce)
+              cmd, None, partitionSize, distributionStrictlyRequired, dataSkewed, coalesce)
           }
         }
       }
@@ -161,7 +157,8 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       dataSkewed: Boolean = false,
       coalesce: Boolean = false): Unit = {
     val tableOrdering = Array[SortOrder](
-      sort(FieldReference("data"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+      sort(FieldReference("data"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
+    )
     val tableDistribution = Distributions.ordered(tableOrdering)
 
     val writeOrdering = Seq(
@@ -169,7 +166,9 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
         attr("data"),
         catalyst.expressions.Ascending,
         catalyst.expressions.NullsFirst,
-        Seq.empty))
+        Seq.empty
+      )
+    )
     val writePartitioning = if (!coalesce) {
       orderedWritePartitioning(writeOrdering, targetNumPartitions)
     } else {
@@ -247,8 +246,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     checkClusteredDistributionAndSortWithSameExprs(microBatchPrefix + "update", Some(10))
   }
 
-  test(
-    "clustered distribution and sort with same exprs with numPartitions: micro-batch complete") {
+  test("clustered distribution and sort with same exprs with numPartitions: micro-batch complete") {
     checkClusteredDistributionAndSortWithSameExprs(microBatchPrefix + "complete", Some(10))
   }
 
@@ -258,12 +256,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
         Seq(true, false).foreach { coalesce =>
           partitionSizes(dataSkewed, coalesce).foreach { partitionSize =>
             checkClusteredDistributionAndSortWithSameExprs(
-              cmd,
-              None,
-              partitionSize,
-              distributionStrictlyRequired,
-              dataSkewed,
-              coalesce)
+              cmd, None, partitionSize, distributionStrictlyRequired, dataSkewed, coalesce)
           }
         }
       }
@@ -279,7 +272,8 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       coalesce: Boolean = false): Unit = {
     val tableOrdering = Array[SortOrder](
       sort(FieldReference("data"), SortDirection.DESCENDING, NullOrdering.NULLS_FIRST),
-      sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+      sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
+    )
     val clustering = Array[Expression](FieldReference("data"), FieldReference("id"))
     val tableDistribution = Distributions.clustered(clustering)
 
@@ -288,15 +282,18 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
         attr("data"),
         catalyst.expressions.Descending,
         catalyst.expressions.NullsFirst,
-        Seq.empty),
+        Seq.empty
+      ),
       catalyst.expressions.SortOrder(
         attr("id"),
         catalyst.expressions.Ascending,
         catalyst.expressions.NullsFirst,
-        Seq.empty))
+        Seq.empty
+      )
+    )
     val writePartitioningExprs = Seq(attr("data"), attr("id"))
-    val writePartitioning =
-      clusteredWritePartitioning(writePartitioningExprs, targetNumPartitions, coalesce)
+    val writePartitioning = clusteredWritePartitioning(
+      writePartitioningExprs, targetNumPartitions, coalesce)
 
     checkWriteRequirements(
       tableDistribution,
@@ -357,27 +354,23 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     checkClusteredDistributionAndSortWithExtendedExprs("overwrite", Some(10))
   }
 
-  test(
-    "clustered distribution and sort with extended exprs with numPartitions: " +
-      "overwriteDynamic") {
+  test("clustered distribution and sort with extended exprs with numPartitions: " +
+    "overwriteDynamic") {
     checkClusteredDistributionAndSortWithExtendedExprs("overwriteDynamic", Some(10))
   }
 
-  test(
-    "clustered distribution and sort with extended exprs with numPartitions: " +
-      "micro-batch append") {
+  test("clustered distribution and sort with extended exprs with numPartitions: " +
+    "micro-batch append") {
     checkClusteredDistributionAndSortWithExtendedExprs(microBatchPrefix + "append", Some(10))
   }
 
-  test(
-    "clustered distribution and sort with extended exprs with numPartitions: " +
-      "micro-batch update") {
+  test("clustered distribution and sort with extended exprs with numPartitions: " +
+    "micro-batch update") {
     checkClusteredDistributionAndSortWithExtendedExprs(microBatchPrefix + "update", Some(10))
   }
 
-  test(
-    "clustered distribution and sort with extended exprs with numPartitions: " +
-      "micro-batch complete") {
+  test("clustered distribution and sort with extended exprs with numPartitions: " +
+    "micro-batch complete") {
     checkClusteredDistributionAndSortWithExtendedExprs(microBatchPrefix + "complete", Some(10))
   }
 
@@ -387,12 +380,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
         Seq(true, false).foreach { coalesce =>
           partitionSizes(dataSkewed, coalesce).foreach { partitionSize =>
             checkClusteredDistributionAndSortWithExtendedExprs(
-              cmd,
-              None,
-              partitionSize,
-              distributionStrictlyRequired,
-              dataSkewed,
-              coalesce)
+              cmd, None, partitionSize, distributionStrictlyRequired, dataSkewed, coalesce)
           }
         }
       }
@@ -408,7 +396,8 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       coalesce: Boolean = false): Unit = {
     val tableOrdering = Array[SortOrder](
       sort(FieldReference("data"), SortDirection.DESCENDING, NullOrdering.NULLS_FIRST),
-      sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+      sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
+    )
     val clustering = Array[Expression](FieldReference("data"))
     val tableDistribution = Distributions.clustered(clustering)
 
@@ -417,15 +406,18 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
         attr("data"),
         catalyst.expressions.Descending,
         catalyst.expressions.NullsFirst,
-        Seq.empty),
+        Seq.empty
+      ),
       catalyst.expressions.SortOrder(
         attr("id"),
         catalyst.expressions.Ascending,
         catalyst.expressions.NullsFirst,
-        Seq.empty))
+        Seq.empty
+      )
+    )
     val writePartitioningExprs = Seq(attr("data"))
-    val writePartitioning =
-      clusteredWritePartitioning(writePartitioningExprs, targetNumPartitions, coalesce)
+    val writePartitioning = clusteredWritePartitioning(
+      writePartitioningExprs, targetNumPartitions, coalesce)
 
     checkWriteRequirements(
       tableDistribution,
@@ -496,7 +488,8 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       command: String,
       targetNumPartitions: Option[Int]): Unit = {
     val tableOrdering = Array[SortOrder](
-      sort(FieldReference("data"), SortDirection.DESCENDING, NullOrdering.NULLS_FIRST))
+      sort(FieldReference("data"), SortDirection.DESCENDING, NullOrdering.NULLS_FIRST)
+    )
     val tableDistribution = Distributions.unspecified()
 
     val writeOrdering = Seq(
@@ -504,7 +497,9 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
         attr("data"),
         catalyst.expressions.Descending,
         catalyst.expressions.NullsFirst,
-        Seq.empty))
+        Seq.empty
+      )
+    )
 
     val writePartitioning = UnknownPartitioning(0)
 
@@ -611,9 +606,8 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     checkOrderedDistributionAndSortWithManualGlobalSort("overwrite", Some(10))
   }
 
-  test(
-    "ordered distribution and sort with manual global sort with numPartitions: " +
-      "overwriteDynamic") {
+  test("ordered distribution and sort with manual global sort with numPartitions: " +
+    "overwriteDynamic") {
     checkOrderedDistributionAndSortWithManualGlobalSort("overwriteDynamic", Some(10))
   }
 
@@ -623,12 +617,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
         Seq(true, false).foreach { coalesce =>
           partitionSizes(dataSkewed, coalesce).foreach { partitionSize =>
             checkOrderedDistributionAndSortWithManualGlobalSort(
-              cmd,
-              None,
-              partitionSize,
-              distributionStrictlyRequired,
-              dataSkewed,
-              coalesce)
+              cmd, None, partitionSize, distributionStrictlyRequired, dataSkewed, coalesce)
           }
         }
       }
@@ -644,7 +633,8 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       coalesce: Boolean = false): Unit = {
     val tableOrdering = Array[SortOrder](
       sort(FieldReference("data"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
-      sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+      sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
+    )
     val tableDistribution = Distributions.ordered(tableOrdering)
 
     val writeOrdering = Seq(
@@ -652,12 +642,15 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
         attr("data"),
         catalyst.expressions.Ascending,
         catalyst.expressions.NullsFirst,
-        Seq.empty),
+        Seq.empty
+      ),
       catalyst.expressions.SortOrder(
         attr("id"),
         catalyst.expressions.Ascending,
         catalyst.expressions.NullsFirst,
-        Seq.empty))
+        Seq.empty
+      )
+    )
     val writePartitioning = if (!coalesce) {
       orderedWritePartitioning(writeOrdering, targetNumPartitions)
     } else {
@@ -694,15 +687,13 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     checkOrderedDistributionAndSortWithIncompatibleGlobalSort("append", Some(10))
   }
 
-  test(
-    "ordered distribution and sort with incompatible global sort with numPartitions: " +
-      "overwrite") {
+  test("ordered distribution and sort with incompatible global sort with numPartitions: " +
+    "overwrite") {
     checkOrderedDistributionAndSortWithIncompatibleGlobalSort("overwrite", Some(10))
   }
 
-  test(
-    "ordered distribution and sort with incompatible global sort with numPartitions: " +
-      "overwriteDynamic") {
+  test("ordered distribution and sort with incompatible global sort with numPartitions: " +
+    "overwriteDynamic") {
     checkOrderedDistributionAndSortWithIncompatibleGlobalSort("overwriteDynamic", Some(10))
   }
 
@@ -713,12 +704,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
         Seq(true, false).foreach { coalesce =>
           partitionSizes(dataSkewed, coalesce).foreach { partitionSize =>
             checkOrderedDistributionAndSortWithIncompatibleGlobalSort(
-              cmd,
-              None,
-              partitionSize,
-              distributionStrictlyRequired,
-              dataSkewed,
-              coalesce)
+              cmd, None, partitionSize, distributionStrictlyRequired, dataSkewed, coalesce)
           }
         }
       }
@@ -734,7 +720,8 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       coalesce: Boolean = false): Unit = {
     val tableOrdering = Array[SortOrder](
       sort(FieldReference("data"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
-      sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+      sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
+    )
     val tableDistribution = Distributions.ordered(tableOrdering)
 
     val writeOrdering = Seq(
@@ -742,12 +729,15 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
         attr("data"),
         catalyst.expressions.Ascending,
         catalyst.expressions.NullsFirst,
-        Seq.empty),
+        Seq.empty
+      ),
       catalyst.expressions.SortOrder(
         attr("id"),
         catalyst.expressions.Ascending,
         catalyst.expressions.NullsFirst,
-        Seq.empty))
+        Seq.empty
+      )
+    )
     val writePartitioning = if (!coalesce) {
       orderedWritePartitioning(writeOrdering, targetNumPartitions)
     } else {
@@ -788,9 +778,8 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     checkOrderedDistributionAndSortWithManualLocalSort("overwrite", Some(10))
   }
 
-  test(
-    "ordered distribution and sort with manual local sort with numPartitions: " +
-      "overwriteDynamic") {
+  test("ordered distribution and sort with manual local sort with numPartitions: " +
+    "overwriteDynamic") {
     checkOrderedDistributionAndSortWithManualLocalSort("overwriteDynamic", Some(10))
   }
 
@@ -800,12 +789,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
         Seq(true, false).foreach { coalesce =>
           partitionSizes(dataSkewed, coalesce).foreach { partitionSize =>
             checkOrderedDistributionAndSortWithManualLocalSort(
-              cmd,
-              None,
-              partitionSize,
-              distributionStrictlyRequired,
-              dataSkewed,
-              coalesce)
+              cmd, None, partitionSize, distributionStrictlyRequired, dataSkewed, coalesce)
           }
         }
       }
@@ -821,7 +805,8 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       coalesce: Boolean = false): Unit = {
     val tableOrdering = Array[SortOrder](
       sort(FieldReference("data"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
-      sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+      sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
+    )
     val tableDistribution = Distributions.ordered(tableOrdering)
 
     val writeOrdering = Seq(
@@ -829,12 +814,15 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
         attr("data"),
         catalyst.expressions.Ascending,
         catalyst.expressions.NullsFirst,
-        Seq.empty),
+        Seq.empty
+      ),
       catalyst.expressions.SortOrder(
         attr("id"),
         catalyst.expressions.Ascending,
         catalyst.expressions.NullsFirst,
-        Seq.empty))
+        Seq.empty
+      )
+    )
     val writePartitioning = if (!coalesce) {
       orderedWritePartitioning(writeOrdering, targetNumPartitions)
     } else {
@@ -867,20 +855,17 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     checkClusteredDistributionAndLocalSortWithManualGlobalSortInVariousCases("overwriteDynamic")
   }
 
-  test(
-    "clustered distribution and local sort with manual global sort with numPartitions: append") {
+  test("clustered distribution and local sort with manual global sort with numPartitions: append") {
     checkClusteredDistributionAndLocalSortWithManualGlobalSort("append", Some(10))
   }
 
-  test(
-    "clustered distribution and local sort with manual global sort with numPartitions: " +
-      "overwrite") {
+  test("clustered distribution and local sort with manual global sort with numPartitions: " +
+    "overwrite") {
     checkClusteredDistributionAndLocalSortWithManualGlobalSort("overwrite", Some(10))
   }
 
-  test(
-    "clustered distribution and local sort with manual global sort with numPartitions: " +
-      "overwriteDynamic") {
+  test("clustered distribution and local sort with manual global sort with numPartitions: " +
+    "overwriteDynamic") {
     checkClusteredDistributionAndLocalSortWithManualGlobalSort("overwriteDynamic", Some(10))
   }
 
@@ -891,12 +876,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
         Seq(true, false).foreach { coalesce =>
           partitionSizes(dataSkewed, coalesce).foreach { partitionSize =>
             checkClusteredDistributionAndLocalSortWithManualGlobalSort(
-              cmd,
-              None,
-              partitionSize,
-              distributionStrictlyRequired,
-              dataSkewed,
-              coalesce)
+              cmd, None, partitionSize, distributionStrictlyRequired, dataSkewed, coalesce)
           }
         }
       }
@@ -912,7 +892,8 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       coalesce: Boolean = false): Unit = {
     val tableOrdering = Array[SortOrder](
       sort(FieldReference("data"), SortDirection.DESCENDING, NullOrdering.NULLS_FIRST),
-      sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+      sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
+    )
     val tableDistribution = Distributions.clustered(Array(FieldReference("data")))
 
     val writeOrdering = Seq(
@@ -920,15 +901,18 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
         attr("data"),
         catalyst.expressions.Descending,
         catalyst.expressions.NullsFirst,
-        Seq.empty),
+        Seq.empty
+      ),
       catalyst.expressions.SortOrder(
         attr("id"),
         catalyst.expressions.Ascending,
         catalyst.expressions.NullsFirst,
-        Seq.empty))
+        Seq.empty
+      )
+    )
     val writePartitioningExprs = Seq(attr("data"))
-    val writePartitioning =
-      clusteredWritePartitioning(writePartitioningExprs, targetNumPartitions, coalesce)
+    val writePartitioning = clusteredWritePartitioning(
+      writePartitioningExprs, targetNumPartitions, coalesce)
 
     checkWriteRequirements(
       tableDistribution,
@@ -956,20 +940,17 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     checkClusteredDistributionAndLocalSortWithManualLocalSortInVariousCases("overwriteDynamic")
   }
 
-  test(
-    "clustered distribution and local sort with manual local sort with numPartitions: append") {
+  test("clustered distribution and local sort with manual local sort with numPartitions: append") {
     checkClusteredDistributionAndLocalSortWithManualLocalSort("append", Some(10))
   }
 
-  test(
-    "clustered distribution and local sort with manual local sort with numPartitions: " +
-      "overwrite") {
+  test("clustered distribution and local sort with manual local sort with numPartitions: " +
+    "overwrite") {
     checkClusteredDistributionAndLocalSortWithManualLocalSort("overwrite", Some(10))
   }
 
-  test(
-    "clustered distribution and local sort with manual local sort with numPartitions: " +
-      "overwriteDynamic") {
+  test("clustered distribution and local sort with manual local sort with numPartitions: " +
+    "overwriteDynamic") {
     checkClusteredDistributionAndLocalSortWithManualLocalSort("overwriteDynamic", Some(10))
   }
 
@@ -980,12 +961,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
         Seq(true, false).foreach { coalesce =>
           partitionSizes(dataSkewed, coalesce).foreach { partitionSize =>
             checkClusteredDistributionAndLocalSortWithManualLocalSort(
-              cmd,
-              None,
-              partitionSize,
-              distributionStrictlyRequired,
-              dataSkewed,
-              coalesce)
+              cmd, None, partitionSize, distributionStrictlyRequired, dataSkewed, coalesce)
           }
         }
       }
@@ -1001,7 +977,8 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       coalesce: Boolean = false): Unit = {
     val tableOrdering = Array[SortOrder](
       sort(FieldReference("data"), SortDirection.DESCENDING, NullOrdering.NULLS_FIRST),
-      sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+      sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
+    )
     val tableDistribution = Distributions.clustered(Array(FieldReference("data")))
 
     val writeOrdering = Seq(
@@ -1009,15 +986,18 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
         attr("data"),
         catalyst.expressions.Descending,
         catalyst.expressions.NullsFirst,
-        Seq.empty),
+        Seq.empty
+      ),
       catalyst.expressions.SortOrder(
         attr("id"),
         catalyst.expressions.Ascending,
         catalyst.expressions.NullsFirst,
-        Seq.empty))
+        Seq.empty
+      )
+    )
     val writePartitioningExprs = Seq(attr("data"))
-    val writePartitioning =
-      clusteredWritePartitioning(writePartitioningExprs, targetNumPartitions, coalesce)
+    val writePartitioning = clusteredWritePartitioning(
+      writePartitioningExprs, targetNumPartitions, coalesce)
 
     checkWriteRequirements(
       tableDistribution,
@@ -1035,24 +1015,19 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
 
   test("continuous mode does not support write distribution and ordering") {
     val ordering = Array[SortOrder](
-      sort(FieldReference("data"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+      sort(FieldReference("data"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
+    )
     val distribution = Distributions.ordered(ordering)
 
-    catalog.createTable(
-      ident,
-      columns,
-      Array.empty,
-      emptyProps,
-      distribution,
-      ordering,
-      None,
-      None)
+    catalog.createTable(ident, columns, Array.empty, emptyProps,
+      distribution, ordering, None, None)
 
     withTempDir { checkpointDir =>
       val inputData = ContinuousMemoryStream[(Long, String, Date)]
       val inputDF = inputData.toDF().toDF("id", "data", "day")
 
-      val writer = inputDF.writeStream
+      val writer = inputDF
+        .writeStream
         .trigger(Trigger.Continuous(100))
         .option("checkpointLocation", checkpointDir.getAbsolutePath)
         .outputMode("append")
@@ -1079,7 +1054,8 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       val inputData = ContinuousMemoryStream[(Long, String, Date)]
       val inputDF = inputData.toDF().toDF("id", "data", "day")
 
-      val writer = inputDF.writeStream
+      val writer = inputDF
+        .writeStream
         .trigger(Trigger.Continuous(100))
         .option("checkpointLocation", checkpointDir.getAbsolutePath)
         .outputMode("append")
@@ -1096,7 +1072,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       checkAnswer(
         spark.table(tableNameAsString),
         Row(1, "a", Date.valueOf("2021-01-01")) ::
-          Row(2, "b", Date.valueOf("2022-02-02")) :: Nil)
+        Row(2, "b", Date.valueOf("2022-02-02")) :: Nil)
     }
   }
 
@@ -1116,31 +1092,24 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     checkClusteredDistributionAndLocalSortContainsV2Function("append", Some(10))
   }
 
-  test(
-    "clustered distribution and local sort contains v2 function with numPartitions: " +
-      "overwrite") {
+  test("clustered distribution and local sort contains v2 function with numPartitions: " +
+    "overwrite") {
     checkClusteredDistributionAndLocalSortContainsV2Function("overwrite", Some(10))
   }
 
-  test(
-    "clustered distribution and local sort contains v2 function with numPartitions: " +
-      "overwriteDynamic") {
+  test("clustered distribution and local sort contains v2 function with numPartitions: " +
+    "overwriteDynamic") {
     checkClusteredDistributionAndLocalSortContainsV2Function("overwriteDynamic", Some(10))
   }
 
   private def checkClusteredDistributionAndLocalSortContainsV2FunctionInVariousCases(
-      cmd: String): Unit = {
+    cmd: String): Unit = {
     Seq(true, false).foreach { distributionStrictlyRequired =>
       Seq(true, false).foreach { dataSkewed =>
         Seq(true, false).foreach { coalesce =>
           partitionSizes(dataSkewed, coalesce).foreach { partitionSize =>
             checkClusteredDistributionAndLocalSortContainsV2Function(
-              cmd,
-              None,
-              partitionSize,
-              distributionStrictlyRequired,
-              dataSkewed,
-              coalesce)
+              cmd, None, partitionSize, distributionStrictlyRequired, dataSkewed, coalesce)
           }
         }
       }
@@ -1155,34 +1124,52 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       dataSkewed: Boolean = false,
       coalesce: Boolean = false): Unit = {
 
-    val stringSelfTransform = ApplyTransform("string_self", Seq(FieldReference("data")))
-    val truncateTransform =
-      ApplyTransform("truncate", Seq(stringSelfTransform, LiteralValue(2, IntegerType)))
-    val yearsTransform = ApplyTransform("years", Seq(FieldReference("day")))
+    val stringSelfTransform = ApplyTransform(
+      "string_self",
+      Seq(FieldReference("data")))
+    val truncateTransform = ApplyTransform(
+      "truncate",
+      Seq(stringSelfTransform, LiteralValue(2, IntegerType)))
+    val yearsTransform = ApplyTransform(
+      "years",
+      Seq(FieldReference("day")))
 
     val tableOrdering = Array[SortOrder](
-      sort(stringSelfTransform, SortDirection.DESCENDING, NullOrdering.NULLS_FIRST),
+      sort(
+        stringSelfTransform,
+        SortDirection.DESCENDING,
+        NullOrdering.NULLS_FIRST),
       sort(
         BucketTransform(LiteralValue(10, IntegerType), Seq(FieldReference("id"))),
         SortDirection.DESCENDING,
         NullOrdering.NULLS_FIRST),
-      sort(yearsTransform, SortDirection.DESCENDING, NullOrdering.NULLS_FIRST))
+      sort(
+        yearsTransform,
+        SortDirection.DESCENDING,
+        NullOrdering.NULLS_FIRST)
+    )
     val tableDistribution = Distributions.clustered(Array(truncateTransform))
 
-    val stringSelfExpr = ApplyFunctionExpression(StringSelfFunction, Seq(attr("data")))
-    val truncateExpr = ApplyFunctionExpression(TruncateFunction, Seq(stringSelfExpr, Literal(2)))
+    val stringSelfExpr = ApplyFunctionExpression(
+      StringSelfFunction,
+      Seq(attr("data")))
+    val truncateExpr = ApplyFunctionExpression(
+      TruncateFunction,
+      Seq(stringSelfExpr, Literal(2)))
 
     val writeOrdering = Seq(
       catalyst.expressions.SortOrder(
         stringSelfExpr,
         catalyst.expressions.Descending,
         catalyst.expressions.NullsFirst,
-        Seq.empty),
+        Seq.empty
+      ),
       catalyst.expressions.SortOrder(
         ApplyFunctionExpression(BucketFunction, Seq(Literal(10), attr("id"))),
         catalyst.expressions.Descending,
         catalyst.expressions.NullsFirst,
-        Seq.empty),
+        Seq.empty
+      ),
       catalyst.expressions.SortOrder(
         Invoke(
           Literal.create(YearsFunction, ObjectType(YearsFunction.getClass)),
@@ -1193,11 +1180,13 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
           propagateNull = false),
         catalyst.expressions.Descending,
         catalyst.expressions.NullsFirst,
-        Seq.empty))
+        Seq.empty
+      )
+    )
 
     val writePartitioningExprs = Seq(truncateExpr)
-    val writePartitioning =
-      clusteredWritePartitioning(writePartitioningExprs, targetNumPartitions, coalesce)
+    val writePartitioning = clusteredWritePartitioning(
+      writePartitioningExprs, targetNumPartitions, coalesce)
 
     checkWriteRequirements(
       tableDistribution,
@@ -1271,33 +1260,21 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       coalesce: Boolean = false): Unit = {
     // scalastyle:on argcount
 
-    catalog.createTable(
-      ident,
-      columns,
-      Array.empty,
-      emptyProps,
-      tableDistribution,
-      tableOrdering,
-      tableNumPartitions,
-      tablePartitionSize,
-      Array.empty,
+    catalog.createTable(ident, columns, Array.empty, emptyProps, tableDistribution,
+      tableOrdering, tableNumPartitions, tablePartitionSize, Array.empty,
       distributionStrictlyRequired)
 
     val df = if (!dataSkewed) {
-      spark
-        .createDataFrame(
-          Seq(
-            (1, "a", Date.valueOf("2021-01-01")),
-            (2, "b", Date.valueOf("2022-02-02")),
-            (3, "c", Date.valueOf("2023-03-03"))))
-        .toDF("id", "data", "day")
+      spark.createDataFrame(Seq(
+        (1, "a", Date.valueOf("2021-01-01")),
+        (2, "b", Date.valueOf("2022-02-02")),
+        (3, "c", Date.valueOf("2023-03-03")))
+      ).toDF("id", "data", "day")
     } else {
-      spark.sparkContext
-        .parallelize(
-          (1 to 10).map { i =>
-            (if (i > 4) 5 else i, i.toString, Date.valueOf(s"${2020 + i}-$i-$i"))
-          },
-          3)
+      spark.sparkContext.parallelize(
+        (1 to 10).map {
+          i => (if (i > 4) 5 else i, i.toString, Date.valueOf(s"${2020 + i}-$i-$i"))
+        }, 3)
         .toDF("id", "data", "day")
     }
     val writer = writeTransform(df).writeTo(tableNameAsString)
@@ -1326,17 +1303,14 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
           SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1") {
 
           val executedPlan = executeCommand()
-          val read = collect(executedPlan) { case r: AQEShuffleReadExec =>
-            r
+          val read = collect(executedPlan) {
+            case r: AQEShuffleReadExec => r
           }
           assert(read.size == 1)
           assert(read.head.partitionSpecs.size == 1)
           checkPartitioningAndOrdering(
             // num of partition in expectedWritePartitioning is 1
-            executedPlan,
-            expectedWritePartitioning,
-            expectedWriteOrdering,
-            1)
+            executedPlan, expectedWritePartitioning, expectedWriteOrdering, 1)
         }
       } else {
         // if the partition size is configured for the table, set the SQL conf to something big
@@ -1352,8 +1326,8 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
             SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> defaultAdvisoryPartitionSize,
             SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1") {
             val executedPlan = executeCommand()
-            val read = collect(executedPlan) { case r: AQEShuffleReadExec =>
-              r
+            val read = collect(executedPlan) {
+              case r: AQEShuffleReadExec => r
             }
             assert(read.size == 1)
             // skew data: 144, 88, 88, 144, 80
@@ -1361,20 +1335,14 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
             assert(read.head.partitionSpecs.size >= 7)
 
             checkPartitioningAndOrdering(
-              executedPlan,
-              expectedWritePartitioning,
-              expectedWriteOrdering,
-              1,
-              true)
+              executedPlan, expectedWritePartitioning, expectedWriteOrdering, 1, true)
           }
         } else {
-          withSQLConf(SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false") {
+          withSQLConf(
+            SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false") {
             val executedPlan = executeCommand()
             checkPartitioningAndOrdering(
-              executedPlan,
-              expectedWritePartitioning,
-              expectedWriteOrdering,
-              1)
+              executedPlan, expectedWritePartitioning, expectedWriteOrdering, 1)
           }
         }
       }
@@ -1395,16 +1363,8 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       outputMode: String = "append",
       expectAnalysisException: Boolean = false): Unit = {
 
-    catalog.createTable(
-      ident,
-      columns,
-      Array.empty,
-      emptyProps,
-      tableDistribution,
-      tableOrdering,
-      tableNumPartitions,
-      tablePartitionSize,
-      Array.empty)
+    catalog.createTable(ident, columns, Array.empty, emptyProps, tableDistribution,
+      tableOrdering, tableNumPartitions, tablePartitionSize, Array.empty)
 
     withTempDir { checkpointDir =>
       val inputData = MemoryStream[(Long, String, Date)]
@@ -1424,7 +1384,8 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
               $"max(day)".cast("date").as("day"))
       }
 
-      val writer = writeTransform(queryDF).writeStream
+      val writer = writeTransform(queryDF)
+        .writeStream
         .option("checkpointLocation", checkpointDir.getAbsolutePath)
         .outputMode(outputMode)
 
@@ -1459,10 +1420,10 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
         val expectedRows = outputMode match {
           case "append" | "update" =>
             Row(1, "a", Date.valueOf("2021-01-01")) ::
-              Row(2, "b", Date.valueOf("2022-02-02")) :: Nil
+            Row(2, "b", Date.valueOf("2022-02-02")) :: Nil
           case "complete" =>
             Row(1, "1", Date.valueOf("2021-01-01")) ::
-              Row(2, "1", Date.valueOf("2022-02-02")) :: Nil
+            Row(2, "1", Date.valueOf("2022-02-02")) :: Nil
         }
         checkAnswer(spark.table(tableNameAsString), expectedRows)
       }
@@ -1502,9 +1463,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       assert(actualPartitioning.numPartitions > conf.numShufflePartitions)
     } else {
       (actualPartitioning, expectedPartitioning) match {
-        case (
-              actual: catalyst.expressions.Expression,
-              expected: catalyst.expressions.Expression) =>
+        case (actual: catalyst.expressions.Expression, expected: catalyst.expressions.Expression) =>
           assert(actual semanticEquals expected, "partitioning must match")
         case (actual, expected) =>
           assert(actual == expected, "partitioning must match")
@@ -1527,10 +1486,8 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
         executedPlan = qe.executedPlan
       }
-      override def onFailure(
-          funcName: String,
-          qe: QueryExecution,
-          exception: Exception): Unit = {}
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
+      }
     }
     spark.listenerManager.register(listener)
 
@@ -1556,13 +1513,11 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       writePartitioningExprs: Seq[catalyst.expressions.Expression],
       targetNumPartitions: Option[Int],
       coalesce: Boolean): physical.Partitioning = {
-    val partitioning = HashPartitioning(
-      writePartitioningExprs,
-      targetNumPartitions.getOrElse(conf.numShufflePartitions))
-    if (coalesce) {
+    val partitioning = HashPartitioning(writePartitioningExprs,
+        targetNumPartitions.getOrElse(conf.numShufflePartitions))
+    if (coalesce)  {
       CoalescedHashPartitioning(
-        partitioning,
-        Seq(CoalescedBoundary(0, partitioning.numPartitions)))
+        partitioning, Seq(CoalescedBoundary(0, partitioning.numPartitions)))
     } else {
       partitioning
     }

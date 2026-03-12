@@ -54,8 +54,7 @@ class SharedStateSuite extends SharedSparkSession {
   }
 
   test("Default database does not exist") {
-    SQLConf.get.setConfString(
-      "spark.sql.catalog.spark_catalog.defaultDatabase",
+    SQLConf.get.setConfString("spark.sql.catalog.spark_catalog.defaultDatabase",
       "default_database_not_exists")
 
     checkError(
@@ -63,10 +62,10 @@ class SharedStateSuite extends SharedSparkSession {
         spark.sharedState.externalCatalog
       },
       condition = "DEFAULT_DATABASE_NOT_EXISTS",
-      parameters = Map("defaultDatabase" -> "default_database_not_exists"))
+      parameters = Map("defaultDatabase" -> "default_database_not_exists")
+    )
 
-    SQLConf.get.setConfString(
-      "spark.sql.catalog.spark_catalog.defaultDatabase",
+    SQLConf.get.setConfString("spark.sql.catalog.spark_catalog.defaultDatabase",
       SessionCatalog.DEFAULT_DATABASE)
   }
 }

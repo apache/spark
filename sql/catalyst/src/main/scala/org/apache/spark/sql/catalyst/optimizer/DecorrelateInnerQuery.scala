@@ -30,27 +30,33 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.collection.Utils
 
 /**
- * Decorrelate the inner query by eliminating outer references and create domain joins. The
- * implementation is based on the paper: Unnesting Arbitrary Queries by Thomas Neumann and Alfons
- * Kemper. https://dl.gi.de/handle/20.500.12116/2418.
+ * Decorrelate the inner query by eliminating outer references and create domain joins.
+ * The implementation is based on the paper: Unnesting Arbitrary Queries by Thomas Neumann
+ * and Alfons Kemper. https://dl.gi.de/handle/20.500.12116/2418.
  *
- * A correlated subquery can be viewed as a "dependent" nested loop join between the outer and the
- * inner query. For each row produced by the outer query, we bind the [[OuterReference]]s in in
- * the inner query with the corresponding values in the row, and then evaluate the inner query.
+ * A correlated subquery can be viewed as a "dependent" nested loop join between the outer and
+ * the inner query. For each row produced by the outer query, we bind the [[OuterReference]]s in
+ * in the inner query with the corresponding values in the row, and then evaluate the inner query.
  *
- * Dependent Join :- Outer Query +- Inner Query
+ * Dependent Join
+ * :- Outer Query
+ * +- Inner Query
  *
  * If the [[OuterReference]]s are bound to the same value, the inner query will return the same
- * result. Based on this, we can reduce the times to evaluate the inner query by first getting all
- * distinct values of the [[OuterReference]]s.
+ * result. Based on this, we can reduce the times to evaluate the inner query by first getting
+ * all distinct values of the [[OuterReference]]s.
  *
- * Normal Join :- Outer Query +- Dependent Join :- Inner Query +- Distinct Aggregate (outer_ref1,
- * outer_ref2, ...) +- Outer Query
+ * Normal Join
+ * :- Outer Query
+ * +- Dependent Join
+ *    :- Inner Query
+ *    +- Distinct Aggregate (outer_ref1, outer_ref2, ...)
+ *       +- Outer Query
  *
  * The distinct aggregate of the outer references is called a "domain", and the dependent join
  * between the inner query and the domain is called a "domain join". We need to push down the
- * domain join through the inner query until there is no outer reference in the sub-tree and the
- * domain join will turn into a normal join.
+ * domain join through the inner query until there is no outer reference in the sub-tree and
+ * the domain join will turn into a normal join.
  *
  * The decorrelation function returns a new query plan with optional placeholder [[DomainJoins]]s
  * added and a list of join conditions with the outer query. [[DomainJoin]]s need to be rewritten
@@ -60,8 +66,9 @@ import org.apache.spark.util.collection.Utils
  *
  * SELECT (SELECT MIN(b) FROM t1 WHERE t2.c = t1.a) FROM t2
  *
- * Aggregate [] [min(b)] Aggregate [a] [min(b), a] +- Filter (outer(c) = a) => +- Relation [t1] +-
- * Relation [t1]
+ * Aggregate [] [min(b)]            Aggregate [a] [min(b), a]
+ * +- Filter (outer(c) = a)   =>   +- Relation [t1]
+ *    +- Relation [t1]
  *
  * Join conditions: [c = a]
  *
@@ -69,26 +76,32 @@ import org.apache.spark.util.collection.Utils
  *
  * SELECT (SELECT MIN(b) FROM t1 WHERE t2.c > t1.a) FROM t2
  *
- * Aggregate [] [min(b)] Aggregate [c'] [min(b), c'] +- Filter (outer(c) > a) => +- Filter (c' >
- * a) +- Relation [t1] +- DomainJoin [c'] +- Relation [t1]
+ * Aggregate [] [min(b)]            Aggregate [c'] [min(b), c']
+ * +- Filter (outer(c) > a)   =>   +- Filter (c' > a)
+ *    +- Relation [t1]                  +- DomainJoin [c']
+ *                                         +- Relation [t1]
  *
  * Join conditions: [c <=> c']
  */
 object DecorrelateInnerQuery extends PredicateHelper {
 
   /**
-   * Check if an expression contains any attribute. Note OuterReference is a leaf node and will
-   * not be found here.
+   * Check if an expression contains any attribute. Note OuterReference is a
+   * leaf node and will not be found here.
    */
   private def containsAttribute(expression: Expression): Boolean = {
     expression.exists(_.isInstanceOf[Attribute])
   }
 
   /**
-   * Check if an expression can be pulled up over an [[Aggregate]] without changing the semantics
-   * of the plan. The expression must be an equality predicate that guarantees one-to-one mapping
-   * between inner and outer attributes. For example: (a = outer(c)) -> true (a > outer(c)) ->
-   * false (a + b = outer(c)) -> false (a = outer(c) - b) -> false
+   * Check if an expression can be pulled up over an [[Aggregate]] without changing the
+   * semantics of the plan. The expression must be an equality predicate that guarantees
+   * one-to-one mapping between inner and outer attributes.
+   * For example:
+   *   (a = outer(c)) -> true
+   *   (a > outer(c)) -> false
+   *   (a + b = outer(c)) -> false
+   *   (a = outer(c) - b) -> false
    */
   def canPullUpOverAgg(expression: Expression): Boolean = {
     def isSupported(e: Expression): Boolean = e match {
@@ -109,16 +122,15 @@ object DecorrelateInnerQuery extends PredicateHelper {
   }
 
   /**
-   * Collect outer references in an expressions that are in the output attributes of the outer
-   * plan.
+   * Collect outer references in an expressions that are in the output attributes of the outer plan.
    */
   private def collectOuterReferences(expression: Expression): AttributeSet = {
     AttributeSet(expression.collect { case o: OuterReference => o.toAttribute })
   }
 
   /**
-   * Collect outer references in a sequence of expressions that are in the output attributes of
-   * the outer plan.
+   * Collect outer references in a sequence of expressions that are in the output attributes
+   * of the outer plan.
    */
   private def collectOuterReferences(expressions: Seq[Expression]): AttributeSet = {
     AttributeSet.fromAttributeSets(expressions.map(collectOuterReferences))
@@ -128,14 +140,14 @@ object DecorrelateInnerQuery extends PredicateHelper {
    * Collect outer references in all expressions in a plan tree.
    */
   private def collectOuterReferencesInPlanTree(plan: LogicalPlan): AttributeSet = {
-    AttributeSet(plan.flatMap(_.expressions.flatMap(_.collect { case o: OuterReference =>
-      o.toAttribute
-    })))
+    AttributeSet(plan.flatMap(
+      _.expressions.flatMap(
+        _.collect { case o: OuterReference => o.toAttribute })))
   }
 
   /**
-   * Build a mapping between outer references with equivalent inner query attributes. E.g.
-   * [outer(a) = x, y = outer(b), outer(c) = z + 1] => {a -> x, b -> y}
+   * Build a mapping between outer references with equivalent inner query attributes.
+   * E.g. [outer(a) = x, y = outer(b), outer(c) = z + 1] => {a -> x, b -> y}
    */
   private def collectEquivalentOuterReferences(
       expressions: Seq[Expression]): AttributeMap[Attribute] = {
@@ -151,16 +163,14 @@ object DecorrelateInnerQuery extends PredicateHelper {
   private def replaceOuterReference[E <: Expression](
       expression: E,
       outerReferenceMap: AttributeMap[Attribute]): E = {
-    expression
-      .transformWithPruning(_.containsPattern(OUTER_REFERENCE)) { case o: OuterReference =>
-        outerReferenceMap.getOrElse(o.toAttribute, o)
-      }
-      .asInstanceOf[E]
+    expression.transformWithPruning(_.containsPattern(OUTER_REFERENCE)) {
+      case o: OuterReference => outerReferenceMap.getOrElse(o.toAttribute, o)
+    }.asInstanceOf[E]
   }
 
   /**
-   * Replace all outer references in the given expressions using the expressions in the outer
-   * reference map.
+   * Replace all outer references in the given expressions using the expressions in the
+   * outer reference map.
    */
   private def replaceOuterReferences[E <: Expression](
       expressions: Seq[E],
@@ -169,8 +179,8 @@ object DecorrelateInnerQuery extends PredicateHelper {
   }
 
   /**
-   * Replace all outer references in the given named expressions and keep the output attributes
-   * unchanged.
+   * Replace all outer references in the given named expressions and keep the output
+   * attributes unchanged.
    */
   private def replaceOuterInNamedExpressions(
       expressions: Seq[NamedExpression],
@@ -186,8 +196,8 @@ object DecorrelateInnerQuery extends PredicateHelper {
   }
 
   /**
-   * Return all references that are presented in the join conditions but not in the output of the
-   * given named expressions.
+   * Return all references that are presented in the join conditions but not in the output
+   * of the given named expressions.
    */
   private def missingReferences(
       namedExpressions: Seq[NamedExpression],
@@ -197,9 +207,9 @@ object DecorrelateInnerQuery extends PredicateHelper {
   }
 
   /**
-   * Deduplicate the inner and the outer query attributes and return an aliased subquery plan and
-   * join conditions if duplicates are found. Duplicated attributes can break the structural
-   * integrity when joining the inner and outer plan together.
+   * Deduplicate the inner and the outer query attributes and return an aliased
+   * subquery plan and join conditions if duplicates are found. Duplicated attributes
+   * can break the structural integrity when joining the inner and outer plan together.
    */
   def deduplicate(
       innerPlan: LogicalPlan,
@@ -214,8 +224,8 @@ object DecorrelateInnerQuery extends PredicateHelper {
         aliasMap.getOrElse(ref, ref)
       }
       val aliasedProjection = Project(aliasedExpressions, innerPlan)
-      val aliasedConditions = conditions.map(_.transform { case ref: Attribute =>
-        aliasMap.getOrElse(ref, ref).toAttribute
+      val aliasedConditions = conditions.map(_.transform {
+        case ref: Attribute => aliasMap.getOrElse(ref, ref).toAttribute
       })
       (aliasedProjection, aliasedConditions)
     } else {
@@ -224,8 +234,8 @@ object DecorrelateInnerQuery extends PredicateHelper {
   }
 
   /**
-   * Build a mapping between domain attributes and corresponding outer query expressions using the
-   * join conditions.
+   * Build a mapping between domain attributes and corresponding outer query expressions
+   * using the join conditions.
    */
   private def buildDomainAttrMap(
       conditions: Seq[Expression],
@@ -250,26 +260,29 @@ object DecorrelateInnerQuery extends PredicateHelper {
    * Rewrites a domain join cond so that it can be pushed to the right side of a
    * union/intersect/except operator.
    *
-   * Example: Take a query like: select * from t0 join lateral ( select a from t1 where b < t0.x
-   * union all select b from t2 where c < t0.y)
+   * Example: Take a query like:
+   * select * from t0 join lateral (
+   *   select a from t1 where b < t0.x
+   *   union all
+   *   select b from t2 where c < t0.y)
    *
    * over tables t0(x, y), t1(a), t2(b).
    *
-   * Step 1: After DecorrelateInnerQuery runs to introduce DomainJoins, we have outer table t0
-   * with attributes [x#1, y#2] and the subquery is a Union where
-   *   - the left side has DomainJoin [t0.x#4, t0.y#5] and output [t1.a#3, t0.x#4, t0.y#5]
-   *   - the right side has DomainJoin [t0.x#7, t0.y#8] and output [t2.b#6, t0.x#7, t0.y#8] Here
-   *     all the x and y attributes are from t0, but they are different instances from different
-   *     joins of t0.
+   * Step 1: After DecorrelateInnerQuery runs to introduce DomainJoins,
+   * we have outer table t0 with attributes [x#1, y#2] and the subquery is a Union where
+   * - the left side has DomainJoin [t0.x#4, t0.y#5] and output [t1.a#3, t0.x#4, t0.y#5]
+   * - the right side has DomainJoin [t0.x#7, t0.y#8] and output [t2.b#6, t0.x#7, t0.y#8]
+   * Here all the x and y attributes are from t0, but they are different instances from
+   * different joins of t0.
    *
    * The domain join conditions are x#4 <=> x#1 and y#5 <=> y#2, i.e. it joins the attributes from
    * the original outer table with the attributes coming out of the DomainJoin of the left side,
    * because the output of a set op uses the attribute names from the left side.
    *
-   * Step 2: rewriteDomainJoins runs, in which we arrive at this function. In this function, we
-   * construct the domain join conditions for the children of the Union. For the left side, those
-   * remain unchanged, while for the right side they are remapped to use the attribute names of
-   * the right-side DomainJoin: x#7 <=> x#1 and y#8 <=> y#2.
+   * Step 2: rewriteDomainJoins runs, in which we arrive at this function.
+   * In this function, we construct the domain join conditions for the children of the Union.
+   * For the left side, those remain unchanged, while for the right side they are remapped to
+   * use the attribute names of the right-side DomainJoin: x#7 <=> x#1 and y#8 <=> y#2.
    */
   def pushDomainConditionsThroughSetOperation(
       conditions: Seq[Expression],
@@ -302,48 +315,55 @@ object DecorrelateInnerQuery extends PredicateHelper {
    * join cond, using the mapping between left and right sides in the semi/anti join cond.
    *
    * After DecorrelateInnerQuery, the domain join conds reference the output names of the
-   * INTERSECT/EXCEPT, which come from the left side. When rewriting the DomainJoin in the right
-   * child, we need to remap the domain attribute names to account for the different names in the
-   * left vs right child, similar to pushDomainConditionsThroughSetOperation. But after the
-   * rewrite to semi/anti join is performed, we instead need to do the remapping based on the
-   * semi/anti join cond which contains equi-joins between the left and right outputs.
+   * INTERSECT/EXCEPT, which come from the left side. When rewriting the DomainJoin in the
+   * right child, we need to remap the domain attribute names to account for the different
+   * names in the left vs right child, similar to pushDomainConditionsThroughSetOperation.
+   * But after the rewrite to semi/anti join is performed, we instead need to do the remapping
+   * based on the semi/anti join cond which contains equi-joins between the left and right
+   * outputs.
    *
-   * Example: Take a query like: select * from t0 join lateral ( select a from t1 where b < t0.x
-   * intersect distinct select b from t2 where c < t0.y)
+   * Example: Take a query like:
+   * select * from t0 join lateral (
+   *   select a from t1 where b < t0.x
+   *   intersect distinct
+   *   select b from t2 where c < t0.y)
    *
    * over tables t0(x, y), t1(a), t2(b).
    *
-   * Step 1 (this is the same as the Union case described above): After DecorrelateInnerQuery runs
-   * to introduce DomainJoins, we have outer table t0 with attributes [x#1, y#2] and the subquery
-   * is a Intersect where
-   *   - the left side has DomainJoin [t0.x#4, t0.y#5] and output [t1.a#3, t0.x#4, t0.y#5]
-   *   - the right side has DomainJoin [t0.x#7, t0.y#8] and output [t2.b#6, t0.x#7, t0.y#8] Here
-   *     all the x and y attributes are from t0, but they are different instances from different
-   *     joins of t0.
+   * Step 1 (this is the same as the Union case described above):
+   * After DecorrelateInnerQuery runs to introduce DomainJoins,
+   * we have outer table t0 with attributes [x#1, y#2] and the subquery is a Intersect where
+   * - the left side has DomainJoin [t0.x#4, t0.y#5] and output [t1.a#3, t0.x#4, t0.y#5]
+   * - the right side has DomainJoin [t0.x#7, t0.y#8] and output [t2.b#6, t0.x#7, t0.y#8]
+   * Here all the x and y attributes are from t0, but they are different instances from
+   * different joins of t0.
    *
    * The domain join conditions are x#4 <=> x#1 and y#5 <=> y#2, i.e. it joins the attributes from
    * the original outer table with the attributes coming out of the DomainJoin of the left side,
    * because the output of a set op uses the attribute names from the left side.
    *
-   * Step 2: ReplaceIntersectWithSemiJoin runs and transforms the Intersect to Join LeftSemi,
-   * (((a#3 <=> b#6) AND (x#4 <=> x#7)) AND (y#5 <=> y#8)) with equi-joins between the left and
-   * right outputs. For EXCEPT DISTINCT the same thing happens but with anti join in
-   * ReplaceExceptWithAntiJoin.
+   * Step 2:
+   * ReplaceIntersectWithSemiJoin runs and transforms the Intersect to
+   * Join LeftSemi, (((a#3 <=> b#6) AND (x#4 <=> x#7)) AND (y#5 <=> y#8))
+   * with equi-joins between the left and right outputs.
+   * For EXCEPT DISTINCT the same thing happens but with anti join in ReplaceExceptWithAntiJoin.
    *
-   * Step 3: rewriteDomainJoins runs, in which we arrive at this function, which uses the semijoin
-   * condition to construct the domain join cond remapping for the right side: x#7 <=> x#1 and y#8
-   * <=> y#2. These new conds together with the original domain join cond are used to rewrite the
-   * DomainJoins.
+   * Step 3:
+   * rewriteDomainJoins runs, in which we arrive at this function, which uses the
+   * semijoin condition to construct the domain join cond remapping for the right side:
+   * x#7 <=> x#1 and y#8 <=> y#2. These new conds together with the original domain join cond are
+   * used to rewrite the DomainJoins.
    *
-   * Note: This logic only applies to INTERSECT/EXCEPT DISTINCT. For INTERSECT/EXCEPT ALL, step 1
-   * is the same but instead of step 2, RewriteIntersectAll or RewriteExceptAll replace the
-   * logical Intersect/Except operator with a combination of Union, Aggregate, and Generate. Then
-   * the DomainJoin conds will go through pushDomainConditionsThroughSetOperation, not this
-   * function.
+   * Note: This logic only applies to INTERSECT/EXCEPT DISTINCT. For INTERSECT/EXCEPT ALL,
+   * step 1 is the same but instead of step 2, RewriteIntersectAll or RewriteExceptAll
+   * replace the logical Intersect/Except operator with a combination of
+   * Union, Aggregate, and Generate. Then the DomainJoin conds will go through
+   * pushDomainConditionsThroughSetOperation, not this function.
    */
   def pushDomainConditionsThroughSemiAntiJoin(
       domainJoinConditions: Seq[Expression],
-      join: Join): Seq[Expression] = {
+      join: Join
+  ) : Seq[Expression] = {
     if (join.condition.isDefined
       && SQLConf.get.getConf(SQLConf.DECORRELATE_SET_OPS_ENABLED)) {
       // The domain conds will be like leftInner <=> outer, and the semi/anti join cond will be like
@@ -353,7 +373,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
         case EqualNullSafe(joinLeft: Attribute, joinRight: Attribute) =>
           domainJoinConditions.collect {
             case EqualNullSafe(domainInner: Attribute, domainOuter: Expression)
-                if domainInner.semanticEquals(joinLeft) =>
+              if domainInner.semanticEquals(joinLeft) =>
               EqualNullSafe(joinRight, domainOuter)
           }
       }.flatten
@@ -380,11 +400,10 @@ object DecorrelateInnerQuery extends PredicateHelper {
           // and use the new join conditions to rewrite domain joins in its child. For example:
           // DomainJoin [c'] LeftOuter (a = c') with domainAttrMap: { c' -> _1 }.
           // Then the new conditions to use will be [(a = _1)].
-          assert(
-            outerJoinCondition.isDefined,
+          assert(outerJoinCondition.isDefined,
             s"LeftOuter domain join should always have the join condition defined:\n$d")
-          val newCond = outerJoinCondition.get.transform { case a: Attribute =>
-            domainAttrMap.getOrElse(a, a)
+          val newCond = outerJoinCondition.get.transform {
+            case a: Attribute => domainAttrMap.getOrElse(a, a)
           }
           // Recursively rewrite domain joins using the new conditions.
           rewriteDomainJoins(outerPlan, child, splitConjunctivePredicates(newCond))
@@ -392,8 +411,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
           // The decorrelation framework adds domain inner joins by traversing down the plan tree
           // recursively until it reaches a node that is not correlated with the outer query.
           // So the child node of a domain inner join shouldn't contain another domain join.
-          assert(
-            !child.exists(_.isInstanceOf[DomainJoin]),
+          assert(!child.exists(_.isInstanceOf[DomainJoin]),
             s"Child of a domain inner join shouldn't contain another domain join.\n$child")
           child
         case o =>
@@ -426,21 +444,17 @@ object DecorrelateInnerQuery extends PredicateHelper {
         throw SparkException.internalError(
           s"Unable to rewrite domain join with conditions: $conditions\n$d.")
       }
-    case s @ (_: Union | _: SetOperation) =>
+    case s @ (_ : Union | _: SetOperation) =>
       // Remap the domain attributes for the children of the set op - see comments on the function.
       s.mapChildren { child =>
-        rewriteDomainJoins(
-          outerPlan,
-          child,
+        rewriteDomainJoins(outerPlan, child,
           pushDomainConditionsThroughSetOperation(conditions, s, child))
       }
     case j: Join if j.joinType == LeftSemi || j.joinType == LeftAnti =>
       // For the INTERSECT/EXCEPT DISTINCT case, the set op is rewritten to a semi/anti join and we
       // need to remap the domain attributes for the right child - see comments on the function.
       j.mapChildren { child =>
-        rewriteDomainJoins(
-          outerPlan,
-          child,
+        rewriteDomainJoins(outerPlan, child,
           pushDomainConditionsThroughSemiAntiJoin(conditions, j))
       }
     case p: LogicalPlan =>
@@ -482,7 +496,8 @@ object DecorrelateInnerQuery extends PredicateHelper {
         plan: LogicalPlan,
         parentOuterReferences: AttributeSet,
         aggregated: Boolean = false,
-        underSetOp: Boolean = false): ReturnType = {
+        underSetOp: Boolean = false
+    ): ReturnType = {
       val isCorrelated = hasOuterReferences(plan)
       if (!isCorrelated) {
         // We have reached a plan without correlation to the outer plan.
@@ -509,23 +524,24 @@ object DecorrelateInnerQuery extends PredicateHelper {
           // +- InnerQuery     =>   :- InnerQuery
           //                        +- Aggregate [a1] [a1 AS a']
           //                           +- OuterQuery
-          val conditions = outerReferenceMap.map { case (o, a) =>
-            val cond = EqualNullSafe(a, OuterReference(o))
-            // SPARK-40615: Certain data types (e.g. MapType) do not support ordering, so
-            // the EqualNullSafe join condition can become unresolved.
-            if (!cond.resolved) {
-              if (!RowOrdering.isOrderable(a.dataType)) {
-                throw QueryCompilationErrors.unsupportedCorrelatedReferenceDataTypeError(
-                  expr = a,
-                  dataType = a.dataType,
-                  origin = a.origin)
-              } else {
-                throw SparkException.internalError(
-                  s"Unable to decorrelate subquery: " +
+          val conditions = outerReferenceMap.map {
+            case (o, a) =>
+              val cond = EqualNullSafe(a, OuterReference(o))
+              // SPARK-40615: Certain data types (e.g. MapType) do not support ordering, so
+              // the EqualNullSafe join condition can become unresolved.
+              if (!cond.resolved) {
+                if (!RowOrdering.isOrderable(a.dataType)) {
+                  throw QueryCompilationErrors.unsupportedCorrelatedReferenceDataTypeError(
+                    expr = a,
+                    dataType = a.dataType,
+                    origin = a.origin
+                  )
+                } else {
+                  throw SparkException.internalError(s"Unable to decorrelate subquery: " +
                     s"join condition '${cond.sql}' cannot be resolved.")
+                }
               }
-            }
-            cond
+              cond
           }
           (domainJoin, conditions.toSeq, AttributeMap(outerReferenceMap))
         }
@@ -658,8 +674,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
             // Add outer references to the PARTITION BY clause
             val partitionFields = collectedChildOuterReferences
               .filter(outerReferenceMap.contains(_))
-              .map(outerReferenceMap(_))
-              .toSeq
+              .map(outerReferenceMap(_)).toSeq
             if (partitionFields.isEmpty) {
               // Underlying subquery has no predicates connecting inner and outer query.
               // In this case, offset can be computed over the inner query directly.
@@ -667,16 +682,14 @@ object DecorrelateInnerQuery extends PredicateHelper {
             } else {
               val orderByFields = replaceOuterReferences(ordering, outerReferenceMap)
 
-              val rowNumber = WindowExpression(
-                RowNumber(),
-                WindowSpecDefinition(
-                  partitionFields,
-                  orderByFields,
+              val rowNumber = WindowExpression(RowNumber(),
+                WindowSpecDefinition(partitionFields, orderByFields,
                   SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)))
               val rowNumberAlias = Alias(rowNumber, "rn")()
               // Window function computes row_number() when partitioning by correlated references,
               // and projects all the other fields from the input.
-              val window = Window(Seq(rowNumberAlias), partitionFields, orderByFields, newChild)
+              val window = Window(Seq(rowNumberAlias),
+                partitionFields, orderByFields, newChild)
               val filter = Filter(GreaterThan(rowNumberAlias.toAttribute, offset), window)
               val project = Project(newChild.output, filter)
               (project, joinCond, outerReferenceMap)
@@ -696,7 +709,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
             // WHERE rn > 2 AND rn <= 2+3
             val (child, ordering, offsetExpr) = input match {
               case Sort(order, _, child, _) => (child, order, Literal(0))
-              case Offset(offsetExpr, offsetChild @ (Sort(order, _, child, _))) =>
+              case Offset(offsetExpr, offsetChild@(Sort(order, _, child, _))) =>
                 (child, order, offsetExpr)
               case Offset(offsetExpr, child) =>
                 (child, Seq(), offsetExpr)
@@ -708,29 +721,25 @@ object DecorrelateInnerQuery extends PredicateHelper {
             // Add outer references to the PARTITION BY clause
             val partitionFields = collectedChildOuterReferences
               .filter(outerReferenceMap.contains(_))
-              .map(outerReferenceMap(_))
-              .toSeq
+              .map(outerReferenceMap(_)).toSeq
             if (partitionFields.isEmpty) {
               // Underlying subquery has no predicates connecting inner and outer query.
               // In this case, limit can be computed over the inner query directly.
               offsetExpr match {
                 case IntegerLiteral(0) => (Limit(limit, newChild), joinCond, outerReferenceMap)
-                case _ =>
-                  (Limit(limit, Offset(offsetExpr, newChild)), joinCond, outerReferenceMap)
+                case _ => (Limit(limit, Offset(offsetExpr, newChild)), joinCond, outerReferenceMap)
               }
             } else {
               val orderByFields = replaceOuterReferences(ordering, outerReferenceMap)
 
-              val rowNumber = WindowExpression(
-                RowNumber(),
-                WindowSpecDefinition(
-                  partitionFields,
-                  orderByFields,
+              val rowNumber = WindowExpression(RowNumber(),
+                WindowSpecDefinition(partitionFields, orderByFields,
                   SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)))
               val rowNumberAlias = Alias(rowNumber, "rn")()
               // Window function computes row_number() when partitioning by correlated references,
               // and projects all the other fields from the input.
-              val window = Window(Seq(rowNumberAlias), partitionFields, orderByFields, newChild)
+              val window = Window(Seq(rowNumberAlias),
+                partitionFields, orderByFields, newChild)
               val filter = offsetExpr match {
                 case IntegerLiteral(0) =>
                   // If there is no offset, we can directly use the row number to filter the rows.
@@ -739,8 +748,10 @@ object DecorrelateInnerQuery extends PredicateHelper {
                   Filter(
                     And(
                       GreaterThan(rowNumberAlias.toAttribute, offsetExpr),
-                      LessThanOrEqual(rowNumberAlias.toAttribute, Add(offsetExpr, limit))),
-                    window)
+                      LessThanOrEqual(rowNumberAlias.toAttribute, Add(offsetExpr, limit))
+                    ),
+                    window
+                  )
               }
               val project = Project(newChild.output, filter)
               (project, joinCond, outerReferenceMap)
@@ -748,10 +759,8 @@ object DecorrelateInnerQuery extends PredicateHelper {
 
           case w @ Window(projectList, partitionSpec, orderSpec, child, hint) =>
             val outerReferences = collectOuterReferences(w.expressions)
-            assert(
-              outerReferences.isEmpty,
-              s"Correlated column is not allowed in window " +
-                s"function: $w")
+            assert(outerReferences.isEmpty, s"Correlated column is not allowed in window " +
+              s"function: $w")
             val newOuterReferences = parentOuterReferences ++ outerReferences
             val (newChild, joinCond, outerReferenceMap) =
               decorrelate(child, newOuterReferences, aggregated = true, underSetOp)
@@ -762,12 +771,9 @@ object DecorrelateInnerQuery extends PredicateHelper {
             val newOrderSpec = replaceOuterReferences(orderSpec, outerReferenceMap)
             val referencesToAdd = missingReferences(newProjectList, joinCond)
 
-            val newWindow = Window(
-              newProjectList ++ referencesToAdd,
+            val newWindow = Window(newProjectList ++ referencesToAdd,
               partitionSpec = newPartitionSpec ++ referencesToAdd,
-              orderSpec = newOrderSpec,
-              newChild,
-              hint)
+              orderSpec = newOrderSpec, newChild, hint)
             (newWindow, joinCond, outerReferenceMap)
 
           case a @ Aggregate(groupingExpressions, aggregateExpressions, child, _) =>
@@ -778,8 +784,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
             // Replace all outer references in grouping and aggregate expressions, and keep
             // the output attributes unchanged.
             val newGroupingExpr = replaceOuterReferences(groupingExpressions, outerReferenceMap)
-            val newAggExpr =
-              replaceOuterInNamedExpressions(aggregateExpressions, outerReferenceMap)
+            val newAggExpr = replaceOuterInNamedExpressions(aggregateExpressions, outerReferenceMap)
             // Add all required domain attributes to both grouping and aggregate expressions.
             val referencesToAdd = missingReferences(newAggExpr, joinCond)
             val newAggregate = a.copy(
@@ -838,8 +843,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
             // +---+------+------------+--------------------------------+
             if (groupingExpressions.isEmpty && handleCountBug) {
               // Evaluate the aggregate expressions with zero tuples.
-              val resultMap =
-                RewriteCorrelatedScalarSubquery.evalAggregateOnZeroTups(newAggregate)
+              val resultMap = RewriteCorrelatedScalarSubquery.evalAggregateOnZeroTups(newAggregate)
               val alwaysTrue = Alias(Literal.TrueLiteral, "alwaysTrue")()
               val alwaysTrueRef = alwaysTrue.toAttribute.withNullability(true)
               val expressions = ArrayBuffer.empty[NamedExpression]
@@ -854,10 +858,8 @@ object DecorrelateInnerQuery extends PredicateHelper {
                     // left outer join.
                     a.toAttribute.withNullability(true)
                   case Some(default) =>
-                    assert(
-                      a.isInstanceOf[Alias],
-                      s"Cannot have non-aliased expression $a in " +
-                        s"aggregate that evaluates to non-null value with zero tuples.")
+                    assert(a.isInstanceOf[Alias], s"Cannot have non-aliased expression $a in " +
+                      s"aggregate that evaluates to non-null value with zero tuples.")
                     val newAttr = a.newInstance()
                     val ref = newAttr.toAttribute.withNullability(true)
                     expressions += newAttr
@@ -944,12 +946,9 @@ object DecorrelateInnerQuery extends PredicateHelper {
             def splitCorrelatedPredicate(
                 condition: Option[Expression],
                 isInnerJoin: Boolean,
-                shouldDecorrelatePredicates: Boolean): (
-                Seq[Expression],
-                Seq[Expression],
-                Seq[Expression],
-                Seq[Expression],
-                AttributeMap[Attribute]) = {
+                shouldDecorrelatePredicates: Boolean):
+            (Seq[Expression], Seq[Expression], Seq[Expression],
+              Seq[Expression], AttributeMap[Attribute]) = {
               // Similar to Filters above, we split the join condition (if present) into correlated
               // and uncorrelated predicates, and separately handle joins under set and aggregation
               // operations.
@@ -972,8 +971,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
                 }
                 (correlated, uncorrelated, equalityCond, predicates, equivalences)
               } else {
-                (
-                  Seq.empty[Expression],
+                (Seq.empty[Expression],
                   if (condition.isEmpty) Seq.empty[Expression] else Seq(condition.get),
                   Seq.empty[Expression],
                   Seq.empty[Expression],
@@ -1032,15 +1030,15 @@ object DecorrelateInnerQuery extends PredicateHelper {
             // - Left Map: {outer(c1) = c1}
             // - Right Map: {outer(c1) = 10 - c1}
             // Then the join condition can be augmented with (c1 <=> 10 - c1).
-            val augmentedConditions = leftOuterReferenceMap.flatMap { case (outer, inner) =>
-              rightOuterReferenceMap.get(outer).map(EqualNullSafe(inner, _))
+            val augmentedConditions = leftOuterReferenceMap.flatMap {
+              case (outer, inner) => rightOuterReferenceMap.get(outer).map(EqualNullSafe(inner, _))
             }
             val newCondition = (newCorrelated ++ uncorrelated
               ++ augmentedConditions).reduceOption(And)
             val newJoin = j.copy(left = newLeft, right = newRight, condition = newCondition)
             (newJoin, newJoinCond, newOuterReferenceMap)
 
-          case s @ (_: Union | _: SetOperation) =>
+          case s @ (_ : Union | _: SetOperation) =>
             // Set ops are decorrelated by pushing the domain join into each child. For details see
             // https://docs.google.com/document/d/11b9ClCF2jYGU7vU2suOT7LRswYkg6tZ8_6xJbvxfh2I/edit
 
@@ -1071,7 +1069,8 @@ object DecorrelateInnerQuery extends PredicateHelper {
                 // The inner expressions for the domain are the values of newOuterReferenceMap.
                 val domainProjections =
                   if (SQLConf.get.getConf(
-                      SQLConf.DECORRELATE_UNION_OR_SET_OP_UNDER_LIMIT_ENABLED)) {
+                    SQLConf.DECORRELATE_UNION_OR_SET_OP_UNDER_LIMIT_ENABLED
+                  )) {
                     newOuterReferences.map(newOuterReferenceMap(_))
                   } else {
                     collectedChildOuterReferences.map(newOuterReferenceMap(_))
@@ -1111,8 +1110,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
         }
       }
     }
-    val (newChild, joinCond, _) =
-      decorrelate(BooleanSimplification(innerPlan), AttributeSet.empty)
+    val (newChild, joinCond, _) = decorrelate(BooleanSimplification(innerPlan), AttributeSet.empty)
     val (plan, conditions) = deduplicate(newChild, joinCond, outputPlanInputAttrs)
     (plan, stripOuterReferences(conditions))
   }

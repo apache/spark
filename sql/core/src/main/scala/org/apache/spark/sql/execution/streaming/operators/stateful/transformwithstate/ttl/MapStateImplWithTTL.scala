@@ -49,28 +49,20 @@ class MapStateImplWithTTL[K, V](
     valEncoder: ExpressionEncoder[Any],
     ttlConfig: TTLConfig,
     batchTimestampMs: Long,
-    metrics: Map[String, SQLMetric])
-    extends OneToOneTTLState(
-      stateName,
-      store,
-      getCompositeKeySchema(keyExprEnc.schema, userKeyEnc.schema),
-      ttlConfig,
-      batchTimestampMs,
-      metrics)
-    with MapState[K, V]
-    with Logging {
+metrics: Map[String, SQLMetric])
+  extends OneToOneTTLState(
+    stateName, store, getCompositeKeySchema(keyExprEnc.schema, userKeyEnc.schema), ttlConfig,
+    batchTimestampMs, metrics) with MapState[K, V] with Logging {
 
-  private val stateTypesEncoder =
-    new CompositeKeyStateEncoder(keyExprEnc, userKeyEnc, valEncoder, stateName, hasTtl = true)
+  private val stateTypesEncoder = new CompositeKeyStateEncoder(
+    keyExprEnc, userKeyEnc, valEncoder, stateName, hasTtl = true)
 
   initialize()
 
   private def initialize(): Unit = {
     val schemaForCompositeKeyRow =
       getCompositeKeySchema(keyExprEnc.schema, userKeyEnc.schema)
-    store.createColFamilyIfAbsent(
-      stateName,
-      schemaForCompositeKeyRow,
+    store.createColFamilyIfAbsent(stateName, schemaForCompositeKeyRow,
       getValueSchemaWithTTL(valEncoder.schema, true),
       PrefixKeyScanStateEncoderSpec(schemaForCompositeKeyRow, 1))
   }
@@ -127,11 +119,9 @@ class MapStateImplWithTTL[K, V](
         }
         if (iter.hasNext) {
           val currentRowPair = iter.next()
-          val key = stateTypesEncoder
-            .decodeCompositeKey(currentRowPair.key)
+          val key = stateTypesEncoder.decodeCompositeKey(currentRowPair.key)
             .asInstanceOf[K]
-          val value = stateTypesEncoder
-            .decodeValue(currentRowPair.value)
+          val value = stateTypesEncoder.decodeValue(currentRowPair.value)
             .asInstanceOf[V]
           (key, value)
         } else {
@@ -183,8 +173,9 @@ class MapStateImplWithTTL[K, V](
    */
 
   /**
-   * Retrieves the value from State even if its expired. This method is used in tests to read the
-   * state store value, and ensure if its cleaned up at the end of the micro-batch.
+   * Retrieves the value from State even if its expired. This method is used
+   * in tests to read the state store value, and ensure if its cleaned up at the
+   * end of the micro-batch.
    */
   private[sql] def getWithoutEnforcingTTL(userKey: K): Option[V] = {
     val encodedCompositeKey = stateTypesEncoder.encodeCompositeKey(userKey)
@@ -216,24 +207,22 @@ class MapStateImplWithTTL[K, V](
   }
 
   /**
-   * Get all ttl values stored in ttl state for current implicit grouping key.
+   * Get all ttl values stored in ttl state for current implicit
+   * grouping key.
    */
   private[sql] def getKeyValuesInTTLState(): Iterator[(K, Long)] = {
-    val implicitGroupingKey = stateTypesEncoder
-      .encodeGroupingKey()
+    val implicitGroupingKey = stateTypesEncoder.encodeGroupingKey()
       .getStruct(0, keyExprEnc.schema.length)
 
     // We're getting composite rows back
-    getTTLRows()
-      .filter { ttlRow =>
-        val compositeKey = ttlRow.elementKey
-        val groupingKey = compositeKey.getStruct(0, keyExprEnc.schema.length)
-        groupingKey == implicitGroupingKey
-      }
-      .map { ttlRow =>
-        val compositeKey = ttlRow.elementKey
-        val userKey = stateTypesEncoder.decodeCompositeKey(compositeKey)
-        (userKey.asInstanceOf[K], ttlRow.expirationMs)
-      }
+    getTTLRows().filter { ttlRow =>
+      val compositeKey = ttlRow.elementKey
+      val groupingKey = compositeKey.getStruct(0, keyExprEnc.schema.length)
+      groupingKey == implicitGroupingKey
+    }.map { ttlRow =>
+      val compositeKey = ttlRow.elementKey
+      val userKey = stateTypesEncoder.decodeCompositeKey(compositeKey)
+      (userKey.asInstanceOf[K], ttlRow.expirationMs)
+    }
   }
 }

@@ -46,8 +46,7 @@ case class OrcScan(
     pushedAggregate: Option[Aggregation] = None,
     pushedFilters: Array[Filter],
     partitionFilters: Seq[Expression] = Seq.empty,
-    dataFilters: Seq[Expression] = Seq.empty)
-    extends FileScan {
+    dataFilters: Seq[Expression] = Seq.empty) extends FileScan {
   override def isSplitable(path: Path): Boolean = {
     // If aggregate is pushed down, only the file footer will be read once,
     // so file should not be split across multiple tasks.
@@ -74,16 +73,9 @@ case class OrcScan(
     }
     // The partition values are already truncated in `FileScan.partitions`.
     // We should use `readPartitionSchema` as the partition schema here.
-    OrcPartitionReaderFactory(
-      conf,
-      broadcastedConf,
-      dataSchema,
-      readDataSchema,
-      readPartitionSchema,
-      pushedFilters,
-      pushedAggregate,
-      new OrcOptions(options.asScala.toMap, conf),
-      memoryMode)
+    OrcPartitionReaderFactory(conf, broadcastedConf,
+      dataSchema, readDataSchema, readPartitionSchema, pushedFilters, pushedAggregate,
+      new OrcOptions(options.asScala.toMap, conf), memoryMode)
   }
 
   override def equals(obj: Any): Boolean = obj match {
@@ -94,23 +86,21 @@ case class OrcScan(
         pushedAggregate.isEmpty && o.pushedAggregate.isEmpty
       }
       super.equals(o) && dataSchema == o.dataSchema && options == o.options &&
-      equivalentFilters(pushedFilters, o.pushedFilters) && pushedDownAggEqual
+        equivalentFilters(pushedFilters, o.pushedFilters) && pushedDownAggEqual
     case _ => false
   }
 
   override def hashCode(): Int = getClass.hashCode()
 
   lazy private val (pushedAggregationsStr, pushedGroupByStr) = if (pushedAggregate.nonEmpty) {
-    (
-      seqToString(pushedAggregate.get.aggregateExpressions.toImmutableArraySeq),
+    (seqToString(pushedAggregate.get.aggregateExpressions.toImmutableArraySeq),
       seqToString(pushedAggregate.get.groupByExpressions.toImmutableArraySeq))
   } else {
     ("[]", "[]")
   }
 
   override def getMetaData(): Map[String, String] = {
-    super.getMetaData() ++ Map(
-      "PushedFilters" -> seqToString(pushedFilters.toImmutableArraySeq)) ++
+    super.getMetaData() ++ Map("PushedFilters" -> seqToString(pushedFilters.toImmutableArraySeq)) ++
       Map("PushedAggregation" -> pushedAggregationsStr) ++
       Map("PushedGroupBy" -> pushedGroupByStr)
   }

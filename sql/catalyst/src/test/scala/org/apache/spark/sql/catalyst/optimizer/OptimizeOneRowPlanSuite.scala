@@ -29,8 +29,8 @@ class OptimizeOneRowPlanSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Replace Operators", Once, ReplaceDistinctWithAggregate) ::
-        Batch("Eliminate Sorts", Once, EliminateSorts) ::
-        Batch("Optimize One Row Plan", FixedPoint(10), OptimizeOneRowPlan) :: Nil
+      Batch("Eliminate Sorts", Once, EliminateSorts) ::
+      Batch("Optimize One Row Plan", FixedPoint(10), OptimizeOneRowPlan) :: Nil
   }
 
   private val t1 = LocalRelation.fromExternalRows(Seq($"a".int), data = Seq(Row(1)))

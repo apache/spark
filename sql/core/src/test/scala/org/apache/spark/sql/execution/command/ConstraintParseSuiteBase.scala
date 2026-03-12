@@ -27,27 +27,29 @@ abstract class ConstraintParseSuiteBase extends AnalysisTest with SharedSparkSes
   protected def validConstraintCharacteristics = Seq(
     ("", "", ConstraintCharacteristic(enforced = None, rely = None)),
     ("", "RELY", ConstraintCharacteristic(enforced = None, rely = Some(true))),
-    ("", "NORELY", ConstraintCharacteristic(enforced = None, rely = Some(false))))
+    ("", "NORELY", ConstraintCharacteristic(enforced = None, rely = Some(false)))
+  )
 
   protected def enforcedConstraintCharacteristics = Seq(
     ("ENFORCED", "", ConstraintCharacteristic(enforced = Some(true), rely = None)),
     ("ENFORCED", "RELY", ConstraintCharacteristic(enforced = Some(true), rely = Some(true))),
     ("ENFORCED", "NORELY", ConstraintCharacteristic(enforced = Some(true), rely = Some(false))),
     ("RELY", "ENFORCED", ConstraintCharacteristic(enforced = Some(true), rely = Some(true))),
-    ("NORELY", "ENFORCED", ConstraintCharacteristic(enforced = Some(true), rely = Some(false))))
+    ("NORELY", "ENFORCED", ConstraintCharacteristic(enforced = Some(true), rely = Some(false)))
+  )
 
   protected def notEnforcedConstraintCharacteristics = Seq(
-    ("NOT ENFORCED", "RELY", ConstraintCharacteristic(enforced = Some(false), rely = Some(true))),
-    (
-      "NOT ENFORCED",
-      "NORELY",
+    ("NOT ENFORCED", "RELY",
+      ConstraintCharacteristic(enforced = Some(false), rely = Some(true))),
+    ("NOT ENFORCED", "NORELY",
       ConstraintCharacteristic(enforced = Some(false), rely = Some(false))),
-    ("RELY", "NOT ENFORCED", ConstraintCharacteristic(enforced = Some(false), rely = Some(true))),
-    (
-      "NORELY",
-      "NOT ENFORCED",
+    ("RELY", "NOT ENFORCED",
+      ConstraintCharacteristic(enforced = Some(false), rely = Some(true))),
+    ("NORELY", "NOT ENFORCED",
       ConstraintCharacteristic(enforced = Some(false), rely = Some(false))),
-    ("NOT ENFORCED", "", ConstraintCharacteristic(enforced = Some(false), rely = None)))
+    ("NOT ENFORCED", "",
+      ConstraintCharacteristic(enforced = Some(false), rely = None))
+  )
 
   protected val invalidConstraintCharacteristics = Seq(
     ("ENFORCED", "ENFORCED"),
@@ -57,7 +59,8 @@ abstract class ConstraintParseSuiteBase extends AnalysisTest with SharedSparkSes
     ("RELY", "RELY"),
     ("RELY", "NORELY"),
     ("NORELY", "RELY"),
-    ("NORELY", "NORELY"))
+    ("NORELY", "NORELY")
+  )
 
   protected def createExpectedPlan(
       columns: Seq[ColumnDefinition],
@@ -65,15 +68,8 @@ abstract class ConstraintParseSuiteBase extends AnalysisTest with SharedSparkSes
       isCreateTable: Boolean = true): LogicalPlan = {
     val tableId = UnresolvedIdentifier(Seq("t"))
     val tableSpec = UnresolvedTableSpec(
-      Map.empty[String, String],
-      Some("parquet"),
-      OptionList(Seq.empty),
-      None,
-      None,
-      None,
-      None,
-      false,
-      tableConstraints)
+      Map.empty[String, String], Some("parquet"), OptionList(Seq.empty),
+      None, None, None, None, false, tableConstraints)
     if (isCreateTable) {
       CreateTable(tableId, columns, Seq.empty, tableSpec, false)
     } else {
@@ -90,11 +86,10 @@ abstract class ConstraintParseSuiteBase extends AnalysisTest with SharedSparkSes
     val parsed = parsePlan(sql)
     val columns = Seq(
       ColumnDefinition("a", IntegerType, nullable = columnANullable),
-      ColumnDefinition("b", StringType, nullable = columnBNullable))
+      ColumnDefinition("b", StringType, nullable = columnBNullable)
+    )
     val expected = createExpectedPlan(
-      columns = columns,
-      tableConstraints = constraints,
-      isCreateTable = isCreateTable)
+      columns = columns, tableConstraints = constraints, isCreateTable = isCreateTable)
     comparePlans(parsed, expected)
   }
 }

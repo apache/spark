@@ -56,8 +56,7 @@ object RemoveRedundantSorts extends Rule[LogicalPlan] {
         }
 
       case _ =>
-        plan.withNewChildren(
-          plan.children.map(recursiveRemoveSort(_, optimizeGlobalSort = false)))
+        plan.withNewChildren(plan.children.map(recursiveRemoveSort(_, optimizeGlobalSort = false)))
     }
   }
 }

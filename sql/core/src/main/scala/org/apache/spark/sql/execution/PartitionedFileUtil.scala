@@ -48,15 +48,8 @@ object PartitionedFileUtil {
       start: Long,
       length: Long): PartitionedFile = {
     val hosts = getBlockHosts(getBlockLocations(file.fileStatus), start, length)
-    PartitionedFile(
-      partitionValues,
-      SparkPath.fromPath(filePath),
-      start,
-      length,
-      hosts,
-      file.getModificationTime,
-      file.getLen,
-      file.metadata)
+    PartitionedFile(partitionValues, SparkPath.fromPath(filePath), start, length, hosts,
+      file.getModificationTime, file.getLen, file.metadata)
   }
 
   private def getBlockLocations(file: FileStatus): Array[BlockLocation] = file match {
@@ -72,28 +65,26 @@ object PartitionedFileUtil {
       blockLocations: Array[BlockLocation],
       offset: Long,
       length: Long): Array[String] = {
-    val candidates = blockLocations
-      .map {
-        // The fragment starts from a position within this block. It handles the case where the
-        // fragment is fully contained in the block.
-        case b if b.getOffset <= offset && offset < b.getOffset + b.getLength =>
-          b.getHosts -> (b.getOffset + b.getLength - offset).min(length)
+    val candidates = blockLocations.map {
+      // The fragment starts from a position within this block. It handles the case where the
+      // fragment is fully contained in the block.
+      case b if b.getOffset <= offset && offset < b.getOffset + b.getLength =>
+        b.getHosts -> (b.getOffset + b.getLength - offset).min(length)
 
-        // The fragment ends at a position within this block
-        case b if b.getOffset < offset + length && offset + length < b.getOffset + b.getLength =>
-          b.getHosts -> (offset + length - b.getOffset)
+      // The fragment ends at a position within this block
+      case b if b.getOffset < offset + length && offset + length < b.getOffset + b.getLength =>
+        b.getHosts -> (offset + length - b.getOffset)
 
-        // The fragment fully contains this block
-        case b if offset <= b.getOffset && b.getOffset + b.getLength <= offset + length =>
-          b.getHosts -> b.getLength
+      // The fragment fully contains this block
+      case b if offset <= b.getOffset && b.getOffset + b.getLength <= offset + length =>
+        b.getHosts -> b.getLength
 
-        // The fragment doesn't intersect with this block
-        case b =>
-          b.getHosts -> 0L
-      }
-      .filter { case (hosts, size) =>
-        size > 0L
-      }
+      // The fragment doesn't intersect with this block
+      case b =>
+        b.getHosts -> 0L
+    }.filter { case (hosts, size) =>
+      size > 0L
+    }
 
     if (candidates.isEmpty) {
       Array.empty[String]
@@ -103,3 +94,4 @@ object PartitionedFileUtil {
     }
   }
 }
+

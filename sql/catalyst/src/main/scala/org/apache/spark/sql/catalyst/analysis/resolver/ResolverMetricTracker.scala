@@ -42,7 +42,8 @@ trait ResolverMetricTracker {
       tracker.recordRuleInvocation(
         rule = ResolverMetricTracker.SINGLE_PASS_RESOLVER_METRIC_LOGGING_ALIAS,
         timeNs = runTime,
-        effective = true)
+        effective = true
+      )
 
       result
     }
@@ -51,15 +52,19 @@ trait ResolverMetricTracker {
     val queryExecutionMetrics = QueryExecutionMetering.INSTANCE
 
     queryExecutionMetrics.incNumEffectiveExecution(
-      ResolverMetricTracker.SINGLE_PASS_RESOLVER_METRIC_LOGGING_ALIAS)
+      ResolverMetricTracker.SINGLE_PASS_RESOLVER_METRIC_LOGGING_ALIAS
+    )
     queryExecutionMetrics.incTimeEffectiveExecutionBy(
       ResolverMetricTracker.SINGLE_PASS_RESOLVER_METRIC_LOGGING_ALIAS,
-      runTime)
+      runTime
+    )
     queryExecutionMetrics.incNumExecution(
-      ResolverMetricTracker.SINGLE_PASS_RESOLVER_METRIC_LOGGING_ALIAS)
+      ResolverMetricTracker.SINGLE_PASS_RESOLVER_METRIC_LOGGING_ALIAS
+    )
     queryExecutionMetrics.incExecutionTimeBy(
       ResolverMetricTracker.SINGLE_PASS_RESOLVER_METRIC_LOGGING_ALIAS,
-      runTime)
+      runTime
+    )
   }
 }
 

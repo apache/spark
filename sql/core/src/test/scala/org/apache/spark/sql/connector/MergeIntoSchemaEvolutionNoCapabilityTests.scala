@@ -60,7 +60,8 @@ trait MergeIntoSchemaEvolutionNoCapabilityTests extends MergeIntoSchemaEvolution
       confs = confs,
       partitionCols = partitionCols,
       disableAutoSchemaEvolution = disableAutoSchemaEvolution,
-      requiresNestedTypeCoercion = requiresNestedTypeCoercion)
+      requiresNestedTypeCoercion = requiresNestedTypeCoercion
+    )
   }
   // scalastyle:on argcount
 
@@ -70,40 +71,49 @@ trait MergeIntoSchemaEvolutionNoCapabilityTests extends MergeIntoSchemaEvolution
   // when the table property 'auto-schema-evolution' is set to 'false'
   // ---------------------------------------------------------------------------
 
-  testEvolution(
-    "source has extra column with set explicit column - " +
-      "no auto-schema-evolution capability")(
+  testEvolution("source has extra column with set explicit column - " +
+    "no auto-schema-evolution capability")(
     targetData = Seq(
       (1, 100, "hr"),
       (2, 200, "software"),
       (3, 300, "hr"),
       (4, 400, "marketing"),
-      (5, 500, "executive")).toDF("pk", "salary", "dep"),
-    sourceData = Seq((4, 150, "dummy", true), (5, 250, "dummy", true), (6, 350, "dummy", false))
-      .toDF("pk", "salary", "dep", "active"),
+      (5, 500, "executive")
+    ).toDF("pk", "salary", "dep"),
+    sourceData = Seq(
+      (4, 150, "dummy", true),
+      (5, 250, "dummy", true),
+      (6, 350, "dummy", false)
+    ).toDF("pk", "salary", "dep", "active"),
     clauses = Seq(
       update(set = "dep='software', active=s.active"),
-      insert(values = "(pk, salary, dep, active) VALUES (s.pk, 0, s.dep, s.active)")),
+      insert(values = "(pk, salary, dep, active) VALUES (s.pk, 0, s.dep, s.active)")
+    ),
     disableAutoSchemaEvolution = true,
     expectErrorContains = "A column, variable, or function parameter with name " +
       "`active` cannot be resolved",
     expectErrorWithoutEvolutionContains = "A column, variable, or function parameter with name " +
-      "`active` cannot be resolved")
+      "`active` cannot be resolved"
+  )
 
-  testEvolution(
-    "source has extra column with set all columns - " +
-      "no auto-schema-evolution capability")(
+  testEvolution("source has extra column with set all columns - " +
+    "no auto-schema-evolution capability")(
     targetData = Seq(
       (1, 100, "hr"),
       (2, 200, "software"),
       (3, 300, "hr"),
       (4, 400, "marketing"),
-      (5, 500, "executive")).toDF("pk", "salary", "dep"),
+      (5, 500, "executive")
+    ).toDF("pk", "salary", "dep"),
     sourceData = Seq(
       (4, 150, "finance", true),
       (5, 250, "finance", false),
-      (6, 350, "finance", true)).toDF("pk", "salary", "dep", "active"),
-    clauses = Seq(updateAll(), insertAll()),
+      (6, 350, "finance", true)
+    ).toDF("pk", "salary", "dep", "active"),
+    clauses = Seq(
+      updateAll(),
+      insertAll()
+    ),
     disableAutoSchemaEvolution = true,
     // Without property enabled, new columns are not added even with clause
     expected = Seq(
@@ -119,71 +129,87 @@ trait MergeIntoSchemaEvolutionNoCapabilityTests extends MergeIntoSchemaEvolution
       (3, 300, "hr"),
       (4, 150, "finance"),
       (5, 250, "finance"),
-      (6, 350, "finance")).toDF("pk", "salary", "dep"))
+      (6, 350, "finance")).toDF("pk", "salary", "dep")
+  )
 
-  testEvolution(
-    "source has extra and missing column with set all column -" +
-      "no auto-schema-evolution capability")(
+  testEvolution("source has extra and missing column with set all column -" +
+    "no auto-schema-evolution capability")(
     targetData = Seq(
       (1, 100, "hr"),
       (2, 200, "software"),
       (3, 300, "hr"),
       (4, 400, "marketing"),
-      (5, 500, "executive")).toDF("pk", "salary", "dep"),
-    sourceData =
-      Seq((4, 150, true), (5, 250, true), (6, 350, false)).toDF("pk", "salary", "active"),
-    clauses = Seq(updateAll(), insertAll()),
+      (5, 500, "executive")
+    ).toDF("pk", "salary", "dep"),
+    sourceData = Seq(
+      (4, 150, true),
+      (5, 250, true),
+      (6, 350, false)
+    ).toDF("pk", "salary", "active"),
+    clauses = Seq(
+      updateAll(),
+      insertAll()
+    ),
     disableAutoSchemaEvolution = true,
     expectErrorContains = "A column, variable, or function parameter with name " +
       "`dep` cannot be resolved",
     expectErrorWithoutEvolutionContains = "A column, variable, or function parameter with name " +
-      "`dep` cannot be resolved")
+      "`dep` cannot be resolved"
+  )
 
-  testEvolution(
-    "source has extra and missing column with set explicit column -" +
-      "no auto-schema-evolution capability")(
+  testEvolution("source has extra and missing column with set explicit column -" +
+    "no auto-schema-evolution capability")(
     targetData = Seq(
       (1, 100, "hr"),
       (2, 200, "software"),
       (3, 300, "hr"),
       (4, 400, "marketing"),
-      (5, 500, "executive")).toDF("pk", "salary", "dep"),
-    sourceData =
-      Seq((4, 150, true), (5, 250, true), (6, 350, false)).toDF("pk", "salary", "active"),
+      (5, 500, "executive")
+    ).toDF("pk", "salary", "dep"),
+    sourceData = Seq(
+      (4, 150, true),
+      (5, 250, true),
+      (6, 350, false)
+    ).toDF("pk", "salary", "active"),
     clauses = Seq(
       update(set = "dep = 'finance', active = s.active"),
-      insert(values = "(pk, salary, dep, active) VALUES (s.pk, s.salary, 'finance', s.active)")),
+      insert(values = "(pk, salary, dep, active) VALUES (s.pk, s.salary, 'finance', s.active)")
+    ),
     disableAutoSchemaEvolution = true,
     expectErrorContains = "A column, variable, or function parameter with name " +
       "`active` cannot be resolved",
     expectErrorWithoutEvolutionContains = "A column, variable, or function parameter with name " +
-      "`active` cannot be resolved")
+      "`active` cannot be resolved"
+  )
 
   testEvolution("type widening from short to int - no auto-schema-evolution capability")(
     targetData = {
-      val schema = StructType(
-        Seq(
-          StructField("pk", IntegerType, nullable = false),
-          StructField("salary", ShortType),
-          StructField("dep", StringType)))
-      spark.createDataFrame(
-        spark.sparkContext.parallelize(
-          Seq(
-            Row(1, 100.toShort, "hr"),
-            Row(2, 200.toShort, "finance"),
-            Row(3, 300.toShort, "engineering"))),
-        schema)
+      val schema = StructType(Seq(
+        StructField("pk", IntegerType, nullable = false),
+        StructField("salary", ShortType),
+        StructField("dep", StringType)
+      ))
+      spark.createDataFrame(spark.sparkContext.parallelize(Seq(
+        Row(1, 100.toShort, "hr"),
+        Row(2, 200.toShort, "finance"),
+        Row(3, 300.toShort, "engineering")
+      )), schema)
     },
-    sourceData = Seq((1, 50000, "hr"), (4, 40000, "sales"), (5, 500, "marketing"))
-      .toDF("pk", "salary", "dep"),
+    sourceData = Seq(
+      (1, 50000, "hr"),
+      (4, 40000, "sales"),
+      (5, 500, "marketing")
+    ).toDF("pk", "salary", "dep"),
     clauses = Seq(
       update(set = "salary = s.salary"),
-      insert(values = "(pk, salary, dep) VALUES (s.pk, s.salary, s.dep)")),
+      insert(values = "(pk, salary, dep) VALUES (s.pk, s.salary, s.dep)")
+    ),
     disableAutoSchemaEvolution = true,
     expectErrorContains = "Fail to assign a value of \"INT\" type to the \"SMALLINT\" " +
       "type column or variable `salary` due to an overflow",
     expectErrorWithoutEvolutionContains =
       "Fail to assign a value of \"INT\" type to the \"SMALLINT\" " +
-        "type column or variable `salary` due to an overflow")
+        "type column or variable `salary` due to an overflow"
+  )
 
 }

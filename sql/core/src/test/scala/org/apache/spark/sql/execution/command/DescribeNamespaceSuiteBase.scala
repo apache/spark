@@ -21,8 +21,8 @@ import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * This base suite contains unified tests for the `DESCRIBE NAMESPACE` command that check V1 and
- * V2 table catalogs. The tests that cannot run for all supported catalogs are located in more
+ * This base suite contains unified tests for the `DESCRIBE NAMESPACE` command that check V1 and V2
+ * table catalogs. The tests that cannot run for all supported catalogs are located in more
  * specific test suites:
  *
  *   - V2 table catalog tests: `org.apache.spark.sql.execution.command.v2.DescribeNamespaceSuite`
@@ -30,7 +30,7 @@ import org.apache.spark.sql.internal.SQLConf
  *     `org.apache.spark.sql.execution.command.v1.DescribeNamespaceSuiteBase`
  *     - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.DescribeNamespaceSuite`
  *     - V1 Hive External catalog:
- *       `org.apache.spark.sql.hive.execution.command.DescribeNamespaceSuite`
+*        `org.apache.spark.sql.hive.execution.command.DescribeNamespaceSuite`
  */
 trait DescribeNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "DESCRIBE NAMESPACE"
@@ -42,8 +42,7 @@ trait DescribeNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
     val e = intercept[AnalysisException] {
       sql(s"DESCRIBE NAMESPACE EXTENDED $catalog.$ns")
     }
-    checkError(
-      e,
+    checkError(e,
       condition = "SCHEMA_NOT_FOUND",
       parameters = Map("schemaName" -> s"`$catalog`.`$ns`"))
   }

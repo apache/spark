@@ -31,8 +31,7 @@ case class DescribeColumnExec(
     override val output: Seq[Attribute],
     column: Attribute,
     isExtended: Boolean,
-    table: Table)
-    extends LeafV2CommandExec {
+    table: Table) extends LeafV2CommandExec {
 
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
@@ -44,8 +43,7 @@ case class DescribeColumnExec(
     }
 
     rows += toCatalystRow("col_name", column.name)
-    rows += toCatalystRow(
-      "data_type",
+    rows += toCatalystRow("data_type",
       CharVarcharUtils.getRawType(column.metadata).getOrElse(column.dataType).catalogString)
     rows += toCatalystRow("comment", comment)
 

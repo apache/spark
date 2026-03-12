@@ -21,16 +21,15 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.command
 
 /**
- * The class contains tests for the `ALTER TABLE .. REPLACE COLUMNS` command to check V2 table
- * catalogs.
+ * The class contains tests for the `ALTER TABLE .. REPLACE COLUMNS` command
+ * to check V2 table catalogs.
  */
 class AlterTableReplaceColumnsSuite
-    extends command.AlterTableReplaceColumnsSuiteBase
-    with CommandSuiteBase {
+  extends command.AlterTableReplaceColumnsSuiteBase
+  with CommandSuiteBase {
 
-  test(
-    "UNSUPPORTED_DEFAULT_VALUE.WITHOUT_SUGGESTION: " +
-      "Support for DEFAULT column values is not implemented yet") {
+  test("UNSUPPORTED_DEFAULT_VALUE.WITHOUT_SUGGESTION: " +
+    "Support for DEFAULT column values is not implemented yet") {
     val sql1 = "ALTER TABLE t1 REPLACE COLUMNS (ym INT default 1)"
     checkError(
       exception = intercept[ParseException] {
@@ -38,6 +37,7 @@ class AlterTableReplaceColumnsSuite
       },
       condition = "UNSUPPORTED_DEFAULT_VALUE.WITHOUT_SUGGESTION",
       parameters = Map.empty,
-      context = ExpectedContext(sql1, 0, 48))
+      context = ExpectedContext(sql1, 0, 48)
+    )
   }
 }

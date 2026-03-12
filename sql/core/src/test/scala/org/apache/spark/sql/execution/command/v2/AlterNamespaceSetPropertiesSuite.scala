@@ -23,8 +23,7 @@ import org.apache.spark.sql.execution.command
  * The class contains tests for the `ALTER NAMESPACE ... SET PROPERTIES` command to check V2 table
  * catalogs.
  */
-class AlterNamespaceSetPropertiesSuite
-    extends command.AlterNamespaceSetPropertiesSuiteBase
+class AlterNamespaceSetPropertiesSuite extends command.AlterNamespaceSetPropertiesSuiteBase
     with CommandSuiteBase {
   override def namespace: String = "ns1.ns2"
   override def notFoundMsgPrefix: String = "Namespace"

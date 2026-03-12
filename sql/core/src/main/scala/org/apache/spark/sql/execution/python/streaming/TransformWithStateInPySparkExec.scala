@@ -49,38 +49,22 @@ import org.apache.spark.util.{CompletionIterator, SerializableConfiguration, Uti
  * Physical operator for executing
  * [[org.apache.spark.sql.catalyst.plans.logical.TransformWithStateInPySpark]]
  *
- * @param functionExpr
- *   function called on each group
- * @param groupingAttributes
- *   used to group the data
- * @param output
- *   used to define the output rows
- * @param outputMode
- *   defines the output mode for the statefulProcessor
- * @param timeMode
- *   The time mode semantics of the stateful processor for timers and TTL.
- * @param stateInfo
- *   Used to identify the state store for a given operator.
- * @param batchTimestampMs
- *   processing timestamp of the current batch.
- * @param eventTimeWatermarkForLateEvents
- *   event time watermark for filtering late events
- * @param eventTimeWatermarkForEviction
- *   event time watermark for state eviction
- * @param userFacingDataType
- *   the user facing data type of the function (both param and return type)
- * @param child
- *   the physical plan for the underlying data
- * @param isStreaming
- *   defines whether the query is streaming or batch
- * @param hasInitialState
- *   defines whether the query has initial state
- * @param initialState
- *   the physical plan for the input initial state
- * @param initialStateGroupingAttrs
- *   grouping attributes for initial state
- * @param initialStateSchema
- *   schema for initial state
+ * @param functionExpr function called on each group
+ * @param groupingAttributes used to group the data
+ * @param output used to define the output rows
+ * @param outputMode defines the output mode for the statefulProcessor
+ * @param timeMode The time mode semantics of the stateful processor for timers and TTL.
+ * @param stateInfo Used to identify the state store for a given operator.
+ * @param batchTimestampMs processing timestamp of the current batch.
+ * @param eventTimeWatermarkForLateEvents event time watermark for filtering late events
+ * @param eventTimeWatermarkForEviction event time watermark for state eviction
+ * @param userFacingDataType the user facing data type of the function (both param and return type)
+ * @param child the physical plan for the underlying data
+ * @param isStreaming defines whether the query is streaming or batch
+ * @param hasInitialState defines whether the query has initial state
+ * @param initialState the physical plan for the input initial state
+ * @param initialStateGroupingAttrs grouping attributes for initial state
+ * @param initialStateSchema schema for initial state
  */
 case class TransformWithStateInPySparkExec(
     functionExpr: Expression,
@@ -99,23 +83,24 @@ case class TransformWithStateInPySparkExec(
     initialState: SparkPlan,
     initialStateGroupingAttrs: Seq[Attribute],
     initialStateSchema: StructType)
-    extends TransformWithStateExecBase(
-      groupingAttributes,
-      timeMode,
-      outputMode,
-      batchTimestampMs,
-      eventTimeWatermarkForEviction,
-      child,
-      initialStateGroupingAttrs,
-      initialState) {
+  extends TransformWithStateExecBase(
+    groupingAttributes,
+    timeMode,
+    outputMode,
+    batchTimestampMs,
+    eventTimeWatermarkForEviction,
+    child,
+    initialStateGroupingAttrs,
+    initialState) {
 
   // NOTE: This is needed to comply with existing release of transformWithStateInPandas.
-  override def shortName: String =
-    if (userFacingDataType == TransformWithStateInPySpark.UserFacingDataType.PANDAS) {
-      StatefulOperatorsUtils.TRANSFORM_WITH_STATE_IN_PANDAS_EXEC_OP_NAME
-    } else {
-      StatefulOperatorsUtils.TRANSFORM_WITH_STATE_IN_PYSPARK_EXEC_OP_NAME
-    }
+  override def shortName: String = if (
+    userFacingDataType == TransformWithStateInPySpark.UserFacingDataType.PANDAS
+  ) {
+    StatefulOperatorsUtils.TRANSFORM_WITH_STATE_IN_PANDAS_EXEC_OP_NAME
+  } else {
+    StatefulOperatorsUtils.TRANSFORM_WITH_STATE_IN_PYSPARK_EXEC_OP_NAME
+  }
 
   private val pythonUDF = functionExpr.asInstanceOf[PythonUDF]
   private val pythonFunction = pythonUDF.func
@@ -131,8 +116,7 @@ case class TransformWithStateInPySparkExec(
     .map(a => StructField(a.name, a.dataType, a.nullable))
   private val groupingKeySchema = StructType(groupingKeyStructFields)
   private val groupingKeyExprEncoder = ExpressionEncoder(groupingKeySchema)
-    .resolveAndBind()
-    .asInstanceOf[ExpressionEncoder[Any]]
+    .resolveAndBind().asInstanceOf[ExpressionEncoder[Any]]
 
   private val numOutputRows: SQLMetric = longMetric("numOutputRows")
 
@@ -148,18 +132,17 @@ case class TransformWithStateInPySparkExec(
     // we need to throw an error if the schema is nullable
     driverProcessorHandle.getColumnFamilySchemas(
       shouldCheckNullable = shouldBeNullable,
-      shouldSetNullable = shouldBeNullable)
+      shouldSetNullable = shouldBeNullable
+    )
   }
 
   override def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo] = {
     driverProcessorHandle.getStateVariableInfos
   }
 
-  /**
-   * Metadata of this stateful operator and its states stores. Written during
-   * IncrementalExecution. `validateAndMaybeEvolveStateSchema` will initialize
-   * `columnFamilySchemas` and `stateVariableInfos` during `init()` call on driver.
-   */
+  /** Metadata of this stateful operator and its states stores.
+   * Written during IncrementalExecution. `validateAndMaybeEvolveStateSchema` will initialize
+   * `columnFamilySchemas` and `stateVariableInfos` during `init()` call on driver. */
   private val driverProcessorHandle: DriverStatefulProcessorHandleImpl =
     new DriverStatefulProcessorHandleImpl(timeMode, groupingKeyExprEncoder)
 
@@ -172,7 +155,8 @@ case class TransformWithStateInPySparkExec(
       pythonFunction,
       "pyspark.sql.streaming.transform_with_state_driver_worker",
       groupingKeySchema,
-      driverProcessorHandle)
+      driverProcessorHandle
+    )
     // runner initialization
     runner.init()
     try {
@@ -180,24 +164,16 @@ case class TransformWithStateInPySparkExec(
       runner.process()
     } catch {
       case e: Throwable =>
-        throw new SparkException(
-          "TransformWithStateInPySpark driver worker " +
-            "exited unexpectedly (crashed)",
-          e)
+        throw new SparkException("TransformWithStateInPySpark driver worker " +
+          "exited unexpectedly (crashed)", e)
     }
     runner.stop()
     val info = getStateInfo
     val stateSchemaDir = stateSchemaDirPath()
 
-    validateAndWriteStateSchema(
-      hadoopConf,
-      batchId,
-      stateSchemaVersion,
-      info,
-      stateSchemaDir,
-      session,
-      operatorStateMetadataVersion,
-      stateStoreEncodingFormat = conf.stateStoreEncodingFormat)
+    validateAndWriteStateSchema(hadoopConf, batchId, stateSchemaVersion, info, stateSchemaDir,
+      session, operatorStateMetadataVersion, stateStoreEncodingFormat =
+        conf.stateStoreEncodingFormat)
   }
 
   /**
@@ -209,93 +185,88 @@ case class TransformWithStateInPySparkExec(
 
     if (!hasInitialState) {
       if (isStreaming) {
-        child
-          .execute()
-          .mapPartitionsWithStateStore[InternalRow](
-            getStateInfo,
-            schemaForKeyRow,
-            schemaForValueRow,
-            NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
-            session.sqlContext.sessionState,
-            Some(session.streams.stateStoreCoordinator),
-            useColumnFamilies = true,
-            useMultipleValuesPerKey = true) {
-            case (store: StateStore, dataIterator: Iterator[InternalRow]) =>
-              processDataWithPartition(store, dataIterator)
-          }
+        child.execute().mapPartitionsWithStateStore[InternalRow](
+          getStateInfo,
+          schemaForKeyRow,
+          schemaForValueRow,
+          NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
+          session.sqlContext.sessionState,
+          Some(session.streams.stateStoreCoordinator),
+          useColumnFamilies = true,
+          useMultipleValuesPerKey = true
+        ) {
+          case (store: StateStore, dataIterator: Iterator[InternalRow]) =>
+            processDataWithPartition(store, dataIterator)
+        }
       } else {
         // If the query is running in batch mode, we need to create a new StateStore and instantiate
         // a temp directory on the executors in mapPartitionsWithIndex.
         val hadoopConfBroadcast =
           SerializableConfiguration.broadcast(sparkContext, session.sessionState.newHadoopConf())
-        child
-          .execute()
-          .mapPartitionsWithIndex[InternalRow](
-            (partitionId: Int, dataIterator: Iterator[InternalRow]) => {
-              initNewStateStoreAndProcessData(partitionId, hadoopConfBroadcast) { store =>
-                processDataWithPartition(store, dataIterator)
-              }
-            })
+        child.execute().mapPartitionsWithIndex[InternalRow](
+          (partitionId: Int, dataIterator: Iterator[InternalRow]) => {
+            initNewStateStoreAndProcessData(partitionId, hadoopConfBroadcast) { store =>
+              processDataWithPartition(store, dataIterator)
+            }
+          }
+        )
       }
     } else {
       val storeConf = new StateStoreConf(session.sqlContext.sessionState.conf)
       val hadoopConfBroadcast =
         SerializableConfiguration.broadcast(sparkContext, session.sessionState.newHadoopConf())
 
-      child
-        .execute()
-        .stateStoreAwareZipPartitions(
-          initialState.execute(),
-          getStateInfo,
-          storeNames = Seq(),
-          session.streams.stateStoreCoordinator) {
-          // The state store aware zip partitions will provide us with two iterators,
-          // child data iterator and the initial state iterator per partition.
-          case (partitionId, childDataIterator, initStateIterator) =>
-            if (isStreaming) {
-              val stateStoreId = StateStoreId(
-                stateInfo.get.checkpointLocation,
-                stateInfo.get.operatorId,
-                partitionId)
-              val storeProviderId = StateStoreProviderId(stateStoreId, stateInfo.get.queryRunId)
-              val store = StateStore.get(
-                storeProviderId = storeProviderId,
-                keySchema = schemaForKeyRow,
-                valueSchema = schemaForValueRow,
-                NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
-                version = stateInfo.get.storeVersion,
-                stateStoreCkptId = stateInfo.get.getStateStoreCkptId(partitionId).map(_.head),
-                stateSchemaBroadcast = stateInfo.get.stateSchemaMetadata,
-                useColumnFamilies = true,
-                storeConf = storeConf,
-                hadoopConf = hadoopConfBroadcast.value.value)
+      child.execute().stateStoreAwareZipPartitions(
+        initialState.execute(),
+        getStateInfo,
+        storeNames = Seq(),
+        session.streams.stateStoreCoordinator) {
+        // The state store aware zip partitions will provide us with two iterators,
+        // child data iterator and the initial state iterator per partition.
+        case (partitionId, childDataIterator, initStateIterator) =>
+          if (isStreaming) {
+            val stateStoreId = StateStoreId(stateInfo.get.checkpointLocation,
+              stateInfo.get.operatorId, partitionId)
+            val storeProviderId = StateStoreProviderId(stateStoreId, stateInfo.get.queryRunId)
+            val store = StateStore.get(
+              storeProviderId = storeProviderId,
+              keySchema = schemaForKeyRow,
+              valueSchema = schemaForValueRow,
+              NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
+              version = stateInfo.get.storeVersion,
+              stateStoreCkptId = stateInfo.get.getStateStoreCkptId(partitionId).map(_.head),
+              stateSchemaBroadcast = stateInfo.get.stateSchemaMetadata,
+              useColumnFamilies = true,
+              storeConf = storeConf,
+              hadoopConf = hadoopConfBroadcast.value.value
+            )
+            processDataWithPartition(store, childDataIterator, initStateIterator)
+          } else {
+            initNewStateStoreAndProcessData(partitionId, hadoopConfBroadcast) { store =>
               processDataWithPartition(store, childDataIterator, initStateIterator)
-            } else {
-              initNewStateStoreAndProcessData(partitionId, hadoopConfBroadcast) { store =>
-                processDataWithPartition(store, childDataIterator, initStateIterator)
-              }
             }
-        }
+          }
+      }
     }
   }
 
   /**
-   * Create a new StateStore for given partitionId and instantiate a temp directory on the
-   * executors. Process data and close the stateStore provider afterwards.
+   * Create a new StateStore for given partitionId and instantiate a temp directory
+   * on the executors. Process data and close the stateStore provider afterwards.
    */
   private def initNewStateStoreAndProcessData(
       partitionId: Int,
-      hadoopConfBroadcast: Broadcast[SerializableConfiguration])(
-      f: StateStore => Iterator[InternalRow]): Iterator[InternalRow] = {
+      hadoopConfBroadcast: Broadcast[SerializableConfiguration])
+      (f: StateStore => Iterator[InternalRow]): Iterator[InternalRow] = {
 
     val providerId = {
       val tempDirPath = Utils.createTempDir().getAbsolutePath
-      new StateStoreProviderId(StateStoreId(tempDirPath, 0, partitionId), getStateInfo.queryRunId)
+      new StateStoreProviderId(
+        StateStoreId(tempDirPath, 0, partitionId), getStateInfo.queryRunId)
     }
 
     val sqlConf = new SQLConf()
-    sqlConf.setConfString(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key,
+    sqlConf.setConfString(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
       classOf[RocksDBStateStoreProvider].getName)
     val storeConf = new StateStoreConf(sqlConf)
 
@@ -313,10 +284,9 @@ case class TransformWithStateInPySparkExec(
 
     val store = stateStoreProvider.getStore(0, None)
     val outputIterator = f(store)
-    CompletionIterator[InternalRow, Iterator[InternalRow]](
-      outputIterator.iterator, {
-        stateStoreProvider.close()
-      }).map { row =>
+    CompletionIterator[InternalRow, Iterator[InternalRow]](outputIterator.iterator, {
+      stateStoreProvider.close()
+    }).map { row =>
       row
     }
   }
@@ -324,7 +294,8 @@ case class TransformWithStateInPySparkExec(
   private def processDataWithPartition(
       store: StateStore,
       dataIterator: Iterator[InternalRow],
-      initStateIterator: Iterator[InternalRow] = Iterator.empty): Iterator[InternalRow] = {
+      initStateIterator: Iterator[InternalRow] = Iterator.empty):
+  Iterator[InternalRow] = {
     val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
     // TODO(SPARK-49603) set the metrics in the lazily initialized iterator
     val timeoutLatencyMs = longMetric("allRemovalsTimeMs")
@@ -342,14 +313,8 @@ case class TransformWithStateInPySparkExec(
 
     val data = groupAndProject(filteredIter, groupingAttributes, child.output, dedupAttributes)
 
-    val processorHandle = new StatefulProcessorHandleImpl(
-      store,
-      getStateInfo.queryRunId,
-      groupingKeyExprEncoder,
-      timeMode,
-      isStreaming,
-      batchTimestampMs,
-      metrics)
+    val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId,
+      groupingKeyExprEncoder, timeMode, isStreaming, batchTimestampMs, metrics)
 
     val evalType = {
       if (userFacingDataType == TransformWithStateInPySpark.UserFacingDataType.PANDAS) {
@@ -372,21 +337,19 @@ case class TransformWithStateInPySparkExec(
         jobArtifactUUID,
         groupingKeySchema,
         batchTimestampMs,
-        eventTimeWatermarkForEviction)
+        eventTimeWatermarkForEviction
+      )
       executePython(data, output, runner)
     } else {
       // dedup attributes here because grouping attributes appear twice (key and value)
       val (initDedupAttributes, initArgOffsets) =
         resolveArgOffsets(initialState.output, initialStateGroupingAttrs)
       val initData =
-        groupAndProject(
-          initStateIterator,
-          initialStateGroupingAttrs,
-          initialState.output,
-          initDedupAttributes)
+        groupAndProject(initStateIterator, initialStateGroupingAttrs,
+          initialState.output, initDedupAttributes)
       // concatenate input rows and initial state rows iterators
       val inputIter: Iterator[((InternalRow, Iterator[InternalRow]), Boolean)] =
-        initData.map { item => (item, true) } ++ data.map { item => (item, false) }
+          initData.map { item => (item, true) } ++ data.map { item => (item, false) }
 
       val evalType = {
         if (userFacingDataType == TransformWithStateInPySpark.UserFacingDataType.PANDAS) {
@@ -409,34 +372,33 @@ case class TransformWithStateInPySparkExec(
         jobArtifactUUID,
         groupingKeySchema,
         batchTimestampMs,
-        eventTimeWatermarkForEviction)
+        eventTimeWatermarkForEviction
+      )
       executePython(inputIter, output, runner)
     }
 
-    CompletionIterator[InternalRow, Iterator[InternalRow]](
-      outputIterator, {
-        // Note: Due to the iterator lazy execution, this metric also captures the time taken
-        // by the upstream (consumer) operators in addition to the processing in this operator.
-        allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
-        commitTimeMs += timeTakenMs {
-          if (isStreaming) {
-            processorHandle.doTtlCleanup()
-            store.commit()
-          } else {
-            store.abort()
-          }
+    CompletionIterator[InternalRow, Iterator[InternalRow]](outputIterator, {
+      // Note: Due to the iterator lazy execution, this metric also captures the time taken
+      // by the upstream (consumer) operators in addition to the processing in this operator.
+      allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
+      commitTimeMs += timeTakenMs {
+        if (isStreaming) {
+          processorHandle.doTtlCleanup()
+          store.commit()
+        } else {
+          store.abort()
         }
-        setStoreMetrics(store, isStreaming)
-        setOperatorMetrics()
-      }).map { row =>
+      }
+      setStoreMetrics(store, isStreaming)
+      setOperatorMetrics()
+    }).map { row =>
       numOutputRows += 1
       row
     }
   }
 
   override protected def withNewChildrenInternal(
-      newLeft: SparkPlan,
-      newRight: SparkPlan): TransformWithStateInPySparkExec =
+      newLeft: SparkPlan, newRight: SparkPlan): TransformWithStateInPySparkExec =
     if (hasInitialState) {
       copy(child = newLeft, initialState = newRight)
     } else {
@@ -467,7 +429,8 @@ object TransformWithStateInPySparkExec {
       operatorId = 0,
       storeVersion = 0,
       numPartitions = shufflePartitions,
-      stateStoreCkptIds = None)
+      stateStoreCkptIds = None
+    )
 
     new TransformWithStateInPySparkExec(
       functionExpr,

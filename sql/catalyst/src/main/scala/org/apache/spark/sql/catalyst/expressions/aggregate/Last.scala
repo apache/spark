@@ -25,11 +25,11 @@ import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.types._
 
 /**
- * Returns the last value of `child` for a group of rows. If the last value of `child` is `null`,
- * it returns `null` (respecting nulls). Even if [[Last]] is used on an already sorted column, if
- * we do partial aggregation and final aggregation (when mergeExpression is used) its result will
- * not be deterministic (unless the input table is sorted and has a single partition, and we use a
- * single reducer to do the aggregation.).
+ * Returns the last value of `child` for a group of rows. If the last value of `child`
+ * is `null`, it returns `null` (respecting nulls). Even if [[Last]] is used on an already
+ * sorted column, if we do partial aggregation and final aggregation (when mergeExpression
+ * is used) its result will not be deterministic (unless the input table is sorted and has
+ * a single partition, and we use a single reducer to do the aggregation.).
  */
 @ExpressionDescription(
   usage = """
@@ -51,9 +51,7 @@ import org.apache.spark.sql.types._
   group = "agg_funcs",
   since = "2.0.0")
 case class Last(child: Expression, ignoreNulls: Boolean)
-    extends DeclarativeAggregate
-    with ExpectsInputTypes
-    with UnaryLike[Expression] {
+  extends DeclarativeAggregate with ExpectsInputTypes with UnaryLike[Expression] {
 
   def this(child: Expression) = this(child, false)
 
@@ -86,17 +84,20 @@ case class Last(child: Expression, ignoreNulls: Boolean)
 
   override lazy val initialValues: Seq[Literal] = Seq(
     /* last = */ Literal.create(null, child.dataType),
-    /* valueSet = */ Literal.create(false, BooleanType))
+    /* valueSet = */ Literal.create(false, BooleanType)
+  )
 
   override lazy val updateExpressions: Seq[Expression] = {
     if (ignoreNulls) {
       Seq(
         /* last = */ If(child.isNull, last, child),
-        /* valueSet = */ valueSet || child.isNotNull)
+        /* valueSet = */ valueSet || child.isNotNull
+      )
     } else {
       Seq(
         /* last = */ child,
-        /* valueSet = */ Literal.create(true, BooleanType))
+        /* valueSet = */ Literal.create(true, BooleanType)
+      )
     }
   }
 
@@ -104,7 +105,8 @@ case class Last(child: Expression, ignoreNulls: Boolean)
     // Prefer the right hand expression if it has been set.
     Seq(
       /* last = */ If(valueSet.right, last.right, last.left),
-      /* valueSet = */ valueSet.right || valueSet.left)
+      /* valueSet = */ valueSet.right || valueSet.left
+    )
   }
 
   override lazy val evaluateExpression: AttributeReference = last

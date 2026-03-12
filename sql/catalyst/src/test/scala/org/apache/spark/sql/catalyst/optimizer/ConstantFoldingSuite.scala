@@ -35,8 +35,12 @@ class ConstantFoldingSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("AnalysisNodes", Once, EliminateSubqueryAliases) ::
-        Batch("ConstantFolding", Once, OptimizeIn, ConstantFolding, BooleanSimplification) :: Nil
+      Batch("AnalysisNodes", Once,
+        EliminateSubqueryAliases) ::
+      Batch("ConstantFolding", Once,
+        OptimizeIn,
+        ConstantFolding,
+        BooleanSimplification) :: Nil
   }
 
   val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
@@ -68,16 +72,20 @@ class ConstantFoldingSuite extends PlanTest {
           Literal(2) * (Literal(3) + Literal(4)) as "2*(3+4)")
         .where(
           Literal(1) === Literal(1) &&
-            Literal(2) > Literal(3) ||
-            Literal(3) > Literal(2))
-        .groupBy(Literal(2) * Literal(3) - Literal(6) / (Literal(4) - Literal(2)))(
-          Literal(9) / Literal(3) as "9/3")
+          Literal(2) > Literal(3) ||
+          Literal(3) > Literal(2) )
+        .groupBy(
+          Literal(2) * Literal(3) - Literal(6) / (Literal(4) - Literal(2))
+        )(Literal(9) / Literal(3) as "9/3")
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer =
       testRelation
-        .select(Literal(9) as "2+3+4", Literal(10) as "2*3+4", Literal(14) as "2*(3+4)")
+        .select(
+          Literal(9) as "2+3+4",
+          Literal(10) as "2*3+4",
+          Literal(14) as "2*(3+4)")
         .where(Literal(true))
         .groupBy(Literal(3.0))(Literal(3.0) as "9/3")
         .analyze
@@ -85,9 +93,8 @@ class ConstantFoldingSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test(
-    "Constant folding test: expressions have attribute references and literals in " +
-      "arithmetic operations") {
+  test("Constant folding test: expressions have attribute references and literals in " +
+    "arithmetic operations") {
     val originalQuery =
       testRelation
         .select(
@@ -110,20 +117,19 @@ class ConstantFoldingSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test(
-    "Constant folding test: expressions have attribute references and literals in " +
-      "predicates") {
+  test("Constant folding test: expressions have attribute references and literals in " +
+    "predicates") {
     val originalQuery =
       testRelation
         .where(
           (($"a" > 1 && Literal(1) === Literal(1)) ||
-            ($"a" < 10 && Literal(1) === Literal(2)) ||
-            (Literal(1) === Literal(1) && $"b" > 1) ||
-            (Literal(1) === Literal(2) && $"b" < 10)) &&
-            (($"a" > 1 || Literal(1) === Literal(1)) &&
-              ($"a" < 10 || Literal(1) === Literal(2)) &&
-              (Literal(1) === Literal(1) || $"b" > 1) &&
-              (Literal(1) === Literal(2) || $"b" < 10)))
+           ($"a" < 10 && Literal(1) === Literal(2)) ||
+           (Literal(1) === Literal(1) && $"b" > 1) ||
+           (Literal(1) === Literal(2) && $"b" < 10)) &&
+           (($"a" > 1 || Literal(1) === Literal(1)) &&
+            ($"a" < 10 || Literal(1) === Literal(2)) &&
+            (Literal(1) === Literal(1) || $"b" > 1) &&
+            (Literal(1) === Literal(2) || $"b" < 10)))
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
@@ -140,14 +146,16 @@ class ConstantFoldingSuite extends PlanTest {
       testRelation
         .select(
           Cast(Literal("2"), IntegerType) + Literal(3) + $"a" as "c1",
-          Coalesce(
-            Seq(Cast(Literal("abc"), IntegerType, evalMode = EvalMode.TRY), Literal(3))) as "c2")
+          Coalesce(Seq(
+            Cast(Literal("abc"), IntegerType, evalMode = EvalMode.TRY), Literal(3))) as "c2")
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer =
       testRelation
-        .select(Literal(5) + $"a" as "c1", Literal(3) as "c2")
+        .select(
+          Literal(5) + $"a" as "c1",
+          Literal(3) as "c2")
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -156,13 +164,17 @@ class ConstantFoldingSuite extends PlanTest {
   test("Constant folding test: expressions have nonfoldable functions") {
     val originalQuery =
       testRelation
-        .select(Rand(5L) + Literal(1) as "c1", sum($"a") as "c2")
+        .select(
+          Rand(5L) + Literal(1) as "c1",
+          sum($"a") as "c2")
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer =
       testRelation
-        .select(Rand(5L) + Literal(1.0) as "c1", sum($"a") as "c2")
+        .select(
+          Rand(5L) + Literal(1.0) as "c1",
+          sum($"a") as "c2")
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -172,6 +184,7 @@ class ConstantFoldingSuite extends PlanTest {
     val originalQuery = testRelation.select(
       IsNull(Literal(null)) as "c1",
       IsNotNull(Literal(null)) as "c2",
+
       UnresolvedExtractValue(Literal.create(null, ArrayType(IntegerType)), 1) as "c3",
       UnresolvedExtractValue(
         Literal.create(Seq(1), ArrayType(IntegerType)),
@@ -179,21 +192,29 @@ class ConstantFoldingSuite extends PlanTest {
       UnresolvedExtractValue(
         Literal.create(null, StructType(Seq(StructField("a", IntegerType, true)))),
         "a") as "c5",
+
       UnaryMinus(Literal.create(null, IntegerType)) as "c6",
       Cast(Literal(null), IntegerType) as "c7",
       Not(Literal.create(null, BooleanType)) as "c8",
+
       Add(Literal.create(null, IntegerType), 1) as "c9",
       Add(1, Literal.create(null, IntegerType)) as "c10",
+
       EqualTo(Literal.create(null, IntegerType), 1) as "c11",
       EqualTo(1, Literal.create(null, IntegerType)) as "c12",
+
       new Like(Literal.create(null, StringType), "abc") as "c13",
       new Like("abc", Literal.create(null, StringType)) as "c14",
+
       Upper(Literal.create(null, StringType)) as "c15",
+
       Substring(Literal.create(null, StringType), 0, 1) as "c16",
       Substring("abc", Literal.create(null, IntegerType), 1) as "c17",
       Substring("abc", 0, Literal.create(null, IntegerType)) as "c18",
+
       Contains(Literal.create(null, StringType), "abc") as "c19",
-      Contains("abc", Literal.create(null, StringType)) as "c20")
+      Contains("abc", Literal.create(null, StringType)) as "c20"
+    )
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
@@ -202,25 +223,33 @@ class ConstantFoldingSuite extends PlanTest {
         .select(
           Literal(true) as "c1",
           Literal(false) as "c2",
+
           Literal.create(null, IntegerType) as "c3",
           Literal.create(null, IntegerType) as "c4",
           Literal.create(null, IntegerType) as "c5",
+
           Literal.create(null, IntegerType) as "c6",
           Literal.create(null, IntegerType) as "c7",
           Literal.create(null, BooleanType) as "c8",
+
           Literal.create(null, IntegerType) as "c9",
           Literal.create(null, IntegerType) as "c10",
+
           Literal.create(null, BooleanType) as "c11",
           Literal.create(null, BooleanType) as "c12",
+
           Literal.create(null, BooleanType) as "c13",
           Literal.create(null, BooleanType) as "c14",
+
           Literal.create(null, StringType) as "c15",
+
           Literal.create(null, StringType) as "c16",
           Literal.create(null, StringType) as "c17",
           Literal.create(null, StringType) as "c18",
+
           Literal.create(null, BooleanType) as "c19",
-          Literal.create(null, BooleanType) as "c20")
-        .analyze
+          Literal.create(null, BooleanType) as "c20"
+        ).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -254,8 +283,12 @@ class ConstantFoldingSuite extends PlanTest {
 
   object OptimizeForCreate extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("AnalysisNodes", Once, EliminateSubqueryAliases) ::
-        Batch("ConstantFolding", FixedPoint(4), OptimizeIn, ConstantFolding, PruneFilters) :: Nil
+      Batch("AnalysisNodes", Once,
+        EliminateSubqueryAliases) ::
+      Batch("ConstantFolding", FixedPoint(4),
+        OptimizeIn,
+        ConstantFolding,
+        PruneFilters) :: Nil
   }
 
   test("SPARK-33544: Constant folding test CreateArray") {
@@ -295,7 +328,9 @@ class ConstantFoldingSuite extends PlanTest {
 
     val correctAnswer =
       testRelation
-        .select(Literal("WWSpark".getBytes()).as("c1"), Literal.create("a", StringType).as("c2"))
+        .select(
+          Literal("WWSpark".getBytes()).as("c1"),
+          Literal.create("a", StringType).as("c2"))
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -315,7 +350,8 @@ class ConstantFoldingSuite extends PlanTest {
                 Literal.fromObject(SerializableBoxedInt(42), serializableObjType),
                 "add",
                 serializableObjType,
-                Literal(1) :: Nil),
+                Literal(1) :: Nil
+              ),
               "toNotSerializable",
               notSerializableObjType),
             "addAsInt",
@@ -356,7 +392,8 @@ class ConstantFoldingSuite extends PlanTest {
         t.select(CaseWhen((Divide(1, 0) === 1, Add(1, 0)) :: Nil, Subtract(1, 0))),
         t.select(If(Divide(1, 0) === 1, Add(1, 0), Add(1, 0))),
         t.select(Coalesce(Divide(1, 0) :: Add(1, 0) :: Nil)),
-        t.select(NaNvl(Divide(1, 0), Add(1, 0)))).foreach { query =>
+        t.select(NaNvl(Divide(1, 0), Add(1, 0)))
+      ).foreach { query =>
         intercept[SparkArithmeticException] {
           Optimize.execute(query.analyze)
         }
@@ -367,7 +404,8 @@ class ConstantFoldingSuite extends PlanTest {
         t.select(CaseWhen(($"c" === 1d, Divide(1, 0)) :: Nil, 1d)),
         t.select(If($"c" === 1d, Divide(1, 0), 1d)),
         t.select(Coalesce($"c" :: Divide(1, 0) :: Nil)),
-        t.select(NaNvl($"c", Divide(1, 0)))).foreach { query =>
+        t.select(NaNvl($"c", Divide(1, 0)))
+      ).foreach { query =>
         val optimized = Optimize.execute(query.analyze)
         val failedToEvaluated = optimized.expressions.flatMap(_.collect {
           case e: Expression if e.getTagValue(ConstantFolding.FAILED_TO_EVALUATE).isDefined => e
@@ -389,15 +427,15 @@ class ConstantFoldingSuite extends PlanTest {
 
     Seq(EqualTo, LessThan, GreaterThan).foreach { comparison =>
       comparePlans(
-        Optimize.execute(
-          testRelation
-            .select(comparison($"a", ScalarSubquery(emptyRelation)).as("o"))
-            .analyze),
+        Optimize.execute(testRelation
+          .select(comparison($"a", ScalarSubquery(emptyRelation)).as("o")).analyze),
         testRelation.select(comparison($"a", nullIntLit).as("o")).analyze)
     }
 
     val oneRowScalarSubquery = testRelation.select(ScalarSubquery(oneRowRelation).as("o")).analyze
-    comparePlans(Optimize.execute(oneRowScalarSubquery), oneRowScalarSubquery)
+    comparePlans(
+      Optimize.execute(oneRowScalarSubquery),
+      oneRowScalarSubquery)
   }
 
   test("SPARK-53360: Once strategy with ConstantFolding's idempotence should not be broken") {
@@ -406,12 +444,9 @@ class ConstantFoldingSuite extends PlanTest {
 
     Seq(EqualTo, LessThan, GreaterThan).foreach { comparison =>
       comparePlans(
-        Optimize.execute(
-          testRelation
-            .select(
-              comparison($"a", Multiply(ScalarSubquery(emptyRelation), Literal(1, IntegerType)))
-                .as("o"))
-            .analyze),
+        Optimize.execute(testRelation
+          .select(comparison($"a",
+            Multiply(ScalarSubquery(emptyRelation), Literal(1, IntegerType))).as("o")).analyze),
         testRelation.select(comparison($"a", nullIntLit).as("o")).analyze)
     }
   }

@@ -27,6 +27,7 @@ import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{DatetimeType, _}
 
+
 /**
  * Analyzes the given columns of the given table to generate statistics, which will be used in
  * query optimizations. Parameter `allColumns` may be specified to generate statistics of all the
@@ -35,14 +36,11 @@ import org.apache.spark.sql.types.{DatetimeType, _}
 case class AnalyzeColumnCommand(
     tableIdent: TableIdentifier,
     columnNames: Option[Seq[String]],
-    allColumns: Boolean)
-    extends LeafRunnableCommand {
+    allColumns: Boolean) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    require(
-      columnNames.isDefined ^ allColumns,
-      "Parameter `columnNames` or `allColumns` are " +
-        "mutually exclusive. Only one of them should be specified.")
+    require(columnNames.isDefined ^ allColumns, "Parameter `columnNames` or `allColumns` are " +
+      "mutually exclusive. Only one of them should be specified.")
     val sessionState = sparkSession.sessionState
 
     tableIdent.database match {
@@ -63,23 +61,15 @@ case class AnalyzeColumnCommand(
     Seq.empty[Row]
   }
 
-  private def analyzeColumnInCachedData(
-      plan: LogicalPlan,
-      sparkSession: SparkSession): Boolean = {
+  private def analyzeColumnInCachedData(plan: LogicalPlan, sparkSession: SparkSession): Boolean = {
     val cacheManager = sparkSession.sharedState.cacheManager
     val df = Dataset.ofRows(sparkSession, plan)
-    cacheManager
-      .lookupCachedData(df)
-      .map { cachedData =>
-        val columnsToAnalyze = getColumnsToAnalyze(
-          tableIdent,
-          cachedData.cachedRepresentation,
-          columnNames,
-          allColumns)
-        cacheManager.analyzeColumnCacheQuery(sparkSession, cachedData, columnsToAnalyze)
-        cachedData
-      }
-      .isDefined
+    cacheManager.lookupCachedData(df).map { cachedData =>
+      val columnsToAnalyze = getColumnsToAnalyze(
+        tableIdent, cachedData.cachedRepresentation, columnNames, allColumns)
+      cacheManager.analyzeColumnCacheQuery(sparkSession, cachedData, columnsToAnalyze)
+      cachedData
+    }.isDefined
   }
 
   private def analyzeColumnInTempView(plan: LogicalPlan, sparkSession: SparkSession): Unit = {
@@ -105,9 +95,7 @@ case class AnalyzeColumnCommand(
     columnsToAnalyze.foreach { attr =>
       if (!supportsType(attr.dataType)) {
         throw QueryCompilationErrors.columnTypeNotSupportStatisticsCollectionError(
-          attr.name,
-          tableIdent,
-          attr.dataType)
+          attr.name, tableIdent, attr.dataType)
       }
     }
     columnsToAnalyze
@@ -131,8 +119,9 @@ case class AnalyzeColumnCommand(
       val (rowCount, newColStats) =
         CommandUtils.computeColumnStats(sparkSession, relation, columnsToAnalyze)
 
-      val newColCatalogStats = newColStats.map { case (attr, columnStat) =>
-        attr.name -> columnStat.toCatalogColumnStat(attr.name, attr.dataType)
+      val newColCatalogStats = newColStats.map {
+        case (attr, columnStat) =>
+          attr.name -> columnStat.toCatalogColumnStat(attr.name, attr.dataType)
       }
 
       // We also update table-level stats in order to keep them consistent with column-level stats.

@@ -51,14 +51,15 @@ import org.apache.spark.util.UninterruptibleThread
 import org.apache.spark.util.Utils
 
 /**
- * Helper trait that should be extended by all SQL test suites within the Spark code base.
+ * Helper trait that should be extended by all SQL test suites within the Spark
+ * code base.
  *
- * This allows subclasses to plugin a custom `SparkSession`. It comes with test data prepared in
- * advance as well as all implicit conversions used extensively by dataframes. To use implicit
- * methods, import `testImplicits._` instead of through the `SparkSession`.
+ * This allows subclasses to plugin a custom `SparkSession`. It comes with test data
+ * prepared in advance as well as all implicit conversions used extensively by dataframes.
+ * To use implicit methods, import `testImplicits._` instead of through the `SparkSession`.
  *
- * Subclasses should *not* create `SparkSession`s in the test suite constructor, which is prone to
- * leaving multiple overlapping [[org.apache.spark.SparkContext]]s in the same JVM.
+ * Subclasses should *not* create `SparkSession`s in the test suite constructor, which is
+ * prone to leaving multiple overlapping [[org.apache.spark.SparkContext]]s in the same JVM.
  */
 private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with PlanTest {
   // Whether to materialize all test data before the first test is run
@@ -97,8 +98,8 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with
   }
 
   /**
-   * Materialize the test data immediately after the `SQLContext` is set up. This is necessary if
-   * the data is accessed by name but not through direct reference.
+   * Materialize the test data immediately after the `SQLContext` is set up.
+   * This is necessary if the data is accessed by name but not through direct reference.
    */
   protected def setupTestData(): Unit = {
     loadTestDataBeforeTests = true
@@ -118,8 +119,8 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with
     }
   }
 
-  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)(implicit
-      pos: Position): Unit = {
+  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)
+      (implicit pos: Position): Unit = {
     if (testTags.exists(_.isInstanceOf[DisableAdaptiveExecution])) {
       super.test(testName, testTags: _*) {
         withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
@@ -134,8 +135,8 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with
   /**
    * Run a test on a separate `UninterruptibleThread`.
    */
-  protected def testWithUninterruptibleThread(name: String, quietly: Boolean = false)(
-      body: => Unit): Unit = {
+  protected def testWithUninterruptibleThread(name: String, quietly: Boolean = false)
+    (body: => Unit): Unit = {
     val timeoutMillis = 10000
     @transient var ex: Throwable = null
 
@@ -174,9 +175,9 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with
   }
 
   /**
-   * Copy file in jar's resource to a temp file, then pass it to `f`. This function is used to
-   * make `f` can use the path of temp file(e.g. file:/), instead of path of jar's resource which
-   * starts with 'jar:file:/'
+   * Copy file in jar's resource to a temp file, then pass it to `f`.
+   * This function is used to make `f` can use the path of temp file(e.g. file:/), instead of
+   * path of jar's resource which starts with 'jar:file:/'
    */
   protected def withResourceTempPath(resourcePath: String)(f: File => Unit): Unit = {
     val inputStream =
@@ -193,18 +194,18 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with
    */
   protected def waitForTasksToFinish(): Unit = {
     eventually(timeout(10.seconds)) {
-      assert(spark.sparkContext.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)
+      assert(spark.sparkContext.statusTracker
+        .getExecutorInfos.map(_.numRunningTasks()).sum == 0)
     }
   }
 
   /**
-   * Creates the specified number of temporary directories, which is then passed to `f` and will
-   * be deleted after `f` returns.
+   * Creates the specified number of temporary directories, which is then passed to `f` and will be
+   * deleted after `f` returns.
    */
   protected def withTempPaths(numPaths: Int)(f: Seq[File] => Unit): Unit = {
     val files = Array.fill[File](numPaths)(Utils.createTempDir().getCanonicalFile)
-    try f(files.toImmutableArraySeq)
-    finally {
+    try f(files.toImmutableArraySeq) finally {
       // wait for all tasks to finish before deleting files
       waitForTasksToFinish()
       files.foreach(Utils.deleteRecursively)
@@ -215,17 +216,17 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with
 /**
  * Helper trait that can be extended by all external SQL test suites.
  *
- * This allows subclasses to plugin a custom `SQLContext`. To use implicit methods, import
- * `testImplicits._` instead of through the `SQLContext`.
+ * This allows subclasses to plugin a custom `SQLContext`.
+ * To use implicit methods, import `testImplicits._` instead of through the `SQLContext`.
  *
- * Subclasses should *not* create `SQLContext`s in the test suite constructor, which is prone to
- * leaving multiple overlapping [[org.apache.spark.SparkContext]]s in the same JVM.
+ * Subclasses should *not* create `SQLContext`s in the test suite constructor, which is
+ * prone to leaving multiple overlapping [[org.apache.spark.SparkContext]]s in the same JVM.
  */
 private[sql] trait SQLTestUtilsBase
-    extends Eventually
-    with BeforeAndAfterAll
-    with SQLTestData
-    with PlanTestBase { self: Suite =>
+  extends Eventually
+  with BeforeAndAfterAll
+  with SQLTestData
+  with PlanTestBase { self: Suite =>
 
   override protected def spark: classic.SparkSession
 
@@ -237,12 +238,12 @@ private[sql] trait SQLTestUtilsBase
   /**
    * A helper object for importing SQL implicits.
    *
-   * Note that the alternative of importing `spark.implicits._` is not possible here. This is
-   * because we create the `SparkSession` immediately before the first test is run, but the
-   * implicits import is needed in the constructor.
+   * Note that the alternative of importing `spark.implicits._` is not possible here.
+   * This is because we create the `SparkSession` immediately before the first test is run,
+   * but the implicits import is needed in the constructor.
    */
   protected object testImplicits
-      extends SQLImplicits
+    extends SQLImplicits
       with ClassicConversions
       with ColumnConversions {
     override protected def session: SparkSession = self.spark
@@ -281,8 +282,7 @@ private[sql] trait SQLTestUtilsBase
   protected def withTempView(viewNames: String*)(f: => Unit): Unit = {
     Utils.tryWithSafeFinally(f) {
       viewNames.foreach { viewName =>
-        try spark.catalog.dropTempView(viewName)
-        catch {
+        try spark.catalog.dropTempView(viewName) catch {
           // If the test failed part way, we don't want to mask the failure by failing to remove
           // temp views that never got created.
           case _: NoSuchTableException =>
@@ -297,8 +297,7 @@ private[sql] trait SQLTestUtilsBase
   protected def withGlobalTempView(viewNames: String*)(f: => Unit): Unit = {
     Utils.tryWithSafeFinally(f) {
       viewNames.foreach { viewName =>
-        try spark.catalog.dropGlobalTempView(viewName)
-        catch {
+        try spark.catalog.dropGlobalTempView(viewName) catch {
           // If the test failed part way, we don't want to mask the failure by failing to remove
           // global temp views that never got created.
           case _: NoSuchTableException =>
@@ -322,9 +321,11 @@ private[sql] trait SQLTestUtilsBase
    * Drops view `viewName` after calling `f`.
    */
   protected def withView(viewNames: String*)(f: => Unit): Unit = {
-    Utils.tryWithSafeFinally(f)(viewNames.foreach { name =>
-      spark.sql(s"DROP VIEW IF EXISTS $name")
-    })
+    Utils.tryWithSafeFinally(f)(
+      viewNames.foreach { name =>
+        spark.sql(s"DROP VIEW IF EXISTS $name")
+      }
+    )
   }
 
   /**
@@ -333,8 +334,7 @@ private[sql] trait SQLTestUtilsBase
   protected def withCache(cacheNames: String*)(f: => Unit): Unit = {
     Utils.tryWithSafeFinally(f) {
       cacheNames.foreach { cacheName =>
-        try uncacheTable(cacheName)
-        catch {
+        try uncacheTable(cacheName) catch {
           case _: AnalysisException =>
         }
       }
@@ -352,7 +352,7 @@ private[sql] trait SQLTestUtilsBase
   }
 
   /**
-   * Creates a temporary database and switches current database to it before executing `f`. This
+   * Creates a temporary database and switches current database to it before executing `f`.  This
    * database is dropped after `f` returns.
    *
    * Note that this method doesn't switch current database before executing `f`.
@@ -362,13 +362,11 @@ private[sql] trait SQLTestUtilsBase
 
     try {
       spark.sql(s"CREATE DATABASE $dbName")
-    } catch {
-      case cause: Throwable =>
-        fail("Failed to create temporary database", cause)
+    } catch { case cause: Throwable =>
+      fail("Failed to create temporary database", cause)
     }
 
-    try f(dbName)
-    finally {
+    try f(dbName) finally {
       if (spark.catalog.currentDatabase == dbName) {
         spark.sql(s"USE $DEFAULT_DATABASE")
       }
@@ -391,8 +389,7 @@ private[sql] trait SQLTestUtilsBase
   /**
    * Drops namespace `namespace` after calling `f`.
    *
-   * Note that, if you switch current catalog/namespace in `f`, you should switch it back
-   * manually.
+   * Note that, if you switch current catalog/namespace in `f`, you should switch it back manually.
    */
   protected def withNamespace(namespaces: String*)(f: => Unit): Unit = {
     Utils.tryWithSafeFinally(f) {
@@ -414,8 +411,8 @@ private[sql] trait SQLTestUtilsBase
   }
 
   /**
-   * Enables Locale `language` before executing `f`, then switches back to the default locale of
-   * JVM after `f` returns.
+   * Enables Locale `language` before executing `f`, then switches back to the default locale of JVM
+   * after `f` returns.
    */
   protected def withLocale(language: String)(f: => Unit): Unit = {
     val originalLocale = Locale.getDefault
@@ -454,24 +451,26 @@ private[sql] trait SQLTestUtilsBase
    */
   protected def stripSparkFilter(df: DataFrame): DataFrame = {
     val schema = df.schema
-    val withoutFilters = df.queryExecution.executedPlan.transform { case FilterExec(_, child) =>
-      child
+    val withoutFilters = df.queryExecution.executedPlan.transform {
+      case FilterExec(_, child) => child
     }
 
     spark.internalCreateDataFrame(withoutFilters.execute(), schema)
   }
 
   /**
-   * Turn a logical plan into a `DataFrame`. This should be removed once we have an easier way to
-   * construct `DataFrame` directly out of local data without relying on implicits.
+   * Turn a logical plan into a `DataFrame`. This should be removed once we have an easier
+   * way to construct `DataFrame` directly out of local data without relying on implicits.
    */
   protected implicit def logicalPlanToSparkQuery(plan: LogicalPlan): DataFrame = {
     Dataset.ofRows(spark, plan)
   }
 
+
   /**
-   * This method is used to make the given path qualified, when a path does not contain a scheme,
-   * this path will not be changed after the default FileSystem is changed.
+   * This method is used to make the given path qualified, when a path
+   * does not contain a scheme, this path will not be changed after the default
+   * FileSystem is changed.
    */
   def makeQualifiedPath(path: String): URI = {
     val hadoopPath = new Path(path)
@@ -491,13 +490,9 @@ private[sql] trait SQLTestUtilsBase
    */
   def getLocalDirSize(file: File): Long = {
     assert(file.isDirectory)
-    Files
-      .walk(file.toPath)
-      .iterator()
-      .asScala
+    Files.walk(file.toPath).iterator().asScala
       .filter(p => Files.isRegularFile(p) && DataSourceUtils.isDataFile(p.getFileName.toString))
-      .map(_.toFile.length)
-      .sum
+      .map(_.toFile.length).sum
   }
 }
 
@@ -532,10 +527,10 @@ private[sql] object SQLTestUtils {
         s"""
            | == Results ==
            | ${sideBySide(
-            s"== Expected Answer - ${expectedAnswer.size} ==" +:
-              prepareAnswer(expectedAnswer).map(_.toString()),
-            s"== Actual Answer - ${sparkAnswer.size} ==" +:
-              prepareAnswer(sparkAnswer).map(_.toString())).mkString("\n")}
+          s"== Expected Answer - ${expectedAnswer.size} ==" +:
+            prepareAnswer(expectedAnswer).map(_.toString()),
+          s"== Actual Answer - ${sparkAnswer.size} ==" +:
+            prepareAnswer(sparkAnswer).map(_.toString())).mkString("\n")}
       """.stripMargin
       Some(errorMessage)
     } else {

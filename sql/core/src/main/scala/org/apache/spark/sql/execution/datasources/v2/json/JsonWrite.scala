@@ -31,16 +31,17 @@ case class JsonWrite(
     paths: Seq[String],
     formatName: String,
     supportsDataType: DataType => Boolean,
-    info: LogicalWriteInfo)
-    extends FileWrite {
+    info: LogicalWriteInfo) extends FileWrite {
   override def prepareWrite(
       sqlConf: SQLConf,
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
     val conf = job.getConfiguration
-    val parsedOptions =
-      new JSONOptions(options, sqlConf.sessionLocalTimeZone, sqlConf.columnNameOfCorruptRecord)
+    val parsedOptions = new JSONOptions(
+      options,
+      sqlConf.sessionLocalTimeZone,
+      sqlConf.columnNameOfCorruptRecord)
     parsedOptions.compressionCodec.foreach { codec =>
       CompressionCodecs.setCodecConfiguration(conf, codec)
     }

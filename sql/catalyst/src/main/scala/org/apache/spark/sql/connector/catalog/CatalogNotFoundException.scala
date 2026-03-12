@@ -25,7 +25,7 @@ class CatalogNotFoundException(
     errorClass: String,
     messageParameters: Map[String, String],
     cause: Throwable)
-    extends SparkException(errorClass, messageParameters, cause) {
+  extends SparkException(errorClass, messageParameters, cause) {
 
   def this(errorClass: String, messageParameters: Map[String, String]) =
     this(errorClass, messageParameters, null)

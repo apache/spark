@@ -32,8 +32,7 @@ class DeltaBasedUpdateAsDeleteAndInsertTableSuite extends DeltaBasedUpdateTableS
   }
 
   test("update handles metadata columns correctly") {
-    createAndInitTable(
-      "pk INT NOT NULL, id INT, dep STRING",
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
         |{ "pk": 2, "id": 2, "dep": "software" }
         |{ "pk": 3, "id": 3, "dep": "hr" }
@@ -60,8 +59,7 @@ class DeltaBasedUpdateAsDeleteAndInsertTableSuite extends DeltaBasedUpdateTableS
 
   test("update with subquery handles metadata columns correctly") {
     withTempView("updated_dep") {
-      createAndInitTable(
-        "pk INT NOT NULL, id INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
         """{ "pk": 1, "id": 1, "dep": "hr" }
           |{ "pk": 2, "id": 2, "dep": "software" }
           |{ "pk": 3, "id": 3, "dep": "hr" }
@@ -70,7 +68,8 @@ class DeltaBasedUpdateAsDeleteAndInsertTableSuite extends DeltaBasedUpdateTableS
       val updatedIdDF = Seq(Some("hr"), Some("it")).toDF()
       updatedIdDF.createOrReplaceTempView("updated_dep")
 
-      sql(s"""UPDATE $tableNameAsString
+      sql(
+        s"""UPDATE $tableNameAsString
            |SET id = -1
            |WHERE
            | id IN (1, 100)

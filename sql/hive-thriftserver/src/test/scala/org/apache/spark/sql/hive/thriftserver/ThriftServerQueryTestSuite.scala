@@ -251,20 +251,6 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
               s"Exception did not match for query #$i\n${expected.sql}, " +
                 s"expected: ${expected.output}, but got: ${output.output}")
 
-          // EXECUTE IMMEDIATE with parameter marker only in the inner string: JDBC may have thrown
-          // "Parameters cannot be used with normal Statement objects, use PreparedStatements
-          // instead" (e.g. Databricks JDBC 11220). Accept success (e.g. "10") because the
-          // parameter is not part of the outer statement sent over JDBC.
-          case _ if expected.output.contains("Parameters cannot be used with normal Statement") ||
-              expected.output.contains("PreparedStatements instead") =>
-            if (output.output == "10" || output.output == "[10]") {
-              // Accept success
-            } else {
-              assertResult(expected.output, s"Result did not match for query #$i\n${expected.sql}") {
-                output.output
-              }
-            }
-
           case _ =>
             assertResult(expected.output, s"Result did not match for query #$i\n${expected.sql}") {
               output.output

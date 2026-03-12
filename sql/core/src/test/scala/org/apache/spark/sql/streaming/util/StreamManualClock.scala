@@ -20,8 +20,8 @@ package org.apache.spark.sql.streaming.util
 import org.apache.spark.util.ManualClock
 
 /**
- * ManualClock used for streaming tests that allows checking whether the stream is waiting on the
- * clock at expected times.
+ * ManualClock used for streaming tests that allows checking whether the stream is waiting
+ * on the clock at expected times.
  */
 class StreamManualClock(time: Long = 0L) extends ManualClock(time) with Serializable {
   private var waitStartTime: Option[Long] = None
@@ -48,3 +48,4 @@ class StreamManualClock(time: Long = 0L) extends ManualClock(time) with Serializ
     waitTargetTime == Some(target)
   }
 }
+

@@ -20,17 +20,17 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.types.{AbstractDataType, DataType, IntegerType}
 
 /**
- * Expression that takes a partition ID value and passes it through directly for use in shuffle
- * partitioning. This is used with RepartitionByExpression to allow users to directly specify
- * target partition IDs.
+ * Expression that takes a partition ID value and passes it through directly for use in
+ * shuffle partitioning. This is used with RepartitionByExpression to allow users to
+ * directly specify target partition IDs.
  *
- * The child expression must evaluate to an integral type and must not be null. The resulting
- * partition ID must be in the range [0, numPartitions).
+ * The child expression must evaluate to an integral type and must not be null.
+ * The resulting partition ID must be in the range [0, numPartitions).
  */
 case class DirectShufflePartitionID(child: Expression)
-    extends UnaryExpression
-    with ExpectsInputTypes
-    with Unevaluable {
+  extends UnaryExpression
+  with ExpectsInputTypes
+  with Unevaluable {
 
   override def dataType: DataType = child.dataType
 
@@ -43,3 +43,4 @@ case class DirectShufflePartitionID(child: Expression)
   override protected def withNewChildInternal(newChild: Expression): DirectShufflePartitionID =
     copy(child = newChild)
 }
+

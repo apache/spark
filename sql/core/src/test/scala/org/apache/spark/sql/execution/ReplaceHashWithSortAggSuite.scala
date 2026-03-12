@@ -134,10 +134,8 @@ abstract class ReplaceHashWithSortAggSuiteBase
   }
 }
 
-class ReplaceHashWithSortAggSuite
-    extends ReplaceHashWithSortAggSuiteBase
-    with DisableAdaptiveExecutionSuite
+class ReplaceHashWithSortAggSuite extends ReplaceHashWithSortAggSuiteBase
+  with DisableAdaptiveExecutionSuite
 
-class ReplaceHashWithSortAggSuiteAE
-    extends ReplaceHashWithSortAggSuiteBase
-    with EnableAdaptiveExecutionSuite
+class ReplaceHashWithSortAggSuiteAE extends ReplaceHashWithSortAggSuiteBase
+  with EnableAdaptiveExecutionSuite

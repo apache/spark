@@ -25,7 +25,7 @@ import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.connector.read.streaming
 import org.apache.spark.sql.connector.read.streaming.{ReadLimit, SupportsAdmissionControl}
 import org.apache.spark.sql.execution.streaming.{Offset, Source}
-import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, MemoryStream, MicroBatchExecution, MultiBatchExecutor, SerializedOffset, SingleBatchExecutor, StreamingExecutionRelation, StreamingQueryWrapper}
+  import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, MemoryStream, MicroBatchExecution, MultiBatchExecutor, SerializedOffset, SingleBatchExecutor, StreamingExecutionRelation, StreamingQueryWrapper}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.tags.SlowSQLTest
@@ -57,16 +57,11 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
     override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
       if (currentOffset == 0) currentOffset = getOffsetValue(end)
       val plan = Range(
-        start.map(getOffsetValue).getOrElse(0L) + 1L,
-        getOffsetValue(end) + 1L,
-        1,
-        None,
+        start.map(getOffsetValue).getOrElse(0L) + 1L, getOffsetValue(end) + 1L, 1, None,
         // Intentionally set isStreaming to false; we only use RDD plan in below.
         isStreaming = false)
       sqlContext.sparkSession.internalCreateDataFrame(
-        plan.queryExecution.toRdd,
-        plan.schema,
-        isStreaming = true)
+        plan.queryExecution.toRdd, plan.schema, isStreaming = true)
     }
 
     override def incrementAvailableOffset(numNewRows: Int): Unit = {
@@ -92,14 +87,11 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
   }
 
   class TestSourceWithAdmissionControl extends TestSource with SupportsAdmissionControl {
-    override def getDefaultReadLimit: ReadLimit = ReadLimit.maxRows(1) // this will be overridden
+    override def getDefaultReadLimit: ReadLimit = ReadLimit.maxRows(1)  // this will be overridden
 
-    override def latestOffset(
-        startOffset: streaming.Offset,
-        limit: ReadLimit): streaming.Offset = {
+    override def latestOffset(startOffset: streaming.Offset, limit: ReadLimit): streaming.Offset = {
       val currentOffset = getOffset
-      assert(
-        currentOffset.nonEmpty,
+      assert(currentOffset.nonEmpty,
         "the latestOffset should be called after incrementAvailableOffset")
       currentOffset.get
     }
@@ -140,10 +132,10 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
   Seq(
     (new TestSource, false),
     (new TestSourceWithAdmissionControl, false),
-    (new TestMicroBatchStream, true)).foreach { case (testSource, supportTriggerAvailableNow) =>
-    testWithConfigMatrix(
-      s"TriggerAvailableNow for multiple sources with " +
-        s"${testSource.getClass}") { useWrapper =>
+    (new TestMicroBatchStream, true)
+  ).foreach { case (testSource, supportTriggerAvailableNow) =>
+    testWithConfigMatrix(s"TriggerAvailableNow for multiple sources with " +
+      s"${testSource.getClass}") { useWrapper =>
       testSource.reset()
 
       withTempDirs { (src, target) =>
@@ -160,16 +152,15 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
         }
 
         // Set up a query to read text files one at a time
-        val df1 = spark.readStream
+        val df1 = spark
+          .readStream
           .option("maxFilesPerTrigger", 1)
           .text(src.getCanonicalPath)
 
         val df2 = testSource.toDF.selectExpr("cast(value as string)")
 
         def startQuery(): StreamingQuery = {
-          df1
-            .union(df2)
-            .writeStream
+          df1.union(df2).writeStream
             .format("parquet")
             .trigger(Trigger.AvailableNow)
             .option("checkpointLocation", checkpoint)
@@ -197,8 +188,7 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
             assert(p.sources.exists(_.description.startsWith(testSource.sourceName)))
           }
           assertQueryUsingRightBatchExecutor(testSource, q)
-          checkAnswer(
-            sql(s"SELECT * from parquet.`$targetDir`"),
+          checkAnswer(sql(s"SELECT * from parquet.`$targetDir`"),
             Seq(1, 2, 3, 7, 8, 9).map(_.toString).toDF())
         } finally {
           q.stop()
@@ -218,9 +208,7 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
             assert(p.sources.exists(_.description.startsWith(testSource.sourceName)))
           }
           assertQueryUsingRightBatchExecutor(testSource, q2)
-          checkAnswer(
-            sql(s"SELECT * from parquet.`$targetDir`"),
-            (1 to 12).map(_.toString).toDF())
+          checkAnswer(sql(s"SELECT * from parquet.`$targetDir`"), (1 to 12).map(_.toString).toDF())
         } finally {
           q2.stop()
         }
@@ -228,65 +216,67 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
     }
   }
 
-  Seq(new TestSource, new TestSourceWithAdmissionControl, new TestMicroBatchStream).foreach {
-    testSource =>
-      testWithConfigMatrix(
-        s"TriggerAvailableNow for single source with " +
-          s"${testSource.getClass}") { _ =>
-        testSource.reset()
+  Seq(
+    new TestSource,
+    new TestSourceWithAdmissionControl,
+    new TestMicroBatchStream
+  ).foreach { testSource =>
+    testWithConfigMatrix(s"TriggerAvailableNow for single source with " +
+      s"${testSource.getClass}") { _ =>
+      testSource.reset()
 
-        val tableName = "trigger_available_now_test_table"
-        withTable(tableName) {
-          val df = testSource.toDF
+      val tableName = "trigger_available_now_test_table"
+      withTable(tableName) {
+        val df = testSource.toDF
 
-          def startQuery(): StreamingQuery = {
-            df.writeStream
-              .format("memory")
-              .queryName(tableName)
-              .trigger(Trigger.AvailableNow)
-              .start()
+        def startQuery(): StreamingQuery = {
+          df.writeStream
+            .format("memory")
+            .queryName(tableName)
+            .trigger(Trigger.AvailableNow)
+            .start()
+        }
+
+        testSource.incrementAvailableOffset(3)
+
+        val q = startQuery()
+
+        try {
+          assert(q.awaitTermination(streamingTimeout.toMillis))
+          assert(q.recentProgress.count(_.numInputRows != 0) == 1)
+          q.recentProgress.foreach { p =>
+            assert(p.sources.exists(_.description.startsWith(testSource.sourceName)))
           }
+          assertQueryUsingRightBatchExecutor(testSource, q)
+          checkAnswer(spark.table(tableName), (1 to 3).toDF())
+        } finally {
+          q.stop()
+        }
 
-          testSource.incrementAvailableOffset(3)
+        testSource.incrementAvailableOffset(3)
 
-          val q = startQuery()
-
-          try {
-            assert(q.awaitTermination(streamingTimeout.toMillis))
-            assert(q.recentProgress.count(_.numInputRows != 0) == 1)
-            q.recentProgress.foreach { p =>
-              assert(p.sources.exists(_.description.startsWith(testSource.sourceName)))
-            }
-            assertQueryUsingRightBatchExecutor(testSource, q)
-            checkAnswer(spark.table(tableName), (1 to 3).toDF())
-          } finally {
-            q.stop()
+        // run a second query
+        val q2 = startQuery()
+        try {
+          assert(q2.awaitTermination(streamingTimeout.toMillis))
+          assert(q2.recentProgress.count(_.numInputRows != 0) == 1)
+          q2.recentProgress.foreach { p =>
+            assert(p.sources.exists(_.description.startsWith(testSource.sourceName)))
           }
-
-          testSource.incrementAvailableOffset(3)
-
-          // run a second query
-          val q2 = startQuery()
-          try {
-            assert(q2.awaitTermination(streamingTimeout.toMillis))
-            assert(q2.recentProgress.count(_.numInputRows != 0) == 1)
-            q2.recentProgress.foreach { p =>
-              assert(p.sources.exists(_.description.startsWith(testSource.sourceName)))
-            }
-            assertQueryUsingRightBatchExecutor(testSource, q2)
-            checkAnswer(spark.table(tableName), (1 to 6).toDF())
-          } finally {
-            q2.stop()
-          }
+          assertQueryUsingRightBatchExecutor(testSource, q2)
+          checkAnswer(spark.table(tableName), (1 to 6).toDF())
+        } finally {
+          q2.stop()
         }
       }
+    }
   }
 
   private def assertQueryUsingRightBatchExecutor(
       testSource: TestDataFrameProvider,
       query: StreamingQuery): Unit = {
-    val useWrapper = query.sparkSession.sessionState.conf
-      .getConf(SQLConf.STREAMING_TRIGGER_AVAILABLE_NOW_WRAPPER_ENABLED)
+    val useWrapper = query.sparkSession.sessionState.conf.getConf(
+      SQLConf.STREAMING_TRIGGER_AVAILABLE_NOW_WRAPPER_ENABLED)
 
     if (useWrapper) {
       assertQueryUsingMultiBatchExecutor(query)

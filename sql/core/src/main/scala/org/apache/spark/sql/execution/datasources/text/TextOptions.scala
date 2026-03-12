@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs
  * Options for the Text data source.
  */
 class TextOptions(@transient private val parameters: CaseInsensitiveMap[String])
-    extends FileSourceOptions(parameters) {
+  extends FileSourceOptions(parameters) {
 
   import TextOptions._
 

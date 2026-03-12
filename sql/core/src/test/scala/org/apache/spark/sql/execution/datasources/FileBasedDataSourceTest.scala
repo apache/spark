@@ -29,8 +29,8 @@ import org.apache.spark.sql.types.StructType
 
 /**
  * A helper trait that provides convenient facilities for file-based data source testing.
- * Specifically, it is used for Parquet and Orc testing. It can be used to write tests that are
- * shared between Parquet and Orc.
+ * Specifically, it is used for Parquet and Orc testing. It can be used to write tests
+ * that are shared between Parquet and Orc.
  */
 private[sql] trait FileBasedDataSourceTest extends SQLTestUtils {
 
@@ -44,23 +44,19 @@ private[sql] trait FileBasedDataSourceTest extends SQLTestUtils {
   /**
    * Reads data source file from given `path` as `DataFrame` and passes it to given function.
    *
-   * @param path
-   *   The path to file
-   * @param testVectorized
-   *   Whether to read the file with vectorized reader.
-   * @param f
-   *   The given function that takes a `DataFrame` as input.
+   * @param path           The path to file
+   * @param testVectorized Whether to read the file with vectorized reader.
+   * @param f              The given function that takes a `DataFrame` as input.
    */
-  protected def readFile(path: String, testVectorized: Boolean = true)(
-      f: DataFrame => Unit): Unit = {
+  protected def readFile(path: String, testVectorized: Boolean = true)
+      (f: DataFrame => Unit): Unit = {
     withSQLConf(vectorizedReaderEnabledKey -> "false") {
       f(spark.read.format(dataSourceName).load(path.toString))
     }
     if (testVectorized) {
       Seq(true, false).foreach { enableNested =>
-        withSQLConf(
-          vectorizedReaderEnabledKey -> "true",
-          vectorizedReaderNestedEnabledKey -> enableNested.toString) {
+        withSQLConf(vectorizedReaderEnabledKey -> "true",
+            vectorizedReaderNestedEnabledKey -> enableNested.toString) {
           f(spark.read.format(dataSourceName).load(path))
         }
       }
@@ -68,11 +64,12 @@ private[sql] trait FileBasedDataSourceTest extends SQLTestUtils {
   }
 
   /**
-   * Writes `data` to a data source file, which is then passed to `f` and will be deleted after
-   * `f` returns.
+   * Writes `data` to a data source file, which is then passed to `f` and will be deleted after `f`
+   * returns.
    */
-  protected def withDataSourceFile[T <: Product: ClassTag: TypeTag](data: Seq[T])(
-      f: String => Unit): Unit = {
+  protected def withDataSourceFile[T <: Product : ClassTag : TypeTag]
+      (data: Seq[T])
+      (f: String => Unit): Unit = {
     withTempPath { file =>
       spark.createDataFrame(data).write.format(dataSourceName).save(file.getCanonicalPath)
       f(file.getCanonicalPath)
@@ -80,51 +77,44 @@ private[sql] trait FileBasedDataSourceTest extends SQLTestUtils {
   }
 
   /**
-   * Writes `data` to a data source file and reads it back as a [[DataFrame]], which is then
-   * passed to `f`. The file will be deleted after `f` returns.
+   * Writes `data` to a data source file and reads it back as a [[DataFrame]],
+   * which is then passed to `f`. The file will be deleted after `f` returns.
    */
-  protected def withDataSourceDataFrame[T <: Product: ClassTag: TypeTag](
-      data: Seq[T],
-      testVectorized: Boolean = true)(f: DataFrame => Unit): Unit = {
+  protected def withDataSourceDataFrame[T <: Product : ClassTag : TypeTag]
+      (data: Seq[T], testVectorized: Boolean = true)
+      (f: DataFrame => Unit): Unit = {
     withDataSourceFile(data)(path => readFile(path.toString, testVectorized)(f))
   }
 
   /**
    * Writes `data` to a data source file, reads it back as a [[DataFrame]] and registers it as a
-   * temporary table named `tableName`, then call `f`. The temporary table together with the data
-   * file will be dropped/deleted after `f` returns.
+   * temporary table named `tableName`, then call `f`. The temporary table together with the
+   * data file will be dropped/deleted after `f` returns.
    */
-  protected def withDataSourceTable[T <: Product: ClassTag: TypeTag](
-      data: Seq[T],
-      tableName: String,
-      testVectorized: Boolean = true)(f: => Unit): Unit = {
+  protected def withDataSourceTable[T <: Product : ClassTag : TypeTag]
+      (data: Seq[T], tableName: String, testVectorized: Boolean = true)
+      (f: => Unit): Unit = {
     withDataSourceDataFrame(data, testVectorized) { df =>
       df.createOrReplaceTempView(tableName)
       withTempView(tableName)(f)
     }
   }
 
-  protected def makeDataSourceFile[T <: Product: ClassTag: TypeTag](
-      data: Seq[T],
-      path: File): Unit = {
-    spark
-      .createDataFrame(data)
-      .write
-      .mode(SaveMode.Overwrite)
-      .format(dataSourceName)
+  protected def makeDataSourceFile[T <: Product : ClassTag : TypeTag](
+      data: Seq[T], path: File): Unit = {
+    spark.createDataFrame(data).write.mode(SaveMode.Overwrite).format(dataSourceName)
       .save(path.getCanonicalPath)
   }
 
-  protected def makeDataSourceFile[T <: Product: ClassTag: TypeTag](
-      df: DataFrame,
-      path: File): Unit = {
+  protected def makeDataSourceFile[T <: Product : ClassTag : TypeTag](
+      df: DataFrame, path: File): Unit = {
     df.write.mode(SaveMode.Overwrite).format(dataSourceName).save(path.getCanonicalPath)
   }
 
   /**
-   * Takes single level `inputDF` dataframe to generate multi-level nested dataframes as new test
-   * data. It tests both non-nested and nested dataframes which are written and read back with
-   * specified datasource.
+   * Takes single level `inputDF` dataframe to generate multi-level nested
+   * dataframes as new test data. It tests both non-nested and nested dataframes
+   * which are written and read back with specified datasource.
    */
   protected def withNestedDataFrame(inputDF: DataFrame): Seq[(DataFrame, String, Any => Any)] = {
     assert(inputDF.schema.fields.length == 1)
@@ -142,14 +132,18 @@ private[sql] trait FileBasedDataSourceTest extends SQLTestUtils {
       (
         df.withColumn("a", struct(struct(df("temp") as "c") as "b")).drop("temp"),
         "a.b.c", // two level nesting
-        (x: Any) => Row(Row(x))),
+        (x: Any) => Row(Row(x))
+      ),
       (
         df.withColumnRenamed("temp", "a.b"),
         "`a.b`", // zero nesting with column name containing `dots`
-        (x: Any) => x),
+        (x: Any) => x
+      ),
       (
-        df.withColumn("a.b", struct(df("temp") as "c.d")).drop("temp"),
+        df.withColumn("a.b", struct(df("temp") as "c.d") ).drop("temp"),
         "`a.b`.`c.d`", // one level nesting with column names containing `dots`
-        (x: Any) => Row(x)))
+        (x: Any) => Row(x)
+      )
+    )
   }
 }

@@ -24,12 +24,12 @@ import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.command
 
 /**
- * The class contains tests for the `ALTER TABLE .. DROP PARTITION` command to check V2 table
- * catalogs.
+ * The class contains tests for the `ALTER TABLE .. DROP PARTITION` command
+ * to check V2 table catalogs.
  */
 class AlterTableDropPartitionSuite
-    extends command.AlterTableDropPartitionSuiteBase
-    with CommandSuiteBase {
+  extends command.AlterTableDropPartitionSuiteBase
+  with CommandSuiteBase {
   override protected val notFullPartitionSpecErr = "Partition spec is invalid"
   override protected def nullPartitionValue: String = "null"
 
@@ -45,7 +45,10 @@ class AlterTableDropPartitionSuite
         },
         condition = "INVALID_PARTITION_OPERATION.PARTITION_MANAGEMENT_IS_UNSUPPORTED",
         parameters = Map("name" -> tableName),
-        context = ExpectedContext(fragment = t, start = 12, stop = 39))
+        context = ExpectedContext(
+          fragment = t,
+          start = 12,
+          stop = 39))
     }
   }
 
@@ -59,7 +62,8 @@ class AlterTableDropPartitionSuite
             sql(s"ALTER TABLE $t DROP PARTITION (id=1) PURGE")
           },
           condition = "UNSUPPORTED_FEATURE.PURGE_PARTITION",
-          parameters = Map.empty)
+          parameters = Map.empty
+        )
       } finally {
         sql(s"ALTER TABLE $t DROP PARTITION (id=1)")
       }

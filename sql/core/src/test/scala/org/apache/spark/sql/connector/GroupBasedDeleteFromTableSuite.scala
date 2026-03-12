@@ -27,8 +27,7 @@ class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
   import testImplicits._
 
   test("delete preserves metadata columns for carried-over records") {
-    createAndInitTable(
-      "pk INT NOT NULL, id INT, dep STRING",
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
         |{ "pk": 2, "id": 2, "dep": "software" }
         |{ "pk": 3, "id": 3, "dep": "hr" }
@@ -51,8 +50,7 @@ class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
   }
 
   test("delete with nondeterministic conditions") {
-    createAndInitTable(
-      "pk INT NOT NULL, id INT, dep STRING",
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
         |{ "pk": 2, "id": 2, "dep": "software" }
         |{ "pk": 3, "id": 3, "dep": "hr" }
@@ -67,12 +65,12 @@ class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
       context = ExpectedContext(
         fragment = "DELETE FROM cat.ns1.test_table WHERE id <= 1 AND rand() > 0.5",
         start = 0,
-        stop = 60))
+        stop = 60)
+    )
   }
 
   test("delete with IN predicate and runtime group filtering") {
-    createAndInitTable(
-      "id INT, salary INT, dep STRING",
+    createAndInitTable("id INT, salary INT, dep STRING",
       """{ "id": 1, "salary": 300, "dep": 'hr' }
         |{ "id": 2, "salary": 150, "dep": 'software' }
         |{ "id": 3, "salary": 120, "dep": 'hr' }
@@ -92,8 +90,7 @@ class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
 
   test("delete with subqueries and runtime group filtering") {
     withTempView("deleted_id", "deleted_dep") {
-      createAndInitTable(
-        "id INT, salary INT, dep STRING",
+      createAndInitTable("id INT, salary INT, dep STRING",
         """{ "id": 1, "salary": 300, "dep": 'hr' }
           |{ "id": 2, "salary": 150, "dep": 'software' }
           |{ "id": 3, "salary": 120, "dep": 'hr' }
@@ -150,8 +147,7 @@ class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
 
   private def checkDeleteRuntimeGroupFiltering(): Unit = {
     withTempView("deleted_id") {
-      createAndInitTable(
-        "id INT, salary INT, dep STRING",
+      createAndInitTable("id INT, salary INT, dep STRING",
         """{ "id": 1, "salary": 300, "dep": 'hr' }
           |{ "id": 2, "salary": 150, "dep": 'software' }
           |{ "id": 3, "salary": 120, "dep": 'hr' }
@@ -175,15 +171,15 @@ class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
 
   test("delete does not double plan table (group filter enabled)") {
     withSQLConf(SQLConf.RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED.key -> "true") {
-      createAndInitTable(
-        "id INT, salary INT, dep STRING",
+      createAndInitTable("id INT, salary INT, dep STRING",
         """{ "id": 1, "salary": 300, "dep": 'hr' }
           |{ "id": 2, "salary": 150, "dep": 'software' }
           |{ "id": 3, "salary": 120, "dep": 'hr' }
           |""".stripMargin)
 
       val (cond, groupFilterCond) = executeAndKeepConditions {
-        sql(s"""DELETE FROM $tableNameAsString
+        sql(
+          s"""DELETE FROM $tableNameAsString
              |WHERE id IN (SELECT id FROM $tableNameAsString WHERE salary > 200)
              |""".stripMargin)
       }
@@ -208,15 +204,15 @@ class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
 
   test("delete does not double plan table (group filter disabled)") {
     withSQLConf(SQLConf.RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED.key -> "false") {
-      createAndInitTable(
-        "id INT, salary INT, dep STRING",
+      createAndInitTable("id INT, salary INT, dep STRING",
         """{ "id": 1, "salary": 300, "dep": 'hr' }
           |{ "id": 2, "salary": 150, "dep": 'software' }
           |{ "id": 3, "salary": 120, "dep": 'hr' }
           |""".stripMargin)
 
       val (cond, groupFilterCond) = executeAndKeepConditions {
-        sql(s"""DELETE FROM $tableNameAsString
+        sql(
+          s"""DELETE FROM $tableNameAsString
              |WHERE id IN (SELECT id FROM $tableNameAsString WHERE salary > 200)
              |""".stripMargin)
       }

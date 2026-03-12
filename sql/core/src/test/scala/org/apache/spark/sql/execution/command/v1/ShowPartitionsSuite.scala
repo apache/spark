@@ -23,9 +23,9 @@ import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.command
 
 /**
- * This base suite contains unified tests for the `SHOW PARTITIONS` command that check V1 table
- * catalogs. The tests that cannot run for all V1 catalogs are located in more specific test
- * suites:
+ * This base suite contains unified tests for the `SHOW PARTITIONS` command that check V1
+ * table catalogs. The tests that cannot run for all V1 catalogs are located in more
+ * specific test suites:
  *
  *   - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.ShowPartitionsSuite`
  *   - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.ShowPartitionsSuite`
@@ -38,9 +38,9 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
       runShowPartitionsSql(
         s"show partitions default.$table",
         Row("year=2015/month=1") ::
-          Row("year=2015/month=2") ::
-          Row("year=2016/month=2") ::
-          Row("year=2016/month=3") :: Nil)
+        Row("year=2015/month=2") ::
+        Row("year=2016/month=2") ::
+        Row("year=2016/month=3") :: Nil)
     }
   }
 
@@ -60,8 +60,14 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
           condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
           parameters = Map(
             "viewName" -> s"`spark_catalog`.`default`.`view1`",
-            "operation" -> "SHOW PARTITIONS"),
-          context = ExpectedContext(fragment = view, start = 16, stop = 20))
+            "operation" -> "SHOW PARTITIONS"
+          ),
+          context = ExpectedContext(
+            fragment = view,
+            start = 16,
+            stop = 20
+          )
+        )
       }
     }
   }
@@ -75,8 +81,16 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
           sql(s"SHOW PARTITIONS $viewName")
         },
         condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
-        parameters = Map("viewName" -> "`test_view`", "operation" -> "SHOW PARTITIONS"),
-        context = ExpectedContext(fragment = viewName, start = 16, stop = 24))
+        parameters = Map(
+          "viewName" -> "`test_view`",
+          "operation" -> "SHOW PARTITIONS"
+        ),
+        context = ExpectedContext(
+          fragment = viewName,
+          start = 16,
+          stop = 24
+        )
+      )
     }
   }
 
@@ -111,8 +125,16 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase 
           sql(s"SHOW PARTITIONS $viewName")
         },
         condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
-        parameters = Map("viewName" -> "`test_view`", "operation" -> "SHOW PARTITIONS"),
-        context = ExpectedContext(fragment = viewName, start = 16, stop = 24))
+        parameters = Map(
+          "viewName" -> "`test_view`",
+          "operation" -> "SHOW PARTITIONS"
+        ),
+        context = ExpectedContext(
+          fragment = viewName,
+          start = 16,
+          stop = 24
+        )
+      )
     }
   }
 
@@ -149,7 +171,9 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase 
   test("SPARK-33904: null and empty string as partition values") {
     withNamespaceAndTable("ns", "tbl") { t =>
       createNullPartTable(t, "parquet")
-      runShowPartitionsSql(s"SHOW PARTITIONS $t", Row("part=__HIVE_DEFAULT_PARTITION__") :: Nil)
+      runShowPartitionsSql(
+        s"SHOW PARTITIONS $t",
+        Row("part=__HIVE_DEFAULT_PARTITION__") :: Nil)
       checkAnswer(spark.table(t), Row(0, null) :: Row(1, null) :: Nil)
     }
   }

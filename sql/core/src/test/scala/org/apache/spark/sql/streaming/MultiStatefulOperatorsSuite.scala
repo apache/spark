@@ -33,9 +33,7 @@ import org.apache.spark.tags.SlowSQLTest
 // Tests for the multiple stateful operators support.
 @SlowSQLTest
 class MultiStatefulOperatorsSuite
-    extends StreamTest
-    with StateStoreMetricsTest
-    with BeforeAndAfter {
+  extends StreamTest with StateStoreMetricsTest with BeforeAndAfter {
 
   import testImplicits._
 
@@ -51,18 +49,15 @@ class MultiStatefulOperatorsSuite
   test("window agg -> window agg, append mode") {
     val inputData = MemoryStream[Int]
 
-    val stream = inputData
-      .toDF()
+    val stream = inputData.toDF()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "0 seconds")
       .groupBy(window($"eventTime", "5 seconds").as("window"))
       .agg(count("*").as("count"))
       .groupBy(window($"window", "10 seconds"))
       .agg(count("*").as("count"), sum("count").as("sum"))
-      .select(
-        $"window".getField("start").cast("long").as[Long],
-        $"count".as[Long],
-        $"sum".as[Long])
+      .select($"window".getField("start").cast("long").as[Long],
+        $"count".as[Long], $"sum".as[Long])
 
     testStream(stream)(
       AddData(inputData, 10 to 21: _*),
@@ -88,6 +83,7 @@ class MultiStatefulOperatorsSuite
       CheckNewAnswer((10, 2, 10)),
       assertNumStateRows(Seq(0, 1)),
       assertNumRowsDroppedByWatermark(Seq(0, 0)),
+
       AddData(inputData, 10 to 29: _*),
       // op1 W (21, 21)
       // agg: [10, 15) 5 - late, [15, 20) 5 - late, [20, 25) 5, [25, 30) 5
@@ -135,14 +131,14 @@ class MultiStatefulOperatorsSuite
       // state: None
       CheckNewAnswer((20, 2, 12)),
       assertNumStateRows(Seq(0, 1)),
-      assertNumRowsDroppedByWatermark(Seq(0, 0)))
+      assertNumRowsDroppedByWatermark(Seq(0, 0))
+    )
   }
 
   test("agg -> agg -> agg, append mode") {
     val inputData = MemoryStream[Int]
 
-    val stream = inputData
-      .toDF()
+    val stream = inputData.toDF()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "0 seconds")
       .groupBy(window($"eventTime", "5 seconds").as("window"))
@@ -154,8 +150,7 @@ class MultiStatefulOperatorsSuite
       .select(
         $"window".getField("start").cast("long").as[Long],
         $"window".getField("end").cast("long").as[Long],
-        $"count".as[Long],
-        $"sum".as[Long])
+        $"count".as[Long], $"sum".as[Long])
 
     testStream(stream)(
       AddData(inputData, 0 to 37: _*),
@@ -191,6 +186,7 @@ class MultiStatefulOperatorsSuite
       CheckNewAnswer((0, 20, 2, 20)),
       assertNumStateRows(Seq(1, 1, 1)),
       assertNumRowsDroppedByWatermark(Seq(0, 0, 0)),
+
       AddData(inputData, 30 to 60: _*),
       // op1 W (37, 37)
       // dropped rows: [30, 35), 1 row <= note that 35, 36, 37 are still in effect
@@ -219,14 +215,14 @@ class MultiStatefulOperatorsSuite
 
       CheckNewAnswer((20, 40, 2, 23), (40, 60, 2, 20)),
       assertNumStateRows(Seq(0, 0, 1)),
-      assertNumRowsDroppedByWatermark(Seq(0, 0, 1)))
+      assertNumRowsDroppedByWatermark(Seq(0, 0, 1))
+    )
   }
 
   test("stream deduplication -> aggregation, append mode") {
     val inputData = MemoryStream[Int]
 
-    val deduplication = inputData
-      .toDF()
+    val deduplication = inputData.toDF()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
       .dropDuplicates("value", "eventTime")
@@ -234,7 +230,8 @@ class MultiStatefulOperatorsSuite
     val windowedAggregation = deduplication
       .groupBy(window($"eventTime", "5 seconds").as("window"))
       .agg(count("*").as("count"), sum("value").as("sum"))
-      .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
+      .select($"window".getField("start").cast("long").as[Long],
+        $"count".as[Long])
 
     testStream(windowedAggregation)(
       AddData(inputData, 1 to 15: _*),
@@ -260,26 +257,24 @@ class MultiStatefulOperatorsSuite
       // state: [5, 10) 5 [10, 15) 5, [15, 20) 1
       CheckNewAnswer((0, 4)),
       assertNumStateRows(Seq(3, 10)),
-      assertNumRowsDroppedByWatermark(Seq(0, 0)))
+      assertNumRowsDroppedByWatermark(Seq(0, 0))
+    )
   }
 
   test("join -> window agg, append mode") {
     val input1 = MemoryStream[Int]
-    val inputDF1 = input1
-      .toDF()
+    val inputDF1 = input1.toDF()
       .withColumnRenamed("value", "value1")
       .withColumn("eventTime1", timestamp_seconds($"value1"))
       .withWatermark("eventTime1", "0 seconds")
 
     val input2 = MemoryStream[Int]
-    val inputDF2 = input2
-      .toDF()
+    val inputDF2 = input2.toDF()
       .withColumnRenamed("value", "value2")
       .withColumn("eventTime2", timestamp_seconds($"value2"))
       .withWatermark("eventTime2", "0 seconds")
 
-    val stream = inputDF1
-      .join(inputDF2, expr("eventTime1 = eventTime2"), "inner")
+    val stream = inputDF1.join(inputDF2, expr("eventTime1 = eventTime2"), "inner")
       .groupBy(window($"eventTime1", "5 seconds").as("window"))
       .agg(count("*").as("count"))
       .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
@@ -330,14 +325,14 @@ class MultiStatefulOperatorsSuite
       // state: [5, 10) 1
       CheckNewAnswer((0, 4)),
       assertNumStateRows(Seq(1, 0)),
-      assertNumRowsDroppedByWatermark(Seq(0, 0)))
+      assertNumRowsDroppedByWatermark(Seq(0, 0))
+    )
   }
 
   test("aggregation -> stream deduplication, append mode") {
     val inputData = MemoryStream[Int]
 
-    val aggStream = inputData
-      .toDF()
+    val aggStream = inputData.toDF()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "0 seconds")
       .groupBy(window($"eventTime", "5 seconds").as("window"))
@@ -348,7 +343,9 @@ class MultiStatefulOperatorsSuite
     // state does not get trimmed due to watermark advancement.
     val dedupNoEventTime = aggStream
       .dropDuplicates("count", "windowEnd")
-      .select($"windowEnd".cast("long").as[Long], $"count".as[Long])
+      .select(
+        $"windowEnd".cast("long").as[Long],
+        $"count".as[Long])
 
     testStream(dedupNoEventTime)(
       AddData(inputData, 1, 5, 10, 15),
@@ -373,7 +370,8 @@ class MultiStatefulOperatorsSuite
 
       CheckNewAnswer((5, 1), (10, 1), (15, 1)),
       assertNumStateRows(Seq(3, 1)),
-      assertNumRowsDroppedByWatermark(Seq(0, 0)))
+      assertNumRowsDroppedByWatermark(Seq(0, 0))
+    )
 
     // Similar to the above but add event time. The dedup state will get trimmed.
     val dedupWithEventTime = aggStream
@@ -408,33 +406,28 @@ class MultiStatefulOperatorsSuite
 
       CheckNewAnswer((5, 4999999, 1), (10, 9999999, 1), (15, 14999999, 1)),
       assertNumStateRows(Seq(0, 1)),
-      assertNumRowsDroppedByWatermark(Seq(0, 0)))
+      assertNumRowsDroppedByWatermark(Seq(0, 0))
+    )
   }
 
   test("join with range join on non-time intervals -> window agg, append mode, shouldn't fail") {
     val input1 = MemoryStream[Int]
-    val inputDF1 = input1
-      .toDF()
+    val inputDF1 = input1.toDF()
       .withColumnRenamed("value", "value1")
       .withColumn("eventTime1", timestamp_seconds($"value1"))
       .withColumn("v1", timestamp_seconds($"value1"))
       .withWatermark("eventTime1", "0 seconds")
 
     val input2 = MemoryStream[(Int, Int)]
-    val inputDF2 = input2
-      .toDS()
-      .toDF("start", "end")
+    val inputDF2 = input2.toDS().toDF("start", "end")
       .withColumn("eventTime2Start", timestamp_seconds($"start"))
       .withColumn("start2", timestamp_seconds($"start"))
       .withColumn("end2", timestamp_seconds($"end"))
       .withWatermark("eventTime2Start", "0 seconds")
 
-    val stream = inputDF1
-      .join(
-        inputDF2,
-        expr("v1 >= start2 AND v1 < end2 " +
-          "AND eventTime1 = start2"),
-        "inner")
+    val stream = inputDF1.join(inputDF2,
+      expr("v1 >= start2 AND v1 < end2 " +
+        "AND eventTime1 = start2"), "inner")
       .groupBy(window($"eventTime1", "5 seconds") as Symbol("window"))
       .agg(count("*") as Symbol("count"))
       .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
@@ -444,7 +437,8 @@ class MultiStatefulOperatorsSuite
       AddData(input2, (1, 2), (2, 3), (3, 4), (4, 5)),
       CheckNewAnswer(),
       assertNumStateRows(Seq(1, 0)),
-      assertNumRowsDroppedByWatermark(Seq(0, 0)))
+      assertNumRowsDroppedByWatermark(Seq(0, 0))
+    )
   }
 
   test("stream-stream time interval left outer join -> aggregation, append mode") {
@@ -454,43 +448,35 @@ class MultiStatefulOperatorsSuite
     val input1 = MemoryStream[(String, Timestamp)]
     val input2 = MemoryStream[(String, Timestamp)]
 
-    val s1 = input1
-      .toDF()
+    val s1 = input1.toDF()
       .toDF("id1", "timestamp1")
       .withWatermark("timestamp1", "0 seconds")
       .as("s1")
 
-    val s2 = input2
-      .toDF()
+    val s2 = input2.toDF()
       .toDF("id2", "timestamp2")
       .withWatermark("timestamp2", "0 seconds")
       .as("s2")
 
-    val s3 = s1.join(
-      s2,
-      expr(
-        "s1.id1 = s2.id2 AND (s1.timestamp1 BETWEEN " +
-          "s2.timestamp2 - INTERVAL 1 hour AND s2.timestamp2 + INTERVAL 1 hour)"),
-      "leftOuter")
+    val s3 = s1.join(s2, expr("s1.id1 = s2.id2 AND (s1.timestamp1 BETWEEN " +
+      "s2.timestamp2 - INTERVAL 1 hour AND s2.timestamp2 + INTERVAL 1 hour)"), "leftOuter")
 
-    val agg = s3
-      .groupBy(window($"timestamp1", "10 minutes"))
+    val agg = s3.groupBy(window($"timestamp1", "10 minutes"))
       .agg(count("*").as("cnt"))
-      .selectExpr(
-        "CAST(window.start AS STRING) AS window_start",
-        "CAST(window.end AS STRING) AS window_end",
-        "cnt")
+      .selectExpr("CAST(window.start AS STRING) AS window_start",
+        "CAST(window.end AS STRING) AS window_end", "cnt")
 
     // for ease of verification, we change the session timezone to UTC
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       testStream(agg)(
         MultiAddData(
-          (
-            input1,
-            Seq(
-              ("1", Timestamp.valueOf("2023-01-01 01:00:10")),
-              ("2", Timestamp.valueOf("2023-01-01 01:00:30")))),
-          (input2, Seq(("1", Timestamp.valueOf("2023-01-01 01:00:20"))))),
+          (input1, Seq(
+            ("1", Timestamp.valueOf("2023-01-01 01:00:10")),
+            ("2", Timestamp.valueOf("2023-01-01 01:00:30")))
+          ),
+          (input2, Seq(
+            ("1", Timestamp.valueOf("2023-01-01 01:00:20"))))
+        ),
 
         // < data batch >
         // global watermark (0, 0)
@@ -537,28 +523,29 @@ class MultiStatefulOperatorsSuite
         // -- result
         // None
         CheckAnswer(),
+
         Execute { query =>
           val lastExecution = query.lastExecution
           val joinOperator = lastExecution.executedPlan.collect {
             case j: StreamingSymmetricHashJoinExec => j
           }.head
-          val aggSaveOperator = lastExecution.executedPlan.collect { case j: StateStoreSaveExec =>
-            j
+          val aggSaveOperator = lastExecution.executedPlan.collect {
+            case j: StateStoreSaveExec => j
           }.head
 
           assert(joinOperator.eventTimeWatermarkForLateEvents === Some(0))
-          assert(
-            joinOperator.eventTimeWatermarkForEviction ===
-              Some(Timestamp.valueOf("2023-01-01 01:00:20").getTime))
+          assert(joinOperator.eventTimeWatermarkForEviction ===
+            Some(Timestamp.valueOf("2023-01-01 01:00:20").getTime))
 
           assert(aggSaveOperator.eventTimeWatermarkForLateEvents === Some(0))
-          assert(
-            aggSaveOperator.eventTimeWatermarkForEviction ===
-              Some(Timestamp.valueOf("2023-01-01 00:00:20").getTime - 1))
+          assert(aggSaveOperator.eventTimeWatermarkForEviction ===
+            Some(Timestamp.valueOf("2023-01-01 00:00:20").getTime - 1))
         },
+
         MultiAddData(
           (input1, Seq(("5", Timestamp.valueOf("2023-01-01 01:15:00")))),
-          (input2, Seq(("6", Timestamp.valueOf("2023-01-01 01:15:00"))))),
+          (input2, Seq(("6", Timestamp.valueOf("2023-01-01 01:15:00"))))
+        ),
 
         // < data batch >
         // global watermark (2023-01-01 01:00:20, 2023-01-01 01:00:20)
@@ -609,32 +596,33 @@ class MultiStatefulOperatorsSuite
         // -- result
         // None
         CheckAnswer(),
+
         Execute { query =>
           val lastExecution = query.lastExecution
           val joinOperator = lastExecution.executedPlan.collect {
             case j: StreamingSymmetricHashJoinExec => j
           }.head
-          val aggSaveOperator = lastExecution.executedPlan.collect { case j: StateStoreSaveExec =>
-            j
+          val aggSaveOperator = lastExecution.executedPlan.collect {
+            case j: StateStoreSaveExec => j
           }.head
 
-          assert(
-            joinOperator.eventTimeWatermarkForLateEvents ===
-              Some(Timestamp.valueOf("2023-01-01 01:00:20").getTime))
-          assert(
-            joinOperator.eventTimeWatermarkForEviction ===
-              Some(Timestamp.valueOf("2023-01-01 01:15:00").getTime))
+          assert(joinOperator.eventTimeWatermarkForLateEvents ===
+            Some(Timestamp.valueOf("2023-01-01 01:00:20").getTime))
+          assert(joinOperator.eventTimeWatermarkForEviction ===
+            Some(Timestamp.valueOf("2023-01-01 01:15:00").getTime))
 
-          assert(
-            aggSaveOperator.eventTimeWatermarkForLateEvents ===
-              Some(Timestamp.valueOf("2023-01-01 00:00:20").getTime - 1))
-          assert(
-            aggSaveOperator.eventTimeWatermarkForEviction ===
-              Some(Timestamp.valueOf("2023-01-01 00:15:00").getTime - 1))
+          assert(aggSaveOperator.eventTimeWatermarkForLateEvents ===
+            Some(Timestamp.valueOf("2023-01-01 00:00:20").getTime - 1))
+          assert(aggSaveOperator.eventTimeWatermarkForEviction ===
+            Some(Timestamp.valueOf("2023-01-01 00:15:00").getTime - 1))
         },
+
         MultiAddData(
-          (input1, Seq(("5", Timestamp.valueOf("2023-01-01 02:16:00")))),
-          (input2, Seq(("6", Timestamp.valueOf("2023-01-01 02:16:00"))))),
+          (input1, Seq(
+            ("5", Timestamp.valueOf("2023-01-01 02:16:00")))),
+          (input2, Seq(
+            ("6", Timestamp.valueOf("2023-01-01 02:16:00"))))
+        ),
 
         // < data batch >
         // global watermark (2023-01-01 01:15:00, 2023-01-01 01:15:00)
@@ -684,30 +672,30 @@ class MultiStatefulOperatorsSuite
         // ("2023-01-01 01:10:00", "2023-01-01 01:20:00", 1)
         // -- result
         // ("2023-01-01 01:00:00", "2023-01-01 01:10:00", 2)
-        CheckAnswer(("2023-01-01 01:00:00", "2023-01-01 01:10:00", 2)),
+        CheckAnswer(
+          ("2023-01-01 01:00:00", "2023-01-01 01:10:00", 2)
+        ),
+
         Execute { query =>
           val lastExecution = query.lastExecution
           val joinOperator = lastExecution.executedPlan.collect {
             case j: StreamingSymmetricHashJoinExec => j
           }.head
-          val aggSaveOperator = lastExecution.executedPlan.collect { case j: StateStoreSaveExec =>
-            j
+          val aggSaveOperator = lastExecution.executedPlan.collect {
+            case j: StateStoreSaveExec => j
           }.head
 
-          assert(
-            joinOperator.eventTimeWatermarkForLateEvents ===
-              Some(Timestamp.valueOf("2023-01-01 01:15:00").getTime))
-          assert(
-            joinOperator.eventTimeWatermarkForEviction ===
-              Some(Timestamp.valueOf("2023-01-01 02:16:00").getTime))
+          assert(joinOperator.eventTimeWatermarkForLateEvents ===
+            Some(Timestamp.valueOf("2023-01-01 01:15:00").getTime))
+          assert(joinOperator.eventTimeWatermarkForEviction ===
+            Some(Timestamp.valueOf("2023-01-01 02:16:00").getTime))
 
-          assert(
-            aggSaveOperator.eventTimeWatermarkForLateEvents ===
-              Some(Timestamp.valueOf("2023-01-01 00:15:00").getTime - 1))
-          assert(
-            aggSaveOperator.eventTimeWatermarkForEviction ===
-              Some(Timestamp.valueOf("2023-01-01 01:16:00").getTime - 1))
-        })
+          assert(aggSaveOperator.eventTimeWatermarkForLateEvents ===
+            Some(Timestamp.valueOf("2023-01-01 00:15:00").getTime - 1))
+          assert(aggSaveOperator.eventTimeWatermarkForEviction ===
+            Some(Timestamp.valueOf("2023-01-01 01:16:00").getTime - 1))
+        }
+      )
     }
   }
 
@@ -720,117 +708,111 @@ class MultiStatefulOperatorsSuite
     val input1 = MemoryStream[(String, Timestamp)]
     val input2 = MemoryStream[(String, Timestamp)]
 
-    val s1 = input1
-      .toDF()
+    val s1 = input1.toDF()
       .toDF("id1", "timestamp1")
       .withWatermark("timestamp1", "0 seconds")
       .as("s1")
 
-    val s2 = input2
-      .toDF()
+    val s2 = input2.toDF()
       .toDF("id2", "timestamp2")
       .withWatermark("timestamp2", "0 seconds")
       .as("s2")
 
-    val s3 = s1.join(
-      s2,
-      expr(
-        "s1.id1 = s2.id2 AND (s1.timestamp1 BETWEEN " +
-          "s2.timestamp2 - INTERVAL 1 hour AND s2.timestamp2 + INTERVAL 1 hour)"),
-      "rightOuter")
+    val s3 = s1.join(s2, expr("s1.id1 = s2.id2 AND (s1.timestamp1 BETWEEN " +
+      "s2.timestamp2 - INTERVAL 1 hour AND s2.timestamp2 + INTERVAL 1 hour)"), "rightOuter")
 
-    val agg = s3
-      .groupBy(window($"timestamp2", "10 minutes"))
+    val agg = s3.groupBy(window($"timestamp2", "10 minutes"))
       .agg(count("*").as("cnt"))
-      .selectExpr(
-        "CAST(window.start AS STRING) AS window_start",
-        "CAST(window.end AS STRING) AS window_end",
-        "cnt")
+      .selectExpr("CAST(window.start AS STRING) AS window_start",
+        "CAST(window.end AS STRING) AS window_end", "cnt")
 
     // for ease of verification, we change the session timezone to UTC
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       testStream(agg)(
         MultiAddData(
-          (
-            input2,
-            Seq(
-              ("1", Timestamp.valueOf("2023-01-01 01:00:10")),
-              ("2", Timestamp.valueOf("2023-01-01 01:00:30")))),
-          (input1, Seq(("1", Timestamp.valueOf("2023-01-01 01:00:20"))))),
+          (input2, Seq(
+            ("1", Timestamp.valueOf("2023-01-01 01:00:10")),
+            ("2", Timestamp.valueOf("2023-01-01 01:00:30")))
+          ),
+          (input1, Seq(
+            ("1", Timestamp.valueOf("2023-01-01 01:00:20"))))
+        ),
         CheckAnswer(),
+
         Execute { query =>
           val lastExecution = query.lastExecution
           val joinOperator = lastExecution.executedPlan.collect {
             case j: StreamingSymmetricHashJoinExec => j
           }.head
-          val aggSaveOperator = lastExecution.executedPlan.collect { case j: StateStoreSaveExec =>
-            j
+          val aggSaveOperator = lastExecution.executedPlan.collect {
+            case j: StateStoreSaveExec => j
           }.head
 
           assert(joinOperator.eventTimeWatermarkForLateEvents === Some(0))
-          assert(
-            joinOperator.eventTimeWatermarkForEviction ===
-              Some(Timestamp.valueOf("2023-01-01 01:00:20").getTime))
+          assert(joinOperator.eventTimeWatermarkForEviction ===
+            Some(Timestamp.valueOf("2023-01-01 01:00:20").getTime))
 
           assert(aggSaveOperator.eventTimeWatermarkForLateEvents === Some(0))
-          assert(
-            aggSaveOperator.eventTimeWatermarkForEviction ===
-              Some(Timestamp.valueOf("2023-01-01 00:00:20").getTime - 1))
+          assert(aggSaveOperator.eventTimeWatermarkForEviction ===
+            Some(Timestamp.valueOf("2023-01-01 00:00:20").getTime - 1))
         },
+
         MultiAddData(
           (input2, Seq(("5", Timestamp.valueOf("2023-01-01 01:15:00")))),
-          (input1, Seq(("6", Timestamp.valueOf("2023-01-01 01:15:00"))))),
+          (input1, Seq(("6", Timestamp.valueOf("2023-01-01 01:15:00"))))
+        ),
         CheckAnswer(),
+
         Execute { query =>
           val lastExecution = query.lastExecution
           val joinOperator = lastExecution.executedPlan.collect {
             case j: StreamingSymmetricHashJoinExec => j
           }.head
-          val aggSaveOperator = lastExecution.executedPlan.collect { case j: StateStoreSaveExec =>
-            j
+          val aggSaveOperator = lastExecution.executedPlan.collect {
+            case j: StateStoreSaveExec => j
           }.head
 
-          assert(
-            joinOperator.eventTimeWatermarkForLateEvents ===
-              Some(Timestamp.valueOf("2023-01-01 01:00:20").getTime))
-          assert(
-            joinOperator.eventTimeWatermarkForEviction ===
-              Some(Timestamp.valueOf("2023-01-01 01:15:00").getTime))
+          assert(joinOperator.eventTimeWatermarkForLateEvents ===
+            Some(Timestamp.valueOf("2023-01-01 01:00:20").getTime))
+          assert(joinOperator.eventTimeWatermarkForEviction ===
+            Some(Timestamp.valueOf("2023-01-01 01:15:00").getTime))
 
-          assert(
-            aggSaveOperator.eventTimeWatermarkForLateEvents ===
-              Some(Timestamp.valueOf("2023-01-01 00:00:20").getTime - 1))
-          assert(
-            aggSaveOperator.eventTimeWatermarkForEviction ===
-              Some(Timestamp.valueOf("2023-01-01 00:15:00").getTime - 1))
+          assert(aggSaveOperator.eventTimeWatermarkForLateEvents ===
+            Some(Timestamp.valueOf("2023-01-01 00:00:20").getTime - 1))
+          assert(aggSaveOperator.eventTimeWatermarkForEviction ===
+            Some(Timestamp.valueOf("2023-01-01 00:15:00").getTime - 1))
         },
+
         MultiAddData(
-          (input2, Seq(("5", Timestamp.valueOf("2023-01-01 02:16:00")))),
-          (input1, Seq(("6", Timestamp.valueOf("2023-01-01 02:16:00"))))),
-        CheckAnswer(("2023-01-01 01:00:00", "2023-01-01 01:10:00", 2)),
+          (input2, Seq(
+            ("5", Timestamp.valueOf("2023-01-01 02:16:00")))),
+          (input1, Seq(
+            ("6", Timestamp.valueOf("2023-01-01 02:16:00"))))
+        ),
+        CheckAnswer(
+          ("2023-01-01 01:00:00", "2023-01-01 01:10:00", 2)
+        ),
+
         Execute { query =>
           val lastExecution = query.lastExecution
           val joinOperator = lastExecution.executedPlan.collect {
             case j: StreamingSymmetricHashJoinExec => j
           }.head
-          val aggSaveOperator = lastExecution.executedPlan.collect { case j: StateStoreSaveExec =>
-            j
+          val aggSaveOperator = lastExecution.executedPlan.collect {
+            case j: StateStoreSaveExec => j
           }.head
 
-          assert(
-            joinOperator.eventTimeWatermarkForLateEvents ===
-              Some(Timestamp.valueOf("2023-01-01 01:15:00").getTime))
-          assert(
-            joinOperator.eventTimeWatermarkForEviction ===
-              Some(Timestamp.valueOf("2023-01-01 02:16:00").getTime))
+          assert(joinOperator.eventTimeWatermarkForLateEvents ===
+            Some(Timestamp.valueOf("2023-01-01 01:15:00").getTime))
+          assert(joinOperator.eventTimeWatermarkForEviction ===
+            Some(Timestamp.valueOf("2023-01-01 02:16:00").getTime))
 
-          assert(
-            aggSaveOperator.eventTimeWatermarkForLateEvents ===
-              Some(Timestamp.valueOf("2023-01-01 00:15:00").getTime - 1))
-          assert(
-            aggSaveOperator.eventTimeWatermarkForEviction ===
-              Some(Timestamp.valueOf("2023-01-01 01:16:00").getTime - 1))
-        })
+          assert(aggSaveOperator.eventTimeWatermarkForLateEvents ===
+            Some(Timestamp.valueOf("2023-01-01 00:15:00").getTime - 1))
+          assert(aggSaveOperator.eventTimeWatermarkForEviction ===
+            Some(Timestamp.valueOf("2023-01-01 01:16:00").getTime - 1))
+        }
+      )
     }
   }
 
@@ -851,24 +833,23 @@ class MultiStatefulOperatorsSuite
 
           val outputWatermark = joinOperator.produceOutputWatermark(0)
           assert(outputWatermark.get === expectedOutputWatermark)
-        })
+        }
+      )
     }
 
     val input1 = MemoryStream[(String, Timestamp)]
-    val df1 = input1
-      .toDF()
+    val df1 = input1.toDF()
       .selectExpr("_1 as leftId", "_2 as leftEventTime")
       .withWatermark("leftEventTime", "5 minutes")
 
     val input2 = MemoryStream[(String, Timestamp)]
-    val df2 = input2
-      .toDF()
+    val df2 = input2.toDF()
       .selectExpr("_1 as rightId", "_2 as rightEventTime")
       .withWatermark("rightEventTime", "10 minutes")
 
-    val join1 = df1.join(
-      df2,
-      expr("""
+    val join1 = df1.join(df2,
+      expr(
+        """
           |leftId = rightId AND leftEventTime BETWEEN
           |  rightEventTime AND rightEventTime + INTERVAL 40 seconds
           |""".stripMargin))
@@ -876,9 +857,9 @@ class MultiStatefulOperatorsSuite
     // right row should wait for additional 40 seconds (+ 1 ms) to be matched with left rows
     testOutputWatermarkInJoin(join1, input1, -40L * 1000 - 1)
 
-    val join2 = df1.join(
-      df2,
-      expr("""
+    val join2 = df1.join(df2,
+      expr(
+        """
           |leftId = rightId AND leftEventTime BETWEEN
           |  rightEventTime - INTERVAL 30 seconds AND rightEventTime
           |""".stripMargin))
@@ -886,9 +867,9 @@ class MultiStatefulOperatorsSuite
     // left row should wait for additional 30 seconds (+ 1 ms) to be matched with left rows
     testOutputWatermarkInJoin(join2, input1, -30L * 1000 - 1)
 
-    val join3 = df1.join(
-      df2,
-      expr("""
+    val join3 = df1.join(df2,
+      expr(
+        """
           |leftId = rightId AND leftEventTime BETWEEN
           |  rightEventTime - INTERVAL 30 seconds AND rightEventTime + INTERVAL 40 seconds
           |""".stripMargin))
@@ -903,22 +884,23 @@ class MultiStatefulOperatorsSuite
     val inputStream1 = MemoryStream[Long]
     val inputStream2 = MemoryStream[Long]
 
-    val df1 = inputStream1
-      .toDF()
+    val df1 = inputStream1.toDF()
       .selectExpr("value", "timestamp_seconds(value) AS ts")
       .withWatermark("ts", "5 seconds")
 
-    val df2 = inputStream2
-      .toDF()
+    val df2 = inputStream2.toDF()
       .selectExpr("value", "timestamp_seconds(value) AS ts")
       .withWatermark("ts", "5 seconds")
 
-    val df1Window = df1.groupBy(window($"ts", "10 seconds")).agg(sum("value").as("sum_df1"))
+    val df1Window = df1.groupBy(
+      window($"ts", "10 seconds")
+    ).agg(sum("value").as("sum_df1"))
 
-    val df2Window = df2.groupBy(window($"ts", "10 seconds")).agg(sum("value").as("sum_df2"))
+    val df2Window = df2.groupBy(
+      window($"ts", "10 seconds")
+    ).agg(sum("value").as("sum_df2"))
 
-    val joined = df1Window
-      .join(df2Window, "window", "inner")
+    val joined = df1Window.join(df2Window, "window", "inner")
       .selectExpr("CAST(window.end AS long) AS window_end", "sum_df1", "sum_df2")
 
     // The test verifies the case where both sides produce input as time window (append mode)
@@ -932,18 +914,24 @@ class MultiStatefulOperatorsSuite
     testStream(joined)(
       MultiAddData(
         (inputStream1, Seq(1L, 2L, 3L, 4L, 5L)),
-        (inputStream2, Seq(5L, 6L, 7L, 8L, 9L))),
+        (inputStream2, Seq(5L, 6L, 7L, 8L, 9L))
+      ),
       // watermark: 5 - 5 = 0
       CheckNewAnswer(),
       MultiAddData(
         (inputStream1, Seq(11L, 12L, 13L, 14L, 15L)),
-        (inputStream2, Seq(15L, 16L, 17L, 18L, 19L))),
+        (inputStream2, Seq(15L, 16L, 17L, 18L, 19L))
+      ),
       // watermark: 15 - 5 = 10 (windows for [0, 10) are completed)
       // Before SPARK-49829, the test fails because this row is not produced.
       CheckNewAnswer((10L, 15L, 35L)),
-      MultiAddData((inputStream1, Seq(100L)), (inputStream2, Seq(101L))),
+      MultiAddData(
+        (inputStream1, Seq(100L)),
+        (inputStream2, Seq(101L))
+      ),
       // watermark: 100 - 5 = 95 (windows for [0, 20) are completed)
-      CheckNewAnswer((20L, 65L, 85L)))
+      CheckNewAnswer((20L, 65L, 85L))
+    )
   }
 
   private def assertNumStateRows(numTotalRows: Seq[Long]): AssertOnQuery = AssertOnQuery { q =>
@@ -958,15 +946,12 @@ class MultiStatefulOperatorsSuite
   private def assertNumRowsDroppedByWatermark(
       numRowsDroppedByWatermark: Seq[Long]): AssertOnQuery = AssertOnQuery { q =>
     q.processAllAvailable()
-    val progressWithData = q.recentProgress
-      .filterNot { p =>
-        // filter out batches which are falling into one of types:
-        // 1) doesn't execute the batch run
-        // 2) empty input batch
-        p.numInputRows == 0
-      }
-      .lastOption
-      .get
+    val progressWithData = q.recentProgress.filterNot { p =>
+      // filter out batches which are falling into one of types:
+      // 1) doesn't execute the batch run
+      // 2) empty input batch
+      p.numInputRows == 0
+    }.lastOption.get
     val stateOperators = progressWithData.stateOperators
     assert(stateOperators.length === numRowsDroppedByWatermark.size)
     assert(stateOperators.map(_.numRowsDroppedByWatermark).toSeq === numRowsDroppedByWatermark)

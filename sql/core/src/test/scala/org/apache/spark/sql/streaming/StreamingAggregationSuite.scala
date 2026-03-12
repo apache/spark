@@ -68,7 +68,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     }
   }
 
-  def testWithAllStateVersions(name: String, confPairs: (String, String)*)(func: => Any): Unit = {
+  def testWithAllStateVersions(name: String, confPairs: (String, String)*)
+                              (func: => Any): Unit = {
     for (version <- StreamingAggregationStateManager.supportedVersions) {
       test(s"$name - state format version $version") {
         executeFuncWithStateVersionSQLConf(version, confPairs, func)
@@ -76,8 +77,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     }
   }
 
-  def testQuietlyWithAllStateVersions(name: String, confPairs: (String, String)*)(
-      func: => Any): Unit = {
+  def testQuietlyWithAllStateVersions(name: String, confPairs: (String, String)*)
+                                     (func: => Any): Unit = {
     for (version <- StreamingAggregationStateManager.supportedVersions) {
       testQuietly(s"$name - state format version $version") {
         executeFuncWithStateVersionSQLConf(version, confPairs, func)
@@ -89,8 +90,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     val inputData = MemoryStream[Int]
 
     val aggregated =
-      inputData
-        .toDF()
+      inputData.toDF()
         .groupBy($"value")
         .agg(count("*"))
         .as[(Int, Long)]
@@ -106,29 +106,31 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       CheckLastBatch((3, 3), (2, 2), (1, 1)),
       // By default we run in new tuple mode.
       AddData(inputData, 4, 4, 4, 4),
-      CheckLastBatch((4, 4)))
+      CheckLastBatch((4, 4))
+    )
   }
 
   testWithAllStateVersions("count distinct") {
     val inputData = MemoryStream[(Int, Seq[Int])]
 
     val aggregated =
-      inputData
-        .toDF()
+      inputData.toDF()
         .select($"*", explode($"_2") as Symbol("value"))
         .groupBy($"_1")
         .agg(size(collect_set($"value")))
         .as[(Int, Int)]
 
-    testStream(aggregated, Update)(AddData(inputData, (1, Seq(1, 2))), CheckLastBatch((1, 2)))
+    testStream(aggregated, Update)(
+      AddData(inputData, (1, Seq(1, 2))),
+      CheckLastBatch((1, 2))
+    )
   }
 
   testWithAllStateVersions("simple count, complete mode") {
     val inputData = MemoryStream[Int]
 
     val aggregated =
-      inputData
-        .toDF()
+      inputData.toDF()
         .groupBy($"value")
         .agg(count("*"))
         .as[(Int, Long)]
@@ -143,15 +145,15 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       AddData(inputData, 3, 2, 1),
       CheckLastBatch((3, 2), (2, 2), (1, 1)),
       AddData(inputData, 4, 4, 4, 4),
-      CheckLastBatch((4, 4), (3, 2), (2, 2), (1, 1)))
+      CheckLastBatch((4, 4), (3, 2), (2, 2), (1, 1))
+    )
   }
 
   testWithAllStateVersions("simple count, append mode") {
     val inputData = MemoryStream[Int]
 
     val aggregated =
-      inputData
-        .toDF()
+      inputData.toDF()
         .groupBy($"value")
         .agg(count("*"))
         .as[(Int, Long)]
@@ -168,8 +170,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     val inputData = MemoryStream[Int]
 
     val aggregated =
-      inputData
-        .toDF()
+      inputData.toDF()
         .groupBy($"value")
         .agg(count("*"))
         .toDF("value", "count")
@@ -186,13 +187,13 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       AddData(inputData, 3, 2, 1),
       CheckLastBatch(isSorted = true, (3, 3), (2, 2), (1, 1)),
       AddData(inputData, 4, 4, 4, 4),
-      CheckLastBatch(isSorted = true, (4, 4), (3, 3), (2, 2), (1, 1)))
+      CheckLastBatch(isSorted = true, (4, 4), (3, 3), (2, 2), (1, 1))
+    )
   }
 
   testWithAllStateVersions("state metrics - append mode") {
     val inputData = MemoryStream[Int]
-    val aggWithWatermark = inputData
-      .toDF()
+    val aggWithWatermark = inputData.toDF()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
       .groupBy(window($"eventTime", "5 seconds") as Symbol("window"))
@@ -232,7 +233,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
 
       // batchId 1 without data
       AdvanceManualClock(1000L), // watermark = 5
-      Execute { q => // wait for the no data batch to complete
+      Execute { q =>             // wait for the no data batch to complete
         eventually(timeout(streamingTimeout)) { assert(q.lastProgress.batchId === 1) }
       },
       CheckAnswer(),
@@ -261,22 +262,22 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
 
       // batchId 4 without data
       AdvanceManualClock(1000L), // watermark = 15
-      Execute { q => // wait for the no data batch to complete
+      Execute { q =>             // wait for the no data batch to complete
         eventually(timeout(streamingTimeout)) { assert(q.lastProgress.batchId === 4) }
       },
       CheckAnswer((10, 3)),
       AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 1 },
       AssertOnQuery { _.stateOperatorProgresses.head.numRowsUpdated === 0 },
       AssertOnQuery { _.stateOperatorProgresses.head.numRowsTotal === 2 },
-      AssertOnQuery { _.lastExecutedBatch.sink.numOutputRows == 1 })
+      AssertOnQuery { _.lastExecutedBatch.sink.numOutputRows == 1 }
+    )
   }
 
   testWithAllStateVersions("state metrics - update/complete mode") {
     val inputData = MemoryStream[Int]
 
     val aggregated =
-      inputData
-        .toDS()
+      inputData.toDS()
         .flatMap(x => Seq(x, x + 1))
         .toDF("value")
         .groupBy($"value")
@@ -304,7 +305,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       AssertOnQuery { _.stateNodes.size === 1 },
       AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 3 },
       AssertOnQuery { _.stateNodes.head.metrics("numUpdatedStateRows").value === 3 },
-      AssertOnQuery { _.stateNodes.head.metrics("numTotalStateRows").value === 4 })
+      AssertOnQuery { _.stateNodes.head.metrics("numTotalStateRows").value === 4 }
+    )
 
     // Test with Complete mode
     inputData.reset()
@@ -320,15 +322,15 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       AssertOnQuery { _.stateNodes.size === 1 },
       AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 4 },
       AssertOnQuery { _.stateNodes.head.metrics("numUpdatedStateRows").value === 3 },
-      AssertOnQuery { _.stateNodes.head.metrics("numTotalStateRows").value === 4 })
+      AssertOnQuery { _.stateNodes.head.metrics("numTotalStateRows").value === 4 }
+    )
   }
 
   testWithAllStateVersions("multiple keys") {
     val inputData = MemoryStream[Int]
 
     val aggregated =
-      inputData
-        .toDF()
+      inputData.toDF()
         .groupBy($"value", $"value" + 1)
         .agg(count("*"))
         .as[(Int, Int, Long)]
@@ -337,21 +339,19 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       AddData(inputData, 1, 2),
       CheckLastBatch((1, 2, 1), (2, 3, 1)),
       AddData(inputData, 1, 2),
-      CheckLastBatch((1, 2, 2), (2, 3, 2)))
+      CheckLastBatch((1, 2, 2), (2, 3, 2))
+    )
   }
 
-  testWithAllStateVersions(
-    "SPARK-29438: ensure UNION doesn't lead streaming aggregation to use" +
-      " shifted partition IDs") {
-    def constructUnionDf(
-        desiredPartitionsForInput1: Int): (MemoryStream[Int], MemoryStream[Int], DataFrame) = {
+  testWithAllStateVersions("SPARK-29438: ensure UNION doesn't lead streaming aggregation to use" +
+    " shifted partition IDs") {
+    def constructUnionDf(desiredPartitionsForInput1: Int)
+      : (MemoryStream[Int], MemoryStream[Int], DataFrame) = {
       val input1 = MemoryStream[Int](spark, desiredPartitionsForInput1)
       val input2 = MemoryStream[Int]
-      val df1 = input1
-        .toDF()
+      val df1 = input1.toDF()
         .select($"value", $"value" + 1)
-      val df2 = input2
-        .toDF()
+      val df2 = input2.toDF()
         .groupBy($"value")
         .agg(count("*"))
 
@@ -365,7 +365,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
         StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
         MultiAddData(input1, 11, 12)(input2, 21, 22),
         CheckNewAnswer(Row(11, 12), Row(12, 13), Row(21, 1), Row(22, 1)),
-        StopStream)
+        StopStream
+      )
 
       // We're restoring the query with different number of partitions in left side of UNION,
       // which may lead right side of union to have mismatched partition IDs (e.g. if it relies on
@@ -380,7 +381,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       testStream(newUnionDf, Update)(
         StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
         MultiAddData(newInput1, 13, 14)(newInput2, 22, 23),
-        CheckNewAnswer(Row(13, 14), Row(14, 15), Row(22, 2), Row(23, 1)))
+        CheckNewAnswer(Row(13, 14), Row(14, 15), Row(22, 2), Row(23, 1))
+      )
     }
   }
 
@@ -388,41 +390,39 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     val inputData = MemoryStream[Int]
     FailureSingleton.firstTime = true
     val aggregated =
-      inputData
-        .toDS()
-        .map { i =>
-          if (i == 4 && FailureSingleton.firstTime) {
-            FailureSingleton.firstTime = false
-            sys.error("injected failure")
-          }
+      inputData.toDS()
+          .map { i =>
+            if (i == 4 && FailureSingleton.firstTime) {
+              FailureSingleton.firstTime = false
+              sys.error("injected failure")
+            }
 
-          i
-        }
-        .groupBy($"value")
-        .agg(count("*"))
-        .as[(Int, Long)]
+            i
+          }
+          .groupBy($"value")
+          .agg(count("*"))
+          .as[(Int, Long)]
 
     testStream(aggregated, Update)(
       StartStream(),
       AddData(inputData, 1, 2, 3, 4),
       ExpectFailure[SparkException](),
       StartStream(),
-      CheckLastBatch((1, 1), (2, 1), (3, 1), (4, 1)))
+      CheckLastBatch((1, 1), (2, 1), (3, 1), (4, 1))
+    )
   }
 
   testWithAllStateVersions("prune results by current_time or localtimestamp, complete mode") {
     import testImplicits._
     val inputDataOne = MemoryStream[Long]
     val aggregatedOne =
-      inputDataOne
-        .toDF()
+      inputDataOne.toDF()
         .groupBy($"value")
         .agg(count("*"))
         .where($"value" >= current_timestamp().cast("long") - 10L)
     val inputDataTwo = MemoryStream[Long]
     val aggregatedTwo =
-      inputDataTwo
-        .toDF()
+      inputDataTwo.toDF()
         .groupBy($"value")
         .agg(count("*"))
         .where($"value" >= localtimestamp().cast(TimestampType).cast("long") - 10L)
@@ -469,7 +469,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
         // advance clock to 100 seconds, should retain keys >= 90
         AddData(inputData, 85L, 90L, 100L, 105L),
         AdvanceManualClock(10 * 1000),
-        CheckLastBatch((90L, 1), (100L, 1), (105L, 1)))
+        CheckLastBatch((90L, 1), (100L, 1), (105L, 1))
+      )
     }
   }
 
@@ -479,8 +480,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     val tz = TimeZone.getDefault.getID
     val inputData = MemoryStream[Long]
     val aggregated =
-      inputData
-        .toDF()
+      inputData.toDF()
         .select(to_utc_timestamp(from_unixtime($"value" * SECONDS_PER_DAY), tz))
         .toDF("value")
         .groupBy($"value")
@@ -519,21 +519,21 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       // advance clock to 100 days, should retain keys >= 90
       AddData(inputData, 85L, 90L, 100L, 105L),
       AdvanceManualClock(MILLIS_PER_DAY * 10),
-      CheckLastBatch((90L, 1), (100L, 1), (105L, 1)))
+      CheckLastBatch((90L, 1), (100L, 1), (105L, 1))
+    )
   }
 
-  testWithAllStateVersions(
-    "SPARK-19690: do not convert batch aggregation in streaming query " +
-      "to streaming") {
+  testWithAllStateVersions("SPARK-19690: do not convert batch aggregation in streaming query " +
+    "to streaming") {
     val streamInput = MemoryStream[Int]
     val batchDF = Seq(1, 2, 3, 4, 5)
-      .toDF("value")
-      .withColumn("parity", $"value" % 2)
-      .groupBy($"parity")
-      .agg(count("*") as Symbol("joinValue"))
+        .toDF("value")
+        .withColumn("parity", $"value" % 2)
+        .groupBy($"parity")
+        .agg(count("*") as Symbol("joinValue"))
     val joinDF = streamInput
-      .toDF()
-      .join(batchDF, $"value" === $"parity")
+        .toDF()
+        .join(batchDF, $"value" === $"parity")
 
     // make sure we're planning an aggregate in the first place
     assert(batchDF.queryExecution.optimizedPlan match { case _: Aggregate => true })
@@ -546,33 +546,36 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
   }
 
   /**
-   * This method verifies certain properties in the SparkPlan of a streaming aggregation. First of
-   * all, it checks that the child of a `StateStoreRestoreExec` creates the desired data
-   * distribution, where the child is a `HashAggregateExec` which already provides the expected
-   * data distribution.
+   * This method verifies certain properties in the SparkPlan of a streaming aggregation.
+   * First of all, it checks that the child of a `StateStoreRestoreExec` creates the desired
+   * data distribution, where the child is a `HashAggregateExec` which already provides
+   * the expected data distribution.
    *
    * The second thing it checks that the child provides the expected number of partitions.
    *
    * The third thing it checks that we don't add an unnecessary shuffle in-between
    * `StateStoreRestoreExec` and `StateStoreSaveExec`.
    */
-  private def checkAggregationChain(se: StreamExecution, expectedPartition: Int): Boolean = {
+  private def checkAggregationChain(
+      se: StreamExecution,
+      expectedPartition: Int): Boolean = {
     val executedPlan = se.lastExecution.executedPlan
-    val restore = executedPlan.collect { case ss: StateStoreRestoreExec => ss }.head
+    val restore = executedPlan
+      .collect { case ss: StateStoreRestoreExec => ss }
+      .head
     restore.child match {
       case node: UnaryExecNode =>
         node.outputPartitioning match {
           case HashPartitioning(_, numPartitions) =>
-            assert(
-              numPartitions === expectedPartition,
+            assert(numPartitions === expectedPartition,
               "Didn't get the expected number of partitions.")
 
-          // below case should only applied to no grouping key which leads to AllTuples
+            // below case should only applied to no grouping key which leads to AllTuples
           case SinglePartition if expectedPartition == 1 => // OK
+
           case p =>
-            fail(
-              "Expected a hash partitioning for child output partitioning, but has " +
-                s"$p instead.")
+            fail("Expected a hash partitioning for child output partitioning, but has " +
+              s"$p instead.")
         }
 
       case _ => fail("Expected no shuffling")
@@ -589,9 +592,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     true
   }
 
-  testWithAllStateVersions(
-    "SPARK-21977: coalesce(1) with 0 partition RDD should be " +
-      "repartitioned to 1") {
+  testWithAllStateVersions("SPARK-21977: coalesce(1) with 0 partition RDD should be " +
+    "repartitioned to 1") {
     val inputSource = new BlockRDDBackedSource(spark)
     MockSourceProvider.withMockSources(inputSource) {
       // `coalesce(1)` changes the partitioning of data to `SinglePartition` which by default
@@ -606,13 +608,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       // we fail to restore the previous state in `StateStoreRestoreExec`, we save the 0 value in
       // `StateStoreSaveExec` losing all previous state.
       val aggregated: Dataset[Long] =
-        spark.readStream
-          .format((new MockSourceProvider).getClass.getCanonicalName)
-          .load()
-          .coalesce(1)
-          .groupBy()
-          .count()
-          .as[Long]
+        spark.readStream.format((new MockSourceProvider).getClass.getCanonicalName)
+        .load().coalesce(1).groupBy().count().as[Long]
 
       testStream(aggregated, Complete())(
         AddBlockData(inputSource, Seq(1)),
@@ -629,16 +626,17 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
         CheckLastBatch(3),
         AddBlockData(inputSource),
         CheckLastBatch(3),
-        StopStream)
+        StopStream
+      )
     }
   }
 
-  testWithAllStateVersions(
-    "SPARK-21977: coalesce(1) with aggregation should still be " +
-      "repartitioned when it has non-empty grouping keys") {
+  testWithAllStateVersions("SPARK-21977: coalesce(1) with aggregation should still be " +
+    "repartitioned when it has non-empty grouping keys") {
     val inputSource = new BlockRDDBackedSource(spark)
     MockSourceProvider.withMockSources(inputSource) {
       withTempDir { tempDir =>
+
         // `coalesce(1)` changes the partitioning of data to `SinglePartition` which by default
         // satisfies the required distributions of all aggregations. However, when we have
         // non-empty grouping keys, in streaming, we must repartition to
@@ -651,11 +649,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
         def createDf(partitions: Int): Dataset[(Long, Long)] = {
           spark.readStream
             .format((new MockSourceProvider).getClass.getCanonicalName)
-            .load()
-            .coalesce(partitions)
-            .groupBy($"a" % 1)
-            .count()
-            .as[(Long, Long)]
+            .load().coalesce(partitions).groupBy($"a" % 1).count().as[(Long, Long)]
         }
 
         testStream(createDf(1), Complete())(
@@ -665,7 +659,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
           AssertOnQuery("Verify addition of exchange operator") { se =>
             checkAggregationChain(se, spark.sessionState.conf.numShufflePartitions)
           },
-          StopStream)
+          StopStream
+        )
 
         testStream(createDf(2), Complete())(
           StartStream(checkpointLocation = tempDir.getAbsolutePath),
@@ -677,7 +672,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
           },
           AddBlockData(inputSource),
           CheckLastBatch((0L, 4L)),
-          StopStream)
+          StopStream
+        )
       }
     }
   }
@@ -694,13 +690,12 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       AddData(input),
       CheckLastBatch(6),
       AddData(input, 0),
-      CheckLastBatch(0))
+      CheckLastBatch(0)
+    )
   }
 
-  testWithAllStateVersions(
-    "SPARK-23004: Ensure that TypedImperativeAggregate functions " +
-      "do not throw errors",
-    SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+  testWithAllStateVersions("SPARK-23004: Ensure that TypedImperativeAggregate functions " +
+    "do not throw errors", SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
     // See the JIRA SPARK-23004 for more details. In short, this test reproduces the error
     // by ensuring the following.
     // - A streaming query with a streaming aggregation.
@@ -710,9 +705,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     //   micro-batch with 128 records that shuffle to a single partition.
     // This test throws the exact error reported in SPARK-23004 without the corresponding fix.
     val input = MemoryStream[Int]
-    val df = input
-      .toDF()
-      .toDF("value")
+    val df = input.toDF().toDF("value")
       .selectExpr("value as group", "value")
       .groupBy("group")
       .agg(collect_list("value"))
@@ -721,23 +714,22 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       AssertOnQuery { q =>
         q.processAllAvailable()
         true
-      })
+      }
+    )
   }
+
 
   test("simple count, update mode - recovery from checkpoint uses state format version 1") {
     val inputData = MemoryStream[Int]
 
     val aggregated =
-      inputData
-        .toDF()
+      inputData.toDF()
         .groupBy($"value")
         .agg(count("*"))
         .as[(Int, Long)]
 
-    val resourceUri = this.getClass
-      .getResource(
-        "/structured-streaming/checkpoint-version-2.3.1-streaming-aggregate-state-format-1/")
-      .toURI
+    val resourceUri = this.getClass.getResource(
+      "/structured-streaming/checkpoint-version-2.3.1-streaming-aggregate-state-format-1/").toURI
 
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
@@ -748,8 +740,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     inputData.addData(3, 2)
 
     testStream(aggregated, Update)(
-      StartStream(
-        checkpointLocation = checkpointDir.getAbsolutePath,
+      StartStream(checkpointLocation = checkpointDir.getAbsolutePath,
         additionalConfs = Map(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION.key -> "2")),
       /*
         Note: The checkpoint was generated using the following input in Spark version 2.3.1
@@ -761,6 +752,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
 
       AddData(inputData, 3, 2, 1),
       CheckLastBatch((3, 3), (2, 2), (1, 1)),
+
       Execute { query =>
         // Verify state format = 1
         val stateVersions = query.lastExecution.executedPlan.collect {
@@ -773,11 +765,11 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
 
       // By default we run in new tuple mode.
       AddData(inputData, 4, 4, 4, 4),
-      CheckLastBatch((4, 4)))
+      CheckLastBatch((4, 4))
+    )
   }
 
-  testQuietlyWithAllStateVersions(
-    "changing schema of state when restarting query",
+  testQuietlyWithAllStateVersions("changing schema of state when restarting query",
     (SQLConf.STATE_STORE_FORMAT_VALIDATION_ENABLED.key, "false"),
     // Since we only do the check in partition 0 and other partitions still may fail with
     // different errors, we change the number of shuffle partitions to 1 to make the test
@@ -798,13 +790,13 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
           val msg = stateSchemaExc.get.getMessage
           assert(msg.contains("does not match existing"))
           // other verifications are presented in StateStoreSuite
-        })
+        }
+      )
     }
   }
 
-  testQuietlyWithAllStateVersions(
-    "changing schema of state when restarting query -" +
-      " schema check off",
+  testQuietlyWithAllStateVersions("changing schema of state when restarting query -" +
+    " schema check off",
     (SQLConf.STATE_SCHEMA_CHECK_ENABLED.key, "false"),
     (SQLConf.STATE_STORE_FORMAT_VALIDATION_ENABLED.key, "false"),
     // Since we only do the check in partition 0 and other partitions still may fail with
@@ -821,55 +813,48 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
           val stateSchemaExc = findStateSchemaNotCompatible(e)
           // it would bring other error in runtime, but it shouldn't check schema in any way
           assert(stateSchemaExc.isEmpty)
-        })
+        }
+      )
     }
   }
 
   test("SPARK-35896: metrics in StateOperatorProgress are output correctly") {
     val inputData = MemoryStream[Int]
     val aggregated =
-      inputData
-        .toDF()
+      inputData.toDF()
         .groupBy($"value")
         .agg(count("*"))
         .as[(Int, Long)]
 
-    testStream(aggregated, Update)(
+    testStream(aggregated, Update) (
       StartStream(additionalConfs = Map(SQLConf.SHUFFLE_PARTITIONS.key -> "3")),
       AddData(inputData, 3, 2, 1, 3),
       CheckLastBatch((3, 2), (2, 1), (1, 1)),
       assertNumStateRows(
-        total = Seq(3),
-        updated = Seq(3),
-        droppedByWatermark = Seq(0),
-        removed = Some(Seq(0))),
+        total = Seq(3), updated = Seq(3), droppedByWatermark = Seq(0), removed = Some(Seq(0))),
+
       AddData(inputData, 1, 4),
       CheckLastBatch((1, 2), (4, 1)),
       assertStateOperatorProgressMetric(
-        operatorName = "stateStoreSave",
-        numShufflePartitions = 3,
-        numStateStoreInstances = 3))
+        operatorName = "stateStoreSave", numShufflePartitions = 3, numStateStoreInstances = 3)
+    )
 
     inputData.reset() // reset the input to clear any data from prev test
-    testStream(aggregated, Complete)(
+    testStream(aggregated, Complete) (
       StartStream(additionalConfs = Map(SQLConf.SHUFFLE_PARTITIONS.key -> "3")),
       AddData(inputData, 3, 2, 1, 3),
       CheckLastBatch((3, 2), (2, 1), (1, 1)),
       assertNumStateRows(
-        total = Seq(3),
-        updated = Seq(3),
-        droppedByWatermark = Seq(0),
-        removed = Some(Seq(0))),
+        total = Seq(3), updated = Seq(3), droppedByWatermark = Seq(0), removed = Some(Seq(0))),
+
       AddData(inputData, 1, 4),
       CheckLastBatch((3, 2), (2, 1), (1, 2), (4, 1)),
       assertStateOperatorProgressMetric(
-        operatorName = "stateStoreSave",
-        numShufflePartitions = 3,
-        numStateStoreInstances = 3))
+        operatorName = "stateStoreSave", numShufflePartitions = 3, numStateStoreInstances = 3)
+    )
 
     // with watermark and append output mode
-    val aggWithWatermark = inputData
-      .toDF()
+    val aggWithWatermark = inputData.toDF()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
       .groupBy(window($"eventTime", "5 seconds") as Symbol("window"))
@@ -877,36 +862,35 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
     inputData.reset() // reset the input to clear any data from prev test
-    testStream(aggWithWatermark, Append)(
+    testStream(aggWithWatermark, Append) (
       StartStream(additionalConfs = Map(SQLConf.SHUFFLE_PARTITIONS.key -> "3")),
       AddData(inputData, 3, 2, 1, 9),
       CheckLastBatch(),
       assertStateOperatorProgressMetric(
-        operatorName = "stateStoreSave",
-        numShufflePartitions = 3,
-        numStateStoreInstances = 3),
+        operatorName = "stateStoreSave", numShufflePartitions = 3, numStateStoreInstances = 3),
+
       AddData(inputData, 25), // Advance watermark to 15 secs, no-data-batch drops rows <= 15
       CheckLastBatch((0, 3), (5, 1)),
       assertNumStateRows(
-        total = Seq(1),
-        updated = Seq(1),
-        droppedByWatermark = Seq(0),
-        removed = Some(Seq(2))))
+        total = Seq(1), updated = Seq(1), droppedByWatermark = Seq(0), removed = Some(Seq(2)))
+    )
   }
 
   testWithAllStateVersions("test that avro encoding is not supported") {
     val inputData = MemoryStream[Int]
 
     val aggregated =
-      inputData
-        .toDF()
+      inputData.toDF()
         .groupBy($"value")
         .agg(count("*"))
         .as[(Int, Long)]
 
     val ex = intercept[Exception] {
       withSQLConf(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> "avro") {
-        testStream(aggregated, Update)(AddData(inputData, 3), ProcessAllAvailable())
+        testStream(aggregated, Update)(
+          AddData(inputData, 3),
+          ProcessAllAvailable()
+        )
       }
     }
     assert(ex.getMessage.contains("State store encoding format as avro is not supported"))
@@ -915,8 +899,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
   private def prepareTestForChangingSchemaOfState(
       tempDir: File): (MemoryStream[Int], DataFrame) = {
     val inputData = MemoryStream[Int]
-    val aggregated = inputData
-      .toDF()
+    val aggregated = inputData.toDF()
       .selectExpr("value % 10 AS id", "value")
       .groupBy($"id")
       .agg(
@@ -928,13 +911,13 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       StartStream(checkpointLocation = tempDir.getAbsolutePath),
       AddData(inputData, 1, 11),
       CheckLastBatch((1L, 12L, 6.0, 11)),
-      StopStream)
+      StopStream
+    )
 
     StateStore.unloadAll()
 
     val inputData2 = MemoryStream[Int]
-    val aggregated2 = inputData2
-      .toDF()
+    val aggregated2 = inputData2.toDF()
       .selectExpr("value % 10 AS id", "value")
       .groupBy($"id")
       .agg(
@@ -948,8 +931,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
   }
 
   @tailrec
-  private def findStateSchemaNotCompatible(
-      exc: Throwable): Option[SparkUnsupportedOperationException] = {
+  private def findStateSchemaNotCompatible(exc: Throwable):
+    Option[SparkUnsupportedOperationException] = {
     exc match {
       case e1: SparkUnsupportedOperationException => Some(e1)
       case e1 if e1.getCause != null => findStateSchemaNotCompatible(e1.getCause)
@@ -966,8 +949,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
   }
 
   /**
-   * A Streaming Source that is backed by a BlockRDD and that can create RDDs with 0 blocks at
-   * will.
+   * A Streaming Source that is backed by a BlockRDD and that can create RDDs with 0 blocks at will.
    */
   class BlockRDDBackedSource(spark: SparkSession) extends Source {
     var counter = 0L
@@ -1003,5 +985,4 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
 
 @SlowSQLTest
 class RocksDBStateStoreStreamingAggregationSuite
-    extends StreamingAggregationSuite
-    with RocksDBStateStoreTest
+  extends StreamingAggregationSuite with RocksDBStateStoreTest

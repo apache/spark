@@ -68,11 +68,9 @@ package object state {
       val cleanedF = dataRDD.sparkContext.clean(storeUpdateFunction)
       val wrappedF = (store: StateStore, iter: Iterator[T]) => {
         // Abort the state store in case of error
-        TaskContext
-          .get()
-          .addTaskCompletionListener[Unit](_ => {
-            if (!store.hasCommitted) store.abort()
-          })
+        TaskContext.get().addTaskCompletionListener[Unit](_ => {
+          if (!store.hasCommitted) store.abort()
+        })
         cleanedF(store, iter)
       }
 
@@ -106,7 +104,8 @@ package object state {
         storeCoordinator: Option[StateStoreCoordinatorRef],
         useColumnFamilies: Boolean = false,
         extraOptions: Map[String, String] = Map.empty)(
-        storeReadFn: (ReadStateStore, Iterator[T]) => Iterator[U]): ReadStateStoreRDD[T, U] = {
+        storeReadFn: (ReadStateStore, Iterator[T]) => Iterator[U])
+      : ReadStateStoreRDD[T, U] = {
 
       val cleanedF = dataRDD.sparkContext.clean(storeReadFn)
       val wrappedF = (store: ReadStateStore, iter: Iterator[T]) => {

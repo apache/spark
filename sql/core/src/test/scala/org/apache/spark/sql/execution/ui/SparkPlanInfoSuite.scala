@@ -32,7 +32,10 @@ class SparkPlanInfoSuite extends SharedSparkSession {
   }
 
   test("SparkPlanInfo creation from SparkPlan with InMemoryTableScan node") {
-    val dfWithCache = Seq((1, 1), (2, 2)).toDF().filter("_1 > 1").cache().repartition(10)
+    val dfWithCache = Seq(
+      (1, 1),
+      (2, 2)
+    ).toDF().filter("_1 > 1").cache().repartition(10)
 
     val planInfoResult = SparkPlanInfo.fromSparkPlan(dfWithCache.queryExecution.executedPlan)
 

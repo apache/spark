@@ -48,9 +48,9 @@ import org.apache.spark.sql.types._
  *
  * by mapping each complex type extractor to a [[org.apache.spark.sql.types.StructField]] with the
  * same name as its child (or "parent" going right to left in the select expression) and a data
- * type appropriate to the complex type extractor. In our example, the name of the child
- * expression is "name" and its data type is a [[org.apache.spark.sql.types.StructType]] with a
- * single string field named "first".
+ * type appropriate to the complex type extractor. In our example, the name of the child expression
+ * is "name" and its data type is a [[org.apache.spark.sql.types.StructType]] with a single string
+ * field named "first".
  */
 object SelectedField {
   def unapply(expr: Expression): Option[StructField] = {
@@ -66,9 +66,7 @@ object SelectedField {
    * Convert an expression into the parts of the schema (the field) it accesses.
    */
   @scala.annotation.tailrec
-  private def selectField(
-      expr: Expression,
-      dataTypeOpt: Option[DataType]): Option[StructField] = {
+  private def selectField(expr: Expression, dataTypeOpt: Option[DataType]): Option[StructField] = {
     expr match {
       case a: Attribute =>
         dataTypeOpt.map { dt =>
@@ -81,8 +79,8 @@ object SelectedField {
       case GetArrayStructFields(child, _, ordinal, _, containsNull) =>
         // For case-sensitivity aware field resolution, we should take `ordinal` which
         // points to correct struct field.
-        val field =
-          child.dataType.asInstanceOf[ArrayType].elementType.asInstanceOf[StructType](ordinal)
+        val field = child.dataType.asInstanceOf[ArrayType]
+          .elementType.asInstanceOf[StructType](ordinal)
         val newFieldDataType = dataTypeOpt match {
           case None =>
             // GetArrayStructFields is the top level extractor. This means its result is
@@ -94,9 +92,7 @@ object SelectedField {
             dataType
           case Some(x) =>
             // This should not happen.
-            throw QueryCompilationErrors.dataTypeUnsupportedByClassError(
-              x,
-              "GetArrayStructFields")
+            throw QueryCompilationErrors.dataTypeUnsupportedByClassError(x, "GetArrayStructFields")
         }
         val newField = StructField(field.name, newFieldDataType, field.nullable)
         selectField(child, Option(ArrayType(struct(newField), containsNull)))

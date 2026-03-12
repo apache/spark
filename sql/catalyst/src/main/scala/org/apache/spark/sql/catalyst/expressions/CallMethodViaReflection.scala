@@ -35,19 +35,18 @@ import org.apache.spark.util.Utils
 /**
  * An expression that invokes a method on a class via reflection.
  *
- * For now, only types defined in `Reflect.typeMapping` are supported (basically primitives and
- * string) as input types, and the output is turned automatically to a string.
+ * For now, only types defined in `Reflect.typeMapping` are supported (basically primitives
+ * and string) as input types, and the output is turned automatically to a string.
  *
- * Note that unlike Hive's reflect function, this expression calls only static methods (i.e. does
- * not support calling non-static methods).
+ * Note that unlike Hive's reflect function, this expression calls only static methods
+ * (i.e. does not support calling non-static methods).
  *
  * We should also look into how to consolidate this expression with
  * [[org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke]] in the future.
  *
- * @param children
- *   the first element should be a literal string for the class name, and the second element
- *   should be a literal string for the method name, and the remaining are input arguments to the
- *   Java method.
+ * @param children the first element should be a literal string for the class name,
+ *                 and the second element should be a literal string for the method name,
+ *                 and the remaining are input arguments to the Java method.
  */
 @ExpressionDescription(
   usage = "_FUNC_(class, method[, arg1[, arg2 ..]]) - Calls a method with reflection.",
@@ -60,11 +59,13 @@ import org.apache.spark.util.Utils
   """,
   since = "2.0.0",
   group = "misc_funcs")
-case class CallMethodViaReflection(children: Seq[Expression], failOnError: Boolean = true)
-    extends Nondeterministic
-    with DefaultStringProducingExpression
-    with CodegenFallback
-    with QueryErrorsBase {
+case class CallMethodViaReflection(
+      children: Seq[Expression],
+      failOnError: Boolean = true)
+  extends Nondeterministic
+  with DefaultStringProducingExpression
+  with CodegenFallback
+  with QueryErrorsBase {
 
   // This could be pretty much anything.
   override def expensive: Boolean = true
@@ -77,9 +78,8 @@ case class CallMethodViaReflection(children: Seq[Expression], failOnError: Boole
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size < 2) {
       throw QueryCompilationErrors.wrongNumArgsError(
-        toSQLId(prettyName),
-        Seq("> 1"),
-        children.length)
+        toSQLId(prettyName), Seq("> 1"), children.length
+      )
     } else {
       val unexpectedParameter = children.zipWithIndex.collectFirst {
         case (e, 0) if !(e.dataType.isInstanceOf[StringType] && e.foldable) =>
@@ -88,7 +88,9 @@ case class CallMethodViaReflection(children: Seq[Expression], failOnError: Boole
             messageParameters = Map(
               "inputName" -> toSQLId("class"),
               "inputType" -> toSQLType(StringTypeWithCollation),
-              "inputExpr" -> toSQLExpr(children.head)))
+              "inputExpr" -> toSQLExpr(children.head)
+            )
+          )
         case (e, 0) if e.eval() == null =>
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_NULL",
@@ -99,31 +101,27 @@ case class CallMethodViaReflection(children: Seq[Expression], failOnError: Boole
             messageParameters = Map(
               "inputName" -> toSQLId("method"),
               "inputType" -> toSQLType(StringTypeWithCollation),
-              "inputExpr" -> toSQLExpr(children(1))))
+              "inputExpr" -> toSQLExpr(children(1))
+            )
+          )
         case (e, 1) if e.eval() == null =>
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_NULL",
             messageParameters = Map("exprName" -> toSQLId("method")))
-        case (e, idx)
-            if idx > 1 &&
-              (!CallMethodViaReflection.typeMapping.contains(e.dataType)
-                && !e.dataType.isInstanceOf[StringType]) =>
+        case (e, idx) if idx > 1 &&
+          (!CallMethodViaReflection.typeMapping.contains(e.dataType)
+            && !e.dataType.isInstanceOf[StringType]) =>
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_INPUT_TYPE",
             messageParameters = Map(
               "paramIndex" -> ordinalNumber(idx),
               "requiredType" -> toSQLType(
-                TypeCollection(
-                  BooleanType,
-                  ByteType,
-                  ShortType,
-                  IntegerType,
-                  LongType,
-                  FloatType,
-                  DoubleType,
+                TypeCollection(BooleanType, ByteType, ShortType,
+                  IntegerType, LongType, FloatType, DoubleType,
                   StringTypeWithCollation(supportsTrimCollation = true))),
               "inputSql" -> toSQLExpr(e),
-              "inputType" -> toSQLType(e.dataType)))
+              "inputType" -> toSQLType(e.dataType))
+          )
       }
 
       unexpectedParameter match {
@@ -131,11 +129,13 @@ case class CallMethodViaReflection(children: Seq[Expression], failOnError: Boole
         case _ if !classExists =>
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_CLASS_TYPE",
-            messageParameters = Map("className" -> className))
+            messageParameters = Map("className" -> className)
+          )
         case _ if method == null =>
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_STATIC_METHOD",
-            messageParameters = Map("methodName" -> methodName, "className" -> className))
+            messageParameters = Map("methodName" -> methodName, "className" -> className)
+          )
         case _ => TypeCheckSuccess
       }
     }
@@ -157,7 +157,7 @@ case class CallMethodViaReflection(children: Seq[Expression], failOnError: Boole
       i += 1
     }
     try {
-      val ret = method.invoke(null, buffer: _*)
+      val ret = method.invoke(null, buffer : _*)
       UTF8String.fromString(String.valueOf(ret))
     } catch {
       case NonFatal(_) if !failOnError =>
@@ -167,32 +167,27 @@ case class CallMethodViaReflection(children: Seq[Expression], failOnError: Boole
 
   @transient private lazy val argExprs: Array[Expression] = children.drop(2).toArray
 
-  /**
-   * Name of the class -- this has to be called after we verify children has at least two exprs.
-   */
+  /** Name of the class -- this has to be called after we verify children has at least two exprs. */
   @transient private lazy val className = children(0).eval().asInstanceOf[UTF8String].toString
 
   /** True if the class exists and can be loaded. */
   @transient private lazy val classExists = CallMethodViaReflection.classExists(className)
 
   /** Name of the method */
-  @transient private lazy val methodName =
-    children(1).eval(null).asInstanceOf[UTF8String].toString
+  @transient private lazy val methodName = children(1).eval(null).asInstanceOf[UTF8String].toString
 
   /** The reflection method. */
   @transient lazy val method: Method = CallMethodViaReflection
-    .findMethod(className, methodName, argExprs.map(_.dataType).toImmutableArraySeq)
-    .orNull
+    .findMethod(className, methodName, argExprs.map(_.dataType).toImmutableArraySeq).orNull
 
   /** A temporary buffer used to hold intermediate results returned by children. */
   @transient private lazy val buffer = new Array[Object](argExprs.length)
 
   override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[Expression]): CallMethodViaReflection = copy(children = newChildren)
+    newChildren: IndexedSeq[Expression]): CallMethodViaReflection = copy(children = newChildren)
 }
 
 object CallMethodViaReflection {
-
   /** Mapping from Spark's type to acceptable JVM types. */
   val typeMapping = Map[DataType, Seq[Class[_]]](
     BooleanType -> Seq(classOf[java.lang.Boolean], classOf[Boolean]),
@@ -202,7 +197,8 @@ object CallMethodViaReflection {
     LongType -> Seq(classOf[java.lang.Long], classOf[Long]),
     FloatType -> Seq(classOf[java.lang.Float], classOf[Float]),
     DoubleType -> Seq(classOf[java.lang.Double], classOf[Double]),
-    StringType -> Seq(classOf[String]))
+    StringType -> Seq(classOf[String])
+  )
 
   /**
    * Returns true if the class can be found and loaded.
@@ -217,17 +213,14 @@ object CallMethodViaReflection {
   }
 
   /**
-   * Finds a Java static method using reflection that matches the given argument types, and whose
-   * return type is string.
+   * Finds a Java static method using reflection that matches the given argument types,
+   * and whose return type is string.
    *
    * The types sequence must be the valid types defined in [[typeMapping]].
    *
    * This is made public for unit testing.
    */
-  def findMethod(
-      className: String,
-      methodName: String,
-      argTypes: Seq[DataType]): Option[Method] = {
+  def findMethod(className: String, methodName: String, argTypes: Seq[DataType]): Option[Method] = {
     val clazz: Class[_] = Utils.classForName(className)
     clazz.getMethods.find { method =>
       val candidateTypes = method.getParameterTypes
@@ -246,7 +239,8 @@ object CallMethodViaReflection {
         candidateTypes.zip(argTypes).forall { case (candidateType, argType) =>
           if (!argType.isInstanceOf[StringType]) {
             typeMapping(argType).exists(candidateType.isAssignableFrom)
-          } else candidateType.isAssignableFrom(classOf[String])
+          }
+          else candidateType.isAssignableFrom(classOf[String])
         }
       }
     }

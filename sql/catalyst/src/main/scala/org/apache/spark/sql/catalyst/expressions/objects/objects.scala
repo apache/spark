@@ -75,11 +75,8 @@ trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInput
     children.forall(_.foldable) && deterministic && trustedSerializable(dataType)
   protected lazy val needNullCheck: Boolean = needNullCheckForIndex.contains(true)
   protected lazy val needNullCheckForIndex: Array[Boolean] =
-    arguments
-      .map(a =>
-        a.nullable && (propagateNull ||
-          EncoderUtils.dataTypeJavaClass(a.dataType).isPrimitive))
-      .toArray
+    arguments.map(a => a.nullable && (propagateNull ||
+        EncoderUtils.dataTypeJavaClass(a.dataType).isPrimitive)).toArray
   protected lazy val evaluatedArgs: Array[Object] = new Array[Object](arguments.length)
   private lazy val boxingFn: Any => Any =
     EncoderUtils.typeBoxedJavaMapping
@@ -117,17 +114,15 @@ trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInput
   /**
    * Prepares codes for arguments.
    *
-   *   - generate codes for argument.
-   *   - use ctx.splitExpressions() to not exceed 64kb JVM limit while preparing arguments.
-   *   - avoid some of nullability checking which are not needed because the expression is not
-   *     nullable.
-   *   - when needNullCheck == true, short circuit if we found one of arguments is null because
-   *     preparing rest of arguments can be skipped in the case.
+   * - generate codes for argument.
+   * - use ctx.splitExpressions() to not exceed 64kb JVM limit while preparing arguments.
+   * - avoid some of nullability checking which are not needed because the expression is not
+   *   nullable.
+   * - when needNullCheck == true, short circuit if we found one of arguments is null because
+   *   preparing rest of arguments can be skipped in the case.
    *
-   * @param ctx
-   *   a [[CodegenContext]]
-   * @return
-   *   (code to prepare arguments, argument string, result of argument null check)
+   * @param ctx a [[CodegenContext]]
+   * @return (code to prepare arguments, argument string, result of argument null check)
    */
   def prepareArguments(ctx: CodegenContext): (String, String, ExprValue) = {
 
@@ -178,14 +173,10 @@ trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInput
    * Evaluate each argument with a given row, invoke a method with a given object and arguments,
    * and cast a return value if the return type can be mapped to a Java Boxed type
    *
-   * @param obj
-   *   the object for the method to be called. If null, perform s static method call
-   * @param method
-   *   the method object to be called
-   * @param input
-   *   the row used for evaluating arguments
-   * @return
-   *   the return object of a method call
+   * @param obj the object for the method to be called. If null, perform s static method call
+   * @param method the method object to be called
+   * @param input the row used for evaluating arguments
+   * @return the return object of a method call
    */
   def invoke(obj: Any, method: Method, input: InternalRow): Any = {
     var i = 0
@@ -201,14 +192,13 @@ trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInput
       // return null if one of arguments is null
       null
     } else {
-      val ret =
-        try {
-          method.invoke(obj, evaluatedArgs: _*)
-        } catch {
-          // Re-throw the original exception.
-          case e: java.lang.reflect.InvocationTargetException if e.getCause != null =>
-            throw e.getCause
-        }
+      val ret = try {
+        method.invoke(obj, evaluatedArgs: _*)
+      } catch {
+        // Re-throw the original exception.
+        case e: java.lang.reflect.InvocationTargetException if e.getCause != null =>
+          throw e.getCause
+      }
       boxingFn(ret)
     }
   }
@@ -246,7 +236,6 @@ trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInput
  * Common trait for [[DecodeUsingSerializer]] and [[EncodeUsingSerializer]]
  */
 trait SerializerSupport {
-
   /**
    * If true, Kryo serialization is used, otherwise the Java one is used
    */
@@ -259,23 +248,22 @@ trait SerializerSupport {
 
   /**
    * Adds a immutable state to the generated class containing a reference to the serializer.
-   * @return
-   *   a string containing the name of the variable referencing the serializer
+   * @return a string containing the name of the variable referencing the serializer
    */
   def addImmutableSerializerIfNeeded(ctx: CodegenContext): String = {
     val (serializerInstance, serializerInstanceClass) = {
       if (kryo) {
-        ("kryoSerializer", classOf[KryoSerializerInstance].getName)
+        ("kryoSerializer",
+          classOf[KryoSerializerInstance].getName)
       } else {
-        ("javaSerializer", classOf[JavaSerializerInstance].getName)
+        ("javaSerializer",
+          classOf[JavaSerializerInstance].getName)
       }
     }
     val newSerializerMethod = s"${classOf[SerializerSupport].getName}$$.MODULE$$.newSerializer"
     // Code to initialize the serializer
-    ctx.addImmutableStateIfNotExists(
-      serializerInstanceClass,
-      serializerInstance,
-      v => s"""
+    ctx.addImmutableStateIfNotExists(serializerInstanceClass, serializerInstance, v =>
+      s"""
          |$v = ($serializerInstanceClass) $newSerializerMethod($kryo);
        """.stripMargin)
     serializerInstance
@@ -283,7 +271,6 @@ trait SerializerSupport {
 }
 
 object SerializerSupport {
-
   /**
    * It creates a new `SerializerInstance` which is either a `KryoSerializerInstance` (is
    * `useKryo` is set to `true`) or a `JavaSerializerInstance`.
@@ -301,35 +288,30 @@ object SerializerSupport {
 }
 
 /**
- * Invokes a static function, returning the result. By default, any of the arguments being null
+ * Invokes a static function, returning the result.  By default, any of the arguments being null
  * will result in returning null instead of calling the function.
  *
- * @param staticObject
- *   The target of the static call. This can either be the object itself (methods defined on scala
- *   objects), or the class object (static methods defined in java).
- * @param dataType
- *   The expected return type of the function call
- * @param functionName
- *   The name of the method to call.
- * @param arguments
- *   An optional list of expressions to pass as arguments to the function.
- * @param inputTypes
- *   A list of data types specifying the input types for the method to be invoked. If enabled, it
- *   must have the same length as [[arguments]]. In case an input type differs from the actual
- *   argument type, Spark will try to perform type coercion and insert cast whenever necessary
- *   before invoking the method. The above is disabled if this is empty.
- * @param propagateNull
- *   When true, and any of the arguments is null, null will be returned instead of calling the
- *   function. Also note: when this is false but any of the arguments is of primitive type and is
- *   null, null also will be returned without invoking the function.
- * @param returnNullable
- *   When false, indicating the invoked method will always return non-null value.
- * @param isDeterministic
- *   Whether the method invocation is deterministic or not. If false, Spark will not apply certain
- *   optimizations such as constant folding.
- * @param scalarFunction
- *   the [[ScalarFunction]] object if this is calling the magic method of the [[ScalarFunction]]
- *   otherwise is unset.
+ * @param staticObject The target of the static call.  This can either be the object itself
+ *                     (methods defined on scala objects), or the class object
+ *                     (static methods defined in java).
+ * @param dataType The expected return type of the function call
+ * @param functionName The name of the method to call.
+ * @param arguments An optional list of expressions to pass as arguments to the function.
+ * @param inputTypes A list of data types specifying the input types for the method to be invoked.
+ *                   If enabled, it must have the same length as [[arguments]]. In case an input
+ *                   type differs from the actual argument type, Spark will try to perform
+ *                   type coercion and insert cast whenever necessary before invoking the method.
+ *                   The above is disabled if this is empty.
+ * @param propagateNull When true, and any of the arguments is null, null will be returned instead
+ *                      of calling the function. Also note: when this is false but any of the
+ *                      arguments is of primitive type and is null, null also will be returned
+ *                      without invoking the function.
+ * @param returnNullable When false, indicating the invoked method will always return
+ *                       non-null value.
+ * @param isDeterministic Whether the method invocation is deterministic or not. If false, Spark
+ *                        will not apply certain optimizations such as constant folding.
+ * @param scalarFunction the [[ScalarFunction]] object if this is calling the magic method of the
+ *                       [[ScalarFunction]] otherwise is unset.
  */
 case class StaticInvoke(
     staticObject: Class[_],
@@ -340,8 +322,7 @@ case class StaticInvoke(
     propagateNull: Boolean = true,
     returnNullable: Boolean = true,
     isDeterministic: Boolean = true,
-    scalarFunction: Option[ScalarFunction[_]] = None)
-    extends InvokeLike {
+    scalarFunction: Option[ScalarFunction[_]] = None) extends InvokeLike {
 
   val objectName = staticObject.getName.stripSuffix("$")
   val cls = if (staticObject.getName == objectName) {
@@ -411,8 +392,7 @@ case class StaticInvoke(
     ev.copy(code = code)
   }
 
-  override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[Expression]): Expression =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     copy(arguments = newChildren)
 
   override protected def stringArgs: Iterator[Any] = {
@@ -424,43 +404,41 @@ case class StaticInvoke(
   }
 
   override def toString: String =
-    s"static_invoke(${if (objectName.startsWith("org.apache.spark.")) {
+    s"static_invoke(${
+      if (objectName.startsWith("org.apache.spark.")) {
         cls.getSimpleName
       } else {
         objectName
-      }}.$functionName(${arguments.mkString(", ")}))"
+      }
+    }.$functionName(${arguments.mkString(", ")}))"
 }
 
 /**
- * Calls the specified function on an object, optionally passing arguments. If the `targetObject`
+ * Calls the specified function on an object, optionally passing arguments.  If the `targetObject`
  * expression evaluates to null then null will be returned.
  *
  * In some cases, due to erasure, the schema may expect a primitive type when in fact the method
- * is returning java.lang.Object. In this case, we will generate code that attempts to unbox the
+ * is returning java.lang.Object.  In this case, we will generate code that attempts to unbox the
  * value automatically.
  *
- * @param targetObject
- *   An expression that will return the object to call the method on.
- * @param functionName
- *   The name of the method to call.
- * @param dataType
- *   The expected return type of the function.
- * @param arguments
- *   An optional list of expressions, whose evaluation will be passed to the function.
- * @param methodInputTypes
- *   A list of data types specifying the input types for the method to be invoked. If enabled, it
- *   must have the same length as [[arguments]]. In case an input type differs from the actual
- *   argument type, Spark will try to perform type coercion and insert cast whenever necessary
- *   before invoking the method. The type coercion is disabled if this is empty.
- * @param propagateNull
- *   When true, and any of the arguments is null, null will be returned instead of calling the
- *   function. Also note: when this is false but any of the arguments is of primitive type and is
- *   null, null also will be returned without invoking the function.
- * @param returnNullable
- *   When false, indicating the invoked method will always return non-null value.
- * @param isDeterministic
- *   Whether the method invocation is deterministic or not. If false, Spark will not apply certain
- *   optimizations such as constant folding.
+ * @param targetObject An expression that will return the object to call the method on.
+ * @param functionName The name of the method to call.
+ * @param dataType The expected return type of the function.
+ * @param arguments An optional list of expressions, whose evaluation will be passed to the
+ *                 function.
+ * @param methodInputTypes A list of data types specifying the input types for the method to be
+ *                         invoked. If enabled, it must have the same length as [[arguments]]. In
+ *                         case an input type differs from the actual argument type, Spark will
+ *                         try to perform type coercion and insert cast whenever necessary before
+ *                         invoking the method. The type coercion is disabled if this is empty.
+ * @param propagateNull When true, and any of the arguments is null, null will be returned instead
+ *                      of calling the function. Also note: when this is false but any of the
+ *                      arguments is of primitive type and is null, null also will be returned
+ *                      without invoking the function.
+ * @param returnNullable When false, indicating the invoked method will always return
+ *                       non-null value.
+ * @param isDeterministic Whether the method invocation is deterministic or not. If false, Spark
+ *                        will not apply certain optimizations such as constant folding.
  */
 case class Invoke(
     targetObject: Expression,
@@ -469,9 +447,8 @@ case class Invoke(
     arguments: Seq[Expression] = Nil,
     methodInputTypes: Seq[AbstractDataType] = Nil,
     propagateNull: Boolean = true,
-    returnNullable: Boolean = true,
-    isDeterministic: Boolean = true)
-    extends InvokeLike {
+    returnNullable : Boolean = true,
+    isDeterministic: Boolean = true) extends InvokeLike {
   override def nullIntolerant: Boolean = propagateNull
   lazy val argClasses = EncoderUtils.expressionJavaClasses(arguments)
 
@@ -539,10 +516,7 @@ case class Invoke(
       }
       s"""
         ${CodeGenerator.boxedType(javaType)} $funcResult = null;
-        ${getFuncResult(
-          needTryCatch,
-          funcResult,
-          s"${obj.value}.$encodedFunctionName($argString)",
+        ${getFuncResult(needTryCatch, funcResult, s"${obj.value}.$encodedFunctionName($argString)",
           Some(CodeGenerator.boxedType(javaType)))}
         $assignResult
       """
@@ -595,27 +569,24 @@ object NewInstance {
  * Constructs a new instance of the given class, using the result of evaluating the specified
  * expressions as arguments.
  *
- * @param cls
- *   The class to construct.
- * @param arguments
- *   A list of expression to use as arguments to the constructor.
- * @param inputTypes
- *   A list of data types specifying the input types for the method to be invoked. If enabled, it
- *   must have the same length as [[arguments]]. In case an input type differs from the actual
- *   argument type, Spark will try to perform type coercion and insert cast whenever necessary
- *   before invoking the method. The above is disabled if this is empty.
- * @param propagateNull
- *   When true, if any of the arguments is null, then null will be returned instead of trying to
- *   construct the object. Also note: when this is false but any of the arguments is of primitive
- *   type and is null, null also will be returned without constructing the object.
- * @param dataType
- *   The type of object being constructed, as a Spark SQL datatype. This allows you to manually
- *   specify the type when the object in question is a valid internal representation (i.e.
- *   ArrayData) instead of an object.
- * @param outerPointer
- *   If the object being constructed is an inner class, the outerPointer for the containing class
- *   must be specified. This parameter is defined as an optional function, which allows us to get
- *   the outer pointer lazily,and it's useful if the inner class is defined in REPL.
+ * @param cls The class to construct.
+ * @param arguments A list of expression to use as arguments to the constructor.
+ * @param inputTypes A list of data types specifying the input types for the method to be invoked.
+ *                   If enabled, it must have the same length as [[arguments]]. In case an input
+ *                   type differs from the actual argument type, Spark will try to perform
+ *                   type coercion and insert cast whenever necessary before invoking the method.
+ *                   The above is disabled if this is empty.
+ * @param propagateNull When true, if any of the arguments is null, then null will be returned
+ *                      instead of trying to construct the object. Also note: when this is false
+ *                      but any of the arguments is of primitive type and is null, null also will
+ *                      be returned without constructing the object.
+ * @param dataType The type of object being constructed, as a Spark SQL datatype.  This allows you
+ *                 to manually specify the type when the object in question is a valid internal
+ *                 representation (i.e. ArrayData) instead of an object.
+ * @param outerPointer If the object being constructed is an inner class, the outerPointer for the
+ *                     containing class must be specified. This parameter is defined as an optional
+ *                     function, which allows us to get the outer pointer lazily,and it's useful if
+ *                     the inner class is defined in REPL.
  */
 case class NewInstance(
     cls: Class[_],
@@ -623,8 +594,7 @@ case class NewInstance(
     inputTypes: Seq[AbstractDataType],
     propagateNull: Boolean,
     dataType: DataType,
-    outerPointer: Option[() => AnyRef])
-    extends InvokeLike {
+    outerPointer: Option[() => AnyRef]) extends InvokeLike {
   private val className = cls.getName
 
   override def nullable: Boolean = needNullCheck
@@ -653,20 +623,18 @@ case class NewInstance(
         throw QueryExecutionErrors.constructorNotFoundError(cls.toString)
       }
     }
-    outerPointer
-      .map { p =>
-        val outerObj = p()
-        val c = getConstructor(outerObj.getClass +: paramTypes)
-        (args: Seq[AnyRef]) => {
-          c(outerObj +: args)
-        }
+    outerPointer.map { p =>
+      val outerObj = p()
+      val c = getConstructor(outerObj.getClass +: paramTypes)
+      (args: Seq[AnyRef]) => {
+        c(outerObj +: args)
       }
-      .getOrElse {
-        val c = getConstructor(paramTypes)
-        (args: Seq[AnyRef]) => {
-          c(args)
-        }
+    }.getOrElse {
+      val c = getConstructor(paramTypes)
+      (args: Seq[AnyRef]) => {
+        c(args)
       }
+    }
   }
 
   override def eval(input: InternalRow): Any = {
@@ -707,14 +675,11 @@ case class NewInstance(
       // this case we can try to call the apply method constructor
       // that might be defined on the companion object.
       case 0 => s"$className$$.MODULE$$.apply($argString)"
-      case _ =>
-        outer
-          .map { gen =>
-            s"${gen.value}.new ${Utils.getSimpleName(cls)}($argString)"
-          }
-          .getOrElse {
-            s"new $className($argString)"
-          }
+      case _ => outer.map { gen =>
+        s"${gen.value}.new ${Utils.getSimpleName(cls)}($argString)"
+      }.getOrElse {
+        s"new $className($argString)"
+      }
     }
 
     val code = code"""
@@ -728,25 +693,20 @@ case class NewInstance(
 
   override def toString: String = s"newInstance($cls)"
 
-  override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[Expression]): NewInstance =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): NewInstance =
     copy(arguments = newChildren)
 }
 
 /**
  * Given an expression that returns on object of type `Option[_]`, this expression unwraps the
- * option into the specified Spark SQL datatype. In the case of `None`, the nullbit is set
- * instead.
+ * option into the specified Spark SQL datatype.  In the case of `None`, the nullbit is set instead.
  *
- * @param dataType
- *   The expected unwrapped option type.
- * @param child
- *   An expression that returns an `Option`
+ * @param dataType The expected unwrapped option type.
+ * @param child An expression that returns an `Option`
  */
-case class UnwrapOption(dataType: DataType, child: Expression)
-    extends UnaryExpression
-    with NonSQLExpression
-    with ExpectsInputTypes {
+case class UnwrapOption(
+    dataType: DataType,
+    child: Expression) extends UnaryExpression with NonSQLExpression with ExpectsInputTypes {
 
   override def nullable: Boolean = true
 
@@ -778,18 +738,14 @@ case class UnwrapOption(dataType: DataType, child: Expression)
 }
 
 /**
- * Converts the result of evaluating `child` into an option, checking both the isNull bit and (in
- * the case of reference types) equality with null.
+ * Converts the result of evaluating `child` into an option, checking both the isNull bit and
+ * (in the case of reference types) equality with null.
  *
- * @param child
- *   The expression to evaluate and wrap.
- * @param optType
- *   The type of this option.
+ * @param child The expression to evaluate and wrap.
+ * @param optType The type of this option.
  */
 case class WrapOption(child: Expression, optType: DataType)
-    extends UnaryExpression
-    with NonSQLExpression
-    with ExpectsInputTypes {
+  extends UnaryExpression with NonSQLExpression with ExpectsInputTypes {
 
   override def dataType: DataType = ObjectType(classOf[Option[_]])
 
@@ -850,9 +806,7 @@ case class LambdaVariable(
     name: String,
     dataType: DataType,
     nullable: Boolean,
-    id: Long = LambdaVariable.curId.incrementAndGet)
-    extends LeafExpression
-    with NonSQLExpression {
+    id: Long = LambdaVariable.curId.incrementAndGet) extends LeafExpression with NonSQLExpression {
 
   private val accessor: (InternalRow, Int) => Any = InternalRow.getAccessor(dataType, nullable)
 
@@ -860,8 +814,7 @@ case class LambdaVariable(
 
   // Interpreted execution of `LambdaVariable` always get the 0-index element from input row.
   override def eval(input: InternalRow): Any = {
-    assert(
-      input.numFields == 1,
+    assert(input.numFields == 1,
       "The input row of interpreted LambdaVariable should have only 1 field.")
     accessor(input, 0)
   }
@@ -887,19 +840,17 @@ case class LambdaVariable(
 /**
  * When constructing [[MapObjects]], the element type must be given, which may not be available
  * before analysis. This class acts like a placeholder for [[MapObjects]], and will be replaced by
- * [[MapObjects]] during analysis after the input data is resolved. Note that, ideally we should
- * not serialize and send unresolved expressions to executors, but users may accidentally do
- * this(e.g. mistakenly reference an encoder instance when implementing Aggregator). Here we mark
- * `function` as transient because it may reference scala Type, which is not serializable. Then
- * even users mistakenly reference unresolved expression and serialize it, it's just a performance
- * issue(more network traffic), and will not fail.
+ * [[MapObjects]] during analysis after the input data is resolved.
+ * Note that, ideally we should not serialize and send unresolved expressions to executors, but
+ * users may accidentally do this(e.g. mistakenly reference an encoder instance when implementing
+ * Aggregator). Here we mark `function` as transient because it may reference scala Type, which is
+ * not serializable. Then even users mistakenly reference unresolved expression and serialize it,
+ * it's just a performance issue(more network traffic), and will not fail.
  */
 case class UnresolvedMapObjects(
     @transient function: Expression => Expression,
     child: Expression,
-    customCollectionCls: Option[Class[_]] = None)
-    extends UnaryExpression
-    with Unevaluable {
+    customCollectionCls: Option[Class[_]] = None) extends UnaryExpression with Unevaluable {
   override lazy val resolved = false
 
   override def dataType: DataType = customCollectionCls.map(ObjectType.apply).getOrElse {
@@ -911,20 +862,16 @@ case class UnresolvedMapObjects(
 }
 
 object MapObjects {
-
   /**
    * Construct an instance of MapObjects case class.
    *
-   * @param function
-   *   The function applied on the collection elements.
-   * @param inputData
-   *   An expression that when evaluated returns a collection object.
-   * @param elementType
-   *   The data type of elements in the collection.
-   * @param elementNullable
-   *   When false, indicating elements in the collection are always non-null value.
-   * @param customCollectionCls
-   *   Class of the resulting collection (returning ObjectType) or None (returning ArrayType)
+   * @param function The function applied on the collection elements.
+   * @param inputData An expression that when evaluated returns a collection object.
+   * @param elementType The data type of elements in the collection.
+   * @param elementNullable When false, indicating elements in the collection are always
+   *                        non-null value.
+   * @param customCollectionCls Class of the resulting collection (returning ObjectType)
+   *                            or None (returning ArrayType)
    */
   def apply(
       function: Expression => Expression,
@@ -935,47 +882,41 @@ object MapObjects {
     // UnresolvedMapObjects does not serialize its 'function' field.
     // If an array expression or array Encoder is not correctly resolved before
     // serialization, this exception condition may occur.
-    require(
-      function != null,
+    require(function != null,
       "MapObjects applied with a null function. " +
-        "Likely cause is failure to resolve an array expression or encoder. " +
-        "(See UnresolvedMapObjects)")
+      "Likely cause is failure to resolve an array expression or encoder. " +
+      "(See UnresolvedMapObjects)")
     val loopVar = LambdaVariable("MapObject", elementType, elementNullable)
     MapObjects(loopVar, function(loopVar), inputData, customCollectionCls)
   }
 }
 
 /**
- * Applies the given expression to every element of a collection of items, returning the result as
- * an ArrayType or ObjectType. This is similar to a typical map operation, but where the lambda
+ * Applies the given expression to every element of a collection of items, returning the result
+ * as an ArrayType or ObjectType. This is similar to a typical map operation, but where the lambda
  * function is expressed using catalyst expressions.
  *
  * The type of the result is determined as follows:
- *   - ArrayType - when customCollectionCls is None
- *   - ObjectType(collection) - when customCollectionCls contains a collection class
+ * - ArrayType - when customCollectionCls is None
+ * - ObjectType(collection) - when customCollectionCls contains a collection class
  *
- * The following collection ObjectTypes are currently supported on input: Seq, Array, ArrayData,
- * java.util.List
+ * The following collection ObjectTypes are currently supported on input:
+ *   Seq, Array, ArrayData, java.util.List
  *
- * @param loopVar
- *   the [[LambdaVariable]] expression representing the loop variable that used to iterate the
- *   collection, and used as input for the `lambdaFunction`.
- * @param lambdaFunction
- *   A function that take the `loopVar` as input, and used as lambda function to handle collection
- *   elements.
- * @param inputData
- *   An expression that when evaluated returns a collection object.
- * @param customCollectionCls
- *   Class of the resulting collection (returning ObjectType) or None (returning ArrayType)
+ * @param loopVar the [[LambdaVariable]] expression representing the loop variable that used to
+ *                iterate the collection, and used as input for the `lambdaFunction`.
+ * @param lambdaFunction A function that take the `loopVar` as input, and used as lambda function
+ *                       to handle collection elements.
+ * @param inputData An expression that when evaluated returns a collection object.
+ * @param customCollectionCls Class of the resulting collection (returning ObjectType)
+ *                            or None (returning ArrayType)
  */
-case class MapObjects private (
+case class MapObjects private(
     loopVar: LambdaVariable,
     lambdaFunction: Expression,
     inputData: Expression,
-    customCollectionCls: Option[Class[_]])
-    extends Expression
-    with NonSQLExpression
-    with TernaryLike[Expression] {
+    customCollectionCls: Option[Class[_]]) extends Expression with NonSQLExpression
+  with TernaryLike[Expression] {
 
   override def nullable: Boolean = inputData.nullable
 
@@ -1058,7 +999,7 @@ case class MapObjects private (
     case Some(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
       // Java list
       if (cls == classOf[java.util.List[_]] || cls == classOf[java.util.AbstractList[_]] ||
-        cls == classOf[java.util.AbstractSequentialList[_]]) {
+          cls == classOf[java.util.AbstractSequentialList[_]]) {
         // Specifying non concrete implementations of `java.util.List`
         executeFuncOnCollection(_).toSeq.asJava
       } else {
@@ -1070,13 +1011,11 @@ case class MapObjects private (
           constructor.getParameterCount == 0
         }
 
-        val constructor = intParamConstructor
-          .map { intConstructor => (len: Int) =>
-            intConstructor.newInstance(len.asInstanceOf[Object])
-          }
-          .getOrElse { (_: Int) =>
-            noParamConstructor.get.newInstance()
-          }
+        val constructor = intParamConstructor.map { intConstructor =>
+          (len: Int) => intConstructor.newInstance(len.asInstanceOf[Object])
+        }.getOrElse {
+          (_: Int) => noParamConstructor.get.newInstance()
+        }
 
         // Specifying concrete implementations of `java.util.List`
         (inputs) => {
@@ -1100,13 +1039,11 @@ case class MapObjects private (
           constructor.getParameterCount == 0
         }
 
-        val constructor = intParamConstructor
-          .map { intConstructor => (len: Int) =>
-            intConstructor.newInstance(len.asInstanceOf[Object])
-          }
-          .getOrElse { (_: Int) =>
-            noParamConstructor.get.newInstance()
-          }
+        val constructor = intParamConstructor.map { intConstructor =>
+          (len: Int) => intConstructor.newInstance(len.asInstanceOf[Object])
+        }.getOrElse {
+          (_: Int) => noParamConstructor.get.newInstance()
+        }
 
         // Specifying concrete implementations of `java.util.Set`
         (inputs) => {
@@ -1133,9 +1070,8 @@ case class MapObjects private (
   }
 
   override def dataType: DataType =
-    customCollectionCls
-      .map(ObjectType.apply)
-      .getOrElse(ArrayType(lambdaFunction.dataType, containsNull = lambdaFunction.nullable))
+    customCollectionCls.map(ObjectType.apply).getOrElse(
+      ArrayType(lambdaFunction.dataType, containsNull = lambdaFunction.nullable))
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val elementJavaType = CodeGenerator.javaType(loopVar.dataType)
@@ -1187,32 +1123,41 @@ case class MapObjects private (
         (
           s"${genInputData.value}.size()",
           s"scala.collection.Iterator $it = ${genInputData.value}.iterator();",
-          s"$it.next()")
+          s"$it.next()"
+        )
       case ObjectType(cls) if cls.isArray =>
-        (s"${genInputData.value}.length", "", s"${genInputData.value}[$loopIndex]")
+        (
+          s"${genInputData.value}.length",
+          "",
+          s"${genInputData.value}[$loopIndex]"
+        )
       case ObjectType(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
         val it = ctx.freshName("it")
         (
           s"${genInputData.value}.size()",
           s"java.util.Iterator $it = ${genInputData.value}.iterator();",
-          s"$it.next()")
+          s"$it.next()"
+        )
       case ObjectType(cls) if classOf[java.util.Set[_]].isAssignableFrom(cls) =>
         val it = ctx.freshName("it")
         (
           s"${genInputData.value}.size()",
           s"java.util.Iterator $it = ${genInputData.value}.iterator();",
-          s"$it.next()")
+          s"$it.next()"
+        )
       case ArrayType(et, _) =>
         (
           s"${genInputData.value}.numElements()",
           "",
-          CodeGenerator.getValue(genInputData.value, et, loopIndex))
+          CodeGenerator.getValue(genInputData.value, et, loopIndex)
+        )
       case ObjectType(cls) if cls == classOf[Object] =>
         val it = ctx.freshName("it")
         (
           s"$seq == null ? $array.length : $seq.size()",
           s"scala.collection.Iterator $it = $seq == null ? null : $seq.iterator();",
-          s"$it == null ? $array[$loopIndex] : $it.next()")
+          s"$it == null ? $array[$loopIndex] : $it.next()"
+        )
     }
 
     // Make a copy of the data if it's unsafe-backed
@@ -1227,8 +1172,7 @@ case class MapObjects private (
 
     val loopNullCheck = if (loopVar.nullable) {
       inputDataType match {
-        case _: ArrayType =>
-          s"${loopVarCode.isNull} = ${genInputData.value}.isNullAt($loopIndex);"
+        case _: ArrayType => s"${loopVarCode.isNull} = ${genInputData.value}.isNullAt($loopIndex);"
         case _ => s"${loopVarCode.isNull} = ${loopVarCode.value} == null;"
       }
     } else {
@@ -1249,7 +1193,8 @@ case class MapObjects private (
                """,
             (genValue: String) => s"$builder.$$plus$$eq($genValue);",
             s"(${cls.getName}) ${classOf[mutable.ArraySeq[_]].getName}$$." +
-              s"MODULE$$.make($builder.result());")
+              s"MODULE$$.make($builder.result());"
+          )
         case Some(cls) if classOf[immutable.ArraySeq[_]].isAssignableFrom(cls) =>
           val tag = ctx.addReferenceObj("tag", elementClassTag())
           val builderClassName = classOf[mutable.ArrayBuilder[_]].getName
@@ -1262,10 +1207,10 @@ case class MapObjects private (
              """,
             (genValue: String) => s"$builder.$$plus$$eq($genValue);",
             s"(${cls.getName}) ${classOf[immutable.ArraySeq[_]].getName}$$." +
-              s"MODULE$$.unsafeWrapArray($builder.result());")
-        case Some(cls)
-            if classOf[scala.collection.Seq[_]].isAssignableFrom(cls) ||
-              classOf[scala.collection.Set[_]].isAssignableFrom(cls) =>
+              s"MODULE$$.unsafeWrapArray($builder.result());"
+          )
+        case Some(cls) if classOf[scala.collection.Seq[_]].isAssignableFrom(cls) ||
+          classOf[scala.collection.Set[_]].isAssignableFrom(cls) =>
           // Scala sequence or set
           val getBuilder = s"${cls.getName}$$.MODULE$$.newBuilder()"
           val builder = ctx.freshName("collectionBuilder")
@@ -1275,7 +1220,8 @@ case class MapObjects private (
                $builder.sizeHint($dataLength);
              """,
             (genValue: String) => s"$builder.$$plus$$eq($genValue);",
-            s"(${cls.getName}) $builder.result();")
+            s"(${cls.getName}) $builder.result();"
+          )
         case Some(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
           // Java list
           val builder = ctx.freshName("collectionBuilder")
@@ -1288,7 +1234,8 @@ case class MapObjects private (
               s"${cls.getName} $builder = new ${cls.getName}($param);"
             },
             (genValue: String) => s"$builder.add($genValue);",
-            s"$builder;")
+            s"$builder;"
+          )
         case Some(cls) if classOf[java.util.Set[_]].isAssignableFrom(cls) =>
           // Java set
           val builder = ctx.freshName("collectionBuilder")
@@ -1300,7 +1247,8 @@ case class MapObjects private (
               s"${cls.getName} $builder = new ${cls.getName}($param);"
             },
             (genValue: String) => s"$builder.add($genValue);",
-            s"$builder;")
+            s"$builder;"
+          )
         case _ =>
           // array
           (
@@ -1309,7 +1257,8 @@ case class MapObjects private (
                $convertedArray = $arrayConstructor;
              """,
             (genValue: String) => s"$convertedArray[$loopIndex] = $genValue;",
-            s"new ${classOf[GenericArrayData].getName}($convertedArray);")
+            s"new ${classOf[GenericArrayData].getName}($convertedArray);"
+          )
       }
 
     val code = genInputData.code + code"""
@@ -1343,9 +1292,7 @@ case class MapObjects private (
   }
 
   override protected def withNewChildrenInternal(
-      newFirst: Expression,
-      newSecond: Expression,
-      newThird: Expression): Expression =
+      newFirst: Expression, newSecond: Expression, newThird: Expression): Expression =
     copy(
       loopVar = newFirst.asInstanceOf[LambdaVariable],
       lambdaFunction = newSecond,
@@ -1355,84 +1302,69 @@ case class MapObjects private (
 /**
  * Similar to [[UnresolvedMapObjects]], this is a placeholder of [[CatalystToExternalMap]].
  *
- * @param child
- *   An expression that when evaluated returns a map object.
- * @param keyFunction
- *   The function applied on the key collection elements.
- * @param valueFunction
- *   The function applied on the value collection elements.
- * @param collClass
- *   The type of the resulting collection.
+ * @param child An expression that when evaluated returns a map object.
+ * @param keyFunction The function applied on the key collection elements.
+ * @param valueFunction The function applied on the value collection elements.
+ * @param collClass The type of the resulting collection.
  */
 case class UnresolvedCatalystToExternalMap(
     child: Expression,
     @transient keyFunction: Expression => Expression,
     @transient valueFunction: Expression => Expression,
-    collClass: Class[_])
-    extends UnaryExpression
-    with Unevaluable {
+    collClass: Class[_]) extends UnaryExpression with Unevaluable {
 
   override lazy val resolved = false
 
   override def dataType: DataType = ObjectType(collClass)
 
   override protected def withNewChildInternal(
-      newChild: Expression): UnresolvedCatalystToExternalMap = copy(child = newChild)
+    newChild: Expression): UnresolvedCatalystToExternalMap = copy(child = newChild)
 }
 
 object CatalystToExternalMap {
   def apply(u: UnresolvedCatalystToExternalMap): CatalystToExternalMap = {
     val mapType = u.child.dataType.asInstanceOf[MapType]
-    val keyLoopVar =
-      LambdaVariable("CatalystToExternalMap_key", mapType.keyType, nullable = false)
-    val valueLoopVar =
-      LambdaVariable("CatalystToExternalMap_value", mapType.valueType, mapType.valueContainsNull)
+    val keyLoopVar = LambdaVariable(
+      "CatalystToExternalMap_key", mapType.keyType, nullable = false)
+    val valueLoopVar = LambdaVariable(
+      "CatalystToExternalMap_value", mapType.valueType, mapType.valueContainsNull)
     CatalystToExternalMap(
-      keyLoopVar,
-      u.keyFunction(keyLoopVar),
-      valueLoopVar,
-      u.valueFunction(valueLoopVar),
-      u.child,
-      u.collClass)
+      keyLoopVar, u.keyFunction(keyLoopVar),
+      valueLoopVar, u.valueFunction(valueLoopVar),
+      u.child, u.collClass)
   }
 }
 
 /**
- * Expression used to convert a Catalyst Map to an external Scala Map. The collection is
- * constructed using the associated builder, obtained by calling `newBuilder` on the collection's
- * companion object.
+ * Expression used to convert a Catalyst Map to an external Scala Map.
+ * The collection is constructed using the associated builder, obtained by calling `newBuilder`
+ * on the collection's companion object.
  *
- * @param keyLoopVar
- *   the [[LambdaVariable]] expression representing the loop variable that is used when iterating
- *   over the key collection, and which is used as input for the `keyLambdaFunction`.
- * @param keyLambdaFunction
- *   A function that takes the `keyLoopVar` as input, and is used as a lambda function to handle
- *   collection elements.
- * @param valueLoopVar
- *   the [[LambdaVariable]] expression representing the loop variable that is used when iterating
- *   over the value collection, and which is used as input for the `valueLambdaFunction`.
- * @param valueLambdaFunction
- *   A function that takes the `valueLoopVar` as input, and is used as a lambda function to handle
- *   collection elements.
- * @param inputData
- *   An expression that when evaluated returns a map object.
- * @param collClass
- *   The type of the resulting collection.
+ * @param keyLoopVar the [[LambdaVariable]] expression representing the loop variable that is used
+ *                   when iterating over the key collection, and which is used as input for the
+ *                   `keyLambdaFunction`.
+ * @param keyLambdaFunction A function that takes the `keyLoopVar` as input, and is used as
+ *                          a lambda function to handle collection elements.
+ * @param valueLoopVar the [[LambdaVariable]] expression representing the loop variable that is used
+ *                     when iterating over the value collection, and which is used as input for the
+ *                     `valueLambdaFunction`.
+ * @param valueLambdaFunction A function that takes the `valueLoopVar` as input, and is used as
+ *                            a lambda function to handle collection elements.
+ * @param inputData An expression that when evaluated returns a map object.
+ * @param collClass The type of the resulting collection.
  */
-case class CatalystToExternalMap private (
+case class CatalystToExternalMap private(
     keyLoopVar: LambdaVariable,
     keyLambdaFunction: Expression,
     valueLoopVar: LambdaVariable,
     valueLambdaFunction: Expression,
     inputData: Expression,
-    collClass: Class[_])
-    extends Expression
-    with NonSQLExpression {
+    collClass: Class[_]) extends Expression with NonSQLExpression {
 
   override def nullable: Boolean = inputData.nullable
 
-  override def children: Seq[Expression] =
-    Seq(keyLoopVar, keyLambdaFunction, valueLoopVar, valueLambdaFunction, inputData)
+  override def children: Seq[Expression] = Seq(
+    keyLoopVar, keyLambdaFunction, valueLoopVar, valueLambdaFunction, inputData)
 
   private lazy val inputMapType = inputData.dataType.asInstanceOf[MapType]
 
@@ -1590,27 +1522,24 @@ object ExternalMapToCatalyst {
  * Converts a Scala/Java map object into catalyst format, by applying the key/value converter when
  * iterate the map.
  *
- * @param keyLoopVar
- *   the [[LambdaVariable]] expression representing the loop variable that is used when iterating
- *   over the key collection, and which is used as input for the `keyConverter`.
- * @param keyConverter
- *   A function that take the `key` as input, and converts it to catalyst format.
- * @param valueLoopVar
- *   the [[LambdaVariable]] expression representing the loop variable that is used when iterating
- *   over the value collection, and which is used as input for the `valueConverter`.
- * @param valueConverter
- *   A function that take the `value` as input, and converts it to catalyst format.
- * @param inputData
- *   An expression that when evaluated returns the input map object.
+ * @param keyLoopVar the [[LambdaVariable]] expression representing the loop variable that is used
+ *                   when iterating over the key collection, and which is used as input for the
+ *                   `keyConverter`.
+ * @param keyConverter A function that take the `key` as input, and converts it to catalyst format.
+ * @param valueLoopVar the [[LambdaVariable]] expression representing the loop variable that is used
+ *                     when iterating over the value collection, and which is used as input for the
+ *                     `valueConverter`.
+ * @param valueConverter A function that take the `value` as input, and converts it to catalyst
+ *                       format.
+ * @param inputData An expression that when evaluated returns the input map object.
  */
-case class ExternalMapToCatalyst private (
+case class ExternalMapToCatalyst private(
     keyLoopVar: LambdaVariable,
     keyConverter: Expression,
     valueLoopVar: LambdaVariable,
     valueConverter: Expression,
     inputData: Expression)
-    extends Expression
-    with NonSQLExpression {
+  extends Expression with NonSQLExpression {
 
   override def foldable: Boolean = false
 
@@ -1619,13 +1548,11 @@ case class ExternalMapToCatalyst private (
   // ExternalMapToCatalyst is stateful because of the rowBuffer in mapCatalystConverter
   override def stateful: Boolean = true
 
-  override def children: Seq[Expression] =
-    Seq(keyLoopVar, keyConverter, valueLoopVar, valueConverter, inputData)
+  override def children: Seq[Expression] = Seq(
+    keyLoopVar, keyConverter, valueLoopVar, valueConverter, inputData)
 
   override def dataType: MapType = MapType(
-    keyConverter.dataType,
-    valueConverter.dataType,
-    valueContainsNull = valueConverter.nullable)
+    keyConverter.dataType, valueConverter.dataType, valueContainsNull = valueConverter.nullable)
 
   private lazy val mapCatalystConverter: Any => (Array[Any], Array[Any]) = {
     val rowBuffer = new GenericInternalRow(Array[Any](1))
@@ -1807,15 +1734,13 @@ case class ExternalMapToCatalyst private (
 }
 
 /**
- * Constructs a new external row, using the result of evaluating the specified expressions as
- * content.
+ * Constructs a new external row, using the result of evaluating the specified expressions
+ * as content.
  *
- * @param children
- *   A list of expression to use as content of the external row.
+ * @param children A list of expression to use as content of the external row.
  */
 case class CreateExternalRow(children: Seq[Expression], schema: StructType)
-    extends Expression
-    with NonSQLExpression {
+  extends Expression with NonSQLExpression {
 
   override def dataType: DataType = ObjectType(classOf[Row])
 
@@ -1858,19 +1783,16 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
   }
 
   override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[Expression]): CreateExternalRow = copy(children = newChildren)
+    newChildren: IndexedSeq[Expression]): CreateExternalRow = copy(children = newChildren)
 }
 
 /**
  * Serializes an input object using a generic serializer (Kryo or Java).
  *
- * @param kryo
- *   if true, use Kryo. Otherwise, use Java.
+ * @param kryo if true, use Kryo. Otherwise, use Java.
  */
 case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
-    extends UnaryExpression
-    with NonSQLExpression
-    with SerializerSupport {
+  extends UnaryExpression with NonSQLExpression with SerializerSupport {
 
   override def nullSafeEval(input: Any): Any = {
     serializerInstance.serialize(input).array()
@@ -1897,16 +1819,13 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
 }
 
 /**
- * Serializes an input object using a generic serializer (Kryo or Java). Note that the ClassTag is
- * not an implicit parameter because TreeNode cannot copy implicit parameters.
+ * Serializes an input object using a generic serializer (Kryo or Java).  Note that the ClassTag
+ * is not an implicit parameter because TreeNode cannot copy implicit parameters.
  *
- * @param kryo
- *   if true, use Kryo. Otherwise, use Java.
+ * @param kryo if true, use Kryo. Otherwise, use Java.
  */
 case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: Boolean)
-    extends UnaryExpression
-    with NonSQLExpression
-    with SerializerSupport {
+  extends UnaryExpression with NonSQLExpression with SerializerSupport {
 
   override def nullSafeEval(input: Any): Any = {
     val inputBytes = java.nio.ByteBuffer.wrap(input.asInstanceOf[Array[Byte]])
@@ -1938,8 +1857,7 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
  * Initialize a Java Bean instance by setting its field values via setters.
  */
 case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Expression])
-    extends Expression
-    with NonSQLExpression {
+  extends Expression with NonSQLExpression {
 
   override def nullable: Boolean = beanInstance.nullable
   override def children: Seq[Expression] = beanInstance +: setters.values.toSeq
@@ -1949,22 +1867,23 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
     assert(beanInstance.dataType.isInstanceOf[ObjectType])
 
     val ObjectType(beanClass) = beanInstance.dataType
-    setters.map { case (name, expr) =>
-      // Looking for known type mapping.
-      // But also looking for general `Object`-type parameter for generic methods.
-      val paramTypes = EncoderUtils.expressionJavaClasses(Seq(expr)) :+
-        classOf[Object]
-      val methods = paramTypes.flatMap { fieldClass =>
-        try {
-          Some(beanClass.getDeclaredMethod(name, fieldClass))
-        } catch {
-          case e: NoSuchMethodException => None
+    setters.map {
+      case (name, expr) =>
+        // Looking for known type mapping.
+        // But also looking for general `Object`-type parameter for generic methods.
+        val paramTypes = EncoderUtils.expressionJavaClasses(Seq(expr)) :+
+          classOf[Object]
+        val methods = paramTypes.flatMap { fieldClass =>
+          try {
+            Some(beanClass.getDeclaredMethod(name, fieldClass))
+          } catch {
+            case e: NoSuchMethodException => None
+          }
         }
-      }
-      if (methods.isEmpty) {
-        throw QueryExecutionErrors.methodNotDeclaredError(name)
-      }
-      methods.head -> expr
+        if (methods.isEmpty) {
+          throw QueryExecutionErrors.methodNotDeclaredError(name)
+        }
+        methods.head -> expr
     }
   }
 
@@ -1972,12 +1891,13 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
     val instance = beanInstance.eval(input)
     if (instance != null) {
       val bean = instance.asInstanceOf[Object]
-      resolvedSetters.foreach { case (setter, expr) =>
-        val paramVal = expr.eval(input)
-        // We don't call setter if input value is null.
-        if (paramVal != null) {
-          setter.invoke(bean, paramVal.asInstanceOf[AnyRef])
-        }
+      resolvedSetters.foreach {
+        case (setter, expr) =>
+          val paramVal = expr.eval(input)
+          // We don't call setter if input value is null.
+          if (paramVal != null) {
+            setter.invoke(bean, paramVal.asInstanceOf[AnyRef])
+          }
       }
     }
     instance
@@ -1989,9 +1909,10 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
     val javaBeanInstance = ctx.freshName("javaBean")
     val beanInstanceJavaType = CodeGenerator.javaType(beanInstance.dataType)
 
-    val initialize = setters.map { case (setterMethod, fieldValue) =>
-      val fieldGen = fieldValue.genCode(ctx)
-      s"""
+    val initialize = setters.map {
+      case (setterMethod, fieldValue) =>
+        val fieldGen = fieldValue.genCode(ctx)
+        s"""
            |${fieldGen.code}
            |if (!${fieldGen.isNull}) {
            |  $javaBeanInstance.$setterMethod(${fieldGen.value});
@@ -2022,13 +1943,12 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
  * Asserts that input values of a non-nullable child expression are not null.
  *
  * Note that there are cases where `child.nullable == true`, while we still need to add this
- * assertion. Consider a nullable column `s` whose data type is a struct containing a non-nullable
- * `Int` field named `i`. Expression `s.i` is nullable because `s` can be null. However, for all
+ * assertion.  Consider a nullable column `s` whose data type is a struct containing a non-nullable
+ * `Int` field named `i`.  Expression `s.i` is nullable because `s` can be null.  However, for all
  * non-null `s`, `s.i` can't be null.
  */
 case class AssertNotNull(child: Expression, walkedTypePath: Seq[String] = Nil)
-    extends UnaryExpression
-    with NonSQLExpression {
+  extends UnaryExpression with NonSQLExpression {
 
   override def dataType: DataType = child.dataType
   override def foldable: Boolean = false
@@ -2068,15 +1988,16 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String] = Nil)
 }
 
 /**
- * Returns the value of field at index `index` from the external row `child`. This class can be
- * viewed as [[GetStructField]] for [[Row]]s instead of [[InternalRow]]s.
+ * Returns the value of field at index `index` from the external row `child`.
+ * This class can be viewed as [[GetStructField]] for [[Row]]s instead of [[InternalRow]]s.
  *
  * Note that the input row and the field we try to get are both guaranteed to be not null, if they
  * are null, a runtime exception will be thrown.
  */
-case class GetExternalRowField(child: Expression, index: Int, fieldName: String)
-    extends UnaryExpression
-    with NonSQLExpression {
+case class GetExternalRowField(
+    child: Expression,
+    index: Int,
+    fieldName: String) extends UnaryExpression with NonSQLExpression {
 
   override def nullable: Boolean = false
 
@@ -2121,13 +2042,11 @@ case class GetExternalRowField(child: Expression, index: Int, fieldName: String)
 }
 
 /**
- * Validates the actual data type of input expression at runtime. If it doesn't match the
+ * Validates the actual data type of input expression at runtime.  If it doesn't match the
  * expectation, throw an exception.
  */
 case class ValidateExternalType(child: Expression, expected: DataType, externalDataType: DataType)
-    extends UnaryExpression
-    with NonSQLExpression
-    with ExpectsInputTypes {
+  extends UnaryExpression with NonSQLExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ObjectType(classOf[Object]))
 
@@ -2139,14 +2058,14 @@ case class ValidateExternalType(child: Expression, expected: DataType, externalD
     case _: DecimalType =>
       (value: Any) => {
         value.isInstanceOf[java.math.BigDecimal] || value.isInstanceOf[scala.math.BigDecimal] ||
-        value.isInstanceOf[Decimal]
+          value.isInstanceOf[Decimal]
       }
     case _: ArrayType =>
       (value: Any) => {
         value.getClass.isArray ||
-        value.isInstanceOf[scala.collection.Seq[_]] ||
-        value.isInstanceOf[scala.collection.Set[_]] ||
-        value.isInstanceOf[java.util.List[_]]
+          value.isInstanceOf[scala.collection.Seq[_]] ||
+          value.isInstanceOf[scala.collection.Set[_]] ||
+          value.isInstanceOf[java.util.List[_]]
       }
     case _: DateType =>
       (value: Any) => {
@@ -2167,7 +2086,8 @@ case class ValidateExternalType(child: Expression, expected: DataType, externalD
     if (checkType(input)) {
       input
     } else {
-      throw QueryExecutionErrors.invalidExternalTypeError(input.getClass.getName, expected, child)
+      throw QueryExecutionErrors.invalidExternalTypeError(
+        input.getClass.getName, expected, child)
     }
   }
 
@@ -2179,14 +2099,15 @@ case class ValidateExternalType(child: Expression, expected: DataType, externalD
     }
     val typeCheck = expected match {
       case _: DecimalType =>
-        genCheckTypes(
-          Seq(classOf[java.math.BigDecimal], classOf[scala.math.BigDecimal], classOf[Decimal]))
+        genCheckTypes(Seq(
+          classOf[java.math.BigDecimal],
+          classOf[scala.math.BigDecimal],
+          classOf[Decimal]))
       case _: ArrayType =>
-        val check = genCheckTypes(
-          Seq(
-            classOf[scala.collection.Seq[_]],
-            classOf[scala.collection.Set[_]],
-            classOf[java.util.List[_]]))
+        val check = genCheckTypes(Seq(
+          classOf[scala.collection.Seq[_]],
+          classOf[scala.collection.Set[_]],
+          classOf[java.util.List[_]]))
         s"$obj.getClass().isArray() || $check"
       case _: DateType =>
         genCheckTypes(Seq(classOf[java.sql.Date], classOf[java.time.LocalDate]))
@@ -2198,8 +2119,10 @@ case class ValidateExternalType(child: Expression, expected: DataType, externalD
 
     // Use unnamed reference that doesn't create a local field here to reduce the number of fields
     // because errMsgField is used only when the type doesn't match.
-    val expectedTypeField = ctx.addReferenceObj("expectedTypeField", expected)
-    val childExpressionMsgField = ctx.addReferenceObj("childExpressionMsgField", child)
+    val expectedTypeField = ctx.addReferenceObj(
+      "expectedTypeField", expected)
+    val childExpressionMsgField = ctx.addReferenceObj(
+      "childExpressionMsgField", child)
 
     val code = code"""
       ${input.code}

@@ -25,8 +25,8 @@ import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.types.StructType
 
 /**
- * Relation that is compatible with V1 TableScan, but it uses JDBCRelation's buildScan which
- * accepts all v2 pushdowns
+ * Relation that is compatible with V1 TableScan,
+ * but it uses JDBCRelation's buildScan which accepts all v2 pushdowns
  */
 case class JDBCV1RelationFromV2Scan(
     context: SQLContext,
@@ -38,9 +38,7 @@ case class JDBCV1RelationFromV2Scan(
     tableSample: Option[TableSampleInfo],
     pushedLimit: Int,
     sortOrders: Array[String],
-    pushedOffset: Int)
-    extends BaseRelation
-    with TableScan {
+    pushedOffset: Int) extends BaseRelation with TableScan {
   override def sqlContext: SQLContext = context
   override def schema: StructType = prunedSchema
   override def needConversion: Boolean = relation.needConversion
@@ -51,15 +49,8 @@ case class JDBCV1RelationFromV2Scan(
       pushedAggregateColumn
     }
 
-    relation.buildScan(
-      columnList,
-      prunedSchema,
-      pushedPredicates,
-      groupByColumns,
-      tableSample,
-      pushedLimit,
-      sortOrders,
-      pushedOffset)
+    relation.buildScan(columnList, prunedSchema, pushedPredicates, groupByColumns, tableSample,
+      pushedLimit, sortOrders, pushedOffset)
   }
 
   override def toString: String = "JDBC v1 Relation from v2 scan"

@@ -30,14 +30,13 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class ConsoleRelation(override val sqlContext: SQLContext, data: DataFrame)
-    extends BaseRelation {
+  extends BaseRelation {
   override def schema: StructType = data.schema
 }
 
-class ConsoleSinkProvider
-    extends SimpleTableProvider
-    with DataSourceRegister
-    with CreatableRelationProvider {
+class ConsoleSinkProvider extends SimpleTableProvider
+  with DataSourceRegister
+  with CreatableRelationProvider {
 
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     ConsoleTable

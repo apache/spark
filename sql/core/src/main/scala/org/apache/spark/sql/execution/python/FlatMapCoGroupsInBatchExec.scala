@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{BinaryExecNode, CoGroupedIterator, SparkPlan}
 import org.apache.spark.sql.execution.python.PandasGroupUtils._
 
+
 /**
  * Base class for Python-based FlatMapCoGroupsIn*Exec.
  */
@@ -75,9 +76,8 @@ trait FlatMapCoGroupsInBatchExec extends SparkPlan with BinaryExecNode with Pyth
     }
 
     // Map cogrouped rows to ArrowPythonRunner results, Only execute if partition is not empty
-    left.execute().zipPartitions(right.execute()) { (leftData, rightData) =>
-      if (leftData.isEmpty && rightData.isEmpty) Iterator.empty
-      else {
+    left.execute().zipPartitions(right.execute())  { (leftData, rightData) =>
+      if (leftData.isEmpty && rightData.isEmpty) Iterator.empty else {
 
         val leftGrouped = groupAndProject(leftData, leftGroup, left.output, leftDedup)
         val rightGrouped = groupAndProject(rightData, rightGroup, right.output, rightDedup)

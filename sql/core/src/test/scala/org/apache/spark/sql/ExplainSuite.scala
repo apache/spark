@@ -48,7 +48,8 @@ trait ExplainSuiteHelper extends QueryTest with SharedSparkSession {
   }
 
   /**
-   * Get the explain by running the sql. The explain mode should be part of the sql text itself.
+   * Get the explain by running the sql. The explain mode should be part of the
+   * sql text itself.
    */
   protected def withNormalizedExplain(queryText: String)(f: String => Unit) = {
     val output = new java.io.ByteArrayOutputStream()
@@ -63,9 +64,7 @@ trait ExplainSuiteHelper extends QueryTest with SharedSparkSession {
    * Runs the plan and makes sure the plans contains all of the keywords.
    */
   protected def checkKeywordsExistsInExplain(
-      df: DataFrame,
-      mode: ExplainMode,
-      keywords: String*): Unit = {
+      df: DataFrame, mode: ExplainMode, keywords: String*): Unit = {
     withNormalizedExplain(df, mode) { normalizedOutput =>
       for (key <- keywords) {
         assert(normalizedOutput.contains(key))
@@ -81,9 +80,7 @@ trait ExplainSuiteHelper extends QueryTest with SharedSparkSession {
    * Runs the plan and makes sure the plans does not contain any of the keywords.
    */
   protected def checkKeywordsNotExistsInExplain(
-      df: DataFrame,
-      mode: ExplainMode,
-      keywords: String*): Unit = {
+      df: DataFrame, mode: ExplainMode, keywords: String*): Unit = {
     withNormalizedExplain(df, mode) { normalizedOutput =>
       for (key <- keywords) {
         assert(!normalizedOutput.contains(key))
@@ -102,23 +99,21 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
   }
 
   test("SPARK-23034 show rdd names in RDD scan nodes (DataFrame)") {
-    val rddWithName =
-      spark.sparkContext.parallelize(ExplainSingleData(1) :: Nil).setName("testRdd")
+    val rddWithName = spark.sparkContext.parallelize(ExplainSingleData(1) :: Nil).setName("testRdd")
     val df = spark.createDataFrame(rddWithName)
     checkKeywordsExistsInExplain(df, keywords = "Scan testRdd")
   }
 
   test("SPARK-24850 InMemoryRelation string representation does not include cached plan") {
     val df = Seq(1).toDF("a").cache()
-    checkKeywordsExistsInExplain(
-      df,
-      keywords = "InMemoryRelation",
-      "StorageLevel(disk, memory, deserialized, 1 replicas)")
+    checkKeywordsExistsInExplain(df,
+      keywords = "InMemoryRelation", "StorageLevel(disk, memory, deserialized, 1 replicas)")
   }
 
   test("optimized plan should show the rewritten expression") {
     withTempView("test_agg") {
-      sql("""
+      sql(
+        """
           |CREATE TEMPORARY VIEW test_agg AS SELECT * FROM VALUES
           |  (1, true), (1, false),
           |  (2, true),
@@ -130,8 +125,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
       // simple explain of queries having every/some/any aggregates. Optimized
       // plan should show the rewritten aggregate expression.
       val df = sql("SELECT k, every(v), some(v), any(v) FROM test_agg GROUP BY k")
-      checkKeywordsExistsInExplain(
-        df,
+      checkKeywordsExistsInExplain(df,
         "Aggregate [k#x], [k#x, every(v#x) AS every(v)#x, some(v#x) AS some(v)#x, " +
           "any(v#x) AS any(v)#x]")
     }
@@ -139,19 +133,18 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     withTable("t") {
       sql("CREATE TABLE t(col TIMESTAMP) USING parquet")
       val df = sql("SELECT date_part('month', col) FROM t")
-      checkKeywordsExistsInExplain(
-        df,
+      checkKeywordsExistsInExplain(df,
         "Project [month(cast(col#x as date)) AS date_part(month, col)#x]")
     }
   }
 
   test("explain inline tables cross-joins") {
-    val df = sql("""
+    val df = sql(
+      """
         |SELECT * FROM VALUES ('one', 1), ('three', null)
         |  CROSS JOIN VALUES ('one', 1), ('three', null)
       """.stripMargin)
-    checkKeywordsExistsInExplain(
-      df,
+    checkKeywordsExistsInExplain(df,
       "Join Cross",
       ":- LocalRelation [col1#x, col2#x]",
       "+- LocalRelation [col1#x, col2#x]")
@@ -159,8 +152,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
 
   test("explain table valued functions") {
     checkKeywordsExistsInExplain(sql("select * from RaNgE(2)"), "Range (0, 2, step=1)")
-    checkKeywordsExistsInExplain(
-      sql("SELECT * FROM range(3) CROSS JOIN range(3)"),
+    checkKeywordsExistsInExplain(sql("SELECT * FROM range(3) CROSS JOIN range(3)"),
       "Join Cross",
       ":- Range (0, 3, step=1)",
       "+- Range (0, 3, step=1)")
@@ -170,23 +162,25 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     checkKeywordsExistsInExplain(
       sql("SELECT * FROM VALUES (0, 1) AS (a, b), LATERAL (SELECT a)"),
       "LateralJoin lateral-subquery#x [a#x], Inner",
-      "Project [outer(a#x) AS a#x]")
+      "Project [outer(a#x) AS a#x]"
+    )
   }
 
   test("explain string functions") {
     // Check if catalyst combine nested `Concat`s
-    val df1 = sql("""
+    val df1 = sql(
+      """
         |SELECT (col1 || col2 || col3 || col4) col
         |  FROM (SELECT id col1, id col2, id col3, id col4 FROM range(10))
       """.stripMargin)
-    checkKeywordsExistsInExplain(
-      df1,
+    checkKeywordsExistsInExplain(df1,
       "Project [concat(cast(id#xL as string), cast(id#xL as string), cast(id#xL as string)" +
         ", cast(id#xL as string)) AS col#x]")
 
     // Check if catalyst combine nested `Concat`s if concatBinaryAsString=false
     withSQLConf(SQLConf.CONCAT_BINARY_AS_STRING.key -> "false") {
-      val df2 = sql("""
+      val df2 = sql(
+        """
           |SELECT ((col1 || col2) || (col3 || col4)) col
           |FROM (
           |  SELECT
@@ -197,15 +191,15 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
           |  FROM range(10)
           |)
         """.stripMargin)
-      checkKeywordsExistsInExplain(
-        df2,
+      checkKeywordsExistsInExplain(df2,
         "Project [concat(concat(col1#x, col2#x), cast(concat(col3#x, col4#x) as string)) AS col#x]",
         "Project [cast(id#xL as string) AS col1#x, " +
           "cast((id#xL + cast(1 as bigint)) as string) AS col2#x, " +
           "encode(cast((id#xL + cast(2 as bigint)) as string), utf-8) AS col3#x, " +
           "encode(cast((id#xL + cast(3 as bigint)) as string), utf-8) AS col4#x]")
 
-      val df3 = sql("""
+      val df3 = sql(
+        """
           |SELECT (col1 || (col3 || col4)) col
           |FROM (
           |  SELECT
@@ -215,8 +209,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
           |  FROM range(10)
           |)
         """.stripMargin)
-      checkKeywordsExistsInExplain(
-        df3,
+      checkKeywordsExistsInExplain(df3,
         "Project [concat(col1#x, cast(concat(col3#x, col4#x) as string)) AS col#x]",
         "Project [cast(id#xL as string) AS col1#x, " +
           "encode(cast((id#xL + cast(2 as bigint)) as string), utf-8) AS col3#x, " +
@@ -238,39 +231,29 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     // AND                                               conjunction
     // OR                                                disjunction
     // ---------------------------------------------------------------------------------------
-    checkKeywordsExistsInExplain(
-      sql("select '1' || 1 + 2"),
-      "Project [13",
-      " AS (concat(1, 1) + 2)#x")
-    checkKeywordsExistsInExplain(
-      sql("select 1 - 2 || 'b'"),
+    checkKeywordsExistsInExplain(sql("select '1' || 1 + 2"),
+      "Project [13", " AS (concat(1, 1) + 2)#x")
+    checkKeywordsExistsInExplain(sql("select 1 - 2 || 'b'"),
       "Project [-1b AS concat((1 - 2), b)#x]")
-    checkKeywordsExistsInExplain(
-      sql("select 2 * 4  + 3 || 'b'"),
+    checkKeywordsExistsInExplain(sql("select 2 * 4  + 3 || 'b'"),
       "Project [11b AS concat(((2 * 4) + 3), b)#x]")
-    checkKeywordsExistsInExplain(
-      sql("select 3 + 1 || 'a' || 4 / 2"),
+    checkKeywordsExistsInExplain(sql("select 3 + 1 || 'a' || 4 / 2"),
       "Project [4a2.0 AS concat(concat((3 + 1), a), (4 / 2))#x]")
-    checkKeywordsExistsInExplain(
-      sql("select 1 == 1 OR 'a' || 'b' ==  'ab'"),
+    checkKeywordsExistsInExplain(sql("select 1 == 1 OR 'a' || 'b' ==  'ab'"),
       "Project [true AS ((1 = 1) OR (concat(a, b) = ab))#x]")
-    checkKeywordsExistsInExplain(
-      sql("select 'a' || 'c' == 'ac' AND 2 == 3"),
+    checkKeywordsExistsInExplain(sql("select 'a' || 'c' == 'ac' AND 2 == 3"),
       "Project [false AS ((concat(a, c) = ac) AND (2 = 3))#x]")
   }
 
   test("explain for these functions; use range to avoid constant folding") {
-    val df = sql(
-      "select ifnull(id, 1), nullif(id, 1), nvl(id, 1), nvl2(id, 1, 2) " +
-        "from range(2)")
-    checkKeywordsExistsInExplain(
-      df,
+    val df = sql("select ifnull(id, 1), nullif(id, 1), nvl(id, 1), nvl2(id, 1, 2) " +
+      "from range(2)")
+    checkKeywordsExistsInExplain(df,
       "Project [id#xL AS ifnull(id, 1)#xL, if ((id#xL = 1)) null " +
         "else id#xL AS nullif(id, 1)#xL, id#xL AS nvl(id, 1)#xL, 1 AS nvl2(id, 1, 2)#x]")
   }
 
-  test(
-    "SPARK-26659: explain of DataWritingCommandExec should not contain duplicate cmd.nodeName") {
+  test("SPARK-26659: explain of DataWritingCommandExec should not contain duplicate cmd.nodeName") {
     withTable("temptable") {
       val df = sql("create table temptable using parquet as select * from range(2)")
       withNormalizedExplain(df, SimpleMode) { normalizedOutput =>
@@ -302,52 +285,48 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
 
   test("explain formatted - check presence of subquery in case of DPP") {
     withTable("df1", "df2") {
-      withSQLConf(
-        SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+      withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
         SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
         SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
-        spark
-          .range(1000)
-          .select(col("id"), col("id").as("k"))
-          .write
-          .partitionBy("k")
-          .format("parquet")
-          .mode("overwrite")
-          .saveAsTable("df1")
+          spark.range(1000).select(col("id"), col("id").as("k"))
+            .write
+            .partitionBy("k")
+            .format("parquet")
+            .mode("overwrite")
+            .saveAsTable("df1")
 
-        spark
-          .range(100)
-          .select(col("id"), col("id").as("k"))
-          .write
-          .partitionBy("k")
-          .format("parquet")
-          .mode("overwrite")
-          .saveAsTable("df2")
+          spark.range(100)
+            .select(col("id"), col("id").as("k"))
+            .write
+            .partitionBy("k")
+            .format("parquet")
+            .mode("overwrite")
+            .saveAsTable("df2")
 
-        val sqlText =
-          """
+          val sqlText =
+            """
               |EXPLAIN FORMATTED SELECT df1.id, df2.k
               |FROM df1 JOIN df2 ON df1.k = df2.k AND df2.id < 2
               |""".stripMargin
 
-        val expected_pattern1 =
-          "Subquery:1 Hosting operator id = 1 Hosting Expression = k#xL IN dynamicpruning#x"
-        val expected_pattern2 =
-          "PartitionFilters: \\[isnotnull\\(k#xL\\), dynamicpruningexpression\\(k#xL " +
-            "IN dynamicpruning#x\\)\\]"
-        val expected_pattern3 =
-          "Location: InMemoryFileIndex \\[\\S*org.apache.spark.sql.ExplainSuite" +
-            "/df2/\\S*, ... 99 entries\\]"
-        val expected_pattern4 =
-          "Location: InMemoryFileIndex \\[\\S*org.apache.spark.sql.ExplainSuite" +
-            "/df1/\\S*, ... 999 entries\\]"
-        withNormalizedExplain(sqlText) { normalizedOutput =>
-          assert(expected_pattern1.r.findAllMatchIn(normalizedOutput).length == 1)
-          assert(expected_pattern2.r.findAllMatchIn(normalizedOutput).length == 1)
-          assert(expected_pattern3.r.findAllMatchIn(normalizedOutput).length == 2)
-          assert(expected_pattern4.r.findAllMatchIn(normalizedOutput).length == 1)
+          val expected_pattern1 =
+            "Subquery:1 Hosting operator id = 1 Hosting Expression = k#xL IN dynamicpruning#x"
+          val expected_pattern2 =
+            "PartitionFilters: \\[isnotnull\\(k#xL\\), dynamicpruningexpression\\(k#xL " +
+              "IN dynamicpruning#x\\)\\]"
+          val expected_pattern3 =
+            "Location: InMemoryFileIndex \\[\\S*org.apache.spark.sql.ExplainSuite" +
+              "/df2/\\S*, ... 99 entries\\]"
+          val expected_pattern4 =
+            "Location: InMemoryFileIndex \\[\\S*org.apache.spark.sql.ExplainSuite" +
+              "/df1/\\S*, ... 999 entries\\]"
+          withNormalizedExplain(sqlText) { normalizedOutput =>
+            assert(expected_pattern1.r.findAllMatchIn(normalizedOutput).length == 1)
+            assert(expected_pattern2.r.findAllMatchIn(normalizedOutput).length == 1)
+            assert(expected_pattern3.r.findAllMatchIn(normalizedOutput).length == 2)
+            assert(expected_pattern4.r.findAllMatchIn(normalizedOutput).length == 1)
+          }
         }
-      }
     }
   }
 
@@ -375,10 +354,9 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
 
     val simpleExplainOutput = getNormalizedExplain(testDf, SimpleMode)
     assert(simpleExplainOutput.startsWith("== Physical Plan =="))
-    Seq(
-      "== Parsed Logical Plan ==",
-      "== Analyzed Logical Plan ==",
-      "== Optimized Logical Plan ==").foreach { planType =>
+    Seq("== Parsed Logical Plan ==",
+        "== Analyzed Logical Plan ==",
+        "== Optimized Logical Plan ==").foreach { planType =>
       assert(!simpleExplainOutput.contains(planType))
     }
     checkKeywordsExistsInExplain(
@@ -413,11 +391,8 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     val token = "MyToken"
     val value = "value"
     val options = Map("password" -> password, "token" -> token, "key" -> value)
-    val cmd = SaveIntoDataSourceCommand(
-      spark.range(10).logicalPlan,
-      new TestOptionsSource,
-      options,
-      SaveMode.Overwrite)
+    val cmd = SaveIntoDataSourceCommand(spark.range(10).logicalPlan, new TestOptionsSource,
+      options, SaveMode.Overwrite)
 
     Seq(SimpleMode, ExtendedMode, FormattedMode).foreach { mode =>
       checkKeywordsExistsInExplain(cmd, mode, value)
@@ -453,9 +428,8 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
   test("Dataset.toExplainString has mode as string") {
     val df = spark.range(10).toDF()
     def assertExplainOutput(mode: ExplainMode): Unit = {
-      assert(
-        df.queryExecution.explainString(mode).replaceAll("#\\d+", "#x").trim ===
-          getNormalizedExplain(df, mode).trim)
+      assert(df.queryExecution.explainString(mode).replaceAll("#\\d+", "#x").trim ===
+        getNormalizedExplain(df, mode).trim)
     }
     assertExplainOutput(SimpleMode)
     assertExplainOutput(ExtendedMode)
@@ -471,23 +445,17 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
 
   test("SPARK-31504: Output fields in formatted Explain should have determined order") {
     withTempPath { path =>
-      spark
-        .range(10)
-        .selectExpr("id as a", "id as b", "id as c", "id as d", "id as e")
-        .write
-        .mode("overwrite")
-        .parquet(path.getAbsolutePath)
+      spark.range(10).selectExpr("id as a", "id as b", "id as c", "id as d", "id as e")
+        .write.mode("overwrite").parquet(path.getAbsolutePath)
       val df1 = spark.read.parquet(path.getAbsolutePath)
       val df2 = spark.read.parquet(path.getAbsolutePath)
-      assert(
-        getNormalizedExplain(df1, FormattedMode) === getNormalizedExplain(df2, FormattedMode))
+      assert(getNormalizedExplain(df1, FormattedMode) === getNormalizedExplain(df2, FormattedMode))
     }
   }
 
   test("Coalesced bucket info should be a part of explain string") {
     withTable("t1", "t2") {
-      withSQLConf(
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
         SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
         Seq(1, 2).toDF("i").write.bucketBy(8, "i").saveAsTable("t1")
         Seq(2, 3).toDF("i").write.bucketBy(4, "i").saveAsTable("t2")
@@ -519,23 +487,21 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
              |ReadSchema: struct\\<value:int\\>
              |""".stripMargin.trim
 
-        spark
-          .range(10)
+        spark.range(10)
           .select(col("id"), col("id").as("value"))
-          .write
-          .option("header", true)
+          .write.option("header", true)
           .partitionBy("id")
           .format(fmt)
           .save(basePath)
         val readSchema =
           StructType(Seq(StructField("id", IntegerType), StructField("value", IntegerType)))
         withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
-          val df = spark.read
+          val df = spark
+            .read
             .schema(readSchema)
             .option("header", true)
             .format(fmt)
-            .load(basePath)
-            .where($"id" > 1 && $"value" > 2)
+            .load(basePath).where($"id" > 1 && $"value" > 2)
           val normalizedOutput = getNormalizedExplain(df, FormattedMode)
           assert(expectedPlanFragment.r.findAllMatchIn(normalizedOutput).length == 1)
         }
@@ -649,7 +615,8 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
         |(22) AdaptiveSparkPlan
         |Output [4]: [k#x, count(v1)#xL, sum(v1)#xL, avg(v2)#x]
         |Arguments: isFinalPlan=true
-        |""".stripMargin)
+        |""".stripMargin
+    )
     checkKeywordsNotExistsInExplain(testDf, FormattedMode, "unknown")
   }
 
@@ -669,9 +636,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
 
   test("SPARK-35884: Explain formatted with subquery") {
     withTempView("t1", "t2") {
-      spark
-        .range(100)
-        .select($"id" % 10 as "key", $"id" as "value")
+      spark.range(100).select($"id" % 10 as "key", $"id" as "value")
         .createOrReplaceTempView("t1")
       spark.range(10).createOrReplaceTempView("t2")
       val query =
@@ -682,9 +647,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
           |""".stripMargin
       val df = sql(query).toDF()
       df.collect()
-      checkKeywordsExistsInExplain(
-        df,
-        FormattedMode,
+      checkKeywordsExistsInExplain(df, FormattedMode,
         """
           |(2) Filter [codegen id : 2]
           |Input [1]: [id#xL]
@@ -710,7 +673,8 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
           |(22) AdaptiveSparkPlan
           |Output [1]: [max(id)#xL]
           |Arguments: isFinalPlan=true
-          |""".stripMargin)
+          |""".stripMargin
+      )
       checkKeywordsNotExistsInExplain(df, FormattedMode, "unknown")
     }
   }
@@ -750,7 +714,9 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
       val df2 = spark.table("t2")
 
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
-        checkKeywordsExistsInExplain(df1.join(df2, df1("i") === df2("i")), "Bucketed: true")
+        checkKeywordsExistsInExplain(
+          df1.join(df2, df1("i") === df2("i")),
+          "Bucketed: true")
       }
 
       withSQLConf(SQLConf.BUCKETING_ENABLED.key -> "false") {
@@ -759,9 +725,11 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
           "Bucketed: false (disabled by configuration)")
       }
 
-      checkKeywordsExistsInExplain(df1, "Bucketed: false (disabled by query planner)")
+      checkKeywordsExistsInExplain(df1, "Bucketed: false (disabled by query planner)" )
 
-      checkKeywordsExistsInExplain(df1.select("j"), "Bucketed: false (bucket column(s) not read)")
+      checkKeywordsExistsInExplain(
+        df1.select("j"),
+        "Bucketed: false (bucket column(s) not read)")
     }
   }
 
@@ -801,18 +769,23 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
     val df = Seq(1, 2).toDF("c").distinct()
     val statistics = "Statistics(sizeInBytes=32.0 B, rowCount=2)"
 
-    checkKeywordsNotExistsInExplain(df, FormattedMode, statistics)
+    checkKeywordsNotExistsInExplain(
+      df,
+      FormattedMode,
+      statistics)
 
     df.collect()
-    checkKeywordsExistsInExplain(df, FormattedMode, statistics)
+    checkKeywordsExistsInExplain(
+      df,
+      FormattedMode,
+      statistics)
   }
 
   test("SPARK-42753: Process subtree for ReusedExchange with unknown child") {
     // Simulate a simplified subtree with a ReusedExchange pointing to an Exchange node that has
     // no ID. This is a rare edge case that could arise during AQE if there are multiple
     // ReusedExchanges. We check to make sure the child Exchange gets an ID and gets printed
-    val exchange = ShuffleExchangeExec(
-      RoundRobinPartitioning(10),
+    val exchange = ShuffleExchangeExec(RoundRobinPartitioning(10),
       RangeExec(org.apache.spark.sql.catalyst.plans.logical.Range(0, 1000, 1, 10)))
     val reused = ReusedExchangeExec(exchange.output, exchange)
     var results = ""
@@ -851,8 +824,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
   test("SPARK-42753: Two ReusedExchange Sharing Same Subtree") {
     // Simulate a simplified subtree with a two ReusedExchange reusing the same exchange
     // Only one exchange node should be printed
-    val exchange = ShuffleExchangeExec(
-      RoundRobinPartitioning(10),
+    val exchange = ShuffleExchangeExec(RoundRobinPartitioning(10),
       RangeExec(org.apache.spark.sql.catalyst.plans.logical.Range(0, 1000, 1, 10)))
     val reused1 = ReusedExchangeExec(exchange.output, exchange)
     val reused2 = ReusedExchangeExec(exchange.output, exchange)
@@ -905,12 +877,10 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
   test("SPARK-42753: Correctly separate two ReusedExchange not sharing subtree") {
     // Simulate two ReusedExchanges reusing two different Exchanges that appear similar
     // The two exchanges should have separate IDs and printed separately
-    val exchange1 = ShuffleExchangeExec(
-      RoundRobinPartitioning(10),
+    val exchange1 = ShuffleExchangeExec(RoundRobinPartitioning(10),
       RangeExec(org.apache.spark.sql.catalyst.plans.logical.Range(0, 1000, 1, 10)))
     val reused1 = ReusedExchangeExec(exchange1.output, exchange1)
-    val exchange2 = ShuffleExchangeExec(
-      RoundRobinPartitioning(10),
+    val exchange2 = ShuffleExchangeExec(RoundRobinPartitioning(10),
       RangeExec(org.apache.spark.sql.catalyst.plans.logical.Range(0, 1000, 1, 10)))
     val reused2 = ReusedExchangeExec(exchange2.output, exchange2)
     val join = SortMergeJoinExec(reused1.output, reused2.output, Inner, None, reused1, reused2)
@@ -972,9 +942,8 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
     assert(results == expectedTree)
   }
 
-  test(
-    "SPARK-55052: Verify exposed AQEShuffleRead properties (coalesced and coalesced-skewed) " +
-      "in Physical Plan Tree") {
+  test("SPARK-55052: Verify exposed AQEShuffleRead properties (coalesced and coalesced-skewed) " +
+    "in Physical Plan Tree") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
@@ -998,8 +967,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
         checkKeywordsExistsInExplain(
           df = df,
           mode = ExplainMode.fromString("FORMATTED"),
-          keywords = "AQEShuffleRead (6), coalesced",
-          "AQEShuffleRead (13), coalesced and skewed")
+          keywords = "AQEShuffleRead (6), coalesced", "AQEShuffleRead (13), coalesced and skewed")
       }
     }
   }
@@ -1009,12 +977,12 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
       SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key -> AQEPropagateEmptyRelation.ruleName,
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1") {
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1"
+    ) {
       val df1 = spark.range(10).withColumn("a", $"id")
       val df2 = spark.range(10).withColumn("b", $"id")
 
-      val joinedDF = df1
-        .where($"a" > 10)
+      val joinedDF = df1.where($"a" > 10)
         .join(df2.where($"b" > 10), Seq("id"), "left_outer")
       checkAnswer(joinedDF, Seq())
       joinedDF.collect()
@@ -1023,8 +991,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
       checkKeywordsExistsInExplain(
         df = joinedDF,
         mode = ExplainMode.fromString("FORMATTED"),
-        keywords = "AQEShuffleRead (6), local",
-        "AQEShuffleRead (9), local")
+        keywords = "AQEShuffleRead (6), local", "AQEShuffleRead (9), local")
     }
   }
 

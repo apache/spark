@@ -49,8 +49,7 @@ class ResolveSubquerySuite extends AnalysisTest {
     LateralJoin(left, LateralSubquery(right), joinType, condition)
 
   test("SPARK-29145 Support subquery in join condition") {
-    val expr = Join(
-      t1,
+    val expr = Join(t1,
       t2,
       Inner,
       Some(InSubquery(Seq(a), ListQuery(Project(Seq(UnresolvedAttribute("c")), t3)))),
@@ -71,11 +70,10 @@ class ResolveSubquerySuite extends AnalysisTest {
   }
 
   test("lateral join with ambiguous join conditions") {
-    val plan = lateralJoin(t1, t0.select($"b"), condition = Some($"b" === 1))
-    assertAnalysisErrorCondition(
-      plan,
-      "AMBIGUOUS_REFERENCE",
-      Map("name" -> "`b`", "referenceNames" -> "[`b`, `b`]"))
+    val plan = lateralJoin(t1, t0.select($"b"), condition = Some($"b" ===  1))
+    assertAnalysisErrorCondition(plan,
+      "AMBIGUOUS_REFERENCE", Map("name" -> "`b`", "referenceNames" -> "[`b`, `b`]")
+    )
   }
 
   test("prefer resolving lateral subquery attributes from the inner query") {
@@ -83,8 +81,7 @@ class ResolveSubquerySuite extends AnalysisTest {
     val expected = LateralJoin(
       t1,
       LateralSubquery(Project(Seq(OuterReference(a).as(a.name), b, c), t2), Seq(a)),
-      Inner,
-      None)
+      Inner, None)
     checkAnalysis(plan, expected)
   }
 
@@ -96,15 +93,15 @@ class ResolveSubquerySuite extends AnalysisTest {
       LateralJoin(
         t1,
         LateralSubquery(Project(Seq(OuterReference(t1b).as(b.name)), t0), Seq(t1b)),
-        Inner,
-        None))
+        Inner, None)
+    )
     checkAnalysis(
       lateralJoin(t1.as("t1"), t2.as("t2").select($"t1.b", $"t2.b")),
       LateralJoin(
         t1,
         LateralSubquery(Project(Seq(OuterReference(t1b).as(b.name), t2b), t2.as("t2")), Seq(t1b)),
-        Inner,
-        None))
+        Inner, None)
+    )
   }
 
   test("resolve nested lateral subqueries") {
@@ -119,18 +116,18 @@ class ResolveSubquerySuite extends AnalysisTest {
             LateralSubquery(
               Project(Seq(OuterReference(b).as(b.name), OuterReference(c).as(c.name)), t0),
               Seq(b, c)),
-            Inner,
-            None),
+            Inner, None),
           Seq(a)),
-        Inner,
-        None))
+        Inner, None)
+    )
 
     // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT a, b, c))
     // TODO: support accessing columns from outer outer query.
     assertAnalysisErrorCondition(
       lateralJoin(t1, lateralJoin(t2, t0.select($"a", $"b", $"c"))),
       "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-      Map("objectName" -> "`a`"))
+      Map("objectName" -> "`a`")
+    )
   }
 
   test("lateral subquery with unresolvable attributes") {
@@ -138,22 +135,26 @@ class ResolveSubquerySuite extends AnalysisTest {
     assertAnalysisErrorCondition(
       lateralJoin(t1, t0.select($"a", $"c")),
       "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-      Map("objectName" -> "`c`"))
+      Map("objectName" -> "`c`")
+    )
     // SELECT * FROM t1, LATERAL (SELECT a, b, c, d FROM t2)
     assertAnalysisErrorCondition(
       lateralJoin(t1, t2.select($"a", $"b", $"c", $"d")),
       "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-      Map("objectName" -> "`d`", "proposal" -> "`b`, `c`"))
+      Map("objectName" -> "`d`", "proposal" -> "`b`, `c`")
+    )
     // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT t1.a))
     assertAnalysisErrorCondition(
       lateralJoin(t1, lateralJoin(t2, t0.select($"t1.a"))),
       "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-      Map("objectName" -> "`t1`.`a`"))
+      Map("objectName" -> "`t1`.`a`")
+    )
     // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT a, b))
     assertAnalysisErrorCondition(
       lateralJoin(t1, lateralJoin(t2, t0.select($"a", $"b"))),
       "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-      Map("objectName" -> "`a`"))
+      Map("objectName" -> "`a`")
+    )
   }
 
   test("lateral subquery with struct type") {
@@ -161,7 +162,8 @@ class ResolveSubquerySuite extends AnalysisTest {
     val ya = GetStructField(OuterReference(y), 0, Some("a")).as(a.name)
     checkAnalysis(
       lateralJoin(t4, t0.select($"x.a", $"y.a")),
-      LateralJoin(t4, LateralSubquery(Project(Seq(xa, ya), t0), Seq(x, y)), Inner, None))
+      LateralJoin(t4, LateralSubquery(Project(Seq(xa, ya), t0), Seq(x, y)), Inner, None)
+    )
     // Analyzer will try to resolve struct first before subquery alias.
     assertAnalysisErrorCondition(
       lateralJoin(t1.as("x"), t4.select($"x.a", $"x.b")),
@@ -170,12 +172,13 @@ class ResolveSubquerySuite extends AnalysisTest {
   }
 
   test("lateral join with unsupported expressions") {
-    val plan =
-      lateralJoin(t1, t0.select(($"a" + $"b").as("c")), condition = Some(sum($"a") === sum($"c")))
+    val plan = lateralJoin(t1, t0.select(($"a" + $"b").as("c")),
+      condition = Some(sum($"a") === sum($"c")))
     assertAnalysisErrorCondition(
       plan,
       expectedErrorCondition = "UNSUPPORTED_EXPR_FOR_OPERATOR",
-      expectedMessageParameters = Map("invalidExprSqls" -> "\"sum(a)\", \"sum(c)\""))
+      expectedMessageParameters = Map("invalidExprSqls" -> "\"sum(a)\", \"sum(c)\"")
+    )
   }
 
   test("SPARK-35618: lateral join with star expansion") {
@@ -184,35 +187,38 @@ class ResolveSubquerySuite extends AnalysisTest {
     // SELECT * FROM t1, LATERAL (SELECT *)
     checkAnalysis(
       lateralJoin(t1.as("t1"), t0.select(star())),
-      LateralJoin(t1, LateralSubquery(Project(Nil, t0)), Inner, None))
+      LateralJoin(t1, LateralSubquery(Project(Nil, t0)), Inner, None)
+    )
     // SELECT * FROM t1, LATERAL (SELECT t1.*)
     checkAnalysis(
       lateralJoin(t1.as("t1"), t0.select(star("t1"))),
-      LateralJoin(t1, LateralSubquery(Project(Seq(outerA, outerB), t0), Seq(a, b)), Inner, None))
+      LateralJoin(t1, LateralSubquery(Project(Seq(outerA, outerB), t0), Seq(a, b)), Inner, None)
+    )
     // SELECT * FROM t1, LATERAL (SELECT * FROM t2)
     checkAnalysis(
       lateralJoin(t1.as("t1"), t2.select(star())),
-      LateralJoin(t1, LateralSubquery(Project(Seq(b, c), t2)), Inner, None))
+      LateralJoin(t1, LateralSubquery(Project(Seq(b, c), t2)), Inner, None)
+    )
     // SELECT * FROM t1, LATERAL (SELECT t1.*, t2.* FROM t2)
     checkAnalysis(
       lateralJoin(t1.as("t1"), t2.as("t2").select(star("t1"), star("t2"))),
-      LateralJoin(
-        t1,
-        LateralSubquery(Project(Seq(outerA, outerB, b, c), t2.as("t2")), Seq(a, b)),
-        Inner,
-        None))
+      LateralJoin(t1,
+        LateralSubquery(Project(Seq(outerA, outerB, b, c), t2.as("t2")), Seq(a, b)), Inner, None)
+    )
     // SELECT * FROM t1, LATERAL (SELECT t2.*)
     assertAnalysisErrorCondition(
       lateralJoin(t1.as("t1"), t0.select(star("t2"))),
       expectedErrorCondition = "CANNOT_RESOLVE_STAR_EXPAND",
-      expectedMessageParameters = Map("targetString" -> "`t2`", "columns" -> ""))
+      expectedMessageParameters = Map("targetString" -> "`t2`", "columns" -> "")
+    )
     // Check case sensitivities.
     // SELECT * FROM t1, LATERAL (SELECT T1.*)
     val plan = lateralJoin(t1.as("t1"), t0.select(star("T1")))
     assertAnalysisErrorCondition(
       plan,
       expectedErrorCondition = "CANNOT_RESOLVE_STAR_EXPAND",
-      expectedMessageParameters = Map("targetString" -> "`T1`", "columns" -> ""))
+      expectedMessageParameters = Map("targetString" -> "`T1`", "columns" -> "")
+    )
     assertAnalysisSuccess(plan, caseSensitive = false)
   }
 
@@ -223,11 +229,9 @@ class ResolveSubquerySuite extends AnalysisTest {
     val newArray = CreateArray(Seq(outerA, outerB))
     checkAnalysis(
       lateralJoin(t1.as("t1"), t0.select(array)),
-      LateralJoin(
-        t1,
-        LateralSubquery(t0.select(newArray.as(newArray.sql)), Seq(a, b)),
-        Inner,
-        None))
+      LateralJoin(t1,
+        LateralSubquery(t0.select(newArray.as(newArray.sql)), Seq(a, b)), Inner, None)
+    )
     assertAnalysisErrorCondition(
       lateralJoin(t1.as("t1"), t0.select(Count(star("t1")))),
       expectedErrorCondition = "INVALID_USAGE_OF_STAR_OR_REGEX",
@@ -238,45 +242,41 @@ class ResolveSubquerySuite extends AnalysisTest {
     // SELECT * FROM t4, LATERAL (SELECT x.*)
     checkAnalysis(
       lateralJoin(t4, t0.select(star("x"))),
-      LateralJoin(
-        t4,
-        LateralSubquery(
-          Project(Seq(GetStructField(OuterReference(x), 0).as(a.name)), t0),
-          Seq(x)),
-        Inner,
-        None))
+      LateralJoin(t4, LateralSubquery(
+        Project(Seq(GetStructField(OuterReference(x), 0).as(a.name)), t0), Seq(x)),
+        Inner, None)
+    )
   }
 
   test("SPARK-36028: resolve scalar subqueries with outer references in Project") {
     // SELECT (SELECT a) FROM t1
     checkAnalysis(
       Project(ScalarSubquery(t0.select($"a")).as("sub") :: Nil, t1),
-      Project(ScalarSubquery(Project(OuterReference(a) :: Nil, t0), Seq(a)).as("sub") :: Nil, t1))
+      Project(ScalarSubquery(Project(OuterReference(a) :: Nil, t0), Seq(a)).as("sub") :: Nil, t1)
+    )
     // SELECT (SELECT a + b + c AS r FROM t2) FROM t1
     checkAnalysis(
-      Project(ScalarSubquery(t2.select(($"a" + $"b" + $"c").as("r"))).as("sub") :: Nil, t1),
-      Project(
-        ScalarSubquery(Project((OuterReference(a) + b + c).as("r") :: Nil, t2), Seq(a))
-          .as("sub") :: Nil,
-        t1))
+      Project(ScalarSubquery(
+        t2.select(($"a" + $"b" + $"c").as("r"))).as("sub") :: Nil, t1),
+      Project(ScalarSubquery(
+        Project((OuterReference(a) + b + c).as("r") :: Nil, t2), Seq(a)).as("sub") :: Nil, t1)
+    )
     // SELECT (SELECT array(t1.*) AS arr) FROM t1
     checkAnalysis(
-      Project(
-        ScalarSubquery(t0.select(CreateArray(Seq(star("t1"))).as("arr"))).as("sub") :: Nil,
-        t1.as("t1")),
-      Project(
-        ScalarSubquery(
-          Project(CreateArray(Seq(OuterReference(a), OuterReference(b))).as("arr") :: Nil, t0),
-          Seq(a, b)).as("sub") :: Nil,
-        t1))
+      Project(ScalarSubquery(t0.select(
+        CreateArray(Seq(star("t1"))).as("arr"))
+      ).as("sub") :: Nil, t1.as("t1")),
+      Project(ScalarSubquery(Project(
+        CreateArray(Seq(OuterReference(a), OuterReference(b))).as("arr") :: Nil, t0
+      ), Seq(a, b)).as("sub") :: Nil, t1)
+    )
   }
 
   test("SPARK-47509: Incorrect results for subquery expressions in LambdaFunctions") {
-    val data = LocalRelation(
-      Seq(
-        $"key".int,
-        $"values1".array(IntegerType),
-        $"values2".array(ArrayType(ArrayType(IntegerType)))))
+    val data = LocalRelation(Seq(
+      $"key".int,
+      $"values1".array(IntegerType),
+      $"values2".array(ArrayType(ArrayType(IntegerType)))))
 
     def plan(e: Expression): LogicalPlan = data.select(e.as("res"))
 
@@ -286,13 +286,17 @@ class ResolveSubquerySuite extends AnalysisTest {
     val lambdaPlanScanFromTable: LogicalPlan = plan(
       LambdaFunction(
         function = lv(Symbol("x")) + lv(Symbol("X")),
-        arguments = Alias(child = ScalarSubquery(plan(lv(Symbol("x")))), name = "alias")()
+        arguments = Alias(
+          child = ScalarSubquery(
+            plan(lv(Symbol("x")))),
+          name = "alias")()
           :: lv(Symbol("X"))
           :: Nil))
 
     assertAnalysisErrorCondition(
       inputPlan = lambdaPlanScanFromTable,
-      expectedErrorCondition = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.HIGHER_ORDER_FUNCTION",
+      expectedErrorCondition =
+        "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.HIGHER_ORDER_FUNCTION",
       expectedMessageParameters = Map.empty[String, String])
   }
 }

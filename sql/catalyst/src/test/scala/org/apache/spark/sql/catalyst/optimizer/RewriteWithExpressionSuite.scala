@@ -28,9 +28,7 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 class RewriteWithExpressionSuite extends PlanTest {
 
   object Optimizer extends RuleExecutor[LogicalPlan] {
-    val batches = Batch(
-      "Rewrite With expression",
-      FixedPoint(5),
+    val batches = Batch("Rewrite With expression", FixedPoint(5),
       PullOutGroupingExpressions,
       RewriteWithExpression) :: Nil
   }
@@ -48,9 +46,7 @@ class RewriteWithExpressionSuite extends PlanTest {
   }
 
   override def comparePlans(
-      plan1: LogicalPlan,
-      plan2: LogicalPlan,
-      checkAnalysis: Boolean = true): Unit = {
+    plan1: LogicalPlan, plan2: LogicalPlan, checkAnalysis: Boolean = true): Unit = {
     super.comparePlans(normalizeCommonExpressionIds(plan1), normalizeCommonExpressionIds(plan2))
   }
 
@@ -74,7 +70,8 @@ class RewriteWithExpressionSuite extends PlanTest {
       testRelation
         .select((testRelation.output :+ (a + a).as("_common_expr_0")): _*)
         .select(($"_common_expr_0" * $"_common_expr_0").as("col"))
-        .analyze)
+        .analyze
+    )
   }
 
   test("nested WITH expression in the definition expression") {
@@ -92,7 +89,8 @@ class RewriteWithExpressionSuite extends PlanTest {
         .select(star(), (a + a).as("_common_expr_0"))
         .select(a, b, ($"_common_expr_0" + $"_common_expr_0" + b).as("_common_expr_1"))
         .select(($"_common_expr_1" * $"_common_expr_1").as("col"))
-        .analyze)
+        .analyze
+    )
   }
 
   test("nested WITH expression in the main expression") {
@@ -103,15 +101,15 @@ class RewriteWithExpressionSuite extends PlanTest {
     val outerExpr = With(b + b) { case Seq(ref) =>
       ref * ref + innerExpr
     }
-    val finalExpr =
-      $"_common_expr_1" * $"_common_expr_1" + ($"_common_expr_0" + $"_common_expr_0")
+    val finalExpr = $"_common_expr_1" * $"_common_expr_1" + ($"_common_expr_0" + $"_common_expr_0")
     comparePlans(
       Optimizer.execute(testRelation.select(outerExpr.as("col"))),
       testRelation
         .select(star(), (b + b).as("_common_expr_1"))
         .select(star(), (a + a).as("_common_expr_0"))
         .select(finalExpr.as("col"))
-        .analyze)
+        .analyze
+    )
   }
 
   test("correlated nested WITH expression is supported") {
@@ -136,7 +134,8 @@ class RewriteWithExpressionSuite extends PlanTest {
         // The final Project contains the final result expression, which references both common
         // expressions.
         .select(($"_common_expr_0" + ($"_common_expr_1" + $"_common_expr_1")).as("col"))
-        .analyze)
+        .analyze
+    )
 
     val commonExprDef2 = CommonExpressionDef(a + a, CommonExpressionId(2))
     val ref2 = new CommonExpressionRef(commonExprDef2)
@@ -155,7 +154,8 @@ class RewriteWithExpressionSuite extends PlanTest {
         // expressions.
         .select(($"_common_expr_0" +
           ($"_common_expr_2" + $"_common_expr_2" + $"_common_expr_0")).as("col"))
-        .analyze)
+        .analyze
+    )
   }
 
   test("WITH expression in filter") {
@@ -170,7 +170,8 @@ class RewriteWithExpressionSuite extends PlanTest {
         .select((testRelation.output :+ (a + a).as("_common_expr_0")): _*)
         .where($"_common_expr_0" < 10 && $"_common_expr_0" > 0)
         .select(testRelation.output: _*)
-        .analyze)
+        .analyze
+    )
   }
 
   test("WITH expression in join condition: only reference left child") {
@@ -185,7 +186,8 @@ class RewriteWithExpressionSuite extends PlanTest {
         .select((testRelation.output :+ (a + a).as("_common_expr_0")): _*)
         .join(testRelation2, condition = Some($"_common_expr_0" < 10 && $"_common_expr_0" > 0))
         .select((testRelation.output ++ testRelation2.output): _*)
-        .analyze)
+        .analyze
+    )
   }
 
   test("WITH expression in join condition: only reference right child") {
@@ -199,9 +201,11 @@ class RewriteWithExpressionSuite extends PlanTest {
       testRelation
         .join(
           testRelation2.select((testRelation2.output :+ (x + x).as("_common_expr_0")): _*),
-          condition = Some($"_common_expr_0" < 10 && $"_common_expr_0" > 0))
+          condition = Some($"_common_expr_0" < 10 && $"_common_expr_0" > 0)
+        )
         .select((testRelation.output ++ testRelation2.output): _*)
-        .analyze)
+        .analyze
+    )
   }
 
   test("WITH expression in join condition: reference both children") {
@@ -217,28 +221,24 @@ class RewriteWithExpressionSuite extends PlanTest {
         .join(
           testRelation2,
           // Can't pre-evaluate, have to inline
-          condition = Some((a + x) < 10 && (a + x) > 0)))
+          condition = Some((a + x) < 10 && (a + x) > 0)
+        )
+    )
   }
 
   test("WITH expression inside conditional expression") {
     val a = testRelation.output.head
-    val expr = Coalesce(
-      Seq(
-        a,
-        With(a + a) { case Seq(ref) =>
-          ref * ref
-        }))
+    val expr = Coalesce(Seq(a, With(a + a) { case Seq(ref) =>
+      ref * ref
+    }))
     val inlinedExpr = Coalesce(Seq(a, (a + a) * (a + a)))
     val plan = testRelation.select(expr.as("col"))
     // With in the conditional branches is always inlined.
     comparePlans(Optimizer.execute(plan), testRelation.select(inlinedExpr.as("col")))
 
-    val expr2 = Coalesce(
-      Seq(
-        With(a + a) { case Seq(ref) =>
-          ref * ref
-        },
-        a))
+    val expr2 = Coalesce(Seq(With(a + a) { case Seq(ref) =>
+      ref * ref
+    }, a))
     val plan2 = testRelation.select(expr2.as("col"))
     // With in the always-evaluated branches can still be optimized.
     comparePlans(
@@ -246,7 +246,8 @@ class RewriteWithExpressionSuite extends PlanTest {
       testRelation
         .select((testRelation.output :+ (a + a).as("_common_expr_0")): _*)
         .select(Coalesce(Seq(($"_common_expr_0" * $"_common_expr_0"), a)).as("col"))
-        .analyze)
+        .analyze
+    )
   }
 
   test("WITH expression in grouping exprs") {
@@ -260,20 +261,25 @@ class RewriteWithExpressionSuite extends PlanTest {
     val expr3 = With(a + 1) { case Seq(ref) =>
       ref * ref
     }
-    val plan = testRelation.groupBy(expr1)((expr2 + 2).as("col1"), count(expr3 - 3).as("col2"))
+    val plan = testRelation.groupBy(expr1)(
+      (expr2 + 2).as("col1"),
+      count(expr3 - 3).as("col2")
+    )
     comparePlans(
       Optimizer.execute(plan),
       testRelation
         .select(testRelation.output :+ (a + 1).as("_common_expr_0"): _*)
         .select(testRelation.output :+
           ($"_common_expr_0" * $"_common_expr_0").as("_groupingexpression"): _*)
-        .select(
-          testRelation.output ++ Seq($"_groupingexpression", (a + 1).as("_common_expr_1")): _*)
+        .select(testRelation.output ++ Seq($"_groupingexpression",
+          (a + 1).as("_common_expr_1")): _*)
         .groupBy($"_groupingexpression")(
           $"_groupingexpression",
-          count($"_common_expr_1" * $"_common_expr_1" - 3).as("_aggregateexpression"))
+          count($"_common_expr_1" * $"_common_expr_1" - 3).as("_aggregateexpression")
+        )
         .select(($"_groupingexpression" + 2).as("col1"), $"_aggregateexpression".as("col2"))
-        .analyze)
+        .analyze
+    )
     // Running CollapseProject after the rule cleans up the unnecessary projections.
     comparePlans(
       CollapseProject(Optimizer.execute(plan)),
@@ -284,8 +290,10 @@ class RewriteWithExpressionSuite extends PlanTest {
           (a + 1).as("_common_expr_1")): _*)
         .groupBy($"_groupingexpression")(
           ($"_groupingexpression" + 2).as("col1"),
-          count($"_common_expr_1" * $"_common_expr_1" - 3).as("col2"))
-        .analyze)
+          count($"_common_expr_1" * $"_common_expr_1" - 3).as("col2")
+        )
+        .analyze
+    )
   }
 
   test("WITH expression in aggregate exprs") {
@@ -296,8 +304,11 @@ class RewriteWithExpressionSuite extends PlanTest {
     val expr2 = With(b + 2) { case Seq(ref) =>
       ref * ref
     }
-    val plan =
-      testRelation.groupBy(a)((a + 3).as("col1"), expr1.as("col2"), max(expr2).as("col3"))
+    val plan = testRelation.groupBy(a)(
+      (a + 3).as("col1"),
+      expr1.as("col2"),
+      max(expr2).as("col3")
+    )
     comparePlans(
       Optimizer.execute(plan),
       testRelation
@@ -307,8 +318,10 @@ class RewriteWithExpressionSuite extends PlanTest {
         .select(
           (a + 3).as("col1"),
           ($"_common_expr_1" * $"_common_expr_1").as("col2"),
-          $"_aggregateexpression".as("col3"))
-        .analyze)
+          $"_aggregateexpression".as("col3")
+        )
+        .analyze
+    )
   }
 
   test("WITH common expression is aggregate function") {
@@ -316,15 +329,20 @@ class RewriteWithExpressionSuite extends PlanTest {
     val expr = With(count(a - 1)) { case Seq(ref) =>
       ref * ref
     }
-    val plan = testRelation.groupBy(a)((a - 1).as("col1"), expr.as("col2"))
+    val plan = testRelation.groupBy(a)(
+      (a - 1).as("col1"),
+      expr.as("col2")
+    )
     comparePlans(
       Optimizer.execute(plan),
       testRelation
         .groupBy(a)(a, count(a - 1).as("_aggregateexpression"))
         .select(
           (a - 1).as("col1"),
-          ($"_aggregateexpression" * $"_aggregateexpression").as("col2"))
-        .analyze)
+          ($"_aggregateexpression" * $"_aggregateexpression").as("col2")
+        )
+        .analyze
+    )
   }
 
   test("aggregate functions in child of WITH expression with ref is not supported") {
@@ -333,7 +351,10 @@ class RewriteWithExpressionSuite extends PlanTest {
       val expr = With(a - 1) { case Seq(ref) =>
         sum(ref * ref)
       }
-      val plan = testRelation.groupBy(a)((a - 1).as("col1"), expr.as("col2"))
+      val plan = testRelation.groupBy(a)(
+        (a - 1).as("col1"),
+        expr.as("col2")
+      )
       Optimizer.execute(plan)
     }
   }
@@ -354,7 +375,8 @@ class RewriteWithExpressionSuite extends PlanTest {
         .groupBy(a)(a, max($"_common_expr_0" * $"_common_expr_0").as("_aggregateexpression"))
         .select($"a", $"_aggregateexpression", (a - 1).as("_common_expr_1"))
         .select(($"_common_expr_1" * $"_aggregateexpression" + $"_common_expr_1").as("col"))
-        .analyze)
+        .analyze
+    )
   }
 
   test("WITH expression in window exprs") {
@@ -370,8 +392,13 @@ class RewriteWithExpressionSuite extends PlanTest {
       .window(
         Seq(windowExpr(count(a), windowSpec(Seq(expr2), Nil, frame)).as("col2")),
         Seq(expr2),
-        Nil)
-      .window(Seq(windowExpr(sum(expr1), windowSpec(Seq(a), Nil, frame)).as("col3")), Seq(a), Nil)
+        Nil
+      )
+      .window(
+        Seq(windowExpr(sum(expr1), windowSpec(Seq(a), Nil, frame)).as("col3")),
+        Seq(a),
+        Nil
+      )
       .select((a - 1).as("col1"), $"col2", $"col3")
       .analyze
     comparePlans(
@@ -379,31 +406,31 @@ class RewriteWithExpressionSuite extends PlanTest {
       testRelation
         .select(a, b, (b + 2).as("_common_expr_0"))
         .window(
-          Seq(
-            windowExpr(
-              count(a),
-              windowSpec(Seq($"_common_expr_0" * $"_common_expr_0"), Nil, frame)).as("col2")),
+          Seq(windowExpr(count(a), windowSpec(Seq($"_common_expr_0" * $"_common_expr_0"), Nil,
+            frame)).as("col2")),
           Seq($"_common_expr_0" * $"_common_expr_0"),
-          Nil)
+          Nil
+        )
         .select(a, b, $"col2")
         .select(a, b, $"col2", (a + 1).as("_common_expr_1"))
         .window(
-          Seq(
-            windowExpr(sum($"_common_expr_1" * $"_common_expr_1"), windowSpec(Seq(a), Nil, frame))
-              .as("col3")),
+          Seq(windowExpr(sum($"_common_expr_1" * $"_common_expr_1"),
+            windowSpec(Seq(a), Nil, frame)).as("col3")),
           Seq(a),
-          Nil)
+          Nil
+        )
         .select(a, b, $"col2", $"col3")
         .select((a - 1).as("col1"), $"col2", $"col3")
-        .analyze)
+        .analyze
+    )
   }
 
   test("WITH common expression is window function") {
     val a = testRelation.output.head
     val frame = SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing)
     val winExpr = windowExpr(sum(a), windowSpec(Seq(a), Nil, frame))
-    val expr = With(winExpr) { case Seq(ref) =>
-      ref * ref
+    val expr = With(winExpr) {
+      case Seq(ref) => ref * ref
     }
     val plan = testRelation.select(expr.as("col")).analyze
     comparePlans(
@@ -413,7 +440,8 @@ class RewriteWithExpressionSuite extends PlanTest {
         .window(Seq(winExpr.as("_we0")), Seq(a), Nil)
         .select(a, $"_we0", ($"_we0" * $"_we0").as("col"))
         .select($"col")
-        .analyze)
+        .analyze
+    )
   }
 
   test("window functions in child of WITH expression with ref is not supported") {
@@ -436,7 +464,8 @@ class RewriteWithExpressionSuite extends PlanTest {
     val plan = testRelation.having($"b")(avg("a").as("a"))(expr).analyze
     comparePlans(
       Optimizer.execute(plan),
-      testRelation.groupBy($"b")(avg("a").as("a")).where($"a" === 1).analyze)
+      testRelation.groupBy($"b")(avg("a").as("a")).where($"a" === 1).analyze
+    )
   }
 
   test("SPARK-50679: duplicated common expressions in different With") {
@@ -453,7 +482,8 @@ class RewriteWithExpressionSuite extends PlanTest {
         .select(
           ($"_common_expr_0" * $"_common_expr_0").as("c1"),
           ($"_common_expr_0" - $"_common_expr_0").as("c2"))
-        .analyze)
+        .analyze
+    )
 
     val wrongExprDef = CommonExpressionDef(a * a, exprDef.id)
     val wrongExprRef = new CommonExpressionRef(wrongExprDef)

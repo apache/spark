@@ -37,7 +37,7 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, BooleanType, Da
   group = "sketch_funcs",
   since = "3.5.0")
 case class HllSketchEstimate(child: Expression)
-    extends UnaryExpression
+  extends UnaryExpression
     with CodegenFallback
     with ExpectsInputTypes {
   override def nullIntolerant: Boolean = true
@@ -56,8 +56,8 @@ case class HllSketchEstimate(child: Expression)
     try {
       Math.round(HllSketch.heapify(Memory.wrap(buffer)).getEstimate)
     } catch {
-      case _: SketchesArgumentException | _: java.lang.Error |
-          _: ArrayIndexOutOfBoundsException =>
+      case _: SketchesArgumentException | _: java.lang.Error
+           | _: ArrayIndexOutOfBoundsException =>
         throw QueryExecutionErrors.hllInvalidInputSketchBuffer(prettyName)
     }
   }
@@ -79,7 +79,7 @@ case class HllSketchEstimate(child: Expression)
   since = "3.5.0")
 // scalastyle:on line.size.limit
 case class HllUnion(first: Expression, second: Expression, third: Expression)
-    extends TernaryExpression
+  extends TernaryExpression
     with CodegenFallback
     with ExpectsInputTypes {
   override def nullIntolerant: Boolean = true
@@ -96,10 +96,8 @@ case class HllUnion(first: Expression, second: Expression, third: Expression)
   }
 
   override protected def withNewChildrenInternal(
-      newFirst: Expression,
-      newSecond: Expression,
-      newThird: Expression): HllUnion =
-    copy(first = newFirst, second = newSecond, third = newThird)
+    newFirst: Expression, newSecond: Expression, newThird: Expression):
+  HllUnion = copy(first = newFirst, second = newSecond, third = newThird)
 
   override def prettyName: String = "hll_union"
 
@@ -108,28 +106,24 @@ case class HllUnion(first: Expression, second: Expression, third: Expression)
   override def dataType: DataType = BinaryType
 
   override def nullSafeEval(value1: Any, value2: Any, value3: Any): Any = {
-    val sketch1 =
-      try {
-        HllSketch.heapify(Memory.wrap(value1.asInstanceOf[Array[Byte]]))
-      } catch {
-        case _: SketchesArgumentException | _: java.lang.Error |
-            _: ArrayIndexOutOfBoundsException =>
-          throw QueryExecutionErrors.hllInvalidInputSketchBuffer(prettyName)
-      }
-    val sketch2 =
-      try {
-        HllSketch.heapify(Memory.wrap(value2.asInstanceOf[Array[Byte]]))
-      } catch {
-        case _: SketchesArgumentException | _: java.lang.Error |
-            _: ArrayIndexOutOfBoundsException =>
-          throw QueryExecutionErrors.hllInvalidInputSketchBuffer(prettyName)
-      }
+    val sketch1 = try {
+      HllSketch.heapify(Memory.wrap(value1.asInstanceOf[Array[Byte]]))
+    } catch {
+      case _: SketchesArgumentException | _: java.lang.Error
+           | _: ArrayIndexOutOfBoundsException =>
+        throw QueryExecutionErrors.hllInvalidInputSketchBuffer(prettyName)
+    }
+    val sketch2 = try {
+      HllSketch.heapify(Memory.wrap(value2.asInstanceOf[Array[Byte]]))
+    } catch {
+      case _: SketchesArgumentException | _: java.lang.Error
+           | _: ArrayIndexOutOfBoundsException =>
+        throw QueryExecutionErrors.hllInvalidInputSketchBuffer(prettyName)
+    }
     val allowDifferentLgConfigK = value3.asInstanceOf[Boolean]
     if (!allowDifferentLgConfigK && sketch1.getLgConfigK != sketch2.getLgConfigK) {
       throw QueryExecutionErrors.hllUnionDifferentLgK(
-        sketch1.getLgConfigK,
-        sketch2.getLgConfigK,
-        function = prettyName)
+        sketch1.getLgConfigK, sketch2.getLgConfigK, function = prettyName)
     }
     val union = new Union(Math.min(sketch1.getLgConfigK, sketch2.getLgConfigK))
     union.update(sketch1)

@@ -25,8 +25,8 @@ class ExecuteImmediateEndToEndSuite extends QueryTest with SharedSparkSession {
     try {
       spark.sql("DECLARE parm = 'Hello';")
 
-      val originalQuery =
-        spark.sql("EXECUTE IMMEDIATE 'SELECT :parm' USING system.session.parm AS parm;")
+      val originalQuery = spark.sql(
+        "EXECUTE IMMEDIATE 'SELECT :parm' USING system.session.parm AS parm;")
       val newQuery = spark.sql("EXECUTE IMMEDIATE 'SELECT :parm' USING system.session.parm;")
 
       assert(originalQuery.columns sameElements newQuery.columns)
@@ -40,7 +40,7 @@ class ExecuteImmediateEndToEndSuite extends QueryTest with SharedSparkSession {
   test("SQL Scripting not supported inside EXECUTE IMMEDIATE") {
     val executeImmediateText = "EXECUTE IMMEDIATE 'BEGIN SELECT 1; END'"
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[AnalysisException ] {
         spark.sql(executeImmediateText)
       },
       condition = "SQL_SCRIPT_IN_EXECUTE_IMMEDIATE",
@@ -59,7 +59,8 @@ class ExecuteImmediateEndToEndSuite extends QueryTest with SharedSparkSession {
     withSessionVariable("v1", "v2") {
       spark.sql("DECLARE v1 = 10")
       spark.sql("DECLARE v2 = 20")
-      val result = spark.sql("""
+      val result = spark.sql(
+        """
           |BEGIN
           |  DECLARE v3 = 1;
           |  EXECUTE IMMEDIATE 'SELECT system.session.v1, v2';
@@ -71,7 +72,8 @@ class ExecuteImmediateEndToEndSuite extends QueryTest with SharedSparkSession {
 
   test("EXECUTE IMMEDIATE does not resolve local variables") {
     val result = intercept[AnalysisException] {
-      spark.sql("""
+      spark.sql(
+        """
           |BEGIN
           |  DECLARE v1 = 5;
           |  EXECUTE IMMEDIATE 'SELECT v1';
@@ -92,7 +94,8 @@ class ExecuteImmediateEndToEndSuite extends QueryTest with SharedSparkSession {
   }
 
   test("EXECUTE IMMEDIATE resolves local variable in USING clause") {
-    val result = spark.sql("""
+    val result = spark.sql(
+      """
         |BEGIN
         |  DECLARE v1 = 5;
         |  EXECUTE IMMEDIATE 'SELECT ?' USING v1;
@@ -104,7 +107,8 @@ class ExecuteImmediateEndToEndSuite extends QueryTest with SharedSparkSession {
   test("EXECUTE IMMEDIATE resolves session var in body and local var in USING") {
     withSessionVariable("v1") {
       spark.sql("DECLARE v1 = 10")
-      val result = spark.sql("""
+      val result = spark.sql(
+        """
           |BEGIN
           |  DECLARE v2 = 20;
           |  EXECUTE IMMEDIATE 'SELECT system.session.v1, ?' USING v2;
@@ -118,7 +122,8 @@ class ExecuteImmediateEndToEndSuite extends QueryTest with SharedSparkSession {
     withSessionVariable("v1") {
       spark.sql("DECLARE v1 = 10")
       val e = intercept[AnalysisException] {
-        spark.sql("""
+        spark.sql(
+          """
             |BEGIN
             |  DECLARE v2 = 20;
             |  EXECUTE IMMEDIATE 'SELECT v1, v2';

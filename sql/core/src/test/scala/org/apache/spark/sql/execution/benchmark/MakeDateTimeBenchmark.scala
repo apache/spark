@@ -21,7 +21,8 @@ import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Synthetic benchmark for the make_date() and make_timestamp() functions. To run this benchmark:
+ * Synthetic benchmark for the make_date() and make_timestamp() functions.
+ * To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class>
@@ -56,7 +57,11 @@ object MakeDateTimeBenchmark extends SqlBasedBenchmark {
     run(benchmark, cardinality, "prepare make_date()", args: _*)
     val foldableExpr = "make_date(2019, 9, 16)"
     run(benchmark, cardinality, foldableExpr, foldableExpr)
-    run(benchmark, cardinality, "make_date(*, *, *)", "make_date" + args.mkString("(", ",", ")"))
+    run(
+      benchmark,
+      cardinality,
+      "make_date(*, *, *)",
+      "make_date" + args.mkString("(", ",", ")"))
 
     benchmark.run()
   }
@@ -67,7 +72,11 @@ object MakeDateTimeBenchmark extends SqlBasedBenchmark {
     val hmsExprs = hmExprs ++ Seq("cast((id % 60000000) / 1000000.0 as decimal(8, 6))")
     val args = ymdExprs ++ hmsExprs
 
-    run(benchmark, cardinality, "prepare make_timestamp()", args: _*)
+    run(
+      benchmark,
+      cardinality,
+      "prepare make_timestamp()",
+      args: _*)
     var foldableExpr = "make_timestamp(2019, 1, 2, 3, 4, 50.123456)"
     run(benchmark, cardinality, foldableExpr, foldableExpr)
     foldableExpr = "make_timestamp(2019, 1, 2, 3, 4, 60.000000)"

@@ -62,14 +62,16 @@ class InMemoryListState[T](clock: Clock, ttl: TTLConfig) extends ListState[T] {
   override def put(newState: Array[T]): Unit = {
     keyToStateValue.put(
       ImplicitGroupingKeyTracker.getImplicitKeyOption.get,
-      mutable.ArrayBuffer.empty[T] ++ newState)
+      mutable.ArrayBuffer.empty[T] ++ newState
+    )
   }
 
   override def appendValue(newState: T): Unit = {
     if (!exists()) {
       keyToStateValue.put(
         ImplicitGroupingKeyTracker.getImplicitKeyOption.get,
-        mutable.ArrayBuffer.empty[T])
+        mutable.ArrayBuffer.empty[T]
+      )
     }
     keyToStateValue(ImplicitGroupingKeyTracker.getImplicitKeyOption.get) += newState
   }
@@ -78,7 +80,8 @@ class InMemoryListState[T](clock: Clock, ttl: TTLConfig) extends ListState[T] {
     if (!exists()) {
       keyToStateValue.put(
         ImplicitGroupingKeyTracker.getImplicitKeyOption.get,
-        mutable.ArrayBuffer.empty[T])
+        mutable.ArrayBuffer.empty[T]
+      )
     }
     keyToStateValue(ImplicitGroupingKeyTracker.getImplicitKeyOption.get) ++= newState
   }
@@ -109,7 +112,8 @@ class InMemoryMapState[K, V](clock: Clock, ttl: TTLConfig) extends MapState[K, V
     if (!exists()) {
       keyToStateValue.put(
         ImplicitGroupingKeyTracker.getImplicitKeyOption.get,
-        mutable.HashMap.empty[K, V])
+        mutable.HashMap.empty[K, V]
+      )
     }
 
     keyToStateValue(ImplicitGroupingKeyTracker.getImplicitKeyOption.get) += (key -> value)
@@ -179,7 +183,7 @@ class InMemoryTimers {
 /**
  * In-memory implementation of StatefulProcessorHandle for testing purposes.
  *
- * ==Internal Implementation==
+ * == Internal Implementation ==
  *
  * '''State Storage:''' All state is stored in Scala mutable collections. A central
  * `states: Map[String, Any]` maps state names to their corresponding in-memory state instances
@@ -187,20 +191,20 @@ class InMemoryTimers {
  * uses a `Map[Any, T]` where the key is the implicit grouping key obtained from
  * [[ImplicitGroupingKeyTracker]].
  *
- * '''Grouping Key Tracking:''' Operations on state are scoped to the current grouping key, which
- * is retrieved via `ImplicitGroupingKeyTracker.getImplicitKeyOption`. This mirrors the production
- * implementation where state is partitioned by key.
+ * '''Grouping Key Tracking:''' Operations on state are scoped to the current grouping key,
+ * which is retrieved via `ImplicitGroupingKeyTracker.getImplicitKeyOption`. This mirrors the
+ * production implementation where state is partitioned by key.
  *
  * '''Timers:''' Managed by [[InMemoryTimers]], which maintains a `Map[Long, Set[Any]]` mapping
  * expiration timestamps to sets of grouping keys. Expired timers can be queried via
  * `listExpiredTimers()`.
  *
  * '''Direct State Access:''' Unlike the production handle, this implementation exposes
- * `peekXxxState` and `updateXxxState` methods for test assertions and setup, allowing direct
- * manipulation of state without going through the processor logic.
+ * `peekXxxState` and `updateXxxState` methods for test assertions and setup, allowing
+ * direct manipulation of state without going through the processor logic.
  */
 class InMemoryStatefulProcessorHandle(timeMode: TimeMode, clock: Clock)
-    extends StatefulProcessorHandle {
+  extends StatefulProcessorHandle {
 
   val timers = new InMemoryTimers()
   private val states = mutable.Map[String, Any]()
@@ -259,7 +263,8 @@ class InMemoryStatefulProcessorHandle(timeMode: TimeMode, clock: Clock)
       require(
         expiryTimestampMs > currentWatermarkMs,
         s"Cannot register timer with expiry $expiryTimestampMs ms " +
-          s"which is not later than the current watermark $currentWatermarkMs ms.")
+          s"which is not later than the current watermark $currentWatermarkMs ms."
+      )
     }
     timers.registerTimer(expiryTimestampMs)
   }

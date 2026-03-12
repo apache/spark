@@ -27,6 +27,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroups
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.types._
 
+
 class FlatMapGroupsWithStateExecHelperSuite extends StreamTest {
 
   import testImplicits._
@@ -47,15 +48,13 @@ class FlatMapGroupsWithStateExecHelperSuite extends StreamTest {
   }
 
   test(s"StateManager v1 - nested type - without timestamp") {
-    val schema = StructType(
-      Seq(
-        StructField("i", IntegerType, nullable = false),
-        StructField(
-          "nested",
-          StructType(
-            Seq(
-              StructField("d", DoubleType, nullable = false),
-              StructField("str", StringType))))))
+    val schema = StructType(Seq(
+      StructField("i", IntegerType, nullable = false),
+      StructField("nested", StructType(Seq(
+        StructField("d", DoubleType, nullable = false),
+        StructField("str", StringType))
+      ))
+    ))
 
     val testValues = Seq(
       NestedStruct(1, Struct(1.0, "someString")),
@@ -71,14 +70,14 @@ class FlatMapGroupsWithStateExecHelperSuite extends StreamTest {
   }
 
   test(s"StateManager v1 - nested type - with timestamp") {
-    val schema = StructType(
-      Seq(
-        StructField("i", IntegerType, nullable = false),
-        StructField(
-          "nested",
-          StructType(
-            Seq(StructField("d", DoubleType, nullable = false), StructField("str", StringType)))),
-        StructField("timeoutTimestamp", IntegerType, nullable = false)))
+    val schema = StructType(Seq(
+      StructField("i", IntegerType, nullable = false),
+      StructField("nested", StructType(Seq(
+        StructField("d", DoubleType, nullable = false),
+        StructField("str", StringType))
+      )),
+      StructField("timeoutTimestamp", IntegerType, nullable = false)
+    ))
 
     val testValues = Seq(
       NestedStruct(1, Struct(1.0, "someString")),
@@ -109,16 +108,15 @@ class FlatMapGroupsWithStateExecHelperSuite extends StreamTest {
   }
 
   test(s"StateManager v2 - nested type - without timestamp") {
-    val schema = StructType(
-      Seq(StructField(
-        "groupState",
-        StructType(Seq(
-          StructField("i", IntegerType, nullable = false),
-          StructField(
-            "nested",
-            StructType(Seq(
-              StructField("d", DoubleType, nullable = false),
-              StructField("str", StringType)))))))))
+    val schema = StructType(Seq(
+      StructField("groupState", StructType(Seq(
+        StructField("i", IntegerType, nullable = false),
+        StructField("nested", StructType(Seq(
+          StructField("d", DoubleType, nullable = false),
+          StructField("str", StringType)
+        )))
+      )))
+    ))
 
     val testValues = Seq(
       NestedStruct(1, Struct(1.0, "someString")),
@@ -130,18 +128,16 @@ class FlatMapGroupsWithStateExecHelperSuite extends StreamTest {
   }
 
   test(s"StateManager v2 - nested type - with timestamp") {
-    val schema = StructType(
-      Seq(
-        StructField(
-          "groupState",
-          StructType(Seq(
-            StructField("i", IntegerType, nullable = false),
-            StructField(
-              "nested",
-              StructType(Seq(
-                StructField("d", DoubleType, nullable = false),
-                StructField("str", StringType))))))),
-        StructField("timeoutTimestamp", LongType, nullable = false)))
+    val schema = StructType(Seq(
+      StructField("groupState", StructType(Seq(
+        StructField("i", IntegerType, nullable = false),
+        StructField("nested", StructType(Seq(
+          StructField("d", DoubleType, nullable = false),
+          StructField("str", StringType)
+        )))
+      ))),
+      StructField("timeoutTimestamp", LongType, nullable = false)
+    ))
 
     val testValues = Seq(
       NestedStruct(1, Struct(1.0, "someString")),
@@ -151,6 +147,7 @@ class FlatMapGroupsWithStateExecHelperSuite extends StreamTest {
 
     testStateManagerWithTimestamp[NestedStruct](version = 2, schema, testValues)
   }
+
 
   def testStateManagerWithoutTimestamp[T: Encoder](
       version: Int,
@@ -190,7 +187,7 @@ class FlatMapGroupsWithStateExecHelperSuite extends StreamTest {
         assert(stateManager.getState(store, key).stateObj == null)
       } catch {
         case e: Throwable =>
-          fail(s"put/get/remove test with '$value' failed", e)
+         fail(s"put/get/remove test with '$value' failed", e)
       }
     }
 

@@ -274,7 +274,9 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
       ctx.addMutableState("int", twoVar, useFreshName = false)
 
       ctx.INPUT_ROW = null
-      ctx.currentVars = Seq(ExprCode(TrueLiteral, oneVar), ExprCode(TrueLiteral, twoVar))
+      ctx.currentVars = Seq(
+        ExprCode(TrueLiteral, oneVar),
+        ExprCode(TrueLiteral, twoVar))
 
       val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(exprs)
       ctx.withSubExprEliminationExprs(subExprs.states) {
@@ -308,9 +310,8 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     }
   }
 
-  test(
-    "SPARK-35410: SubExpr elimination should not include redundant child exprs " +
-      "for conditional expressions") {
+  test("SPARK-35410: SubExpr elimination should not include redundant child exprs " +
+    "for conditional expressions") {
     val add1 = Add(Literal(1), Literal(2))
     val add2 = Add(Literal(2), Literal(3))
     val add3 = Add(add1, add2)
@@ -326,9 +327,8 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     assert(commonExprs.head.expr eq add3)
   }
 
-  test(
-    "SPARK-36073: SubExpr elimination should include common child exprs of conditional " +
-      "expressions") {
+  test("SPARK-36073: SubExpr elimination should include common child exprs of conditional " +
+    "expressions") {
     val add = Add(Literal(1), Literal(2))
     val ifExpr1 = If(Literal(true), add, Literal(3))
     val ifExpr3 = If(GreaterThan(add, Literal(4)), Add(ifExpr1, add), Multiply(ifExpr1, add))
@@ -386,9 +386,8 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     assert(equivalence2.getAllExprStates().map(_.expr) === Seq(add, Add(Literal(3), add)))
   }
 
-  test(
-    "SPARK-35499: Subexpressions should only be extracted from CaseWhen values with an "
-      + "elseValue") {
+  test("SPARK-35499: Subexpressions should only be extracted from CaseWhen values with an "
+    + "elseValue") {
     val add1 = Add(Literal(1), Literal(2))
     val add2 = Add(Literal(2), Literal(3))
     val conditions = (GreaterThan(add1, Literal(3)), add1) ::
@@ -510,8 +509,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
 }
 
 case class CodegenFallbackExpression(child: Expression)
-    extends UnaryExpression
-    with CodegenFallback {
+  extends UnaryExpression with CodegenFallback {
   override def dataType: DataType = child.dataType
   override protected def withNewChildInternal(newChild: Expression): CodegenFallbackExpression =
     copy(child = newChild)

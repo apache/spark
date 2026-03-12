@@ -32,7 +32,9 @@ class RunLengthEncodingSuite extends SparkFunSuite {
   testRunLengthEncoding(new ShortColumnStats, SHORT)
   testRunLengthEncoding(new IntColumnStats, INT)
   testRunLengthEncoding(new LongColumnStats, LONG)
-  Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI").foreach(collation => {
+  Seq(
+    "UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI"
+  ).foreach(collation => {
     val dt = StringType(collation)
     val typeName = if (collation == "UTF8_BINARY") "STRING" else s"STRING($collation)"
     testRunLengthEncoding(new StringColumnStats(dt), STRING(dt), false, Some(typeName))
@@ -132,8 +134,7 @@ class RunLengthEncodingSuite extends SparkFunSuite {
       assertResult(RunLengthEncoding.typeId, "Wrong compression scheme ID")(buffer.getInt())
 
       val decoder = RunLengthEncoding.decoder(buffer, columnType)
-      val columnVector = new OnHeapColumnVector(
-        inputSeq.length,
+      val columnVector = new OnHeapColumnVector(inputSeq.length,
         ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType))
       decoder.decompress(columnVector, inputSeq.length)
 

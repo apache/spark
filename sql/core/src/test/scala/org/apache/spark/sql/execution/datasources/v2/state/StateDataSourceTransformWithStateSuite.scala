@@ -36,9 +36,11 @@ import org.apache.spark.util.Utils
 class StatefulProcessorWithSingleValueVar extends RunningCountStatefulProcessor {
   @transient private var _valueState: ValueState[TestClass] = _
 
-  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
-    _valueState = getHandle
-      .getValueState[TestClass]("valueState", Encoders.product[TestClass], TTLConfig.NONE)
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
+    _valueState = getHandle.getValueState[TestClass](
+      "valueState", Encoders.product[TestClass], TTLConfig.NONE)
   }
 
   override def handleInputRows(
@@ -51,12 +53,15 @@ class StatefulProcessorWithSingleValueVar extends RunningCountStatefulProcessor 
   }
 }
 
-class StatefulProcessorWithTTL extends StatefulProcessor[String, String, (String, String)] {
+class StatefulProcessorWithTTL
+  extends StatefulProcessor[String, String, (String, String)] {
   @transient protected var _countState: ValueState[Long] = _
 
-  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
-    _countState = getHandle
-      .getValueState[Long]("countState", Encoders.scalaLong, TTLConfig(Duration.ofMillis(30000)))
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
+    _countState = getHandle.getValueState[Long]("countState",
+      Encoders.scalaLong, TTLConfig(Duration.ofMillis(30000)))
   }
 
   override def handleInputRows(
@@ -75,10 +80,13 @@ class StatefulProcessorWithTTL extends StatefulProcessor[String, String, (String
 }
 
 /** Stateful processor tracking groups belonging to sessions with/without TTL */
-class SessionGroupsStatefulProcessor extends StatefulProcessor[String, (String, String), String] {
+class SessionGroupsStatefulProcessor extends
+  StatefulProcessor[String, (String, String), String] {
   @transient private var _groupsList: ListState[String] = _
 
-  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
     _groupsList = getHandle.getListState("groupsList", Encoders.STRING, TTLConfig.NONE)
   }
 
@@ -93,14 +101,14 @@ class SessionGroupsStatefulProcessor extends StatefulProcessor[String, (String, 
   }
 }
 
-class SessionGroupsStatefulProcessorWithTTL
-    extends StatefulProcessor[String, (String, String), String] {
+class SessionGroupsStatefulProcessorWithTTL extends
+  StatefulProcessor[String, (String, String), String] {
   @transient private var _groupsListWithTTL: ListState[String] = _
 
-  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
-    _groupsListWithTTL = getHandle.getListState(
-      "groupsListWithTTL",
-      Encoders.STRING,
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
+    _groupsListWithTTL = getHandle.getListState("groupsListWithTTL", Encoders.STRING,
       TTLConfig(Duration.ofMillis(30000)))
   }
 
@@ -116,30 +124,24 @@ class SessionGroupsStatefulProcessorWithTTL
 }
 
 /**
- * Test suite to verify integration of state data source reader with the transformWithState
- * operator
+ * Test suite to verify integration of state data source reader with the transformWithState operator
  */
 @SlowSQLTest
-class StateDataSourceTransformWithStateSuite
-    extends StateStoreMetricsTest
-    with AlsoTestWithEncodingTypes
-    with AlsoTestWithRocksDBFeatures {
+class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
+  with AlsoTestWithEncodingTypes with AlsoTestWithRocksDBFeatures {
 
   import testImplicits._
 
   test("state data source integration - value state with single variable") {
     withTempDir { tempDir =>
-      withSQLConf(
-        SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-          classOf[RocksDBStateStoreProvider].getName,
+      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName,
         SQLConf.SHUFFLE_PARTITIONS.key ->
           TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
         val inputData = MemoryStream[String]
-        val result = inputData
-          .toDS()
+        val result = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new StatefulProcessorWithSingleValueVar(),
+          .transformWithState(new StatefulProcessorWithSingleValueVar(),
             TimeMode.None(),
             OutputMode.Update())
 
@@ -149,7 +151,8 @@ class StateDataSourceTransformWithStateSuite
           CheckNewAnswer(("a", "1")),
           AddData(inputData, "b"),
           CheckNewAnswer(("b", "1")),
-          StopStream)
+          StopStream
+        )
 
         val stateReaderDf = spark.read
           .format("statestore")
@@ -159,11 +162,11 @@ class StateDataSourceTransformWithStateSuite
 
         val resultDf = stateReaderDf.selectExpr(
           "key.value AS groupingKey",
-          "value.id AS valueId",
-          "value.name AS valueName",
+          "value.id AS valueId", "value.name AS valueName",
           "partition_id")
 
-        checkAnswer(resultDf, Seq(Row("a", 1L, "dummyKey", 0), Row("b", 1L, "dummyKey", 1)))
+        checkAnswer(resultDf,
+          Seq(Row("a", 1L, "dummyKey", 0), Row("b", 1L, "dummyKey", 1)))
 
         // non existent state variable should fail
         val ex = intercept[Exception] {
@@ -190,21 +193,17 @@ class StateDataSourceTransformWithStateSuite
     }
   }
 
-  testWithChangelogCheckpointingEnabled(
-    "state data source cdf integration - " +
-      "value state with single variable") {
+  testWithChangelogCheckpointingEnabled("state data source cdf integration - " +
+    "value state with single variable") {
     withTempDir { tempDir =>
-      withSQLConf(
-        SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-          classOf[RocksDBStateStoreProvider].getName,
+      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName,
         SQLConf.SHUFFLE_PARTITIONS.key ->
           TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
         val inputData = MemoryStream[String]
-        val result = inputData
-          .toDS()
+        val result = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new StatefulProcessorWithSingleValueVar(),
+          .transformWithState(new StatefulProcessorWithSingleValueVar(),
             TimeMode.None(),
             OutputMode.Update())
 
@@ -214,25 +213,24 @@ class StateDataSourceTransformWithStateSuite
           CheckNewAnswer(("a", "1")),
           AddData(inputData, "b"),
           CheckNewAnswer(("b", "1")),
-          StopStream)
+          StopStream
+        )
 
         val changeFeedDf = spark.read
-          .format("statestore")
-          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
-          .option(StateSourceOptions.STATE_VAR_NAME, "valueState")
-          .option(StateSourceOptions.READ_CHANGE_FEED, true)
-          .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
-          .load()
+            .format("statestore")
+            .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+            .option(StateSourceOptions.STATE_VAR_NAME, "valueState")
+            .option(StateSourceOptions.READ_CHANGE_FEED, true)
+            .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
+            .load()
 
         val opDf = changeFeedDf.selectExpr(
           "change_type",
           "key.value AS groupingKey",
-          "value.id AS valueId",
-          "value.name AS valueName",
+          "value.id AS valueId", "value.name AS valueName",
           "partition_id")
 
-        checkAnswer(
-          opDf,
+        checkAnswer(opDf,
           Seq(Row("update", "a", 1L, "dummyKey", 0), Row("update", "b", 1L, "dummyKey", 1)))
       }
     }
@@ -240,17 +238,14 @@ class StateDataSourceTransformWithStateSuite
 
   test("state data source integration - value state with single variable and TTL") {
     withTempDir { tempDir =>
-      withSQLConf(
-        SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-          classOf[RocksDBStateStoreProvider].getName,
+      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName,
         SQLConf.SHUFFLE_PARTITIONS.key ->
           TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
         val inputData = MemoryStream[String]
-        val result = inputData
-          .toDS()
+        val result = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new StatefulProcessorWithTTL(),
+          .transformWithState(new StatefulProcessorWithTTL(),
             TimeMode.ProcessingTime(),
             OutputMode.Update())
 
@@ -262,7 +257,8 @@ class StateDataSourceTransformWithStateSuite
             // wait for the batch to run since we are using processing time
             Thread.sleep(5000)
           },
-          StopStream)
+          StopStream
+        )
 
         val stateReaderDf = spark.read
           .format("statestore")
@@ -271,10 +267,7 @@ class StateDataSourceTransformWithStateSuite
           .load()
 
         val resultDf = stateReaderDf.selectExpr(
-          "key.value",
-          "value.value",
-          "value.ttlExpirationMs",
-          "partition_id")
+          "key.value", "value.value", "value.ttlExpirationMs", "partition_id")
 
         var count = 0L
         resultDf.collect().foreach { row =>
@@ -287,9 +280,9 @@ class StateDataSourceTransformWithStateSuite
 
         val answerDf = stateReaderDf.selectExpr(
           "key.value AS groupingKey",
-          "value.value.value AS valueId",
-          "partition_id")
-        checkAnswer(answerDf, Seq(Row("a", 1L, 0), Row("b", 1L, 1)))
+          "value.value.value AS valueId", "partition_id")
+        checkAnswer(answerDf,
+          Seq(Row("a", 1L, 0), Row("b", 1L, 1)))
 
         // non existent state variable should fail
         val ex = intercept[Exception] {
@@ -305,29 +298,23 @@ class StateDataSourceTransformWithStateSuite
     }
   }
 
-  testWithChangelogCheckpointingEnabled(
-    "state data source cdf integration - " +
-      "value state with single variable and TTL") {
+  testWithChangelogCheckpointingEnabled("state data source cdf integration - " +
+    "value state with single variable and TTL") {
     withTempDir { tempDir =>
-      withSQLConf(
-        SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-          classOf[RocksDBStateStoreProvider].getName,
+      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName,
         SQLConf.SHUFFLE_PARTITIONS.key ->
           TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
         val inputData = MemoryStream[String]
-        val result = inputData
-          .toDS()
+        val result = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new StatefulProcessorWithTTL(),
+          .transformWithState(new StatefulProcessorWithTTL(),
             TimeMode.ProcessingTime(),
             OutputMode.Update())
 
         val clock = new StreamManualClock
         testStream(result)(
-          StartStream(
-            Trigger.ProcessingTime("1 second"),
-            triggerClock = clock,
+          StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock,
             checkpointLocation = tempDir.getCanonicalPath),
           AddData(inputData, "a"),
           AddData(inputData, "b"),
@@ -339,7 +326,8 @@ class StateDataSourceTransformWithStateSuite
           AddData(inputData, "d"),
           AdvanceManualClock(30 * 1000),
           CheckNewAnswer(("d", "1")),
-          StopStream)
+          StopStream
+        )
 
         val stateReaderDf = spark.read
           .format("statestore")
@@ -350,10 +338,7 @@ class StateDataSourceTransformWithStateSuite
           .load()
 
         val resultDf = stateReaderDf.selectExpr(
-          "key.value",
-          "value.value",
-          "value.ttlExpirationMs",
-          "partition_id")
+          "key.value", "value.value", "value.ttlExpirationMs", "partition_id")
 
         var count = 0L
         resultDf.collect().foreach { row =>
@@ -369,12 +354,9 @@ class StateDataSourceTransformWithStateSuite
         val answerDf = stateReaderDf.selectExpr(
           "change_type",
           "key.value AS groupingKey",
-          "value.value.value AS valueId",
-          "partition_id")
-        checkAnswer(
-          answerDf,
-          Seq(
-            Row("update", "a", 1L, 0),
+          "value.value.value AS valueId", "partition_id")
+        checkAnswer(answerDf,
+          Seq(Row("update", "a", 1L, 0),
             Row("update", "b", 1L, 1),
             Row("update", "c", 1L, 2),
             Row("delete", "a", null, 0),
@@ -387,16 +369,13 @@ class StateDataSourceTransformWithStateSuite
 
   test("state data source integration - list state") {
     withTempDir { tempDir =>
-      withSQLConf(
-        SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-          classOf[RocksDBStateStoreProvider].getName) {
+      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName) {
 
         val inputData = MemoryStream[(String, String)]
-        val result = inputData
-          .toDS()
+        val result = inputData.toDS()
           .groupByKey(x => x._1)
-          .transformWithState(
-            new SessionGroupsStatefulProcessor(),
+          .transformWithState(new SessionGroupsStatefulProcessor(),
             TimeMode.None(),
             OutputMode.Update())
 
@@ -409,7 +388,8 @@ class StateDataSourceTransformWithStateSuite
           AddData(inputData, ("session3", "group7")),
           AddData(inputData, ("session1", "group4")),
           CheckNewAnswer(),
-          StopStream)
+          StopStream
+        )
 
         // Verify that the state can be read in flattened/non-flattened modes
         val stateReaderDf = spark.read
@@ -420,17 +400,16 @@ class StateDataSourceTransformWithStateSuite
           .load()
 
         val listStateDf = stateReaderDf
-          .selectExpr("key.value AS groupingKey", "list_value.value AS valueList", "partition_id")
-          .select($"groupingKey", explode($"valueList"))
+          .selectExpr(
+      "key.value AS groupingKey",
+            "list_value.value AS valueList",
+            "partition_id")
+          .select($"groupingKey",
+            explode($"valueList"))
 
-        checkAnswer(
-          listStateDf,
-          Seq(
-            Row("session1", "group1"),
-            Row("session1", "group2"),
-            Row("session1", "group4"),
-            Row("session2", "group1"),
-            Row("session3", "group7")))
+        checkAnswer(listStateDf,
+          Seq(Row("session1", "group1"), Row("session1", "group2"), Row("session1", "group4"),
+            Row("session2", "group1"), Row("session3", "group7")))
 
         val flattenedReaderDf = spark.read
           .format("statestore")
@@ -441,30 +420,22 @@ class StateDataSourceTransformWithStateSuite
         val resultDf = flattenedReaderDf.selectExpr(
           "key.value AS groupingKey",
           "list_element.value AS valueList")
-        checkAnswer(
-          resultDf,
-          Seq(
-            Row("session1", "group1"),
-            Row("session1", "group2"),
-            Row("session1", "group4"),
-            Row("session2", "group1"),
-            Row("session3", "group7")))
+        checkAnswer(resultDf,
+          Seq(Row("session1", "group1"), Row("session1", "group2"), Row("session1", "group4"),
+            Row("session2", "group1"), Row("session3", "group7")))
       }
     }
   }
 
   testWithChangelogCheckpointingEnabled("state data source cdf integration - list state") {
     withTempDir { tempDir =>
-      withSQLConf(
-        SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-          classOf[RocksDBStateStoreProvider].getName) {
+      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName) {
 
         val inputData = MemoryStream[(String, String)]
-        val result = inputData
-          .toDS()
+        val result = inputData.toDS()
           .groupByKey(x => x._1)
-          .transformWithState(
-            new SessionGroupsStatefulProcessor(),
+          .transformWithState(new SessionGroupsStatefulProcessor(),
             TimeMode.None(),
             OutputMode.Update())
 
@@ -477,7 +448,8 @@ class StateDataSourceTransformWithStateSuite
           AddData(inputData, ("session3", "group7")),
           AddData(inputData, ("session1", "group4")),
           CheckNewAnswer(),
-          StopStream)
+          StopStream
+        )
 
         val flattenedReaderDf = spark.read
           .format("statestore")
@@ -492,10 +464,8 @@ class StateDataSourceTransformWithStateSuite
           "key.value AS groupingKey",
           "list_element.value AS valueList",
           "partition_id")
-        checkAnswer(
-          resultDf,
-          Seq(
-            Row("append", "session1", "group1", 0),
+        checkAnswer(resultDf,
+          Seq(Row("append", "session1", "group1", 0),
             Row("append", "session1", "group2", 0),
             Row("append", "session1", "group4", 0),
             Row("append", "session2", "group1", 0),
@@ -506,17 +476,14 @@ class StateDataSourceTransformWithStateSuite
 
   test("state data source integration - list state and TTL") {
     withTempDir { tempDir =>
-      withSQLConf(
-        SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-          classOf[RocksDBStateStoreProvider].getName,
+      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName,
         SQLConf.SHUFFLE_PARTITIONS.key ->
           TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
         val inputData = MemoryStream[(String, String)]
-        val result = inputData
-          .toDS()
+        val result = inputData.toDS()
           .groupByKey(x => x._1)
-          .transformWithState(
-            new SessionGroupsStatefulProcessorWithTTL(),
+          .transformWithState(new SessionGroupsStatefulProcessorWithTTL(),
             TimeMode.ProcessingTime(),
             OutputMode.Update())
 
@@ -531,7 +498,8 @@ class StateDataSourceTransformWithStateSuite
             // wait for the batch to run since we are using processing time
             Thread.sleep(5000)
           },
-          StopStream)
+          StopStream
+        )
 
         // Verify that the state can be read in flattened/non-flattened modes
         val stateReaderDf = spark.read
@@ -542,8 +510,12 @@ class StateDataSourceTransformWithStateSuite
           .load()
 
         val listStateDf = stateReaderDf
-          .selectExpr("key.value AS groupingKey", "list_value AS valueList", "partition_id")
-          .select($"groupingKey", explode($"valueList").as("valueList"))
+          .selectExpr(
+      "key.value AS groupingKey",
+            "list_value AS valueList",
+            "partition_id")
+          .select($"groupingKey",
+            explode($"valueList").as("valueList"))
 
         val resultDf = listStateDf.selectExpr("valueList.ttlExpirationMs")
         var count = 0L
@@ -555,16 +527,12 @@ class StateDataSourceTransformWithStateSuite
         // verify that 5 state rows are present
         assert(count === 5)
 
-        val valuesDf = listStateDf.selectExpr("groupingKey", "valueList.value.value AS groupId")
+        val valuesDf = listStateDf.selectExpr("groupingKey",
+          "valueList.value.value AS groupId")
 
-        checkAnswer(
-          valuesDf,
-          Seq(
-            Row("session1", "group1"),
-            Row("session1", "group2"),
-            Row("session1", "group4"),
-            Row("session2", "group1"),
-            Row("session3", "group7")))
+        checkAnswer(valuesDf,
+          Seq(Row("session1", "group1"), Row("session1", "group2"), Row("session1", "group4"),
+          Row("session2", "group1"), Row("session3", "group7")))
 
         val flattenedStateReaderDf = spark.read
           .format("statestore")
@@ -584,42 +552,32 @@ class StateDataSourceTransformWithStateSuite
         assert(flattenedCount === 5)
 
         val outputDf = flattenedStateReaderDf
-          .selectExpr("key.value AS groupingKey", "list_element.value.value AS groupId")
+          .selectExpr("key.value AS groupingKey",
+            "list_element.value.value AS groupId")
 
-        checkAnswer(
-          outputDf,
-          Seq(
-            Row("session1", "group1"),
-            Row("session1", "group2"),
-            Row("session1", "group4"),
-            Row("session2", "group1"),
-            Row("session3", "group7")))
+        checkAnswer(outputDf,
+          Seq(Row("session1", "group1"), Row("session1", "group2"), Row("session1", "group4"),
+          Row("session2", "group1"), Row("session3", "group7")))
       }
     }
   }
 
-  testWithChangelogCheckpointingEnabled(
-    "state data source cdf integration - list state and TTL") {
+  testWithChangelogCheckpointingEnabled("state data source cdf integration - list state and TTL") {
     withTempDir { tempDir =>
-      withSQLConf(
-        SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-          classOf[RocksDBStateStoreProvider].getName,
+      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName,
         SQLConf.SHUFFLE_PARTITIONS.key ->
           TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
         val inputData = MemoryStream[(String, String)]
-        val result = inputData
-          .toDS()
+        val result = inputData.toDS()
           .groupByKey(x => x._1)
-          .transformWithState(
-            new SessionGroupsStatefulProcessorWithTTL(),
+          .transformWithState(new SessionGroupsStatefulProcessorWithTTL(),
             TimeMode.ProcessingTime(),
             OutputMode.Update())
 
         val clock = new StreamManualClock
         testStream(result)(
-          StartStream(
-            Trigger.ProcessingTime("1 second"),
-            triggerClock = clock,
+          StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock,
             checkpointLocation = tempDir.getCanonicalPath),
           AddData(inputData, ("session1", "group2")),
           AddData(inputData, ("session1", "group1")),
@@ -630,7 +588,8 @@ class StateDataSourceTransformWithStateSuite
           AddData(inputData, ("session1", "group4")),
           AdvanceManualClock(30 * 1000),
           CheckNewAnswer(),
-          StopStream)
+          StopStream
+        )
 
         val flattenedStateReaderDf = spark.read
           .format("statestore")
@@ -660,10 +619,8 @@ class StateDataSourceTransformWithStateSuite
             "list_element.value.value AS groupId",
             "partition_id")
 
-        checkAnswer(
-          outputDf,
-          Seq(
-            Row("append", "session1", "group1", 0),
+        checkAnswer(outputDf,
+          Seq(Row("append", "session1", "group1", 0),
             Row("append", "session1", "group2", 0),
             Row("append", "session1", "group4", 0),
             Row("append", "session2", "group1", 0),
@@ -676,27 +633,29 @@ class StateDataSourceTransformWithStateSuite
   }
 
   test("state data source integration - map state with single variable") {
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName,
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
       withTempDir { tempDir =>
         val inputData = MemoryStream[InputMapRow]
-        val result = inputData
-          .toDS()
+        val result = inputData.toDS()
           .groupByKey(x => x.key)
-          .transformWithState(new TestMapStateProcessor(), TimeMode.None(), OutputMode.Append())
+          .transformWithState(new TestMapStateProcessor(),
+            TimeMode.None(),
+            OutputMode.Append())
         testStream(result, OutputMode.Append())(
           StartStream(checkpointLocation = tempDir.getCanonicalPath),
           AddData(inputData, InputMapRow("k1", "updateValue", ("v1", "10"))),
           AddData(inputData, InputMapRow("k1", "exists", ("", ""))),
           AddData(inputData, InputMapRow("k2", "exists", ("", ""))),
           CheckNewAnswer(("k1", "exists", "true"), ("k2", "exists", "false")),
+
           AddData(inputData, InputMapRow("k1", "updateValue", ("v2", "5"))),
           AddData(inputData, InputMapRow("k2", "updateValue", ("v2", "3"))),
           ProcessAllAvailable(),
-          StopStream)
+          StopStream
+        )
 
         // Verify that the state can be read in flattened/non-flattened modes
         val stateReaderDf = spark.read
@@ -706,14 +665,16 @@ class StateDataSourceTransformWithStateSuite
           .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, false)
           .load()
 
-        val resultDf =
-          stateReaderDf.selectExpr("key.value AS groupingKey", "map_value AS mapValue")
+        val resultDf = stateReaderDf.selectExpr(
+          "key.value AS groupingKey", "map_value AS mapValue")
 
-        checkAnswer(
-          resultDf,
+        checkAnswer(resultDf,
           Seq(
-            Row("k1", Map(Row("v1") -> Row("10"), Row("v2") -> Row("5"))),
-            Row("k2", Map(Row("v2") -> Row("3")))))
+            Row("k1",
+              Map(Row("v1") -> Row("10"), Row("v2") -> Row("5"))),
+            Row("k2",
+              Map(Row("v2") -> Row("3"))))
+        )
 
         val flattenedStateReaderDf = spark.read
           .format("statestore")
@@ -722,42 +683,45 @@ class StateDataSourceTransformWithStateSuite
           .load()
 
         val outputDf = flattenedStateReaderDf
-          .selectExpr(
-            "key.value AS groupingKey",
+          .selectExpr("key.value AS groupingKey",
             "user_map_key.value AS mapKey",
             "user_map_value.value AS mapValue")
 
-        checkAnswer(
-          outputDf,
-          Seq(Row("k1", "v1", "10"), Row("k1", "v2", "5"), Row("k2", "v2", "3")))
+        checkAnswer(outputDf,
+          Seq(
+            Row("k1", "v1", "10"),
+            Row("k1", "v2", "5"),
+            Row("k2", "v2", "3"))
+        )
       }
     }
   }
 
-  testWithChangelogCheckpointingEnabled(
-    "state data source cdf integration - " +
-      "map state with single variable") {
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName,
+  testWithChangelogCheckpointingEnabled("state data source cdf integration - " +
+   "map state with single variable") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
       withTempDir { tempDir =>
         val inputData = MemoryStream[InputMapRow]
-        val result = inputData
-          .toDS()
+        val result = inputData.toDS()
           .groupByKey(x => x.key)
-          .transformWithState(new TestMapStateProcessor(), TimeMode.None(), OutputMode.Append())
+          .transformWithState(new TestMapStateProcessor(),
+            TimeMode.None(),
+            OutputMode.Append())
         testStream(result, OutputMode.Append())(
           StartStream(checkpointLocation = tempDir.getCanonicalPath),
           AddData(inputData, InputMapRow("k1", "updateValue", ("v1", "10"))),
           AddData(inputData, InputMapRow("k1", "exists", ("", ""))),
           AddData(inputData, InputMapRow("k2", "exists", ("", ""))),
           CheckNewAnswer(("k1", "exists", "true"), ("k2", "exists", "false")),
+
           AddData(inputData, InputMapRow("k1", "updateValue", ("v2", "5"))),
           AddData(inputData, InputMapRow("k2", "updateValue", ("v2", "3"))),
           ProcessAllAvailable(),
-          StopStream)
+          StopStream
+        )
 
         val flattenedStateReaderDf = spark.read
           .format("statestore")
@@ -775,27 +739,25 @@ class StateDataSourceTransformWithStateSuite
             "user_map_value.value AS mapValue",
             "partition_id")
 
-        checkAnswer(
-          outputDf,
+        checkAnswer(outputDf,
           Seq(
             Row("update", "k1", "v1", "10", 4L),
             Row("update", "k1", "v2", "5", 4L),
-            Row("update", "k2", "v2", "3", 2L)))
+            Row("update", "k2", "v2", "3", 2L))
+        )
       }
     }
   }
 
   test("state data source integration - map state TTL with single variable") {
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName,
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
       withTempDir { tempDir =>
         val inputStream = MemoryStream[MapInputEvent]
         val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
-        val result = inputStream
-          .toDS()
+        val result = inputStream.toDS()
           .groupByKey(x => x.key)
           .transformWithState(
             new MapStateTTLProcessor(ttlConfig),
@@ -804,31 +766,34 @@ class StateDataSourceTransformWithStateSuite
 
         val clock = new StreamManualClock
         testStream(result)(
-          StartStream(
-            Trigger.ProcessingTime("1 second"),
-            triggerClock = clock,
+          StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock,
             checkpointLocation = tempDir.getCanonicalPath),
-          AddData(
-            inputStream,
+          AddData(inputStream,
             MapInputEvent("k1", "key1", "put", 1),
-            MapInputEvent("k1", "key2", "put", 2)),
+            MapInputEvent("k1", "key2", "put", 2)
+          ),
           AdvanceManualClock(1 * 1000), // batch timestamp: 1000
           CheckNewAnswer(),
-          AddData(
-            inputStream,
+          AddData(inputStream,
             MapInputEvent("k1", "key1", "get", -1),
-            MapInputEvent("k1", "key2", "get", -1)),
+            MapInputEvent("k1", "key2", "get", -1)
+          ),
           AdvanceManualClock(30 * 1000), // batch timestamp: 31000
           CheckNewAnswer(
             MapOutputEvent("k1", "key1", 1, isTTLValue = false, -1),
-            MapOutputEvent("k1", "key2", 2, isTTLValue = false, -1)),
+            MapOutputEvent("k1", "key2", 2, isTTLValue = false, -1)
+          ),
           // get values from ttl state
-          AddData(inputStream, MapInputEvent("k1", "", "get_values_in_ttl_state", -1)),
+          AddData(inputStream,
+            MapInputEvent("k1", "", "get_values_in_ttl_state", -1)
+          ),
           AdvanceManualClock(1 * 1000), // batch timestamp: 32000
           CheckNewAnswer(
             MapOutputEvent("k1", "key1", -1, isTTLValue = true, 61000),
-            MapOutputEvent("k1", "key2", -1, isTTLValue = true, 61000)),
-          StopStream)
+            MapOutputEvent("k1", "key2", -1, isTTLValue = true, 61000)
+          ),
+          StopStream
+        )
 
         // Verify that the state can be read in flattened/non-flattened modes
         val stateReaderDf = spark.read
@@ -838,15 +803,15 @@ class StateDataSourceTransformWithStateSuite
           .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, false)
           .load()
 
-        val resultDf =
-          stateReaderDf.selectExpr("key.value AS groupingKey", "map_value AS mapValue")
+        val resultDf = stateReaderDf.selectExpr(
+          "key.value AS groupingKey", "map_value AS mapValue")
 
-        checkAnswer(
-          resultDf,
+        checkAnswer(resultDf,
           Seq(
-            Row(
-              "k1",
-              Map(Row("key2") -> Row(Row(2), 61000L), Row("key1") -> Row(Row(1), 61000L)))))
+            Row("k1",
+              Map(Row("key2") -> Row(Row(2), 61000L),
+                Row("key1") -> Row(Row(1), 61000L))))
+        )
 
         val flattenedStateReaderDf = spark.read
           .format("statestore")
@@ -855,30 +820,30 @@ class StateDataSourceTransformWithStateSuite
           .load()
 
         val outputDf = flattenedStateReaderDf
-          .selectExpr(
-            "key.value AS groupingKey",
+          .selectExpr("key.value AS groupingKey",
             "user_map_key.value AS mapKey",
             "user_map_value.value.value AS mapValue",
             "user_map_value.ttlExpirationMs AS ttlTimestamp")
 
-        checkAnswer(outputDf, Seq(Row("k1", "key1", 1, 61000L), Row("k1", "key2", 2, 61000L)))
+        checkAnswer(outputDf,
+          Seq(
+            Row("k1", "key1", 1, 61000L),
+            Row("k1", "key2", 2, 61000L))
+        )
       }
     }
   }
 
-  testWithChangelogCheckpointingEnabled(
-    "state data source cdf integration - " +
-      "map state TTL with single variable") {
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName,
+  testWithChangelogCheckpointingEnabled("state data source cdf integration - " +
+   "map state TTL with single variable") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
       withTempDir { tempDir =>
         val inputStream = MemoryStream[MapInputEvent]
         val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
-        val result = inputStream
-          .toDS()
+        val result = inputStream.toDS()
           .groupByKey(x => x.key)
           .transformWithState(
             new MapStateTTLProcessor(ttlConfig),
@@ -887,34 +852,39 @@ class StateDataSourceTransformWithStateSuite
 
         val clock = new StreamManualClock
         testStream(result)(
-          StartStream(
-            Trigger.ProcessingTime("1 second"),
-            triggerClock = clock,
+          StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock,
             checkpointLocation = tempDir.getCanonicalPath),
-          AddData(
-            inputStream,
+          AddData(inputStream,
             MapInputEvent("k1", "key1", "put", 1),
-            MapInputEvent("k1", "key2", "put", 2)),
+            MapInputEvent("k1", "key2", "put", 2)
+          ),
           AdvanceManualClock(1 * 1000), // batch timestamp: 1000
           CheckNewAnswer(),
-          AddData(
-            inputStream,
+          AddData(inputStream,
             MapInputEvent("k1", "key1", "get", -1),
-            MapInputEvent("k1", "key2", "get", -1)),
+            MapInputEvent("k1", "key2", "get", -1)
+          ),
           AdvanceManualClock(30 * 1000), // batch timestamp: 31000
           CheckNewAnswer(
             MapOutputEvent("k1", "key1", 1, isTTLValue = false, -1),
-            MapOutputEvent("k1", "key2", 2, isTTLValue = false, -1)),
+            MapOutputEvent("k1", "key2", 2, isTTLValue = false, -1)
+          ),
           // get values from ttl state
-          AddData(inputStream, MapInputEvent("k1", "", "get_values_in_ttl_state", -1)),
+          AddData(inputStream,
+            MapInputEvent("k1", "", "get_values_in_ttl_state", -1)
+          ),
           AdvanceManualClock(1 * 1000), // batch timestamp: 32000
           CheckNewAnswer(
             MapOutputEvent("k1", "key1", -1, isTTLValue = true, 61000),
-            MapOutputEvent("k1", "key2", -1, isTTLValue = true, 61000)),
-          AddData(inputStream, MapInputEvent("k2", "key3", "put", 3)),
+            MapOutputEvent("k1", "key2", -1, isTTLValue = true, 61000)
+          ),
+          AddData(inputStream,
+            MapInputEvent("k2", "key3", "put", 3)
+          ),
           AdvanceManualClock(30 * 1000), // batch timestamp: 62000
           CheckNewAnswer(),
-          StopStream)
+          StopStream
+        )
 
         val flattenedStateReaderDf = spark.read
           .format("statestore")
@@ -933,30 +903,28 @@ class StateDataSourceTransformWithStateSuite
             "user_map_value.ttlExpirationMs AS ttlTimestamp",
             "partition_id")
 
-        checkAnswer(
-          outputDf,
+        checkAnswer(outputDf,
           Seq(
             Row("update", "k1", "key1", 1, 61000L, 4L),
             Row("update", "k1", "key2", 2, 61000L, 4L),
             Row("delete", "k1", "key1", null, null, 4L),
             Row("delete", "k1", "key2", null, null, 4L),
-            Row("update", "k2", "key3", 3, 122000L, 2L)))
+            Row("update", "k2", "key3", 3, 122000L, 2L))
+        )
       }
     }
   }
 
   test("state data source - processing-time timers integration") {
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName,
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
       withTempDir { tempDir =>
         val clock = new StreamManualClock
 
         val inputData = MemoryStream[String]
-        val result = inputData
-          .toDS()
+        val result = inputData.toDS()
           .groupByKey(x => x)
           .transformWithState(
             new RunningCountStatefulProcessorWithProcTimeTimerUpdates(),
@@ -964,9 +932,7 @@ class StateDataSourceTransformWithStateSuite
             OutputMode.Update())
 
         testStream(result, OutputMode.Update())(
-          StartStream(
-            Trigger.ProcessingTime("1 second"),
-            triggerClock = clock,
+          StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock,
             checkpointLocation = tempDir.getCanonicalPath),
           AddData(inputData, "a"),
           AdvanceManualClock(1 * 1000),
@@ -983,26 +949,25 @@ class StateDataSourceTransformWithStateSuite
           .load()
 
         val resultDf = stateReaderDf.selectExpr(
-          "key.value AS groupingKey",
+       "key.value AS groupingKey",
           "expiration_timestamp_ms AS expiryTimestamp",
           "partition_id")
 
-        checkAnswer(resultDf, Seq(Row("a", 10500L, 0)))
+        checkAnswer(resultDf,
+          Seq(Row("a", 10500L, 0)))
       }
     }
   }
 
   test("state data source - event-time timers integration") {
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName,
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
       withTempDir { tempDir =>
         val inputData = MemoryStream[(String, Int)]
         val result =
-          inputData
-            .toDS()
+          inputData.toDS()
             .select($"_1".as("key"), timestamp_seconds($"_2").as("eventTime"))
             .withWatermark("eventTime", "10 seconds")
             .as[(String, Long)]
@@ -1014,6 +979,7 @@ class StateDataSourceTransformWithStateSuite
 
         testStream(result, OutputMode.Update())(
           StartStream(checkpointLocation = tempDir.getCanonicalPath),
+
           AddData(inputData, ("a", 11), ("a", 13), ("a", 15)),
           // Max event time = 15. Timeout timestamp for "a" = 15 + 5 = 20. Watermark = 15 - 10 = 5.
           CheckNewAnswer(("a", 15)), // Output = max event time of a
@@ -1033,16 +999,17 @@ class StateDataSourceTransformWithStateSuite
           "expiration_timestamp_ms AS expiryTimestamp",
           "partition_id")
 
-        checkAnswer(resultDf, Seq(Row("a", 20000L, 0)))
+        checkAnswer(resultDf,
+          Seq(Row("a", 20000L, 0)))
       }
     }
   }
 
   /**
    * Note that we cannot use the golden files approach for transformWithState. The new schema
-   * format keeps track of the schema file path as an absolute path which cannot be used with the
-   * getResource model used in other similar tests. Hence, we force the snapshot creation for
-   * given versions and ensure that we are loading from given start snapshot version for loading
+   * format keeps track of the schema file path as an absolute path which cannot be used with
+   * the getResource model used in other similar tests. Hence, we force the snapshot creation
+   * for given versions and ensure that we are loading from given start snapshot version for loading
    * the state data.
    */
   testWithChangelogCheckpointingEnabled("snapshotStartBatchId with transformWithState") {
@@ -1050,8 +1017,8 @@ class StateDataSourceTransformWithStateSuite
       @transient protected var _countState: ValueState[Long] = _
 
       override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
-        _countState =
-          getHandle.getValueState[Long]("countState", Encoders.scalaLong, TTLConfig.NONE)
+        _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong,
+          TTLConfig.NONE)
       }
 
       override def handleInputRows(
@@ -1071,7 +1038,7 @@ class StateDataSourceTransformWithStateSuite
     withTempDir { tmpDir =>
       withSQLConf(
         SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-          classOf[RocksDBStateStoreProvider].getName,
+        classOf[RocksDBStateStoreProvider].getName,
         SQLConf.SHUFFLE_PARTITIONS.key ->
           TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
         SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
@@ -1080,8 +1047,7 @@ class StateDataSourceTransformWithStateSuite
         val query = inputData
           .toDS()
           .groupByKey(_._1)
-          .transformWithState(
-            new AggregationStatefulProcessor(),
+          .transformWithState(new AggregationStatefulProcessor(),
             TimeMode.None(),
             OutputMode.Append())
         testStream(query)(
@@ -1098,24 +1064,21 @@ class StateDataSourceTransformWithStateSuite
           ProcessAllAvailable(),
           // Ensure that we get a chance to upload created snapshots
           Execute { _ => Thread.sleep(5000) },
-          StopStream)
+          StopStream
+        )
       }
 
       // Create a file manager for the state store with opId=0 and partition=4
       val dfsRootDir = new File(tmpDir.getAbsolutePath + "/state/0/4")
       val fileManager = new RocksDBFileManager(
-        dfsRootDir.getAbsolutePath,
-        Utils.createTempDir(),
-        new Configuration,
-        CompressionCodec.LZ4,
-        fileChecksumEnabled = SQLConf.get.checkpointFileChecksumEnabled,
+        dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration,
+        CompressionCodec.LZ4, fileChecksumEnabled = SQLConf.get.checkpointFileChecksumEnabled,
         fileChecksumThreadPoolSize = Some(2))
 
       // Read the changelog for one of the partitions at version 3 and
       // ensure that we have two entries
       // For this test - keys 9 and 12 are written at version 3 for partition 4
-      val commitLog =
-        new StreamingQueryCheckpointMetadata(spark, tmpDir.getCanonicalPath).commitLog
+      val commitLog = new StreamingQueryCheckpointMetadata(spark, tmpDir.getCanonicalPath).commitLog
       val commitMetadata = commitLog.get(3 - 1) // batchId = version - 1
       val operatorId = 0
       val operatorStateUniqueIds = if (commitMetadata.get.stateUniqueIds.isDefined) {
@@ -1159,14 +1122,16 @@ class StateDataSourceTransformWithStateSuite
       // Ensure that the state matches for the partition that is not modified and does not match for
       // the other partition
       Seq(1, 4).foreach { partition =>
-        val stateSnapshotDf = spark.read
+        val stateSnapshotDf = spark
+          .read
           .format("statestore")
           .option("snapshotPartitionId", partition)
           .option("snapshotStartBatchId", 1)
           .option("stateVarName", "countState")
           .load(tmpDir.getCanonicalPath)
 
-        val stateDf = spark.read
+        val stateDf = spark
+          .read
           .format("statestore")
           .option("stateVarName", "countState")
           .load(tmpDir.getCanonicalPath)
@@ -1180,10 +1145,8 @@ class StateDataSourceTransformWithStateSuite
             "key.value AS groupingKey",
             "value.value AS count",
             "partition_id")
-          checkAnswer(
-            resultDfForSnapshot,
-            Seq(
-              Row(16, 4L, 4),
+          checkAnswer(resultDfForSnapshot,
+            Seq(Row(16, 4L, 4),
               Row(17, 1L, 4),
               Row(19, 3L, 4),
               Row(2, 2L, 4),
@@ -1191,13 +1154,13 @@ class StateDataSourceTransformWithStateSuite
               Row(9, 1L, 4)))
 
           // Ensure that key 12 is present in the final state loaded from the latest snapshot
-          val resultDf =
-            stateDf.selectExpr("key.value AS groupingKey", "value.value AS count", "partition_id")
+          val resultDf = stateDf.selectExpr(
+            "key.value AS groupingKey",
+            "value.value AS count",
+            "partition_id")
 
-          checkAnswer(
-            resultDf,
-            Seq(
-              Row(16, 4L, 4),
+          checkAnswer(resultDf,
+            Seq(Row(16, 4L, 4),
               Row(17, 1L, 4),
               Row(19, 3L, 4),
               Row(2, 2L, 4),
@@ -1210,8 +1173,8 @@ class StateDataSourceTransformWithStateSuite
   }
 }
 
-class StateDataSourceTransformWithStateSuiteCheckpointV2
-    extends StateDataSourceTransformWithStateSuite {
+class StateDataSourceTransformWithStateSuiteCheckpointV2 extends
+  StateDataSourceTransformWithStateSuite {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -1220,10 +1183,8 @@ class StateDataSourceTransformWithStateSuiteCheckpointV2
 }
 
 /**
- * Test suite that runs all StateDataSourceTransformWithStateSuite tests with row checksum
- * enabled.
+ * Test suite that runs all StateDataSourceTransformWithStateSuite tests with row checksum enabled.
  */
 @SlowSQLTest
 class StateDataSourceTransformWithStateSuiteWithRowChecksum
-    extends StateDataSourceTransformWithStateSuite
-    with EnableStateStoreRowChecksum
+  extends StateDataSourceTransformWithStateSuite with EnableStateStoreRowChecksum

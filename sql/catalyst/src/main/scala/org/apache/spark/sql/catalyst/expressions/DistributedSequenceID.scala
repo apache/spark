@@ -21,16 +21,13 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{DISTRIBUTED_SEQUENCE_ID,
 import org.apache.spark.sql.types.{DataType, LongType}
 
 /**
- * Returns increasing 64-bit integers consecutive from 0. The generated ID is guaranteed to be
- * increasing consecutive started from 0.
+ * Returns increasing 64-bit integers consecutive from 0.
+ * The generated ID is guaranteed to be increasing consecutive started from 0.
  *
- * @note
- *   this expression is dedicated for Pandas API on Spark to use.
+ * @note this expression is dedicated for Pandas API on Spark to use.
  */
 case class DistributedSequenceID(cache: Expression)
-    extends LeafExpression
-    with Unevaluable
-    with NonSQLExpression {
+  extends LeafExpression with Unevaluable with NonSQLExpression {
 
   // This argument indicate whether the underlying RDD should be cached
   // according to PS config "pandas_on_Spark.compute.default_index_cache".

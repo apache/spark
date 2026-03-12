@@ -44,8 +44,8 @@ import org.apache.spark.sql.types._
 case class TestClass(var id: Long, var name: String)
 
 /**
- * Class that adds tests for single value ValueState types used in arbitrary stateful operators
- * such as transformWithState
+ * Class that adds tests for single value ValueState types used in arbitrary stateful
+ * operators such as transformWithState
  */
 class ValueStateSuite extends StateVariableSuiteBase {
 
@@ -55,11 +55,12 @@ class ValueStateSuite extends StateVariableSuiteBase {
   test("Implicit key operations") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
-      val handle =
-        new StatefulProcessorHandleImpl(store, UUID.randomUUID(), stringEncoder, TimeMode.None())
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        stringEncoder, TimeMode.None())
 
       val stateName = "testState"
-      val testState: ValueState[Long] = handle.getValueState[Long]("testState", TTLConfig.NONE)
+      val testState: ValueState[Long] = handle.getValueState[Long]("testState",
+        TTLConfig.NONE)
       assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isEmpty)
       val ex = intercept[Exception] {
         testState.update(123)
@@ -69,9 +70,11 @@ class ValueStateSuite extends StateVariableSuiteBase {
       checkError(
         ex.asInstanceOf[SparkException],
         condition = "INTERNAL_ERROR_TWS",
-        parameters =
-          Map("message" -> s"Implicit key not found in state store for stateName=$stateName"),
-        matchPVals = true)
+        parameters = Map(
+          "message" -> s"Implicit key not found in state store for stateName=$stateName"
+        ),
+        matchPVals = true
+      )
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isDefined)
       testState.update(123)
@@ -86,19 +89,22 @@ class ValueStateSuite extends StateVariableSuiteBase {
       checkError(
         ex1.asInstanceOf[SparkException],
         condition = "INTERNAL_ERROR_TWS",
-        parameters =
-          Map("message" -> s"Implicit key not found in state store for stateName=$stateName"),
-        matchPVals = true)
+        parameters = Map(
+          "message" -> s"Implicit key not found in state store for stateName=$stateName"
+        ),
+        matchPVals = true
+      )
     }
   }
 
   test("Value state operations for single instance") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
-      val handle =
-        new StatefulProcessorHandleImpl(store, UUID.randomUUID(), stringEncoder, TimeMode.None())
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        stringEncoder, TimeMode.None())
 
-      val testState: ValueState[Long] = handle.getValueState[Long]("testState", TTLConfig.NONE)
+      val testState: ValueState[Long] = handle.getValueState[Long]("testState",
+        TTLConfig.NONE)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update(123)
       assert(testState.get() === 123)
@@ -121,11 +127,13 @@ class ValueStateSuite extends StateVariableSuiteBase {
   test("Value state operations for multiple instances") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
-      val handle =
-        new StatefulProcessorHandleImpl(store, UUID.randomUUID(), stringEncoder, TimeMode.None())
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        stringEncoder, TimeMode.None())
 
-      val testState1: ValueState[Long] = handle.getValueState[Long]("testState1", TTLConfig.NONE)
-      val testState2: ValueState[Long] = handle.getValueState[Long]("testState2", TTLConfig.NONE)
+      val testState1: ValueState[Long] = handle.getValueState[Long](
+        "testState1", TTLConfig.NONE)
+      val testState2: ValueState[Long] = handle.getValueState[Long](
+        "testState2", TTLConfig.NONE)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState1.update(123)
       assert(testState1.get() === 123)
@@ -164,8 +172,8 @@ class ValueStateSuite extends StateVariableSuiteBase {
   test("Value state operations for unsupported type name should fail") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
-      val handle =
-        new StatefulProcessorHandleImpl(store, UUID.randomUUID(), stringEncoder, TimeMode.None())
+      val handle = new StatefulProcessorHandleImpl(store,
+        UUID.randomUUID(), stringEncoder, TimeMode.None())
 
       val cfName = "$testState"
       val ex = intercept[SparkUnsupportedOperationException] {
@@ -174,8 +182,11 @@ class ValueStateSuite extends StateVariableSuiteBase {
       checkError(
         ex,
         condition = "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS",
-        parameters = Map("colFamilyName" -> cfName),
-        matchPVals = false)
+        parameters = Map(
+          "colFamilyName" -> cfName
+        ),
+        matchPVals = false
+      )
     }
   }
 
@@ -188,29 +199,27 @@ class ValueStateSuite extends StateVariableSuiteBase {
 
     val ex = intercept[StateStoreMultipleColumnFamiliesNotSupportedException] {
       provider.init(
-        storeId,
-        keySchema,
-        valueSchema,
-        NoPrefixKeyStateEncoderSpec(keySchema),
-        useColumnFamilies = true,
-        storeConf,
-        hadoopConf)
+        storeId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
+        useColumnFamilies = true, storeConf, hadoopConf)
     }
     checkError(
       ex,
       condition = "UNSUPPORTED_FEATURE.STATE_STORE_MULTIPLE_COLUMN_FAMILIES",
-      parameters = Map("stateStoreProvider" -> "HDFSBackedStateStoreProvider"),
-      matchPVals = true)
+      parameters = Map(
+        "stateStoreProvider" -> "HDFSBackedStateStoreProvider"
+      ),
+      matchPVals = true
+    )
   }
 
   test("test SQL encoder - Value state operations for Primitive(Double) instances") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
-      val handle =
-        new StatefulProcessorHandleImpl(store, UUID.randomUUID(), stringEncoder, TimeMode.None())
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        stringEncoder, TimeMode.None())
 
-      val testState: ValueState[Double] =
-        handle.getValueState[Double]("testState", Encoders.scalaDouble, TTLConfig.NONE)
+      val testState: ValueState[Double] = handle.getValueState[Double]("testState",
+        Encoders.scalaDouble, TTLConfig.NONE)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update(1.0)
       assert(testState.get().equals(1.0))
@@ -232,10 +241,11 @@ class ValueStateSuite extends StateVariableSuiteBase {
   test("test SQL encoder - Value state operations for Primitive(Long) instances") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
-      val handle =
-        new StatefulProcessorHandleImpl(store, UUID.randomUUID(), stringEncoder, TimeMode.None())
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        stringEncoder, TimeMode.None())
 
-      val testState: ValueState[Long] = handle.getValueState[Long]("testState", TTLConfig.NONE)
+      val testState: ValueState[Long] = handle.getValueState[Long]("testState",
+        TTLConfig.NONE)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update(1L)
       assert(testState.get().equals(1L))
@@ -257,11 +267,11 @@ class ValueStateSuite extends StateVariableSuiteBase {
   test("test SQL encoder - Value state operations for case class instances") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
-      val handle =
-        new StatefulProcessorHandleImpl(store, UUID.randomUUID(), stringEncoder, TimeMode.None())
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        stringEncoder, TimeMode.None())
 
-      val testState: ValueState[TestClass] =
-        handle.getValueState[TestClass]("testState", TTLConfig.NONE)
+      val testState: ValueState[TestClass] = handle.getValueState[TestClass]("testState",
+        TTLConfig.NONE)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update(TestClass(1, "testcase1"))
       assert(testState.get().equals(TestClass(1, "testcase1")))
@@ -283,13 +293,11 @@ class ValueStateSuite extends StateVariableSuiteBase {
   test("test SQL encoder - Value state operations for POJO instances") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
-      val handle =
-        new StatefulProcessorHandleImpl(store, UUID.randomUUID(), stringEncoder, TimeMode.None())
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        stringEncoder, TimeMode.None())
 
-      val testState: ValueState[POJOTestClass] = handle.getValueState[POJOTestClass](
-        "testState",
-        Encoders.bean(classOf[POJOTestClass]),
-        TTLConfig.NONE)
+      val testState: ValueState[POJOTestClass] = handle.getValueState[POJOTestClass]("testState",
+         Encoders.bean(classOf[POJOTestClass]), TTLConfig.NONE)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update(new POJOTestClass("testcase1", 1))
       assert(testState.get().equals(new POJOTestClass("testcase1", 1)))
@@ -312,17 +320,13 @@ class ValueStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val timestampMs = 10
-      val handle = new StatefulProcessorHandleImpl(
-        store,
-        UUID.randomUUID(),
-        stringEncoder,
-        TimeMode.ProcessingTime(),
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        stringEncoder, TimeMode.ProcessingTime(),
         batchTimestampMs = Some(timestampMs))
 
       val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
-      val testState: ValueStateImplWithTTL[String] = handle
-        .getValueState[String]("testState", Encoders.STRING, ttlConfig)
-        .asInstanceOf[ValueStateImplWithTTL[String]]
+      val testState: ValueStateImplWithTTL[String] = handle.getValueState[String]("testState",
+        Encoders.STRING, ttlConfig).asInstanceOf[ValueStateImplWithTTL[String]]
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update("v1")
       assert(testState.get() === "v1")
@@ -336,16 +340,12 @@ class ValueStateSuite extends StateVariableSuiteBase {
       assert(ttlStateValueIterator.isDefined)
 
       // increment batchProcessingTime, or watermark and ensure expired value is not returned
-      val nextBatchHandle = new StatefulProcessorHandleImpl(
-        store,
-        UUID.randomUUID(),
+      val nextBatchHandle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         stringEncoder,
-        TimeMode.ProcessingTime(),
-        batchTimestampMs = Some(ttlExpirationMs))
+        TimeMode.ProcessingTime(), batchTimestampMs = Some(ttlExpirationMs))
 
       val nextBatchTestState: ValueStateImplWithTTL[String] =
-        nextBatchHandle
-          .getValueState[String]("testState", Encoders.STRING, ttlConfig)
+        nextBatchHandle.getValueState[String]("testState", Encoders.STRING, ttlConfig)
           .asInstanceOf[ValueStateImplWithTTL[String]]
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
@@ -375,12 +375,9 @@ class ValueStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val batchTimestampMs = 10
-      val handle = new StatefulProcessorHandleImpl(
-        store,
-        UUID.randomUUID(),
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         stringEncoder,
-        TimeMode.ProcessingTime(),
-        batchTimestampMs = Some(batchTimestampMs))
+        TimeMode.ProcessingTime(), batchTimestampMs = Some(batchTimestampMs))
 
       Seq(null, Duration.ofMinutes(-1)).foreach { ttlDuration =>
         val ttlConfig = TTLConfig(ttlDuration)
@@ -391,8 +388,12 @@ class ValueStateSuite extends StateVariableSuiteBase {
         checkError(
           ex,
           condition = "STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE",
-          parameters = Map("operationType" -> "update", "stateName" -> "testState"),
-          matchPVals = true)
+          parameters = Map(
+            "operationType" -> "update",
+            "stateName" -> "testState"
+          ),
+          matchPVals = true
+        )
       }
     }
   }
@@ -401,20 +402,14 @@ class ValueStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val timestampMs = 10
-      val handle = new StatefulProcessorHandleImpl(
-        store,
-        UUID.randomUUID(),
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         encoderFor(Encoders.product[TestClass]).asInstanceOf[ExpressionEncoder[Any]],
-        TimeMode.ProcessingTime(),
-        batchTimestampMs = Some(timestampMs))
+        TimeMode.ProcessingTime(), batchTimestampMs = Some(timestampMs))
 
       val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
       val testState: ValueStateImplWithTTL[POJOTestClass] =
-        handle
-          .getValueState[POJOTestClass](
-            "testState",
-            Encoders.bean(classOf[POJOTestClass]),
-            ttlConfig)
+        handle.getValueState[POJOTestClass]("testState",
+        Encoders.bean(classOf[POJOTestClass]), ttlConfig)
           .asInstanceOf[ValueStateImplWithTTL[POJOTestClass]]
       ImplicitGroupingKeyTracker.setImplicitKey(TestClass(1L, "k1"))
       testState.update(new POJOTestClass("n1", 1))
@@ -450,18 +445,17 @@ class ValueStateSuite extends StateVariableSuiteBase {
       stateVariableInfo = TransformWithStateVariableUtils.getValueState("testState", ttlEnabled),
       ttlEnabled = ttlEnabled,
       expectedNumColFamilies = if (ttlEnabled) 2 else 1,
-      groupingKeyToExpectedCount = Map("key1" -> 1, "key2" -> 1))
+      groupingKeyToExpectedCount = Map("key1" -> 1, "key2" -> 1)
+    )
   }
 }
 
 /**
- * Abstract Base Class that provides test utilities for different state variable types
- * (ValueState, ListState, MapState) used in arbitrary stateful operators.
+ * Abstract Base Class that provides test utilities for different state variable
+ * types (ValueState, ListState, MapState) used in arbitrary stateful operators.
  */
-abstract class StateVariableSuiteBase
-    extends SharedSparkSession
-    with BeforeAndAfter
-    with AlsoTestWithEncodingTypes {
+abstract class StateVariableSuiteBase extends SharedSparkSession
+  with BeforeAndAfter with AlsoTestWithEncodingTypes {
 
   before {
     StateStore.stop()
@@ -489,8 +483,7 @@ abstract class StateVariableSuiteBase
   protected def newStoreProviderWithStateVariable(
       useColumnFamilies: Boolean,
       schemaProvider: Option[StateSchemaProvider]): RocksDBStateStoreProvider = {
-    newStoreProviderWithStateVariable(
-      StateStoreId(newDir(), Random.nextInt(), 0),
+    newStoreProviderWithStateVariable(StateStoreId(newDir(), Random.nextInt(), 0),
       NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
       useColumnFamilies = useColumnFamilies,
       schemaProvider = schemaProvider)
@@ -511,20 +504,15 @@ abstract class StateVariableSuiteBase
     val provider = new RocksDBStateStoreProvider()
     conf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
     provider.init(
-      storeId,
-      schemaForKeyRow,
-      schemaForValueRow,
-      keyStateEncoderSpec,
+      storeId, schemaForKeyRow, schemaForValueRow, keyStateEncoderSpec,
       useColumnFamilies,
-      new StateStoreConf(sqlConf),
-      conf,
-      useMultipleValuesPerKey,
+      new StateStoreConf(sqlConf), conf, useMultipleValuesPerKey,
       schemaProvider.orElse(Some(new TestStateSchemaProvider)))
     provider
   }
 
-  protected def tryWithProviderResource[T](provider: StateStoreProvider)(
-      f: StateStoreProvider => T): T = {
+  protected def tryWithProviderResource[T](
+      provider: StateStoreProvider)(f: StateStoreProvider => T): T = {
     try {
       val tc = TaskContext.empty()
       try {
@@ -547,67 +535,59 @@ abstract class StateVariableSuiteBase
       groupingKeyToExpectedCount: Map[String, Int],
       timeMode: TimeMode = TimeMode.ProcessingTime()): Unit = {
     val schemaProvider = new TestStateSchemaProvider
-    tryWithProviderResource(newStoreProviderWithStateVariable(true, Some(schemaProvider))) {
-      provider =>
-        val store = provider.getStore(0)
-        val timestampMs = 10
-        val handle = new StatefulProcessorHandleImpl(
-          store,
-          UUID.randomUUID(),
-          stringEncoder,
-          timeMode,
-          batchTimestampMs = Some(timestampMs))
+    tryWithProviderResource(
+      newStoreProviderWithStateVariable(true, Some(schemaProvider))) { provider =>
+      val store = provider.getStore(0)
+      val timestampMs = 10
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        stringEncoder, timeMode, batchTimestampMs = Some(timestampMs))
 
-        val ttlConfig = if (ttlEnabled) {
-          TTLConfig(ttlDuration = Duration.ofMinutes(1))
-        } else {
-          TTLConfig.NONE
+      val ttlConfig = if (ttlEnabled) {
+        TTLConfig(ttlDuration = Duration.ofMinutes(1))
+      } else {
+        TTLConfig.NONE
+      }
+
+      // call the passed in func to create the state variable and add state
+      addStateFunc(handle, ttlConfig, store)
+
+      // Get all the column families and their key schemas
+      val colFamilyNameAndKeySchema = schemaProvider.schemas.filter(_._1.isKey)
+        .map(kv => (kv._1.colFamilyName, kv._2.sqlSchema))
+        // don't include default CF
+        .filterNot(_._1 == StateStore.DEFAULT_COL_FAMILY_NAME)
+
+      assert(colFamilyNameAndKeySchema.size === expectedNumColFamilies,
+        s"Should have $expectedNumColFamilies column families, " +
+          s"found ${colFamilyNameAndKeySchema.size}")
+
+      // Verify partition key extraction for each column family
+      val expectedStateKeyCount = groupingKeyToExpectedCount.values.sum
+      colFamilyNameAndKeySchema.foreach { case (colFamilyName, keySchema) =>
+        val extractor = StatePartitionKeyExtractorFactory.create(
+          StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME,
+          keySchema,
+          storeName = StateStoreId.DEFAULT_STORE_NAME,
+          colFamilyName = colFamilyName,
+          stateVariableInfo = Some(stateVariableInfo)
+        )
+
+        assert(extractor.partitionKeySchema === stringEncoder.schema,
+          "Partition key schema should match the grouping key schema")
+
+        // Get all state keys and extract partition keys
+        val stateKeys = store.iterator(colFamilyName).map(_.key.copy()).toList
+        assert(stateKeys.length == expectedStateKeyCount,
+          s"Should have $expectedStateKeyCount state keys, found ${stateKeys.length}")
+
+        val partitionKeys = stateKeys.map(extractor.partitionKey(_).copy())
+
+        groupingKeyToExpectedCount.foreach { case (keyStr, expectedCount) =>
+          val keyRow = stringEncoder.createSerializer().apply(keyStr).copy()
+          assert(partitionKeys.count(_ === keyRow) == expectedCount,
+            s"Should have $expectedCount partition keys for $keyStr")
         }
-
-        // call the passed in func to create the state variable and add state
-        addStateFunc(handle, ttlConfig, store)
-
-        // Get all the column families and their key schemas
-        val colFamilyNameAndKeySchema = schemaProvider.schemas
-          .filter(_._1.isKey)
-          .map(kv => (kv._1.colFamilyName, kv._2.sqlSchema))
-          // don't include default CF
-          .filterNot(_._1 == StateStore.DEFAULT_COL_FAMILY_NAME)
-
-        assert(
-          colFamilyNameAndKeySchema.size === expectedNumColFamilies,
-          s"Should have $expectedNumColFamilies column families, " +
-            s"found ${colFamilyNameAndKeySchema.size}")
-
-        // Verify partition key extraction for each column family
-        val expectedStateKeyCount = groupingKeyToExpectedCount.values.sum
-        colFamilyNameAndKeySchema.foreach { case (colFamilyName, keySchema) =>
-          val extractor = StatePartitionKeyExtractorFactory.create(
-            StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME,
-            keySchema,
-            storeName = StateStoreId.DEFAULT_STORE_NAME,
-            colFamilyName = colFamilyName,
-            stateVariableInfo = Some(stateVariableInfo))
-
-          assert(
-            extractor.partitionKeySchema === stringEncoder.schema,
-            "Partition key schema should match the grouping key schema")
-
-          // Get all state keys and extract partition keys
-          val stateKeys = store.iterator(colFamilyName).map(_.key.copy()).toList
-          assert(
-            stateKeys.length == expectedStateKeyCount,
-            s"Should have $expectedStateKeyCount state keys, found ${stateKeys.length}")
-
-          val partitionKeys = stateKeys.map(extractor.partitionKey(_).copy())
-
-          groupingKeyToExpectedCount.foreach { case (keyStr, expectedCount) =>
-            val keyRow = stringEncoder.createSerializer().apply(keyStr).copy()
-            assert(
-              partitionKeys.count(_ === keyRow) == expectedCount,
-              s"Should have $expectedCount partition keys for $keyStr")
-          }
-        }
+      }
     }
   }
 }

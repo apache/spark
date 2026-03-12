@@ -22,16 +22,16 @@ import org.apache.spark.sql.catalyst.util._
 
 class CodeFormatterSuite extends SparkFunSuite {
 
-  def testCase(
-      name: String)(input: String, comment: Map[String, String] = Map.empty, maxLines: Int = -1)(
-      expected: String): Unit = {
+  def testCase(name: String)(input: String,
+      comment: Map[String, String] = Map.empty, maxLines: Int = -1)(expected: String): Unit = {
     test(name) {
       val sourceCode = new CodeAndComment(input.trim, comment)
       if (CodeFormatter.format(sourceCode, maxLines).trim !== expected.trim) {
-        fail(s"""
+        fail(
+          s"""
              |== FAIL: Formatted code doesn't match ===
-             |${sideBySide(CodeFormatter.format(sourceCode, maxLines).trim, expected.trim)
-                 .mkString("\n")}
+             |${sideBySide(CodeFormatter.format(sourceCode, maxLines).trim,
+                 expected.trim).mkString("\n")}
            """.stripMargin)
       }
     }
@@ -46,7 +46,8 @@ class CodeFormatterSuite extends SparkFunSuite {
       Map(
         "project_c4" -> "// (((input[0, bigint, false] + 1) + 2) + 3))",
         "project_c3" -> "// ((input[0, bigint, false] + 1) + 2)",
-        "project_c2" -> "// (input[0, bigint, false] + 1)"))
+        "project_c2" -> "// (input[0, bigint, false] + 1)"
+      ))
 
     val reducedCode = CodeFormatter.stripOverlappingComments(code)
     assert(reducedCode.body === "/*project_c4*/")
@@ -74,9 +75,8 @@ class CodeFormatterSuite extends SparkFunSuite {
       """.stripMargin
 
     val reducedCode = CodeFormatter.stripExtraNewLinesAndComments(code)
-    assert(
-      reducedCode ===
-        """
+    assert(reducedCode ===
+      """
         |public function() {
         |code_body
         |code_body
@@ -91,7 +91,7 @@ class CodeFormatterSuite extends SparkFunSuite {
       |blahblah;
       |}
     """.stripMargin
-  } {
+  }{
     """
       |/* 001 */ class A {
       |/* 002 */   blahblah;
@@ -123,7 +123,7 @@ class CodeFormatterSuite extends SparkFunSuite {
       | if (c) {duh;}
       |}
     """.stripMargin
-  } {
+  }{
     """
       |/* 001 */ class A {
       |/* 002 */   if (c) {duh;}
@@ -137,7 +137,7 @@ class CodeFormatterSuite extends SparkFunSuite {
       | if (c) {duh;} else {boo;}
       |}
     """.stripMargin
-  } {
+  }{
     """
       |/* 001 */ class A {
       |/* 002 */   if (c) {duh;} else {boo;}
@@ -152,7 +152,7 @@ class CodeFormatterSuite extends SparkFunSuite {
       |b,
       |c)
     """.stripMargin
-  } {
+  }{
     """
       |/* 001 */ foo(
       |/* 002 */   a,
@@ -161,27 +161,29 @@ class CodeFormatterSuite extends SparkFunSuite {
     """.stripMargin
   }
 
-  testCase("function calls with maxLines=0")(
+  testCase("function calls with maxLines=0") (
     """
       |foo(
       |a,
       |b,
       |c)
     """.stripMargin,
-    maxLines = 0) {
+    maxLines = 0
+  ) {
     """
       |/* 001 */ [truncated to 0 lines (total lines is 4)]
     """.stripMargin
   }
 
-  testCase("function calls with maxLines=2")(
+  testCase("function calls with maxLines=2") (
     """
       |foo(
       |a,
       |b,
       |c)
     """.stripMargin,
-    maxLines = 2) {
+    maxLines = 2
+  ) {
     """
       |/* 001 */ foo(
       |/* 002 */   a,
@@ -196,7 +198,7 @@ class CodeFormatterSuite extends SparkFunSuite {
       |class body;
       |}
     """.stripMargin
-  } {
+  }{
     """
       |/* 001 */ // This is a comment about class A { { { ( (
       |/* 002 */ class A {
@@ -212,7 +214,7 @@ class CodeFormatterSuite extends SparkFunSuite {
       |class body;
       |}
     """.stripMargin
-  } {
+  }{
     """
       |/* 001 */ /** This is a comment about class A { { { ( ( */
       |/* 002 */ class A {
@@ -230,7 +232,7 @@ class CodeFormatterSuite extends SparkFunSuite {
       |class body;
       |}
     """.stripMargin
-  } {
+  }{
     """
       |/* 001 */ /* This is a comment about
       |/* 002 */ class A {
@@ -242,7 +244,8 @@ class CodeFormatterSuite extends SparkFunSuite {
   }
 
   testCase("reduce empty lines") {
-    CodeFormatter.stripExtraNewLines("""
+    CodeFormatter.stripExtraNewLines(
+      """
         |class A {
         |
         |
@@ -259,7 +262,7 @@ class CodeFormatterSuite extends SparkFunSuite {
         | else {boo;}
         |}
       """.stripMargin.trim)
-  } {
+  }{
     """
       |/* 001 */ class A {
       |/* 002 */   /*
@@ -282,8 +285,8 @@ class CodeFormatterSuite extends SparkFunSuite {
       |/*c2*/
       |class B
       |/*c1*//*c2*/
-    """.stripMargin,
-    Map("c1" -> "/*abc*/", "c2" -> "/*xyz*/")) {
+    """.stripMargin, Map("c1" -> "/*abc*/", "c2" -> "/*xyz*/")
+  ) {
     """
       |/* 001 */ /*abc*/
       |/* 002 */ class A

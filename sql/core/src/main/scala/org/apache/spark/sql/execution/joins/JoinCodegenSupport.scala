@@ -28,12 +28,11 @@ import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan}
 trait JoinCodegenSupport extends CodegenSupport with BaseJoinExec {
 
   /**
-   * Generate the (non-equi) condition used to filter joined rows. This is used in Inner, Left
-   * Semi, Left Anti and Full Outer joins.
+   * Generate the (non-equi) condition used to filter joined rows.
+   * This is used in Inner, Left Semi, Left Anti and Full Outer joins.
    *
-   * @return
-   *   Tuple of variable name for row of build side, generated code for condition, and generated
-   *   code for variables of build side.
+   * @return Tuple of variable name for row of build side, generated code for condition,
+   *         and generated code for variables of build side.
    */
   protected def getJoinCondition(
       ctx: CodegenContext,
@@ -51,10 +50,8 @@ trait JoinCodegenSupport extends CodegenSupport with BaseJoinExec {
     val checkCondition = if (condition.isDefined) {
       val expr = condition.get
       // evaluate the variables that are used by the condition
-      val eval = evaluateRequiredVariables(
-        streamPlan.output ++ buildPlan.output,
-        streamVars2 ++ buildVars,
-        expr.references)
+      val eval = evaluateRequiredVariables(streamPlan.output ++ buildPlan.output,
+        streamVars2 ++ buildVars, expr.references)
 
       // filter the output via condition
       ctx.currentVars = streamVars2 ++ buildVars

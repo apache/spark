@@ -37,15 +37,23 @@ class UnpivotParserSuite extends AnalysisTest {
   test("unpivot - single value") {
     assertEqual(
       "SELECT * FROM t UNPIVOT (val FOR col in (a, b))",
-      Unpivot(None, Some(Seq(Seq($"a"), Seq($"b"))), None, "col", Seq("val"), table("t"))
+      Unpivot(
+        None,
+        Some(Seq(Seq($"a"), Seq($"b"))),
+        None,
+        "col",
+        Seq("val"),
+        table("t"))
         .where(coalesce($"val").isNotNull)
-        .select(star()))
+        .select(star())
+    )
   }
 
   test("unpivot - single value with alias") {
     Seq(
       "SELECT * FROM t UNPIVOT (val FOR col in (a A, b))",
-      "SELECT * FROM t UNPIVOT (val FOR col in (a AS A, b))").foreach { sql =>
+      "SELECT * FROM t UNPIVOT (val FOR col in (a AS A, b))"
+    ).foreach { sql =>
       withClue(sql) {
         assertEqual(
           sql,
@@ -57,7 +65,8 @@ class UnpivotParserSuite extends AnalysisTest {
             Seq("val"),
             table("t"))
             .where(coalesce($"val").isNotNull)
-            .select(star()))
+            .select(star())
+        )
       }
     }
   }
@@ -73,34 +82,37 @@ class UnpivotParserSuite extends AnalysisTest {
         Seq("val1", "val2"),
         table("t"))
         .where(coalesce($"val1", $"val2").isNotNull)
-        .select(star()))
+        .select(star())
+    )
   }
 
   test("unpivot - multiple values with alias") {
     Seq(
       "SELECT * FROM t UNPIVOT ((val1, val2) FOR col in ((a, b) first, (c, d)))",
-      "SELECT * FROM t UNPIVOT ((val1, val2) FOR col in ((a, b) AS first, (c, d)))").foreach {
-      sql =>
-        withClue(sql) {
-          assertEqual(
-            sql,
-            Unpivot(
-              None,
-              Some(Seq(Seq($"a", $"b"), Seq($"c", $"d"))),
-              Some(Seq(Some("first"), None)),
-              "col",
-              Seq("val1", "val2"),
-              table("t"))
-              .where(coalesce($"val1", $"val2").isNotNull)
-              .select(star()))
-        }
+      "SELECT * FROM t UNPIVOT ((val1, val2) FOR col in ((a, b) AS first, (c, d)))"
+    ).foreach { sql =>
+      withClue(sql) {
+        assertEqual(
+          sql,
+          Unpivot(
+            None,
+            Some(Seq(Seq($"a", $"b"), Seq($"c", $"d"))),
+            Some(Seq(Some("first"), None)),
+            "col",
+            Seq("val1", "val2"),
+            table("t"))
+            .where(coalesce($"val1", $"val2").isNotNull)
+            .select(star())
+        )
+      }
     }
   }
 
   test("unpivot - multiple values with inner alias") {
     Seq(
       "SELECT * FROM t UNPIVOT ((val1, val2) FOR col in ((a A, b), (c, d)))",
-      "SELECT * FROM t UNPIVOT ((val1, val2) FOR col in ((a AS A, b), (c, d)))").foreach { sql =>
+      "SELECT * FROM t UNPIVOT ((val1, val2) FOR col in ((a AS A, b), (c, d)))"
+    ).foreach { sql =>
       withClue(sql) {
         intercept(sql, Some("PARSE_SYNTAX_ERROR"), "Syntax error at or near ")
       }
@@ -110,14 +122,22 @@ class UnpivotParserSuite extends AnalysisTest {
   test("unpivot - alias") {
     Seq(
       "SELECT up.* FROM t UNPIVOT (val FOR col in (a, b)) up",
-      "SELECT up.* FROM t UNPIVOT (val FOR col in (a, b)) AS up").foreach { sql =>
+      "SELECT up.* FROM t UNPIVOT (val FOR col in (a, b)) AS up"
+    ).foreach { sql =>
       withClue(sql) {
         assertEqual(
           sql,
-          Unpivot(None, Some(Seq(Seq($"a"), Seq($"b"))), None, "col", Seq("val"), table("t"))
+          Unpivot(
+            None,
+            Some(Seq(Seq($"a"), Seq($"b"))),
+            None,
+            "col",
+            Seq("val"),
+            table("t"))
             .where(coalesce($"val").isNotNull)
             .subquery("up")
-            .select(star("up")))
+            .select(star("up"))
+        )
       }
     }
   }
@@ -125,15 +145,16 @@ class UnpivotParserSuite extends AnalysisTest {
   test("unpivot - no unpivot value names") {
     intercept(
       "SELECT * FROM t UNPIVOT (() FOR col in ((a, b), (c, d)))",
-      Some("PARSE_SYNTAX_ERROR"),
-      "Syntax error at or near ")
+      Some("PARSE_SYNTAX_ERROR"), "Syntax error at or near "
+    )
   }
 
   test("unpivot - no unpivot columns") {
     Seq(
       "SELECT * FROM t UNPIVOT (val FOR col in ())",
       "SELECT * FROM t UNPIVOT ((val1, val2) FOR col in ())",
-      "SELECT * FROM t UNPIVOT ((val1, val2) FOR col in (()))").foreach { sql =>
+      "SELECT * FROM t UNPIVOT ((val1, val2) FOR col in (()))"
+    ).foreach { sql =>
       withClue(sql) {
         intercept(sql, Some("PARSE_SYNTAX_ERROR"), "Syntax error at or near ")
       }
@@ -143,26 +164,44 @@ class UnpivotParserSuite extends AnalysisTest {
   test("unpivot - exclude nulls") {
     assertEqual(
       "SELECT * FROM t UNPIVOT EXCLUDE NULLS (val FOR col in (a, b))",
-      Unpivot(None, Some(Seq(Seq($"a"), Seq($"b"))), None, "col", Seq("val"), table("t"))
+      Unpivot(
+        None,
+        Some(Seq(Seq($"a"), Seq($"b"))),
+        None,
+        "col",
+        Seq("val"),
+        table("t"))
         .where(coalesce($"val").isNotNull)
-        .select(star()))
+        .select(star())
+    )
   }
 
   test("unpivot - include nulls") {
     assertEqual(
       "SELECT * FROM t UNPIVOT INCLUDE NULLS (val FOR col in (a, b))",
-      Unpivot(None, Some(Seq(Seq($"a"), Seq($"b"))), None, "col", Seq("val"), table("t"))
-        .select(star()))
+      Unpivot(
+        None,
+        Some(Seq(Seq($"a"), Seq($"b"))),
+        None,
+        "col",
+        Seq("val"),
+        table("t"))
+        .select(star())
+    )
   }
 
   test("unpivot - with joins") {
     // unpivot the left table
     assertEqual(
       "SELECT * FROM t1 UNPIVOT (val FOR col in (a, b)) JOIN t2",
-      Unpivot(None, Some(Seq(Seq($"a"), Seq($"b"))), None, "col", Seq("val"), table("t1"))
-        .where(coalesce($"val").isNotNull)
-        .join(table("t2"))
-        .select(star()))
+      Unpivot(
+        None,
+        Some(Seq(Seq($"a"), Seq($"b"))),
+        None,
+        "col",
+        Seq("val"),
+        table("t1")
+      ).where(coalesce($"val").isNotNull).join(table("t2")).select(star()))
 
     // unpivot the join result
     assertEqual(
@@ -173,25 +212,36 @@ class UnpivotParserSuite extends AnalysisTest {
         None,
         "col",
         Seq("val"),
-        table("t1").join(table("t2"))).where(coalesce($"val").isNotNull).select(star()))
+        table("t1").join(table("t2"))
+      ).where(coalesce($"val").isNotNull).select(star()))
 
     // unpivot the right table
     assertEqual(
       "SELECT * FROM t1 JOIN (t2 UNPIVOT (val FOR col in (a, b)))",
-      table("t1")
-        .join(Unpivot(None, Some(Seq(Seq($"a"), Seq($"b"))), None, "col", Seq("val"), table("t2"))
-          .where(coalesce($"val").isNotNull))
-        .select(star()))
+      table("t1").join(
+        Unpivot(
+          None,
+          Some(Seq(Seq($"a"), Seq($"b"))),
+          None,
+          "col",
+          Seq("val"),
+          table("t2")
+        ).where(coalesce($"val").isNotNull)
+      ).select(star()))
   }
 
   test("unpivot - with implicit joins") {
     // unpivot the left table
     assertEqual(
       "SELECT * FROM t1 UNPIVOT (val FOR col in (a, b)), t2",
-      Unpivot(None, Some(Seq(Seq($"a"), Seq($"b"))), None, "col", Seq("val"), table("t1"))
-        .where(coalesce($"val").isNotNull)
-        .join(table("t2"))
-        .select(star()))
+      Unpivot(
+        None,
+        Some(Seq(Seq($"a"), Seq($"b"))),
+        None,
+        "col",
+        Seq("val"),
+        table("t1")
+      ).where(coalesce($"val").isNotNull).join(table("t2")).select(star()))
 
     // unpivot the join result
     assertEqual(
@@ -202,7 +252,8 @@ class UnpivotParserSuite extends AnalysisTest {
         None,
         "col",
         Seq("val"),
-        table("t1").join(table("t2"))).where(coalesce($"val").isNotNull).select(star()))
+        table("t1").join(table("t2"))
+      ).where(coalesce($"val").isNotNull).select(star()))
 
     // unpivot the right table - same SQL as above but with ANSI mode
     withSQLConf(
@@ -210,20 +261,31 @@ class UnpivotParserSuite extends AnalysisTest {
       SQLConf.ANSI_RELATION_PRECEDENCE.key -> "true") {
       assertEqual(
         "SELECT * FROM t1, t2 UNPIVOT (val FOR col in (a, b))",
-        table("t1")
-          .join(
-            Unpivot(None, Some(Seq(Seq($"a"), Seq($"b"))), None, "col", Seq("val"), table("t2"))
-              .where(coalesce($"val").isNotNull))
-          .select(star()))
+        table("t1").join(
+          Unpivot(
+            None,
+            Some(Seq(Seq($"a"), Seq($"b"))),
+            None,
+            "col",
+            Seq("val"),
+            table("t2")
+          ).where(coalesce($"val").isNotNull)
+        ).select(star()))
     }
 
     // unpivot the right table
     assertEqual(
       "SELECT * FROM t1, (t2 UNPIVOT (val FOR col in (a, b)))",
-      table("t1")
-        .join(Unpivot(None, Some(Seq(Seq($"a"), Seq($"b"))), None, "col", Seq("val"), table("t2"))
-          .where(coalesce($"val").isNotNull))
-        .select(star()))
+      table("t1").join(
+        Unpivot(
+          None,
+          Some(Seq(Seq($"a"), Seq($"b"))),
+          None,
+          "col",
+          Seq("val"),
+          table("t2")
+        ).where(coalesce($"val").isNotNull)
+      ).select(star()))
 
     // mixed with explicit joins
     assertEqual(
@@ -235,25 +297,24 @@ class UnpivotParserSuite extends AnalysisTest {
         None,
         "col",
         Seq("val"),
-        table("t1").join(table("t2")).join(table("t3")))
-        .where(coalesce($"val").isNotNull)
-        .select(star()))
+        table("t1").join(table("t2")).join(table("t3"))
+      ).where(coalesce($"val").isNotNull).select(star()))
     withSQLConf(
       SQLConf.ANSI_ENABLED.key -> "true",
       SQLConf.ANSI_RELATION_PRECEDENCE.key -> "true") {
       assertEqual(
         // unpivot the join result of t2 and t3
         "SELECT * FROM t1, t2 JOIN t3 UNPIVOT (val FOR col in (a, b))",
-        table("t1")
-          .join(
-            Unpivot(
-              None,
-              Some(Seq(Seq($"a"), Seq($"b"))),
-              None,
-              "col",
-              Seq("val"),
-              table("t2").join(table("t3"))).where(coalesce($"val").isNotNull))
-          .select(star()))
+        table("t1").join(
+          Unpivot(
+            None,
+            Some(Seq(Seq($"a"), Seq($"b"))),
+            None,
+            "col",
+            Seq("val"),
+            table("t2").join(table("t3"))
+          ).where(coalesce($"val").isNotNull)
+        ).select(star()))
     }
   }
 
@@ -266,7 +327,14 @@ class UnpivotParserSuite extends AnalysisTest {
         None,
         "col",
         Seq("val"),
-        Unpivot(None, Some(Seq(Seq($"a"), Seq($"b"))), None, "col", Seq("val"), table("t1"))
-          .where(coalesce($"val").isNotNull)).where(coalesce($"val").isNotNull).select(star()))
+        Unpivot(
+          None,
+          Some(Seq(Seq($"a"), Seq($"b"))),
+          None,
+          "col",
+          Seq("val"),
+          table("t1")
+        ).where(coalesce($"val").isNotNull)
+      ).where(coalesce($"val").isNotNull).select(star()))
   }
 }

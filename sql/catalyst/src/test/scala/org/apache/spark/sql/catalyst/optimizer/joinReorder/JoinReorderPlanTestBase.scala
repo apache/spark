@@ -55,11 +55,12 @@ trait JoinReorderPlanTestBase extends PlanTest {
     val normalized1 = normalizePlan(normalizeExprIds(plan1))
     val normalized2 = normalizePlan(normalizeExprIds(plan2))
     if (!sameJoinPlan(normalized1, normalized2)) {
-      fail(s"""
+      fail(
+        s"""
            |== FAIL: Plans do not match ===
            |${sideBySide(
-               rewriteNameFromAttrNullability(normalized1).treeString,
-               rewriteNameFromAttrNullability(normalized2).treeString).mkString("\n")}
+          rewriteNameFromAttrNullability(normalized1).treeString,
+          rewriteNameFromAttrNullability(normalized2).treeString).mkString("\n")}
          """.stripMargin)
     }
   }
@@ -70,8 +71,8 @@ trait JoinReorderPlanTestBase extends PlanTest {
       case (j1: Join, j2: Join) =>
         (sameJoinPlan(j1.left, j2.left) && sameJoinPlan(j1.right, j2.right)
           && j1.hint.leftHint == j2.hint.leftHint && j1.hint.rightHint == j2.hint.rightHint) ||
-        (sameJoinPlan(j1.left, j2.right) && sameJoinPlan(j1.right, j2.left)
-          && j1.hint.leftHint == j2.hint.rightHint && j1.hint.rightHint == j2.hint.leftHint)
+          (sameJoinPlan(j1.left, j2.right) && sameJoinPlan(j1.right, j2.left)
+            && j1.hint.leftHint == j2.hint.rightHint && j1.hint.rightHint == j2.hint.leftHint)
       case (p1: Project, p2: Project) =>
         p1.projectList == p2.projectList && sameJoinPlan(p1.child, p2.child)
       case _ =>

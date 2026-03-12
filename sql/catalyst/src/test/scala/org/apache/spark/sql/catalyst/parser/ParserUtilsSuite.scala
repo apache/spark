@@ -44,11 +44,13 @@ class ParserUtilsSuite extends SparkFunSuite {
     parser.statement().asInstanceOf[ShowNamespacesContext]
   }
 
-  val createDbContext = buildContext("""
+  val createDbContext = buildContext(
+    """
       |CREATE DATABASE IF NOT EXISTS database_name
       |COMMENT 'database_comment' LOCATION '/home/user/db'
       |WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')
-    """.stripMargin) { parser =>
+    """.stripMargin
+  ) { parser =>
     parser.statement().asInstanceOf[CreateNamespaceContext]
   }
 
@@ -111,7 +113,7 @@ class ParserUtilsSuite extends SparkFunSuite {
     assert(unescapeSQLString(""""\256"""") == "256")
 
     // String including a '\u0000' style literal characters (\u732B is a cat in Kanji).
-    assert(unescapeSQLString("\"How cute \\u732B are\"") == "How cute \u732B are")
+    assert(unescapeSQLString("\"How cute \\u732B are\"")  == "How cute \u732B are")
 
     // String including a surrogate pair character
     // (\uD867\uDE3D is Okhotsk atka mackerel in Kanji).
@@ -124,10 +126,10 @@ class ParserUtilsSuite extends SparkFunSuite {
     assert(unescapeSQLString("\"\\U0001F408 \\U0001F415\"") == "\uD83D\uDC08 \uD83D\uDC15")
 
     // String including escaped normal characters.
-    assert(
-      unescapeSQLString(""""ab\
+    assert(unescapeSQLString(
+      """"ab\
         |cd\ef"""".stripMargin) ==
-        """ab
+      """ab
         |cdef""".stripMargin)
 
     // String with an invalid '\' as the last character.
@@ -215,8 +217,8 @@ class ParserUtilsSuite extends SparkFunSuite {
       assert(string(token2) == "database_comment")
     }
 
-    val token3 =
-      dataTypeBuilder.visitStringLit(createDbContext.locationSpec.asScala.head.stringLit())
+    val token3 = dataTypeBuilder.visitStringLit(
+      createDbContext.locationSpec.asScala.head.stringLit())
     if (token3 != null) {
       assert(string(token3) == "/home/user/db")
     }
@@ -249,11 +251,8 @@ class ParserUtilsSuite extends SparkFunSuite {
     val ctx = createDbContext.locationSpec.asScala.head
     val current = CurrentOrigin.get
     val (location, origin) = withOrigin(ctx) {
-      (
-        Option(
-          new org.apache.spark.sql.catalyst.parser.DataTypeAstBuilder()
-            .visitStringLit(ctx.stringLit())).map(string).getOrElse(""),
-        CurrentOrigin.get)
+      (Option(new org.apache.spark.sql.catalyst.parser.DataTypeAstBuilder()
+        .visitStringLit(ctx.stringLit())).map(string).getOrElse(""), CurrentOrigin.get)
     }
     assert(location == "/home/user/db")
     assert(origin == Origin(Some(3), Some(27)))
@@ -292,9 +291,8 @@ class ParserUtilsSuite extends SparkFunSuite {
         assert(current.stopIndex.isDefined)
         // With sqlText, startIndex, stopIndex, we can get the corresponding SQL text of the
         // Cast clause.
-        assert(
-          current.sqlText.get.substring(current.startIndex.get, current.stopIndex.get + 1) ==
-            castClause)
+        assert(current.sqlText.get.substring(current.startIndex.get, current.stopIndex.get + 1) ==
+          castClause)
       }
     }
   }

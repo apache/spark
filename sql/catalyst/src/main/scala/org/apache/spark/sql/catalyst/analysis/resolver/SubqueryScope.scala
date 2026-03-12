@@ -40,35 +40,34 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPl
  *
  * During the [[Exists]] resolution inside the HAVING clause we encounter "t1.col2" name, which is
  * resolved to an [[OuterReference]]. There's an [[AggregateExpression]] on top of it. This whole
- * expression is not local to the subquery, and thus it belongs to an outer [[Aggregate]] operator
- * below the `HAVING` clause. We need top pull it up outside of the subquery, and insert it in the
- * [[Aggregate]] operator. So the resolution order is as follows:
- *   - Resolve "t1.col2" to an [[OuterReference]] in [[ExpressionResolver.resolveAttribute]];
- *   - Resolve the [[AggregateExpression]] in [[AggregateExpressionResolver.resolve]];
- *   - Detect an outer reference below the aggregate expression, cut the whole subtree with outer
- *     references stripped away, alias it and insert it in this [[SubqueryScope]];
- *   - Replace the aggregate expression with an [[OuterReference]] to the [[AttributeReference]]
- *     from that artificial [[Alias]];
- *   - When the resolution of the [[SubqueryExpression]] is finished,
- *     [[SubqueryRegistry.popScope]] merges the lower scope to the upper one, and all the outer
- *     aggregate expression references are appended to the common
- *     [[lowerAliasedOuterAggregateExpressions]] list.
- *   - Finally, the resolution of the `HAVING` clause can insert the missing aggregate expression
- *     into the lower [[Aggregate]] operator. During this process we must call
- *     [[ExpressionIdAssigner.mapExpression]] on the new alias, because this auto-generated alias
- *     is new to the query plan, so that [[ExpressionIdAssigner]] remembers it.
+ * expression is not local to the subquery, and thus it belongs to an outer [[Aggregate]]
+ * operator below the `HAVING` clause. We need top pull it up outside of the subquery, and insert
+ * it in the [[Aggregate]] operator. So the resolution order is as follows:
+ *  - Resolve "t1.col2" to an [[OuterReference]] in [[ExpressionResolver.resolveAttribute]];
+ *  - Resolve the [[AggregateExpression]] in [[AggregateExpressionResolver.resolve]];
+ *  - Detect an outer reference below the aggregate expression, cut the whole subtree with outer
+ *    references stripped away, alias it and insert it in this [[SubqueryScope]];
+ *  - Replace the aggregate expression with an [[OuterReference]] to the [[AttributeReference]] from
+ *    that artificial [[Alias]];
+ *  - When the resolution of the [[SubqueryExpression]] is finished,
+ *    [[SubqueryRegistry.popScope]] merges the lower scope to the upper one, and all the
+ *    outer aggregate expression references are appended to the common
+ *    [[lowerAliasedOuterAggregateExpressions]] list.
+ *  - Finally, the resolution of the `HAVING` clause can insert the missing aggregate expression
+ *    into the lower [[Aggregate]] operator. During this process we must call
+ *    [[ExpressionIdAssigner.mapExpression]] on the new alias, because this auto-generated alias
+ *    is new to the query plan, so that [[ExpressionIdAssigner]] remembers it.
  *
  * Notes:
- *   - Spark only supports outer aggregates in the subqueries inside `HAVING`;
- *   - The subtree under a given [[AggregateExpression]] can be arbitrary, but must contain either
- *     local or outer references, the mixed set is disallowed.
- *   - We can have several subquery expressions in HAVING clause, that's why we append outer
- *     aggregate expressions from lower scopes in [[mergeChildScope]].
+ *  - Spark only supports outer aggregates in the subqueries inside `HAVING`;
+ *  - The subtree under a given [[AggregateExpression]] can be arbitrary, but must contain either
+ *    local or outer references, the mixed set is disallowed.
+ *  - We can have several subquery expressions in HAVING clause, that's why we append outer
+ *    aggregate expressions from lower scopes in [[mergeChildScope]].
  *
- * @param aggregateExpressionsExtractor
- *   [[GroupingAndAggregateExpressionsExtractor]] object defined in case the outer parent operator
- *   is a partially resolved HAVING. Used to extract the aggregate expressions from the outer
- *   [[Aggregate]] operator.
+ * @param aggregateExpressionsExtractor [[GroupingAndAggregateExpressionsExtractor]] object defined
+ *   in case the outer parent operator is a partially resolved HAVING. Used to extract the
+ *   aggregate expressions from the outer [[Aggregate]] operator.
  */
 class SubqueryScope(
     val aggregateExpressionsExtractor: Option[GroupingAndAggregateExpressionsExtractor] = None) {
@@ -101,8 +100,8 @@ class SubqueryScope(
 }
 
 /**
- * The [[SubqueryRegistry]] manages the stack of [[SubqueryScope]]s during the resolution of the
- * whole SQL query. Every new [[SubqueryScope]] has its own isolated scope.
+ * The [[SubqueryRegistry]] manages the stack of [[SubqueryScope]]s during the resolution of
+ * the whole SQL query. Every new [[SubqueryScope]] has its own isolated scope.
  */
 class SubqueryRegistry {
   private val stack = new ArrayDeque[SubqueryScope]
@@ -114,8 +113,8 @@ class SubqueryRegistry {
   def currentScope: SubqueryScope = stack.peek()
 
   /**
-   * Push a new scope to the stack. This is used by the [[SubqueryExpressionResolver]] to create a
-   * new scope for each [[SubqueryExpression]].
+   * Push a new scope to the stack. This is used by the [[SubqueryExpressionResolver]]
+   * to create a new scope for each [[SubqueryExpression]].
    */
   def pushScope(
       parentOperator: LogicalPlan,
@@ -127,7 +126,10 @@ class SubqueryRegistry {
     }
 
     stack.push(
-      new SubqueryScope(aggregateExpressionsExtractor = groupingAndAggregateExpressionsExtractor))
+      new SubqueryScope(
+        aggregateExpressionsExtractor = groupingAndAggregateExpressionsExtractor
+      )
+    )
   }
 
   /*

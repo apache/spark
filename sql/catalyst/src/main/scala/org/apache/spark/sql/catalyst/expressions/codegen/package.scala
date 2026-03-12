@@ -34,8 +34,8 @@ package object codegen {
       Batch("CleanExpressions", FixedPoint(20), CleanExpressions) :: Nil
 
     object CleanExpressions extends rules.Rule[Expression] {
-      def apply(e: Expression): Expression = e transform { case Alias(c, _) =>
-        c
+      def apply(e: Expression): Expression = e transform {
+        case Alias(c, _) => c
       }
     }
   }
@@ -51,7 +51,8 @@ package object codegen {
     def apply(obj: Any): Unit = {
       val generatedClass = obj.getClass
       val classLoader =
-        generatedClass.getClassLoader
+        generatedClass
+          .getClassLoader
           .asInstanceOf[AbstractFileClassLoader]
       val generatedBytes = classLoader.classBytes(generatedClass.getName)
 

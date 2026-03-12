@@ -29,21 +29,17 @@ import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
 @SlowSQLTest
-class FlatMapGroupsWithStateDistributionSuite
-    extends StreamTest
-    with StatefulOpClusteredDistributionTestHelper {
+class FlatMapGroupsWithStateDistributionSuite extends StreamTest
+  with StatefulOpClusteredDistributionTestHelper {
 
   import testImplicits._
 
-  test(
-    "SPARK-38204: flatMapGroupsWithState should require StatefulOpClusteredDistribution " +
-      "from children - with initial state") {
+  test("SPARK-38204: flatMapGroupsWithState should require StatefulOpClusteredDistribution " +
+    "from children - with initial state") {
     // function will return -1 on timeout and returns count of the state otherwise
     val stateFunc =
-      (
-          key: (String, String),
-          values: Iterator[(String, String, Long)],
-          state: GroupState[RunningCount]) => {
+      (key: (String, String), values: Iterator[(String, String, Long)],
+       state: GroupState[RunningCount]) => {
 
         if (state.hasTimedOut) {
           state.remove()
@@ -61,12 +57,9 @@ class FlatMapGroupsWithStateDistributionSuite
     val initialState = Seq(("c", "c", new RunningCount(2)))
       .toDS()
       .repartition($"_2")
-      .groupByKey(a => (a._1, a._2))
-      .mapValues(_._3)
+      .groupByKey(a => (a._1, a._2)).mapValues(_._3)
     val result =
-      inputData
-        .toDF()
-        .toDF("key1", "key2", "time")
+      inputData.toDF().toDF("key1", "key2", "time")
         .selectExpr("key1", "key2", "timestamp_seconds(time) as timestamp")
         .withWatermark("timestamp", "10 second")
         .as[(String, String, Long)]
@@ -88,28 +81,20 @@ class FlatMapGroupsWithStateDistributionSuite
         }
 
         assert(flatMapGroupsWithStateExecs.length === 1)
-        assert(
-          requireStatefulOpClusteredDistribution(
-            flatMapGroupsWithStateExecs.head,
-            Seq(Seq("_1", "_2"), Seq("_1", "_2")),
-            numPartitions))
-        assert(
-          hasDesiredHashPartitioningInChildren(
-            flatMapGroupsWithStateExecs.head,
-            Seq(Seq("_1", "_2"), Seq("_1", "_2")),
-            numPartitions))
-      })
+        assert(requireStatefulOpClusteredDistribution(
+          flatMapGroupsWithStateExecs.head, Seq(Seq("_1", "_2"), Seq("_1", "_2")), numPartitions))
+        assert(hasDesiredHashPartitioningInChildren(
+          flatMapGroupsWithStateExecs.head, Seq(Seq("_1", "_2"), Seq("_1", "_2")), numPartitions))
+      }
+    )
   }
 
-  test(
-    "SPARK-38204: flatMapGroupsWithState should require StatefulOpClusteredDistribution " +
-      "from children - without initial state") {
+  test("SPARK-38204: flatMapGroupsWithState should require StatefulOpClusteredDistribution " +
+    "from children - without initial state") {
     // function will return -1 on timeout and returns count of the state otherwise
     val stateFunc =
-      (
-          key: (String, String),
-          values: Iterator[(String, String, Long)],
-          state: GroupState[RunningCount]) => {
+      (key: (String, String), values: Iterator[(String, String, Long)],
+       state: GroupState[RunningCount]) => {
 
         if (state.hasTimedOut) {
           state.remove()
@@ -125,9 +110,7 @@ class FlatMapGroupsWithStateDistributionSuite
     val clock = new StreamManualClock
     val inputData = MemoryStream[(String, String, Long)]
     val result =
-      inputData
-        .toDF()
-        .toDF("key1", "key2", "time")
+      inputData.toDF().toDF("key1", "key2", "time")
         .selectExpr("key1", "key2", "timestamp_seconds(time) as timestamp")
         .withWatermark("timestamp", "10 second")
         .as[(String, String, Long)]
@@ -149,36 +132,27 @@ class FlatMapGroupsWithStateDistributionSuite
         }
 
         assert(flatMapGroupsWithStateExecs.length === 1)
-        assert(
-          requireStatefulOpClusteredDistribution(
-            flatMapGroupsWithStateExecs.head,
-            Seq(Seq("_1", "_2"), Seq("_1", "_2")),
-            numPartitions))
+        assert(requireStatefulOpClusteredDistribution(
+          flatMapGroupsWithStateExecs.head, Seq(Seq("_1", "_2"), Seq("_1", "_2")), numPartitions))
         if (flatMapGroupsWithStateExecs.head.hasInitialState) {
-          assert(
-            hasDesiredHashPartitioningInChildren(
-              flatMapGroupsWithStateExecs.head.children,
-              Seq(Seq("_1", "_2"), Seq("_1", "_2")),
-              numPartitions))
+          assert(hasDesiredHashPartitioningInChildren(
+            flatMapGroupsWithStateExecs.head.children, Seq(Seq("_1", "_2"), Seq("_1", "_2")),
+            numPartitions))
         } else {
-          assert(
-            hasDesiredHashPartitioningInChildren(
-              Seq(flatMapGroupsWithStateExecs.head.left),
-              Seq(Seq("_1", "_2"), Seq("_1", "_2")),
-              numPartitions))
+          assert(hasDesiredHashPartitioningInChildren(
+            Seq(flatMapGroupsWithStateExecs.head.left), Seq(Seq("_1", "_2"), Seq("_1", "_2")),
+            numPartitions))
         }
-      })
+      }
+    )
   }
 
-  test(
-    "SPARK-38204: flatMapGroupsWithState should require ClusteredDistribution " +
-      "from children if the query starts from checkpoint in 3.2.x - with initial state") {
+  test("SPARK-38204: flatMapGroupsWithState should require ClusteredDistribution " +
+    "from children if the query starts from checkpoint in 3.2.x - with initial state") {
     // function will return -1 on timeout and returns count of the state otherwise
     val stateFunc =
-      (
-          key: (String, String),
-          values: Iterator[(String, String, Long)],
-          state: GroupState[RunningCount]) => {
+      (key: (String, String), values: Iterator[(String, String, Long)],
+       state: GroupState[RunningCount]) => {
 
         if (state.hasTimedOut) {
           state.remove()
@@ -196,12 +170,9 @@ class FlatMapGroupsWithStateDistributionSuite
     val initialState = Seq(("c", "c", new RunningCount(2)))
       .toDS()
       .repartition($"_2")
-      .groupByKey(a => (a._1, a._2))
-      .mapValues(_._3)
+      .groupByKey(a => (a._1, a._2)).mapValues(_._3)
     val result =
-      inputData
-        .toDF()
-        .toDF("key1", "key2", "time")
+      inputData.toDF().toDF("key1", "key2", "time")
         .selectExpr("key1", "key2", "timestamp_seconds(time) as timestamp")
         .withWatermark("timestamp", "10 second")
         .as[(String, String, Long)]
@@ -210,10 +181,8 @@ class FlatMapGroupsWithStateDistributionSuite
         .flatMapGroupsWithState(Update, ProcessingTimeTimeout(), initialState)(stateFunc)
         .select($"_1._1".as("key1"), $"_1._2".as("key2"), $"_2".as("cnt"))
 
-    val resourceUri = this.getClass
-      .getResource(
-        "/structured-streaming/checkpoint-version-3.2.0-flatmapgroupswithstate1-repartition/")
-      .toURI
+    val resourceUri = this.getClass.getResource(
+      "/structured-streaming/checkpoint-version-3.2.0-flatmapgroupswithstate1-repartition/").toURI
 
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
@@ -223,8 +192,7 @@ class FlatMapGroupsWithStateDistributionSuite
     inputData.addData(("a", "a", 1L))
 
     testStream(result, Update)(
-      StartStream(
-        Trigger.ProcessingTime("1 second"),
+      StartStream(Trigger.ProcessingTime("1 second"),
         checkpointLocation = checkpointDir.getAbsolutePath,
         triggerClock = clock,
         additionalConfs = Map(SQLConf.STATEFUL_OPERATOR_USE_STRICT_DISTRIBUTION.key -> "true")),
@@ -263,6 +231,7 @@ class FlatMapGroupsWithStateDistributionSuite
       AddData(inputData, ("a", "b", 1L)),
       AdvanceManualClock(1 * 1000),
       CheckNewAnswer(("a", "b", "1")),
+
       Execute { query =>
         val numPartitions = query.lastExecution.numStateStores
 
@@ -271,36 +240,27 @@ class FlatMapGroupsWithStateDistributionSuite
         }
 
         assert(flatMapGroupsWithStateExecs.length === 1)
-        assert(
-          requireClusteredDistribution(
-            flatMapGroupsWithStateExecs.head,
-            Seq(Seq("_1", "_2"), Seq("_1", "_2")),
-            Some(numPartitions)))
+        assert(requireClusteredDistribution(flatMapGroupsWithStateExecs.head,
+          Seq(Seq("_1", "_2"), Seq("_1", "_2")), Some(numPartitions)))
         if (flatMapGroupsWithStateExecs.head.hasInitialState) {
-          assert(
-            hasDesiredHashPartitioningInChildren(
-              flatMapGroupsWithStateExecs.head.children,
-              Seq(Seq("_1", "_2"), Seq("_1", "_2")),
-              numPartitions))
+          assert(hasDesiredHashPartitioningInChildren(
+            flatMapGroupsWithStateExecs.head.children, Seq(Seq("_1", "_2"), Seq("_1", "_2")),
+            numPartitions))
         } else {
-          assert(
-            hasDesiredHashPartitioningInChildren(
-              Seq(flatMapGroupsWithStateExecs.head.left),
-              Seq(Seq("_1", "_2"), Seq("_1", "_2")),
-              numPartitions))
+          assert(hasDesiredHashPartitioningInChildren(
+            Seq(flatMapGroupsWithStateExecs.head.left), Seq(Seq("_1", "_2"), Seq("_1", "_2")),
+            numPartitions))
         }
-      })
+      }
+    )
   }
 
-  test(
-    "SPARK-38204: flatMapGroupsWithState should require ClusteredDistribution " +
-      "from children if the query starts from checkpoint in 3.2.x - without initial state") {
+  test("SPARK-38204: flatMapGroupsWithState should require ClusteredDistribution " +
+    "from children if the query starts from checkpoint in 3.2.x - without initial state") {
     // function will return -1 on timeout and returns count of the state otherwise
     val stateFunc =
-      (
-          key: (String, String),
-          values: Iterator[(String, String, Long)],
-          state: GroupState[RunningCount]) => {
+      (key: (String, String), values: Iterator[(String, String, Long)],
+       state: GroupState[RunningCount]) => {
 
         if (state.hasTimedOut) {
           state.remove()
@@ -316,9 +276,7 @@ class FlatMapGroupsWithStateDistributionSuite
     val clock = new StreamManualClock
     val inputData = MemoryStream[(String, String, Long)]
     val result =
-      inputData
-        .toDF()
-        .toDF("key1", "key2", "time")
+      inputData.toDF().toDF("key1", "key2", "time")
         .selectExpr("key1", "key2", "timestamp_seconds(time) as timestamp")
         .withWatermark("timestamp", "10 second")
         .as[(String, String, Long)]
@@ -327,10 +285,8 @@ class FlatMapGroupsWithStateDistributionSuite
         .flatMapGroupsWithState(Update, ProcessingTimeTimeout())(stateFunc)
         .select($"_1._1".as("key1"), $"_1._2".as("key2"), $"_2".as("cnt"))
 
-    val resourceUri = this.getClass
-      .getResource(
-        "/structured-streaming/checkpoint-version-3.2.0-flatmapgroupswithstate2-repartition/")
-      .toURI
+    val resourceUri = this.getClass.getResource(
+      "/structured-streaming/checkpoint-version-3.2.0-flatmapgroupswithstate2-repartition/").toURI
 
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
@@ -340,8 +296,7 @@ class FlatMapGroupsWithStateDistributionSuite
     inputData.addData(("a", "a", 1L))
 
     testStream(result, Update)(
-      StartStream(
-        Trigger.ProcessingTime("1 second"),
+      StartStream(Trigger.ProcessingTime("1 second"),
         checkpointLocation = checkpointDir.getAbsolutePath,
         triggerClock = clock,
         additionalConfs = Map(SQLConf.STATEFUL_OPERATOR_USE_STRICT_DISTRIBUTION.key -> "true")),
@@ -375,6 +330,7 @@ class FlatMapGroupsWithStateDistributionSuite
       AddData(inputData, ("a", "b", 1L)),
       AdvanceManualClock(1 * 1000),
       CheckNewAnswer(("a", "b", "1")),
+
       Execute { query =>
         val numPartitions = query.lastExecution.numStateStores
 
@@ -383,36 +339,27 @@ class FlatMapGroupsWithStateDistributionSuite
         }
 
         assert(flatMapGroupsWithStateExecs.length === 1)
-        assert(
-          requireClusteredDistribution(
-            flatMapGroupsWithStateExecs.head,
-            Seq(Seq("_1", "_2"), Seq("_1", "_2")),
-            Some(numPartitions)))
+        assert(requireClusteredDistribution(flatMapGroupsWithStateExecs.head,
+          Seq(Seq("_1", "_2"), Seq("_1", "_2")), Some(numPartitions)))
         if (flatMapGroupsWithStateExecs.head.hasInitialState) {
-          assert(
-            hasDesiredHashPartitioningInChildren(
-              flatMapGroupsWithStateExecs.head.children,
-              Seq(Seq("_1", "_2"), Seq("_1", "_2")),
-              numPartitions))
+          assert(hasDesiredHashPartitioningInChildren(
+            flatMapGroupsWithStateExecs.head.children, Seq(Seq("_1", "_2"), Seq("_1", "_2")),
+            numPartitions))
         } else {
-          assert(
-            hasDesiredHashPartitioningInChildren(
-              Seq(flatMapGroupsWithStateExecs.head.left),
-              Seq(Seq("_1", "_2"), Seq("_1", "_2")),
-              numPartitions))
+          assert(hasDesiredHashPartitioningInChildren(
+            Seq(flatMapGroupsWithStateExecs.head.left), Seq(Seq("_1", "_2"), Seq("_1", "_2")),
+            numPartitions))
         }
-      })
+      }
+    )
   }
 
-  test(
-    "SPARK-38204: flatMapGroupsWithState should require ClusteredDistribution " +
-      "from children if the query starts from checkpoint in prior to 3.2") {
+  test("SPARK-38204: flatMapGroupsWithState should require ClusteredDistribution " +
+    "from children if the query starts from checkpoint in prior to 3.2") {
     // function will return -1 on timeout and returns count of the state otherwise
     val stateFunc =
-      (
-          key: (String, String),
-          values: Iterator[(String, String, Long)],
-          state: GroupState[RunningCount]) => {
+      (key: (String, String), values: Iterator[(String, String, Long)],
+       state: GroupState[RunningCount]) => {
 
         if (state.hasTimedOut) {
           state.remove()
@@ -428,9 +375,7 @@ class FlatMapGroupsWithStateDistributionSuite
     val clock = new StreamManualClock
     val inputData = MemoryStream[(String, String, Long)]
     val result =
-      inputData
-        .toDF()
-        .toDF("key1", "key2", "time")
+      inputData.toDF().toDF("key1", "key2", "time")
         .selectExpr("key1", "key2", "timestamp_seconds(time) as timestamp")
         .withWatermark("timestamp", "10 second")
         .as[(String, String, Long)]
@@ -439,10 +384,8 @@ class FlatMapGroupsWithStateDistributionSuite
         .flatMapGroupsWithState(Update, ProcessingTimeTimeout())(stateFunc)
         .select($"_1._1".as("key1"), $"_1._2".as("key2"), $"_2".as("cnt"))
 
-    val resourceUri = this.getClass
-      .getResource(
-        "/structured-streaming/checkpoint-version-3.1.0-flatmapgroupswithstate-repartition/")
-      .toURI
+    val resourceUri = this.getClass.getResource(
+      "/structured-streaming/checkpoint-version-3.1.0-flatmapgroupswithstate-repartition/").toURI
 
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
@@ -452,8 +395,7 @@ class FlatMapGroupsWithStateDistributionSuite
     inputData.addData(("a", "a", 1L))
 
     testStream(result, Update)(
-      StartStream(
-        Trigger.ProcessingTime("1 second"),
+      StartStream(Trigger.ProcessingTime("1 second"),
         checkpointLocation = checkpointDir.getAbsolutePath,
         triggerClock = clock,
         additionalConfs = Map(SQLConf.STATEFUL_OPERATOR_USE_STRICT_DISTRIBUTION.key -> "true")),
@@ -499,7 +441,7 @@ class FlatMapGroupsWithStateDistributionSuite
                                       +- MicroBatchScan[_1#3, _2#4, _3#5L] MemoryStreamDataSource
 
         C. Spark 2.4.0
-       *(3) Project [_1#32._1 AS key1#35, _1#32._2 AS key2#36, _2#33 AS cnt#37]
+        *(3) Project [_1#32._1 AS key1#35, _1#32._2 AS key2#36, _2#33 AS cnt#37]
         +- *(3) SerializeFromObject [if (isnull(assertnotnull(input[0, scala.Tuple2, true])._1)) null else named_struct(_1, staticinvoke(class org.apache.spark.unsafe.types.UTF8String, StringType, fromString, assertnotnull(assertnotnull(input[0, scala.Tuple2, true])._1)._1, true, false), _2, staticinvoke(class org.apache.spark.unsafe.types.UTF8String, StringType, fromString, assertnotnull(assertnotnull(input[0, scala.Tuple2, true])._1)._2, true, false)) AS _1#32, staticinvoke(class org.apache.spark.unsafe.types.UTF8String, StringType, fromString, assertnotnull(input[0, scala.Tuple2, true])._2, true, false) AS _2#33]
            +- FlatMapGroupsWithState <function3>, newInstance(class scala.Tuple2), newInstance(class scala.Tuple3), [_1#26, _2#27], [key1#9, key2#10, timestamp#15-T10000ms], obj#31: scala.Tuple2, state info [ checkpoint = file:/tmp/spark-634482c9-a55a-4f4e-b352-babec98fb4fc/state, runId = dd65fff0-d901-4e0b-a1ad-8c09b69f33ba, opId = 0, ver = 0, numPartitions = 5], class[count[0]: bigint], 2, Update, ProcessingTimeTimeout, 1000, 0
               +- *(2) Sort [_1#26 ASC NULLS FIRST, _2#27 ASC NULLS FIRST], false, 0
@@ -516,6 +458,7 @@ class FlatMapGroupsWithStateDistributionSuite
       AddData(inputData, ("a", "b", 1L)),
       AdvanceManualClock(1 * 1000),
       CheckNewAnswer(("a", "b", "1")),
+
       Execute { query =>
         val numPartitions = query.lastExecution.numStateStores
 
@@ -524,24 +467,18 @@ class FlatMapGroupsWithStateDistributionSuite
         }
 
         assert(flatMapGroupsWithStateExecs.length === 1)
-        assert(
-          requireClusteredDistribution(
-            flatMapGroupsWithStateExecs.head,
-            Seq(Seq("_1", "_2"), Seq("_1", "_2")),
-            Some(numPartitions)))
+        assert(requireClusteredDistribution(flatMapGroupsWithStateExecs.head,
+          Seq(Seq("_1", "_2"), Seq("_1", "_2")), Some(numPartitions)))
         if (flatMapGroupsWithStateExecs.head.hasInitialState) {
-          assert(
-            hasDesiredHashPartitioningInChildren(
-              flatMapGroupsWithStateExecs.head.children,
-              Seq(Seq("_1", "_2"), Seq("_1", "_2")),
-              numPartitions))
+          assert(hasDesiredHashPartitioningInChildren(
+            flatMapGroupsWithStateExecs.head.children, Seq(Seq("_1", "_2"), Seq("_1", "_2")),
+            numPartitions))
         } else {
-          assert(
-            hasDesiredHashPartitioningInChildren(
-              Seq(flatMapGroupsWithStateExecs.head.left),
-              Seq(Seq("_1", "_2"), Seq("_1", "_2")),
-              numPartitions))
+          assert(hasDesiredHashPartitioningInChildren(
+            Seq(flatMapGroupsWithStateExecs.head.left), Seq(Seq("_1", "_2"), Seq("_1", "_2")),
+            numPartitions))
         }
-      })
+      }
+    )
   }
 }

@@ -20,17 +20,20 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, Literal, NamedExpression}
 
+
 class AnalysisHelperSuite extends SparkFunSuite {
 
   private var invocationCount = 0
-  private val function: PartialFunction[LogicalPlan, LogicalPlan] = { case p: Project =>
-    invocationCount += 1
-    p
+  private val function: PartialFunction[LogicalPlan, LogicalPlan] = {
+    case p: Project =>
+      invocationCount += 1
+      p
   }
 
-  private val exprFunction: PartialFunction[Expression, Expression] = { case e: Literal =>
-    invocationCount += 1
-    Literal.TrueLiteral
+  private val exprFunction: PartialFunction[Expression, Expression] = {
+    case e: Literal =>
+      invocationCount += 1
+      Literal.TrueLiteral
   }
 
   private def projectExprs: Seq[NamedExpression] = Alias(Literal.TrueLiteral, "A")() :: Nil

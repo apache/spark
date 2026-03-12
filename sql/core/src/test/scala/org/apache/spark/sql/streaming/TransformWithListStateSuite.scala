@@ -26,11 +26,14 @@ import org.apache.spark.tags.SlowSQLTest
 
 case class InputRow(key: String, action: String, value: String)
 
-class TestListStateProcessor extends StatefulProcessor[String, InputRow, (String, String)] {
+class TestListStateProcessor
+  extends StatefulProcessor[String, InputRow, (String, String)] {
 
   @transient var _listState: ListState[String] = _
 
-  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
     _listState = getHandle.getListState("testListState", Encoders.STRING, TTLConfig.NONE)
   }
 
@@ -90,7 +93,8 @@ class InitialListStateProcessor extends StatefulProcessor[String, String, (Strin
     listState = getHandle.getListState[InitialListItem](
       "listState",
       Encoders.product[InitialListItem],
-      TTLConfig.NONE)
+      TTLConfig.NONE
+    )
   }
 
   override def handleInputRows(
@@ -124,7 +128,8 @@ class EvolvedListStateProcessor extends StatefulProcessor[String, String, (Strin
     listState = getHandle.getListState[EvolvedListItem](
       "listState",
       Encoders.product[EvolvedListItem],
-      TTLConfig.NONE)
+      TTLConfig.NONE
+    )
   }
 
   override def handleInputRows(
@@ -142,7 +147,8 @@ class EvolvedListStateProcessor extends StatefulProcessor[String, String, (Strin
         id = value,
         count = currentCount + 1,
         lastUpdated = System.currentTimeMillis(),
-        description = s"Updated item $value with count ${currentCount + 1}")
+        description = s"Updated item $value with count ${currentCount + 1}"
+      )
     }.toList
 
     if (newItems.nonEmpty) {
@@ -155,7 +161,8 @@ class EvolvedListStateProcessor extends StatefulProcessor[String, String, (Strin
           id = item.id,
           count = item.count,
           lastUpdated = System.currentTimeMillis(),
-          description = s"Migrated item ${item.id} with count ${item.count}")
+          description = s"Migrated item ${item.id} with count ${item.count}"
+        )
       }
 
       // Write both migrated and new items
@@ -169,14 +176,18 @@ class EvolvedListStateProcessor extends StatefulProcessor[String, String, (Strin
   }
 }
 
-class ToggleSaveAndEmitProcessor extends StatefulProcessor[String, String, String] {
+class ToggleSaveAndEmitProcessor
+  extends StatefulProcessor[String, String, String] {
 
   @transient var _listState: ListState[String] = _
   @transient var _valueState: ValueState[Boolean] = _
 
-  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
     _listState = getHandle.getListState("testListState", Encoders.STRING, TTLConfig.NONE)
-    _valueState = getHandle.getValueState("testValueState", Encoders.scalaBoolean, TTLConfig.NONE)
+    _valueState = getHandle.getValueState("testValueState", Encoders.scalaBoolean,
+      TTLConfig.NONE)
   }
 
   override def handleInputRows(
@@ -212,139 +223,142 @@ class ToggleSaveAndEmitProcessor extends StatefulProcessor[String, String, Strin
 }
 
 @SlowSQLTest
-class TransformWithListStateSuite
-    extends StreamTest
-    with AlsoTestWithRocksDBFeatures
-    with AlsoTestWithEncodingTypes
-    with StateStoreMetricsTest {
+class TransformWithListStateSuite extends StreamTest
+  with AlsoTestWithRocksDBFeatures with AlsoTestWithEncodingTypes with StateStoreMetricsTest {
   import testImplicits._
 
   test("test appending null value in list state throw exception") {
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName) {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
 
       val inputData = MemoryStream[InputRow]
-      val result = inputData
-        .toDS()
+      val result = inputData.toDS()
         .groupByKey(x => x.key)
-        .transformWithState(new TestListStateProcessor(), TimeMode.None(), OutputMode.Update())
+        .transformWithState(new TestListStateProcessor(),
+          TimeMode.None(),
+          OutputMode.Update())
 
-      testStream(result, OutputMode.Update())(
+      testStream(result, OutputMode.Update()) (
         AddData(inputData, InputRow("k1", "tryAppendingNull", "")),
         ExpectFailure[SparkIllegalArgumentException](e => {
           assert(e.getMessage.contains("ILLEGAL_STATE_STORE_VALUE.NULL_VALUE"))
-        }))
+        })
+      )
     }
   }
 
   test("test putting null value in list state throw exception") {
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName) {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
 
       val inputData = MemoryStream[InputRow]
-      val result = inputData
-        .toDS()
+      val result = inputData.toDS()
         .groupByKey(x => x.key)
-        .transformWithState(new TestListStateProcessor(), TimeMode.None(), OutputMode.Update())
+        .transformWithState(new TestListStateProcessor(),
+          TimeMode.None(),
+          OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
         AddData(inputData, InputRow("k1", "tryPuttingNullInList", "")),
         ExpectFailure[SparkIllegalArgumentException](e => {
           assert(e.getMessage.contains("ILLEGAL_STATE_STORE_VALUE.NULL_VALUE"))
-        }))
+        })
+      )
     }
   }
 
   test("test putting null list in list state throw exception") {
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName) {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
 
       val inputData = MemoryStream[InputRow]
-      val result = inputData
-        .toDS()
+      val result = inputData.toDS()
         .groupByKey(x => x.key)
-        .transformWithState(new TestListStateProcessor(), TimeMode.None(), OutputMode.Update())
+        .transformWithState(new TestListStateProcessor(),
+          TimeMode.None(),
+          OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
         AddData(inputData, InputRow("k1", "tryPutNullList", "")),
         ExpectFailure[SparkIllegalArgumentException](e => {
           assert(e.getMessage.contains("ILLEGAL_STATE_STORE_VALUE.NULL_VALUE"))
-        }))
+        })
+      )
     }
   }
 
   test("test appending null list in list state throw exception") {
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName) {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
 
       val inputData = MemoryStream[InputRow]
-      val result = inputData
-        .toDS()
+      val result = inputData.toDS()
         .groupByKey(x => x.key)
-        .transformWithState(new TestListStateProcessor(), TimeMode.None(), OutputMode.Update())
+        .transformWithState(new TestListStateProcessor(),
+          TimeMode.None(),
+          OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
         AddData(inputData, InputRow("k1", "tryAppendingNullList", "")),
         ExpectFailure[SparkIllegalArgumentException](e => {
           assert(e.getMessage.contains("ILLEGAL_STATE_STORE_VALUE.NULL_VALUE"))
-        }))
+        })
+      )
     }
   }
 
   test("test putting empty list in list state throw exception") {
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName) {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
 
       val inputData = MemoryStream[InputRow]
-      val result = inputData
-        .toDS()
+      val result = inputData.toDS()
         .groupByKey(x => x.key)
-        .transformWithState(new TestListStateProcessor(), TimeMode.None(), OutputMode.Update())
+        .transformWithState(new TestListStateProcessor(),
+          TimeMode.None(),
+          OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
         AddData(inputData, InputRow("k1", "tryPutEmptyList", "")),
         ExpectFailure[SparkIllegalArgumentException](e => {
           assert(e.getMessage.contains("ILLEGAL_STATE_STORE_VALUE.EMPTY_LIST_VALUE"))
-        }))
+        })
+      )
     }
   }
 
   test("test appending empty list in list state throw exception") {
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName) {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
 
       val inputData = MemoryStream[InputRow]
-      val result = inputData
-        .toDS()
+      val result = inputData.toDS()
         .groupByKey(x => x.key)
-        .transformWithState(new TestListStateProcessor(), TimeMode.None(), OutputMode.Update())
+        .transformWithState(new TestListStateProcessor(),
+          TimeMode.None(),
+          OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
         AddData(inputData, InputRow("k1", "tryAppendingEmptyList", "")),
         ExpectFailure[SparkIllegalArgumentException](e => {
           assert(e.getMessage.contains("ILLEGAL_STATE_STORE_VALUE.EMPTY_LIST_VALUE"))
-        }))
+        })
+      )
     }
   }
 
   test("test list state correctness") {
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName) {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
 
       val inputData = MemoryStream[InputRow]
-      val result = inputData
-        .toDS()
+      val result = inputData.toDS()
         .groupByKey(x => x.key)
-        .transformWithState(new TestListStateProcessor(), TimeMode.None(), OutputMode.Update())
+        .transformWithState(new TestListStateProcessor(),
+          TimeMode.None(),
+          OutputMode.Update())
 
-      testStream(result, OutputMode.Update())(
+      testStream(result, OutputMode.Update()) (
         // no interaction test
         AddData(inputData, InputRow("k1", "emit", "v1")),
         CheckNewAnswer(("k1", "v1")),
@@ -364,6 +378,7 @@ class TransformWithListStateSuite
         AddData(inputData, InputRow("k2", "emit", "v3")),
         CheckNewAnswer(("k1", "v5"), ("k2", "v3")),
         assertNumStateRows(total = 2, updated = 3),
+
         AddData(inputData, InputRow("k1", "emitAllInState", "")),
         AddData(inputData, InputRow("k2", "emitAllInState", "")),
         CheckNewAnswer(("k2", "v1"), ("k2", "v2"), ("k1", "v4")),
@@ -375,6 +390,7 @@ class TransformWithListStateSuite
         AddData(inputData, InputRow("k3", "append", "v5")),
         CheckNewAnswer(("k3", "v4")),
         assertNumStateRows(total = 1, updated = 4),
+
         AddData(inputData, InputRow("k3", "emitAllInState", "")),
         CheckNewAnswer(("k3", "v1"), ("k3", "v2"), ("k3", "v3"), ("k3", "v5")),
         assertNumStateRows(total = 0, updated = 0),
@@ -399,21 +415,19 @@ class TransformWithListStateSuite
           assert(q.lastProgress.stateOperators(0).numRowsUpdated === 2)
           assert(q.lastProgress.stateOperators(0).numRowsRemoved === 2)
         },
-        StopStream)
+        StopStream
+      )
     }
   }
 
   test("test ValueState And ListState in Processor") {
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName) {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
 
       val inputData = MemoryStream[String]
-      val result = inputData
-        .toDS()
+      val result = inputData.toDS()
         .groupByKey(x => x)
-        .transformWithState(
-          new ToggleSaveAndEmitProcessor(),
+        .transformWithState(new ToggleSaveAndEmitProcessor(),
           TimeMode.None(),
           OutputMode.Update())
 
@@ -425,7 +439,8 @@ class TransformWithListStateSuite
         AddData(inputData, "k1"),
         AddData(inputData, "k2"),
         CheckNewAnswer("k1", "k1", "k2", "k2"),
-        assertNumStateRows(total = 0, updated = 0))
+        assertNumStateRows(total = 0, updated = 0)
+      )
     }
   }
 
@@ -436,11 +451,9 @@ class TransformWithListStateSuite
         val inputData = MemoryStream[String]
 
         // First run with initial schema
-        val result1 = inputData
-          .toDS()
+        val result1 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new InitialListStateProcessor(),
+          .transformWithState(new InitialListStateProcessor(),
             TimeMode.None(),
             OutputMode.Update())
 
@@ -454,14 +467,13 @@ class TransformWithListStateSuite
           AddData(inputData, "item1", "item3"),
           CheckNewAnswer(("item1", 2), ("item3", 1)),
           assertNumStateRows(total = 3, updated = 2),
-          StopStream)
+          StopStream
+        )
 
         // Second run with evolved schema
-        val result2 = inputData
-          .toDS()
+        val result2 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new EvolvedListStateProcessor(),
+          .transformWithState(new EvolvedListStateProcessor(),
             TimeMode.None(),
             OutputMode.Update())
 
@@ -477,7 +489,8 @@ class TransformWithListStateSuite
           // For rows with key item1 we clear and readd 3 items (3 updates)
           // rows with keys item2 and item3 are not migrated because they are not accessed
           assertNumStateRows(total = 3, updated = 3),
-          StopStream)
+          StopStream
+        )
       }
     }
   }
@@ -488,5 +501,4 @@ class TransformWithListStateSuite
  */
 @SlowSQLTest
 class TransformWithListStateSuiteWithRowChecksum
-    extends TransformWithListStateSuite
-    with EnableStateStoreRowChecksum
+  extends TransformWithListStateSuite with EnableStateStoreRowChecksum

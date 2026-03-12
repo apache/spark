@@ -31,19 +31,20 @@ trait CommandSuiteBase extends SharedSparkSession {
   def catalogVersion: String = "V1" // The catalog version is added to test names
   def commandVersion: String = "V1" // The command version is added to test names
   def catalog: String = CatalogManager.SESSION_CATALOG_NAME
-  def defaultUsing: String =
-    "USING parquet" // The clause is used in creating tables under testing
+  def defaultUsing: String = "USING parquet" // The clause is used in creating tables under testing
 
   // TODO(SPARK-33393): Move this to `DDLCommandTestUtils`
-  def checkLocation(t: String, spec: TablePartitionSpec, expected: String): Unit = {
+  def checkLocation(
+      t: String,
+      spec: TablePartitionSpec,
+      expected: String): Unit = {
     val tablePath = t.split('.')
     val tableName = tablePath.last
     val ns = tablePath.init.mkString(".")
-    val partSpec = spec.map { case (key, value) => s"$key = $value" }.mkString(", ")
+    val partSpec = spec.map { case (key, value) => s"$key = $value"}.mkString(", ")
     val information = sql(s"SHOW TABLE EXTENDED IN $ns LIKE '$tableName' PARTITION($partSpec)")
       .select("information")
-      .first()
-      .getString(0)
+      .first().getString(0)
     val location = information.split("\\r?\\n").filter(_.startsWith("Location:")).head
     assert(location.endsWith(expected))
   }

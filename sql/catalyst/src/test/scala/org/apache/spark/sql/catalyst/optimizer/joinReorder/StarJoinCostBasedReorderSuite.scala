@@ -27,20 +27,20 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.statsEstimation.{StatsEstimationTestBase, StatsTestPlan}
 import org.apache.spark.sql.internal.SQLConf._
 
+
 class StarJoinCostBasedReorderSuite extends JoinReorderPlanTestBase with StatsEstimationTestBase {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch(
-        "Operator Optimizations",
-        FixedPoint(100),
+      Batch("Operator Optimizations", FixedPoint(100),
         CombineFilters,
         PushPredicateThroughNonJoin,
         ReorderJoin,
         PushPredicateThroughJoin,
         ColumnPruning,
         CollapseProject) ::
-        Batch("Join Reorder", FixedPoint(1), CostBasedJoinReorder) :: Nil
+      Batch("Join Reorder", FixedPoint(1),
+        CostBasedJoinReorder) :: Nil
   }
 
   var originalConfCBOEnabled = false
@@ -67,59 +67,60 @@ class StarJoinCostBasedReorderSuite extends JoinReorderPlanTestBase with StatsEs
     }
   }
 
-  private val columnInfo: AttributeMap[ColumnStat] = AttributeMap(
-    Seq(
-      // F1 (fact table)
-      attr("f1_fk1") -> rangeColumnStat(100, 0),
-      attr("f1_fk2") -> rangeColumnStat(100, 0),
-      attr("f1_fk3") -> rangeColumnStat(100, 0),
-      attr("f1_c1") -> rangeColumnStat(100, 0),
-      attr("f1_c2") -> rangeColumnStat(100, 0),
+  private val columnInfo: AttributeMap[ColumnStat] = AttributeMap(Seq(
+    // F1 (fact table)
+    attr("f1_fk1") -> rangeColumnStat(100, 0),
+    attr("f1_fk2") -> rangeColumnStat(100, 0),
+    attr("f1_fk3") -> rangeColumnStat(100, 0),
+    attr("f1_c1") -> rangeColumnStat(100, 0),
+    attr("f1_c2") -> rangeColumnStat(100, 0),
 
-      // D1 (dimension)
-      attr("d1_pk") -> rangeColumnStat(100, 0),
-      attr("d1_c2") -> rangeColumnStat(50, 0),
-      attr("d1_c3") -> rangeColumnStat(50, 0),
+    // D1 (dimension)
+    attr("d1_pk") -> rangeColumnStat(100, 0),
+    attr("d1_c2") -> rangeColumnStat(50, 0),
+    attr("d1_c3") -> rangeColumnStat(50, 0),
 
-      // D2 (dimension)
-      attr("d2_pk") -> rangeColumnStat(20, 0),
-      attr("d2_c2") -> rangeColumnStat(10, 0),
-      attr("d2_c3") -> rangeColumnStat(10, 0),
+    // D2 (dimension)
+    attr("d2_pk") -> rangeColumnStat(20, 0),
+    attr("d2_c2") -> rangeColumnStat(10, 0),
+    attr("d2_c3") -> rangeColumnStat(10, 0),
 
-      // D3 (dimension)
-      attr("d3_pk") -> rangeColumnStat(10, 0),
-      attr("d3_c2") -> rangeColumnStat(5, 0),
-      attr("d3_c3") -> rangeColumnStat(5, 0),
+    // D3 (dimension)
+    attr("d3_pk") -> rangeColumnStat(10, 0),
+    attr("d3_c2") -> rangeColumnStat(5, 0),
+    attr("d3_c3") -> rangeColumnStat(5, 0),
 
-      // T1 (regular table i.e. outside star)
-      attr("t1_c1") -> rangeColumnStat(20, 1),
-      attr("t1_c2") -> rangeColumnStat(10, 1),
-      attr("t1_c3") -> rangeColumnStat(10, 1),
+    // T1 (regular table i.e. outside star)
+    attr("t1_c1") -> rangeColumnStat(20, 1),
+    attr("t1_c2") -> rangeColumnStat(10, 1),
+    attr("t1_c3") -> rangeColumnStat(10, 1),
 
-      // T2 (regular table)
-      attr("t2_c1") -> rangeColumnStat(5, 1),
-      attr("t2_c2") -> rangeColumnStat(5, 1),
-      attr("t2_c3") -> rangeColumnStat(5, 1),
+    // T2 (regular table)
+    attr("t2_c1") -> rangeColumnStat(5, 1),
+    attr("t2_c2") -> rangeColumnStat(5, 1),
+    attr("t2_c3") -> rangeColumnStat(5, 1),
 
-      // T3 (regular table)
-      attr("t3_c1") -> rangeColumnStat(5, 1),
-      attr("t3_c2") -> rangeColumnStat(5, 1),
-      attr("t3_c3") -> rangeColumnStat(5, 1),
+    // T3 (regular table)
+    attr("t3_c1") -> rangeColumnStat(5, 1),
+    attr("t3_c2") -> rangeColumnStat(5, 1),
+    attr("t3_c3") -> rangeColumnStat(5, 1),
 
-      // T4 (regular table)
-      attr("t4_c1") -> rangeColumnStat(5, 1),
-      attr("t4_c2") -> rangeColumnStat(5, 1),
-      attr("t4_c3") -> rangeColumnStat(5, 1),
+    // T4 (regular table)
+    attr("t4_c1") -> rangeColumnStat(5, 1),
+    attr("t4_c2") -> rangeColumnStat(5, 1),
+    attr("t4_c3") -> rangeColumnStat(5, 1),
 
-      // T5 (regular table)
-      attr("t5_c1") -> rangeColumnStat(5, 1),
-      attr("t5_c2") -> rangeColumnStat(5, 1),
-      attr("t5_c3") -> rangeColumnStat(5, 1),
+    // T5 (regular table)
+    attr("t5_c1") -> rangeColumnStat(5, 1),
+    attr("t5_c2") -> rangeColumnStat(5, 1),
+    attr("t5_c3") -> rangeColumnStat(5, 1),
 
-      // T6 (regular table)
-      attr("t6_c1") -> rangeColumnStat(5, 1),
-      attr("t6_c2") -> rangeColumnStat(5, 1),
-      attr("t6_c3") -> rangeColumnStat(5, 1)))
+    // T6 (regular table)
+    attr("t6_c1") -> rangeColumnStat(5, 1),
+    attr("t6_c2") -> rangeColumnStat(5, 1),
+    attr("t6_c3") -> rangeColumnStat(5, 1)
+
+  ))
 
   private val nameToAttr: Map[String, Attribute] = columnInfo.map(kv => kv._1.name -> kv._1)
   private val nameToColInfo: Map[String, (Attribute, ColumnStat)] =
@@ -129,9 +130,8 @@ class StarJoinCostBasedReorderSuite extends JoinReorderPlanTestBase with StatsEs
     outputList = Seq("f1_fk1", "f1_fk2", "f1_fk3", "f1_c1", "f1_c2").map(nameToAttr),
     rowCount = 1000,
     size = Some(1000 * (8 + 4 * 5)),
-    attributeStats = AttributeMap(
-      Seq("f1_fk1", "f1_fk2", "f1_fk3", "f1_c1", "f1_c2")
-        .map(nameToColInfo)))
+    attributeStats = AttributeMap(Seq("f1_fk1", "f1_fk2", "f1_fk3", "f1_c1", "f1_c2")
+      .map(nameToColInfo)))
 
   // To control the layout of the join plans, keep the size for the non-fact tables constant
   // and vary the rowcount and the number of distinct values of the join columns.
@@ -208,15 +208,11 @@ class StarJoinCostBasedReorderSuite extends JoinReorderPlanTestBase with StatsEs
     //
     // Number of generated plans: 11 (vs. 20 w/o filter)
     val query =
-      f1.join(t1)
-        .join(t2)
-        .join(d1)
-        .join(d2)
-        .where(
-          (nameToAttr("f1_c1") === nameToAttr("t1_c1")) &&
-            (nameToAttr("f1_c2") === nameToAttr("t2_c1")) &&
-            (nameToAttr("f1_fk1") === nameToAttr("d1_pk")) &&
-            (nameToAttr("f1_fk2") === nameToAttr("d2_pk")))
+      f1.join(t1).join(t2).join(d1).join(d2)
+        .where((nameToAttr("f1_c1") === nameToAttr("t1_c1")) &&
+          (nameToAttr("f1_c2") === nameToAttr("t2_c1")) &&
+          (nameToAttr("f1_fk1") === nameToAttr("d1_pk")) &&
+          (nameToAttr("f1_fk2") === nameToAttr("d2_pk")))
 
     val expected =
       f1.join(d2, Inner, Some(nameToAttr("f1_fk2") === nameToAttr("d2_pk")))
@@ -248,25 +244,18 @@ class StarJoinCostBasedReorderSuite extends JoinReorderPlanTestBase with StatsEs
     //
     // Number of generated plans: 15 (vs 24)
     val query =
-      d1.join(t1)
-        .join(t2)
-        .join(f1)
-        .join(d2)
-        .join(t3)
-        .where(
-          (nameToAttr("d1_pk") === nameToAttr("f1_fk1")) &&
-            (nameToAttr("t1_c1") === nameToAttr("f1_c1")) &&
-            (nameToAttr("d2_pk") === nameToAttr("f1_fk2")) &&
-            (nameToAttr("f1_fk2") === nameToAttr("d2_pk")) &&
-            (nameToAttr("d1_c2") === nameToAttr("t2_c1")) &&
-            (nameToAttr("t2_c2") === nameToAttr("t3_c1")))
+      d1.join(t1).join(t2).join(f1).join(d2).join(t3)
+        .where((nameToAttr("d1_pk") === nameToAttr("f1_fk1")) &&
+          (nameToAttr("t1_c1") === nameToAttr("f1_c1")) &&
+          (nameToAttr("d2_pk") === nameToAttr("f1_fk2")) &&
+          (nameToAttr("f1_fk2") === nameToAttr("d2_pk")) &&
+          (nameToAttr("d1_c2") === nameToAttr("t2_c1")) &&
+          (nameToAttr("t2_c2") === nameToAttr("t3_c1")))
 
     val expected =
       f1.join(d2, Inner, Some(nameToAttr("f1_fk2") === nameToAttr("d2_pk")))
         .join(d1, Inner, Some(nameToAttr("f1_fk1") === nameToAttr("d1_pk")))
-        .join(
-          t3.join(t2, Inner, Some(nameToAttr("t2_c2") === nameToAttr("t3_c1"))),
-          Inner,
+        .join(t3.join(t2, Inner, Some(nameToAttr("t2_c2") === nameToAttr("t3_c1"))), Inner,
           Some(nameToAttr("d1_c2") === nameToAttr("t2_c1")))
         .join(t1, Inner, Some(nameToAttr("t1_c1") === nameToAttr("f1_c1")))
         .select(outputsOf(d1, t1, t2, f1, d2, t3): _*)
@@ -296,31 +285,21 @@ class StarJoinCostBasedReorderSuite extends JoinReorderPlanTestBase with StatsEs
     //
     // Number of generated plans: 22 (vs. 34)
     val query =
-      d1.join(t1)
-        .join(t2)
-        .join(t3)
-        .join(t4)
-        .join(f1)
-        .join(d2)
-        .where(
-          (nameToAttr("t1_c1") === nameToAttr("t2_c1")) &&
-            (nameToAttr("t3_c1") === nameToAttr("t4_c1")) &&
-            (nameToAttr("t1_c2") === nameToAttr("t4_c2")) &&
-            (nameToAttr("d1_c2") === nameToAttr("t4_c3")) &&
-            (nameToAttr("f1_fk1") === nameToAttr("d1_pk")) &&
-            (nameToAttr("f1_fk2") === nameToAttr("d2_pk")))
+      d1.join(t1).join(t2).join(t3).join(t4).join(f1).join(d2)
+        .where((nameToAttr("t1_c1") === nameToAttr("t2_c1")) &&
+          (nameToAttr("t3_c1") === nameToAttr("t4_c1")) &&
+          (nameToAttr("t1_c2") === nameToAttr("t4_c2")) &&
+          (nameToAttr("d1_c2") === nameToAttr("t4_c3")) &&
+          (nameToAttr("f1_fk1") === nameToAttr("d1_pk")) &&
+          (nameToAttr("f1_fk2") === nameToAttr("d2_pk")))
 
     val expected =
       f1
         .join(d2, Inner, Some(nameToAttr("f1_fk2") === nameToAttr("d2_pk")))
         .join(d1, Inner, Some(nameToAttr("f1_fk1") === nameToAttr("d1_pk")))
-        .join(
-          t3.join(t4, Inner, Some(nameToAttr("t3_c1") === nameToAttr("t4_c1"))),
-          Inner,
+        .join(t3.join(t4, Inner, Some(nameToAttr("t3_c1") === nameToAttr("t4_c1"))), Inner,
           Some(nameToAttr("d1_c2") === nameToAttr("t4_c1")))
-        .join(
-          t1.join(t2, Inner, Some(nameToAttr("t1_c1") === nameToAttr("t2_c1"))),
-          Inner,
+        .join(t1.join(t2, Inner, Some(nameToAttr("t1_c1") === nameToAttr("t2_c1"))), Inner,
           Some(nameToAttr("t1_c2") === nameToAttr("t4_c2")))
         .select(outputsOf(d1, t1, t2, t3, t4, f1, d2): _*)
 
@@ -354,41 +333,26 @@ class StarJoinCostBasedReorderSuite extends JoinReorderPlanTestBase with StatsEs
     // TODO(SPARK-32687): find a way to make optimization result of `CostBasedJoinReorder`
     //  deterministic even if the input order is different.
     val query =
-      d1.join(t3)
-        .join(t4)
-        .join(f1)
-        .join(d3)
-        .join(d2)
-        .join(t5)
-        .join(t6)
-        .join(t1)
-        .join(t2)
-        .where(
-          (nameToAttr("d1_c2") === nameToAttr("t3_c1")) &&
-            (nameToAttr("t3_c2") === nameToAttr("t4_c2")) &&
-            (nameToAttr("d1_pk") === nameToAttr("f1_fk1")) &&
-            (nameToAttr("f1_fk2") === nameToAttr("d2_pk")) &&
-            (nameToAttr("d2_c2") === nameToAttr("t5_c1")) &&
-            (nameToAttr("t5_c2") === nameToAttr("t6_c2")) &&
-            (nameToAttr("f1_fk3") === nameToAttr("d3_pk")) &&
-            (nameToAttr("d3_c2") === nameToAttr("t1_c1")) &&
-            (nameToAttr("t1_c2") === nameToAttr("t2_c2")))
+      d1.join(t3).join(t4).join(f1).join(d3).join(d2).join(t5).join(t6).join(t1).join(t2)
+        .where((nameToAttr("d1_c2") === nameToAttr("t3_c1")) &&
+          (nameToAttr("t3_c2") === nameToAttr("t4_c2")) &&
+          (nameToAttr("d1_pk") === nameToAttr("f1_fk1")) &&
+          (nameToAttr("f1_fk2") === nameToAttr("d2_pk")) &&
+          (nameToAttr("d2_c2") === nameToAttr("t5_c1")) &&
+          (nameToAttr("t5_c2") === nameToAttr("t6_c2")) &&
+          (nameToAttr("f1_fk3") === nameToAttr("d3_pk")) &&
+          (nameToAttr("d3_c2") === nameToAttr("t1_c1")) &&
+          (nameToAttr("t1_c2") === nameToAttr("t2_c2")))
 
     val expected =
       f1.join(d3, Inner, Some(nameToAttr("f1_fk3") === nameToAttr("d3_pk")))
         .join(d2, Inner, Some(nameToAttr("f1_fk2") === nameToAttr("d2_pk")))
         .join(d1, Inner, Some(nameToAttr("f1_fk1") === nameToAttr("d1_pk")))
-        .join(
-          t4.join(t3, Inner, Some(nameToAttr("t3_c2") === nameToAttr("t4_c2"))),
-          Inner,
+        .join(t4.join(t3, Inner, Some(nameToAttr("t3_c2") === nameToAttr("t4_c2"))), Inner,
           Some(nameToAttr("d1_c2") === nameToAttr("t3_c1")))
-        .join(
-          t2.join(t1, Inner, Some(nameToAttr("t1_c2") === nameToAttr("t2_c2"))),
-          Inner,
+        .join(t2.join(t1, Inner, Some(nameToAttr("t1_c2") === nameToAttr("t2_c2"))), Inner,
           Some(nameToAttr("d3_c2") === nameToAttr("t1_c1")))
-        .join(
-          t5.join(t6, Inner, Some(nameToAttr("t5_c2") === nameToAttr("t6_c2"))),
-          Inner,
+        .join(t5.join(t6, Inner, Some(nameToAttr("t5_c2") === nameToAttr("t6_c2"))), Inner,
           Some(nameToAttr("d2_c2") === nameToAttr("t5_c1")))
         .select(outputsOf(d1, t3, t4, f1, d3, d2, t5, t6, t1, t2): _*)
 
@@ -410,13 +374,10 @@ class StarJoinCostBasedReorderSuite extends JoinReorderPlanTestBase with StatsEs
     // level 3: {d1 d2 f1 d3 }
     // Number of generated plans: 11 (= 11)
     val query =
-      d1.join(d2)
-        .join(f1)
-        .join(d3)
-        .where(
-          (nameToAttr("f1_fk1") === nameToAttr("d1_pk")) &&
-            (nameToAttr("f1_fk2") === nameToAttr("d2_pk")) &&
-            (nameToAttr("f1_fk3") === nameToAttr("d3_pk")))
+      d1.join(d2).join(f1).join(d3)
+        .where((nameToAttr("f1_fk1") === nameToAttr("d1_pk")) &&
+          (nameToAttr("f1_fk2") === nameToAttr("d2_pk")) &&
+          (nameToAttr("f1_fk3") === nameToAttr("d3_pk")))
 
     val expected =
       f1.join(d3, Inner, Some(nameToAttr("f1_fk3") === nameToAttr("d3_pk")))
@@ -439,13 +400,10 @@ class StarJoinCostBasedReorderSuite extends JoinReorderPlanTestBase with StatsEs
     // level 3: {t1 t2 f1 t3 }
     // Number of generated plans: 11 (= 11)
     val query =
-      t1.join(f1)
-        .join(t2)
-        .join(t3)
-        .where(
-          (nameToAttr("f1_fk1") === nameToAttr("t1_c1")) &&
-            (nameToAttr("f1_fk2") === nameToAttr("t2_c1")) &&
-            (nameToAttr("f1_fk3") === nameToAttr("t3_c1")))
+      t1.join(f1).join(t2).join(t3)
+        .where((nameToAttr("f1_fk1") === nameToAttr("t1_c1")) &&
+          (nameToAttr("f1_fk2") === nameToAttr("t2_c1")) &&
+          (nameToAttr("f1_fk3") === nameToAttr("t3_c1")))
 
     val expected =
       f1.join(t3, Inner, Some(nameToAttr("f1_fk3") === nameToAttr("t3_c1")))

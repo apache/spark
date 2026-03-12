@@ -20,7 +20,8 @@ import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 
 /**
- * Benchmark for path escaping/unescaping To run this benchmark:
+ * Benchmark for path escaping/unescaping
+ * To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class> --jars <spark core test jar> <spark catalyst test jar>
@@ -101,12 +102,11 @@ object EscapePathBenchmark extends BenchmarkBase {
     while (i < path.length) {
       val c = path.charAt(i)
       if (c == '%' && i + 2 < path.length) {
-        val code: Int =
-          try {
-            Integer.parseInt(path.substring(i + 1, i + 3), 16)
-          } catch {
-            case _: Exception => -1
-          }
+        val code: Int = try {
+          Integer.parseInt(path.substring(i + 1, i + 3), 16)
+        } catch {
+          case _: Exception => -1
+        }
         if (code >= 0) {
           sb.append(code.asInstanceOf[Char])
           i += 3

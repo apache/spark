@@ -28,12 +28,12 @@ import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
 /**
- * A stress test for streaming queries that read and write files. This test consists of two
- * threads:
- *   - one that writes out `numRecords` distinct integers to files of random sizes (the total
- *     number of records is fixed but each files size / creation time is random).
- *   - another that continually restarts a buggy streaming query (i.e. fails with 5% probability
- *     on any partition).
+ * A stress test for streaming queries that read and write files.  This test consists of
+ * two threads:
+ *  - one that writes out `numRecords` distinct integers to files of random sizes (the total
+ *    number of records is fixed but each files size / creation time is random).
+ *  - another that continually restarts a buggy streaming query (i.e. fails with 5% probability on
+ *    any partition).
  *
  * At the end, the resulting files are loaded and the answer is checked.
  */
@@ -106,7 +106,7 @@ class FileStreamStressSuite extends StreamTest {
     val input = spark.readStream.format("text").load(inputDir)
 
     def startStream(): StreamingQuery = {
-      val errorMsg = injectedErrorMsg // work around serialization issue
+      val errorMsg = injectedErrorMsg  // work around serialization issue
       val output = input
         .repartition(5)
         .as[String]
@@ -121,13 +121,15 @@ class FileStreamStressSuite extends StreamTest {
         .toDF("id", "data")
 
       if (partitionWrites) {
-        output.writeStream
+        output
+          .writeStream
           .partitionBy("id")
           .format("parquet")
           .option("checkpointLocation", checkpoint)
           .start(outputDir)
       } else {
-        output.writeStream
+        output
+          .writeStream
           .format("parquet")
           .option("checkpointLocation", checkpoint)
           .start(outputDir)
@@ -143,7 +145,7 @@ class FileStreamStressSuite extends StreamTest {
         stream.awaitTermination()
       } catch {
         case e: StreamingQueryException
-            if e.getCause != null && e.getCause.getCause != null &&
+          if e.getCause != null && e.getCause.getCause != null &&
               e.getCause.getCause.getMessage.contains(injectedErrorMsg) =>
           // Getting the expected error message
           failures += 1

@@ -43,44 +43,30 @@ import org.apache.spark.util.{DependencyUtils, Utils}
 /**
  * A class that holds all session-specific state in a given [[SparkSession]].
  *
- * @param sharedState
- *   The state shared across sessions, e.g. global view manager, external catalog.
- * @param conf
- *   SQL-specific key-value configurations.
- * @param experimentalMethods
- *   Interface to add custom planning strategies and optimizers.
- * @param functionRegistry
- *   Internal catalog for managing functions registered by the user.
- * @param udfRegistration
- *   Interface exposed to the user for registering user-defined functions.
- * @param udtfRegistration
- *   Interface exposed to the user for registering user-defined table functions.
- * @param dataSourceManager
- *   Internal catalog for managing data sources registered by users.
- * @param dataSourceRegistration
- *   Interface exposed to users for registering data sources.
- * @param catalogBuilder
- *   a function to create an internal catalog for managing table and database states.
- * @param sqlParser
- *   Parser that extracts expressions, plans, table identifiers etc. from SQL texts.
- * @param analyzerBuilder
- *   A function to create the logical query plan analyzer for resolving unresolved attributes and
- *   relations.
- * @param optimizerBuilder
- *   a function to create the logical query plan optimizer.
- * @param planner
- *   Planner that converts optimized logical plans to physical plans.
- * @param streamingQueryManagerBuilder
- *   A function to create a streaming query manager to start and stop streaming queries.
- * @param listenerManager
- *   Interface to register custominternal/SessionState.scala
- *   [[org.apache.spark.sql.util.QueryExecutionListener]]s.
- * @param resourceLoaderBuilder
- *   a function to create a session shared resource loader to load JARs, files, etc.
- * @param createQueryExecution
- *   Function used to create QueryExecution objects.
- * @param createClone
- *   Function used to create clones of the session state.
+ * @param sharedState The state shared across sessions, e.g. global view manager, external catalog.
+ * @param conf SQL-specific key-value configurations.
+ * @param experimentalMethods Interface to add custom planning strategies and optimizers.
+ * @param functionRegistry Internal catalog for managing functions registered by the user.
+ * @param udfRegistration Interface exposed to the user for registering user-defined functions.
+ * @param udtfRegistration Interface exposed to the user for registering user-defined
+ *                         table functions.
+ * @param dataSourceManager Internal catalog for managing data sources registered by users.
+ * @param dataSourceRegistration Interface exposed to users for registering data sources.
+ * @param catalogBuilder a function to create an internal catalog for managing table and database
+ *                       states.
+ * @param sqlParser Parser that extracts expressions, plans, table identifiers etc. from SQL texts.
+ * @param analyzerBuilder A function to create the logical query plan analyzer for resolving
+ *                        unresolved attributes and relations.
+ * @param optimizerBuilder a function to create the logical query plan optimizer.
+ * @param planner Planner that converts optimized logical plans to physical plans.
+ * @param streamingQueryManagerBuilder A function to create a streaming query manager to
+ *                                     start and stop streaming queries.
+ * @param listenerManager Interface to register custominternal/SessionState.scala
+ *                        [[org.apache.spark.sql.util.QueryExecutionListener]]s.
+ * @param resourceLoaderBuilder a function to create a session shared resource loader to load JARs,
+ *                              files, etc.
+ * @param createQueryExecution Function used to create QueryExecution objects.
+ * @param createClone Function used to create clones of the session state.
  */
 private[sql] class SessionState(
     sharedState: SharedState,
@@ -128,8 +114,9 @@ private[sql] class SessionState(
 
   def catalogManager: CatalogManager = analyzer.catalogManager
 
-  def newHadoopConf(): Configuration =
-    SessionState.newHadoopConf(sharedState.sparkContext.hadoopConfiguration, conf)
+  def newHadoopConf(): Configuration = SessionState.newHadoopConf(
+    sharedState.sparkContext.hadoopConfiguration,
+    conf)
 
   def newHadoopConfWithOptions(options: Map[String, String]): Configuration = {
     val hadoopConf = newHadoopConf()
@@ -168,8 +155,10 @@ private[sql] object SessionState {
  * Concrete implementation of a [[BaseSessionStateBuilder]].
  */
 @Unstable
-class SessionStateBuilder(session: SparkSession, parentState: Option[SessionState])
-    extends BaseSessionStateBuilder(session, parentState) {
+class SessionStateBuilder(
+    session: SparkSession,
+    parentState: Option[SessionState])
+  extends BaseSessionStateBuilder(session, parentState) {
   override protected def newBuilder: NewBuilder = new SessionStateBuilder(_, _)
 }
 

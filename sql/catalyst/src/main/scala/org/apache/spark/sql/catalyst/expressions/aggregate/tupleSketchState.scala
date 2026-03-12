@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.datasketches.tuple.{Intersection, Sketch, Summary, Union, UpdatableSketch, UpdatableSummary}
 
 /**
- * Sealed trait representing the internal state of tuple sketch aggregation operations. All
- * implementations must be defined in this file to maintain exhaustiveness checking.
+ * Sealed trait representing the internal state of tuple sketch aggregation operations.
+ * All implementations must be defined in this file to maintain exhaustiveness checking.
  */
 sealed trait TupleSketchState[S <: Summary] {
   def serialize(): Array[Byte]

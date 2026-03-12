@@ -23,21 +23,20 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.UPDATE_EVENT_TIME_WATERMA
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
- * Extracts the watermark delay and adds it to the UpdateEventTimeWatermarkColumn logical node (if
- * such a node is present). [[UpdateEventTimeWatermarkColumn]] node updates the eventTimeColumn
- * for upstream operators.
+ * Extracts the watermark delay and adds it to the UpdateEventTimeWatermarkColumn
+ * logical node (if such a node is present). [[UpdateEventTimeWatermarkColumn]] node updates
+ * the eventTimeColumn for upstream operators.
  *
- * If the logical plan contains a [[UpdateEventTimeWatermarkColumn]] node, but no watermark has
- * been defined, the query will fail with a compilation error.
+ * If the logical plan contains a [[UpdateEventTimeWatermarkColumn]] node, but no watermark
+ * has been defined, the query will fail with a compilation error.
  */
 object ResolveUpdateEventTimeWatermarkColumn extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-    _.containsPattern(UPDATE_EVENT_TIME_WATERMARK_COLUMN),
-    ruleId) {
+    _.containsPattern(UPDATE_EVENT_TIME_WATERMARK_COLUMN), ruleId) {
     case u: UpdateEventTimeWatermarkColumn if u.delay.isEmpty && u.childrenResolved =>
-      val existingWatermarkDelay = u.child.collect { case EventTimeWatermark(_, _, delay, _) =>
-        delay
+      val existingWatermarkDelay = u.child.collect {
+        case EventTimeWatermark(_, _, delay, _) => delay
       }
 
       if (existingWatermarkDelay.isEmpty) {

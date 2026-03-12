@@ -45,7 +45,11 @@ class SQLConfEntrySuite extends SparkFunSuite {
         conf.setConfString(key, "abc")
       },
       condition = "INVALID_CONF_VALUE.TYPE_MISMATCH",
-      parameters = Map("confName" -> key, "confValue" -> "abc", "confType" -> "int"))
+      parameters = Map(
+        "confName" -> key,
+        "confValue" -> "abc",
+        "confType" -> "int")
+    )
   }
 
   test("longConf") {
@@ -66,7 +70,11 @@ class SQLConfEntrySuite extends SparkFunSuite {
         conf.setConfString(key, "abc")
       },
       condition = "INVALID_CONF_VALUE.TYPE_MISMATCH",
-      parameters = Map("confName" -> key, "confValue" -> "abc", "confType" -> "long"))
+      parameters = Map(
+        "confName" -> key,
+        "confValue" -> "abc",
+        "confType" -> "long")
+    )
   }
 
   test("booleanConf") {
@@ -89,7 +97,11 @@ class SQLConfEntrySuite extends SparkFunSuite {
         conf.setConfString(key, "abc")
       },
       condition = "INVALID_CONF_VALUE.TYPE_MISMATCH",
-      parameters = Map("confName" -> key, "confValue" -> "abc", "confType" -> "boolean"))
+      parameters = Map(
+        "confName" -> key,
+        "confValue" -> "abc",
+        "confType" -> "boolean")
+    )
   }
 
   test("doubleConf") {
@@ -110,7 +122,11 @@ class SQLConfEntrySuite extends SparkFunSuite {
         conf.setConfString(key, "abc")
       },
       condition = "INVALID_CONF_VALUE.TYPE_MISMATCH",
-      parameters = Map("confName" -> key, "confValue" -> "abc", "confType" -> "double"))
+      parameters = Map(
+        "confName" -> key,
+        "confValue" -> "abc",
+        "confType" -> "double")
+    )
   }
 
   test("stringConf") {
@@ -130,7 +146,8 @@ class SQLConfEntrySuite extends SparkFunSuite {
   test("enumConf") {
     val key = "spark.sql.SQLConfEntrySuite.enum"
     val candidates = Set("a", "b", "c")
-    val confEntry = buildConf(key).stringConf
+    val confEntry = buildConf(key)
+      .stringConf
       .checkValues(candidates)
       .createWithDefault("a")
     assert(conf.getConf(confEntry) === "a")
@@ -148,13 +165,18 @@ class SQLConfEntrySuite extends SparkFunSuite {
         conf.setConfString(key, "abc")
       },
       condition = "INVALID_CONF_VALUE.OUT_OF_RANGE_OF_OPTIONS",
-      parameters =
-        Map("confName" -> key, "confValue" -> "abc", "confOptions" -> candidates.mkString(", ")))
+      parameters = Map(
+        "confName" -> key,
+        "confValue" -> "abc",
+        "confOptions" -> candidates.mkString(", "))
+    )
   }
 
   test("stringSeqConf") {
     val key = "spark.sql.SQLConfEntrySuite.stringSeq"
-    val confEntry = buildConf(key).stringConf.toSequence
+    val confEntry = buildConf(key)
+      .stringConf
+      .toSequence
       .createWithDefault(Nil)
     assert(conf.getConf(confEntry, Seq("a", "b", "c")) === Seq("a", "b", "c"))
 
@@ -169,7 +191,9 @@ class SQLConfEntrySuite extends SparkFunSuite {
 
   test("optionalConf") {
     val key = "spark.sql.SQLConfEntrySuite.optional"
-    val confEntry = buildConf(key).stringConf.createOptional
+    val confEntry = buildConf(key)
+      .stringConf
+      .createOptional
 
     assert(conf.getConf(confEntry) === None)
     conf.setConfString(key, "a")
@@ -197,7 +221,8 @@ class SQLConfEntrySuite extends SparkFunSuite {
       parameters = Map(
         "confName" -> confEntry.key,
         "confValue" -> "-1",
-        "confRequirement" -> "The maximum size of the cache must not be negative"))
+        "confRequirement" -> "The maximum size of the cache must not be negative")
+    )
 
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
@@ -207,7 +232,8 @@ class SQLConfEntrySuite extends SparkFunSuite {
       parameters = Map(
         "confName" -> confEntry.key,
         "confValue" -> "-1",
-        "confRequirement" -> "The maximum size of the cache must not be negative"))
+        "confRequirement" -> "The maximum size of the cache must not be negative")
+    )
   }
 
   test("clone SQLConf") {

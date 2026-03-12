@@ -19,40 +19,32 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 /**
  * The [[ExpressionResolutionContext]] is a state that is propagated between the nodes of the
- * expression tree during the bottom-up expression resolution process. This way we pass the
- * results of [[ExpressionResolver.resolve]] call, which are not the resolved child itself, from
- * children to parents.
+ * expression tree during the bottom-up expression resolution process. This way we pass the results
+ * of [[ExpressionResolver.resolve]] call, which are not the resolved child itself, from children
+ * to parents.
  *
- * @param isRoot
- *   A flag indicating that we are resolving the root of the expression tree. It's used by the
- *   [[ExpressionResolver]] to correctly propagate top-level information like
+ * @param isRoot A flag indicating that we are resolving the root of the expression tree. It's
+ *   used by the [[ExpressionResolver]] to correctly propagate top-level information like
  *   [[isTopOfProjectList]]. It's going to be set to `true` for the top-level context when we are
  *   entering expression resolution from a specific operator (this can be either a top-level query
  *   or a subquery).
- * @param hasLocalReferences
- *   A flag that highlights that a specific node corresponding to [[ExpressionResolutionContext]]
- *   has local [[AttributeReferences]] in its subtree.
- * @param hasOuterReferences
- *   A flag that highlights that a specific node corresponding to [[ExpressionResolutionContext]]
- *   has outer [[AttributeReferences]] in its subtree.
- * @param hasAggregateExpressions
- *   A flag that highlights that a specific node corresponding to [[ExpressionResolutionContext]]
- *   has aggregate expressions in its subtree.
- * @param hasAttributeOutsideOfAggregateExpressions
- *   A flag that highlights that a specific node corresponding to [[ExpressionResolutionContext]]
- *   has attributes in its subtree which are not under an [[AggregateExpression]].
- * @param hasLateralColumnAlias
- *   A flag that highlights that a specific node corresponding to [[ExpressionResolutionContext]]
- *   has LCA in its subtree.
- * @param isTopOfProjectList
- *   A flag indicating that we are resolving top of [[Project]] list. Otherwise, extra [[Alias]]es
- *   have to be stripped away.
- * @param resolvingGroupingExpressions
- *   A flag indicating whether an expression we are resolving is one of
- *   [[Aggregate.groupingExpressions]].
- * @param resolvingTreeUnderAggregateExpression
- *   A flag indicating whether an expression we are resolving a tree under
- *   [[AggregateExpression]].
+ * @param hasLocalReferences A flag that highlights that a specific node corresponding to
+ *   [[ExpressionResolutionContext]] has local [[AttributeReferences]] in its subtree.
+ * @param hasOuterReferences A flag that highlights that a specific node corresponding to
+ *   [[ExpressionResolutionContext]] has outer [[AttributeReferences]] in its subtree.
+ * @param hasAggregateExpressions A flag that highlights that a specific node
+ *   corresponding to [[ExpressionResolutionContext]] has aggregate expressions in its subtree.
+ * @param hasAttributeOutsideOfAggregateExpressions A flag that highlights that a specific node
+ *   corresponding to [[ExpressionResolutionContext]] has attributes in its subtree which are not
+ *   under an [[AggregateExpression]].
+ * @param hasLateralColumnAlias A flag that highlights that a specific node corresponding to
+ *   [[ExpressionResolutionContext]] has LCA in its subtree.
+ * @param isTopOfProjectList A flag indicating that we are resolving top of [[Project]] list.
+ *   Otherwise, extra [[Alias]]es have to be stripped away.
+ * @param resolvingGroupingExpressions A flag indicating whether an expression we are resolving is
+ *   one of [[Aggregate.groupingExpressions]].
+ * @param resolvingTreeUnderAggregateExpression A flag indicating whether an expression we are
+ *   resolving a tree under [[AggregateExpression]].
  */
 class ExpressionResolutionContext(
     val isRoot: Boolean = false,
@@ -88,11 +80,13 @@ object ExpressionResolutionContext {
     if (parent.isRoot) {
       new ExpressionResolutionContext(
         isTopOfProjectList = parent.isTopOfProjectList,
-        resolvingGroupingExpressions = parent.resolvingGroupingExpressions)
+        resolvingGroupingExpressions = parent.resolvingGroupingExpressions
+      )
     } else {
       new ExpressionResolutionContext(
         resolvingGroupingExpressions = parent.resolvingGroupingExpressions,
-        resolvingTreeUnderAggregateExpression = parent.resolvingTreeUnderAggregateExpression)
+        resolvingTreeUnderAggregateExpression = parent.resolvingTreeUnderAggregateExpression
+      )
     }
   }
 }

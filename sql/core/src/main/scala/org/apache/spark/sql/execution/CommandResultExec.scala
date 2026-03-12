@@ -27,16 +27,14 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * Physical plan node for holding data from a command.
  *
- * `commandPhysicalPlan` is just used to display the plan tree for EXPLAIN. `rows` may not be
- * serializable and ideally we should not send `rows` to the executors. Thus marking them as
- * transient.
+ * `commandPhysicalPlan` is just used to display the plan tree for EXPLAIN.
+ * `rows` may not be serializable and ideally we should not send `rows` to the executors.
+ * Thus marking them as transient.
  */
 case class CommandResultExec(
     output: Seq[Attribute],
     @transient commandPhysicalPlan: SparkPlan,
-    @transient rows: Seq[InternalRow])
-    extends LeafExecNode
-    with InputRDDCodegen {
+    @transient rows: Seq[InternalRow]) extends LeafExecNode with InputRDDCodegen {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -56,7 +54,8 @@ case class CommandResultExec(
     if (rows.isEmpty) {
       sparkContext.emptyRDD
     } else {
-      val numSlices = math.min(unsafeRows.length, session.leafNodeDefaultParallelism)
+      val numSlices = math.min(
+        unsafeRows.length, session.leafNodeDefaultParallelism)
       sparkContext.parallelize(unsafeRows.toImmutableArraySeq, numSlices)
     }
   }

@@ -48,24 +48,25 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
-    case op @ PhysicalOperation(
-          projects,
-          filters,
-          logicalRelation @ LogicalRelationWithTable(
-            fsRelation @ HadoopFsRelation(
-              catalogFileIndex: CatalogFileIndex,
-              partitionSchema,
-              _,
-              _,
-              _,
-              _),
-            _)) if filters.nonEmpty && fsRelation.partitionSchema.nonEmpty =>
+    case op @ PhysicalOperation(projects, filters,
+        logicalRelation @ LogicalRelationWithTable(
+          fsRelation @
+            HadoopFsRelation(
+            catalogFileIndex: CatalogFileIndex,
+            partitionSchema,
+            _,
+            _,
+            _,
+            _),
+          _)
+        )
+        if filters.nonEmpty && fsRelation.partitionSchema.nonEmpty =>
       val normalizedFilters = DataSourceStrategy.normalizeExprs(
         filters.filter { f =>
           f.deterministic &&
-          !SubqueryExpression.hasSubquery(f) &&
-          // Python UDFs might exist because this rule is applied before ``ExtractPythonUDFs``.
-          !f.exists(_.isInstanceOf[PythonUDF])
+            !SubqueryExpression.hasSubquery(f) &&
+            // Python UDFs might exist because this rule is applied before ``ExtractPythonUDFs``.
+            !f.exists(_.isInstanceOf[PythonUDF])
         },
         logicalRelation.output)
       val (partitionKeyFilters, _) = DataSourceUtils
@@ -81,14 +82,13 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
         val colStats = filteredStats.map(_.attributeStats.map { case (attr, colStat) =>
           (attr.name, colStat.toCatalogColumnStat(attr.name, attr.dataType))
         })
-        val withStats = logicalRelation.catalogTable.map(
-          _.copy(stats = Some(
-            CatalogStatistics(
-              sizeInBytes = BigInt(prunedFileIndex.sizeInBytes),
-              rowCount = filteredStats.flatMap(_.rowCount),
-              colStats = colStats.getOrElse(Map.empty)))))
-        val prunedLogicalRelation =
-          logicalRelation.copy(relation = prunedFsRelation, catalogTable = withStats)
+        val withStats = logicalRelation.catalogTable.map(_.copy(
+          stats = Some(CatalogStatistics(
+            sizeInBytes = BigInt(prunedFileIndex.sizeInBytes),
+            rowCount = filteredStats.flatMap(_.rowCount),
+            colStats = colStats.getOrElse(Map.empty)))))
+        val prunedLogicalRelation = logicalRelation.copy(
+          relation = prunedFsRelation, catalogTable = withStats)
         // Keep partition-pruning predicates so that they are visible in physical planning
         rebuildPhysicalOperation(projects, filters, prunedLogicalRelation)
       } else {

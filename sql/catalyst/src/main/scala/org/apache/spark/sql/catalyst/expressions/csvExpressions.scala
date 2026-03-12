@@ -39,8 +39,7 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage =
-    "_FUNC_(csvStr, schema[, options]) - Returns a struct value with the given `csvStr` and `schema`.",
+  usage = "_FUNC_(csvStr, schema[, options]) - Returns a struct value with the given `csvStr` and `schema`.",
   examples = """
     Examples:
       > SELECT _FUNC_('1, 0.8', 'a INT, b DOUBLE');
@@ -57,9 +56,9 @@ case class CsvToStructs(
     child: Expression,
     timeZoneId: Option[String] = None,
     requiredSchema: Option[StructType] = None)
-    extends UnaryExpression
-    with TimeZoneAwareExpression
-    with ExpectsInputTypes {
+  extends UnaryExpression
+  with TimeZoneAwareExpression
+  with ExpectsInputTypes {
 
   override def nullable: Boolean = child.nullable
 
@@ -102,11 +101,7 @@ case class CsvToStructs(
 
   @transient
   private lazy val evaluator: CsvToStructsEvaluator = CsvToStructsEvaluator(
-    options,
-    nullableSchema,
-    nameOfCorruptRecord,
-    timeZoneId,
-    requiredSchema)
+    options, nullableSchema, nameOfCorruptRecord, timeZoneId, requiredSchema)
 
   override def nullSafeEval(input: Any): Any = {
     evaluator.evaluate(input.asInstanceOf[UTF8String])
@@ -117,12 +112,12 @@ case class CsvToStructs(
     val eval = child.genCode(ctx)
     val resultType = CodeGenerator.boxedType(dataType)
     val resultTerm = ctx.freshName("result")
-    ev.copy(code = code"""
+    ev.copy(code =
+      code"""
          |${eval.code}
          |$resultType $resultTerm = ($resultType) $refEvaluator.evaluate(${eval.value});
          |boolean ${ev.isNull} = $resultTerm == null;
-         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(
-                          dataType)};
+         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
          |if (!${ev.isNull}) {
          |  ${ev.value} = $resultTerm;
          |}
@@ -145,16 +140,19 @@ case class CsvToStructs(
   """,
   since = "3.0.0",
   group = "csv_funcs")
-case class SchemaOfCsv(child: Expression, options: Map[String, String])
-    extends UnaryExpression
-    with RuntimeReplaceable
-    with DefaultStringProducingExpression
-    with QueryErrorsBase {
+case class SchemaOfCsv(
+    child: Expression,
+    options: Map[String, String])
+  extends UnaryExpression
+  with RuntimeReplaceable
+  with DefaultStringProducingExpression
+  with QueryErrorsBase {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
 
-  def this(child: Expression, options: Expression) =
-    this(child = child, options = ExprUtils.convertToMapData(options))
+  def this(child: Expression, options: Expression) = this(
+    child = child,
+    options = ExprUtils.convertToMapData(options))
 
   override def nullable: Boolean = false
 
@@ -177,7 +175,8 @@ case class SchemaOfCsv(child: Expression, options: Map[String, String])
           "paramIndex" -> ordinalNumber(0),
           "inputSql" -> toSQLExpr(child),
           "inputType" -> toSQLType(child.dataType),
-          "requiredType" -> toSQLType(StringType)))
+          "requiredType" -> toSQLType(StringType))
+      )
     } else {
       super.checkInputDataTypes()
     }
@@ -217,13 +216,13 @@ case class SchemaOfCsv(child: Expression, options: Map[String, String])
   group = "csv_funcs")
 // scalastyle:on line.size.limit
 case class StructsToCsv(
-    options: Map[String, String],
-    child: Expression,
-    timeZoneId: Option[String] = None)
-    extends UnaryExpression
-    with TimeZoneAwareExpression
-    with DefaultStringProducingExpression
-    with ExpectsInputTypes {
+     options: Map[String, String],
+     child: Expression,
+     timeZoneId: Option[String] = None)
+  extends UnaryExpression
+  with TimeZoneAwareExpression
+  with DefaultStringProducingExpression
+  with ExpectsInputTypes {
   override def nullIntolerant: Boolean = true
   override def nullable: Boolean = true
 
@@ -233,17 +232,22 @@ case class StructsToCsv(
   def this(child: Expression) = this(Map.empty, child, None)
 
   def this(child: Expression, options: Expression) =
-    this(options = ExprUtils.convertToMapData(options), child = child, timeZoneId = None)
+    this(
+      options = ExprUtils.convertToMapData(options),
+      child = child,
+      timeZoneId = None)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     child.dataType match {
-      case schema: StructType if schema.map(_.dataType).forall(dt => isSupportedDataType(dt)) =>
-        TypeCheckSuccess
-      case _ =>
-        DataTypeMismatch(
-          errorSubClass = "UNSUPPORTED_INPUT_TYPE",
-          messageParameters =
-            Map("functionName" -> toSQLId(prettyName), "dataType" -> toSQLType(child.dataType)))
+      case schema: StructType if schema.map(_.dataType).forall(
+        dt => isSupportedDataType(dt)) => TypeCheckSuccess
+      case _ => DataTypeMismatch(
+        errorSubClass = "UNSUPPORTED_INPUT_TYPE",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "dataType" -> toSQLType(child.dataType)
+        )
+      )
     }
   }
 
@@ -264,14 +268,12 @@ case class StructsToCsv(
 
   @transient
   lazy val gen = new UnivocityGenerator(
-    inputSchema,
-    writer,
-    new CSVOptions(options, columnPruning = true, timeZoneId.get))
+    inputSchema, writer, new CSVOptions(options, columnPruning = true, timeZoneId.get))
 
   // This converts rows to the CSV output according to the given schema.
   @transient
-  lazy val converter: Any => UTF8String = { (row: Any) =>
-    UTF8String.fromString(gen.writeToString(row.asInstanceOf[InternalRow]))
+  lazy val converter: Any => UTF8String = {
+    (row: Any) => UTF8String.fromString(gen.writeToString(row.asInstanceOf[InternalRow]))
   }
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
@@ -288,9 +290,7 @@ case class StructsToCsv(
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val structsToCsv = ctx.addReferenceObj("structsToCsv", this)
-    nullSafeCodeGen(
-      ctx,
-      ev,
+    nullSafeCodeGen(ctx, ev,
       eval => s"${ev.value} = (UTF8String) $structsToCsv.converter().apply($eval);")
   }
 }

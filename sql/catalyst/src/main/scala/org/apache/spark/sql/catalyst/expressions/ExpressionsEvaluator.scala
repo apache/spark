@@ -37,8 +37,9 @@ trait ExpressionsEvaluator {
   }
 
   /**
-   * Initializes internal states given the current partition index. This is used by
-   * nondeterministic expressions to set initial states. The default implementation does nothing.
+   * Initializes internal states given the current partition index.
+   * This is used by nondeterministic expressions to set initial states.
+   * The default implementation does nothing.
    */
   def initialize(partitionIndex: Int): Unit = {}
 

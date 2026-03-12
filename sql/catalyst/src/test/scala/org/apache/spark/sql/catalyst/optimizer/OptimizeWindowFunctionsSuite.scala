@@ -27,7 +27,8 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 class OptimizeWindowFunctionsSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("OptimizeWindowFunctions", FixedPoint(10), OptimizeWindowFunctions) :: Nil
+    val batches = Batch("OptimizeWindowFunctions", FixedPoint(10),
+        OptimizeWindowFunctions) :: Nil
   }
 
   val testRelation = LocalRelation($"a".double, $"b".double, $"c".string)
@@ -39,16 +40,12 @@ class OptimizeWindowFunctionsSuite extends PlanTest {
     val inputPlan = testRelation.select(
       WindowExpression(
         First(a, false).toAggregateExpression(),
-        WindowSpecDefinition(
-          b :: Nil,
-          c.asc :: Nil,
+        WindowSpecDefinition(b :: Nil, c.asc :: Nil,
           SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))))
     val correctAnswer = testRelation.select(
       WindowExpression(
         NthValue(a, Literal(1), false),
-        WindowSpecDefinition(
-          b :: Nil,
-          c.asc :: Nil,
+        WindowSpecDefinition(b :: Nil, c.asc :: Nil,
           SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))))
 
     val optimized = Optimize.execute(inputPlan)
@@ -59,16 +56,12 @@ class OptimizeWindowFunctionsSuite extends PlanTest {
     val inputPlan = testRelation.select(
       WindowExpression(
         First(a, false).toAggregateExpression(),
-        WindowSpecDefinition(
-          b :: Nil,
-          c.asc :: Nil,
+        WindowSpecDefinition(b :: Nil, c.asc :: Nil,
           SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing))))
     val correctAnswer = testRelation.select(
       WindowExpression(
         NthValue(a, Literal(1), false),
-        WindowSpecDefinition(
-          b :: Nil,
-          c.asc :: Nil,
+        WindowSpecDefinition(b :: Nil, c.asc :: Nil,
           SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing))))
 
     val optimized = Optimize.execute(inputPlan)
@@ -79,9 +72,7 @@ class OptimizeWindowFunctionsSuite extends PlanTest {
     val inputPlan = testRelation.select(
       WindowExpression(
         First(a, false).toAggregateExpression(),
-        WindowSpecDefinition(
-          b :: Nil,
-          c.asc :: Nil,
+        WindowSpecDefinition(b :: Nil, c.asc :: Nil,
           SpecifiedWindowFrame(RowFrame, Literal(1), CurrentRow))))
 
     val optimized = Optimize.execute(inputPlan)
@@ -92,9 +83,7 @@ class OptimizeWindowFunctionsSuite extends PlanTest {
     val inputPlan = testRelation.select(
       WindowExpression(
         First(a, false).toAggregateExpression(),
-        WindowSpecDefinition(
-          b :: Nil,
-          c.asc :: Nil,
+        WindowSpecDefinition(b :: Nil, c.asc :: Nil,
           SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow))))
 
     val optimized = Optimize.execute(inputPlan)
@@ -105,9 +94,7 @@ class OptimizeWindowFunctionsSuite extends PlanTest {
     val inputPlan = testRelation.select(
       WindowExpression(
         First(a, false).toAggregateExpression(),
-        WindowSpecDefinition(
-          b :: Nil,
-          Nil,
+        WindowSpecDefinition(b :: Nil, Nil,
           SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))))
 
     val optimized = Optimize.execute(inputPlan)

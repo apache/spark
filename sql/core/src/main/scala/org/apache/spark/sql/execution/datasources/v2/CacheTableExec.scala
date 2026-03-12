@@ -43,8 +43,7 @@ trait BaseCacheTableExec extends LeafV2CommandExec {
 
   override def run(): Seq[InternalRow] = {
     val storageLevelKey = "storagelevel"
-    val storageLevel = CaseInsensitiveMap(options)
-      .get(storageLevelKey)
+    val storageLevel = CaseInsensitiveMap(options).get(storageLevelKey)
       .map(s => StorageLevel.fromString(s.toUpperCase(Locale.ROOT)))
       .getOrElse(conf.defaultCacheStorageLevel)
     val withoutStorageLevel = options
@@ -80,8 +79,7 @@ case class CacheTableExec(
     relation: LogicalPlan,
     multipartIdentifier: Seq[String],
     override val isLazy: Boolean,
-    override val options: Map[String, String])
-    extends BaseCacheTableExec {
+    override val options: Map[String, String]) extends BaseCacheTableExec {
   override lazy val relationName: String = multipartIdentifier.quoted
 
   override lazy val planToCache: LogicalPlan = relation
@@ -93,8 +91,7 @@ case class CacheTableAsSelectExec(
     originalText: String,
     override val isLazy: Boolean,
     override val options: Map[String, String],
-    referredTempFunctions: Seq[String])
-    extends BaseCacheTableExec {
+    referredTempFunctions: Seq[String]) extends BaseCacheTableExec {
   override lazy val relationName: String = tempViewName
 
   override def planToCache: LogicalPlan = UnresolvedRelation(Seq(tempViewName))
@@ -113,7 +110,8 @@ case class CacheTableAsSelectExec(
       replace = false,
       viewType = LocalTempView,
       isAnalyzed = true,
-      referredTempFunctions = referredTempFunctions).run(session)
+      referredTempFunctions = referredTempFunctions
+    ).run(session)
     try {
       super.run()
     } catch {
@@ -126,7 +124,9 @@ case class CacheTableAsSelectExec(
   }
 }
 
-case class UncacheTableExec(relation: LogicalPlan, cascade: Boolean) extends LeafV2CommandExec {
+case class UncacheTableExec(
+    relation: LogicalPlan,
+    cascade: Boolean) extends LeafV2CommandExec {
   override def run(): Seq[InternalRow] = {
     CommandUtils.uncacheTableOrView(session, relation, cascade)
     Seq.empty

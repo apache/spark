@@ -45,7 +45,12 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         condition = "NON_DETERMINISTIC_CHECK_CONSTRAINT",
         sqlState = "42621",
         parameters = Map("checkCondition" -> "i > rand(0)"),
-        context = ExpectedContext(fragment = "i > rand(0)", start = 67, stop = 77))
+        context = ExpectedContext(
+          fragment = "i > rand(0)",
+          start = 67,
+          stop = 77
+        )
+      )
     }
   }
 
@@ -54,7 +59,8 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       "CREATE TABLE t(i DOUBLE CHECK (i > rand(0)))",
       "CREATE TABLE t(i DOUBLE, CONSTRAINT c1 CHECK (i > rand(0)))",
       "REPLACE TABLE t(i DOUBLE CHECK (i > rand(0)))",
-      "REPLACE TABLE t(i DOUBLE, CONSTRAINT c1 CHECK (i > rand(0)))").foreach { query =>
+      "REPLACE TABLE t(i DOUBLE, CONSTRAINT c1 CHECK (i > rand(0)))"
+    ).foreach { query =>
       withTable("t") {
         val error = intercept[AnalysisException] {
           sql(query)
@@ -64,7 +70,10 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
           condition = "NON_DETERMINISTIC_CHECK_CONSTRAINT",
           sqlState = "42621",
           parameters = Map("checkCondition" -> "i > rand(0)"),
-          context = ExpectedContext(fragment = "i > rand(0)"))
+          context = ExpectedContext(
+            fragment = "i > rand(0)"
+          )
+        )
       }
     }
   }
@@ -88,7 +97,12 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
           parameters = Map(
             "objectName" -> quoteNameParts(AttributeNameParser.parseAttributeName(s"$t2.j")),
             "proposal" -> quoteNameParts(AttributeNameParser.parseAttributeName(s"$t1.i"))),
-          context = ExpectedContext(fragment = s"$t2.j", start = 73, stop = 104))
+          context = ExpectedContext(
+            fragment = s"$t2.j",
+            start = 73,
+            stop = 104
+          )
+        )
       }
     }
   }
@@ -105,7 +119,10 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = "42703",
         parameters = Map("objectName" -> "`t`.`i`", "proposal" -> "`j`"),
-        context = ExpectedContext(fragment = "t.i"))
+        context = ExpectedContext(
+          fragment = "t.i"
+        )
+      )
     }
   }
 
@@ -123,9 +140,8 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       val table = loadTable(nonPartitionCatalog, "ns", "tbl")
       val constraint = getCheckConstraint(table)
       assert(constraint.name() == "c1")
-      assert(
-        constraint.toDDL ==
-          "CONSTRAINT c1 CHECK (from_json(j, 'a INT').a > 1) ENFORCED NORELY")
+      assert(constraint.toDDL ==
+        "CONSTRAINT c1 CHECK (from_json(j, 'a INT').a > 1) ENFORCED NORELY")
       assert(constraint.predicateSql() == "from_json(j, 'a INT').a > 1")
       assert(constraint.predicate() == null)
     }
@@ -138,7 +154,8 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       ("RELY", s"ENFORCED RELY"),
       ("ENFORCED", s"ENFORCED NORELY"),
       ("ENFORCED NORELY", s"ENFORCED NORELY"),
-      ("ENFORCED RELY", s"ENFORCED RELY"))
+      ("ENFORCED RELY", s"ENFORCED RELY")
+    )
   }
 
   test("Create table with check constraint") {
@@ -156,9 +173,8 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
 
   test("Create table with check constraint: char/varchar type") {
     Seq(true, false).foreach { preserveCharVarcharTypeInfo =>
-      withSQLConf(
-        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key ->
-          preserveCharVarcharTypeInfo.toString) {
+      withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key ->
+        preserveCharVarcharTypeInfo.toString) {
         Seq("CHAR(10)", "VARCHAR(10)").foreach { dt =>
           withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
             val constraintStr = "CONSTRAINT c1 CHECK (LENGTH(name) > 0)"
@@ -166,9 +182,8 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
             val table = loadTable(nonPartitionCatalog, "ns", "tbl")
             val constraint = getCheckConstraint(table)
             assert(constraint.name() == "c1")
-            assert(
-              constraint.toDDL ==
-                s"CONSTRAINT c1 CHECK (LENGTH(name) > 0) ENFORCED NORELY")
+            assert(constraint.toDDL ==
+              s"CONSTRAINT c1 CHECK (LENGTH(name) > 0) ENFORCED NORELY")
             assert(constraint.predicateSql() == "LENGTH(name) > 0")
           }
         }
@@ -233,8 +248,8 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         checkError(
           exception = error,
           condition = "NEW_CHECK_CONSTRAINT_VIOLATION",
-          parameters =
-            Map("expression" -> "id > 0", "tableName" -> "non_part_test_catalog.ns.tbl"))
+          parameters = Map("expression" -> "id > 0", "tableName" -> "non_part_test_catalog.ns.tbl")
+        )
         assert(loadTable(nonPartitionCatalog, "ns", "tbl").constraints.isEmpty)
       }
     }
@@ -252,8 +267,8 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       checkError(
         exception = error,
         condition = "NEW_CHECK_CONSTRAINT_VIOLATION",
-        parameters =
-          Map("expression" -> "s.num > 0", "tableName" -> "non_part_test_catalog.ns.tbl"))
+        parameters = Map("expression" -> "s.num > 0", "tableName" -> "non_part_test_catalog.ns.tbl")
+      )
       assert(loadTable(nonPartitionCatalog, "ns", "tbl").constraints.isEmpty)
 
       // Add a valid check constraint
@@ -263,9 +278,8 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       assert(table.validatedVersion() == "1")
       val constraint = getCheckConstraint(table)
       assert(constraint.name() == "valid_positive_num")
-      assert(
-        constraint.toDDL ==
-          "CONSTRAINT valid_positive_num CHECK (s.num >= -1) ENFORCED NORELY")
+      assert(constraint.toDDL ==
+        "CONSTRAINT valid_positive_num CHECK (s.num >= -1) ENFORCED NORELY")
     }
   }
 
@@ -281,8 +295,10 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       checkError(
         exception = error,
         condition = "NEW_CHECK_CONSTRAINT_VIOLATION",
-        parameters =
-          Map("expression" -> "m['a'] > 0", "tableName" -> "non_part_test_catalog.ns.tbl"))
+        parameters = Map(
+          "expression" -> "m['a'] > 0",
+          "tableName" -> "non_part_test_catalog.ns.tbl")
+      )
       assert(loadTable(nonPartitionCatalog, "ns", "tbl").constraints.isEmpty)
 
       // Add a valid check constraint
@@ -292,9 +308,8 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       assert(table.validatedVersion() == "1")
       val constraint = getCheckConstraint(table)
       assert(constraint.name() == "valid_map_val")
-      assert(
-        constraint.toDDL ==
-          "CONSTRAINT valid_map_val CHECK (m['a'] >= -1) ENFORCED NORELY")
+      assert(constraint.toDDL ==
+        "CONSTRAINT valid_map_val CHECK (m['a'] >= -1) ENFORCED NORELY")
     }
   }
 
@@ -310,8 +325,8 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       checkError(
         exception = error,
         condition = "NEW_CHECK_CONSTRAINT_VIOLATION",
-        parameters =
-          Map("expression" -> "a[1] > 0", "tableName" -> "non_part_test_catalog.ns.tbl"))
+        parameters = Map("expression" -> "a[1] > 0", "tableName" -> "non_part_test_catalog.ns.tbl")
+      )
       assert(loadTable(nonPartitionCatalog, "ns", "tbl").constraints.isEmpty)
 
       // Add a valid check constraint
@@ -321,9 +336,8 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       assert(table.validatedVersion() == "1")
       val constraint = getCheckConstraint(table)
       assert(constraint.name() == "valid_array")
-      assert(
-        constraint.toDDL ==
-          "CONSTRAINT valid_array CHECK (a[1] >= -2) ENFORCED NORELY")
+      assert(constraint.toDDL ==
+        "CONSTRAINT valid_array CHECK (a[1] >= -2) ENFORCED NORELY")
     }
   }
 
@@ -342,18 +356,17 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
           exception = error,
           condition = "CONSTRAINT_ALREADY_EXISTS",
           sqlState = "42710",
-          parameters = Map(
-            "constraintName" -> "abc",
-            "oldConstraint" -> "CONSTRAINT abc CHECK (id > 0) ENFORCED NORELY"))
+          parameters = Map("constraintName" -> "abc",
+            "oldConstraint" -> "CONSTRAINT abc CHECK (id > 0) ENFORCED NORELY")
+        )
       }
     }
   }
 
   test("Check constraint violation on table insert - top level column") {
     withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
-      sql(
-        s"CREATE TABLE $t (id INT, CONSTRAINT positive_id CHECK (id > 0), " +
-          s" CONSTRAINT less_than_100 CHECK(abs(id) < 100)) $defaultUsing")
+      sql(s"CREATE TABLE $t (id INT, CONSTRAINT positive_id CHECK (id > 0), " +
+        s" CONSTRAINT less_than_100 CHECK(abs(id) < 100)) $defaultUsing")
       var error = intercept[SparkRuntimeException] {
         sql(s"INSERT INTO $t VALUES (-1)")
       }
@@ -361,10 +374,9 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         exception = error,
         condition = "CHECK_CONSTRAINT_VIOLATION",
         sqlState = "23001",
-        parameters = Map(
-          "constraintName" -> "positive_id",
-          "expression" -> "id > 0",
-          "values" -> " - id : -1"))
+        parameters =
+          Map("constraintName" -> "positive_id", "expression" -> "id > 0", "values" -> " - id : -1")
+      )
 
       error = intercept[SparkRuntimeException] {
         sql(s"INSERT INTO $t VALUES (100)")
@@ -373,19 +385,18 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         exception = error,
         condition = "CHECK_CONSTRAINT_VIOLATION",
         sqlState = "23001",
-        parameters = Map(
-          "constraintName" -> "less_than_100",
-          "expression" -> "abs(id) < 100",
-          "values" -> " - id : 100"))
+        parameters =
+          Map("constraintName" -> "less_than_100", "expression" -> "abs(id) < 100",
+            "values" -> " - id : 100")
+      )
     }
   }
 
   test("Check constraint with current_timestamp function") {
     withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
       // Create table with a constraint using current_timestamp
-      sql(
-        s"CREATE TABLE $t (id INT, creation_time TIMESTAMP, " +
-          s"CONSTRAINT valid_time CHECK (creation_time <= current_timestamp())) $defaultUsing")
+      sql(s"CREATE TABLE $t (id INT, creation_time TIMESTAMP, " +
+        s"CONSTRAINT valid_time CHECK (creation_time <= current_timestamp())) $defaultUsing")
 
       // Insert valid data (current or past timestamp)
       sql(s"INSERT INTO $t VALUES (1, current_timestamp()), (2, TIMESTAMP '2020-01-01 00:00:00')")
@@ -402,28 +413,23 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       }
       assert(error.getMessage.contains("CHECK_CONSTRAINT_VIOLATION"))
       assert(error.getMessageParameters.get("constraintName") == "valid_time")
-      assert(
-        error.getMessageParameters.get("expression") == "creation_time <= current_timestamp()")
+      assert(error.getMessageParameters.get("expression") == "creation_time <= current_timestamp()")
     }
   }
 
   test("Check constraint with current_timestamp function - update operation") {
     withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { t =>
       // Create table with a constraint using current_timestamp
-      sql(
-        s"CREATE TABLE $t (id INT, creation_time TIMESTAMP, " +
-          s"CONSTRAINT valid_time CHECK (creation_time <= current_timestamp())) $defaultUsing")
+      sql(s"CREATE TABLE $t (id INT, creation_time TIMESTAMP, " +
+        s"CONSTRAINT valid_time CHECK (creation_time <= current_timestamp())) $defaultUsing")
 
       // Insert initial data
       sql(s"INSERT INTO $t VALUES (1, current_timestamp()), (2, TIMESTAMP '2020-01-01 00:00:00')")
 
       // Valid update with current or past timestamp
       sql(s"UPDATE $t SET creation_time = TIMESTAMP '2021-01-01 00:00:00' WHERE id = 1")
-      checkAnswer(
-        spark
-          .table(t)
-          .select("id")
-          .where("creation_time = TIMESTAMP '2021-01-01 00:00:00'"),
+      checkAnswer(spark.table(t).select("id")
+        .where("creation_time = TIMESTAMP '2021-01-01 00:00:00'"),
         Seq(Row(1)))
 
       // Valid update with null timestamp
@@ -437,8 +443,7 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       }
       assert(error.getMessage.contains("CHECK_CONSTRAINT_VIOLATION"))
       assert(error.getMessageParameters.get("constraintName") == "valid_time")
-      assert(
-        error.getMessageParameters.get("expression") == "creation_time <= current_timestamp()")
+      assert(error.getMessageParameters.get("expression") == "creation_time <= current_timestamp()")
     }
   }
 
@@ -446,23 +451,22 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { target =>
       withNamespaceAndTable("ns", "source", rowLevelOPCatalog) { source =>
         // Create target table with constraint using current_timestamp
-        sql(
-          s"CREATE TABLE $target (id INT, creation_time TIMESTAMP, " +
-            s"CONSTRAINT valid_time CHECK (creation_time <= current_timestamp())) $defaultUsing")
+        sql(s"CREATE TABLE $target (id INT, creation_time TIMESTAMP, " +
+          s"CONSTRAINT valid_time CHECK (creation_time <= current_timestamp())) $defaultUsing")
 
         // Create source table without constraints
         sql(s"CREATE TABLE $source (id INT, creation_time TIMESTAMP) $defaultUsing")
 
         // Insert initial data
         sql(s"INSERT INTO $target VALUES (1, TIMESTAMP '2020-01-01 00:00:00')")
-        sql(
-          s"INSERT INTO $source VALUES " +
-            s"(2, TIMESTAMP '2021-01-01 00:00:00'), " +
-            s"(3, current_timestamp()), " +
-            s"(4, null)")
+        sql(s"INSERT INTO $source VALUES " +
+          s"(2, TIMESTAMP '2021-01-01 00:00:00'), " +
+          s"(3, current_timestamp()), " +
+          s"(4, null)")
 
         // Valid merge with past timestamps or null
-        sql(s"""
+        sql(
+          s"""
              |MERGE INTO $target t
              |USING (SELECT * FROM $source WHERE id IN (2, 4)) s
              |ON t.id = s.id
@@ -470,19 +474,18 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
              |WHEN NOT MATCHED THEN INSERT (id, creation_time) VALUES (s.id, s.creation_time)
              |""".stripMargin)
 
-        checkAnswer(
-          spark.table(target).orderBy("id"),
-          Seq(
-            Row(1, java.sql.Timestamp.valueOf("2020-01-01 00:00:00")),
-            Row(2, java.sql.Timestamp.valueOf("2021-01-01 00:00:00")),
-            Row(4, null)))
+        checkAnswer(spark.table(target).orderBy("id"),
+          Seq(Row(1, java.sql.Timestamp.valueOf("2020-01-01 00:00:00")),
+              Row(2, java.sql.Timestamp.valueOf("2021-01-01 00:00:00")),
+              Row(4, null)))
 
         // Future timestamp should fail validation
         val tomorrow = "current_timestamp() + INTERVAL 1 DAY"
         sql(s"INSERT INTO $source VALUES (5, $tomorrow)")
 
         val error = intercept[SparkRuntimeException] {
-          sql(s"""
+          sql(
+            s"""
                |MERGE INTO $target t
                |USING (SELECT * FROM $source WHERE id = 5) s
                |ON t.id = s.id
@@ -492,9 +495,8 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
 
         assert(error.getMessage.contains("CHECK_CONSTRAINT_VIOLATION"))
         assert(error.getMessageParameters.get("constraintName") == "valid_time")
-        assert(
-          error.getMessageParameters.get("expression") ==
-            "creation_time <= current_timestamp()")
+        assert(error.getMessageParameters.get("expression") ==
+          "creation_time <= current_timestamp()")
       }
     }
   }
@@ -502,9 +504,8 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
   test("Check constraint with current_date function") {
     // Create another table with other current_* functions
     withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
-      sql(
-        s"CREATE TABLE $t (id INT, creation_date DATE, " +
-          s"CONSTRAINT valid_date CHECK (creation_date <= current_date())) $defaultUsing")
+      sql(s"CREATE TABLE $t (id INT, creation_date DATE, " +
+        s"CONSTRAINT valid_date CHECK (creation_date <= current_date())) $defaultUsing")
 
       // Insert valid data (current or past timestamp)
       sql(s"INSERT INTO $t VALUES (1, current_date()), (2, DATE'2020-01-01')")
@@ -522,16 +523,17 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         parameters = Map(
           "constraintName" -> "valid_date",
           "expression" -> "creation_date <= current_date()",
-          "values" -> " - creation_date : 2932896"))
+          "values" -> " - creation_date : 2932896"
+        )
+      )
     }
   }
 
   test("Check constraint with current_database function") {
     withNamespaceAndTable("test_db", "tbl", nonPartitionCatalog) { t =>
       sql(s"USE $nonPartitionCatalog.test_db")
-      sql(
-        s"CREATE TABLE $t (id INT, db STRING, " +
-          s"CONSTRAINT valid_db CHECK (db = current_database())) $defaultUsing")
+      sql(s"CREATE TABLE $t (id INT, db STRING, " +
+        s"CONSTRAINT valid_db CHECK (db = current_database())) $defaultUsing")
 
       // Insert valid data (current database)
       sql(s"INSERT INTO $t VALUES (1, current_database()), (2, 'test_db')")
@@ -548,16 +550,17 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         parameters = Map(
           "constraintName" -> "valid_db",
           "expression" -> "db = current_database()",
-          "values" -> " - db : invalid_db"))
+          "values" -> " - db : invalid_db"
+        )
+      )
     }
   }
 
   test("Check constraint with current_database function - update operation") {
     withNamespaceAndTable("test_db", "tbl", rowLevelOPCatalog) { t =>
       sql(s"USE $rowLevelOPCatalog.test_db")
-      sql(
-        s"CREATE TABLE $t (id INT, db STRING, " +
-          s"CONSTRAINT valid_db CHECK (db = current_database())) $defaultUsing")
+      sql(s"CREATE TABLE $t (id INT, db STRING, " +
+        s"CONSTRAINT valid_db CHECK (db = current_database())) $defaultUsing")
 
       // Insert initial valid data
       sql(s"INSERT INTO $t VALUES (1, current_database()), (2, 'test_db')")
@@ -578,7 +581,9 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         parameters = Map(
           "constraintName" -> "valid_db",
           "expression" -> "db = current_database()",
-          "values" -> " - db : invalid_db"))
+          "values" -> " - db : invalid_db"
+        )
+      )
     }
   }
 
@@ -586,9 +591,8 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     withNamespaceAndTable("test_db", "target", rowLevelOPCatalog) { target =>
       withNamespaceAndTable("test_db", "source", rowLevelOPCatalog) { source =>
         sql(s"USE $rowLevelOPCatalog.test_db")
-        sql(
-          s"CREATE TABLE $target (id INT, db STRING, " +
-            s"CONSTRAINT valid_db CHECK (db = current_database())) $defaultUsing")
+        sql(s"CREATE TABLE $target (id INT, db STRING, " +
+          s"CONSTRAINT valid_db CHECK (db = current_database())) $defaultUsing")
         sql(s"CREATE TABLE $source (id INT, db STRING) $defaultUsing")
 
         // Insert initial valid data
@@ -596,19 +600,20 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         sql(s"INSERT INTO $source VALUES (3, 'test_db'), (4, 'invalid_db')")
 
         // Valid merge with current database value
-        sql(s"""
+        sql(
+          s"""
              |MERGE INTO $target t
              |USING (SELECT * FROM $source WHERE id = 3) s
              |ON t.id = s.id
              |WHEN NOT MATCHED THEN INSERT (id, db) VALUES (s.id, s.db)
              |""".stripMargin)
-        checkAnswer(
-          spark.table(target).orderBy("id"),
+        checkAnswer(spark.table(target).orderBy("id"),
           Seq(Row(1, "test_db"), Row(2, "test_db"), Row(3, "test_db")))
 
         // Invalid database should fail validation
         val error = intercept[SparkRuntimeException] {
-          sql(s"""
+          sql(
+            s"""
                |MERGE INTO $target t
                |USING (SELECT * FROM $source WHERE id = 4) s
                |ON t.id = s.id
@@ -622,7 +627,9 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
           parameters = Map(
             "constraintName" -> "valid_db",
             "expression" -> "db = current_database()",
-            "values" -> " - db : invalid_db"))
+            "values" -> " - db : invalid_db"
+          )
+        )
       }
     }
   }
@@ -642,15 +649,16 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         parameters = Map(
           "constraintName" -> "positive_num",
           "expression" -> "s.num > 0",
-          "values" -> " - s.num : -1"))
+          "values" -> " - s.num : -1"
+        )
+      )
     }
   }
 
   test("Check constraint violation on table insert - map type column") {
     withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
-      sql(
-        s"CREATE TABLE $t (id INT," +
-          s" m MAP<STRING, INT> CONSTRAINT positive_num CHECK (m['a'] > 0)) $defaultUsing")
+      sql(s"CREATE TABLE $t (id INT," +
+        s" m MAP<STRING, INT> CONSTRAINT positive_num CHECK (m['a'] > 0)) $defaultUsing")
 
       val error = intercept[SparkRuntimeException] {
         sql(s"INSERT INTO $t VALUES (1, map('a', -1))")
@@ -662,15 +670,16 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         parameters = Map(
           "constraintName" -> "positive_num",
           "expression" -> "m['a'] > 0",
-          "values" -> " - m['a'] : -1"))
+          "values" -> " - m['a'] : -1"
+        )
+      )
     }
   }
 
   test("Check constraint violation on table insert - array type column") {
     withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
-      sql(
-        s"CREATE TABLE $t (id INT," +
-          s" a ARRAY<INT>, CONSTRAINT positive_array CHECK (a[1] > 0)) $defaultUsing")
+      sql(s"CREATE TABLE $t (id INT," +
+        s" a ARRAY<INT>, CONSTRAINT positive_array CHECK (a[1] > 0)) $defaultUsing")
 
       val error = intercept[SparkRuntimeException] {
         sql(s"INSERT INTO $t VALUES (1, array(1, -2, 3))")
@@ -683,16 +692,17 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         parameters = Map(
           "constraintName" -> "positive_array",
           "expression" -> "a[1] > 0",
-          "values" -> " - a[1] : -2"))
+          "values" -> " - a[1] : -2"
+        )
+      )
     }
   }
 
   test("Check constraint violation on table update - top level column") {
     withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { t =>
-      sql(
-        s"CREATE TABLE $t (id INT, value INT," +
-          s" CONSTRAINT positive_id CHECK (id > 0)," +
-          s" CONSTRAINT less_than_100 CHECK(abs(value) < 100)) $defaultUsing")
+      sql(s"CREATE TABLE $t (id INT, value INT," +
+        s" CONSTRAINT positive_id CHECK (id > 0)," +
+        s" CONSTRAINT less_than_100 CHECK(abs(value) < 100)) $defaultUsing")
       sql(s"INSERT INTO $t VALUES (5, 10)")
       var error = intercept[SparkRuntimeException] {
         sql(s"UPDATE $t SET id = -1 WHERE value = 10")
@@ -701,10 +711,9 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         exception = error,
         condition = "CHECK_CONSTRAINT_VIOLATION",
         sqlState = "23001",
-        parameters = Map(
-          "constraintName" -> "positive_id",
-          "expression" -> "id > 0",
-          "values" -> " - id : -1"))
+        parameters =
+          Map("constraintName" -> "positive_id", "expression" -> "id > 0", "values" -> " - id : -1")
+      )
 
       error = intercept[SparkRuntimeException] {
         sql(s"UPDATE $t SET value = -100 WHERE id = 5")
@@ -713,10 +722,10 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         exception = error,
         condition = "CHECK_CONSTRAINT_VIOLATION",
         sqlState = "23001",
-        parameters = Map(
-          "constraintName" -> "less_than_100",
-          "expression" -> "abs(value) < 100",
-          "values" -> " - value : -100"))
+        parameters =
+          Map("constraintName" -> "less_than_100", "expression" -> "abs(value) < 100",
+            "values" -> " - value : -100")
+      )
     }
   }
 
@@ -732,18 +741,17 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         exception = error,
         condition = "CHECK_CONSTRAINT_VIOLATION",
         sqlState = "23001",
-        parameters = Map(
-          "constraintName" -> "positive_num",
-          "expression" -> "s.num > 0",
-          "values" -> " - s.num : -1"))
+        parameters =
+          Map("constraintName" -> "positive_num",
+            "expression" -> "s.num > 0", "values" -> " - s.num : -1")
+      )
     }
   }
 
   test("Check constraint violation on table update - map type column") {
     withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { t =>
-      sql(
-        s"CREATE TABLE $t (id INT, value INT," +
-          s" m MAP<STRING, INT> CONSTRAINT positive_num CHECK (m['a'] > 0)) $defaultUsing")
+      sql(s"CREATE TABLE $t (id INT, value INT," +
+        s" m MAP<STRING, INT> CONSTRAINT positive_num CHECK (m['a'] > 0)) $defaultUsing")
       sql(s"INSERT INTO $t VALUES (5, 10, map('a', 5))")
       val error = intercept[SparkRuntimeException] {
         sql(s"UPDATE $t SET m = map('a', -1) WHERE value = 10")
@@ -752,18 +760,17 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         exception = error,
         condition = "CHECK_CONSTRAINT_VIOLATION",
         sqlState = "23001",
-        parameters = Map(
-          "constraintName" -> "positive_num",
-          "expression" -> "m['a'] > 0",
-          "values" -> " - m['a'] : -1"))
+        parameters =
+          Map("constraintName" -> "positive_num",
+            "expression" -> "m['a'] > 0", "values" -> " - m['a'] : -1")
+      )
     }
   }
 
   test("Check constraint violation on table update - array type column") {
     withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { t =>
-      sql(
-        s"CREATE TABLE $t (id INT, value INT," +
-          s" a ARRAY<INT>, CONSTRAINT positive_array CHECK (a[1] > 0)) $defaultUsing")
+      sql(s"CREATE TABLE $t (id INT, value INT," +
+        s" a ARRAY<INT>, CONSTRAINT positive_array CHECK (a[1] > 0)) $defaultUsing")
       sql(s"INSERT INTO $t VALUES (5, 10, array(5, 6))")
       val error = intercept[SparkRuntimeException] {
         sql(s"UPDATE $t SET a = array(1, -2) WHERE value = 10")
@@ -772,26 +779,26 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         exception = error,
         condition = "CHECK_CONSTRAINT_VIOLATION",
         sqlState = "23001",
-        parameters = Map(
-          "constraintName" -> "positive_array",
-          "expression" -> "a[1] > 0",
-          "values" -> " - a[1] : -2"))
+        parameters =
+          Map("constraintName" -> "positive_array",
+            "expression" -> "a[1] > 0", "values" -> " - a[1] : -2")
+      )
     }
   }
 
   test("Check constraint violation on table merge - top level column") {
     withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { target =>
       withNamespaceAndTable("ns", "tbl2", rowLevelOPCatalog) { source =>
-        sql(
-          s"CREATE TABLE $target (id INT, value INT," +
-            s" CONSTRAINT positive_id CHECK (id > 0)," +
-            s" CONSTRAINT less_than_100 CHECK(abs(id) < 100)) $defaultUsing")
+        sql(s"CREATE TABLE $target (id INT, value INT," +
+          s" CONSTRAINT positive_id CHECK (id > 0)," +
+          s" CONSTRAINT less_than_100 CHECK(abs(id) < 100)) $defaultUsing")
         sql(s"CREATE TABLE $source (id INT, value INT) $defaultUsing")
         sql(s"INSERT INTO $target VALUES (5, 10)")
         sql(s"INSERT INTO $source VALUES (-1, 20)")
 
         var error = intercept[SparkRuntimeException] {
-          sql(s"""
+          sql(
+            s"""
                |MERGE INTO $target t
                |USING $source s
                |ON t.value = s.value
@@ -802,13 +809,14 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
           exception = error,
           condition = "CHECK_CONSTRAINT_VIOLATION",
           sqlState = "23001",
-          parameters = Map(
-            "constraintName" -> "positive_id",
-            "expression" -> "id > 0",
-            "values" -> " - id : -1"))
+          parameters =
+            Map("constraintName" -> "positive_id", "expression" -> "id > 0",
+              "values" -> " - id : -1")
+        )
 
         error = intercept[SparkRuntimeException] {
-          sql(s"""
+          sql(
+            s"""
                |MERGE INTO $target t
                |USING $source s
                |ON t.value = s.value
@@ -819,13 +827,14 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
           exception = error,
           condition = "CHECK_CONSTRAINT_VIOLATION",
           sqlState = "23001",
-          parameters = Map(
-            "constraintName" -> "less_than_100",
-            "expression" -> "abs(id) < 100",
-            "values" -> " - id : 100"))
+          parameters =
+            Map("constraintName" -> "less_than_100", "expression" -> "abs(id) < 100",
+              "values" -> " - id : 100")
+        )
 
         error = intercept[SparkRuntimeException] {
-          sql(s"""
+          sql(
+            s"""
                |MERGE INTO $target t
                |USING $source s
                |ON t.value = s.value
@@ -837,10 +846,10 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
           exception = error,
           condition = "CHECK_CONSTRAINT_VIOLATION",
           sqlState = "23001",
-          parameters = Map(
-            "constraintName" -> "positive_id",
-            "expression" -> "id > 0",
-            "values" -> " - id : -1"))
+          parameters =
+            Map("constraintName" -> "positive_id", "expression" -> "id > 0",
+              "values" -> " - id : -1")
+        )
       }
     }
   }
@@ -848,16 +857,16 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
   test("Check constraint violation on table merge - nested column") {
     withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { target =>
       withNamespaceAndTable("ns", "tbl2", rowLevelOPCatalog) { source =>
-        sql(
-          s"CREATE TABLE $target (id INT, value INT," +
-            s" s STRUCT<num INT, str STRING> " +
-            s"CONSTRAINT positive_num CHECK (s.num > 0)) $defaultUsing")
+        sql(s"CREATE TABLE $target (id INT, value INT," +
+          s" s STRUCT<num INT, str STRING> " +
+          s"CONSTRAINT positive_num CHECK (s.num > 0)) $defaultUsing")
         sql(s"CREATE TABLE $source (id INT, value INT) $defaultUsing")
         sql(s"INSERT INTO $target VALUES (5, 10, struct(5, 'test'))")
         sql(s"INSERT INTO $source VALUES (-1, 20)")
 
         val error = intercept[SparkRuntimeException] {
-          sql(s"""
+          sql(
+            s"""
                |MERGE INTO $target t
                |USING $source s
                |ON t.value = s.value
@@ -869,10 +878,10 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
           exception = error,
           condition = "CHECK_CONSTRAINT_VIOLATION",
           sqlState = "23001",
-          parameters = Map(
-            "constraintName" -> "positive_num",
-            "expression" -> "s.num > 0",
-            "values" -> " - s.num : -1"))
+          parameters =
+            Map("constraintName" -> "positive_num", "expression" -> "s.num > 0",
+              "values" -> " - s.num : -1")
+        )
       }
     }
   }
@@ -880,15 +889,15 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
   test("Check constraint violation on table merge - map type column") {
     withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { target =>
       withNamespaceAndTable("ns", "tbl2", rowLevelOPCatalog) { source =>
-        sql(
-          s"CREATE TABLE $target (id INT, value INT," +
-            s" m MAP<STRING, INT> CONSTRAINT positive_num CHECK (m['a'] > 0)) $defaultUsing")
+        sql(s"CREATE TABLE $target (id INT, value INT," +
+          s" m MAP<STRING, INT> CONSTRAINT positive_num CHECK (m['a'] > 0)) $defaultUsing")
         sql(s"CREATE TABLE $source (id INT, value INT) $defaultUsing")
         sql(s"INSERT INTO $target VALUES (5, 10, map('a', 5))")
         sql(s"INSERT INTO $source VALUES (-1, 20)")
 
         val error = intercept[SparkRuntimeException] {
-          sql(s"""
+          sql(
+            s"""
                |MERGE INTO $target t
                |USING $source s
                |ON t.value = s.value
@@ -899,10 +908,10 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
           exception = error,
           condition = "CHECK_CONSTRAINT_VIOLATION",
           sqlState = "23001",
-          parameters = Map(
-            "constraintName" -> "positive_num",
-            "expression" -> "m['a'] > 0",
-            "values" -> " - m['a'] : -1"))
+          parameters =
+            Map("constraintName" -> "positive_num", "expression" -> "m['a'] > 0",
+              "values" -> " - m['a'] : -1")
+        )
       }
     }
   }
@@ -910,15 +919,15 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
   test("Check constraint violation on table merge - array type column") {
     withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { target =>
       withNamespaceAndTable("ns", "tbl2", rowLevelOPCatalog) { source =>
-        sql(
-          s"CREATE TABLE $target (id INT, value INT," +
-            s" a ARRAY<INT>, CONSTRAINT positive_array CHECK (a[1] > 0)) $defaultUsing")
+        sql(s"CREATE TABLE $target (id INT, value INT," +
+          s" a ARRAY<INT>, CONSTRAINT positive_array CHECK (a[1] > 0)) $defaultUsing")
         sql(s"CREATE TABLE $source (id INT, value INT) $defaultUsing")
         sql(s"INSERT INTO $target VALUES (5, 10, array(5, 6))")
         sql(s"INSERT INTO $source VALUES (-1, 20)")
 
         val error = intercept[SparkRuntimeException] {
-          sql(s"""
+          sql(
+            s"""
                |MERGE INTO $target t
                |USING $source s
                |ON t.value = s.value
@@ -929,19 +938,18 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
           exception = error,
           condition = "CHECK_CONSTRAINT_VIOLATION",
           sqlState = "23001",
-          parameters = Map(
-            "constraintName" -> "positive_array",
-            "expression" -> "a[1] > 0",
-            "values" -> " - a[1] : -2"))
+          parameters =
+            Map("constraintName" -> "positive_array", "expression" -> "a[1] > 0",
+              "values" -> " - a[1] : -2")
+        )
       }
     }
   }
 
   test("Check constraint violation on insert overwrite by position") {
     withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
-      sql(
-        s"CREATE TABLE $t (id INT, value INT," +
-          s" CONSTRAINT positive_value CHECK (value > 0)) $defaultUsing")
+      sql(s"CREATE TABLE $t (id INT, value INT," +
+        s" CONSTRAINT positive_value CHECK (value > 0)) $defaultUsing")
       // First insert valid data
       sql(s"INSERT INTO $t VALUES (1, 10)")
 
@@ -957,15 +965,16 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         parameters = Map(
           "constraintName" -> "positive_value",
           "expression" -> "value > 0",
-          "values" -> " - value : -5"))
+          "values" -> " - value : -5"
+        )
+      )
     }
   }
 
   test("Check constraint violation on insert overwrite by name") {
     withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
-      sql(
-        s"CREATE TABLE $t (id INT, value INT," +
-          s" CONSTRAINT positive_value CHECK (value > 0)) $defaultUsing")
+      sql(s"CREATE TABLE $t (id INT, value INT," +
+        s" CONSTRAINT positive_value CHECK (value > 0)) $defaultUsing")
       // First insert valid data
       sql(s"INSERT INTO $t VALUES (1, 10)")
 
@@ -981,7 +990,9 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         parameters = Map(
           "constraintName" -> "positive_value",
           "expression" -> "value > 0",
-          "values" -> " - value : -5"))
+          "values" -> " - value : -5"
+        )
+      )
     }
   }
 
@@ -1012,21 +1023,17 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
 
   test("Check constraint validation succeeds on table insert - map type column") {
     withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
-      sql(
-        s"CREATE TABLE $t (id INT," +
-          s" m MAP<STRING, INT> CONSTRAINT positive_num CHECK (m['a'] > 0)) $defaultUsing")
+      sql(s"CREATE TABLE $t (id INT," +
+        s" m MAP<STRING, INT> CONSTRAINT positive_num CHECK (m['a'] > 0)) $defaultUsing")
       sql(s"INSERT INTO $t VALUES (1, map('a', 10, 'b', 20)), (2, map('a', null))")
-      checkAnswer(
-        spark.table(t),
-        Seq(Row(1, Map("a" -> 10, "b" -> 20)), Row(2, Map("a" -> null))))
+      checkAnswer(spark.table(t), Seq(Row(1, Map("a" -> 10, "b" -> 20)), Row(2, Map("a" -> null))))
     }
   }
 
   test("Check constraint validation succeeds on table insert - array type column") {
     withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
-      sql(
-        s"CREATE TABLE $t (id INT," +
-          s" a ARRAY<INT>, CONSTRAINT positive_array CHECK (a[1] > 0)) $defaultUsing")
+      sql(s"CREATE TABLE $t (id INT," +
+        s" a ARRAY<INT>, CONSTRAINT positive_array CHECK (a[1] > 0)) $defaultUsing")
       sql(s"INSERT INTO $t VALUES (1, array(5, 6, 7)), (2, array(8, null))")
       checkAnswer(spark.table(t), Seq(Row(1, Seq(5, 6, 7)), Row(2, Seq(8, null))))
     }
@@ -1034,10 +1041,9 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
 
   test("Check constraint validation succeeds on table update - top level column") {
     withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { t =>
-      sql(
-        s"CREATE TABLE $t (id INT, value INT," +
-          s" CONSTRAINT positive_id CHECK (id > 0)," +
-          s" CONSTRAINT less_than_100 CHECK(abs(value) < 100)) $defaultUsing")
+      sql(s"CREATE TABLE $t (id INT, value INT," +
+        s" CONSTRAINT positive_id CHECK (id > 0)," +
+        s" CONSTRAINT less_than_100 CHECK(abs(value) < 100)) $defaultUsing")
       sql(s"INSERT INTO $t VALUES (1, 10), (2, 20)")
       sql(s"UPDATE $t SET id = null WHERE value = 10")
       checkAnswer(spark.table(t), Seq(Row(null, 10), Row(2, 20)))
@@ -1056,9 +1062,8 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
 
   test("Check constraint validation succeeds on table update - map type column") {
     withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { t =>
-      sql(
-        s"CREATE TABLE $t (id INT, value INT," +
-          s" m MAP<STRING, INT> CONSTRAINT positive_num CHECK (m['a'] > 0)) $defaultUsing")
+      sql(s"CREATE TABLE $t (id INT, value INT," +
+        s" m MAP<STRING, INT> CONSTRAINT positive_num CHECK (m['a'] > 0)) $defaultUsing")
       sql(s"INSERT INTO $t VALUES (1, 10, map('a', 5)), (2, 20, map('b', 10))")
       sql(s"UPDATE $t SET m = map('a', null) WHERE value = 10")
       checkAnswer(spark.table(t), Seq(Row(1, 10, Map("a" -> null)), Row(2, 20, Map("b" -> 10))))
@@ -1067,9 +1072,8 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
 
   test("Check constraint validation succeeds on table update - array type column") {
     withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { t =>
-      sql(
-        s"CREATE TABLE $t (id INT, value INT," +
-          s" a ARRAY<INT>, CONSTRAINT positive_array CHECK (a[1] > 0)) $defaultUsing")
+      sql(s"CREATE TABLE $t (id INT, value INT," +
+        s" a ARRAY<INT>, CONSTRAINT positive_array CHECK (a[1] > 0)) $defaultUsing")
       sql(s"INSERT INTO $t VALUES (1, 10, array(5, 6)), (2, 20, array(7, 8))")
       sql(s"UPDATE $t SET a = array(null, 1) WHERE value = 10")
       checkAnswer(spark.table(t), Seq(Row(1, 10, Seq(null, 1)), Row(2, 20, Seq(7, 8))))
@@ -1079,15 +1083,15 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
   test("Check constraint validation succeeds on table merge - top level column") {
     withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { target =>
       withNamespaceAndTable("ns", "tbl2", rowLevelOPCatalog) { source =>
-        sql(
-          s"CREATE TABLE $target (id INT, value INT," +
-            s" CONSTRAINT positive_id CHECK (id > 0)," +
-            s" CONSTRAINT less_than_100 CHECK(abs(value) < 100)) $defaultUsing")
+        sql(s"CREATE TABLE $target (id INT, value INT," +
+          s" CONSTRAINT positive_id CHECK (id > 0)," +
+          s" CONSTRAINT less_than_100 CHECK(abs(value) < 100)) $defaultUsing")
         sql(s"CREATE TABLE $source (id INT, value INT) $defaultUsing")
         sql(s"INSERT INTO $target VALUES (1, 10), (2, 20)")
         sql(s"INSERT INTO $source VALUES (3, 30), (4, 40)")
 
-        sql(s"""
+        sql(
+          s"""
              |MERGE INTO $target t
              |USING $source s
              |ON t.value = s.value
@@ -1101,27 +1105,23 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
   test("Check constraint validation succeeds on table merge - nested column") {
     withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { target =>
       withNamespaceAndTable("ns", "tbl2", rowLevelOPCatalog) { source =>
-        sql(
-          s"CREATE TABLE $target (id INT, value INT," +
-            s" s STRUCT<num INT, str STRING> " +
-            s"CONSTRAINT positive_num CHECK (s.num > 0)) $defaultUsing")
+        sql(s"CREATE TABLE $target (id INT, value INT," +
+          s" s STRUCT<num INT, str STRING> " +
+          s"CONSTRAINT positive_num CHECK (s.num > 0)) $defaultUsing")
         sql(s"CREATE TABLE $source (id INT, value INT) $defaultUsing")
         sql(s"INSERT INTO $target VALUES (1, 10, struct(5, 'test')), (2, 20, struct(10, 'test'))")
         sql(s"INSERT INTO $source VALUES (3, 30), (4, 40)")
 
-        sql(s"""
+        sql(
+          s"""
              |MERGE INTO $target t
              |USING $source s
              |ON t.value = s.value
              |WHEN NOT MATCHED THEN INSERT(id, value) VALUES (s.id, s.value)
              |""".stripMargin)
-        checkAnswer(
-          spark.table(target),
-          Seq(
-            Row(1, 10, Row(5, "test")),
-            Row(2, 20, Row(10, "test")),
-            Row(3, 30, null),
-            Row(4, 40, null)))
+        checkAnswer(spark.table(target),
+          Seq(Row(1, 10, Row(5, "test")), Row(2, 20, Row(10, "test")),
+            Row(3, 30, null), Row(4, 40, null)))
       }
     }
   }
@@ -1129,26 +1129,22 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
   test("Check constraint validation succeeds on table merge - map type column") {
     withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { target =>
       withNamespaceAndTable("ns", "tbl2", rowLevelOPCatalog) { source =>
-        sql(
-          s"CREATE TABLE $target (id INT, value INT," +
-            s" m MAP<STRING, INT> CONSTRAINT positive_num CHECK (m['a'] > 0)) $defaultUsing")
+        sql(s"CREATE TABLE $target (id INT, value INT," +
+          s" m MAP<STRING, INT> CONSTRAINT positive_num CHECK (m['a'] > 0)) $defaultUsing")
         sql(s"CREATE TABLE $source (id INT, value INT) $defaultUsing")
         sql(s"INSERT INTO $target VALUES (1, 10, map('a', 5)), (2, 20, map('b', 10))")
         sql(s"INSERT INTO $source VALUES (3, 30), (4, 40)")
 
-        sql(s"""
+        sql(
+          s"""
              |MERGE INTO $target t
              |USING $source s
              |ON t.value = s.value
              |WHEN NOT MATCHED THEN INSERT(id, value) VALUES (s.id, s.value)
              |""".stripMargin)
-        checkAnswer(
-          spark.table(target),
-          Seq(
-            Row(1, 10, Map("a" -> 5)),
-            Row(2, 20, Map("b" -> 10)),
-            Row(3, 30, null),
-            Row(4, 40, null)))
+        checkAnswer(spark.table(target),
+          Seq(Row(1, 10, Map("a" -> 5)), Row(2, 20, Map("b" -> 10)),
+            Row(3, 30, null), Row(4, 40, null)))
       }
     }
   }
@@ -1156,49 +1152,55 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
   test("Check constraint validation succeeds on table merge - array type column") {
     withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { target =>
       withNamespaceAndTable("ns", "tbl2", rowLevelOPCatalog) { source =>
-        sql(
-          s"CREATE TABLE $target (id INT, value INT," +
-            s" a ARRAY<INT>, CONSTRAINT positive_array CHECK (a[1] > 0)) $defaultUsing")
+        sql(s"CREATE TABLE $target (id INT, value INT," +
+          s" a ARRAY<INT>, CONSTRAINT positive_array CHECK (a[1] > 0)) $defaultUsing")
         sql(s"CREATE TABLE $source (id INT, value INT) $defaultUsing")
         sql(s"INSERT INTO $target VALUES (1, 10, array(5, 6)), (2, 20, array(7, 8))")
         sql(s"INSERT INTO $source VALUES (3, 30), (4, 40)")
 
-        sql(s"""
+        sql(
+          s"""
              |MERGE INTO $target t
              |USING $source s
              |ON t.value = s.value
              |WHEN NOT MATCHED THEN INSERT(id, value) VALUES (s.id, s.value)
              |""".stripMargin)
-        checkAnswer(
-          spark.table(target),
-          Seq(Row(1, 10, Seq(5, 6)), Row(2, 20, Seq(7, 8)), Row(3, 30, null), Row(4, 40, null)))
+        checkAnswer(spark.table(target),
+          Seq(Row(1, 10, Seq(5, 6)), Row(2, 20, Seq(7, 8)),
+            Row(3, 30, null), Row(4, 40, null)))
       }
     }
   }
 
   test("Check constraint with constant valid expression should be optimized out") {
-    Seq("1 > 0", "abs(-99) < 100", "null", "current_date() > DATE'2023-01-01'").foreach {
-      constant =>
-        withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
-          sql(
-            s"CREATE TABLE $t (id INT, value INT," +
-              s" CONSTRAINT positive_id CHECK ($constant)) $defaultUsing")
-          val optimizedPlan =
-            sql(s"INSERT INTO $t VALUES (1, 10), (2, 20)").queryExecution.optimizedPlan
-          val filter = optimizedPlan.collectFirst { case f: Filter =>
-            f
-          }
-          assert(filter.isEmpty)
+    Seq(
+      "1 > 0",
+      "abs(-99) < 100",
+      "null",
+      "current_date() > DATE'2023-01-01'"
+    ).foreach { constant =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT, value INT," +
+          s" CONSTRAINT positive_id CHECK ($constant)) $defaultUsing")
+        val optimizedPlan =
+          sql(s"INSERT INTO $t VALUES (1, 10), (2, 20)").queryExecution.optimizedPlan
+        val filter = optimizedPlan.collectFirst {
+          case f: Filter => f
         }
+        assert(filter.isEmpty)
+      }
     }
   }
 
   test("Check constraint with constant invalid expression should throw error") {
-    Seq("1 < 0", "abs(-99) > 100", "current_date() < DATE'2023-01-01'").foreach { constant =>
+    Seq(
+      "1 < 0",
+      "abs(-99) > 100",
+      "current_date() < DATE'2023-01-01'"
+    ).foreach { constant =>
       withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
-        sql(
-          s"CREATE TABLE $t (id INT, value INT," +
-            s" CONSTRAINT positive_id CHECK ($constant)) $defaultUsing")
+        sql(s"CREATE TABLE $t (id INT, value INT," +
+          s" CONSTRAINT positive_id CHECK ($constant)) $defaultUsing")
         val error = intercept[SparkRuntimeException] {
           sql(s"INSERT INTO $t VALUES (1, 10), (2, 20)")
         }
@@ -1206,8 +1208,9 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
           exception = error,
           condition = "CHECK_CONSTRAINT_VIOLATION",
           sqlState = "23001",
-          parameters =
-            Map("constraintName" -> "positive_id", "expression" -> constant, "values" -> ""))
+          parameters = Map("constraintName" -> "positive_id", "expression" -> constant,
+            "values" -> "")
+        )
       }
     }
   }

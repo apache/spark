@@ -39,14 +39,13 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   /**
    * Used for testing leaf math expressions.
    *
-   * @param e
-   *   expression
-   * @param c
-   *   The constants in scala.math
-   * @tparam T
-   *   Generic type for primitives
+   * @param e expression
+   * @param c The constants in scala.math
+   * @tparam T Generic type for primitives
    */
-  private def testLeaf[T](e: () => Expression, c: T): Unit = {
+  private def testLeaf[T](
+      e: () => Expression,
+      c: T): Unit = {
     checkEvaluation(e(), c, EmptyRow)
     checkEvaluation(e(), c, create_row(null))
   }
@@ -54,20 +53,13 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   /**
    * Used for testing unary math expressions.
    *
-   * @param c
-   *   expression
-   * @param f
-   *   The functions in scala.math or elsewhere used to generate expected results
-   * @param domain
-   *   The set of values to run the function with
-   * @param expectNull
-   *   Whether the given values should return null or not
-   * @param expectNaN
-   *   Whether the given values should eval to NaN or not
-   * @tparam T
-   *   Generic type for primitives
-   * @tparam U
-   *   Generic type for the output of the given function `f`
+   * @param c expression
+   * @param f The functions in scala.math or elsewhere used to generate expected results
+   * @param domain The set of values to run the function with
+   * @param expectNull Whether the given values should return null or not
+   * @param expectNaN Whether the given values should eval to NaN or not
+   * @tparam T Generic type for primitives
+   * @tparam U Generic type for the output of the given function `f`
    */
   private def testUnary[T, U](
       c: Expression => Expression,
@@ -95,23 +87,17 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   /**
    * Used for testing binary math expressions.
    *
-   * @param c
-   *   The DataFrame function
-   * @param f
-   *   The functions in scala.math
-   * @param domain
-   *   The set of values to run the function with
-   * @param expectNull
-   *   Whether the given values should return null or not
-   * @param expectNaN
-   *   Whether the given values should eval to NaN or not
+   * @param c The DataFrame function
+   * @param f The functions in scala.math
+   * @param domain The set of values to run the function with
+   * @param expectNull Whether the given values should return null or not
+   * @param expectNaN Whether the given values should eval to NaN or not
    */
   private def testBinary(
       c: (Expression, Expression) => Expression,
       f: (Double, Double) => Double,
       domain: Iterable[(Double, Double)] = (-20 to 20).map(v => (v * 0.1, v * -0.1)),
-      expectNull: Boolean = false,
-      expectNaN: Boolean = false): Unit = {
+      expectNull: Boolean = false, expectNaN: Boolean = false): Unit = {
     if (expectNull) {
       domain.foreach { case (v1, v2) =>
         checkEvaluation(c(Literal(v1), Literal(v2)), null, create_row(null))
@@ -130,31 +116,29 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(c(Literal(1.0), Literal.create(null, DoubleType)), null, create_row(null))
   }
 
-  private def checkNaN(expression: Expression, inputRow: InternalRow = EmptyRow): Unit = {
+  private def checkNaN(
+    expression: Expression, inputRow: InternalRow = EmptyRow): Unit = {
     checkNaNWithoutCodegen(expression, inputRow)
     checkNaNWithGeneratedProjection(expression, inputRow)
     checkNaNWithOptimization(expression, inputRow)
   }
 
   private def checkNaNWithoutCodegen(
-      expression: Expression,
-      inputRow: InternalRow = EmptyRow): Unit = {
-    val actual =
-      try evaluateWithoutCodegen(expression, inputRow)
-      catch {
-        case e: Exception => fail(s"Exception evaluating $expression", e)
-      }
+    expression: Expression,
+    inputRow: InternalRow = EmptyRow): Unit = {
+    val actual = try evaluateWithoutCodegen(expression, inputRow) catch {
+      case e: Exception => fail(s"Exception evaluating $expression", e)
+    }
     if (!actual.asInstanceOf[Double].isNaN) {
-      fail(
-        s"Incorrect evaluation (codegen off): $expression, " +
-          s"actual: $actual, " +
-          s"expected: NaN")
+      fail(s"Incorrect evaluation (codegen off): $expression, " +
+        s"actual: $actual, " +
+        s"expected: NaN")
     }
   }
 
   private def checkNaNWithGeneratedProjection(
-      expression: Expression,
-      inputRow: InternalRow = EmptyRow): Unit = {
+    expression: Expression,
+    inputRow: InternalRow = EmptyRow): Unit = {
 
     val plan =
       GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil)
@@ -166,8 +150,8 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   private def checkNaNWithOptimization(
-      expression: Expression,
-      inputRow: InternalRow = EmptyRow): Unit = {
+    expression: Expression,
+    inputRow: InternalRow = EmptyRow): Unit = {
     val plan = Project(Alias(expression, s"Optimized($expression)")() :: Nil, OneRowRelation())
     val optimizedPlan = SimpleTestOptimizer.execute(plan)
     checkNaNWithoutCodegen(optimizedPlan.expressions.head, inputRow)
@@ -178,23 +162,22 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(Conv(Literal("3"), Literal(10), Literal(2), ansiEnabled), "11")
       checkEvaluation(Conv(Literal("-15"), Literal(10), Literal(-16), ansiEnabled), "-F")
       checkEvaluation(
-        Conv(Literal("-15"), Literal(10), Literal(16), ansiEnabled),
-        "FFFFFFFFFFFFFFF1")
+        Conv(Literal("-15"), Literal(10), Literal(16), ansiEnabled), "FFFFFFFFFFFFFFF1")
       checkEvaluation(Conv(Literal("big"), Literal(36), Literal(16), ansiEnabled), "3A48")
-      checkEvaluation(
-        Conv(Literal.create(null, StringType), Literal(36), Literal(16), ansiEnabled),
+      checkEvaluation(Conv(Literal.create(null, StringType), Literal(36), Literal(16), ansiEnabled),
         null)
       checkEvaluation(
-        Conv(Literal("3"), Literal.create(null, IntegerType), Literal(16), ansiEnabled),
-        null)
+        Conv(Literal("3"), Literal.create(null, IntegerType), Literal(16), ansiEnabled), null)
       checkEvaluation(
-        Conv(Literal("3"), Literal(16), Literal.create(null, IntegerType), ansiEnabled),
-        null)
-      checkEvaluation(Conv(Literal("1234"), Literal(10), Literal(37), ansiEnabled), null)
-      checkEvaluation(Conv(Literal(""), Literal(10), Literal(16), ansiEnabled), null)
+        Conv(Literal("3"), Literal(16), Literal.create(null, IntegerType), ansiEnabled), null)
+      checkEvaluation(
+        Conv(Literal("1234"), Literal(10), Literal(37), ansiEnabled), null)
+      checkEvaluation(
+        Conv(Literal(""), Literal(10), Literal(16), ansiEnabled), null)
 
       // If there is an invalid digit in the number, the longest valid prefix should be converted.
-      checkEvaluation(Conv(Literal("11abc"), Literal(10), Literal(16), ansiEnabled), "B")
+      checkEvaluation(
+        Conv(Literal("11abc"), Literal(10), Literal(16), ansiEnabled), "B")
     }
   }
 
@@ -203,19 +186,13 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ("9223372036854775807", 36, 16, "FFFFFFFFFFFFFFFF"),
       ("92233720368547758070", 10, 16, "FFFFFFFFFFFFFFFF"),
       ("-92233720368547758070", 10, 16, "FFFFFFFFFFFFFFFF"),
-      (
-        "100000000000000000000000000000000000000000000000000000000000000000",
-        2,
-        10,
+      ("100000000000000000000000000000000000000000000000000000000000000000", 2, 10,
         "18446744073709551615"),
-      (
-        "100000000000000000000000000000000000000000000000000000000000000000",
-        2,
-        8,
-        "1777777777777777777777")).foreach { case (numExpr, fromBase, toBase, expected) =>
+      ("100000000000000000000000000000000000000000000000000000000000000000", 2, 8,
+        "1777777777777777777777")
+    ).foreach { case (numExpr, fromBase, toBase, expected) =>
       checkEvaluation(
-        Conv(Literal(numExpr), Literal(fromBase), Literal(toBase), ansiEnabled = false),
-        expected)
+       Conv(Literal(numExpr), Literal(fromBase), Literal(toBase), ansiEnabled = false), expected)
       checkExceptionInExpression[SparkArithmeticException](
         Conv(Literal(numExpr), Literal(fromBase), Literal(toBase), ansiEnabled = true),
         "Overflow in function conv()")
@@ -539,8 +516,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ShiftLeft(Literal.create(null, IntegerType), Literal(1)), null)
     checkEvaluation(ShiftLeft(Literal(21), Literal.create(null, IntegerType)), null)
     checkEvaluation(
-      ShiftLeft(Literal.create(null, IntegerType), Literal.create(null, IntegerType)),
-      null)
+      ShiftLeft(Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
     checkEvaluation(ShiftLeft(Literal(21), Literal(1)), 42)
 
     checkEvaluation(ShiftLeft(Literal(21.toLong), Literal(1)), 42.toLong)
@@ -563,8 +539,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ShiftRight(Literal.create(null, IntegerType), Literal(1)), null)
     checkEvaluation(ShiftRight(Literal(42), Literal.create(null, IntegerType)), null)
     checkEvaluation(
-      ShiftRight(Literal.create(null, IntegerType), Literal.create(null, IntegerType)),
-      null)
+      ShiftRight(Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
     checkEvaluation(ShiftRight(Literal(42), Literal(1)), 21)
 
     checkEvaluation(ShiftRight(Literal(42.toLong), Literal(1)), 21.toLong)
@@ -587,36 +562,27 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ShiftRightUnsigned(Literal.create(null, IntegerType), Literal(1)), null)
     checkEvaluation(ShiftRightUnsigned(Literal(42), Literal.create(null, IntegerType)), null)
     checkEvaluation(
-      ShiftRight(Literal.create(null, IntegerType), Literal.create(null, IntegerType)),
-      null)
+      ShiftRight(Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
     checkEvaluation(ShiftRightUnsigned(Literal(42), Literal(1)), 21)
 
     checkEvaluation(ShiftRightUnsigned(Literal(42.toLong), Literal(1)), 21.toLong)
     checkEvaluation(ShiftRightUnsigned(Literal(-42.toLong), Literal(1)), 9223372036854775787L)
 
-    checkEvaluation(
-      ShiftRightUnsigned(positiveIntLit, positiveIntLit),
+    checkEvaluation(ShiftRightUnsigned(positiveIntLit, positiveIntLit),
       positiveInt >>> positiveInt)
-    checkEvaluation(
-      ShiftRightUnsigned(positiveIntLit, negativeIntLit),
+    checkEvaluation(ShiftRightUnsigned(positiveIntLit, negativeIntLit),
       positiveInt >>> negativeInt)
-    checkEvaluation(
-      ShiftRightUnsigned(negativeIntLit, positiveIntLit),
+    checkEvaluation(ShiftRightUnsigned(negativeIntLit, positiveIntLit),
       negativeInt >>> positiveInt)
-    checkEvaluation(
-      ShiftRightUnsigned(negativeIntLit, negativeIntLit),
+    checkEvaluation(ShiftRightUnsigned(negativeIntLit, negativeIntLit),
       negativeInt >>> negativeInt)
-    checkEvaluation(
-      ShiftRightUnsigned(positiveLongLit, positiveIntLit),
+    checkEvaluation(ShiftRightUnsigned(positiveLongLit, positiveIntLit),
       positiveLong >>> positiveInt)
-    checkEvaluation(
-      ShiftRightUnsigned(positiveLongLit, negativeIntLit),
+    checkEvaluation(ShiftRightUnsigned(positiveLongLit, negativeIntLit),
       positiveLong >>> negativeInt)
-    checkEvaluation(
-      ShiftRightUnsigned(negativeLongLit, positiveIntLit),
+    checkEvaluation(ShiftRightUnsigned(negativeLongLit, positiveIntLit),
       negativeLong >>> positiveInt)
-    checkEvaluation(
-      ShiftRightUnsigned(negativeLongLit, negativeIntLit),
+    checkEvaluation(ShiftRightUnsigned(negativeLongLit, negativeIntLit),
       negativeLong >>> negativeInt)
 
     checkConsistencyBetweenInterpretedAndCodegen(ShiftRightUnsigned, IntegerType, IntegerType)
@@ -691,8 +657,14 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       create_row(null))
 
     // negative input should yield null output
-    checkEvaluation(Logarithm(Literal(-1.0), Literal(1.0)), null, create_row(null))
-    checkEvaluation(Logarithm(Literal(1.0), Literal(-1.0)), null, create_row(null))
+    checkEvaluation(
+      Logarithm(Literal(-1.0), Literal(1.0)),
+      null,
+      create_row(null))
+    checkEvaluation(
+      Logarithm(Literal(1.0), Literal(-1.0)),
+      null,
+      create_row(null))
     checkConsistencyBetweenInterpretedAndCodegen(Logarithm, DoubleType, DoubleType)
   }
 
@@ -705,8 +677,8 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val bdPi: BigDecimal = BigDecimal(31415927L, 7)
     val floatPi: Float = 3.1415f
 
-    val doubleResults: Seq[Double] =
-      Seq(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3.0, 3.1, 3.14, 3.142, 3.1416, 3.14159, 3.141593)
+    val doubleResults: Seq[Double] = Seq(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3.0, 3.1, 3.14, 3.142,
+      3.1416, 3.14159, 3.141593)
 
     val floatResults: Seq[Float] = Seq(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 3.0f, 3.1f, 3.14f,
       3.141f, 3.1415f, 3.1415f, 3.1415f)
@@ -714,37 +686,37 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val shortResults: Seq[Short] = Seq[Short](0, 0, 30000, 31000, 31400, 31420) ++
       Seq.fill[Short](7)(31415)
 
-    val intResults: Seq[Int] =
-      Seq(314000000, 314200000, 314160000, 314159000, 314159300, 314159270) ++ Seq.fill(7)(
-        314159265)
+    val intResults: Seq[Int] = Seq(314000000, 314200000, 314160000, 314159000, 314159300,
+      314159270) ++ Seq.fill(7)(314159265)
 
-    val longResults: Seq[Long] = Seq(31415926536000000L, 31415926535900000L, 31415926535900000L,
-      31415926535898000L, 31415926535897900L, 31415926535897930L) ++
+    val longResults: Seq[Long] = Seq(31415926536000000L, 31415926535900000L,
+      31415926535900000L, 31415926535898000L, 31415926535897900L, 31415926535897930L) ++
       Seq.fill(7)(31415926535897932L)
 
-    val intResultsB: Seq[Int] =
-      Seq(314000000, 314200000, 314160000, 314159000, 314159300, 314159260) ++ Seq.fill(7)(
-        314159265)
+    val intResultsB: Seq[Int] = Seq(314000000, 314200000, 314160000, 314159000, 314159300,
+      314159260) ++ Seq.fill(7)(314159265)
 
     def doubleResultsFloor(i: Int): Decimal = {
-      val results = Seq(0, 0, 0, 0, 0, 0, 3, 3.1, 3.14, 3.141, 3.1415, 3.14159, 3.141592)
+      val results = Seq(0, 0, 0, 0, 0, 0, 3,
+        3.1, 3.14, 3.141, 3.1415, 3.14159, 3.141592)
       Decimal(results(i))
     }
 
     def doubleResultsCeil(i: Int): Any = {
-      val results =
-        Seq(1000000, 100000, 10000, 1000, 100, 10, 4, 3.2, 3.15, 3.142, 3.1416, 3.1416, 3.141593)
+      val results = Seq(1000000, 100000, 10000, 1000, 100, 10,
+        4, 3.2, 3.15, 3.142, 3.1416, 3.1416, 3.141593)
       Decimal(results(i))
     }
 
     def floatResultsFloor(i: Int): Any = {
-      val results = Seq(0, 0, 0, 0, 0, 0, 3, 3.1, 3.14, 3.141, 3.1415, 3.1415, 3.1415)
+      val results = Seq(0, 0, 0, 0, 0, 0, 3,
+        3.1, 3.14, 3.141, 3.1415, 3.1415, 3.1415)
       Decimal(results(i))
     }
 
     def floatResultsCeil(i: Int): Any = {
-      val results =
-        Seq(1000000, 100000, 10000, 1000, 100, 10, 4, 3.2, 3.15, 3.142, 3.1415, 3.1415, 3.1415)
+      val results = Seq(1000000, 100000, 10000, 1000, 100, 10, 4,
+        3.2, 3.15, 3.142, 3.1415, 3.1415, 3.1415)
       Decimal(results(i))
     }
 
@@ -773,16 +745,14 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     def intResultsFloor(i: Int): Decimal = {
-      val results =
-        Seq(314000000, 314100000, 314150000, 314159000, 314159200, 314159260) ++ Seq.fill(7)(
-          314159265)
+      val results = Seq(314000000, 314100000, 314150000, 314159000,
+        314159200, 314159260) ++ Seq.fill(7)(314159265)
       Decimal(results(i))
     }
 
     def intResultsCeil(i: Int): Decimal = {
-      val results =
-        Seq(315000000, 314200000, 314160000, 314160000, 314159300, 314159270) ++ Seq.fill(7)(
-          314159265)
+      val results = Seq(315000000, 314200000, 314160000, 314160000,
+        314159300, 314159270) ++ Seq.fill(7)(314159265)
       Decimal(results(i))
     }
 
@@ -797,78 +767,40 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(BRound(intPi, scale), intResultsB(i), EmptyRow)
       checkEvaluation(BRound(longPi, scale), longResults(i), EmptyRow)
       checkEvaluation(BRound(floatPi, scale), floatResults(i), EmptyRow)
-      checkEvaluation(
-        checkDataTypeAndCast(RoundFloor(Literal(doublePi), Literal(scale))),
-        doubleResultsFloor(i),
-        EmptyRow)
-      checkEvaluation(
-        checkDataTypeAndCast(RoundFloor(Literal(shortPi), Literal(scale))),
-        shortResultsFloor(i),
-        EmptyRow)
-      checkEvaluation(
-        checkDataTypeAndCast(RoundFloor(Literal(intPi), Literal(scale))),
-        intResultsFloor(i),
-        EmptyRow)
-      checkEvaluation(
-        checkDataTypeAndCast(RoundFloor(Literal(longPi), Literal(scale))),
-        longResultsFloor(i),
-        EmptyRow)
-      checkEvaluation(
-        checkDataTypeAndCast(RoundFloor(Literal(floatPi), Literal(scale))),
-        floatResultsFloor(i),
-        EmptyRow)
-      checkEvaluation(
-        checkDataTypeAndCast(RoundCeil(Literal(doublePi), Literal(scale))),
-        doubleResultsCeil(i),
-        EmptyRow)
-      checkEvaluation(
-        checkDataTypeAndCast(RoundCeil(Literal(shortPi), Literal(scale))),
-        shortResultsCeil(i),
-        EmptyRow)
-      checkEvaluation(
-        checkDataTypeAndCast(RoundCeil(Literal(intPi), Literal(scale))),
-        intResultsCeil(i),
-        EmptyRow)
-      checkEvaluation(
-        checkDataTypeAndCast(RoundCeil(Literal(longPi), Literal(scale))),
-        longResultsCeil(i),
-        EmptyRow)
-      checkEvaluation(
-        checkDataTypeAndCast(RoundCeil(Literal(floatPi), Literal(scale))),
-        floatResultsCeil(i),
-        EmptyRow)
+      checkEvaluation(checkDataTypeAndCast(
+        RoundFloor(Literal(doublePi), Literal(scale))), doubleResultsFloor(i), EmptyRow)
+      checkEvaluation(checkDataTypeAndCast(
+        RoundFloor(Literal(shortPi), Literal(scale))), shortResultsFloor(i), EmptyRow)
+      checkEvaluation(checkDataTypeAndCast(
+        RoundFloor(Literal(intPi), Literal(scale))), intResultsFloor(i), EmptyRow)
+      checkEvaluation(checkDataTypeAndCast(
+        RoundFloor(Literal(longPi), Literal(scale))), longResultsFloor(i), EmptyRow)
+      checkEvaluation(checkDataTypeAndCast(
+        RoundFloor(Literal(floatPi), Literal(scale))), floatResultsFloor(i), EmptyRow)
+      checkEvaluation(checkDataTypeAndCast(
+        RoundCeil(Literal(doublePi), Literal(scale))), doubleResultsCeil(i), EmptyRow)
+      checkEvaluation(checkDataTypeAndCast(
+        RoundCeil(Literal(shortPi), Literal(scale))), shortResultsCeil(i), EmptyRow)
+      checkEvaluation(checkDataTypeAndCast(
+        RoundCeil(Literal(intPi), Literal(scale))), intResultsCeil(i), EmptyRow)
+      checkEvaluation(checkDataTypeAndCast(
+        RoundCeil(Literal(longPi), Literal(scale))), longResultsCeil(i), EmptyRow)
+      checkEvaluation(checkDataTypeAndCast(
+        RoundCeil(Literal(floatPi), Literal(scale))), floatResultsCeil(i), EmptyRow)
     }
 
-    val bdResults: Seq[BigDecimal] = Seq(
-      BigDecimal(3),
-      BigDecimal("3.1"),
-      BigDecimal("3.14"),
-      BigDecimal("3.142"),
-      BigDecimal("3.1416"),
-      BigDecimal("3.14159"),
-      BigDecimal("3.141593"),
-      BigDecimal("3.1415927"))
+    val bdResults: Seq[BigDecimal] = Seq(BigDecimal(3), BigDecimal("3.1"), BigDecimal("3.14"),
+      BigDecimal("3.142"), BigDecimal("3.1416"), BigDecimal("3.14159"),
+      BigDecimal("3.141593"), BigDecimal("3.1415927"))
 
     val bdResultsFloor: Seq[BigDecimal] =
-      Seq(
-        BigDecimal(3),
-        BigDecimal("3.1"),
-        BigDecimal("3.14"),
-        BigDecimal("3.141"),
-        BigDecimal("3.1415"),
-        BigDecimal("3.14159"),
-        BigDecimal("3.141592"),
-        BigDecimal("3.1415927"))
+        Seq(BigDecimal(3), BigDecimal("3.1"), BigDecimal("3.14"),
+      BigDecimal("3.141"), BigDecimal("3.1415"), BigDecimal("3.14159"),
+      BigDecimal("3.141592"), BigDecimal("3.1415927"))
 
-    val bdResultsCeil: Seq[BigDecimal] = Seq(
-      BigDecimal(4),
-      BigDecimal("3.2"),
-      BigDecimal("3.15"),
-      BigDecimal("3.142"),
-      BigDecimal("3.1416"),
-      BigDecimal("3.14160"),
-      BigDecimal("3.141593"),
-      BigDecimal("3.1415927"))
+    val bdResultsCeil: Seq[BigDecimal] = Seq(BigDecimal(4), BigDecimal("3.2"), BigDecimal("3.15"),
+      BigDecimal("3.142"), BigDecimal("3.1416"), BigDecimal("3.14160"),
+      BigDecimal("3.141593"), BigDecimal("3.1415927"))
 
     (0 to 7).foreach { i =>
       checkEvaluation(Round(bdPi, i), bdResults(i), EmptyRow)
@@ -885,19 +817,15 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     DataTypeTestUtils.numericTypes.foreach { dataType =>
       checkEvaluation(Round(Literal.create(null, dataType), Literal(2)), null)
-      checkEvaluation(
-        Round(Literal.create(null, dataType), Literal.create(null, IntegerType)),
-        null)
+      checkEvaluation(Round(Literal.create(null, dataType),
+        Literal.create(null, IntegerType)), null)
       checkEvaluation(BRound(Literal.create(null, dataType), Literal(2)), null)
-      checkEvaluation(
-        BRound(Literal.create(null, dataType), Literal.create(null, IntegerType)),
-        null)
-      checkEvaluation(
-        checkDataTypeAndCast(RoundFloor(Literal.create(null, dataType), Literal(2))),
-        null)
-      checkEvaluation(
-        checkDataTypeAndCast(RoundCeil(Literal.create(null, dataType), Literal(2))),
-        null)
+      checkEvaluation(BRound(Literal.create(null, dataType),
+        Literal.create(null, IntegerType)), null)
+      checkEvaluation(checkDataTypeAndCast(
+        RoundFloor(Literal.create(null, dataType), Literal(2))), null)
+      checkEvaluation(checkDataTypeAndCast(
+        RoundCeil(Literal.create(null, dataType), Literal(2))), null)
     }
 
     checkEvaluation(Round(2.5, 0), 3.0)
@@ -941,18 +869,16 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       (Byte.MaxValue, ByteType, -1, -126.toByte),
       (Short.MaxValue, ShortType, -1, -32766.toShort),
       (Int.MaxValue, IntegerType, -1, -2147483646),
-      (Long.MaxValue, LongType, -1, -9223372036854775806L)).foreach {
-      case (input, dt, scale, expected) =>
-        Seq(
-          Round(Literal(input, dt), scale, ansiEnabled = true),
-          BRound(Literal(input, dt), scale, ansiEnabled = true)).foreach { expr =>
-          checkExceptionInExpression[SparkArithmeticException](expr, "Overflow")
-        }
-        Seq(
-          Round(Literal(input, dt), scale, ansiEnabled = false),
-          BRound(Literal(input, dt), scale, ansiEnabled = false)).foreach { expr =>
-          checkEvaluation(expr, expected)
-        }
+      (Long.MaxValue, LongType, -1, -9223372036854775806L)
+    ).foreach { case (input, dt, scale, expected) =>
+      Seq(Round(Literal(input, dt), scale, ansiEnabled = true),
+        BRound(Literal(input, dt), scale, ansiEnabled = true)).foreach { expr =>
+        checkExceptionInExpression[SparkArithmeticException](expr, "Overflow")
+      }
+      Seq(Round(Literal(input, dt), scale, ansiEnabled = false),
+        BRound(Literal(input, dt), scale, ansiEnabled = false)).foreach { expr =>
+        checkEvaluation(expr, expected)
+      }
     }
   }
 
@@ -983,16 +909,9 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       (Period.ofYears(1), Period.ofYears(0), Period.ofYears(10), 10L) -> 2L,
       (Period.ofYears(1), Period.ofYears(0), Period.ofYears(1), 10L) -> 11L,
       (Period.ofMonths(Int.MaxValue), Period.ofYears(0), Period.ofYears(1), 10L) -> 11L,
-      (
-        Period.ofMonths(0),
-        Period.ofMonths(Int.MinValue),
-        Period.ofMonths(Int.MaxValue),
-        10L) -> 6L,
-      (
-        Period.ofMonths(-1),
-        Period.ofMonths(Int.MinValue),
-        Period.ofMonths(Int.MaxValue),
-        10L) -> 5L).foreach { case ((v, s, e, n), expected) =>
+      (Period.ofMonths(0), Period.ofMonths(Int.MinValue), Period.ofMonths(Int.MaxValue), 10L) -> 6L,
+      (Period.ofMonths(-1), Period.ofMonths(Int.MinValue), Period.ofMonths(Int.MaxValue), 10L) -> 5L
+    ).foreach { case ((v, s, e, n), expected) =>
       checkEvaluation(WidthBucket(Literal(v), Literal(s), Literal(e), Literal(n)), expected)
     }
   }
@@ -1004,26 +923,15 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       (Duration.ofHours(11), Duration.ofHours(0), Duration.ofHours(10), 10L) -> 11L,
       (Duration.ofMinutes(1), Duration.ofMinutes(0), Duration.ofMinutes(60), 10L) -> 1L,
       (Duration.ofSeconds(-30), Duration.ofSeconds(-59), Duration.ofSeconds(60), 10L) -> 3L,
-      (
-        Duration.ofDays(0),
-        Duration.of(Long.MinValue, ChronoUnit.MICROS),
-        Duration.of(Long.MaxValue, ChronoUnit.MICROS),
-        10L) -> 6L,
-      (
-        Duration.ofDays(0),
-        Duration.of(Long.MinValue, ChronoUnit.MICROS),
-        Duration.ofDays(0),
-        10L) -> 11L,
-      (
-        Duration.of(Long.MinValue, ChronoUnit.MICROS),
-        Duration.of(Long.MinValue, ChronoUnit.MICROS),
-        Duration.ofDays(0),
-        10L) -> 1L,
-      (
-        Duration.ofDays(-1),
-        Duration.ofDays(0),
-        Duration.of(Long.MaxValue, ChronoUnit.MICROS),
-        10L) -> 0L).foreach { case ((v, s, e, n), expected) =>
+      (Duration.ofDays(0), Duration.of(Long.MinValue, ChronoUnit.MICROS),
+        Duration.of(Long.MaxValue, ChronoUnit.MICROS), 10L) -> 6L,
+      (Duration.ofDays(0), Duration.of(Long.MinValue, ChronoUnit.MICROS),
+        Duration.ofDays(0), 10L) -> 11L,
+      (Duration.of(Long.MinValue, ChronoUnit.MICROS), Duration.of(Long.MinValue, ChronoUnit.MICROS),
+        Duration.ofDays(0), 10L) -> 1L,
+      (Duration.ofDays(-1), Duration.ofDays(0),
+        Duration.of(Long.MaxValue, ChronoUnit.MICROS), 10L) -> 0L
+    ).foreach { case ((v, s, e, n), expected) =>
       checkEvaluation(WidthBucket(Literal(v), Literal(s), Literal(e), Literal(n)), expected)
     }
   }
@@ -1093,12 +1001,12 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Atan(doubleLit),
 
       // Nested expressions
-      Add(Multiply(intLit, Literal(2)), Divide(doubleLit, Literal(2.0))))
+      Add(Multiply(intLit, Literal(2)), Divide(doubleLit, Literal(2.0)))
+    )
 
     expressions.foreach { expr =>
       assert(expr.foldable, s"Expression $expr should be foldable")
-      assert(
-        expr.contextIndependentFoldable,
+      assert(expr.contextIndependentFoldable,
         s"Expression $expr should be context independent foldable")
     }
   }

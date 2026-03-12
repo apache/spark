@@ -41,10 +41,8 @@ case class StreamingRelationV2(
     identifier: Option[Identifier],
     v1Relation: Option[LogicalPlan],
     sourceIdentifyingName: StreamingSourceIdentifyingName = Unassigned)
-    extends LeafNode
-    with MultiInstanceRelation
-    with ExposesMetadataColumns
-    with HasStreamingSourceIdentifyingName {
+  extends LeafNode with MultiInstanceRelation with ExposesMetadataColumns
+  with HasStreamingSourceIdentifyingName {
   override lazy val resolved = v1Relation.forall(_.resolved)
   override def isStreaming: Boolean = true
   override def toString: String = sourceName
@@ -54,8 +52,7 @@ case class StreamingRelationV2(
   override lazy val metadataOutput: Seq[AttributeReference] = table match {
     case hasMeta: SupportsMetadataColumns =>
       metadataOutputWithOutConflicts(
-        hasMeta.metadataColumns.toAttributes,
-        hasMeta.canRenameConflictingMetadataColumns)
+        hasMeta.metadataColumns.toAttributes, hasMeta.canRenameConflictingMetadataColumns)
     case _ =>
       Nil
   }
@@ -63,16 +60,8 @@ case class StreamingRelationV2(
   def withMetadataColumns(): StreamingRelationV2 = {
     val newMetadata = metadataOutput.filterNot(outputSet.contains)
     if (newMetadata.nonEmpty) {
-      StreamingRelationV2(
-        source,
-        sourceName,
-        table,
-        extraOptions,
-        output ++ newMetadata,
-        catalog,
-        identifier,
-        v1Relation,
-        sourceIdentifyingName)
+      StreamingRelationV2(source, sourceName, table, extraOptions,
+        output ++ newMetadata, catalog, identifier, v1Relation, sourceIdentifyingName)
     } else {
       this
     }
@@ -82,8 +71,9 @@ case class StreamingRelationV2(
     copy(sourceIdentifyingName = name)
   }
 
-  override def computeStats(): Statistics =
-    Statistics(sizeInBytes = BigInt(conf.defaultSizeInBytes))
+  override def computeStats(): Statistics = Statistics(
+    sizeInBytes = BigInt(conf.defaultSizeInBytes)
+  )
 
   override def newInstance(): LogicalPlan = this.copy(output = output.map(_.newInstance()))
 }

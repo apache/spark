@@ -17,7 +17,17 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, Literal, MapFromArrays, MapFromEntries, VariableReference}
+import org.apache.spark.sql.catalyst.expressions.{
+  Alias,
+  CreateArray,
+  CreateMap,
+  CreateNamedStruct,
+  Expression,
+  Literal,
+  MapFromArrays,
+  MapFromEntries,
+  VariableReference
+}
 
 /**
  * Object used to validate arguments of [[ParameterizedQuery]] nodes.
@@ -30,7 +40,9 @@ object ParameterizedQueryArgumentsValidator {
    */
   def apply(arguments: Iterable[(String, Expression)]): Unit = {
     arguments.find(arg => isNotAllowed(arg._2)).foreach { case (name, expr) =>
-      expr.failAnalysis(errorClass = "INVALID_SQL_ARG", messageParameters = Map("name" -> name))
+      expr.failAnalysis(
+        errorClass = "INVALID_SQL_ARG",
+        messageParameters = Map("name" -> name))
     }
   }
 

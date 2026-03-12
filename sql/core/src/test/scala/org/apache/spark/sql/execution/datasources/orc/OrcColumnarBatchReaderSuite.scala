@@ -45,10 +45,8 @@ class OrcColumnarBatchReaderSuite extends QueryTest with SharedSparkSession {
   private val partitionSchema = StructType.fromDDL("p1 string, p2 string")
   private val partitionValues = InternalRow(fromString("partValue1"), fromString("partValue2"))
   private val orcFileSchemaList = Seq(
-    "struct<col1:int,col2:int>",
-    "struct<col1:int,col2:int,p1:string,p2:string>",
-    "struct<col1:int,col2:int,p1:string>",
-    "struct<col1:int,col2:int,p2:string>")
+    "struct<col1:int,col2:int>", "struct<col1:int,col2:int,p1:string,p2:string>",
+    "struct<col1:int,col2:int,p1:string>", "struct<col1:int,col2:int,p2:string>")
   orcFileSchemaList.foreach { case schema =>
     val orcFileSchema = TypeDescription.fromString(schema)
 
@@ -69,9 +67,7 @@ class OrcColumnarBatchReaderSuite extends QueryTest with SharedSparkSession {
     test(s"all partitions are requested: $schema") {
       val requestedDataColIds = Array(0, 1, 0, 0)
       val requestedPartitionColIds = Array(-1, -1, 0, 1)
-      val reader = getReader(
-        requestedDataColIds,
-        requestedPartitionColIds,
+      val reader = getReader(requestedDataColIds, requestedPartitionColIds,
         dataSchema.fields ++ partitionSchema.fields)
       assert(reader.requestedDataColIds === Array(0, 1, -1, -1))
     }
@@ -79,9 +75,7 @@ class OrcColumnarBatchReaderSuite extends QueryTest with SharedSparkSession {
     test(s"initBatch should initialize requested partition columns only: $schema") {
       val requestedDataColIds = Array(0, -1) // only `col1` is requested, `col2` doesn't exist
       val requestedPartitionColIds = Array(-1, 0) // only `p1` is requested
-      val reader = getReader(
-        requestedDataColIds,
-        requestedPartitionColIds,
+      val reader = getReader(requestedDataColIds, requestedPartitionColIds,
         Array(dataSchema.fields(0), partitionSchema.fields(0)))
       val batch = reader.columnarBatch
       assert(batch.numCols() === 2)
@@ -99,19 +93,8 @@ class OrcColumnarBatchReaderSuite extends QueryTest with SharedSparkSession {
       Seq(1).toDF().repartition(1).write.orc(dir.getCanonicalPath)
 
       val dataTypes =
-        Seq(
-          StringType,
-          BooleanType,
-          ByteType,
-          BinaryType,
-          ShortType,
-          IntegerType,
-          LongType,
-          FloatType,
-          DoubleType,
-          DecimalType(25, 5),
-          DateType,
-          TimestampType)
+        Seq(StringType, BooleanType, ByteType, BinaryType, ShortType, IntegerType, LongType,
+          FloatType, DoubleType, DecimalType(25, 5), DateType, TimestampType)
 
       val constantValues =
         Seq(
@@ -123,18 +106,16 @@ class OrcColumnarBatchReaderSuite extends QueryTest with SharedSparkSession {
           3,
           Long.MaxValue,
           0.25.toFloat,
-          0.75d,
+          0.75D,
           Decimal("1234.23456"),
           DateTimeUtils.fromJavaDate(java.sql.Date.valueOf("2015-01-01")),
           DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf("2015-01-01 23:50:59.123")))
 
       dataTypes.zip(constantValues).foreach { case (dt, v) =>
-        val schema =
-          StructType(StructField("col1", IntegerType) :: StructField("pcol", dt) :: Nil)
+        val schema = StructType(StructField("col1", IntegerType) :: StructField("pcol", dt) :: Nil)
         val partitionValues = new GenericInternalRow(Array(v))
         val file = new File(TestUtils.listDirectory(dir).head)
-        val fileSplit =
-          new FileSplit(new Path(file.getCanonicalPath), 0L, file.length, Array.empty)
+        val fileSplit = new FileSplit(new Path(file.getCanonicalPath), 0L, file.length, Array.empty)
         val taskConf = spark.sessionState.newHadoopConf()
         val orcFileSchema = TypeDescription.fromString(schema.simpleString)
         val vectorizedReader = new OrcColumnarBatchReader(4096, MemoryMode.ON_HEAP)
@@ -157,9 +138,8 @@ class OrcColumnarBatchReaderSuite extends QueryTest with SharedSparkSession {
           val actual = row.copy().get(1, dt)
           val expected = v
           if (dt.isInstanceOf[BinaryType]) {
-            assert(
-              actual.asInstanceOf[Array[Byte]]
-                sameElements expected.asInstanceOf[Array[Byte]])
+            assert(actual.asInstanceOf[Array[Byte]]
+              sameElements expected.asInstanceOf[Array[Byte]])
           } else {
             assert(actual == expected)
           }

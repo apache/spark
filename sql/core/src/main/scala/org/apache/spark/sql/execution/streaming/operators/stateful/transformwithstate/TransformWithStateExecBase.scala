@@ -33,9 +33,10 @@ import org.apache.spark.util.NextIterator
 /**
  * This is the base class for physical node that execute `TransformWithState`.
  *
- * It contains some common logics like state store metrics handling, co-locate initial state with
- * the incoming data, and etc. Concrete physical node like `TransformWithStateInPySparkExec` and
- * `TransformWithStateExec` should extend this class.
+ * It contains some common logics like state store metrics handling, co-locate
+ * initial state with the incoming data, and etc. Concrete physical node like
+ * `TransformWithStateInPySparkExec` and `TransformWithStateExec` should extend
+ * this class.
  */
 abstract class TransformWithStateExecBase(
     groupingAttributes: Seq[Attribute],
@@ -46,16 +47,18 @@ abstract class TransformWithStateExecBase(
     child: SparkPlan,
     initialStateGroupingAttrs: Seq[Attribute],
     initialState: SparkPlan)
-    extends BinaryExecNode
-    with StateStoreWriter
-    with WatermarkSupport
-    with TransformWithStateMetadataUtils {
+  extends BinaryExecNode
+  with StateStoreWriter
+  with WatermarkSupport
+  with TransformWithStateMetadataUtils {
 
   override def operatorStateMetadataVersion: Int = 2
 
   // Supported state store providers for TransformWithState.
   // TransformWithState currently supports only RocksDBStateStoreProvider.
-  private val SUPPORTED_STATE_STORE_PROVIDERS = Set(classOf[RocksDBStateStoreProvider].getName)
+  private val SUPPORTED_STATE_STORE_PROVIDERS = Set(
+    classOf[RocksDBStateStoreProvider].getName
+  )
 
   override def supportsSchemaEvolution: Boolean = true
 

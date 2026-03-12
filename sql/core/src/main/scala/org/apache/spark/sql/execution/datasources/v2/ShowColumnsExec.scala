@@ -25,9 +25,9 @@ import org.apache.spark.sql.execution.LeafExecNode
 /**
  * Physical plan node for show columns from table.
  */
-case class ShowColumnsExec(output: Seq[Attribute], resolvedTable: ResolvedTable)
-    extends V2CommandExec
-    with LeafExecNode {
+case class ShowColumnsExec(
+    output: Seq[Attribute],
+    resolvedTable: ResolvedTable) extends V2CommandExec with LeafExecNode {
   override protected def run(): Seq[InternalRow] = {
     resolvedTable.table.columns().map(f => toCatalystRow(f.name())).toSeq
   }

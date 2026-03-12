@@ -34,8 +34,7 @@ case class WriteToStream(
     deleteCheckpointOnStop: Boolean,
     inputQuery: LogicalPlan,
     catalogAndIdent: Option[(TableCatalog, Identifier)] = None,
-    catalogTable: Option[CatalogTable])
-    extends UnaryNode {
+    catalogTable: Option[CatalogTable]) extends UnaryNode {
 
   override def isStreaming: Boolean = true
 
@@ -46,3 +45,4 @@ case class WriteToStream(
   override protected def withNewChildInternal(newChild: LogicalPlan): WriteToStream =
     copy(inputQuery = newChild)
 }
+

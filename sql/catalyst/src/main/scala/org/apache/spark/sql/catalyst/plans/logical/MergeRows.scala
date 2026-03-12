@@ -31,8 +31,7 @@ case class MergeRows(
     notMatchedBySourceInstructions: Seq[Instruction],
     checkCardinality: Boolean,
     output: Seq[Attribute],
-    child: LogicalPlan)
-    extends UnaryNode {
+    child: LogicalPlan) extends UnaryNode {
 
   override lazy val producedAttributes: AttributeSet = {
     AttributeSet(output.filterNot(attr => inputSet.contains(attr)))
@@ -70,9 +69,9 @@ object MergeRows {
 
   /**
    * When a MERGE operation is rewritten, the target table is joined with the source and each
-   * MATCHED/NOT MATCHED/NOT MATCHED BY SOURCE clause is converted into a corresponding
-   * instruction on top of the joined plan. The purpose of an instruction is to derive an output
-   * row based on a joined row.
+   * MATCHED/NOT MATCHED/NOT MATCHED BY SOURCE clause is converted into a corresponding instruction
+   * on top of the joined plan. The purpose of an instruction is to derive an output row
+   * based on a joined row.
    *
    * Instructions are valid expressions so that they will be properly transformed by the analyzer
    * and optimizer.
@@ -94,8 +93,11 @@ object MergeRows {
   case object Insert extends Context
   case object Update extends Context
 
-  case class Keep(context: Context, condition: Expression, output: Seq[Expression])
-      extends Instruction {
+  case class Keep(
+      context: Context,
+      condition: Expression,
+      output: Seq[Expression])
+    extends Instruction {
     def children: Seq[Expression] = condition +: output
     override def outputs: Seq[Seq[Expression]] = Seq(output)
 
@@ -114,8 +116,10 @@ object MergeRows {
     }
   }
 
-  case class Split(condition: Expression, output: Seq[Expression], otherOutput: Seq[Expression])
-      extends Instruction {
+  case class Split(
+      condition: Expression,
+      output: Seq[Expression],
+      otherOutput: Seq[Expression]) extends Instruction {
 
     def children: Seq[Expression] = Seq(condition) ++ output ++ otherOutput
     override def outputs: Seq[Seq[Expression]] = Seq(output, otherOutput)

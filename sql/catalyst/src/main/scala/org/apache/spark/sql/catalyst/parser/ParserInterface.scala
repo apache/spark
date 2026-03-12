@@ -28,7 +28,6 @@ import org.apache.spark.sql.types.StructType
  */
 @DeveloperApi
 trait ParserInterface extends DataTypeParserInterface {
-
   /**
    * Parse a string to a [[LogicalPlan]].
    */
@@ -36,13 +35,11 @@ trait ParserInterface extends DataTypeParserInterface {
   def parsePlan(sqlText: String): LogicalPlan
 
   /**
-   * Parse a string to a [[LogicalPlan]] with explicit parameter context. This method avoids
-   * thread-local usage for better API design.
+   * Parse a string to a [[LogicalPlan]] with explicit parameter context.
+   * This method avoids thread-local usage for better API design.
    */
   @throws[ParseException]("Text cannot be parsed to a LogicalPlan")
-  def parsePlanWithParameters(
-      sqlText: String,
-      parameterContext: ParameterContext): LogicalPlan = {
+  def parsePlanWithParameters(sqlText: String, parameterContext: ParameterContext): LogicalPlan = {
     // Default implementation falls back to regular parsePlan
     // Concrete implementations can override this for parameter support
     parsePlan(sqlText)
@@ -79,8 +76,7 @@ trait ParserInterface extends DataTypeParserInterface {
   def parseQuery(sqlText: String): LogicalPlan
 
   /**
-   * Parse a string to a [[StructType]] as routine parameters, handling default values and
-   * comments.
+   * Parse a string to a [[StructType]] as routine parameters, handling default values and comments.
    */
   @throws[ParseException]("Text cannot be parsed to routine parameters")
   def parseRoutineParam(sqlText: String): StructType

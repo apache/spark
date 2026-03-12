@@ -36,8 +36,7 @@ class SameResultSuite extends QueryTest with SharedSparkSession {
     withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
       withTempPath { path =>
         val tmpDir = path.getCanonicalPath
-        spark
-          .range(10)
+        spark.range(10)
           .selectExpr("id as a", "id + 1 as b", "id + 2 as c", "id + 3 as d")
           .write
           .partitionBy("a", "b")
@@ -57,8 +56,7 @@ class SameResultSuite extends QueryTest with SharedSparkSession {
       Seq("orc", "json", "csv", "parquet").foreach { format =>
         withTempPath { path =>
           val tmpDir = path.getCanonicalPath
-          spark
-            .range(10)
+          spark.range(10)
             .selectExpr("id as a", "id + 1 as b", "id + 2 as c", "id + 3 as d")
             .write
             .partitionBy("a", "b")
@@ -90,8 +88,7 @@ class SameResultSuite extends QueryTest with SharedSparkSession {
     withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
       withTempPath { path =>
         val tmpDir = path.getCanonicalPath
-        spark
-          .range(10)
+        spark.range(10)
           .selectExpr("id as a", "id + 1 as b", "cast(id as string) value")
           .write
           .partitionBy("a", "b")
@@ -114,9 +111,7 @@ class SameResultSuite extends QueryTest with SharedSparkSession {
   }
 
   private def getFileSourceScanExec(df: DataFrame): FileSourceScanExec = {
-    df.queryExecution.sparkPlan
-      .find(_.isInstanceOf[FileSourceScanExec])
-      .get
+    df.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
       .asInstanceOf[FileSourceScanExec]
   }
 

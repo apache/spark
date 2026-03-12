@@ -65,10 +65,8 @@ object RecordType extends Enumeration {
       case DELETE_RECORD => "delete"
       case MERGE_RECORD => "append"
       case DELETE_RANGE_RECORD => "delete_range"
-      case _ =>
-        throw StateStoreErrors.unsupportedOperationException(
-          "getRecordTypeAsString",
-          recordType.toString)
+      case _ => throw StateStoreErrors.unsupportedOperationException(
+        "getRecordTypeAsString", recordType.toString)
     }
   }
 
@@ -88,7 +86,10 @@ object RecordType extends Enumeration {
 /**
  * Class for lineage item for checkpoint format V2.
  */
-case class LineageItem(version: Long, checkpointUniqueId: String)
+case class LineageItem(
+    version: Long,
+    checkpointUniqueId: String
+)
 
 /**
  * Base class for state store changelog writer
@@ -99,8 +100,7 @@ case class LineageItem(version: Long, checkpointUniqueId: String)
 abstract class StateStoreChangelogWriter(
     fm: CheckpointFileManager,
     file: Path,
-    compressionCodec: CompressionCodec)
-    extends Logging {
+    compressionCodec: CompressionCodec) extends Logging {
 
   implicit val formats: Formats = DefaultFormats
 
@@ -118,8 +118,7 @@ abstract class StateStoreChangelogWriter(
   }
 
   protected def writeLineage(stateStoreCheckpointIdLineage: Array[LineageItem]): Unit = {
-    assert(
-      version >= 3,
+    assert(version >= 3,
       "writeLineage should only be invoked with state store checkpoint id enabled (version >= 3)")
     val lineageStr = Serialization.write(stateStoreCheckpointIdLineage)
     compressedStream.writeUTF(lineageStr)
@@ -146,10 +145,9 @@ abstract class StateStoreChangelogWriter(
       // IOException into FSError.
       case e: FSError if e.getCause.isInstanceOf[IOException] =>
       case NonFatal(ex) =>
-        logInfo(
-          log"Failed to cancel changelog file ${MDC(FILE_NAME, file)} " +
-            log"for state store provider " +
-            log"with exception=${MDC(ERROR, ex)}")
+        logInfo(log"Failed to cancel changelog file ${MDC(FILE_NAME, file)} " +
+          log"for state store provider " +
+          log"with exception=${MDC(ERROR, ex)}")
     } finally {
       backingFileStream = null
       compressedStream = null
@@ -160,17 +158,18 @@ abstract class StateStoreChangelogWriter(
 }
 
 /**
- * Write changes to the key value state store instance to a changelog file. There are 2 types of
- * records, put and delete. A put record is written as: | key length | key content | value length |
- * value content | A delete record is written as: | key length | key content | -1 | Write an Int
- * -1 to signal the end of file. The overall changelog format is: | put record | delete record |
- * ... | put record | -1 |
+ * Write changes to the key value state store instance to a changelog file.
+ * There are 2 types of records, put and delete.
+ * A put record is written as: | key length | key content | value length | value content |
+ * A delete record is written as: | key length | key content | -1 |
+ * Write an Int -1 to signal the end of file.
+ * The overall changelog format is: | put record | delete record | ... | put record | -1 |
  */
 class StateStoreChangelogWriterV1(
     fm: CheckpointFileManager,
     file: Path,
     compressionCodec: CompressionCodec)
-    extends StateStoreChangelogWriter(fm, file, compressionCodec) {
+  extends StateStoreChangelogWriter(fm, file, compressionCodec) {
 
   // Note that v1 does not record this value in the changelog file
   override def version: Short = 1
@@ -192,15 +191,13 @@ class StateStoreChangelogWriterV1(
   }
 
   override def merge(key: Array[Byte], value: Array[Byte]): Unit = {
-    throw new UnsupportedOperationException(
-      "Operation not supported with state " +
-        "changelog writer v1")
+    throw new UnsupportedOperationException("Operation not supported with state " +
+      "changelog writer v1")
   }
 
   override def deleteRange(beginKey: Array[Byte], endKey: Array[Byte]): Unit = {
-    throw new UnsupportedOperationException(
-      "Operation not supported with state " +
-        "changelog writer v1")
+    throw new UnsupportedOperationException("Operation not supported with state " +
+      "changelog writer v1")
   }
 
   override def commit(): Unit = {
@@ -234,7 +231,7 @@ class StateStoreChangelogWriterV2(
     fm: CheckpointFileManager,
     file: Path,
     compressionCodec: CompressionCodec)
-    extends StateStoreChangelogWriter(fm, file, compressionCodec) {
+  extends StateStoreChangelogWriter(fm, file, compressionCodec) {
 
   override def version: Short = 2
 
@@ -267,8 +264,7 @@ class StateStoreChangelogWriterV2(
     compressedStream.write(endKey)
   }
 
-  private def writePutOrMergeRecord(
-      key: Array[Byte],
+  private def writePutOrMergeRecord(key: Array[Byte],
       value: Array[Byte],
       recordType: RecordType): Unit = {
     assert(recordType == RecordType.PUT_RECORD || recordType == RecordType.MERGE_RECORD)
@@ -298,19 +294,21 @@ class StateStoreChangelogWriterV2(
 }
 
 /**
- * Write changes to the key value state store instance to a changelog file. There are 2 types of
- * records, put and delete. A put record is written as: | key length | key content | value length |
- * value content | A delete record is written as: | key length | key content | -1 | Write an Int
- * -1 to signal the end of file. The overall changelog format is: | put record | delete record |
- * ... | put record | -1 | V3 is a extension of V1 for writing changelogs with version in the
- * first line and lineage in the second line.
+ * Write changes to the key value state store instance to a changelog file.
+ * There are 2 types of records, put and delete.
+ * A put record is written as: | key length | key content | value length | value content |
+ * A delete record is written as: | key length | key content | -1 |
+ * Write an Int -1 to signal the end of file.
+ * The overall changelog format is: | put record | delete record | ... | put record | -1 |
+ * V3 is a extension of V1 for writing changelogs with version
+ * in the first line and lineage in the second line.
  */
 class StateStoreChangelogWriterV3(
-    fm: CheckpointFileManager,
-    file: Path,
-    compressionCodec: CompressionCodec,
-    stateStoreCheckpointIdLineage: Array[LineageItem])
-    extends StateStoreChangelogWriterV1(fm, file, compressionCodec) {
+     fm: CheckpointFileManager,
+     file: Path,
+     compressionCodec: CompressionCodec,
+     stateStoreCheckpointIdLineage: Array[LineageItem])
+  extends StateStoreChangelogWriterV1(fm, file, compressionCodec) {
 
   override def version: Short = 3
 
@@ -335,11 +333,11 @@ class StateStoreChangelogWriterV3(
  * in the first line and lineage in the second line.
  */
 class StateStoreChangelogWriterV4(
-    fm: CheckpointFileManager,
-    file: Path,
-    compressionCodec: CompressionCodec,
-    stateStoreCheckpointIdLineage: Array[LineageItem])
-    extends StateStoreChangelogWriterV2(fm, file, compressionCodec) {
+     fm: CheckpointFileManager,
+     file: Path,
+     compressionCodec: CompressionCodec,
+     stateStoreCheckpointIdLineage: Array[LineageItem])
+  extends StateStoreChangelogWriterV2(fm, file, compressionCodec) {
 
   override def version: Short = 4
 
@@ -359,21 +357,19 @@ class StateStoreChangelogWriterV4(
 class StateStoreChangelogReaderFactory(
     fm: CheckpointFileManager,
     fileToRead: Path,
-    compressionCodec: CompressionCodec)
-    extends Logging {
+    compressionCodec: CompressionCodec) extends Logging {
 
   private def decompressStream(inputStream: DataInputStream): DataInputStream = {
     val compressed = compressionCodec.compressedInputStream(inputStream)
     new DataInputStream(compressed)
   }
 
-  private lazy val sourceStream =
-    try {
-      fm.open(fileToRead)
-    } catch {
-      case f: FileNotFoundException =>
-        throw QueryExecutionErrors.failedToReadStreamingStateFileError(fileToRead, f)
-    }
+  private lazy val sourceStream = try {
+    fm.open(fileToRead)
+  } catch {
+    case f: FileNotFoundException =>
+      throw QueryExecutionErrors.failedToReadStreamingStateFileError(fileToRead, f)
+  }
   protected val input: DataInputStream = decompressStream(sourceStream)
 
   private lazy val changeLogVersion: Short = {
@@ -394,18 +390,17 @@ class StateStoreChangelogReaderFactory(
       // Or if the first record in the changelog file in V1 has a large enough
       // key, readUTF() will throw a UTFDataFormatException so we should return
       // version 1 (SPARK-51922).
-      case _: java.io.EOFException | _: java.io.UTFDataFormatException |
-          // SPARK-52553 - Can throw this if the bytes in the file is coincidentally
-          // decoded as UTF string like "v)".
-          _: NumberFormatException =>
-        1
+      case _: java.io.EOFException |
+           _: java.io.UTFDataFormatException |
+           // SPARK-52553 - Can throw this if the bytes in the file is coincidentally
+           // decoded as UTF string like "v)".
+           _: NumberFormatException => 1
     }
   }
 
   /**
    * Construct the change log reader based on the version stored in changelog file
-   * @return
-   *   StateStoreChangelogReader
+   * @return StateStoreChangelogReader
    */
   def constructChangelogReader(): StateStoreChangelogReader = {
     var reader: StateStoreChangelogReader = null
@@ -446,8 +441,7 @@ abstract class StateStoreChangelogReader(
     fm: CheckpointFileManager,
     fileToRead: Path,
     compressionCodec: CompressionCodec)
-    extends NextIterator[(RecordType.Value, Array[Byte], Array[Byte])]
-    with Logging {
+  extends NextIterator[(RecordType.Value, Array[Byte], Array[Byte])] with Logging {
 
   implicit val formats: Formats = DefaultFormats
 
@@ -456,13 +450,12 @@ abstract class StateStoreChangelogReader(
     new DataInputStream(compressed)
   }
 
-  private lazy val sourceStream =
-    try {
-      fm.open(fileToRead)
-    } catch {
-      case f: FileNotFoundException =>
-        throw QueryExecutionErrors.failedToReadStreamingStateFileError(fileToRead, f)
-    }
+  private lazy val sourceStream = try {
+    fm.open(fileToRead)
+  } catch {
+    case f: FileNotFoundException =>
+      throw QueryExecutionErrors.failedToReadStreamingStateFileError(fileToRead, f)
+  }
   protected val input: DataInputStream = decompressStream(sourceStream)
 
   // This function is valid only when called upon initialization,
@@ -472,14 +465,12 @@ abstract class StateStoreChangelogReader(
   protected def verifyVersion(): Unit = {
     // ensure that the version read is correct, also updates file position
     val changelogVersionStr = readVersion()
-    assert(
-      changelogVersionStr == s"v${version}",
+    assert(changelogVersionStr == s"v${version}",
       s"Changelog version mismatch: $changelogVersionStr != v${version}")
   }
 
   private def readLineage(): Array[LineageItem] = {
-    assert(
-      version >= 3,
+    assert(version >= 3,
       "readLineage should only be invoked with state store checkpoint id enabled (version >= 3)")
     val lineageStr = input.readUTF()
     Serialization.read[Array[LineageItem]](lineageStr)
@@ -496,16 +487,17 @@ abstract class StateStoreChangelogReader(
 }
 
 /**
- * Read an iterator of change record from the changelog file. A record is represented by
- * tuple(recordType: RecordType.Value, key: Array[Byte], value: Array[Byte]) A put record is
- * returned as a tuple(recordType, key, value) A delete record is return as a tuple(recordType,
- * key, null)
+ * Read an iterator of change record from the changelog file.
+ * A record is represented by tuple(recordType: RecordType.Value,
+ *  key: Array[Byte], value: Array[Byte])
+ * A put record is returned as a tuple(recordType, key, value)
+ * A delete record is return as a tuple(recordType, key, null)
  */
 class StateStoreChangelogReaderV1(
     fm: CheckpointFileManager,
     fileToRead: Path,
     compressionCodec: CompressionCodec)
-    extends StateStoreChangelogReader(fm, fileToRead, compressionCodec) {
+  extends StateStoreChangelogReader(fm, fileToRead, compressionCodec) {
 
   // Note that v1 does not record this value in the changelog file
   override def version: Short = 1
@@ -538,16 +530,17 @@ class StateStoreChangelogReaderV1(
 }
 
 /**
- * Read an iterator of change record from the changelog file. A record is represented by
- * tuple(recordType: RecordType.Value, key: Array[Byte], value: Array[Byte]) A put or merge record
- * is returned as a tuple(recordType, key, value) A delete record is return as a tuple(recordType,
- * key, null)
+ * Read an iterator of change record from the changelog file.
+ * A record is represented by tuple(recordType: RecordType.Value,
+ * key: Array[Byte], value: Array[Byte])
+ * A put or merge record is returned as a tuple(recordType, key, value)
+ * A delete record is return as a tuple(recordType, key, null)
  */
 class StateStoreChangelogReaderV2(
     fm: CheckpointFileManager,
     fileToRead: Path,
     compressionCodec: CompressionCodec)
-    extends StateStoreChangelogReader(fm, fileToRead, compressionCodec) {
+  extends StateStoreChangelogReader(fm, fileToRead, compressionCodec) {
 
   private def parseBuffer(input: DataInputStream): Array[Byte] = {
     val blockSize = input.readInt()
@@ -597,17 +590,19 @@ class StateStoreChangelogReaderV2(
 }
 
 /**
- * Read an iterator of change record from the changelog file. A record is represented by
- * tuple(recordType: RecordType.Value, key: Array[Byte], value: Array[Byte]) A put record is
- * returned as a tuple(recordType, key, value) A delete record is return as a tuple(recordType,
- * key, null) V3 is a extension of V1 for reading changelogs with version in the first line and
- * lineage in the second line.
+ * Read an iterator of change record from the changelog file.
+ * A record is represented by tuple(recordType: RecordType.Value,
+ *  key: Array[Byte], value: Array[Byte])
+ * A put record is returned as a tuple(recordType, key, value)
+ * A delete record is return as a tuple(recordType, key, null)
+ * V3 is a extension of V1 for reading changelogs with version
+ * in the first line and lineage in the second line.
  */
 class StateStoreChangelogReaderV3(
-    fm: CheckpointFileManager,
-    fileToRead: Path,
-    compressionCodec: CompressionCodec)
-    extends StateStoreChangelogReaderV1(fm, fileToRead, compressionCodec) {
+     fm: CheckpointFileManager,
+     fileToRead: Path,
+     compressionCodec: CompressionCodec)
+  extends StateStoreChangelogReaderV1(fm, fileToRead, compressionCodec) {
 
   override def version: Short = 3
 
@@ -621,17 +616,19 @@ class StateStoreChangelogReaderV3(
 }
 
 /**
- * Read an iterator of change record from the changelog file. A record is represented by
- * tuple(recordType: RecordType.Value, key: Array[Byte], value: Array[Byte]) A put or merge record
- * is returned as a tuple(recordType, key, value) A delete record is return as a tuple(recordType,
- * key, null) V4 is a extension of V2 for reading changelogs with version in the first line and
- * lineage in the second line.
+ * Read an iterator of change record from the changelog file.
+ * A record is represented by tuple(recordType: RecordType.Value,
+ * key: Array[Byte], value: Array[Byte])
+ * A put or merge record is returned as a tuple(recordType, key, value)
+ * A delete record is return as a tuple(recordType, key, null)
+ * V4 is a extension of V2 for reading changelogs with version
+ * in the first line and lineage in the second line.
  */
 class StateStoreChangelogReaderV4(
-    fm: CheckpointFileManager,
-    fileToRead: Path,
-    compressionCodec: CompressionCodec)
-    extends StateStoreChangelogReaderV2(fm, fileToRead, compressionCodec) {
+     fm: CheckpointFileManager,
+     fileToRead: Path,
+     compressionCodec: CompressionCodec)
+  extends StateStoreChangelogReaderV2(fm, fileToRead, compressionCodec) {
 
   override def version: Short = 4
 
@@ -644,23 +641,16 @@ class StateStoreChangelogReaderV4(
 
 /**
  * Base class representing a iterator that iterates over a range of changelog files in a state
- * store. In each iteration, it will return a tuple of (changeType: [[RecordType]], nested key:
- * [[UnsafeRow]], nested value: [[UnsafeRow]], batchId: [[Long]])
+ * store. In each iteration, it will return a tuple of (changeType: [[RecordType]],
+ * nested key: [[UnsafeRow]], nested value: [[UnsafeRow]], batchId: [[Long]])
  *
- * @param storeId
- *   id of the state store
- * @param fm
- *   checkpoint file manager used to manage streaming query checkpoint
- * @param stateLocation
- *   location of the state store
- * @param startVersion
- *   start version of the changelog file to read
- * @param endVersion
- *   end version of the changelog file to read
- * @param compressionCodec
- *   de-compression method using for reading changelog file
- * @param colFamilyNameOpt
- *   optional column family name to read from
+ * @param storeId id of the state store
+ * @param fm checkpoint file manager used to manage streaming query checkpoint
+ * @param stateLocation location of the state store
+ * @param startVersion start version of the changelog file to read
+ * @param endVersion end version of the changelog file to read
+ * @param compressionCodec de-compression method using for reading changelog file
+ * @param colFamilyNameOpt optional column family name to read from
  */
 abstract class StateStoreChangeDataReader(
     storeId: StateStoreId,
@@ -671,17 +661,15 @@ abstract class StateStoreChangeDataReader(
     compressionCodec: CompressionCodec,
     storeConf: StateStoreConf,
     colFamilyNameOpt: Option[String] = None)
-    extends NextIterator[(RecordType.Value, UnsafeRow, UnsafeRow, Long)]
-    with Logging {
+  extends NextIterator[(RecordType.Value, UnsafeRow, UnsafeRow, Long)] with Logging {
 
   assert(startVersion >= 1)
   assert(endVersion >= startVersion)
 
-  protected val readVerifier: Option[KeyValueIntegrityVerifier] =
-    KeyValueIntegrityVerifier.create(
-      storeId.toString,
-      storeConf.rowChecksumEnabled,
-      storeConf.rowChecksumReadVerificationRatio)
+  protected val readVerifier: Option[KeyValueIntegrityVerifier] = KeyValueIntegrityVerifier.create(
+    storeId.toString,
+    storeConf.rowChecksumEnabled,
+    storeConf.rowChecksumReadVerificationRatio)
 
   /**
    * Iterator that iterates over the changelog files in the state store.
@@ -726,8 +714,8 @@ abstract class StateStoreChangeDataReader(
   private var changelogReader: StateStoreChangelogReader = null
 
   /**
-   * Get a changelog reader that has at least one record left to read. If there is no readers
-   * left, return null.
+   * Get a changelog reader that has at least one record left to read. If there is no readers left,
+   * return null.
    */
   protected def currentChangelogReader(): StateStoreChangelogReader = {
     while (changelogReader == null || !changelogReader.hasNext) {
@@ -741,8 +729,9 @@ abstract class StateStoreChangeDataReader(
       }
 
       val changelogFile = fileIterator.next()
-      changelogReader = new StateStoreChangelogReaderFactory(fm, changelogFile, compressionCodec)
-        .constructChangelogReader()
+      changelogReader =
+        new StateStoreChangelogReaderFactory(fm, changelogFile, compressionCodec)
+          .constructChangelogReader()
     }
     changelogReader
   }

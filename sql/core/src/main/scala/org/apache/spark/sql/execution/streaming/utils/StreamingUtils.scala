@@ -24,23 +24,17 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.catalyst.streaming.StreamingSourceIdentifyingName
 
 object StreamingUtils {
-
   /**
    * Resolves a checkpoint location to a fully qualified path.
    *
-   * Converts relative or unqualified paths to fully qualified paths using the file system's URI
-   * and working directory.
+   * Converts relative or unqualified paths to fully qualified paths using the
+   * file system's URI and working directory.
    *
-   * @param hadoopConf
-   *   Hadoop configuration to access the file system
-   * @param checkpointLocation
-   *   The checkpoint location path (may be relative or unqualified)
-   * @return
-   *   Fully qualified checkpoint location URI as a string
+   * @param hadoopConf Hadoop configuration to access the file system
+   * @param checkpointLocation The checkpoint location path (may be relative or unqualified)
+   * @return Fully qualified checkpoint location URI as a string
    */
-  def resolvedCheckpointLocation(
-      hadoopConf: Configuration,
-      checkpointLocation: String): String = {
+  def resolvedCheckpointLocation(hadoopConf: Configuration, checkpointLocation: String): String = {
     val checkpointPath = new Path(checkpointLocation)
     val fs = checkpointPath.getFileSystem(hadoopConf)
     checkpointPath.makeQualified(fs.getUri, fs.getWorkingDirectory).toUri.toString
@@ -49,23 +43,20 @@ object StreamingUtils {
   /**
    * Computes the metadata path for a streaming source based on its identifying name.
    *
-   * Named sources (UserProvided/FlowAssigned) use stable name-based paths, enabling source
-   * evolution (reordering, adding, or removing sources without breaking state). Unassigned
-   * sources use sequential IDs for backward compatibility.
+   * Named sources (UserProvided/FlowAssigned) use stable name-based paths, enabling
+   * source evolution (reordering, adding, or removing sources without breaking state).
+   * Unassigned sources use sequential IDs for backward compatibility.
    *
    * Examples:
    *   - UserProvided("mySource") => "$checkpointRoot/sources/mySource"
    *   - FlowAssigned("source_1") => "$checkpointRoot/sources/source_1"
    *   - Unassigned => "$checkpointRoot/sources/0" (increments nextSourceId)
    *
-   * @param sourceIdentifyingName
-   *   The source's identifying name (UserProvided, FlowAssigned, or Unassigned)
-   * @param nextSourceId
-   *   AtomicLong tracking the next positional source ID for Unassigned sources
-   * @param resolvedCheckpointRoot
-   *   The resolved checkpoint root path
-   * @return
-   *   The computed metadata path string
+   * @param sourceIdentifyingName The source's identifying name
+   *                              (UserProvided, FlowAssigned, or Unassigned)
+   * @param nextSourceId AtomicLong tracking the next positional source ID for Unassigned sources
+   * @param resolvedCheckpointRoot The resolved checkpoint root path
+   * @return The computed metadata path string
    */
   def getMetadataPath(
       sourceIdentifyingName: StreamingSourceIdentifyingName,

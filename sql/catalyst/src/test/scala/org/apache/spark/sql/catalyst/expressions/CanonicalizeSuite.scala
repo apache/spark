@@ -43,15 +43,12 @@ class CanonicalizeSuite extends SparkFunSuite {
     assert(range.where(in1).sameResult(range.where(in2)))
     assert(!range.where(in1).sameResult(range.where(in3)))
 
-    val arrays1 = In(
-      idAttr,
-      Seq(CreateArray(Seq(Literal(1), Literal(2))), CreateArray(Seq(Literal(2), Literal(1)))))
-    val arrays2 = In(
-      idAttr,
-      Seq(CreateArray(Seq(Literal(2), Literal(1))), CreateArray(Seq(Literal(1), Literal(2)))))
-    val arrays3 = In(
-      idAttr,
-      Seq(CreateArray(Seq(Literal(1), Literal(2))), CreateArray(Seq(Literal(3), Literal(1)))))
+    val arrays1 = In(idAttr, Seq(CreateArray(Seq(Literal(1), Literal(2))),
+      CreateArray(Seq(Literal(2), Literal(1)))))
+    val arrays2 = In(idAttr, Seq(CreateArray(Seq(Literal(2), Literal(1))),
+      CreateArray(Seq(Literal(1), Literal(2)))))
+    val arrays3 = In(idAttr, Seq(CreateArray(Seq(Literal(1), Literal(2))),
+      CreateArray(Seq(Literal(3), Literal(1)))))
 
     assert(arrays1.canonicalized.semanticHash() == arrays2.canonicalized.semanticHash())
     assert(arrays1.canonicalized.semanticHash() != arrays3.canonicalized.semanticHash())
@@ -69,28 +66,22 @@ class CanonicalizeSuite extends SparkFunSuite {
     // GetStructField with different names are semantically equal
     val fieldA1 = GetStructField(
       AttributeReference("data1", structType, false)(expId, qualifier),
-      0,
-      Some("a1"))
+      0, Some("a1"))
     val fieldA2 = GetStructField(
       AttributeReference("data2", structType, false)(expId, qualifier),
-      0,
-      Some("a2"))
+      0, Some("a2"))
     assert(fieldA1.semanticEquals(fieldA2))
 
     val fieldB1 = GetStructField(
       GetStructField(
         AttributeReference("data1", structType, false)(expId, qualifier),
-        0,
-        Some("a1")),
-      0,
-      Some("b1"))
+        0, Some("a1")),
+      0, Some("b1"))
     val fieldB2 = GetStructField(
       GetStructField(
         AttributeReference("data2", structType, false)(expId, qualifier),
-        0,
-        Some("a2")),
-      0,
-      Some("b2"))
+        0, Some("a2")),
+      0, Some("b2"))
     assert(fieldB1.semanticEquals(fieldB2))
   }
 
@@ -108,15 +99,16 @@ class CanonicalizeSuite extends SparkFunSuite {
     assert(castWithTimeZoneId.semanticEquals(cast))
   }
 
-  test(
-    "SPARK-43336: Canonicalize Cast between Timestamp and TimestampNTZ should consider " +
-      "timezone") {
+  test("SPARK-43336: Canonicalize Cast between Timestamp and TimestampNTZ should consider " +
+    "timezone") {
     val timestampLiteral = Literal.create(1L, TimestampType)
     val timestampNTZLiteral = Literal.create(1L, TimestampNTZType)
-    Seq(Cast(timestampLiteral, TimestampNTZType), Cast(timestampNTZLiteral, TimestampType))
-      .foreach { cast =>
-        assert(!cast.semanticEquals(cast.withTimeZone(SQLConf.get.sessionLocalTimeZone)))
-      }
+    Seq(
+      Cast(timestampLiteral, TimestampNTZType),
+      Cast(timestampNTZLiteral, TimestampType)
+    ).foreach { cast =>
+      assert(!cast.semanticEquals(cast.withTimeZone(SQLConf.get.sessionLocalTimeZone)))
+    }
   }
 
   test("SPARK-32927: Bitwise operations are commutative") {
@@ -193,9 +185,8 @@ class CanonicalizeSuite extends SparkFunSuite {
     }
   }
 
-  test(
-    "SPARK-38030: Canonicalization should not remove nullability of AttributeReference" +
-      " dataType") {
+  test("SPARK-38030: Canonicalization should not remove nullability of AttributeReference" +
+    " dataType") {
     val structType = StructType(Seq(StructField("name", StringType, nullable = false)))
     val attr = AttributeReference("col", structType)()
     // AttributeReference dataType should not be converted to nullable
@@ -210,9 +201,8 @@ class CanonicalizeSuite extends SparkFunSuite {
   test("SPARK-40362: Commutative operator under BinaryComparison") {
     Seq(EqualTo, EqualNullSafe, GreaterThan, LessThan, GreaterThanOrEqual, LessThanOrEqual)
       .foreach { bc =>
-        assert(
-          bc(Multiply($"a", $"b"), Literal(10))
-            .semanticEquals(bc(Multiply($"b", $"a"), Literal(10))))
+        assert(bc(Multiply($"a", $"b"), Literal(10)).semanticEquals(
+          bc(Multiply($"b", $"a"), Literal(10))))
       }
   }
 
@@ -222,20 +212,17 @@ class CanonicalizeSuite extends SparkFunSuite {
     val literal2 = Literal.create(d, DecimalType(2, 1))
     val literal3 = Literal.create(d, DecimalType(3, 2))
     assert(Add(literal1, literal2).semanticEquals(Add(literal2, literal1)))
-    assert(
-      Add(Add(literal1, literal2), literal3).semanticEquals(
-        Add(Add(literal3, literal2), literal1)))
+    assert(Add(Add(literal1, literal2), literal3).semanticEquals(
+      Add(Add(literal3, literal2), literal1)))
 
     val literal4 = Literal.create(d, DecimalType(12, 5))
     val literal5 = Literal.create(d, DecimalType(12, 6))
-    assert(
-      !Add(Add(literal4, literal5), literal1).semanticEquals(
-        Add(Add(literal1, literal5), literal4)))
+    assert(!Add(Add(literal4, literal5), literal1).semanticEquals(
+      Add(Add(literal1, literal5), literal4)))
   }
 
-  test(
-    "SPARK-42162: Commutative expression canonicalization should work" +
-      " with the MultiCommutativeOp memory optimization") {
+  test("SPARK-42162: Commutative expression canonicalization should work" +
+    " with the MultiCommutativeOp memory optimization") {
     val default = SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)
     SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key, "3")
 
@@ -244,71 +231,57 @@ class CanonicalizeSuite extends SparkFunSuite {
     val literal1 = Literal.create(d, DecimalType(2, 1))
     val literal2 = Literal.create(d, DecimalType(2, 1))
     val literal3 = Literal.create(d, DecimalType(3, 2))
-    assert(
-      Add(literal1, Add(literal2, literal3))
-        .semanticEquals(Add(Add(literal1, literal2), literal3)))
+    assert(Add(literal1, Add(literal2, literal3))
+      .semanticEquals(Add(Add(literal1, literal2), literal3)))
     assert(Add(literal1, Add(literal2, literal3)).canonicalized.isInstanceOf[MultiCommutativeOp])
 
     // Multiply
-    assert(
-      Multiply(literal1, Multiply(literal2, literal3))
-        .semanticEquals(Multiply(Multiply(literal1, literal2), literal3)))
-    assert(
-      Multiply(literal1, Multiply(literal2, literal3)).canonicalized
-        .isInstanceOf[MultiCommutativeOp])
+    assert(Multiply(literal1, Multiply(literal2, literal3))
+      .semanticEquals(Multiply(Multiply(literal1, literal2), literal3)))
+    assert(Multiply(literal1, Multiply(literal2, literal3))
+      .canonicalized.isInstanceOf[MultiCommutativeOp])
 
     // And
     val literalBool1 = Literal.create(true, BooleanType)
     val literalBool2 = Literal.create(true, BooleanType)
     val literalBool3 = Literal.create(true, BooleanType)
-    assert(
-      And(literalBool1, And(literalBool2, literalBool3))
-        .semanticEquals(And(And(literalBool1, literalBool2), literalBool3)))
-    assert(
-      And(literalBool1, And(literalBool2, literalBool3)).canonicalized
-        .isInstanceOf[MultiCommutativeOp])
+    assert(And(literalBool1, And(literalBool2, literalBool3))
+      .semanticEquals(And(And(literalBool1, literalBool2), literalBool3)))
+    assert(And(literalBool1, And(literalBool2, literalBool3))
+      .canonicalized.isInstanceOf[MultiCommutativeOp])
 
     // Or
-    assert(
-      Or(literalBool1, Or(literalBool2, literalBool3))
-        .semanticEquals(Or(Or(literalBool1, literalBool2), literalBool3)))
-    assert(
-      Or(literalBool1, Or(literalBool2, literalBool3)).canonicalized
-        .isInstanceOf[MultiCommutativeOp])
+    assert(Or(literalBool1, Or(literalBool2, literalBool3))
+      .semanticEquals(Or(Or(literalBool1, literalBool2), literalBool3)))
+    assert(Or(literalBool1, Or(literalBool2, literalBool3))
+      .canonicalized.isInstanceOf[MultiCommutativeOp])
 
     // BitwiseAnd
     val literalBit1 = Literal(1)
     val literalBit2 = Literal(2)
     val literalBit3 = Literal(3)
-    assert(
-      BitwiseAnd(literalBit1, BitwiseAnd(literalBit2, literalBit3))
-        .semanticEquals(BitwiseAnd(BitwiseAnd(literalBit1, literalBit2), literalBit3)))
-    assert(
-      BitwiseAnd(literalBit1, BitwiseAnd(literalBit2, literalBit3)).canonicalized
-        .isInstanceOf[MultiCommutativeOp])
+    assert(BitwiseAnd(literalBit1, BitwiseAnd(literalBit2, literalBit3))
+      .semanticEquals(BitwiseAnd(BitwiseAnd(literalBit1, literalBit2), literalBit3)))
+    assert(BitwiseAnd(literalBit1, BitwiseAnd(literalBit2, literalBit3))
+      .canonicalized.isInstanceOf[MultiCommutativeOp])
 
     // BitwiseOr
-    assert(
-      BitwiseOr(literalBit1, BitwiseOr(literalBit2, literalBit3))
-        .semanticEquals(BitwiseOr(BitwiseOr(literalBit1, literalBit2), literalBit3)))
-    assert(
-      BitwiseOr(literalBit1, BitwiseOr(literalBit2, literalBit3)).canonicalized
-        .isInstanceOf[MultiCommutativeOp])
+    assert(BitwiseOr(literalBit1, BitwiseOr(literalBit2, literalBit3))
+      .semanticEquals(BitwiseOr(BitwiseOr(literalBit1, literalBit2), literalBit3)))
+    assert(BitwiseOr(literalBit1, BitwiseOr(literalBit2, literalBit3))
+      .canonicalized.isInstanceOf[MultiCommutativeOp])
 
     // BitwiseXor
-    assert(
-      BitwiseXor(literalBit1, BitwiseXor(literalBit2, literalBit3))
-        .semanticEquals(BitwiseXor(BitwiseXor(literalBit1, literalBit2), literalBit3)))
-    assert(
-      BitwiseXor(literalBit1, BitwiseXor(literalBit2, literalBit3)).canonicalized
-        .isInstanceOf[MultiCommutativeOp])
+    assert(BitwiseXor(literalBit1, BitwiseXor(literalBit2, literalBit3))
+      .semanticEquals(BitwiseXor(BitwiseXor(literalBit1, literalBit2), literalBit3)))
+    assert(BitwiseXor(literalBit1, BitwiseXor(literalBit2, literalBit3))
+      .canonicalized.isInstanceOf[MultiCommutativeOp])
 
     SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key, default.toString)
   }
 
-  test(
-    "SPARK-42162: Commutative expression canonicalization should not use" +
-      " MultiCommutativeOp memory optimization when threshold is not met") {
+  test("SPARK-42162: Commutative expression canonicalization should not use" +
+    " MultiCommutativeOp memory optimization when threshold is not met") {
     val default = SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)
     SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key, "100")
 
@@ -317,64 +290,51 @@ class CanonicalizeSuite extends SparkFunSuite {
     val literal1 = Literal.create(d, DecimalType(2, 1))
     val literal2 = Literal.create(d, DecimalType(2, 1))
     val literal3 = Literal.create(d, DecimalType(3, 2))
-    assert(
-      Add(literal1, Add(literal2, literal3))
-        .semanticEquals(Add(Add(literal1, literal2), literal3)))
+    assert(Add(literal1, Add(literal2, literal3))
+      .semanticEquals(Add(Add(literal1, literal2), literal3)))
     assert(!Add(literal1, Add(literal2, literal3)).canonicalized.isInstanceOf[MultiCommutativeOp])
 
     // Multiply
-    assert(
-      Multiply(literal1, Multiply(literal2, literal3))
-        .semanticEquals(Multiply(Multiply(literal1, literal2), literal3)))
-    assert(
-      !Multiply(literal1, Multiply(literal2, literal3)).canonicalized
-        .isInstanceOf[MultiCommutativeOp])
+    assert(Multiply(literal1, Multiply(literal2, literal3))
+      .semanticEquals(Multiply(Multiply(literal1, literal2), literal3)))
+    assert(!Multiply(literal1, Multiply(literal2, literal3))
+      .canonicalized.isInstanceOf[MultiCommutativeOp])
 
     // And
     val literalBool1 = Literal.create(true, BooleanType)
     val literalBool2 = Literal.create(true, BooleanType)
     val literalBool3 = Literal.create(true, BooleanType)
-    assert(
-      And(literalBool1, And(literalBool2, literalBool3))
-        .semanticEquals(And(And(literalBool1, literalBool2), literalBool3)))
-    assert(
-      !And(literalBool1, And(literalBool2, literalBool3)).canonicalized
-        .isInstanceOf[MultiCommutativeOp])
+    assert(And(literalBool1, And(literalBool2, literalBool3))
+      .semanticEquals(And(And(literalBool1, literalBool2), literalBool3)))
+    assert(!And(literalBool1, And(literalBool2, literalBool3))
+      .canonicalized.isInstanceOf[MultiCommutativeOp])
 
     // Or
-    assert(
-      Or(literalBool1, Or(literalBool2, literalBool3))
-        .semanticEquals(Or(Or(literalBool1, literalBool2), literalBool3)))
-    assert(
-      !Or(literalBool1, Or(literalBool2, literalBool3)).canonicalized
-        .isInstanceOf[MultiCommutativeOp])
+    assert(Or(literalBool1, Or(literalBool2, literalBool3))
+      .semanticEquals(Or(Or(literalBool1, literalBool2), literalBool3)))
+    assert(!Or(literalBool1, Or(literalBool2, literalBool3))
+      .canonicalized.isInstanceOf[MultiCommutativeOp])
 
     // BitwiseAnd
     val literalBit1 = Literal(1)
     val literalBit2 = Literal(2)
     val literalBit3 = Literal(3)
-    assert(
-      BitwiseAnd(literalBit1, BitwiseAnd(literalBit2, literalBit3))
-        .semanticEquals(BitwiseAnd(BitwiseAnd(literalBit1, literalBit2), literalBit3)))
-    assert(
-      !BitwiseAnd(literalBit1, BitwiseAnd(literalBit2, literalBit3)).canonicalized
-        .isInstanceOf[MultiCommutativeOp])
+    assert(BitwiseAnd(literalBit1, BitwiseAnd(literalBit2, literalBit3))
+      .semanticEquals(BitwiseAnd(BitwiseAnd(literalBit1, literalBit2), literalBit3)))
+    assert(!BitwiseAnd(literalBit1, BitwiseAnd(literalBit2, literalBit3))
+      .canonicalized.isInstanceOf[MultiCommutativeOp])
 
     // BitwiseOr
-    assert(
-      BitwiseOr(literalBit1, BitwiseOr(literalBit2, literalBit3))
-        .semanticEquals(BitwiseOr(BitwiseOr(literalBit1, literalBit2), literalBit3)))
-    assert(
-      !BitwiseOr(literalBit1, BitwiseOr(literalBit2, literalBit3)).canonicalized
-        .isInstanceOf[MultiCommutativeOp])
+    assert(BitwiseOr(literalBit1, BitwiseOr(literalBit2, literalBit3))
+      .semanticEquals(BitwiseOr(BitwiseOr(literalBit1, literalBit2), literalBit3)))
+    assert(!BitwiseOr(literalBit1, BitwiseOr(literalBit2, literalBit3))
+      .canonicalized.isInstanceOf[MultiCommutativeOp])
 
     // BitwiseXor
-    assert(
-      BitwiseXor(literalBit1, BitwiseXor(literalBit2, literalBit3))
-        .semanticEquals(BitwiseXor(BitwiseXor(literalBit1, literalBit2), literalBit3)))
-    assert(
-      !BitwiseXor(literalBit1, BitwiseXor(literalBit2, literalBit3)).canonicalized
-        .isInstanceOf[MultiCommutativeOp])
+    assert(BitwiseXor(literalBit1, BitwiseXor(literalBit2, literalBit3))
+      .semanticEquals(BitwiseXor(BitwiseXor(literalBit1, literalBit2), literalBit3)))
+    assert(!BitwiseXor(literalBit1, BitwiseXor(literalBit2, literalBit3))
+      .canonicalized.isInstanceOf[MultiCommutativeOp])
 
     SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key, default.toString)
   }
@@ -450,18 +410,14 @@ class CanonicalizeSuite extends SparkFunSuite {
     val expr2 = AttributeReference("b", BooleanType)()
 
     val common1 = With(expr1) { case Seq(expr1) =>
-      Or(
-        With(expr2) { case Seq(expr2) =>
-          And(EqualTo(expr1, expr2), EqualTo(expr1, expr2))
-        },
-        expr1)
+      Or(With(expr2) { case Seq(expr2) =>
+        And(EqualTo(expr1, expr2), EqualTo(expr1, expr2))
+      }, expr1)
     }
     val common2 = With(expr1) { case Seq(expr1) =>
-      Or(
-        With(expr2) { case Seq(expr2) =>
-          And(EqualTo(expr1, expr2), EqualTo(expr1, expr2))
-        },
-        expr1)
+      Or(With(expr2) { case Seq(expr2) =>
+        And(EqualTo(expr1, expr2), EqualTo(expr1, expr2))
+      }, expr1)
     }
     // Check that canonicalization is consistent across multiple executions.
     assert(common1.canonicalized == common2.canonicalized)
@@ -485,54 +441,55 @@ class CanonicalizeSuite extends SparkFunSuite {
     })
 
     val common3 = With(expr1.newInstance()) { case Seq(expr1) =>
-      Or(
-        With(expr2.newInstance()) { case Seq(expr2) =>
-          And(EqualTo(expr1, expr2), EqualTo(expr1, expr2))
-        },
-        expr1)
+      Or(With(expr2.newInstance()) { case Seq(expr2) =>
+        And(EqualTo(expr1, expr2), EqualTo(expr1, expr2))
+      }, expr1)
     }
     val common4 = With(expr1.newInstance()) { case Seq(expr1) =>
-      Or(
-        With(expr2.newInstance()) { case Seq(expr2) =>
-          And(EqualTo(expr2, expr1), EqualTo(expr2, expr1))
-        },
-        expr1)
+      Or(With(expr2.newInstance()) { case Seq(expr2) =>
+        And(EqualTo(expr2, expr1), EqualTo(expr2, expr1))
+      }, expr1)
     }
     // Check that canonicalization for two different expressions with similar structures is
     // different.
     assert(common3.canonicalized != common4.canonicalized)
   }
 
-  test(
-    "SPARK-48035: Add/Multiply operator canonicalization should take into account the" +
-      "evaluation mode of the operands before operand reordering") {
+  test("SPARK-48035: Add/Multiply operator canonicalization should take into account the" +
+    "evaluation mode of the operands before operand reordering") {
     Seq(1, 10) map { multiCommutativeOpOptThreshold =>
-      val default = SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)
-      SQLConf.get.setConfString(
-        MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key,
-        multiCommutativeOpOptThreshold.toString)
-      try {
-        val l1 = Literal(1)
-        val l2 = Literal(2)
-        val l3 = Literal(3)
+        val default = SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)
+        SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key,
+          multiCommutativeOpOptThreshold.toString)
+        try {
+          val l1 = Literal(1)
+          val l2 = Literal(2)
+          val l3 = Literal(3)
 
-        val expr1 = Add(Add(l1, l2), l3)
-        val expr2 = Add(Add(l2, l1, EvalMode.TRY), l3)
-        assert(!expr1.semanticEquals(expr2))
+          val expr1 = Add(Add(l1, l2), l3)
+          val expr2 = Add(Add(l2, l1, EvalMode.TRY), l3)
+          assert(!expr1.semanticEquals(expr2))
 
-        val expr3 = Multiply(Multiply(l1, l2), l3)
-        val expr4 = Multiply(Multiply(l2, l1, EvalMode.TRY), l3)
-        assert(!expr3.semanticEquals(expr4))
-      } finally {
-        SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key, default.toString)
-      }
+          val expr3 = Multiply(Multiply(l1, l2), l3)
+          val expr4 = Multiply(Multiply(l2, l1, EvalMode.TRY), l3)
+          assert(!expr3.semanticEquals(expr4))
+        } finally {
+          SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key,
+            default.toString)
+        }
     }
   }
 
   test("unit test for gatherCommutative()") {
-    val addExpression = Add(Literal(1), Add(Literal(2), Literal(3)))
-    val commutativeExpressions =
-      addExpression.gatherCommutative(addExpression, { case Add(l, r, _) => Seq(l, r) })
+    val addExpression = Add(
+      Literal(1),
+      Add(
+        Literal(2),
+        Literal(3)
+      )
+    )
+    val commutativeExpressions = addExpression.gatherCommutative(addExpression,
+      { case Add(l, r, _) => Seq(l, r)})
     assert(commutativeExpressions == Seq(Literal(1), Literal(2), Literal(3)))
   }
 }

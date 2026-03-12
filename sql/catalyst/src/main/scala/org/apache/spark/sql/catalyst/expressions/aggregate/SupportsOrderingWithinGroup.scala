@@ -31,17 +31,15 @@ trait SupportsOrderingWithinGroup { self: AggregateFunction =>
   /**
    * Tells Analyzer that WITHIN GROUP (ORDER BY ...) is mandatory for function.
    *
-   * @see
-   *   [[QueryCompilationErrors.functionMissingWithinGroupError]]
+   * @see [[QueryCompilationErrors.functionMissingWithinGroupError]]
    */
   def isOrderingMandatory: Boolean
 
   /**
-   * Tells Analyzer that DISTINCT is supported. The DISTINCT can conflict with order so some
-   * functions can ban it.
+   * Tells Analyzer that DISTINCT is supported.
+   * The DISTINCT can conflict with order so some functions can ban it.
    *
-   * @see
-   *   [[QueryCompilationErrors.distinctWithOrderingFunctionUnsupportedError]]
+   * @see [[QueryCompilationErrors.distinctWithOrderingFunctionUnsupportedError]]
    */
   def isDistinctSupported: Boolean
 }

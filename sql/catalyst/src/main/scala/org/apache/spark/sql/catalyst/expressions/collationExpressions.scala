@@ -58,22 +58,13 @@ object CollateExpressionBuilder extends ExpressionBuilder {
                 evalCollation.toString.toUpperCase().contains("TRIM")) {
                 throw QueryCompilationErrors.trimCollationNotEnabledError()
               }
-              Collate(
-                e,
-                UnresolvedCollation(
-                  AttributeNameParser.parseAttributeName(evalCollation.toString)))
+              Collate(e, UnresolvedCollation(
+                AttributeNameParser.parseAttributeName(evalCollation.toString)))
             }
-          case (_: StringType, false) =>
-            throw QueryCompilationErrors.nonFoldableArgumentError(
-              funcName,
-              "collationName",
-              StringType)
-          case (_, _) =>
-            throw QueryCompilationErrors.unexpectedInputDataTypeError(
-              funcName,
-              1,
-              StringType,
-              collationExpr)
+          case (_: StringType, false) => throw QueryCompilationErrors.nonFoldableArgumentError(
+            funcName, "collationName", StringType)
+          case (_, _) => throw QueryCompilationErrors.unexpectedInputDataTypeError(
+            funcName, 1, StringType, collationExpr)
         }
       case s => throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2), s.length)
     }
@@ -81,12 +72,12 @@ object CollateExpressionBuilder extends ExpressionBuilder {
 }
 
 /**
- * An expression that marks a given expression with specified collation. This function is
- * pass-through, it will not modify the input data. Only type metadata will be updated.
+ * An expression that marks a given expression with specified collation.
+ * This function is pass-through, it will not modify the input data.
+ * Only type metadata will be updated.
  */
 case class Collate(child: Expression, collation: Expression)
-    extends BinaryExpression
-    with ExpectsInputTypes {
+  extends BinaryExpression with ExpectsInputTypes {
   override def left: Expression = child
   override def right: Expression = collation
   override def dataType: DataType = collation.dataType
@@ -107,8 +98,7 @@ case class Collate(child: Expression, collation: Expression)
     s"$prettyName($child, $collation)"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): Expression =
+      newLeft: Expression, newRight: Expression): Expression =
     copy(child = newLeft, collation = newRight)
 
   override def foldable: Boolean = child.foldable
@@ -122,8 +112,7 @@ case class Collate(child: Expression, collation: Expression)
  * specified but not yet validated or resolved.
  */
 case class UnresolvedCollation(collationName: Seq[String])
-    extends LeafExpression
-    with Unevaluable {
+  extends LeafExpression with Unevaluable {
   override def dataType: DataType = throw new UnresolvedException("dataType")
 
   override def nullable: Boolean = false
@@ -171,10 +160,10 @@ case class ResolvedCollation(collationName: String) extends LeafExpression {
   group = "string_funcs")
 // scalastyle:on line.contains.tab
 case class Collation(child: Expression)
-    extends UnaryExpression
-    with RuntimeReplaceable
-    with ExpectsInputTypes
-    with DefaultStringProducingExpression {
+  extends UnaryExpression
+  with RuntimeReplaceable
+  with ExpectsInputTypes
+  with DefaultStringProducingExpression {
   override protected def withNewChildInternal(newChild: Expression): Collation = copy(newChild)
   override lazy val replacement: Expression = {
     val collationId = child.dataType.asInstanceOf[StringType].collationId

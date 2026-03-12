@@ -26,7 +26,9 @@ import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructT
 class DataSourceV2RelationSuite extends SparkFunSuite {
 
   test("DataSourceV2Relation.v1StatsToV2Stats") {
-    val schema = StructType(Seq(StructField("id", IntegerType), StructField("name", StringType)))
+    val schema = StructType(Seq(
+      StructField("id", IntegerType),
+      StructField("name", StringType)))
 
     val idColStat = CatalogColumnStat(
       distinctCount = Some(10),
@@ -63,7 +65,7 @@ class DataSourceV2RelationSuite extends SparkFunSuite {
     assert(idV2.avgLen().getAsLong === 4L)
     assert(idV2.maxLen().getAsLong === 4L)
     assert(idV2.min().isPresent)
-    assert(idV2.min().get() === 1) // deserialized from "1" as IntegerType
+    assert(idV2.min().get() === 1)   // deserialized from "1" as IntegerType
     assert(idV2.max().get() === 100)
 
     // No rowCount: numRows should be empty

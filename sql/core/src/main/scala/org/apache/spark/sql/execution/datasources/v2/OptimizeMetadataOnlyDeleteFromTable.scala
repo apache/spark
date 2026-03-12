@@ -29,9 +29,9 @@ import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * A rule that replaces a rewritten DELETE operation with a delete using filters if the data
- * source can handle this DELETE command without executing the plan that operates on individual or
- * groups of rows.
+ * A rule that replaces a rewritten DELETE operation with a delete using filters if the data source
+ * can handle this DELETE command without executing the plan that operates on individual or groups
+ * of rows.
  *
  * Note this rule must be run after expression optimization but before scan planning.
  */
@@ -42,8 +42,7 @@ object OptimizeMetadataOnlyDeleteFromTable extends Rule[LogicalPlan] with Predic
       relation.table match {
         case table: SupportsDeleteV2 if !SubqueryExpression.hasSubquery(cond) =>
           val predicates = splitConjunctivePredicates(cond)
-          val normalizedPredicates =
-            DataSourceStrategy.normalizeExprs(predicates, relation.output)
+          val normalizedPredicates = DataSourceStrategy.normalizeExprs(predicates, relation.output)
           val filters = toDataSourceV2Filters(normalizedPredicates)
           val allPredicatesTranslated = normalizedPredicates.size == filters.length
           if (allPredicatesTranslated && table.canDeleteWhere(filters)) {

@@ -64,13 +64,12 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
 
   Seq(
     ("SPARK-51097", "RocksDBStateStoreProvider", classOf[RocksDBStateStoreProvider].getName),
-    (
-      "SPARK-51252",
-      "HDFSBackedStateStoreProvider",
-      classOf[HDFSBackedStateStoreProvider].getName)).foreach {
+    ("SPARK-51252", "HDFSBackedStateStoreProvider", classOf[HDFSBackedStateStoreProvider].getName)
+  ).foreach {
     case (ticketPrefix, providerName, providerClassName) =>
       testWithChangelogCheckpointingEnabled(
-        s"$ticketPrefix: Verify snapshot lag metrics are updated correctly with $providerName") {
+        s"$ticketPrefix: Verify snapshot lag metrics are updated correctly with $providerName"
+      ) {
         withSQLConf(
           SQLConf.STATE_STORE_PROVIDER_CLASS.key -> providerClassName,
           SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
@@ -78,7 +77,8 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
           SQLConf.STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT.key -> "3",
           SQLConf.STATE_STORE_MAINTENANCE_FORCE_SHUTDOWN_TIMEOUT.key -> "5",
           SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
-          SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "3") {
+          SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "3"
+        ) {
           withTempDir { checkpointDir =>
             val inputData = MemoryStream[String]
             val result = inputData.toDS().dropDuplicates()
@@ -104,13 +104,16 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
                     .view
                     .filterKeys(_.startsWith(SNAPSHOT_LAG_METRIC_PREFIX))
                   // Determined by STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT
-                  assert(instanceMetrics.size == q.sparkSession.conf
-                    .get(SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT))
+                  assert(
+                    instanceMetrics.size == q.sparkSession.conf
+                      .get(SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT)
+                  )
                   // All state store instances should have uploaded a version
                   assert(instanceMetrics.forall(_._2 >= 0))
                 }
               },
-              StopStream)
+              StopStream
+            )
           }
         }
       }
@@ -120,14 +123,18 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
     (
       "SPARK-51097",
       "RocksDBSkipMaintenanceOnCertainPartitionsProvider",
-      classOf[RocksDBSkipMaintenanceOnCertainPartitionsProvider].getName),
+      classOf[RocksDBSkipMaintenanceOnCertainPartitionsProvider].getName
+    ),
     (
       "SPARK-51252",
       "HDFSBackedSkipMaintenanceOnCertainPartitionsProvider",
-      classOf[HDFSBackedSkipMaintenanceOnCertainPartitionsProvider].getName)).foreach {
+      classOf[HDFSBackedSkipMaintenanceOnCertainPartitionsProvider].getName
+    )
+  ).foreach {
     case (ticketPrefix, providerName, providerClassName) =>
       testWithChangelogCheckpointingEnabled(
-        s"$ticketPrefix: Verify snapshot lag metrics are updated correctly with $providerName") {
+        s"$ticketPrefix: Verify snapshot lag metrics are updated correctly with $providerName"
+      ) {
         withSQLConf(
           SQLConf.STATE_STORE_PROVIDER_CLASS.key -> providerClassName,
           SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
@@ -135,7 +142,8 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
           SQLConf.STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT.key -> "3",
           SQLConf.STATE_STORE_MAINTENANCE_FORCE_SHUTDOWN_TIMEOUT.key -> "5",
           SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
-          SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "3") {
+          SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "3"
+        ) {
           withTempDir { checkpointDir =>
             val inputData = MemoryStream[String]
             val result = inputData.toDS().dropDuplicates()
@@ -159,12 +167,14 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
                     q.lastProgress
                       .stateOperators(0)
                       .customMetrics
-                      .get(snapshotLagMetricName(0)) === -1)
+                      .get(snapshotLagMetricName(0)) === -1
+                  )
                   assert(
                     q.lastProgress
                       .stateOperators(0)
                       .customMetrics
-                      .get(snapshotLagMetricName(1)) === -1)
+                      .get(snapshotLagMetricName(1)) === -1
+                  )
                   // Make sure only smallest K active metrics are published
                   val instanceMetrics = q.lastProgress
                     .stateOperators(0)
@@ -173,15 +183,20 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
                     .view
                     .filterKeys(_.startsWith(SNAPSHOT_LAG_METRIC_PREFIX))
                   // Determined by STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT
-                  assert(instanceMetrics.size == q.sparkSession.conf
-                    .get(SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT))
+                  assert(
+                    instanceMetrics.size == q.sparkSession.conf
+                      .get(SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT)
+                  )
                   // Two metrics published are -1, but the remainder should all be set to a
                   // non-negative version as they uploaded properly.
-                  assert(instanceMetrics.count(_._2 >= 0) == q.sparkSession.conf
-                    .get(SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT) - 2)
+                  assert(
+                    instanceMetrics.count(_._2 >= 0) == q.sparkSession.conf
+                      .get(SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT) - 2
+                  )
                 }
               },
-              StopStream)
+              StopStream
+            )
           }
         }
       }
@@ -189,14 +204,13 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
 
   Seq(
     ("SPARK-51097", "RocksDBStateStoreProvider", classOf[RocksDBStateStoreProvider].getName),
-    (
-      "SPARK-51252",
-      "HDFSBackedStateStoreProvider",
-      classOf[HDFSBackedStateStoreProvider].getName)).foreach {
+    ("SPARK-51252", "HDFSBackedStateStoreProvider", classOf[HDFSBackedStateStoreProvider].getName)
+  ).foreach {
     case (ticketPrefix, providerName, providerClassName) =>
       testWithChangelogCheckpointingEnabled(
         s"$ticketPrefix: Verify snapshot lag metrics are updated correctly for join queries with " +
-          s"$providerName") {
+        s"$providerName"
+      ) {
         withSQLConf(
           SQLConf.STATE_STORE_PROVIDER_CLASS.key -> providerClassName,
           SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
@@ -205,7 +219,8 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
           SQLConf.STATE_STORE_MAINTENANCE_FORCE_SHUTDOWN_TIMEOUT.key -> "5",
           SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
           SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "10",
-          SQLConf.SHUFFLE_PARTITIONS.key -> "3") {
+          SQLConf.SHUFFLE_PARTITIONS.key -> "3"
+        ) {
           withTempDir { checkpointDir =>
             val input1 = MemoryStream[Int]
             val input2 = MemoryStream[Int]
@@ -242,13 +257,16 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
                     .view
                     .filterKeys(_.startsWith(SNAPSHOT_LAG_METRIC_PREFIX))
                   // Determined by STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT
-                  assert(instanceMetrics.size == q.sparkSession.conf
-                    .get(SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT))
+                  assert(
+                    instanceMetrics.size == q.sparkSession.conf
+                      .get(SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT)
+                  )
                   // All state store instances should have uploaded a version
                   assert(instanceMetrics.forall(_._2 >= 0))
                 }
               },
-              StopStream)
+              StopStream
+            )
           }
         }
       }
@@ -258,15 +276,19 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
     (
       "SPARK-51097",
       "RocksDBSkipMaintenanceOnCertainPartitionsProvider",
-      classOf[RocksDBSkipMaintenanceOnCertainPartitionsProvider].getName),
+      classOf[RocksDBSkipMaintenanceOnCertainPartitionsProvider].getName
+    ),
     (
       "SPARK-51252",
       "HDFSBackedSkipMaintenanceOnCertainPartitionsProvider",
-      classOf[HDFSBackedSkipMaintenanceOnCertainPartitionsProvider].getName)).foreach {
+      classOf[HDFSBackedSkipMaintenanceOnCertainPartitionsProvider].getName
+    )
+  ).foreach {
     case (ticketPrefix, providerName, providerClassName) =>
       testWithChangelogCheckpointingEnabled(
         s"$ticketPrefix: Verify snapshot lag metrics are updated correctly for join queries with " +
-          s"$providerName") {
+        s"$providerName"
+      ) {
         withSQLConf(
           SQLConf.STATE_STORE_PROVIDER_CLASS.key -> providerClassName,
           SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
@@ -274,7 +296,8 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
           SQLConf.STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT.key -> "3",
           SQLConf.STATE_STORE_MAINTENANCE_FORCE_SHUTDOWN_TIMEOUT.key -> "5",
           SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
-          SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "10") {
+          SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "10"
+        ) {
           withTempDir { checkpointDir =>
             val input1 = MemoryStream[Int]
             val input2 = MemoryStream[Int]
@@ -310,20 +333,27 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
                     .asScala
                     .view
                     .filterKeys(_.startsWith(SNAPSHOT_LAG_METRIC_PREFIX))
-                  val badInstanceMetrics = allInstanceMetrics.filterKeys(k =>
-                    k.startsWith(snapshotLagMetricName(0, "")) ||
-                      k.startsWith(snapshotLagMetricName(1, "")))
+                  val badInstanceMetrics = allInstanceMetrics.filterKeys(
+                    k =>
+                      k.startsWith(snapshotLagMetricName(0, "")) ||
+                      k.startsWith(snapshotLagMetricName(1, ""))
+                  )
                   // Determined by STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT
-                  assert(allInstanceMetrics.size == q.sparkSession.conf
-                    .get(SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT))
+                  assert(
+                    allInstanceMetrics.size == q.sparkSession.conf
+                      .get(SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT)
+                  )
                   // Two ids are blocked, each with four state stores
                   assert(badInstanceMetrics.count(_._2 == -1) == 2 * 4)
                   // The rest should have uploaded a version
-                  assert(allInstanceMetrics.count(_._2 >= 0) == q.sparkSession.conf
-                    .get(SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT) - 2 * 4)
+                  assert(
+                    allInstanceMetrics.count(_._2 >= 0) == q.sparkSession.conf
+                      .get(SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT) - 2 * 4
+                  )
                 }
               },
-              StopStream)
+              StopStream
+            )
           }
         }
       }
@@ -331,7 +361,8 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
 
   testWithChangelogCheckpointingEnabled(
     "SPARK-51779 Verify snapshot lag metrics are updated correctly for join " +
-      "using virtual column families with RocksDB") {
+    "using virtual column families with RocksDB"
+  ) {
     withSQLConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
         classOf[RocksDBSkipMaintenanceOnCertainPartitionsProvider].getName,
@@ -341,7 +372,8 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
       SQLConf.STATE_STORE_MAINTENANCE_FORCE_SHUTDOWN_TIMEOUT.key -> "5",
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
       SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "4",
-      SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "3") {
+      SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "3"
+    ) {
       withTempDir { checkpointDir =>
         val input1 = MemoryStream[Int]
         val input2 = MemoryStream[Int]
@@ -376,13 +408,16 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
                 .customMetrics
                 .asScala
                 .filter(_._1.startsWith(SNAPSHOT_LAG_METRIC_PREFIX))
-              val badInstanceMetrics = allInstanceMetrics.filter { case (key, _) =>
-                key.startsWith(snapshotLagMetricName(0, "")) ||
-                key.startsWith(snapshotLagMetricName(1, ""))
+              val badInstanceMetrics = allInstanceMetrics.filter {
+                case (key, _) =>
+                  key.startsWith(snapshotLagMetricName(0, "")) ||
+                    key.startsWith(snapshotLagMetricName(1, ""))
               }
               // Determined by STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT
-              assert(allInstanceMetrics.size == q.sparkSession.conf
-                .get(SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT))
+              assert(
+                allInstanceMetrics.size == q.sparkSession.conf
+                  .get(SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT)
+              )
               // However, creating a family column forces a snapshot regardless of maintenance
               // Thus, the version will be 1 for this case.
               // Since join queries only use one state store now, the number of instance metrics
@@ -391,25 +426,27 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
               // of 2 * 4 = 8 like previously.
               assert(badInstanceMetrics.count(_._2 == 1) == 2)
               // The rest should have uploaded a version greater than 1
-              assert(allInstanceMetrics.count(_._2 >= 2) == q.sparkSession.conf
-                .get(SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT) - 2)
+              assert(
+                allInstanceMetrics.count(_._2 >= 2) == q.sparkSession.conf
+                  .get(SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT) - 2
+              )
             }
           },
-          StopStream)
+          StopStream
+        )
       }
     }
   }
 
   Seq(
     ("SPARK-51097", "RocksDBStateStoreProvider", classOf[RocksDBStateStoreProvider].getName),
-    (
-      "SPARK-51252",
-      "HDFSBackedStateStoreProvider",
-      classOf[HDFSBackedStateStoreProvider].getName)).foreach {
+    ("SPARK-51252", "HDFSBackedStateStoreProvider", classOf[HDFSBackedStateStoreProvider].getName)
+  ).foreach {
     case (ticketPrefix, providerName, providerClassName) =>
       testWithChangelogCheckpointingEnabled(
         s"$ticketPrefix: Verify instance metrics for $providerName are not collected " +
-          s"in execution plan") {
+        s"in execution plan"
+      ) {
         withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key -> providerClassName) {
           withTempDir { checkpointDir =>
             val input1 = MemoryStream[Int]
@@ -432,15 +469,15 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
                 // Go through all elements in the execution plan and verify none of the metrics
                 // are generated from RocksDB's snapshot lag instance metrics.
                 q.lastExecution.executedPlan
-                  .collect { case node =>
-                    node.metrics
+                  .collect {
+                    case node => node.metrics
                   }
                   .forall { nodeMetrics =>
-                    nodeMetrics.forall(metric =>
-                      !metric._1.startsWith(SNAPSHOT_LAG_METRIC_PREFIX))
+                    nodeMetrics.forall(metric => !metric._1.startsWith(SNAPSHOT_LAG_METRIC_PREFIX))
                   }
               },
-              StopStream)
+              StopStream
+            )
           }
         }
       }
@@ -451,5 +488,4 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
  * Test suite that runs all StateStoreInstanceMetricSuite tests with row checksum enabled.
  */
 class StateStoreInstanceMetricSuiteWithRowChecksum
-    extends StateStoreInstanceMetricSuite
-    with EnableStateStoreRowChecksum
+  extends StateStoreInstanceMetricSuite with EnableStateStoreRowChecksum

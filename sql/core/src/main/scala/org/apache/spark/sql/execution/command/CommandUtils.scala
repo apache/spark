@@ -47,10 +47,9 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.Utils
 
 /**
- * For the purpose of calculating total directory sizes, use this filter to ignore some irrelevant
- * files.
- * @param stagingDir
- *   hive staging dir
+ * For the purpose of calculating total directory sizes, use this filter to
+ * ignore some irrelevant files.
+ * @param stagingDir hive staging dir
  */
 class PathFilterIgnoreNonData(stagingDir: String) extends PathFilter with Serializable {
   override def accept(path: Path): Boolean = {
@@ -86,27 +85,23 @@ object CommandUtils extends Logging {
   def calculateTotalSize(
       spark: SparkSession,
       catalogTable: CatalogTable,
-      partitionRowCount: Option[Map[TablePartitionSpec, BigInt]] = None)
-      : (BigInt, Seq[CatalogTablePartition]) = {
+      partitionRowCount: Option[Map[TablePartitionSpec, BigInt]] = None):
+  (BigInt, Seq[CatalogTablePartition]) = {
     val sessionState = spark.sessionState
     val startTime = System.nanoTime()
     val (totalSize, newPartitions) = if (catalogTable.partitionColumnNames.isEmpty) {
-      val size = calculateSingleLocationSize(
-        sessionState,
-        catalogTable.identifier,
+      val size = calculateSingleLocationSize(sessionState, catalogTable.identifier,
         catalogTable.storage.locationUri)
       (BigInt(size), Seq())
     } else {
       // Calculate table size as a sum of the visible partitions. See SPARK-21079
       val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
-      logInfo(
-        log"Starting to calculate sizes for ${MDC(COUNT, partitions.length)} " +
-          log"partitions.")
+      logInfo(log"Starting to calculate sizes for ${MDC(COUNT, partitions.length)} " +
+        log"partitions.")
       calculatePartitionStats(spark, catalogTable, partitions, partitionRowCount)
     }
-    logInfo(
-      log"It took ${MDC(TIME, (System.nanoTime() - startTime) / (1000 * 1000))} ms to " +
-        log"calculate the total size for table ${MDC(TABLE_NAME, catalogTable.identifier)}.")
+    logInfo(log"It took ${MDC(TIME, (System.nanoTime() - startTime) / (1000 * 1000))} ms to " +
+      log"calculate the total size for table ${MDC(TABLE_NAME, catalogTable.identifier)}.")
     (totalSize, newPartitions)
   }
 
@@ -114,8 +109,8 @@ object CommandUtils extends Logging {
       spark: SparkSession,
       catalogTable: CatalogTable,
       partitions: Seq[CatalogTablePartition],
-      partitionRowCount: Option[Map[TablePartitionSpec, BigInt]] = None)
-      : (BigInt, Seq[CatalogTablePartition]) = {
+      partitionRowCount: Option[Map[TablePartitionSpec, BigInt]] = None):
+  (BigInt, Seq[CatalogTablePartition]) = {
     val paths = partitions.map(_.storage.locationUri)
     val sizes = calculateMultipleLocationSizes(spark, catalogTable.identifier, paths)
     val newPartitions = partitions.zipWithIndex.flatMap { case (p, idx) =>
@@ -149,8 +144,7 @@ object CommandUtils extends Logging {
             } else {
               0L
             }
-          }
-          .sum
+          }.sum
       } else {
         fileStatus.getLen
       }
@@ -159,26 +153,21 @@ object CommandUtils extends Logging {
     }
 
     val startTime = System.nanoTime()
-    val size = locationUri
-      .map { p =>
-        val path = new Path(p)
-        try {
-          val fs = path.getFileSystem(sessionState.newHadoopConf())
-          getPathSize(fs, fs.getFileStatus(path))
-        } catch {
-          case NonFatal(e) =>
-            logWarning(
-              log"Failed to get the size of table ${MDC(TABLE_NAME, identifier.table)} " +
-                log"in the database ${MDC(DATABASE_NAME, identifier.database)} because of " +
-                log"${MDC(ERROR, e.toString)}",
-              e)
-            0L
-        }
+    val size = locationUri.map { p =>
+      val path = new Path(p)
+      try {
+        val fs = path.getFileSystem(sessionState.newHadoopConf())
+        getPathSize(fs, fs.getFileStatus(path))
+      } catch {
+        case NonFatal(e) =>
+          logWarning(log"Failed to get the size of table ${MDC(TABLE_NAME, identifier.table)} " +
+            log"in the database ${MDC(DATABASE_NAME, identifier.database)} because of " +
+            log"${MDC(ERROR, e.toString)}", e)
+          0L
       }
-      .getOrElse(0L)
+    }.getOrElse(0L)
     val durationInMs = (System.nanoTime() - startTime) / (1000 * 1000)
-    logDebug(
-      s"It took $durationInMs ms to calculate the total file size under path $locationUri.")
+    logDebug(s"It took $durationInMs ms to calculate the total file size under path $locationUri.")
 
     size
   }
@@ -195,14 +184,12 @@ object CommandUtils extends Logging {
   }
 
   /**
-   * Launch a Job to list all leaf files in `paths` and compute the total size for each path.
-   * @param sparkSession
-   *   the [[SparkSession]]
-   * @param paths
-   *   the Seq of [[Option[Path]]]s
-   * @return
-   *   a Seq of same size as `paths` where i-th element is total size of `paths(i)` or 0 if
-   *   `paths(i)` is None
+   * Launch a Job to list all leaf files in `paths` and compute the total size
+   * for each path.
+   * @param sparkSession the [[SparkSession]]
+   * @param paths the Seq of [[Option[Path]]]s
+   * @return a Seq of same size as `paths` where i-th element is total size of `paths(i)` or 0
+   *         if `paths(i)` is None
    */
   def calculateMultipleLocationSizesInParallel(
       sparkSession: SparkSession,
@@ -210,15 +197,10 @@ object CommandUtils extends Logging {
     val stagingDir = sparkSession.sessionState.conf
       .getConfString("hive.exec.stagingdir", ".hive-staging")
     val filter = new PathFilterIgnoreNonData(stagingDir)
-    val sizes = InMemoryFileIndex
-      .bulkListLeafFiles(
-        paths.flatten,
-        sparkSession.sessionState.newHadoopConf(),
-        filter,
-        sparkSession)
-      .map { case (_, files) =>
-        files.map(_.getLen).sum
-      }
+    val sizes = InMemoryFileIndex.bulkListLeafFiles(paths.flatten,
+      sparkSession.sessionState.newHadoopConf(), filter, sparkSession).map {
+      case (_, files) => files.map(_.getLen).sum
+    }
     // the size is 0 where paths(i) is not defined and sizes(i) where it is defined
     paths.zipWithIndex.map { case (p, idx) => p.map(_ => sizes(idx)).getOrElse(0L) }
   }
@@ -278,16 +260,15 @@ object CommandUtils extends Logging {
         } else {
           calculateRowCountsPerPartition(sparkSession, tableMeta, None)
         }
-      val (newTotalSize, newPartitions) =
-        CommandUtils.calculateTotalSize(sparkSession, tableMeta, Some(rowCounts))
+      val (newTotalSize, newPartitions) = CommandUtils.calculateTotalSize(
+        sparkSession, tableMeta, Some(rowCounts))
 
       val newRowCount =
         if (noScan) None else Some(BigInt(sparkSession.table(tableIdentWithDB).count()))
 
       // Update the metastore if the above statistics of the table are different from those
       // recorded in the metastore.
-      val newStats =
-        CommandUtils.compareAndGetNewStats(tableMeta.stats, newTotalSize, newRowCount)
+      val newStats = CommandUtils.compareAndGetNewStats(tableMeta.stats, newTotalSize, newRowCount)
       if (newStats.isDefined) {
         sessionState.catalog.alterTableStats(tableIdentWithDB, newStats)
       }
@@ -300,8 +281,7 @@ object CommandUtils extends Logging {
 
   /**
    * Compute stats for the given columns.
-   * @return
-   *   (row count, map from column name to CatalogColumnStats)
+   * @return (row count, map from column name to CatalogColumnStats)
    */
   private[sql] def computeColumnStats(
       sparkSession: SparkSession,
@@ -327,21 +307,14 @@ object CommandUtils extends Logging {
       columns.map(statExprs(_, conf, attributePercentiles))
 
     val namedExpressions = expressions.map(e => Alias(e, e.toString)())
-    val statsRow = new QueryExecution(
-      sparkSession,
-      Aggregate(Nil, namedExpressions, relation),
+    val statsRow = new QueryExecution(sparkSession, Aggregate(Nil, namedExpressions, relation),
       shuffleCleanupModeOpt = Some(RemoveShuffleFiles)).executedPlan.executeTake(1).head
 
     val rowCount = statsRow.getLong(0)
     val columnStats = columns.zipWithIndex.map { case (attr, i) =>
       // according to `statExprs`, the stats struct always have 7 fields.
-      (
-        attr,
-        rowToColumnStat(
-          statsRow.getStruct(i + 1, 7),
-          attr,
-          rowCount,
-          attributePercentiles.get(attr)))
+      (attr, rowToColumnStat(statsRow.getStruct(i + 1, 7), attr, rowCount,
+        attributePercentiles.get(attr)))
     }.toMap
     (rowCount, columnStats)
   }
@@ -360,22 +333,18 @@ object CommandUtils extends Logging {
     val attributePercentiles = mutable.HashMap[Attribute, ArrayData]()
     if (attrsToGenHistogram.nonEmpty) {
       val percentiles = (0 to conf.histogramNumBins)
-        .map(i => i.toDouble / conf.histogramNumBins)
-        .toArray[Any]
+        .map(i => i.toDouble / conf.histogramNumBins).toArray[Any]
 
       val namedExprs = attrsToGenHistogram.map { attr =>
         val aggFunc =
-          new ApproximatePercentile(
-            attr,
+          new ApproximatePercentile(attr,
             Literal(new GenericArrayData(percentiles), ArrayType(DoubleType, false)),
             Literal(conf.percentileAccuracy))
         val expr = aggFunc.toAggregateExpression()
         Alias(expr, expr.toString)()
       }
 
-      val percentilesRow = new QueryExecution(
-        sparkSession,
-        Aggregate(Nil, namedExprs, relation),
+      val percentilesRow = new QueryExecution(sparkSession, Aggregate(Nil, namedExprs, relation),
         shuffleCleanupModeOpt = Some(RemoveShuffleFiles)).executedPlan.executeTake(1).head
       attrsToGenHistogram.zipWithIndex.foreach { case (attr, i) =>
         val percentiles = percentilesRow.getArray(i)
@@ -389,6 +358,7 @@ object CommandUtils extends Logging {
     AttributeMap(attributePercentiles)
   }
 
+
   /** Returns true iff the we support gathering histogram on column of the given type. */
   private def supportsHistogram(dataType: DataType): Boolean = dataType match {
     case _: IntegralType => true
@@ -401,17 +371,17 @@ object CommandUtils extends Logging {
   /**
    * Constructs an expression to compute column statistics for a given column.
    *
-   * The expression should create a single struct column with the following schema: distinctCount:
-   * Long, min: T, max: T, nullCount: Long, avgLen: Long, maxLen: Long,
+   * The expression should create a single struct column with the following schema:
+   * distinctCount: Long, min: T, max: T, nullCount: Long, avgLen: Long, maxLen: Long,
    * distinctCountsForIntervals: Array[Long]
    *
-   * Together with [[rowToColumnStat]], this function is used to create [[ColumnStat]] and as a
-   * result should stay in sync with it.
+   * Together with [[rowToColumnStat]], this function is used to create [[ColumnStat]] and
+   * as a result should stay in sync with it.
    */
   private def statExprs(
-      col: Attribute,
-      conf: SQLConf,
-      colPercentiles: AttributeMap[ArrayData]): CreateNamedStruct = {
+    col: Attribute,
+    conf: SQLConf,
+    colPercentiles: AttributeMap[ArrayData]): CreateNamedStruct = {
     def struct(exprs: Expression*): CreateNamedStruct = CreateStruct(exprs.map { expr =>
       expr.transformUp { case af: AggregateFunction => af.toAggregateExpression() }
     })
@@ -428,22 +398,14 @@ object CommandUtils extends Logging {
       val genHistogram =
         supportsHistogram(col.dataType) && colPercentiles.contains(col)
       val intervalNdvsExpr = if (genHistogram) {
-        ApproxCountDistinctForIntervals(
-          col,
-          Literal(colPercentiles(col), ArrayType(col.dataType)),
-          conf.ndvMaxError)
+        ApproxCountDistinctForIntervals(col,
+          Literal(colPercentiles(col), ArrayType(col.dataType)), conf.ndvMaxError)
       } else {
         nullArray
       }
       // For fixed width types, avg size should be the same as max size.
-      struct(
-        ndv,
-        Cast(Min(col), col.dataType),
-        Cast(Max(col), col.dataType),
-        numNulls,
-        defaultSize,
-        defaultSize,
-        intervalNdvsExpr)
+      struct(ndv, Cast(Min(col), col.dataType), Cast(Max(col), col.dataType), numNulls,
+        defaultSize, defaultSize, intervalNdvsExpr)
     }
 
     col.dataType match {
@@ -456,18 +418,14 @@ object CommandUtils extends Logging {
         // For string and binary type, we don't compute min, max or histogram
         val nullLit = Literal(null, col.dataType)
         struct(
-          ndv,
-          nullLit,
-          nullLit,
-          numNulls,
+          ndv, nullLit, nullLit, numNulls,
           // Set avg/max size to default size if all the values are null or there is no value.
           Coalesce(Seq(Ceil(Average(Length(col))), defaultSize)),
           Coalesce(Seq(Cast(Max(Length(col)), LongType), defaultSize)),
           nullArray)
       case _ =>
         throw QueryCompilationErrors.analyzingColumnStatisticsNotSupportedForColumnTypeError(
-          col.name,
-          col.dataType)
+          col.name, col.dataType)
     }
   }
 
@@ -476,10 +434,10 @@ object CommandUtils extends Logging {
    * [[org.apache.spark.sql.catalyst.plans.logical.ColumnStat]].
    */
   private def rowToColumnStat(
-      row: InternalRow,
-      attr: Attribute,
-      rowCount: Long,
-      percentiles: Option[ArrayData]): ColumnStat = {
+    row: InternalRow,
+    attr: Attribute,
+    rowCount: Long,
+    percentiles: Option[ArrayData]): ColumnStat = {
     // The first 6 fields are basic column stats, the 7th is ndvs for histogram bins.
     val cs = ColumnStat(
       distinctCount = Option(BigInt(row.getLong(0))),
@@ -488,7 +446,8 @@ object CommandUtils extends Logging {
       max = Option(row.get(2, attr.dataType)),
       nullCount = Option(BigInt(row.getLong(3))),
       avgLen = Option(row.getLong(4)),
-      maxLen = Option(row.getLong(5)))
+      maxLen = Option(row.getLong(5))
+    )
     if (row.isNullAt(6) || cs.nullCount.isEmpty) {
       cs
     } else {
@@ -566,8 +525,8 @@ object CommandUtils extends Logging {
       tableMeta: CatalogTable,
       partitionValueSpec: Option[TablePartitionSpec]): Map[TablePartitionSpec, BigInt] = {
     val filter = if (partitionValueSpec.isDefined) {
-      val filters = partitionValueSpec.get.map { case (columnName, value) =>
-        col(columnName) === lit(value)
+      val filters = partitionValueSpec.get.map {
+        case (columnName, value) => col(columnName) ===  lit(value)
       }
       filters.reduce(_ && _)
     } else {
@@ -579,19 +538,17 @@ object CommandUtils extends Logging {
 
     val df = tableDf.filter(filter).groupBy(partitionColumns: _*).count()
 
-    df.collect()
-      .map { r =>
-        val partitionColumnValues = partitionColumns.indices.map { i =>
-          if (r.isNullAt(i)) {
-            ExternalCatalogUtils.DEFAULT_PARTITION_NAME
-          } else {
-            r.get(i).toString
-          }
+    df.collect().map { r =>
+      val partitionColumnValues = partitionColumns.indices.map { i =>
+        if (r.isNullAt(i)) {
+          ExternalCatalogUtils.DEFAULT_PARTITION_NAME
+        } else {
+          r.get(i).toString
         }
-        val spec = Utils.toMap(tableMeta.partitionColumnNames, partitionColumnValues)
-        val count = BigInt(r.getLong(partitionColumns.size))
-        (spec, count)
       }
-      .toMap
+      val spec = Utils.toMap(tableMeta.partitionColumnNames, partitionColumnValues)
+      val count = BigInt(r.getLong(partitionColumns.size))
+      (spec, count)
+    }.toMap
   }
 }

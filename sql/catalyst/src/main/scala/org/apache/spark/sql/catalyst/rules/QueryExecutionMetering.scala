@@ -86,20 +86,16 @@ case class QueryExecutionMetering() {
     val colRunTime = "Effective Time / Total Time".padTo(len = 47, " ").mkString
     val colNumRuns = "Effective Runs / Total Runs".padTo(len = 47, " ").mkString
 
-    val ruleMetrics = map.toSeq
-      .sortBy(_._2)
-      .reverseIterator
-      .map { case (name, time) =>
-        val timeEffectiveRun = timeEffectiveRunsMap.get(name)
-        val numRuns = numRunsMap.get(name)
-        val numEffectiveRun = numEffectiveRunsMap.get(name)
+    val ruleMetrics = map.toSeq.sortBy(_._2).reverseIterator.map { case (name, time) =>
+      val timeEffectiveRun = timeEffectiveRunsMap.get(name)
+      val numRuns = numRunsMap.get(name)
+      val numEffectiveRun = numEffectiveRunsMap.get(name)
 
-        val ruleName = name.padTo(maxLengthRuleNames, " ").mkString
-        val runtimeValue = s"$timeEffectiveRun / $time".padTo(len = 47, " ").mkString
-        val numRunValue = s"$numEffectiveRun / $numRuns".padTo(len = 47, " ").mkString
-        s"$ruleName $runtimeValue $numRunValue"
-      }
-      .mkString("\n", "\n", "")
+      val ruleName = name.padTo(maxLengthRuleNames, " ").mkString
+      val runtimeValue = s"$timeEffectiveRun / $time".padTo(len = 47, " ").mkString
+      val numRunValue = s"$numEffectiveRun / $numRuns".padTo(len = 47, " ").mkString
+      s"$ruleName $runtimeValue $numRunValue"
+    }.mkString("\n", "\n", "")
 
     s"""
        |=== Metrics of Analyzer/Optimizer Rules ===

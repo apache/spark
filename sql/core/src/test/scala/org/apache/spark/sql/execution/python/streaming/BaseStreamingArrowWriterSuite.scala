@@ -38,11 +38,7 @@ class BaseStreamingArrowWriterSuite extends SparkFunSuite {
     writer = mock(classOf[ArrowStreamWriter])
     arrowWriter = mock(classOf[ArrowWriter])
     transformWithStateInPySparkWriter = new BaseStreamingArrowWriter(
-      root,
-      writer,
-      arrowMaxRecordsPerBatch,
-      arrowMaxBytesPerBatch,
-      arrowWriter)
+      root, writer, arrowMaxRecordsPerBatch, arrowMaxBytesPerBatch, arrowWriter)
   }
 
   test("test writeRow") {
@@ -82,8 +78,8 @@ class BaseStreamingArrowWriterSuite extends SparkFunSuite {
     when(arrowWriter.sizeInBytes()).thenAnswer { _ => sizeCounter.toLong }
 
     // Set arrowMaxBytesPerBatch to 1
-    transformWithStateInPySparkWriter =
-      new BaseStreamingArrowWriter(root, writer, arrowMaxRecordsPerBatch, 1, arrowWriter)
+    transformWithStateInPySparkWriter = new BaseStreamingArrowWriter(
+      root, writer, arrowMaxRecordsPerBatch, 1, arrowWriter)
     val dataRow = mock(classOf[InternalRow])
     transformWithStateInPySparkWriter.writeRow(dataRow)
     verify(arrowWriter).write(dataRow)
@@ -104,8 +100,8 @@ class BaseStreamingArrowWriterSuite extends SparkFunSuite {
     val dataRow = mock(classOf[InternalRow])
 
     // Test with negative value
-    transformWithStateInPySparkWriter =
-      new BaseStreamingArrowWriter(root, writer, -1, arrowMaxBytesPerBatch, arrowWriter)
+    transformWithStateInPySparkWriter = new BaseStreamingArrowWriter(
+      root, writer, -1, arrowMaxBytesPerBatch, arrowWriter)
 
     // Write many rows (more than typical batch size)
     for (_ <- 1 to 10) {
@@ -121,8 +117,8 @@ class BaseStreamingArrowWriterSuite extends SparkFunSuite {
     verify(writer).writeBatch()
 
     // Test with zero value
-    transformWithStateInPySparkWriter =
-      new BaseStreamingArrowWriter(root, writer, 0, arrowMaxBytesPerBatch, arrowWriter)
+    transformWithStateInPySparkWriter = new BaseStreamingArrowWriter(
+      root, writer, 0, arrowMaxBytesPerBatch, arrowWriter)
 
     // Write many rows again
     for (_ <- 1 to 10) {
@@ -131,7 +127,7 @@ class BaseStreamingArrowWriterSuite extends SparkFunSuite {
 
     // Verify rows were written but batch was not finalized
     verify(arrowWriter, times(20)).write(dataRow)
-    verify(writer).writeBatch() // still 1 from before
+    verify(writer).writeBatch()  // still 1 from before
 
     // Only finalize when explicitly called
     transformWithStateInPySparkWriter.finalizeCurrentArrowBatch()

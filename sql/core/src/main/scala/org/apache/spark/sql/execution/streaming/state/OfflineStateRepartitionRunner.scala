@@ -34,51 +34,46 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
 /**
  * Runs repartitioning for the state stores used by a streaming query.
  *
- * This class handles the process of creating a new microbatch, repartitioning state data across
- * new partitions, and committing the changes to the checkpoint i.e. if the last streaming batch
- * was batch `N`, this will create batch `N+1` with the repartitioned state. Note that this new
- * batch doesn't read input data from sources, it only represents the repartition operation. The
- * next time the streaming query is started, it will pick up from this new batch.
+ * This class handles the process of creating a new microbatch, repartitioning state data
+ * across new partitions, and committing the changes to the checkpoint i.e.
+ * if the last streaming batch was batch `N`, this will create batch `N+1` with the repartitioned
+ * state. Note that this new batch doesn't read input data from sources, it only represents the
+ * repartition operation. The next time the streaming query is started, it will pick up from
+ * this new batch.
  *
- * @param sparkSession
- *   The active Spark session
- * @param checkpointLocation
- *   The checkpoint location path
- * @param numPartitions
- *   The new number of partitions to repartition to
- * @param enforceExactlyOnceSink
- *   if we shouldn't allow skipping failed batches, to avoid duplicates in exactly once sinks.
+ * @param sparkSession The active Spark session
+ * @param checkpointLocation The checkpoint location path
+ * @param numPartitions The new number of partitions to repartition to
+ * @param enforceExactlyOnceSink if we shouldn't allow skipping failed batches,
+ *                               to avoid duplicates in exactly once sinks.
  */
 class OfflineStateRepartitionRunner(
     sparkSession: SparkSession,
     checkpointLocation: String,
     numPartitions: Int,
-    enforceExactlyOnceSink: Boolean = true)
-    extends Logging {
+    enforceExactlyOnceSink: Boolean = true) extends Logging {
 
   import OfflineStateRepartitionUtils._
 
   private val hadoopConf = sparkSession.sessionState.newHadoopConf()
 
-  private val resolvedCpLocation =
-    StreamingUtils.resolvedCheckpointLocation(hadoopConf, checkpointLocation)
+  private val resolvedCpLocation = StreamingUtils.resolvedCheckpointLocation(
+    hadoopConf, checkpointLocation)
 
-  private val checkpointMetadata =
-    new StreamingQueryCheckpointMetadata(sparkSession, resolvedCpLocation)
+  private val checkpointMetadata = new StreamingQueryCheckpointMetadata(
+    sparkSession, resolvedCpLocation)
 
   /**
-   * Runs a repartitioning batch and returns the batch ID. This will only return when the
-   * repartitioning is done.
+   * Runs a repartitioning batch and returns the batch ID.
+   * This will only return when the repartitioning is done.
    *
-   * @return
-   *   The repartition batch ID
+   * @return The repartition batch ID
    */
   def run(): Long = {
-    logInfo(
-      log"Starting offline state repartitioning for " +
-        log"checkpointLocation=${MDC(CHECKPOINT_LOCATION, checkpointLocation)}, " +
-        log"numPartitions=${MDC(NUM_PARTITIONS, numPartitions)}, " +
-        log"enforceExactlyOnceSink=${MDC(ENFORCE_EXACTLY_ONCE, enforceExactlyOnceSink)}")
+    logInfo(log"Starting offline state repartitioning for " +
+      log"checkpointLocation=${MDC(CHECKPOINT_LOCATION, checkpointLocation)}, " +
+      log"numPartitions=${MDC(NUM_PARTITIONS, numPartitions)}, " +
+      log"enforceExactlyOnceSink=${MDC(ENFORCE_EXACTLY_ONCE, enforceExactlyOnceSink)}")
 
     try {
       val (repartitionBatchId, durationMs) = Utils.timeTakenMs {
@@ -98,7 +93,8 @@ class OfflineStateRepartitionRunner(
           resolvedCpLocation,
           hadoopConf,
           transformFunc = Some(stateRepartitionFunc),
-          writeCheckpointMetadata = Some(checkpointMetadata))
+          writeCheckpointMetadata = Some(checkpointMetadata)
+        )
         val operatorToCkptIds = rewriter.run()
 
         updateNumPartitionsInOperatorMetadata(newBatchId, readBatchId = lastCommittedBatchId)
@@ -108,22 +104,19 @@ class OfflineStateRepartitionRunner(
         newBatchId
       }
 
-      logInfo(
-        log"Completed state repartitioning for " +
-          log"checkpointLocation=${MDC(CHECKPOINT_LOCATION, checkpointLocation)}, " +
-          log"numPartitions=${MDC(NUM_PARTITIONS, numPartitions)}, " +
-          log"enforceExactlyOnceSink=${MDC(ENFORCE_EXACTLY_ONCE, enforceExactlyOnceSink)}, " +
-          log"repartitionBatchId=${MDC(BATCH_ID, repartitionBatchId)}, " +
-          log"durationMs=${MDC(DURATION, durationMs)}")
+      logInfo(log"Completed state repartitioning for " +
+        log"checkpointLocation=${MDC(CHECKPOINT_LOCATION, checkpointLocation)}, " +
+        log"numPartitions=${MDC(NUM_PARTITIONS, numPartitions)}, " +
+        log"enforceExactlyOnceSink=${MDC(ENFORCE_EXACTLY_ONCE, enforceExactlyOnceSink)}, " +
+        log"repartitionBatchId=${MDC(BATCH_ID, repartitionBatchId)}, " +
+        log"durationMs=${MDC(DURATION, durationMs)}")
 
       repartitionBatchId
     } catch {
       case e: Throwable =>
-        logError(
-          log"State repartitioning failed for " +
-            log"checkpointLocation=${MDC(CHECKPOINT_LOCATION, checkpointLocation)}, " +
-            log"numPartitions=${MDC(NUM_PARTITIONS, numPartitions)}",
-          e)
+        logError(log"State repartitioning failed for " +
+          log"checkpointLocation=${MDC(CHECKPOINT_LOCATION, checkpointLocation)}, " +
+          log"numPartitions=${MDC(NUM_PARTITIONS, numPartitions)}", e)
         throw e
     }
   }
@@ -153,24 +146,21 @@ class OfflineStateRepartitionRunner(
         // If it is a failed repartition batch, lets check if the shuffle partitions
         // is the same as the requested. If same, then we can retry the batch.
         val lastBatch = checkpointMetadata.offsetLog.get(lastBatchId).get
-        val lastBatchShufflePartitions = getShufflePartitions(lastBatch.metadataOpt.get).get
+        val lastBatchShufflePartitions = getShufflePartitions(
+          lastBatch.metadataOpt.get).get
         if (lastBatchShufflePartitions == numPartitions) {
           // We can retry the repartition batch.
-          logInfo(
-            log"The last batch is a failed repartition batch " +
-              log"(batchId=${MDC(BATCH_ID, lastBatchId)}). " +
-              log"Retrying it since it used the same number of shuffle partitions " +
-              log"as the requested ${MDC(NUM_PARTITIONS, numPartitions)}.")
+          logInfo(log"The last batch is a failed repartition batch " +
+            log"(batchId=${MDC(BATCH_ID, lastBatchId)}). " +
+            log"Retrying it since it used the same number of shuffle partitions " +
+            log"as the requested ${MDC(NUM_PARTITIONS, numPartitions)}.")
           lastBatchId
         } else {
           // Failed repartition should be retried with the same number of shuffle partitions.
           // Once that completes successfully, then can repartition to another number
           // of shuffle partitions.
           throw OfflineStateRepartitionErrors.lastBatchAbandonedRepartitionError(
-            checkpointLocation,
-            lastBatchId,
-            lastBatchShufflePartitions,
-            numPartitions)
+            checkpointLocation, lastBatchId, lastBatchShufflePartitions, numPartitions)
         }
       } else {
         if (enforceExactlyOnceSink) {
@@ -178,9 +168,7 @@ class OfflineStateRepartitionRunner(
           // Before proceeding with repartitioning, since repartitioning produces a new batch.
           // If we skip the unsuccessful batch, this can cause duplicates in exactly-once sinks
           // which uses the batchId to track already committed data.
-          throw OfflineStateRepartitionErrors.lastBatchFailedError(
-            checkpointLocation,
-            lastBatchId)
+          throw OfflineStateRepartitionErrors.lastBatchFailedError(checkpointLocation, lastBatchId)
         } else {
           // We can skip the uncommitted batches. And repartition using the last committed
           // batch state. Note that input data from the skipped failed batch will be reprocessed
@@ -194,8 +182,7 @@ class OfflineStateRepartitionRunner(
   }
 
   private def skipUncommittedBatches(lastBatchId: Long, lastCommittedBatchId: Long): Unit = {
-    assert(
-      lastBatchId > lastCommittedBatchId,
+    assert(lastBatchId > lastCommittedBatchId,
       "Last batch ID must be greater than last committed batch ID")
 
     val fromBatchId = lastCommittedBatchId + 1
@@ -206,54 +193,46 @@ class OfflineStateRepartitionRunner(
       }
     }
 
-    logInfo(
-      log"Skipped uncommitted batches from batchId " +
-        log"${MDC(BATCH_ID, fromBatchId)} to ${MDC(BATCH_ID, lastBatchId)}")
+    logInfo(log"Skipped uncommitted batches from batchId " +
+      log"${MDC(BATCH_ID, fromBatchId)} to ${MDC(BATCH_ID, lastBatchId)}")
   }
 
   /**
-   * Creates a new offset log entry for the repartition batch using the OffsetSeq of the last
-   * committed batch. But with a new number of partitions.
+   * Creates a new offset log entry for the repartition batch using the OffsetSeq
+   * of the last committed batch. But with a new number of partitions.
    */
   private def createNewBatchFromLastCommitted(
       lastBatchId: Long,
       lastCommittedBatchId: Long): Long = {
     val newBatchId = lastBatchId + 1
     // We want to repartition the state as of the last committed batch.
-    val lastCommittedOffsetSeq = checkpointMetadata.offsetLog
-      .get(lastCommittedBatchId)
+    val lastCommittedOffsetSeq = checkpointMetadata.offsetLog.get(lastCommittedBatchId)
       .getOrElse(throw OfflineStateRepartitionErrors
         .offsetSeqNotFoundError(checkpointLocation, lastCommittedBatchId))
 
     // Missing offset metadata not supported
     val lastCommittedMetadata = lastCommittedOffsetSeq.metadataOpt.getOrElse(
       throw OfflineStateRepartitionErrors.missingOffsetSeqMetadataError(
-        checkpointLocation,
-        version = 1,
-        batchId = lastCommittedBatchId))
+        checkpointLocation, version = 1, batchId = lastCommittedBatchId)
+    )
 
     // No-op if the number of shuffle partitions in last commit is the same as the requested.
     if (getShufflePartitions(lastCommittedMetadata).get == numPartitions) {
       throw OfflineStateRepartitionErrors.shufflePartitionsAlreadyMatchError(
-        checkpointLocation,
-        lastCommittedBatchId,
-        numPartitions)
+        checkpointLocation, lastCommittedBatchId, numPartitions)
     }
 
     // Create a new offset log entry from the last committed but with updated num shuffle partitions
     val newOffsetSeq = lastCommittedOffsetSeq match {
       case v1: OffsetSeq =>
         val metadata = v1.metadataOpt.get.asInstanceOf[OffsetSeqMetadata]
-        v1.copy(metadataOpt = Some(
-          metadata.copy(conf =
-            metadata.conf + (SQLConf.SHUFFLE_PARTITIONS.key -> numPartitions.toString))))
+        v1.copy(metadataOpt = Some(metadata.copy(
+          conf = metadata.conf + (SQLConf.SHUFFLE_PARTITIONS.key -> numPartitions.toString))))
       case v2: OffsetMap =>
-        v2.copy(metadata = v2.metadata.copy(conf =
-          v2.metadata.conf + (SQLConf.SHUFFLE_PARTITIONS.key -> numPartitions.toString)))
-      case _ =>
-        throw OfflineStateRepartitionErrors.unsupportedOffsetSeqVersionError(
-          checkpointLocation,
-          version = -1)
+        v2.copy(metadata = v2.metadata.copy(
+          conf = v2.metadata.conf + (SQLConf.SHUFFLE_PARTITIONS.key -> numPartitions.toString)))
+      case _ => throw OfflineStateRepartitionErrors.unsupportedOffsetSeqVersionError(
+        checkpointLocation, version = -1)
     }
 
     // Will fail if there is a concurrent operation on going
@@ -261,14 +240,15 @@ class OfflineStateRepartitionRunner(
       throw QueryExecutionErrors.concurrentStreamLogUpdate(newBatchId)
     }
 
-    logInfo(
-      log"Created new offset log entry for repartition batch. " +
-        log"batchId=${MDC(BATCH_ID, newBatchId)}")
+    logInfo(log"Created new offset log entry for repartition batch. " +
+      log"batchId=${MDC(BATCH_ID, newBatchId)}")
 
     newBatchId
   }
 
-  private def updateNumPartitionsInOperatorMetadata(newBatchId: Long, readBatchId: Long): Unit = {
+  private def updateNumPartitionsInOperatorMetadata(
+      newBatchId: Long,
+      readBatchId: Long): Unit = {
     val stateMetadataReader = new StateMetadataPartitionReader(
       resolvedCpLocation,
       new SerializableConfiguration(hadoopConf),
@@ -277,8 +257,8 @@ class OfflineStateRepartitionRunner(
     val allOperatorsMetadata = stateMetadataReader.allOperatorStateMetadata
     assert(allOperatorsMetadata.nonEmpty, "Operator metadata shouldn't be empty")
 
-    val stateRootLocation =
-      new Path(resolvedCpLocation, StreamingCheckpointConstants.DIR_NAME_STATE).toString
+    val stateRootLocation = new Path(
+      resolvedCpLocation, StreamingCheckpointConstants.DIR_NAME_STATE).toString
 
     allOperatorsMetadata.foreach { opMetadata =>
       opMetadata match {
@@ -298,15 +278,13 @@ class OfflineStateRepartitionRunner(
             Some(newBatchId))
           metadataWriter.write(updatedMetadata)
 
-          logInfo(
-            log"Updated operator metadata for " +
-              log"operator=${MDC(OP_TYPE, updatedMetadata.operatorInfo.operatorName)}, " +
-              log"numStateStores=${MDC(COUNT, updatedMetadata.stateStoreInfo.length)}")
+          logInfo(log"Updated operator metadata for " +
+            log"operator=${MDC(OP_TYPE, updatedMetadata.operatorInfo.operatorName)}, " +
+            log"numStateStores=${MDC(COUNT, updatedMetadata.stateStoreInfo.length)}")
         case v =>
-          logInfo(
-            log"Skipping operator metadata update for " +
-              log"operator=${MDC(OP_TYPE, v.operatorInfo.operatorName)}, " +
-              log"since metadata version(${MDC(FILE_VERSION, v.version)}) is not versioned")
+          logInfo(log"Skipping operator metadata update for " +
+            log"operator=${MDC(OP_TYPE, v.operatorInfo.operatorName)}, " +
+            log"since metadata version(${MDC(FILE_VERSION, v.version)}) is not versioned")
       }
     }
   }

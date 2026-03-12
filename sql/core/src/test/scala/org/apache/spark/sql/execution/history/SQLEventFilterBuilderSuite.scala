@@ -41,8 +41,13 @@ class SQLEventFilterBuilderSuite extends SparkFunSuite {
 
     // Start the application.
     time += 1
-    listener.onApplicationStart(
-      SparkListenerApplicationStart("name", Some("id"), time, "user", Some("attempt"), None))
+    listener.onApplicationStart(SparkListenerApplicationStart(
+      "name",
+      Some("id"),
+      time,
+      "user",
+      Some("attempt"),
+      None))
 
     // Start a couple of executors.
     time += 1
@@ -53,15 +58,8 @@ class SQLEventFilterBuilderSuite extends SparkFunSuite {
 
     // Start SQL Execution
     listener.onOtherEvent(
-      SparkListenerSQLExecutionStart(
-        1,
-        Some(1),
-        "desc1",
-        "details1",
-        "plan",
-        new SparkPlanInfo("node", "str", Seq.empty, Map.empty, Seq.empty),
-        time,
-        Map.empty))
+      SparkListenerSQLExecutionStart(1, Some(1), "desc1", "details1", "plan",
+      new SparkPlanInfo("node", "str", Seq.empty, Map.empty, Seq.empty), time, Map.empty))
 
     time += 1
 
@@ -69,12 +67,12 @@ class SQLEventFilterBuilderSuite extends SparkFunSuite {
     val jobProp = createJobProps()
     val jobPropWithSqlExecution = new Properties(jobProp)
     jobPropWithSqlExecution.setProperty(SQLExecution.EXECUTION_ID_KEY, "1")
-    val jobInfoForJob1 =
-      pushJobEventsWithoutJobEnd(listener, 1, jobPropWithSqlExecution, execIds, time)
+    val jobInfoForJob1 = pushJobEventsWithoutJobEnd(listener, 1, jobPropWithSqlExecution,
+      execIds, time)
     listener.onJobEnd(SparkListenerJobEnd(1, time, JobSucceeded))
 
-    val jobInfoForJob2 =
-      pushJobEventsWithoutJobEnd(listener, 2, jobPropWithSqlExecution, execIds, time)
+    val jobInfoForJob2 = pushJobEventsWithoutJobEnd(listener, 2, jobPropWithSqlExecution,
+      execIds, time)
     listener.onJobEnd(SparkListenerJobEnd(2, time, JobSucceeded))
 
     // job 3: not coupled with SQL execution 1, finished
@@ -89,17 +87,14 @@ class SQLEventFilterBuilderSuite extends SparkFunSuite {
 
     // only SQL executions related jobs are tracked
     assert(listener.liveJobs === Set(1, 2))
-    assert(
-      listener.liveStages ===
-        (jobInfoForJob1.stageIds ++ jobInfoForJob2.stageIds).toSet)
-    assert(
-      listener.liveTasks ===
-        (jobInfoForJob1.stageToTaskIds.values.flatten ++
-          jobInfoForJob2.stageToTaskIds.values.flatten).toSet)
-    assert(
-      listener.liveRDDs ===
-        (jobInfoForJob1.stageToRddIds.values.flatten ++
-          jobInfoForJob2.stageToRddIds.values.flatten).toSet)
+    assert(listener.liveStages ===
+      (jobInfoForJob1.stageIds ++ jobInfoForJob2.stageIds).toSet)
+    assert(listener.liveTasks ===
+      (jobInfoForJob1.stageToTaskIds.values.flatten ++
+        jobInfoForJob2.stageToTaskIds.values.flatten).toSet)
+    assert(listener.liveRDDs ===
+      (jobInfoForJob1.stageToRddIds.values.flatten ++
+        jobInfoForJob2.stageToRddIds.values.flatten).toSet)
 
     // End SQL execution
     listener.onOtherEvent(SparkListenerSQLExecutionEnd(1, 0))

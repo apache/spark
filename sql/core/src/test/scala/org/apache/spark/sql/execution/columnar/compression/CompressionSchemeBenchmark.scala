@@ -31,7 +31,8 @@ import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.Utils._
 
 /**
- * Benchmark to decoders using various compression schemes. To run this benchmark:
+ * Benchmark to decoders using various compression schemes.
+ * To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class>
@@ -58,10 +59,10 @@ object CompressionSchemeBenchmark extends BenchmarkBase with AllCompressionSchem
   }
 
   private[this] def prepareEncodeInternal[T <: PhysicalDataType](
-      count: Int,
-      tpe: NativeColumnType[T],
-      supportedScheme: CompressionScheme,
-      input: ByteBuffer): ((ByteBuffer, ByteBuffer) => ByteBuffer, Double, ByteBuffer) = {
+    count: Int,
+    tpe: NativeColumnType[T],
+    supportedScheme: CompressionScheme,
+    input: ByteBuffer): ((ByteBuffer, ByteBuffer) => ByteBuffer, Double, ByteBuffer) = {
     assert(supportedScheme.supports(tpe))
 
     def toRow(d: Any) = new GenericInternalRow(Array[Any](d))
@@ -221,8 +222,7 @@ object CompressionSchemeBenchmark extends BenchmarkBase with AllCompressionSchem
     val testData = allocateLocal(count * (4 + strLen))
 
     val g = {
-      val dataTable =
-        (0 until tableSize).map(_ => RandomStringUtils.secure.nextAlphabetic(strLen))
+      val dataTable = (0 until tableSize).map(_ => RandomStringUtils.secure.nextAlphabetic(strLen))
       val rng = genHigherSkewData()
       () => dataTable(rng().toInt % tableSize)
     }

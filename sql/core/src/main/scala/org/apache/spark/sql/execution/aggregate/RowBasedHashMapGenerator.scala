@@ -25,11 +25,11 @@ import org.apache.spark.sql.types._
 /**
  * This is a helper class to generate an append-only row-based hash map that can act as a 'cache'
  * for extremely fast key-value lookups while evaluating aggregates (and fall back to the
- * `BytesToBytesMap` if a given key isn't found). This is 'codegened' in HashAggregate to speed up
- * aggregates w/ key.
+ * `BytesToBytesMap` if a given key isn't found). This is 'codegened' in HashAggregate to speed
+ * up aggregates w/ key.
  *
- * We also have VectorizedHashMapGenerator, which generates a append-only vectorized hash map. We
- * choose one of the two as the 1st level, fast hash map during aggregation.
+ * We also have VectorizedHashMapGenerator, which generates a append-only vectorized hash map.
+ * We choose one of the two as the 1st level, fast hash map during aggregation.
  *
  * NOTE: This row-based hash map currently doesn't support nullable keys and falls back to the
  * `BytesToBytesMap` to store them.
@@ -41,12 +41,8 @@ class RowBasedHashMapGenerator(
     groupingKeySchema: StructType,
     bufferSchema: StructType,
     bitMaxCapacity: Int)
-    extends HashMapGenerator(
-      ctx,
-      aggregateExpressions,
-      generatedClassName,
-      groupingKeySchema,
-      bufferSchema) {
+  extends HashMapGenerator (ctx, aggregateExpressions, generatedClassName,
+    groupingKeySchema, bufferSchema) {
 
   override protected def initializeAggregateHashMap(): String = {
     val keySchema = ctx.addReferenceObj("keySchemaTerm", groupingKeySchema)
@@ -98,18 +94,15 @@ class RowBasedHashMapGenerator(
   /**
    * Generates a method that returns true if the group-by keys exist at a given index in the
    * associated [[org.apache.spark.sql.catalyst.expressions.RowBasedKeyValueBatch]].
+   *
    */
   protected def generateEquals(): String = {
 
     def genEqualsForKeys(groupingKeys: Seq[Buffer]): String = {
-      groupingKeys.zipWithIndex
-        .map { case (key: Buffer, ordinal: Int) =>
-          s"""(${ctx.genEqual(
-              key.dataType,
-              CodeGenerator.getValue("row", key.dataType, ordinal.toString()),
-              key.name)})"""
-        }
-        .mkString(" && ")
+      groupingKeys.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
+        s"""(${ctx.genEqual(key.dataType, CodeGenerator.getValue("row",
+          key.dataType, ordinal.toString()), key.name)})"""
+      }.mkString(" && ")
     }
 
     s"""
@@ -121,26 +114,26 @@ class RowBasedHashMapGenerator(
   }
 
   /**
-   * Generates a method that returns a [[org.apache.spark.sql.catalyst.expressions.UnsafeRow]]
-   * which keeps track of the aggregate value(s) for a given set of keys. If the corresponding row
-   * doesn't exist, the generated method adds the corresponding row in the associated
+   * Generates a method that returns a
+   * [[org.apache.spark.sql.catalyst.expressions.UnsafeRow]] which keeps track of the
+   * aggregate value(s) for a given set of keys. If the corresponding row doesn't exist, the
+   * generated method adds the corresponding row in the associated
    * [[org.apache.spark.sql.catalyst.expressions.RowBasedKeyValueBatch]].
+   *
    */
-  protected def generateFindOrInsert(): String = {
-    val createUnsafeRowForKey = groupingKeys.zipWithIndex
-      .map { case (key: Buffer, ordinal: Int) =>
-        key.dataType match {
-          case t: DecimalType =>
-            s"agg_rowWriter.write(${ordinal}, ${key.name}, ${t.precision}, ${t.scale})"
-          case t: DataType =>
-            if (!t.isInstanceOf[StringType] && !t.isInstanceOf[CalendarIntervalType] &&
-              !CodeGenerator.isPrimitiveType(t)) {
-              throw new IllegalArgumentException(s"cannot generate code for unsupported type: $t")
-            }
-            s"agg_rowWriter.write(${ordinal}, ${key.name})"
-        }
+   protected def generateFindOrInsert(): String = {
+    val createUnsafeRowForKey = groupingKeys.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
+      key.dataType match {
+        case t: DecimalType =>
+          s"agg_rowWriter.write(${ordinal}, ${key.name}, ${t.precision}, ${t.scale})"
+        case t: DataType =>
+          if (!t.isInstanceOf[StringType] && !t.isInstanceOf[CalendarIntervalType] &&
+            !CodeGenerator.isPrimitiveType(t)) {
+            throw new IllegalArgumentException(s"cannot generate code for unsupported type: $t")
+          }
+          s"agg_rowWriter.write(${ordinal}, ${key.name})"
       }
-      .mkString(";\n")
+    }.mkString(";\n")
 
     val resetNullBits = if (groupingKeySchema.map(_.nullable).forall(_ == false)) {
       ""
@@ -149,7 +142,8 @@ class RowBasedHashMapGenerator(
     }
 
     s"""
-       |public org.apache.spark.sql.catalyst.expressions.UnsafeRow findOrInsert(${groupingKeySignature}) {
+       |public org.apache.spark.sql.catalyst.expressions.UnsafeRow findOrInsert(${
+            groupingKeySignature}) {
        |  long h = hash(${groupingKeys.map(_.name).mkString(", ")});
        |  int step = 0;
        |  int idx = (int) h & (numBuckets - 1);

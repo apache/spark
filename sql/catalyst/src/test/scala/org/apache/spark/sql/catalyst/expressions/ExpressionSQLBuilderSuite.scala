@@ -36,7 +36,8 @@ class ExpressionSQLBuilderSuite extends SparkFunSuite {
       assert(actualSQL == expectedSQL)
     } catch {
       case cause: Throwable =>
-        fail(s"""Wrong SQL generated for the following expression:
+        fail(
+          s"""Wrong SQL generated for the following expression:
              |
              |${e.prettyName}
              |
@@ -71,22 +72,21 @@ class ExpressionSQLBuilderSuite extends SparkFunSuite {
     checkSQL(Literal(2: Short), "2S")
     checkSQL(Literal(4: Int), "4")
     checkSQL(Literal(8: Long), "8L")
-    checkSQL(Literal(1.5f), "CAST('1.5' AS FLOAT)")
+    checkSQL(Literal(1.5F), "CAST('1.5' AS FLOAT)")
     checkSQL(Literal(Float.PositiveInfinity), "CAST('Infinity' AS FLOAT)")
     checkSQL(Literal(Float.NegativeInfinity), "CAST('-Infinity' AS FLOAT)")
     checkSQL(Literal(Float.NaN), "CAST('NaN' AS FLOAT)")
     checkSQL(Literal(Float.MinPositiveValue), "CAST('1.4E-45' AS FLOAT)")
-    checkSQL(Literal(2.5d), "2.5D")
+    checkSQL(Literal(2.5D), "2.5D")
     checkSQL(Literal(Double.PositiveInfinity), "CAST('Infinity' AS DOUBLE)")
     checkSQL(Literal(Double.NegativeInfinity), "CAST('-Infinity' AS DOUBLE)")
     checkSQL(Literal(Double.NaN), "CAST('NaN' AS DOUBLE)")
     checkSQL(Literal(Double.MinPositiveValue), "4.9E-324D")
     checkSQL(Literal(BigDecimal("10.0000000").underlying), "10.0000000BD")
-    checkSQL(Literal(Array(0x01, 0xa3).map(_.toByte)), "X'01A3'")
+    checkSQL(Literal(Array(0x01, 0xA3).map(_.toByte)), "X'01A3'")
 
     // Nanos are truncated, but micros should not be
-    val timestamp = LocalDateTime
-      .of(2016, 1, 1, 0, 0, 0, 987654321)
+    val timestamp = LocalDateTime.of(2016, 1, 1, 0, 0, 0, 987654321)
       .atZone(DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
       .toInstant
     checkSQL(Literal(timestamp), "TIMESTAMP '2016-01-01 00:00:00.987654'")
@@ -138,37 +138,49 @@ class ExpressionSQLBuilderSuite extends SparkFunSuite {
   test("window specification") {
     val frame = SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow)
 
-    checkSQL(WindowSpecDefinition($"a".int :: Nil, Nil, frame), s"(PARTITION BY a ${frame.sql})")
+    checkSQL(
+      WindowSpecDefinition($"a".int :: Nil, Nil, frame),
+      s"(PARTITION BY a ${frame.sql})"
+    )
 
     checkSQL(
       WindowSpecDefinition($"a".int :: $"b".string :: Nil, Nil, frame),
-      s"(PARTITION BY a, b ${frame.sql})")
+      s"(PARTITION BY a, b ${frame.sql})"
+    )
 
     checkSQL(
       WindowSpecDefinition(Nil, $"a".int.asc :: Nil, frame),
-      s"(ORDER BY a ASC NULLS FIRST ${frame.sql})")
+      s"(ORDER BY a ASC NULLS FIRST ${frame.sql})"
+    )
 
     checkSQL(
       WindowSpecDefinition(Nil, $"a".int.asc :: $"b".string.desc :: Nil, frame),
-      s"(ORDER BY a ASC NULLS FIRST, b DESC NULLS LAST ${frame.sql})")
+      s"(ORDER BY a ASC NULLS FIRST, b DESC NULLS LAST ${frame.sql})"
+    )
 
     checkSQL(
-      WindowSpecDefinition(
-        $"a".int :: $"b".string :: Nil,
-        $"c".int.asc :: $"d".string.desc :: Nil,
-        frame),
-      s"(PARTITION BY a, b ORDER BY c ASC NULLS FIRST, d DESC NULLS LAST ${frame.sql})")
+      WindowSpecDefinition($"a".int :: $"b".string :: Nil,
+        $"c".int.asc :: $"d".string.desc :: Nil, frame),
+      s"(PARTITION BY a, b ORDER BY c ASC NULLS FIRST, d DESC NULLS LAST ${frame.sql})"
+    )
   }
 
   test("interval arithmetic") {
     val interval = Literal(new CalendarInterval(0, 0, MICROS_PER_HOUR))
 
-    checkSQL(TimestampAddInterval($"a", interval), "a + INTERVAL '1 hours'")
+    checkSQL(
+      TimestampAddInterval($"a", interval),
+      "a + INTERVAL '1 hours'"
+    )
 
     checkSQL(
       DatetimeSub($"a", interval, Literal.default(TimestampType)),
-      "a - INTERVAL '1 hours'")
+      "a - INTERVAL '1 hours'"
+    )
 
-    checkSQL(DateAddInterval($"a", interval), "a + INTERVAL '1 hours'")
+    checkSQL(
+      DateAddInterval($"a", interval),
+      "a + INTERVAL '1 hours'"
+    )
   }
 }

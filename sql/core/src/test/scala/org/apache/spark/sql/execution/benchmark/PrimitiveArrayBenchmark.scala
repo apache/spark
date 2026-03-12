@@ -22,19 +22,19 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.util.collection.Utils.createArray
 
 /**
- * Benchmark primitive arrays via DataFrame and Dataset program using primitive arrays To run this
- * benchmark:
- *   1. without sbt: bin/spark-submit --class <this class> --jars <spark core test jar>,<spark
- *      catalyst test jar> < spark sql test jar>
- *   2. build/sbt "sql/Test/runMain <this class>"
- *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this
- *      class>" Results will be written to "benchmarks/PrimitiveArrayBenchmark-results.txt".
+ * Benchmark primitive arrays via DataFrame and Dataset program using primitive arrays
+ * To run this benchmark:
+ * 1. without sbt:
+ *    bin/spark-submit --class <this class>
+ *      --jars <spark core test jar>,<spark catalyst test jar> < spark sql test jar>
+ * 2. build/sbt "sql/Test/runMain <this class>"
+ * 3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
+ *    Results will be written to "benchmarks/PrimitiveArrayBenchmark-results.txt".
  */
 object PrimitiveArrayBenchmark extends SqlBasedBenchmark {
 
   override def getSparkSession: SparkSession = {
-    SparkSession
-      .builder()
+    SparkSession.builder()
       .master("local[1]")
       .appName("microbenchmark")
       .config("spark.sql.shuffle.partitions", 1)
@@ -56,7 +56,7 @@ object PrimitiveArrayBenchmark extends SqlBasedBenchmark {
     val sc = spark.sparkContext
     val primitiveIntArray = createArray(count, 65535)
     val dsInt = sc.parallelize(Seq(primitiveIntArray), 1).toDS()
-    dsInt.count() // force to build dataset
+    dsInt.count()  // force to build dataset
     val intArray = { i: Int =>
       var n = 0
       var len = 0
@@ -67,7 +67,7 @@ object PrimitiveArrayBenchmark extends SqlBasedBenchmark {
     }
     val primitiveDoubleArray = createArray(count, 65535.0)
     val dsDouble = sc.parallelize(Seq(primitiveDoubleArray), 1).toDS()
-    dsDouble.count() // force to build dataset
+    dsDouble.count()  // force to build dataset
     val doubleArray = { i: Int =>
       var n = 0
       var len = 0

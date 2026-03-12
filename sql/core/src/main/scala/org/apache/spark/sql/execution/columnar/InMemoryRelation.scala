@@ -44,72 +44,55 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * The default implementation of CachedBatch.
  *
- * @param numRows
- *   The total number of rows in this batch
- * @param buffers
- *   The buffers for serialized columns
- * @param stats
- *   The stat of columns
+ * @param numRows The total number of rows in this batch
+ * @param buffers The buffers for serialized columns
+ * @param stats The stat of columns
  */
 @DefaultSerializer(classOf[DefaultCachedBatchKryoSerializer])
-case class DefaultCachedBatch(numRows: Int, buffers: Array[Array[Byte]], stats: InternalRow)
-    extends SimpleMetricsCachedBatch
+case class DefaultCachedBatch(
+     numRows: Int,
+     buffers: Array[Array[Byte]],
+     stats: InternalRow)
+  extends SimpleMetricsCachedBatch
 
 class DefaultCachedBatchKryoSerializer extends KryoSerializer[DefaultCachedBatch] {
   override def write(kryo: Kryo, output: KryoOutput, batch: DefaultCachedBatch): Unit = {
     output.writeInt(batch.numRows)
-    SparkException.require(
-      batch.buffers != null,
-      "INVALID_KRYO_SERIALIZER_NO_DATA",
-      Map(
-        "obj" -> "DefaultCachedBatch.buffers",
+    SparkException.require(batch.buffers != null, "INVALID_KRYO_SERIALIZER_NO_DATA",
+      Map("obj" -> "DefaultCachedBatch.buffers",
         "serdeOp" -> "serialize",
         "serdeClass" -> this.getClass.getName))
     output.writeInt(batch.buffers.length + 1) // +1 to distinguish Kryo.NULL
     for (i <- batch.buffers.indices) {
       val buffer = batch.buffers(i)
-      SparkException.require(
-        buffer != null,
-        "INVALID_KRYO_SERIALIZER_NO_DATA",
-        Map(
-          "obj" -> s"DefaultCachedBatch.buffers($i)",
-          "serdeOp" -> "serialize",
-          "serdeClass" -> this.getClass.getName))
-      output.writeInt(buffer.length + 1) // +1 to distinguish Kryo.NULL
+        SparkException.require(buffer != null, "INVALID_KRYO_SERIALIZER_NO_DATA",
+          Map("obj" -> s"DefaultCachedBatch.buffers($i)",
+            "serdeOp" -> "serialize",
+            "serdeClass" -> this.getClass.getName))
+      output.writeInt(buffer.length + 1)  // +1 to distinguish Kryo.NULL
       output.writeBytes(buffer)
     }
     kryo.writeClassAndObject(output, batch.stats)
   }
 
   override def read(
-      kryo: Kryo,
-      input: KryoInput,
-      cls: Class[DefaultCachedBatch]): DefaultCachedBatch = {
+      kryo: Kryo, input: KryoInput, cls: Class[DefaultCachedBatch]): DefaultCachedBatch = {
     val numRows = input.readInt()
     val length = input.readInt()
-    SparkException.require(
-      length != Kryo.NULL,
-      "INVALID_KRYO_SERIALIZER_NO_DATA",
-      Map(
-        "obj" -> "DefaultCachedBatch.buffers",
+    SparkException.require(length != Kryo.NULL, "INVALID_KRYO_SERIALIZER_NO_DATA",
+      Map("obj" -> "DefaultCachedBatch.buffers",
         "serdeOp" -> "deserialize",
         "serdeClass" -> this.getClass.getName))
-    val buffers = 0
-      .until(length - 1)
-      .map { i => // -1 to restore
-        val subLength = input.readInt()
-        SparkException.require(
-          subLength != Kryo.NULL,
-          "INVALID_KRYO_SERIALIZER_NO_DATA",
-          Map(
-            "obj" -> s"DefaultCachedBatch.buffers($i)",
-            "serdeOp" -> "deserialize",
-            "serdeClass" -> this.getClass.getName))
-        val innerArray = new Array[Byte](subLength - 1) // -1 to restore
-        input.readBytes(innerArray)
-        innerArray
-      }
-      .toArray
+    val buffers = 0.until(length - 1).map { i => // -1 to restore
+      val subLength = input.readInt()
+      SparkException.require(subLength != Kryo.NULL, "INVALID_KRYO_SERIALIZER_NO_DATA",
+          Map("obj" -> s"DefaultCachedBatch.buffers($i)",
+          "serdeOp" -> "deserialize",
+          "serdeClass" -> this.getClass.getName))
+      val innerArray = new Array[Byte](subLength - 1) // -1 to restore
+      input.readBytes(innerArray)
+      innerArray
+    }.toArray
     val stats = kryo.readClassAndObject(input).asInstanceOf[InternalRow]
     DefaultCachedBatch(numRows, buffers, stats)
   }
@@ -153,7 +136,7 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
           var rowCount = 0
           var totalSize = 0L
           while (rowIterator.hasNext && rowCount < batchSize
-            && totalSize < ColumnBuilder.MAX_BATCH_SIZE_IN_BYTE) {
+              && totalSize < ColumnBuilder.MAX_BATCH_SIZE_IN_BYTE) {
             val row = rowIterator.next()
 
             // Added for SPARK-6082. This assertion can be useful for scenarios when something
@@ -163,8 +146,8 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
             assert(
               row.numFields == columnBuilders.length,
               s"Row column number mismatch, expected ${output.size} columns, " +
-                s"but got ${row.numFields}." +
-                s"\nRow content: $row")
+                  s"but got ${row.numFields}." +
+                  s"\nRow content: $row")
 
             var i = 0
             totalSize = 0
@@ -176,14 +159,11 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
             rowCount += 1
           }
 
-          val stats =
-            new GenericInternalRow(columnBuilders.flatMap(_.columnStats.collectedStatistics))
-          DefaultCachedBatch(
-            rowCount,
-            columnBuilders.map { builder =>
-              JavaUtils.bufferToArray(builder.build())
-            },
-            stats)
+          val stats = new GenericInternalRow(
+            columnBuilders.flatMap(_.columnStats.collectedStatistics))
+          DefaultCachedBatch(rowCount, columnBuilders.map { builder =>
+            JavaUtils.bufferToArray(builder.build())
+          }, stats)
         }
 
         def hasNext: Boolean = rowIterator.hasNext
@@ -195,17 +175,19 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
     f.dataType match {
       // More types can be supported, but this is to match the original implementation that
       // only supported primitive types "for ease of review"
-      case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType =>
-        true
+      case BooleanType | ByteType | ShortType | IntegerType | LongType |
+           FloatType | DoubleType => true
       case _ => false
     })
 
   override def vectorTypes(attributes: Seq[Attribute], conf: SQLConf): Option[Seq[String]] =
-    Option(Seq.fill(attributes.length)(if (!conf.offHeapColumnVectorEnabled) {
-      classOf[OnHeapColumnVector].getName
-    } else {
-      classOf[OffHeapColumnVector].getName
-    }))
+    Option(Seq.fill(attributes.length)(
+      if (!conf.offHeapColumnVectorEnabled) {
+        classOf[OnHeapColumnVector].getName
+      } else {
+        classOf[OffHeapColumnVector].getName
+      }
+    ))
 
   override def convertCachedBatchToColumnarBatch(
       input: RDD[CachedBatch],
@@ -233,8 +215,7 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
         ColumnAccessor.decompress(
           cachedColumnarBatch.buffers(columnIndices(i)),
           columnarBatch.column(i).asInstanceOf[WritableColumnVector],
-          outputSchema.fields(i).dataType,
-          rowCount)
+          outputSchema.fields(i).dataType, rowCount)
       }
       taskContext.foreach(_.addTaskCompletionListener[Unit](_ => columnarBatch.close()))
       columnarBatch
@@ -261,8 +242,7 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
 
     input.mapPartitionsInternal { cachedBatchIterator =>
       val columnarIterator = GenerateColumnAccessor.generate(columnTypes.toImmutableArraySeq)
-      columnarIterator.initialize(
-        cachedBatchIterator.asInstanceOf[Iterator[DefaultCachedBatch]],
+      columnarIterator.initialize(cachedBatchIterator.asInstanceOf[Iterator[DefaultCachedBatch]],
         columnTypes,
         requestedColumnIndices.toArray)
       columnarIterator
@@ -270,7 +250,8 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
   }
 }
 
-private[sql] case class CachedRDDBuilder(
+private[sql]
+case class CachedRDDBuilder(
     serializer: CachedBatchSerializer,
     storageLevel: StorageLevel,
     @transient cachedPlan: SparkPlan,
@@ -284,13 +265,12 @@ private[sql] case class CachedRDDBuilder(
   val rowCountStats: LongAccumulator = cachedPlan.session.sparkContext.longAccumulator
   private val materializedPartitions = cachedPlan.session.sparkContext.longAccumulator
 
-  val cachedName = tableName
-    .map(n => s"In-memory table $n")
+  val cachedName = tableName.map(n => s"In-memory table $n")
     .getOrElse(Utils.abbreviate(cachedPlan.toString, 1024))
 
   val supportsColumnarInput: Boolean = {
     cachedPlan.supportsColumnar &&
-    serializer.supportsColumnarInput(cachedPlan.output)
+      serializer.supportsColumnarInput(cachedPlan.output)
   }
 
   def cachedColumnBuffers: RDD[CachedBatch] = synchronized {
@@ -327,48 +307,45 @@ private[sql] case class CachedRDDBuilder(
   }
 
   private def buildBuffers(): RDD[CachedBatch] = {
-    val cb =
-      try {
-        if (supportsColumnarInput) {
-          serializer.convertColumnarBatchToCachedBatch(
-            cachedPlan.executeColumnar(),
-            cachedPlan.output,
-            storageLevel,
-            cachedPlan.conf)
-        } else {
-          serializer.convertInternalRowToCachedBatch(
-            cachedPlan.execute(),
-            cachedPlan.output,
-            storageLevel,
-            cachedPlan.conf)
-        }
-      } catch {
-        case e: Throwable if cachedPlan.isInstanceOf[AdaptiveSparkPlanExec] =>
-          // SPARK-49982: during RDD execution, AQE will execute all stages except ResultStage. If any
-          // failure happen, the failure will be cached and the next SQL cache caller will hit the
-          // negative cache. Therefore we need to recache the plan.
-          val session = cachedPlan.session
-          session.sharedState.cacheManager.recacheByPlan(session, logicalPlan)
-          throw e
+    val cb = try {
+      if (supportsColumnarInput) {
+        serializer.convertColumnarBatchToCachedBatch(
+          cachedPlan.executeColumnar(),
+          cachedPlan.output,
+          storageLevel,
+          cachedPlan.conf)
+      } else {
+        serializer.convertInternalRowToCachedBatch(
+          cachedPlan.execute(),
+          cachedPlan.output,
+          storageLevel,
+          cachedPlan.conf)
       }
-    val cached = cb
-      .mapPartitionsInternal { it =>
-        TaskContext.get().addTaskCompletionListener[Unit] { context =>
-          if (!context.isFailed() && !context.isInterrupted()) {
-            materializedPartitions.add(1L)
-          }
-        }
-        new Iterator[CachedBatch] {
-          override def hasNext: Boolean = it.hasNext
-          override def next(): CachedBatch = {
-            val batch = it.next()
-            sizeInBytesStats.add(batch.sizeInBytes)
-            rowCountStats.add(batch.numRows)
-            batch
-          }
+    } catch {
+      case e: Throwable if cachedPlan.isInstanceOf[AdaptiveSparkPlanExec] =>
+        // SPARK-49982: during RDD execution, AQE will execute all stages except ResultStage. If any
+        // failure happen, the failure will be cached and the next SQL cache caller will hit the
+        // negative cache. Therefore we need to recache the plan.
+        val session = cachedPlan.session
+        session.sharedState.cacheManager.recacheByPlan(session, logicalPlan)
+        throw e
+    }
+    val cached = cb.mapPartitionsInternal { it =>
+      TaskContext.get().addTaskCompletionListener[Unit] { context =>
+        if (!context.isFailed() && !context.isInterrupted()) {
+          materializedPartitions.add(1L)
         }
       }
-      .persist(storageLevel)
+      new Iterator[CachedBatch] {
+        override def hasNext: Boolean = it.hasNext
+        override def next(): CachedBatch = {
+          val batch = it.next()
+          sizeInBytesStats.add(batch.sizeInBytes)
+          rowCountStats.add(batch.numRows)
+          batch
+        }
+      }
+    }.persist(storageLevel)
     cached.setName(cachedName)
     cached
   }
@@ -431,8 +408,8 @@ object InMemoryRelation {
       qe.executedPlan
     }
     val newBuilder = cacheBuilder.copy(cachedPlan = newCachedPlan, logicalPlan = qe.logical)
-    val relation =
-      new InMemoryRelation(newBuilder.cachedPlan.output, newBuilder, optimizedPlan.outputOrdering)
+    val relation = new InMemoryRelation(
+      newBuilder.cachedPlan.output, newBuilder, optimizedPlan.outputOrdering)
     relation.statsOfPlanToCache = optimizedPlan.stats
     relation
   }
@@ -452,8 +429,7 @@ case class InMemoryRelation(
     output: Seq[Attribute],
     @transient cacheBuilder: CachedRDDBuilder,
     override val outputOrdering: Seq[SortOrder])
-    extends logical.LeafNode
-    with MultiInstanceRelation {
+  extends logical.LeafNode with MultiInstanceRelation {
 
   @volatile var statsOfPlanToCache: Statistics = null
 
@@ -466,13 +442,15 @@ case class InMemoryRelation(
 
   def cachedPlan: SparkPlan = cacheBuilder.cachedPlan
 
-  private[sql] def updateStats(rowCount: Long, newColStats: Map[Attribute, ColumnStat]): Unit =
-    this.synchronized {
-      val newStats = statsOfPlanToCache.copy(
-        rowCount = Some(rowCount),
-        attributeStats = AttributeMap(statsOfPlanToCache.attributeStats ++ newColStats))
-      statsOfPlanToCache = newStats
-    }
+  private[sql] def updateStats(
+      rowCount: Long,
+      newColStats: Map[Attribute, ColumnStat]): Unit = this.synchronized {
+    val newStats = statsOfPlanToCache.copy(
+      rowCount = Some(rowCount),
+      attributeStats = AttributeMap(statsOfPlanToCache.attributeStats ++ newColStats)
+    )
+    statsOfPlanToCache = newStats
+  }
 
   override def computeStats(): Statistics = {
     if (!cacheBuilder.isCachedColumnBuffersLoaded) {
@@ -481,7 +459,8 @@ case class InMemoryRelation(
     } else {
       statsOfPlanToCache.copy(
         sizeInBytes = cacheBuilder.sizeInBytesStats.value.longValue,
-        rowCount = Some(cacheBuilder.rowCountStats.value.longValue))
+        rowCount = Some(cacheBuilder.rowCountStats.value.longValue)
+      )
     }
   }
 

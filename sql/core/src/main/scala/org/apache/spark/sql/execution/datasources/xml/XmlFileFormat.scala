@@ -60,7 +60,8 @@ case class XmlFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       files: Seq[FileStatus]): Option[StructType] = {
     val xmlOptions = getXmlOptions(sparkSession, options)
 
-    XmlDataSource(xmlOptions).inferSchema(sparkSession, files, xmlOptions)
+    XmlDataSource(xmlOptions).inferSchema(
+      sparkSession, files, xmlOptions)
   }
 
   override def prepareWrite(
@@ -115,7 +116,9 @@ case class XmlFileFormat() extends TextBasedFileFormat with DataSourceRegister {
     }
 
     (file: PartitionedFile) => {
-      val parser = new StaxXmlParser(actualRequiredSchema, xmlOptions)
+      val parser = new StaxXmlParser(
+        actualRequiredSchema,
+        xmlOptions)
       XmlDataSource(xmlOptions).readFile(
         broadcastedHadoopConf.value.value,
         file,

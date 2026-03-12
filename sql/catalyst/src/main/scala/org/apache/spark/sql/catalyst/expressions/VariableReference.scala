@@ -40,15 +40,14 @@ case class VariableReference(
     // This flag will be false if the `VariableReference` is used to manage the variable, like
     // setting a new value, where we shouldn't constant-fold it.
     canFold: Boolean = true)
-    extends LeafExpression {
+  extends LeafExpression {
 
   override def dataType: DataType = varDef.currentValue.dataType
   override def nullable: Boolean = varDef.currentValue.nullable
   override def foldable: Boolean = canFold
 
   override def toString: String = {
-    val qualifiedName =
-      (catalog.name +: identifier.namespace :+ identifier.name).map(quoteIfNeeded)
+    val qualifiedName = (catalog.name +: identifier.namespace :+ identifier.name).map(quoteIfNeeded)
     s"$prettyName(${qualifiedName.mkString(".")}=${varDef.currentValue.sql})"
   }
 

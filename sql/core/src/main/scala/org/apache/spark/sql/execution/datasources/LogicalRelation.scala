@@ -34,7 +34,7 @@ import org.apache.spark.sql.sources.BaseRelation
  * objects to help avoiding the default pattern.
  *
  * Here's the list of pattern objects:
- *   - [[LogicalRelationWithTable]]
+ * - [[LogicalRelationWithTable]]
  */
 case class LogicalRelation(
     relation: BaseRelation,
@@ -42,15 +42,16 @@ case class LogicalRelation(
     catalogTable: Option[CatalogTable],
     override val isStreaming: Boolean,
     @transient stream: Option[SparkDataStream])
-    extends LeafNode
-    with StreamSourceAwareLogicalPlan
-    with MultiInstanceRelation
-    with ExposesMetadataColumns
-    with NormalizeableRelation {
+  extends LeafNode
+  with StreamSourceAwareLogicalPlan
+  with MultiInstanceRelation
+  with ExposesMetadataColumns
+  with NormalizeableRelation {
 
   // Only care about relation when canonicalizing.
-  override def doCanonicalize(): LogicalPlan =
-    copy(output = output.map(QueryPlan.normalizeExpressions(_, output)), catalogTable = None)
+  override def doCanonicalize(): LogicalPlan = copy(
+    output = output.map(QueryPlan.normalizeExpressions(_, output)),
+    catalogTable = None)
 
   override def computeStats(): Statistics = {
     catalogTable
@@ -63,8 +64,9 @@ case class LogicalRelation(
 
   /**
    * Returns a new instance of this LogicalRelation. According to the semantics of
-   * MultiInstanceRelation, this method returns a copy of this object with unique expression ids.
-   * We respect the `expectedOutputAttributes` and create new instances of attributes in it.
+   * MultiInstanceRelation, this method returns a copy of this object with
+   * unique expression ids. We respect the `expectedOutputAttributes` and create
+   * new instances of attributes in it.
    */
   override def newInstance(): LogicalRelation = {
     this.copy(output = output.map(_.newInstance()))
@@ -72,7 +74,7 @@ case class LogicalRelation(
 
   override def refresh(): Unit = relation match {
     case fs: HadoopFsRelation => fs.location.refresh()
-    case _ => // Do nothing.
+    case _ =>  // Do nothing.
   }
 
   override def simpleString(maxFields: Int): String = {

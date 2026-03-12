@@ -35,8 +35,7 @@ import org.apache.spark.sql.execution.window.WindowExec
 class LogicalPlanTagInSparkPlanSuite extends TPCDSQuerySuite with DisableAdaptiveExecutionSuite {
 
   override protected def checkGeneratedCode(
-      plan: SparkPlan,
-      checkMethodCodeSize: Boolean = true): Unit = {
+      plan: SparkPlan, checkMethodCodeSize: Boolean = true): Unit = {
     super.checkGeneratedCode(plan, checkMethodCodeSize)
     checkLogicalPlanTag(plan)
   }
@@ -60,8 +59,8 @@ class LogicalPlanTagInSparkPlanSuite extends TPCDSQuerySuite with DisableAdaptiv
 
   private def checkLogicalPlanTag(plan: SparkPlan): Unit = {
     plan match {
-      case _: HashJoin | _: BroadcastNestedLoopJoinExec | _: CartesianProductExec |
-          _: ShuffledHashJoinExec | _: SortMergeJoinExec =>
+      case _: HashJoin | _: BroadcastNestedLoopJoinExec | _: CartesianProductExec
+           | _: ShuffledHashJoinExec | _: SortMergeJoinExec =>
         assertLogicalPlanType[Join](plan)
 
       // There is no corresponding logical plan for the physical partial aggregate.
@@ -142,7 +141,7 @@ class LogicalPlanTagInSparkPlanSuite extends TPCDSQuerySuite with DisableAdaptiv
     }
   }
 
-  private def assertLogicalPlanType[T <: LogicalPlan: ClassTag](node: SparkPlan): Unit = {
+  private def assertLogicalPlanType[T <: LogicalPlan : ClassTag](node: SparkPlan): Unit = {
     val logicalPlan = getLogicalPlan(node)
     val expectedCls = implicitly[ClassTag[T]].runtimeClass
     assert(expectedCls == logicalPlan.getClass)

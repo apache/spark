@@ -28,12 +28,12 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.streaming.StreamingQueryProgress
 
 /**
- * Serves metrics from a [[org.apache.spark.sql.streaming.StreamingQuery]] to Codahale/DropWizard
- * metrics
+ * Serves metrics from a [[org.apache.spark.sql.streaming.StreamingQuery]] to
+ * Codahale/DropWizard metrics
  */
-class MetricsReporter(stream: StreamExecution, override val sourceName: String)
-    extends CodahaleSource
-    with Logging {
+class MetricsReporter(
+    stream: StreamExecution,
+    override val sourceName: String) extends CodahaleSource with Logging {
 
   override val metricRegistry: MetricRegistry = new MetricRegistry
 
@@ -48,10 +48,8 @@ class MetricsReporter(stream: StreamExecution, override val sourceName: String)
       .ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
       .withZone(DateTimeUtils.getZoneId("UTC"))
 
-  registerGauge(
-    "eventTime-watermark",
-    progress => convertStringDateToMillis(progress.eventTime.get("watermark")),
-    0L)
+  registerGauge("eventTime-watermark",
+    progress => convertStringDateToMillis(progress.eventTime.get("watermark")), 0L)
 
   registerGauge("states-rowsTotal", _.stateOperators.map(_.numRowsTotal).sum, 0L)
   registerGauge("states-usedBytes", _.stateOperators.map(_.memoryUsedBytes).sum, 0L)
@@ -65,13 +63,14 @@ class MetricsReporter(stream: StreamExecution, override val sourceName: String)
     }
   }
 
-  private def registerGauge[T](name: String, f: StreamingQueryProgress => T, default: T): Unit = {
+  private def registerGauge[T](
+      name: String,
+      f: StreamingQueryProgress => T,
+      default: T): Unit = {
     synchronized {
-      metricRegistry.register(
-        name,
-        new Gauge[T] {
-          override def getValue: T = Option(stream.lastProgress).map(f).getOrElse(default)
-        })
+      metricRegistry.register(name, new Gauge[T] {
+        override def getValue: T = Option(stream.lastProgress).map(f).getOrElse(default)
+      })
     }
   }
 }

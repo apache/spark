@@ -29,19 +29,20 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{LOCAL_RELATION, REPARTIT
 /**
  * The base class of two rules in the normal and AQE Optimizer. It simplifies query plans with
  * empty or non-empty relations:
- *   1. Higher-node Logical Plans
- *      - Union with all empty children.
- *   2. Binary-node Logical Plans
- *      - Join with one or two empty children (including Intersect/Except).
- *      - Left semi Join Right side is non-empty and condition is empty. Eliminate join to its
- *        left side.
- *      - Left anti join Right side is non-empty and condition is empty. Eliminate join to an
- *        empty [[LocalRelation]].
- *   3. Unary-node Logical Plans
- *      - Project/Filter/Sample with all empty children.
- *      - Limit/Repartition/RepartitionByExpression/Rebalance with all empty children.
- *      - Aggregate with all empty children and at least one grouping expression.
- *      - Generate(Explode) with all empty children. Others like Hive UDTF may return results.
+ *  1. Higher-node Logical Plans
+ *     - Union with all empty children.
+ *  2. Binary-node Logical Plans
+ *     - Join with one or two empty children (including Intersect/Except).
+ *     - Left semi Join
+ *       Right side is non-empty and condition is empty. Eliminate join to its left side.
+ *     - Left anti join
+ *       Right side is non-empty and condition is empty. Eliminate join to an empty
+ *       [[LocalRelation]].
+ *  3. Unary-node Logical Plans
+ *     - Project/Filter/Sample with all empty children.
+ *     - Limit/Repartition/RepartitionByExpression/Rebalance with all empty children.
+ *     - Aggregate with all empty children and at least one grouping expression.
+ *     - Generate(Explode) with all empty children. Others like Hive UDTF may return results.
  */
 abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSupport {
   // This tag is used to mark a repartition as a root repartition which is user-specified
@@ -62,7 +63,7 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
 
   // Construct a project list from plan's output, while the value is always NULL.
   private def nullValueProjectList(plan: LogicalPlan): Seq[NamedExpression] =
-    plan.output.map { a => Alias(cast(Literal(null), a.dataType), a.name)(a.exprId) }
+    plan.output.map{ a => Alias(cast(Literal(null), a.dataType), a.name)(a.exprId) }
 
   protected def canExecuteWithoutJoin(plan: LogicalPlan): Boolean = true
 
@@ -95,7 +96,8 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
     // Joins on empty LocalRelations generated from streaming sources are not eliminated
     // as stateful streaming joins need to perform other state management operations other than
     // just processing the input data.
-    case p @ Join(_, _, joinType, conditionOpt, _) if !p.children.exists(_.isStreaming) =>
+    case p @ Join(_, _, joinType, conditionOpt, _)
+        if !p.children.exists(_.isStreaming) =>
       val isLeftEmpty = isEmpty(p.left)
       val isRightEmpty = isEmpty(p.right)
       val isFalseCondition = conditionOpt match {
@@ -137,59 +139,57 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
     // is exactly what we want to propagate empty relation.
     case p: LogicalQueryStage if isEmpty(p) && !p.isDirectStage => empty(p)
 
-    case p: UnaryNode if p.children.nonEmpty && p.children.forall(isEmpty) =>
-      p match {
-        case _: Project => empty(p)
-        case _: Filter => empty(p)
-        case _: Sample => empty(p)
-        case _: Sort => empty(p)
-        case _: GlobalLimit if !p.isStreaming => empty(p)
-        case _: LocalLimit if !p.isStreaming => empty(p)
-        case _: Offset => empty(p)
-        case _: RepartitionOperation =>
-          if (!p.containsTag(ROOT_REPARTITION)) {
-            empty(p)
-          } else {
-            p.unsetTagValue(ROOT_REPARTITION)
-            p
-          }
-        case _: RebalancePartitions => empty(p)
-        // An aggregate with non-empty group expression will return one output row per group when the
-        // input to the aggregate is not empty. If the input to the aggregate is empty then all groups
-        // will be empty and thus the output will be empty. If we're working on batch data, we can
-        // then treat the aggregate as redundant.
-        //
-        // If the aggregate is over streaming data, we may need to update the state store even if no
-        // new rows are processed, so we can't eliminate the node.
-        //
-        // If the grouping expressions are empty, however, then the aggregate will always produce a
-        // single output row and thus we cannot propagate the EmptyRelation.
-        //
-        // Aggregation on empty LocalRelation generated from a streaming source is not eliminated
-        // as stateful streaming aggregation need to perform other state management operations other
-        // than just processing the input data.
-        case Aggregate(ge, _, _, _) if ge.nonEmpty && !p.isStreaming => empty(p)
-        // Generators like Hive-style UDTF may return their records within `close`.
-        case Generate(_: Explode, _, _, _, _, _) => empty(p)
-        case Expand(_, _, _) => empty(p)
-        case _: Window => empty(p)
-        case _ => p
-      }
+    case p: UnaryNode if p.children.nonEmpty && p.children.forall(isEmpty) => p match {
+      case _: Project => empty(p)
+      case _: Filter => empty(p)
+      case _: Sample => empty(p)
+      case _: Sort => empty(p)
+      case _: GlobalLimit if !p.isStreaming => empty(p)
+      case _: LocalLimit if !p.isStreaming => empty(p)
+      case _: Offset => empty(p)
+      case _: RepartitionOperation =>
+        if (!p.containsTag(ROOT_REPARTITION)) {
+          empty(p)
+        } else {
+          p.unsetTagValue(ROOT_REPARTITION)
+          p
+        }
+      case _: RebalancePartitions => empty(p)
+      // An aggregate with non-empty group expression will return one output row per group when the
+      // input to the aggregate is not empty. If the input to the aggregate is empty then all groups
+      // will be empty and thus the output will be empty. If we're working on batch data, we can
+      // then treat the aggregate as redundant.
+      //
+      // If the aggregate is over streaming data, we may need to update the state store even if no
+      // new rows are processed, so we can't eliminate the node.
+      //
+      // If the grouping expressions are empty, however, then the aggregate will always produce a
+      // single output row and thus we cannot propagate the EmptyRelation.
+      //
+      // Aggregation on empty LocalRelation generated from a streaming source is not eliminated
+      // as stateful streaming aggregation need to perform other state management operations other
+      // than just processing the input data.
+      case Aggregate(ge, _, _, _) if ge.nonEmpty && !p.isStreaming => empty(p)
+      // Generators like Hive-style UDTF may return their records within `close`.
+      case Generate(_: Explode, _, _, _, _, _) => empty(p)
+      case Expand(_, _, _) => empty(p)
+      case _: Window => empty(p)
+      case _ => p
+    }
   }
 
   protected def userSpecifiedRepartition(p: LogicalPlan): Boolean = p match {
     case _: Repartition => true
     case r: RepartitionByExpression
-        if r.optNumPartitions.isDefined || r.partitionExpressions.nonEmpty =>
-      true
+      if r.optNumPartitions.isDefined || r.partitionExpressions.nonEmpty => true
     case _ => false
   }
 
   protected def applyInternal(plan: LogicalPlan): LogicalPlan
 
   /**
-   * Add a [[ROOT_REPARTITION]] tag for the root user-specified repartition so this rule can skip
-   * optimize it.
+   * Add a [[ROOT_REPARTITION]] tag for the root user-specified repartition so this rule can
+   * skip optimize it.
    */
   private def addTagForRootRepartition(plan: LogicalPlan): LogicalPlan = {
     if (!plan.containsPattern(REPARTITION_OPERATION)) {
@@ -218,8 +218,7 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
  */
 object PropagateEmptyRelation extends PropagateEmptyRelationBase {
   override protected def applyInternal(p: LogicalPlan): LogicalPlan = p.transformUpWithPruning(
-    _.containsAnyPattern(LOCAL_RELATION, TRUE_OR_FALSE_LITERAL),
-    ruleId) {
+    _.containsAnyPattern(LOCAL_RELATION, TRUE_OR_FALSE_LITERAL), ruleId) {
     commonApplyFunc
   }
 }

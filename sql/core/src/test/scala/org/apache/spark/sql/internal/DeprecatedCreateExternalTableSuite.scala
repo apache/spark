@@ -30,7 +30,10 @@ class DeprecatedCreateExternalTableSuite extends SharedSparkSession {
       withTempDir { dir =>
         val path = new File(dir, "test")
         spark.range(100).write.parquet(path.getAbsolutePath)
-        spark.catalog.createExternalTable(tableName = "t", path = path.getAbsolutePath)
+        spark.catalog.createExternalTable(
+          tableName = "t",
+          path = path.getAbsolutePath
+        )
         assert(spark.sessionState.catalog.tableExists(TableIdentifier("t")))
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
         assert(table.tableType === CatalogTableType.EXTERNAL)

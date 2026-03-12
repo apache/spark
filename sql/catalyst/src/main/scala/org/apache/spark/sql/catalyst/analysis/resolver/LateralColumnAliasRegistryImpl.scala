@@ -25,41 +25,47 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 /**
  * [[LateralColumnAliasRegistryImpl]] is a utility class that contains structures required for
  * lateral column alias resolution. Here we store:
- *   - [[currentAttributeDependencyLevelStack]] - Current attribute dependency level in the scope.
- *     Dependency level is defined as a maximum dependency in that attribute's expression tree.
- *     For example, in a query like:
+ *  - [[currentAttributeDependencyLevelStack]] - Current attribute dependency level in the scope.
+ *  Dependency level is defined as a maximum dependency in that attribute's expression tree. For
+ *  example, in a query like:
  *
- * {{{SELECT a, b, a + b AS c, a + c AS d}}}
+ *  {{{ SELECT a, b, a + b AS c, a + c AS d}}}
  *
- * Dependency levels will be as follows: level 0: a, b level 1: c level 2: d
+ * Dependency levels will be as follows:
+ * level 0: a, b
+ * level 1: c
+ * level 2: d
  *
- * We add a new entry to the stack for each new [[Alias]] resolution. This is needed because we
- * can have nesting Aliases in the plan, that do not belong to the same LCA scope. For example, in
- * the following query:
+ *  We add a new entry to the stack for each new [[Alias]] resolution. This is needed because we
+ *  can have nesting Aliases in the plan, that do not belong to the same LCA scope. For example,
+ *  in the following query:
  *
- * {{{SELECT STRUCT('alpha' AS A, 'beta' AS B) ST}}}
+ *  {{{ SELECT STRUCT('alpha' AS A, 'beta' AS B) ST }}}
  *
- * ST, A and B would be aliases in the same expression tree, but they do not belong in the same
- * LCA scope.
+ *  ST, A and B would be aliases in the same expression tree, but they do not belong in the same
+ *  LCA scope.
  *
- *   - [[availableAttributes]] - All attributes that can be laterally referenced. This map is
- *     indexed by name, but contains a list of attributes with the same name. This is because it
- *     is possible to have multiple attributes with the same name in the scope, but they can't be
- *     laterally referenced. Handling ambiguous references is done in the [[getAttribute]] method.
- *     For the following query:
+ *  - [[availableAttributes]] - All attributes that can be laterally referenced. This map is
+ *  indexed by name, but contains a list of attributes with the same name. This is because it is
+ *  possible to have multiple attributes with the same name in the scope, but they can't be
+ *  laterally referenced. Handling ambiguous references is done in the [[getAttribute]] method.
+ *  For the following query:
  *
- * {{{SELECT 0 AS a, 1 AS b, 2 AS c, b AS d, a AS e, d AS f, a AS g, g AS h, h AS i}}}
+ *  {{{ SELECT 0 AS a, 1 AS b, 2 AS c, b AS d, a AS e, d AS f, a AS g, g AS h, h AS i }}}
  *
- * [[availableAttributes]] will be: {a, b, c, d, e, f, g, h, i}
- *   - [[referencedAliases]] - Aliases that have been laterally referenced. For the given query
- *     example, [[referencedAliases]] will be: {a, b, d, g, h}
- *   - [[aliasDependencyLevels]] - Dependency levels of all aliases, indexed by dependency level.
- *     For the given query example, dependency levels will be as follows:
+ *  [[availableAttributes]] will be: {a, b, c, d, e, f, g, h, i}
+ *  - [[referencedAliases]] - Aliases that have been laterally referenced. For the given query
+ *  example, [[referencedAliases]] will be: {a, b, d, g, h}
+ *  - [[aliasDependencyLevels]] - Dependency levels of all aliases, indexed by dependency level.
+ *  For the given query example, dependency levels will be as follows:
  *
- * level 0: a, b, c level 1: d, e, g level 2: f, h level 3: i
+ *  level 0: a, b, c
+ *  level 1: d, e, g
+ *  level 2: f, h
+ *  level 3: i
  *
- * @param attributes
- *   Output attributes from currently resolved [[NameScope]], to which the registry belongs.
+ * @param attributes Output attributes from currently resolved [[NameScope]], to which the registry
+ *                   belongs.
  */
 class LateralColumnAliasRegistryImpl(attributes: Seq[Attribute])
     extends LateralColumnAliasRegistry {
@@ -103,7 +109,8 @@ class LateralColumnAliasRegistryImpl(attributes: Seq[Attribute])
         if (aliasReferenceList.size() > 1) {
           throw QueryCompilationErrors.ambiguousLateralColumnAliasError(
             attributeName,
-            aliasReferenceList.size())
+            aliasReferenceList.size()
+          )
         }
 
         val aliasReference = aliasReferenceList.get(0)
@@ -112,7 +119,8 @@ class LateralColumnAliasRegistryImpl(attributes: Seq[Attribute])
           // referenced attribute incremented by 1.
           val maxDependencyLevel = Math.max(
             currentAttributeDependencyLevelStack.pop(),
-            aliasReference.dependencyLevel + 1)
+            aliasReference.dependencyLevel + 1
+          )
           currentAttributeDependencyLevelStack.push(maxDependencyLevel)
         }
 
@@ -143,7 +151,10 @@ class LateralColumnAliasRegistryImpl(attributes: Seq[Attribute])
    */
   private def registerAlias(alias: Alias): Unit = {
     addAliasDependency(alias)
-    registerAttribute(alias.toAttribute, currentAttributeDependencyLevelStack.peek())
+    registerAttribute(
+      alias.toAttribute,
+      currentAttributeDependencyLevelStack.peek()
+    )
   }
 
   private def registerAllAttributes(attributes: Seq[Attribute]) =
@@ -152,7 +163,12 @@ class LateralColumnAliasRegistryImpl(attributes: Seq[Attribute])
   private def registerAttribute(attribute: Attribute, dependencyLevel: Int = 0): Unit = {
     availableAttributes
       .computeIfAbsent(attribute.name, _ => new ArrayList[AliasReference])
-      .add(AliasReference(attribute, dependencyLevel))
+      .add(
+        AliasReference(
+          attribute,
+          dependencyLevel
+        )
+      )
   }
 
   private def addAliasDependency(alias: Alias): Unit = {

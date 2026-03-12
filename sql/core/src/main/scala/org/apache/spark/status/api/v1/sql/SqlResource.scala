@@ -65,10 +65,10 @@ private[v1] class SqlResource extends BaseAppResource {
   }
 
   private def prepareExecutionData(
-      exec: SQLExecutionUIData,
-      graph: SparkPlanGraph,
-      details: Boolean,
-      planDescription: Boolean): ExecutionData = {
+    exec: SQLExecutionUIData,
+    graph: SparkPlanGraph,
+    details: Boolean,
+    planDescription: Boolean): ExecutionData = {
 
     var running = Seq[Int]()
     var completed = Seq[Int]()
@@ -110,21 +110,16 @@ private[v1] class SqlResource extends BaseAppResource {
       exec.rootExecutionId)
   }
 
-  private def printableMetrics(
-      allNodes: collection.Seq[SparkPlanGraphNode],
-      metricValues: Map[Long, String]): collection.Seq[Node] = {
+  private def printableMetrics(allNodes: collection.Seq[SparkPlanGraphNode],
+    metricValues: Map[Long, String]): collection.Seq[Node] = {
 
-    def getMetric(
-        metricValues: Map[Long, String],
-        accumulatorId: Long,
-        metricName: String): Option[Metric] = {
+    def getMetric(metricValues: Map[Long, String], accumulatorId: Long,
+      metricName: String): Option[Metric] = {
 
-      metricValues
-        .get(accumulatorId)
-        .map(mv => {
-          val metricValue = if (mv.startsWith("\n")) mv.substring(1, mv.length) else mv
-          Metric(metricName, metricValue)
-        })
+      metricValues.get(accumulatorId).map( mv => {
+        val metricValue = if (mv.startsWith("\n")) mv.substring(1, mv.length) else mv
+        Metric(metricName, metricValue)
+      })
     }
 
     val nodeIdAndWSCGIdMap = getNodeIdAndWSCGIdMap(allNodes)
@@ -152,10 +147,8 @@ private[v1] class SqlResource extends BaseAppResource {
   }
 
   private def getWholeStageCodegenId(wscgNodeName: String): Option[Long] = {
-    Try(
-      wscgNodeName
-        .substring(s"$WHOLE_STAGE_CODEGEN (".length, wscgNodeName.length - 1)
-        .toLong) match {
+    Try(wscgNodeName.substring(
+      s"$WHOLE_STAGE_CODEGEN (".length, wscgNodeName.length - 1).toLong) match {
       case Success(wscgId) => Some(wscgId)
       case Failure(t) => None
     }

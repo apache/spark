@@ -65,8 +65,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       schema: StructType,
       partitioning: Array[Transform],
       properties: util.Map[String, String]): Table = {
-    val sourceOptions = StateSourceOptions.modifySourceOptions(
-      hadoopConf,
+    val sourceOptions = StateSourceOptions.modifySourceOptions(hadoopConf,
       StateSourceOptions.apply(session, hadoopConf, properties))
     // Build the sql conf for the batch we are reading using confs in the offsetlog
     val batchSqlConf =
@@ -90,13 +89,8 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       NoPrefixKeyStateEncoderSpec(keySchema)
     }
 
-    new StateTable(
-      session,
-      schema,
-      sourceOptions,
-      stateConf,
-      batchSqlConf.getConf(SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL).get,
-      keyStateEncoderSpec,
+    new StateTable(session, schema, sourceOptions, stateConf,
+      batchSqlConf.getConf(SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL).get, keyStateEncoderSpec,
       stateStoreReaderInfo.transformWithStateVariableInfoOpt,
       stateStoreReaderInfo.stateStoreColFamilySchemaOpt,
       stateStoreReaderInfo.stateSchemaProviderOpt,
@@ -105,8 +99,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
   }
 
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
-    val sourceOptions = StateSourceOptions.modifySourceOptions(
-      hadoopConf,
+    val sourceOptions = StateSourceOptions.modifySourceOptions(hadoopConf,
       StateSourceOptions.apply(session, hadoopConf, options))
 
     val stateStoreReaderInfo = getStoreMetadataAndRunChecks(sourceOptions)
@@ -116,20 +109,12 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     try {
       val (keySchema, valueSchema) = sourceOptions.joinSide match {
         case JoinSideValues.left =>
-          StreamStreamJoinStateHelper.readKeyValueSchema(
-            session,
-            stateCheckpointLocation.toString,
-            sourceOptions.operatorId,
-            LeftSide,
-            oldSchemaFilePaths)
+          StreamStreamJoinStateHelper.readKeyValueSchema(session, stateCheckpointLocation.toString,
+            sourceOptions.operatorId, LeftSide, oldSchemaFilePaths)
 
         case JoinSideValues.right =>
-          StreamStreamJoinStateHelper.readKeyValueSchema(
-            session,
-            stateCheckpointLocation.toString,
-            sourceOptions.operatorId,
-            RightSide,
-            oldSchemaFilePaths)
+          StreamStreamJoinStateHelper.readKeyValueSchema(session, stateCheckpointLocation.toString,
+            sourceOptions.operatorId, RightSide, oldSchemaFilePaths)
 
         case JoinSideValues.none =>
           // we should have the schema for the state store if joinSide is none
@@ -138,9 +123,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
           (resultSchema.keySchema, resultSchema.valueSchema)
       }
 
-      SchemaUtil.getSourceSchema(
-        sourceOptions,
-        keySchema,
+      SchemaUtil.getSourceSchema(sourceOptions, keySchema,
         valueSchema,
         stateStoreReaderInfo.transformWithStateVariableInfoOpt,
         stateStoreReaderInfo.stateStoreColFamilySchemaOpt,
@@ -155,10 +138,11 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
   override def supportsExternalMetadata(): Boolean = false
 
   /**
-   * Return the state format version for SYMMETRIC_HASH_JOIN operators, otherwise None for
-   * non-join operators. This currently only supports join operators because this function is only
-   * used to create a PartitionKeyExtractor through PartitionKeyExtractorFactory where only join
-   * operators require state format version
+   * Return the state format version for SYMMETRIC_HASH_JOIN operators,
+   * otherwise None for non-join operators.
+   * This currently only supports join operators because this function is only used to
+   * create a PartitionKeyExtractor through PartitionKeyExtractorFactory where only join operators
+   * require state format version
    */
   private def getStateFormatVersion(
       storeMetadata: Array[StateMetadataTableEntry],
@@ -177,26 +161,29 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
   }
 
   /**
-   * Returns true if this is a read-all-column-families request for a stream-stream join that uses
-   * virtual column families (state format version 3).
+   * Returns true if this is a read-all-column-families request for a stream-stream join
+   * that uses virtual column families (state format version 3).
    */
   private def isReadAllColFamiliesOnJoinV3(
       sourceOptions: StateSourceOptions,
       storeMetadata: Array[StateMetadataTableEntry]): Boolean = {
     sourceOptions.internalOnlyReadAllColumnFamilies &&
-    storeMetadata.head.operatorName == StatefulOperatorsUtils.SYMMETRIC_HASH_JOIN_EXEC_OP_NAME &&
-    StreamStreamJoinStateHelper.usesVirtualColumnFamilies(
-      hadoopConf,
-      sourceOptions.stateCheckpointLocation.toString,
-      sourceOptions.operatorId)
+      storeMetadata.head.operatorName == StatefulOperatorsUtils.SYMMETRIC_HASH_JOIN_EXEC_OP_NAME &&
+      StreamStreamJoinStateHelper.usesVirtualColumnFamilies(
+        hadoopConf,
+        sourceOptions.stateCheckpointLocation.toString,
+        sourceOptions.operatorId)
   }
 
-  private def buildSqlConfForBatch(checkpointLocation: String, batchId: Long): SQLConf = {
+  private def buildSqlConfForBatch(
+      checkpointLocation: String,
+      batchId: Long): SQLConf = {
     val offsetLog = new StreamingQueryCheckpointMetadata(session, checkpointLocation).offsetLog
     offsetLog.get(batchId) match {
       case Some(value) =>
         val metadata = value.metadataOpt.getOrElse(
-          throw StateDataSourceErrors.offsetMetadataLogUnavailable(batchId, checkpointLocation))
+          throw StateDataSourceErrors.offsetMetadataLogUnavailable(batchId, checkpointLocation)
+        )
 
         val clonedSqlConf = session.sessionState.conf.clone()
         OffsetSeqMetadata.setSessionConf(metadata, clonedSqlConf)
@@ -215,17 +202,14 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       // the user has not defined any state variables for the operator
       val operatorProperties = opMetadata.operatorPropertiesJson
       if (operatorProperties.isEmpty) {
-        throw StateDataSourceErrors.invalidOptionValue(
-          STATE_VAR_NAME,
+        throw StateDataSourceErrors.invalidOptionValue(STATE_VAR_NAME,
           "No state variable names are defined for the transformWithState operator")
       }
 
-      val twsOperatorProperties =
-        TransformWithStateOperatorProperties.fromJson(operatorProperties)
+      val twsOperatorProperties = TransformWithStateOperatorProperties.fromJson(operatorProperties)
       val timeMode = twsOperatorProperties.timeMode
       if (sourceOptions.readRegisteredTimers && timeMode == TimeMode.None().toString) {
-        throw StateDataSourceErrors.invalidOptionValue(
-          READ_REGISTERED_TIMERS,
+        throw StateDataSourceErrors.invalidOptionValue(READ_REGISTERED_TIMERS,
           "Registered timers are not available in TimeMode=None.")
       }
 
@@ -245,8 +229,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       // state variables and therefore not registered in stateVars.
       if (stateVarInfo.size != 1 &&
         !StateStoreColumnFamilySchemaUtils.isTestingInternalColFamily(stateVarName)) {
-        throw StateDataSourceErrors.invalidOptionValue(
-          STATE_VAR_NAME,
+        throw StateDataSourceErrors.invalidOptionValue(STATE_VAR_NAME,
           s"State variable $stateVarName is not defined for the transformWithState operator.")
       }
     }
@@ -257,22 +240,19 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
         require(stateStoreMetadata.size == 1)
         val opMetadata = stateStoreMetadata.head
         opMetadata.operatorName match {
-          case opName: String
-              if opName ==
-                StatefulOperatorsUtils.SYMMETRIC_HASH_JOIN_EXEC_OP_NAME =>
+          case opName: String if opName ==
+            StatefulOperatorsUtils.SYMMETRIC_HASH_JOIN_EXEC_OP_NAME =>
             // Verify that the storename is valid
-            val possibleStoreNames =
-              SymmetricHashJoinStateManager.allStateStoreNames(LeftSide, RightSide)
+            val possibleStoreNames = SymmetricHashJoinStateManager.allStateStoreNames(
+              LeftSide, RightSide)
             if (!possibleStoreNames.contains(name)) {
-              val errorMsg =
-                s"Store name $name not allowed for join operator. Allowed names are " +
-                  s"$possibleStoreNames. " +
-                  s"Please remove this option and re-run the query."
+              val errorMsg = s"Store name $name not allowed for join operator. Allowed names are " +
+                s"$possibleStoreNames. " +
+                s"Please remove this option and re-run the query."
               throw StateDataSourceErrors.invalidOptionValue(STORE_NAME, errorMsg)
             }
-          case opName: String
-              if StatefulOperatorsUtils.TRANSFORM_WITH_STATE_OP_NAMES
-                .contains(opName) =>
+          case opName: String if StatefulOperatorsUtils.TRANSFORM_WITH_STATE_OP_NAMES
+            .contains(opName) =>
             runTWSChecks(opMetadata)
           case _ =>
             // if we are trying to query state source with state variable name, then the operator
@@ -288,9 +268,8 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
           require(stateStoreMetadata.size == 1)
           val opMetadata = stateStoreMetadata.head
           opMetadata.operatorName match {
-            case opName: String
-                if StatefulOperatorsUtils.TRANSFORM_WITH_STATE_OP_NAMES
-                  .contains(opName) =>
+            case opName: String if StatefulOperatorsUtils.TRANSFORM_WITH_STATE_OP_NAMES
+              .contains(opName) =>
               runTWSChecks(opMetadata)
             case _ =>
               // if we are trying to query state source with state variable name, then the operator
@@ -360,17 +339,16 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
           var stateVarInfoList = operatorProperties.stateVariables
             .filter(stateVar => stateVar.stateName == stateVarName)
           if (!TimerStateUtils.isTimerCFName(stateVarName) &&
-            StateStoreColumnFamilySchemaUtils.isTestingInternalColFamily(stateVarName)) {
+              StateStoreColumnFamilySchemaUtils.isTestingInternalColFamily(stateVarName)) {
             // pass this dummy TWSStateVariableInfo for TWS internal column family during testing,
             // because internal column families are not registered in
             // operatorProperties.stateVariables, thus stateVarInfoList will be empty.
-            stateVarInfoList = List(
-              TransformWithStateVariableInfo(stateVarName, StateVariableType.ValueState, false))
+            stateVarInfoList = List(TransformWithStateVariableInfo(
+              stateVarName, StateVariableType.ValueState, false
+            ))
           }
-          require(
-            stateVarInfoList.size == 1,
-            s"Failed to find unique state variable info " +
-              s"for state variable $stateVarName in operator ${sourceOptions.operatorId}")
+          require(stateVarInfoList.size == 1, s"Failed to find unique state variable info " +
+            s"for state variable $stateVarName in operator ${sourceOptions.operatorId}")
           val stateVarInfo = stateVarInfoList.head
           transformWithStateVariableInfoOpt = Some(stateVarInfo)
 
@@ -378,7 +356,8 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
           val stateSchemaMetadata = StateSchemaMetadata.createStateSchemaMetadata(
             sourceOptions.stateCheckpointLocation.toString,
             hadoopConf,
-            schemaFilePaths)
+            schemaFilePaths
+          )
           stateSchemaProvider = Some(new InMemoryStateSchemaProvider(stateSchemaMetadata))
           schemaFilePaths.map(new Path(_))
         } else {
@@ -396,17 +375,11 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
         // for v1
         val partitionId = StateStore.PARTITION_ID_TO_CHECK_SCHEMA
         val stateCheckpointLocation = sourceOptions.stateCheckpointLocation
-        val storeId = new StateStoreId(
-          stateCheckpointLocation.toString,
-          sourceOptions.operatorId,
-          partitionId,
-          sourceOptions.storeName)
+        val storeId = new StateStoreId(stateCheckpointLocation.toString, sourceOptions.operatorId,
+          partitionId, sourceOptions.storeName)
         val providerId = new StateStoreProviderId(storeId, UUID.randomUUID())
-        val manager = new StateSchemaCompatibilityChecker(
-          providerId,
-          hadoopConf,
-          oldSchemaFilePaths = oldSchemaFilePaths,
-          createSchemaDir = false)
+        val manager = new StateSchemaCompatibilityChecker(providerId, hadoopConf,
+          oldSchemaFilePaths = oldSchemaFilePaths, createSchemaDir = false)
         val stateSchema = manager.readSchemaFile()
 
         if (sourceOptions.internalOnlyReadAllColumnFamilies) {
@@ -441,13 +414,10 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
         val stateFormatVersion = getStateFormatVersion(
           storeMetadata,
           sourceOptions.resolvedCpLocation,
-          sourceOptions.batchId)
-        Some(
-          AllColumnFamiliesReaderInfo(
-            stateStoreColFamilySchemas,
-            stateVariableInfos,
-            operatorName,
-            stateFormatVersion))
+          sourceOptions.batchId
+        )
+        Some(AllColumnFamiliesReaderInfo(
+          stateStoreColFamilySchemas, stateVariableInfos, operatorName, stateFormatVersion))
       } else {
         None
       }
@@ -457,7 +427,8 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       transformWithStateVariableInfoOpt,
       stateSchemaProvider,
       joinColFamilyOpt,
-      allColFamilyReaderInfoOpt)
+      allColFamilyReaderInfoOpt
+    )
   }
 
   private def getKeyStateEncoderSpec(
@@ -466,12 +437,11 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     // If operator metadata is not found, then log a warning and continue with using the no-prefix
     // key state encoder
     val keyStateEncoderSpec = if (storeMetadata.length == 0) {
-      logWarning(
-        "Metadata for state store not found, possible cause is this checkpoint " +
-          "is created by older version of spark. If the query has session window aggregation, " +
-          "the state can't be read correctly and runtime exception will be thrown. " +
-          "Run the streaming query in newer spark version to generate state metadata " +
-          "can fix the issue.")
+      logWarning("Metadata for state store not found, possible cause is this checkpoint " +
+        "is created by older version of spark. If the query has session window aggregation, " +
+        "the state can't be read correctly and runtime exception will be thrown. " +
+        "Run the streaming query in newer spark version to generate state metadata " +
+        "can fix the issue.")
       NoPrefixKeyStateEncoderSpec(colFamilySchema.keySchema)
     } else {
       require(storeMetadata.length == 1)
@@ -480,8 +450,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       if (storeMetadataEntry.version == 1 && storeMetadataEntry.numColsPrefixKey == 0) {
         NoPrefixKeyStateEncoderSpec(colFamilySchema.keySchema)
       } else if (storeMetadataEntry.version == 1 && storeMetadataEntry.numColsPrefixKey > 0) {
-        PrefixKeyScanStateEncoderSpec(
-          colFamilySchema.keySchema,
+        PrefixKeyScanStateEncoderSpec(colFamilySchema.keySchema,
           storeMetadataEntry.numColsPrefixKey)
       } else if (storeMetadataEntry.version == 2) {
         // for version 2, we have the encoder spec recorded to the state schema file. so we just
@@ -489,18 +458,22 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
         require(colFamilySchema.keyStateEncoderSpec.isDefined)
         colFamilySchema.keyStateEncoderSpec.get
       } else {
-        throw StateDataSourceErrors.internalError(
-          s"Failed to read " +
-            s"key state encoder spec for operator=${storeMetadataEntry.operatorId}")
+        throw StateDataSourceErrors.internalError(s"Failed to read " +
+          s"key state encoder spec for operator=${storeMetadataEntry.operatorId}")
       }
     }
     keyStateEncoderSpec
   }
 }
 
-case class FromSnapshotOptions(snapshotStartBatchId: Long, snapshotPartitionId: Int)
+case class FromSnapshotOptions(
+    snapshotStartBatchId: Long,
+    snapshotPartitionId: Int)
 
-case class ReadChangeFeedOptions(changeStartBatchId: Long, changeEndBatchId: Long)
+case class ReadChangeFeedOptions(
+    changeStartBatchId: Long,
+    changeEndBatchId: Long
+)
 
 case class StateSourceOptions(
     resolvedCpLocation: String,
@@ -536,7 +509,7 @@ case class StateSourceOptions(
   }
 }
 
-object StateSourceOptions extends DataSourceOptions with Logging {
+object StateSourceOptions extends DataSourceOptions with Logging{
   val PATH = newOption("path")
   val BATCH_ID = newOption("batchId")
   val OPERATOR_ID = newOption("operatorId")
@@ -572,10 +545,8 @@ object StateSourceOptions extends DataSourceOptions with Logging {
       throw StateDataSourceErrors.requiredOptionUnspecified(PATH)
     }.get
 
-    val operatorId = Option(options.get(OPERATOR_ID))
-      .map(_.toInt)
-      .orElse(Some(0))
-      .get
+    val operatorId = Option(options.get(OPERATOR_ID)).map(_.toInt)
+      .orElse(Some(0)).get
 
     if (operatorId < 0) {
       throw StateDataSourceErrors.invalidOptionValueIsNegative(OPERATOR_ID)
@@ -593,52 +564,43 @@ object StateSourceOptions extends DataSourceOptions with Logging {
     val stateVarName = Option(options.get(STATE_VAR_NAME))
       .map(_.trim)
 
-    val readRegisteredTimers =
-      try {
-        Option(options.get(READ_REGISTERED_TIMERS))
-          .map(_.toBoolean)
-          .getOrElse(false)
-      } catch {
-        case _: IllegalArgumentException =>
-          throw StateDataSourceErrors.invalidOptionValue(
-            READ_REGISTERED_TIMERS,
-            "Boolean value is expected")
-      }
+    val readRegisteredTimers = try {
+      Option(options.get(READ_REGISTERED_TIMERS))
+        .map(_.toBoolean).getOrElse(false)
+    } catch {
+      case _: IllegalArgumentException =>
+        throw StateDataSourceErrors.invalidOptionValue(READ_REGISTERED_TIMERS,
+          "Boolean value is expected")
+    }
 
     if (readRegisteredTimers && stateVarName.isDefined) {
       throw StateDataSourceErrors.conflictOptions(Seq(READ_REGISTERED_TIMERS, STATE_VAR_NAME))
     }
 
-    val flattenCollectionTypes =
-      try {
-        Option(options.get(FLATTEN_COLLECTION_TYPES))
-          .map(_.toBoolean)
-          .getOrElse(true)
-      } catch {
-        case _: IllegalArgumentException =>
-          throw StateDataSourceErrors.invalidOptionValue(
-            FLATTEN_COLLECTION_TYPES,
-            "Boolean value is expected")
-      }
+    val flattenCollectionTypes = try {
+      Option(options.get(FLATTEN_COLLECTION_TYPES))
+        .map(_.toBoolean).getOrElse(true)
+    } catch {
+      case _: IllegalArgumentException =>
+        throw StateDataSourceErrors.invalidOptionValue(FLATTEN_COLLECTION_TYPES,
+          "Boolean value is expected")
+    }
 
-    val joinSide =
-      try {
-        Option(options.get(JOIN_SIDE))
-          .map(JoinSideValues.withName)
-          .getOrElse(JoinSideValues.none)
-      } catch {
-        case _: NoSuchElementException =>
-          throw StateDataSourceErrors.invalidOptionValue(
-            JOIN_SIDE,
-            s"Valid values are ${JoinSideValues.values.mkString(",")}")
-      }
+    val joinSide = try {
+      Option(options.get(JOIN_SIDE))
+        .map(JoinSideValues.withName).getOrElse(JoinSideValues.none)
+    } catch {
+      case _: NoSuchElementException =>
+        throw StateDataSourceErrors.invalidOptionValue(JOIN_SIDE,
+          s"Valid values are ${JoinSideValues.values.mkString(",")}")
+    }
 
     if (joinSide != JoinSideValues.none && storeName != StateStoreId.DEFAULT_STORE_NAME) {
       throw StateDataSourceErrors.conflictOptions(Seq(JOIN_SIDE, STORE_NAME))
     }
 
-    val resolvedCpLocation =
-      StreamingUtils.resolvedCheckpointLocation(hadoopConf, checkpointLocation)
+    val resolvedCpLocation = StreamingUtils.resolvedCheckpointLocation(
+      hadoopConf, checkpointLocation)
 
     var batchId = Option(options.get(BATCH_ID)).map(_.toLong)
 
@@ -647,21 +609,18 @@ object StateSourceOptions extends DataSourceOptions with Logging {
 
     val readChangeFeed = Option(options.get(READ_CHANGE_FEED)).exists(_.toBoolean)
 
-    val internalOnlyReadAllColumnFamilies =
-      try {
-        Option(options.get(INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES)).exists(_.toBoolean)
-      } catch {
-        case _: IllegalArgumentException =>
-          throw StateDataSourceErrors.invalidOptionValue(
-            INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES,
-            "Boolean value is expected")
-      }
+    val internalOnlyReadAllColumnFamilies = try {
+      Option(options.get(INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES)).exists(_.toBoolean)
+    } catch {
+      case _: IllegalArgumentException =>
+        throw StateDataSourceErrors.invalidOptionValue(INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES,
+          "Boolean value is expected")
+    }
 
     // This config should only be used by internal callers e.g. repartitioning
     if (internalOnlyReadAllColumnFamilies) {
-      logWarning(
-        "StateSourceOptions option INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES is enabled. " +
-          "This config should only be used for internal callers e.g. repartitioning")
+      logWarning("StateSourceOptions option INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES is enabled. " +
+        "This config should only be used for internal callers e.g. repartitioning")
       if (stateVarName.isDefined) {
         throw StateDataSourceErrors.conflictOptions(
           Seq(INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES, STATE_VAR_NAME))
@@ -691,8 +650,7 @@ object StateSourceOptions extends DataSourceOptions with Logging {
         throw StateDataSourceErrors.conflictOptions(Seq(BATCH_ID, READ_CHANGE_FEED))
       }
       if (snapshotStartBatchId.isDefined) {
-        throw StateDataSourceErrors.conflictOptions(
-          Seq(SNAPSHOT_START_BATCH_ID, READ_CHANGE_FEED))
+        throw StateDataSourceErrors.conflictOptions(Seq(SNAPSHOT_START_BATCH_ID, READ_CHANGE_FEED))
       }
       if (snapshotPartitionId.isDefined) {
         throw StateDataSourceErrors.conflictOptions(Seq(SNAPSHOT_PARTITION_ID, READ_CHANGE_FEED))
@@ -709,11 +667,10 @@ object StateSourceOptions extends DataSourceOptions with Logging {
         throw StateDataSourceErrors.invalidOptionValueIsNegative(CHANGE_START_BATCH_ID)
       }
       if (changeEndBatchId.get < changeStartBatchId.get) {
-        throw StateDataSourceErrors.invalidOptionValue(
-          CHANGE_END_BATCH_ID,
+        throw StateDataSourceErrors.invalidOptionValue(CHANGE_END_BATCH_ID,
           s"$CHANGE_END_BATCH_ID cannot be smaller than $CHANGE_START_BATCH_ID. " +
-            s"Please check the input to $CHANGE_END_BATCH_ID, or if you are using its default " +
-            s"value, make sure that $CHANGE_START_BATCH_ID is less than ${changeEndBatchId.get}.")
+          s"Please check the input to $CHANGE_END_BATCH_ID, or if you are using its default " +
+          s"value, make sure that $CHANGE_START_BATCH_ID is less than ${changeEndBatchId.get}.")
       }
 
       batchId = Some(changeEndBatchId.get)
@@ -722,13 +679,11 @@ object StateSourceOptions extends DataSourceOptions with Logging {
         ReadChangeFeedOptions(changeStartBatchId.get, changeEndBatchId.get))
     } else {
       if (changeStartBatchId.isDefined) {
-        throw StateDataSourceErrors.invalidOptionValue(
-          CHANGE_START_BATCH_ID,
-          s"Only specify this option when $READ_CHANGE_FEED is set to true.")
+        throw StateDataSourceErrors.invalidOptionValue(CHANGE_START_BATCH_ID,
+            s"Only specify this option when $READ_CHANGE_FEED is set to true.")
       }
       if (changeEndBatchId.isDefined) {
-        throw StateDataSourceErrors.invalidOptionValue(
-          CHANGE_END_BATCH_ID,
+        throw StateDataSourceErrors.invalidOptionValue(CHANGE_END_BATCH_ID,
           s"Only specify this option when $READ_CHANGE_FEED is set to true.")
       }
 
@@ -741,8 +696,7 @@ object StateSourceOptions extends DataSourceOptions with Logging {
         throw StateDataSourceErrors.invalidOptionValueIsNegative(SNAPSHOT_START_BATCH_ID)
       } else if (snapshotStartBatchId.exists(_ > batchId.get)) {
         throw StateDataSourceErrors.invalidOptionValue(
-          SNAPSHOT_START_BATCH_ID,
-          s"value should be less than or equal to ${batchId.get}")
+          SNAPSHOT_START_BATCH_ID, s"value should be less than or equal to ${batchId.get}")
       }
       if (snapshotPartitionId.exists(_ < 0)) {
         throw StateDataSourceErrors.invalidOptionValueIsNegative(SNAPSHOT_PARTITION_ID)
@@ -775,13 +729,20 @@ object StateSourceOptions extends DataSourceOptions with Logging {
       batchId.get
     }
 
-    val startOperatorStateUniqueIds =
-      getOperatorStateUniqueIds(sparkSession, startBatchId, operatorId, resolvedCpLocation)
+    val startOperatorStateUniqueIds = getOperatorStateUniqueIds(
+      sparkSession,
+      startBatchId,
+      operatorId,
+      resolvedCpLocation)
 
     val endOperatorStateUniqueIds = if (startBatchId == endBatchId) {
       startOperatorStateUniqueIds
     } else {
-      getOperatorStateUniqueIds(sparkSession, endBatchId, operatorId, resolvedCpLocation)
+      getOperatorStateUniqueIds(
+        sparkSession,
+        endBatchId,
+        operatorId,
+        resolvedCpLocation)
     }
 
     if (startOperatorStateUniqueIds.isDefined != endOperatorStateUniqueIds.isDefined) {
@@ -791,24 +752,15 @@ object StateSourceOptions extends DataSourceOptions with Logging {
         startBatchId,
         endBatchId,
         startFormatVersion,
-        endFormatVersion)
+        endFormatVersion
+      )
     }
 
     StateSourceOptions(
-      resolvedCpLocation,
-      batchId.get,
-      operatorId,
-      storeName,
-      joinSide,
-      readChangeFeed,
-      fromSnapshotOptions,
-      readChangeFeedOptions,
-      stateVarName,
-      readRegisteredTimers,
-      flattenCollectionTypes,
-      internalOnlyReadAllColumnFamilies,
-      startOperatorStateUniqueIds,
-      endOperatorStateUniqueIds)
+      resolvedCpLocation, batchId.get, operatorId, storeName, joinSide,
+      readChangeFeed, fromSnapshotOptions, readChangeFeedOptions,
+      stateVarName, readRegisteredTimers, flattenCollectionTypes, internalOnlyReadAllColumnFamilies,
+      startOperatorStateUniqueIds, endOperatorStateUniqueIds)
   }
 
   private def getLastCommittedBatch(session: SparkSession, checkpointLocation: String): Long = {
@@ -820,10 +772,10 @@ object StateSourceOptions extends DataSourceOptions with Logging {
   }
 
   private def getOperatorStateUniqueIds(
-      session: SparkSession,
-      batchId: Long,
-      operatorId: Long,
-      checkpointLocation: String): Option[Array[Array[String]]] = {
+    session: SparkSession,
+    batchId: Long,
+    operatorId: Long,
+    checkpointLocation: String): Option[Array[Array[String]]] = {
     val commitLog = new StreamingQueryCheckpointMetadata(session, checkpointLocation).commitLog
     val commitMetadata = commitLog.get(batchId) match {
       case Some(commitMetadata) => commitMetadata
@@ -837,16 +789,14 @@ object StateSourceOptions extends DataSourceOptions with Logging {
   // If this is a join operator specifying a store name using state format v3,
   // we need to modify the options.
   private[state] def modifySourceOptions(
-      hadoopConf: Configuration,
-      sourceOptions: StateSourceOptions): StateSourceOptions = {
+    hadoopConf: Configuration, sourceOptions: StateSourceOptions): StateSourceOptions = {
     // If a storeName is specified (e.g. right-keyToNumValues) and v3 is used,
     // we are using join with virtual column families not diff stores. Therefore,
     // options will be modified to set stateVarName to that storeName and storeName
     // to default.
     if (sourceOptions.storeName != StateStoreId.DEFAULT_STORE_NAME &&
       StreamStreamJoinStateHelper.usesVirtualColumnFamilies(
-        hadoopConf,
-        sourceOptions.stateCheckpointLocation.toString,
+        hadoopConf, sourceOptions.stateCheckpointLocation.toString,
         sourceOptions.operatorId)) {
       sourceOptions.copy(
         stateVarName = Some(sourceOptions.storeName),
@@ -866,26 +816,26 @@ case class StateStoreReaderInfo(
     stateSchemaProviderOpt: Option[StateSchemaProvider],
     joinColFamilyOpt: Option[String], // Only used for join op with state format v3
     // List of all column family schemas - used when internalOnlyReadAllColumnFamilies=true
-    allColumnFamiliesReaderInfo: Option[AllColumnFamiliesReaderInfo])
+    allColumnFamiliesReaderInfo: Option[AllColumnFamiliesReaderInfo]
+)
 
 object StateDataSource {
   private def getStateStoreMetadata(
-      stateSourceOptions: StateSourceOptions,
-      hadoopConf: Configuration): Array[StateMetadataTableEntry] = {
+    stateSourceOptions: StateSourceOptions,
+    hadoopConf: Configuration): Array[StateMetadataTableEntry] = {
     val allStateStoreMetadata = new StateMetadataPartitionReader(
       stateSourceOptions.stateCheckpointLocation.getParent.toString,
-      new SerializableConfiguration(hadoopConf),
-      stateSourceOptions.batchId).stateMetadata.toArray
+      new SerializableConfiguration(hadoopConf), stateSourceOptions.batchId).stateMetadata.toArray
     val stateStoreMetadata = allStateStoreMetadata.filter { entry =>
       entry.operatorId == stateSourceOptions.operatorId &&
-      entry.stateStoreName == stateSourceOptions.storeName
+        entry.stateStoreName == stateSourceOptions.storeName
     }
     stateStoreMetadata
   }
 
   def getOldSchemaFilePaths(
-      stateSourceOptions: StateSourceOptions,
-      hadoopConf: Configuration): List[Path] = {
+    stateSourceOptions: StateSourceOptions,
+    hadoopConf: Configuration): List[Path] = {
     val metadata = getStateStoreMetadata(stateSourceOptions, hadoopConf)
     metadata.headOption.map(_.stateSchemaFilePaths.map(new Path(_))).getOrElse(List.empty)
   }

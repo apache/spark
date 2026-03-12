@@ -26,8 +26,8 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.ByteType
 
 /**
- * Object used to transform grouping analytics (CUBE/ROLLUP/GROUPING SETS) operations into
- * [[Expand]] and [[Aggregate]] operators.
+ * Object used to transform grouping analytics (CUBE/ROLLUP/GROUPING SETS) operations
+ * into [[Expand]] and [[Aggregate]] operators.
  */
 object GroupingAnalyticsTransformer extends SQLConfHelper with AliasHelper {
 
@@ -36,12 +36,12 @@ object GroupingAnalyticsTransformer extends SQLConfHelper with AliasHelper {
    * followed by an [[Aggregate]] operator.
    *
    * The transformation works by:
-   *   1. Creating aliases for all group by expressions to prevent null values set by [[Expand]]
-   *      from being used in aggregates instead of the original values.
-   *   2. Creating an [[Expand]] operator that generates rows for each grouping set, with
-   *      appropriate null values for expressions not in the current grouping set.
-   *   3. Creating an [[Aggregate]] operator that aggregates the expanded rows, using the grouping
-   *      attributes and replacing grouping functions ([[GROUPING]], [[GROUPING_ID]]).
+   * 1. Creating aliases for all group by expressions to prevent null values set by [[Expand]]
+   *    from being used in aggregates instead of the original values.
+   * 2. Creating an [[Expand]] operator that generates rows for each grouping set, with
+   *    appropriate null values for expressions not in the current grouping set.
+   * 3. Creating an [[Aggregate]] operator that aggregates the expanded rows, using the
+   *    grouping attributes and replacing grouping functions ([[GROUPING]], [[GROUPING_ID]]).
    *
    * For example, for a query:
    *
@@ -50,10 +50,10 @@ object GroupingAnalyticsTransformer extends SQLConfHelper with AliasHelper {
    * }}}
    *
    * Arguments would be:
-   *   - groupByExpressions: [col1#0]
-   *   - selectedGroupByExpressions: [[col1#0], []]
-   *   - aggregationExpressions: [col1#0]
-   *   - child: LocalRelation [col1#0]
+   *  - groupByExpressions: [col1#0]
+   *  - selectedGroupByExpressions: [[col1#0], []]
+   *  - aggregationExpressions: [col1#0]
+   *  - child: LocalRelation [col1#0]
    *
    * The result of [[GroupingAnalyticsTransformer]] invocation would be:
    *
@@ -64,20 +64,14 @@ object GroupingAnalyticsTransformer extends SQLConfHelper with AliasHelper {
    *         +- LocalRelation [col1#0]
    * }}}
    *
-   * @param newAlias
-   *   Function to create new aliases, takes expression, optional name, and optional qualifier
-   * @param childOutput
-   *   The output attributes of the child plan
-   * @param groupByExpressions
-   *   The original group by expressions
-   * @param selectedGroupByExpressions
-   *   The selected group by expressions for each grouping set
-   * @param child
-   *   The child logical plan
-   * @param aggregationExpressions
-   *   The aggregation expressions
-   * @return
-   *   The transformed logical plan with Expand and Aggregate operators
+   * @param newAlias Function to create new aliases, takes expression, optional name, and optional
+   *                 qualifier
+   * @param childOutput The output attributes of the child plan
+   * @param groupByExpressions The original group by expressions
+   * @param selectedGroupByExpressions The selected group by expressions for each grouping set
+   * @param child The child logical plan
+   * @param aggregationExpressions The aggregation expressions
+   * @return The transformed logical plan with Expand and Aggregate operators
    */
   def apply(
       newAlias: (Expression, Option[String], Seq[String]) => Alias,
@@ -95,7 +89,8 @@ object GroupingAnalyticsTransformer extends SQLConfHelper with AliasHelper {
       child = child,
       groupByAliases = groupByAliases,
       gid = gid,
-      childOutput = childOutput)
+      childOutput = childOutput
+    )
     val groupingAttributes = expand.output.drop(childOutput.length)
 
     val aggregations = constructAggregateExpressions(
@@ -104,12 +99,14 @@ object GroupingAnalyticsTransformer extends SQLConfHelper with AliasHelper {
       aggregations = aggregationExpressions,
       groupByAliases = groupByAliases,
       groupingAttributes = groupingAttributes,
-      gid = gid)
+      gid = gid
+    )
 
     val aggregate = Aggregate(
       groupingExpressions = groupingAttributes,
       aggregateExpressions = aggregations,
-      child = expand)
+      child = expand
+    )
 
     aggregate
   }
@@ -140,10 +137,13 @@ object GroupingAnalyticsTransformer extends SQLConfHelper with AliasHelper {
             Cast(
               BitwiseAnd(
                 ShiftRight(gid, Literal(groupByExpressions.length - 1 - index)),
-                Literal(1L)),
-              ByteType).withTimeZone(conf.sessionLocalTimeZone),
+                Literal(1L)
+              ),
+              ByteType
+            ).withTimeZone(conf.sessionLocalTimeZone),
             Some(toPrettySQL(grouping)),
-            Seq.empty)
+            Seq.empty
+          )
         } else {
           throw QueryCompilationErrors.groupingColInvalidError(column, groupByExpressions)
         }
@@ -169,8 +169,8 @@ object GroupingAnalyticsTransformer extends SQLConfHelper with AliasHelper {
   }
 
   /**
-   * Create new aliases for all group by expressions to prevent null values set by [[Expand]] from
-   * being used in aggregates instead of original values.
+   * Create new aliases for all group by expressions to prevent null values set by [[Expand]]
+   * from being used in aggregates instead of original values.
    */
   private def constructGroupByAlias(
       newAlias: (Expression, Option[String], Seq[String]) => Alias,
@@ -207,7 +207,8 @@ object GroupingAnalyticsTransformer extends SQLConfHelper with AliasHelper {
         val alias = groupByAliases
           .find(_.child.semanticEquals(expression))
           .getOrElse(
-            throw QueryCompilationErrors.selectExprNotInGroupByError(expression, groupByAliases))
+            throw QueryCompilationErrors.selectExprNotInGroupByError(expression, groupByAliases)
+          )
         expandedAttributes.find(_.semanticEquals(alias.toAttribute)).getOrElse(alias.toAttribute)
       }
     }
@@ -218,7 +219,8 @@ object GroupingAnalyticsTransformer extends SQLConfHelper with AliasHelper {
       groupByAttrs = expandedAttributes,
       gid = gid,
       child = child,
-      childOutputOpt = Some(childOutput))
+      childOutputOpt = Some(childOutput)
+    )
   }
 
   /**
@@ -238,7 +240,8 @@ object GroupingAnalyticsTransformer extends SQLConfHelper with AliasHelper {
           expression = expression,
           groupByExpressions = groupByExpressions,
           gid = gid,
-          newAlias = newAlias)
+          newAlias = newAlias
+        )
       }
 
     val aggregationsWithExtractedAttributes = aggregationsWithReplacedGroupingFunctions
@@ -246,7 +249,8 @@ object GroupingAnalyticsTransformer extends SQLConfHelper with AliasHelper {
         replaceExpressions(
           expression = expression,
           groupByAliases = groupByAliases,
-          groupingAttributes = groupingAttributes)
+          groupingAttributes = groupingAttributes
+        )
       }
 
     aggregationsWithExtractedAttributes.map { expression =>
@@ -255,8 +259,8 @@ object GroupingAnalyticsTransformer extends SQLConfHelper with AliasHelper {
   }
 
   /**
-   * Replace group by expressions with their corresponding expanded attributes from the [[Expand]]
-   * operator output. Leaves aggregate expressions unchanged.
+   * Replace group by expressions with their corresponding expanded attributes from the
+   * [[Expand]] operator output. Leaves aggregate expressions unchanged.
    */
   private def replaceExpressions(
       expression: Expression,

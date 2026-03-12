@@ -46,13 +46,11 @@ private[sql] object PredicateUtils {
           if (!values.forall(_.isInstanceOf[LiteralValue[_]])) return None
           val dataType = values(0).asInstanceOf[LiteralValue[_]].dataType
           if (!values.forall(e =>
-              DataTypeUtils.sameType(e.asInstanceOf[LiteralValue[_]].dataType, dataType))) {
+            DataTypeUtils.sameType(e.asInstanceOf[LiteralValue[_]].dataType, dataType))) {
             return None
           }
           val inValues = values.map(v =>
-            CatalystTypeConverters.convertToScala(
-              v.asInstanceOf[LiteralValue[_]].value,
-              dataType))
+            CatalystTypeConverters.convertToScala(v.asInstanceOf[LiteralValue[_]].value, dataType))
           Some(In(attribute, inValues))
         } else {
           Some(In(attribute, Array.empty[Any]))
@@ -72,9 +70,8 @@ private[sql] object PredicateUtils {
         }
         Some(v1Filter)
 
-      case "IS_NULL" | "IS_NOT_NULL"
-          if predicate.children().length == 1 &&
-            predicate.children()(0).isInstanceOf[NamedReference] =>
+      case "IS_NULL" | "IS_NOT_NULL" if predicate.children().length == 1 &&
+          predicate.children()(0).isInstanceOf[NamedReference] =>
         val attribute = predicate.children()(0).toString
         val v1Filter = predicate.name() match {
           case "IS_NULL" => IsNull(attribute)

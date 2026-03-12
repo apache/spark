@@ -23,7 +23,8 @@ import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Synthetic benchmark for the extract function. To run this benchmark:
+ * Synthetic benchmark for the extract function.
+ * To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class>
@@ -50,7 +51,11 @@ object ExtractBenchmark extends SqlBasedBenchmark {
     }
   }
 
-  private def run(benchmark: Benchmark, cardinality: Long, name: String, exprs: String*): Unit = {
+  private def run(
+      benchmark: Benchmark,
+      cardinality: Long,
+      name: String,
+      exprs: String*): Unit = {
     benchmark.addCase(name, numIters = 3) { _ =>
       doBenchmark(cardinality, exprs: _*)
     }
@@ -59,12 +64,10 @@ object ExtractBenchmark extends SqlBasedBenchmark {
   private def castExpr(from: String): String = from match {
     case "timestamp" => "timestamp_seconds(id)"
     case "date" => "cast(timestamp_seconds(id) as date)"
-    case "interval" =>
-      "(cast(timestamp_seconds(id) as date) - date'0001-01-01') + " +
-        "(timestamp_seconds(id) - timestamp'1000-01-01 01:02:03.123456')"
-    case other =>
-      throw new IllegalArgumentException(
-        s"Unsupported column type $other. Valid column types are 'timestamp' and 'date'")
+    case "interval" => "(cast(timestamp_seconds(id) as date) - date'0001-01-01') + " +
+      "(timestamp_seconds(id) - timestamp'1000-01-01 01:02:03.123456')"
+    case other => throw new IllegalArgumentException(
+      s"Unsupported column type $other. Valid column types are 'timestamp' and 'date'")
   }
 
   private def run(
@@ -76,9 +79,8 @@ object ExtractBenchmark extends SqlBasedBenchmark {
     val expr = func match {
       case "extract" => s"EXTRACT($field FROM ${castExpr(from)}) AS $field"
       case "date_part" => s"DATE_PART('$field', ${castExpr(from)}) AS $field"
-      case other =>
-        throw new IllegalArgumentException(
-          s"Unsupported function '$other'. Valid functions are 'extract' and 'date_part'.")
+      case other => throw new IllegalArgumentException(
+        s"Unsupported function '$other'. Valid functions are 'extract' and 'date_part'.")
     }
     benchmark.addCase(s"$field of $from", numIters = 3) { _ =>
       doBenchmark(cardinality, expr)
@@ -87,26 +89,15 @@ object ExtractBenchmark extends SqlBasedBenchmark {
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val N = 10000000L
-    val datetimeFields = Seq(
-      "YEAR",
-      "YEAROFWEEK",
-      "QUARTER",
-      "MONTH",
-      "WEEK",
-      "DAY",
-      "DAYOFWEEK",
-      "DOW",
-      "DOW_ISO",
-      "DAYOFWEEK_ISO",
-      "DOY",
-      "HOUR",
-      "MINUTE",
-      "SECOND")
+    val datetimeFields = Seq("YEAR", "YEAROFWEEK", "QUARTER", "MONTH", "WEEK", "DAY", "DAYOFWEEK",
+      "DOW", "DOW_ISO", "DAYOFWEEK_ISO", "DOY", "HOUR", "MINUTE", "SECOND")
     val intervalFields = Seq("YEAR", "MONTH", "DAY", "HOUR", "MINUTE", "SECOND")
-    val settings =
-      Map("timestamp" -> datetimeFields, "date" -> datetimeFields, "interval" -> intervalFields)
+    val settings = Map(
+      "timestamp" -> datetimeFields,
+      "date" -> datetimeFields,
+      "interval" -> intervalFields)
 
-    for { (dataType, fields) <- settings; func <- Seq("extract", "date_part") } {
+    for {(dataType, fields) <- settings; func <- Seq("extract", "date_part")} {
 
       val benchmark = new Benchmark(s"Invoke $func for $dataType", N, output = output)
 

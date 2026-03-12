@@ -25,14 +25,14 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * An internal expressions which is used to generate pretty string for all kinds of values. It has
  * several differences with casting value to string:
- *   - It prints null values (either from column or struct field) as "NULL".
- *   - It prints binary values (either from column or struct field) using the hex format.
+ *  - It prints null values (either from column or struct field) as "NULL".
+ *  - It prints binary values (either from column or struct field) using the hex format.
  */
 case class ToPrettyString(child: Expression, timeZoneId: Option[String] = None)
-    extends UnaryExpression
-    with DefaultStringProducingExpression
-    with TimeZoneAwareExpression
-    with ToStringBase {
+  extends UnaryExpression
+  with DefaultStringProducingExpression
+  with TimeZoneAwareExpression
+  with ToStringBase {
 
   override def nullable: Boolean = false
 

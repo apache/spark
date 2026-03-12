@@ -21,9 +21,9 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest}
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2Provider, InsertIntoSQLOnlyTests}
 
 class QueryCompilationErrorsDSv2Suite
-    extends QueryTest
-    with DatasourceV2SQLBase
-    with InsertIntoSQLOnlyTests {
+  extends QueryTest
+  with DatasourceV2SQLBase
+  with InsertIntoSQLOnlyTests {
 
   private val v2Source = classOf[FakeV2Provider].getName
   override protected val v2Format = v2Source

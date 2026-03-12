@@ -93,20 +93,29 @@ class DateFormatterSuite extends DatetimeFormatterSuite {
     LegacyBehaviorPolicy.values.foreach { parserPolicy =>
       withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> parserPolicy.toString) {
         LegacyDateFormats.values.foreach { legacyFormat =>
-          Seq(-701265, -371419, -199722, -1, 0, 967, 2094, 17877, 24837, 1110657).foreach {
-            days =>
-              outstandingTimezonesIds.foreach { timeZone =>
-                withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
-                  val formatter = DateFormatter(
-                    DateFormatter.defaultPattern,
-                    DateFormatter.defaultLocale,
-                    legacyFormat,
-                    isParsing = false)
-                  val date = formatter.format(days)
-                  val parsed = formatter.parse(date)
-                  assert(days === parsed)
-                }
+          Seq(
+            -701265,
+            -371419,
+            -199722,
+            -1,
+            0,
+            967,
+            2094,
+            17877,
+            24837,
+            1110657).foreach { days =>
+            outstandingTimezonesIds.foreach { timeZone =>
+              withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
+                val formatter = DateFormatter(
+                  DateFormatter.defaultPattern,
+                  DateFormatter.defaultLocale,
+                  legacyFormat,
+                  isParsing = false)
+                val date = formatter.format(days)
+                val parsed = formatter.parse(date)
+                assert(days === parsed)
               }
+            }
           }
         }
       }
@@ -156,8 +165,7 @@ class DateFormatterSuite extends DatetimeFormatterSuite {
               DateFormatter.defaultLocale,
               legacyFormat,
               isParsing = false)
-            assert(
-              LocalDate.ofEpochDay(formatter.parse("1000-01-01")) === LocalDate.of(1000, 1, 1))
+            assert(LocalDate.ofEpochDay(formatter.parse("1000-01-01")) === LocalDate.of(1000, 1, 1))
             assert(formatter.format(LocalDate.of(1000, 1, 1)) === "1000-01-01")
             assert(formatter.format(localDateToDays(LocalDate.of(1000, 1, 1))) === "1000-01-01")
             assert(formatter.format(java.sql.Date.valueOf("1000-01-01")) === "1000-01-01")
@@ -191,7 +199,8 @@ class DateFormatterSuite extends DatetimeFormatterSuite {
       "1582-10-4" -> LocalDate.of(1582, 10, 4),
       "1583-1-1 " -> LocalDate.of(1583, 1, 1),
       "1970-01-1 00:00" -> LocalDate.of(1970, 1, 1),
-      "2021-8-12T18:31:50" -> LocalDate.of(2021, 8, 12)).foreach { case (inputStr, ld) =>
+      "2021-8-12T18:31:50" -> LocalDate.of(2021, 8, 12)
+    ).foreach { case (inputStr, ld) =>
       assert(formatter.parse(inputStr) === ld.toEpochDay)
     }
 

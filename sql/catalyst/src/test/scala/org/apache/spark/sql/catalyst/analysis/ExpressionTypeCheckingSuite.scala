@@ -50,8 +50,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
   }
 
   private def assertErrorForBinaryDifferingTypes(
-      expr: Expression,
-      messageParameters: Map[String, String]): Unit = {
+      expr: Expression, messageParameters: Map[String, String]): Unit = {
     checkError(
       exception = analysisException(expr),
       condition = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
@@ -59,8 +58,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
   }
 
   private def assertErrorForOrderingTypes(
-      expr: Expression,
-      messageParameters: Map[String, String]): Unit = {
+      expr: Expression, messageParameters: Map[String, String]): Unit = {
     checkError(
       exception = analysisException(expr),
       condition = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
@@ -68,8 +66,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
   }
 
   private def assertErrorForDataDifferingTypes(
-      expr: Expression,
-      messageParameters: Map[String, String]): Unit = {
+      expr: Expression, messageParameters: Map[String, String]): Unit = {
     checkError(
       exception = analysisException(expr),
       condition = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
@@ -77,17 +74,14 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
   }
 
   private def assertErrorForWrongNumParameters(
-      expr: Expression,
-      messageParameters: Map[String, String]): Unit = {
+      expr: Expression, messageParameters: Map[String, String]): Unit = {
     checkError(
       exception = analysisException(expr),
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = messageParameters)
   }
 
-  private def assertForWrongType(
-      expr: Expression,
-      messageParameters: Map[String, String]): Unit = {
+  private def assertForWrongType(expr: Expression, messageParameters: Map[String, String]): Unit = {
     checkError(
       exception = analysisException(expr),
       condition = "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
@@ -290,87 +284,114 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       messageParameters = Map(
         "sqlExpr" -> "\"(mapField = mapField)\"",
         "functionName" -> "`=`",
-        "dataType" -> "\"MAP<STRING, BIGINT>\""))
+        "dataType" -> "\"MAP<STRING, BIGINT>\""
+      )
+    )
     assertErrorForOrderingTypes(
       expr = EqualTo($"mapField", $"mapField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(mapField = mapField)\"",
         "functionName" -> "`=`",
-        "dataType" -> "\"MAP<STRING, BIGINT>\""))
+        "dataType" -> "\"MAP<STRING, BIGINT>\""
+      )
+    )
     assertErrorForOrderingTypes(
       expr = EqualNullSafe($"mapField", $"mapField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(mapField <=> mapField)\"",
         "functionName" -> "`<=>`",
-        "dataType" -> "\"MAP<STRING, BIGINT>\""))
+        "dataType" -> "\"MAP<STRING, BIGINT>\""
+      )
+    )
     assertErrorForOrderingTypes(
       expr = LessThan($"mapField", $"mapField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(mapField < mapField)\"",
         "functionName" -> "`<`",
-        "dataType" -> "\"MAP<STRING, BIGINT>\""))
+        "dataType" -> "\"MAP<STRING, BIGINT>\""
+      )
+    )
     assertErrorForOrderingTypes(
       expr = LessThanOrEqual($"mapField", $"mapField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(mapField <= mapField)\"",
         "functionName" -> "`<=`",
-        "dataType" -> "\"MAP<STRING, BIGINT>\""))
+        "dataType" -> "\"MAP<STRING, BIGINT>\""
+      )
+    )
     assertErrorForOrderingTypes(
       expr = GreaterThan($"mapField", $"mapField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(mapField > mapField)\"",
         "functionName" -> "`>`",
-        "dataType" -> "\"MAP<STRING, BIGINT>\""))
+        "dataType" -> "\"MAP<STRING, BIGINT>\""
+      )
+    )
     assertErrorForOrderingTypes(
       expr = GreaterThanOrEqual($"mapField", $"mapField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(mapField >= mapField)\"",
         "functionName" -> "`>=`",
-        "dataType" -> "\"MAP<STRING, BIGINT>\""))
+        "dataType" -> "\"MAP<STRING, BIGINT>\""
+      )
+    )
 
-    assert(
-      If(Literal(1), Literal("a"), Literal("b")).checkInputDataTypes() ==
-        DataTypeMismatch(
-          errorSubClass = "UNEXPECTED_INPUT_TYPE",
-          messageParameters = Map(
-            "paramIndex" -> ordinalNumber(0),
-            "requiredType" -> toSQLType(BooleanType),
-            "inputSql" -> "\"1\"",
-            "inputType" -> "\"INT\"")))
+    assert(If(Literal(1), Literal("a"), Literal("b")).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(0),
+          "requiredType" -> toSQLType(BooleanType),
+          "inputSql" -> "\"1\"",
+          "inputType" -> "\"INT\""
+        )
+      )
+    )
 
-    assert(
-      If(Literal(true), Literal(1), Literal(false)).checkInputDataTypes() ==
-        DataTypeMismatch(
-          errorSubClass = "DATA_DIFF_TYPES",
-          messageParameters =
-            Map("functionName" -> "`if`", "dataType" -> "[\"INT\", \"BOOLEAN\"]")))
+    assert(If(Literal(true), Literal(1), Literal(false)).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "DATA_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> "`if`",
+          "dataType" -> "[\"INT\", \"BOOLEAN\"]"
+        )
+      )
+    )
 
-    assert(
-      CaseWhen(Seq((Literal(true), Literal(1)), (Literal(true), Literal("a"))))
-        .checkInputDataTypes() ==
-        DataTypeMismatch(
-          errorSubClass = "DATA_DIFF_TYPES",
-          messageParameters =
-            Map("functionName" -> "`casewhen`", "dataType" -> "[\"INT\", \"STRING\"]")))
+    assert(CaseWhen(Seq((Literal(true), Literal(1)),
+      (Literal(true), Literal("a")))).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "DATA_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> "`casewhen`",
+          "dataType" -> "[\"INT\", \"STRING\"]"
+        )
+      )
+    )
 
-    assert(
-      CaseKeyWhen(Literal(1), Seq(Literal(1), Literal("a"), Literal(2), Literal(3)))
-        .checkInputDataTypes() ==
-        DataTypeMismatch(
-          errorSubClass = "DATA_DIFF_TYPES",
-          messageParameters =
-            Map("functionName" -> "`casewhen`", "dataType" -> "[\"STRING\", \"INT\"]")))
+    assert(CaseKeyWhen(Literal(1), Seq(Literal(1), Literal("a"),
+      Literal(2), Literal(3))).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "DATA_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> "`casewhen`",
+          "dataType" -> "[\"STRING\", \"INT\"]"
+        )
+      )
+    )
 
-    assert(
-      CaseWhen(Seq((Literal(true), Literal(1)), (Literal(2), Literal(3))))
-        .checkInputDataTypes() ==
-        DataTypeMismatch(
-          errorSubClass = "UNEXPECTED_INPUT_TYPE",
-          messageParameters = Map(
-            "paramIndex" -> ordinalNumber(1),
-            "requiredType" -> "\"BOOLEAN\"",
-            "inputSql" -> "\"2\"",
-            "inputType" -> "\"INT\"")))
+    assert(CaseWhen(Seq((Literal(true), Literal(1)),
+      (Literal(2), Literal(3)))).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(1),
+          "requiredType" -> "\"BOOLEAN\"",
+          "inputSql" -> "\"2\"",
+          "inputType" -> "\"INT\""
+        )
+      )
+    )
   }
 
   test("check types for aggregates") {
@@ -389,13 +410,17 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       messageParameters = Map(
         "sqlExpr" -> "\"min(mapField)\"",
         "functionName" -> "`min`",
-        "dataType" -> "\"MAP<STRING, BIGINT>\""))
+        "dataType" -> "\"MAP<STRING, BIGINT>\""
+      )
+    )
     assertErrorForOrderingTypes(
       expr = Max($"mapField"),
       messageParameters = Map(
         "sqlExpr" -> "\"max(mapField)\"",
         "functionName" -> "`max`",
-        "dataType" -> "\"MAP<STRING, BIGINT>\""))
+        "dataType" -> "\"MAP<STRING, BIGINT>\""
+      )
+    )
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -427,13 +452,17 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       messageParameters = Map(
         "sqlExpr" -> "\"array(intField, booleanField)\"",
         "functionName" -> "`array`",
-        "dataType" -> "(\"INT\" or \"BOOLEAN\")"))
+        "dataType" -> "(\"INT\" or \"BOOLEAN\")"
+      )
+    )
     assertErrorForDataDifferingTypes(
       expr = Coalesce(Seq($"intField", $"booleanField")),
       messageParameters = Map(
         "sqlExpr" -> "\"coalesce(intField, booleanField)\"",
         "functionName" -> "`coalesce`",
-        "dataType" -> "(\"INT\" or \"BOOLEAN\")"))
+        "dataType" -> "(\"INT\" or \"BOOLEAN\")"
+      )
+    )
 
     val coalesce = Coalesce(Nil)
     checkError(
@@ -493,7 +522,8 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
         "paramIndex" -> ordinalNumber(0),
         "inputSql" -> "\"intField\"",
         "inputType" -> "\"INT\"",
-        "requiredType" -> "(\"ARRAY\" or \"MAP\")"))
+        "requiredType" -> "(\"ARRAY\" or \"MAP\")")
+    )
   }
 
   test("check types for CreateNamedStruct") {
@@ -504,22 +534,29 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
         "functionName" -> "`named_struct`",
         "expectedNum" -> "2n (n > 0)",
         "actualNum" -> "3",
-        "docroot" -> SPARK_DOC_ROOT))
+        "docroot" -> SPARK_DOC_ROOT)
+    )
     checkError(
       exception = analysisException(CreateNamedStruct(Seq(1, "a", "b", 2.0))),
       condition = "DATATYPE_MISMATCH.CREATE_NAMED_STRUCT_WITHOUT_FOLDABLE_STRING",
-      parameters = Map("sqlExpr" -> "\"named_struct(1, a, b, 2.0)\"", "inputExprs" -> "[\"1\"]"))
+      parameters = Map(
+        "sqlExpr" -> "\"named_struct(1, a, b, 2.0)\"",
+        "inputExprs" -> "[\"1\"]")
+    )
     checkError(
       exception = analysisException(CreateNamedStruct(Seq($"a".string.at(0), "a", "b", 2.0))),
       condition = "DATATYPE_MISMATCH.CREATE_NAMED_STRUCT_WITHOUT_FOLDABLE_STRING",
       parameters = Map(
         "sqlExpr" -> "\"named_struct(boundreference(), a, b, 2.0)\"",
-        "inputExprs" -> "[\"boundreference()\"]"))
+        "inputExprs" -> "[\"boundreference()\"]")
+    )
     checkError(
-      exception =
-        analysisException(CreateNamedStruct(Seq(Literal.create(null, StringType), "a"))),
+      exception = analysisException(CreateNamedStruct(Seq(Literal.create(null, StringType), "a"))),
       condition = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
-      parameters = Map("sqlExpr" -> "\"named_struct(NULL, a)\"", "exprName" -> "[\"NULL\"]"))
+      parameters = Map(
+        "sqlExpr" -> "\"named_struct(NULL, a)\"",
+        "exprName" -> "[\"NULL\"]")
+    )
   }
 
   test("check types for CreateMap") {
@@ -530,23 +567,28 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
         "functionName" -> "`map`",
         "expectedNum" -> "2n (n > 0)",
         "actualNum" -> "3",
-        "docroot" -> SPARK_DOC_ROOT))
+        "docroot" -> SPARK_DOC_ROOT)
+    )
     checkError(
-      exception =
-        analysisException(CreateMap(Seq(Literal(1), Literal("a"), Literal(true), Literal("b")))),
+      exception = analysisException(CreateMap(Seq(Literal(1),
+        Literal("a"), Literal(true), Literal("b")))),
       condition = "DATATYPE_MISMATCH.CREATE_MAP_KEY_DIFF_TYPES",
       parameters = Map(
         "sqlExpr" -> "\"map(1, a, true, b)\"",
         "functionName" -> "`map`",
-        "dataType" -> "[\"INT\", \"BOOLEAN\"]"))
+        "dataType" -> "[\"INT\", \"BOOLEAN\"]"
+      )
+    )
     checkError(
-      exception =
-        analysisException(CreateMap(Seq(Literal("a"), Literal(1), Literal("b"), Literal(true)))),
+      exception = analysisException(CreateMap(Seq(Literal("a"),
+        Literal(1), Literal("b"), Literal(true)))),
       condition = "DATATYPE_MISMATCH.CREATE_MAP_VALUE_DIFF_TYPES",
       parameters = Map(
         "sqlExpr" -> "\"map(a, 1, b, true)\"",
         "functionName" -> "`map`",
-        "dataType" -> "[\"INT\", \"BOOLEAN\"]"))
+        "dataType" -> "[\"INT\", \"BOOLEAN\"]"
+      )
+    )
   }
 
   test("check types for ROUND/BROUND") {
@@ -654,7 +696,8 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
           "functionName" -> toSQLId(expr1.prettyName),
           "expectedNum" -> "> 1",
           "actualNum" -> "1",
-          "docroot" -> SPARK_DOC_ROOT))
+          "docroot" -> SPARK_DOC_ROOT)
+      )
 
       val expr2 = operator(Seq($"intField", $"stringField"))
       assertErrorForDataDifferingTypes(
@@ -662,7 +705,9 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
         messageParameters = Map(
           "sqlExpr" -> toSQLExpr(expr2),
           "functionName" -> toSQLId(expr2.prettyName),
-          "dataType" -> "[\"INT\", \"STRING\"]"))
+          "dataType" -> "[\"INT\", \"STRING\"]"
+        )
+      )
 
       val expr3 = operator(Seq($"mapField", $"mapField"))
       assertErrorForOrderingTypes(
@@ -670,82 +715,86 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
         messageParameters = Map(
           "sqlExpr" -> toSQLExpr(expr3),
           "functionName" -> s"`${expr3.prettyName}`",
-          "dataType" -> "\"MAP<STRING, BIGINT>\""))
+          "dataType" -> "\"MAP<STRING, BIGINT>\""
+        )
+      )
     }
   }
 
   test("check types for SQL string generation") {
-    assert(
-      Literal.create(Array(1, 2, 3), ArrayType(IntegerType)).sql ==
-        "ARRAY(1, 2, 3)")
-    assert(
-      Literal.create(Array(1, 2, null), ArrayType(IntegerType)).sql ==
-        "ARRAY(1, 2, CAST(NULL AS INT))")
-    assert(
-      Literal.default(StructType(Seq(StructField("col", StringType)))).sql ==
-        "NAMED_STRUCT('col', '')")
-    assert(
-      Literal.default(StructType(Seq(StructField("col", NullType)))).sql ==
-        "NAMED_STRUCT('col', NULL)")
-    assert(
-      Literal.create(Map(42L -> true), MapType(LongType, BooleanType)).sql ==
-        "MAP(42L, true)")
-    assert(
-      Literal.create(Map(42L -> null), MapType(LongType, NullType)).sql ==
-        "MAP(42L, NULL)")
+    assert(Literal.create(Array(1, 2, 3), ArrayType(IntegerType)).sql ==
+      "ARRAY(1, 2, 3)")
+    assert(Literal.create(Array(1, 2, null), ArrayType(IntegerType)).sql ==
+      "ARRAY(1, 2, CAST(NULL AS INT))")
+    assert(Literal.default(StructType(Seq(StructField("col", StringType)))).sql ==
+      "NAMED_STRUCT('col', '')")
+    assert(Literal.default(StructType(Seq(StructField("col", NullType)))).sql ==
+      "NAMED_STRUCT('col', NULL)")
+    assert(Literal.create(Map(42L -> true), MapType(LongType, BooleanType)).sql ==
+      "MAP(42L, true)")
+    assert(Literal.create(Map(42L -> null), MapType(LongType, NullType)).sql ==
+      "MAP(42L, NULL)")
   }
 
   test("hash expressions are prohibited on MapType elements") {
     val argument = Literal.create(Map(42L -> true), MapType(LongType, BooleanType))
     val murmur3Hash = new Murmur3Hash(Seq(argument))
-    assert(
-      murmur3Hash.checkInputDataTypes() ==
-        DataTypeMismatch(
-          errorSubClass = "HASH_MAP_TYPE",
-          messageParameters = Map("functionName" -> toSQLId(murmur3Hash.prettyName))))
+    assert(murmur3Hash.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "HASH_MAP_TYPE",
+        messageParameters = Map("functionName" -> toSQLId(murmur3Hash.prettyName))
+      )
+    )
   }
 
   test("hash expressions are prohibited on VariantType elements") {
     val argument = Literal.create(null, VariantType)
     val murmur3Hash = new Murmur3Hash(Seq(argument))
-    assert(
-      murmur3Hash.checkInputDataTypes() ==
-        DataTypeMismatch(
-          errorSubClass = "HASH_VARIANT_TYPE",
-          messageParameters = Map("functionName" -> toSQLId(murmur3Hash.prettyName))))
+    assert(murmur3Hash.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "HASH_VARIANT_TYPE",
+        messageParameters = Map("functionName" -> toSQLId(murmur3Hash.prettyName))
+      )
+    )
   }
 
   test("check types for Lag") {
     val lag = Lag(Literal(1), NonFoldableLiteral(10), Literal(null), true)
-    assert(
-      lag.checkInputDataTypes() ==
-        DataTypeMismatch(
-          errorSubClass = "NON_FOLDABLE_INPUT",
-          messageParameters = Map(
-            "inputName" -> "`offset`",
-            "inputType" -> "\"INT\"",
-            "inputExpr" -> "\"(- nonfoldableliteral())\"")))
+    assert(lag.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "`offset`",
+          "inputType" -> "\"INT\"",
+          "inputExpr" -> "\"(- nonfoldableliteral())\""
+        )
+      ))
   }
 
   test("check types for SpecifiedWindowFrame") {
     val swf1 = SpecifiedWindowFrame(RangeFrame, Literal(10.0), Literal(2147483648L))
-    assert(
-      swf1.checkInputDataTypes() ==
-        DataTypeMismatch(
-          errorSubClass = "SPECIFIED_WINDOW_FRAME_DIFF_TYPES",
-          messageParameters = Map(
-            "lower" -> "\"10.0\"",
-            "upper" -> "\"2147483648\"",
-            "lowerType" -> "\"DOUBLE\"",
-            "upperType" -> "\"BIGINT\"")))
+    assert(swf1.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "SPECIFIED_WINDOW_FRAME_DIFF_TYPES",
+        messageParameters = Map(
+          "lower" -> "\"10.0\"",
+          "upper" -> "\"2147483648\"",
+          "lowerType" -> "\"DOUBLE\"",
+          "upperType" -> "\"BIGINT\""
+        )
+      )
+    )
 
     val swf2 = SpecifiedWindowFrame(RangeFrame, NonFoldableLiteral(10.0), Literal(2147483648L))
-    assert(
-      swf2.checkInputDataTypes() ==
-        DataTypeMismatch(
-          errorSubClass = "SPECIFIED_WINDOW_FRAME_WITHOUT_FOLDABLE",
-          messageParameters =
-            Map("location" -> "lower", "expression" -> "\"nonfoldableliteral()\"")))
+    assert(swf2.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "SPECIFIED_WINDOW_FRAME_WITHOUT_FOLDABLE",
+        messageParameters = Map(
+          "location" -> "lower",
+          "expression" -> "\"nonfoldableliteral()\""
+        )
+      )
+    )
   }
 
   test("check types for WindowSpecDefinition") {
@@ -758,9 +807,9 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
         wsd.checkInputDataTypes()
       },
       condition = "INTERNAL_ERROR",
-      parameters = Map(
-        "message" -> ("Cannot use an UnspecifiedFrame. " +
-          "This should have been converted during analysis.")))
+      parameters = Map("message" -> ("Cannot use an UnspecifiedFrame. " +
+        "This should have been converted during analysis."))
+    )
   }
 
   test("check that current time is foldable") {

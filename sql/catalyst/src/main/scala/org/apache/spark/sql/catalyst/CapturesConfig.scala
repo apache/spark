@@ -40,7 +40,9 @@ trait CapturesConfig {
     "spark.sql.hive.convertMetastoreCtas",
     SQLConf.ADDITIONAL_REMOTE_REPOSITORIES.key)
 
-  private val configAllowList = Set(SQLConf.DISABLE_HINTS.key)
+  private val configAllowList = Set(
+    SQLConf.DISABLE_HINTS.key
+  )
 
   /**
    * Set of single-pass resolver confs that shouldn't be stored during view/UDF/proc creation.
@@ -49,11 +51,12 @@ trait CapturesConfig {
    */
   private val singlePassResolverDenyList = Set(
     SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key,
-    SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key)
+    SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key
+  )
 
   /**
-   * Convert the provided SQL configs to `properties`. Here we only capture the SQL configs that
-   * are modifiable and should be captured, i.e. not in the denyList and in the allowList. We also
+   * Convert the provided SQL configs to `properties`. Here we only capture the SQL configs that are
+   * modifiable and should be captured, i.e. not in the denyList and in the allowList. We also
    * capture `SESSION_LOCAL_TIMEZONE` whose default value relies on the JVM system timezone and
    * the `ANSI_ENABLED` value.
    *
@@ -85,13 +88,13 @@ trait CapturesConfig {
 
   /**
    * Capture view config either of:
-   *   1. exists in allowList
-   *   2. do not exists in denyList
+   * 1. exists in allowList
+   * 2. do not exists in denyList
    */
   private def shouldCaptureConfig(key: String): Boolean = {
     configAllowList.contains(key) || (
       !configPrefixDenyList.exists(prefix => key.startsWith(prefix)) &&
         !singlePassResolverDenyList.contains(key)
-    )
+      )
   }
 }

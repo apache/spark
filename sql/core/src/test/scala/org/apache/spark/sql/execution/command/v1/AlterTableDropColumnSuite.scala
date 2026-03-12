@@ -26,7 +26,8 @@ import org.apache.spark.sql.execution.command
  * that check V1 table catalogs. The tests that cannot run for all V1 catalogs are located in more
  * specific test suites:
  *
- *   - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.AlterTableDropColumnSuite`
+ *   - V1 In-Memory catalog:
+ *     `org.apache.spark.sql.execution.command.v1.AlterTableDropColumnSuite`
  *   - V1 Hive External catalog:
  *     `org.apache.spark.sql.hive.execution.command.AlterTableDropColumnSuite`
  */
@@ -36,15 +37,21 @@ trait AlterTableDropColumnSuiteBase extends command.AlterTableDropColumnSuiteBas
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id int) $defaultUsing")
       checkError(
-        exception = intercept[AnalysisException](sql(s"ALTER TABLE $t DROP COLUMN id")),
+        exception = intercept[AnalysisException](
+          sql(s"ALTER TABLE $t DROP COLUMN id")
+        ),
         condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-        parameters = Map("tableName" -> toSQLId(t), "operation" -> "DROP COLUMN"))
+        parameters = Map(
+          "tableName" -> toSQLId(t),
+          "operation" -> "DROP COLUMN"
+        )
+      )
     }
   }
 }
 
 /**
- * The class contains tests for the `ALTER TABLE .. DROP (COLUMN | COLUMNS)` command to check V1
- * In-Memory table catalog.
+ * The class contains tests for the `ALTER TABLE .. DROP (COLUMN | COLUMNS)` command to check
+ * V1 In-Memory table catalog.
  */
 class AlterTableDropColumnSuite extends AlterTableDropColumnSuiteBase with CommandSuiteBase

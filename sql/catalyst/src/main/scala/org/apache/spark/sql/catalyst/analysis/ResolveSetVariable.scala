@@ -31,14 +31,14 @@ import org.apache.spark.sql.types.IntegerType
  * Resolves the target SQL variables that we want to set in SetVariable, and add cast if necessary
  * to make the assignment valid.
  */
-class ResolveSetVariable(val catalogManager: CatalogManager)
-    extends Rule[LogicalPlan]
-    with ColumnResolutionHelper {
+class ResolveSetVariable(val catalogManager: CatalogManager) extends Rule[LogicalPlan]
+  with ColumnResolutionHelper {
   private val variableResolution = new VariableResolution(catalogManager.tempVariableManager)
 
   /**
-   * Checks for duplicate variable names and throws an exception if found. Names are normalized
-   * when the variables are created. No need for case insensitive comparison here.
+   * Checks for duplicate variable names and throws an exception if found.
+   * Names are normalized when the variables are created.
+   * No need for case insensitive comparison here.
    */
   private def checkForDuplicateVariables(variables: Seq[VariableReference]): Unit = {
     // TODO: we need to group by the qualified variable name once other catalogs support it.
@@ -46,48 +46,46 @@ class ResolveSetVariable(val catalogManager: CatalogManager)
     if (dups.nonEmpty) {
       throw new AnalysisException(
         errorClass = "DUPLICATE_ASSIGNMENTS",
-        messageParameters = Map(
-          "nameList" ->
-            dups.keys.map(key => toSQLId(key.name())).mkString(", ")))
+        messageParameters = Map("nameList" ->
+          dups.keys.map(key => toSQLId(key.name())).mkString(", ")))
     }
   }
 
-  override def apply(plan: LogicalPlan): LogicalPlan =
-    plan.resolveOperatorsWithPruning(_.containsPattern(COMMAND), ruleId) {
-      // Resolve the left hand side of the SET VAR command
-      case setVariable: SetVariable if !setVariable.targetVariables.forall(_.resolved) =>
-        val resolvedVars = setVariable.targetVariables.map {
-          case u: UnresolvedAttribute =>
-            variableResolution.lookupVariable(nameParts = u.nameParts) match {
-              case Some(variable) => variable.copy(canFold = false)
-              case _ => throw unresolvedVariableError(u.nameParts, Seq("SYSTEM", "SESSION"))
-            }
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+    _.containsPattern(COMMAND), ruleId) {
+    // Resolve the left hand side of the SET VAR command
+    case setVariable: SetVariable if !setVariable.targetVariables.forall(_.resolved) =>
+      val resolvedVars = setVariable.targetVariables.map {
+        case u: UnresolvedAttribute =>
+          variableResolution.lookupVariable(
+            nameParts = u.nameParts
+          ) match {
+            case Some(variable) => variable.copy(canFold = false)
+            case _ => throw unresolvedVariableError(u.nameParts, Seq("SYSTEM", "SESSION"))
+          }
 
-          case other =>
-            throw SparkException.internalError(
-              "Unexpected target variable expression in SetVariable: " + other)
-        }
+        case other => throw SparkException.internalError(
+          "Unexpected target variable expression in SetVariable: " + other)
+      }
 
-        setVariable.copy(targetVariables = resolvedVars)
+      setVariable.copy(targetVariables = resolvedVars)
 
-      case setVariable: SetVariable
-          if setVariable.targetVariables.forall(_.isInstanceOf[VariableReference]) &&
-            setVariable.sourceQuery.resolved =>
-        val targetVariables = setVariable.targetVariables.map(_.asInstanceOf[VariableReference])
+    case setVariable: SetVariable
+        if setVariable.targetVariables.forall(_.isInstanceOf[VariableReference]) &&
+          setVariable.sourceQuery.resolved =>
+      val targetVariables = setVariable.targetVariables.map(_.asInstanceOf[VariableReference])
 
-        // Check for duplicate variable names - this handles both regular SET VAR (after resolution)
-        // and EXECUTE IMMEDIATE ... INTO (which comes pre-resolved)
-        checkForDuplicateVariables(targetVariables)
+      // Check for duplicate variable names - this handles both regular SET VAR (after resolution)
+      // and EXECUTE IMMEDIATE ... INTO (which comes pre-resolved)
+      checkForDuplicateVariables(targetVariables)
 
-        val withCasts = TableOutputResolver.resolveVariableOutputColumns(
-          targetVariables,
-          setVariable.sourceQuery,
-          conf)
-        val withLimit = if (withCasts.maxRows.exists(_ <= 2)) {
-          withCasts
-        } else {
-          Limit(Literal(2, IntegerType), withCasts)
-        }
-        setVariable.copy(sourceQuery = withLimit)
-    }
+      val withCasts = TableOutputResolver.resolveVariableOutputColumns(
+        targetVariables, setVariable.sourceQuery, conf)
+      val withLimit = if (withCasts.maxRows.exists(_ <= 2)) {
+        withCasts
+      } else {
+        Limit(Literal(2, IntegerType), withCasts)
+      }
+      setVariable.copy(sourceQuery = withLimit)
+  }
 }

@@ -34,8 +34,7 @@ case class JDBCScan(
     tableSample: Option[TableSampleInfo],
     pushedLimit: Int,
     sortOrders: Array[String],
-    pushedOffset: Int)
-    extends V1Scan {
+    pushedOffset: Int) extends V1Scan {
 
   override def readSchema(): StructType = prunedSchema
 
@@ -56,13 +55,12 @@ case class JDBCScan(
   override def description(): String = {
     val (aggString, groupByString) = if (groupByColumns.nonEmpty) {
       val groupByColumnsLength = groupByColumns.get.length
-      (
-        seqToString(pushedAggregateColumn.drop(groupByColumnsLength).toImmutableArraySeq),
+      (seqToString(pushedAggregateColumn.drop(groupByColumnsLength).toImmutableArraySeq),
         seqToString(pushedAggregateColumn.take(groupByColumnsLength).toImmutableArraySeq))
     } else {
       ("[]", "[]")
     }
-    super.description() + ", prunedSchema: " + seqToString(prunedSchema) +
+    super.description()  + ", prunedSchema: " + seqToString(prunedSchema) +
       ", PushedPredicates: " + seqToString(pushedPredicates.toImmutableArraySeq) +
       ", PushedAggregates: " + aggString + ", PushedGroupBy: " + groupByString
   }

@@ -67,8 +67,10 @@ class SaveLoadSuite extends DataSourceTest with SharedSparkSession with BeforeAn
 
     // Test if we can pick up the data source name passed in load.
     spark.conf.set(SQLConf.DEFAULT_DATA_SOURCE_NAME.key, "not a source name")
-    checkAnswer(spark.read.format("json").load(path.toString), expectedDF.collect())
-    checkAnswer(spark.read.format("json").load(path.toString), expectedDF.collect())
+    checkAnswer(spark.read.format("json").load(path.toString),
+      expectedDF.collect())
+    checkAnswer(spark.read.format("json").load(path.toString),
+      expectedDF.collect())
     val schema = StructType(StructField("b", StringType, true) :: Nil)
     checkAnswer(
       spark.read.format("json").schema(schema).load(path.toString),

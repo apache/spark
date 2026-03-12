@@ -43,10 +43,10 @@ trait OrcFiltersBase {
   case class OrcPrimitiveField(fieldName: String, fieldType: DataType)
 
   /**
-   * This method returns a map which contains ORC field name and data type. Each key represents a
-   * column; `dots` are used as separators for nested columns. If any part of the names contains
-   * `dots`, it is quoted to avoid confusion. See `org.apache.spark.sql.connector.catalog.quoted`
-   * for implementation details.
+   * This method returns a map which contains ORC field name and data type. Each key
+   * represents a column; `dots` are used as separators for nested columns. If any part
+   * of the names contains `dots`, it is quoted to avoid confusion. See
+   * `org.apache.spark.sql.connector.catalog.quoted` for implementation details.
    *
    * BinaryType, UserDefinedType, ArrayType and MapType are ignored.
    */

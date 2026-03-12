@@ -28,8 +28,8 @@ import org.apache.spark.sql.internal.{SessionState, SessionStateBuilder, SQLConf
 private[sql] trait WithTestConf { self: SparkSession =>
 
   /**
-   * A map of configurations that should be applied to the test session. These configs will
-   * persist even after SQLConf.clear() is called.
+   * A map of configurations that should be applied to the test session.
+   * These configs will persist even after SQLConf.clear() is called.
    */
   protected def testConfOverrides: Map[String, String]
 
@@ -57,15 +57,11 @@ private[sql] trait WithTestConf { self: SparkSession =>
  * A special `SparkSession` prepared for testing.
  */
 private[spark] class TestSparkSession(sc: SparkContext)
-    extends SparkSession(sc)
-    with WithTestConf { self =>
+    extends SparkSession(sc) with WithTestConf { self =>
 
   def this(sparkConf: SparkConf, maxLocalTaskFailures: Int = 1, numCores: Int = 2) = {
-    this(
-      new SparkContext(
-        s"local[$numCores,$maxLocalTaskFailures]",
-        "test-sql-context",
-        sparkConf.set("spark.sql.testkey", "true")))
+    this(new SparkContext(s"local[$numCores,$maxLocalTaskFailures]", "test-sql-context",
+      sparkConf.set("spark.sql.testkey", "true")))
   }
 
   def this() = {
@@ -95,6 +91,7 @@ private[spark] class TestSparkSession(sc: SparkContext)
   }
 }
 
+
 private[sql] object TestSQLContext {
 
   /**
@@ -112,7 +109,9 @@ private[sql] object TestSQLContext {
       SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key -> "true")
 }
 
-private[sql] class TestSQLSessionStateBuilder(session: SparkSession, state: Option[SessionState])
-    extends SessionStateBuilder(session, state) {
+private[sql] class TestSQLSessionStateBuilder(
+    session: SparkSession,
+    state: Option[SessionState])
+  extends SessionStateBuilder(session, state) {
   override def newBuilder: NewBuilder = new TestSQLSessionStateBuilder(_, _)
 }

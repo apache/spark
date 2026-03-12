@@ -63,8 +63,8 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
   // Reference: DateTimeUtils.parseTimestampString
   // Used to determine inferring a column with mixture of dates and timestamps as TimestampType or
   // StringType when no timestamp format is specified (the lenient timestamp formatter will be used)
-  private val LENIENT_TS_FORMATTER_SUPPORTED_DATE_FORMATS =
-    Set("yyyy-MM-dd", "yyyy-M-d", "yyyy-M-dd", "yyyy-MM-d", "yyyy-MM", "yyyy-M", "yyyy")
+  private val LENIENT_TS_FORMATTER_SUPPORTED_DATE_FORMATS = Set(
+    "yyyy-MM-dd", "yyyy-M-d", "yyyy-M-dd", "yyyy-MM-d", "yyyy-MM", "yyyy-M", "yyyy")
 
   private val isDefaultNTZ = SQLConf.get.timestampType == TimestampNTZType
 
@@ -78,11 +78,13 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
 
   /**
    * Similar to the JSON schema inference
-   *   1. Infer type of each row
-   *   2. Merge row types to find common type
-   *   3. Replace any null types with string type
+   *     1. Infer type of each row
+   *     2. Merge row types to find common type
+   *     3. Replace any null types with string type
    */
-  def infer(tokenRDD: RDD[Array[String]], header: Array[String]): StructType = {
+  def infer(
+      tokenRDD: RDD[Array[String]],
+      header: Array[String]): StructType = {
     val fields = if (options.inferSchemaFlag) {
       val startType: Array[DataType] = Array.fill[DataType](header.length)(NullType)
       val rootTypes: Array[DataType] =
@@ -97,7 +99,9 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     StructType(fields)
   }
 
-  def toStructFields(fieldTypes: Array[DataType], header: Array[String]): Array[StructField] = {
+  def toStructFields(
+      fieldTypes: Array[DataType],
+      header: Array[String]): Array[StructField] = {
     header.zip(fieldTypes).map { case (thisHeader, rootType) =>
       val dType = rootType match {
         case _: NullType => StringType
@@ -109,9 +113,9 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
 
   def inferRowType(rowSoFar: Array[DataType], next: Array[String]): Array[DataType] = {
     var i = 0
-    while (i < math.min(rowSoFar.length, next.length)) { // May have columns on right missing.
+    while (i < math.min(rowSoFar.length, next.length)) {  // May have columns on right missing.
       rowSoFar(i) = inferField(rowSoFar(i), next(i))
-      i += 1
+      i+=1
     }
     rowSoFar
   }
@@ -123,8 +127,8 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
   }
 
   /**
-   * Infer type of string field. Given known type Double, and a string "1", there is no point
-   * checking if it is an Int, as the final type must be Double or higher.
+   * Infer type of string field. Given known type Double, and a string "1", there is no
+   * point checking if it is an Int, as the final type must be Double or higher.
    */
   def inferField(typeSoFar: DataType, field: String): DataType = {
     if (field == null || field.isEmpty || field == options.nullValue) {
@@ -241,13 +245,13 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
   }
 
   /**
-   * Returns the common data type given two input data types so that the return type is compatible
-   * with both input data types.
+   * Returns the common data type given two input data types so that the return type
+   * is compatible with both input data types.
    */
   private def compatibleType(t1: DataType, t2: DataType): Option[DataType] = {
     (t1, t2) match {
       case (DateType, TimestampType) | (DateType, TimestampNTZType) |
-          (TimestampNTZType, DateType) | (TimestampType, DateType) =>
+           (TimestampNTZType, DateType) | (TimestampType, DateType) =>
         // For a column containing a mixture of dates and timestamps, infer it as timestamp type
         // if its dates can be inferred as timestamp type, otherwise infer it as StringType.
         // This only happens when the timestamp pattern is not specified, as the default timestamp
@@ -260,18 +264,17 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
             Some(t1)
           case _ => Some(StringType)
         }
-      case _ =>
-        TypeCoercion.findTightestCommonType(t1, t2).orElse(findCompatibleTypeForCSV(t1, t2))
+      case _ => TypeCoercion.findTightestCommonType(t1, t2).orElse(findCompatibleTypeForCSV(t1, t2))
     }
   }
 
   /**
    * Return true if strings of given date format can be parsed as timestamps
-   *   1. If user provides timestamp format, we will parse strings as timestamps using
-   *      Iso8601TimestampFormatter (with strict timestamp parsing). Any date string can not be
-   *      parsed as timestamp type in this case
-   *   2. Otherwise, we will use DefaultTimestampFormatter to parse strings as timestamps, which
-   *      is more lenient and can parse strings of some date formats as timestamps.
+   *  1. If user provides timestamp format, we will parse strings as timestamps using
+   *  Iso8601TimestampFormatter (with strict timestamp parsing). Any date string can not be parsed
+   *  as timestamp type in this case
+   *  2. Otherwise, we will use DefaultTimestampFormatter to parse strings as timestamps, which
+   *  is more lenient and can parse strings of some date formats as timestamps.
    */
   private def canParseDateAsTimestamp(dateFormat: String, tsType: DataType): Boolean = {
     if ((tsType.isInstanceOf[TimestampType] && options.timestampFormatInRead.isEmpty) ||
@@ -283,8 +286,8 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
   }
 
   /**
-   * The following pattern matching represents additional type promotion rules that are CSV
-   * specific.
+   * The following pattern matching represents additional type promotion rules that
+   * are CSV specific.
    */
   private val findCompatibleTypeForCSV: (DataType, DataType) => Option[DataType] = {
     case (StringType, t2) => Some(StringType)

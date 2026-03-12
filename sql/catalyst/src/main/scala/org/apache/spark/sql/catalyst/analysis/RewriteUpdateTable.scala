@@ -29,8 +29,7 @@ import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
- * A rule that rewrites UPDATE operations using plans that operate on individual or groups of
- * rows.
+ * A rule that rewrites UPDATE operations using plans that operate on individual or groups of rows.
  *
  * This rule assumes the commands have been fully resolved and all assignments have been aligned.
  */
@@ -73,8 +72,8 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     val readRelation = buildRelationWithAttrs(relation, operationTable, metadataAttrs)
 
     // build a plan with updated and copied over records
-    val updatedAndRemainingRowsPlan =
-      buildReplaceDataUpdateProjection(readRelation, assignments, cond)
+    val updatedAndRemainingRowsPlan = buildReplaceDataUpdateProjection(
+      readRelation, assignments, cond)
 
     // build a plan to replace read groups in the table
     val writeRelation = relation.copy(table = operationTable)
@@ -174,8 +173,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
     // build a plan to write the row delta to the table
     val writeRelation = relation.copy(table = operationTable)
-    val projections =
-      buildWriteDeltaProjections(rowDeltaPlan, rowAttrs, rowIdAttrs, metadataAttrs)
+    val projections = buildWriteDeltaProjections(rowDeltaPlan, rowAttrs, rowIdAttrs, metadataAttrs)
     WriteDelta(writeRelation, cond, rowDeltaPlan, relation, projections)
   }
 

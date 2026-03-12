@@ -62,13 +62,13 @@ class IntegralDeltaSuite extends SparkFunSuite {
 
       // Compression scheme ID + compressed contents
       val compressedSize = 4 + (if (deltas.isEmpty) {
-                                  0
-                                } else {
-                                  val oneBoolean = columnType.defaultSize
-                                  1 + oneBoolean + deltas.map { d =>
-                                    if (math.abs(d) <= Byte.MaxValue) 1 else 1 + oneBoolean
-                                  }.sum
-                                })
+        0
+      } else {
+        val oneBoolean = columnType.defaultSize
+        1 + oneBoolean + deltas.map {
+          d => if (math.abs(d) <= Byte.MaxValue) 1 else 1 + oneBoolean
+        }.sum
+      })
 
       // 4 extra bytes for compression scheme type ID
       assertResult(headerSize + compressedSize, "Wrong buffer capacity")(buffer.capacity)
@@ -101,7 +101,7 @@ class IntegralDeltaSuite extends SparkFunSuite {
       val mutableRow = new GenericInternalRow(1)
 
       if (input.nonEmpty) {
-        input.foreach {
+        input.foreach{
           assert(decoder.hasNext)
           assertResult(_, "Wrong decoded value") {
             decoder.next(mutableRow, 0)
@@ -136,8 +136,7 @@ class IntegralDeltaSuite extends SparkFunSuite {
       assertResult(scheme.typeId, "Wrong compression scheme ID")(buffer.getInt())
 
       val decoder = scheme.decoder(buffer, columnType)
-      val columnVector = new OnHeapColumnVector(
-        input.length,
+      val columnVector = new OnHeapColumnVector(input.length,
         ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType))
       decoder.decompress(columnVector, input.length)
 
@@ -177,6 +176,7 @@ class IntegralDeltaSuite extends SparkFunSuite {
     test(s"$scheme: long random series") {
       skeleton(Seq.fill[I#InternalType](10000)(makeRandomValue(columnType)))
     }
+
 
     test(s"$scheme: empty column for decompress()") {
       skeletonForDecompress(Seq.empty)

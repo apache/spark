@@ -138,8 +138,9 @@ class AddMetadataColumnsSuite extends QueryTest with SharedSparkSession {
         val analyzed = filter.select(left("k")).queryExecution.analyzed
         analyzed match {
           case Project(
-                _,
-                Project(_, Filter(_, Project(innerProjectList: Seq[NamedExpression], _)))) =>
+              _,
+              Project(_, Filter(_, Project(innerProjectList: Seq[NamedExpression], _)))
+              ) =>
             assert(Seq("k", "v1", "v2", "k") == innerProjectList.map(_.name))
             assert(innerProjectList.map(_.exprId).count(_ == rightKeyExprId) == 0)
             assert(innerProjectList.map(_.exprId).count(_ == leftKeyExprId) == 1)
@@ -151,8 +152,9 @@ class AddMetadataColumnsSuite extends QueryTest with SharedSparkSession {
         val analyzed = filter.select(left("k")).queryExecution.analyzed
         analyzed match {
           case Project(
-                _,
-                Project(_, Filter(_, Project(innerProjectList: Seq[NamedExpression], _)))) =>
+              _,
+              Project(_, Filter(_, Project(innerProjectList: Seq[NamedExpression], _)))
+              ) =>
             assert(Seq("k", "v1", "v2", "k", "k", "k") == innerProjectList.map(_.name))
             assert(innerProjectList.map(_.exprId).count(_ == rightKeyExprId) == 1)
             assert(innerProjectList.map(_.exprId).count(_ == leftKeyExprId) == 2)

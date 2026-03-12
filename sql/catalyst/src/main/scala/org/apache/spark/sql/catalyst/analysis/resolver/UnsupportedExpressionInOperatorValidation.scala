@@ -30,15 +30,15 @@ object UnsupportedExpressionInOperatorValidation {
    * [[Aggregate]] as the transformation to attributes is delayed to specific resolvers (if
    * needed). Example:
    *
-   * {{{SELECT SUM(col1) + 1 FROM VALUES(1) ORDER BY SUM(col1) + 1}}}
+   * {{{ SELECT SUM(col1) + 1 FROM VALUES(1) ORDER BY SUM(col1) + 1 }}}
    *
-   * In this case, ordering [[AggregateExpression]] in `SUM(col1) + 1` should be allowed here as
-   * its parent expression `SUM(col1) + 1` will be transformed to attribute later in
+   * In this case, ordering [[AggregateExpression]] in `SUM(col1) + 1` should be allowed here
+   * as its parent expression `SUM(col1) + 1` will be transformed to attribute later in
    * [[GroupingAndAggregateExpressionsExtractor.extractReferencedGroupingAndAggregateExpressions]]
    * and thus at the end of [[Sort]] resolution we won't have any [[AggregateExpression]]s in its
    * ordering expression tree. On the other side, here is a query that should fail:
    *
-   * {{{SELECT col1 FROM VALUES(1) ORDER BY MAX(col1)}}}
+   * {{{ SELECT col1 FROM VALUES(1) ORDER BY MAX(col1) }}}
    *
    * `MAX(col1)` can't be extracted as the child of the [[Sort]] is [[Project]] and thus we fail
    * during validation in [[Resolver.validateResolvedOperatorGenerically]].
@@ -52,15 +52,15 @@ object UnsupportedExpressionInOperatorValidation {
       case _: WindowExpression => operator.isInstanceOf[Window]
       case _: AggregateExpression =>
         !(operator.isInstanceOf[Project] ||
-          operator.isInstanceOf[Aggregate] ||
-          operator.isInstanceOf[Window] ||
-          operator.isInstanceOf[CollectMetrics] ||
-          isSortOnTopOfAggregate ||
-          isFilterOnTopOfAggregate ||
-          onlyInLateralSubquery(operator))
+        operator.isInstanceOf[Aggregate] ||
+        operator.isInstanceOf[Window] ||
+        operator.isInstanceOf[CollectMetrics] ||
+        isSortOnTopOfAggregate ||
+        isFilterOnTopOfAggregate ||
+        onlyInLateralSubquery(operator))
       case _: Generator =>
         !(operator.isInstanceOf[Generate] ||
-          operator.isInstanceOf[BaseEvalPythonUDTF])
+        operator.isInstanceOf[BaseEvalPythonUDTF])
       case _ =>
         false
     }
@@ -70,7 +70,8 @@ object UnsupportedExpressionInOperatorValidation {
     operator.isInstanceOf[LateralJoin] && {
       // TODO: check if we are resolving a lateral join condition once lateral join is supported.
       throw QueryCompilationErrors.unsupportedSinglePassAnalyzerFeature(
-        s"${operator.getClass} operator resolution")
+        s"${operator.getClass} operator resolution"
+      )
     }
   }
 }

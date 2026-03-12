@@ -24,7 +24,10 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class STExpressionsSuite extends QueryTest with SharedSparkSession with ExpressionEvalHelper {
+class STExpressionsSuite
+  extends QueryTest
+  with SharedSparkSession
+  with ExpressionEvalHelper {
 
   // Private common constants used across several tests.
   private final val defaultGeographySrid: Int = ExpressionDefaults.DEFAULT_GEOGRAPHY_SRID
@@ -194,11 +197,18 @@ class STExpressionsSuite extends QueryTest with SharedSparkSession with Expressi
       (s"array($geog1, $geog1)", geographyType1, Seq(row, row)),
       (s"array($geog2, $geog2)", geographyType2, Seq(row, row)),
       (s"array($geog1, $geog2)", mixedSridGeographyType, Seq(row, row)),
-      (s"array($geog2, $geog1)", mixedSridGeographyType, Seq(row, row)))
+      (s"array($geog2, $geog1)", mixedSridGeographyType, Seq(row, row))
+    )
 
     for ((expr, expectedType, expectedRows) <- testCases) {
-      assertType(s"SELECT $expr", ArrayType(expectedType))
-      checkAnswer(sql(s"WITH t AS (SELECT explode($expr) AS g) SELECT $geo FROM t"), expectedRows)
+      assertType(
+        s"SELECT $expr",
+        ArrayType(expectedType)
+      )
+      checkAnswer(
+        sql(s"WITH t AS (SELECT explode($expr) AS g) SELECT $geo FROM t"),
+        expectedRows
+      )
     }
   }
 
@@ -219,7 +229,8 @@ class STExpressionsSuite extends QueryTest with SharedSparkSession with Expressi
       (s"array($geog1, $geog1)", geographyType1, Seq(row, row)),
       (s"array($geog2, $geog2)", geographyType2, Seq(row, row)),
       (s"array($geog1, $geog2)", mixedSridGeographyType, Seq(row, row)),
-      (s"array($geog2, $geog1)", mixedSridGeographyType, Seq(row, row)))
+      (s"array($geog2, $geog1)", mixedSridGeographyType, Seq(row, row))
+    )
 
     // Test with literal and column, using geographies with different SRID values.
     withTable("tbl") {
@@ -228,10 +239,14 @@ class STExpressionsSuite extends QueryTest with SharedSparkSession with Expressi
       sql(s"INSERT INTO tbl VALUES (X'$wkbString')")
 
       for ((query, expectedType, expectedRows) <- testCases) {
-        assertType(s"SELECT $query FROM tbl", ArrayType(expectedType))
+        assertType(
+          s"SELECT $query FROM tbl",
+          ArrayType(expectedType)
+        )
         checkAnswer(
           sql(s"WITH t AS (SELECT explode($query) AS g FROM tbl) SELECT $geo FROM t"),
-          expectedRows)
+          expectedRows
+        )
       }
     }
   }
@@ -255,11 +270,18 @@ class STExpressionsSuite extends QueryTest with SharedSparkSession with Expressi
       (s"nvl($geog1, $geog1)", geographyType1, Seq(row)),
       (s"nvl($geog2, $geog2)", geographyType2, Seq(row)),
       (s"nvl($geog1, $geog2)", mixedSridGeographyType, Seq(row)),
-      (s"nvl($geog2, $geog1)", mixedSridGeographyType, Seq(row)))
+      (s"nvl($geog2, $geog1)", mixedSridGeographyType, Seq(row))
+    )
 
     for ((expr, expectedType, expectedRows) <- testCases) {
-      assertType(s"SELECT $expr", expectedType)
-      checkAnswer(sql(s"WITH t AS (SELECT $expr AS g) SELECT $geo FROM t"), expectedRows)
+      assertType(
+        s"SELECT $expr",
+        expectedType
+      )
+      checkAnswer(
+        sql(s"WITH t AS (SELECT $expr AS g) SELECT $geo FROM t"),
+        expectedRows
+      )
     }
   }
 
@@ -282,7 +304,8 @@ class STExpressionsSuite extends QueryTest with SharedSparkSession with Expressi
       (s"nvl($geog1, $geog1)", geographyType1, Seq(row)),
       (s"nvl($geog2, $geog2)", geographyType2, Seq(row)),
       (s"nvl($geog1, $geog2)", mixedSridGeographyType, Seq(row)),
-      (s"nvl($geog2, $geog1)", mixedSridGeographyType, Seq(row)))
+      (s"nvl($geog2, $geog1)", mixedSridGeographyType, Seq(row))
+    )
 
     // Test with literal and column, using geographies with different SRID values.
     withTable("tbl") {
@@ -291,10 +314,14 @@ class STExpressionsSuite extends QueryTest with SharedSparkSession with Expressi
       sql(s"INSERT INTO tbl VALUES (X'$wkbString')")
 
       for ((query, expectedType, expectedRows) <- testCases) {
-        assertType(s"SELECT $query FROM tbl", expectedType)
+        assertType(
+          s"SELECT $query FROM tbl",
+          expectedType
+        )
         checkAnswer(
           sql(s"WITH t AS (SELECT $query AS g FROM tbl) SELECT $geo FROM t"),
-          expectedRows)
+          expectedRows
+        )
       }
     }
   }
@@ -316,11 +343,18 @@ class STExpressionsSuite extends QueryTest with SharedSparkSession with Expressi
       (s"array($geom1, $geom1)", geometryType1, Seq(row, row)),
       (s"array($geom2, $geom2)", geometryType2, Seq(row, row)),
       (s"array($geom1, $geom2)", mixedSridGeometryType, Seq(row, row)),
-      (s"array($geom2, $geom1)", mixedSridGeometryType, Seq(row, row)))
+      (s"array($geom2, $geom1)", mixedSridGeometryType, Seq(row, row))
+    )
 
     for ((expr, expectedType, expectedRows) <- testCases) {
-      assertType(s"SELECT $expr", ArrayType(expectedType))
-      checkAnswer(sql(s"WITH t AS (SELECT explode($expr) AS g) SELECT $geo FROM t"), expectedRows)
+      assertType(
+        s"SELECT $expr",
+        ArrayType(expectedType)
+      )
+      checkAnswer(
+        sql(s"WITH t AS (SELECT explode($expr) AS g) SELECT $geo FROM t"),
+        expectedRows
+      )
     }
   }
 
@@ -341,7 +375,8 @@ class STExpressionsSuite extends QueryTest with SharedSparkSession with Expressi
       (s"array($geom1, $geom1)", geometryType1, Seq(row, row)),
       (s"array($geom2, $geom2)", geometryType2, Seq(row, row)),
       (s"array($geom1, $geom2)", mixedSridGeometryType, Seq(row, row)),
-      (s"array($geom2, $geom1)", mixedSridGeometryType, Seq(row, row)))
+      (s"array($geom2, $geom1)", mixedSridGeometryType, Seq(row, row))
+    )
 
     // Test with literal and column, using geometries with different SRID values.
     withTable("tbl") {
@@ -350,10 +385,14 @@ class STExpressionsSuite extends QueryTest with SharedSparkSession with Expressi
       sql(s"INSERT INTO tbl VALUES (X'$wkbString')")
 
       for ((query, expectedType, expectedRows) <- testCases) {
-        assertType(s"SELECT $query FROM tbl", ArrayType(expectedType))
+        assertType(
+          s"SELECT $query FROM tbl",
+          ArrayType(expectedType)
+        )
         checkAnswer(
           sql(s"WITH t AS (SELECT explode($query) AS g FROM tbl) SELECT $geo FROM t"),
-          expectedRows)
+          expectedRows
+        )
       }
     }
   }
@@ -377,11 +416,18 @@ class STExpressionsSuite extends QueryTest with SharedSparkSession with Expressi
       (s"nvl($geom1, $geom1)", geometryType1, Seq(row)),
       (s"nvl($geom2, $geom2)", geometryType2, Seq(row)),
       (s"nvl($geom1, $geom2)", mixedSridGeometryType, Seq(row)),
-      (s"nvl($geom2, $geom1)", mixedSridGeometryType, Seq(row)))
+      (s"nvl($geom2, $geom1)", mixedSridGeometryType, Seq(row))
+    )
 
     for ((expr, expectedType, expectedRows) <- testCases) {
-      assertType(s"SELECT $expr", expectedType)
-      checkAnswer(sql(s"WITH t AS (SELECT $expr AS g) SELECT $geo FROM t"), expectedRows)
+      assertType(
+        s"SELECT $expr",
+        expectedType
+      )
+      checkAnswer(
+        sql(s"WITH t AS (SELECT $expr AS g) SELECT $geo FROM t"),
+        expectedRows
+      )
     }
   }
 
@@ -404,7 +450,8 @@ class STExpressionsSuite extends QueryTest with SharedSparkSession with Expressi
       (s"nvl($geom1, $geom1)", geometryType1, Seq(row)),
       (s"nvl($geom2, $geom2)", geometryType2, Seq(row)),
       (s"nvl($geom1, $geom2)", mixedSridGeometryType, Seq(row)),
-      (s"nvl($geom2, $geom1)", mixedSridGeometryType, Seq(row)))
+      (s"nvl($geom2, $geom1)", mixedSridGeometryType, Seq(row))
+    )
 
     // Test with literal and column, using geometries with different SRID values.
     withTable("tbl") {
@@ -413,10 +460,14 @@ class STExpressionsSuite extends QueryTest with SharedSparkSession with Expressi
       sql(s"INSERT INTO tbl VALUES (X'$wkbString')")
 
       for ((query, expectedType, expectedRows) <- testCases) {
-        assertType(s"SELECT $query FROM tbl", expectedType)
+        assertType(
+          s"SELECT $query FROM tbl",
+          expectedType
+        )
         checkAnswer(
           sql(s"WITH t AS (SELECT $query AS g FROM tbl) SELECT $geo FROM t"),
-          expectedRows)
+          expectedRows
+        )
       }
     }
   }
@@ -458,7 +509,8 @@ class STExpressionsSuite extends QueryTest with SharedSparkSession with Expressi
         geographyExpressionInvalidWkb.eval()
       },
       condition = "WKB_PARSE_ERROR",
-      parameters = Map("parseError" -> "Unexpected end of WKB buffer", "pos" -> "0"))
+      parameters = Map("parseError" -> "Unexpected end of WKB buffer", "pos" -> "0")
+    )
   }
 
   test("ST_GeomFromWKB - expressions") {
@@ -484,7 +536,8 @@ class STExpressionsSuite extends QueryTest with SharedSparkSession with Expressi
         geometryExpressionInvalidSrid.eval()
       },
       condition = "ST_INVALID_SRID_VALUE",
-      parameters = Map("srid" -> s"$invalidSrid"))
+      parameters = Map("srid" -> s"$invalidSrid")
+    )
     // ST_GeomFromWKB with invalid WKB.
     val invalidWkbLiteral = Literal.create(Array[Byte](111), BinaryType)
     val geometryExpressionInvalidWkb = new ST_GeomFromWKB(invalidWkbLiteral)
@@ -493,7 +546,8 @@ class STExpressionsSuite extends QueryTest with SharedSparkSession with Expressi
         geometryExpressionInvalidWkb.eval()
       },
       condition = "WKB_PARSE_ERROR",
-      parameters = Map("parseError" -> "Unexpected end of WKB buffer", "pos" -> "0"))
+      parameters = Map("parseError" -> "Unexpected end of WKB buffer", "pos" -> "0")
+    )
   }
 
   test("ST_GeomFromWKB - columns") {
@@ -512,14 +566,16 @@ class STExpressionsSuite extends QueryTest with SharedSparkSession with Expressi
       assertType(s"SELECT $geomColNoSrid FROM tbl", defaultGeometryType)
       checkAnswer(
         sql(s"SELECT hex(ST_AsBinary($geomColNoSrid)) FROM tbl WHERE srid = $validSrid"),
-        Row(wkbString))
+        Row(wkbString)
+      )
 
       // ST_GeomFromWKB with valid SRID.
       val geomColValidSrid = "ST_GeomFromWKB(wkb, srid)"
       assertType(s"SELECT $geomColValidSrid FROM tbl", GeometryType("ANY"))
       checkAnswer(
         sql(s"SELECT hex(ST_AsBinary($geomColValidSrid)) FROM tbl WHERE srid = $validSrid"),
-        Row(wkbString))
+        Row(wkbString)
+      )
 
       // ST_GeomFromWKB with invalid SRID.
       val geomColInvalidSrid = "ST_GeomFromWKB(wkb, 9999)"
@@ -528,7 +584,8 @@ class STExpressionsSuite extends QueryTest with SharedSparkSession with Expressi
           sql(s"SELECT $geomColInvalidSrid FROM tbl WHERE srid = $validSrid").collect()
         },
         condition = "ST_INVALID_SRID_VALUE",
-        parameters = Map("srid" -> s"$invalidSrid"))
+        parameters = Map("srid" -> s"$invalidSrid")
+      )
     }
   }
 
@@ -600,7 +657,8 @@ class STExpressionsSuite extends QueryTest with SharedSparkSession with Expressi
         geogInvalidSrid.eval()
       },
       condition = "ST_INVALID_SRID_VALUE",
-      parameters = Map("srid" -> s"$invalidSrid"))
+      parameters = Map("srid" -> s"$invalidSrid")
+    )
 
     // ST_SetSrid on GEOMETRY expression.
     val geomLit = ST_SetSrid(geometryLiteral, sridLiteral)
@@ -623,7 +681,8 @@ class STExpressionsSuite extends QueryTest with SharedSparkSession with Expressi
         geomInvalidSrid.eval()
       },
       condition = "ST_INVALID_SRID_VALUE",
-      parameters = Map("srid" -> s"$invalidSrid"))
+      parameters = Map("srid" -> s"$invalidSrid")
+    )
   }
 
   test("ST_SetSrid - columns") {
@@ -693,12 +752,14 @@ class STExpressionsSuite extends QueryTest with SharedSparkSession with Expressi
         s"ST_GeogFromWKB($dummyArgument)",
         s"ST_GeomFromWKB($dummyArgument)",
         s"ST_Srid($dummyArgument)",
-        s"ST_SetSrid($dummyArgument, $dummyArgument)").foreach { query =>
+        s"ST_SetSrid($dummyArgument, $dummyArgument)"
+      ).foreach { query =>
         checkError(
           exception = intercept[AnalysisException] {
             sql(s"SELECT $query").collect()
           },
-          condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED")
+          condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED"
+        )
       }
     }
   }
@@ -710,7 +771,8 @@ class STExpressionsSuite extends QueryTest with SharedSparkSession with Expressi
         "SELECT NULL::GEOGRAPHY(4326)",
         "SELECT NULL::GEOGRAPHY(ANY)",
         "SELECT NULL::GEOMETRY(4326)",
-        "SELECT NULL::GEOMETRY(ANY)").foreach { query =>
+        "SELECT NULL::GEOMETRY(ANY)"
+      ).foreach { query =>
         checkError(
           exception = intercept[AnalysisException] {
             sql(query).collect()
@@ -728,10 +790,14 @@ class STExpressionsSuite extends QueryTest with SharedSparkSession with Expressi
         ("GEOGRAPHY(4326)", "GEOGRAPHY(ANY)"),
         ("GEOMETRY(4326)", "GEOMETRY(ANY)"),
         ("GEOMETRY(ANY)", "GEOMETRY(0)"),
-        ("GEOMETRY(3857)", "GEOMETRY(4326)")).foreach { case (type1, type2) =>
+        ("GEOMETRY(3857)", "GEOMETRY(4326)")
+      ).foreach { case (type1, type2) =>
         val geo1 = s"CAST($value AS $type1)"
         val geo2 = s"CAST($value AS $type2)"
-        Seq(s"SELECT array($geo1, $geo2)", s"SELECT nvl($geo1, $geo2)").foreach { query =>
+        Seq(
+          s"SELECT array($geo1, $geo2)",
+          s"SELECT nvl($geo1, $geo2)"
+        ).foreach { query =>
           checkError(
             exception = intercept[AnalysisException] {
               sql(query).collect()

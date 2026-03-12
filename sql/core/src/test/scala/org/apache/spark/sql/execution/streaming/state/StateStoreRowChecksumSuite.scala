@@ -36,12 +36,13 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 /**
- * Main test for State store row checksum feature. Has both [[HDFSStateStoreRowChecksumSuite]] and
- * [[RocksDBStateStoreRowChecksumSuite]] as subclasses. Row checksum is also enabled in other
- * tests (State operators, TransformWithState, State data source, RTM etc.) by adding the
- * [[AlsoTestWithStateStoreRowChecksum]] trait.
- */
-abstract class StateStoreRowChecksumSuite extends SharedSparkSession with BeforeAndAfter {
+ * Main test for State store row checksum feature. Has both  [[HDFSStateStoreRowChecksumSuite]]
+ * and [[RocksDBStateStoreRowChecksumSuite]] as subclasses. Row checksum is also enabled
+ * in other tests (State operators, TransformWithState, State data source, RTM etc.)
+ * by adding the [[AlsoTestWithStateStoreRowChecksum]] trait.
+ * */
+abstract class StateStoreRowChecksumSuite extends SharedSparkSession
+  with BeforeAndAfter {
 
   import StateStoreTestsHelper._
 
@@ -57,8 +58,7 @@ abstract class StateStoreRowChecksumSuite extends SharedSparkSession with Before
   }
 
   override protected def sparkConf: SparkConf = {
-    super.sparkConf
-      .set(SQLConf.STATE_STORE_ROW_CHECKSUM_ENABLED.key, true.toString)
+    super.sparkConf.set(SQLConf.STATE_STORE_ROW_CHECKSUM_ENABLED.key, true.toString)
       // To avoid file checksum verification since we will be injecting corruption in this suite
       .set(SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key, false.toString)
   }
@@ -79,7 +79,8 @@ abstract class StateStoreRowChecksumSuite extends SharedSparkSession with Before
       opId: Long = 0,
       partition: Int = 0,
       runId: UUID = UUID.randomUUID(),
-      keyStateEncoderSpec: KeyStateEncoderSpec = NoPrefixKeyStateEncoderSpec(keySchema),
+      keyStateEncoderSpec: KeyStateEncoderSpec = NoPrefixKeyStateEncoderSpec(
+        keySchema),
       keySchema: StructType = keySchema,
       valueSchema: StructType = valueSchema,
       sqlConf: SQLConf = SQLConf.get,
@@ -97,12 +98,11 @@ abstract class StateStoreRowChecksumSuite extends SharedSparkSession with Before
     provider
   }
 
-  protected def corruptRow(provider: StateStoreProvider, store: StateStore, key: UnsafeRow): Unit
+  protected def corruptRow(
+    provider: StateStoreProvider, store: StateStore, key: UnsafeRow): Unit
 
   protected def corruptRowInFile(
-      provider: StateStoreProvider,
-      version: Long,
-      isSnapshot: Boolean): Unit
+    provider: StateStoreProvider, version: Long, isSnapshot: Boolean): Unit
 
   test("Detect local corrupt row") {
     withStateStoreProvider(createInitializedProvider()) { provider =>
@@ -113,8 +113,7 @@ abstract class StateStoreRowChecksumSuite extends SharedSparkSession with Before
       // corrupt a row
       corruptRow(provider, store, dataToKeyRow("1", 11))
 
-      assert(
-        get(store, "2", 22).contains(200),
+      assert(get(store, "2", 22).contains(200),
         "failed to get the correct value for the uncorrupted row")
 
       checkChecksumError(intercept[SparkException] {
@@ -193,10 +192,7 @@ abstract class StateStoreRowChecksumSuite extends SharedSparkSession with Before
       assertVerifierStats(verifier, expectedRequests = numRows, expectedVerifies = numRows)
 
       store.iterator().foreach(kv => assert(kv.key != null && kv.value != null))
-      assertVerifierStats(
-        verifier,
-        expectedRequests = numRows * 2,
-        expectedVerifies = numRows * 2)
+      assertVerifierStats(verifier, expectedRequests = numRows * 2, expectedVerifies = numRows * 2)
 
       version = store.commit()
     }
@@ -240,19 +236,15 @@ abstract class StateStoreRowChecksumSuite extends SharedSparkSession with Before
         "stateStoreId" -> (s".*StateStoreId[\\[\\(].*(operatorId|opId)=($opId)" +
           s".*(partitionId|partId)=($partId).*[)\\]]"),
         "expectedChecksum" -> "^-?\\d+$", // integer
-        "computedChecksum" -> "^-?\\d+$"
-      ), // integer
+        "computedChecksum" -> "^-?\\d+$"), // integer
       matchPVals = true)
   }
 
   protected def getReadVerifier(
-      provider: StateStoreProvider,
-      store: StateStore): Option[KeyValueIntegrityVerifier]
+      provider: StateStoreProvider, store: StateStore): Option[KeyValueIntegrityVerifier]
 
-  private def assertVerifierStats(
-      verifier: KeyValueChecksumVerifier,
-      expectedRequests: Long,
-      expectedVerifies: Long): Unit = {
+  private def assertVerifierStats(verifier: KeyValueChecksumVerifier,
+      expectedRequests: Long, expectedVerifies: Long): Unit = {
     assert(verifier.getNumRequests == expectedRequests)
     assert(verifier.getNumVerified == expectedVerifies)
   }
@@ -264,9 +256,7 @@ class HDFSStateStoreRowChecksumSuite extends StateStoreRowChecksumSuite with Pri
   override protected def createProvider: StateStoreProvider = new HDFSBackedStateStoreProvider
 
   override protected def corruptRow(
-      provider: StateStoreProvider,
-      store: StateStore,
-      key: UnsafeRow): Unit = {
+      provider: StateStoreProvider, store: StateStore, key: UnsafeRow): Unit = {
     val hdfsProvider = provider.asInstanceOf[HDFSBackedStateStoreProvider]
     val hdfsStore = store.asInstanceOf[hdfsProvider.HDFSBackedStateStore]
 
@@ -282,15 +272,11 @@ class HDFSStateStoreRowChecksumSuite extends StateStoreRowChecksumSuite with Pri
     val corruptValue = currentValue ^ 1
 
     // update with the corrupt value, but keeping the previous checksum
-    map.put(
-      key,
-      StateStoreRowWithChecksum(dataToValueRow(corruptValue), currentValueRow.checksum))
+    map.put(key, StateStoreRowWithChecksum(dataToValueRow(corruptValue), currentValueRow.checksum))
   }
 
   protected def corruptRowInFile(
-      provider: StateStoreProvider,
-      version: Long,
-      isSnapshot: Boolean): Unit = {
+      provider: StateStoreProvider, version: Long, isSnapshot: Boolean): Unit = {
     val hdfsProvider = provider.asInstanceOf[HDFSBackedStateStoreProvider]
 
     val baseDirField = PrivateMethod[Path](Symbol("baseDir"))
@@ -313,8 +299,7 @@ class HDFSStateStoreRowChecksumSuite extends StateStoreRowChecksumSuite with Pri
 
     // Now delete the current file and write a new file with corrupt row
     fm.delete(filePath)
-    val output =
-      hdfsProvider.compressStream(fm.createAtomic(filePath, overwriteIfPossible = true))
+    val output = hdfsProvider.compressStream(fm.createAtomic(filePath, overwriteIfPossible = true))
     output.write(currentData)
     output.close()
   }
@@ -323,16 +308,15 @@ class HDFSStateStoreRowChecksumSuite extends StateStoreRowChecksumSuite with Pri
   override protected def corruptRowInFileTestMode: Seq[Boolean] = Seq(true, false)
 
   protected def getReadVerifier(
-      provider: StateStoreProvider,
-      store: StateStore): Option[KeyValueIntegrityVerifier] = {
+      provider: StateStoreProvider, store: StateStore): Option[KeyValueIntegrityVerifier] = {
     val hdfsProvider = provider.asInstanceOf[HDFSBackedStateStoreProvider]
     val hdfsStore = store.asInstanceOf[hdfsProvider.HDFSBackedStateStore]
 
     // Access the private hdfs store map
     val mapToUpdateField = PrivateMethod[HDFSBackedStateStoreMap](Symbol("mapToUpdate"))
     val storeMap = hdfsStore invokePrivate mapToUpdateField()
-    val readVerifierField =
-      PrivateMethod[Option[KeyValueIntegrityVerifier]](Symbol("readVerifier"))
+    val readVerifierField = PrivateMethod[Option[KeyValueIntegrityVerifier]](
+      Symbol("readVerifier"))
     storeMap invokePrivate readVerifierField()
   }
 
@@ -361,9 +345,8 @@ class HDFSStateStoreRowChecksumSuite extends StateStoreRowChecksumSuite with Pri
   }
 }
 
-class RocksDBStateStoreRowChecksumSuite
-    extends StateStoreRowChecksumSuite
-    with PrivateMethodTester {
+class RocksDBStateStoreRowChecksumSuite extends StateStoreRowChecksumSuite
+  with PrivateMethodTester {
   import StateStoreTestsHelper._
 
   override protected def sparkConf: SparkConf = {
@@ -375,9 +358,7 @@ class RocksDBStateStoreRowChecksumSuite
   override protected def createProvider: StateStoreProvider = new RocksDBStateStoreProvider
 
   override protected def corruptRow(
-      provider: StateStoreProvider,
-      store: StateStore,
-      key: UnsafeRow): Unit = {
+      provider: StateStoreProvider, store: StateStore, key: UnsafeRow): Unit = {
     val rocksDBProvider = provider.asInstanceOf[RocksDBStateStoreProvider]
     val dbField = PrivateMethod[NativeRocksDB](Symbol("db"))
     val db = rocksDBProvider.rocksDB invokePrivate dbField()
@@ -397,9 +378,7 @@ class RocksDBStateStoreRowChecksumSuite
   }
 
   protected def corruptRowInFile(
-      provider: StateStoreProvider,
-      version: Long,
-      isSnapshot: Boolean): Unit = {
+      provider: StateStoreProvider, version: Long, isSnapshot: Boolean): Unit = {
     assert(!isSnapshot, "Doesn't support corrupting a row in snapshot file")
     val rocksDBProvider = provider.asInstanceOf[RocksDBStateStoreProvider]
     val rocksDBFileManager = rocksDBProvider.rocksDB.fileManager
@@ -426,8 +405,7 @@ class RocksDBStateStoreRowChecksumSuite
     // Now delete the current file and write a new file with corrupt row
     fm.delete(changelogFilePath)
     val output = new DataOutputStream(
-      codec.compressedOutputStream(
-        fm.createAtomic(changelogFilePath, overwriteIfPossible = true)))
+      codec.compressedOutputStream(fm.createAtomic(changelogFilePath, overwriteIfPossible = true)))
     output.write(currentData)
     output.close()
   }
@@ -436,18 +414,17 @@ class RocksDBStateStoreRowChecksumSuite
   override protected def corruptRowInFileTestMode: Seq[Boolean] = Seq(false)
 
   protected def getReadVerifier(
-      provider: StateStoreProvider,
-      store: StateStore): Option[KeyValueIntegrityVerifier] = {
+      provider: StateStoreProvider, store: StateStore): Option[KeyValueIntegrityVerifier] = {
     val rocksDBProvider = provider.asInstanceOf[RocksDBStateStoreProvider]
-    val readVerifierField =
-      PrivateMethod[Option[KeyValueIntegrityVerifier]](Symbol("readVerifier"))
+    val readVerifierField = PrivateMethod[Option[KeyValueIntegrityVerifier]](
+      Symbol("readVerifier"))
     rocksDBProvider.rocksDB invokePrivate readVerifierField()
   }
 }
 
 /**
- * Trait that enables state store row checksum in test sparkConf. Use this to create separate test
- * suites that test with row checksum enabled.
+ * Trait that enables state store row checksum in test sparkConf.
+ * Use this to create separate test suites that test with row checksum enabled.
  *
  * Example:
  * {{{

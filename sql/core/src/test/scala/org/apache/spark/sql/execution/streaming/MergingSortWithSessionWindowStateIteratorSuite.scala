@@ -34,9 +34,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 class MergingSortWithSessionWindowStateIteratorSuite extends StreamTest with BeforeAndAfter {
 
-  private val rowSchema = new StructType()
-    .add("key1", StringType)
-    .add("key2", IntegerType)
+  private val rowSchema = new StructType().add("key1", StringType).add("key2", IntegerType)
     .add("session", new StructType().add("start", LongType).add("end", LongType))
     .add("value", LongType)
   private val rowAttributes = toAttributes(rowSchema)
@@ -48,8 +46,8 @@ class MergingSortWithSessionWindowStateIteratorSuite extends StreamTest with Bef
   private val sessionAttribute = rowAttributes.filter(_.name == "session").head
 
   private val inputValueGen = UnsafeProjection.create(rowAttributes.map(_.dataType).toArray)
-  private val inputKeyGen =
-    UnsafeProjection.create(keysWithoutSessionAttributes.map(_.dataType).toArray)
+  private val inputKeyGen = UnsafeProjection.create(
+    keysWithoutSessionAttributes.map(_.dataType).toArray)
 
   before {
     SparkSession.setActiveSession(spark)
@@ -62,15 +60,15 @@ class MergingSortWithSessionWindowStateIteratorSuite extends StreamTest with Bef
     (SQLConf.STATE_STORE_PROVIDER_CLASS.key, value.stripSuffix("$"))
   }
 
-  private val availableOptions =
-    for (opt1 <- providerOptions;
-      opt2 <- StreamingSessionWindowStateManager.supportedVersions) yield (opt1, opt2)
+  private val availableOptions = for (
+    opt1 <- providerOptions;
+    opt2 <- StreamingSessionWindowStateManager.supportedVersions
+  ) yield (opt1, opt2)
 
   availableOptions.foreach { case (providerOpt, version) =>
     withSQLConf(providerOpt) {
-      test(
-        s"StreamingSessionWindowStateManager " +
-          s"provider ${providerOpt._2} state version v${version} - rows only in state") {
+      test(s"StreamingSessionWindowStateManager " +
+        s"provider ${providerOpt._2} state version v${version} - rows only in state") {
         testRowsOnlyInState(version)
       }
 
@@ -79,9 +77,8 @@ class MergingSortWithSessionWindowStateIteratorSuite extends StreamTest with Bef
         testRowsInBothInputAndState(version)
       }
 
-      test(
-        s"StreamingSessionWindowStateManager " +
-          s"provider ${providerOpt._2} state version v${version} - rows only in input") {
+      test(s"StreamingSessionWindowStateManager " +
+        s"provider ${providerOpt._2} state version v${version} - rows only in input") {
         testRowsOnlyInInput(version)
       }
     }
@@ -135,8 +132,12 @@ class MergingSortWithSessionWindowStateIteratorSuite extends StreamTest with Bef
       stateManager.updateSessions(store, key2, key2Values)
       stateManager.updateSessions(store, key3, key3Values)
 
-      val inputsForKey1 = Seq(createRow("a", 1, 90, 100, 1), createRow("a", 1, 125, 135, 2))
-      val inputsForKey3 = Seq(createRow("b", 1, 150, 160, 3))
+      val inputsForKey1 = Seq(
+        createRow("a", 1, 90, 100, 1),
+        createRow("a", 1, 125, 135, 2))
+      val inputsForKey3 = Seq(
+        createRow("b", 1, 150, 160, 3)
+      )
       val inputs = inputsForKey1 ++ inputsForKey3
 
       val iter = new MergingSortWithSessionWindowStateIterator(
@@ -204,12 +205,13 @@ class MergingSortWithSessionWindowStateIteratorSuite extends StreamTest with Bef
     row.getStruct(2, 2).getLong(0)
   }
 
-  private def withStateManager(stateFormatVersion: Int)(
+  private def withStateManager(
+      stateFormatVersion: Int)(
       f: (StreamingSessionWindowStateManager, StateStore) => Unit): Unit = {
     withTempDir { file =>
       val storeConf = new StateStoreConf()
-      val stateInfo =
-        StatefulOperatorStateInfo(file.getAbsolutePath, UUID.randomUUID, 0, 0, 5, None)
+      val stateInfo = StatefulOperatorStateInfo(
+        file.getAbsolutePath, UUID.randomUUID, 0, 0, 5, None)
 
       val manager = StreamingSessionWindowStateManager.createStateManager(
         keysWithoutSessionAttributes,
@@ -219,16 +221,9 @@ class MergingSortWithSessionWindowStateIteratorSuite extends StreamTest with Bef
 
       val storeProviderId = StateStoreProviderId(stateInfo, 0, StateStoreId.DEFAULT_STORE_NAME)
       val store = StateStore.get(
-        storeProviderId,
-        manager.getStateKeySchema,
-        manager.getStateValueSchema,
+        storeProviderId, manager.getStateKeySchema, manager.getStateValueSchema,
         PrefixKeyScanStateEncoderSpec(manager.getStateKeySchema, manager.getNumColsForPrefixKey),
-        stateInfo.storeVersion,
-        None,
-        None,
-        useColumnFamilies = false,
-        storeConf,
-        new Configuration)
+        stateInfo.storeVersion, None, None, useColumnFamilies = false, storeConf, new Configuration)
 
       try {
         f(manager, store)

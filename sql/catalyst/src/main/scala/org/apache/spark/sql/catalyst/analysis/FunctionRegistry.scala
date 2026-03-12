@@ -44,18 +44,17 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * A catalog for looking up user defined functions, used by an [[Analyzer]].
  *
- * Note: 1) The implementation should be thread-safe to allow concurrent access. 2) the database
- * name is always case-sensitive here, callers are responsible to format the database name w.r.t.
- * case-sensitive config.
+ * Note:
+ *   1) The implementation should be thread-safe to allow concurrent access.
+ *   2) the database name is always case-sensitive here, callers are responsible to
+ *      format the database name w.r.t. case-sensitive config.
  */
 trait FunctionRegistryBase[T] {
 
   type FunctionBuilder = Seq[Expression] => T
 
   final def registerFunction(
-      name: FunctionIdentifier,
-      builder: FunctionBuilder,
-      source: String): Unit = {
+      name: FunctionIdentifier, builder: FunctionBuilder, source: String): Unit = {
     val info = new ExpressionInfo(
       // SPARK-43099: getCanonicalName would return null on JDK15+
       Option(builder.getClass.getCanonicalName).getOrElse(builder.getClass.getName),
@@ -73,15 +72,13 @@ trait FunctionRegistryBase[T] {
   }
 
   def registerFunction(
-      name: FunctionIdentifier,
-      info: ExpressionInfo,
-      builder: FunctionBuilder): Unit
+    name: FunctionIdentifier,
+    info: ExpressionInfo,
+    builder: FunctionBuilder): Unit
 
   /* Create or replace a temporary function. */
   final def createOrReplaceTempFunction(
-      name: String,
-      builder: FunctionBuilder,
-      source: String): Unit = {
+      name: String, builder: FunctionBuilder, source: String): Unit = {
     // Regular temporary functions are qualified with CatalogManager.SESSION_NAMESPACE
     // to enable coexistence with builtin functions of the same name
     val identifier = FunctionIdentifier(
@@ -121,10 +118,10 @@ trait FunctionRegistryBase[T] {
 object FunctionRegistryBase {
 
   /**
-   * Return an expression info and a function builder for the function as defined by T using the
-   * given name.
+   * Return an expression info and a function builder for the function as defined by
+   * T using the given name.
    */
-  def build[T: ClassTag](
+  def build[T : ClassTag](
       name: String,
       since: Option[String]): (ExpressionInfo, Seq[Expression] => T) = {
     val runtimeClass = scala.reflect.classTag[T].runtimeClass
@@ -158,16 +155,12 @@ object FunctionRegistryBase {
         val f = constructors.find(_.getParameterTypes.toImmutableArraySeq == params).getOrElse {
           val validParametersCount = constructors
             .filter(_.getParameterTypes.forall(_ == classOf[Expression]))
-            .map(_.getParameterCount)
-            .distinct
-            .sorted
+            .map(_.getParameterCount).distinct.sorted
           throw QueryCompilationErrors.wrongNumArgsError(
-            name,
-            validParametersCount.toImmutableArraySeq,
-            params.length)
+            name, validParametersCount.toImmutableArraySeq, params.length)
         }
         try {
-          f.newInstance(expressions: _*).asInstanceOf[T]
+          f.newInstance(expressions : _*).asInstanceOf[T]
         } catch {
           // the exception is an invocation exception. To get a meaningful message, we need the
           // cause.
@@ -182,7 +175,7 @@ object FunctionRegistryBase {
   /**
    * Creates an [[ExpressionInfo]] for the function as defined by T using the given name.
    */
-  def expressionInfo[T: ClassTag](name: String, since: Option[String]): ExpressionInfo = {
+  def expressionInfo[T : ClassTag](name: String, since: Option[String]): ExpressionInfo = {
     val clazz = scala.reflect.classTag[T].runtimeClass
     val df = clazz.getAnnotation(classOf[ExpressionDescription])
     if (df != null) {
@@ -203,11 +196,7 @@ object FunctionRegistryBase {
         // This exists for the backward compatibility with old `ExpressionDescription`s defining
         // the extended description in `extended()`.
         new ExpressionInfo(
-          clazz.getCanonicalName.stripSuffix("$"),
-          null,
-          name,
-          df.usage(),
-          df.extended())
+          clazz.getCanonicalName.stripSuffix("$"), null, name, df.usage(), df.extended())
       }
     } else {
       new ExpressionInfo(clazz.getCanonicalName.stripSuffix("$"), name)
@@ -236,8 +225,8 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
   }
 
   /**
-   * Perform function registry without any preprocessing. This is used when registering built-in
-   * functions and doing `FunctionRegistry.clone()`
+   * Perform function registry without any preprocessing.
+   * This is used when registering built-in functions and doing `FunctionRegistry.clone()`
    */
   def internalRegisterFunction(
       name: FunctionIdentifier,
@@ -246,9 +235,8 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
     val newFunction = (info, builder)
     functionBuilders.put(name, newFunction) match {
       case Some(previousFunction) if previousFunction != newFunction =>
-        logWarning(
-          log"The function ${MDC(FUNCTION_NAME, name)} replaced a " +
-            log"previously registered function.")
+        logWarning(log"The function ${MDC(FUNCTION_NAME, name)} replaced a " +
+          log"previously registered function.")
       case _ =>
     }
   }
@@ -286,9 +274,7 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
  */
 trait EmptyFunctionRegistryBase[T] extends FunctionRegistryBase[T] {
   override def registerFunction(
-      name: FunctionIdentifier,
-      info: ExpressionInfo,
-      builder: FunctionBuilder): Unit = {
+      name: FunctionIdentifier, info: ExpressionInfo, builder: FunctionBuilder): Unit = {
     throw SparkUnsupportedOperationException()
   }
 
@@ -333,7 +319,9 @@ class SimpleFunctionRegistry
   }
 }
 
-object EmptyFunctionRegistry extends EmptyFunctionRegistryBase[Expression] with FunctionRegistry {
+object EmptyFunctionRegistry
+    extends EmptyFunctionRegistryBase[Expression]
+    with FunctionRegistry {
 
   override def clone(): FunctionRegistry = this
 }
@@ -460,6 +448,7 @@ object FunctionRegistry {
     expression[Cot]("cot"),
     expression[Tanh]("tanh"),
     expression[WidthBucket]("width_bucket"),
+
     expression[Add]("+"),
     expression[Subtract]("-"),
     expression[Multiply]("*"),
@@ -730,13 +719,9 @@ object FunctionRegistry {
     expressionBuilder("make_timestamp_ntz", MakeTimestampNTZExpressionBuilder, setAlias = true),
     expressionBuilder("make_timestamp_ltz", MakeTimestampLTZExpressionBuilder, setAlias = true),
     expressionBuilder(
-      "try_make_timestamp_ntz",
-      TryMakeTimestampNTZExpressionBuilder,
-      setAlias = true),
+      "try_make_timestamp_ntz", TryMakeTimestampNTZExpressionBuilder, setAlias = true),
     expressionBuilder(
-      "try_make_timestamp_ltz",
-      TryMakeTimestampLTZExpressionBuilder,
-      setAlias = true),
+      "try_make_timestamp_ltz", TryMakeTimestampLTZExpressionBuilder, setAlias = true),
     expression[MakeInterval]("make_interval"),
     expression[MakeDTInterval]("make_dt_interval"),
     expression[MakeYMInterval]("make_ym_interval"),
@@ -806,6 +791,7 @@ object FunctionRegistry {
     expression[MapZipWith]("map_zip_with"),
     expression[ZipWith]("zip_with"),
     expression[Get]("get"),
+
     CreateStruct.registryEntry,
 
     // misc functions
@@ -997,12 +983,14 @@ object FunctionRegistry {
 
     // Protobuf
     expression[FromProtobuf]("from_protobuf"),
-    expression[ToProtobuf]("to_protobuf"))
+    expression[ToProtobuf]("to_protobuf")
+  )
 
   val builtin: SimpleFunctionRegistry = {
     val fr = new SimpleFunctionRegistry
-    expressions.foreach { case (name, (info, builder)) =>
-      fr.internalRegisterFunction(FunctionIdentifier(name), info, builder)
+    expressions.foreach {
+      case (name, (info, builder)) =>
+        fr.internalRegisterFunction(FunctionIdentifier(name), info, builder)
     }
     fr
   }
@@ -1012,12 +1000,12 @@ object FunctionRegistry {
   /** Registry for internal functions used by Connect and the Column API. */
   private[sql] val internal: SimpleFunctionRegistry = new SimpleFunctionRegistry
 
-  private[spark] def registerInternalExpression[T <: Expression: ClassTag](
+  private[spark] def registerInternalExpression[T <: Expression : ClassTag](
       name: String,
       setAlias: Boolean = false): Unit = {
     val (info, builder) = FunctionRegistryBase.build[T](name, None)
-    val newBuilder = if (setAlias) { (expressions: Seq[Expression]) =>
-      {
+    val newBuilder = if (setAlias) {
+      (expressions: Seq[Expression]) => {
         val expr = builder(expressions)
         expr.setTagValue(FUNC_ALIAS, name)
         expr
@@ -1054,39 +1042,42 @@ object FunctionRegistry {
   registerInternalExpression[ArrayBinarySearch]("array_binary_search")
 
   private def makeExprInfoForVirtualOperator(name: String, usage: String): ExpressionInfo = {
-    new ExpressionInfo(null, null, name, usage, "", "", "", "", "", "", "built-in")
+    new ExpressionInfo(
+      null,
+      null,
+      name,
+      usage,
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "built-in")
   }
 
   val builtinOperators: Map[String, ExpressionInfo] = Map(
-    "<>" -> makeExprInfoForVirtualOperator(
-      "<>",
+    "<>" -> makeExprInfoForVirtualOperator("<>",
       "expr1 <> expr2 - Returns true if `expr1` is not equal to `expr2`."),
-    "!=" -> makeExprInfoForVirtualOperator(
-      "!=",
+    "!=" -> makeExprInfoForVirtualOperator("!=",
       "expr1 != expr2 - Returns true if `expr1` is not equal to `expr2`."),
-    "case" -> makeExprInfoForVirtualOperator(
-      "case",
+    "case" -> makeExprInfoForVirtualOperator("case",
       "CASE expr1 WHEN expr2 THEN expr3 [WHEN expr4 THEN expr5]* [ELSE expr6] END " +
         "- When `expr1` = `expr2`, returns `expr3`; when `expr1` = `expr4`, return `expr5`; " +
         "else return `expr6`."),
-    "||" -> makeExprInfoForVirtualOperator(
-      "||",
-      "expr1 || expr2 - Returns the concatenation of `expr1` and `expr2`."))
+    "||" -> makeExprInfoForVirtualOperator("||",
+      "expr1 || expr2 - Returns the concatenation of `expr1` and `expr2`.")
+  )
 
   /**
    * Create a SQL function builder and corresponding `ExpressionInfo`.
-   * @param name
-   *   The function name.
-   * @param setAlias
-   *   The alias name used in SQL representation string.
-   * @param since
-   *   The Spark version since the function is added.
-   * @tparam T
-   *   The actual expression class.
-   * @return
-   *   (function name, (expression information, function builder))
+   * @param name The function name.
+   * @param setAlias The alias name used in SQL representation string.
+   * @param since The Spark version since the function is added.
+   * @tparam T The actual expression class.
+   * @return (function name, (expression information, function builder))
    */
-  private def expression[T <: Expression: ClassTag](
+  private def expression[T <: Expression : ClassTag](
       name: String,
       setAlias: Boolean = false,
       since: Option[String] = None): (String, (ExpressionInfo, FunctionBuilder)) = {
@@ -1103,24 +1094,19 @@ object FunctionRegistry {
   }
 
   /**
-   * This method will be used to rearrange the arguments provided in function invocation in the
-   * order defined by the function signature given in the builder instance.
+   * This method will be used to rearrange the arguments provided in function invocation
+   * in the order defined by the function signature given in the builder instance.
    *
-   * @param name
-   *   The name of the function
-   * @param builder
-   *   The builder of the function expression
-   * @param expressions
-   *   The argument list passed in function invocation
-   * @tparam T
-   *   The class of the builder
-   * @return
-   *   An argument list in positional order defined by the builder
+   * @param name The name of the function
+   * @param builder The builder of the function expression
+   * @param expressions The argument list passed in function invocation
+   * @tparam T The class of the builder
+   * @return An argument list in positional order defined by the builder
    */
   def rearrangeExpressions[T <: FunctionBuilderBase[_]](
       name: String,
       builder: T,
-      expressions: Seq[Expression]): Seq[Expression] = {
+      expressions: Seq[Expression]) : Seq[Expression] = {
     val rearrangedExpressions = if (builder.functionSignature.isDefined) {
       val functionSignature = builder.functionSignature.get
       builder.rearrange(functionSignature, expressions, name, SQLConf.get.resolver)
@@ -1133,7 +1119,7 @@ object FunctionRegistry {
     rearrangedExpressions
   }
 
-  private def expressionBuilder[T <: ExpressionBuilder: ClassTag](
+  private def expressionBuilder[T <: ExpressionBuilder : ClassTag](
       name: String,
       builder: T,
       setAlias: Boolean = false,
@@ -1144,7 +1130,8 @@ object FunctionRegistry {
       if (lambdas.nonEmpty && !builder.supportsLambda) {
         throw new AnalysisException(
           errorClass = "INVALID_LAMBDA_FUNCTION_CALL.NON_HIGHER_ORDER_FUNCTION",
-          messageParameters = Map("class" -> builder.getClass.getCanonicalName))
+          messageParameters = Map(
+            "class" -> builder.getClass.getCanonicalName))
       }
       assert(others.forall(_.resolved), "function arguments must be resolved.")
       val rearrangedExpressions = rearrangeExpressions(name, builder, expressions)
@@ -1156,9 +1143,10 @@ object FunctionRegistry {
   }
 
   /**
-   * Creates a function registry lookup entry for cast aliases (SPARK-16730). For example, if name
-   * is "int", and dataType is IntegerType, this means int(x) would become an alias for cast(x as
-   * IntegerType). See usage above.
+   * Creates a function registry lookup entry for cast aliases (SPARK-16730).
+   * For example, if name is "int", and dataType is IntegerType, this means int(x) would become
+   * an alias for cast(x as IntegerType).
+   * See usage above.
    */
   private def castAlias(
       name: String,
@@ -1173,23 +1161,13 @@ object FunctionRegistry {
     val clazz = scala.reflect.classTag[Cast].runtimeClass
     val usage = "_FUNC_(expr) - Casts the value `expr` to the target data type `_FUNC_`."
     val expressionInfo =
-      new ExpressionInfo(
-        clazz.getCanonicalName,
-        null,
-        name,
-        usage,
-        "",
-        "",
-        "",
-        "conversion_funcs",
-        "2.0.1",
-        "",
-        "built-in")
+      new ExpressionInfo(clazz.getCanonicalName, null, name, usage, "", "", "",
+        "conversion_funcs", "2.0.1", "", "built-in")
     (name, (expressionInfo, builder))
   }
 
-  private def expressionGeneratorOuter[T <: Generator: ClassTag](
-      name: String): (String, (ExpressionInfo, FunctionBuilder)) = {
+  private def expressionGeneratorOuter[T <: Generator : ClassTag](name: String)
+    : (String, (ExpressionInfo, FunctionBuilder)) = {
     val (_, (info, builder)) = expression[T](name)
     val outerBuilder = (args: Seq[Expression]) => {
       GeneratorOuter(builder(args).asInstanceOf[Generator])
@@ -1197,9 +1175,8 @@ object FunctionRegistry {
     (name, (info, outerBuilder))
   }
 
-  private def expressionGeneratorBuilderOuter[T <: ExpressionBuilder: ClassTag](
-      name: String,
-      builder: T): (String, (ExpressionInfo, FunctionBuilder)) = {
+  private def expressionGeneratorBuilderOuter[T <: ExpressionBuilder : ClassTag]
+    (name: String, builder: T) : (String, (ExpressionInfo, FunctionBuilder)) = {
     val info = FunctionRegistryBase.expressionInfo[T](name, since = None)
     val outerBuilder = (args: Seq[Expression]) => {
       val rearrangedArgs =
@@ -1221,8 +1198,7 @@ trait TableFunctionRegistry extends FunctionRegistryBase[LogicalPlan] {
   override def clone(): TableFunctionRegistry = throw new CloneNotSupportedException()
 }
 
-class SimpleTableFunctionRegistry
-    extends SimpleFunctionRegistryBase[LogicalPlan]
+class SimpleTableFunctionRegistry extends SimpleFunctionRegistryBase[LogicalPlan]
     with TableFunctionRegistry {
 
   override def clone(): SimpleTableFunctionRegistry = synchronized {
@@ -1234,8 +1210,7 @@ class SimpleTableFunctionRegistry
   }
 }
 
-object EmptyTableFunctionRegistry
-    extends EmptyFunctionRegistryBase[LogicalPlan]
+object EmptyTableFunctionRegistry extends EmptyFunctionRegistryBase[LogicalPlan]
     with TableFunctionRegistry {
 
   override def clone(): TableFunctionRegistry = this
@@ -1245,44 +1220,38 @@ object TableFunctionRegistry {
 
   type TableFunctionBuilder = Seq[Expression] => LogicalPlan
 
-  private def logicalPlan[T <: LogicalPlan: ClassTag](
-      name: String): (String, (ExpressionInfo, TableFunctionBuilder)) = {
+  private def logicalPlan[T <: LogicalPlan : ClassTag](name: String)
+      : (String, (ExpressionInfo, TableFunctionBuilder)) = {
     val (info, builder) = FunctionRegistryBase.build[T](name, since = None)
     (name, (info, (expressions: Seq[Expression]) => builder(expressions)))
   }
 
   /**
-   * A function used for table-valued functions to return a builder that when given input
-   * arguments, will return a function expression representing the table-valued functions.
+   * A function used for table-valued functions to return a builder that
+   * when given input arguments, will return a function expression representing
+   * the table-valued functions.
    *
-   * @param name
-   *   Name of the function
-   * @param builder
-   *   Object which will build the expression given input arguments
-   * @param since
-   *   Time of implementation
-   * @tparam T
-   *   Type of the builder
-   * @return
-   *   A tuple of the function name, expression info, and function builder
+   * @param name Name of the function
+   * @param builder Object which will build the expression given input arguments
+   * @param since Time of implementation
+   * @tparam T Type of the builder
+   * @return A tuple of the function name, expression info, and function builder
    */
-  def generatorBuilder[T <: GeneratorBuilder: ClassTag](
+  def generatorBuilder[T <: GeneratorBuilder : ClassTag](
       name: String,
       builder: T,
       since: Option[String] = None): (String, (ExpressionInfo, TableFunctionBuilder)) = {
     val info = FunctionRegistryBase.expressionInfo[T](name, since)
     val funcBuilder = (expressions: Seq[Expression]) => {
       assert(expressions.forall(_.resolved), "function arguments must be resolved.")
-      val rearrangedExpressions =
-        FunctionRegistry.rearrangeExpressions(name, builder, expressions)
+      val rearrangedExpressions = FunctionRegistry.rearrangeExpressions(name, builder, expressions)
       builder.build(name, rearrangedExpressions)
     }
     (name, (info, funcBuilder))
   }
 
-  def generator[T <: Generator: ClassTag](
-      name: String,
-      outer: Boolean = false): (String, (ExpressionInfo, TableFunctionBuilder)) = {
+  def generator[T <: Generator : ClassTag](name: String, outer: Boolean = false)
+      : (String, (ExpressionInfo, TableFunctionBuilder)) = {
     val (info, builder) = FunctionRegistryBase.build[T](name, since = None)
     val newBuilder = (expressions: Seq[Expression]) => {
       val generator = builder(expressions)
@@ -1312,12 +1281,14 @@ object TableFunctionRegistry {
     generator[SQLKeywords]("sql_keywords"),
     generatorBuilder("variant_explode", VariantExplodeGeneratorBuilder),
     generatorBuilder("variant_explode_outer", VariantExplodeOuterGeneratorBuilder),
-    PythonWorkerLogs.functionBuilder)
+    PythonWorkerLogs.functionBuilder
+  )
 
   val builtin: SimpleTableFunctionRegistry = {
     val fr = new SimpleTableFunctionRegistry
-    logicalPlans.foreach { case (name, (info, builder)) =>
-      fr.internalRegisterFunction(FunctionIdentifier(name), info, builder)
+    logicalPlans.foreach {
+      case (name, (info, builder)) =>
+        fr.internalRegisterFunction(FunctionIdentifier(name), info, builder)
     }
     fr
   }
@@ -1336,7 +1307,7 @@ trait ExpressionBuilder extends FunctionBuilderBase[Expression]
  * representations are constructed in [[TableFunctionRegistry]].
  */
 trait GeneratorBuilder extends FunctionBuilderBase[LogicalPlan] {
-  override final def build(funcName: String, expressions: Seq[Expression]): LogicalPlan = {
+  override final def build(funcName: String, expressions: Seq[Expression]) : LogicalPlan = {
     Generate(
       buildGenerator(funcName, expressions),
       unrequiredChildIndex = Nil,
@@ -1348,5 +1319,5 @@ trait GeneratorBuilder extends FunctionBuilderBase[LogicalPlan] {
 
   def isOuter: Boolean
 
-  def buildGenerator(funcName: String, expressions: Seq[Expression]): Generator
+  def buildGenerator(funcName: String, expressions: Seq[Expression]) : Generator
 }

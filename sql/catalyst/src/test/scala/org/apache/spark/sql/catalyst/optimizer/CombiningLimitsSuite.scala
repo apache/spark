@@ -29,23 +29,26 @@ class CombiningLimitsSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("Column Pruning", FixedPoint(100), ColumnPruning, RemoveNoopOperators) ::
-        Batch("Eliminate Limit", FixedPoint(10), EliminateLimits) ::
-        Batch(
-          "Constant Folding",
-          FixedPoint(10),
-          NullPropagation,
-          ConstantFolding,
-          BooleanSimplification,
-          SimplifyConditionals) :: Nil
+      Batch("Column Pruning", FixedPoint(100),
+        ColumnPruning,
+        RemoveNoopOperators) ::
+      Batch("Eliminate Limit", FixedPoint(10),
+        EliminateLimits) ::
+      Batch("Constant Folding", FixedPoint(10),
+        NullPropagation,
+        ConstantFolding,
+        BooleanSimplification,
+        SimplifyConditionals) :: Nil
   }
 
   val testRelation = LocalRelation.fromExternalRows(
     Seq("a".attr.int, "b".attr.int, "c".attr.int),
-    1.to(10).map(_ => Row(1, 2, 3)))
+    1.to(10).map(_ => Row(1, 2, 3))
+  )
   val testRelation2 = LocalRelation.fromExternalRows(
     Seq("x".attr.int, "y".attr.int, "z".attr.int),
-    Seq(Row(1, 2, 3), Row(2, 3, 4)))
+    Seq(Row(1, 2, 3), Row(2, 3, 4))
+  )
   val testRelation3 = RelationWithoutMaxRows(Seq("i".attr.int))
   val testRelation4 = LongMaxRelation(Seq("j".attr.int))
   val testRelation5 = EmptyRelation(Seq("k".attr.int))
@@ -61,8 +64,7 @@ class CombiningLimitsSuite extends PlanTest {
     val correctAnswer =
       testRelation
         .select($"a")
-        .limit(5)
-        .analyze
+        .limit(5).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -79,8 +81,7 @@ class CombiningLimitsSuite extends PlanTest {
     val correctAnswer =
       testRelation
         .select($"a")
-        .limit(2)
-        .analyze
+        .limit(2).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -97,8 +98,7 @@ class CombiningLimitsSuite extends PlanTest {
     val correctAnswer =
       testRelation
         .select($"a")
-        .limit(2)
-        .analyze
+        .limit(2).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -121,39 +121,42 @@ class CombiningLimitsSuite extends PlanTest {
     comparePlans(optimized3, query3)
 
     // test sort after limit
-    val query4 = testRelation
-      .select()
-      .groupBy()(count(1))
-      .orderBy(count(1).asc)
-      .limit(1)
-      .analyze
+    val query4 = testRelation.select().groupBy()(count(1))
+      .orderBy(count(1).asc).limit(1).analyze
     val optimized4 = Optimize.execute(query4)
     // the top project has been removed, so we need optimize expected too
-    val expected4 =
-      Optimize.execute(testRelation.select().groupBy()(count(1)).orderBy(count(1).asc).analyze)
+    val expected4 = Optimize.execute(
+      testRelation.select().groupBy()(count(1)).orderBy(count(1).asc).analyze)
     comparePlans(optimized4, expected4)
   }
 
   test("SPARK-33497: Eliminate Limit if LocalRelation max rows not larger than Limit") {
-    checkPlanAndMaxRow(testRelation.select().limit(10), testRelation.select(), 10)
+    checkPlanAndMaxRow(
+      testRelation.select().limit(10),
+      testRelation.select(),
+      10
+    )
   }
 
   test("SPARK-33497: Eliminate Limit if Range max rows not larger than Limit") {
     checkPlanAndMaxRow(
       Range(0, 100, 1, None).select().limit(200),
       Range(0, 100, 1, None).select(),
-      100)
+      100
+    )
     checkPlanAndMaxRow(
       Range(-1, Long.MaxValue, 1, None).select().limit(1),
       Range(-1, Long.MaxValue, 1, None).select().limit(1),
-      1)
+      1
+    )
   }
 
   test("SPARK-33497: Eliminate Limit if Sample max rows not larger than Limit") {
     checkPlanAndMaxRow(
       testRelation.select().sample(0, 0.2, false, 1).limit(10),
       testRelation.select().sample(0, 0.2, false, 1),
-      10)
+      10
+    )
   }
 
   test("SPARK-38271: PoissonSampler may output more rows than child.maxRows") {
@@ -162,22 +165,32 @@ class CombiningLimitsSuite extends PlanTest {
     val optimized = Optimize.execute(query.analyze)
     assert(optimized.maxRows.isEmpty)
     // can not eliminate Limit since Sample.maxRows is None
-    checkPlanAndMaxRow(query.limit(10), query.limit(10), 10)
+    checkPlanAndMaxRow(
+      query.limit(10),
+      query.limit(10),
+      10
+    )
   }
 
   test("SPARK-33497: Eliminate Limit if Deduplicate max rows not larger than Limit") {
     checkPlanAndMaxRow(
       testRelation.deduplicate("a".attr).limit(10),
       testRelation.deduplicate("a".attr),
-      10)
+      10
+    )
   }
 
   test("SPARK-33497: Eliminate Limit if Repartition max rows not larger than Limit") {
-    checkPlanAndMaxRow(testRelation.repartition(2).limit(10), testRelation.repartition(2), 10)
+    checkPlanAndMaxRow(
+      testRelation.repartition(2).limit(10),
+      testRelation.repartition(2),
+      10
+    )
     checkPlanAndMaxRow(
       testRelation.distribute("a".attr)(2).limit(10),
       testRelation.distribute("a".attr)(2),
-      10)
+      10
+    )
   }
 
   test("SPARK-33497: Eliminate Limit if Join max rows not larger than Limit") {
@@ -185,40 +198,49 @@ class CombiningLimitsSuite extends PlanTest {
       checkPlanAndMaxRow(
         testRelation.join(testRelation2, joinType).limit(20),
         testRelation.join(testRelation2, joinType),
-        20)
+        20
+      )
       checkPlanAndMaxRow(
         testRelation.join(testRelation2, joinType).limit(10),
         testRelation.join(testRelation2, joinType).limit(10),
-        10)
+        10
+      )
       // without maxRow
       checkPlanAndMaxRow(
         testRelation.join(testRelation3, joinType).limit(100),
         testRelation.join(testRelation3, joinType).limit(100),
-        100)
+        100
+      )
       // maxRow is not valid long
       checkPlanAndMaxRow(
         testRelation.join(testRelation4, joinType).limit(100),
         testRelation.join(testRelation4, joinType).limit(100),
-        100)
+        100
+      )
     }
 
     Seq(LeftSemi, LeftAnti).foreach { joinType =>
       checkPlanAndMaxRow(
         testRelation.join(testRelation2, joinType).limit(5),
         testRelation.join(testRelation2.select(), joinType).limit(5),
-        5)
+        5
+      )
       checkPlanAndMaxRow(
         testRelation.join(testRelation2, joinType).limit(10),
         testRelation.join(testRelation2.select(), joinType),
-        10)
+        10
+      )
     }
   }
 
   test("SPARK-33497: Eliminate Limit if Window max rows not larger than Limit") {
     checkPlanAndMaxRow(
-      testRelation.window(Seq(count(1).as("c")), Seq("a".attr), Seq("b".attr.asc)).limit(20),
-      testRelation.window(Seq(count(1).as("c")), Seq("a".attr), Seq("b".attr.asc)),
-      10)
+      testRelation.window(
+        Seq(count(1).as("c")), Seq("a".attr), Seq("b".attr.asc)).limit(20),
+      testRelation.window(
+        Seq(count(1).as("c")), Seq("a".attr), Seq("b".attr.asc)),
+      10
+    )
   }
 
   test("SPARK-34628: Remove GlobalLimit operator if its child max rows <= limit") {
@@ -232,38 +254,41 @@ class CombiningLimitsSuite extends PlanTest {
       checkPlanAndMaxRow(
         testRelation.join(testRelation5, joinType).limit(9),
         testRelation.join(testRelation5, joinType).limit(9),
-        9)
+        9
+      )
 
       checkPlanAndMaxRow(
         testRelation.join(testRelation5, joinType).limit(10),
         testRelation.join(testRelation5, joinType),
-        10)
+        10
+      )
     }
 
     Seq(RightOuter, FullOuter).foreach { joinType =>
       checkPlanAndMaxRow(
         testRelation5.join(testRelation, joinType).limit(9),
         testRelation5.join(testRelation, joinType).limit(9),
-        9)
+        9
+      )
 
       checkPlanAndMaxRow(
         testRelation5.join(testRelation, joinType).limit(10),
         testRelation5.join(testRelation, joinType),
-        10)
+        10
+      )
     }
 
     Seq(Inner, Cross).foreach { joinType =>
       checkPlanAndMaxRow(
         testRelation.join(testRelation5, joinType).limit(9),
         testRelation.join(testRelation5, joinType),
-        0)
+        0
+      )
     }
   }
 
   private def checkPlanAndMaxRow(
-      optimized: LogicalPlan,
-      expected: LogicalPlan,
-      expectedMaxRow: Long): Unit = {
+      optimized: LogicalPlan, expected: LogicalPlan, expectedMaxRow: Long): Unit = {
     comparePlans(Optimize.execute(optimized.analyze), expected.analyze)
     assert(expected.maxRows.get == expectedMaxRow)
   }

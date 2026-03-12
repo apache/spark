@@ -42,10 +42,10 @@ import org.apache.spark.sql.types._
 case class Average(
     child: Expression,
     evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get))
-    extends DeclarativeAggregate
-    with ImplicitCastInputTypes
-    with SupportQueryContext
-    with UnaryLike[Expression] {
+  extends DeclarativeAggregate
+  with ImplicitCastInputTypes
+  with SupportQueryContext
+  with UnaryLike[Expression] {
 
   def this(child: Expression) = this(child, EvalMode.fromSQLConf(SQLConf.get))
 
@@ -73,7 +73,7 @@ case class Average(
   }
 
   lazy val sumDataType = child.dataType match {
-    case _ @DecimalType.Fixed(p, s) => DecimalType.bounded(p + 10, s)
+    case _ @ DecimalType.Fixed(p, s) => DecimalType.bounded(p + 10, s)
     case _: YearMonthIntervalType => YearMonthIntervalType()
     case _: DayTimeIntervalType => DayTimeIntervalType()
     case _ => DoubleType
@@ -91,18 +91,19 @@ case class Average(
 
   override lazy val initialValues = Seq(
     /* sum = */ Literal.default(sumDataType),
-    /* count = */ Literal(0L))
+    /* count = */ Literal(0L)
+  )
 
   override lazy val mergeExpressions = Seq(
     /* sum = */ add(sum.left, sum.right),
-    /* count = */ count.left + count.right)
+    /* count = */ count.left + count.right
+  )
 
   // If all input are nulls, count will be 0 and we will get null after the division.
   // We can't directly use `/` as it throws an exception under ansi mode.
   override lazy val evaluateExpression = child.dataType match {
     case _: DecimalType =>
-      If(
-        EqualTo(count, Literal(0L)),
+      If(EqualTo(count, Literal(0L)),
         Literal(null, resultType),
         DecimalDivideWithOverflowCheck(
           sum,
@@ -111,23 +112,22 @@ case class Average(
           getContextOrNull(),
           evalMode != EvalMode.ANSI))
     case _: YearMonthIntervalType =>
-      If(
-        EqualTo(count, Literal(0L)),
-        Literal(null, YearMonthIntervalType()),
-        DivideYMInterval(sum, count))
+      If(EqualTo(count, Literal(0L)),
+        Literal(null, YearMonthIntervalType()), DivideYMInterval(sum, count))
     case _: DayTimeIntervalType =>
-      If(
-        EqualTo(count, Literal(0L)),
-        Literal(null, DayTimeIntervalType()),
-        DivideDTInterval(sum, count))
+      If(EqualTo(count, Literal(0L)),
+        Literal(null, DayTimeIntervalType()), DivideDTInterval(sum, count))
     case _ =>
       Divide(sum.cast(resultType), count.cast(resultType), EvalMode.LEGACY)
   }
 
   override lazy val updateExpressions: Seq[Expression] = Seq(
     /* sum = */
-    add(sum, coalesce(child.cast(sumDataType), Literal.default(sumDataType))),
-    /* count = */ If(child.isNull, count, count + 1L))
+    add(
+      sum,
+      coalesce(child.cast(sumDataType), Literal.default(sumDataType))),
+    /* count = */ If(child.isNull, count, count + 1L)
+  )
 
   // The flag `useAnsiAdd` won't be shown in the `toString` or `toAggString` methods
   override def flatArguments: Iterator[Any] = Iterator(child)
@@ -144,8 +144,7 @@ case class Average(
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage =
-    "_FUNC_(expr) - Returns the mean calculated from values of a group and the result is null on overflow.",
+  usage = "_FUNC_(expr) - Returns the mean calculated from values of a group and the result is null on overflow.",
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (1), (2), (3) AS tab(col);

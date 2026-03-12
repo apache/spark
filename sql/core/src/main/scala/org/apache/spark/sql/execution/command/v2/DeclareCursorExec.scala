@@ -27,21 +27,19 @@ import org.apache.spark.sql.scripting.CursorDeclared
 /**
  * Physical plan node for declaring cursors.
  *
- * Creates a cursor definition and initializes it in the Declared state. The cursor query is
- * stored as SQL text and is not parsed or analyzed until OPEN time. This allows parameter markers
- * to be preserved and bound correctly at OPEN.
+ * Creates a cursor definition and initializes it in the Declared state.
+ * The cursor query is stored as SQL text and is not parsed or analyzed until OPEN time.
+ * This allows parameter markers to be preserved and bound correctly at OPEN.
  *
- * @param cursorName
- *   Name of the cursor
- * @param queryText
- *   Original SQL text of the cursor query (with parameter markers preserved)
- * @param asensitive
- *   Whether the cursor is ASENSITIVE (sensitivity to underlying data changes, not case
- *   sensitivity). Currently all cursors are effectively INSENSITIVE.
+ * @param cursorName Name of the cursor
+ * @param queryText Original SQL text of the cursor query (with parameter markers preserved)
+ * @param asensitive Whether the cursor is ASENSITIVE (sensitivity to underlying data changes,
+ *                   not case sensitivity). Currently all cursors are effectively INSENSITIVE.
  */
-case class DeclareCursorExec(cursorName: String, queryText: String, asensitive: Boolean)
-    extends LeafV2CommandExec
-    with DataTypeErrorsBase {
+case class DeclareCursorExec(
+    cursorName: String,
+    queryText: String,
+    asensitive: Boolean) extends LeafV2CommandExec with DataTypeErrorsBase {
 
   override protected def run(): Seq[InternalRow] = {
     val scriptingContext = CursorCommandUtils.getScriptingContext(cursorName)
@@ -64,7 +62,9 @@ case class DeclareCursorExec(cursorName: String, queryText: String, asensitive: 
     // Create immutable cursor definition with normalized name and SQL text
     // Query parsing and analysis is deferred until OPEN time
     // Note: Stores normalized name for consistency with VariableDefinition
-    val cursorDef = CursorDefinition(name = normalizedName, queryText = queryText)
+    val cursorDef = CursorDefinition(
+      name = normalizedName,
+      queryText = queryText)
 
     // Store cursor definition and initial state
     currentScope.cursors.put(normalizedName, cursorDef)

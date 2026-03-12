@@ -21,8 +21,8 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 
 /**
  * A mixin trait for expression resolvers that as part of their resolution, replace single node
- * with a subtree of nodes. This step is necessary because the underlying legacy code that is
- * being called produces partially-unresolved subtrees. In order to resolve the subtree a callback
+ * with a subtree of nodes. This step is necessary because the underlying legacy code that is being
+ * called produces partially-unresolved subtrees. In order to resolve the subtree a callback
  * resolver is called recursively. This callback must ensure that no node is resolved twice in
  * order to not break the single-pass invariant. This is done by tagging the limits of this
  * traversal with [[ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY]] tag. This tag is applied to the
@@ -63,8 +63,8 @@ trait ProducesUnresolvedSubtree extends ResolvesExpressionChildren {
 
   /**
    * Try to pop the tag that marks the boundary of the single-pass subtree resolution.
-   * [[ExpressionResolver]] calls this method to check if the subtree traversal needs to be
-   * stopped because lower subtree is already resolved.
+   * [[ExpressionResolver]] calls this method to check if the subtree traversal needs to be stopped
+   * because lower subtree is already resolved.
    */
   protected def tryPopSinglePassSubtreeBoundary(unresolvedExpression: Expression): Boolean = {
     if (unresolvedExpression

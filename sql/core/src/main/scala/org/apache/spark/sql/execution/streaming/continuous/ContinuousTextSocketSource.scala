@@ -44,21 +44,18 @@ import org.apache.spark.sql.execution.streaming.sources.TextSocketReader
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.RpcUtils
 
+
 /**
  * A [[ContinuousStream]] that reads text lines through a TCP socket, designed only for tutorials
- * and debugging. This ContinuousStream will *not* work in production applications due to multiple
- * reasons, including no support for fault recovery.
+ * and debugging. This ContinuousStream will *not* work in production applications due to
+ * multiple reasons, including no support for fault recovery.
  *
  * The driver maintains a socket connection to the host-port, keeps the received messages in
  * buckets and serves the messages to the executors via a RPC endpoint.
  */
 class TextSocketContinuousStream(
-    host: String,
-    port: Int,
-    numPartitions: Int,
-    options: CaseInsensitiveStringMap)
-    extends ContinuousStream
-    with Logging {
+    host: String, port: Int, numPartitions: Int, options: CaseInsensitiveStringMap)
+  extends ContinuousStream with Logging {
 
   implicit val defaultFormats: DefaultFormats = DefaultFormats
 
@@ -103,6 +100,7 @@ class TextSocketContinuousStream(
     startOffset
   }
 
+
   override def planInputPartitions(start: Offset): Array[InputPartition] = {
     val startOffset = start.asInstanceOf[TextSocketOffset]
     recordEndpoint.setStartOffsets(startOffset.offsets)
@@ -123,8 +121,9 @@ class TextSocketContinuousStream(
           " cannot be changed.")
     }
 
-    startOffset.offsets.zipWithIndex.map { case (offset, i) =>
-      TextSocketContinuousInputPartition(endpointName, i, offset, includeTimestamp)
+    startOffset.offsets.zipWithIndex.map {
+      case (offset, i) =>
+        TextSocketContinuousInputPartition(endpointName, i, offset, includeTimestamp)
     }.toArray
   }
 
@@ -135,21 +134,19 @@ class TextSocketContinuousStream(
   override def commit(end: Offset): Unit = synchronized {
     val endOffset = end match {
       case off: TextSocketOffset => off
-      case _ =>
-        throw new IllegalArgumentException(
-          s"TextSocketContinuousReader.commit()" +
-            s"received an offset ($end) that did not originate with an instance of this class")
+      case _ => throw new IllegalArgumentException(s"TextSocketContinuousReader.commit()" +
+        s"received an offset ($end) that did not originate with an instance of this class")
     }
 
-    endOffset.offsets.zipWithIndex.foreach { case (offset, partition) =>
-      val max = startOffset.offsets(partition) + buckets(partition).size
-      if (offset > max) {
-        throw new IllegalStateException(
-          "Invalid offset " + offset + " to commit" +
-            " for partition " + partition + ". Max valid offset: " + max)
-      }
-      val n = offset - startOffset.offsets(partition)
-      buckets(partition).dropInPlace(n)
+    endOffset.offsets.zipWithIndex.foreach {
+      case (offset, partition) =>
+        val max = startOffset.offsets(partition) + buckets(partition).size
+        if (offset > max) {
+          throw new IllegalStateException("Invalid offset " + offset + " to commit" +
+          " for partition " + partition + ". Max valid offset: " + max)
+        }
+        val n = offset - startOffset.offsets(partition)
+        buckets(partition).dropInPlace(n)
     }
     startOffset = endOffset
     recordEndpoint.setStartOffsets(startOffset.offsets)
@@ -189,12 +186,11 @@ class TextSocketContinuousStream(
             }
             TextSocketContinuousStream.this.synchronized {
               currentOffset += 1
-              val newData = (
-                line,
-                Timestamp.valueOf(TextSocketReader.DATE_TIME_FORMATTER.format(Instant.now())))
+              val newData = (line,
+                Timestamp.valueOf(TextSocketReader.DATE_TIME_FORMATTER.format(Instant.now()))
+              )
               buckets(currentOffset % numPartitions) += toRow(newData)
-                .copy()
-                .asInstanceOf[UnsafeRow]
+                .copy().asInstanceOf[UnsafeRow]
             }
           }
         } catch {
@@ -219,20 +215,18 @@ case class TextSocketContinuousInputPartition(
     driverEndpointName: String,
     partitionId: Int,
     startOffset: Int,
-    includeTimestamp: Boolean)
-    extends InputPartition
+    includeTimestamp: Boolean) extends InputPartition
+
 
 object TextSocketReaderFactory extends ContinuousPartitionReaderFactory {
 
   override def createReader(partition: InputPartition): ContinuousPartitionReader[InternalRow] = {
     val p = partition.asInstanceOf[TextSocketContinuousInputPartition]
     new TextSocketContinuousPartitionReader(
-      p.driverEndpointName,
-      p.partitionId,
-      p.startOffset,
-      p.includeTimestamp)
+      p.driverEndpointName, p.partitionId, p.startOffset, p.includeTimestamp)
   }
 }
+
 
 /**
  * Continuous text socket input partition reader.
@@ -244,10 +238,12 @@ class TextSocketContinuousPartitionReader(
     partitionId: Int,
     startOffset: Int,
     includeTimestamp: Boolean)
-    extends ContinuousPartitionReader[InternalRow] {
+  extends ContinuousPartitionReader[InternalRow] {
 
-  private val endpoint =
-    RpcUtils.makeDriverRef(driverEndpointName, SparkEnv.get.conf, SparkEnv.get.rpcEnv)
+  private val endpoint = RpcUtils.makeDriverRef(
+    driverEndpointName,
+    SparkEnv.get.conf,
+    SparkEnv.get.rpcEnv)
 
   private var currentOffset = startOffset
   private var current: Option[InternalRow] = None
@@ -280,15 +276,14 @@ class TextSocketContinuousPartitionReader(
     ContinuousRecordPartitionOffset(partitionId, currentOffset)
 
   private def getRecord: Option[InternalRow] =
-    endpoint
-      .askSync[Option[InternalRow]](
-        GetRecord(ContinuousRecordPartitionOffset(partitionId, currentOffset)))
-      .map(rec =>
-        if (includeTimestamp) {
-          rec
-        } else {
-          projectWithoutTimestamp(rec)
-        })
+    endpoint.askSync[Option[InternalRow]](GetRecord(
+      ContinuousRecordPartitionOffset(partitionId, currentOffset))).map(rec =>
+      if (includeTimestamp) {
+        rec
+      } else {
+        projectWithoutTimestamp(rec)
+      }
+    )
 }
 
 case class TextSocketOffset(offsets: List[Int]) extends Offset {

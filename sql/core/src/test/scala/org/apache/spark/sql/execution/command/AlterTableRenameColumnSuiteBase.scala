@@ -21,8 +21,8 @@ import org.apache.spark.sql.QueryTest
 
 /**
  * This base suite contains unified tests for the `ALTER TABLE ... RENAME COLUMN` command that
- * check V1 and V2 table catalogs. The tests that cannot run for all supported catalogs are
- * located in more specific test suites:
+ * check V1 and V2 table catalogs. The tests that cannot run for all supported catalogs are located
+ * in more specific test suites:
  *
  *   - V2 table catalog tests:
  *     `org.apache.spark.sql.execution.command.v2.AlterTableRenameColumnSuite`
@@ -31,8 +31,9 @@ import org.apache.spark.sql.QueryTest
  *     - V1 In-Memory catalog:
  *       `org.apache.spark.sql.execution.command.v1.AlterTableRenameColumnSuite`
  *     - V1 Hive External catalog:
- *       `org.apache.spark.sql.hive.execution.command.AlterTableRenameColumnSuite`
+ *        `org.apache.spark.sql.hive.execution.command.AlterTableRenameColumnSuite`
  */
 trait AlterTableRenameColumnSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "ALTER TABLE .. RENAME COLUMN"
 }
+

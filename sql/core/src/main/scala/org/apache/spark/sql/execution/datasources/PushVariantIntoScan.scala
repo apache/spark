@@ -45,15 +45,14 @@ case class VariantMetadata(
   // Produce a metadata contain one key-value pair. The key is the special `METADATA_KEY`.
   // The value contains three key-value pairs for `path`, `failOnError`, and `timeZoneId`.
   def toMetadata: Metadata =
-    new MetadataBuilder()
-      .putMetadata(
-        VariantMetadata.METADATA_KEY,
-        new MetadataBuilder()
-          .putString(VariantMetadata.PATH_KEY, path)
-          .putBoolean(VariantMetadata.FAIL_ON_ERROR_KEY, failOnError)
-          .putString(VariantMetadata.TIME_ZONE_ID_KEY, timeZoneId)
-          .build())
-      .build()
+    new MetadataBuilder().putMetadata(
+      VariantMetadata.METADATA_KEY,
+      new MetadataBuilder()
+        .putString(VariantMetadata.PATH_KEY, path)
+        .putBoolean(VariantMetadata.FAIL_ON_ERROR_KEY, failOnError)
+        .putString(VariantMetadata.TIME_ZONE_ID_KEY, timeZoneId)
+        .build()
+    ).build()
 
   def parsedPath(): Array[VariantPathSegment] = {
     VariantPathParser.parse(path).getOrElse {
@@ -83,7 +82,8 @@ object VariantMetadata {
     VariantMetadata(
       value.getString(PATH_KEY),
       value.getBoolean(FAIL_ON_ERROR_KEY),
-      value.getString(TIME_ZONE_ID_KEY))
+      value.getString(TIME_ZONE_ID_KEY)
+    )
   }
 }
 
@@ -98,14 +98,12 @@ object RequestedVariantField {
   def apply(v: VariantGet): RequestedVariantField = {
     assert(v.path.foldable)
     RequestedVariantField(
-      VariantMetadata(v.path.eval().toString, v.failOnError, v.timeZoneId.get),
-      v.dataType)
+      VariantMetadata(v.path.eval().toString, v.failOnError, v.timeZoneId.get), v.dataType)
   }
 
   def apply(c: Cast): RequestedVariantField =
     RequestedVariantField(
-      VariantMetadata("$", c.evalMode != EvalMode.TRY, c.timeZoneId.get),
-      c.dataType)
+      VariantMetadata("$", c.evalMode != EvalMode.TRY, c.timeZoneId.get), c.dataType)
 }
 
 // Extract a nested struct access path. Return the (root attribute id, a sequence of ordinals to
@@ -184,12 +182,10 @@ class VariantInRelation {
             // of the placeholder field doesn't matter, even if the scan source accidentally
             // contains such a field.
             if (requestedFields.isEmpty) {
-              val placeholder = VariantMetadata(
-                "$.__placeholder_field__",
-                failOnError = false,
-                timeZoneId = "UTC")
-              requestedFields = Array(
-                StructField("0", BooleanType, metadata = placeholder.toMetadata))
+              val placeholder = VariantMetadata("$.__placeholder_field__",
+                failOnError = false, timeZoneId = "UTC")
+              requestedFields = Array(StructField("0", BooleanType,
+                metadata = placeholder.toMetadata))
             }
             StructType(requestedFields)
           case _ => dataType
@@ -218,10 +214,9 @@ class VariantInRelation {
   // fields, which also changes the struct type containing it, and it is difficult to reconstruct
   // the original struct value. This is not a big loss, because we need the full variant anyway.
   def collectRequestedFields(expr: Expression): Unit = expr match {
-    case v @ VariantGet(StructPathToVariant(fields), path, _, _, _) if path.foldable =>
+    case v@VariantGet(StructPathToVariant(fields), path, _, _, _) if path.foldable =>
       addField(fields, RequestedVariantField(v))
-    case c @ Cast(StructPathToVariant(fields), _, _, _) =>
-      addField(fields, RequestedVariantField(c))
+    case c@Cast(StructPathToVariant(fields), _, _, _) => addField(fields, RequestedVariantField(c))
     case IsNotNull(StructPath(_, _)) | IsNull(StructPath(_, _)) =>
     case StructPath(attrId, path) =>
       mapping.get(attrId) match {
@@ -241,22 +236,24 @@ class VariantInRelation {
     case _ => expr.children.foreach(collectRequestedFields)
   }
 
-  def rewriteExpr(expr: Expression, attributeMap: Map[ExprId, AttributeReference]): Expression = {
-    def rewriteAttribute(expr: Expression): Expression = expr.transformDown { case a: Attribute =>
-      attributeMap.getOrElse(a.exprId, a)
+  def rewriteExpr(
+      expr: Expression,
+      attributeMap: Map[ExprId, AttributeReference]): Expression = {
+    def rewriteAttribute(expr: Expression): Expression = expr.transformDown {
+      case a: Attribute => attributeMap.getOrElse(a.exprId, a)
     }
 
     // Rewrite patterns should be consistent with visit patterns in `collectRequestedFields`.
     expr.transformDown {
-      case g @ VariantGet(v @ StructPathToVariant(fields), path, _, _, _) if path.foldable =>
+      case g@VariantGet(v@StructPathToVariant(fields), path, _, _, _) if path.foldable =>
         // Rewrite the attribute in advance, rather than depending on the last branch to rewrite it.
         // Ww need to avoid the `v@StructPathToVariant(fields)` branch to rewrite the child again.
         GetStructField(rewriteAttribute(v), fields(RequestedVariantField(g)))
-      case c @ Cast(v @ StructPathToVariant(fields), _, _, _) =>
+      case c@Cast(v@StructPathToVariant(fields), _, _, _) =>
         GetStructField(rewriteAttribute(v), fields(RequestedVariantField(c)))
-      case i @ IsNotNull(StructPath(_, _)) => rewriteAttribute(i)
-      case i @ IsNull(StructPath(_, _)) => rewriteAttribute(i)
-      case v @ StructPathToVariant(fields) =>
+      case i@IsNotNull(StructPath(_, _)) => rewriteAttribute(i)
+      case i@IsNull(StructPath(_, _)) => rewriteAttribute(i)
+      case v@StructPathToVariant(fields) =>
         GetStructField(rewriteAttribute(v), fields(RequestedVariantField.fullVariant))
       case a: Attribute => attributeMap.getOrElse(a.exprId, a)
     }
@@ -280,16 +277,12 @@ object PushVariantIntoScan extends Rule[LogicalPlan] {
     // eventually.
     case s: Subquery if s.correlated => plan
     case _ if !SQLConf.get.getConf(SQLConf.PUSH_VARIANT_INTO_SCAN) => plan
-    case _ =>
-      plan.transformDown {
-        case p @ PhysicalOperation(
-              projectList,
-              filters,
-              relation @ LogicalRelationWithTable(
-                hadoopFsRelation @ HadoopFsRelation(_, _, _, _, _: ParquetFileFormat, _),
-                _)) =>
-          rewritePlan(p, projectList, filters, relation, hadoopFsRelation)
-      }
+    case _ => plan.transformDown {
+      case p@PhysicalOperation(projectList, filters,
+      relation @ LogicalRelationWithTable(
+      hadoopFsRelation@HadoopFsRelation(_, _, _, _, _: ParquetFileFormat, _), _)) =>
+        rewritePlan(p, projectList, filters, relation, hadoopFsRelation)
+    }
   }
 
   private def rewritePlan(
@@ -300,12 +293,10 @@ object PushVariantIntoScan extends Rule[LogicalPlan] {
       hadoopFsRelation: HadoopFsRelation): LogicalPlan = {
     val variants = new VariantInRelation
 
-    val schemaAttributes = relation.resolve(
-      hadoopFsRelation.dataSchema,
+    val schemaAttributes = relation.resolve(hadoopFsRelation.dataSchema,
       hadoopFsRelation.sparkSession.sessionState.analyzer.resolver)
-    val defaultValues =
-      ResolveDefaultColumns.existenceDefaultValues(StructType(schemaAttributes.map(a =>
-        StructField(a.name, a.dataType, a.nullable, a.metadata))))
+    val defaultValues = ResolveDefaultColumns.existenceDefaultValues(StructType(
+      schemaAttributes.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata))))
     for ((a, defaultValue) <- schemaAttributes.zip(defaultValues)) {
       variants.addVariantFields(a.exprId, a.dataType, defaultValue, Nil)
     }
@@ -319,8 +310,8 @@ object PushVariantIntoScan extends Rule[LogicalPlan] {
     val attributeMap = schemaAttributes.map { a =>
       if (variants.mapping.get(a.exprId).exists(_.nonEmpty)) {
         val newType = variants.rewriteType(a.exprId, a.dataType, Nil)
-        val newAttr =
-          AttributeReference(a.name, newType, a.nullable, a.metadata)(qualifier = a.qualifier)
+        val newAttr = AttributeReference(a.name, newType, a.nullable, a.metadata)(
+          qualifier = a.qualifier)
         (a.exprId, newAttr)
       } else {
         // `relation.resolve` actually returns `Seq[AttributeReference]`, although the return type
@@ -334,10 +325,9 @@ object PushVariantIntoScan extends Rule[LogicalPlan] {
     }
     val newOutput = relation.output.map(a => attributeMap.getOrElse(a.exprId, a))
 
-    val newHadoopFsRelation =
-      hadoopFsRelation.copy(dataSchema = StructType(newFields))(hadoopFsRelation.sparkSession)
-    val newRelation =
-      relation.copy(relation = newHadoopFsRelation, output = newOutput.toIndexedSeq)
+    val newHadoopFsRelation = hadoopFsRelation.copy(dataSchema = StructType(newFields))(
+      hadoopFsRelation.sparkSession)
+    val newRelation = relation.copy(relation = newHadoopFsRelation, output = newOutput.toIndexedSeq)
 
     val withFilter = if (filters.nonEmpty) {
       Filter(filters.map(variants.rewriteExpr(_, attributeMap)).reduce(And), newRelation)

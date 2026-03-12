@@ -36,87 +36,77 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
   private val sqlStore = parent.sqlStore
   private val groupSubExecutionEnabled = parent.conf.get(UI_SQL_GROUP_SUB_EXECUTION_ENABLED)
 
+
   override def render(request: HttpServletRequest): Seq[Node] = {
     val parameterExecutionId = request.getParameter("id")
-    require(
-      parameterExecutionId != null && parameterExecutionId.nonEmpty,
+    require(parameterExecutionId != null && parameterExecutionId.nonEmpty,
       "Missing execution id parameter")
 
     val executionId = parameterExecutionId.toLong
-    val content = sqlStore
-      .execution(executionId)
-      .map { executionUIData =>
-        val currentTime = System.currentTimeMillis()
-        val duration = executionUIData.completionTime.map(_.getTime()).getOrElse(currentTime) -
-          executionUIData.submissionTime
+    val content = sqlStore.execution(executionId).map { executionUIData =>
+      val currentTime = System.currentTimeMillis()
+      val duration = executionUIData.completionTime.map(_.getTime()).getOrElse(currentTime) -
+        executionUIData.submissionTime
 
-        def jobLinks(status: JobExecutionStatus, label: String): Seq[Node] = {
-          val jobs = executionUIData.jobs.flatMap { case (jobId, jobStatus) =>
-            if (jobStatus == status) Some(jobId) else None
-          }
-          if (jobs.nonEmpty) {
-            <li class="job-url">
-            <strong>{label} </strong>
-            {
-              jobs.toSeq.sorted.map { jobId =>
-                <a href={jobURL(request, jobId.intValue())}>{
-                  jobId.toString
-                }</a><span>&nbsp;</span>
-              }
-            }
-          </li>
-          } else {
-            Nil
-          }
+      def jobLinks(status: JobExecutionStatus, label: String): Seq[Node] = {
+        val jobs = executionUIData.jobs.flatMap { case (jobId, jobStatus) =>
+          if (jobStatus == status) Some(jobId) else None
         }
+        if (jobs.nonEmpty) {
+          <li class="job-url">
+            <strong>{label} </strong>
+            {jobs.toSeq.sorted.map { jobId =>
+              <a href={jobURL(request, jobId.intValue())}>{jobId.toString}</a><span>&nbsp;</span>
+            }}
+          </li>
+        } else {
+          Nil
+        }
+      }
 
-        val summary =
-          <div>
+
+      val summary =
+        <div>
           <ul class="list-unstyled">
             <li>
-              <strong>Submitted Time: </strong>{
-            UIUtils.formatDate(executionUIData.submissionTime)
-          }
+              <strong>Submitted Time: </strong>{UIUtils.formatDate(executionUIData.submissionTime)}
             </li>
             <li>
               <strong>Duration: </strong>{UIUtils.formatDuration(duration)}
             </li>
             {
-            Option(executionUIData.queryId)
-              .map { qId =>
+              Option(executionUIData.queryId).map { qId =>
                 <li>
                   <strong>Query ID: </strong>{qId}
                 </li>
-              }
-              .getOrElse(Seq.empty)
-          }
+              }.getOrElse(Seq.empty)
+            }
             {
-            if (executionUIData.rootExecutionId != executionId) {
-              <li>
+              if (executionUIData.rootExecutionId != executionId) {
+                <li>
                   <strong>Parent Execution: </strong>
                   <a href={"?id=" + executionUIData.rootExecutionId}>
                     {executionUIData.rootExecutionId}
                   </a>
                 </li>
-            }
-          }
-            {
-            if (groupSubExecutionEnabled) {
-              val subExecutions = sqlStore
-                .executionsList()
-                .filter(e => e.rootExecutionId == executionId && e.executionId != executionId)
-              if (subExecutions.nonEmpty) {
-                <li>
-                    <strong>Sub Executions: </strong>
-                    {
-                  subExecutions.map { e =>
-                    <a href={"?id=" + e.executionId}>{e.executionId}</a><span>&nbsp;</span>
-                  }
-                }
-                  </li>
               }
             }
-          }
+            {
+              if (groupSubExecutionEnabled) {
+                val subExecutions = sqlStore.executionsList()
+                  .filter(e => e.rootExecutionId == executionId && e.executionId != executionId)
+                if (subExecutions.nonEmpty) {
+                  <li>
+                    <strong>Sub Executions: </strong>
+                    {
+                      subExecutions.map { e =>
+                        <a href={"?id=" + e.executionId}>{e.executionId}</a><span>&nbsp;</span>
+                      }
+                    }
+                  </li>
+                }
+              }
+            }
             {jobLinks(JobExecutionStatus.RUNNING, "Running Jobs:")}
             {jobLinks(JobExecutionStatus.SUCCEEDED, "Succeeded Jobs:")}
             {jobLinks(JobExecutionStatus.FAILED, "Failed Jobs:")}
@@ -133,33 +123,29 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
           </div>
         </div>
 
-        val metrics = sqlStore.executionMetrics(executionId)
-        val graph = sqlStore.planGraph(executionId)
-        val configs = Option(executionUIData.modifiedConfigs).getOrElse(Map.empty)
+      val metrics = sqlStore.executionMetrics(executionId)
+      val graph = sqlStore.planGraph(executionId)
+      val configs = Option(executionUIData.modifiedConfigs).getOrElse(Map.empty)
 
-        summary ++
-          planVisualization(request, metrics, graph) ++
-          physicalPlanDescription(executionUIData.physicalPlanDescription) ++
-          modifiedConfigs(configs.filter { case (k, _) =>
-            !k.startsWith(pandasOnSparkConfPrefix)
-          }) ++
-          modifiedPandasOnSparkConfigs(configs.filter { case (k, _) =>
-            k.startsWith(pandasOnSparkConfPrefix)
-          }) ++
-          <br/>
-      }
-      .getOrElse {
-        <div>No information to display for query {executionId}</div>
-      }
+      summary ++
+        planVisualization(request, metrics, graph) ++
+        physicalPlanDescription(executionUIData.physicalPlanDescription) ++
+        modifiedConfigs(configs.filter { case (k, _) => !k.startsWith(pandasOnSparkConfPrefix) }) ++
+        modifiedPandasOnSparkConfigs(
+          configs.filter { case (k, _) => k.startsWith(pandasOnSparkConfPrefix) }) ++
+        <br/>
+    }.getOrElse {
+      <div>No information to display for query {executionId}</div>
+    }
 
-    UIUtils.headerSparkPage(request, s"Details for Query $executionId", content, parent)
+    UIUtils.headerSparkPage(
+      request, s"Details for Query $executionId", content, parent)
   }
+
 
   private def planVisualizationResources(request: HttpServletRequest): Seq[Node] = {
     // scalastyle:off
-    <link rel="stylesheet" href={
-      UIUtils.prependBaseUri(request, "/static/sql/spark-sql-viz.css")
-    } type="text/css"/>
+    <link rel="stylesheet" href={UIUtils.prependBaseUri(request, "/static/sql/spark-sql-viz.css")} type="text/css"/>
     <script src={UIUtils.prependBaseUri(request, "/static/d3.min.js")}></script>
     <script src={UIUtils.prependBaseUri(request, "/static/dagre-d3.min.js")}></script>
     <script src={UIUtils.prependBaseUri(request, "/static/graphlib-dot.min.js")}></script>
@@ -242,7 +228,8 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
       propertyHeader,
       propertyRow,
       Option(modifiedConfigs).getOrElse(Map.empty).toSeq.sorted,
-      fixedWidth = true)
+      fixedWidth = true
+    )
 
     <div>
       <span class="collapse-table" data-bs-toggle="collapse"
@@ -278,8 +265,12 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
       (key, pyValue)
     }
 
-    val configs =
-      UIUtils.listingTable(propertyHeader, propertyRow, modifiedOptions.sorted, fixedWidth = true)
+    val configs = UIUtils.listingTable(
+      propertyHeader,
+      propertyRow,
+      modifiedOptions.sorted,
+      fixedWidth = true
+    )
 
     <div>
       <span class="collapse-table" data-bs-toggle="collapse"

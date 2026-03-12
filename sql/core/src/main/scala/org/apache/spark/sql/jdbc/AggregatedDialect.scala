@@ -22,26 +22,22 @@ import java.sql.SQLException
 import org.apache.spark.sql.types.{DataType, MetadataBuilder}
 
 /**
- * AggregatedDialect can unify multiple dialects into one virtual Dialect. Dialects are tried in
- * order, and the first dialect that does not return a neutral element will win.
+ * AggregatedDialect can unify multiple dialects into one virtual Dialect.
+ * Dialects are tried in order, and the first dialect that does not return a
+ * neutral element will win.
  *
- * @param dialects
- *   List of dialects.
+ * @param dialects List of dialects.
  */
 private class AggregatedDialect(dialects: List[JdbcDialect])
-    extends JdbcDialect
-    with NoLegacyJDBCError {
+  extends JdbcDialect with NoLegacyJDBCError {
 
   require(dialects.nonEmpty)
 
-  override def canHandle(url: String): Boolean =
+  override def canHandle(url : String): Boolean =
     dialects.map(_.canHandle(url)).reduce(_ && _)
 
   override def getCatalystType(
-      sqlType: Int,
-      typeName: String,
-      size: Int,
-      md: MetadataBuilder): Option[DataType] = {
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     dialects.flatMap(_.getCatalystType(sqlType, typeName, size, md)).headOption
   }
 
@@ -77,13 +73,10 @@ private class AggregatedDialect(dialects: List[JdbcDialect])
 
   /**
    * The SQL query used to truncate a table.
-   * @param table
-   *   The table to truncate.
-   * @param cascade
-   *   Whether or not to cascade the truncation. Default value is the value of
-   *   isCascadingTruncateTable()
-   * @return
-   *   The SQL query to use for truncating a table
+   * @param table The table to truncate.
+   * @param cascade Whether or not to cascade the truncation. Default value is the
+   *                value of isCascadingTruncateTable()
+   * @return The SQL query to use for truncating a table
    */
   override def getTruncateQuery(
       table: String,

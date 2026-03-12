@@ -52,13 +52,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       a.copy(write = Some(write), query = newQuery)
 
     case o @ OverwriteByExpression(
-          r: DataSourceV2Relation,
-          deleteExpr,
-          query,
-          options,
-          _,
-          None,
-          _) =>
+        r: DataSourceV2Relation, deleteExpr, query, options, _, None, _) =>
       // fail if any filter cannot be converted. correctness depends on removing all matching data.
       val predicates = splitConjunctivePredicates(deleteExpr).flatMap { pred =>
         val predicate = DataSourceV2Strategy.translateFilterV2(pred)
@@ -97,13 +91,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       o.copy(write = Some(write), query = newQuery)
 
     case WriteToMicroBatchDataSource(
-          relationOpt,
-          table,
-          query,
-          queryId,
-          options,
-          outputMode,
-          Some(batchId)) =>
+        relationOpt, table, query, queryId, options, outputMode, Some(batchId)) =>
       val writeOptions = mergeOptions(
         options,
         relationOpt.map(r => r.options.asCaseSensitiveMap.asScala.toMap).getOrElse(Map.empty))
@@ -152,13 +140,11 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
         writeBuilder.build()
       case Complete =>
         // TODO: we should do this check earlier when we have capability API.
-        require(
-          writeBuilder.isInstanceOf[SupportsTruncate],
+        require(writeBuilder.isInstanceOf[SupportsTruncate],
           table.name + " does not support Complete mode.")
         writeBuilder.asInstanceOf[SupportsTruncate].truncate().build()
       case Update =>
-        require(
-          writeBuilder.isInstanceOf[SupportsStreamingUpdateAsAppend],
+        require(writeBuilder.isInstanceOf[SupportsStreamingUpdateAsAppend],
           table.name + " does not support Update mode.")
         writeBuilder.asInstanceOf[SupportsStreamingUpdateAsAppend].build()
     }
@@ -202,9 +188,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       metadataSchema)
 
     val writeBuilder = table.asWritable.newWriteBuilder(info)
-    assert(
-      writeBuilder.isInstanceOf[DeltaWriteBuilder],
-      s"$writeBuilder must be DeltaWriteBuilder")
+    assert(writeBuilder.isInstanceOf[DeltaWriteBuilder], s"$writeBuilder must be DeltaWriteBuilder")
     writeBuilder.asInstanceOf[DeltaWriteBuilder]
   }
 }

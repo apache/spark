@@ -17,10 +17,14 @@
 
 package org.apache.spark.sql.scripting
 
-import org.apache.spark.sql.catalyst.catalog.{SqlScriptingContextManager, SqlScriptingExecutionContextExtension, VariableManager}
+import org.apache.spark.sql.catalyst.catalog.{
+  SqlScriptingContextManager,
+  SqlScriptingExecutionContextExtension,
+  VariableManager
+}
 
 class SqlScriptingContextManagerImpl(context: SqlScriptingExecutionContext)
-    extends SqlScriptingContextManager {
+  extends SqlScriptingContextManager {
 
   private val variableManager = new SqlScriptingLocalVariableManager(context)
 

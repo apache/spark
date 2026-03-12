@@ -34,8 +34,7 @@ case class ContinuousScanExec(
     @transient stream: ContinuousStream,
     @transient start: Offset,
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
-    ordering: Option[Seq[SortOrder]] = None)
-    extends DataSourceV2ScanExecBase {
+    ordering: Option[Seq[SortOrder]] = None) extends DataSourceV2ScanExecBase {
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
@@ -54,10 +53,9 @@ case class ContinuousScanExec(
 
   override lazy val inputRDD: RDD[InternalRow] = {
     assert(partitions.forall(_.isDefined), "should contain a partition")
-    EpochCoordinatorRef
-      .get(
-        sparkContext.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
-        sparkContext.env)
+    EpochCoordinatorRef.get(
+      sparkContext.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
+      sparkContext.env)
       .askSync[Unit](SetReaderPartitions(partitions.size))
     val inputRDD = new ContinuousDataSourceRDD(
       sparkContext,

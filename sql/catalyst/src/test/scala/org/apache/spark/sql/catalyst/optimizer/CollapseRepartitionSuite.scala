@@ -26,10 +26,12 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 class CollapseRepartitionSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("CollapseRepartition", FixedPoint(10), CollapseRepartition) :: Nil
+      Batch("CollapseRepartition", FixedPoint(10),
+        CollapseRepartition) :: Nil
   }
 
   val testRelation = LocalRelation($"a".int, $"b".int)
+
 
   test("collapse two adjacent coalesces into one") {
     // Always respects the top coalesces amd removes useless coalesce below coalesce
@@ -198,20 +200,17 @@ class CollapseRepartitionSuite extends PlanTest {
     val originalQuery1 = testRelation
       .orderBy($"a".asc, $"b".asc)
       .distribute($"a")(20)
-    comparePlans(
-      Optimize.execute(originalQuery1.analyze),
-      testRelation.distribute($"a")(20).analyze)
+    comparePlans(Optimize.execute(originalQuery1.analyze), testRelation.distribute($"a")(20)
+      .analyze)
 
-    val originalQuery2 = testRelation
-      .distribute($"a")(10)
+    val originalQuery2 = testRelation.distribute($"a")(10)
       .sortBy($"a".asc, $"b".asc)
       .distribute($"a")(20)
     comparePlans(Optimize.execute(originalQuery2.analyze), originalQuery2.analyze)
   }
 
   test("SPARK-37904: Improve rebalance in CollapseRepartition") {
-    Seq(
-      testRelation.sortBy($"a".asc),
+    Seq(testRelation.sortBy($"a".asc),
       testRelation.orderBy($"a".asc),
       testRelation.coalesce(1),
       testRelation.repartition(1),

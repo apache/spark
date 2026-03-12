@@ -23,9 +23,9 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 
 /**
  * Dummy implementation of [[LateralColumnAliasRegistry]] used when
- * [[SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED]] is disabled. Getter methods throw an
- * exception as they should never be called on a dummy implementation. Non-getter methods must
- * remain idempotent.
+ * [[SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED]] is disabled. Getter methods throw an exception
+ * as they should never be called on a dummy implementation. Non-getter methods must remain
+ * idempotent.
  */
 class LateralColumnAliasProhibitedRegistry extends LateralColumnAliasRegistry {
   def withNewLcaScope(isTopLevelAlias: Boolean)(body: => Alias): Alias = body

@@ -20,13 +20,11 @@ package org.apache.spark.sql.execution.adaptive
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 
 /**
- * Exception thrown when an invalid query plan is detected in AQE replanning, in which case AQE
- * will stop the current replanning process and keep using the latest valid plan.
+ * Exception thrown when an invalid query plan is detected in AQE replanning,
+ * in which case AQE will stop the current replanning process and keep using the latest valid plan.
  *
- * @param message
- *   The reason why the plan is considered invalid.
- * @param plan
- *   The invalid plan/sub-plan.
+ * @param message The reason why the plan is considered invalid.
+ * @param plan The invalid plan/sub-plan.
  */
 case class InvalidAQEPlanException[QueryType <: QueryPlan[_]](message: String, plan: QueryType)
-    extends Exception(message)
+  extends Exception(message)

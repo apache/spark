@@ -29,20 +29,16 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.sketch.CountMinSketch
 
 /**
- * This function returns a count-min sketch of a column with the given esp, confidence and seed. A
- * count-min sketch is a probabilistic data structure used for summarizing streams of data in
- * sub-linear space, which is useful for equality predicates and join size estimation. The result
- * returned by the function is an array of bytes, which should be deserialized to a
+ * This function returns a count-min sketch of a column with the given esp, confidence and seed.
+ * A count-min sketch is a probabilistic data structure used for summarizing streams of data in
+ * sub-linear space, which is useful for equality predicates and join size estimation.
+ * The result returned by the function is an array of bytes, which should be deserialized to a
  * `CountMinSketch` before usage.
  *
- * @param child
- *   child expression that can produce column value with `child.eval(inputRow)`
- * @param epsExpression
- *   relative error, must be positive
- * @param confidenceExpression
- *   confidence, must be positive and less than 1.0
- * @param seedExpression
- *   random seed
+ * @param child child expression that can produce column value with `child.eval(inputRow)`
+ * @param epsExpression relative error, must be positive
+ * @param confidenceExpression confidence, must be positive and less than 1.0
+ * @param seedExpression random seed
  */
 case class CountMinSketchAgg(
     child: Expression,
@@ -51,10 +47,10 @@ case class CountMinSketchAgg(
     seedExpression: Expression,
     override val mutableAggBufferOffset: Int,
     override val inputAggBufferOffset: Int)
-    extends TypedImperativeAggregate[CountMinSketch]
-    with ExpectsInputTypes
-    with QuaternaryLike[Expression]
-    with QueryErrorsBase {
+  extends TypedImperativeAggregate[CountMinSketch]
+  with ExpectsInputTypes
+  with QuaternaryLike[Expression]
+  with QueryErrorsBase {
 
   def this(
       child: Expression,
@@ -82,21 +78,24 @@ case class CountMinSketchAgg(
         messageParameters = Map(
           "inputName" -> toSQLId("eps"),
           "inputType" -> toSQLType(epsExpression.dataType),
-          "inputExpr" -> toSQLExpr(epsExpression)))
+          "inputExpr" -> toSQLExpr(epsExpression))
+      )
     } else if (!confidenceExpression.foldable) {
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
           "inputName" -> toSQLId("confidence"),
           "inputType" -> toSQLType(confidenceExpression.dataType),
-          "inputExpr" -> toSQLExpr(confidenceExpression)))
+          "inputExpr" -> toSQLExpr(confidenceExpression))
+      )
     } else if (!seedExpression.foldable) {
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
           "inputName" -> toSQLId("seed"),
           "inputType" -> toSQLType(seedExpression.dataType),
-          "inputExpr" -> toSQLExpr(seedExpression)))
+          "inputExpr" -> toSQLExpr(seedExpression))
+      )
     } else if (epsExpression.eval() == null) {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_NULL",
@@ -115,14 +114,18 @@ case class CountMinSketchAgg(
         messageParameters = Map(
           "exprName" -> "eps",
           "valueRange" -> s"(${0.toDouble}, ${Double.MaxValue}]",
-          "currentValue" -> toSQLValue(eps, DoubleType)))
+          "currentValue" -> toSQLValue(eps, DoubleType)
+        )
+      )
     } else if (confidence <= 0.0 || confidence >= 1.0) {
       DataTypeMismatch(
         errorSubClass = "VALUE_OUT_OF_RANGE",
         messageParameters = Map(
           "exprName" -> "confidence",
           "valueRange" -> s"(${0.toDouble}, ${1.toDouble}]",
-          "currentValue" -> toSQLValue(confidence, DoubleType)))
+          "currentValue" -> toSQLValue(confidence, DoubleType)
+        )
+      )
     } else {
       TypeCheckSuccess
     }
@@ -168,10 +171,7 @@ case class CountMinSketchAgg(
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override def inputTypes: Seq[AbstractDataType] = {
-    Seq(
-      TypeCollection(IntegralType, StringType, BinaryType),
-      DoubleType,
-      DoubleType,
+    Seq(TypeCollection(IntegralType, StringType, BinaryType), DoubleType, DoubleType,
       TypeCollection(IntegerType, LongType))
   }
 
@@ -189,11 +189,8 @@ case class CountMinSketchAgg(
   override def third: Expression = confidenceExpression
   override def fourth: Expression = seedExpression
 
-  override protected def withNewChildrenInternal(
-      first: Expression,
-      second: Expression,
-      third: Expression,
-      fourth: Expression): CountMinSketchAgg =
+  override protected def withNewChildrenInternal(first: Expression, second: Expression,
+      third: Expression, fourth: Expression): CountMinSketchAgg =
     copy(
       child = first,
       epsExpression = second,
@@ -218,12 +215,12 @@ case class CountMinSketchAgg(
   since = "2.2.0")
 // scalastyle:on line.size.limit
 object CountMinSketchAggExpressionBuilder extends ExpressionBuilder {
-  final val defaultFunctionSignature = FunctionSignature(
-    Seq(
-      InputParameter("column"),
-      InputParameter("epsilon"),
-      InputParameter("confidence"),
-      InputParameter("seed")))
+  final val defaultFunctionSignature = FunctionSignature(Seq(
+    InputParameter("column"),
+    InputParameter("epsilon"),
+    InputParameter("confidence"),
+    InputParameter("seed")
+  ))
   override def functionSignature: Option[FunctionSignature] = Some(defaultFunctionSignature)
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     assert(expressions.size == 4)

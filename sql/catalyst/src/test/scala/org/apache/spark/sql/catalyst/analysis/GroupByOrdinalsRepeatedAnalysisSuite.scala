@@ -32,46 +32,55 @@ class GroupByOrdinalsRepeatedAnalysisSuite extends AnalysisTest {
 
   test("SPARK-45920: group by ordinal repeated analysis") {
     val plan = testRelation.groupBy(Literal(1))(Literal(100).as("a")).analyze
-    comparePlans(plan, testRelation.groupBy(Literal(1))(Literal(100).as("a")).analyze)
+    comparePlans(
+      plan,
+      testRelation.groupBy(Literal(1))(Literal(100).as("a")).analyze
+    )
 
-    val testRelationWithData =
-      testRelation.copy(data = Seq(new GenericInternalRow(Array(1: Any))))
+    val testRelationWithData = testRelation.copy(data = Seq(new GenericInternalRow(Array(1: Any))))
     // Copy the plan to reset its `analyzed` flag, so that analyzer rules will re-apply.
-    val copiedPlan = plan.transform { case _: LocalRelation =>
-      testRelationWithData
+    val copiedPlan = plan.transform {
+      case _: LocalRelation => testRelationWithData
     }
     comparePlans(
       copiedPlan.analyze, // repeated analysis
-      testRelationWithData.groupBy(Literal(1))(Literal(100).as("a")).analyze)
+      testRelationWithData.groupBy(Literal(1))(Literal(100).as("a")).analyze
+    )
   }
 
   test("SPARK-47895: group by all repeated analysis") {
     val plan = testRelation.groupBy($"all")(Literal(100).as("a")).analyze
-    comparePlans(plan, testRelation.groupBy(Literal(1))(Literal(100).as("a")).analyze)
+    comparePlans(
+      plan,
+      testRelation.groupBy(Literal(1))(Literal(100).as("a")).analyze
+    )
 
-    val testRelationWithData =
-      testRelation.copy(data = Seq(new GenericInternalRow(Array(1: Any))))
+    val testRelationWithData = testRelation.copy(data = Seq(new GenericInternalRow(Array(1: Any))))
     // Copy the plan to reset its `analyzed` flag, so that analyzer rules will re-apply.
-    val copiedPlan = plan.transform { case _: LocalRelation =>
-      testRelationWithData
+    val copiedPlan = plan.transform {
+      case _: LocalRelation => testRelationWithData
     }
     comparePlans(
       copiedPlan.analyze, // repeated analysis
-      testRelationWithData.groupBy(Literal(1))(Literal(100).as("a")).analyze)
+      testRelationWithData.groupBy(Literal(1))(Literal(100).as("a")).analyze
+    )
   }
 
   test("SPARK-47895: group by alias repeated analysis") {
     val plan = testRelation.groupBy($"b")(Literal(100).as("b")).analyze
-    comparePlans(plan, testRelation.groupBy(Literal(1))(Literal(100).as("b")).analyze)
+    comparePlans(
+      plan,
+      testRelation.groupBy(Literal(1))(Literal(100).as("b")).analyze
+    )
 
-    val testRelationWithData =
-      testRelation.copy(data = Seq(new GenericInternalRow(Array(1: Any))))
+    val testRelationWithData = testRelation.copy(data = Seq(new GenericInternalRow(Array(1: Any))))
     // Copy the plan to reset its `analyzed` flag, so that analyzer rules will re-apply.
-    val copiedPlan = plan.transform { case _: LocalRelation =>
-      testRelationWithData
+    val copiedPlan = plan.transform {
+      case _: LocalRelation => testRelationWithData
     }
     comparePlans(
       copiedPlan.analyze, // repeated analysis
-      testRelationWithData.groupBy(Literal(1))(Literal(100).as("b")).analyze)
+      testRelationWithData.groupBy(Literal(1))(Literal(100).as("b")).analyze
+    )
   }
 }

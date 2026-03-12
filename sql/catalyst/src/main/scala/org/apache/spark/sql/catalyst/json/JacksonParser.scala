@@ -49,8 +49,7 @@ class JacksonParser(
     schema: DataType,
     val options: JSONOptions,
     allowArrayAsStructs: Boolean,
-    filters: Seq[Filter] = Seq.empty)
-    extends Logging {
+    filters: Seq[Filter] = Seq.empty) extends Logging {
 
   import JacksonUtils._
   import com.fasterxml.jackson.core.JsonToken._
@@ -91,41 +90,38 @@ class JacksonParser(
       .orElse(SQLConf.get.jsonEnableDateTimeParsingFallback)
       .getOrElse {
         SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
-        options.timestampFormatInRead.isEmpty
+          options.timestampFormatInRead.isEmpty
       }
   private val enableParsingFallbackForDateType =
     options.enableDateTimeParsingFallback
       .orElse(SQLConf.get.jsonEnableDateTimeParsingFallback)
       .getOrElse {
         SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
-        options.dateFormatInRead.isEmpty
+          options.dateFormatInRead.isEmpty
       }
 
   private val enablePartialResults = SQLConf.get.jsonEnablePartialResults
 
   /**
-   * Create a converter which converts the JSON documents held by the `JsonParser` to a value
-   * according to a desired schema. This is a wrapper for the method `makeConverter()` to handle a
-   * row wrapped with an array.
+   * Create a converter which converts the JSON documents held by the `JsonParser`
+   * to a value according to a desired schema. This is a wrapper for the method
+   * `makeConverter()` to handle a row wrapped with an array.
    */
   private def makeRootConverter(dt: DataType): JsonParser => Iterable[InternalRow] = {
     dt match {
-      case _: VariantType =>
-        (parser: JsonParser) => {
-          Some(InternalRow(parseVariant(parser)))
-        }
-      case _: StructType if options.singleVariantColumn.isDefined =>
-        (parser: JsonParser) => {
-          Some(InternalRow(parseVariant(parser)))
-        }
+      case _: VariantType => (parser: JsonParser) => {
+        Some(InternalRow(parseVariant(parser)))
+      }
+      case _: StructType if options.singleVariantColumn.isDefined => (parser: JsonParser) => {
+        Some(InternalRow(parseVariant(parser)))
+      }
       case st: StructType => makeStructRootConverter(st)
       case mt: MapType => makeMapRootConverter(mt)
       case at: ArrayType => makeArrayRootConverter(at)
     }
   }
 
-  private val variantAllowDuplicateKeys =
-    SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS)
+  private val variantAllowDuplicateKeys = SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS)
 
   protected final def parseVariant(parser: JsonParser): VariantVal = {
     // Skips `FIELD_NAME` at the beginning. This check is adapted from `parseJsonToken`, but we
@@ -151,10 +147,8 @@ class JacksonParser(
     } else {
       new NoopFilters
     }
-    (parser: JsonParser) =>
-      parseJsonToken[Iterable[InternalRow]](parser, st) {
-        case START_OBJECT =>
-          convertObject(parser, st, fieldConverters, jsonFilters, isRoot = true)
+    (parser: JsonParser) => parseJsonToken[Iterable[InternalRow]](parser, st) {
+      case START_OBJECT => convertObject(parser, st, fieldConverters, jsonFilters, isRoot = true)
         // SPARK-3308: support reading top level JSON arrays and take every element
         // in such an array as a row
         //
@@ -168,336 +162,311 @@ class JacksonParser(
         // List([str_a_1,null])
         // List([str_a_2,null], [null,str_b_3])
         //
-        case START_ARRAY if allowArrayAsStructs =>
-          val array = convertArray(parser, elementConverter, isRoot = true, arrayAsStructs = true)
-          // Here, as we support reading top level JSON arrays and take every element
-          // in such an array as a row, this case is possible.
-          if (array.numElements() == 0) {
-            Array.empty[InternalRow]
-          } else {
-            array.toArray[InternalRow](schema)
-          }
-        case START_ARRAY =>
-          throw JsonArraysAsStructsException()
-      }
+      case START_ARRAY if allowArrayAsStructs =>
+        val array = convertArray(parser, elementConverter, isRoot = true, arrayAsStructs = true)
+        // Here, as we support reading top level JSON arrays and take every element
+        // in such an array as a row, this case is possible.
+        if (array.numElements() == 0) {
+          Array.empty[InternalRow]
+        } else {
+          array.toArray[InternalRow](schema)
+        }
+      case START_ARRAY =>
+        throw JsonArraysAsStructsException()
+    }
   }
 
   private def makeMapRootConverter(mt: MapType): JsonParser => Iterable[InternalRow] = {
     val fieldConverter = makeConverter(mt.valueType)
-    (parser: JsonParser) =>
-      parseJsonToken[Iterable[InternalRow]](parser, mt) { case START_OBJECT =>
-        Some(InternalRow(convertMap(parser, fieldConverter)))
-      }
+    (parser: JsonParser) => parseJsonToken[Iterable[InternalRow]](parser, mt) {
+      case START_OBJECT => Some(InternalRow(convertMap(parser, fieldConverter)))
+    }
   }
 
   private def makeArrayRootConverter(at: ArrayType): JsonParser => Iterable[InternalRow] = {
     val elemConverter = makeConverter(at.elementType)
-    (parser: JsonParser) =>
-      parseJsonToken[Iterable[InternalRow]](parser, at) {
-        case START_ARRAY => Some(InternalRow(convertArray(parser, elemConverter)))
-        case START_OBJECT if at.elementType.isInstanceOf[StructType] =>
-          // This handles the case when an input JSON object is a structure but
-          // the specified schema is an array of structures. In that case, the input JSON is
-          // considered as an array of only one element of struct type.
-          // This behavior was introduced by changes for SPARK-19595.
-          //
-          // For example, if the specified schema is ArrayType(new StructType().add("i", IntegerType))
-          // and JSON input as below:
-          //
-          // [{"i": 1}, {"i": 2}]
-          // [{"i": 3}]
-          // {"i": 4}
-          //
-          // The last row is considered as an array with one element, and result of conversion:
-          //
-          // Seq(Row(1), Row(2))
-          // Seq(Row(3))
-          // Seq(Row(4))
-          //
-          val st = at.elementType.asInstanceOf[StructType]
-          val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
+    (parser: JsonParser) => parseJsonToken[Iterable[InternalRow]](parser, at) {
+      case START_ARRAY => Some(InternalRow(convertArray(parser, elemConverter)))
+      case START_OBJECT if at.elementType.isInstanceOf[StructType] =>
+        // This handles the case when an input JSON object is a structure but
+        // the specified schema is an array of structures. In that case, the input JSON is
+        // considered as an array of only one element of struct type.
+        // This behavior was introduced by changes for SPARK-19595.
+        //
+        // For example, if the specified schema is ArrayType(new StructType().add("i", IntegerType))
+        // and JSON input as below:
+        //
+        // [{"i": 1}, {"i": 2}]
+        // [{"i": 3}]
+        // {"i": 4}
+        //
+        // The last row is considered as an array with one element, and result of conversion:
+        //
+        // Seq(Row(1), Row(2))
+        // Seq(Row(3))
+        // Seq(Row(4))
+        //
+        val st = at.elementType.asInstanceOf[StructType]
+        val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
 
-          val res =
-            try {
-              convertObject(parser, st, fieldConverters)
-            } catch {
-              case err: PartialResultException =>
-                throw PartialArrayDataResultException(
-                  new GenericArrayData(Seq(err.partialResult)),
-                  err.cause)
-            }
+        val res = try {
+          convertObject(parser, st, fieldConverters)
+        } catch {
+          case err: PartialResultException =>
+            throw PartialArrayDataResultException(
+              new GenericArrayData(Seq(err.partialResult)),
+              err.cause
+            )
+        }
 
-          Some(InternalRow(new GenericArrayData(res.toArray[Any])))
-      }
+        Some(InternalRow(new GenericArrayData(res.toArray[Any])))
+    }
   }
 
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 
   /**
-   * Create a converter which converts the JSON documents held by the `JsonParser` to a value
-   * according to a desired schema.
+   * Create a converter which converts the JSON documents held by the `JsonParser`
+   * to a value according to a desired schema.
    */
   def makeConverter(dataType: DataType): ValueConverter = dataType match {
     case BooleanType =>
-      (parser: JsonParser) =>
-        parseJsonToken[java.lang.Boolean](parser, dataType) {
-          case VALUE_TRUE => true
-          case VALUE_FALSE => false
-        }
-
-    case ByteType =>
-      (parser: JsonParser) =>
-        parseJsonToken[java.lang.Byte](parser, dataType) { case VALUE_NUMBER_INT =>
-          parser.getByteValue
-        }
-
-    case ShortType =>
-      (parser: JsonParser) =>
-        parseJsonToken[java.lang.Short](parser, dataType) { case VALUE_NUMBER_INT =>
-          parser.getShortValue
-        }
-
-    case IntegerType =>
-      (parser: JsonParser) =>
-        parseJsonToken[java.lang.Integer](parser, dataType) { case VALUE_NUMBER_INT =>
-          parser.getIntValue
-        }
-
-    case LongType =>
-      (parser: JsonParser) =>
-        parseJsonToken[java.lang.Long](parser, dataType) { case VALUE_NUMBER_INT =>
-          parser.getLongValue
-        }
-
-    case FloatType =>
-      (parser: JsonParser) =>
-        parseJsonToken[java.lang.Float](parser, dataType) {
-          case VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT =>
-            parser.getFloatValue
-
-          case VALUE_STRING if parser.getTextLength >= 1 =>
-            // Special case handling for NaN and Infinity.
-            parser.getText match {
-              case "NaN" if options.allowNonNumericNumbers =>
-                Float.NaN
-              case "+INF" | "+Infinity" | "Infinity" if options.allowNonNumericNumbers =>
-                Float.PositiveInfinity
-              case "-INF" | "-Infinity" if options.allowNonNumericNumbers =>
-                Float.NegativeInfinity
-              case _ =>
-                throw StringAsDataTypeException(parser.currentName, parser.getText, FloatType)
-            }
-        }
-
-    case DoubleType =>
-      (parser: JsonParser) =>
-        parseJsonToken[java.lang.Double](parser, dataType) {
-          case VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT =>
-            parser.getDoubleValue
-
-          case VALUE_STRING if parser.getTextLength >= 1 =>
-            // Special case handling for NaN and Infinity.
-            parser.getText match {
-              case "NaN" if options.allowNonNumericNumbers =>
-                Double.NaN
-              case "+INF" | "+Infinity" | "Infinity" if options.allowNonNumericNumbers =>
-                Double.PositiveInfinity
-              case "-INF" | "-Infinity" if options.allowNonNumericNumbers =>
-                Double.NegativeInfinity
-              case _ =>
-                throw StringAsDataTypeException(parser.currentName, parser.getText, DoubleType)
-            }
-        }
-
-    case _: StringType =>
-      (parser: JsonParser) => {
-        // This must be enabled if we will retrieve the bytes directly from the raw content:
-        val oldFeature = parser.getFeatureMask
-        val featureToAdd = JsonParser.Feature.INCLUDE_SOURCE_IN_LOCATION.getMask
-        parser.overrideStdFeatures(oldFeature | featureToAdd, featureToAdd)
-        val result = parseJsonToken[UTF8String](parser, dataType) {
-          case VALUE_STRING =>
-            UTF8String.fromString(parser.getText)
-
-          case other =>
-            // Note that it always tries to convert the data as string without the case of failure.
-            val startLocation = parser.currentTokenLocation()
-            def skipAhead(): Unit = {
-              other match {
-                case START_OBJECT =>
-                  parser.skipChildren()
-                case START_ARRAY =>
-                  parser.skipChildren()
-                case _ =>
-                // Do nothing in this case; we've already read the token
-              }
-            }
-
-            // PositionedReadable
-            startLocation.contentReference().getRawContent match {
-              case byteArray: Array[Byte] if exactStringParsing =>
-                skipAhead()
-                val endLocation = parser.currentLocation.getByteOffset
-
-                UTF8String.fromBytes(
-                  byteArray,
-                  startLocation.getByteOffset.toInt,
-                  endLocation.toInt - (startLocation.getByteOffset.toInt))
-              case positionedReadable: PositionedReadable if exactStringParsing =>
-                skipAhead()
-                val endLocation = parser.currentLocation.getByteOffset
-
-                val size = endLocation.toInt - (startLocation.getByteOffset.toInt)
-                val buffer = new Array[Byte](size)
-                positionedReadable.read(startLocation.getByteOffset, buffer, 0, size)
-                UTF8String.fromBytes(buffer, 0, size)
-              case _ =>
-                val writer = new ByteArrayOutputStream()
-                Utils.tryWithResource(factory.createGenerator(writer, JsonEncoding.UTF8)) {
-                  generator => generator.copyCurrentStructure(parser)
-                }
-                UTF8String.fromBytes(writer.toByteArray)
-            }
-        }
-        // Reset back to the original configuration using `~0` as the mask,
-        // which is a bitmask with all bits set, effectively allowing all features
-        // to be reset. This ensures that every feature is restored to its previous
-        // state as defined by `oldFeature`.
-        parser.overrideStdFeatures(oldFeature, ~0)
-        result
+      (parser: JsonParser) => parseJsonToken[java.lang.Boolean](parser, dataType) {
+        case VALUE_TRUE => true
+        case VALUE_FALSE => false
       }
 
-    case TimestampType =>
-      (parser: JsonParser) =>
-        parseJsonToken[java.lang.Long](parser, dataType) {
-          case VALUE_STRING if parser.getTextLength >= 1 =>
-            try {
-              timestampFormatter.parse(parser.getText)
-            } catch {
-              case NonFatal(e) =>
-                // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
-                // compatibility if enabled.
-                if (!enableParsingFallbackForTimestampType) {
-                  throw e
-                }
-                val str =
-                  DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(parser.getText))
-                DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw e)
-            }
+    case ByteType =>
+      (parser: JsonParser) => parseJsonToken[java.lang.Byte](parser, dataType) {
+        case VALUE_NUMBER_INT => parser.getByteValue
+      }
 
-          case VALUE_NUMBER_INT =>
-            parser.getLongValue * 1000000L
+    case ShortType =>
+      (parser: JsonParser) => parseJsonToken[java.lang.Short](parser, dataType) {
+        case VALUE_NUMBER_INT => parser.getShortValue
+      }
+
+    case IntegerType =>
+      (parser: JsonParser) => parseJsonToken[java.lang.Integer](parser, dataType) {
+        case VALUE_NUMBER_INT => parser.getIntValue
+      }
+
+    case LongType =>
+      (parser: JsonParser) => parseJsonToken[java.lang.Long](parser, dataType) {
+        case VALUE_NUMBER_INT => parser.getLongValue
+      }
+
+    case FloatType =>
+      (parser: JsonParser) => parseJsonToken[java.lang.Float](parser, dataType) {
+        case VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT =>
+          parser.getFloatValue
+
+        case VALUE_STRING if parser.getTextLength >= 1 =>
+          // Special case handling for NaN and Infinity.
+          parser.getText match {
+            case "NaN" if options.allowNonNumericNumbers =>
+              Float.NaN
+            case "+INF" | "+Infinity" | "Infinity" if options.allowNonNumericNumbers =>
+              Float.PositiveInfinity
+            case "-INF" | "-Infinity" if options.allowNonNumericNumbers =>
+              Float.NegativeInfinity
+            case _ => throw StringAsDataTypeException(parser.currentName, parser.getText,
+              FloatType)
+          }
+      }
+
+    case DoubleType =>
+      (parser: JsonParser) => parseJsonToken[java.lang.Double](parser, dataType) {
+        case VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT =>
+          parser.getDoubleValue
+
+        case VALUE_STRING if parser.getTextLength >= 1 =>
+          // Special case handling for NaN and Infinity.
+          parser.getText match {
+            case "NaN" if options.allowNonNumericNumbers =>
+              Double.NaN
+            case "+INF" | "+Infinity" | "Infinity" if options.allowNonNumericNumbers =>
+              Double.PositiveInfinity
+            case "-INF" | "-Infinity" if options.allowNonNumericNumbers =>
+              Double.NegativeInfinity
+            case _ => throw StringAsDataTypeException(parser.currentName, parser.getText,
+              DoubleType)
+          }
+      }
+
+    case _: StringType => (parser: JsonParser) => {
+      // This must be enabled if we will retrieve the bytes directly from the raw content:
+      val oldFeature = parser.getFeatureMask
+      val featureToAdd = JsonParser.Feature.INCLUDE_SOURCE_IN_LOCATION.getMask
+      parser.overrideStdFeatures(oldFeature | featureToAdd, featureToAdd)
+      val result = parseJsonToken[UTF8String](parser, dataType) {
+        case VALUE_STRING =>
+          UTF8String.fromString(parser.getText)
+
+        case other =>
+          // Note that it always tries to convert the data as string without the case of failure.
+          val startLocation = parser.currentTokenLocation()
+          def skipAhead(): Unit = {
+            other match {
+              case START_OBJECT =>
+                parser.skipChildren()
+              case START_ARRAY =>
+                parser.skipChildren()
+              case _ =>
+              // Do nothing in this case; we've already read the token
+            }
+          }
+
+          // PositionedReadable
+          startLocation.contentReference().getRawContent match {
+            case byteArray: Array[Byte] if exactStringParsing =>
+              skipAhead()
+              val endLocation = parser.currentLocation.getByteOffset
+
+              UTF8String.fromBytes(
+                byteArray,
+                startLocation.getByteOffset.toInt,
+                endLocation.toInt - (startLocation.getByteOffset.toInt))
+            case positionedReadable: PositionedReadable if exactStringParsing =>
+              skipAhead()
+              val endLocation = parser.currentLocation.getByteOffset
+
+              val size = endLocation.toInt - (startLocation.getByteOffset.toInt)
+              val buffer = new Array[Byte](size)
+              positionedReadable.read(startLocation.getByteOffset, buffer, 0, size)
+              UTF8String.fromBytes(buffer, 0, size)
+            case _ =>
+              val writer = new ByteArrayOutputStream()
+              Utils.tryWithResource(factory.createGenerator(writer, JsonEncoding.UTF8)) {
+                generator => generator.copyCurrentStructure(parser)
+              }
+              UTF8String.fromBytes(writer.toByteArray)
+          }
         }
+      // Reset back to the original configuration using `~0` as the mask,
+      // which is a bitmask with all bits set, effectively allowing all features
+      // to be reset. This ensures that every feature is restored to its previous
+      // state as defined by `oldFeature`.
+      parser.overrideStdFeatures(oldFeature, ~0)
+      result
+    }
+
+    case TimestampType =>
+      (parser: JsonParser) => parseJsonToken[java.lang.Long](parser, dataType) {
+        case VALUE_STRING if parser.getTextLength >= 1 =>
+          try {
+            timestampFormatter.parse(parser.getText)
+          } catch {
+            case NonFatal(e) =>
+              // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
+              // compatibility if enabled.
+              if (!enableParsingFallbackForTimestampType) {
+                throw e
+              }
+              val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(parser.getText))
+              DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw e)
+          }
+
+        case VALUE_NUMBER_INT =>
+          parser.getLongValue * 1000000L
+      }
 
     case TimestampNTZType =>
-      (parser: JsonParser) =>
-        parseJsonToken[java.lang.Long](parser, dataType) {
-          case VALUE_STRING if parser.getTextLength >= 1 =>
-            timestampNTZFormatter.parseWithoutTimeZone(parser.getText, false)
-        }
+      (parser: JsonParser) => parseJsonToken[java.lang.Long](parser, dataType) {
+        case VALUE_STRING if parser.getTextLength >= 1 =>
+          timestampNTZFormatter.parseWithoutTimeZone(parser.getText, false)
+      }
 
     case DateType =>
-      (parser: JsonParser) =>
-        parseJsonToken[java.lang.Integer](parser, dataType) {
-          case VALUE_STRING if parser.getTextLength >= 1 =>
-            try {
-              dateFormatter.parse(parser.getText)
-            } catch {
-              case NonFatal(e) =>
-                // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
-                // compatibility if enabled.
-                if (!enableParsingFallbackForDateType) {
-                  throw e
+      (parser: JsonParser) => parseJsonToken[java.lang.Integer](parser, dataType) {
+        case VALUE_STRING if parser.getTextLength >= 1 =>
+          try {
+            dateFormatter.parse(parser.getText)
+          } catch {
+            case NonFatal(e) =>
+              // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
+              // compatibility if enabled.
+              if (!enableParsingFallbackForDateType) {
+                throw e
+              }
+              val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(parser.getText))
+              DateTimeUtils.stringToDate(str).getOrElse {
+                // In Spark 1.5.0, we store the data as number of days since epoch in string.
+                // So, we just convert it to Int.
+                try {
+                  RebaseDateTime.rebaseJulianToGregorianDays(parser.getText.toInt)
+                } catch {
+                  case _: NumberFormatException => throw e
                 }
-                val str =
-                  DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(parser.getText))
-                DateTimeUtils
-                  .stringToDate(str)
-                  .getOrElse {
-                    // In Spark 1.5.0, we store the data as number of days since epoch in string.
-                    // So, we just convert it to Int.
-                    try {
-                      RebaseDateTime.rebaseJulianToGregorianDays(parser.getText.toInt)
-                    } catch {
-                      case _: NumberFormatException => throw e
-                    }
-                  }
-                  .asInstanceOf[Integer]
-            }
-        }
+              }.asInstanceOf[Integer]
+          }
+      }
 
     case BinaryType =>
-      (parser: JsonParser) =>
-        parseJsonToken[Array[Byte]](parser, dataType) { case VALUE_STRING =>
-          parser.getBinaryValue
-        }
+      (parser: JsonParser) => parseJsonToken[Array[Byte]](parser, dataType) {
+        case VALUE_STRING => parser.getBinaryValue
+      }
 
     case dt: DecimalType =>
-      (parser: JsonParser) =>
-        parseJsonToken[Decimal](parser, dataType) {
-          case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT) =>
-            Decimal(parser.getDecimalValue, dt.precision, dt.scale)
-          case VALUE_STRING if parser.getTextLength >= 1 =>
-            val bigDecimal = decimalParser(parser.getText)
-            Decimal(bigDecimal, dt.precision, dt.scale)
-        }
+      (parser: JsonParser) => parseJsonToken[Decimal](parser, dataType) {
+        case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT) =>
+          Decimal(parser.getDecimalValue, dt.precision, dt.scale)
+        case VALUE_STRING if parser.getTextLength >= 1 =>
+          val bigDecimal = decimalParser(parser.getText)
+          Decimal(bigDecimal, dt.precision, dt.scale)
+      }
 
-    case CalendarIntervalType =>
-      (parser: JsonParser) =>
-        parseJsonToken[CalendarInterval](parser, dataType) { case VALUE_STRING =>
+    case CalendarIntervalType => (parser: JsonParser) =>
+      parseJsonToken[CalendarInterval](parser, dataType) {
+        case VALUE_STRING =>
           IntervalUtils.safeStringToInterval(UTF8String.fromString(parser.getText))
-        }
+      }
 
-    case ym: YearMonthIntervalType =>
-      (parser: JsonParser) =>
-        parseJsonToken[Integer](parser, dataType) { case VALUE_STRING =>
+    case ym: YearMonthIntervalType => (parser: JsonParser) =>
+      parseJsonToken[Integer](parser, dataType) {
+        case VALUE_STRING =>
           val expr = Cast(Literal(parser.getText), ym)
           Integer.valueOf(expr.eval(EmptyRow).asInstanceOf[Int])
-        }
+      }
 
-    case dt: DayTimeIntervalType =>
-      (parser: JsonParser) =>
-        parseJsonToken[java.lang.Long](parser, dataType) { case VALUE_STRING =>
+    case dt: DayTimeIntervalType => (parser: JsonParser) =>
+      parseJsonToken[java.lang.Long](parser, dataType) {
+        case VALUE_STRING =>
           val expr = Cast(Literal(parser.getText), dt)
           java.lang.Long.valueOf(expr.eval(EmptyRow).asInstanceOf[Long])
-        }
+      }
 
-    case _: TimeType =>
-      (parser: JsonParser) =>
-        parseJsonToken[java.lang.Long](parser, dataType) {
-          case VALUE_STRING if parser.getTextLength >= 1 =>
-            timeFormatter.parse(parser.getText)
-        }
+    case _: TimeType => (parser: JsonParser) =>
+      parseJsonToken[java.lang.Long](parser, dataType) {
+        case VALUE_STRING if parser.getTextLength >= 1 =>
+          timeFormatter.parse(parser.getText)
+      }
 
     case st: StructType =>
       val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
-      (parser: JsonParser) =>
-        parseJsonToken[InternalRow](parser, dataType) { case START_OBJECT =>
-          convertObject(parser, st, fieldConverters).get
-        }
+      (parser: JsonParser) => parseJsonToken[InternalRow](parser, dataType) {
+        case START_OBJECT => convertObject(parser, st, fieldConverters).get
+      }
 
     case at: ArrayType =>
       val elementConverter = makeConverter(at.elementType)
-      (parser: JsonParser) =>
-        parseJsonToken[ArrayData](parser, dataType) { case START_ARRAY =>
-          convertArray(parser, elementConverter)
-        }
+      (parser: JsonParser) => parseJsonToken[ArrayData](parser, dataType) {
+        case START_ARRAY => convertArray(parser, elementConverter)
+      }
 
     case mt: MapType =>
       val valueConverter = makeConverter(mt.valueType)
-      (parser: JsonParser) =>
-        parseJsonToken[MapData](parser, dataType) { case START_OBJECT =>
-          convertMap(parser, valueConverter)
-        }
+      (parser: JsonParser) => parseJsonToken[MapData](parser, dataType) {
+        case START_OBJECT => convertMap(parser, valueConverter)
+      }
 
     case udt: UserDefinedType[_] =>
       makeConverter(udt.sqlType)
 
     case _: NullType =>
-      (parser: JsonParser) =>
-        parseJsonToken[java.lang.Long](parser, dataType) { case _ =>
-          null
-        }
+      (parser: JsonParser) => parseJsonToken[java.lang.Long](parser, dataType) {
+        case _ => null
+      }
 
     case _: VariantType => parseVariant
 
@@ -506,13 +475,14 @@ class JacksonParser(
   }
 
   /**
-   * This method skips `FIELD_NAME`s at the beginning, and handles nulls ahead before trying to
-   * parse the JSON token using given function `f`. If the `f` failed to parse and convert the
+   * This method skips `FIELD_NAME`s at the beginning, and handles nulls ahead before trying
+   * to parse the JSON token using given function `f`. If the `f` failed to parse and convert the
    * token, call `failedConversion` to handle the token.
    */
   @scala.annotation.tailrec
-  private def parseJsonToken[R >: Null](parser: JsonParser, dataType: DataType)(
-      f: PartialFunction[JsonToken, R]): R = {
+  private def parseJsonToken[R >: Null](
+      parser: JsonParser,
+      dataType: DataType)(f: PartialFunction[JsonToken, R]): R = {
     parser.getCurrentToken match {
       case FIELD_NAME =>
         // There are useless FIELD_NAMEs between START_OBJECT and END_OBJECT tokens
@@ -571,8 +541,8 @@ class JacksonParser(
   }
 
   /**
-   * Parse an object from the token stream into a new Row representing the schema. Fields in the
-   * json that are not defined in the requested schema will be dropped.
+   * Parse an object from the token stream into a new Row representing the schema.
+   * Fields in the json that are not defined in the requested schema will be dropped.
    */
   private def convertObject(
       parser: JsonParser,
@@ -622,7 +592,9 @@ class JacksonParser(
   /**
    * Parse an object as a Map, preserving all fields.
    */
-  private def convertMap(parser: JsonParser, fieldConverter: ValueConverter): MapData = {
+  private def convertMap(
+      parser: JsonParser,
+      fieldConverter: ValueConverter): MapData = {
     val keys = ArrayBuffer.empty[UTF8String]
     val values = ArrayBuffer.empty[Any]
     var badRecordException: Option[Throwable] = None
@@ -680,8 +652,7 @@ class JacksonParser(
     if (badRecordException.isEmpty) {
       arrayData
     } else if (arrayAsStructs) {
-      throw PartialResultArrayException(
-        arrayData.toArray[InternalRow](schema),
+      throw PartialResultArrayException(arrayData.toArray[InternalRow](schema),
         badRecordException.get)
     } else {
       throw PartialArrayDataResultException(arrayData, badRecordException.get)
@@ -702,9 +673,8 @@ class JacksonParser(
   /**
    * Parse the JSON input to the set of [[InternalRow]]s.
    *
-   * @param recordLiteral
-   *   an optional function that will be used to generate the corrupt record text instead of
-   *   record.toString
+   * @param recordLiteral an optional function that will be used to generate
+   *   the corrupt record text instead of record.toString
    */
   def parse[T](
       record: T,
@@ -716,11 +686,10 @@ class JacksonParser(
         // but it works on any token stream and not just strings
         parser.nextToken() match {
           case null => None
-          case _ =>
-            rootConverter.apply(parser) match {
-              case null => throw QueryExecutionErrors.rootConverterReturnNullError()
-              case rows => rows.toSeq
-            }
+          case _ => rootConverter.apply(parser) match {
+            case null => throw QueryExecutionErrors.rootConverterReturnNullError()
+            case rows => rows.toSeq
+          }
         }
       }
     } catch {
@@ -737,9 +706,7 @@ class JacksonParser(
             |""".stripMargin + e.getMessage
         val wrappedCharException = new CharConversionException(msg)
         wrappedCharException.initCause(e)
-        throw BadRecordException(
-          () => recordLiteral(record),
-          () => Array.empty,
+        throw BadRecordException(() => recordLiteral(record), () => Array.empty,
           wrappedCharException)
       case PartialResultException(row, cause) =>
         throw BadRecordException(

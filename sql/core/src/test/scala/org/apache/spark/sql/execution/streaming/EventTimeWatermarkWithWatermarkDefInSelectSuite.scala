@@ -30,9 +30,9 @@ import org.apache.spark.sql.functions.{col, timestamp_seconds}
 import org.apache.spark.sql.streaming.StateStoreMetricsTest
 
 class EventTimeWatermarkWithWatermarkDefInSelectSuite
-    extends StateStoreMetricsTest
-    with BeforeAndAfter
-    with Logging {
+  extends StateStoreMetricsTest
+  with BeforeAndAfter
+  with Logging {
 
   import testImplicits._
 
@@ -43,11 +43,11 @@ class EventTimeWatermarkWithWatermarkDefInSelectSuite
   test("event time and watermark metrics with watermark in select statement - case 1") {
     // All event time metrics where watermarking is set
     val inputData = MemoryStream[Int]
-    val df = inputData
-      .toDF()
+    val df = inputData.toDF()
       .withColumn("eventTime", timestamp_seconds(col("value")))
     df.createOrReplaceTempView("stream_src")
-    val aggWithWatermark = spark.sql("""
+    val aggWithWatermark = spark.sql(
+      """
         |SELECT
         |    CAST(window.start AS LONG), CAST(count(*) AS LONG) AS count
         |FROM
@@ -63,7 +63,8 @@ class EventTimeWatermarkWithWatermarkDefInSelectSuite
     val inputData = MemoryStream[Int]
     val df = inputData.toDF()
     df.createOrReplaceTempView("stream_src")
-    val aggWithWatermark = spark.sql("""
+    val aggWithWatermark = spark.sql(
+      """
         |SELECT
         |    CAST(window.start AS LONG), CAST(count(*) AS LONG) AS count
         |FROM
@@ -87,32 +88,26 @@ class EventTimeWatermarkWithWatermarkDefInSelectSuite
       assertEventStats(min = 10, max = 14, avg = 12, wtrmark = 5),
       AddData(inputData, 25),
       CheckAnswer((10, 3)),
-      assertEventStats(min = 25, max = 25, avg = 25, wtrmark = 5))
+      assertEventStats(min = 25, max = 25, avg = 25, wtrmark = 5)
+    )
   }
 
   test("stream-stream join with watermark in select statement - case 1") {
     val leftInput = MemoryStream[(Int, Int)]
     val rightInput = MemoryStream[(Int, Int)]
 
-    val df1 = leftInput
-      .toDF()
-      .toDF("leftKey", "time")
-      .select(
-        $"leftKey",
-        timestamp_seconds($"time") as "leftTime",
+    val df1 = leftInput.toDF().toDF("leftKey", "time")
+      .select($"leftKey", timestamp_seconds($"time") as "leftTime",
         ($"leftKey" * 2) as "leftValue")
-    val df2 = rightInput
-      .toDF()
-      .toDF("rightKey", "time")
-      .select(
-        $"rightKey",
-        timestamp_seconds($"time") as "rightTime",
+    val df2 = rightInput.toDF().toDF("rightKey", "time")
+      .select($"rightKey", timestamp_seconds($"time") as "rightTime",
         ($"rightKey" * 3) as "rightValue")
 
     df1.createOrReplaceTempView("stream_left")
     df2.createOrReplaceTempView("stream_right")
 
-    val joined = spark.sql("""
+    val joined = spark.sql(
+      """
         |SELECT
         |    leftKey, rightKey, CAST(leftTime AS INTEGER), CAST(rightTime AS INTEGER)
         |FROM
@@ -137,7 +132,8 @@ class EventTimeWatermarkWithWatermarkDefInSelectSuite
     df1.createOrReplaceTempView("stream_left")
     df2.createOrReplaceTempView("stream_right")
 
-    val joined = spark.sql("""
+    val joined = spark.sql(
+      """
         |SELECT
         |    leftKey, rightKey, CAST(leftTime AS INTEGER), CAST(rightTime AS INTEGER)
         |FROM
@@ -207,25 +203,23 @@ class EventTimeWatermarkWithWatermarkDefInSelectSuite
       // states evicted
       // left: (1, 5), (3, 5), (1, 5) (below watermark = 20)
       // right: (1, 10), (2, 5), (1, 9) (below watermark = 20)
-      assertNumStateRows(total = 2, updated = 1))
+      assertNumStateRows(total = 2, updated = 1)
+    )
   }
 
   test("stream-batch join followed by time window aggregation") {
     val inputData = MemoryStream[Int]
-    val df = inputData
-      .toDF()
+    val df = inputData.toDF()
       .withColumn("eventTime", timestamp_seconds(col("value")))
     df.createOrReplaceTempView("stream_src")
 
-    val batchDf = spark
-      .range(0, 50)
-      .map { i =>
-        if (i % 2 == 0) (i, "even") else (i, "odd")
-      }
-      .toDF("value", "batch_value")
+    val batchDf = spark.range(0, 50).map { i =>
+      if (i % 2 == 0) (i, "even") else (i, "odd")
+    }.toDF("value", "batch_value")
     batchDf.createOrReplaceTempView("batch_src")
 
-    val agg = spark.sql("""
+    val agg = spark.sql(
+      """
         |SELECT
         |    CAST(window.start AS LONG), batch_value, CAST(count(*) AS LONG) AS count
         |FROM
@@ -243,7 +237,8 @@ class EventTimeWatermarkWithWatermarkDefInSelectSuite
       AddData(inputData, 10, 11, 14),
       CheckAnswer(),
       AddData(inputData, 25),
-      CheckAnswer((10, "even", 2), (10, "odd", 1)))
+      CheckAnswer((10, "even", 2), (10, "odd", 1))
+    )
   }
 
   /** Assert event stats generated on that last batch with data in it */
@@ -254,11 +249,7 @@ class EventTimeWatermarkWithWatermarkDefInSelectSuite
   }
 
   /** Assert event stats generated on that last batch with data in it */
-  private def assertEventStats(
-      min: Long,
-      max: Long,
-      avg: Double,
-      wtrmark: Long): AssertOnQuery = {
+  private def assertEventStats(min: Long, max: Long, avg: Double, wtrmark: Long): AssertOnQuery = {
     assertEventStats { e =>
       assert(e.get("min") === formatTimestamp(min), s"min value mismatch")
       assert(e.get("max") === formatTimestamp(max), s"max value mismatch")

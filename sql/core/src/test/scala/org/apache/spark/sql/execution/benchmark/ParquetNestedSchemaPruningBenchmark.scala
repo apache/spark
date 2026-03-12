@@ -18,8 +18,8 @@
 package org.apache.spark.sql.execution.benchmark
 
 /**
- * Synthetic benchmark for nested schema pruning performance for Parquet datasource. To run this
- * benchmark:
+ * Synthetic benchmark for nested schema pruning performance for Parquet datasource.
+ * To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class>
@@ -31,6 +31,6 @@ package org.apache.spark.sql.execution.benchmark
  * }}}
  */
 object ParquetNestedSchemaPruningBenchmark extends NestedSchemaPruningBenchmark {
-  override val dataSourceName: String = "parquet"
-  override val benchmarkName: String = "Nested Schema Pruning Benchmark For Parquet"
+    override val dataSourceName: String = "parquet"
+    override val benchmarkName: String = "Nested Schema Pruning Benchmark For Parquet"
 }

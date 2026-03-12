@@ -29,8 +29,7 @@ case class MetricViewPlaceholder(
     desc: MetricView,
     outputMetrics: Seq[Attribute],
     child: LogicalPlan,
-    isCreate: Boolean = false)
-    extends UnaryNode {
+    isCreate: Boolean = false) extends UnaryNode {
   final override val nodePatterns: Seq[TreePattern] = Seq(METRIC_VIEW_PLACEHOLDER)
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = {
     copy(child = newChild)
@@ -43,7 +42,9 @@ case class MetricViewPlaceholder(
   override def producedAttributes: AttributeSet = AttributeSet(outputMetrics)
 }
 
-case class ResolvedMetricView(identifier: TableIdentifier, child: LogicalPlan) extends UnaryNode {
+case class ResolvedMetricView(
+    identifier: TableIdentifier,
+    child: LogicalPlan) extends UnaryNode {
   override def output: scala.Seq[Attribute] = child.output
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(child = newChild)

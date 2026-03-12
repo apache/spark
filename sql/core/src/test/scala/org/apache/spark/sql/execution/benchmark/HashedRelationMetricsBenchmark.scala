@@ -27,7 +27,8 @@ import org.apache.spark.sql.execution.joins.LongToUnsafeRowMap
 import org.apache.spark.sql.types.LongType
 
 /**
- * Benchmark to measure metrics performance at HashedRelation. To run this benchmark:
+ * Benchmark to measure metrics performance at HashedRelation.
+ * To run this benchmark:
  * {{{
  *   1. without sbt: bin/spark-submit --class <this class>
  *      --jars <spark core test jar>,<spark catalyst test jar> <spark sql test jar>

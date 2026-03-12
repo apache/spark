@@ -33,9 +33,8 @@ trait MergeIntoSchemaEvolutionExtraSQLTests extends RowLevelOperationSuiteBase {
   test("source missing struct field violating check constraints") {
     Seq(true, false).foreach { withSchemaEvolution =>
       Seq(true, false).foreach { coercionEnabled =>
-        withSQLConf(
-          SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
-            coercionEnabled.toString) {
+        withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
+          coercionEnabled.toString) {
           withTempView("source") {
             // Target table has struct with nested field c2
             createAndInitTable(
@@ -43,29 +42,28 @@ trait MergeIntoSchemaEvolutionExtraSQLTests extends RowLevelOperationSuiteBase {
                  |s STRUCT<c1: INT, c2: INT>,
                  |dep STRING""".stripMargin,
               """{ "pk": 0, "s": { "c1": 1, "c2": 10 }, "dep": "sales" }
-                |{ "pk": 1, "s": { "c1": 2, "c2": 20 }, "dep": "hr" }""".stripMargin)
+                |{ "pk": 1, "s": { "c1": 2, "c2": 20 }, "dep": "hr" }"""
+                .stripMargin)
 
             // Add CHECK constraint on nested field c2 using ALTER TABLE
-            sql(
-              s"ALTER TABLE $tableNameAsString ADD CONSTRAINT check_c2 CHECK " +
-                s"(s.c2 IS NOT NULL AND s.c2 > 1)")
+            sql(s"ALTER TABLE $tableNameAsString ADD CONSTRAINT check_c2 CHECK " +
+              s"(s.c2 IS NOT NULL AND s.c2 > 1)")
 
             // Source table schema with struct missing the c2 field
-            val sourceTableSchema = StructType(
-              Seq(
-                StructField("pk", IntegerType),
-                StructField(
-                  "s",
-                  StructType(
-                    Seq(
-                      StructField("c1", IntegerType)
-                      // missing field 'c2' which has CHECK constraint IS NOT NULL AND > 1
-                    ))),
-                StructField("dep", StringType)))
+            val sourceTableSchema = StructType(Seq(
+              StructField("pk", IntegerType),
+              StructField("s", StructType(Seq(
+                StructField("c1", IntegerType)
+                // missing field 'c2' which has CHECK constraint IS NOT NULL AND > 1
+              ))),
+              StructField("dep", StringType)
+            ))
 
-            val data = Seq(Row(1, Row(100), "engineering"), Row(2, Row(200), "finance"))
-            spark
-              .createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+            val data = Seq(
+              Row(1, Row(100), "engineering"),
+              Row(2, Row(200), "finance")
+            )
+            spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
               .createOrReplaceTempView("source")
 
             val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
@@ -81,9 +79,8 @@ trait MergeIntoSchemaEvolutionExtraSQLTests extends RowLevelOperationSuiteBase {
                 sql(mergeStmt)
               }
               assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION")
-              assert(
-                error.getMessage.contains("CHECK constraint check_c2 s.c2 IS NOT NULL AND " +
-                  "s.c2 > 1 violated by row with values:\n - s.c2 : null"))
+              assert(error.getMessage.contains("CHECK constraint check_c2 s.c2 IS NOT NULL AND " +
+                "s.c2 > 1 violated by row with values:\n - s.c2 : null"))
             } else {
               // Without schema evolution or coercion, the schema mismatch is rejected
               val error = intercept[AnalysisException] {
@@ -104,15 +101,16 @@ trait MergeIntoSchemaEvolutionExtraSQLTests extends RowLevelOperationSuiteBase {
     withTable(tableNameAsString) {
       withTempView("source") {
         // Target: pk INT, salary INT, dep STRING
-        val targetData: DataFrame =
-          Seq((1, 100, "hr"), (2, 200, "software")).toDF("pk", "salary", "dep")
+        val targetData: DataFrame = Seq(
+          (1, 100, "hr"),
+          (2, 200, "software")
+        ).toDF("pk", "salary", "dep")
         // Source: pk LONG (wider type), salary INT, dep STRING, active BOOLEAN (new column)
         // Triggers UpdateColumnType(pk) and AddColumn(active) in schema evolution
-        val sourceData: DataFrame = Seq((1L, 150, "hr", true), (3L, 350, "eng", false)).toDF(
-          "pk",
-          "salary",
-          "dep",
-          "active")
+        val sourceData: DataFrame = Seq(
+          (1L, 150, "hr", true),
+          (3L, 350, "eng", false)
+        ).toDF("pk", "salary", "dep", "active")
 
         val columns = CatalogV2Util.structTypeToV2Columns(targetData.schema)
         val partitionCols = Seq("dep")
@@ -127,7 +125,8 @@ trait MergeIntoSchemaEvolutionExtraSQLTests extends RowLevelOperationSuiteBase {
         sourceData.createOrReplaceTempView("source")
 
         val ex = intercept[AnalysisException] {
-          sql(s"""MERGE WITH SCHEMA EVOLUTION
+          sql(
+            s"""MERGE WITH SCHEMA EVOLUTION
                |INTO $tableNameAsString t
                |USING source s
                |ON t.pk = s.pk
@@ -136,20 +135,18 @@ trait MergeIntoSchemaEvolutionExtraSQLTests extends RowLevelOperationSuiteBase {
                |VALUES (s.pk, s.salary, s.dep, s.active)
                |""".stripMargin)
         }
-        assert(
-          ex.getCondition.startsWith("UNSUPPORTED_AUTO_SCHEMA_EVOLUTION_CHANGES"),
+        assert(ex.getCondition.startsWith("UNSUPPORTED_AUTO_SCHEMA_EVOLUTION_CHANGES"),
           s"Expected error class UNSUPPORTED_AUTO_SCHEMA_EVOLUTION_CHANGES but got: " +
             s"${ex.getCondition}. Message: ${ex.getMessage}")
-        assert(
-          ex.getMessageParameters.get("tableName") != null,
+        assert(ex.getMessageParameters.get("tableName") != null,
           s"Error message should mention table name: ${ex.getMessage}")
 
         val msg = ex.getMessage
         val expectedChanges = "ALTER COLUMN pk TYPE BIGINT; ADD COLUMN active BOOLEAN"
-        assert(
-          msg.contains(expectedChanges),
+        assert(msg.contains(expectedChanges),
           s"Error message should contain exact changes '$expectedChanges': $msg")
       }
     }
   }
 }
+

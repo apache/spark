@@ -28,8 +28,7 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  * A leaf node wrapper for propagated empty relation, which preserved the eliminated logical plan.
  * The logical plan might be partial executed, i.e., containing LogicalQueryStage.
  */
-case class EmptyRelationExec(@transient logical: LogicalPlan)
-    extends LeafExecNode
+case class EmptyRelationExec(@transient logical: LogicalPlan) extends LeafExecNode
     with InputRDDCodegen {
   private val rdd = sparkContext.emptyRDD[InternalRow]
 
@@ -64,8 +63,7 @@ case class EmptyRelationExec(@transient logical: LogicalPlan)
       printNodeId: Boolean,
       printOutputColumns: Boolean,
       indent: Int = 0): Unit = {
-    super.generateTreeString(
-      depth,
+    super.generateTreeString(depth,
       lastChildren,
       append,
       verbose,
@@ -78,16 +76,8 @@ case class EmptyRelationExec(@transient logical: LogicalPlan)
     Option(logical).foreach { _ =>
       lastChildren.add(true)
       logical.generateTreeString(
-        depth + 1,
-        lastChildren,
-        append,
-        verbose,
-        "",
-        false,
-        maxFields,
-        printNodeId,
-        printOutputColumns,
-        indent)
+        depth + 1, lastChildren, append, verbose, "", false, maxFields, printNodeId,
+        printOutputColumns, indent)
       lastChildren.remove(lastChildren.size() - 1)
     }
   }

@@ -22,15 +22,15 @@ import org.apache.spark.sql.internal.TableValuedFunctionArgument
 
 /**
  * Represents a table argument, providing methods to specify partitioning, ordering, and
- * single-partition constraints when passing a DataFrame as a table argument to TVF(Table-Valued
- * Function)s.
+ * single-partition constraints when passing a DataFrame as a table argument
+ * to TVF(Table-Valued Function)s.
  *
  * @since 4.0.0
  */
 private[sql] class TableArg(
     private[sql] val expression: FunctionTableSubqueryArgumentExpression,
     sparkSession: classic.SparkSession)
-    extends TableValuedFunctionArgument {
+  extends TableValuedFunctionArgument {
   import sparkSession.toRichColumn
 
   private def isPartitioned: Boolean =
@@ -40,17 +40,22 @@ private[sql] class TableArg(
   def partitionBy(cols: Column*): TableArg = {
     if (isPartitioned) {
       throw new IllegalArgumentException(
-        "Cannot call partitionBy() after partitionBy() or withSinglePartition() has been called.")
+        "Cannot call partitionBy() after partitionBy() or withSinglePartition() has been called."
+      )
     }
     val partitionByExpressions = cols.map(_.expr)
-    new TableArg(expression.copy(partitionByExpressions = partitionByExpressions), sparkSession)
+    new TableArg(
+      expression.copy(
+        partitionByExpressions = partitionByExpressions),
+        sparkSession)
   }
 
   @scala.annotation.varargs
   def orderBy(cols: Column*): TableArg = {
     if (!isPartitioned) {
       throw new IllegalArgumentException(
-        "Please call partitionBy() or withSinglePartition() before orderBy().")
+        "Please call partitionBy() or withSinglePartition() before orderBy()."
+      )
     }
     val orderByExpressions = cols.map { col =>
       col.expr match {
@@ -58,15 +63,20 @@ private[sql] class TableArg(
         case expr: Expression => SortOrder(expr, Ascending)
       }
     }
-    new TableArg(expression.copy(orderByExpressions = orderByExpressions), sparkSession)
+    new TableArg(
+      expression.copy(orderByExpressions = orderByExpressions),
+      sparkSession)
   }
 
   def withSinglePartition(): TableArg = {
     if (isPartitioned) {
       throw new IllegalArgumentException(
         "Cannot call withSinglePartition() after partitionBy() or " +
-          "withSinglePartition() has been called.")
+          "withSinglePartition() has been called."
+      )
     }
-    new TableArg(expression.copy(withSinglePartition = true), sparkSession)
+    new TableArg(
+      expression.copy(withSinglePartition = true),
+      sparkSession)
   }
 }

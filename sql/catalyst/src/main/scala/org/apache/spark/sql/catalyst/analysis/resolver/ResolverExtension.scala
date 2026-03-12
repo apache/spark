@@ -31,9 +31,9 @@ trait ResolverExtension {
    * single-pass [[Resolver]] on all the configured extensions when it exhausted its match list
    * for the known node types.
    *
-   *   - The implementation can rely on children being resolved.
-   *   - The implementation can introduce new unresolved subtrees, but has to invoke `resolver` on
-   *     them.
+   *  - The implementation can rely on children being resolved.
+   *  - The implementation can introduce new unresolved subtrees, but has to invoke `resolver` on
+   *    them.
    */
   def resolveOperator(
       operator: LogicalPlan,

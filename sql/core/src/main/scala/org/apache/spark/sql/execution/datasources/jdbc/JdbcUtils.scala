@@ -69,7 +69,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       val statement = conn.prepareStatement(dialect.getTableExistsQuery(options.table))
       try {
         statement.setQueryTimeout(options.queryTimeout)
-        statement.executeQuery() // Success means table exists (query executed without error)
+        statement.executeQuery()  // Success means table exists (query executed without error)
       } finally {
         statement.close()
       }
@@ -78,7 +78,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     executionResult match {
       case Success(_) => true
       case Failure(e: SQLException) if dialect.isObjectNotFoundException(e) => false
-      case Failure(e) => throw e // Re-throw unexpected exceptions
+      case Failure(e) => throw e  // Re-throw unexpected exceptions
     }
   }
 
@@ -132,10 +132,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       rddSchema.fields.map { col =>
         tableSchema.get.find(f => conf.resolver(f.name, col.name)).getOrElse {
           throw QueryCompilationErrors.columnNotFoundInSchemaError(
-            col.dataType,
-            col.name,
-            table,
-            rddSchema.fieldNames)
+            col.dataType, col.name, table, rddSchema.fieldNames)
         }
       }
     }
@@ -145,10 +142,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
   /**
    * Retrieve standard jdbc types.
    *
-   * @param dt
-   *   The datatype (e.g. [[org.apache.spark.sql.types.StringType]])
-   * @return
-   *   The default JdbcType for this DataType
+   * @param dt The datatype (e.g. [[org.apache.spark.sql.types.StringType]])
+   * @return The default JdbcType for this DataType
    */
   def getCommonJDBCType(dt: DataType): Option[JdbcType] = {
     dt match {
@@ -169,17 +164,15 @@ object JdbcUtils extends Logging with SQLConfHelper {
       // Note that some dialects override this setting, e.g. as SQL Server.
       case TimestampNTZType => Option(JdbcType("TIMESTAMP", java.sql.Types.TIMESTAMP))
       case DateType => Option(JdbcType("DATE", java.sql.Types.DATE))
-      case t: DecimalType =>
-        Option(JdbcType(s"DECIMAL(${t.precision},${t.scale})", java.sql.Types.DECIMAL))
+      case t: DecimalType => Option(
+        JdbcType(s"DECIMAL(${t.precision},${t.scale})", java.sql.Types.DECIMAL))
       case _ => None
     }
   }
 
   def getJdbcType(dt: DataType, dialect: JdbcDialect): JdbcType = {
-    dialect
-      .getJDBCType(dt)
-      .orElse(getCommonJDBCType(dt))
-      .getOrElse(throw QueryExecutionErrors.cannotGetJdbcTypeError(dt))
+    dialect.getJDBCType(dt).orElse(getCommonJDBCType(dt)).getOrElse(
+      throw QueryExecutionErrors.cannotGetJdbcTypeError(dt))
   }
 
   def getTimestampType(isTimestampNTZ: Boolean): DataType = {
@@ -245,8 +238,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       // For unmatched types:
       // including java.sql.Types.ARRAY,DATALINK,DISTINCT,JAVA_OBJECT,OTHER,REF_CURSOR,
       // TIME_WITH_TIMEZONE,TIMESTAMP_WITH_TIMEZONE, and among others.
-      val jdbcType = classOf[JDBCType]
-        .getEnumConstants()
+      val jdbcType = classOf[JDBCType].getEnumConstants()
         .find(_.getVendorTypeNumber == sqlType)
         .map(_.getName)
         .getOrElse(sqlType.toString)
@@ -264,12 +256,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
         conn.prepareStatement(options.prepareQuery + dialect.getSchemaQuery(options.tableOrQuery))
       try {
         statement.setQueryTimeout(options.queryTimeout)
-        Some(
-          getSchema(
-            conn,
-            statement.executeQuery(),
-            dialect,
-            isTimestampNTZ = options.preferTimestampNTZ))
+        Some(getSchema(conn, statement.executeQuery(), dialect,
+          isTimestampNTZ = options.preferTimestampNTZ))
       } catch {
         case _: SQLException => None
       } finally {
@@ -283,14 +271,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
   /**
    * Takes a [[ResultSet]] and returns its Catalyst schema.
    *
-   * @param alwaysNullable
-   *   If true, all the columns are nullable.
-   * @param isTimestampNTZ
-   *   If true, all timestamp columns are interpreted as TIMESTAMP_NTZ.
-   * @return
-   *   A [[StructType]] giving the Catalyst schema.
-   * @throws SQLException
-   *   if the schema contains an unsupported type.
+   * @param alwaysNullable If true, all the columns are nullable.
+   * @param isTimestampNTZ If true, all timestamp columns are interpreted as TIMESTAMP_NTZ.
+   * @return A [[StructType]] giving the Catalyst schema.
+   * @throws SQLException if the schema contains an unsupported type.
    */
   def getSchema(
       conn: Connection,
@@ -314,10 +298,9 @@ object JdbcUtils extends Logging with SQLConfHelper {
           rsmd.isSigned(i + 1)
         } catch {
           // Workaround for HIVE-14684:
-          case e: SQLException
-              if e.getMessage == "Method not supported" &&
-                rsmd.getClass.getName == "org.apache.hive.jdbc.HiveResultSetMetaData" =>
-            true
+          case e: SQLException if
+          e.getMessage == "Method not supported" &&
+            rsmd.getClass.getName == "org.apache.hive.jdbc.HiveResultSetMetaData" => true
         }
       }
       val nullable = if (alwaysNullable) {
@@ -343,10 +326,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       dialect.updateExtraColumnMeta(conn, rsmd, i + 1, metadata)
 
       val columnType =
-        dialect
-          .getCatalystType(dataType, typeName, fieldSize, metadata)
-          .getOrElse(
-            getCatalystType(dataType, typeName, fieldSize, fieldScale, isSigned, isTimestampNTZ))
+        dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
+          getCatalystType(dataType, typeName, fieldSize, fieldScale, isSigned, isTimestampNTZ))
       fields(i) = StructField(columnName, columnType, nullable, metadata.build())
       i = i + 1
     }
@@ -356,7 +337,9 @@ object JdbcUtils extends Logging with SQLConfHelper {
   /**
    * Convert a [[ResultSet]] into an iterator of Catalyst Rows.
    */
-  def resultSetToRows(resultSet: ResultSet, schema: StructType): Iterator[Row] = {
+  def resultSetToRows(
+      resultSet: ResultSet,
+      schema: StructType): Iterator[Row] = {
     resultSetToRows(resultSet, schema, NoopDialect)
   }
 
@@ -420,7 +403,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
   }
 
   def createSchemaFetchMetric(sparkContext: SparkContext): SQLMetric = {
-    SQLMetrics.createNanoTimingMetric(sparkContext, JDBCRelation.schemaFetchName)
+    SQLMetrics.createNanoTimingMetric(
+      sparkContext,
+      JDBCRelation.schemaFetchName
+    )
   }
 
   // A `JDBCValueGetter` is responsible for getting a value from `ResultSet` into a field
@@ -429,10 +415,12 @@ object JdbcUtils extends Logging with SQLConfHelper {
   private type JDBCValueGetter = (ResultSet, InternalRow, Int) => Unit
 
   /**
-   * Creates `JDBCValueGetter`s according to [[StructType]], which can set each value from
-   * `ResultSet` to each field of [[InternalRow]] correctly.
+   * Creates `JDBCValueGetter`s according to [[StructType]], which can set
+   * each value from `ResultSet` to each field of [[InternalRow]] correctly.
    */
-  private def makeGetters(dialect: JdbcDialect, schema: StructType): Array[JDBCValueGetter] = {
+  private def makeGetters(
+      dialect: JdbcDialect,
+      schema: StructType): Array[JDBCValueGetter] = {
     val replaced = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
     replaced.fields.map(sf => makeGetter(sf.dataType, dialect, sf.metadata))
   }
@@ -442,7 +430,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       dialect: JdbcDialect,
       metadata: Metadata): JDBCValueGetter = dt match {
     case BooleanType =>
-      (rs: ResultSet, row: InternalRow, pos: Int) => row.setBoolean(pos, rs.getBoolean(pos + 1))
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        row.setBoolean(pos, rs.getBoolean(pos + 1))
 
     case DateType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
@@ -469,37 +458,41 @@ object JdbcUtils extends Logging with SQLConfHelper {
         row.update(pos, decimal)
 
     case DoubleType =>
-      (rs: ResultSet, row: InternalRow, pos: Int) => row.setDouble(pos, rs.getDouble(pos + 1))
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        row.setDouble(pos, rs.getDouble(pos + 1))
 
     case FloatType =>
-      (rs: ResultSet, row: InternalRow, pos: Int) => row.setFloat(pos, rs.getFloat(pos + 1))
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        row.setFloat(pos, rs.getFloat(pos + 1))
 
     case IntegerType =>
-      (rs: ResultSet, row: InternalRow, pos: Int) => row.setInt(pos, rs.getInt(pos + 1))
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        row.setInt(pos, rs.getInt(pos + 1))
 
     case LongType if metadata.contains("binarylong") =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
-        val l = nullSafeConvert[Array[Byte]](
-          rs.getBytes(pos + 1),
-          bytes => {
-            var ans = 0L
-            var j = 0
-            while (j < bytes.length) {
-              ans = 256 * ans + (255 & bytes(j))
-              j = j + 1
-            }
-            ans
-          })
+        val l = nullSafeConvert[Array[Byte]](rs.getBytes(pos + 1), bytes => {
+          var ans = 0L
+          var j = 0
+          while (j < bytes.length) {
+            ans = 256 * ans + (255 & bytes(j))
+            j = j + 1
+          }
+          ans
+        })
         row.update(pos, l)
 
     case LongType =>
-      (rs: ResultSet, row: InternalRow, pos: Int) => row.setLong(pos, rs.getLong(pos + 1))
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        row.setLong(pos, rs.getLong(pos + 1))
 
     case ShortType =>
-      (rs: ResultSet, row: InternalRow, pos: Int) => row.setShort(pos, rs.getShort(pos + 1))
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        row.setShort(pos, rs.getShort(pos + 1))
 
     case ByteType =>
-      (rs: ResultSet, row: InternalRow, pos: Int) => row.setByte(pos, rs.getByte(pos + 1))
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        row.setByte(pos, rs.getByte(pos + 1))
 
     case StringType if metadata.contains("rowid") =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
@@ -522,11 +515,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
     // It stores the number of milliseconds after midnight, 00:00:00.000000
     case TimestampType if metadata.contains("logical_time_type") =>
       (rs: ResultSet, row: InternalRow, pos: Int) => {
-        row.update(
-          pos,
-          nullSafeConvert[Time](
-            rs.getTime(pos + 1),
-            t => Math.multiplyExact(t.getTime, MICROS_PER_MILLIS)))
+        row.update(pos, nullSafeConvert[Time](
+          rs.getTime(pos + 1), t => Math.multiplyExact(t.getTime, MICROS_PER_MILLIS)))
       }
 
     case TimestampType =>
@@ -540,12 +530,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     case TimestampNTZType if metadata.contains("logical_time_type") =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
-        val micros = nullSafeConvert[Time](
-          rs.getTime(pos + 1),
-          t => {
-            val time = dialect.convertJavaTimestampToTimestampNTZ(new Timestamp(t.getTime))
-            localDateTimeToMicros(time)
-          })
+        val micros = nullSafeConvert[Time](rs.getTime(pos + 1), t => {
+          val time = dialect.convertJavaTimestampToTimestampNTZ(new Timestamp(t.getTime))
+          localDateTimeToMicros(time)
+        })
         row.update(pos, micros)
 
     case TimestampNTZType =>
@@ -561,26 +549,24 @@ object JdbcUtils extends Logging with SQLConfHelper {
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         val bytes = rs.getBytes(pos + 1)
         if (bytes != null) {
-          val binary =
-            bytes.flatMap(Integer.toBinaryString(_).getBytes(StandardCharsets.US_ASCII))
+          val binary = bytes.flatMap(Integer.toBinaryString(_).getBytes(StandardCharsets.US_ASCII))
           row.update(pos, binary)
         } else {
           row.update(pos, null)
         }
 
     case BinaryType =>
-      (rs: ResultSet, row: InternalRow, pos: Int) => row.update(pos, rs.getBytes(pos + 1))
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        row.update(pos, rs.getBytes(pos + 1))
 
     case _: YearMonthIntervalType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
-        row.update(
-          pos,
+        row.update(pos,
           nullSafeConvert(rs.getString(pos + 1), dialect.getYearMonthIntervalAsMonths))
 
     case _: DayTimeIntervalType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
-        row.update(
-          pos,
+        row.update(pos,
           nullSafeConvert(rs.getString(pos + 1), dialect.getDayTimeIntervalAsMicros))
 
     case _: ArrayType if metadata.contains("pg_bit_array_type") =>
@@ -600,33 +586,31 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     case ArrayType(et, _) =>
       def elementConversion(et: DataType): AnyRef => Any = et match {
-        case TimestampType =>
-          arrayConverter[Timestamp] { (t: Timestamp) =>
-            fromJavaTimestamp(dialect.convertJavaTimestampToTimestamp(t))
-          }
+        case TimestampType => arrayConverter[Timestamp] {
+          (t: Timestamp) => fromJavaTimestamp(dialect.convertJavaTimestampToTimestamp(t))
+        }
 
         case TimestampNTZType =>
-          arrayConverter[Timestamp] { (t: Timestamp) =>
-            localDateTimeToMicros(dialect.convertJavaTimestampToTimestampNTZ(t))
+          arrayConverter[Timestamp] {
+            (t: Timestamp) => localDateTimeToMicros(dialect.convertJavaTimestampToTimestampNTZ(t))
           }
 
         case StringType =>
           arrayConverter[Object]((obj: Object) => UTF8String.fromString(obj.toString))
 
-        case DateType =>
-          arrayConverter[Date] { (d: Date) =>
-            fromJavaDate(dialect.convertJavaDateToDate(d))
-          }
+        case DateType => arrayConverter[Date] {
+          (d: Date) => fromJavaDate(dialect.convertJavaDateToDate(d))
+        }
 
         case dt: DecimalType =>
-          arrayConverter[java.math.BigDecimal](d => Decimal(d, dt.precision, dt.scale))
+            arrayConverter[java.math.BigDecimal](d => Decimal(d, dt.precision, dt.scale))
 
         case LongType if metadata.contains("binarylong") =>
           throw QueryExecutionErrors.unsupportedArrayElementTypeBasedOnBinaryError(dt)
 
         case ArrayType(et0, _) =>
-          arrayConverter[Array[Any]] { arr =>
-            new GenericArrayData(elementConversion(et0)(arr))
+          arrayConverter[Array[Any]] {
+            arr => new GenericArrayData(elementConversion(et0)(arr))
           }
 
         case IntegerType => arrayConverter[Int]((i: Int) => i)
@@ -678,52 +662,62 @@ object JdbcUtils extends Logging with SQLConfHelper {
       dialect: JdbcDialect,
       dataType: DataType): JDBCValueSetter = dataType match {
     case IntegerType =>
-      (stmt: PreparedStatement, row: Row, pos: Int) => stmt.setInt(pos + 1, row.getInt(pos))
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setInt(pos + 1, row.getInt(pos))
 
     case LongType =>
-      (stmt: PreparedStatement, row: Row, pos: Int) => stmt.setLong(pos + 1, row.getLong(pos))
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setLong(pos + 1, row.getLong(pos))
 
     case DoubleType =>
-      (stmt: PreparedStatement, row: Row, pos: Int) => stmt.setDouble(pos + 1, row.getDouble(pos))
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setDouble(pos + 1, row.getDouble(pos))
 
     case FloatType =>
-      (stmt: PreparedStatement, row: Row, pos: Int) => stmt.setFloat(pos + 1, row.getFloat(pos))
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setFloat(pos + 1, row.getFloat(pos))
 
     case ShortType =>
-      (stmt: PreparedStatement, row: Row, pos: Int) => stmt.setInt(pos + 1, row.getShort(pos))
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setInt(pos + 1, row.getShort(pos))
 
     case ByteType =>
-      (stmt: PreparedStatement, row: Row, pos: Int) => stmt.setInt(pos + 1, row.getByte(pos))
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setInt(pos + 1, row.getByte(pos))
 
     case BooleanType =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         stmt.setBoolean(pos + 1, row.getBoolean(pos))
 
     case StringType =>
-      (stmt: PreparedStatement, row: Row, pos: Int) => stmt.setString(pos + 1, row.getString(pos))
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setString(pos + 1, row.getString(pos))
 
     case BinaryType =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         stmt.setBytes(pos + 1, row.getAs[Array[Byte]](pos))
 
     case TimestampType =>
-      if (conf.datetimeJava8ApiEnabled) { (stmt: PreparedStatement, row: Row, pos: Int) =>
-        stmt.setTimestamp(pos + 1, toJavaTimestamp(instantToMicros(row.getAs[Instant](pos))))
-      } else { (stmt: PreparedStatement, row: Row, pos: Int) =>
-        stmt.setTimestamp(pos + 1, row.getAs[java.sql.Timestamp](pos))
+      if (conf.datetimeJava8ApiEnabled) {
+        (stmt: PreparedStatement, row: Row, pos: Int) =>
+          stmt.setTimestamp(pos + 1, toJavaTimestamp(instantToMicros(row.getAs[Instant](pos))))
+      } else {
+        (stmt: PreparedStatement, row: Row, pos: Int) =>
+          stmt.setTimestamp(pos + 1, row.getAs[java.sql.Timestamp](pos))
       }
 
     case TimestampNTZType =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
-        stmt.setTimestamp(
-          pos + 1,
+        stmt.setTimestamp(pos + 1,
           dialect.convertTimestampNTZToJavaTimestamp(row.getAs[java.time.LocalDateTime](pos)))
 
     case DateType =>
-      if (conf.datetimeJava8ApiEnabled) { (stmt: PreparedStatement, row: Row, pos: Int) =>
-        stmt.setDate(pos + 1, toJavaDate(localDateToDays(row.getAs[LocalDate](pos))))
-      } else { (stmt: PreparedStatement, row: Row, pos: Int) =>
-        stmt.setDate(pos + 1, row.getAs[java.sql.Date](pos))
+      if (conf.datetimeJava8ApiEnabled) {
+        (stmt: PreparedStatement, row: Row, pos: Int) =>
+          stmt.setDate(pos + 1, toJavaDate(localDateToDays(row.getAs[LocalDate](pos))))
+      } else {
+        (stmt: PreparedStatement, row: Row, pos: Int) =>
+          stmt.setDate(pos + 1, row.getAs[java.sql.Date](pos))
       }
 
     case t: DecimalType =>
@@ -767,24 +761,25 @@ object JdbcUtils extends Logging with SQLConfHelper {
   }
 
   /**
-   * Saves a partition of a DataFrame to the JDBC database. This is done in a single database
-   * transaction (unless isolation level is "NONE") in order to avoid repeatedly inserting data as
-   * much as possible.
+   * Saves a partition of a DataFrame to the JDBC database.  This is done in
+   * a single database transaction (unless isolation level is "NONE")
+   * in order to avoid repeatedly inserting data as much as possible.
    *
-   * It is still theoretically possible for rows in a DataFrame to be inserted into the database
-   * more than once if a stage somehow fails after the commit occurs but before the stage can
-   * return successfully.
+   * It is still theoretically possible for rows in a DataFrame to be
+   * inserted into the database more than once if a stage somehow fails after
+   * the commit occurs but before the stage can return successfully.
    *
-   * This is not a closure inside saveTable() because apparently cosmetic implementation changes
-   * elsewhere might easily render such a closure non-Serializable. Instead, we explicitly close
-   * over all variables that are used.
+   * This is not a closure inside saveTable() because apparently cosmetic
+   * implementation changes elsewhere might easily render such a closure
+   * non-Serializable.  Instead, we explicitly close over all variables that
+   * are used.
    *
-   * Note that this method records task output metrics. It assumes the method is running in a
-   * task. For now, we only records the number of rows being written because there's no good way
-   * to measure the total bytes being written. Only effective outputs are taken into account: for
-   * example, metric will not be updated if it supports transaction and transaction is rolled
-   * back, but metric will be updated even with error if it doesn't support transaction, as
-   * there're dirty outputs.
+   * Note that this method records task output metrics. It assumes the method is
+   * running in a task. For now, we only records the number of rows being written
+   * because there's no good way to measure the total bytes being written. Only
+   * effective outputs are taken into account: for example, metric will not be updated
+   * if it supports transaction and transaction is rolled back, but metric will be
+   * updated even with error if it doesn't support transaction, as there're dirty outputs.
    */
   def savePartition(
       table: String,
@@ -814,21 +809,19 @@ object JdbcUtils extends Logging with SQLConfHelper {
           // has been chosen and transactions are supported
           val defaultIsolation = metadata.getDefaultTransactionIsolation
           finalIsolationLevel = defaultIsolation
-          if (metadata.supportsTransactionIsolationLevel(isolationLevel)) {
+          if (metadata.supportsTransactionIsolationLevel(isolationLevel))  {
             // Finally update to actually requested level if possible
             finalIsolationLevel = isolationLevel
           } else {
-            logWarning(
-              log"Requested isolation level " +
-                log"${MDC(ISOLATION_LEVEL, isolationLevelString(isolationLevel))} " +
-                log"is not supported; falling back to default isolation level " +
-                log"${MDC(DEFAULT_ISOLATION_LEVEL, isolationLevelString(defaultIsolation))}")
+            logWarning(log"Requested isolation level " +
+              log"${MDC(ISOLATION_LEVEL, isolationLevelString(isolationLevel))} " +
+              log"is not supported; falling back to default isolation level " +
+              log"${MDC(DEFAULT_ISOLATION_LEVEL, isolationLevelString(defaultIsolation))}")
           }
         } else {
-          logWarning(
-            log"Requested isolation level " +
-              log"${MDC(ISOLATION_LEVEL, isolationLevelString(isolationLevel))}, " +
-              log"but transactions are unsupported")
+          logWarning(log"Requested isolation level " +
+            log"${MDC(ISOLATION_LEVEL, isolationLevelString(isolationLevel))}, " +
+            log"but transactions are unsupported")
         }
       } catch {
         case NonFatal(e) => logWarning("Exception while detecting transaction support", e)
@@ -979,8 +972,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     userSchema.fieldNames.foreach { col =>
       schema.find(f => conf.resolver(f.name, col)).getOrElse {
         throw QueryCompilationErrors.createTableColumnTypesOptionColumnNotFoundInSchemaError(
-          col,
-          schema)
+          col, schema)
       }
     }
 
@@ -991,8 +983,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
   }
 
   /**
-   * Parses the user specified customSchema option value to DataFrame schema, and returns a schema
-   * that is replaced by the custom schema's dataType if column name is matched.
+   * Parses the user specified customSchema option value to DataFrame schema, and
+   * returns a schema that is replaced by the custom schema's dataType if column name is matched.
    */
   def getCustomSchema(
       tableSchema: StructType,
@@ -1033,23 +1025,13 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     val insertStmt = getInsertStatement(table, rddSchema, tableSchema, isCaseSensitive, dialect)
     val repartitionedDF = options.numPartitions match {
-      case Some(n) if n <= 0 =>
-        throw QueryExecutionErrors.invalidJdbcNumPartitionsError(
-          n,
-          JDBCOptions.JDBC_NUM_PARTITIONS)
+      case Some(n) if n <= 0 => throw QueryExecutionErrors.invalidJdbcNumPartitionsError(
+        n, JDBCOptions.JDBC_NUM_PARTITIONS)
       case Some(n) if n < df.rdd.getNumPartitions => df.coalesce(n)
       case _ => df
     }
-    repartitionedDF.foreachPartition { iterator =>
-      savePartition(
-        table,
-        iterator,
-        rddSchema,
-        insertStmt,
-        batchSize,
-        dialect,
-        isolationLevel,
-        options)
+    repartitionedDF.foreachPartition { iterator => savePartition(
+      table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel, options)
     }
   }
 
@@ -1064,7 +1046,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       options: JdbcOptionsInWrite): Unit = {
     val statement = conn.createStatement
     val dialect = JdbcDialects.get(options.url)
-    val strSchema = schemaString(dialect, schema, caseSensitive, options.createTableColumnTypes)
+    val strSchema = schemaString(
+      dialect, schema, caseSensitive, options.createTableColumnTypes)
     try {
       statement.setQueryTimeout(options.queryTimeout)
       dialect.createTable(statement, tableName, strSchema, options)
@@ -1105,10 +1088,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
     val dialect = JdbcDialects.get(options.url)
     val metaData = conn.getMetaData
     if (changes.length == 1) {
-      executeStatement(
-        conn,
-        options,
-        dialect.alterTable(tableName, changes, metaData.getDatabaseMajorVersion)(0))
+      executeStatement(conn, options, dialect.alterTable(tableName, changes,
+        metaData.getDatabaseMajorVersion)(0))
     } else {
       if (!metaData.supportsTransactions) {
         throw QueryExecutionErrors.multiActionAlterError(tableName)
@@ -1170,7 +1151,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
     executeStatement(conn, options, dialect.getSchemaCommentQuery(schema, comment))
   }
 
-  def removeSchemaComment(conn: Connection, options: JDBCOptions, schema: String): Unit = {
+  def removeSchemaComment(
+      conn: Connection,
+      options: JDBCOptions,
+      schema: String): Unit = {
     val dialect = JdbcDialects.get(options.url)
     executeStatement(conn, options, dialect.removeSchemaCommentQuery(schema))
   }
@@ -1179,10 +1163,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
    * Drops a schema from the JDBC database.
    */
   def dropSchema(
-      conn: Connection,
-      options: JDBCOptions,
-      schema: String,
-      cascade: Boolean): Unit = {
+      conn: Connection, options: JDBCOptions, schema: String, cascade: Boolean): Unit = {
     val dialect = JdbcDialects.get(options.url)
     executeStatement(conn, options, dialect.dropSchema(schema, cascade))
   }
@@ -1199,9 +1180,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       properties: util.Map[String, String],
       options: JDBCOptions): Unit = {
     val dialect = JdbcDialects.get(options.url)
-    executeStatement(
-      conn,
-      options,
+    executeStatement(conn, options,
       dialect.createIndex(indexName, tableIdent, columns, columnsProperties, properties))
   }
 
@@ -1253,7 +1232,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
   /**
    * Check if index exists in a table
    */
-  def checkIfIndexExists(conn: Connection, sql: String, options: JDBCOptions): Boolean = {
+  def checkIfIndexExists(
+      conn: Connection,
+      sql: String,
+      options: JDBCOptions): Boolean = {
     val statement = conn.createStatement
     try {
       statement.setQueryTimeout(options.queryTimeout)
@@ -1269,8 +1251,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
   }
 
   /**
-   * Process index properties and return tuple of indexType and list of the other index
-   * properties.
+   * Process index properties and return tuple of indexType and list of the other index properties.
    */
   def processIndexProperties(
       properties: util.Map[String, String],
@@ -1299,9 +1280,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     (indexType, indexPropertyList.toArray)
   }
 
-  def containsIndexTypeIgnoreCase(
-      supportedIndexTypeList: Array[String],
-      value: String): Boolean = {
+  def containsIndexTypeIgnoreCase(supportedIndexTypeList: Array[String], value: String): Boolean = {
     if (supportedIndexTypeList.isEmpty) {
       throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3173")
     }
@@ -1320,7 +1299,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
   }
 
   def executeQuery(conn: Connection, options: JDBCOptions, sql: String)(
-      f: ResultSet => Unit): Unit = {
+    f: ResultSet => Unit): Unit = {
     val statement = conn.createStatement
     try {
       statement.setQueryTimeout(options.queryTimeout)
@@ -1353,13 +1332,14 @@ object JdbcUtils extends Logging with SQLConfHelper {
   def withConnection[T](options: JDBCOptions)(f: Connection => T): T = {
     val dialect = JdbcDialects.get(options.url)
 
-    var conn: Connection = null
+    var conn : Connection = null
     classifyException(
       condition = "FAILED_JDBC.CONNECTION",
       messageParameters = Map("url" -> options.getRedactUrl()),
       dialect,
       description = "Failed to connect",
-      isRuntime = false) {
+      isRuntime = false
+    ) {
       conn = dialect.createConnectionFactory(options)(-1)
     }
     try {

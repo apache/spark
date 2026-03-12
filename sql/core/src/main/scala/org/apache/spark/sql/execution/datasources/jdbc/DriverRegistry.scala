@@ -27,17 +27,17 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**
- * java.sql.DriverManager is always loaded by bootstrap classloader, so it can't load JDBC drivers
- * accessible by Spark ClassLoader.
+ * java.sql.DriverManager is always loaded by bootstrap classloader,
+ * so it can't load JDBC drivers accessible by Spark ClassLoader.
  *
  * To solve the problem, drivers from user-supplied jars are wrapped into thin wrapper.
  */
 object DriverRegistry extends Logging {
 
   /**
-   * Load DriverManager first to avoid any race condition between DriverManager static
-   * initialization block and specific driver class's static initialization block. e.g.
-   * PhoenixDriver
+   * Load DriverManager first to avoid any race condition between
+   * DriverManager static initialization block and specific driver class's
+   * static initialization block. e.g. PhoenixDriver
    */
   DriverManager.getDrivers
 
@@ -62,14 +62,13 @@ object DriverRegistry extends Logging {
   }
 
   def get(className: String): Driver = {
-    DriverManager.getDrivers.asScala
-      .collectFirst {
-        case d: DriverWrapper if d.wrapped.getClass.getCanonicalName == className => d.wrapped
-        case d if d.getClass.getCanonicalName == className => d
-      }
-      .getOrElse {
-        throw SparkException.internalError(
-          s"Did not find registered driver with class $className")
-      }
+    DriverManager.getDrivers.asScala.collectFirst {
+      case d: DriverWrapper if d.wrapped.getClass.getCanonicalName == className => d.wrapped
+      case d if d.getClass.getCanonicalName == className => d
+    }.getOrElse {
+      throw SparkException.internalError(
+        s"Did not find registered driver with class $className")
+    }
   }
 }
+

@@ -30,15 +30,14 @@ class SessionStateSuite extends SparkFunSuite {
 
   /**
    * A shared SparkSession for all tests in this suite. Make sure you reset any changes to this
-   * session as this is a singleton HiveSparkSession in HiveSessionStateSuite and it's shared with
-   * all Hive test suites.
+   * session as this is a singleton HiveSparkSession in HiveSessionStateSuite and it's shared
+   * with all Hive test suites.
    */
   protected var activeSession: classic.SparkSession = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    activeSession = classic.SparkSession
-      .builder()
+    activeSession = classic.SparkSession.builder()
       .master("local")
       .config("default-config", "default")
       .getOrCreate()
@@ -90,25 +89,18 @@ class SessionStateSuite extends SparkFunSuite {
 
       // inheritance
       assert(forkedSession ne activeSession)
-      assert(
-        forkedSession.sessionState.functionRegistry ne
-          activeSession.sessionState.functionRegistry)
-      assert(
-        forkedSession.sessionState.functionRegistry
-          .lookupFunction(testFuncName1Qualified)
-          .nonEmpty)
+      assert(forkedSession.sessionState.functionRegistry ne
+        activeSession.sessionState.functionRegistry)
+      assert(forkedSession.sessionState.functionRegistry
+        .lookupFunction(testFuncName1Qualified).nonEmpty)
 
       // independence
       forkedSession.sessionState.functionRegistry.dropFunction(testFuncName1Qualified)
-      assert(
-        activeSession.sessionState.functionRegistry
-          .lookupFunction(testFuncName1Qualified)
-          .nonEmpty)
+      assert(activeSession.sessionState.functionRegistry
+        .lookupFunction(testFuncName1Qualified).nonEmpty)
       activeSession.udf.register(testFuncName2.funcName, (_: Int) + 1)
-      assert(
-        forkedSession.sessionState.functionRegistry
-          .lookupFunction(testFuncName2Qualified)
-          .isEmpty)
+      assert(forkedSession.sessionState.functionRegistry
+        .lookupFunction(testFuncName2Qualified).isEmpty)
     } finally {
       activeSession.sessionState.functionRegistry.dropFunction(testFuncName1Qualified)
       activeSession.sessionState.functionRegistry.dropFunction(testFuncName2Qualified)
@@ -132,9 +124,8 @@ class SessionStateSuite extends SparkFunSuite {
       // inheritance
       assert(forkedSession ne activeSession)
       assert(forkedSession.experimental ne activeSession.experimental)
-      assert(
-        forkedSession.experimental.extraOptimizations.toSet ==
-          activeSession.experimental.extraOptimizations.toSet)
+      assert(forkedSession.experimental.extraOptimizations.toSet ==
+        activeSession.experimental.extraOptimizations.toSet)
 
       // independence
       forkedSession.experimental.extraOptimizations = List(DummyRule2)
@@ -150,7 +141,7 @@ class SessionStateSuite extends SparkFunSuite {
   test("fork new session and inherit listener manager") {
     class CommandCollector extends QueryExecutionListener {
       val commands: ArrayBuffer[String] = ArrayBuffer.empty[String]
-      override def onFailure(funcName: String, qe: QueryExecution, ex: Exception): Unit = {}
+      override def onFailure(funcName: String, qe: QueryExecution, ex: Exception) : Unit = {}
       override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
         commands += funcName
       }
@@ -202,8 +193,8 @@ class SessionStateSuite extends SparkFunSuite {
 
   test("fork new sessions and run query on inherited table") {
     def checkTableExists(sparkSession: SparkSession): Unit = {
-      QueryTest.checkAnswer(
-        sparkSession.sql("""
+      QueryTest.checkAnswer(sparkSession.sql(
+        """
           |SELECT x.str, COUNT(*)
           |FROM df x JOIN df y ON x.str = y.str
           |GROUP BY x.str

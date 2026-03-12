@@ -177,7 +177,7 @@ object SparkBloomFilterBenchmark extends BenchmarkBase {
       fpp: Double = 0.03,
       hitRate: Double = 0.5): Unit = {
     val benchmark = new Benchmark(
-      s"Binary Query Operation (Hit Rate: ${hitRate * 100}%) - $numItems items, FPP: $fpp",
+      s"Binary Query Operation (Hit Rate: ${hitRate*100}%) - $numItems items, FPP: $fpp",
       valuesPerIteration,
       output = output)
 
@@ -189,7 +189,7 @@ object SparkBloomFilterBenchmark extends BenchmarkBase {
     // Prepare query data with specified hit rate
     val queryBinaryData = (0 until valuesPerIteration).map { i =>
       if (i < (valuesPerIteration * hitRate).toInt) {
-        binaryData(i % numItems) // Existing data (hit)
+        binaryData(i % numItems)  // Existing data (hit)
       } else {
         // New binary data (likely miss)
         s"new_item_${i}_not_in_filter_${System.currentTimeMillis()}".getBytes("UTF-8")
@@ -256,21 +256,21 @@ object SparkBloomFilterBenchmark extends BenchmarkBase {
     }
 
     runBenchmark("FPP Impact on Put Operations") {
-      benchmarkPutOperation(MEDIUM_ITEMS, 100000, 0.01) // Low FPP
-      benchmarkPutOperation(MEDIUM_ITEMS, 100000, 0.03) // Default FPP
-      benchmarkPutOperation(MEDIUM_ITEMS, 100000, 0.05) // High FPP
+      benchmarkPutOperation(MEDIUM_ITEMS, 100000, 0.01)  // Low FPP
+      benchmarkPutOperation(MEDIUM_ITEMS, 100000, 0.03)  // Default FPP
+      benchmarkPutOperation(MEDIUM_ITEMS, 100000, 0.05)  // High FPP
     }
 
     runBenchmark("FPP Impact on Query Operations") {
-      benchmarkMightContainOperation(MEDIUM_ITEMS, 100000, 0.01, 0.5) // Low FPP, 50% hit rate
-      benchmarkMightContainOperation(MEDIUM_ITEMS, 100000, 0.03, 0.5) // Default FPP, 50% hit rate
-      benchmarkMightContainOperation(MEDIUM_ITEMS, 100000, 0.05, 0.5) // High FPP, 50% hit rate
+      benchmarkMightContainOperation(MEDIUM_ITEMS, 100000, 0.01, 0.5)  // Low FPP, 50% hit rate
+      benchmarkMightContainOperation(MEDIUM_ITEMS, 100000, 0.03, 0.5)  // Default FPP, 50% hit rate
+      benchmarkMightContainOperation(MEDIUM_ITEMS, 100000, 0.05, 0.5)  // High FPP, 50% hit rate
     }
 
     runBenchmark("Hit Rate Impact Analysis") {
-      benchmarkMightContainOperation(MEDIUM_ITEMS, 100000, 0.03, 0.1) // 10% hit rate
-      benchmarkMightContainOperation(MEDIUM_ITEMS, 100000, 0.03, 0.5) // 50% hit rate
-      benchmarkMightContainOperation(MEDIUM_ITEMS, 100000, 0.03, 0.9) // 90% hit rate
+      benchmarkMightContainOperation(MEDIUM_ITEMS, 100000, 0.03, 0.1)  // 10% hit rate
+      benchmarkMightContainOperation(MEDIUM_ITEMS, 100000, 0.03, 0.5)  // 50% hit rate
+      benchmarkMightContainOperation(MEDIUM_ITEMS, 100000, 0.03, 0.9)  // 90% hit rate
     }
 
     runBenchmark("Binary Put Operation - Small Scale") {
@@ -298,21 +298,21 @@ object SparkBloomFilterBenchmark extends BenchmarkBase {
     }
 
     runBenchmark("FPP Impact on Binary Put Operations") {
-      benchmarkBinaryPutOperation(MEDIUM_ITEMS, 100000, 0.01) // Low FPP
-      benchmarkBinaryPutOperation(MEDIUM_ITEMS, 100000, 0.03) // Default FPP
-      benchmarkBinaryPutOperation(MEDIUM_ITEMS, 100000, 0.05) // High FPP
+      benchmarkBinaryPutOperation(MEDIUM_ITEMS, 100000, 0.01)  // Low FPP
+      benchmarkBinaryPutOperation(MEDIUM_ITEMS, 100000, 0.03)  // Default FPP
+      benchmarkBinaryPutOperation(MEDIUM_ITEMS, 100000, 0.05)  // High FPP
     }
 
     runBenchmark("FPP Impact on Binary Query Operations") {
-      benchmarkBinaryMightContainOperation(MEDIUM_ITEMS, 100000, 0.01, 0.5) // Low FPP
-      benchmarkBinaryMightContainOperation(MEDIUM_ITEMS, 100000, 0.03, 0.5) // Default FPP
-      benchmarkBinaryMightContainOperation(MEDIUM_ITEMS, 100000, 0.05, 0.5) // High FPP
+      benchmarkBinaryMightContainOperation(MEDIUM_ITEMS, 100000, 0.01, 0.5)  // Low FPP
+      benchmarkBinaryMightContainOperation(MEDIUM_ITEMS, 100000, 0.03, 0.5)  // Default FPP
+      benchmarkBinaryMightContainOperation(MEDIUM_ITEMS, 100000, 0.05, 0.5)  // High FPP
     }
 
     runBenchmark("Hit Rate Impact on Binary Operations") {
-      benchmarkBinaryMightContainOperation(MEDIUM_ITEMS, 100000, 0.03, 0.1) // 10% hit rate
-      benchmarkBinaryMightContainOperation(MEDIUM_ITEMS, 100000, 0.03, 0.5) // 50% hit rate
-      benchmarkBinaryMightContainOperation(MEDIUM_ITEMS, 100000, 0.03, 0.9) // 90% hit rate
+      benchmarkBinaryMightContainOperation(MEDIUM_ITEMS, 100000, 0.03, 0.1)  // 10% hit rate
+      benchmarkBinaryMightContainOperation(MEDIUM_ITEMS, 100000, 0.03, 0.5)  // 50% hit rate
+      benchmarkBinaryMightContainOperation(MEDIUM_ITEMS, 100000, 0.03, 0.9)  // 90% hit rate
     }
   }
 }

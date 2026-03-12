@@ -24,35 +24,35 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE
 
 /**
- * Remove redundant aggregates from a query plan. A redundant aggregate is an aggregate whose only
- * goal is to keep distinct values, while its parent aggregate would ignore duplicate values.
+ * Remove redundant aggregates from a query plan. A redundant aggregate is an aggregate whose
+ * only goal is to keep distinct values, while its parent aggregate would ignore duplicate values.
  */
 object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
-  def apply(plan: LogicalPlan): LogicalPlan =
-    plan.transformUpWithPruning(_.containsPattern(AGGREGATE), ruleId) {
-      case upper @ Aggregate(_, _, lower: Aggregate, _) if isLowerRedundant(upper, lower) =>
-        val projectList = lower.aggregateExpressions.filter(upper.references.contains(_))
-        upper.copy(child = Project(projectList, lower.child))
-      case agg @ Aggregate(groupingExps, _, child, _)
-          if agg.groupOnly && child.distinctKeys.exists(
-            _.subsetOf(ExpressionSet(groupingExps))) =>
-        Project(agg.aggregateExpressions, child)
-    }
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
+    _.containsPattern(AGGREGATE), ruleId) {
+    case upper @ Aggregate(_, _, lower: Aggregate, _) if isLowerRedundant(upper, lower) =>
+      val projectList = lower.aggregateExpressions.filter(upper.references.contains(_))
+      upper.copy(child = Project(projectList, lower.child))
+    case agg @ Aggregate(groupingExps, _, child, _)
+        if agg.groupOnly && child.distinctKeys.exists(_.subsetOf(ExpressionSet(groupingExps))) =>
+      Project(agg.aggregateExpressions, child)
+  }
 
   private def isLowerRedundant(upper: Aggregate, lower: Aggregate): Boolean = {
-    val upperHasNoDuplicateSensitiveAgg = upper.aggregateExpressions
-      .forall(expr =>
-        !expr.exists {
-          case ae: AggregateExpression => isDuplicateSensitive(ae)
-          case _ => false
-        })
+    val upperHasNoDuplicateSensitiveAgg = upper
+      .aggregateExpressions
+      .forall(expr => !expr.exists {
+        case ae: AggregateExpression => isDuplicateSensitive(ae)
+        case _ => false
+      })
 
-    lazy val upperRefsOnlyDeterministicNonAgg = upper.references.subsetOf(
-      AttributeSet(
-        lower.aggregateExpressions
-          .filter(_.deterministic)
-          .filterNot(AggregateExpression.containsAggregate)
-          .map(_.toAttribute)))
+    lazy val upperRefsOnlyDeterministicNonAgg = upper.references.subsetOf(AttributeSet(
+      lower
+        .aggregateExpressions
+        .filter(_.deterministic)
+        .filterNot(AggregateExpression.containsAggregate)
+        .map(_.toAttribute)
+    ))
 
     // If the lower aggregation is global, it is not redundant because a project with
     // non-aggregate expressions is different with global aggregation in semantics.

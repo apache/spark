@@ -84,40 +84,16 @@ class ScalaReflectionRelationSuite extends SparkFunSuite with SharedSparkSession
 
   test("query case class RDD") {
     withTempView("reflectData") {
-      val data = ReflectData(
-        "a",
-        1,
-        1L,
-        1.toFloat,
-        1.toDouble,
-        1.toShort,
-        1.toByte,
-        true,
-        new java.math.BigDecimal(1),
-        Date.valueOf("1970-01-01"),
-        new Timestamp(12345),
-        Seq(1, 2, 3),
-        new java.math.BigInteger("1"),
-        scala.math.BigInt(1))
+      val data = ReflectData("a", 1, 1L, 1.toFloat, 1.toDouble, 1.toShort, 1.toByte, true,
+        new java.math.BigDecimal(1), Date.valueOf("1970-01-01"), new Timestamp(12345), Seq(1, 2, 3),
+        new java.math.BigInteger("1"), scala.math.BigInt(1))
       Seq(data).toDF().createOrReplaceTempView("reflectData")
 
-      assert(
-        sql("SELECT * FROM reflectData").collect().head ===
-          Row(
-            "a",
-            1,
-            1L,
-            1.toFloat,
-            1.toDouble,
-            1.toShort,
-            1.toByte,
-            true,
-            new java.math.BigDecimal(1),
-            Date.valueOf("1970-01-01"),
-            new Timestamp(12345),
-            Seq(1, 2, 3),
-            new java.math.BigDecimal(1),
-            new java.math.BigDecimal(1)))
+      assert(sql("SELECT * FROM reflectData").collect().head ===
+        Row("a", 1, 1L, 1.toFloat, 1.toDouble, 1.toShort, 1.toByte, true,
+          new java.math.BigDecimal(1), Date.valueOf("1970-01-01"),
+          new Timestamp(12345), Seq(1, 2, 3), new java.math.BigDecimal(1),
+          new java.math.BigDecimal(1)))
     }
   }
 
@@ -126,9 +102,8 @@ class ScalaReflectionRelationSuite extends SparkFunSuite with SharedSparkSession
       val data = NullReflectData(null, null, null, null, null, null, null)
       Seq(data).toDF().createOrReplaceTempView("reflectNullData")
 
-      assert(
-        sql("SELECT * FROM reflectNullData").collect().head ===
-          Row.fromSeq(Seq.fill(7)(null)))
+      assert(sql("SELECT * FROM reflectNullData").collect().head ===
+        Row.fromSeq(Seq.fill(7)(null)))
     }
   }
 
@@ -137,9 +112,8 @@ class ScalaReflectionRelationSuite extends SparkFunSuite with SharedSparkSession
       val data = OptionalReflectData(None, None, None, None, None, None, None)
       Seq(data).toDF().createOrReplaceTempView("reflectOptionalData")
 
-      assert(
-        sql("SELECT * FROM reflectOptionalData").collect().head ===
-          Row.fromSeq(Seq.fill(7)(null)))
+      assert(sql("SELECT * FROM reflectOptionalData").collect().head ===
+        Row.fromSeq(Seq.fill(7)(null)))
     }
   }
 
@@ -149,9 +123,7 @@ class ScalaReflectionRelationSuite extends SparkFunSuite with SharedSparkSession
       Seq(ReflectBinary(Array[Byte](1))).toDF().createOrReplaceTempView("reflectBinary")
 
       val result = sql("SELECT data FROM reflectBinary")
-        .collect()
-        .head(0)
-        .asInstanceOf[Array[Byte]]
+        .collect().head(0).asInstanceOf[Array[Byte]]
       assert(result.toSeq === Seq[Byte](1))
     }
   }
@@ -171,19 +143,18 @@ class ScalaReflectionRelationSuite extends SparkFunSuite with SharedSparkSession
           Nested(None, "abc")))
 
       Seq(data).toDF().createOrReplaceTempView("reflectComplexData")
-      assert(
-        sql("SELECT * FROM reflectComplexData").collect().head ===
+      assert(sql("SELECT * FROM reflectComplexData").collect().head ===
+        Row(
+          Seq(1, 2, 3),
+          Seq(1, 2, null),
+          Map(1 -> 10L, 2 -> 20L),
+          Map(1 -> 10L, 2 -> 20L, 3 -> null),
           Row(
-            Seq(1, 2, 3),
-            Seq(1, 2, null),
-            Map(1 -> 10L, 2 -> 20L),
-            Map(1 -> 10L, 2 -> 20L, 3 -> null),
-            Row(
-              Seq(10, 20, 30),
-              Seq(10, 20, null),
-              Map(10 -> 100L, 20 -> 200L),
-              Map(10 -> 100L, 20 -> 200L, 30 -> null),
-              Row(null, "abc"))))
+            Seq(10, 20, 30),
+            Seq(10, 20, null),
+            Map(10 -> 100L, 20 -> 200L),
+            Map(10 -> 100L, 20 -> 200L, 30 -> null),
+            Row(null, "abc"))))
     }
   }
 

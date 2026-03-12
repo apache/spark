@@ -33,16 +33,18 @@ import org.apache.spark.util.Utils
 /**
  * Options for the JDBC data source.
  */
-class JDBCOptions(val parameters: CaseInsensitiveMap[String]) extends Serializable with Logging {
+class JDBCOptions(
+    val parameters: CaseInsensitiveMap[String])
+  extends Serializable with Logging {
 
   import JDBCOptions._
 
   def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
 
   def this(url: String, table: String, parameters: Map[String, String]) = {
-    this(
-      CaseInsensitiveMap(
-        parameters ++ Map(JDBCOptions.JDBC_URL -> url, JDBCOptions.JDBC_TABLE_NAME -> table)))
+    this(CaseInsensitiveMap(parameters ++ Map(
+      JDBCOptions.JDBC_URL -> url,
+      JDBCOptions.JDBC_TABLE_NAME -> table)))
   }
 
   /**
@@ -63,9 +65,8 @@ class JDBCOptions(val parameters: CaseInsensitiveMap[String]) extends Serializab
 
   /**
    * Returns a property with all options except Spark internal data source options like `url`,
-   * `dbtable`, and `numPartition`. This should be used when invoking JDBC API like
-   * `Driver.connect` because each DBMS vendor has its own property list for JDBC driver. See
-   * SPARK-17776.
+   * `dbtable`, and `numPartition`. This should be used when invoking JDBC API like `Driver.connect`
+   * because each DBMS vendor has its own property list for JDBC driver. See SPARK-17776.
    */
   val asConnectionProperties: Properties = {
     val properties = new Properties()
@@ -85,12 +86,10 @@ class JDBCOptions(val parameters: CaseInsensitiveMap[String]) extends Serializab
   val tableOrQuery = (parameters.get(JDBC_TABLE_NAME), parameters.get(JDBC_QUERY_STRING)) match {
     case (Some(name), Some(subquery)) =>
       throw QueryExecutionErrors.cannotSpecifyBothJdbcTableNameAndQueryError(
-        JDBC_TABLE_NAME,
-        JDBC_QUERY_STRING)
+        JDBC_TABLE_NAME, JDBC_QUERY_STRING)
     case (None, None) =>
       throw QueryExecutionErrors.missingJdbcTableNameAndQueryError(
-        JDBC_TABLE_NAME,
-        JDBC_QUERY_STRING)
+        JDBC_TABLE_NAME, JDBC_QUERY_STRING)
     case (Some(name), None) =>
       if (name.isEmpty) {
         throw QueryExecutionErrors.emptyOptionError(JDBC_TABLE_NAME)
@@ -137,16 +136,14 @@ class JDBCOptions(val parameters: CaseInsensitiveMap[String]) extends Serializab
   // the upper bound of the partition column
   val upperBound = parameters.get(JDBC_UPPER_BOUND)
   // numPartitions is also used for data source writing
-  require(
-    (partitionColumn.isEmpty && lowerBound.isEmpty && upperBound.isEmpty) ||
-      (partitionColumn.isDefined && lowerBound.isDefined && upperBound.isDefined &&
-        numPartitions.isDefined),
+  require((partitionColumn.isEmpty && lowerBound.isEmpty && upperBound.isEmpty) ||
+    (partitionColumn.isDefined && lowerBound.isDefined && upperBound.isDefined &&
+      numPartitions.isDefined),
     s"When reading JDBC data sources, users need to specify all or none for the following " +
       s"options: '$JDBC_PARTITION_COLUMN', '$JDBC_LOWER_BOUND', '$JDBC_UPPER_BOUND', " +
       s"and '$JDBC_NUM_PARTITIONS'")
 
-  require(
-    !(parameters.get(JDBC_QUERY_STRING).isDefined && partitionColumn.isDefined),
+  require(!(parameters.get(JDBC_QUERY_STRING).isDefined && partitionColumn.isDefined),
     s"""
        |Options '$JDBC_QUERY_STRING' and '$JDBC_PARTITION_COLUMN' can not be specified together.
        |Please define the query using `$JDBC_TABLE_NAME` option instead and make sure to qualify
@@ -160,7 +157,8 @@ class JDBCOptions(val parameters: CaseInsensitiveMap[String]) extends Serializab
        |  .option("upperBound", "100")
        |  .option("numPartitions", "3")
        |  .load()
-     """.stripMargin)
+     """.stripMargin
+  )
 
   val fetchSize = parameters.getOrElse(JDBC_BATCH_FETCH_SIZE, "0").toInt
 
@@ -180,8 +178,7 @@ class JDBCOptions(val parameters: CaseInsensitiveMap[String]) extends Serializab
 
   val batchSize = {
     val size = parameters.getOrElse(JDBC_BATCH_INSERT_SIZE, "1000").toInt
-    require(
-      size >= 1,
+    require(size >= 1,
       s"Invalid value `${size.toString}` for parameter " +
         s"`$JDBC_BATCH_INSERT_SIZE`. The minimum value is 1.")
     size
@@ -193,10 +190,8 @@ class JDBCOptions(val parameters: CaseInsensitiveMap[String]) extends Serializab
       case "READ_COMMITTED" => Connection.TRANSACTION_READ_COMMITTED
       case "REPEATABLE_READ" => Connection.TRANSACTION_REPEATABLE_READ
       case "SERIALIZABLE" => Connection.TRANSACTION_SERIALIZABLE
-      case other =>
-        throw QueryExecutionErrors.invalidJdbcTxnIsolationLevelError(
-          JDBC_TXN_ISOLATION_LEVEL,
-          other)
+      case other => throw QueryExecutionErrors.invalidJdbcTxnIsolationLevelError(
+        JDBC_TXN_ISOLATION_LEVEL, other)
     }
   // An option to execute custom SQL before fetching data from the remote DB
   val sessionInitStatement = parameters.get(JDBC_SESSION_INIT_STATEMENT)
@@ -258,16 +253,12 @@ class JDBCOptions(val parameters: CaseInsensitiveMap[String]) extends Serializab
       .map(_.toBoolean)
       .getOrElse(SQLConf.get.timestampType == TimestampNTZType)
 
-  val hint = parameters
-    .get(JDBC_HINT_STRING)
-    .map(value => {
-      require(
-        value.matches("(?s)^/\\*\\+ .* \\*/$"),
-        s"Invalid value `$value` for option `$JDBC_HINT_STRING`." +
-          s" It should start with `/*+ ` and end with ` */`.")
+  val hint = parameters.get(JDBC_HINT_STRING).map(value => {
+    require(value.matches("(?s)^/\\*\\+ .* \\*/$"),
+      s"Invalid value `$value` for option `$JDBC_HINT_STRING`." +
+        s" It should start with `/*+ ` and end with ` */`.")
       s"$value "
-    })
-    .getOrElse("")
+    }).getOrElse("")
 
   override def hashCode: Int = this.parameters.hashCode()
 
@@ -280,17 +271,18 @@ class JDBCOptions(val parameters: CaseInsensitiveMap[String]) extends Serializab
   def getRedactUrl(): String = Utils.redact(SQLConf.get.stringRedactionPattern, url)
 }
 
-class JdbcOptionsInWrite(override val parameters: CaseInsensitiveMap[String])
-    extends JDBCOptions(parameters) {
+class JdbcOptionsInWrite(
+    override val parameters: CaseInsensitiveMap[String])
+  extends JDBCOptions(parameters) {
 
   import JDBCOptions._
 
   def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
 
   def this(url: String, table: String, parameters: Map[String, String]) = {
-    this(
-      CaseInsensitiveMap(
-        parameters ++ Map(JDBCOptions.JDBC_URL -> url, JDBCOptions.JDBC_TABLE_NAME -> table)))
+    this(CaseInsensitiveMap(parameters ++ Map(
+      JDBCOptions.JDBC_URL -> url,
+      JDBCOptions.JDBC_TABLE_NAME -> table)))
   }
 
   require(

@@ -35,18 +35,21 @@ class AlterTableRenameColumnParserSuite extends AnalysisTest with SharedSparkSes
 
   test("alter table: rename column - hyphen in identifier") {
     checkError(
-      exception = parseException(parsePlan)("ALTER TABLE t RENAME COLUMN test-col TO test"),
+      exception = parseException(parsePlan)(
+        "ALTER TABLE t RENAME COLUMN test-col TO test"),
       condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-col"))
     checkError(
-      exception = parseException(parsePlan)("ALTER TABLE t RENAME COLUMN test TO test-col"),
+      exception = parseException(parsePlan)(
+        "ALTER TABLE t RENAME COLUMN test TO test-col"),
       condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-col"))
   }
 
   test("alter table: rename nested column") {
     checkError(
-      exception = parseException(parsePlan)("ALTER TABLE t RENAME COLUMN point.x to point.y"),
+      exception = parseException(parsePlan)(
+        "ALTER TABLE t RENAME COLUMN point.x to point.y"),
       condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'.'", "hint" -> ""))
   }

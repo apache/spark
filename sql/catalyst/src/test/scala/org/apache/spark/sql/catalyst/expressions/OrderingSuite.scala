@@ -53,8 +53,7 @@ class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
         val intOrdering = new InterpretedOrdering(sortOrder :: Nil)
         val genOrdering = new LazilyGeneratedOrdering(sortOrder :: Nil)
         val kryoIntOrdering = kryo.deserialize[InterpretedOrdering](kryo.serialize(intOrdering))
-        val kryoGenOrdering =
-          kryo.deserialize[LazilyGeneratedOrdering](kryo.serialize(genOrdering))
+        val kryoGenOrdering = kryo.deserialize[LazilyGeneratedOrdering](kryo.serialize(genOrdering))
 
         Seq(intOrdering, genOrdering, kryoIntOrdering, kryoGenOrdering).foreach { ordering =>
           assert(ordering.compare(rowA, rowA) === 0)
@@ -146,11 +145,12 @@ class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
     val data = Seq(
       (Array[Byte](1), Array[Byte](-1)),
       (Array[Byte](1, 1, 1, 1, 1), Array[Byte](1, 1, 1, 1, -1)),
-      (Array[Byte](1, 1, 1, 1, 1, 1, 1, 1, 1), Array[Byte](1, 1, 1, 1, 1, 1, 1, 1, -1)))
+      (Array[Byte](1, 1, 1, 1, 1, 1, 1, 1, 1), Array[Byte](1, 1, 1, 1, 1, 1, 1, 1, -1))
+      )
     data.foreach { case (b1, b2) =>
       val rowOrdering = InterpretedOrdering.forSchema(Seq(BinaryType))
-      val genOrdering =
-        GenerateOrdering.generate(BoundReference(0, BinaryType, nullable = true).asc :: Nil)
+      val genOrdering = GenerateOrdering.generate(
+        BoundReference(0, BinaryType, nullable = true).asc :: Nil)
       val rowType = StructType(StructField("b", BinaryType, nullable = true) :: Nil)
       val toCatalyst = CatalystTypeConverters.createToCatalystConverter(rowType)
       val rowB1 = toCatalyst(Row(b1)).asInstanceOf[InternalRow]
@@ -174,13 +174,9 @@ class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
     // to set CODEGEN_FACTORY_MODE to NO_CODEGEN because the ScalaUDF expression will
     // indirectly create an UnsafeProjection, and we want that UnsafeProjection to be
     // an InterpretedUnsafeProjection
-    withSQLConf(
-      SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString) {
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString) {
       val udfFunc = (s: String) => s
-      val stringUdf = ScalaUDF(
-        udfFunc,
-        StringType,
-        BoundReference(0, StringType, true) :: Nil,
+      val stringUdf = ScalaUDF(udfFunc, StringType, BoundReference(0, StringType, true) :: Nil,
         Option(ExpressionEncoder[String]().resolveAndBind()) :: Nil,
         Some(ExpressionEncoder[String]().resolveAndBind()))
       val sortOrder = Seq(SortOrder(stringUdf, Ascending))

@@ -31,9 +31,9 @@ trait ValidatesFilter extends QueryErrorsBase {
 
   /**
    * Method used to validate [[Filter]] operator. Throws in the following cases:
-   *   - If condition is invalid (based on
-   *     `UnsupportedExpressionInOperatorValidation.isExpressionInUnsupportedOperator` check)
-   *   - If the data type of the condition is not boolean.
+   *  - If condition is invalid (based on
+   *    `UnsupportedExpressionInOperatorValidation.isExpressionInUnsupportedOperator` check)
+   *  - If the data type of the condition is not boolean.
    */
   def validateFilter(
       invalidExpressions: Seq[Expression],
@@ -57,7 +57,9 @@ trait ValidatesFilter extends QueryErrorsBase {
       errorClass = "INVALID_WHERE_CONDITION",
       messageParameters = Map(
         "condition" -> toSQLExpr(filter.condition),
-        "expressionList" -> invalidExpressions.map(_.sql).mkString(", ")))
+        "expressionList" -> invalidExpressions.map(_.sql).mkString(", ")
+      )
+    )
   }
 
   private def throwDataTypeMismatchFilterNotBoolean(filter: Filter): Nothing =
@@ -66,7 +68,9 @@ trait ValidatesFilter extends QueryErrorsBase {
       messageParameters = Map(
         "sqlExpr" -> makeCommaSeparatedExpressionString(filter.expressions),
         "filter" -> toSQLExpr(filter.condition),
-        "type" -> toSQLType(filter.condition.dataType)))
+        "type" -> toSQLType(filter.condition.dataType)
+      )
+    )
 
   private def makeCommaSeparatedExpressionString(expressions: Seq[Expression]): String = {
     expressions.map(toSQLExpr).mkString(", ")

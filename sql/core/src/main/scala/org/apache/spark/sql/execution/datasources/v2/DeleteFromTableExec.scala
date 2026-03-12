@@ -25,8 +25,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 case class DeleteFromTableExec(
     table: SupportsDeleteV2,
     condition: Array[Predicate],
-    refreshCache: () => Unit)
-    extends LeafV2CommandExec {
+    refreshCache: () => Unit) extends LeafV2CommandExec {
 
   override protected def run(): Seq[InternalRow] = {
     table.deleteWhere(condition)

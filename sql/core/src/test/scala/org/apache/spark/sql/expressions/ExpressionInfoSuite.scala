@@ -33,8 +33,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
     val info = spark.sessionState.catalog.lookupFunctionInfo(FunctionIdentifier("upper"))
     assert(info.getName === "upper")
     assert(info.getClassName === "org.apache.spark.sql.catalyst.expressions.Upper")
-    assert(
-      info.getUsage === "upper(str) - Returns `str` with all characters changed to uppercase.")
+    assert(info.getUsage === "upper(str) - Returns `str` with all characters changed to uppercase.")
     assert(info.getExamples.contains("> SELECT upper('SparkSql');"))
     assert(info.getSince === "1.0.1")
     assert(info.getNote === "")
@@ -44,91 +43,30 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
   test("group info in ExpressionInfo") {
     val info = spark.sessionState.catalog.lookupFunctionInfo(FunctionIdentifier("sum"))
     assert(info.getGroup === "agg_funcs")
-    Seq(
-      "agg_funcs",
-      "array_funcs",
-      "binary_funcs",
-      "bitwise_funcs",
-      "collection_funcs",
-      "predicate_funcs",
-      "conditional_funcs",
-      "conversion_funcs",
-      "csv_funcs",
-      "datetime_funcs",
-      "generator_funcs",
-      "hash_funcs",
-      "json_funcs",
-      "lambda_funcs",
-      "map_funcs",
-      "math_funcs",
-      "misc_funcs",
-      "string_funcs",
-      "struct_funcs",
-      "window_funcs",
-      "xml_funcs")
+    Seq("agg_funcs", "array_funcs", "binary_funcs", "bitwise_funcs", "collection_funcs",
+      "predicate_funcs", "conditional_funcs", "conversion_funcs", "csv_funcs", "datetime_funcs",
+      "generator_funcs", "hash_funcs", "json_funcs", "lambda_funcs", "map_funcs", "math_funcs",
+      "misc_funcs", "string_funcs", "struct_funcs", "window_funcs", "xml_funcs")
 
     Seq("agg_funcs", "array_funcs", "datetime_funcs", "json_funcs", "map_funcs", "window_funcs")
-      .foreach { groupName =>
-        val info = new ExpressionInfo(
-          "testClass",
-          null,
-          "testName",
-          null,
-          "",
-          "",
-          "",
-          groupName,
-          "",
-          "",
-          "")
-        assert(info.getGroup === groupName)
-      }
+        .foreach { groupName =>
+      val info = new ExpressionInfo(
+        "testClass", null, "testName", null, "", "", "", groupName, "", "", "")
+      assert(info.getGroup === groupName)
+    }
 
     val validGroups = Seq(
-      "agg_funcs",
-      "array_funcs",
-      "avro_funcs",
-      "binary_funcs",
-      "bitwise_funcs",
-      "collection_funcs",
-      "predicate_funcs",
-      "conditional_funcs",
-      "conversion_funcs",
-      "csv_funcs",
-      "datetime_funcs",
-      "generator_funcs",
-      "hash_funcs",
-      "json_funcs",
-      "lambda_funcs",
-      "map_funcs",
-      "math_funcs",
-      "misc_funcs",
-      "protobuf_funcs",
-      "sketch_funcs",
-      "string_funcs",
-      "struct_funcs",
-      "window_funcs",
-      "xml_funcs",
-      "table_funcs",
-      "url_funcs",
-      "variant_funcs",
-      "vector_funcs",
+      "agg_funcs", "array_funcs", "avro_funcs", "binary_funcs", "bitwise_funcs", "collection_funcs",
+      "predicate_funcs", "conditional_funcs", "conversion_funcs", "csv_funcs", "datetime_funcs",
+      "generator_funcs", "hash_funcs", "json_funcs", "lambda_funcs", "map_funcs", "math_funcs",
+      "misc_funcs", "protobuf_funcs", "sketch_funcs", "string_funcs", "struct_funcs",
+      "window_funcs", "xml_funcs", "table_funcs", "url_funcs", "variant_funcs", "vector_funcs",
       "st_funcs").sorted
     val invalidGroupName = "invalid_group_funcs"
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
         new ExpressionInfo(
-          "testClass",
-          null,
-          "testName",
-          null,
-          "",
-          "",
-          "",
-          invalidGroupName,
-          "",
-          "",
-          "")
+          "testClass", null, "testName", null, "", "", "", invalidGroupName, "", "", "")
       },
       condition = "_LEGACY_ERROR_TEMP_3202",
       parameters = Map(
@@ -142,34 +80,18 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
     assert(info.getSource === "built-in")
 
     val validSources = Seq(
-      "built-in",
-      "hive",
-      "python_udf",
-      "scala_udf",
-      "java_udf",
-      "python_udtf",
-      "internal",
+      "built-in", "hive", "python_udf", "scala_udf", "java_udf", "python_udtf", "internal",
       "sql_udf")
     validSources.foreach { source =>
-      val info =
-        new ExpressionInfo("testClass", null, "testName", null, "", "", "", "", "", "", source)
+      val info = new ExpressionInfo(
+        "testClass", null, "testName", null, "", "", "", "", "", "", source)
       assert(info.getSource === source)
     }
     val invalidSource = "invalid_source"
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
         new ExpressionInfo(
-          "testClass",
-          null,
-          "testName",
-          null,
-          "",
-          "",
-          "",
-          "",
-          "",
-          "",
-          invalidSource)
+          "testClass", null, "testName", null, "", "", "", "", "", "", invalidSource)
       },
       condition = "_LEGACY_ERROR_TEMP_3203",
       parameters = Map(
@@ -182,18 +104,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
     val invalidNote = "  invalid note"
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
-        new ExpressionInfo(
-          "testClass",
-          null,
-          "testName",
-          null,
-          "",
-          "",
-          invalidNote,
-          "",
-          "",
-          "",
-          "")
+        new ExpressionInfo("testClass", null, "testName", null, "", "", invalidNote, "", "", "", "")
       },
       condition = "_LEGACY_ERROR_TEMP_3201",
       parameters = Map("exprName" -> "testName", "note" -> invalidNote))
@@ -202,17 +113,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
         new ExpressionInfo(
-          "testClass",
-          null,
-          "testName",
-          null,
-          "",
-          "",
-          "",
-          "",
-          invalidSince,
-          "",
-          "")
+          "testClass", null, "testName", null, "", "", "", "", invalidSince, "", "")
       },
       condition = "_LEGACY_ERROR_TEMP_3204",
       parameters = Map("since" -> invalidSince, "exprName" -> "testName"))
@@ -221,17 +122,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
         new ExpressionInfo(
-          "testClass",
-          null,
-          "testName",
-          null,
-          "",
-          "",
-          "",
-          "",
-          "",
-          invalidDeprecated,
-          "")
+          "testClass", null, "testName", null, "", "", "", "", "", invalidDeprecated, "")
       },
       condition = "_LEGACY_ERROR_TEMP_3205",
       parameters = Map("exprName" -> "testName", "deprecated" -> invalidDeprecated))
@@ -256,28 +147,24 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       "org.apache.spark.sql.catalyst.expressions.Collate",
       classOf[ShiftLeft].getName,
       classOf[ShiftRight].getName,
-      classOf[ShiftRightUnsigned].getName)
+      classOf[ShiftRightUnsigned].getName
+    )
     spark.sessionState.functionRegistry.listFunction().foreach { funcId =>
       val info = spark.sessionState.catalog.lookupFunctionInfo(funcId)
       val className = info.getClassName
       withClue(s"Expression class '$className'") {
         val exprExamples = info.getOriginalExamples
         if (!exprExamples.isEmpty && !ignoreSet.contains(className)) {
-          assert(
-            exampleRe
-              .findAllIn(exprExamples)
-              .iterator
-              .to(Iterable)
-              .filter(setStmtRe.findFirstIn(_).isEmpty) // Ignore SET commands
-              .forall(_.contains("_FUNC_")))
+          assert(exampleRe.findAllIn(exprExamples).iterator.to(Iterable)
+            .filter(setStmtRe.findFirstIn(_).isEmpty) // Ignore SET commands
+            .forall(_.contains("_FUNC_")))
         }
       }
     }
   }
 
-  test(
-    "SPARK-32870: Default expressions in FunctionRegistry should have their " +
-      "usage, examples, since, and group filled") {
+  test("SPARK-32870: Default expressions in FunctionRegistry should have their " +
+    "usage, examples, since, and group filled") {
     val ignoreSet = Set(
       // Cast aliases do not need examples
       "org.apache.spark.sql.catalyst.expressions.Cast")
@@ -310,8 +197,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
     def checkExampleSyntax(example: String): Unit = {
       val beginStmtNum = beginSqlStmtRe.findAllIn(example).length
       val endStmtNum = endSqlStmtRe.findAllIn(example).length
-      assert(
-        beginStmtNum === endStmtNum,
+      assert(beginStmtNum === endStmtNum,
         "The number of ` > ` does not match to the number of `;`")
     }
     val exampleRe = """^(.+);\n(?s)(.+)$""".r
@@ -356,7 +242,8 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
     ThreadUtils.parmap(
       spark.sessionState.functionRegistry.listFunction(),
       prefix = "ExpressionInfoSuite-check-outputs-of-expression-examples",
-      maxThreads = Runtime.getRuntime.availableProcessors) { funcId =>
+      maxThreads = Runtime.getRuntime.availableProcessors
+    ) { funcId =>
       // Examples can change settings. We clone the session to prevent tests clashing.
       val clonedSpark = spark.cloneSession()
       // Coalescing partitions can change result order, so disable it.
@@ -370,8 +257,8 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
           example.split("  > ").toList.foreach {
             case exampleRe(sql, output) =>
               val df = clonedSpark.sql(sql)
-              val actual =
-                unindentAndTrim(hiveResultString(df.queryExecution.executedPlan).mkString("\n"))
+              val actual = unindentAndTrim(
+                hiveResultString(df.queryExecution.executedPlan).mkString("\n"))
               val expected = unindentAndTrim(output)
               assert(actual === expected)
             case _ =>
@@ -384,22 +271,17 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
   test("Check whether SQL expressions should extend NullIntolerant") {
     // Only check expressions extended from these expressions because these expressions are
     // NullIntolerant by default.
-    val exprTypesToCheck = Seq(
-      classOf[UnaryExpression],
-      classOf[BinaryExpression],
-      classOf[TernaryExpression],
-      classOf[QuaternaryExpression],
-      classOf[SeptenaryExpression])
+    val exprTypesToCheck = Seq(classOf[UnaryExpression], classOf[BinaryExpression],
+      classOf[TernaryExpression], classOf[QuaternaryExpression], classOf[SeptenaryExpression])
 
     // Do not check these expressions, because these expressions override the eval method
     val ignoreSet = Set(
       // Throws an exception, even if input is null
-      classOf[RaiseError])
+      classOf[RaiseError]
+    )
 
-    val candidateExprsToCheck = spark.sessionState.functionRegistry
-      .listFunction()
-      .map(spark.sessionState.catalog.lookupFunctionInfo)
-      .map(_.getClassName)
+    val candidateExprsToCheck = spark.sessionState.functionRegistry.listFunction()
+      .map(spark.sessionState.catalog.lookupFunctionInfo).map(_.getClassName)
       .filterNot(c => ignoreSet.exists(_.getName.equals(c)))
       .map(name => Utils.classForName(name))
       .filterNot(classOf[NonSQLExpression].isAssignableFrom)
@@ -413,15 +295,13 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
         val isNullIntolerantOverridden = clazz.getMethod("nullIntolerant") !=
           classOf[Expression].getMethod("nullIntolerant")
         if (isEvalOverrode && isNullIntolerantOverridden) {
-          fail(
-            s"${clazz.getName} should not override nullIntolerant, " +
-              s"or add ${clazz.getName} in the ignoreSet of this test.")
+          fail(s"${clazz.getName} should not override nullIntolerant, " +
+            s"or add ${clazz.getName} in the ignoreSet of this test.")
         } else if (!isEvalOverrode && !isNullIntolerantOverridden) {
           fail(s"${clazz.getName} should override nullIntolerant.")
         } else {
-          assert(
-            (!isEvalOverrode && isNullIntolerantOverridden) ||
-              (isEvalOverrode && !isNullIntolerantOverridden))
+          assert((!isEvalOverrode && isNullIntolerantOverridden) ||
+            (isEvalOverrode && !isNullIntolerantOverridden))
         }
       }
     }

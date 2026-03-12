@@ -33,7 +33,8 @@ case class KnownData(
     stringDatum: String,
     timeDatum: String,
     timestampDatum: Timestamp,
-    nullDatum: Null)
+    nullDatum: Null
+)
 
 final class StaxXmlGeneratorSuite extends SharedSparkSession {
   test("write/read roundtrip") {
@@ -49,11 +50,10 @@ final class StaxXmlGeneratorSuite extends SharedSparkSession {
         longDatum = 1520828868,
         stringDatum = "test,breakdelimiter",
         timeDatum = "12:34:56",
-        timestampDatum = Timestamp.from(
-          ZonedDateTime.of(2017, 12, 20, 21, 46, 54, 0, ZoneId.of("UTC")).toInstant),
+        timestampDatum = Timestamp.from(ZonedDateTime.of(2017, 12, 20, 21, 46, 54, 0,
+          ZoneId.of("UTC")).toInstant),
         nullDatum = null),
-      KnownData(
-        booleanDatum = false,
+      KnownData(booleanDatum = false,
         dateDatum = Date.valueOf("2016-12-19"),
         decimalDatum = Decimal(12.345, 10, 3),
         doubleDatum = 21.2121,
@@ -61,9 +61,10 @@ final class StaxXmlGeneratorSuite extends SharedSparkSession {
         longDatum = 1520828123,
         stringDatum = "breakdelimiter,test",
         timeDatum = "23:45:16",
-        timestampDatum = Timestamp.from(
-          ZonedDateTime.of(2017, 12, 29, 17, 21, 49, 0, ZoneId.of("America/New_York")).toInstant),
-        nullDatum = null))
+        timestampDatum = Timestamp.from(ZonedDateTime.of(2017, 12, 29, 17, 21, 49, 0,
+          ZoneId.of("America/New_York")).toInstant),
+        nullDatum = null)
+    )
 
     val df = dataset.toDF().orderBy("booleanDatum")
     val targetFile =

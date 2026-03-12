@@ -41,9 +41,7 @@ abstract class FileTable(
     options: CaseInsensitiveStringMap,
     paths: Seq[String],
     userSpecifiedSchema: Option[StructType])
-    extends Table
-    with SupportsRead
-    with SupportsWrite {
+  extends Table with SupportsRead with SupportsWrite {
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
@@ -54,42 +52,28 @@ abstract class FileTable(
     if (FileStreamSink.hasMetadata(paths, hadoopConf, sparkSession.sessionState.conf)) {
       // We are reading from the results of a streaming query. We will load files from
       // the metadata log instead of listing them using HDFS APIs.
-      new MetadataLogFileIndex(
-        sparkSession,
-        new Path(paths.head),
-        options.asScala.toMap,
-        userSpecifiedSchema)
+      new MetadataLogFileIndex(sparkSession, new Path(paths.head),
+        options.asScala.toMap, userSpecifiedSchema)
     } else {
       // This is a non-streaming file based datasource.
-      val rootPathsSpecified = DataSource.checkAndGlobPathIfNecessary(
-        paths,
-        hadoopConf,
-        checkEmptyGlobPath = true,
-        checkFilesExist = true,
-        enableGlobbing = globPaths)
+      val rootPathsSpecified = DataSource.checkAndGlobPathIfNecessary(paths, hadoopConf,
+        checkEmptyGlobPath = true, checkFilesExist = true, enableGlobbing = globPaths)
       val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
       new InMemoryFileIndex(
-        sparkSession,
-        rootPathsSpecified,
-        caseSensitiveMap,
-        userSpecifiedSchema,
-        fileStatusCache)
+        sparkSession, rootPathsSpecified, caseSensitiveMap, userSpecifiedSchema, fileStatusCache)
     }
   }
 
   lazy val dataSchema: StructType = {
-    val schema = userSpecifiedSchema
-      .map { schema =>
-        val partitionSchema = fileIndex.partitionSchema
-        val resolver = sparkSession.sessionState.conf.resolver
-        StructType(schema.filterNot(f => partitionSchema.exists(p => resolver(p.name, f.name))))
-      }
-      .orElse {
-        inferSchema(fileIndex.allFiles())
-      }
-      .getOrElse {
-        throw QueryCompilationErrors.dataSchemaNotSpecifiedError(formatName)
-      }
+    val schema = userSpecifiedSchema.map { schema =>
+      val partitionSchema = fileIndex.partitionSchema
+      val resolver = sparkSession.sessionState.conf.resolver
+      StructType(schema.filterNot(f => partitionSchema.exists(p => resolver(p.name, f.name))))
+    }.orElse {
+      inferSchema(fileIndex.allFiles())
+    }.getOrElse {
+      throw QueryCompilationErrors.dataSchemaNotSpecifiedError(formatName)
+    }
     fileIndex match {
       case _: MetadataLogFileIndex => schema
       case _ => schema.asNullable
@@ -126,21 +110,21 @@ abstract class FileTable(
   override def capabilities: java.util.Set[TableCapability] = FileTable.CAPABILITIES
 
   /**
-   * When possible, this method should return the schema of the given `files`. When the format
-   * does not support inference, or no valid files are given should return None. In these cases
+   * When possible, this method should return the schema of the given `files`.  When the format
+   * does not support inference, or no valid files are given should return None.  In these cases
    * Spark will require that user specify the schema manually.
    */
   def inferSchema(files: Seq[FileStatus]): Option[StructType]
 
   /**
-   * Returns whether this format supports the given [[DataType]] in read/write path. By default
-   * all data types are supported.
+   * Returns whether this format supports the given [[DataType]] in read/write path.
+   * By default all data types are supported.
    */
   def supportsDataType(dataType: DataType): Boolean = true
 
   /**
-   * The string that represents the format that this data source provider uses. This is overridden
-   * by children to provide a nice alias for the data source. For example:
+   * The string that represents the format that this data source provider uses. This is
+   * overridden by children to provide a nice alias for the data source. For example:
    *
    * {{{
    *   override def formatName(): String = "ORC"
@@ -149,11 +133,11 @@ abstract class FileTable(
   def formatName: String
 
   /**
-   * Returns a V1 [[FileFormat]] class of the same file data source. This is a solution for the
-   * following cases:
-   *   1. File datasource V2 implementations cause regression. Users can disable the problematic
-   *      data source via SQL configuration and fall back to FileFormat.
-   *   2. Catalog support is required, which is still under development for data source V2.
+   * Returns a V1 [[FileFormat]] class of the same file data source.
+   * This is a solution for the following cases:
+   * 1. File datasource V2 implementations cause regression. Users can disable the problematic data
+   *    source via SQL configuration and fall back to FileFormat.
+   * 2. Catalog support is required, which is still under development for data source V2.
    */
   def fallbackFileFormat: Class[_ <: FileFormat]
 
@@ -166,11 +150,10 @@ abstract class FileTable(
   }
 
   /**
-   * Merge the options of FileTable and the table operation while respecting the keys of the table
-   * operation.
+   * Merge the options of FileTable and the table operation while respecting the
+   * keys of the table operation.
    *
-   * @param options
-   *   The options of the table operation.
+   * @param options The options of the table operation.
    * @return
    */
   protected def mergedOptions(options: CaseInsensitiveStringMap): CaseInsensitiveStringMap = {
@@ -180,8 +163,8 @@ abstract class FileTable(
   }
 
   /**
-   * Merge the options of FileTable and the LogicalWriteInfo while respecting the keys of the
-   * options carried by LogicalWriteInfo.
+   * Merge the options of FileTable and the LogicalWriteInfo while respecting the
+   * keys of the options carried by LogicalWriteInfo.
    */
   protected def mergedWriteInfo(writeInfo: LogicalWriteInfo): LogicalWriteInfo = {
     LogicalWriteInfoImpl(

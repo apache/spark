@@ -31,7 +31,7 @@ abstract class FileScanBuilder(
     sparkSession: SparkSession,
     fileIndex: PartitioningAwareFileIndex,
     dataSchema: StructType)
-    extends ScanBuilder
+  extends ScanBuilder
     with SupportsPushDownRequiredColumns
     with SupportsPushDownCatalystFilters {
   private val partitionSchema = fileIndex.partitionSchema

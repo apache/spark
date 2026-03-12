@@ -34,12 +34,8 @@ import org.apache.spark.sql.types.{StructField, StructType}
 /**
  * A physical plan that evaluates a [[PythonUDF]]
  */
-case class BatchEvalPythonExec(
-    udfs: Seq[PythonUDF],
-    resultAttrs: Seq[Attribute],
-    child: SparkPlan)
-    extends EvalPythonExec
-    with PythonSQLMetrics {
+case class BatchEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute], child: SparkPlan)
+  extends EvalPythonExec with PythonSQLMetrics {
 
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
   private[this] val sessionUUID = {
@@ -76,7 +72,7 @@ class BatchEvalPythonEvaluatorFactory(
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String],
     binaryAsBytes: Boolean)
-    extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
+  extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
 
   override def evaluate(
       funcs: Seq[(ChainedPythonFunctions, Long)],
@@ -87,19 +83,14 @@ class BatchEvalPythonEvaluatorFactory(
     EvaluatePython.registerPicklers() // register pickler for Row
 
     // Input iterator to Python.
-    val inputIterator =
-      BatchEvalPythonExec.getInputIterator(iter, schema, batchSize, binaryAsBytes)
+    val inputIterator = BatchEvalPythonExec.getInputIterator(iter, schema, batchSize, binaryAsBytes)
 
     // Output iterator for results from Python.
     val outputIterator =
       new PythonUDFWithNamedArgumentsRunner(
-        funcs,
-        PythonEvalType.SQL_BATCHED_UDF,
-        argMetas,
-        pythonMetrics,
-        jobArtifactUUID,
-        sessionUUID)
-        .compute(inputIterator, context.partitionId(), context)
+        funcs, PythonEvalType.SQL_BATCHED_UDF, argMetas, pythonMetrics,
+        jobArtifactUUID, sessionUUID)
+      .compute(inputIterator, context.partitionId(), context)
 
     val unpickle = new Unpickler
     val mutableRow = new GenericInternalRow(1)
@@ -111,21 +102,19 @@ class BatchEvalPythonEvaluatorFactory(
 
     val fromJava = EvaluatePython.makeFromJava(resultType)
 
-    outputIterator
-      .flatMap { pickedResult =>
-        val unpickledBatch = unpickle.loads(pickedResult)
-        unpickledBatch.asInstanceOf[java.util.ArrayList[Any]].asScala
+    outputIterator.flatMap { pickedResult =>
+      val unpickledBatch = unpickle.loads(pickedResult)
+      unpickledBatch.asInstanceOf[java.util.ArrayList[Any]].asScala
+    }.map { result =>
+      pythonMetrics("pythonNumRowsReceived") += 1
+      if (udfs.length == 1) {
+        // fast path for single UDF
+        mutableRow(0) = fromJava(result)
+        mutableRow
+      } else {
+        fromJava(result).asInstanceOf[InternalRow]
       }
-      .map { result =>
-        pythonMetrics("pythonNumRowsReceived") += 1
-        if (udfs.length == 1) {
-          // fast path for single UDF
-          mutableRow(0) = fromJava(result)
-          mutableRow
-        } else {
-          fromJava(result).asInstanceOf[InternalRow]
-        }
-      }
+    }
   }
 }
 
@@ -149,28 +138,24 @@ object BatchEvalPythonExec {
     //    StructType(Seq(StructField("_1", IntegerType), StructField("_2", IntegerType))))`
     // to be `equal()` and so we need to disable this feature explicitly (`valueCompare=false`).
     // Please note that cache by reference is still enabled depending on `needConversion`.
-    val pickle = new Pickler(
-      /* useMemo = */ needConversion,
+    val pickle = new Pickler(/* useMemo = */ needConversion,
       /* valueCompare = */ false)
     // Input iterator to Python: input rows are grouped so we send them in batches to Python.
     // For each row, add it to the queue.
-    iter
-      .map { row =>
-        if (needConversion) {
-          EvaluatePython.toJava(row, schema, binaryAsBytes)
-        } else {
-          // fast path for these types that does not need conversion in Python
-          val fields = new Array[Any](row.numFields)
-          var i = 0
-          while (i < row.numFields) {
-            val dt = dataTypes(i)
-            fields(i) = EvaluatePython.toJava(row.get(i, dt), dt, binaryAsBytes)
-            i += 1
-          }
-          fields
+    iter.map { row =>
+      if (needConversion) {
+        EvaluatePython.toJava(row, schema, binaryAsBytes)
+      } else {
+        // fast path for these types that does not need conversion in Python
+        val fields = new Array[Any](row.numFields)
+        var i = 0
+        while (i < row.numFields) {
+          val dt = dataTypes(i)
+          fields(i) = EvaluatePython.toJava(row.get(i, dt), dt, binaryAsBytes)
+          i += 1
         }
+        fields
       }
-      .grouped(batchSize)
-      .map(x => pickle.dumps(x.toArray))
+    }.grouped(batchSize).map(x => pickle.dumps(x.toArray))
   }
 }

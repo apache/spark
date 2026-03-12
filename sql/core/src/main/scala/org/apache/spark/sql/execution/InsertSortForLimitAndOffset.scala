@@ -28,12 +28,12 @@ import org.apache.spark.sql.internal.SQLConf
 /**
  * When LIMIT/OFFSET is the root node, Spark plans it as CollectLimitExec which preserves the data
  * ordering. However, when OFFSET/LIMIT is not the root node, Spark uses GlobalLimitExec which
- * shuffles all the data into one partition and then gets a slice of it. Unfortunately, the
- * shuffle reader fetches shuffle blocks in a random order and can not preserve the data ordering,
- * which violates the requirement of LIMIT/OFFSET.
+ * shuffles all the data into one partition and then gets a slice of it. Unfortunately, the shuffle
+ * reader fetches shuffle blocks in a random order and can not preserve the data ordering, which
+ * violates the requirement of LIMIT/OFFSET.
  *
- * This rule inserts an extra local sort before LIMIT/OFFSET to preserve the data ordering. TODO:
- * add a order preserving mode in the shuffle reader.
+ * This rule inserts an extra local sort before LIMIT/OFFSET to preserve the data ordering.
+ * TODO: add a order preserving mode in the shuffle reader.
  */
 object InsertSortForLimitAndOffset extends Rule[SparkPlan] {
   override def apply(plan: SparkPlan): SparkPlan = {
@@ -41,11 +41,11 @@ object InsertSortForLimitAndOffset extends Rule[SparkPlan] {
 
     plan transform {
       case l @ GlobalLimitExec(
-            _,
-            // Should not match AQE shuffle stage because we only target un-submitted stages which
-            // we can still rewrite the query plan.
-            s @ ShuffleExchangeExec(SinglePartition, child, _, _),
-            _) if child.logicalLink.isDefined =>
+          _,
+          // Should not match AQE shuffle stage because we only target un-submitted stages which
+          // we can still rewrite the query plan.
+          s @ ShuffleExchangeExec(SinglePartition, child, _, _),
+          _) if child.logicalLink.isDefined =>
         extractOrderingAndPropagateOrderingColumns(child) match {
           case Some((ordering, newChild)) =>
             val newShuffle = s.withNewChildren(Seq(newChild))
@@ -72,8 +72,8 @@ object InsertSortForLimitAndOffset extends Rule[SparkPlan] {
   private def extractOrderingAndPropagateOrderingColumns(
       plan: SparkPlan): Option[(Seq[SortOrder], SparkPlan)] = plan match {
     case p: SortExec if p.global => Some(p.sortOrder, p)
-    case p: UnaryExecNode
-        if p.isInstanceOf[LocalLimitExec] ||
+    case p: UnaryExecNode if
+        p.isInstanceOf[LocalLimitExec] ||
           p.isInstanceOf[WholeStageCodegenExec] ||
           p.isInstanceOf[FilterExec] ||
           p.isInstanceOf[EvalPythonExec] =>

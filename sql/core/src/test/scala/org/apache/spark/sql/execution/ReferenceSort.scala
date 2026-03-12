@@ -25,33 +25,32 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
 
+
 /**
  * A reference sort implementation used to compare against our normal sort.
  */
-case class ReferenceSort(sortOrder: Seq[SortOrder], global: Boolean, child: SparkPlan)
-    extends UnaryExecNode {
+case class ReferenceSort(
+    sortOrder: Seq[SortOrder],
+    global: Boolean,
+    child: SparkPlan)
+  extends UnaryExecNode {
 
   override def requiredChildDistribution: Seq[Distribution] =
     if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
 
   protected override def doExecute(): RDD[InternalRow] = {
-    child
-      .execute()
-      .mapPartitions(
-        { iterator =>
-          val ordering = RowOrdering.create(sortOrder, child.output)
-          val sorter = new ExternalSorter[InternalRow, Null, InternalRow](
-            TaskContext.get(),
-            ordering = Some(ordering))
-          sorter.insertAll(iterator.map(r => (r.copy(), null)))
-          val baseIterator = sorter.iterator.map(_._1)
-          val context = TaskContext.get()
-          context.taskMetrics().incDiskBytesSpilled(sorter.diskBytesSpilled)
-          context.taskMetrics().incMemoryBytesSpilled(sorter.memoryBytesSpilled)
-          context.taskMetrics().incPeakExecutionMemory(sorter.peakMemoryUsedBytes)
-          CompletionIterator[InternalRow, Iterator[InternalRow]](baseIterator, sorter.stop())
-        },
-        preservesPartitioning = true)
+    child.execute().mapPartitions( { iterator =>
+      val ordering = RowOrdering.create(sortOrder, child.output)
+      val sorter = new ExternalSorter[InternalRow, Null, InternalRow](
+        TaskContext.get(), ordering = Some(ordering))
+      sorter.insertAll(iterator.map(r => (r.copy(), null)))
+      val baseIterator = sorter.iterator.map(_._1)
+      val context = TaskContext.get()
+      context.taskMetrics().incDiskBytesSpilled(sorter.diskBytesSpilled)
+      context.taskMetrics().incMemoryBytesSpilled(sorter.memoryBytesSpilled)
+      context.taskMetrics().incPeakExecutionMemory(sorter.peakMemoryUsedBytes)
+      CompletionIterator[InternalRow, Iterator[InternalRow]](baseIterator, sorter.stop())
+    }, preservesPartitioning = true)
   }
 
   override def output: Seq[Attribute] = child.output

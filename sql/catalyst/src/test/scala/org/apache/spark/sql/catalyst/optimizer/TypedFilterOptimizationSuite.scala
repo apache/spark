@@ -31,11 +31,13 @@ import org.apache.spark.sql.types.BooleanType
 class TypedFilterOptimizationSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("EliminateSerialization", FixedPoint(50), EliminateSerialization) ::
-        Batch("CombineTypedFilters", FixedPoint(50), CombineTypedFilters) :: Nil
+      Batch("EliminateSerialization", FixedPoint(50),
+        EliminateSerialization) ::
+      Batch("CombineTypedFilters", FixedPoint(50),
+        CombineTypedFilters) :: Nil
   }
 
-  implicit private def productEncoder[T <: Product: TypeTag]: ExpressionEncoder[T] =
+  implicit private def productEncoder[T <: Product : TypeTag]: ExpressionEncoder[T] =
     ExpressionEncoder[T]()
 
   val testRelation = LocalRelation($"_1".int, $"_2".int)
@@ -46,16 +48,14 @@ class TypedFilterOptimizationSuite extends PlanTest {
     val query = testRelation
       .deserialize[(Int, Int)]
       .serialize[(Int, Int)]
-      .filter(f)
-      .analyze
+      .filter(f).analyze
 
     val optimized = Optimize.execute(query)
 
     val expected = testRelation
       .deserialize[(Int, Int)]
       .where(callFunction(f, BooleanType, $"obj"))
-      .serialize[(Int, Int)]
-      .analyze
+      .serialize[(Int, Int)].analyze
 
     comparePlans(optimized, expected)
   }
@@ -66,8 +66,7 @@ class TypedFilterOptimizationSuite extends PlanTest {
     val query = testRelation
       .deserialize[(Int, Int)]
       .serialize[(Int, Int)]
-      .filter(f)
-      .analyze
+      .filter(f).analyze
     val optimized = Optimize.execute(query)
     comparePlans(optimized, query)
   }
@@ -78,16 +77,14 @@ class TypedFilterOptimizationSuite extends PlanTest {
     val query = testRelation
       .filter(f)
       .deserialize[(Int, Int)]
-      .serialize[(Int, Int)]
-      .analyze
+      .serialize[(Int, Int)].analyze
 
     val optimized = Optimize.execute(query)
 
     val expected = testRelation
       .deserialize[(Int, Int)]
       .where(callFunction(f, BooleanType, $"obj"))
-      .serialize[(Int, Int)]
-      .analyze
+      .serialize[(Int, Int)].analyze
 
     comparePlans(optimized, expected)
   }
@@ -98,8 +95,7 @@ class TypedFilterOptimizationSuite extends PlanTest {
     val query = testRelation
       .filter(f)
       .deserialize[(Int, Int)]
-      .serialize[(Int, Int)]
-      .analyze
+      .serialize[(Int, Int)].analyze
     val optimized = Optimize.execute(query)
     comparePlans(optimized, query)
   }

@@ -33,8 +33,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
 
     sql(s"ALTER TABLE $tableNameAsString ADD COLUMN txt STRING DEFAULT 'initial-text'")
 
-    append(
-      "pk INT, dep STRING",
+    append("pk INT, dep STRING",
       """{ "pk": 2, "dep": "hr" }
         |{ "pk": 3, "dep": "software" }
         |{ "pk": 4, "dep": "hr" }
@@ -42,8 +41,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
 
     sql(s"ALTER TABLE $tableNameAsString ALTER COLUMN txt SET DEFAULT 'new-text'")
 
-    append(
-      "pk INT, dep STRING",
+    append("pk INT, dep STRING",
       """{ "pk": 5, "dep": "hr" }
         |{ "pk": 6, "dep": "hr" }
         |""".stripMargin)
@@ -78,38 +76,42 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
         |""".stripMargin)
     sql(s"ALTER TABLE $tableNameAsString ADD CONSTRAINT positive_pk CHECK (pk > 0)")
     val df = sql(s"DELETE FROM $tableNameAsString WHERE pk < 2")
-    val checkInvariant = df.queryExecution.analyzed.collectFirst { case f: Filter =>
-      f.condition.collectFirst { case c: CheckInvariant =>
-        c
-      }
+    val checkInvariant = df.queryExecution.analyzed.collectFirst {
+      case f: Filter =>
+        f.condition.collectFirst {
+          case c: CheckInvariant => c
+        }
     }.flatten
     if (enforceCheckConstraintOnDelete) {
       assert(checkInvariant.isDefined, "Check invariant should be present in the delete plan")
     } else {
       assert(checkInvariant.isEmpty, "Check invariant should not be present in the delete plan")
     }
-    checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Seq(Row(2, 4, "eng"), Row(3, 6, "eng")))
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(Row(2, 4, "eng"), Row(3, 6, "eng")))
     sql(s"DELETE FROM $tableNameAsString WHERE pk >=3")
-    checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Seq(Row(2, 4, "eng")))
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(Row(2, 4, "eng")))
   }
 
   test("delete from table containing struct column with default value") {
-    sql(s"""CREATE TABLE $tableNameAsString (
+    sql(
+      s"""CREATE TABLE $tableNameAsString (
          | pk INT NOT NULL,
          | complex STRUCT<c1:INT,c2:STRING> DEFAULT struct(-1, 'unknown'),
          | dep STRING)
          |PARTITIONED BY (dep)
          |""".stripMargin)
 
-    append(
-      "pk INT NOT NULL, dep STRING",
+    append("pk INT NOT NULL, dep STRING",
       """{ "pk": 1, "dep": "hr" }
         |{ "pk": 2, "dep": "hr" }
         |{ "pk": 3, "dep": "hr" }
         |""".stripMargin)
 
-    append(
-      "pk INT NOT NULL, complex STRUCT<c1:INT,c2:STRING>, dep STRING",
+    append("pk INT NOT NULL, complex STRUCT<c1:INT,c2:STRING>, dep STRING",
       """{ "pk": 4, "dep": "hr" }
         |{ "pk": 5, "complex": { "c1": 5, "c2": "v5" }, "dep": "hr" }
         |""".stripMargin)
@@ -127,7 +129,10 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
-      Seq(Row(3, Row(-1, "unknown"), "hr"), Row(4, null, "hr"), Row(5, Row(5, "v5"), "hr")))
+      Seq(
+        Row(3, Row(-1, "unknown"), "hr"),
+        Row(4, null, "hr"),
+        Row(5, Row(5, "v5"), "hr")))
   }
 
   test("EXPLAIN only delete") {
@@ -135,7 +140,9 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
 
     sql(s"EXPLAIN DELETE FROM $tableNameAsString WHERE id <= 10")
 
-    checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, "hr") :: Nil)
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, "hr") :: Nil)
   }
 
   test("delete from empty tables") {
@@ -147,8 +154,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
   }
 
   test("delete with basic filters") {
-    createAndInitTable(
-      "pk INT NOT NULL, id INT, dep STRING",
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
         |{ "pk": 2, "id": 2, "dep": "software" }
         |{ "pk": 3, "id": 3, "dep": "hr" }
@@ -162,8 +168,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
   }
 
   test("delete with aliases") {
-    createAndInitTable(
-      "pk INT NOT NULL, id INT, dep STRING",
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
         |{ "pk": 2, "id": 2, "dep": "software" }
         |{ "pk": 3, "id": 3, "dep": "hr" }
@@ -175,8 +180,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
   }
 
   test("delete with IN predicates") {
-    createAndInitTable(
-      "pk INT NOT NULL, id INT, dep STRING",
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
         |{ "pk": 2, "id": 2, "dep": "software" }
         |{ "pk": 3, "id": null, "dep": "hr" }
@@ -190,8 +194,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
   }
 
   test("delete with NOT IN predicates") {
-    createAndInitTable(
-      "pk INT NOT NULL, id INT, dep STRING",
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
         |{ "pk": 2, "id": 2, "dep": "software" }
         |{ "pk": 3, "id": null, "dep": "hr" }
@@ -211,8 +214,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
   }
 
   test("delete with conditions on nested columns") {
-    createAndInitTable(
-      "pk INT NOT NULL, id INT, complex STRUCT<c1:INT,c2:STRING>, dep STRING",
+    createAndInitTable("pk INT NOT NULL, id INT, complex STRUCT<c1:INT,c2:STRING>, dep STRING",
       """{ "pk": 1, "id": 1, "complex": { "c1": 3, "c2": "v1" }, "dep": "hr" }
         |{ "pk": 2, "id": 2, "complex": { "c1": 2, "c2": "v2" }, "dep": "software" }
         |""".stripMargin)
@@ -230,8 +232,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
 
   test("delete with IN subqueries") {
     withTempView("deleted_id", "deleted_dep") {
-      createAndInitTable(
-        "pk INT NOT NULL, id INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
         """{ "pk": 1, "id": 1, "dep": "hr" }
           |{ "pk": 2, "id": 2, "dep": "hardware" }
           |{ "pk": 3, "id": null, "dep": "hr" }
@@ -243,7 +244,8 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
       val deletedDepDF = Seq("software", "hr").toDF()
       deletedDepDF.createOrReplaceTempView("deleted_dep")
 
-      sql(s"""DELETE FROM $tableNameAsString
+      sql(
+        s"""DELETE FROM $tableNameAsString
            |WHERE
            | id IN (SELECT * FROM deleted_id)
            | AND
@@ -254,8 +256,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
 
-      append(
-        "pk INT NOT NULL, id INT, dep STRING",
+      append("pk INT NOT NULL, id INT, dep STRING",
         """{ "pk": 4, "id": 1, "dep": "hr" }
           |{ "pk": 5, "id": -1, "dep": "hr" }
           |""".stripMargin)
@@ -264,7 +265,8 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(5, -1, "hr") :: Row(4, 1, "hr") :: Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
 
-      sql(s"""DELETE FROM $tableNameAsString
+      sql(
+        s"""DELETE FROM $tableNameAsString
            |WHERE
            | id IS NULL
            | OR
@@ -275,8 +277,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(5, -1, "hr") :: Row(4, 1, "hr") :: Nil)
 
-      append(
-        "pk INT NOT NULL, id INT, dep STRING",
+      append("pk INT NOT NULL, id INT, dep STRING",
         """{ "pk": 6, "id": null, "dep": "hr" }
           |{ "pk": 7, "id": 2, "dep": "hr" }
           |""".stripMargin)
@@ -285,7 +286,8 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(5, -1, "hr") :: Row(4, 1, "hr") :: Row(7, 2, "hr") :: Row(6, null, "hr") :: Nil)
 
-      sql(s"""DELETE FROM $tableNameAsString
+      sql(
+        s"""DELETE FROM $tableNameAsString
            |WHERE
            | id IN (SELECT value + 2 FROM deleted_id)
            | AND
@@ -300,8 +302,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
 
   test("delete with multi-column IN subqueries") {
     withTempView("deleted_employee") {
-      createAndInitTable(
-        "pk INT NOT NULL, id INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
         """{ "pk": 1, "id": 1, "dep": "hr" }
           |{ "pk": 2, "id": 2, "dep": "hardware" }
           |{ "pk": 3, "id": null, "dep": "hr" }
@@ -310,7 +311,8 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
       val deletedEmployeeDF = Seq((None, "hr"), (Some(1), "hr")).toDF()
       deletedEmployeeDF.createOrReplaceTempView("deleted_employee")
 
-      sql(s"""DELETE FROM $tableNameAsString
+      sql(
+        s"""DELETE FROM $tableNameAsString
            |WHERE
            | (id, dep) IN (SELECT * FROM deleted_employee)
            |""".stripMargin)
@@ -323,8 +325,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
 
   test("delete with NOT IN subqueries") {
     withTempView("deleted_id", "deleted_dep") {
-      createAndInitTable(
-        "pk INT NOT NULL, id INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
         """{ "pk": 1, "id": 1, "dep": "hr" }
           |{ "pk": 2, "id": 2, "dep": "hardware" }
           |{ "pk": 3, "id": null, "dep": "hr" }
@@ -336,7 +337,8 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
       val deletedDepDF = Seq("software", "hr").toDF()
       deletedDepDF.createOrReplaceTempView("deleted_dep")
 
-      sql(s"""DELETE FROM $tableNameAsString
+      sql(
+        s"""DELETE FROM $tableNameAsString
            |WHERE
            | id NOT IN (SELECT * FROM deleted_id)
            |""".stripMargin)
@@ -345,15 +347,15 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "hr") :: Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
 
-      sql(s"""DELETE FROM $tableNameAsString
+      sql(
+        s"""DELETE FROM $tableNameAsString
            |WHERE
            | id NOT IN (SELECT * FROM deleted_id WHERE value IS NOT NULL)
            |""".stripMargin)
 
       checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(3, null, "hr") :: Nil)
 
-      append(
-        "pk INT NOT NULL, id INT, dep STRING",
+      append("pk INT NOT NULL, id INT, dep STRING",
         """{ "pk": 4, "id": 1, "dep": "hr" }
           |{ "pk": 5, "id": 2, "dep": "hardware" }
           |{ "pk": 6, "id": null, "dep": "hr" }
@@ -361,12 +363,10 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
-        Row(4, 1, "hr") :: Row(5, 2, "hardware") :: Row(3, null, "hr") :: Row(
-          6,
-          null,
-          "hr") :: Nil)
+        Row(4, 1, "hr") :: Row(5, 2, "hardware") :: Row(3, null, "hr") :: Row(6, null, "hr") :: Nil)
 
-      sql(s"""DELETE FROM $tableNameAsString
+      sql(
+        s"""DELETE FROM $tableNameAsString
            |WHERE
            | id NOT IN (SELECT * FROM deleted_id)
            | OR
@@ -375,7 +375,8 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
 
       checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(5, 2, "hardware") :: Nil)
 
-      sql(s"""DELETE FROM $tableNameAsString
+      sql(
+        s"""DELETE FROM $tableNameAsString
            |WHERE
            | id NOT IN (SELECT * FROM deleted_id WHERE value IS NOT NULL)
            | AND
@@ -384,7 +385,8 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
 
       checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(5, 2, "hardware") :: Nil)
 
-      sql(s"""DELETE FROM $tableNameAsString t
+      sql(
+        s"""DELETE FROM $tableNameAsString t
            |WHERE
            | t.id NOT IN (SELECT * FROM deleted_id WHERE value IS NOT NULL)
            | OR
@@ -397,8 +399,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
 
   test("delete with EXISTS subquery") {
     withTempView("deleted_id", "deleted_dep") {
-      createAndInitTable(
-        "pk INT NOT NULL, id INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
         """{ "pk": 1, "id": 1, "dep": "hr" }
           |{ "pk": 2, "id": 2, "dep": "hardware" }
           |{ "pk": 3, "id": null, "dep": "hr" }
@@ -410,7 +411,8 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
       val deletedDepDF = Seq("software", "hr").toDF()
       deletedDepDF.createOrReplaceTempView("deleted_dep")
 
-      sql(s"""DELETE FROM $tableNameAsString t
+      sql(
+        s"""DELETE FROM $tableNameAsString t
            |WHERE
            | EXISTS (SELECT 1 FROM deleted_id d WHERE t.id = d.value)
            |""".stripMargin)
@@ -419,7 +421,8 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "hr") :: Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
 
-      sql(s"""DELETE FROM $tableNameAsString t
+      sql(
+        s"""DELETE FROM $tableNameAsString t
            |WHERE
            | EXISTS (SELECT 1 FROM deleted_id d WHERE t.id = d.value + 2)
            |""".stripMargin)
@@ -428,28 +431,33 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
 
-      sql(s"""DELETE FROM $tableNameAsString t
+      sql(
+        s"""DELETE FROM $tableNameAsString t
            |WHERE
            | EXISTS (SELECT 1 FROM deleted_id d WHERE t.id = d.value) OR t.id IS NULL
            |""".stripMargin)
 
-      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(2, 2, "hardware") :: Nil)
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(2, 2, "hardware") :: Nil)
 
-      sql(s"""DELETE FROM $tableNameAsString t
+      sql(
+        s"""DELETE FROM $tableNameAsString t
            |WHERE
            | EXISTS (SELECT 1 FROM deleted_id di WHERE t.id = di.value)
            | AND
            | EXISTS (SELECT 1 FROM deleted_dep dd WHERE t.dep = dd.value)
            |""".stripMargin)
 
-      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(2, 2, "hardware") :: Nil)
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(2, 2, "hardware") :: Nil)
     }
   }
 
   test("delete with NOT EXISTS subquery") {
     withTempView("deleted_id", "deleted_dep") {
-      createAndInitTable(
-        "pk INT NOT NULL, id INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
         """{ "pk": 1, "id": 1, "dep": "hr" }
           |{ "pk": 2, "id": 2, "dep": "hardware" }
           |{ "pk": 3, "id": null, "dep": "hr" }
@@ -461,7 +469,8 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
       val deletedDepDF = Seq("software", "hr").toDF()
       deletedDepDF.createOrReplaceTempView("deleted_dep")
 
-      sql(s"""DELETE FROM $tableNameAsString t
+      sql(
+        s"""DELETE FROM $tableNameAsString t
            |WHERE
            | NOT EXISTS (SELECT 1 FROM deleted_id di WHERE t.id = di.value + 2)
            | AND
@@ -472,14 +481,16 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "hr") :: Row(3, null, "hr") :: Nil)
 
-      sql(s"""DELETE FROM $tableNameAsString t
+      sql(
+        s"""DELETE FROM $tableNameAsString t
            |WHERE
            | NOT EXISTS (SELECT 1 FROM deleted_id d WHERE t.id = d.value + 2)
            |""".stripMargin)
 
       checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, 1, "hr") :: Nil)
 
-      sql(s"""DELETE FROM $tableNameAsString t
+      sql(
+        s"""DELETE FROM $tableNameAsString t
            |WHERE
            | NOT EXISTS (SELECT 1 FROM deleted_id d WHERE t.id = d.value + 2)
            | OR
@@ -492,8 +503,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
 
   test("delete with a scalar subquery") {
     withTempView("deleted_id") {
-      createAndInitTable(
-        "pk INT NOT NULL, id INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
         """{ "pk": 1, "id": 1, "dep": "hr" }
           |{ "pk": 2, "id": 2, "dep": "hardware" }
           |{ "pk": 3, "id": null, "dep": "hr" }
@@ -502,7 +512,8 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
       val deletedIdDF = Seq(Some(1), Some(100), None).toDF()
       deletedIdDF.createOrReplaceTempView("deleted_id")
 
-      sql(s"""DELETE FROM $tableNameAsString t
+      sql(
+        s"""DELETE FROM $tableNameAsString t
            |WHERE
            | id <= (SELECT min(value) FROM deleted_id)
            |""".stripMargin)
@@ -516,8 +527,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
   test("delete refreshes relation cache") {
     withTempView("temp") {
       withCache("temp") {
-        createAndInitTable(
-          "pk INT NOT NULL, id INT, dep STRING",
+        createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
           """{ "pk": 1, "id": 1, "dep": "hr" }
             |{ "pk": 2, "id": 1, "dep": "hardware" }
             |{ "pk": 3, "id": 2, "dep": "hardware" }
@@ -532,7 +542,9 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
         sql("CACHE TABLE temp")
 
         // verify the view returns expected results
-        checkAnswer(sql("SELECT * FROM temp"), Row(1, 1, "hr") :: Row(2, 1, "hardware") :: Nil)
+        checkAnswer(
+          sql("SELECT * FROM temp"),
+          Row(1, 1, "hr") :: Row(2, 1, "hardware") :: Nil)
 
         // delete some records from the table
         sql(s"DELETE FROM $tableNameAsString WHERE id <= 1")
@@ -549,8 +561,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
   }
 
   test("delete without condition executed as delete with filters") {
-    createAndInitTable(
-      "pk INT NOT NULL, id INT, dep INT",
+    createAndInitTable("pk INT NOT NULL, id INT, dep INT",
       """{ "pk": 1, "id": 1, "dep": 100 }
         |{ "pk": 2, "id": 2, "dep": 200 }
         |{ "pk": 3, "id": 3, "dep": 100 }
@@ -562,8 +573,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
   }
 
   test("delete with supported predicates gets converted into delete with filters") {
-    createAndInitTable(
-      "pk INT NOT NULL, id INT, dep INT",
+    createAndInitTable("pk INT NOT NULL, id INT, dep INT",
       """{ "pk": 1, "id": 1, "dep": 100 }
         |{ "pk": 2, "id": 2, "dep": 200 }
         |{ "pk": 3, "id": 3, "dep": 100 }
@@ -571,12 +581,13 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
 
     executeDeleteWithFilters(s"DELETE FROM $tableNameAsString WHERE dep = 100")
 
-    checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(2, 2, 200) :: Nil)
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(2, 2, 200) :: Nil)
   }
 
   test("delete with unsupported predicates cannot be converted into delete with filters") {
-    createAndInitTable(
-      "pk INT NOT NULL, id INT, dep INT",
+    createAndInitTable("pk INT NOT NULL, id INT, dep INT",
       """{ "pk": 1, "id": 1, "dep": 100 }
         |{ "pk": 2, "id": 2, "dep": 200 }
         |{ "pk": 3, "id": 3, "dep": 100 }
@@ -584,13 +595,14 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
 
     executeDeleteWithRewrite(s"DELETE FROM $tableNameAsString WHERE dep = 100 OR dep < 200")
 
-    checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(2, 2, 200) :: Nil)
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(2, 2, 200) :: Nil)
   }
 
   test("delete with subquery cannot be converted into delete with filters") {
     withTempView("deleted_id") {
-      createAndInitTable(
-        "pk INT NOT NULL, id INT, dep INT",
+      createAndInitTable("pk INT NOT NULL, id INT, dep INT",
         """{ "pk": 1, "id": 1, "dep": 100 }
           |{ "pk": 2, "id": 2, "dep": 200 }
           |{ "pk": 3, "id": 3, "dep": 100 }
@@ -599,8 +611,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
       val deletedIdDF = Seq(Some(1), Some(100), None).toDF()
       deletedIdDF.createOrReplaceTempView("deleted_id")
 
-      val q =
-        s"DELETE FROM $tableNameAsString WHERE dep = 100 AND id IN (SELECT * FROM deleted_id)"
+      val q = s"DELETE FROM $tableNameAsString WHERE dep = 100 AND id IN (SELECT * FROM deleted_id)"
       executeDeleteWithRewrite(q)
 
       checkAnswer(
@@ -609,30 +620,42 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     }
   }
 
+
   test("delete from table with recursive CTE") {
     withTempView("source") {
-      sql(s"""CREATE TABLE $tableNameAsString (
+      sql(
+        s"""CREATE TABLE $tableNameAsString (
            | val INT)
            |""".stripMargin)
 
-      append(
-        "val INT",
+      append("val INT",
         """{ "val": 1 }
           |{ "val": 9 }
           |{ "val": 8 }
           |{ "val": 4 }
           |""".stripMargin)
 
-      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Seq(Row(1), Row(9), Row(8), Row(4)))
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1),
+          Row(9),
+          Row(8),
+          Row(4)))
 
-      sql(s"""WITH RECURSIVE s(val) AS (
+      sql(
+        s"""WITH RECURSIVE s(val) AS (
            |  SELECT 1
            |  UNION ALL
            |  SELECT val + 1 FROM s WHERE val < 5
            |) DELETE FROM $tableNameAsString WHERE val IN (SELECT val FROM s)
            |""".stripMargin)
 
-      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Seq(Row(9), Row(8)))
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(9),
+          Row(8)))
     }
   }
 
@@ -643,7 +666,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
 
     executedPlan match {
       case _: DeleteFromTableExec =>
-      // OK
+        // OK
       case other =>
         fail("unexpected executed plan: " + other)
     }
@@ -656,9 +679,9 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
 
     executedPlan match {
       case _: ReplaceDataExec =>
-      // OK
+        // OK
       case _: WriteDeltaExec =>
-      // OK
+        // OK
       case other =>
         fail("unexpected executed plan: " + other)
     }

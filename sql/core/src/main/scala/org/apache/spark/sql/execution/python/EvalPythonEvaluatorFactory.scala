@@ -33,7 +33,7 @@ abstract class EvalPythonEvaluatorFactory(
     childOutput: Seq[Attribute],
     udfs: Seq[PythonUDF],
     output: Seq[Attribute])
-    extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
+  extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
 
   protected def evaluate(
       funcs: Seq[(ChainedPythonFunctions, Long)],

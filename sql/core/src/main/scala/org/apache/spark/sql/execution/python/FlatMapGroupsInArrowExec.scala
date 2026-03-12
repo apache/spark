@@ -22,35 +22,35 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.types.{StructField, StructType}
 
+
 /**
  * Physical node for [[org.apache.spark.sql.catalyst.plans.logical.FlatMapGroupsInArrow]]
  *
- * Rows in each group are passed to the Python worker as an iterator of Arrow record batches. The
- * Python worker passes the record batches either as a materialized `pyarrow.Table` or an iterator
- * of pyarrow.RecordBatch, depending on the eval type of the user-defined function. The Python
- * worker returns the resulting record batches which are turned into an Iterator[InternalRow]
- * using ColumnarBatch.
+ * Rows in each group are passed to the Python worker as an iterator of Arrow record batches.
+ * The Python worker passes the record batches either as a materialized `pyarrow.Table` or
+ * an iterator of pyarrow.RecordBatch, depending on the eval type of the user-defined function.
+ * The Python worker returns the resulting record batches which are turned into an
+ * Iterator[InternalRow] using ColumnarBatch.
  *
- * Note on memory usage: When using the `pyarrow.Table` API, the entire group is materialized in
- * memory in the Python worker, and the entire result for a group must also be fully materialized.
- * The iterator of record batches API can be used to avoid this limitation on the Python side.
+ * Note on memory usage:
+ * When using the `pyarrow.Table` API, the entire group is materialized in memory in the Python
+ * worker, and the entire result for a group must also be fully materialized. The iterator of
+ * record batches API can be used to avoid this limitation on the Python side.
  */
 case class FlatMapGroupsInArrowExec(
     groupingAttributes: Seq[Attribute],
     func: Expression,
     output: Seq[Attribute],
     child: SparkPlan)
-    extends FlatMapGroupsInBatchExec {
+  extends FlatMapGroupsInBatchExec {
 
   protected val pythonEvalType: Int = {
     func.asInstanceOf[PythonUDF].evalType
   }
 
-  override protected def groupedData(
-      iter: Iterator[InternalRow],
-      attrs: Seq[Attribute]): Iterator[Iterator[InternalRow]] =
-    super
-      .groupedData(iter, attrs)
+  override protected def groupedData(iter: Iterator[InternalRow], attrs: Seq[Attribute]):
+      Iterator[Iterator[InternalRow]] =
+    super.groupedData(iter, attrs)
       // Here we wrap it via another row so that Python sides understand it as a DataFrame.
       .map(_.map(InternalRow(_)))
 

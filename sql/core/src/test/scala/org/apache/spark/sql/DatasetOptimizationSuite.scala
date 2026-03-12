@@ -40,6 +40,7 @@ class DatasetOptimizationSuite extends QueryTest with SharedSparkSession {
     checkAnswer(ds, Seq(Row("a"), Row("b"), Row("c")))
   }
 
+
   // This methods checks if the given DataFrame has specified struct fields in object
   // serializer. The varargs parameter `structFields` is the struct fields for object
   // serializers. The first `structFields` is aligned with first serializer and ditto
@@ -65,8 +66,8 @@ class DatasetOptimizationSuite extends QueryTest with SharedSparkSession {
 
   test("Prune nested serializers: struct") {
     withSQLConf(SQLConf.SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
-      val data =
-        Seq((("a", 1, ("aa", 1.0)), 1), (("b", 2, ("bb", 2.0)), 2), (("c", 3, ("cc", 3.0)), 3))
+      val data = Seq((("a", 1, ("aa", 1.0)), 1), (("b", 2, ("bb", 2.0)), 2),
+        (("c", 3, ("cc", 3.0)), 3))
       val ds = data.toDS().map(t => (t._1, t._2 + 1))
 
       val df1 = ds.select("_1._1")
@@ -89,8 +90,7 @@ class DatasetOptimizationSuite extends QueryTest with SharedSparkSession {
 
   test("Prune nested serializers: array of struct") {
     withSQLConf(SQLConf.SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
-      val arrayData = Seq(
-        (Seq(("a", 1, ("a_1", 11)), ("b", 2, ("b_1", 22))), 1, ("aa", 1.0)),
+      val arrayData = Seq((Seq(("a", 1, ("a_1", 11)), ("b", 2, ("b_1", 22))), 1, ("aa", 1.0)),
         (Seq(("c", 3, ("c_1", 33)), ("d", 4, ("d_1", 44))), 2, ("bb", 2.0)))
       val arrayDs = arrayData.toDS().map(t => (t._1, t._2 + 1, t._3))
       val df1 = arrayDs.select("_1._1")
@@ -108,17 +108,14 @@ class DatasetOptimizationSuite extends QueryTest with SharedSparkSession {
       // The second serializer creates a struct of just one field "_1".
       val df3 = arrayDs.select("_1._1", "_1._3._2", "_3._1")
       testSerializer(df3, Seq(Seq("_1", "_3"), Seq("_2")), Seq(Seq("_1")))
-      checkAnswer(
-        df3,
-        Seq(Row(Seq("a", "b"), Seq(11, 22), "aa"), Row(Seq("c", "d"), Seq(33, 44), "bb")))
+      checkAnswer(df3, Seq(Row(Seq("a", "b"), Seq(11, 22), "aa"),
+        Row(Seq("c", "d"), Seq(33, 44), "bb")))
     }
   }
 
   test("Prune nested serializers: map of struct") {
     withSQLConf(SQLConf.SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
-      val mapData = Seq(
-        (Map(("k", ("a_1", 11))), 1),
-        (Map(("k", ("b_1", 22))), 2),
+      val mapData = Seq((Map(("k", ("a_1", 11))), 1), (Map(("k", ("b_1", 22))), 2),
         (Map(("k", ("c_1", 33))), 3))
       val mapDs = mapData.toDS().map(t => (t._1, t._2 + 1))
       val df1 = mapDs.select("_1.k._1")
@@ -137,8 +134,8 @@ class DatasetOptimizationSuite extends QueryTest with SharedSparkSession {
 
   test("Pruned nested serializers: map of complex key") {
     withSQLConf(SQLConf.SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
-      val mapData =
-        Seq((Map((("1", 1), "a_1")), 1), (Map((("2", 2), "b_1")), 2), (Map((("3", 3), "c_1")), 3))
+      val mapData = Seq((Map((("1", 1), "a_1")), 1), (Map((("2", 2), "b_1")), 2),
+        (Map((("3", 3), "c_1")), 3))
       val mapDs = mapData.toDS().map(t => (t._1, t._2 + 1))
       val df1 = mapDs.select(expr("map_keys(_1)._1[0]"))
       testSerializer(df1, Seq(Seq("_1")))

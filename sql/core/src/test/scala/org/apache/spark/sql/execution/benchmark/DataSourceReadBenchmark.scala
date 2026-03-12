@@ -34,8 +34,10 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnVector
 
+
 /**
- * Benchmark to measure data source read performance. To run this benchmark:
+ * Benchmark to measure data source read performance.
+ * To run this benchmark:
  * {{{
  *   1. without sbt: bin/spark-submit --class <this class>
  *        --jars <spark core test jar>,<spark catalyst test jar> <spark sql test jar>
@@ -65,8 +67,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
   }
 
   def withTempTable(tableNames: String*)(f: => Unit): Unit = {
-    try f
-    finally tableNames.foreach(spark.catalog.dropTempView)
+    try f finally tableNames.foreach(spark.catalog.dropTempView)
   }
 
   private def prepareTable(
@@ -110,9 +111,8 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
   }
 
   private def saveAsParquetV2Table(df: DataFrameWriter[Row], dir: String): Unit = {
-    withSQLConf(
-      ParquetOutputFormat.WRITER_VERSION ->
-        ParquetProperties.WriterVersion.PARQUET_2_0.toString) {
+    withSQLConf(ParquetOutputFormat.WRITER_VERSION ->
+      ParquetProperties.WriterVersion.PARQUET_2_0.toString) {
       df.mode("overwrite")
         .option("compression", ParquetCompressionCodec.SNAPPY.lowerCaseName())
         .parquet(dir)
@@ -136,25 +136,21 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
 
   def numericScanBenchmark(values: Int, dataType: DataType): Unit = {
     // Benchmarks running through spark sql.
-    val sqlBenchmark =
-      new Benchmark(s"SQL Single ${dataType.sql} Column Scan", values, output = output)
+    val sqlBenchmark = new Benchmark(
+      s"SQL Single ${dataType.sql} Column Scan",
+      values,
+      output = output)
 
     // Benchmarks driving reader component directly.
-    val parquetReaderBenchmark =
-      new Benchmark(s"Parquet Reader Single ${dataType.sql} Column Scan", values, output = output)
+    val parquetReaderBenchmark = new Benchmark(
+      s"Parquet Reader Single ${dataType.sql} Column Scan",
+      values,
+      output = output)
 
     withTempPath { dir =>
-      withTempTable(
-        "t1",
-        "csvTable",
-        "jsonTable",
-        "parquetV1Table",
-        "parquetV2Table",
-        "orcTable") {
+      withTempTable("t1", "csvTable", "jsonTable", "parquetV1Table", "parquetV2Table", "orcTable") {
         import spark.implicits._
-        spark
-          .range(values)
-          .map(_ => Random.nextLong())
+        spark.range(values).map(_ => Random.nextLong())
           .selectExpr(getExpr(dataType) + " as id")
           .createOrReplaceTempView("t1")
 
@@ -232,8 +228,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
 
             files.foreach { p =>
               val reader = new VectorizedParquetRecordReader(
-                enableOffHeapColumnVector,
-                vectorizedReaderBatchSize)
+                enableOffHeapColumnVector, vectorizedReaderBatchSize)
               try {
                 reader.initialize(p, ("id" :: Nil).asJava)
                 val batch = reader.resultBatch()
@@ -273,8 +268,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
 
               files.foreach { p =>
                 val reader = new VectorizedParquetRecordReader(
-                  enableOffHeapColumnVector,
-                  vectorizedReaderBatchSize)
+                  enableOffHeapColumnVector, vectorizedReaderBatchSize)
                 try {
                   reader.initialize(p, ("id" :: Nil).asJava)
                   val batch = reader.resultBatch()
@@ -301,16 +295,17 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
    * Similar to [[numericScanBenchmark]] but accessed column is a struct field.
    */
   def nestedNumericScanBenchmark(values: Int, dataType: DataType): Unit = {
-    val sqlBenchmark =
-      new Benchmark(s"SQL Single ${dataType.sql} Column Scan in Struct", values, output = output)
+    val sqlBenchmark = new Benchmark(
+      s"SQL Single ${dataType.sql} Column Scan in Struct",
+      values,
+      output = output)
 
     withTempPath { dir =>
       withTempTable("t1", "parquetV1Table", "parquetV2Table", "orcTable") {
         import spark.implicits._
         spark.range(values).map(_ => Random.nextLong()).createOrReplaceTempView("t1")
 
-        prepareTable(
-          dir,
+        prepareTable(dir,
           spark.sql(s"SELECT named_struct('f', ${getExpr(dataType)}) as col FROM t1"),
           onlyParquetOrc = true)
 
@@ -339,16 +334,14 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
             }
           }
 
-          sqlBenchmark.addCase(
-            s"SQL Parquet Vectorized: DataPage$version " +
+          sqlBenchmark.addCase(s"SQL Parquet Vectorized: DataPage$version " +
               "(Nested Column Disabled)") { _ =>
             withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "false") {
               spark.sql(s"select sum(col.f) from parquet${version}Table").noop()
             }
           }
 
-          sqlBenchmark.addCase(
-            s"SQL Parquet Vectorized: DataPage$version " +
+          sqlBenchmark.addCase(s"SQL Parquet Vectorized: DataPage$version " +
               "(Nested Column Enabled)") { _ =>
             withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
               spark.sql(s"select sum(col.f) from parquet${version}Table").noop()
@@ -362,25 +355,20 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
   }
 
   def nestedColumnScanBenchmark(values: Int): Unit = {
-    val benchmark =
-      new Benchmark(s"SQL Nested Column Scan", values, minNumIters = 10, output = output)
+    val benchmark = new Benchmark(s"SQL Nested Column Scan", values, minNumIters = 10,
+      output = output)
 
     withTempPath { dir =>
       withTempTable("t1", "parquetV1Table", "parquetV2Table", "orcTable") {
         import spark.implicits._
-        spark
-          .range(values)
-          .map(_ => Random.nextLong())
-          .map { x =>
-            val arrayOfStructColumn = (0 until 5).map(i => (x + i, s"$x".repeat(5)))
-            val mapOfStructColumn = Map(
-              s"$x" -> (x * 0.1, (x, s"$x".repeat(100))),
-              (s"$x".repeat(2)) -> (x * 0.2, (x, s"$x".repeat(200))),
-              (s"$x".repeat(3)) -> (x * 0.3, (x, s"$x".repeat(300))))
-            (arrayOfStructColumn, mapOfStructColumn)
-          }
-          .toDF("col1", "col2")
-          .createOrReplaceTempView("t1")
+        spark.range(values).map(_ => Random.nextLong()).map { x =>
+          val arrayOfStructColumn = (0 until 5).map(i => (x + i, s"$x".repeat(5)))
+          val mapOfStructColumn = Map(
+            s"$x" -> (x * 0.1, (x, s"$x".repeat(100))),
+            (s"$x".repeat(2)) -> (x * 0.2, (x, s"$x".repeat(200))),
+            (s"$x".repeat(3)) -> (x * 0.3, (x, s"$x".repeat(300))))
+          (arrayOfStructColumn, mapOfStructColumn)
+        }.toDF("col1", "col2").createOrReplaceTempView("t1")
 
         prepareTable(dir, spark.sql(s"SELECT * FROM t1"), onlyParquetOrc = true)
 
@@ -402,32 +390,28 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
           }
         }
 
+
         withParquetVersions { version =>
           benchmark.addCase(s"SQL Parquet MR: DataPage$version") { _ =>
             withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-              spark
-                .sql(s"SELECT SUM(SIZE(col1)), SUM(SIZE(col2)) FROM parquet${version}Table")
+              spark.sql(s"SELECT SUM(SIZE(col1)), SUM(SIZE(col2)) FROM parquet${version}Table")
                 .noop()
             }
           }
 
-          benchmark.addCase(
-            s"SQL Parquet Vectorized: DataPage$version " +
+          benchmark.addCase(s"SQL Parquet Vectorized: DataPage$version " +
               s"(Nested Column Disabled)") { _ =>
             withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "false") {
-              spark
-                .sql(s"SELECT SUM(SIZE(col1)), SUM(SIZE(col2)) FROM parquet${version}Table")
+              spark.sql(s"SELECT SUM(SIZE(col1)), SUM(SIZE(col2)) FROM parquet${version}Table")
                 .noop()
             }
           }
 
-          benchmark.addCase(
-            s"SQL Parquet Vectorized: DataPage$version " +
+          benchmark.addCase(s"SQL Parquet Vectorized: DataPage$version " +
               s"(Nested Column Enabled)") { _ =>
             withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
-              spark
-                .sql(s"SELECT SUM(SIZE(col1)), SUM(SIZE(col2)) FROM parquet${version}Table")
-                .noop()
+              spark.sql(s"SELECT SUM(SIZE(col1)), SUM(SIZE(col2)) FROM parquet${version}Table")
+                  .noop()
             }
           }
         }
@@ -441,13 +425,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
     val benchmark = new Benchmark("Int and String Scan", values, output = output)
 
     withTempPath { dir =>
-      withTempTable(
-        "t1",
-        "csvTable",
-        "jsonTable",
-        "parquetV1Table",
-        "parquetV2Table",
-        "orcTable") {
+      withTempTable("t1", "csvTable", "jsonTable", "parquetV1Table", "parquetV2Table", "orcTable") {
         import spark.implicits._
         spark.range(values).map(_ => Random.nextLong()).createOrReplaceTempView("t1")
 
@@ -496,17 +474,13 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
     val benchmark = new Benchmark("Repeated String", values, output = output)
 
     withTempPath { dir =>
-      withTempTable(
-        "t1",
-        "csvTable",
-        "jsonTable",
-        "parquetV1Table",
-        "parquetV2Table",
-        "orcTable") {
+      withTempTable("t1", "csvTable", "jsonTable", "parquetV1Table", "parquetV2Table", "orcTable") {
         import spark.implicits._
         spark.range(values).map(_ => Random.nextLong()).createOrReplaceTempView("t1")
 
-        prepareTable(dir, spark.sql("select cast((value % 200) + 10000 as STRING) as c1 from t1"))
+        prepareTable(
+          dir,
+          spark.sql("select cast((value % 200) + 10000 as STRING) as c1 from t1"))
 
         benchmark.addCase("SQL CSV") { _ =>
           spark.sql("select sum(length(c1)) from csvTable").noop()
@@ -549,17 +523,12 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
     val benchmark = new Benchmark("Partitioned Table", values, output = output)
 
     withTempPath { dir =>
-      withTempTable(
-        "t1",
-        "csvTable",
-        "jsonTable",
-        "parquetV1Table",
-        "parquetV2Table",
-        "orcTable") {
+      withTempTable("t1", "csvTable", "jsonTable", "parquetV1Table", "parquetV2Table", "orcTable") {
         import spark.implicits._
         spark.range(values).map(_ => Random.nextLong()).createOrReplaceTempView("t1")
 
-        prepareTable(dir, spark.sql(s"SELECT value % 2 AS p, ${getExpr()} id FROM t1"), Some("p"))
+        prepareTable(dir,
+          spark.sql(s"SELECT value % 2 AS p, ${getExpr()} id FROM t1"), Some("p"))
 
         benchmark.addCase("Data column - CSV") { _ =>
           spark.sql("select sum(id) from csvTable").noop()
@@ -668,51 +637,37 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
       new Benchmark(s"String with Nulls Scan ($percentageOfNulls%)", values, output = output)
 
     withTempPath { dir =>
-      withTempTable(
-        "t1",
-        "csvTable",
-        "jsonTable",
-        "parquetV1Table",
-        "parquetV2Table",
-        "orcTable") {
+      withTempTable("t1", "csvTable", "jsonTable", "parquetV1Table", "parquetV2Table", "orcTable") {
         spark.range(values).createOrReplaceTempView("t1")
 
         prepareTable(
           dir,
           spark.sql(
             s"SELECT IF(RAND(1) < $fractionOfNulls, NULL, CAST(id as STRING)) AS c1, " +
-              s"IF(RAND(2) < $fractionOfNulls, NULL, CAST(id as STRING)) AS c2 FROM t1"))
+            s"IF(RAND(2) < $fractionOfNulls, NULL, CAST(id as STRING)) AS c2 FROM t1"))
 
         benchmark.addCase("SQL CSV") { _ =>
-          spark
-            .sql("select sum(length(c2)) from csvTable where c1 is " +
-              "not NULL and c2 is not NULL")
-            .noop()
+          spark.sql("select sum(length(c2)) from csvTable where c1 is " +
+            "not NULL and c2 is not NULL").noop()
         }
 
         benchmark.addCase("SQL Json") { _ =>
-          spark
-            .sql("select sum(length(c2)) from jsonTable where c1 is " +
-              "not NULL and c2 is not NULL")
-            .noop()
+          spark.sql("select sum(length(c2)) from jsonTable where c1 is " +
+            "not NULL and c2 is not NULL").noop()
         }
 
         withParquetVersions { version =>
           benchmark.addCase(s"SQL Parquet Vectorized: DataPage$version") { _ =>
-            spark
-              .sql(s"select sum(length(c2)) from parquet${version}Table where c1 is " +
-                "not NULL and c2 is not NULL")
-              .noop()
+            spark.sql(s"select sum(length(c2)) from parquet${version}Table where c1 is " +
+              "not NULL and c2 is not NULL").noop()
           }
         }
 
         withParquetVersions { version =>
           benchmark.addCase(s"SQL Parquet MR: DataPage$version") { _ =>
             withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-              spark
-                .sql(s"select sum(length(c2)) from parquet${version}Table where c1 is " +
-                  "not NULL and c2 is not NULL")
-                .noop()
+              spark.sql(s"select sum(length(c2)) from parquet${version}Table where c1 is " +
+                "not NULL and c2 is not NULL").noop()
             }
           }
         }
@@ -725,8 +680,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
             var sum = 0
             files.foreach { p =>
               val reader = new VectorizedParquetRecordReader(
-                enableOffHeapColumnVector,
-                vectorizedReaderBatchSize)
+                enableOffHeapColumnVector, vectorizedReaderBatchSize)
               try {
                 reader.initialize(p, ("c1" :: "c2" :: Nil).asJava)
                 val batch = reader.resultBatch()
@@ -746,18 +700,14 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
         }
 
         benchmark.addCase("SQL ORC Vectorized") { _ =>
-          spark
-            .sql("SELECT SUM(LENGTH(c2)) FROM orcTable " +
-              "WHERE c1 IS NOT NULL AND c2 IS NOT NULL")
-            .noop()
+          spark.sql("SELECT SUM(LENGTH(c2)) FROM orcTable " +
+            "WHERE c1 IS NOT NULL AND c2 IS NOT NULL").noop()
         }
 
         benchmark.addCase("SQL ORC MR") { _ =>
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
-            spark
-              .sql("SELECT SUM(LENGTH(c2)) FROM orcTable " +
-                "WHERE c1 IS NOT NULL AND c2 IS NOT NULL")
-              .noop()
+            spark.sql("SELECT SUM(LENGTH(c2)) FROM orcTable " +
+              "WHERE c1 IS NOT NULL AND c2 IS NOT NULL").noop()
           }
         }
 
@@ -767,26 +717,18 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
   }
 
   def columnsBenchmark(values: Int, width: Int): Unit = {
-    val benchmark =
-      new Benchmark(s"Single Column Scan from $width columns", values, output = output)
+    val benchmark = new Benchmark(
+      s"Single Column Scan from $width columns",
+      values,
+      output = output)
 
     withTempPath { dir =>
-      withTempTable(
-        "t1",
-        "csvTable",
-        "jsonTable",
-        "parquetV1Table",
-        "parquetV2Table",
-        "orcTable") {
+      withTempTable("t1", "csvTable", "jsonTable", "parquetV1Table", "parquetV2Table", "orcTable") {
         import spark.implicits._
         val middle = width / 2
         val selectExpr = (1 to width).map(i => s"${getExpr()} as c$i")
-        spark
-          .range(values)
-          .map(_ => Random.nextLong())
-          .toDF()
-          .selectExpr(selectExpr: _*)
-          .createOrReplaceTempView("t1")
+        spark.range(values).map(_ => Random.nextLong()).toDF()
+          .selectExpr(selectExpr: _*).createOrReplaceTempView("t1")
 
         prepareTable(dir, spark.sql("SELECT * FROM t1"))
 
@@ -829,14 +771,13 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("SQL Single Numeric Column Scan") {
-      Seq(BooleanType, ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType)
-        .foreach { dataType =>
-          numericScanBenchmark(1024 * 1024 * 15, dataType)
-        }
+      Seq(BooleanType, ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType).foreach {
+        dataType => numericScanBenchmark(1024 * 1024 * 15, dataType)
+      }
     }
     runBenchmark("SQL Single Numeric Column Scan in Struct") {
-      Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType).foreach { dataType =>
-        nestedNumericScanBenchmark(1024 * 1024 * 15, dataType)
+      Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType).foreach {
+        dataType => nestedNumericScanBenchmark(1024 * 1024 * 15, dataType)
       }
     }
     runBenchmark("SQL Nested Column Scan") {

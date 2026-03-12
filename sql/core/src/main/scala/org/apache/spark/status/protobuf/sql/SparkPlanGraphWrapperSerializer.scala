@@ -26,7 +26,7 @@ import org.apache.spark.status.protobuf.Utils.{getStringField, setStringField}
 import org.apache.spark.util.Utils.weakIntern
 
 private[protobuf] class SparkPlanGraphWrapperSerializer
-    extends ProtobufSerDe[SparkPlanGraphWrapper] {
+  extends ProtobufSerDe[SparkPlanGraphWrapper] {
 
   override def serialize(plan: SparkPlanGraphWrapper): Array[Byte] = {
     val builder = StoreTypes.SparkPlanGraphWrapper.newBuilder()
@@ -34,7 +34,7 @@ private[protobuf] class SparkPlanGraphWrapperSerializer
     plan.nodes.foreach { node =>
       builder.addNodes(serializeSparkPlanGraphNodeWrapper(node))
     }
-    plan.edges.foreach { edge =>
+    plan.edges.foreach {edge =>
       builder.addEdges(serializeSparkPlanGraphEdge(edge))
     }
     builder.build().toByteArray
@@ -45,11 +45,12 @@ private[protobuf] class SparkPlanGraphWrapperSerializer
     new SparkPlanGraphWrapper(
       executionId = wrapper.getExecutionId,
       nodes = wrapper.getNodesList.asScala.map(deserializeSparkPlanGraphNodeWrapper),
-      edges = wrapper.getEdgesList.asScala.map(deserializeSparkPlanGraphEdge))
+      edges = wrapper.getEdgesList.asScala.map(deserializeSparkPlanGraphEdge)
+    )
   }
 
-  private def serializeSparkPlanGraphNodeWrapper(
-      input: SparkPlanGraphNodeWrapper): StoreTypes.SparkPlanGraphNodeWrapper = {
+  private def serializeSparkPlanGraphNodeWrapper(input: SparkPlanGraphNodeWrapper):
+    StoreTypes.SparkPlanGraphNodeWrapper = {
 
     val builder = StoreTypes.SparkPlanGraphNodeWrapper.newBuilder()
     if (input.node != null) {
@@ -60,34 +61,38 @@ private[protobuf] class SparkPlanGraphWrapperSerializer
     builder.build()
   }
 
-  private def deserializeSparkPlanGraphNodeWrapper(
-      input: StoreTypes.SparkPlanGraphNodeWrapper): SparkPlanGraphNodeWrapper = {
+  private def deserializeSparkPlanGraphNodeWrapper(input: StoreTypes.SparkPlanGraphNodeWrapper):
+    SparkPlanGraphNodeWrapper = {
     if (input.hasNode) {
       new SparkPlanGraphNodeWrapper(
         node = deserializeSparkPlanGraphNode(input.getNode),
-        cluster = null)
+        cluster = null
+      )
     } else {
       new SparkPlanGraphNodeWrapper(
         node = null,
-        cluster = deserializeSparkPlanGraphClusterWrapper(input.getCluster))
+        cluster = deserializeSparkPlanGraphClusterWrapper(input.getCluster)
+      )
     }
   }
 
-  private def serializeSparkPlanGraphEdge(
-      edge: SparkPlanGraphEdge): StoreTypes.SparkPlanGraphEdge = {
+  private def serializeSparkPlanGraphEdge(edge: SparkPlanGraphEdge):
+    StoreTypes.SparkPlanGraphEdge = {
     val builder = StoreTypes.SparkPlanGraphEdge.newBuilder()
     builder.setFromId(edge.fromId)
     builder.setToId(edge.toId)
     builder.build()
   }
 
-  private def deserializeSparkPlanGraphEdge(
-      edge: StoreTypes.SparkPlanGraphEdge): SparkPlanGraphEdge = {
-    SparkPlanGraphEdge(fromId = edge.getFromId, toId = edge.getToId)
+  private def deserializeSparkPlanGraphEdge(edge: StoreTypes.SparkPlanGraphEdge):
+    SparkPlanGraphEdge = {
+    SparkPlanGraphEdge(
+      fromId = edge.getFromId,
+      toId = edge.getToId)
   }
 
-  private def serializeSparkPlanGraphNode(
-      node: SparkPlanGraphNode): StoreTypes.SparkPlanGraphNode = {
+  private def serializeSparkPlanGraphNode(node: SparkPlanGraphNode):
+    StoreTypes.SparkPlanGraphNode = {
     val builder = StoreTypes.SparkPlanGraphNode.newBuilder()
     builder.setId(node.id)
     setStringField(node.name, builder.setName)
@@ -98,18 +103,19 @@ private[protobuf] class SparkPlanGraphWrapperSerializer
     builder.build()
   }
 
-  private def deserializeSparkPlanGraphNode(
-      node: StoreTypes.SparkPlanGraphNode): SparkPlanGraphNode = {
+  private def deserializeSparkPlanGraphNode(node: StoreTypes.SparkPlanGraphNode):
+    SparkPlanGraphNode = {
 
     new SparkPlanGraphNode(
       id = node.getId,
       name = getStringField(node.hasName, () => weakIntern(node.getName)),
       desc = getStringField(node.hasDesc, () => node.getDesc),
-      metrics = node.getMetricsList.asScala.map(SQLPlanMetricSerializer.deserialize))
+      metrics = node.getMetricsList.asScala.map(SQLPlanMetricSerializer.deserialize)
+    )
   }
 
-  private def serializeSparkPlanGraphClusterWrapper(
-      cluster: SparkPlanGraphClusterWrapper): StoreTypes.SparkPlanGraphClusterWrapper = {
+  private def serializeSparkPlanGraphClusterWrapper(cluster: SparkPlanGraphClusterWrapper):
+    StoreTypes.SparkPlanGraphClusterWrapper = {
     val builder = StoreTypes.SparkPlanGraphClusterWrapper.newBuilder()
     builder.setId(cluster.id)
     setStringField(cluster.name, builder.setName)
@@ -124,13 +130,14 @@ private[protobuf] class SparkPlanGraphWrapperSerializer
   }
 
   private def deserializeSparkPlanGraphClusterWrapper(
-      cluster: StoreTypes.SparkPlanGraphClusterWrapper): SparkPlanGraphClusterWrapper = {
+    cluster: StoreTypes.SparkPlanGraphClusterWrapper): SparkPlanGraphClusterWrapper = {
 
     new SparkPlanGraphClusterWrapper(
       id = cluster.getId,
       name = getStringField(cluster.hasName, () => weakIntern(cluster.getName)),
       desc = getStringField(cluster.hasDesc, () => cluster.getDesc),
       nodes = cluster.getNodesList.asScala.map(deserializeSparkPlanGraphNodeWrapper),
-      metrics = cluster.getMetricsList.asScala.map(SQLPlanMetricSerializer.deserialize))
+      metrics = cluster.getMetricsList.asScala.map(SQLPlanMetricSerializer.deserialize)
+    )
   }
 }

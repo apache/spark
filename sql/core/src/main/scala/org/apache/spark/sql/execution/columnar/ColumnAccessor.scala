@@ -32,8 +32,8 @@ import org.apache.spark.unsafe.types.{CalendarInterval, VariantVal}
 
 /**
  * An `Iterator` like trait used to extract values from columnar byte buffer. When a value is
- * extracted from the buffer, instead of directly returning it, the value is set into some field
- * of a [[InternalRow]]. In this way, boxing cost can be avoided by leveraging the setter methods
+ * extracted from the buffer, instead of directly returning it, the value is set into some field of
+ * a [[InternalRow]]. In this way, boxing cost can be avoided by leveraging the setter methods
  * for primitive values provided by [[InternalRow]].
  */
 private[columnar] trait ColumnAccessor {
@@ -51,7 +51,7 @@ private[columnar] trait ColumnAccessor {
 private[columnar] abstract class BasicColumnAccessor[JvmType](
     protected val buffer: ByteBuffer,
     protected val columnType: ColumnType[JvmType])
-    extends ColumnAccessor {
+  extends ColumnAccessor {
 
   protected def initialize(): Unit = {}
 
@@ -69,74 +69,72 @@ private[columnar] abstract class BasicColumnAccessor[JvmType](
 }
 
 private[columnar] class NullColumnAccessor(buffer: ByteBuffer)
-    extends BasicColumnAccessor[Any](buffer, NULL)
-    with NullableColumnAccessor
+  extends BasicColumnAccessor[Any](buffer, NULL)
+  with NullableColumnAccessor
 
 private[columnar] abstract class NativeColumnAccessor[T <: PhysicalDataType](
     override protected val buffer: ByteBuffer,
     override protected val columnType: NativeColumnType[T])
-    extends BasicColumnAccessor(buffer, columnType)
-    with NullableColumnAccessor
-    with CompressibleColumnAccessor[T]
+  extends BasicColumnAccessor(buffer, columnType)
+  with NullableColumnAccessor
+  with CompressibleColumnAccessor[T]
 
 private[columnar] class BooleanColumnAccessor(buffer: ByteBuffer)
-    extends NativeColumnAccessor(buffer, BOOLEAN)
+  extends NativeColumnAccessor(buffer, BOOLEAN)
 
 private[columnar] class ByteColumnAccessor(buffer: ByteBuffer)
-    extends NativeColumnAccessor(buffer, BYTE)
+  extends NativeColumnAccessor(buffer, BYTE)
 
 private[columnar] class ShortColumnAccessor(buffer: ByteBuffer)
-    extends NativeColumnAccessor(buffer, SHORT)
+  extends NativeColumnAccessor(buffer, SHORT)
 
 private[columnar] class IntColumnAccessor(buffer: ByteBuffer)
-    extends NativeColumnAccessor(buffer, INT)
+  extends NativeColumnAccessor(buffer, INT)
 
 private[columnar] class LongColumnAccessor(buffer: ByteBuffer)
-    extends NativeColumnAccessor(buffer, LONG)
+  extends NativeColumnAccessor(buffer, LONG)
 
 private[columnar] class FloatColumnAccessor(buffer: ByteBuffer)
-    extends NativeColumnAccessor(buffer, FLOAT)
+  extends NativeColumnAccessor(buffer, FLOAT)
 
 private[columnar] class DoubleColumnAccessor(buffer: ByteBuffer)
-    extends NativeColumnAccessor(buffer, DOUBLE)
+  extends NativeColumnAccessor(buffer, DOUBLE)
 
 private[columnar] class StringColumnAccessor(buffer: ByteBuffer, dataType: StringType)
-    extends NativeColumnAccessor(buffer, STRING(dataType))
+  extends NativeColumnAccessor(buffer, STRING(dataType))
 
 private[columnar] class BinaryColumnAccessor(buffer: ByteBuffer)
-    extends BasicColumnAccessor[Array[Byte]](buffer, BINARY)
-    with NullableColumnAccessor
+  extends BasicColumnAccessor[Array[Byte]](buffer, BINARY)
+  with NullableColumnAccessor
 
 private[columnar] class IntervalColumnAccessor(buffer: ByteBuffer)
-    extends BasicColumnAccessor[CalendarInterval](buffer, CALENDAR_INTERVAL)
-    with NullableColumnAccessor
+  extends BasicColumnAccessor[CalendarInterval](buffer, CALENDAR_INTERVAL)
+  with NullableColumnAccessor
 
 private[columnar] class VariantColumnAccessor(buffer: ByteBuffer)
-    extends BasicColumnAccessor[VariantVal](buffer, VARIANT)
-    with NullableColumnAccessor
+  extends BasicColumnAccessor[VariantVal](buffer, VARIANT)
+  with NullableColumnAccessor
 
 private[columnar] class CompactDecimalColumnAccessor(buffer: ByteBuffer, dataType: DecimalType)
-    extends NativeColumnAccessor(buffer, COMPACT_DECIMAL(dataType))
+  extends NativeColumnAccessor(buffer, COMPACT_DECIMAL(dataType))
 
 private[columnar] class DecimalColumnAccessor(buffer: ByteBuffer, dataType: DecimalType)
-    extends BasicColumnAccessor[Decimal](buffer, LARGE_DECIMAL(dataType))
-    with NullableColumnAccessor
+  extends BasicColumnAccessor[Decimal](buffer, LARGE_DECIMAL(dataType))
+  with NullableColumnAccessor
 
 private[columnar] class StructColumnAccessor(buffer: ByteBuffer, dataType: StructType)
-    extends BasicColumnAccessor[UnsafeRow](buffer, STRUCT(PhysicalStructType(dataType.fields)))
-    with NullableColumnAccessor
+  extends BasicColumnAccessor[UnsafeRow](buffer, STRUCT(PhysicalStructType(dataType.fields)))
+  with NullableColumnAccessor
 
 private[columnar] class ArrayColumnAccessor(buffer: ByteBuffer, dataType: ArrayType)
-    extends BasicColumnAccessor[UnsafeArrayData](
-      buffer,
-      ARRAY(PhysicalArrayType(dataType.elementType, dataType.containsNull)))
-    with NullableColumnAccessor
+  extends BasicColumnAccessor[UnsafeArrayData](
+    buffer, ARRAY(PhysicalArrayType(dataType.elementType, dataType.containsNull)))
+  with NullableColumnAccessor
 
 private[columnar] class MapColumnAccessor(buffer: ByteBuffer, dataType: MapType)
-    extends BasicColumnAccessor[UnsafeMapData](
-      buffer,
-      MAP(PhysicalMapType(dataType.keyType, dataType.valueType, dataType.valueContainsNull)))
-    with NullableColumnAccessor
+  extends BasicColumnAccessor[UnsafeMapData](
+    buffer, MAP(PhysicalMapType(dataType.keyType, dataType.valueType, dataType.valueContainsNull)))
+  with NullableColumnAccessor
 
 private[sql] object ColumnAccessor {
   @tailrec
@@ -166,10 +164,8 @@ private[sql] object ColumnAccessor {
     }
   }
 
-  def decompress(
-      columnAccessor: ColumnAccessor,
-      columnVector: WritableColumnVector,
-      numRows: Int): Unit = {
+  def decompress(columnAccessor: ColumnAccessor, columnVector: WritableColumnVector, numRows: Int):
+      Unit = {
     columnAccessor match {
       case nativeAccessor: NativeColumnAccessor[_] =>
         nativeAccessor.decompress(columnVector, numRows)
@@ -179,10 +175,8 @@ private[sql] object ColumnAccessor {
   }
 
   def decompress(
-      array: Array[Byte],
-      columnVector: WritableColumnVector,
-      dataType: DataType,
-      numRows: Int): Unit = {
+      array: Array[Byte], columnVector: WritableColumnVector, dataType: DataType, numRows: Int):
+      Unit = {
     val byteBuffer = ByteBuffer.wrap(array)
     val columnAccessor = ColumnAccessor(dataType, byteBuffer)
     decompress(columnAccessor, columnVector, numRows)

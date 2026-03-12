@@ -36,9 +36,7 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
       } else {
         Some(stats.map(_.rowCount.get).filter(_ > 0L).product)
       }
-      Statistics(
-        sizeInBytes = stats.map(_.sizeInBytes).filter(_ > 0L).product,
-        rowCount = rowCount)
+      Statistics(sizeInBytes = stats.map(_.sizeInBytes).filter(_ > 0L).product, rowCount = rowCount)
   }
 
   override def visitAggregate(p: Aggregate): Statistics = {

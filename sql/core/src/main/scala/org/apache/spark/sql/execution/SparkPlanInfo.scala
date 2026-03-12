@@ -27,7 +27,8 @@ import org.apache.spark.sql.execution.metric.SQLMetricInfo
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * :: DeveloperApi :: Stores information about a SQL SparkPlan.
+ * :: DeveloperApi ::
+ * Stores information about a SQL SparkPlan.
  */
 @DeveloperApi
 class SparkPlanInfo(

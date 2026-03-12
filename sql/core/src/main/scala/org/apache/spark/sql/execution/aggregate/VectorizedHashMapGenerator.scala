@@ -27,17 +27,17 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
 /**
  * This is a helper class to generate an append-only vectorized hash map that can act as a 'cache'
  * for extremely fast key-value lookups while evaluating aggregates (and fall back to the
- * `BytesToBytesMap` if a given key isn't found). This is 'codegened' in HashAggregate to speed up
- * aggregates w/ key.
+ * `BytesToBytesMap` if a given key isn't found). This is 'codegened' in HashAggregate to speed
+ * up aggregates w/ key.
  *
  * It is backed by a power-of-2-sized array for index lookups and a columnar batch that stores the
  * key-value pairs. The index lookups in the array rely on linear probing (with a small number of
  * maximum tries) and use an inexpensive hash function which makes it really efficient for a
- * majority of lookups. However, using linear probing and an inexpensive hash function also makes
- * it less robust as compared to the `BytesToBytesMap` (especially for a large number of keys or
- * even for certain distribution of keys) and requires us to fall back on the latter for
- * correctness. We also use a secondary columnar batch that logically projects over the original
- * columnar batch and is equivalent to the `BytesToBytesMap` aggregate buffer.
+ * majority of lookups. However, using linear probing and an inexpensive hash function also makes it
+ * less robust as compared to the `BytesToBytesMap` (especially for a large number of keys or even
+ * for certain distribution of keys) and requires us to fall back on the latter for correctness. We
+ * also use a secondary columnar batch that logically projects over the original columnar batch and
+ * is equivalent to the `BytesToBytesMap` aggregate buffer.
  *
  * NOTE: This vectorized hash map currently doesn't support nullable keys and falls back to the
  * `BytesToBytesMap` to store them.
@@ -49,12 +49,8 @@ class VectorizedHashMapGenerator(
     groupingKeySchema: StructType,
     bufferSchema: StructType,
     bitMaxCapacity: Int)
-    extends HashMapGenerator(
-      ctx,
-      aggregateExpressions,
-      generatedClassName,
-      groupingKeySchema,
-      bufferSchema) {
+  extends HashMapGenerator (ctx, aggregateExpressions, generatedClassName,
+    groupingKeySchema, bufferSchema) {
 
   override protected def initializeAggregateHashMap(): String = {
     val schemaStructType = new StructType((groupingKeySchema ++ bufferSchema).toArray)
@@ -90,10 +86,11 @@ class VectorizedHashMapGenerator(
      """.stripMargin
   }
 
+
   /**
    * Generates a method that returns true if the group-by keys exist at a given index in the
-   * associated [[org.apache.spark.sql.execution.vectorized.OnHeapColumnVector]]. For instance, if
-   * we have 2 long group-by keys, the generated function would be of the form:
+   * associated [[org.apache.spark.sql.execution.vectorized.OnHeapColumnVector]]. For instance,
+   * if we have 2 long group-by keys, the generated function would be of the form:
    *
    * {{{
    * private boolean equals(int idx, long agg_key, long agg_key1) {
@@ -105,13 +102,11 @@ class VectorizedHashMapGenerator(
   protected def generateEquals(): String = {
 
     def genEqualsForKeys(groupingKeys: Seq[Buffer]): String = {
-      groupingKeys.zipWithIndex
-        .map { case (key: Buffer, ordinal: Int) =>
-          val value =
-            CodeGenerator.getValueFromVector(s"vectors[$ordinal]", key.dataType, "buckets[idx]")
-          s"(${ctx.genEqual(key.dataType, value, key.name)})"
-        }
-        .mkString(" && ")
+      groupingKeys.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
+        val value = CodeGenerator.getValueFromVector(s"vectors[$ordinal]", key.dataType,
+          "buckets[idx]")
+        s"(${ctx.genEqual(key.dataType, value, key.name)})"
+      }.mkString(" && ")
     }
 
     s"""
@@ -126,8 +121,8 @@ class VectorizedHashMapGenerator(
    * [[org.apache.spark.sql.execution.vectorized.MutableColumnarRow]] which keeps track of the
    * aggregate value(s) for a given set of keys. If the corresponding row doesn't exist, the
    * generated method adds the corresponding row in the associated
-   * [[org.apache.spark.sql.execution.vectorized.OnHeapColumnVector]]. For instance, if we have 2
-   * long group-by keys, the generated function would be of the form:
+   * [[org.apache.spark.sql.execution.vectorized.OnHeapColumnVector]]. For instance, if we
+   * have 2 long group-by keys, the generated function would be of the form:
    *
    * {{{
    * public MutableColumnarRow findOrInsert(long agg_key, long agg_key1) {
@@ -170,12 +165,8 @@ class VectorizedHashMapGenerator(
 
     def genCodeToSetAggBuffers(bufferValues: Seq[Buffer]): Seq[String] = {
       bufferValues.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
-        CodeGenerator.updateColumn(
-          s"vectors[${groupingKeys.length + ordinal}]",
-          "numRows",
-          key.dataType,
-          buffVars(ordinal),
-          nullable = true)
+        CodeGenerator.updateColumn(s"vectors[${groupingKeys.length + ordinal}]", "numRows",
+          key.dataType, buffVars(ordinal), nullable = true)
       }
     }
 

@@ -25,7 +25,7 @@ import org.apache.spark.util.ListenerBus
  * Wraps an ExternalCatalog to provide listener events.
  */
 class ExternalCatalogWithListener(delegate: ExternalCatalog)
-    extends ExternalCatalog
+  extends ExternalCatalog
     with ListenerBus[ExternalCatalogEventListener, ExternalCatalogEvent] {
   import CatalogTypes.TablePartitionSpec
 
@@ -119,10 +119,7 @@ class ExternalCatalogWithListener(delegate: ExternalCatalog)
     postToAll(AlterTableEvent(db, name, AlterTableKind.TABLE))
   }
 
-  override def alterTableDataSchema(
-      db: String,
-      table: String,
-      newDataSchema: StructType): Unit = {
+  override def alterTableDataSchema(db: String, table: String, newDataSchema: StructType): Unit = {
     postToAll(AlterTablePreEvent(db, table, AlterTableKind.DATASCHEMA))
     delegate.alterTableDataSchema(db, table, newDataSchema)
     postToAll(AlterTableEvent(db, table, AlterTableKind.DATASCHEMA))
@@ -185,13 +182,7 @@ class ExternalCatalogWithListener(delegate: ExternalCatalog)
       inheritTableSpecs: Boolean,
       isSrcLocal: Boolean): Unit = {
     delegate.loadPartition(
-      db,
-      table,
-      loadPath,
-      partition,
-      isOverwrite,
-      inheritTableSpecs,
-      isSrcLocal)
+      db, table, loadPath, partition, isOverwrite, inheritTableSpecs, isSrcLocal)
   }
 
   override def loadDynamicPartitions(

@@ -34,8 +34,7 @@ case class CreateTableExec(
     columns: Array[Column],
     partitioning: Seq[Transform],
     tableSpec: TableSpec,
-    ignoreIfExists: Boolean)
-    extends LeafV2CommandExec {
+    ignoreIfExists: Boolean) extends LeafV2CommandExec {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   val tableProperties = CatalogV2Util.convertTableProperties(tableSpec)

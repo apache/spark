@@ -36,7 +36,7 @@ case class JsonTable(
     paths: Seq[String],
     userSpecifiedSchema: Option[StructType],
     fallbackFileFormat: Class[_ <: FileFormat])
-    extends FileTable(sparkSession, options, paths, userSpecifiedSchema) {
+  extends FileTable(sparkSession, options, paths, userSpecifiedSchema) {
   override def newScanBuilder(options: CaseInsensitiveStringMap): JsonScanBuilder =
     JsonScanBuilder(sparkSession, fileIndex, schema, dataSchema, mergedOptions(options))
 
@@ -45,7 +45,8 @@ case class JsonTable(
       options.asScala.toMap,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
-    JsonDataSource(parsedOptions).inferSchema(sparkSession, files, parsedOptions)
+    JsonDataSource(parsedOptions).inferSchema(
+      sparkSession, files, parsedOptions)
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {

@@ -31,20 +31,16 @@ import org.apache.spark.sql.util.SchemaUtils
  * Resolves different children of Union to a common set of columns.
  */
 object ResolveUnion extends Rule[LogicalPlan] {
-
   /**
    * Transform the array of structs to the target struct type.
    */
-  private def transformArray(
-      arrayCol: Expression,
-      targetType: ArrayType,
+  private def transformArray(arrayCol: Expression, targetType: ArrayType,
       allowMissing: Boolean) = {
     assert(arrayCol.dataType.isInstanceOf[ArrayType], "Only support ArrayType.")
 
     val arrayType = arrayCol.dataType.asInstanceOf[ArrayType]
 
-    val x = NamedLambdaVariable(
-      UnresolvedNamedLambdaVariable.freshVarName("x"),
+    val x = NamedLambdaVariable(UnresolvedNamedLambdaVariable.freshVarName("x"),
       arrayType.elementType,
       arrayType.containsNull)
     val function = mergeFields(x, targetType.elementType, allowMissing)
@@ -58,10 +54,8 @@ object ResolveUnion extends Rule[LogicalPlan] {
    * return a new struct with all of the expected fields, adding null values when `col` doesn't
    * already contain them. Currently we don't support merging structs nested inside of maps.
    */
-  private def addFields(
-      col: Expression,
-      targetType: StructType,
-      allowMissing: Boolean): Expression = {
+  private def addFields(col: Expression,
+     targetType: StructType, allowMissing: Boolean): Expression = {
     assert(col.dataType.isInstanceOf[StructType], "Only support StructType.")
 
     val resolver = conf.resolver
@@ -82,8 +76,7 @@ object ResolveUnion extends Rule[LogicalPlan] {
           } else {
             // for allowMissingCol as false throw exception for missing col
             throw QueryCompilationErrors.noSuchStructFieldInGivenFieldsError(
-              expectedField.name,
-              colType.fields)
+              expectedField.name, colType.fields)
           }
       }
       newStructFields ++= Literal(expectedField.name) :: newExpression :: Nil
@@ -106,9 +99,7 @@ object ResolveUnion extends Rule[LogicalPlan] {
   /**
    * Handles the merging of complex types. Currently supports structs and arrays recursively.
    */
-  private def mergeFields(
-      col: Expression,
-      targetType: DataType,
+  private def mergeFields(col: Expression, targetType: DataType,
       allowMissing: Boolean): Expression = {
     if (!DataType.equalsStructurallyByName(col.dataType, targetType, conf.resolver)) {
       (col.dataType, targetType) match {
@@ -126,10 +117,10 @@ object ResolveUnion extends Rule[LogicalPlan] {
   }
 
   /**
-   * This method will compare right to left plan's outputs. If there is one struct attribute at
-   * right side has same name with left side struct attribute, but two structs are not the same
-   * data type, i.e., some missing (nested) fields at right struct attribute, then this method
-   * will try to add missing (nested) fields into the right attribute with null values.
+   * This method will compare right to left plan's outputs. If there is one struct attribute
+   * at right side has same name with left side struct attribute, but two structs are not the
+   * same data type, i.e., some missing (nested) fields at right struct attribute, then this
+   * method will try to add missing (nested) fields into the right attribute with null values.
    */
   private def compareAndAddFields(
       left: LogicalPlan,
@@ -160,8 +151,7 @@ object ResolveUnion extends Rule[LogicalPlan] {
           Alias(Literal(null, lattr.dataType), lattr.name)()
         } else {
           throw QueryCompilationErrors.cannotResolveColumnNameAmongAttributesError(
-            lattr.name,
-            rightOutputAttrs.map(_.name).mkString(", "))
+            lattr.name, rightOutputAttrs.map(_.name).mkString(", "))
         }
       }
     }
@@ -203,18 +193,22 @@ object ResolveUnion extends Rule[LogicalPlan] {
     val leftOutputAttrs = left.output
     val rightOutputAttrs = right.output
 
-    SchemaUtils.checkColumnNameDuplication(leftOutputAttrs.map(_.name), caseSensitiveAnalysis)
-    SchemaUtils.checkColumnNameDuplication(rightOutputAttrs.map(_.name), caseSensitiveAnalysis)
+    SchemaUtils.checkColumnNameDuplication(
+      leftOutputAttrs.map(_.name),
+      caseSensitiveAnalysis)
+    SchemaUtils.checkColumnNameDuplication(
+      rightOutputAttrs.map(_.name),
+      caseSensitiveAnalysis)
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan =
-    plan.resolveOperatorsUpWithPruning(_.containsPattern(UNION), ruleId) {
-      case e if !e.childrenResolved => e
+  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+    _.containsPattern(UNION), ruleId) {
+    case e if !e.childrenResolved => e
 
-      case Union(children, byName, allowMissingCol) if byName =>
-        children.reduceLeft { (left, right) =>
-          checkColumnNames(left, right)
-          unionTwoSides(left, right, allowMissingCol)
-        }
-    }
+    case Union(children, byName, allowMissingCol) if byName =>
+      children.reduceLeft { (left, right) =>
+        checkColumnNames(left, right)
+        unionTwoSides(left, right, allowMissingCol)
+      }
+  }
 }

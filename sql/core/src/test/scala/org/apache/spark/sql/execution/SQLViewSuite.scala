@@ -95,8 +95,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           sql("CREATE GLOBAL TEMP VIEW global_temp_jtv1 AS SELECT * FROM jt WHERE id > 0")
           checkError(
             exception = intercept[AnalysisException] {
-              sql(
-                s"CREATE VIEW jtv1 AS SELECT * FROM $globalTempDB.global_temp_jtv1 WHERE id < 6")
+              sql(s"CREATE VIEW jtv1 AS SELECT * FROM $globalTempDB.global_temp_jtv1 WHERE id < 6")
             },
             condition = "INVALID_TEMP_OBJ_REFERENCE",
             parameters = Map(
@@ -119,13 +118,16 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         condition = "EXPECT_VIEW_NOT_TABLE.NO_ALTERNATIVE",
         parameters = Map(
           "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`",
-          "operation" -> "CREATE OR REPLACE VIEW"))
+          "operation" -> "CREATE OR REPLACE VIEW")
+      )
       checkError(
         exception = intercept[AnalysisException] {
           sql("CREATE VIEW tab1 AS SELECT * FROM jt")
         },
         condition = "TABLE_OR_VIEW_ALREADY_EXISTS",
-        parameters = Map("relationName" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`"))
+        parameters = Map(
+          "relationName" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`")
+      )
       checkError(
         exception = intercept[AnalysisException] {
           sql("ALTER VIEW tab1 AS SELECT * FROM jt")
@@ -133,8 +135,13 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         condition = "EXPECT_VIEW_NOT_TABLE.NO_ALTERNATIVE",
         parameters = Map(
           "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`",
-          "operation" -> "ALTER VIEW ... AS"),
-        context = ExpectedContext(fragment = "tab1", start = 11, stop = 14))
+          "operation" -> "ALTER VIEW ... AS"
+        ),
+        context = ExpectedContext(
+          fragment = "tab1",
+          start = 11,
+          stop = 14)
+      )
     }
   }
 
@@ -155,17 +162,31 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           sql(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = 'an')")
         },
         condition = "EXPECT_PERMANENT_VIEW_NOT_TEMP",
-        parameters =
-          Map("viewName" -> s"`$viewName`", "operation" -> "ALTER VIEW ... SET TBLPROPERTIES"),
-        context = ExpectedContext(fragment = "testView", start = 11, stop = 18))
+        parameters = Map(
+          "viewName" -> s"`$viewName`",
+          "operation" -> "ALTER VIEW ... SET TBLPROPERTIES"
+        ),
+        context = ExpectedContext(
+          fragment = "testView",
+          start = 11,
+          stop = 18
+        )
+      )
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")
         },
         condition = "EXPECT_PERMANENT_VIEW_NOT_TEMP",
-        parameters =
-          Map("viewName" -> s"`$viewName`", "operation" -> "ALTER VIEW ... UNSET TBLPROPERTIES"),
-        context = ExpectedContext(fragment = "testView", start = 11, stop = 18))
+        parameters = Map(
+          "viewName" -> s"`$viewName`",
+          "operation" -> "ALTER VIEW ... UNSET TBLPROPERTIES"
+        ),
+        context = ExpectedContext(
+          fragment = "testView",
+          start = 11,
+          stop = 18
+        )
+      )
     }
   }
 
@@ -180,8 +201,10 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         condition = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
         parameters = Map(
           "viewName" -> s"`$viewName`",
-          "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"),
-        context = ExpectedContext(fragment = viewName, start = 12, stop = 19))
+          "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"
+        ),
+        context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
+      )
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName PARTITION (a=1, b=2) SET SERDE 'whatever'")
@@ -189,8 +212,10 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         condition = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
         parameters = Map(
           "viewName" -> s"`$viewName`",
-          "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"),
-        context = ExpectedContext(fragment = viewName, start = 12, stop = 19))
+          "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"
+        ),
+        context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
+      )
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName SET SERDEPROPERTIES ('p' = 'an')")
@@ -198,72 +223,98 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         condition = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
         parameters = Map(
           "viewName" -> s"`$viewName`",
-          "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"),
-        context = ExpectedContext(fragment = viewName, start = 12, stop = 19))
+          "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"
+        ),
+        context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
+      )
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName PARTITION (a='4') RENAME TO PARTITION (a='5')")
         },
         condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
-        parameters =
-          Map("viewName" -> s"`$viewName`", "operation" -> "ALTER TABLE ... RENAME TO PARTITION"),
-        context = ExpectedContext(fragment = viewName, start = 12, stop = 19))
+        parameters = Map(
+          "viewName" -> s"`$viewName`",
+          "operation" -> "ALTER TABLE ... RENAME TO PARTITION"
+        ),
+        context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
+      )
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName RECOVER PARTITIONS")
         },
         condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
-        parameters =
-          Map("viewName" -> s"`$viewName`", "operation" -> "ALTER TABLE ... RECOVER PARTITIONS"),
-        context = ExpectedContext(fragment = viewName, start = 12, stop = 19))
+        parameters = Map(
+          "viewName" -> s"`$viewName`",
+          "operation" -> "ALTER TABLE ... RECOVER PARTITIONS"
+        ),
+        context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
+      )
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName SET LOCATION '/path/to/your/lovely/heart'")
         },
         condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
-        parameters =
-          Map("viewName" -> s"`$viewName`", "operation" -> "ALTER TABLE ... SET LOCATION ..."),
-        context = ExpectedContext(fragment = viewName, start = 12, stop = 19))
+        parameters = Map(
+          "viewName" -> s"`$viewName`",
+          "operation" -> "ALTER TABLE ... SET LOCATION ..."
+        ),
+        context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
+      )
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName PARTITION (a='4') SET LOCATION '/path/to/home'")
         },
         condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
-        parameters =
-          Map("viewName" -> s"`$viewName`", "operation" -> "ALTER TABLE ... SET LOCATION ..."),
-        context = ExpectedContext(fragment = viewName, start = 12, stop = 19))
+        parameters = Map(
+          "viewName" -> s"`$viewName`",
+          "operation" -> "ALTER TABLE ... SET LOCATION ..."
+        ),
+        context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
+      )
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName ADD IF NOT EXISTS PARTITION (a='4', b='8')")
         },
         condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
-        parameters =
-          Map("viewName" -> s"`$viewName`", "operation" -> "ALTER TABLE ... ADD PARTITION ..."),
-        context = ExpectedContext(fragment = viewName, start = 12, stop = 19))
+        parameters = Map(
+          "viewName" -> s"`$viewName`",
+          "operation" -> "ALTER TABLE ... ADD PARTITION ..."
+        ),
+        context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
+      )
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName DROP PARTITION (a='4', b='8')")
         },
         condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
-        parameters =
-          Map("viewName" -> s"`$viewName`", "operation" -> "ALTER TABLE ... DROP PARTITION ..."),
-        context = ExpectedContext(fragment = viewName, start = 12, stop = 19))
+        parameters = Map(
+          "viewName" -> s"`$viewName`",
+          "operation" -> "ALTER TABLE ... DROP PARTITION ..."
+        ),
+        context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
+      )
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName SET TBLPROPERTIES ('p' = 'an')")
         },
         condition = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
-        parameters =
-          Map("viewName" -> s"`$viewName`", "operation" -> "ALTER TABLE ... SET TBLPROPERTIES"),
-        context = ExpectedContext(fragment = viewName, start = 12, stop = 19))
+        parameters = Map(
+          "viewName" -> s"`$viewName`",
+          "operation" -> "ALTER TABLE ... SET TBLPROPERTIES"
+        ),
+        context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
+      )
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName UNSET TBLPROPERTIES ('p')")
         },
         condition = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
-        parameters =
-          Map("viewName" -> s"`$viewName`", "operation" -> "ALTER TABLE ... UNSET TBLPROPERTIES"),
-        context = ExpectedContext(fragment = viewName, start = 12, stop = 19))
+        parameters = Map(
+          "viewName" -> s"`$viewName`",
+          "operation" -> "ALTER TABLE ... UNSET TBLPROPERTIES"
+        ),
+        context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
+      )
     }
   }
 
@@ -277,7 +328,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           sql(s"INSERT INTO TABLE $viewName SELECT 1")
         },
         condition = "UNSUPPORTED_INSERT.RDD_BASED",
-        parameters = Map.empty)
+        parameters = Map.empty
+      )
 
       val dataFilePath =
         Thread.currentThread().getContextClassLoader.getResource("data/files/employee.dat")
@@ -287,31 +339,53 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           sql(sqlText)
         },
         condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
-        parameters = Map("viewName" -> s"`$viewName`", "operation" -> "LOAD DATA"),
+        parameters = Map(
+          "viewName" -> s"`$viewName`",
+          "operation" -> "LOAD DATA"
+        ),
         context = ExpectedContext(
           fragment = viewName,
           start = sqlText.length - 8,
-          stop = sqlText.length - 1))
+          stop = sqlText.length - 1
+        )
+      )
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"SHOW CREATE TABLE $viewName")
         },
         condition = "EXPECT_PERMANENT_VIEW_NOT_TEMP",
-        parameters = Map("viewName" -> s"`$viewName`", "operation" -> "SHOW CREATE TABLE"),
-        context = ExpectedContext(fragment = viewName, start = 18, stop = 25))
+        parameters = Map(
+          "viewName" -> s"`$viewName`",
+          "operation" -> "SHOW CREATE TABLE"
+        ),
+        context = ExpectedContext(
+          fragment = viewName,
+          start = 18,
+          stop = 25
+        )
+      )
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
         },
         condition = "EXPECT_PERMANENT_VIEW_NOT_TEMP",
-        parameters = Map("viewName" -> s"`$viewName`", "operation" -> "ANALYZE TABLE"),
-        context = ExpectedContext(fragment = viewName, start = 14, stop = 21))
+        parameters = Map(
+          "viewName" -> s"`$viewName`",
+          "operation" -> "ANALYZE TABLE"
+        ),
+        context = ExpectedContext(
+          fragment = viewName,
+          start = 14,
+          stop = 21
+        )
+      )
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
         },
         condition = "UNSUPPORTED_FEATURE.ANALYZE_UNCACHED_TEMP_VIEW",
-        parameters = Map("viewName" -> s"`$viewName`"))
+        parameters = Map("viewName" -> s"`$viewName`")
+      )
     }
   }
 
@@ -335,8 +409,10 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`testview`",
-          "operation" -> "INSERT"),
-        context = ExpectedContext(fragment = viewName, start = 18, stop = 25))
+          "operation" -> "INSERT"
+        ),
+        context = ExpectedContext(fragment = viewName, start = 18, stop = 25)
+      )
 
       val dataFilePath =
         Thread.currentThread().getContextClassLoader.getResource("data/files/employee.dat")
@@ -352,7 +428,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         context = ExpectedContext(
           fragment = viewName,
           start = sqlText.length - 8,
-          stop = sqlText.length - 1))
+          stop = sqlText.length - 1
+        )
+      )
     }
   }
 
@@ -375,15 +453,14 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  private def assertRelationNotFound(
-      query: String,
-      relation: String,
-      context: ExpectedContext): Unit = {
+  private def assertRelationNotFound(query: String, relation: String, context: ExpectedContext):
+  Unit = {
     val e = intercept[AnalysisException] {
       sql(query)
     }
     checkErrorTableNotFound(e, relation, context)
   }
+
 
   test("error handling: fail if the temp view name contains the database prefix") {
     // Fully qualified table name like "database.table" is not allowed for temporary view
@@ -399,8 +476,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       val e = intercept[ParseException] {
         sql("CREATE TEMPORARY VIEW IF NOT EXISTS myabcdview AS SELECT * FROM jt")
       }
-      assert(
-        e.message.contains("It is not allowed to define a TEMPORARY view with IF NOT EXISTS"))
+      assert(e.message.contains("It is not allowed to define a TEMPORARY view with IF NOT EXISTS"))
     }
   }
 
@@ -426,8 +502,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
   test("SPARK-32374: disallow setting properties for CREATE TEMPORARY VIEW") {
     withTempView("myabcdview") {
-      val sqlText =
-        "CREATE TEMPORARY VIEW myabcdview TBLPROPERTIES ('a' = 'b') AS SELECT * FROM jt"
+      val sqlText = "CREATE TEMPORARY VIEW myabcdview TBLPROPERTIES ('a' = 'b') AS SELECT * FROM jt"
       checkError(
         exception = intercept[ParseException] {
           sql(sqlText)
@@ -440,7 +515,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
   test("correctly parse CREATE VIEW statement") {
     withView("testView") {
-      sql("""CREATE VIEW IF NOT EXISTS
+      sql(
+        """CREATE VIEW IF NOT EXISTS
           |default.testView (c1 COMMENT 'blabla', c2 COMMENT 'blabla')
           |TBLPROPERTIES ('a' = 'b')
           |AS SELECT * FROM jt
@@ -469,7 +545,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
   test("correctly parse CREATE TEMPORARY VIEW statement") {
     withTempView("testView") {
-      sql("""CREATE TEMPORARY VIEW
+      sql(
+        """CREATE TEMPORARY VIEW
           |testView (c1 COMMENT 'blabla', c2 COMMENT 'blabla')
           |AS SELECT * FROM jt
           |""".stripMargin)
@@ -485,8 +562,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         sql("CREATE TEMPORARY VIEW testView AS SELECT id FROM jt")
       }
 
-      checkError(
-        e,
+      checkError(e,
         "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
         parameters = Map("relationName" -> "`testView`"))
     }
@@ -559,7 +635,10 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         condition = "CREATE_VIEW_WITH_IF_NOT_EXISTS_AND_REPLACE",
         sqlState = "42601",
         parameters = Map("viewName" -> "testView"),
-        context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1))
+        context = ExpectedContext(
+          fragment = sqlText,
+          start = 0,
+          stop = sqlText.length - 1))
     }
   }
 
@@ -639,7 +718,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
   test("ALTER VIEW AS should keep the previous table properties, comment, create_time, etc.") {
     withView("test_view") {
-      sql("""
+      sql(
+        """
           |CREATE VIEW test_view
           |COMMENT 'test'
           |TBLPROPERTIES ('key' = 'a')
@@ -725,12 +805,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       spark.range(10).write.saveAsTable("add_col")
       withView("v") {
         sql("CREATE VIEW v AS SELECT * FROM add_col")
-        spark
-          .range(10)
-          .select($"id", $"id" as Symbol("a"))
-          .write
-          .mode("overwrite")
-          .saveAsTable("add_col")
+        spark.range(10).select($"id", $"id" as Symbol("a"))
+          .write.mode("overwrite").saveAsTable("add_col")
         checkAnswer(sql("SELECT * FROM v"), spark.range(10).toDF())
       }
     }
@@ -747,45 +823,25 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           }
         }
       }
-      assertRelationNotFound(
-        "SELECT * FROM view1",
-        "`table1`",
-        ExpectedContext(
-          "VIEW",
-          "spark_catalog.default.view1",
-          14,
-          13 + "table1".length,
-          "table1"))
+      assertRelationNotFound("SELECT * FROM view1", "`table1`",
+        ExpectedContext("VIEW", "spark_catalog.default.view1", 14, 13 + "table1".length, "table1"))
 
       // Fail if the referenced table is invalid.
       withTable("table2") {
         sql("CREATE TABLE table2(a int, b string) USING parquet")
         sql("CREATE VIEW view2 AS SELECT * FROM table2")
       }
-      assertRelationNotFound(
-        "SELECT * FROM view2",
-        "`table2`",
-        ExpectedContext(
-          "VIEW",
-          "spark_catalog.default.view2",
-          14,
-          13 + "table2".length,
-          "table2"))
+      assertRelationNotFound("SELECT * FROM view2", "`table2`",
+        ExpectedContext("VIEW", "spark_catalog.default.view2", 14, 13 + "table2".length, "table2"))
 
       // Fail if the referenced view is invalid.
       withView("testView") {
         sql("CREATE VIEW testView AS SELECT * FROM jt")
         sql("CREATE VIEW view3 AS SELECT * FROM testView")
       }
-      assertRelationNotFound(
-        "SELECT * FROM view3",
-        "`testView`",
-        ExpectedContext(
-          "VIEW",
-          "spark_catalog.default.view3",
-          14,
-          13 + "testView".length,
-          "testView"))
+      assertRelationNotFound("SELECT * FROM view3", "`testView`",
+        ExpectedContext("VIEW", "spark_catalog.default.view3", 14,
+          13 + "testView".length, "testView"))
     }
   }
 
@@ -816,24 +872,17 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`testView2`",
             "viewColumns" -> "`x`, `y`, `z`",
-            "dataColumns" -> "`id`, `id1`"))
+            "dataColumns" -> "`id`, `id1`")
+        )
 
         // Correctly resolve a view when the referenced table schema changes.
-        spark
-          .range(1, 10)
-          .selectExpr("id", "id + id dummy", "id + 1 id1")
-          .write
-          .mode(SaveMode.Overwrite)
-          .saveAsTable("tab1")
+        spark.range(1, 10).selectExpr("id", "id + id dummy", "id + 1 id1")
+          .write.mode(SaveMode.Overwrite).saveAsTable("tab1")
         checkAnswer(sql("SELECT * FROM testView ORDER BY x"), (1 to 9).map(i => Row(i, i + 1)))
 
         // Throw an AnalysisException if the column name is not found.
-        spark
-          .range(1, 10)
-          .selectExpr("id", "id + 1 dummy")
-          .write
-          .mode(SaveMode.Overwrite)
-          .saveAsTable("tab1")
+        spark.range(1, 10).selectExpr("id", "id + 1 dummy")
+          .write.mode(SaveMode.Overwrite).saveAsTable("tab1")
         checkError(
           exception = intercept[AnalysisException](sql("SELECT * FROM testView")),
           condition = "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
@@ -843,7 +892,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             "colName" -> "id1",
             "suggestion" -> ("CREATE OR REPLACE VIEW " +
               s"$SESSION_CATALOG_NAME.default.testview (x, y) AS SELECT * FROM tab1"),
-            "expectedNum" -> "1"))
+            "expectedNum" -> "1")
+        )
       }
     }
   }
@@ -858,9 +908,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           // Allow casting from IntegerType to LongType
           val df = (1 until 10).map(i => (i, i + 1)).toDF("id", "id1")
           df.write.format("json").mode(SaveMode.Overwrite).saveAsTable("tab1")
-          checkAnswer(
-            sql("SELECT * FROM testView ORDER BY id1"),
-            (1 to 9).map(i => Row(i, i + 1)))
+          checkAnswer(sql("SELECT * FROM testView ORDER BY id1"), (1 to 9).map(i => Row(i, i + 1)))
 
           // Casting from DoubleType to LongType might truncate, throw an AnalysisException.
           val df2 = (1 until 10).map(i => (i.toDouble, i.toDouble)).toDF("id", "id1")
@@ -874,7 +922,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
               "targetType" -> "\"BIGINT\"",
               "details" -> ("The type path of the target object is:\n\n" +
                 "You can either add an explicit cast to the input data or " +
-                "choose a higher precision type of the field in the target object")))
+                "choose a higher precision type of the field in the target object")
+            )
+          )
 
           // Can't cast from ArrayType to LongType, throw an AnalysisException.
           val df3 = (1 until 10).map(i => (i, Seq(i))).toDF("id", "id1")
@@ -888,7 +938,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
               "targetType" -> "\"BIGINT\"",
               "details" -> ("The type path of the target object is:\n\n" +
                 "You can either add an explicit cast to the input data or " +
-                "choose a higher precision type of the field in the target object")))
+                "choose a higher precision type of the field in the target object")
+            )
+          )
         }
       }
     }
@@ -910,7 +962,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           "viewIdent" -> s"`$SESSION_CATALOG_NAME`.`default`.`view1`",
           "newPath" -> (s"`$SESSION_CATALOG_NAME`.`default`.`view1` -> " +
             s"`$SESSION_CATALOG_NAME`.`default`.`view2` -> " +
-            s"`$SESSION_CATALOG_NAME`.`default`.`view1`")))
+            s"`$SESSION_CATALOG_NAME`.`default`.`view1`")
+        )
+      )
 
       // Detect the most left cycle when there exists multiple cyclic view references.
       checkError(
@@ -923,7 +977,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           "newPath" -> (s"`$SESSION_CATALOG_NAME`.`default`.`view1` -> " +
             s"`$SESSION_CATALOG_NAME`.`default`.`view3` -> " +
             s"`$SESSION_CATALOG_NAME`.`default`.`view2` -> " +
-            s"`$SESSION_CATALOG_NAME`.`default`.`view1`")))
+            s"`$SESSION_CATALOG_NAME`.`default`.`view1`")
+        )
+      )
 
       // Detect cyclic view reference on CREATE OR REPLACE VIEW.
       checkError(
@@ -935,7 +991,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           "viewIdent" -> s"`$SESSION_CATALOG_NAME`.`default`.`view1`",
           "newPath" -> (s"`$SESSION_CATALOG_NAME`.`default`.`view1` -> " +
             s"`$SESSION_CATALOG_NAME`.`default`.`view2` -> " +
-            s"`$SESSION_CATALOG_NAME`.`default`.`view1`")))
+            s"`$SESSION_CATALOG_NAME`.`default`.`view1`")
+        )
+      )
 
       // Detect cyclic view reference from subqueries.
       checkError(
@@ -947,7 +1005,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           "viewIdent" -> s"`$SESSION_CATALOG_NAME`.`default`.`view1`",
           "newPath" -> (s"`$SESSION_CATALOG_NAME`.`default`.`view1` -> " +
             s"`$SESSION_CATALOG_NAME`.`default`.`view2` -> " +
-            s"`$SESSION_CATALOG_NAME`.`default`.`view1`")))
+            s"`$SESSION_CATALOG_NAME`.`default`.`view1`"))
+      )
     }
   }
 
@@ -993,7 +1052,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         withSQLConf(ANSI_ENABLED.key -> "false") {
           sql("CREATE TEMPORARY VIEW v1 AS SELECT 1/0")
         }
-        withSQLConf(USE_CURRENT_SQL_CONFIGS_FOR_VIEW.key -> "true", ANSI_ENABLED.key -> "true") {
+        withSQLConf(
+          USE_CURRENT_SQL_CONFIGS_FOR_VIEW.key -> "true",
+          ANSI_ENABLED.key -> "true") {
           checkAnswer(sql("SELECT * FROM v1"), Seq(Row(null)))
         }
       }
@@ -1012,7 +1073,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
               sql("SELECT * FROM v1").collect()
             },
             condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
-            parameters = Map("path" -> ".*"))
+            parameters = Map("path" -> ".*")
+          )
         }
 
         withSQLConf(STORE_ANALYZED_PLAN_FOR_VIEW.key -> "false") {
@@ -1031,7 +1093,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
               sql("SELECT * FROM v1").collect()
             },
             condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
-            parameters = Map("path" -> ".*"))
+            parameters = Map("path" -> ".*")
+          )
         }
       }
     }
@@ -1078,10 +1141,12 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           checkAnswer(sql("SELECT * FROM v2"), Seq(Row(1), Row(2), Row(3)))
         }
         withSQLConf(GROUP_BY_ORDINAL.key -> "false") {
-          checkAnswer(sql("SELECT * FROM v3"), Seq(Row(1, 1), Row(2, 1), Row(3, 1)))
+          checkAnswer(sql("SELECT * FROM v3"),
+            Seq(Row(1, 1), Row(2, 1), Row(3, 1)))
         }
         withSQLConf(GROUP_BY_ALIASES.key -> "false") {
-          checkAnswer(sql("SELECT * FROM v4"), Seq(Row(1, 1), Row(2, 1), Row(3, 1)))
+          checkAnswer(sql("SELECT * FROM v4"),
+            Seq(Row(1, 1), Row(2, 1), Row(3, 1)))
         }
         withSQLConf(ANSI_ENABLED.key -> "true") {
           checkAnswer(sql("SELECT * FROM v5"), Seq(Row(null)))
@@ -1092,17 +1157,19 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             val e = intercept[AnalysisException] {
               sql("SELECT * FROM v1")
             }
-            checkError(
-              e,
+            checkError(e,
               condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
               sqlState = None,
-              parameters = Map("objectName" -> "`C1`", "proposal" -> "`c1`"),
+              parameters = Map(
+                "objectName" -> "`C1`",
+                "proposal" -> "`c1`"),
               context = ExpectedContext(
                 objectType = "VIEW",
                 objectName = "spark_catalog.default.v1",
                 startIndex = 7,
                 stopIndex = 8,
-                fragment = "C1"))
+                fragment = "C1"
+              ))
           }
           withSQLConf(ORDER_BY_ORDINAL.key -> "false") {
             checkAnswer(sql("SELECT * FROM v2"), Seq(Row(3), Row(2), Row(1)))
@@ -1111,27 +1178,29 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             val e = intercept[AnalysisException] {
               sql("SELECT * FROM v3")
             }
-            checkError(
-              e,
+            checkError(e,
               condition = "MISSING_AGGREGATION",
-              parameters =
-                Map("expression" -> "\"c1\"", "expressionAnyValue" -> "\"any_value(c1)\""))
+              parameters = Map(
+                "expression" -> "\"c1\"",
+                "expressionAnyValue" -> "\"any_value(c1)\""))
           }
           withSQLConf(GROUP_BY_ALIASES.key -> "false") {
             val e = intercept[AnalysisException] {
               sql("SELECT * FROM v4")
             }
-            checkError(
-              e,
+            checkError(e,
               condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
               sqlState = None,
-              parameters = Map("objectName" -> "`a`", "proposal" -> "`c1`"),
+              parameters = Map(
+                "objectName" -> "`a`",
+                "proposal" -> "`c1`"),
               context = ExpectedContext(
                 objectType = "VIEW",
                 objectName = "spark_catalog.default.v4",
                 startIndex = 49,
                 stopIndex = 49,
-                fragment = "a"))
+                fragment = "a"
+            ))
           }
           withSQLConf(ANSI_ENABLED.key -> "true") {
             checkError(
@@ -1145,7 +1214,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
                 objectName = s"$SESSION_CATALOG_NAME.default.v5",
                 fragment = "1/0",
                 startIndex = 7,
-                stopIndex = 9))
+                stopIndex = 9)
+            )
           }
         }
 
@@ -1163,7 +1233,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             objectName = s"$SESSION_CATALOG_NAME.default.v1",
             fragment = "1/0",
             startIndex = 7,
-            stopIndex = 9))
+            stopIndex = 9)
+        )
       }
     }
   }
@@ -1175,14 +1246,15 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         val viewId = "v"
         withView(viewId) {
           val viewText = "SELECT a + b c FROM t"
-          sql(s"""
+          sql(
+            s"""
               |CREATE $viewType $viewId AS
               |-- the body of the view
               |$viewText
               |""".stripMargin)
           val plan = sql("select c / 2.0D d from v").logicalPlan
-          val add = plan.collectFirst { case Project(Seq(Alias(a: Add, _)), _) =>
-            a
+          val add = plan.collectFirst {
+            case Project(Seq(Alias(a: Add, _)), _) => a
           }
           assert(add.isDefined)
           val qualifiedName = if (viewType == "VIEW") {
@@ -1197,11 +1269,12 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             stopIndex = Some(11),
             sqlText = Some("SELECT a + b c FROM t"),
             objectType = Some("VIEW"),
-            objectName = Some(qualifiedName))
+            objectName = Some(qualifiedName)
+          )
           assert(add.get.origin == expectedAddOrigin)
 
-          val divide = plan.collectFirst { case Project(Seq(Alias(d: Divide, _)), _) =>
-            d
+          val divide = plan.collectFirst {
+            case Project(Seq(Alias(d: Divide, _)), _) => d
           }
           assert(divide.isDefined)
           val expectedDivideOrigin = Origin(
@@ -1221,11 +1294,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
   test("SPARK-37932: view join with same view") {
     withTable("t") {
       withView("v1") {
-        Seq((1, "test1"), (2, "test2"), (1, "test2"))
-          .toDF("id", "name")
-          .write
-          .format("parquet")
-          .saveAsTable("t")
+        Seq((1, "test1"), (2, "test2"), (1, "test2")).toDF("id", "name")
+          .write.format("parquet").saveAsTable("t")
         sql("CREATE VIEW v1 (id, name) AS SELECT id, name FROM t")
 
         checkAnswer(
@@ -1257,7 +1327,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
   test("SPARK-52521: view with ANSI expressions") {
     withView("v1") {
       withSQLConf(ANSI_ENABLED.key -> "true") {
-        sql("""
+        sql(
+          """
             |CREATE VIEW v1 AS
             |SELECT RIGHT(CAST(id AS STRING), 1) AS c
             |FROM range(1)

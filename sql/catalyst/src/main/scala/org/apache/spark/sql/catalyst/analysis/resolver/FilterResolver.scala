@@ -32,8 +32,8 @@ class FilterResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
   /**
    * Resolve [[Filter]] by resolving its child and its condition. If an attribute that is used in
    * the condition is not present in child's output, we need to try and find the attribute in
-   * hidden output. If found, update child's output and place a [[Project]] node on top of
-   * original [[Filter]] with the original output of a [[Filter]]'s child.
+   * hidden output. If found, update child's output and place a [[Project]] node on top of original
+   * [[Filter]] with the original output of a [[Filter]]'s child.
    *
    * See [[ResolvesNameByHiddenOutput]] doc for more context.
    */
@@ -43,7 +43,8 @@ class FilterResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
     val partiallyResolvedFilter = unresolvedFilter.copy(child = resolvedChild)
     val resolvedCondition = expressionResolver.resolveExpressionTreeInOperator(
       partiallyResolvedFilter.condition,
-      partiallyResolvedFilter)
+      partiallyResolvedFilter
+    )
 
     val referencedAttributes = expressionResolver.getLastReferencedAttributes
 
@@ -52,7 +53,8 @@ class FilterResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
     validateFilter(
       invalidExpressions = expressionResolver.getLastInvalidExpressionsInTheContextOfOperator,
       unresolvedOperator = unresolvedFilter,
-      resolvedFilter = resolvedFilter)
+      resolvedFilter = resolvedFilter
+    )
 
     val missingAttributes: Seq[Attribute] =
       scopes.current.resolveMissingAttributesByHiddenOutput(referencedAttributes)
@@ -63,6 +65,7 @@ class FilterResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
     retainOriginalOutput(
       operator = finalFilter,
       missingExpressions = missingAttributes,
-      scopes = scopes)
+      scopes = scopes
+    )
   }
 }

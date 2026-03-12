@@ -51,7 +51,11 @@ class QueryPlanningTrackerEndToEndSuite extends StreamTest {
       assert(tracker.rules.nonEmpty)
     }
 
-    testStream(df)(StartStream(), AddData(inputData, 1, 2, 3), Execute(assertStatus), StopStream)
+    testStream(df)(
+      StartStream(),
+      AddData(inputData, 1, 2, 3),
+      Execute(assertStatus),
+      StopStream)
   }
 
   test("The start times should be in order: parsing <= analysis <= optimization <= planning") {

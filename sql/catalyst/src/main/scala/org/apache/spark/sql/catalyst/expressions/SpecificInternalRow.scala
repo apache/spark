@@ -22,7 +22,7 @@ import org.apache.spark.sql.types._
 
 /**
  * A parent class for mutable container objects that are reused when the values are changed,
- * resulting in less garbage. These values are held by a [[SpecificInternalRow]].
+ * resulting in less garbage.  These values are held by a [[SpecificInternalRow]].
  *
  * The following code was roughly used to generate these objects:
  * {{{
@@ -188,7 +188,7 @@ final class MutableAny extends MutableValue {
 
 /**
  * A row type that holds an array specialized container objects, of type [[MutableValue]], chosen
- * based on the dataTypes of each column. The intent is to decrease garbage when modifying the
+ * based on the dataTypes of each column.  The intent is to decrease garbage when modifying the
  * values of primitive columns.
  */
 final class SpecificInternalRow(val values: Array[MutableValue]) extends BaseGenericInternalRow {
@@ -198,21 +198,21 @@ final class SpecificInternalRow(val values: Array[MutableValue]) extends BaseGen
       .map(_.getMutableValue)
       .getOrElse(dataTypeToMutableValueDefault(dataType))
 
-  private[this] def dataTypeToMutableValueDefault(dataType: DataType): MutableValue =
-    dataType match {
-      // We use INT for DATE and YearMonthIntervalType internally
-      case IntegerType | DateType | _: YearMonthIntervalType => new MutableInt
-      // We use Long for Timestamp, Timestamp without time zone and DayTimeInterval internally
-      case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
-        new MutableLong
-      case FloatType => new MutableFloat
-      case DoubleType => new MutableDouble
-      case BooleanType => new MutableBoolean
-      case ByteType => new MutableByte
-      case ShortType => new MutableShort
-      case udt: UserDefinedType[_] => dataTypeToMutableValue(udt.sqlType)
-      case _ => new MutableAny
-    }
+  private[this] def dataTypeToMutableValueDefault(
+      dataType: DataType): MutableValue = dataType match {
+    // We use INT for DATE and YearMonthIntervalType internally
+    case IntegerType | DateType | _: YearMonthIntervalType => new MutableInt
+    // We use Long for Timestamp, Timestamp without time zone and DayTimeInterval internally
+    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
+      new MutableLong
+    case FloatType => new MutableFloat
+    case DoubleType => new MutableDouble
+    case BooleanType => new MutableBoolean
+    case ByteType => new MutableByte
+    case ShortType => new MutableShort
+    case udt: UserDefinedType[_] => dataTypeToMutableValue(udt.sqlType)
+    case _ => new MutableAny
+  }
 
   def this(dataTypes: Seq[DataType]) = {
     // SPARK-32550: use `dataTypes.foreach` instead of `while loop + dataTypes(i)` to ensure

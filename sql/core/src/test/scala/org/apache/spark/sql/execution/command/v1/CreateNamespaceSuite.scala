@@ -25,16 +25,15 @@ import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.execution.command
 
 /**
- * This base suite contains unified tests for the `CREATE NAMESPACE` command that checks V1 table
- * catalogs. The tests that cannot run for all V1 catalogs are located in more specific test
- * suites:
+ * This base suite contains unified tests for the `CREATE NAMESPACE` command that checks V1
+ * table catalogs. The tests that cannot run for all V1 catalogs are located in more
+ * specific test suites:
  *
  *   - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.CreateNamespaceSuite`
  *   - V1 Hive External catalog:
  *     `org.apache.spark.sql.hive.execution.command.CreateNamespaceSuite`
  */
-trait CreateNamespaceSuiteBase
-    extends command.CreateNamespaceSuiteBase
+trait CreateNamespaceSuiteBase extends command.CreateNamespaceSuiteBase
     with command.TestsV1AndV2Commands {
   override def namespace: String = "db"
 
@@ -42,9 +41,8 @@ trait CreateNamespaceSuiteBase
     val ns = s"$catalog.$namespace"
     withNamespace(ns) {
       sql(s"CREATE NAMESPACE $ns")
-      assert(
-        makeQualifiedPath(getNamespaceLocation(catalog, namespaceArray))
-          === getDBPath(namespace))
+      assert(makeQualifiedPath(getNamespaceLocation(catalog, namespaceArray))
+        === getDBPath(namespace))
     }
   }
 
@@ -55,8 +53,8 @@ trait CreateNamespaceSuiteBase
 }
 
 /**
- * The class contains tests for the `CREATE NAMESPACE` command to check V1 In-Memory table
- * catalog.
+ * The class contains tests for the `CREATE NAMESPACE` command to check V1 In-Memory
+ * table catalog.
  */
 class CreateNamespaceSuite extends CreateNamespaceSuiteBase with CommandSuiteBase {
   override def commandVersion: String = super[CreateNamespaceSuiteBase].commandVersion

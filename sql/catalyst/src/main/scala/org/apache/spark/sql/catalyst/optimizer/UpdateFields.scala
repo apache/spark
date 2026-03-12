@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.UPDATE_FIELDS
 
+
 /**
  * Optimizes [[UpdateFields]] expression chains.
  */
@@ -40,8 +41,8 @@ object OptimizeUpdateFields extends Rule[LogicalPlan] {
 
   val optimizeUpdateFields: PartialFunction[Expression, Expression] = {
     case UpdateFields(structExpr, fieldOps)
-        if fieldOps.forall(_.isInstanceOf[WithField]) &&
-          canOptimize(fieldOps.map(_.asInstanceOf[WithField].name)) =>
+      if fieldOps.forall(_.isInstanceOf[WithField]) &&
+        canOptimize(fieldOps.map(_.asInstanceOf[WithField].name)) =>
       val caseSensitive = conf.caseSensitiveAnalysis
 
       val withFields = fieldOps.map(_.asInstanceOf[WithField])
@@ -71,17 +72,16 @@ object OptimizeUpdateFields extends Rule[LogicalPlan] {
       UpdateFields(struct, fieldOps1 ++ fieldOps2)
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan =
-    plan.resolveExpressionsWithPruning(_.containsPattern(UPDATE_FIELDS), ruleId)(
-      optimizeUpdateFields)
+  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsWithPruning(
+    _.containsPattern(UPDATE_FIELDS), ruleId)(optimizeUpdateFields)
 }
 
 /**
  * Replaces [[UpdateFields]] expression with an evaluable expression.
  */
 object ReplaceUpdateFieldsExpression extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan =
-    plan.transformAllExpressionsWithPruning(_.containsPattern(UPDATE_FIELDS)) {
-      case u: UpdateFields => u.evalExpr
-    }
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
+    _.containsPattern(UPDATE_FIELDS)) {
+    case u: UpdateFields => u.evalExpr
+  }
 }

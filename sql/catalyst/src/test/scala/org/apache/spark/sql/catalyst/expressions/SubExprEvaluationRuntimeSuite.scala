@@ -79,8 +79,8 @@ class SubExprEvaluationRuntimeSuite extends SparkFunSuite {
 
     //  ( (one * two) * (one * two) ) + sqrt( (one * two) * (one * two) )
     val proxyExpressions = runtime.proxyExpressions(Seq(sum))
-    val proxys = proxyExpressions.flatMap(_.collect { case p: ExpressionProxy =>
-      p
+    val proxys = proxyExpressions.flatMap(_.collect {
+      case p: ExpressionProxy => p
     })
     // ( (one * two) * (one * two) )
     assert(proxys.size == 2)
@@ -91,11 +91,9 @@ class SubExprEvaluationRuntimeSuite extends SparkFunSuite {
     val runtime = new SubExprEvaluationRuntime(1)
 
     val sum = Add(Rand(0), Rand(0))
-    val proxys = runtime
-      .proxyExpressions(Seq(sum, sum))
-      .flatMap(_.collect { case p: ExpressionProxy =>
-        p
-      })
+    val proxys = runtime.proxyExpressions(Seq(sum, sum)).flatMap(_.collect {
+      case p: ExpressionProxy => p
+    })
     assert(proxys.isEmpty)
   }
 
@@ -113,8 +111,8 @@ class SubExprEvaluationRuntimeSuite extends SparkFunSuite {
     val sqrt = Sqrt(mul2_1)
     val sum = Add(mul2_2, sqrt)
     val proxyExpressions = runtime.proxyExpressions(Seq(sum))
-    val proxys = proxyExpressions.flatMap(_.collect { case p: ExpressionProxy =>
-      p
+    val proxys = proxyExpressions.flatMap(_.collect {
+      case p: ExpressionProxy => p
     })
     // ( (one * two) * (one * two) )
     assert(proxys.size == 2)

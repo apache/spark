@@ -29,11 +29,18 @@ import org.apache.spark.sql.functions.window
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.tags.SlowSQLTest
 
-case class InputEventRow(key: String, eventTime: Timestamp, event: String)
+case class InputEventRow(
+    key: String,
+    eventTime: Timestamp,
+    event: String)
 
-case class OutputRow(key: String, outputEventTime: Timestamp, count: Int)
+case class OutputRow(
+    key: String,
+    outputEventTime: Timestamp,
+    count: Int)
 
-class TestStatefulProcessor extends StatefulProcessor[String, InputEventRow, OutputRow] {
+class TestStatefulProcessor
+  extends StatefulProcessor[String, InputEventRow, OutputRow] {
   override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {}
 
   override def handleInputRows(
@@ -56,7 +63,8 @@ class TestStatefulProcessor extends StatefulProcessor[String, InputEventRow, Out
   }
 }
 
-class InputCountStatefulProcessor[T] extends StatefulProcessor[String, T, Int] {
+class InputCountStatefulProcessor[T]
+  extends StatefulProcessor[String, T, Int] {
   override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {}
 
   override def handleInputRows(
@@ -71,7 +79,7 @@ class InputCountStatefulProcessor[T] extends StatefulProcessor[String, T, Int] {
  * Emits output row with timestamp older than current watermark for batchId > 0.
  */
 class StatefulProcessorEmittingRowsOlderThanWatermark
-    extends StatefulProcessor[String, InputEventRow, OutputRow] {
+  extends StatefulProcessor[String, InputEventRow, OutputRow] {
   override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {}
 
   override def handleInputRows(
@@ -88,30 +96,30 @@ class StatefulProcessorEmittingRowsOlderThanWatermark
   }
 }
 
-case class Window(start: Timestamp, end: Timestamp)
+case class Window(
+    start: Timestamp,
+    end: Timestamp)
 
-case class AggEventRow(window: Window, count: Long)
+case class AggEventRow(
+    window: Window,
+    count: Long)
 
 @SlowSQLTest
-class TransformWithStateChainingSuite
-    extends StreamTest
-    with AlsoTestWithEncodingTypes
-    with AlsoTestWithRocksDBFeatures {
+class TransformWithStateChainingSuite extends StreamTest
+  with AlsoTestWithEncodingTypes
+  with AlsoTestWithRocksDBFeatures {
   import testImplicits._
 
   private def isAvroEnabled: Boolean = SQLConf.get.stateStoreEncodingFormat == "avro"
 
-  test(
-    "watermark is propagated correctly for next stateful operator" +
-      " after transformWithState") {
+  test("watermark is propagated correctly for next stateful operator" +
+    " after transformWithState") {
     if (!isAvroEnabled) {
-      withSQLConf(
-        SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-          classOf[RocksDBStateStoreProvider].getName) {
+      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName) {
         val inputData = MemoryStream[InputEventRow]
 
-        val result = inputData
-          .toDS()
+        val result = inputData.toDS()
           .withWatermark("eventTime", "1 minute")
           .groupByKey(x => x.key)
           .transformWithState[OutputRow](
@@ -132,55 +140,48 @@ class TransformWithStateChainingSuite
           },
           AddData(inputData, InputEventRow("k1", timestamp("2024-02-01 00:00:00"), "e1")),
           // global watermark should now be 1 minute behind  `2024-02-01 00:00:00`.
-          CheckNewAnswer(
-            AggEventRow(
-              Window(timestamp("2024-01-01 00:00:00"), timestamp("2024-01-01 00:01:00")),
-              1)),
+          CheckNewAnswer(AggEventRow(
+            Window(timestamp("2024-01-01 00:00:00"), timestamp("2024-01-01 00:01:00")), 1)
+          ),
           Execute("assertWatermarkEquals") { q =>
             assertWatermarkEquals(q, timestamp("2024-01-31 23:59:00"))
           },
           AddData(inputData, InputEventRow("k1", timestamp("2024-02-02 00:00:00"), "e1")),
-          CheckNewAnswer(
-            AggEventRow(
-              Window(timestamp("2024-02-01 00:00:00"), timestamp("2024-02-01 00:01:00")),
-              1)))
+          CheckNewAnswer(AggEventRow(
+            Window(timestamp("2024-02-01 00:00:00"), timestamp("2024-02-01 00:01:00")), 1)
+          )
+        )
       }
     }
   }
 
-  test(
-    "passing eventTime column to transformWithState fails if" +
-      " no watermark is defined") {
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName) {
+  test("passing eventTime column to transformWithState fails if" +
+    " no watermark is defined") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
       val inputData = MemoryStream[InputEventRow]
 
       val ex = intercept[AnalysisException] {
-        inputData
-          .toDS()
-          .groupByKey(x => x.key)
-          .transformWithState[OutputRow](
-            new TestStatefulProcessor(),
-            "outputEventTime",
-            OutputMode.Append())
+        inputData.toDS()
+        .groupByKey(x => x.key)
+        .transformWithState[OutputRow](
+          new TestStatefulProcessor(),
+          "outputEventTime",
+          OutputMode.Append())
       }
 
       checkError(ex, "CANNOT_ASSIGN_EVENT_TIME_COLUMN_WITHOUT_WATERMARK")
     }
   }
 
-  test(
-    "missing eventTime column to transformWithState fails the query if " +
-      "another stateful operator is added") {
+  test("missing eventTime column to transformWithState fails the query if " +
+    "another stateful operator is added") {
     if (!isAvroEnabled) {
-      withSQLConf(
-        SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-          classOf[RocksDBStateStoreProvider].getName) {
+      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName) {
         val inputData = MemoryStream[InputEventRow]
 
-        val result = inputData
-          .toDS()
+        val result = inputData.toDS()
           .withWatermark("eventTime", "1 minute")
           .groupByKey(x => x.key)
           .transformWithState[OutputRow](
@@ -192,7 +193,9 @@ class TransformWithStateChainingSuite
 
         checkError(
           exception = intercept[AnalysisException] {
-            testStream(result, OutputMode.Append())(StartStream())
+            testStream(result, OutputMode.Append())(
+              StartStream()
+            )
           },
           condition = "STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION",
           sqlState = "42KDE",
@@ -204,13 +207,11 @@ class TransformWithStateChainingSuite
   }
 
   test("chaining multiple transformWithState operators") {
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName) {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
       val inputData = MemoryStream[InputEventRow]
 
-      val result = inputData
-        .toDS()
+      val result = inputData.toDS()
         .withWatermark("eventTime", "1 minute")
         .groupByKey(x => x.key)
         .transformWithState[OutputRow](
@@ -221,7 +222,8 @@ class TransformWithStateChainingSuite
         .transformWithState(
           new InputCountStatefulProcessor[OutputRow](),
           TimeMode.None(),
-          OutputMode.Append())
+          OutputMode.Append()
+        )
 
       testStream(result, OutputMode.Append())(
         AddData(inputData, InputEventRow("k1", timestamp("2024-01-01 00:00:00"), "e1")),
@@ -235,20 +237,18 @@ class TransformWithStateChainingSuite
           assertWatermarkEquals(q, timestamp("2024-01-31 23:59:00"))
         },
         AddData(inputData, InputEventRow("k1", timestamp("2024-02-02 00:00:00"), "e1")),
-        CheckNewAnswer(1))
+        CheckNewAnswer(1)
+      )
     }
   }
 
-  test(
-    "dropDuplicateWithWatermark after transformWithState operator" +
-      " fails if watermark column is not provided") {
+  test("dropDuplicateWithWatermark after transformWithState operator" +
+    " fails if watermark column is not provided") {
     if (!isAvroEnabled) {
-      withSQLConf(
-        SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-          classOf[RocksDBStateStoreProvider].getName) {
+      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName) {
         val inputData = MemoryStream[InputEventRow]
-        val result = inputData
-          .toDS()
+        val result = inputData.toDS()
           .withWatermark("eventTime", "1 minute")
           .groupByKey(x => x.key)
           .transformWithState[OutputRow](
@@ -258,22 +258,21 @@ class TransformWithStateChainingSuite
           .dropDuplicatesWithinWatermark()
 
         val ex = intercept[ExtendedAnalysisException] {
-          testStream(result, OutputMode.Append())(StartStream())
+          testStream(result, OutputMode.Append())(
+            StartStream()
+          )
         }
-        assert(
-          ex.getMessage.contains("dropDuplicatesWithinWatermark is not supported on" +
-            " streaming DataFrames/DataSets without watermark"))
+        assert(ex.getMessage.contains("dropDuplicatesWithinWatermark is not supported on" +
+          " streaming DataFrames/DataSets without watermark"))
       }
     }
   }
 
   test("dropDuplicateWithWatermark after transformWithState operator") {
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName) {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
       val inputData = MemoryStream[InputEventRow]
-      val result = inputData
-        .toDS()
+      val result = inputData.toDS()
         .withWatermark("eventTime", "1 minute")
         .groupByKey(x => x.key)
         .transformWithState[OutputRow](
@@ -284,22 +283,20 @@ class TransformWithStateChainingSuite
 
       if (!isAvroEnabled) {
         testStream(result, OutputMode.Append())(
-          AddData(
-            inputData,
-            InputEventRow("k1", timestamp("2024-02-01 00:00:00"), "e1"),
+          AddData(inputData, InputEventRow("k1", timestamp("2024-02-01 00:00:00"), "e1"),
             InputEventRow("k1", timestamp("2024-02-01 00:00:00"), "e1")),
           CheckNewAnswer(OutputRow("k1", timestamp("2024-02-01 00:00:00"), 2)),
           Execute("assertWatermarkEquals") { q =>
             assertWatermarkEquals(q, timestamp("2024-01-31 23:59:00"))
-          })
+          }
+        )
       } else {
         val ex = intercept[Exception] {
           testStream(result, OutputMode.Append())(
-            AddData(
-              inputData,
-              InputEventRow("k1", timestamp("2024-02-01 00:00:00"), "e1"),
+            AddData(inputData, InputEventRow("k1", timestamp("2024-02-01 00:00:00"), "e1"),
               InputEventRow("k1", timestamp("2024-02-01 00:00:00"), "e1")),
-            ProcessAllAvailable())
+            ProcessAllAvailable()
+          )
         }
         assert(ex.getMessage.contains("State store encoding format as avro is not supported"))
       }
@@ -307,14 +304,12 @@ class TransformWithStateChainingSuite
   }
 
   test("query fails if the output dataset does not contain specified eventTimeColumn") {
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName) {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
       val inputData = MemoryStream[InputEventRow]
 
       val ex = intercept[ExtendedAnalysisException] {
-        val result = inputData
-          .toDS()
+        val result = inputData.toDS()
           .withWatermark("eventTime", "1 minute")
           .groupByKey(x => x.key)
           .transformWithState[OutputRow](
@@ -322,12 +317,12 @@ class TransformWithStateChainingSuite
             "missingEventTimeColumn",
             OutputMode.Append())
 
-        testStream(result, OutputMode.Append())(StartStream())
+        testStream(result, OutputMode.Append())(
+          StartStream()
+        )
       }
 
-      checkError(
-        ex,
-        "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      checkError(ex, "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         parameters = Map(
           "objectName" -> "`missingEventTimeColumn`",
           "proposal" -> "`outputEventTime`, `count`, `key`"))
@@ -335,12 +330,10 @@ class TransformWithStateChainingSuite
   }
 
   test("query fails if the output dataset contains rows older than current watermark") {
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName) {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
       val inputData = MemoryStream[InputEventRow]
-      val result = inputData
-        .toDS()
+      val result = inputData.toDS()
         .withWatermark("eventTime", "1 minute")
         .groupByKey(x => x.key)
         .transformWithState[OutputRow](
@@ -355,27 +348,24 @@ class TransformWithStateChainingSuite
         // this batch would fail now, because watermark will move past 1ms after epoch
         AddData(inputData, InputEventRow("k1", timestamp("2024-02-02 00:00:00"), "e1")),
         ExpectFailure[SparkRuntimeException] { ex =>
-          checkError(
-            ex.asInstanceOf[SparkThrowable],
+          checkError(ex.asInstanceOf[SparkThrowable],
             "EMITTING_ROWS_OLDER_THAN_WATERMARK_NOT_ALLOWED",
-            parameters =
-              Map("currentWatermark" -> "1706774340000", "emittedRowEventTime" -> "1000"))
-        })
+            parameters = Map("currentWatermark" -> "1706774340000",
+              "emittedRowEventTime" -> "1000"))
+        }
+      )
     }
   }
 
   test("ensure that watermark delay is resolved from a view") {
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName) {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
       val inputData = MemoryStream[InputEventRow]
-      inputData
-        .toDS()
+      inputData.toDS()
         .withWatermark("eventTime", "1 minute")
         .createOrReplaceTempView("tempViewWithWatermark")
 
-      val result = spark.readStream
-        .table("tempViewWithWatermark")
+      val result = spark.readStream.table("tempViewWithWatermark")
         .as[InputEventRow]
         .groupByKey(x => x.key)
         .transformWithState[OutputRow](
@@ -388,22 +378,20 @@ class TransformWithStateChainingSuite
         CheckNewAnswer(OutputRow("k1", timestamp("2024-02-01 00:00:00"), 1)),
         Execute("assertWatermarkEquals") { q =>
           assertWatermarkEquals(q, timestamp("2024-01-31 23:59:00"))
-        })
+        }
+      )
     }
   }
 
   test("ensure that query fails if there is no watermark when reading from a view") {
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName) {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
       val inputData = MemoryStream[InputEventRow]
-      inputData
-        .toDS()
+      inputData.toDS()
         .createOrReplaceTempView("tempViewWithoutWatermark")
 
       val ex = intercept[AnalysisException] {
-        val result = spark.readStream
-          .table("tempViewWithoutWatermark")
+        val result = spark.readStream.table("tempViewWithoutWatermark")
           .as[InputEventRow]
           .groupByKey(x => x.key)
           .transformWithState[OutputRow](
@@ -414,10 +402,10 @@ class TransformWithStateChainingSuite
         testStream(result, OutputMode.Append())(
           AddData(inputData, InputEventRow("k1", timestamp("2024-02-01 00:00:00"), "e1")),
           ExpectFailure[SparkRuntimeException] { ex =>
-            checkError(
-              ex.asInstanceOf[AnalysisException],
+            checkError(ex.asInstanceOf[AnalysisException],
               "CANNOT_ASSIGN_EVENT_TIME_COLUMN_WITHOUT_WATERMARK")
-          })
+          }
+        )
       }
 
       checkError(ex, "CANNOT_ASSIGN_EVENT_TIME_COLUMN_WITHOUT_WATERMARK")
@@ -451,5 +439,4 @@ class TransformWithStateChainingSuite
  */
 @SlowSQLTest
 class TransformWithStateChainingSuiteWithRowChecksum
-    extends TransformWithStateChainingSuite
-    with EnableStateStoreRowChecksum
+  extends TransformWithStateChainingSuite with EnableStateStoreRowChecksum

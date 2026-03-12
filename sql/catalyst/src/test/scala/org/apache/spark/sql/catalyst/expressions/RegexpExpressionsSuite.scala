@@ -34,21 +34,18 @@ import org.apache.spark.sql.types.{IntegerType, StringType}
 class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   /**
-   * Check if a given expression evaluates to an expected output, in case the input is a literal
-   * and in case the input is in the form of a row.
-   * @tparam A
-   *   type of input
-   * @param mkExpr
-   *   the expression to test for a given input
-   * @param input
-   *   value that will be used to create the expression, as literal and in the form of a row
-   * @param expected
-   *   the expected output of the expression
-   * @param inputToExpression
-   *   an implicit conversion from the input type to its corresponding sql expression
+   * Check if a given expression evaluates to an expected output, in case the input is
+   * a literal and in case the input is in the form of a row.
+   * @tparam A type of input
+   * @param mkExpr the expression to test for a given input
+   * @param input value that will be used to create the expression, as literal and in the form
+   *        of a row
+   * @param expected the expected output of the expression
+   * @param inputToExpression an implicit conversion from the input type to its corresponding
+   *        sql expression
    */
-  def checkLiteralRow[A](mkExpr: Expression => Expression, input: A, expected: Any)(implicit
-      inputToExpression: A => Expression): Unit = {
+  def checkLiteralRow[A](mkExpr: Expression => Expression, input: A, expected: Any)
+    (implicit inputToExpression: A => Expression): Unit = {
     checkEvaluation(mkExpr(input), expected) // check literal input
 
     val regex = $"a".string.at(0)
@@ -59,48 +56,24 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create(null, StringType).likeAll("%foo%", "%oo"), null)
     checkEvaluation(Literal.create("foo", StringType).likeAll("%foo%", "%oo"), true)
     checkEvaluation(Literal.create("foo", StringType).likeAll("%foo%", "%bar%"), false)
-    checkEvaluation(
-      Literal
-        .create("foo", StringType)
-        .likeAll("%foo%", Literal.create(null, StringType)),
-      null)
-    checkEvaluation(
-      Literal
-        .create("foo", StringType)
-        .likeAll(Literal.create(null, StringType), "%foo%"),
-      null)
-    checkEvaluation(
-      Literal
-        .create("foo", StringType)
-        .likeAll("%feo%", Literal.create(null, StringType)),
-      false)
-    checkEvaluation(
-      Literal
-        .create("foo", StringType)
-        .likeAll(Literal.create(null, StringType), "%feo%"),
-      false)
+    checkEvaluation(Literal.create("foo", StringType)
+      .likeAll("%foo%", Literal.create(null, StringType)), null)
+    checkEvaluation(Literal.create("foo", StringType)
+      .likeAll(Literal.create(null, StringType), "%foo%"), null)
+    checkEvaluation(Literal.create("foo", StringType)
+      .likeAll("%feo%", Literal.create(null, StringType)), false)
+    checkEvaluation(Literal.create("foo", StringType)
+      .likeAll(Literal.create(null, StringType), "%feo%"), false)
     checkEvaluation(Literal.create("foo", StringType).notLikeAll("tee", "%yoo%"), true)
     checkEvaluation(Literal.create("foo", StringType).notLikeAll("%oo%", "%yoo%"), false)
-    checkEvaluation(
-      Literal
-        .create("foo", StringType)
-        .notLikeAll("%foo%", Literal.create(null, StringType)),
-      false)
-    checkEvaluation(
-      Literal
-        .create("foo", StringType)
-        .notLikeAll(Literal.create(null, StringType), "%foo%"),
-      false)
-    checkEvaluation(
-      Literal
-        .create("foo", StringType)
-        .notLikeAll("%yoo%", Literal.create(null, StringType)),
-      null)
-    checkEvaluation(
-      Literal
-        .create("foo", StringType)
-        .notLikeAll(Literal.create(null, StringType), "%yoo%"),
-      null)
+    checkEvaluation(Literal.create("foo", StringType)
+      .notLikeAll("%foo%", Literal.create(null, StringType)), false)
+    checkEvaluation(Literal.create("foo", StringType)
+      .notLikeAll(Literal.create(null, StringType), "%foo%"), false)
+    checkEvaluation(Literal.create("foo", StringType)
+      .notLikeAll("%yoo%", Literal.create(null, StringType)), null)
+    checkEvaluation(Literal.create("foo", StringType)
+      .notLikeAll(Literal.create(null, StringType), "%yoo%"), null)
   }
 
   test("LIKE ANY") {
@@ -108,49 +81,25 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create("foo", StringType).likeAny("%foo%", "%oo"), true)
     checkEvaluation(Literal.create("foo", StringType).likeAny("%foo%", "%bar%"), true)
     checkEvaluation(Literal.create("foo", StringType).likeAny("%fee%", "%bar%"), false)
-    checkEvaluation(
-      Literal
-        .create("foo", StringType)
-        .likeAny("%foo%", Literal.create(null, StringType)),
-      true)
-    checkEvaluation(
-      Literal
-        .create("foo", StringType)
-        .likeAny(Literal.create(null, StringType), "%foo%"),
-      true)
-    checkEvaluation(
-      Literal
-        .create("foo", StringType)
-        .likeAny("%feo%", Literal.create(null, StringType)),
-      null)
-    checkEvaluation(
-      Literal
-        .create("foo", StringType)
-        .likeAny(Literal.create(null, StringType), "%feo%"),
-      null)
+    checkEvaluation(Literal.create("foo", StringType)
+      .likeAny("%foo%", Literal.create(null, StringType)), true)
+    checkEvaluation(Literal.create("foo", StringType)
+      .likeAny(Literal.create(null, StringType), "%foo%"), true)
+    checkEvaluation(Literal.create("foo", StringType)
+      .likeAny("%feo%", Literal.create(null, StringType)), null)
+    checkEvaluation(Literal.create("foo", StringType)
+      .likeAny(Literal.create(null, StringType), "%feo%"), null)
     checkEvaluation(Literal.create("foo", StringType).notLikeAny("tee", "%yoo%"), true)
     checkEvaluation(Literal.create("foo", StringType).notLikeAny("%oo%", "%yoo%"), true)
     checkEvaluation(Literal.create("foo", StringType).notLikeAny("%foo%", "%oo"), false)
-    checkEvaluation(
-      Literal
-        .create("foo", StringType)
-        .notLikeAny("%foo%", Literal.create(null, StringType)),
-      null)
-    checkEvaluation(
-      Literal
-        .create("foo", StringType)
-        .notLikeAny(Literal.create(null, StringType), "%foo%"),
-      null)
-    checkEvaluation(
-      Literal
-        .create("foo", StringType)
-        .notLikeAny("%yoo%", Literal.create(null, StringType)),
-      true)
-    checkEvaluation(
-      Literal
-        .create("foo", StringType)
-        .notLikeAny(Literal.create(null, StringType), "%yoo%"),
-      true)
+    checkEvaluation(Literal.create("foo", StringType)
+      .notLikeAny("%foo%", Literal.create(null, StringType)), null)
+    checkEvaluation(Literal.create("foo", StringType)
+      .notLikeAny(Literal.create(null, StringType), "%foo%"), null)
+    checkEvaluation(Literal.create("foo", StringType)
+      .notLikeAny("%yoo%", Literal.create(null, StringType)), true)
+    checkEvaluation(Literal.create("foo", StringType)
+      .notLikeAny(Literal.create(null, StringType), "%yoo%"), true)
   }
 
   test("LIKE Pattern") {
@@ -160,17 +109,13 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create("a", StringType).like(Literal.create(null, StringType)), null)
     checkEvaluation(Literal.create(null, StringType).like(Literal.create(null, StringType)), null)
     checkEvaluation(
-      Literal.create("a", StringType).like(NonFoldableLiteral.create("a", StringType)),
-      true)
+      Literal.create("a", StringType).like(NonFoldableLiteral.create("a", StringType)), true)
     checkEvaluation(
-      Literal.create("a", StringType).like(NonFoldableLiteral.create(null, StringType)),
-      null)
+      Literal.create("a", StringType).like(NonFoldableLiteral.create(null, StringType)), null)
     checkEvaluation(
-      Literal.create(null, StringType).like(NonFoldableLiteral.create("a", StringType)),
-      null)
+      Literal.create(null, StringType).like(NonFoldableLiteral.create("a", StringType)), null)
     checkEvaluation(
-      Literal.create(null, StringType).like(NonFoldableLiteral.create(null, StringType)),
-      null)
+      Literal.create(null, StringType).like(NonFoldableLiteral.create(null, StringType)), null)
 
     // simple patterns
     checkLiteralRow("abdef" like _, "abdef", true)
@@ -182,8 +127,8 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkLiteralRow("addb" like _, "a%", true)
     checkLiteralRow("addb" like _, "**", false)
     checkLiteralRow("abc" like _, "a%", true)
-    checkLiteralRow("abc" like _, "b%", false)
-    checkLiteralRow("abc" like _, "bc%", false)
+    checkLiteralRow("abc"  like _, "b%", false)
+    checkLiteralRow("abc"  like _, "bc%", false)
     checkLiteralRow("a\nb" like _, "a_b", true)
     checkLiteralRow("ab" like _, "a%b", true)
     checkLiteralRow("a\nb" like _, "a%b", true)
@@ -236,98 +181,74 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       // null handling
       checkLiteralRow(Literal.create(null, StringType).like(_, escapeChar), "a", null)
       checkEvaluation(
-        Literal.create("a", StringType).like(Literal.create(null, StringType), escapeChar),
-        null)
+        Literal.create("a", StringType).like(Literal.create(null, StringType), escapeChar), null)
       checkEvaluation(
-        Literal.create(null, StringType).like(Literal.create(null, StringType), escapeChar),
-        null)
-      checkEvaluation(
-        Literal
-          .create("a", StringType)
-          .like(NonFoldableLiteral.create("a", StringType), escapeChar),
-        true)
-      checkEvaluation(
-        Literal
-          .create("a", StringType)
-          .like(NonFoldableLiteral.create(null, StringType), escapeChar),
-        null)
-      checkEvaluation(
-        Literal
-          .create(null, StringType)
-          .like(NonFoldableLiteral.create("a", StringType), escapeChar),
-        null)
-      checkEvaluation(
-        Literal
-          .create(null, StringType)
-          .like(NonFoldableLiteral.create(null, StringType), escapeChar),
-        null)
+        Literal.create(null, StringType).like(Literal.create(null, StringType), escapeChar), null)
+      checkEvaluation(Literal.create("a", StringType).like(
+        NonFoldableLiteral.create("a", StringType), escapeChar), true)
+      checkEvaluation(Literal.create("a", StringType).like(
+        NonFoldableLiteral.create(null, StringType), escapeChar), null)
+      checkEvaluation(Literal.create(null, StringType).like(
+        NonFoldableLiteral.create("a", StringType), escapeChar), null)
+      checkEvaluation(Literal.create(null, StringType).like(
+        NonFoldableLiteral.create(null, StringType), escapeChar), null)
 
       // simple patterns
-      checkLiteralRow("abdef" like (_, escapeChar), "abdef", true)
-      checkLiteralRow("a_%b" like (_, escapeChar), s"a${escapeChar}__b", true)
-      checkLiteralRow("addb" like (_, escapeChar), "a_%b", true)
-      checkLiteralRow("addb" like (_, escapeChar), s"a${escapeChar}__b", false)
-      checkLiteralRow("addb" like (_, escapeChar), s"a%$escapeChar%b", false)
-      checkLiteralRow("a_%b" like (_, escapeChar), s"a%$escapeChar%b", true)
-      checkLiteralRow("addb" like (_, escapeChar), "a%", true)
-      checkLiteralRow("addb" like (_, escapeChar), "**", false)
-      checkLiteralRow("abc" like (_, escapeChar), "a%", true)
-      checkLiteralRow("abc" like (_, escapeChar), "b%", false)
-      checkLiteralRow("abc" like (_, escapeChar), "bc%", false)
-      checkLiteralRow("a\nb" like (_, escapeChar), "a_b", true)
-      checkLiteralRow("ab" like (_, escapeChar), "a%b", true)
-      checkLiteralRow("a\nb" like (_, escapeChar), "a%b", true)
+      checkLiteralRow("abdef" like(_, escapeChar), "abdef", true)
+      checkLiteralRow("a_%b" like(_, escapeChar), s"a${escapeChar}__b", true)
+      checkLiteralRow("addb" like(_, escapeChar), "a_%b", true)
+      checkLiteralRow("addb" like(_, escapeChar), s"a${escapeChar}__b", false)
+      checkLiteralRow("addb" like(_, escapeChar), s"a%$escapeChar%b", false)
+      checkLiteralRow("a_%b" like(_, escapeChar), s"a%$escapeChar%b", true)
+      checkLiteralRow("addb" like(_, escapeChar), "a%", true)
+      checkLiteralRow("addb" like(_, escapeChar), "**", false)
+      checkLiteralRow("abc" like(_, escapeChar), "a%", true)
+      checkLiteralRow("abc"  like(_, escapeChar), "b%", false)
+      checkLiteralRow("abc"  like(_, escapeChar), "bc%", false)
+      checkLiteralRow("a\nb" like(_, escapeChar), "a_b", true)
+      checkLiteralRow("ab" like(_, escapeChar), "a%b", true)
+      checkLiteralRow("a\nb" like(_, escapeChar), "a%b", true)
 
       // empty input
-      checkLiteralRow("" like (_, escapeChar), "", true)
-      checkLiteralRow("a" like (_, escapeChar), "", false)
-      checkLiteralRow("" like (_, escapeChar), "a", false)
+      checkLiteralRow("" like(_, escapeChar), "", true)
+      checkLiteralRow("a" like(_, escapeChar), "", false)
+      checkLiteralRow("" like(_, escapeChar), "a", false)
 
       // SI-17647 double-escaping backslash
-      checkLiteralRow(
-        s"""$escapeChar$escapeChar$escapeChar$escapeChar""" like (_, escapeChar),
-        s"""%$escapeChar$escapeChar%""",
-        true)
-      checkLiteralRow("""%%""" like (_, escapeChar), """%%""", true)
-      checkLiteralRow(
-        s"""${escapeChar}__""" like (_, escapeChar),
-        s"""$escapeChar$escapeChar${escapeChar}__""",
-        true)
-      checkLiteralRow(
-        s"""$escapeChar$escapeChar${escapeChar}__""" like (_, escapeChar),
-        s"""%$escapeChar$escapeChar%$escapeChar%""",
-        false)
-      checkLiteralRow(
-        s"""_$escapeChar$escapeChar$escapeChar%""" like (_, escapeChar),
-        s"""%$escapeChar${escapeChar}""",
-        false)
+      checkLiteralRow(s"""$escapeChar$escapeChar$escapeChar$escapeChar""" like(_, escapeChar),
+        s"""%$escapeChar$escapeChar%""", true)
+      checkLiteralRow("""%%""" like(_, escapeChar), """%%""", true)
+      checkLiteralRow(s"""${escapeChar}__""" like(_, escapeChar),
+        s"""$escapeChar$escapeChar${escapeChar}__""", true)
+      checkLiteralRow(s"""$escapeChar$escapeChar${escapeChar}__""" like(_, escapeChar),
+        s"""%$escapeChar$escapeChar%$escapeChar%""", false)
+      checkLiteralRow(s"""_$escapeChar$escapeChar$escapeChar%""" like(_, escapeChar),
+        s"""%$escapeChar${escapeChar}""", false)
 
       // unicode
       // scalastyle:off nonascii
-      checkLiteralRow("a\u20ACa" like (_, escapeChar), "_\u20AC_", true)
-      checkLiteralRow("a€a" like (_, escapeChar), "_€_", true)
-      checkLiteralRow("a€a" like (_, escapeChar), "_\u20AC_", true)
-      checkLiteralRow("a\u20ACa" like (_, escapeChar), "_€_", true)
+      checkLiteralRow("a\u20ACa" like(_, escapeChar), "_\u20AC_", true)
+      checkLiteralRow("a€a" like(_, escapeChar), "_€_", true)
+      checkLiteralRow("a€a" like(_, escapeChar), "_\u20AC_", true)
+      checkLiteralRow("a\u20ACa" like(_, escapeChar), "_€_", true)
       // scalastyle:on nonascii
 
       // invalid escaping
       checkError(
         exception = intercept[AnalysisException] {
-          evaluateWithoutCodegen("""a""" like (s"""${escapeChar}a""", escapeChar))
+          evaluateWithoutCodegen("""a""" like(s"""${escapeChar}a""", escapeChar))
         },
         condition = "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
         parameters = Map("format" -> s"'${escapeChar}a'", "char" -> "'a'"))
 
       // case
-      checkLiteralRow("A" like (_, escapeChar), "a%", false)
-      checkLiteralRow("a" like (_, escapeChar), "A%", false)
-      checkLiteralRow("AaA" like (_, escapeChar), "_a_", true)
+      checkLiteralRow("A" like(_, escapeChar), "a%", false)
+      checkLiteralRow("a" like(_, escapeChar), "A%", false)
+      checkLiteralRow("AaA" like(_, escapeChar), "_a_", true)
 
       // example
-      checkLiteralRow(
-        s"""%SystemDrive%${escapeChar}Users${escapeChar}John""" like (_, escapeChar),
-        s"""$escapeChar%SystemDrive$escapeChar%$escapeChar${escapeChar}Users%""",
-        true)
+      checkLiteralRow(s"""%SystemDrive%${escapeChar}Users${escapeChar}John""" like(_, escapeChar),
+        s"""$escapeChar%SystemDrive$escapeChar%$escapeChar${escapeChar}Users%""", true)
     }
   }
 
@@ -338,11 +259,9 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation("abdef" rlike NonFoldableLiteral.create("abdef", StringType), true)
     checkEvaluation("abdef" rlike NonFoldableLiteral.create(null, StringType), null)
     checkEvaluation(
-      Literal.create(null, StringType) rlike NonFoldableLiteral.create("abdef", StringType),
-      null)
+      Literal.create(null, StringType) rlike NonFoldableLiteral.create("abdef", StringType), null)
     checkEvaluation(
-      Literal.create(null, StringType) rlike NonFoldableLiteral.create(null, StringType),
-      null)
+      Literal.create(null, StringType) rlike NonFoldableLiteral.create(null, StringType), null)
 
     checkLiteralRow("abdef" rlike _, "abdef", true)
     checkLiteralRow("abbbbc" rlike _, "a.*c", true)
@@ -356,10 +275,10 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkLiteralRow("axe" rlike _, "pi|apa", false)
     checkLiteralRow("pip" rlike _, "^(pi)*$", false)
 
-    checkLiteralRow("abc" rlike _, "^ab", true)
-    checkLiteralRow("abc" rlike _, "^bc", false)
-    checkLiteralRow("abc" rlike _, "^ab", true)
-    checkLiteralRow("abc" rlike _, "^bc", false)
+    checkLiteralRow("abc"  rlike _, "^ab", true)
+    checkLiteralRow("abc"  rlike _, "^bc", false)
+    checkLiteralRow("abc"  rlike _, "^ab", true)
+    checkLiteralRow("abc"  rlike _, "^bc", false)
     checkError(
       exception = intercept[SparkRuntimeException] {
         evaluateWithoutCodegen("abbbbc" rlike "**")
@@ -368,7 +287,8 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       parameters = Map(
         "parameter" -> toSQLId("regexp"),
         "functionName" -> toSQLId("rlike"),
-        "value" -> "'**'"))
+        "value" -> "'**'")
+    )
     checkError(
       exception = intercept[SparkRuntimeException] {
         val regex = $"a".string.at(0)
@@ -378,7 +298,8 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       parameters = Map(
         "parameter" -> toSQLId("regexp"),
         "functionName" -> toSQLId("rlike"),
-        "value" -> "'**'"))
+        "value" -> "'**'")
+    )
   }
 
   test("RegexReplace") {
@@ -474,47 +395,52 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       expr,
       row8,
       "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
-      Map(
-        "parameter" -> "`idx`",
+      Map("parameter" -> "`idx`",
         "functionName" -> "`regexp_extract`",
         "groupCount" -> "2",
-        "groupIndex" -> "3"))
+        "groupIndex" -> "3"
+      )
+    )
     checkErrorInExpression[SparkRuntimeException](
       expr,
       row9,
       "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
-      Map(
-        "parameter" -> "`idx`",
+      Map("parameter" -> "`idx`",
         "functionName" -> "`regexp_extract`",
         "groupCount" -> "1",
-        "groupIndex" -> "2"))
+        "groupIndex" -> "2"
+      )
+    )
     checkErrorInExpression[SparkRuntimeException](
       expr,
       row10,
       "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
-      Map(
-        "parameter" -> "`idx`",
+      Map("parameter" -> "`idx`",
         "functionName" -> "`regexp_extract`",
         "groupCount" -> "0",
-        "groupIndex" -> "1"))
+        "groupIndex" -> "1"
+      )
+    )
     checkErrorInExpression[SparkRuntimeException](
       expr,
       row11,
       "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
-      Map(
-        "parameter" -> "`idx`",
+      Map("parameter" -> "`idx`",
         "functionName" -> "`regexp_extract`",
         "groupCount" -> "2",
-        "groupIndex" -> "-1"))
+        "groupIndex" -> "-1"
+      )
+    )
     checkErrorInExpression[SparkRuntimeException](
       expr,
       row12,
       "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
-      Map(
-        "parameter" -> "`idx`",
+      Map("parameter" -> "`idx`",
         "functionName" -> "`regexp_extract`",
         "groupCount" -> "0",
-        "groupIndex" -> "-1"))
+        "groupIndex" -> "-1"
+      )
+    )
     // Test escaping of arguments
     GenerateUnsafeProjection.generate(
       RegExpExtract(Literal("\"quote"), Literal("\"quote"), Literal(1)) :: Nil)
@@ -547,8 +473,8 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val expr1 = new RegExpExtractAll(s, p)
     checkEvaluation(expr1, Seq("100", "300", "500"), row2)
 
-    val nonNullExpr =
-      RegExpExtractAll(Literal("100-200,300-400,500-600"), Literal("(\\d+)-(\\d+)"), Literal(1))
+    val nonNullExpr = RegExpExtractAll(Literal("100-200,300-400,500-600"),
+      Literal("(\\d+)-(\\d+)"), Literal(1))
     checkEvaluation(nonNullExpr, Seq("100", "300", "500"), row2)
 
     // invalid group index
@@ -562,47 +488,52 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       expr,
       row9,
       "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
-      Map(
-        "parameter" -> "`idx`",
+      Map("parameter" -> "`idx`",
         "functionName" -> "`regexp_extract_all`",
         "groupCount" -> "2",
-        "groupIndex" -> "3"))
+        "groupIndex" -> "3"
+      )
+    )
     checkErrorInExpression[SparkRuntimeException](
       expr,
       row10,
       "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
-      Map(
-        "parameter" -> "`idx`",
-        "functionName" -> "`regexp_extract_all`",
+      Map("parameter" -> "`idx`",
+        "functionName"-> "`regexp_extract_all`",
         "groupCount" -> "1",
-        "groupIndex" -> "2"))
+        "groupIndex" -> "2"
+      )
+    )
     checkErrorInExpression[SparkRuntimeException](
       expr,
       row11,
       "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
-      Map(
-        "parameter" -> "`idx`",
+      Map("parameter" -> "`idx`",
         "functionName" -> "`regexp_extract_all`",
         "groupCount" -> "0",
-        "groupIndex" -> "1"))
+        "groupIndex" -> "1"
+      )
+    )
     checkErrorInExpression[SparkRuntimeException](
       expr,
       row12,
       "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
-      Map(
-        "parameter" -> "`idx`",
+      Map("parameter" -> "`idx`",
         "functionName" -> "`regexp_extract_all`",
         "groupCount" -> "2",
-        "groupIndex" -> "-1"))
+        "groupIndex" -> "-1"
+      )
+    )
     checkErrorInExpression[SparkRuntimeException](
       expr,
       row13,
       "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
-      Map(
-        "parameter" -> "`idx`",
+      Map("parameter" -> "`idx`",
         "functionName" -> "`regexp_extract_all`",
         "groupCount" -> "0",
-        "groupIndex" -> "-1"))
+        "groupIndex" -> "-1"
+      )
+    )
   }
 
   test("SPLIT") {
@@ -613,45 +544,33 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val row3 = create_row("aa2bb3cc", null)
 
     checkEvaluation(
-      StringSplit(Literal("aa2bb3cc"), Literal("[1-9]+"), -1),
-      Seq("aa", "bb", "cc"),
-      row1)
+      StringSplit(Literal("aa2bb3cc"), Literal("[1-9]+"), -1), Seq("aa", "bb", "cc"), row1)
     checkEvaluation(
-      StringSplit(Literal("aa2bb3cc"), Literal("[1-9]+"), 2),
-      Seq("aa", "bb3cc"),
-      row1)
+      StringSplit(Literal("aa2bb3cc"), Literal("[1-9]+"), 2), Seq("aa", "bb3cc"), row1)
     // limit = 0 should behave just like limit = -1
     checkEvaluation(
-      StringSplit(Literal("aacbbcddc"), Literal("c"), 0),
-      Seq("aa", "bb", "dd", ""),
-      row1)
+      StringSplit(Literal("aacbbcddc"), Literal("c"), 0), Seq("aa", "bb", "dd", ""), row1)
     checkEvaluation(
-      StringSplit(Literal("aacbbcddc"), Literal("c"), -1),
-      Seq("aa", "bb", "dd", ""),
-      row1)
-    checkEvaluation(StringSplit(s1, s2, -1), Seq("aa", "bb", "cc"), row1)
+      StringSplit(Literal("aacbbcddc"), Literal("c"), -1), Seq("aa", "bb", "dd", ""), row1)
+    checkEvaluation(
+      StringSplit(s1, s2, -1), Seq("aa", "bb", "cc"), row1)
     checkEvaluation(StringSplit(s1, s2, -1), null, row2)
     checkEvaluation(StringSplit(s1, s2, -1), null, row3)
     // Empty regex
     checkEvaluation(
-      StringSplit(Literal("hello"), Literal(""), 0),
-      Seq("h", "e", "l", "l", "o"),
-      row1)
+      StringSplit(Literal("hello"), Literal(""), 0), Seq("h", "e", "l", "l", "o"), row1)
     checkEvaluation(
-      StringSplit(Literal("hello"), Literal(""), -1),
-      Seq("h", "e", "l", "l", "o"),
-      row1)
+      StringSplit(Literal("hello"), Literal(""), -1), Seq("h", "e", "l", "l", "o"), row1)
     checkEvaluation(
-      StringSplit(Literal("hello"), Literal(""), 5),
-      Seq("h", "e", "l", "l", "o"),
-      row1)
-    checkEvaluation(StringSplit(Literal("hello"), Literal(""), 3), Seq("h", "e", "llo"), row1)
+      StringSplit(Literal("hello"), Literal(""), 5), Seq("h", "e", "l", "l", "o"), row1)
     checkEvaluation(
-      StringSplit(Literal("hello"), Literal(""), 100),
-      Seq("h", "e", "l", "l", "o"),
-      row1)
-    checkEvaluation(StringSplit(Literal(""), Literal(""), -1), Seq(""), row1)
-    checkEvaluation(StringSplit(Literal(""), Literal(""), 0), Seq(""), row1)
+      StringSplit(Literal("hello"), Literal(""), 3), Seq("h", "e", "llo"), row1)
+    checkEvaluation(
+      StringSplit(Literal("hello"), Literal(""), 100), Seq("h", "e", "l", "l", "o"), row1)
+    checkEvaluation(
+      StringSplit(Literal(""), Literal(""), -1), Seq(""), row1)
+    checkEvaluation(
+      StringSplit(Literal(""), Literal(""), 0), Seq(""), row1)
 
     // Test escaping of arguments
     GenerateUnsafeProjection.generate(
@@ -661,21 +580,17 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-30759: cache initialization for literal patterns") {
     val expr = "A" like Literal.create("a", StringType)
     expr.eval()
-    val cache =
-      expr.getClass.getSuperclass.getDeclaredFields.filter(_.getName.endsWith("cache")).head
+    val cache = expr.getClass.getSuperclass
+      .getDeclaredFields.filter(_.getName.endsWith("cache")).head
     cache.setAccessible(true)
     assert(cache.get(expr).asInstanceOf[java.util.regex.Pattern].pattern().contains("a"))
   }
 
   test("SPARK-34814: LikeSimplification should handle NULL") {
-    withSQLConf(
-      SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
-        ConstantFolding.getClass.getName.stripSuffix("$")) {
-      checkEvaluation(
-        Literal
-          .create("foo", StringType)
-          .likeAll("%foo%", Literal.create(null, StringType)),
-        null)
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+      ConstantFolding.getClass.getName.stripSuffix("$")) {
+      checkEvaluation(Literal.create("foo", StringType)
+        .likeAll("%foo%", Literal.create(null, StringType)), null)
     }
   }
 
@@ -701,20 +616,20 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       RegExpExtract(s, p, r),
       create_row("1a 2b 14m", "(?l)", 0),
       "INVALID_PARAMETER_VALUE.PATTERN",
-      Map("parameter" -> "`regexp`", "functionName" -> "`regexp_extract`", "value" -> "'(?l)'"))
+      Map("parameter" -> "`regexp`", "functionName" -> "`regexp_extract`", "value" -> "'(?l)'")
+    )
     checkErrorInExpression[SparkRuntimeException](
       RegExpExtractAll(s, p, r),
       create_row("abc", "] [", 0),
       "INVALID_PARAMETER_VALUE.PATTERN",
-      Map(
-        "parameter" -> "`regexp`",
-        "functionName" -> "`regexp_extract_all`",
-        "value" -> "'] ['"))
+      Map("parameter" -> "`regexp`", "functionName" -> "`regexp_extract_all`", "value" -> "'] ['")
+    )
     checkErrorInExpression[SparkRuntimeException](
       RegExpInStr(s, p, r),
       create_row("abc", ", (", 0),
       "INVALID_PARAMETER_VALUE.PATTERN",
-      Map("parameter" -> "`regexp`", "functionName" -> "`regexp_instr`", "value" -> "', ('"))
+      Map("parameter" -> "`regexp`", "functionName" -> "`regexp_instr`", "value" -> "', ('")
+    )
   }
 
   test("RegExpReplace: fails analysis if pos is not a constant") {
@@ -724,13 +639,15 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val posExpr = AttributeReference("b", IntegerType)()
     val expr = RegExpReplace(s, p, r, posExpr)
 
-    assert(
-      expr.checkInputDataTypes() ==
-        DataTypeMismatch(
-          errorSubClass = "NON_FOLDABLE_INPUT",
-          messageParameters = Map(
-            "inputName" -> toSQLId("position"),
-            "inputType" -> toSQLType(posExpr.dataType),
-            "inputExpr" -> toSQLExpr(posExpr))))
+    assert(expr.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> toSQLId("position"),
+          "inputType" -> toSQLType(posExpr.dataType),
+          "inputExpr" -> toSQLExpr(posExpr)
+        )
+      )
+    )
   }
 }

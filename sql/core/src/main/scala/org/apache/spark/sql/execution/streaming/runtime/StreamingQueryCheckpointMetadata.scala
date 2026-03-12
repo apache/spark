@@ -27,21 +27,16 @@ import org.apache.spark.sql.internal.SQLConf
 
 /**
  * An interface for accessing the checkpoint metadata associated with a streaming query.
- * @param sparkSession
- *   Spark session
- * @param resolvedCheckpointRoot
- *   The resolved checkpoint root path
+ * @param sparkSession Spark session
+ * @param resolvedCheckpointRoot The resolved checkpoint root path
  */
-class StreamingQueryCheckpointMetadata(
-    sparkSession: SparkSession,
-    resolvedCheckpointRoot: String) {
+class StreamingQueryCheckpointMetadata(sparkSession: SparkSession, resolvedCheckpointRoot: String) {
 
   /**
    * A write-ahead-log that records the offsets that are present in each batch. In order to ensure
    * that a given batch will always consist of the same data, we write to this log *before* any
-   * processing is done. Thus, the Nth record in this log indicated data that is currently being
-   * processed and the N-1th entry indicates which offsets have been durably committed to the
-   * sink.
+   * processing is done.  Thus, the Nth record in this log indicated data that is currently being
+   * processed and the N-1th entry indicates which offsets have been durably committed to the sink.
    */
   lazy val offsetLog =
     new OffsetSeqLog(sparkSession, checkpointFile(StreamingCheckpointConstants.DIR_NAME_OFFSETS))

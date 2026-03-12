@@ -32,14 +32,12 @@ trait DatetimeFormatterSuite extends SparkFunSuite with SQLHelper with Matchers 
   def checkFormatterCreation(pattern: String, isParsing: Boolean): Unit
 
   private def dateFormatter(
-      pattern: String,
-      ldf: LegacyDateFormat = FAST_DATE_FORMAT): DateFormatter = {
+      pattern: String, ldf: LegacyDateFormat = FAST_DATE_FORMAT): DateFormatter = {
     DateFormatter(pattern, DateFormatter.defaultLocale, ldf, isParsing = true)
   }
 
   private def timestampFormatter(
-      pattern: String,
-      ldf: LegacyDateFormat = SIMPLE_DATE_FORMAT): TimestampFormatter = {
+      pattern: String, ldf: LegacyDateFormat = SIMPLE_DATE_FORMAT): TimestampFormatter = {
     TimestampFormatter(pattern, UTC, legacyFormat = ldf, isParsing = true)
   }
 
@@ -47,9 +45,8 @@ trait DatetimeFormatterSuite extends SparkFunSuite with SQLHelper with Matchers 
 
   private def assertEqual(pattern: String, datetimeStr: String, expected: Long): Unit = {
     if (useDateFormatter) {
-      assert(
-        dateFormatter(pattern).parse(datetimeStr) ===
-          DateTimeUtils.microsToDays(expected, UTC))
+      assert(dateFormatter(pattern).parse(datetimeStr) ===
+        DateTimeUtils.microsToDays(expected, UTC))
     } else {
       assert(timestampFormatter(pattern).parse(datetimeStr) === expected)
     }
@@ -86,8 +83,8 @@ trait DatetimeFormatterSuite extends SparkFunSuite with SQLHelper with Matchers 
       }
       // supported by the legacy one, then we will suggest users with SparkUpgradeException
       ((weekBasedLetters ++ unsupportedLetters).map(_.toString)
-        ++ unsupportedPatternLengths -- unsupportedBoth).foreach { pattern =>
-        intercept[SparkUpgradeException](checkFormatterCreation(pattern, isParsing))
+        ++ unsupportedPatternLengths -- unsupportedBoth).foreach {
+        pattern => intercept[SparkUpgradeException](checkFormatterCreation(pattern, isParsing))
       }
     }
 
@@ -97,8 +94,8 @@ trait DatetimeFormatterSuite extends SparkFunSuite with SQLHelper with Matchers 
       intercept[SparkIllegalArgumentException](checkFormatterCreation(pattern, true))
     }
     // supported by the legacy one, then we will suggest users with SparkUpgradeException
-    (unsupportedLettersForParsing.map(_.toString) -- unsupportedBoth).foreach { pattern =>
-      intercept[SparkUpgradeException](checkFormatterCreation(pattern, true))
+    (unsupportedLettersForParsing.map(_.toString) -- unsupportedBoth).foreach {
+      pattern => intercept[SparkUpgradeException](checkFormatterCreation(pattern, true))
     }
   }
 
@@ -106,47 +103,32 @@ trait DatetimeFormatterSuite extends SparkFunSuite with SQLHelper with Matchers 
     withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "EXCEPTION") {
       // resolved to queryable LocaleDate or fail directly
       assertEqual("yyyy-dd-DD", "2020-29-60", date(2020, 2, 29))
-      assertError(
-        "yyyy-dd-DD",
-        "2020-02-60",
+      assertError("yyyy-dd-DD", "2020-02-60",
         "Field DayOfMonth 29 differs from DayOfMonth 2 derived from 2020-02-29")
       assertEqual("yyyy-MM-DD", "2020-02-60", date(2020, 2, 29))
-      assertError(
-        "yyyy-MM-DD",
-        "2020-03-60",
+      assertError("yyyy-MM-DD", "2020-03-60",
         "Field MonthOfYear 2 differs from MonthOfYear 3 derived from 2020-02-29")
       assertEqual("yyyy-MM-dd-DD", "2020-02-29-60", date(2020, 2, 29))
-      assertError(
-        "yyyy-MM-dd-DD",
-        "2020-03-01-60",
+      assertError("yyyy-MM-dd-DD", "2020-03-01-60",
         "Field DayOfYear 61 differs from DayOfYear 60 derived from 2020-03-01")
       assertEqual("yyyy-DDD", "2020-366", date(2020, 12, 31))
-      assertError(
-        "yyyy-DDD",
-        "2019-366",
+      assertError("yyyy-DDD", "2019-366",
         "Invalid date 'DayOfYear 366' as '2019' is not a leap year")
 
       // unresolved and need to check manually(SPARK-31939 fixed)
       assertEqual("DDD", "365", date(1970, 12, 31))
-      assertError("DDD", "366", "Invalid date 'DayOfYear 366' as '1970' is not a leap year")
+      assertError("DDD", "366",
+        "Invalid date 'DayOfYear 366' as '1970' is not a leap year")
       assertEqual("MM-DD", "03-60", date(1970, 3))
-      assertError(
-        "MM-DD",
-        "02-60",
+      assertError("MM-DD", "02-60",
         "Field MonthOfYear 2 differs from MonthOfYear 3 derived from 1970-03-01")
       assertEqual("MM-dd-DD", "02-28-59", date(1970, 2, 28))
-      assertError(
-        "MM-dd-DD",
-        "02-28-60",
+      assertError("MM-dd-DD", "02-28-60",
         "Field MonthOfYear 2 differs from MonthOfYear 3 derived from 1970-03-01")
-      assertError(
-        "MM-dd-DD",
-        "02-28-58",
+      assertError("MM-dd-DD", "02-28-58",
         "Field DayOfMonth 28 differs from DayOfMonth 27 derived from 1970-02-27")
       assertEqual("dd-DD", "28-59", date(1970, 2, 28))
-      assertError(
-        "dd-DD",
-        "27-59",
+      assertError("dd-DD", "27-59",
         "Field DayOfMonth 27 differs from DayOfMonth 28 derived from 1970-02-28")
     }
   }

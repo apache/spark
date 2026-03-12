@@ -21,8 +21,8 @@ import com.fasterxml.jackson.annotation.JsonProperty
 
 private[sql] case class ColumnV01(
     @JsonProperty(required = true) name: String,
-    @JsonProperty(required = true) expr: String)
-    extends ColumnBase
+    @JsonProperty(required = true) expr: String
+) extends ColumnBase
 
 private[sql] object ColumnV01 {
   def fromCanonical(canonical: Column): ColumnV01 = {
@@ -43,8 +43,7 @@ private[sql] case class MetricViewV01(
     @JsonProperty(required = true) source: String,
     filter: Option[String] = None,
     dimensions: Seq[ColumnV01] = Seq.empty,
-    measures: Seq[ColumnV01] = Seq.empty)
-    extends MetricViewBase
+    measures: Seq[ColumnV01] = Seq.empty) extends MetricViewBase
 
 private[sql] object MetricViewV01 {
   def fromCanonical(canonical: MetricView): MetricViewV01 = {
@@ -64,20 +63,21 @@ private[sql] object MetricViewV01 {
       source = source,
       filter = filter,
       dimensions = dimensions,
-      measures = measures)
+      measures = measures
+    )
   }
 }
 
 private[sql] object YamlMapperProviderV01 extends YamlMapperProviderBase
 
 private[sql] object MetricViewYAMLDeserializerV01
-    extends BaseMetricViewYAMLDeserializer[MetricViewV01] {
+  extends BaseMetricViewYAMLDeserializer[MetricViewV01] {
   override protected def yamlMapperProvider: YamlMapperProviderBase = YamlMapperProviderV01
 
   protected def getTargetClass: Class[MetricViewV01] = classOf[MetricViewV01]
 }
 
 private[sql] object MetricViewYAMLSerializerV01
-    extends BaseMetricViewYAMLSerializer[MetricViewV01] {
+  extends BaseMetricViewYAMLSerializer[MetricViewV01] {
   override protected def yamlMapperProvider: YamlMapperProviderBase = YamlMapperProviderV01
 }

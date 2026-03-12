@@ -44,7 +44,8 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
     checkError(
       exception = intercept[SparkRuntimeException](builder.put(null, 1)),
       condition = "NULL_MAP_KEY",
-      parameters = Map.empty)
+      parameters = Map.empty
+    )
   }
 
   test("fail while duplicated keys detected") {
@@ -53,7 +54,10 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
     checkError(
       exception = intercept[SparkRuntimeException](builder.put(1, 2)),
       condition = "DUPLICATED_MAP_KEY",
-      parameters = Map("key" -> "1", "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\""))
+      parameters = Map(
+        "key" -> "1",
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
+    )
   }
 
   test("apply key normalization when creating") {
@@ -62,10 +66,13 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
     checkError(
       exception = intercept[SparkRuntimeException](builderDouble.put(0.0, 2)),
       condition = "DUPLICATED_MAP_KEY",
-      parameters = Map("key" -> "0.0", "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\""))
+      parameters = Map(
+        "key" -> "0.0",
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
+    )
   }
 
-  test("disable map key normalization") {
+  test ("disable map key normalization") {
     withSQLConf(SQLConf.DISABLE_MAP_KEY_NORMALIZATION.key -> "true") {
       val builder = new ArrayBasedMapBuilder(DoubleType, IntegerType)
       builder.put(0.0, 1)
@@ -104,8 +111,10 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
     checkError(
       exception = intercept[SparkRuntimeException](builder.put(arr, 3)),
       condition = "DUPLICATED_MAP_KEY",
-      parameters =
-        Map("key" -> arr.toString, "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\""))
+      parameters = Map(
+        "key" -> arr.toString,
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
+    )
 
     withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
       val builder = new ArrayBasedMapBuilder(BinaryType, IntegerType)
@@ -140,7 +149,8 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
       condition = "DUPLICATED_MAP_KEY",
       parameters = Map(
         "key" -> unsafeRow.toString(),
-        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\""))
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
+    )
 
     withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
       val builder = new ArrayBasedMapBuilder(new StructType().add("i", "int"), IntegerType)
@@ -173,7 +183,8 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
       condition = "DUPLICATED_MAP_KEY",
       parameters = Map(
         "key" -> unsafeArray.toString,
-        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\""))
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
+    )
 
     withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
       val builder = new ArrayBasedMapBuilder(ArrayType(IntegerType), IntegerType)
@@ -182,9 +193,8 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
       builder.put(unsafeArray, 3)
       val map = builder.build()
       assert(map.numElements() == 2)
-      assert(
-        ArrayBasedMapData.toScalaMap(map) ==
-          Map(new GenericArrayData(Seq(1, 1)) -> 3, new GenericArrayData(Seq(2, 2)) -> 2))
+      assert(ArrayBasedMapData.toScalaMap(map) ==
+        Map(new GenericArrayData(Seq(1, 1)) -> 3, new GenericArrayData(Seq(2, 2)) -> 2))
     }
   }
 }

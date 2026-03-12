@@ -111,10 +111,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         if (cpDir == null || !restart) {
           cpDir = s"$dir/${RandomStringUtils.secure.nextAlphabetic(10)}"
         }
-        MemoryStream[Int]
-          .toDS()
-          .groupBy()
-          .count()
+        MemoryStream[Int].toDS().groupBy().count()
           .writeStream
           .format("memory")
           .outputMode("complete")
@@ -152,7 +149,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
 
   testQuietly("isActive, exception, and awaitTermination") {
     val inputData = MemoryStream[Int]
-    val mapped = inputData.toDS().map { 6 / _ }
+    val mapped = inputData.toDS().map { 6 / _}
 
     testStream(mapped)(
       AssertOnQuery(_.isActive),
@@ -176,21 +173,20 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       TestAwaitTermination(ExpectException[SparkException]()),
       TestAwaitTermination(ExpectException[SparkException](), timeoutMs = 2000),
       TestAwaitTermination(ExpectException[SparkException](), timeoutMs = 10),
-      AssertOnQuery(
-        q => {
-          q.exception.get.startOffset ===
-            q.committedOffsets.toOffsetSeq(Seq(inputData), OffsetSeqMetadata()).toString &&
-            q.exception.get.endOffset ===
+      AssertOnQuery(q => {
+        q.exception.get.startOffset ===
+          q.committedOffsets.toOffsetSeq(Seq(inputData), OffsetSeqMetadata()).toString &&
+          q.exception.get.endOffset ===
             q.availableOffsets.toOffsetSeq(Seq(inputData), OffsetSeqMetadata()).toString
-        },
-        "incorrect start offset or end offset on exception"))
+      }, "incorrect start offset or end offset on exception")
+    )
   }
 
   testQuietly("OneTime trigger, commit log, and exception") {
     // NOTE: the test uses the deprecated Trigger.Once() by intention, do not change.
     import Trigger.Once
     val inputData = MemoryStream[Int]
-    val mapped = inputData.toDS().map { 6 / _ }
+    val mapped = inputData.toDS().map { 6 / _}
 
     testStream(mapped)(
       AssertOnQuery(_.isActive),
@@ -221,14 +217,13 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       StartStream(trigger = Once),
       ExpectFailure[SparkException](),
       AssertOnQuery(_.isActive === false),
-      AssertOnQuery(
-        q => {
-          q.exception.get.startOffset ===
-            q.committedOffsets.toOffsetSeq(Seq(inputData), OffsetSeqMetadata()).toString &&
-            q.exception.get.endOffset ===
+      AssertOnQuery(q => {
+        q.exception.get.startOffset ===
+          q.committedOffsets.toOffsetSeq(Seq(inputData), OffsetSeqMetadata()).toString &&
+          q.exception.get.endOffset ===
             q.availableOffsets.toOffsetSeq(Seq(inputData), OffsetSeqMetadata()).toString
-        },
-        "incorrect start offset or end offset on exception"))
+      }, "incorrect start offset or end offset on exception")
+    )
   }
 
   testQuietly("status, lastProgress, and recentProgress") {
@@ -241,11 +236,10 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       private def dataAdded: Boolean = currentOffset.offset != -1
 
       // latestOffset should take 50 ms the first time it is called after data is added
-      override def latestOffset(startOffset: OffsetV2, limit: ReadLimit): OffsetV2 =
-        synchronized {
-          if (dataAdded) clock.waitTillTime(1050)
-          super.latestOffset(startOffset, limit)
-        }
+      override def latestOffset(startOffset: OffsetV2, limit: ReadLimit): OffsetV2 = synchronized {
+        if (dataAdded) clock.waitTillTime(1050)
+        super.latestOffset(startOffset, limit)
+      }
 
       // getBatch should take 100 ms the first time it is called
       override def planInputPartitions(start: OffsetV2, end: OffsetV2): Array[InputPartition] = {
@@ -257,36 +251,28 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
 
     // query execution should take 350 ms the first time it is called
-    val mapped = inputData
-      .toDS()
-      .coalesce(1)
-      .as[Long]
-      .map { x =>
-        clock.waitTillTime(1500) // this will only wait the first time when clock < 1500
-        10 / x
-      }
-      .agg(count("*"))
-      .as[Long]
+    val mapped = inputData.toDS().coalesce(1).as[Long].map { x =>
+      clock.waitTillTime(1500)  // this will only wait the first time when clock < 1500
+      10 / x
+    }.agg(count("*")).as[Long]
 
     case class AssertStreamExecThreadIsWaitingForTime(targetTime: Long)
-        extends AssertOnQuery(
-          q => {
-            eventually(Timeout(streamingTimeout)) {
-              if (q.exception.isEmpty) {
-                assert(clock.isStreamWaitingFor(targetTime))
-              }
-            }
-            if (q.exception.isDefined) {
-              throw q.exception.get
-            }
-            true
-          },
-          "") {
+      extends AssertOnQuery(q => {
+        eventually(Timeout(streamingTimeout)) {
+          if (q.exception.isEmpty) {
+            assert(clock.isStreamWaitingFor(targetTime))
+          }
+        }
+        if (q.exception.isDefined) {
+          throw q.exception.get
+        }
+        true
+      }, "") {
       override def toString: String = s"AssertStreamExecThreadIsWaitingForTime($targetTime)"
     }
 
     case class AssertClockTime(time: Long)
-        extends AssertOnQuery(q => clock.getTimeMillis() === time, "") {
+      extends AssertOnQuery(q => clock.getTimeMillis() === time, "") {
       override def toString: String = s"AssertClockTime($time)"
     }
 
@@ -308,6 +294,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AssertOnQuery(_.status.isTriggerActive),
       AssertOnQuery(_.status.message.startsWith("Getting offsets from")),
       AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
+
       AdvanceManualClock(50), // time = 1050 to unblock `latestOffset`
       AssertClockTime(1050),
       // will block on `planInputPartitions` that needs 1350
@@ -316,6 +303,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AssertOnQuery(_.status.isTriggerActive),
       AssertOnQuery(_.status.message === "Processing new data"),
       AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
+
       AdvanceManualClock(100), // time = 1150 to unblock `planInputPartitions`
       AssertClockTime(1150),
       AssertStreamExecThreadIsWaitingForTime(1500), // will block on map task that needs 1500
@@ -328,7 +316,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AdvanceManualClock(350), // time = 1500 to unblock map task
       AssertClockTime(1500),
       CheckAnswer(2),
-      AssertStreamExecThreadIsWaitingForTime(2000), // will block until the next trigger
+      AssertStreamExecThreadIsWaitingForTime(2000),  // will block until the next trigger
       AssertOnQuery(_.status.isDataAvailable),
       AssertOnQuery(_.status.isTriggerActive === false),
       AssertOnQuery(_.status.message === "Waiting for next trigger"),
@@ -355,9 +343,9 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
 
         assert(progress.sources.length === 1)
         assert(progress.sources(0).description contains "MemoryStream")
-        assert(progress.sources(0).startOffset === null) // no prior offset
+        assert(progress.sources(0).startOffset === null)   // no prior offset
         assert(progress.sources(0).endOffset === "0")
-        assert(progress.sources(0).processedRowsPerSecond === 4.0) // 2 rows processed in 500 ms
+        assert(progress.sources(0).processedRowsPerSecond === 4.0)  // 2 rows processed in 500 ms
 
         assert(progress.stateOperators.length === 1)
         assert(progress.stateOperators(0).numRowsUpdated === 1)
@@ -368,11 +356,11 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       },
 
       // Test whether input rate is updated after two batches
-      AssertStreamExecThreadIsWaitingForTime(2000), // blocked waiting for next trigger time
+      AssertStreamExecThreadIsWaitingForTime(2000),  // blocked waiting for next trigger time
       AddData(inputData, 1, 2),
       AdvanceManualClock(500), // allow another trigger
       AssertClockTime(2000),
-      AssertStreamExecThreadIsWaitingForTime(3000), // will block waiting for next trigger time
+      AssertStreamExecThreadIsWaitingForTime(3000),  // will block waiting for next trigger time
       CheckAnswer(4),
       AssertOnQuery(_.status.isDataAvailable),
       AssertOnQuery(_.status.isTriggerActive === false),
@@ -413,7 +401,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       ExpectFailure[SparkException](),
       AssertOnQuery(_.status.isDataAvailable === false),
       AssertOnQuery(_.status.isTriggerActive === false),
-      AssertOnQuery(_.status.message.startsWith("Terminated with exception")))
+      AssertOnQuery(_.status.message.startsWith("Terminated with exception"))
+    )
   }
 
   test("lastProgress should be null when recentProgress is empty") {
@@ -451,7 +440,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       testStream(inputData.toDF())(
         AssertOnQuery { q => !isMetricsRegistered(q) },
         StopStream,
-        AssertOnQuery { q => !isMetricsRegistered(q) })
+        AssertOnQuery { q => !isMetricsRegistered(q) }
+      )
     }
 
     // Registered when enabled
@@ -459,7 +449,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       testStream(inputData.toDF())(
         AssertOnQuery { q => isMetricsRegistered(q) },
         StopStream,
-        AssertOnQuery { q => !isMetricsRegistered(q) })
+        AssertOnQuery { q => !isMetricsRegistered(q) }
+      )
     }
   }
 
@@ -491,8 +482,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
 
   test("SPARK-37147: MetricsReporter does not fail when durationMs is empty") {
     val stateOpProgressMock = mock[StreamingQueryProgress]
-    when(stateOpProgressMock.durationMs).thenReturn(
-      Collections.emptyMap[String, java.lang.Long]())
+    when(stateOpProgressMock.durationMs).thenReturn(Collections.emptyMap[String, java.lang.Long]())
     val streamExecMock = mock[StreamExecution]
     when(streamExecMock.lastProgress).thenReturn(stateOpProgressMock)
 
@@ -504,8 +494,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     val streamingTriggerDF = spark.createDataset(1 to 10).toDF()
     val streamingInputDF = createSingleTriggerStreamingDF(streamingTriggerDF).toDF("value")
 
-    val progress =
-      getStreamingQuery(streamingInputDF.join(streamingInputDF, "value")).recentProgress.head
+    val progress = getStreamingQuery(streamingInputDF.join(streamingInputDF, "value"))
+      .recentProgress.head
     assert(progress.numInputRows === 20) // data is read multiple times in self-joins
     assert(progress.sources.length === 1)
     assert(progress.sources(0).numInputRows === 20)
@@ -514,13 +504,12 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
   test("input row calculation with mixed batch and streaming V1 sources") {
     val streamingTriggerDF = spark.createDataset(1 to 10).toDF()
     val streamingInputDF = createSingleTriggerStreamingDF(streamingTriggerDF).toDF("value")
-    val staticInputDF =
-      spark.createDataFrame(Seq(1 -> "1", 2 -> "2")).toDF("value", "anotherValue")
+    val staticInputDF = spark.createDataFrame(Seq(1 -> "1", 2 -> "2")).toDF("value", "anotherValue")
 
     // Trigger input has 10 rows, static input has 2 rows,
     // therefore after the first trigger, the calculated input rows should be 10
-    val progress =
-      getStreamingQuery(streamingInputDF.join(staticInputDF, "value")).recentProgress.head
+    val progress = getStreamingQuery(streamingInputDF.join(staticInputDF, "value"))
+      .recentProgress.head
     assert(progress.numInputRows === 10)
     assert(progress.sources.length === 1)
     assert(progress.sources(0).numInputRows === 10)
@@ -552,7 +541,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         // The source is scanned twice because of self-union
         assert(lastProgress.get.numInputRows == 6)
         true
-      })
+      }
+    )
   }
 
   test("input row calculation with same V2 source used twice in self-join") {
@@ -565,7 +555,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       testStream(streamDF.join(streamDF, "v"))(
         AddData(memoryStream, 1, 2, 3),
         CheckAnswer(1, 2, 3),
-        check)
+        check
+      )
     }
 
     withSQLConf(SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
@@ -584,8 +575,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         val lastProgress = getLastProgressWithData(q)
         assert(lastProgress.nonEmpty)
         assert(lastProgress.get.sources.length == 1)
-        assert(q.lastExecution.executedPlan.collect { case r: ReusedExchangeExec =>
-          r
+        assert(q.lastExecution.executedPlan.collect {
+          case r: ReusedExchangeExec => r
         }.length == 1)
         // The source is scanned only once because of exchange reuse
         assert(lastProgress.get.numInputRows == 3)
@@ -620,14 +611,14 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         assert(lastProgress.get.sources(0).numInputRows == 0)
         assert(lastProgress.get.sources(1).numInputRows == 2)
         true
-      })
+      }
+    )
   }
 
   test("input row calculation with mixed batch and streaming V2 sources") {
 
     val streamInput = MemoryStream[Int]
-    val staticInputDF =
-      spark.createDataFrame(Seq(1 -> "1", 2 -> "2")).toDF("value", "anotherValue")
+    val staticInputDF = spark.createDataFrame(Seq(1 -> "1", 2 -> "2")).toDF("value", "anotherValue")
 
     testStream(streamInput.toDF().join(staticInputDF, "value"))(
       AddData(streamInput, 1, 2, 3),
@@ -640,8 +631,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
             StreamingQueryPlanTraverseHelper
               .collectFromUnfoldedPlan(q.lastExecution.executedPlan) {
                 case n if n.children.isEmpty => n
-              }
-              .length)
+              }.length)
 
         val lastProgress = getLastProgressWithData(q)
         assert(lastProgress.nonEmpty)
@@ -649,7 +639,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         assert(lastProgress.get.sources.length == 1)
         assert(lastProgress.get.sources(0).numInputRows == 3)
         true
-      })
+      }
+    )
 
     val streamInput2 = MemoryStream[Int]
     val staticInputDF2 = staticInputDF.union(staticInputDF).cache()
@@ -674,19 +665,17 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         assert(lastProgress.get.sources.length == 1)
         assert(lastProgress.get.sources(0).numInputRows == 3)
         true
-      })
+      }
+    )
   }
 
   test("SPARK-41198: input row calculation with CTE") {
     withTable("parquet_tbl", "parquet_streaming_tbl") {
-      spark
-        .range(0, 10)
-        .selectExpr("id AS col1", "id AS col2")
-        .write
-        .format("parquet")
-        .saveAsTable("parquet_tbl")
+      spark.range(0, 10).selectExpr("id AS col1", "id AS col2")
+        .write.format("parquet").saveAsTable("parquet_tbl")
 
-      val dfWithClause = spark.sql("""
+      val dfWithClause = spark.sql(
+        """
           |with batch_tbl as (
           |  SELECT col1, col2 FROM parquet_tbl
           |)
@@ -694,7 +683,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
           |SELECT col1 AS key, col2 as value_batch FROM batch_tbl
           |""".stripMargin)
 
-      spark.sql("""
+      spark.sql(
+        """
           |CREATE TABLE parquet_streaming_tbl
           |(
           |  key integer,
@@ -713,13 +703,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       testStream(joinedDf)(
         StartStream(triggerClock = clock, trigger = Trigger.ProcessingTime(100)),
         Execute { _ =>
-          spark
-            .range(1, 5)
-            .selectExpr("id AS key", "id AS value_stream")
-            .write
-            .format("parquet")
-            .mode(SaveMode.Append)
-            .saveAsTable("parquet_streaming_tbl")
+          spark.range(1, 5).selectExpr("id AS key", "id AS value_stream")
+            .write.format("parquet").mode(SaveMode.Append).saveAsTable("parquet_streaming_tbl")
         },
         AdvanceManualClock(150),
         waitUntilBatchProcessed(clock),
@@ -731,7 +716,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
           assert(lastProgress.get.sources.length == 1)
           assert(lastProgress.get.sources(0).numInputRows == 4)
           true
-        })
+        }
+      )
     }
   }
 
@@ -740,7 +726,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       val streamInput = MemoryStream[Int]
       val streamDf = streamInput.toDF().selectExpr("value AS key", "value AS value_stream")
 
-      spark.sql("""
+      spark.sql(
+        """
           |CREATE TABLE parquet_streaming_tbl
           |(
           |  key integer,
@@ -757,13 +744,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         StartStream(triggerClock = clock, trigger = Trigger.ProcessingTime(100)),
         AddData(streamInput, 1, 2, 3),
         Execute { _ =>
-          spark
-            .range(4, 6)
-            .selectExpr("id AS key", "id AS value_stream")
-            .write
-            .format("parquet")
-            .mode(SaveMode.Append)
-            .saveAsTable("parquet_streaming_tbl")
+          spark.range(4, 6).selectExpr("id AS key", "id AS value_stream")
+            .write.format("parquet").mode(SaveMode.Append).saveAsTable("parquet_streaming_tbl")
         },
         AdvanceManualClock(150),
         waitUntilBatchProcessed(clock),
@@ -776,7 +758,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
           assert(lastProgress.get.sources(0).numInputRows == 3)
           assert(lastProgress.get.sources(1).numInputRows == 2)
           true
-        })
+        }
+      )
     }
   }
 
@@ -805,14 +788,15 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         CheckAnswer(6, 3, 6, 3),
         AddData(inputData, 4, 6),
         CheckAnswer(6, 3, 6, 3, 1, 1),
+
         AssertOnQuery("metadata log should contain only two files") { q =>
           val metadataLogDir = new java.io.File(q.offsetLog.metadataPath.toUri)
           val logFileNames = metadataLogDir.listFiles().toSeq.map(_.getName())
-          val toTest =
-            logFileNames.filter(!_.endsWith(".crc")).sorted // Workaround for SPARK-17475
+          val toTest = logFileNames.filter(!_.endsWith(".crc")).sorted // Workaround for SPARK-17475
           assert(toTest.size == 2 && toTest.head == "1")
           true
-        })
+        }
+      )
     }
 
     val inputData2 = MemoryStream[Int]
@@ -830,14 +814,15 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         CheckAnswer(1, 2, 1, 2, 3, 4, 5, 6),
         AddData(inputData2, 7, 8),
         CheckAnswer(1, 2, 1, 2, 3, 4, 5, 6, 7, 8),
+
         AssertOnQuery("metadata log should contain three files") { q =>
           val metadataLogDir = new java.io.File(q.offsetLog.metadataPath.toUri)
           val logFileNames = metadataLogDir.listFiles().toSeq.map(_.getName())
-          val toTest =
-            logFileNames.filter(!_.endsWith(".crc")).sorted // Workaround for SPARK-17475
+          val toTest = logFileNames.filter(!_.endsWith(".crc")).sorted // Workaround for SPARK-17475
           assert(toTest.size == 3 && toTest.head == "2")
           true
-        })
+        }
+      )
     }
   }
 
@@ -851,22 +836,18 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
 
     val input = MemoryStream[Int] :: MemoryStream[Int] :: MemoryStream[Int] :: Nil
     val q1 = startQuery(input(0).toDS(), "stream_serializable_test_1")
-    val q2 = startQuery(
-      input(1).toDS().map { i =>
-        // Emulate that `StreamingQuery` get captured with normal usage unintentionally.
-        // It should not fail the query.
-        val q = q1
-        i
-      },
-      "stream_serializable_test_2")
-    val q3 = startQuery(
-      input(2).toDS().map { i =>
-        // Emulate that `StreamingQuery` is used in executors. We should fail the query with a clear
-        // error message.
-        q1.explain()
-        i
-      },
-      "stream_serializable_test_3")
+    val q2 = startQuery(input(1).toDS().map { i =>
+      // Emulate that `StreamingQuery` get captured with normal usage unintentionally.
+      // It should not fail the query.
+      val q = q1
+      i
+    }, "stream_serializable_test_2")
+    val q3 = startQuery(input(2).toDS().map { i =>
+      // Emulate that `StreamingQuery` is used in executors. We should fail the query with a clear
+      // error message.
+      q1.explain()
+      i
+    }, "stream_serializable_test_3")
     try {
       input.foreach(_.addData(1))
 
@@ -946,10 +927,12 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         .load()
         .as[Int]
 
-      testStream(df1.union(df2).map(i => i / 0))(AssertOnQuery { sq =>
-        intercept[StreamingQueryException](sq.processAllAvailable())
-        sq.exception.isDefined && !sq.isActive
-      })
+      testStream(df1.union(df2).map(i => i / 0))(
+        AssertOnQuery { sq =>
+          intercept[StreamingQueryException](sq.processAllAvailable())
+          sq.exception.isDefined && !sq.isActive
+        }
+      )
 
       assert(calledStop, "Did not call stop on source for stopped stream")
     }
@@ -971,12 +954,14 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       val df = spark.readStream
         .format("org.apache.spark.sql.streaming.util.MockSourceProvider")
         .load()
-      testStream(df)(AssertOnQuery { sq =>
-        sq.processAllAvailable()
-        assert(sq.id.toString === queryId)
-        assert(sq.runId.toString !== queryId)
-        true
-      })
+      testStream(df)(
+        AssertOnQuery { sq =>
+          sq.processAllAvailable()
+          assert(sq.id.toString === queryId)
+          assert(sq.runId.toString !== queryId)
+          true
+        }
+      )
     }
   }
 
@@ -984,9 +969,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     // NOTE: the test uses the deprecated Trigger.Once() by intention, do not change.
     val input = MemoryStream[Int]
     input.addData(1)
-    val query = input
-      .toDF()
-      .writeStream
+    val query = input.toDF().writeStream
       .trigger(Trigger.Once())
       .format("console")
       .start()
@@ -995,14 +978,11 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
   }
 
-  test(
-    "processAllAvailable should not block forever when a query is stopped -" +
-      " Trigger.AvailableNow") {
+  test("processAllAvailable should not block forever when a query is stopped -" +
+    " Trigger.AvailableNow") {
     val input = MemoryStream[Int]
     input.addData(1)
-    val query = input
-      .toDF()
-      .writeStream
+    val query = input.toDF().writeStream
       .trigger(Trigger.AvailableNow())
       .format("console")
       .start()
@@ -1014,9 +994,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
   test("SPARK-22238: don't check for RDD partitions during streaming aggregation preparation") {
     val stream = MemoryStream[(Int, Int)]
     val baseDf = Seq((1, "A"), (2, "b")).toDF("num", "char").where("char = 'A'")
-    val otherDf = stream
-      .toDF()
-      .toDF("num", "numSq")
+    val otherDf = stream.toDF().toDF("num", "numSq")
       .join(broadcast(baseDf), "num")
       .groupBy($"char")
       .agg(sum($"numSq"))
@@ -1038,7 +1016,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AddData(stream, 1),
       CheckAnswer(collectUuid),
       AddData(stream, 2),
-      CheckAnswer(collectUuid))
+      CheckAnswer(collectUuid)
+    )
     assert(uuids.distinct.size == 2)
   }
 
@@ -1057,7 +1036,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AddData(stream, 1),
       CheckAnswer(collectRand),
       AddData(stream, 2),
-      CheckAnswer(collectRand))
+      CheckAnswer(collectRand)
+    )
     assert(rands.distinct.size == 4)
   }
 
@@ -1075,21 +1055,24 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AddData(stream, 1),
       CheckAnswer(collectShuffle),
       AddData(stream, 2),
-      CheckAnswer(collectShuffle))
+      CheckAnswer(collectShuffle)
+    )
     assert(rands.distinct.size == 2)
   }
 
-  test(
-    "StreamingRelationV2/StreamingExecutionRelation/ContinuousExecutionRelation.toJSON " +
-      "should not fail") {
+  test("StreamingRelationV2/StreamingExecutionRelation/ContinuousExecutionRelation.toJSON " +
+    "should not fail") {
     val df = spark.readStream.format("rate").load()
     assert(df.logicalPlan.toJSON.contains("StreamingRelationV2"))
 
-    testStream(df)(AssertOnQuery(_.logicalPlan.toJSON.contains("StreamingDataSourceV2Relation")))
+    testStream(df)(
+      AssertOnQuery(_.logicalPlan.toJSON.contains("StreamingDataSourceV2Relation"))
+    )
 
     testStream(df)(
       StartStream(trigger = Trigger.Continuous(100)),
-      AssertOnQuery(_.logicalPlan.toJSON.contains("StreamingDataSourceV2Relation")))
+      AssertOnQuery(_.logicalPlan.toJSON.contains("StreamingDataSourceV2Relation"))
+    )
   }
 
   test("special characters in checkpoint path") {
@@ -1097,8 +1080,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       val checkpointDir = new File(tempDir, "chk @#chk")
       val inputData = MemoryStream[Int]
       inputData.addData(1)
-      val q = inputData
-        .toDF()
+      val q = inputData.toDF()
         .writeStream
         .format("noop")
         .option("checkpointLocation", checkpointDir.getCanonicalPath)
@@ -1125,8 +1107,9 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     Utils.copyDirectory(inputDir, dir)
 
     // Spark 2.4 and earlier escaped the _spark_metadata path once
-    val legacySparkMetadataDir =
-      new File(dir, new Path("output %@#output/_spark_metadata").toUri.toString)
+    val legacySparkMetadataDir = new File(
+      dir,
+      new Path("output %@#output/_spark_metadata").toUri.toString)
 
     // Migrate from legacy _spark_metadata directory to the new _spark_metadata directory.
     // Ideally we should copy "_spark_metadata" directly like what the user is supposed to do to
@@ -1141,10 +1124,9 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
   test("detect escaped path and report the migration guide") {
     // Assert that the error message contains the migration conf, path and the legacy path.
     def assertMigrationError(errorMessage: String, path: File, legacyPath: File): Unit = {
-      Seq(
-        SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key,
-        path.getCanonicalPath,
-        legacyPath.getCanonicalPath).foreach { msg =>
+      Seq(SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key,
+          path.getCanonicalPath,
+          legacyPath.getCanonicalPath).foreach { msg =>
         assert(errorMessage.contains(msg))
       }
     }
@@ -1163,8 +1145,9 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         tempDir,
         new Path(new Path(new Path("chk %@#chk").toUri.toString).toUri.toString).toUri.toString)
       // Spark 2.4 and earlier escaped the _spark_metadata path once
-      val legacySparkMetadataDir =
-        new File(tempDir, new Path("output %@#output/_spark_metadata").toUri.toString)
+      val legacySparkMetadataDir = new File(
+        tempDir,
+        new Path("output %@#output/_spark_metadata").toUri.toString)
 
       // Reading a file sink output in a batch query should detect the legacy _spark_metadata
       // directory and throw an error
@@ -1177,8 +1160,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       // throw an error
       val inputData = MemoryStream[Int]
       val e2 = intercept[SparkException] {
-        inputData
-          .toDF()
+        inputData.toDF()
           .writeStream
           .format("parquet")
           .option("checkpointLocation", checkpointDir.getCanonicalPath)
@@ -1192,8 +1174,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       // Restarting the streaming query should detect the legacy
       // checkpoint path and throw an error.
       val e3 = intercept[SparkException] {
-        inputData
-          .toDF()
+        inputData.toDF()
           .writeStream
           .format("parquet")
           .option("checkpointLocation", checkpointDir.getCanonicalPath)
@@ -1204,8 +1185,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       // Fix the checkpoint path and verify that the user can migrate the issue by moving files.
       Utils.moveDirectory(legacyCheckpointDir, checkpointDir)
 
-      val q = inputData
-        .toDF()
+      val q = inputData.toDF()
         .writeStream
         .format("parquet")
         .option("checkpointLocation", checkpointDir.getCanonicalPath)
@@ -1238,8 +1218,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         checkDatasetUnorderly(df.as[Int], 1, 2, 3)
 
         val inputData = MemoryStream[Int]
-        val q = inputData
-          .toDF()
+        val q = inputData.toDF()
           .writeStream
           .format("parquet")
           .option("checkpointLocation", checkpointDir.getCanonicalPath)
@@ -1256,27 +1235,25 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
   }
 
   test("containsSpecialCharsInPath") {
-    Seq(
-      "foo/b ar",
-      "/foo/b ar",
-      "file:/foo/b ar",
-      "file://foo/b ar",
-      "file:///foo/b ar",
-      "file://foo:bar@bar/foo/b ar").foreach { p =>
+    Seq("foo/b ar",
+        "/foo/b ar",
+        "file:/foo/b ar",
+        "file://foo/b ar",
+        "file:///foo/b ar",
+        "file://foo:bar@bar/foo/b ar").foreach { p =>
       assert(StreamExecution.containsSpecialCharsInPath(new Path(p)), s"failed to check $p")
     }
-    Seq(
-      "foo/bar",
-      "/foo/bar",
-      "file:/foo/bar",
-      "file://foo/bar",
-      "file:///foo/bar",
-      "file://foo:bar@bar/foo/bar",
-      // Special chars not in a path should not be considered as such urls won't hit the escaped
-      // path issue.
-      "file://foo:b ar@bar/foo/bar",
-      "file://foo:bar@b ar/foo/bar",
-      "file://f oo:bar@bar/foo/bar").foreach { p =>
+    Seq("foo/bar",
+        "/foo/bar",
+        "file:/foo/bar",
+        "file://foo/bar",
+        "file:///foo/bar",
+        "file://foo:bar@bar/foo/bar",
+        // Special chars not in a path should not be considered as such urls won't hit the escaped
+        // path issue.
+        "file://foo:b ar@bar/foo/bar",
+        "file://foo:bar@b ar/foo/bar",
+        "file://f oo:bar@bar/foo/bar").foreach { p =>
       assert(!StreamExecution.containsSpecialCharsInPath(new Path(p)), s"failed to check $p")
     }
   }
@@ -1287,7 +1264,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     withTempView("s1", "s2") {
       inputData1.toDF().createOrReplaceTempView("s1")
       inputData2.toDF().createOrReplaceTempView("s2")
-      val unioned = spark.sql("select s1.value from s1 union select s2.value from s2")
+      val unioned = spark.sql(
+        "select s1.value from s1 union select s2.value from s2")
       checkAppendOutputModeException(unioned)
     }
   }
@@ -1309,7 +1287,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
 
       testStream(distinct, Complete)(
         AddData(inputData, 1, 2, 3, 3, 4),
-        CheckAnswer(Row(1), Row(2), Row(3), Row(4)))
+        CheckAnswer(Row(1), Row(2), Row(3), Row(4))
+      )
     }
   }
 
@@ -1326,8 +1305,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
           batchId += 1
           Dataset.ofRows(spark, LocalRelation(toAttributes(schema), Nil, isStreaming = true))
         } else {
-          Dataset.ofRows(
-            spark,
+          Dataset.ofRows(spark,
             LocalRelation(toAttributes(schema), InternalRow(10) :: Nil, isStreaming = true))
         }
       }
@@ -1350,13 +1328,13 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
   }
 
-  test(
-    "SPARK-46062: streaming query reading from CTE, which refers to temp view from " +
-      "streaming source") {
+  test("SPARK-46062: streaming query reading from CTE, which refers to temp view from " +
+    "streaming source") {
     val inputStream = MemoryStream[Int]
     inputStream.toDF().createOrReplaceTempView("tv")
 
-    val df = spark.sql("""
+    val df = spark.sql(
+      """
         |WITH w as (
         |  SELECT * FROM tv
         |)
@@ -1382,25 +1360,23 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
           case _ =>
         }
 
-        assert(
-          isStreamingForCteDef.isDefined && isStreamingForCteRef.isDefined,
+        assert(isStreamingForCteDef.isDefined && isStreamingForCteRef.isDefined,
           "Both definition and reference for CTE should be available in analyzed plan.")
 
-        assert(
-          isStreamingForCteDef.get,
-          "Expected isStreaming=true for CTE definition, but " +
-            "isStreaming is set to false.")
+        assert(isStreamingForCteDef.get, "Expected isStreaming=true for CTE definition, but " +
+          "isStreaming is set to false.")
 
-        assert(
-          isStreamingForCteDef === isStreamingForCteRef,
+        assert(isStreamingForCteDef === isStreamingForCteRef,
           "isStreaming flag should be carried over from definition to reference, " +
             s"definition: ${isStreamingForCteDef.get}, reference: ${isStreamingForCteRef.get}.")
-      })
+      }
+    )
   }
 
   test("Collation aware streaming") {
     withTable("parquet_streaming_tbl") {
-      spark.sql("""
+      spark.sql(
+        """
           |CREATE TABLE parquet_streaming_tbl
           |(
           |  key STRING COLLATE UTF8_LCASE,
@@ -1414,28 +1390,26 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       testStream(filteredDf)(
         StartStream(triggerClock = clock, trigger = Trigger.ProcessingTime(100)),
         Execute { _ =>
-          spark
-            .createDataFrame(Seq("aaa" -> 1, "AAA" -> 2, "bbb" -> 3, "aa" -> 4))
+          spark.createDataFrame(Seq("aaa" -> 1, "AAA" -> 2, "bbb" -> 3, "aa" -> 4))
             .toDF("key", "value_stream")
-            .write
-            .format("parquet")
-            .mode(SaveMode.Append)
+            .write.format("parquet").mode(SaveMode.Append)
             .saveAsTable("parquet_streaming_tbl")
         },
         AdvanceManualClock(150),
         waitUntilBatchProcessed(clock),
-        CheckLastBatch(("aaa", 1), ("AAA", 2)))
+        CheckLastBatch(("aaa", 1), ("AAA", 2))
+      )
     }
   }
 
-  test(
-    "SPARK-47776: streaming aggregation having binary inequality column in the grouping " +
-      "key must be disallowed") {
+  test("SPARK-47776: streaming aggregation having binary inequality column in the grouping " +
+    "key must be disallowed") {
     val tableName = "parquet_dummy_tbl"
     val collationName = "UTF8_LCASE"
 
     withTable(tableName) {
-      sql(s"""
+      sql(
+        s"""
            |CREATE TABLE $tableName (c1 STRING COLLATE $collationName)
            |USING PARQUET
            |""".stripMargin)
@@ -1443,8 +1417,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       sql(s"INSERT INTO $tableName VALUES ('aaa')")
       sql(s"INSERT INTO $tableName VALUES ('AAA')")
 
-      val df = spark.readStream
-        .table(tableName)
+      val df = spark.readStream.table(tableName)
         .groupBy("c1")
         .count()
 
@@ -1460,8 +1433,11 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       checkError(
         ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
         condition = "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY",
-        parameters = Map("schema" -> ".+\"c1\":\"spark.UTF8_LCASE\".+"),
-        matchPVals = true)
+        parameters = Map(
+          "schema" -> ".+\"c1\":\"spark.UTF8_LCASE\".+"
+        ),
+        matchPVals = true
+      )
     }
   }
 
@@ -1469,26 +1445,21 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[Object].getCanonicalName) {
       val input = MemoryStream[Int]
       input.addData(1)
-      val query = input
-        .toDF()
-        .limit(2)
-        .writeStream
+      val query = input.toDF().limit(2).writeStream
         .trigger(Trigger.AvailableNow())
         .format("console")
         .start()
       val ex = intercept[StreamingQueryException] {
         query.processAllAvailable()
       }
-      assert(
-        ex.getMessage.contains(
-          s"The given State Store Provider ${classOf[Object].getCanonicalName} does not " +
-            "extend org.apache.spark.sql.execution.streaming.state.StateStoreProvider."))
+      assert(ex.getMessage.contains(
+        s"The given State Store Provider ${classOf[Object].getCanonicalName} does not " +
+          "extend org.apache.spark.sql.execution.streaming.state.StateStoreProvider."))
     }
   }
 
-  test(
-    "SPARK-49905 shuffle added by stateful operator should use the shuffle origin " +
-      "`REQUIRED_BY_STATEFUL_OPERATOR`") {
+  test("SPARK-49905 shuffle added by stateful operator should use the shuffle origin " +
+    "`REQUIRED_BY_STATEFUL_OPERATOR`") {
     val inputData = MemoryStream[Int]
 
     // Use the streaming aggregation as an example - all stateful operators are using the same
@@ -1499,20 +1470,20 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AddData(inputData, 1, 2, 3, 1, 2, 3),
       CheckAnswer((1, 2), (2, 2), (3, 2)),
       Execute { qe =>
-        val shuffleOpt = qe.lastExecution.executedPlan.collect { case s: ShuffleExchangeExec =>
-          s
+        val shuffleOpt = qe.lastExecution.executedPlan.collect {
+          case s: ShuffleExchangeExec => s
         }
 
         assert(shuffleOpt.nonEmpty, "No shuffle exchange found in the query plan")
         assert(shuffleOpt.head.shuffleOrigin === REQUIRED_BY_STATEFUL_OPERATOR)
-      })
+      }
+    )
   }
 
   test("SPARK-53942: changing the number of stateful shuffle partitions via config") {
     val stream = MemoryStream[Int]
 
-    val df = stream
-      .toDF()
+    val df = stream.toDF()
       .groupBy("value")
       .count()
 
@@ -1520,7 +1491,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       withSQLConf(SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL.key -> 10.toString) {
         assert(
           spark.conf.get(SQLConf.SHUFFLE_PARTITIONS)
-            != spark.conf.get(SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL).get)
+            != spark.conf.get(SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL).get
+        )
 
         testStream(df, OutputMode.Update())(
           StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
@@ -1530,20 +1502,18 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
             // This also proves the path of downgrade; we use the same entry name to persist the
             // stateful shuffle partitions, hence it is compatible with older Spark versions.
             assert(
-              q.offsetLog
-                .offsetSeqMetadataForBatchId(0)
-                .get
-                .conf
+              q.offsetLog.offsetSeqMetadataForBatchId(0).get.conf
                 .get(SQLConf.SHUFFLE_PARTITIONS.key) === Some("10"))
 
-            val stateOps = q.lastExecution.executedPlan.collect { case s: StateStoreSaveExec =>
-              s
+            val stateOps = q.lastExecution.executedPlan.collect {
+              case s: StateStoreSaveExec => s
             }
 
             val stateStoreSave = stateOps.head
             assert(stateStoreSave.stateInfo.get.numPartitions === 10)
             true
-          })
+          }
+        )
       }
 
       // Trying to change the number of stateful shuffle partitions, which should be ignored.
@@ -1554,32 +1524,28 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
           ProcessAllAvailable(),
           Execute { q =>
             assert(
-              q.offsetLog
-                .offsetSeqMetadataForBatchId(1)
-                .get
-                .conf
+              q.offsetLog.offsetSeqMetadataForBatchId(1).get.conf
                 .get(SQLConf.SHUFFLE_PARTITIONS.key) === Some("10"))
 
-            val stateOps = q.lastExecution.executedPlan.collect { case s: StateStoreSaveExec =>
-              s
+            val stateOps = q.lastExecution.executedPlan.collect {
+              case s: StateStoreSaveExec => s
             }
 
             val stateStoreSave = stateOps.head
             // This shouldn't change to 3.
             assert(stateStoreSave.stateInfo.get.numPartitions === 10)
-          })
+          }
+        )
       }
     }
   }
 
   test("SPARK-53942: changing the number of stateless shuffle partitions via config") {
     val inputData = MemoryStream[(String, Int)]
-    val dfStream = inputData
-      .toDF()
+    val dfStream = inputData.toDF()
       .select($"_1".as("key"), $"_2".as("value"))
 
-    val dfBatch = spark
-      .createDataFrame(Seq(("a", "aux1"), ("b", "aux2"), ("c", "aux3")))
+    val dfBatch = spark.createDataFrame(Seq(("a", "aux1"), ("b", "aux2"), ("c", "aux3")))
       .toDF("key", "aux")
 
     val joined = dfStream.join(dfBatch, "key")
@@ -1602,19 +1568,17 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
               q.sparkSessionForStream.conf.get(
                 SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL) === Some(1))
             assert(
-              q.offsetLog
-                .offsetSeqMetadataForBatchId(0)
-                .get
-                .conf
+              q.offsetLog.offsetSeqMetadataForBatchId(0).get.conf
                 .get(SQLConf.SHUFFLE_PARTITIONS.key) === Some("1"))
 
-            val shuffles = q.lastExecution.executedPlan.collect { case s: ShuffleExchangeExec =>
-              s
+            val shuffles = q.lastExecution.executedPlan.collect {
+              case s: ShuffleExchangeExec => s
             }
 
             val shuffle = shuffles.head
             assert(shuffle.numPartitions === 1)
-          })
+          }
+        )
       }
 
       // Trying to change the number of stateless shuffle partitions, which should be honored.
@@ -1635,36 +1599,30 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
               q.sparkSessionForStream.conf.get(
                 SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL) === Some(1))
             assert(
-              q.offsetLog
-                .offsetSeqMetadataForBatchId(1)
-                .get
-                .conf
+              q.offsetLog.offsetSeqMetadataForBatchId(1).get.conf
                 .get(SQLConf.SHUFFLE_PARTITIONS.key) === Some("1"))
 
-            val shuffles = q.lastExecution.executedPlan.collect { case s: ShuffleExchangeExec =>
-              s
+            val shuffles = q.lastExecution.executedPlan.collect {
+              case s: ShuffleExchangeExec => s
             }
 
             val shuffle = shuffles.head
             assert(shuffle.numPartitions === 5)
-          })
+          }
+        )
       }
     }
   }
 
   test("SPARK-53942: stateful shuffle partitions are retained from old checkpoint") {
     val input = MemoryStream[Int]
-    val df1 = input
-      .toDF()
-      .select(
-        $"value" as Symbol("key1"),
-        $"value" * 2 as Symbol("key2"),
+    val df1 = input.toDF()
+      .select($"value" as Symbol("key1"), $"value" * 2 as Symbol("key2"),
         $"value" * 3 as Symbol("value"))
     val dedup = df1.dropDuplicates("key1", "key2")
 
-    val resourceUri = this.getClass
-      .getResource("/structured-streaming/checkpoint-version-4.0.1-dedup-spark-53942/")
-      .toURI
+    val resourceUri = this.getClass.getResource(
+      "/structured-streaming/checkpoint-version-4.0.1-dedup-spark-53942/").toURI
 
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
@@ -1688,31 +1646,31 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         AddData(input, 2, 3, 3, 4, 5),
         CheckAnswer((5, 10, 15)),
         Execute { q =>
-          val shuffles = q.lastExecution.executedPlan.collect { case s: ShuffleExchangeExec =>
-            s
+          val shuffles = q.lastExecution.executedPlan.collect {
+            case s: ShuffleExchangeExec => s
           }
 
           val shuffle = shuffles.head
           assert(shuffle.numPartitions === 5)
         },
-        StopStream)
+        StopStream
+      )
     }
   }
 
-  private val TEST_PROVIDERS =
-    Seq(classOf[HDFSBackedStateStoreProvider].getName, classOf[RocksDBStateStoreProvider].getName)
+  private val TEST_PROVIDERS = Seq(
+    classOf[HDFSBackedStateStoreProvider].getName,
+    classOf[RocksDBStateStoreProvider].getName
+  )
 
   TEST_PROVIDERS.foreach { provider =>
-    test(
-      "SPARK-53103: non empty state and commits checkpoint directory on first batch"
-        + s"(with $provider)") {
-      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key -> provider) {
+    test("SPARK-53103: non empty state and commits checkpoint directory on first batch"
+      + s"(with $provider)") {
+      withSQLConf(
+        SQLConf.STATE_STORE_PROVIDER_CLASS.key -> provider) {
 
         withTempDir { checkpointDir =>
-          val q = MemoryStream[Int]
-            .toDS()
-            .groupBy()
-            .count()
+          val q = MemoryStream[Int].toDS().groupBy().count()
             .writeStream
             .format("memory")
             .outputMode("complete")
@@ -1733,10 +1691,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
 
           checkError(
             exception = intercept[StreamingQueryException] {
-              MemoryStream[Int]
-                .toDS()
-                .groupBy()
-                .count()
+              MemoryStream[Int].toDS().groupBy().count()
                 .writeStream
                 .format("memory")
                 .outputMode("complete")
@@ -1749,7 +1704,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
             sqlState = "42K03",
             parameters = Map(
               "checkpointLocation" ->
-                ("file:" + (new Path(checkpointDir.getCanonicalPath, "state")).toString)))
+                ("file:" + (new Path(checkpointDir.getCanonicalPath, "state")).toString)
+            ))
         }
 
         withTempDir { checkpointDir =>
@@ -1762,10 +1718,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
 
           checkError(
             exception = intercept[StreamingQueryException] {
-              MemoryStream[Int]
-                .toDS()
-                .groupBy()
-                .count()
+              MemoryStream[Int].toDS().groupBy().count()
                 .writeStream
                 .format("memory")
                 .outputMode("complete")
@@ -1778,7 +1731,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
             sqlState = "42K03",
             parameters = Map(
               "checkpointLocation" ->
-                ("file:" + (new Path(checkpointDir.getCanonicalPath, "commits")).toString)))
+                ("file:" + (new Path(checkpointDir.getCanonicalPath, "commits")).toString)
+            ))
         }
       }
     }
@@ -1811,9 +1765,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       override def getOffset: Option[Offset] = Some(LongOffset(0))
       override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
         sqlContext.sparkSession.internalCreateDataFrame(
-          triggerDF.queryExecution.toRdd,
-          triggerDF.schema,
-          isStreaming = true)
+          triggerDF.queryExecution.toRdd, triggerDF.schema, isStreaming = true)
       }
       override def stop(): Unit = {}
     }
@@ -1839,23 +1791,22 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
   /**
    * A [[StreamAction]] to test the behavior of `StreamingQuery.awaitTermination()`.
    *
-   * @param expectedBehavior
-   *   Expected behavior (not blocked, blocked, or exception thrown)
-   * @param timeoutMs
-   *   Timeout in milliseconds When timeoutMs is less than or equal to 0, awaitTermination() is
-   *   tested (i.e. w/o timeout) When timeoutMs is greater than 0, awaitTermination(timeoutMs) is
-   *   tested
-   * @param expectedReturnValue
-   *   Expected return value when awaitTermination(timeoutMs) is used
+   * @param expectedBehavior  Expected behavior (not blocked, blocked, or exception thrown)
+   * @param timeoutMs         Timeout in milliseconds
+   *                          When timeoutMs is less than or equal to 0, awaitTermination() is
+   *                          tested (i.e. w/o timeout)
+   *                          When timeoutMs is greater than 0, awaitTermination(timeoutMs) is
+   *                          tested
+   * @param expectedReturnValue Expected return value when awaitTermination(timeoutMs) is used
    */
   case class TestAwaitTermination(
       expectedBehavior: ExpectedBehavior,
       timeoutMs: Int = -1,
-      expectedReturnValue: Boolean = false)
-      extends AssertOnQuery(
-        TestAwaitTermination
-          .assertOnQueryCondition(expectedBehavior, timeoutMs, expectedReturnValue),
-        "Error testing awaitTermination behavior") {
+      expectedReturnValue: Boolean = false
+    ) extends AssertOnQuery(
+      TestAwaitTermination.assertOnQueryCondition(expectedBehavior, timeoutMs, expectedReturnValue),
+      "Error testing awaitTermination behavior"
+    ) {
     override def toString(): String = {
       s"TestAwaitTermination($expectedBehavior, timeoutMs = $timeoutMs, " +
         s"expectedReturnValue = $expectedReturnValue)"
@@ -1867,19 +1818,19 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     /**
      * Tests the behavior of `StreamingQuery.awaitTermination`.
      *
-     * @param expectedBehavior
-     *   Expected behavior (not blocked, blocked, or exception thrown)
-     * @param timeoutMs
-     *   Timeout in milliseconds When timeoutMs is less than or equal to 0, awaitTermination() is
-     *   tested (i.e. w/o timeout) When timeoutMs is greater than 0, awaitTermination(timeoutMs)
-     *   is tested
-     * @param expectedReturnValue
-     *   Expected return value when awaitTermination(timeoutMs) is used
+     * @param expectedBehavior  Expected behavior (not blocked, blocked, or exception thrown)
+     * @param timeoutMs         Timeout in milliseconds
+     *                          When timeoutMs is less than or equal to 0, awaitTermination() is
+     *                          tested (i.e. w/o timeout)
+     *                          When timeoutMs is greater than 0, awaitTermination(timeoutMs) is
+     *                          tested
+     * @param expectedReturnValue Expected return value when awaitTermination(timeoutMs) is used
      */
     def assertOnQueryCondition(
         expectedBehavior: ExpectedBehavior,
         timeoutMs: Int,
-        expectedReturnValue: Boolean)(q: StreamExecution): Boolean = {
+        expectedReturnValue: Boolean
+      )(q: StreamExecution): Boolean = {
 
       def awaitTermFunc(): Unit = {
         if (timeoutMs <= 0) {

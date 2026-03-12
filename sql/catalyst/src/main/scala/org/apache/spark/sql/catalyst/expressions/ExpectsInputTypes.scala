@@ -28,8 +28,7 @@ import org.apache.spark.sql.types.AbstractDataType
  * This trait is typically used by operator expressions (e.g. [[Add]], [[Subtract]]) to define
  * expected input types without any implicit casting.
  *
- * Most function expressions (e.g. [[Substring]] should extend [[ImplicitCastInputTypes]])
- * instead.
+ * Most function expressions (e.g. [[Substring]] should extend [[ImplicitCastInputTypes]]) instead.
  */
 trait ExpectsInputTypes extends Expression {
 
@@ -38,8 +37,8 @@ trait ExpectsInputTypes extends Expression {
    * the type requirement for the i-th child.
    *
    * The possible values at each position are:
-   *   1. a specific data type, e.g. LongType, StringType.
-   *   2. a non-leaf abstract data type, e.g. NumericType, IntegralType, FractionalType.
+   * 1. a specific data type, e.g. LongType, StringType.
+   * 2. a non-leaf abstract data type, e.g. NumericType, IntegralType, FractionalType.
    */
   def inputTypes: Seq[AbstractDataType]
 

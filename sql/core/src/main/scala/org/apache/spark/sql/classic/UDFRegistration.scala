@@ -45,10 +45,11 @@ import org.apache.spark.sql.types.DataType
  */
 @Stable
 class UDFRegistration private[sql] (session: SparkSession, functionRegistry: FunctionRegistry)
-    extends sql.UDFRegistration
-    with Logging {
+  extends sql.UDFRegistration
+  with Logging {
   protected[sql] def registerPython(name: String, udf: UserDefinedPythonFunction): Unit = {
-    log.debug(s"""
+    log.debug(
+      s"""
         | Registering new PythonUDF:
         | name: $name
         | command: ${udf.func.command}
@@ -66,21 +67,16 @@ class UDFRegistration private[sql] (session: SparkSession, functionRegistry: Fun
   /**
    * Registers a user-defined aggregate function (UDAF).
    *
-   * @param name
-   *   the name of the UDAF.
-   * @param udaf
-   *   the UDAF needs to be registered.
-   * @return
-   *   the registered UDAF.
+   * @param name the name of the UDAF.
+   * @param udaf the UDAF needs to be registered.
+   * @return the registered UDAF.
    * @since 1.5.0
-   * @deprecated
-   *   this method and the use of UserDefinedAggregateFunction are deprecated. Aggregator[IN, BUF,
-   *   OUT] should now be registered as a UDF via the functions.udaf(agg) method.
+   * @deprecated this method and the use of UserDefinedAggregateFunction are deprecated.
+   *             Aggregator[IN, BUF, OUT] should now be registered as a UDF via the
+   *             functions.udaf(agg) method.
    */
-  @deprecated(
-    "Aggregator[IN, BUF, OUT] should now be registered as a UDF" +
-      " via the functions.udaf(agg) method.",
-    "3.0.0")
+  @deprecated("Aggregator[IN, BUF, OUT] should now be registered as a UDF" +
+    " via the functions.udaf(agg) method.", "3.0.0")
   def register(name: String, udaf: UserDefinedAggregateFunction): UserDefinedAggregateFunction = {
     def builder(children: Seq[Expression]) = ScalaUDAF(children, udaf, udafName = Some(name))
     functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
@@ -116,13 +112,12 @@ class UDFRegistration private[sql] (session: SparkSession, functionRegistry: Fun
     named
   }
 
+
   /**
    * Register a Java UDAF class using reflection, for use from pyspark
    *
-   * @param name
-   *   UDAF name
-   * @param className
-   *   fully qualified class name of UDAF
+   * @param name      UDAF name
+   * @param className fully qualified class name of UDAF
    */
   private[sql] def registerJavaUDAF(name: String, className: String): Unit = {
     try {
@@ -149,11 +144,7 @@ class UDFRegistration private[sql] (session: SparkSession, functionRegistry: Fun
       val udfInterfaces = clazz.getGenericInterfaces
         .filter(_.isInstanceOf[ParameterizedType])
         .map(_.asInstanceOf[ParameterizedType])
-        .filter(e =>
-          e.getRawType.isInstanceOf[Class[_]] && e.getRawType
-            .asInstanceOf[Class[_]]
-            .getCanonicalName
-            .startsWith("org.apache.spark.sql.api.java.UDF"))
+        .filter(e => e.getRawType.isInstanceOf[Class[_]] && e.getRawType.asInstanceOf[Class[_]].getCanonicalName.startsWith("org.apache.spark.sql.api.java.UDF"))
       if (udfInterfaces.length == 0) {
         throw QueryCompilationErrors.udfClassDoesNotImplementAnyUDFInterfaceError(className)
       } else if (udfInterfaces.length > 1) {
@@ -176,76 +167,21 @@ class UDFRegistration private[sql] (session: SparkSession, functionRegistry: Fun
             case 6 => register(name, udf.asInstanceOf[UDF5[_, _, _, _, _, _]], returnType)
             case 7 => register(name, udf.asInstanceOf[UDF6[_, _, _, _, _, _, _]], returnType)
             case 8 => register(name, udf.asInstanceOf[UDF7[_, _, _, _, _, _, _, _]], returnType)
-            case 9 =>
-              register(name, udf.asInstanceOf[UDF8[_, _, _, _, _, _, _, _, _]], returnType)
-            case 10 =>
-              register(name, udf.asInstanceOf[UDF9[_, _, _, _, _, _, _, _, _, _]], returnType)
-            case 11 =>
-              register(name, udf.asInstanceOf[UDF10[_, _, _, _, _, _, _, _, _, _, _]], returnType)
-            case 12 =>
-              register(
-                name,
-                udf.asInstanceOf[UDF11[_, _, _, _, _, _, _, _, _, _, _, _]],
-                returnType)
-            case 13 =>
-              register(
-                name,
-                udf.asInstanceOf[UDF12[_, _, _, _, _, _, _, _, _, _, _, _, _]],
-                returnType)
-            case 14 =>
-              register(
-                name,
-                udf.asInstanceOf[UDF13[_, _, _, _, _, _, _, _, _, _, _, _, _, _]],
-                returnType)
-            case 15 =>
-              register(
-                name,
-                udf.asInstanceOf[UDF14[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _]],
-                returnType)
-            case 16 =>
-              register(
-                name,
-                udf.asInstanceOf[UDF15[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]],
-                returnType)
-            case 17 =>
-              register(
-                name,
-                udf.asInstanceOf[UDF16[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]],
-                returnType)
-            case 18 =>
-              register(
-                name,
-                udf.asInstanceOf[UDF17[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]],
-                returnType)
-            case 19 =>
-              register(
-                name,
-                udf.asInstanceOf[UDF18[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]],
-                returnType)
-            case 20 =>
-              register(
-                name,
-                udf.asInstanceOf[
-                  UDF19[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]],
-                returnType)
-            case 21 =>
-              register(
-                name,
-                udf.asInstanceOf[
-                  UDF20[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]],
-                returnType)
-            case 22 =>
-              register(
-                name,
-                udf.asInstanceOf[
-                  UDF21[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]],
-                returnType)
-            case 23 =>
-              register(
-                name,
-                udf.asInstanceOf[
-                  UDF22[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]],
-                returnType)
+            case 9 => register(name, udf.asInstanceOf[UDF8[_, _, _, _, _, _, _, _, _]], returnType)
+            case 10 => register(name, udf.asInstanceOf[UDF9[_, _, _, _, _, _, _, _, _, _]], returnType)
+            case 11 => register(name, udf.asInstanceOf[UDF10[_, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 12 => register(name, udf.asInstanceOf[UDF11[_, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 13 => register(name, udf.asInstanceOf[UDF12[_, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 14 => register(name, udf.asInstanceOf[UDF13[_, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 15 => register(name, udf.asInstanceOf[UDF14[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 16 => register(name, udf.asInstanceOf[UDF15[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 17 => register(name, udf.asInstanceOf[UDF16[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 18 => register(name, udf.asInstanceOf[UDF17[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 19 => register(name, udf.asInstanceOf[UDF18[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 20 => register(name, udf.asInstanceOf[UDF19[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 21 => register(name, udf.asInstanceOf[UDF20[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 22 => register(name, udf.asInstanceOf[UDF21[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 23 => register(name, udf.asInstanceOf[UDF22[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
             case n =>
               throw QueryCompilationErrors.udfClassWithTooManyTypeArgumentsError(n)
           }
@@ -255,8 +191,7 @@ class UDFRegistration private[sql] (session: SparkSession, functionRegistry: Fun
         }
       }
     } catch {
-      case _: ClassNotFoundException =>
-        throw QueryCompilationErrors.cannotLoadClassNotOnClassPathError(className)
+      case _: ClassNotFoundException => throw QueryCompilationErrors.cannotLoadClassNotOnClassPathError(className)
     }
   }
   // scalastyle:on line.size.limit

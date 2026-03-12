@@ -23,16 +23,12 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.UnaryExecNode
 
 object EvalPythonExec {
-
   /**
    * Metadata for arguments of Python UDTF.
    *
-   * @param offset
-   *   the offset of the argument
-   * @param name
-   *   the name of the argument if it's a `NamedArgumentExpression`
-   * @param isTableArg
-   *   whether this argument is a table argument
+   * @param offset the offset of the argument
+   * @param name the name of the argument if it's a `NamedArgumentExpression`
+   * @param isTableArg whether this argument is a table argument
    */
   case class ArgumentMetadata(offset: Int, name: Option[String], isTableArg: Boolean = false)
 }
@@ -43,15 +39,21 @@ object EvalPythonExec {
  * Python evaluation works by sending the necessary (projected) input data via a socket to an
  * external Python process, and combine the result from the Python process with the original row.
  *
- * For each row we send to Python, we also put it in a queue first. For each output row from
- * Python, we drain the queue to find the original input row. Note that if the Python process is
- * way too slow, this could lead to the queue growing unbounded and spill into disk when run out
- * of memory.
+ * For each row we send to Python, we also put it in a queue first. For each output row from Python,
+ * we drain the queue to find the original input row. Note that if the Python process is way too
+ * slow, this could lead to the queue growing unbounded and spill into disk when run out of memory.
  *
  * Here is a diagram to show how this works:
  *
- * Downstream (for parent) / \ / socket (output of UDF) / \ RowQueue Python \ / \ socket (input of
- * UDF) \ / upstream (from child)
+ *            Downstream (for parent)
+ *             /      \
+ *            /     socket  (output of UDF)
+ *           /         \
+ *        RowQueue    Python
+ *           \         /
+ *            \     socket  (input of UDF)
+ *             \     /
+ *          upstream (from child)
  *
  * The rows sent to and received from Python are packed into batches (100 rows) and serialized,
  * there should be always some rows buffered in the socket or Python process, so the pulling from

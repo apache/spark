@@ -36,13 +36,11 @@ class ShowColumnsParserSuite extends AnalysisTest {
         None))
     comparePlans(
       parsePlan("SHOW COLUMNS IN a.b.c FROM a.b"),
-      ShowColumns(
-        UnresolvedTableOrView(Seq("a", "b", "c"), "SHOW COLUMNS", allowTempView = true),
+      ShowColumns(UnresolvedTableOrView(Seq("a", "b", "c"), "SHOW COLUMNS", allowTempView = true),
         Some(Seq("a", "b"))))
     comparePlans(
       parsePlan("SHOW COLUMNS FROM a.b.c IN a.b"),
-      ShowColumns(
-        UnresolvedTableOrView(Seq("a", "b", "c"), "SHOW COLUMNS", allowTempView = true),
+      ShowColumns(UnresolvedTableOrView(Seq("a", "b", "c"), "SHOW COLUMNS", allowTempView = true),
         Some(Seq("a", "b"))))
   }
 
@@ -51,6 +49,7 @@ class ShowColumnsParserSuite extends AnalysisTest {
       exception = parseException(parsePlan)("SHOW COLUMNS IN t FROM test-db"),
       condition = "INVALID_IDENTIFIER",
       sqlState = "42602",
-      parameters = Map("ident" -> "test-db"))
+      parameters = Map("ident" -> "test-db")
+    )
   }
 }

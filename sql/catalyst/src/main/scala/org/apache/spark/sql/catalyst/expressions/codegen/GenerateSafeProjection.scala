@@ -33,9 +33,8 @@ import org.apache.spark.sql.types._
 abstract class BaseProjection extends Projection {}
 
 /**
- * Generates byte code that produces a [[InternalRow]] object (not an [[UnsafeRow]]) that can
- * update itself based on a new input [[InternalRow]] for a fixed set of
- * [[Expression Expressions]].
+ * Generates byte code that produces a [[InternalRow]] object (not an [[UnsafeRow]]) that can update
+ * itself based on a new input [[InternalRow]] for a fixed set of [[Expression Expressions]].
  */
 object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection] {
 
@@ -71,7 +70,8 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     val allFields = ctx.splitExpressions(
       expressions = fieldWriters,
       funcName = "writeFields",
-      arguments = Seq("InternalRow" -> tmpInput, "Object[]" -> values))
+      arguments = Seq("InternalRow" -> tmpInput, "Object[]" -> values)
+    )
     val code =
       code"""
          |final InternalRow $tmpInput = $input;
@@ -137,14 +137,16 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
   }
 
   @tailrec
-  private def convertToSafe(ctx: CodegenContext, input: ExprValue, dataType: DataType): ExprCode =
-    dataType match {
-      case s: StructType => createCodeForStruct(ctx, input, s)
-      case ArrayType(elementType, _) => createCodeForArray(ctx, input, elementType)
-      case MapType(keyType, valueType, _) => createCodeForMap(ctx, input, keyType, valueType)
-      case udt: UserDefinedType[_] => convertToSafe(ctx, input, udt.sqlType)
-      case _ => ExprCode(FalseLiteral, input)
-    }
+  private def convertToSafe(
+      ctx: CodegenContext,
+      input: ExprValue,
+      dataType: DataType): ExprCode = dataType match {
+    case s: StructType => createCodeForStruct(ctx, input, s)
+    case ArrayType(elementType, _) => createCodeForArray(ctx, input, elementType)
+    case MapType(keyType, valueType, _) => createCodeForMap(ctx, input, keyType, valueType)
+    case udt: UserDefinedType[_] => convertToSafe(ctx, input, udt.sqlType)
+    case _ => ExprCode(FalseLiteral, input)
+  }
 
   protected def create(expressions: Seq[Expression]): Projection = {
     val ctx = newCodeGenContext()

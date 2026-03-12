@@ -29,10 +29,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 object ValidateSubqueryExpression
-    extends PredicateHelper
-    with QueryErrorsBase
-    with PlanToString
-    with Logging {
+    extends PredicateHelper with QueryErrorsBase with PlanToString with Logging {
 
   /**
    * Validates subquery expressions in the plan. Upon failure, returns an user facing error.
@@ -43,12 +40,11 @@ object ValidateSubqueryExpression
       skipOuterReferenceValidationInFilter: Boolean = false): Unit = {
     def checkAggregateInScalarSubquery(
         conditions: Seq[Expression],
-        query: LogicalPlan,
-        agg: Aggregate): Unit = {
+        query: LogicalPlan, agg: Aggregate): Unit = {
       // Make sure correlated scalar subqueries contain one row for every outer row by
       // enforcing that they are aggregates containing exactly one aggregate expression.
-      val aggregates = agg.expressions.flatMap(_.collect { case a: AggregateExpression =>
-        a
+      val aggregates = agg.expressions.flatMap(_.collect {
+        case a: AggregateExpression => a
       })
       if (aggregates.isEmpty) {
         expr.failAnalysis(
@@ -58,31 +54,30 @@ object ValidateSubqueryExpression
       }
 
       val nonEquivalentGroupByExprs = nonEquivalentGroupbyCols(query, agg)
-      val invalidCols =
-        if (!SQLConf.get.getConf(
-            SQLConf.LEGACY_SCALAR_SUBQUERY_ALLOW_GROUP_BY_NON_EQUALITY_CORRELATED_PREDICATE)) {
-          nonEquivalentGroupByExprs
-        } else {
-          // Legacy incorrect logic for checking for invalid group-by columns (see SPARK-48503).
-          // Allows any inner attribute that appears in a correlated predicate, even if it is a
-          // non-equality predicate or under an operator that can change the values of the attribute
-          // (see comments on getCorrelatedEquivalentInnerColumns for examples).
-          // Note: groupByCols does not contain outer refs - grouping by an outer ref is always ok
-          val groupByCols = AttributeSet(agg.groupingExpressions.flatMap(_.references))
-          val subqueryColumns = getCorrelatedPredicates(query)
-            .flatMap(_.references)
-            .filterNot(conditions.flatMap(_.references).contains)
-          val correlatedCols = AttributeSet(subqueryColumns)
-          val invalidColsLegacy = groupByCols -- correlatedCols
-          if (!nonEquivalentGroupByExprs.isEmpty && invalidColsLegacy.isEmpty) {
-            logWarning(log"Using legacy behavior for " +
-              log"${MDC(LogKeys.CONFIG, SQLConf.LEGACY_SCALAR_SUBQUERY_ALLOW_GROUP_BY_NON_EQUALITY_CORRELATED_PREDICATE.key)}. " +
-              log"Query would be rejected with non-legacy behavior but is allowed by " +
-              log"legacy behavior. Query may be invalid and return wrong results if the scalar " +
-              log"subquery's group-by outputs multiple rows.")
-          }
-          invalidColsLegacy
+      val invalidCols = if (!SQLConf.get.getConf(
+        SQLConf.LEGACY_SCALAR_SUBQUERY_ALLOW_GROUP_BY_NON_EQUALITY_CORRELATED_PREDICATE)) {
+        nonEquivalentGroupByExprs
+      } else {
+        // Legacy incorrect logic for checking for invalid group-by columns (see SPARK-48503).
+        // Allows any inner attribute that appears in a correlated predicate, even if it is a
+        // non-equality predicate or under an operator that can change the values of the attribute
+        // (see comments on getCorrelatedEquivalentInnerColumns for examples).
+        // Note: groupByCols does not contain outer refs - grouping by an outer ref is always ok
+        val groupByCols = AttributeSet(agg.groupingExpressions.flatMap(_.references))
+        val subqueryColumns = getCorrelatedPredicates(query).flatMap(_.references)
+          .filterNot(conditions.flatMap(_.references).contains)
+        val correlatedCols = AttributeSet(subqueryColumns)
+        val invalidColsLegacy = groupByCols -- correlatedCols
+        if (!nonEquivalentGroupByExprs.isEmpty && invalidColsLegacy.isEmpty) {
+          logWarning(log"Using legacy behavior for " +
+            log"${MDC(LogKeys.CONFIG, SQLConf
+            .LEGACY_SCALAR_SUBQUERY_ALLOW_GROUP_BY_NON_EQUALITY_CORRELATED_PREDICATE.key)}. " +
+            log"Query would be rejected with non-legacy behavior but is allowed by " +
+            log"legacy behavior. Query may be invalid and return wrong results if the scalar " +
+            log"subquery's group-by outputs multiple rows.")
         }
+        invalidColsLegacy
+      }
 
       if (invalidCols.nonEmpty) {
         val names = invalidCols.map { el =>
@@ -152,8 +147,7 @@ object ValidateSubqueryExpression
       case ScalarSubquery(query, outerAttrs, _, _, _, _, _) =>
         // Scalar subquery must return one column as output.
         if (query.output.size != 1) {
-          throw QueryCompilationErrors.subqueryReturnMoreThanOneColumn(
-            query.output.size,
+          throw QueryCompilationErrors.subqueryReturnMoreThanOneColumn(query.output.size,
             expr.origin)
         }
 
@@ -207,7 +201,7 @@ object ValidateSubqueryExpression
             // OneRowRelation subquery and can be rewritten by the optimizer without
             // any decorrelation.
             case Generate(_: PythonUDTF, _, _, _, _, _: OneRowRelation)
-                if SQLConf.get.getConf(SQLConf.OPTIMIZE_ONE_ROW_RELATION_SUBQUERY) => // Ok
+              if SQLConf.get.getConf(SQLConf.OPTIMIZE_ONE_ROW_RELATION_SUBQUERY) =>  // Ok
             case _ =>
               expr.failAnalysis(
                 errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
@@ -227,12 +221,12 @@ object ValidateSubqueryExpression
         checkCorrelationsInSubquery(expr.plan, isLateral = true)
 
       case _: FunctionTableSubqueryArgumentExpression =>
-      // Do nothing here, since we will check for this pattern later.
+        // Do nothing here, since we will check for this pattern later.
 
       case inSubqueryOrExistsSubquery =>
         plan match {
-          case _: Filter | _: SupportsSubquery | _: Join | _: Project | _: Aggregate |
-              _: Window => // Ok
+          case _: Filter | _: SupportsSubquery | _: Join |
+            _: Project | _: Aggregate | _: Window => // Ok
           case _ =>
             expr.failAnalysis(
               errorClass =
@@ -246,7 +240,8 @@ object ValidateSubqueryExpression
   }
 
   /**
-   * Validates to make sure the outer references appearing inside the subquery are allowed.
+   * Validates to make sure the outer references appearing inside the subquery
+   * are allowed.
    */
   private def checkCorrelationsInSubquery(
       sub: LogicalPlan,
@@ -302,7 +297,8 @@ object ValidateSubqueryExpression
       val exprs = stripOuterReferences(p.expressions.filter(expr => containsOuter(expr)))
       if (!canHostOuter(p) && !exprs.isEmpty) {
         p.failAnalysis(
-          errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+          errorClass =
+            "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
           messageParameters = Map("sqlExprs" -> exprs.map(toSQLExpr).mkString(",")))
       }
     }
@@ -363,9 +359,7 @@ object ValidateSubqueryExpression
     //      1     | 1 | 5
     //      1     | 2 | 4
     // and the plan after rewrite will give the original query incorrect results.
-    def failOnUnsupportedCorrelatedPredicate(
-        predicates: Seq[Expression],
-        p: LogicalPlan): Unit = {
+    def failOnUnsupportedCorrelatedPredicate(predicates: Seq[Expression], p: LogicalPlan): Unit = {
       // Correlated non-equality predicates are only supported with the decorrelate
       // inner query framework. Currently we only use this new framework for scalar
       // and lateral subqueries.
@@ -413,7 +407,7 @@ object ValidateSubqueryExpression
         case p @ (_: ResolvedHint | _: LeafNode | _: Repartition | _: SubqueryAlias) =>
           p.children.foreach(child => checkPlan(child, aggregated, canContainOuter))
 
-        case p @ (_: Union | _: SetOperation) =>
+        case p @ (_ : Union | _: SetOperation) =>
           // Set operations (e.g. UNION) containing correlated values are only supported
           // with DecorrelateInnerQuery framework.
           val childCanContainOuter = (canContainOuter

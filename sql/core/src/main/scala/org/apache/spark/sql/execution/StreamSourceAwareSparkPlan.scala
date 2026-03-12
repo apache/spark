@@ -19,15 +19,14 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 
 /**
- * This trait is a mixin for source physical nodes to represent the stream. This is required to
- * the physical nodes which is transformed from source logical nodes inheriting
+ * This trait is a mixin for source physical nodes to represent the stream. This is required to the
+ * physical nodes which is transformed from source logical nodes inheriting
  * [[org.apache.spark.sql.catalyst.plans.logical.StreamSourceAwareLogicalPlan]].
  *
- * The node implementing this trait should expose the number of output rows via "numOutputRows" in
- * `metrics`.
+ * The node implementing this trait should expose the number of output rows via "numOutputRows"
+ * in `metrics`.
  */
 trait StreamSourceAwareSparkPlan extends SparkPlan {
-
   /** Get the stream associated with this node. */
   def getStream: Option[SparkDataStream]
 }

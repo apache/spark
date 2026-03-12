@@ -28,7 +28,8 @@ class ForeignKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDL
     ("NOT ENFORCED NORELY", "NOT ENFORCED NORELY"),
     ("NORELY NOT ENFORCED", "NOT ENFORCED NORELY"),
     ("NORELY", "NOT ENFORCED NORELY"),
-    ("RELY", "NOT ENFORCED RELY"))
+    ("RELY", "NOT ENFORCED RELY")
+  )
 
   test("Add foreign key constraint") {
     validConstraintCharacteristics.foreach { case (characteristic, expectedDDL) =>
@@ -37,16 +38,14 @@ class ForeignKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDL
         sql(s"CREATE TABLE ${t}_ref (id bigint, data string) $defaultUsing")
         assert(loadTable(catalog, "ns", "tbl").constraints.isEmpty)
 
-        sql(
-          s"ALTER TABLE $t ADD CONSTRAINT fk1 FOREIGN KEY (fk) " +
-            s"REFERENCES ${t}_ref(id) $characteristic")
+        sql(s"ALTER TABLE $t ADD CONSTRAINT fk1 FOREIGN KEY (fk) " +
+          s"REFERENCES ${t}_ref(id) $characteristic")
         val table = loadTable(catalog, "ns", "tbl")
         assert(table.constraints.length == 1)
         val constraint = table.constraints.head
         assert(constraint.name() == "fk1")
-        assert(
-          constraint.toDDL == s"CONSTRAINT fk1 FOREIGN KEY (fk) " +
-            s"REFERENCES test_catalog.ns.tbl_ref (id) $expectedDDL")
+        assert(constraint.toDDL == s"CONSTRAINT fk1 FOREIGN KEY (fk) " +
+          s"REFERENCES test_catalog.ns.tbl_ref (id) $expectedDDL")
       }
     }
   }
@@ -62,9 +61,8 @@ class ForeignKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDL
         assert(table.constraints.length == 1)
         val constraint = table.constraints.head
         assert(constraint.name() == "fk1")
-        assert(
-          constraint.toDDL == s"CONSTRAINT fk1 FOREIGN KEY (fk) " +
-            s"REFERENCES non_part_test_catalog.ns.tbl_ref (id) $expectedDDL")
+        assert(constraint.toDDL == s"CONSTRAINT fk1 FOREIGN KEY (fk) " +
+          s"REFERENCES non_part_test_catalog.ns.tbl_ref (id) $expectedDDL")
       }
     }
   }
@@ -81,9 +79,8 @@ class ForeignKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDL
         assert(table.constraints.length == 1)
         val constraint = table.constraints.head
         assert(constraint.name() == "fk1")
-        assert(
-          constraint.toDDL == s"CONSTRAINT fk1 FOREIGN KEY (fk) " +
-            s"REFERENCES non_part_test_catalog.ns.tbl_ref (id) $expectedDDL")
+        assert(constraint.toDDL == s"CONSTRAINT fk1 FOREIGN KEY (fk) " +
+          s"REFERENCES non_part_test_catalog.ns.tbl_ref (id) $expectedDDL")
       }
     }
   }
@@ -100,9 +97,8 @@ class ForeignKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDL
         assert(table.constraints.length == 1)
         val constraint = table.constraints.head
         assert(constraint.name() == "fk1")
-        assert(
-          constraint.toDDL == s"CONSTRAINT fk1 FOREIGN KEY (fk) " +
-            s"REFERENCES $atomicCatalog.ns.tbl_ref (id) $expectedDDL")
+        assert(constraint.toDDL == s"CONSTRAINT fk1 FOREIGN KEY (fk) " +
+          s"REFERENCES $atomicCatalog.ns.tbl_ref (id) $expectedDDL")
       }
     }
   }
@@ -123,32 +119,29 @@ class ForeignKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDL
           exception = error,
           condition = "CONSTRAINT_ALREADY_EXISTS",
           sqlState = "42710",
-          parameters = Map(
-            "constraintName" -> "fk1",
+          parameters = Map("constraintName" -> "fk1",
             "oldConstraint" ->
               ("CONSTRAINT fk1 FOREIGN KEY (fk) " +
-                "REFERENCES test_catalog.ns.tbl_ref (id) NOT ENFORCED NORELY")))
+                "REFERENCES test_catalog.ns.tbl_ref (id) NOT ENFORCED NORELY"))
+        )
       }
     }
   }
 
   test("Add foreign key constraint with multiple columns") {
     withNamespaceAndTable("ns", "tbl", catalog) { t =>
-      sql(
-        s"CREATE TABLE $t (id1 bigint, id2 bigint, fk1 bigint, fk2 bigint, data string) " +
-          s"$defaultUsing")
+      sql(s"CREATE TABLE $t (id1 bigint, id2 bigint, fk1 bigint, fk2 bigint, data string) " +
+        s"$defaultUsing")
       sql(s"CREATE TABLE ${t}_ref (id1 bigint, id2 bigint, data string) $defaultUsing")
       assert(loadTable(catalog, "ns", "tbl").constraints.isEmpty)
 
-      sql(
-        s"ALTER TABLE $t ADD CONSTRAINT fk1 FOREIGN KEY (fk1, fk2) REFERENCES ${t}_ref(id1, id2)")
+      sql(s"ALTER TABLE $t ADD CONSTRAINT fk1 FOREIGN KEY (fk1, fk2) REFERENCES ${t}_ref(id1, id2)")
       val table = loadTable(catalog, "ns", "tbl")
       assert(table.constraints.length == 1)
       val constraint = table.constraints.head
       assert(constraint.name() == "fk1")
-      assert(
-        constraint.toDDL ==
-          s"CONSTRAINT fk1 FOREIGN KEY (fk1, fk2) " +
+      assert(constraint.toDDL ==
+        s"CONSTRAINT fk1 FOREIGN KEY (fk1, fk2) " +
           s"REFERENCES test_catalog.ns.tbl_ref (id1, id2) NOT ENFORCED NORELY")
     }
   }

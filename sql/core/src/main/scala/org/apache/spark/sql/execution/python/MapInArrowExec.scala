@@ -32,7 +32,7 @@ case class MapInArrowExec(
     child: SparkPlan,
     override val isBarrier: Boolean,
     override val profile: Option[ResourceProfile])
-    extends MapInBatchExec {
+  extends MapInBatchExec {
 
   override protected val pythonEvalType: Int = PythonEvalType.SQL_MAP_ARROW_ITER_UDF
 

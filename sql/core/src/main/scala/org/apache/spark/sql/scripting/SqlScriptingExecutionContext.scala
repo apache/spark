@@ -35,7 +35,9 @@ class SqlScriptingExecutionContext extends SqlScriptingExecutionContextExtension
   private[scripting] val frames: ListBuffer[SqlScriptingExecutionFrame] = ListBuffer.empty
   private[scripting] var firstHandlerScopeLabel: Option[String] = None
 
-  def enterScope(label: String, triggerHandlerMap: TriggerToExceptionHandlerMap): Unit = {
+  def enterScope(
+      label: String,
+      triggerHandlerMap: TriggerToExceptionHandlerMap): Unit = {
     if (frames.isEmpty) {
       throw SparkException.internalError("Cannot enter scope: no frames.")
     }
@@ -57,19 +59,15 @@ class SqlScriptingExecutionContext extends SqlScriptingExecutionContextExtension
    * This encapsulates the common pattern used by both variable and cursor resolution.
    *
    * The search follows these rules:
-   *   1. Search current frame first
-   *   2. Search previous frames in reverse order (newest to oldest)
-   *   3. For each previous frame, only search scopes that were visible where the current frame
-   *      (handler) was defined - respects lexical scoping
+   * 1. Search current frame first
+   * 2. Search previous frames in reverse order (newest to oldest)
+   * 3. For each previous frame, only search scopes that were visible where the current
+   *    frame (handler) was defined - respects lexical scoping
    *
-   * @param searchInCurrentFrame
-   *   Function to search within the current frame
-   * @param searchInScopes
-   *   Function to search within a list of candidate scopes
-   * @tparam T
-   *   The type of object being searched for
-   * @return
-   *   The found object, or None if not found
+   * @param searchInCurrentFrame Function to search within the current frame
+   * @param searchInScopes Function to search within a list of candidate scopes
+   * @tparam T The type of object being searched for
+   * @return The found object, or None if not found
    */
   private[scripting] def searchAcrossFrames[T](
       searchInCurrentFrame: SqlScriptingExecutionFrame => Option[T],
@@ -95,9 +93,8 @@ class SqlScriptingExecutionContext extends SqlScriptingExecutionContextExtension
       // Get scopes from this frame up to and including where the previous handler
       // frame was defined. If it was not defined in this scope, candidateScopes
       // will be empty.
-      val candidateScopes = frame.scopes.reverse
-        .dropWhile(scope => !previousFrameDefinitionLabel.contains(scope.label))
-        .toSeq
+      val candidateScopes = frame.scopes.reverse.dropWhile(
+        scope => !previousFrameDefinitionLabel.contains(scope.label)).toSeq
 
       val result = searchInScopes(candidateScopes)
       if (result.isDefined) {
@@ -116,18 +113,14 @@ class SqlScriptingExecutionContext extends SqlScriptingExecutionContextExtension
   }
 
   /**
-   * Perform an action in the frame containing a specific object. This is similar to
-   * searchAcrossFrames but executes an action when the object is found. Useful for operations
-   * like updating cursor state where we need to modify the frame.
+   * Perform an action in the frame containing a specific object.
+   * This is similar to searchAcrossFrames but executes an action when the object is found.
+   * Useful for operations like updating cursor state where we need to modify the frame.
    *
-   * @param searchInFrame
-   *   Function to check if object exists in a frame
-   * @param searchInScopes
-   *   Function to check if object exists in candidate scopes
-   * @param actionInFrame
-   *   Action to perform in the frame containing the object
-   * @return
-   *   true if object was found and action performed, false otherwise
+   * @param searchInFrame Function to check if object exists in a frame
+   * @param searchInScopes Function to check if object exists in candidate scopes
+   * @param actionInFrame Action to perform in the frame containing the object
+   * @return true if object was found and action performed, false otherwise
    */
   private[scripting] def performInFrameContaining(
       searchInFrame: SqlScriptingExecutionFrame => Boolean,
@@ -147,9 +140,8 @@ class SqlScriptingExecutionContext extends SqlScriptingExecutionContextExtension
     var previousFrameDefinitionLabel = currentFrame.scopeLabel
 
     frames.dropRight(1).reverseIterator.foreach { frame =>
-      val candidateScopes = frame.scopes.reverse
-        .dropWhile(scope => !previousFrameDefinitionLabel.contains(scope.label))
-        .toSeq
+      val candidateScopes = frame.scopes.reverse.dropWhile(
+        scope => !previousFrameDefinitionLabel.contains(scope.label)).toSeq
 
       if (searchInScopes(candidateScopes)) {
         actionInFrame(frame)
@@ -165,26 +157,27 @@ class SqlScriptingExecutionContext extends SqlScriptingExecutionContextExtension
   }
 
   /**
-   * Find a cursor by its normalized name in the current scope and parent scopes. Implementation
-   * of SqlScriptingExecutionContextExtension API.
+   * Find a cursor by its normalized name in the current scope and parent scopes.
+   * Implementation of SqlScriptingExecutionContextExtension API.
    *
-   * Searches through all frames in reverse order (current to oldest), respecting scope visibility
-   * rules. This matches the behavior of variable resolution to ensure consistency. Cursors
-   * declared in handlers shadow cursors with the same name in outer scopes.
+   * Searches through all frames in reverse order (current to oldest), respecting scope
+   * visibility rules. This matches the behavior of variable resolution to ensure consistency.
+   * Cursors declared in handlers shadow cursors with the same name in outer scopes.
    */
   override def findCursorByName(normalizedName: String): Option[CursorDefinition] = {
     searchAcrossFrames(
       searchInCurrentFrame = _.findCursorByName(normalizedName),
-      searchInScopes = _.flatMap(_.cursors.get(normalizedName)).headOption)
+      searchInScopes = _.flatMap(_.cursors.get(normalizedName)).headOption
+    )
   }
 
   /**
-   * Find a cursor in a specific labeled scope. Implementation of
-   * SqlScriptingExecutionContextExtension API.
+   * Find a cursor in a specific labeled scope.
+   * Implementation of SqlScriptingExecutionContextExtension API.
    *
-   * Searches through all frames in reverse order, respecting scope visibility rules. For
-   * qualified cursor references (label.cursor), this finds the cursor in the specific labeled
-   * scope across all accessible frames.
+   * Searches through all frames in reverse order, respecting scope visibility rules.
+   * For qualified cursor references (label.cursor), this finds the cursor in the
+   * specific labeled scope across all accessible frames.
    */
   override def findCursorInScope(
       normalizedScopeLabel: String,
@@ -192,12 +185,14 @@ class SqlScriptingExecutionContext extends SqlScriptingExecutionContextExtension
     searchAcrossFrames(
       searchInCurrentFrame = _.findCursorInScope(normalizedScopeLabel, normalizedName),
       searchInScopes = _.find(_.label == normalizedScopeLabel)
-        .flatMap(_.cursors.get(normalizedName)))
+        .flatMap(_.cursors.get(normalizedName))
+    )
   }
 
   /**
-   * Get cursor state across all frames. Searches through all frames in reverse order, respecting
-   * scope visibility rules. This matches the cursor definition lookup behavior.
+   * Get cursor state across all frames.
+   * Searches through all frames in reverse order, respecting scope visibility rules.
+   * This matches the cursor definition lookup behavior.
    */
   def getCursorState(normalizedName: String, scopeLabel: Option[String]): Option[CursorState] = {
     searchAcrossFrames(
@@ -208,21 +203,22 @@ class SqlScriptingExecutionContext extends SqlScriptingExecutionContextExtension
             scopes.find(_.label == label).flatMap(_.cursorStates.get(normalizedName))
           case None =>
             scopes.flatMap(_.cursorStates.get(normalizedName)).headOption
-        })
+        }
+    )
   }
 
   /**
-   * Get cursor state for a resolved CursorReference. This is a convenience method that avoids
-   * repeating the same pattern in cursor commands.
+   * Get cursor state for a resolved CursorReference.
+   * This is a convenience method that avoids repeating the same pattern in cursor commands.
    */
-  def getCursorState(cursorRef: org.apache.spark.sql.catalyst.expressions.CursorReference)
-      : Option[CursorState] = {
+  def getCursorState(cursorRef: org.apache.spark.sql.catalyst.expressions.CursorReference):
+      Option[CursorState] = {
     getCursorState(cursorRef.normalizedName, cursorRef.scopeLabel)
   }
 
   /**
-   * Update cursor state across all frames. Uses shared frame/scope search logic to find the
-   * cursor, then updates its state.
+   * Update cursor state across all frames.
+   * Uses shared frame/scope search logic to find the cursor, then updates its state.
    */
   def updateCursorState(
       normalizedName: String,
@@ -246,7 +242,9 @@ class SqlScriptingExecutionContext extends SqlScriptingExecutionContextExtension
           case None =>
             scopes.flatMap(_.cursors.get(normalizedName)).headOption.isDefined
         },
-      actionInFrame = frame => frame.updateCursorState(normalizedName, scopeLabel, newState))
+      actionInFrame = frame =>
+        frame.updateCursorState(normalizedName, scopeLabel, newState)
+    )
 
     if (!found) {
       throw SparkException.internalError(s"Cursor $normalizedName not found in any frame")
@@ -260,7 +258,7 @@ class SqlScriptingExecutionContext extends SqlScriptingExecutionContextExtension
 
     // If the last frame is a handler, try to find a handler in its body first.
     if (frames.last.frameType == SqlScriptingFrameType.EXIT_HANDLER
-      || frames.last.frameType == SqlScriptingFrameType.CONTINUE_HANDLER) {
+        || frames.last.frameType == SqlScriptingFrameType.CONTINUE_HANDLER) {
       val handler = frames.last.findHandler(condition, sqlState, firstHandlerScopeLabel)
       if (handler.isDefined) {
         return handler
@@ -288,62 +286,52 @@ object SqlScriptingFrameType extends Enumeration {
 }
 
 /**
- * SQL scripting executor - executes script and returns result statements. This supports returning
- * multiple result statements from a single script.
+ * SQL scripting executor - executes script and returns result statements.
+ * This supports returning multiple result statements from a single script.
  *
- * @param executionPlan
- *   CompoundBody which need to be executed.
- * @param frameType
- *   Type of the frame.
- * @param scopeLabel
- *   Label of the scope where handler is defined. Available only for frameType = EXIT_HANDLER,
- *   frameType = CONTINUE_HANDLER and frameType = SQL_STORED_PROCEDURE.
+ * @param executionPlan CompoundBody which need to be executed.
+ * @param frameType Type of the frame.
+ * @param scopeLabel Label of the scope where handler is defined.
+ *                   Available only for frameType = EXIT_HANDLER, frameType = CONTINUE_HANDLER
+ *                   and frameType = SQL_STORED_PROCEDURE.
  */
 class SqlScriptingExecutionFrame(
     val executionPlan: CompoundBodyExec,
     val frameType: SqlScriptingFrameType,
-    val scopeLabel: Option[String] = None)
-    extends Iterator[CompoundStatementExec] {
+    val scopeLabel: Option[String] = None) extends Iterator[CompoundStatementExec] {
 
   // List of scopes that are currently active.
   private[scripting] val scopes: ListBuffer[SqlScriptingExecutionScope] = ListBuffer.empty
 
   /**
-   * Find a cursor by its normalized name in the current scope and parent scopes. Used by cursor
-   * commands after name resolution.
+   * Find a cursor by its normalized name in the current scope and parent scopes.
+   * Used by cursor commands after name resolution.
    *
-   * @param normalizedName
-   *   The normalized cursor name (considering case sensitivity)
-   * @return
-   *   The cursor definition if found
+   * @param normalizedName The normalized cursor name (considering case sensitivity)
+   * @return The cursor definition if found
    */
   def findCursorByName(normalizedName: String): Option[CursorDefinition] = {
     scopes.reverseIterator.flatMap(_.cursors.get(normalizedName)).nextOption()
   }
 
   /**
-   * Find a cursor in a specific labeled scope. Used by qualified cursor references
-   * (label.cursor).
+   * Find a cursor in a specific labeled scope.
+   * Used by qualified cursor references (label.cursor).
    *
-   * @param scopeLabel
-   *   The label of the scope to search in
-   * @param normalizedName
-   *   The normalized cursor name (considering case sensitivity)
-   * @return
-   *   The cursor definition if found
+   * @param scopeLabel The label of the scope to search in
+   * @param normalizedName The normalized cursor name (considering case sensitivity)
+   * @return The cursor definition if found
    */
   def findCursorInScope(scopeLabel: String, normalizedName: String): Option[CursorDefinition] = {
     scopes.reverseIterator.find(_.label == scopeLabel).flatMap(_.cursors.get(normalizedName))
   }
 
   /**
-   * Find the scope object with the given label. Used to access scope-specific state (e.g.,
-   * cursorStates).
+   * Find the scope object with the given label.
+   * Used to access scope-specific state (e.g., cursorStates).
    *
-   * @param scopeLabel
-   *   The label of the scope to find
-   * @return
-   *   The scope if found
+   * @param scopeLabel The label of the scope to find
+   * @return The scope if found
    */
   def findScope(scopeLabel: String): Option[SqlScriptingExecutionScope] = {
     scopes.reverseIterator.find(_.label == scopeLabel)
@@ -352,12 +340,10 @@ class SqlScriptingExecutionFrame(
   /**
    * Get the cursor state for a given cursor, considering scope qualifications.
    *
-   * @param normalizedName
-   *   The normalized cursor name
-   * @param scopeLabel
-   *   Optional scope label (Some("label") for qualified cursors, None for unqualified)
-   * @return
-   *   The cursor state if found
+   * @param normalizedName The normalized cursor name
+   * @param scopeLabel Optional scope label (Some("label") for qualified cursors, None for
+   *                   unqualified)
+   * @return The cursor state if found
    */
   def getCursorState(normalizedName: String, scopeLabel: Option[String]): Option[CursorState] = {
     scopeLabel match {
@@ -372,12 +358,10 @@ class SqlScriptingExecutionFrame(
   /**
    * Update the cursor state for a given cursor, considering scope qualifications.
    *
-   * @param normalizedName
-   *   The normalized cursor name
-   * @param scopeLabel
-   *   Optional scope label (Some("label") for qualified cursors, None for unqualified)
-   * @param newState
-   *   The new cursor state
+   * @param normalizedName The normalized cursor name
+   * @param scopeLabel Optional scope label (Some("label") for qualified cursors, None for
+   *                   unqualified)
+   * @param newState The new cursor state
    */
   def updateCursorState(
       normalizedName: String,
@@ -385,13 +369,12 @@ class SqlScriptingExecutionFrame(
       newState: CursorState): Unit = {
     val targetScope = scopeLabel match {
       case Some(label) =>
-        findScope(label).getOrElse(throw SparkException.internalError(s"Scope $label not found"))
+        findScope(label).getOrElse(
+          throw SparkException.internalError(s"Scope $label not found"))
       case None =>
         // Find the scope where this cursor is defined
-        scopes.reverseIterator
-          .find(_.cursors.contains(normalizedName))
-          .getOrElse(
-            throw SparkException.internalError(s"Cursor $normalizedName not found in any scope"))
+        scopes.reverseIterator.find(_.cursors.contains(normalizedName)).getOrElse(
+          throw SparkException.internalError(s"Cursor $normalizedName not found in any scope"))
     }
     targetScope.cursorStates.put(normalizedName, newState)
   }
@@ -440,18 +423,18 @@ class SqlScriptingExecutionFrame(
 
     val searchScopes =
       if (frameType == SqlScriptingFrameType.EXIT_HANDLER
-        || frameType == SqlScriptingFrameType.CONTINUE_HANDLER) {
-        // If the frame is a handler, search for the handler in its body. Don't skip any scopes.
-        scopes.reverseIterator
-      } else if (firstHandlerScopeLabel.isEmpty) {
-        // If no handler is active, search for the handler from the current scope.
-        // Don't skip any scopes.
-        scopes.reverseIterator
-      } else {
-        // Drop all scopes until the first most outer scope where an active handler is defined.
-        // Drop one more scope to start searching from the surrounding scope.
-        scopes.reverseIterator.dropWhile(_.label != firstHandlerScopeLabel.get).drop(1)
-      }
+          || frameType == SqlScriptingFrameType.CONTINUE_HANDLER) {
+      // If the frame is a handler, search for the handler in its body. Don't skip any scopes.
+      scopes.reverseIterator
+    } else if (firstHandlerScopeLabel.isEmpty) {
+      // If no handler is active, search for the handler from the current scope.
+      // Don't skip any scopes.
+      scopes.reverseIterator
+    } else {
+      // Drop all scopes until the first most outer scope where an active handler is defined.
+      // Drop one more scope to start searching from the surrounding scope.
+      scopes.reverseIterator.dropWhile(_.label != firstHandlerScopeLabel.get).drop(1)
+    }
 
     // In the remaining scopes, try to find the most appropriate handler.
     searchScopes.foreach { scope =>
@@ -481,8 +464,8 @@ class SqlScriptingExecutionScope(
   val cursorStates = new mutable.HashMap[String, CursorState]
 
   /**
-   * Cleanup resources when this scope is being removed. Closes all open cursors and releases
-   * their result data.
+   * Cleanup resources when this scope is being removed.
+   * Closes all open cursors and releases their result data.
    */
   def cleanup(): Unit = {
     // Close all cursors by transitioning them to Closed state
@@ -495,22 +478,19 @@ class SqlScriptingExecutionScope(
    * Finds the most appropriate error handler for exception based on its condition and SQL state.
    *
    * The method follows these rules to determine the most appropriate handler:
-   *   1. Specific named condition handlers (e.g., DIVIDE_BY_ZERO) are checked first.
-   *   2. If no specific condition handler is found, SQLSTATE handlers are checked.
-   *   3. For SQLSTATEs starting with '02', a generic NOT FOUND handler is used if available.
-   *   4. For other SQLSTATEs (except those starting with 'XX' or '02'), a generic SQLEXCEPTION
-   *      handler is used if available.
+   * 1. Specific named condition handlers (e.g., DIVIDE_BY_ZERO) are checked first.
+   * 2. If no specific condition handler is found, SQLSTATE handlers are checked.
+   * 3. For SQLSTATEs starting with '02', a generic NOT FOUND handler is used if available.
+   * 4. For other SQLSTATEs (except those starting with 'XX' or '02'), a generic SQLEXCEPTION
+   *    handler is used if available.
    *
-   * Note: Handlers defined in the innermost compound statement where the exception was raised are
-   * considered.
+   * Note: Handlers defined in the innermost compound statement where the exception was raised
+   * are considered.
    *
-   * @param condition
-   *   Error condition of the exception to find handler for.
-   * @param sqlState
-   *   SQLSTATE of the exception to find handler for.
+   * @param condition Error condition of the exception to find handler for.
+   * @param sqlState SQLSTATE of the exception to find handler for.
    *
-   * @return
-   *   Handler for the given condition if exists.
+   * @return Handler for the given condition if exists.
    */
   def findHandler(condition: String, sqlState: String): Option[ExceptionHandlerExec] = {
     // Check if there is a specific handler for the given condition.
@@ -546,7 +526,7 @@ class SqlScriptingExecutionScope(
       // different from 'XX' and '02'.
       errorHandler = triggerToExceptionHandlerMap.getSqlExceptionHandler match {
         case Some(handler)
-            if !uppercaseSqlState.startsWith("XX") && !uppercaseSqlState.startsWith("02") =>
+          if !uppercaseSqlState.startsWith("XX") && !uppercaseSqlState.startsWith("02") =>
           Some(handler)
         case _ => None
       }

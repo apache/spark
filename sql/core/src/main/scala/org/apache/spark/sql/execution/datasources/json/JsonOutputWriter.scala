@@ -33,8 +33,7 @@ class JsonOutputWriter(
     options: JSONOptions,
     dataSchema: StructType,
     context: TaskAttemptContext)
-    extends OutputWriter
-    with Logging {
+  extends OutputWriter with Logging {
 
   private val encoding = options.encoding match {
     case Some(charsetName) => Charset.forName(charsetName)
@@ -42,10 +41,9 @@ class JsonOutputWriter(
   }
 
   if (JSONOptionsInRead.denyList.contains(encoding)) {
-    logWarning(
-      log"The JSON file (${MDC(PATH, path)}) was written in the encoding " +
-        log"${MDC(ENCODING, encoding.displayName())} which can be read back by Spark only " +
-        log"if multiLine is enabled.")
+    logWarning(log"The JSON file (${MDC(PATH, path)}) was written in the encoding " +
+      log"${MDC(ENCODING, encoding.displayName())} which can be read back by Spark only " +
+      log"if multiLine is enabled.")
   }
 
   private val writer = CodecStreams.createOutputStreamWriter(context, new Path(path), encoding)

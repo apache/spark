@@ -51,23 +51,18 @@ import org.apache.spark.sql.types.Metadata
  * SELECT col1.field1 FROM VALUES (named_struct('field1', 1), 3);
  * }}}
  *
- * @param candidates
- *   A list of candidates that are possible matches for a given name.
- * @param aliasName
- *   If the candidates size is 1 and it's type is [[ExtractValue]] (which means that it's a
- *   field/value/item from a recursive type), then the `aliasName` should be the name with which
- *   the candidate needs to be aliased. Otherwise, `aliasName` is `None`.
- * @param aliasMetadata
- *   If the candidates were created out of expressions referenced by group by alias, store the
- *   metadata of the alias. Otherwise, `aliasMetadata` is `None`.
- * @param lateralAttributeReference
- *   If the candidate is laterally referencing another column this field is populated with that
- *   column's attribute.
- * @param output
- *   [[output]] of a [[NameScope]] that produced this [[NameTarget]]. Used to provide suggestions
- *   for thrown errors.
- * @param isOuterReference
- *   A flag indicating that this [[NameTarget]] resolves to an outer reference.
+ * @param candidates A list of candidates that are possible matches for a given name.
+ * @param aliasName If the candidates size is 1 and it's type is [[ExtractValue]] (which means that
+ *   it's a field/value/item from a recursive type), then the `aliasName` should be the name with
+ *   which the candidate needs to be aliased. Otherwise, `aliasName` is `None`.
+ * @param aliasMetadata If the candidates were created out of expressions referenced by group by
+ *   alias, store the metadata of the alias. Otherwise, `aliasMetadata` is `None`.
+ * @param lateralAttributeReference If the candidate is laterally referencing another column this
+ *   field is populated with that column's attribute.
+ * @param output [[output]] of a [[NameScope]] that produced this [[NameTarget]]. Used to provide
+ *   suggestions for thrown errors.
+ * @param isOuterReference A flag indicating that this [[NameTarget]] resolves to an outer
+ *   reference.
  */
 case class NameTarget(
     candidates: Seq[Expression],
@@ -79,9 +74,9 @@ case class NameTarget(
 
   /**
    * Pick a single candidate from `candidates`:
-   *   - If there are no candidates, throw `UNRESOLVED_COLUMN.WITH_SUGGESTION`.
-   *   - If there are several candidates, throw `AMBIGUOUS_REFERENCE`.
-   *   - Otherwise, return a single [[Expression]].
+   * - If there are no candidates, throw `UNRESOLVED_COLUMN.WITH_SUGGESTION`.
+   * - If there are several candidates, throw `AMBIGUOUS_REFERENCE`.
+   * - Otherwise, return a single [[Expression]].
    */
   def pickCandidate(unresolvedAttribute: UnresolvedAttribute): Expression = {
     if (candidates.isEmpty) {
@@ -98,10 +93,13 @@ case class NameTarget(
       unresolvedAttribute.name,
       proposal = orderSuggestedIdentifiersBySimilarity(
         unresolvedAttribute.name,
-        candidates = output.map(attribute => attribute.qualifier :+ attribute.name)))
+        candidates = output.map(attribute => attribute.qualifier :+ attribute.name)
+      )
+    )
 
   private def throwAmbiguousReferenceError(unresolvedAttribute: UnresolvedAttribute): Nothing =
     throw QueryCompilationErrors.ambiguousReferenceError(
       unresolvedAttribute.name,
-      candidates.collect { case attribute: AttributeReference => attribute })
+      candidates.collect { case attribute: AttributeReference => attribute }
+    )
 }

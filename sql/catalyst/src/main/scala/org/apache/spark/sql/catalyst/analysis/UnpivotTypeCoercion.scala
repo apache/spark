@@ -23,24 +23,29 @@ import org.apache.spark.sql.catalyst.plans.logical.Unpivot
 
 /**
  * Singleton object performing the type coercion on the given [[Unpivot]] node. Do that by:
- *   1. Get wider data type of inner values at same index.
- *   2. Cast inner values to type according to their index.
+ *  1. Get wider data type of inner values at same index.
+ *  2. Cast inner values to type according to their index.
  */
 object UnpivotTypeCoercion extends SQLConfHelper {
   def apply(unpivot: Unpivot): Unpivot = {
-    val valueDataTypes = unpivot.values.get.head.zipWithIndex.map { case (_, index) =>
-      TypeCoercion.findWiderTypeWithoutStringPromotion(unpivot.values.get.map(_(index).dataType))
+    val valueDataTypes = unpivot.values.get.head.zipWithIndex.map {
+      case (_, index) =>
+        TypeCoercion.findWiderTypeWithoutStringPromotion(
+          unpivot.values.get.map(_(index).dataType)
+        )
     }
 
-    val values = unpivot.values.get.map(values =>
-      values.zipWithIndex.map { case (value, index) =>
-        (value, valueDataTypes(index))
-      } map {
-        case (value, Some(valueType)) if value.dataType != valueType =>
-          val cast = Cast(value, valueType)
-          Alias(cast.withTimeZone(conf.sessionLocalTimeZone), value.name)()
-        case (value, _) => value
-      })
+    val values = unpivot.values.get.map(
+      values =>
+        values.zipWithIndex.map {
+          case (value, index) => (value, valueDataTypes(index))
+        } map {
+          case (value, Some(valueType)) if value.dataType != valueType =>
+            val cast = Cast(value, valueType)
+            Alias(cast.withTimeZone(conf.sessionLocalTimeZone), value.name)()
+          case (value, _) => value
+        }
+    )
 
     unpivot.copy(values = Some(values))
   }

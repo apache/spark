@@ -31,7 +31,10 @@ class AlterTableSetSerdeParserSuite extends AnalysisTest with SharedSparkSession
       exception = parseException(parsePlan)(sql),
       condition = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "Values must be specified for key(s): [key_without_value]"),
-      context = ExpectedContext(fragment = sql, start = 0, stop = 103))
+      context = ExpectedContext(
+        fragment = sql,
+        start = 0,
+        stop = 103))
   }
 
   test("alter table SerDe properties by 'SET SERDE'") {
@@ -106,9 +109,8 @@ class AlterTableSetSerdeParserSuite extends AnalysisTest with SharedSparkSession
     comparePlans(parsed, expected)
   }
 
-  test(
-    "table with multi-part identifier: " +
-      "alter table SerDe properties by 'SET SERDE ... WITH SERDEPROPERTIES'") {
+  test("table with multi-part identifier: " +
+    "alter table SerDe properties by 'SET SERDE ... WITH SERDEPROPERTIES'") {
     val sql =
       """
         |ALTER TABLE a.b.c SET SERDE 'org.apache.class'
@@ -123,9 +125,8 @@ class AlterTableSetSerdeParserSuite extends AnalysisTest with SharedSparkSession
     comparePlans(parsed, expected)
   }
 
-  test(
-    "table with multi-part identifier: " +
-      "alter parition SerDe properties by 'SET SERDE ... WITH SERDEPROPERTIES'") {
+  test("table with multi-part identifier: " +
+    "alter parition SerDe properties by 'SET SERDE ... WITH SERDEPROPERTIES'") {
     val sql =
       """
         |ALTER TABLE a.b.c PARTITION (test=1, dt='2008-08-08', country='us')

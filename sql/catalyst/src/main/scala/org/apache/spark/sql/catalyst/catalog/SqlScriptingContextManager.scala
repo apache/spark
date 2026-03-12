@@ -21,7 +21,6 @@ package org.apache.spark.sql.catalyst.catalog
  * Trait which provides an interface for SQL scripting context manager.
  */
 trait SqlScriptingContextManager {
-
   /**
    * Get execution context
    */

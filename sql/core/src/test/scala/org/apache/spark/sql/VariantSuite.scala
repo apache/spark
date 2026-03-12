@@ -44,8 +44,7 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
 
   test("basic tests") {
     def verifyResult(df: DataFrame): Unit = {
-      val result = df
-        .collect()
+      val result = df.collect()
         .map(_.get(0).asInstanceOf[VariantVal].toString)
         .sorted
         .toSeq
@@ -65,8 +64,7 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
   }
 
   test("basic try_parse_json alias") {
-    val df = spark.createDataFrame(
-      Seq(Row("""{ "a" : 1 }"""), Row("""{ a : 1 }""")).asJava,
+    val df = spark.createDataFrame(Seq(Row("""{ "a" : 1 }"""), Row("""{ a : 1 }""")).asJava,
       new StructType().add("json", StringType))
     val actual = df.select(to_json(try_parse_json(col("json")))).collect()
 
@@ -75,15 +73,11 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
   }
 
   test("basic parse_json alias") {
-    val df = spark.createDataFrame(
-      Seq(Row("""{ "a" : 1 }""")).asJava,
+    val df = spark.createDataFrame(Seq(Row("""{ "a" : 1 }""")).asJava,
       new StructType().add("json", StringType))
-    val actual = df
-      .select(
-        to_json(parse_json(col("json"))),
-        to_json(parse_json(lit("""{"b": [{"c": "str2"}]}"""))))
-      .collect()
-      .head
+    val actual = df.select(
+      to_json(parse_json(col("json"))),
+      to_json(parse_json(lit("""{"b": [{"c": "str2"}]}""")))).collect().head
 
     assert(actual.getString(0) == """{"a":1}""")
     assert(actual.getString(1) == """{"b":[{"c":"str2"}]}""")
@@ -107,7 +101,8 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
         df.select(variant_get(v, "$.a", "binary")).collect()
       },
       condition = "INVALID_VARIANT_CAST",
-      parameters = Map("value" -> "1", "dataType" -> "\"BINARY\""))
+      parameters = Map("value" -> "1", "dataType" -> "\"BINARY\"")
+    )
 
     checkAnswer(df.select(try_variant_get(v, "$.a", "int")), rows(1, null))
     checkAnswer(df.select(try_variant_get(v, "$.b", "int")), rows(null, 2))
@@ -121,66 +116,56 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
     Seq("CODEGEN_ONLY", "NO_CODEGEN").foreach { codegenMode =>
       withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
         // The first three rows have valid paths while the final row has an invalid path
-        val df = Seq(
-          ("""{"a" : 1}""", "$.a", 2),
-          ("""{"b" : 2}""", "$", 1),
-          ("""{"c" : 3}""", null, 1),
-          (null, null, 1),
-          (null, "$.a", 1),
+        val df = Seq(("""{"a" : 1}""", "$.a", 2), ("""{"b" : 2}""", "$", 1),
+          ("""{"c" : 3}""", null, 1), (null, null, 1), (null, "$.a", 1),
           ("""{"d" : 3}""", "abc", 0)).toDF("json", "path", "valid")
         val v = parse_json(col("json"))
         val df1 = df.where($"valid" > 0).select(variant_get(v, col("path"), "string"))
         checkAnswer(df1, rows("1", """{"b":2}""", null, null, null))
-        assert(
-          df1.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec] ==
-            (codegenMode == "CODEGEN_ONLY"))
+        assert(df1.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec] ==
+          (codegenMode == "CODEGEN_ONLY"))
         // Invalid path
         val df2 = df.select(variant_get(v, col("path"), "string"))
         checkError(
           exception = intercept[SparkRuntimeException] { df2.collect() },
           condition = "INVALID_VARIANT_GET_PATH",
           parameters = Map("path" -> "abc", "functionName" -> toSQLId("variant_get")))
-        assert(
-          df2.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec] ==
-            (codegenMode == "CODEGEN_ONLY"))
+        assert(df2.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec] ==
+          (codegenMode == "CODEGEN_ONLY"))
         // Invalid cast
         val df3 = df.where($"valid" > 1).select(variant_get(v, col("path"), "binary"))
         checkError(
           exception = intercept[SparkRuntimeException] { df3.collect() },
           condition = "INVALID_VARIANT_CAST",
-          parameters = Map("value" -> "1", "dataType" -> "\"BINARY\""))
-        assert(
-          df3.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec] ==
-            (codegenMode == "CODEGEN_ONLY"))
+          parameters = Map("value" -> "1", "dataType" -> "\"BINARY\"")
+        )
+        assert(df3.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec] ==
+          (codegenMode == "CODEGEN_ONLY"))
 
         // try_variant_get
         val df4 = df.where($"valid" > 0).select(try_variant_get(v, col("path"), "string"))
         checkAnswer(df4, rows("1", """{"b":2}""", null, null, null))
-        assert(
-          df4.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec] ==
-            (codegenMode == "CODEGEN_ONLY"))
+        assert(df4.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec] ==
+          (codegenMode == "CODEGEN_ONLY"))
         // Invalid path
         val df5 = df.select(try_variant_get(v, col("path"), "string"))
         checkError(
           exception = intercept[SparkRuntimeException] { df5.collect() },
           condition = "INVALID_VARIANT_GET_PATH",
           parameters = Map("path" -> "abc", "functionName" -> toSQLId("try_variant_get")))
-        assert(
-          df5.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec] ==
-            (codegenMode == "CODEGEN_ONLY"))
+        assert(df5.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec] ==
+          (codegenMode == "CODEGEN_ONLY"))
         // Invalid cast
         val df6 = df.where($"valid" > 1).select(try_variant_get(v, col("path"), "binary"))
         checkAnswer(df6, rows(null))
-        assert(
-          df6.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec] ==
-            (codegenMode == "CODEGEN_ONLY"))
+        assert(df6.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec] ==
+          (codegenMode == "CODEGEN_ONLY"))
 
         // SQL API
         withTable("t") {
           df.withColumn("v", parse_json(col("json"))).write.saveAsTable("t")
           // variant_get
-          checkAnswer(
-            sql("select variant_get(v, path, 'string') from t where valid > 0"),
+          checkAnswer(sql("select variant_get(v, path, 'string') from t where valid > 0"),
             rows("1", """{"b":2}""", null, null, null))
           checkError(
             exception = intercept[SparkRuntimeException] {
@@ -193,10 +178,10 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
               sql("select variant_get(v, path, 'binary') from t where valid > 1").collect()
             },
             condition = "INVALID_VARIANT_CAST",
-            parameters = Map("value" -> "1", "dataType" -> "\"BINARY\""))
+            parameters = Map("value" -> "1", "dataType" -> "\"BINARY\"")
+          )
           // try_variant_get
-          checkAnswer(
-            sql("select try_variant_get(v, path, 'string') from t where valid > 0"),
+          checkAnswer(sql("select try_variant_get(v, path, 'string') from t where valid > 0"),
             rows("1", """{"b":2}""", null, null, null))
           checkError(
             exception = intercept[SparkRuntimeException] {
@@ -204,8 +189,7 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
             },
             condition = "INVALID_VARIANT_GET_PATH",
             parameters = Map("path" -> "abc", "functionName" -> toSQLId("try_variant_get")))
-          checkAnswer(
-            sql("select try_variant_get(v, path, 'binary') from t where valid > 1"),
+          checkAnswer(sql("select try_variant_get(v, path, 'binary') from t where valid > 1"),
             rows(null))
         }
       }
@@ -230,7 +214,8 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
 
       val df = spark.createDataFrame(
         spark.sparkContext.parallelize(input.map(Row(_))),
-        StructType.fromDDL("v variant"))
+        StructType.fromDDL("v variant")
+      )
       val result = df.collect().map(_.get(0).asInstanceOf[VariantVal])
 
       def prepareAnswer(values: Seq[VariantVal]): Seq[String] = {
@@ -241,9 +226,7 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
       withTempDir { dir =>
         val tempDir = new File(dir, "files").getCanonicalPath
         df.write.parquet(tempDir)
-        val readResult = spark.read
-          .parquet(tempDir)
-          .collect()
+        val readResult = spark.read.parquet(tempDir).collect()
           .map(_.get(0).asInstanceOf[VariantVal])
         assert(prepareAnswer(input) == prepareAnswer(readResult.toImmutableArraySeq))
       }
@@ -270,27 +253,23 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
       spark.sparkContext.parallelize(input.map { v =>
         Row.fromSeq(Seq(v))
       }),
-      StructType.fromDDL("v array<variant>"))
+      StructType.fromDDL("v array<variant>")
+    )
 
     def prepareAnswer(values: Seq[Row]): Seq[String] = {
-      values
-        .map(_.get(0))
-        .map { v =>
-          if (v == null) {
-            "null"
-          } else {
-            v.asInstanceOf[mutable.ArraySeq[Any]]
-              .map(_.asInstanceOf[VariantVal].debugString())
-              .mkString(",")
-          }
+      values.map(_.get(0)).map { v =>
+        if (v == null) {
+          "null"
+        } else {
+          v.asInstanceOf[mutable.ArraySeq[Any]]
+           .map(_.asInstanceOf[VariantVal].debugString()).mkString(",")
         }
-        .sorted
+      }.sorted
     }
 
     // Test conversion to UnsafeRow in both codegen and interpreted code paths.
-    val codegenModes = Seq(
-      CodegenObjectFactoryMode.NO_CODEGEN.toString,
-      CodegenObjectFactoryMode.FALLBACK.toString)
+    val codegenModes = Seq(CodegenObjectFactoryMode.NO_CODEGEN.toString,
+                           CodegenObjectFactoryMode.FALLBACK.toString)
     codegenModes.foreach { codegen =>
       withTempDir { dir =>
         withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegen) {
@@ -298,7 +277,7 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
           df.write.parquet(tempDir)
           Seq(false, true).foreach { vectorizedReader =>
             withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key ->
-              vectorizedReader.toString) {
+                vectorizedReader.toString) {
               val readResult = spark.read.parquet(tempDir).collect().toSeq
               assert(prepareAnswer(df.collect().toSeq) == prepareAnswer(readResult))
             }
@@ -310,9 +289,7 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
 
   test("write partitioned file") {
     def verifyResult(df: DataFrame): Unit = {
-      val result = df
-        .selectExpr("v")
-        .collect()
+      val result = df.selectExpr("v").collect()
         .map(_.get(0).asInstanceOf[VariantVal].toString)
         .sorted
         .toSeq
@@ -341,7 +318,8 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
           query.write.partitionBy("v").parquet(tempDir)
         },
         condition = "INVALID_PARTITION_COLUMN_DATA_TYPE",
-        parameters = Map("type" -> "\"VARIANT\""))
+        parameters = Map("type" -> "\"VARIANT\"")
+      )
     }
 
     // Same as above, using saveAsTable
@@ -356,7 +334,8 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
           query.write.partitionBy("v").saveAsTable("t")
         },
         condition = "INVALID_PARTITION_COLUMN_DATA_TYPE",
-        parameters = Map("type" -> "\"VARIANT\""))
+        parameters = Map("type" -> "\"VARIANT\"")
+      )
     }
 
     // Same as above, using SQL CTAS
@@ -371,7 +350,8 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
           spark.sql(s"CREATE TABLE t USING PARQUET PARTITIONED BY (v) AS $queryString")
         },
         condition = "INVALID_PARTITION_COLUMN_DATA_TYPE",
-        parameters = Map("type" -> "\"VARIANT\""))
+        parameters = Map("type" -> "\"VARIANT\"")
+      )
     }
   }
 
@@ -389,55 +369,43 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
     // Binary value of a literal "false"
     val v = "X'8'"
     val cases = Seq(
-      (
-        s"named_struct('value', $v)",
-        "INVALID_VARIANT_FROM_PARQUET.WRONG_NUM_FIELDS",
-        Map.empty[String, String]),
-      (
-        s"named_struct('value', $v, 'metadata', $m, 'paths', $v)",
-        "INVALID_VARIANT_FROM_PARQUET.WRONG_NUM_FIELDS",
-        Map.empty[String, String]),
-      (
-        s"named_struct('value', $v, 'dictionary', $m)",
-        "INVALID_VARIANT_FROM_PARQUET.MISSING_FIELD",
-        Map("field" -> "metadata")),
-      (
-        s"named_struct('val', $v, 'metadata', $m)",
-        "INVALID_VARIANT_FROM_PARQUET.MISSING_FIELD",
-        Map("field" -> "value")),
-      (
-        s"named_struct('value', 8, 'metadata', $m)",
-        "INVALID_VARIANT_FROM_PARQUET.NULLABLE_OR_NOT_BINARY_FIELD",
-        Map("field" -> "value")),
-      (
-        s"named_struct('value', cast(null as binary), 'metadata', $m)",
-        "INVALID_VARIANT_FROM_PARQUET.NULLABLE_OR_NOT_BINARY_FIELD",
-        Map("field" -> "value")),
-      (
-        s"named_struct('value', $v, 'metadata', cast(null as binary))",
-        "INVALID_VARIANT_FROM_PARQUET.NULLABLE_OR_NOT_BINARY_FIELD",
-        Map("field" -> "metadata")))
+      (s"named_struct('value', $v)",
+        "INVALID_VARIANT_FROM_PARQUET.WRONG_NUM_FIELDS", Map.empty[String, String]),
+      (s"named_struct('value', $v, 'metadata', $m, 'paths', $v)",
+        "INVALID_VARIANT_FROM_PARQUET.WRONG_NUM_FIELDS", Map.empty[String, String]),
+      (s"named_struct('value', $v, 'dictionary', $m)",
+        "INVALID_VARIANT_FROM_PARQUET.MISSING_FIELD", Map("field" -> "metadata")),
+      (s"named_struct('val', $v, 'metadata', $m)",
+        "INVALID_VARIANT_FROM_PARQUET.MISSING_FIELD", Map("field" -> "value")),
+      (s"named_struct('value', 8, 'metadata', $m)",
+        "INVALID_VARIANT_FROM_PARQUET.NULLABLE_OR_NOT_BINARY_FIELD", Map("field" -> "value")),
+      (s"named_struct('value', cast(null as binary), 'metadata', $m)",
+        "INVALID_VARIANT_FROM_PARQUET.NULLABLE_OR_NOT_BINARY_FIELD", Map("field" -> "value")),
+      (s"named_struct('value', $v, 'metadata', cast(null as binary))",
+        "INVALID_VARIANT_FROM_PARQUET.NULLABLE_OR_NOT_BINARY_FIELD", Map("field" -> "metadata"))
+    )
     cases.foreach { case (structDef, condition, parameters) =>
       Seq(false, true).foreach { vectorizedReader =>
         withSQLConf(
           SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorizedReader.toString,
           // Invalid variant binary fails during shredding schema inference.
-          SQLConf.VARIANT_INFER_SHREDDING_SCHEMA.key -> "false") {
+          SQLConf.VARIANT_INFER_SHREDDING_SCHEMA.key -> "false"
+        ) {
           withTempDir { dir =>
             val file = new File(dir, "dir").getCanonicalPath
             val df = spark.sql(s"select $structDef as v from range(10)")
             df.write.parquet(file)
             val schema = StructType(Seq(StructField("v", VariantType)))
             val result = spark.read.schema(schema).parquet(file).selectExpr("to_json(v)")
-            val e = withSQLConf(
-              SQLConf.VARIANT_ALLOW_READING_SHREDDED.key -> "false",
+            val e = withSQLConf(SQLConf.VARIANT_ALLOW_READING_SHREDDED.key -> "false",
               SQLConf.PUSH_VARIANT_INTO_SCAN.key -> "false") {
               intercept[org.apache.spark.SparkException](result.collect())
             }
             checkError(
               exception = e.getCause.asInstanceOf[AnalysisException],
               condition = condition,
-              parameters = parameters)
+              parameters = parameters
+            )
           }
         }
       }
@@ -453,8 +421,9 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
     // Binary value of a literal "false"
     val v = "X'8'"
     val cases = Seq(
-      s"named_struct('value', $v, 'metadata', $m)",
-      s"named_struct('metadata', $m, 'value', $v)")
+        s"named_struct('value', $v, 'metadata', $m)",
+        s"named_struct('metadata', $m, 'value', $v)"
+    )
     cases.foreach { structDef =>
       withTempDir { dir =>
         val file = new File(dir, "dir").getCanonicalPath
@@ -474,35 +443,32 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
 
       // These are valid.
       for ((schema, options) <- Seq(
-          ("var variant", Map()),
-          ("var variant, _corrupt_record string", Map()),
-          ("_corrupt_record string, var variant", Map()),
-          ("c string, var variant", Map("columnNameOfCorruptRecord" -> "c")))) {
-        spark.read
-          .options(Map("singleVariantColumn" -> "var") ++ options)
-          .schema(schema)
-          .json(file.getAbsolutePath)
-          .collect()
+        ("var variant", Map()),
+        ("var variant, _corrupt_record string", Map()),
+        ("_corrupt_record string, var variant", Map()),
+        ("c string, var variant", Map("columnNameOfCorruptRecord" -> "c"))
+      )) {
+        spark.read.options(Map("singleVariantColumn" -> "var") ++ options)
+          .schema(schema).json(file.getAbsolutePath).collect()
       }
 
       // These are invalid.
       for ((schema, options) <- Seq(
-          ("a variant", Map()),
-          ("var int", Map()),
-          ("var variant, c string", Map()),
-          ("var variant, _corrupt_record int", Map()),
-          ("var variant, _corrupt_record string", Map("columnNameOfCorruptRecord" -> "c")),
-          ("var variant, var string", Map("columnNameOfCorruptRecord" -> "var")))) {
+        ("a variant", Map()),
+        ("var int", Map()),
+        ("var variant, c string", Map()),
+        ("var variant, _corrupt_record int", Map()),
+        ("var variant, _corrupt_record string", Map("columnNameOfCorruptRecord" -> "c")),
+        ("var variant, var string", Map("columnNameOfCorruptRecord" -> "var"))
+      )) {
         checkError(
           exception = intercept[AnalysisException] {
-            spark.read
-              .options(Map("singleVariantColumn" -> "var") ++ options)
-              .schema(schema)
-              .json(file.getAbsolutePath)
-              .collect()
+            spark.read.options(Map("singleVariantColumn" -> "var") ++ options)
+              .schema(schema).json(file.getAbsolutePath).collect()
           },
           condition = "INVALID_SINGLE_VARIANT_COLUMN",
-          parameters = Map("schema" -> s"\"${StructType.fromDDL(schema).sql}\""))
+          parameters = Map("schema" -> s"\"${StructType.fromDDL(schema).sql}\"")
+        )
       }
     }
   }
@@ -510,17 +476,18 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
   test("json scan with map schema") {
     withTempDir { dir =>
       val file = new File(dir, "file.json")
-      val content = Seq("true", """{"v": null}""", """{"v": {"a": 1, "b": null}}""")
-        .mkString("\n")
-        .getBytes(StandardCharsets.UTF_8)
+      val content = Seq(
+        "true",
+        """{"v": null}""",
+        """{"v": {"a": 1, "b": null}}"""
+      ).mkString("\n").getBytes(StandardCharsets.UTF_8)
       Files.write(file.toPath, content)
       checkAnswer(
-        spark.read
-          .format("json")
-          .schema("v map<string, variant>")
+        spark.read.format("json").schema("v map<string, variant>")
           .load(file.getAbsolutePath)
           .selectExpr("to_json(v)"),
-        Seq(Row(null), Row(null), Row("""{"a":1,"b":null}""")))
+        Seq(Row(null), Row(null), Row("""{"a":1,"b":null}"""))
+      )
     }
   }
 
@@ -531,7 +498,8 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
       },
       condition = "GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE",
       parameters = Map("sqlExpr" -> "\"parse_json()\"", "dataType" -> "\"VARIANT\""),
-      context = ExpectedContext(fragment = "parse_json('')", start = 7, stop = 20))
+      context = ExpectedContext(fragment = "parse_json('')", start = 7, stop = 20)
+    )
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -542,7 +510,8 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
         "functionName" -> "`sortorder`",
         "dataType" -> "\"VARIANT\"",
         "sqlExpr" -> "\"v ASC NULLS FIRST\""),
-      context = ExpectedContext(fragment = "order by 1", start = 24, stop = 33))
+      context = ExpectedContext(fragment = "order by 1", start = 24, stop = 33)
+    )
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -553,48 +522,45 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
         "functionName" -> "`sortorder`",
         "dataType" -> "\"VARIANT\"",
         "sqlExpr" -> "\"v ASC NULLS FIRST\""),
-      context = ExpectedContext(fragment = "sort by 1", start = 24, stop = 32))
+      context = ExpectedContext(fragment = "sort by 1", start = 24, stop = 32)
+    )
 
     checkError(
       exception = intercept[AnalysisException] {
-        spark.sql(
-          "with t as (select 1 as a, parse_json('') as v) " +
-            "select rank() over (partition by a order by v) from t")
+        spark.sql("with t as (select 1 as a, parse_json('') as v) " +
+          "select rank() over (partition by a order by v) from t")
       },
       condition = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
       parameters = Map(
         "functionName" -> "`sortorder`",
         "dataType" -> "\"VARIANT\"",
         "sqlExpr" -> "\"v ASC NULLS FIRST\""),
-      context = ExpectedContext(fragment = "v", start = 91, stop = 91))
+      context = ExpectedContext(fragment = "v", start = 91, stop = 91)
+    )
 
     checkError(
       exception = intercept[AnalysisException] {
-        spark.sql(
-          "with t as (select parse_json('') as v) " +
-            "select t1.v from t as t1 join t as t2 on t1.v = t2.v")
+        spark.sql("with t as (select parse_json('') as v) " +
+          "select t1.v from t as t1 join t as t2 on t1.v = t2.v")
       },
       condition = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
-      parameters =
-        Map("functionName" -> "`=`", "dataType" -> "\"VARIANT\"", "sqlExpr" -> "\"(v = v)\""),
-      context = ExpectedContext(fragment = "t1.v = t2.v", start = 80, stop = 90))
+      parameters = Map(
+        "functionName" -> "`=`",
+        "dataType" -> "\"VARIANT\"",
+        "sqlExpr" -> "\"(v = v)\""),
+      context = ExpectedContext(fragment = "t1.v = t2.v", start = 80, stop = 90)
+    )
   }
 
   test("variant_explode") {
     def check(input: String, expected: Seq[Row]): Unit = {
       withView("v") {
         Seq(input).toDF("json").createOrReplaceTempView("v")
-        checkAnswer(
-          sql(
-            "select pos, key, to_json(value) from v, " +
-              "lateral variant_explode(parse_json(json))"),
-          expected)
+        checkAnswer(sql("select pos, key, to_json(value) from v, " +
+          "lateral variant_explode(parse_json(json))"), expected)
         val expectedOuter = if (expected.isEmpty) Seq(Row(null, null, null)) else expected
-        checkAnswer(
-          sql(
-            "select pos, key, to_json(value) from v, " +
-              "lateral variant_explode_outer(parse_json(json))"),
-          expectedOuter)
+        checkAnswer(sql("select pos, key, to_json(value) from v, " +
+          "lateral variant_explode_outer(parse_json(json))"), expectedOuter)
       }
     }
 
@@ -604,8 +570,7 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
         check("1", Nil)
         check("null", Nil)
         check("""{"a": [1, 2, 3], "b": true}""", Seq(Row(0, "a", "[1,2,3]"), Row(1, "b", "true")))
-        check(
-          """[null, "hello", {}]""",
+        check("""[null, "hello", {}]""",
           Seq(Row(0, null, "null"), Row(1, null, "\"hello\""), Row(2, null, "{}")))
       }
     }
@@ -647,60 +612,80 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
     (
       "basic int parse json",
       VariantExpressionEvalUtils.parseJson(UTF8String.fromString("1")),
-      VariantType),
+      VariantType
+    ),
     (
       "basic json parse json",
       VariantExpressionEvalUtils.parseJson(UTF8String.fromString("{\"k\": \"v\"}")),
-      VariantType),
+      VariantType
+    ),
     (
       "basic null parse json",
       VariantExpressionEvalUtils.parseJson(UTF8String.fromString("null")),
-      VariantType),
-    ("basic null", null, VariantType),
+      VariantType
+    ),
+    (
+      "basic null",
+      null,
+      VariantType
+    ),
     (
       "basic array",
       new GenericArrayData(Array[Int](1, 2, 3, 4, 5)),
-      new ArrayType(IntegerType, false)),
-    ("basic string", UTF8String.fromString("literal string"), StringType),
-    ("basic timestamp", 0L, TimestampType),
-    ("basic int", 0, IntegerType),
+      new ArrayType(IntegerType, false)
+    ),
+    (
+      "basic string",
+      UTF8String.fromString("literal string"),
+      StringType
+    ),
+    (
+      "basic timestamp",
+      0L,
+      TimestampType
+    ),
+    (
+      "basic int",
+      0,
+      IntegerType
+    ),
     (
       "basic struct",
       Literal.default(new StructType().add("col0", StringType)).eval(),
-      new StructType().add("col0", StringType)),
+      new StructType().add("col0", StringType)
+    ),
     (
       "complex struct with child variant",
-      Literal
-        .default(
-          new StructType()
-            .add("col0", StringType)
-            .add("col1", new StructType().add("col0", VariantType))
-            .add("col2", VariantType)
-            .add("col3", new ArrayType(VariantType, false)))
-        .eval(),
+      Literal.default(new StructType()
+        .add("col0", StringType)
+        .add("col1", new StructType().add("col0", VariantType))
+        .add("col2", VariantType)
+        .add("col3", new ArrayType(VariantType, false))
+      ).eval(),
       new StructType()
         .add("col0", StringType)
         .add("col1", new StructType().add("col0", VariantType))
         .add("col2", VariantType)
-        .add("col3", new ArrayType(VariantType, false))),
+        .add("col3", new ArrayType(VariantType, false))
+    ),
     (
       "basic array with null",
       new GenericArrayData(Array[Any](1, 2, null)),
-      new ArrayType(IntegerType, true)),
+      new ArrayType(IntegerType, true)
+    ),
     (
       "basic map with null",
       new ArrayBasedMapData(
-        new GenericArrayData(
-          Array[Any](UTF8String.fromString("k1"), UTF8String.fromString("k2"))),
-        new GenericArrayData(Array[Any](1, null))),
-      new MapType(StringType, IntegerType, true))).foreach { case (testName, value, dt) =>
+        new GenericArrayData(Array[Any](UTF8String.fromString("k1"), UTF8String.fromString("k2"))),
+        new GenericArrayData(Array[Any](1, null))
+      ),
+      new MapType(StringType, IntegerType, true)
+    )
+  ).foreach { case (testName, value, dt) =>
     test(s"SPARK-48067: Variant literal `sql` correctly recreates the variant - $testName") {
       val l = Literal.create(
-        VariantExpressionEvalUtils.castToVariant(value, dt.asInstanceOf[DataType]),
-        VariantType)
-      val jsonString = l
-        .eval()
-        .asInstanceOf[VariantVal]
+        VariantExpressionEvalUtils.castToVariant(value, dt.asInstanceOf[DataType]), VariantType)
+      val jsonString = l.eval().asInstanceOf[VariantVal]
         .toJson(DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
       val expectedSql = s"PARSE_JSON('$jsonString')"
       assert(l.sql == expectedSql)
@@ -715,13 +700,15 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
         Literal.create(UTF8String.fromString("$"), StringType),
         dt,
         true,
-        Some(DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone).toString()))
+        Some(DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone).toString())
+      )
       val sqlVariantExpr = VariantGet(
         Literal.create(valueFromLiteralSql, VariantType),
         Literal.create(UTF8String.fromString("$"), StringType),
         dt,
         true,
-        Some(DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone).toString()))
+        Some(DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone).toString())
+      )
       checkEvaluation(castVariantExpr, sqlVariantExpr.eval())
     }
   }
@@ -830,8 +817,8 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
 
   test("variant with many keys in a cached column-based df") {
     withTable("t") {
-      // The initial size of the buffer backing a cached dataframe column is 128KB.
-      // See `ColumnBuilder`.
+       // The initial size of the buffer backing a cached dataframe column is 128KB.
+       // See `ColumnBuilder`.
       val numKeys = 128 * 1024
       // We start in long range because the shredded writer writes int64 by default which wouldn't
       // match narrower binaries.
@@ -857,17 +844,12 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
     val largeKey = "x".repeat(1000)
     val df = Seq(s"""{ "$largeKey": {"a" : 1 },
                        "b" : 2,
-                       "c": [1,2,3,{"$largeKey": 4}] }""")
-      .toDF("json")
-      .selectExpr("parse_json(json) as v")
+                       "c": [1,2,3,{"$largeKey": 4}] }""").toDF("json")
+            .selectExpr("parse_json(json) as v")
 
     // Check Variant with approximate bounds to avoid flakiness if we make minor format changes.
-    def checkSize(
-        v: VariantVal,
-        minMetadata: Long,
-        maxMetadata: Long,
-        minValue: Long,
-        maxValue: Long): Unit = {
+    def checkSize(v: VariantVal, minMetadata: Long, maxMetadata: Long,
+                  minValue: Long, maxValue: Long): Unit = {
       val mSize = v.getMetadata.length
       assert(mSize >= minMetadata)
       assert(mSize <= maxMetadata)
@@ -877,71 +859,26 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
     }
 
     // The full Variant has large metadata (but only one copy of `largeKey`).
-    checkSize(
-      df.selectExpr("variant_get(v, '$', 'variant')")
-        .collect()(0)
-        .getAs[VariantVal](0),
-      1000,
-      1050,
-      20,
-      40)
+    checkSize(df.selectExpr("variant_get(v, '$', 'variant')").collect()(0)
+        .getAs[VariantVal](0), 1000, 1050, 20, 40)
     // Extracting Variant or a nested type containing Variant should strip out the large metadata.
-    checkSize(
-      df.selectExpr("variant_get(v, '$.b', 'variant')")
-        .collect()(0)
-        .getAs[VariantVal](0),
-      2,
-      4,
-      2,
-      4)
+    checkSize(df.selectExpr("variant_get(v, '$.b', 'variant')").collect()(0)
+        .getAs[VariantVal](0), 2, 4, 2, 4)
     // Behavior is the same without an explicit cast to Variant.
-    checkSize(
-      df.selectExpr("variant_get(v, '$.b', 'variant')")
-        .collect()(0)
-        .getAs[VariantVal](0),
-      2,
-      4,
-      2,
-      4)
-    checkSize(
-      df.selectExpr(s"variant_get(v, '$$.$largeKey', 'variant')")
-        .collect()(0)
-        .getAs[VariantVal](0),
-      5,
-      10,
-      5,
-      10)
-    checkSize(
-      df.selectExpr(s"variant_get(v, '$$.$largeKey', 'struct<a:variant>')")
-        .collect()(0)
-        .getStruct(0)
-        .getAs[VariantVal](0),
-      2,
-      4,
-      2,
-      4)
+    checkSize(df.selectExpr("variant_get(v, '$.b', 'variant')").collect()(0)
+        .getAs[VariantVal](0), 2, 4, 2, 4)
+    checkSize(df.selectExpr(s"variant_get(v, '$$.$largeKey', 'variant')").collect()(0)
+        .getAs[VariantVal](0), 5, 10, 5, 10)
+    checkSize(df.selectExpr(s"variant_get(v, '$$.$largeKey', 'struct<a:variant>')")
+        .collect()(0).getStruct(0).getAs[VariantVal](0), 2, 4, 2, 4)
     // Only the array element that contains `largeKey` should be large.
-    checkSize(
-      df.selectExpr("variant_get(v, '$.c', 'array<variant>')")
-        .collect()(0)
-        .getSeq[VariantVal](0)(0),
-      2,
-      4,
-      2,
-      4)
-    checkSize(
-      df.selectExpr("variant_get(v, '$.c', 'array<variant>')")
-        .collect()(0)
-        .getSeq[VariantVal](0)(3),
-      1000,
-      1020,
-      5,
-      10)
+    checkSize(df.selectExpr("variant_get(v, '$.c', 'array<variant>')").collect()(0)
+        .getSeq[VariantVal](0)(0), 2, 4, 2, 4)
+    checkSize(df.selectExpr("variant_get(v, '$.c', 'array<variant>')").collect()(0)
+        .getSeq[VariantVal](0)(3), 1000, 1020, 5, 10)
     // Cast to a nested type containing Variant should also remove metadata.
-    val structResult = df
-      .selectExpr(s"cast(v as struct<$largeKey:variant,b:variant>)")
-      .collect()(0)
-      .getStruct(0)
+    val structResult = df.selectExpr(s"cast(v as struct<$largeKey:variant,b:variant>)").collect()(0)
+        .getStruct(0)
     checkSize(structResult.getAs[VariantVal](0), 5, 10, 5, 10)
     checkSize(structResult.getAs[VariantVal](1), 2, 4, 2, 4)
   }

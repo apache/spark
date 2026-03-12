@@ -41,11 +41,11 @@ object NormalizePlan extends PredicateHelper {
    * single-pass resolver, due to the nature of bottom-up resolution. Before normalization,
    * pre-process the plan by replacing all [[RuntimeReplaceable]] nodes with their replacements.
    * Normalization includes:
-   *   - Replacing [[SubqueryExpression]] plans with normalized versions.
-   *   - Replacing [[CommonExpressionDef]] and [[CommonExpressionRef]] ids with 0 - needed because
-   *     these ids are different for every node.
-   *   - Replacing [[ExpressionWithRandomSeed]] seeds with 0 - needed because these seeds are
-   *     randomly generated.
+   * - Replacing [[SubqueryExpression]] plans with normalized versions.
+   * - Replacing [[CommonExpressionDef]] and [[CommonExpressionRef]] ids with 0 - needed because
+   *   these ids are different for every node.
+   * - Replacing [[ExpressionWithRandomSeed]] seeds with 0 - needed because these seeds are
+   *   randomly generated.
    */
   def normalizeExpressions(plan: LogicalPlan): LogicalPlan = {
     val withNormalizedRuntimeReplaceable = normalizeRuntimeReplaceable(plan)
@@ -67,7 +67,7 @@ object NormalizePlan extends PredicateHelper {
    * This is necessary because fixed-point analyzer may produce non-deterministic results when
    * resolving original expressions. For example, in a query like:
    *
-   * {{{SELECT assert_true(1)}}}
+   * {{{ SELECT assert_true(1) }}}
    *
    * Before resolution, we have [[UnresolvedFunction]] whose child is Literal(1). This child will
    * first be converted to Cast(Literal(1), BooleanType) by type coercion. Because in this case
@@ -81,8 +81,8 @@ object NormalizePlan extends PredicateHelper {
   def normalizeRuntimeReplaceable(plan: LogicalPlan): LogicalPlan = ReplaceExpressions(plan)
 
   /**
-   * Since attribute references are given globally unique ids during analysis, we must normalize
-   * them to check if two different queries are identical.
+   * Since attribute references are given globally unique ids during analysis,
+   * we must normalize them to check if two different queries are identical.
    */
   def normalizeExprIds(plan: LogicalPlan): LogicalPlan = {
     plan.transformAllExpressions {
@@ -117,18 +117,17 @@ object NormalizePlan extends PredicateHelper {
 
   /**
    * Normalizes plans:
-   *   - Filter the filter conditions that appear in a plan. For instance, ((expr 1 && expr 2) &&
-   *     expr 3), (expr 1 && expr 2 && expr 3), (expr 3 && (expr 1 && expr 2) etc., will all now
-   *     be equivalent.
-   *   - Sample the seed will replaced by 0L.
-   *   - Join conditions will be resorted by hashCode.
-   *   - CTERelationDef ids will be rewritten using a monitonically increasing counter from 0.
-   *   - CTERelationRef ids will be remapped based on the new CTERelationDef IDs. This is
-   *     possible, because WithCTE returns cteDefs as first children, and the defs will be
-   *     traversed before the refs.
-   *   - Normalizes inner [[Project]] nodes by sorting project lists alphabetically.
-   *   - Normalizes inner [[Aggregate]] nodes by sorting aggregate expressions lists
-   *     alphabetically.
+   * - Filter the filter conditions that appear in a plan. For instance,
+   *   ((expr 1 && expr 2) && expr 3), (expr 1 && expr 2 && expr 3), (expr 3 && (expr 1 && expr 2)
+   *   etc., will all now be equivalent.
+   * - Sample the seed will replaced by 0L.
+   * - Join conditions will be resorted by hashCode.
+   * - CTERelationDef ids will be rewritten using a monitonically increasing counter from 0.
+   * - CTERelationRef ids will be remapped based on the new CTERelationDef IDs. This is possible,
+   *   because WithCTE returns cteDefs as first children, and the defs will be traversed before the
+   *   refs.
+   * - Normalizes inner [[Project]] nodes by sorting project lists alphabetically.
+   * - Normalizes inner [[Aggregate]] nodes by sorting aggregate expressions lists alphabetically.
    */
   def normalizePlan(plan: LogicalPlan): LogicalPlan = {
     val cteIdNormalizer = new CteIdNormalizer
@@ -139,7 +138,8 @@ object NormalizePlan extends PredicateHelper {
             .map(rewriteBinaryComparison)
             .sortBy(_.hashCode())
             .reduce(And),
-          child)
+          child
+        )
       case sample: Sample =>
         sample.copy(seed = 0L)
       case Join(left, right, joinType, condition, hint) if condition.isDefined =>
@@ -186,9 +186,12 @@ object NormalizePlan extends PredicateHelper {
        */
       case project @ Project(
             _,
-            sort @ Sort(_, _, filter @ Filter(_, innerAggregate: Aggregate), _)) =>
-        project.copy(child =
-          sort.copy(child = filter.copy(child = normalizeAggregateListOrder(innerAggregate))))
+            sort @ Sort(_, _, filter @ Filter(_, innerAggregate: Aggregate), _)
+          ) =>
+        project.copy(
+          child =
+            sort.copy(child = filter.copy(child = normalizeAggregateListOrder(innerAggregate)))
+        )
 
       case c: KeepAnalyzedQuery => c.storeAnalyzedQuery()
       case localRelation: LocalRelation if !localRelation.data.isEmpty =>
@@ -204,7 +207,8 @@ object NormalizePlan extends PredicateHelper {
         cteIdNormalizer.normalizeDef(cteRelationDef)
       case unionLoop: UnionLoop =>
         cteIdNormalizer.normalizeUnionLoop(
-          unionLoop.copy(outputAttrIds = Seq.fill(unionLoop.outputAttrIds.size)(ExprId(0))))
+          unionLoop.copy(outputAttrIds = Seq.fill(unionLoop.outputAttrIds.size)(ExprId(0)))
+        )
       case cteRelationRef: CTERelationRef =>
         cteIdNormalizer.normalizeRef(cteRelationRef)
       case unionLoopRef: UnionLoopRef =>
@@ -215,10 +219,11 @@ object NormalizePlan extends PredicateHelper {
   }
 
   /**
-   * Rewrite [[BinaryComparison]] operator to keep order. The following cases will be equivalent:
-   *   1. (a = b), (b = a);
-   *   2. (a <=> b), (b <=> a).
-   *   3. (a > b), (b < a)
+   * Rewrite [[BinaryComparison]] operator to keep order. The following cases will be
+   * equivalent:
+   * 1. (a = b), (b = a);
+   * 2. (a <=> b), (b <=> a).
+   * 3. (a > b), (b < a)
    */
   private def rewriteBinaryComparison(condition: Expression): Expression = condition match {
     case EqualTo(l, r) => Seq(l, r).sortBy(_.hashCode()).reduce(EqualTo)

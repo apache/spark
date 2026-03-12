@@ -30,14 +30,14 @@ import org.apache.spark.util.Utils
 /**
  * This expression converts data of `ArrayData` to an array of java type.
  *
- * NOTE: When the data type of expression is `ArrayType`, and the expression is foldable, the
- * `ConstantFolding` can do constant folding optimization automatically, (avoiding frequent calls
- * to `ArrayData.to{XXX}Array()`).
+ * NOTE: When the data type of expression is `ArrayType`, and the expression is foldable,
+ * the `ConstantFolding` can do constant folding optimization automatically,
+ * (avoiding frequent calls to `ArrayData.to{XXX}Array()`).
  */
 case class ToJavaArray(array: Expression)
-    extends UnaryExpression
-    with RuntimeReplaceable
-    with QueryErrorsBase {
+  extends UnaryExpression
+  with RuntimeReplaceable
+  with QueryErrorsBase {
 
   override def checkInputDataTypes(): TypeCheckResult = array.dataType match {
     case ArrayType(_, _) =>
@@ -49,7 +49,8 @@ case class ToJavaArray(array: Expression)
           "paramIndex" -> ordinalNumber(0),
           "requiredType" -> toSQLType(ArrayType),
           "inputSql" -> toSQLExpr(array),
-          "inputType" -> toSQLType(array.dataType)))
+          "inputType" -> toSQLType(array.dataType))
+      )
   }
 
   override def foldable: Boolean = array.foldable
@@ -83,7 +84,12 @@ case class ToJavaArray(array: Expression)
     if (isPrimitiveType) {
       val funcNamePrefix = if (resultArrayElementNullable) "toBoxed" else "to"
       val funcName = s"$funcNamePrefix${CodeGenerator.boxedType(elementType)}Array"
-      StaticInvoke(classOf[ToJavaArrayUtils], dataType, funcName, Seq(array), Seq(array.dataType))
+      StaticInvoke(
+        classOf[ToJavaArrayUtils],
+        dataType,
+        funcName,
+        Seq(array),
+        Seq(array.dataType))
     } else {
       Invoke(
         array,

@@ -44,14 +44,8 @@ class ValueStateImplWithTTL[S](
     ttlConfig: TTLConfig,
     batchTimestampMs: Long,
     metrics: Map[String, SQLMetric] = Map.empty)
-    extends OneToOneTTLState(
-      stateName,
-      store,
-      keyExprEnc.schema,
-      ttlConfig,
-      batchTimestampMs,
-      metrics)
-    with ValueState[S] {
+  extends OneToOneTTLState(
+    stateName, store, keyExprEnc.schema, ttlConfig, batchTimestampMs, metrics) with ValueState[S] {
 
   private val stateTypesEncoder =
     StateTypesEncoder(keyExprEnc, valEncoder, stateName, hasTtl = true)
@@ -59,11 +53,11 @@ class ValueStateImplWithTTL[S](
   initialize()
 
   private def initialize(): Unit = {
-    store.createColFamilyIfAbsent(
-      stateName,
+    store.createColFamilyIfAbsent(stateName,
       keyExprEnc.schema,
       getValueSchemaWithTTL(valEncoder.schema, true),
-      NoPrefixKeyStateEncoderSpec(keyExprEnc.schema))
+      NoPrefixKeyStateEncoderSpec(keyExprEnc.schema)
+    )
   }
 
   /** Function to check if state exists. Returns true if present and false otherwise */
@@ -114,8 +108,9 @@ class ValueStateImplWithTTL[S](
    */
 
   /**
-   * Retrieves the value from State even if its expired. This method is used in tests to read the
-   * state store value, and ensure if its cleaned up at the end of the micro-batch.
+   * Retrieves the value from State even if its expired. This method is used
+   * in tests to read the state store value, and ensure if its cleaned up at the
+   * end of the micro-batch.
    */
   private[sql] def getWithoutEnforcingTTL(): Option[S] = {
     val encodedGroupingKey = stateTypesEncoder.encodeGroupingKey()
@@ -140,24 +135,24 @@ class ValueStateImplWithTTL[S](
     // ttlExpiration
     if (retRow != null) {
       val ttlExpiration = stateTypesEncoder.decodeTtlExpirationMs(retRow)
-      ttlExpiration.map(expiration =>
-        (stateTypesEncoder.decodeValue(retRow).asInstanceOf[S], expiration))
+      ttlExpiration.map(expiration => (stateTypesEncoder.decodeValue(retRow).asInstanceOf[S],
+        expiration))
     } else {
       None
     }
   }
 
   /**
-   * Get the TTL value stored in TTL state for the current implicit grouping key, if it exists.
+   * Get the TTL value stored in TTL state for the current implicit grouping key,
+   * if it exists.
    */
   private[sql] def getValueInTTLState(): Option[Long] = {
     val groupingKey = stateTypesEncoder.encodeGroupingKey()
     val ttlRowsForGroupingKey = getTTLRows().filter(_.elementKey == groupingKey).toSeq
 
-    assert(
-      ttlRowsForGroupingKey.size <= 1,
-      "Multiple TTLRows found for grouping key " +
-        s"$groupingKey. Expected at most 1. Found: ${ttlRowsForGroupingKey.mkString(", ")}.")
+    assert(ttlRowsForGroupingKey.size <= 1, "Multiple TTLRows found for grouping key " +
+      s"$groupingKey. Expected at most 1. Found: ${ttlRowsForGroupingKey.mkString(", ")}.")
     ttlRowsForGroupingKey.headOption.map(_.expirationMs)
   }
 }
+

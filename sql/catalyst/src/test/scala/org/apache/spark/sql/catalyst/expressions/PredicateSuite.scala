@@ -33,32 +33,45 @@ import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
+
 class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   private def booleanLogicTest(
-      name: String,
-      op: (Expression, Expression) => Expression,
-      truthTable: Seq[(Any, Any, Any)]): Unit = {
+    name: String,
+    op: (Expression, Expression) => Expression,
+    truthTable: Seq[(Any, Any, Any)]): Unit = {
     test(s"3VL $name") {
-      truthTable.foreach { case (l, r, answer) =>
-        val expr =
-          op(NonFoldableLiteral.create(l, BooleanType), NonFoldableLiteral.create(r, BooleanType))
-        checkEvaluation(expr, answer)
+      truthTable.foreach {
+        case (l, r, answer) =>
+          val expr = op(NonFoldableLiteral.create(l, BooleanType),
+            NonFoldableLiteral.create(r, BooleanType))
+          checkEvaluation(expr, answer)
       }
     }
   }
 
   // scalastyle:off
   /**
-   * Checks for three-valued-logic. Based on:
+   * Checks for three-valued-logic.  Based on:
    * http://en.wikipedia.org/wiki/Null_(SQL)#Comparisons_with_NULL_and_the_three-valued_logic_.283VL.29
-   * I.e. in flat cpo "False -> Unknown -> True", OR is lowest upper bound, AND is greatest lower
-   * bound. p q p OR q p AND q p = q True True True True True True False True False False True
-   * Unknown True Unknown Unknown False True True False False False False False False True False
-   * Unknown Unknown False Unknown Unknown True True Unknown Unknown Unknown False Unknown False
-   * Unknown Unknown Unknown Unknown Unknown Unknown
+   * I.e. in flat cpo "False -> Unknown -> True",
+   *   OR is lowest upper bound,
+   *   AND is greatest lower bound.
+   * p       q       p OR q  p AND q  p = q
+   * True    True    True    True     True
+   * True    False   True    False    False
+   * True    Unknown True    Unknown  Unknown
+   * False   True    True    False    False
+   * False   False   False   False    True
+   * False   Unknown Unknown False    Unknown
+   * Unknown True    True    Unknown  Unknown
+   * Unknown False   Unknown False    Unknown
+   * Unknown Unknown Unknown Unknown  Unknown
    *
-   * p NOT p True False False True Unknown Unknown
+   * p       NOT p
+   * True    False
+   * False   True
+   * Unknown Unknown
    */
   // scalastyle:on
 
@@ -82,9 +95,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  booleanLogicTest(
-    "AND",
-    And,
+  booleanLogicTest("AND", And,
     (true, true, true) ::
       (true, false, false) ::
       (true, null, null) ::
@@ -95,9 +106,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
       (null, false, false) ::
       (null, null, null) :: Nil)
 
-  booleanLogicTest(
-    "OR",
-    Or,
+  booleanLogicTest("OR", Or,
     (true, true, true) ::
       (true, false, true) ::
       (true, null, true) ::
@@ -108,9 +117,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
       (null, false, null) ::
       (null, null, null) :: Nil)
 
-  booleanLogicTest(
-    "=",
-    EqualTo,
+  booleanLogicTest("=", EqualTo,
     (true, true, true) ::
       (true, false, false) ::
       (true, null, null) ::
@@ -129,26 +136,20 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("basic IN/INSET predicate test") {
     Seq(true, false).foreach { legacyNullInBehavior =>
-      withSQLConf(
-        SQLConf.LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR.key -> legacyNullInBehavior.toString) {
-        checkInAndInSet(
-          In(NonFoldableLiteral.create(null, IntegerType), Seq(Literal(1), Literal(2))),
-          null)
-        checkInAndInSet(
-          In(
-            NonFoldableLiteral.create(null, IntegerType),
-            Seq(NonFoldableLiteral.create(null, IntegerType))),
-          null)
-        checkInAndInSet(
-          In(NonFoldableLiteral.create(null, IntegerType), Seq.empty),
+      withSQLConf(SQLConf.LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR.key -> legacyNullInBehavior.toString) {
+        checkInAndInSet(In(NonFoldableLiteral.create(null, IntegerType), Seq(Literal(1),
+          Literal(2))), null)
+        checkInAndInSet(In(NonFoldableLiteral.create(null, IntegerType),
+          Seq(NonFoldableLiteral.create(null, IntegerType))), null)
+        checkInAndInSet(In(NonFoldableLiteral.create(null, IntegerType), Seq.empty),
           expected = if (legacyNullInBehavior) null else false)
         checkInAndInSet(In(Literal(1), Seq.empty), false)
         checkInAndInSet(In(Literal(1), Seq(NonFoldableLiteral.create(null, IntegerType))), null)
-        checkInAndInSet(
-          In(Literal(1), Seq(Literal(1), NonFoldableLiteral.create(null, IntegerType))),
+        checkInAndInSet(In(Literal(1),
+          Seq(Literal(1), NonFoldableLiteral.create(null, IntegerType))),
           true)
-        checkInAndInSet(
-          In(Literal(2), Seq(Literal(1), NonFoldableLiteral.create(null, IntegerType))),
+        checkInAndInSet(In(Literal(2),
+          Seq(Literal(1), NonFoldableLiteral.create(null, IntegerType))),
           null)
         checkInAndInSet(In(Literal(1), Seq(Literal(1), Literal(2))), true)
         checkInAndInSet(In(Literal(2), Seq(Literal(1), Literal(2))), true)
@@ -157,11 +158,12 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     checkEvaluation(
-      And(
-        In(Literal(1), Seq(Literal(1), Literal(2))),
-        In(Literal(2), Seq(Literal(1), Literal(2)))),
+      And(In(Literal(1), Seq(Literal(1), Literal(2))), In(Literal(2), Seq(Literal(1),
+        Literal(2)))),
       true)
-    checkEvaluation(And(InSet(Literal(1), HashSet(1, 2)), InSet(Literal(2), Set(1, 2))), true)
+    checkEvaluation(
+      And(InSet(Literal(1), HashSet(1, 2)), InSet(Literal(2), Set(1, 2))),
+      true)
 
     val ns = NonFoldableLiteral.create(null, StringType)
     checkInAndInSet(In(ns, Seq(Literal("1"), Literal("2"))), null)
@@ -176,8 +178,8 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     def testWithRandomDataGeneration(dataType: DataType, nullable: Boolean): Unit = {
       val maybeDataGen = RandomDataGenerator.forType(dataType, nullable = nullable)
       // Actually we won't pass in unsupported data types, this is a safety check.
-      val dataGen =
-        maybeDataGen.getOrElse(fail(s"Failed to create data generator for type $dataType"))
+      val dataGen = maybeDataGen.getOrElse(
+        fail(s"Failed to create data generator for type $dataType"))
       val inputData = Seq.fill(10) {
         val value = dataGen.apply()
         def cleanData(value: Any) = value match {
@@ -210,30 +212,33 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val atomicTypes = DataTypeTestUtils.atomicTypes.filter { t =>
       RandomDataGenerator.forType(t).isDefined &&
-      !t.isInstanceOf[DecimalType] && !t.isInstanceOf[BinaryType]
+        !t.isInstanceOf[DecimalType] && !t.isInstanceOf[BinaryType]
     } ++ Seq(DecimalType.USER_DEFAULT)
 
     val atomicArrayTypes = atomicTypes.map(ArrayType(_, containsNull = true))
 
     // Basic types:
-    for (dataType <- atomicTypes;
-      nullable <- Seq(true, false)) {
+    for (
+        dataType <- atomicTypes;
+        nullable <- Seq(true, false)) {
       testWithRandomDataGeneration(dataType, nullable)
     }
 
     // Array types:
-    for (arrayType <- atomicArrayTypes;
-      nullable <- Seq(true, false)
-      if RandomDataGenerator.forType(arrayType.elementType, arrayType.containsNull).isDefined) {
+    for (
+        arrayType <- atomicArrayTypes;
+        nullable <- Seq(true, false)
+        if RandomDataGenerator.forType(arrayType.elementType, arrayType.containsNull).isDefined) {
       testWithRandomDataGeneration(arrayType, nullable)
     }
 
     // Struct types:
-    for (colOneType <- atomicTypes;
-      colTwoType <- atomicTypes;
-      nullable <- Seq(true, false)) {
-      val structType =
-        StructType(StructField("a", colOneType) :: StructField("b", colTwoType) :: Nil)
+    for (
+        colOneType <- atomicTypes;
+        colTwoType <- atomicTypes;
+        nullable <- Seq(true, false)) {
+      val structType = StructType(
+        StructField("a", colOneType) :: StructField("b", colTwoType) :: Nil)
       testWithRandomDataGeneration(structType, nullable)
     }
 
@@ -244,8 +249,8 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
         assert(msg.contains("function in does not support ordering on type map"))
       case TypeCheckResult.DataTypeMismatch(errorSubClass, messageParameters) =>
         assert(errorSubClass == "INVALID_ORDERING_TYPE")
-        assert(
-          messageParameters === Map("functionName" -> "`in`", "dataType" -> "\"MAP<INT, INT>\""))
+        assert(messageParameters === Map(
+          "functionName" -> "`in`", "dataType" -> "\"MAP<INT, INT>\""))
     }
   }
 
@@ -274,10 +279,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
       check(presentValue = Literal(2.toByte), absentValue = Literal(3.toByte), byteValues)
       check(presentValue = Literal(Byte.MinValue), absentValue = Literal(5.toByte), byteValues)
       check(presentValue = Literal(20.toShort), absentValue = Literal(-14.toShort), shortValues)
-      check(
-        presentValue = Literal(Short.MaxValue),
-        absentValue = Literal(30.toShort),
-        shortValues)
+      check(presentValue = Literal(Short.MaxValue), absentValue = Literal(30.toShort), shortValues)
       check(presentValue = Literal(20), absentValue = Literal(-14), intValues)
       check(presentValue = Literal(Int.MinValue), absentValue = Literal(2), intValues)
       check(
@@ -301,12 +303,12 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-22501: In should not generate codes beyond 64KB") {
     val N = 3000
     val sets = (1 to N).map(i => Literal(i.toDouble))
-    checkEvaluation(In(Literal(1.0d), sets), true)
+    checkEvaluation(In(Literal(1.0D), sets), true)
   }
 
   test("SPARK-22705: In should use less global variables") {
     val ctx = new CodegenContext()
-    In(Literal(1.0d), Seq(Literal(1.0d), Literal(2.0d))).genCode(ctx)
+    In(Literal(1.0D), Seq(Literal(1.0D), Literal(2.0D))).genCode(ctx)
     assert(ctx.inlinedMutableStates.isEmpty)
   }
 
@@ -316,9 +318,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     val threefour = Literal(Array(3.toByte, 4.toByte))
     val nl = NonFoldableLiteral.create(null, onetwo.dataType)
     val hS = Seq(Literal(Array(1.toByte, 2.toByte)), Literal(Array(3.toByte)))
-    val nS = Seq(
-      Literal(Array(1.toByte, 2.toByte)),
-      Literal(Array(3.toByte)),
+    val nS = Seq(Literal(Array(1.toByte, 2.toByte)), Literal(Array(3.toByte)),
       NonFoldableLiteral.create(null, onetwo.dataType))
     checkInAndInSet(In(onetwo, hS), true)
     checkInAndInSet(In(three, hS), true)
@@ -335,9 +335,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     val twoC = Literal.create((2, "c"))
     val nl = NonFoldableLiteral.create(null, oneA.dataType)
     val hS = Seq(Literal.create((1, "a")), Literal.create((2, "b")))
-    val nS = Seq(
-      Literal.create((1, "a")),
-      Literal.create((2, "b")),
+    val nS = Seq(Literal.create((1, "a")), Literal.create((2, "b")),
       NonFoldableLiteral.create(null, oneA.dataType))
     checkInAndInSet(In(oneA, hS), true)
     checkInAndInSet(In(twoB, hS), true)
@@ -354,9 +352,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     val threefour = Literal.create(Seq(3, 4))
     val nl = NonFoldableLiteral.create(null, onetwo.dataType)
     val hS = Seq(Literal.create(Seq(1, 2)), Literal.create(Seq(3)))
-    val nS = Seq(
-      Literal.create(Seq(1, 2)),
-      Literal.create(Seq(3)),
+    val nS = Seq(Literal.create(Seq(1, 2)), Literal.create(Seq(3)),
       NonFoldableLiteral.create(null, onetwo.dataType))
     checkInAndInSet(In(onetwo, hS), true)
     checkInAndInSet(In(three, hS), true)
@@ -372,88 +368,28 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   private val udt = new ExamplePointUDT
 
   private val smallValues =
-    Seq(
-      1.toByte,
-      1.toShort,
-      1,
-      1L,
-      Decimal(1),
-      Array(1.toByte),
-      Date.valueOf("2000-01-01"),
-      new Timestamp(1),
-      "a",
-      1f,
-      1d,
-      0f,
-      0d,
-      false,
-      Array(1L, 2L))
-      .map(Literal(_)) ++ Seq(
-      Literal.create(MyStruct(1L, "b")),
+    Seq(1.toByte, 1.toShort, 1, 1L, Decimal(1), Array(1.toByte), Date.valueOf("2000-01-01"),
+      new Timestamp(1), "a", 1f, 1d, 0f, 0d, false, Array(1L, 2L))
+      .map(Literal(_)) ++ Seq(Literal.create(MyStruct(1L, "b")),
       Literal.create(MyStruct2(MyStruct(1L, "a"), Array(1, 1))),
       Literal.create(ArrayData.toArrayData(Array(1.0, 2.0)), udt))
   private val largeValues =
-    Seq(
-      2.toByte,
-      2.toShort,
-      2,
-      2L,
-      Decimal(2),
-      Array(2.toByte),
-      Date.valueOf("2000-01-02"),
-      new Timestamp(2),
-      "b",
-      2f,
-      2d,
-      Float.NaN,
-      Double.NaN,
-      true,
-      Array(2L, 1L))
-      .map(Literal(_)) ++ Seq(
-      Literal.create(MyStruct(2L, "b")),
+    Seq(2.toByte, 2.toShort, 2, 2L, Decimal(2), Array(2.toByte), Date.valueOf("2000-01-02"),
+      new Timestamp(2), "b", 2f, 2d, Float.NaN, Double.NaN, true, Array(2L, 1L))
+      .map(Literal(_)) ++ Seq(Literal.create(MyStruct(2L, "b")),
       Literal.create(MyStruct2(MyStruct(1L, "a"), Array(1, 2))),
       Literal.create(ArrayData.toArrayData(Array(1.0, 3.0)), udt))
 
   private val equalValues1 =
-    Seq(
-      1.toByte,
-      1.toShort,
-      1,
-      1L,
-      Decimal(1),
-      Array(1.toByte),
-      Date.valueOf("2000-01-01"),
-      new Timestamp(1),
-      "a",
-      1f,
-      1d,
-      Float.NaN,
-      Double.NaN,
-      true,
-      Array(1L, 2L))
-      .map(Literal(_)) ++ Seq(
-      Literal.create(MyStruct(1L, "b")),
+    Seq(1.toByte, 1.toShort, 1, 1L, Decimal(1), Array(1.toByte), Date.valueOf("2000-01-01"),
+      new Timestamp(1), "a", 1f, 1d, Float.NaN, Double.NaN, true, Array(1L, 2L))
+      .map(Literal(_)) ++ Seq(Literal.create(MyStruct(1L, "b")),
       Literal.create(MyStruct2(MyStruct(1L, "a"), Array(1, 1))),
       Literal.create(ArrayData.toArrayData(Array(1.0, 2.0)), udt))
   private val equalValues2 =
-    Seq(
-      1.toByte,
-      1.toShort,
-      1,
-      1L,
-      Decimal(1),
-      Array(1.toByte),
-      Date.valueOf("2000-01-01"),
-      new Timestamp(1),
-      "a",
-      1f,
-      1d,
-      Float.NaN,
-      Double.NaN,
-      true,
-      Array(1L, 2L))
-      .map(Literal(_)) ++ Seq(
-      Literal.create(MyStruct(1L, "b")),
+    Seq(1.toByte, 1.toShort, 1, 1L, Decimal(1), Array(1.toByte), Date.valueOf("2000-01-01"),
+      new Timestamp(1), "a", 1f, 1d, Float.NaN, Double.NaN, true, Array(1L, 2L))
+      .map(Literal(_)) ++ Seq(Literal.create(MyStruct(1L, "b")),
       Literal.create(MyStruct2(MyStruct(1L, "a"), Array(1, 1))),
       Literal.create(ArrayData.toArrayData(Array(1.0, 2.0)), udt))
 
@@ -549,21 +485,21 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
       .add("2", LongType)
       .add("3", ArrayType(IntegerType))
 
-    val projection =
-      UnsafeProjection.create(new StructType().add("array", arrayType).add("struct", structType))
+    val projection = UnsafeProjection.create(
+      new StructType().add("array", arrayType).add("struct", structType))
 
     val unsafeRow = projection(InternalRow(array, struct))
 
     val unsafeArray = unsafeRow.getArray(0)
     val unsafeStruct = unsafeRow.getStruct(1, 3)
 
-    checkEvaluation(
-      EqualTo(Literal.create(array, arrayType), Literal.create(unsafeArray, arrayType)),
-      true)
+    checkEvaluation(EqualTo(
+      Literal.create(array, arrayType),
+      Literal.create(unsafeArray, arrayType)), true)
 
-    checkEvaluation(
-      EqualTo(Literal.create(struct, structType), Literal.create(unsafeStruct, structType)),
-      true)
+    checkEvaluation(EqualTo(
+      Literal.create(struct, structType),
+      Literal.create(unsafeStruct, structType)), true)
   }
 
   test("EqualTo double/float infinity") {
@@ -590,9 +526,8 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(interpreted.eval(new UnsafeRow()))
   }
 
-  test(
-    "SPARK-24872: Replace taking the $symbol with $sqlOperator in BinaryOperator's" +
-      " toString method") {
+  test("SPARK-24872: Replace taking the $symbol with $sqlOperator in BinaryOperator's" +
+    " toString method") {
     val expression = CatalystSqlParser.parseExpression("id=1 or id=2").toString()
     val expected = "(('id = 1) OR ('id = 2))"
     assert(expression == expected)
@@ -606,12 +541,11 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     IsUnknown(Literal.create(null, IntegerType)).checkInputDataTypes() match {
       case TypeCheckResult.DataTypeMismatch(errorSubClass, messageParameters) =>
         assert(errorSubClass === "UNEXPECTED_INPUT_TYPE")
-        assert(
-          messageParameters === Map(
-            "paramIndex" -> ordinalNumber(0),
-            "requiredType" -> "\"BOOLEAN\"",
-            "inputSql" -> "\"NULL\"",
-            "inputType" -> "\"INT\""))
+        assert(messageParameters === Map(
+          "paramIndex" -> ordinalNumber(0),
+          "requiredType" -> "\"BOOLEAN\"",
+          "inputSql" -> "\"NULL\"",
+          "inputType" -> "\"INT\""))
     }
   }
 
@@ -624,17 +558,17 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-32764: compare special double/float values") {
     checkEvaluation(EqualTo(Literal(Double.NaN), Literal(Double.NaN)), true)
     checkEvaluation(EqualTo(Literal(Double.NaN), Literal(Double.PositiveInfinity)), false)
-    checkEvaluation(EqualTo(Literal(0.0d), Literal(-0.0d)), true)
+    checkEvaluation(EqualTo(Literal(0.0D), Literal(-0.0D)), true)
     checkEvaluation(GreaterThan(Literal(Double.NaN), Literal(Double.PositiveInfinity)), true)
     checkEvaluation(GreaterThan(Literal(Double.NaN), Literal(Double.NaN)), false)
-    checkEvaluation(GreaterThan(Literal(0.0d), Literal(-0.0d)), false)
+    checkEvaluation(GreaterThan(Literal(0.0D), Literal(-0.0D)), false)
 
     checkEvaluation(EqualTo(Literal(Float.NaN), Literal(Float.NaN)), true)
     checkEvaluation(EqualTo(Literal(Float.NaN), Literal(Float.PositiveInfinity)), false)
-    checkEvaluation(EqualTo(Literal(0.0f), Literal(-0.0f)), true)
+    checkEvaluation(EqualTo(Literal(0.0F), Literal(-0.0F)), true)
     checkEvaluation(GreaterThan(Literal(Float.NaN), Literal(Float.PositiveInfinity)), true)
     checkEvaluation(GreaterThan(Literal(Float.NaN), Literal(Float.NaN)), false)
-    checkEvaluation(GreaterThan(Literal(0.0f), Literal(-0.0f)), false)
+    checkEvaluation(GreaterThan(Literal(0.0F), Literal(-0.0F)), false)
   }
 
   test("SPARK-32110: compare special double/float values in array") {
@@ -657,24 +591,18 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
         expected: Any): Unit = {
       // test double
       checkEvaluation(
-        exprBuilder(createUnsafeDoubleArray(left), createUnsafeDoubleArray(right)),
-        expected)
+        exprBuilder(createUnsafeDoubleArray(left), createUnsafeDoubleArray(right)), expected)
       checkEvaluation(
-        exprBuilder(createUnsafeDoubleArray(left), createSafeDoubleArray(right)),
-        expected)
+        exprBuilder(createUnsafeDoubleArray(left), createSafeDoubleArray(right)), expected)
       checkEvaluation(
-        exprBuilder(createSafeDoubleArray(left), createSafeDoubleArray(right)),
-        expected)
+        exprBuilder(createSafeDoubleArray(left), createSafeDoubleArray(right)), expected)
       // test float
       checkEvaluation(
-        exprBuilder(createUnsafeFloatArray(left), createUnsafeFloatArray(right)),
-        expected)
+        exprBuilder(createUnsafeFloatArray(left), createUnsafeFloatArray(right)), expected)
       checkEvaluation(
-        exprBuilder(createUnsafeFloatArray(left), createSafeFloatArray(right)),
-        expected)
+        exprBuilder(createUnsafeFloatArray(left), createSafeFloatArray(right)), expected)
       checkEvaluation(
-        exprBuilder(createSafeFloatArray(left), createSafeFloatArray(right)),
-        expected)
+        exprBuilder(createSafeFloatArray(left), createSafeFloatArray(right)), expected)
     }
 
     checkExpr(EqualTo, Double.NaN, Double.NaN, true)
@@ -711,22 +639,18 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
         expected: Any): Unit = {
       // test double
       checkEvaluation(
-        exprBuilder(createUnsafeDoubleRow(left), createUnsafeDoubleRow(right)),
-        expected)
+        exprBuilder(createUnsafeDoubleRow(left), createUnsafeDoubleRow(right)), expected)
       checkEvaluation(
-        exprBuilder(createUnsafeDoubleRow(left), createSafeDoubleRow(right)),
-        expected)
+        exprBuilder(createUnsafeDoubleRow(left), createSafeDoubleRow(right)), expected)
       checkEvaluation(
-        exprBuilder(createSafeDoubleRow(left), createSafeDoubleRow(right)),
-        expected)
+        exprBuilder(createSafeDoubleRow(left), createSafeDoubleRow(right)), expected)
       // test float
       checkEvaluation(
-        exprBuilder(createUnsafeFloatRow(left), createUnsafeFloatRow(right)),
-        expected)
+        exprBuilder(createUnsafeFloatRow(left), createUnsafeFloatRow(right)), expected)
       checkEvaluation(
-        exprBuilder(createUnsafeFloatRow(left), createSafeFloatRow(right)),
-        expected)
-      checkEvaluation(exprBuilder(createSafeFloatRow(left), createSafeFloatRow(right)), expected)
+        exprBuilder(createUnsafeFloatRow(left), createSafeFloatRow(right)), expected)
+      checkEvaluation(
+        exprBuilder(createSafeFloatRow(left), createSafeFloatRow(right)), expected)
     }
 
     checkExpr(EqualTo, Double.NaN, Double.NaN, true)
@@ -739,29 +663,21 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-36792: InSet should handle Double.NaN and Float.NaN") {
     checkInAndInSet(In(Literal(Double.NaN), Seq(Literal(Double.NaN), Literal(2d))), true)
-    checkInAndInSet(
-      In(
-        Literal.create(null, DoubleType),
-        Seq(Literal(Double.NaN), Literal(2d), Literal.create(null, DoubleType))),
-      null)
-    checkInAndInSet(
-      In(Literal.create(null, DoubleType), Seq(Literal(Double.NaN), Literal(2d))),
-      null)
-    checkInAndInSet(In(Literal(3d), Seq(Literal(Double.NaN), Literal(2d))), false)
-    checkInAndInSet(
-      In(Literal(3d), Seq(Literal(Double.NaN), Literal(2d), Literal.create(null, DoubleType))),
-      null)
-    checkInAndInSet(
-      In(
-        Literal(Double.NaN),
-        Seq(Literal(Double.NaN), Literal(2d), Literal.create(null, DoubleType))),
-      true)
+    checkInAndInSet(In(Literal.create(null, DoubleType),
+      Seq(Literal(Double.NaN), Literal(2d), Literal.create(null, DoubleType))), null)
+    checkInAndInSet(In(Literal.create(null, DoubleType),
+      Seq(Literal(Double.NaN), Literal(2d))), null)
+    checkInAndInSet(In(Literal(3d),
+      Seq(Literal(Double.NaN), Literal(2d))), false)
+    checkInAndInSet(In(Literal(3d),
+      Seq(Literal(Double.NaN), Literal(2d), Literal.create(null, DoubleType))), null)
+    checkInAndInSet(In(Literal(Double.NaN),
+      Seq(Literal(Double.NaN), Literal(2d), Literal.create(null, DoubleType))), true)
   }
 
   test("In and InSet logging limits") {
-    assert(
-      In(Literal(1), Seq(Literal(1), Literal(2))).simpleString(1)
-        === "1 IN (1,... 1 more fields)")
+    assert(In(Literal(1), Seq(Literal(1), Literal(2))).simpleString(1)
+      === "1 IN (1,... 1 more fields)")
     assert(In(Literal(1), Seq(Literal(1), Literal(2))).simpleString(2) === "1 IN (1,2)")
     assert(In(Literal(1), Seq(Literal(1))).simpleString(1) === "1 IN (1)")
     assert(InSet(Literal(1), Set(1, 2)).simpleString(1) === "1 INSET 1, ... 1 more fields")
@@ -813,15 +729,14 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
 
       // Timestamp comparisons
       EqualTo(tsLit, tsLit2),
-      GreaterThan(
-        tsLit,
+      GreaterThan(tsLit,
         Literal.create(java.sql.Timestamp.valueOf("2020-12-31 12:00:00"), TimestampType)),
-      LessThan(tsLit, tsLit2))
+      LessThan(tsLit, tsLit2)
+    )
 
     expressions.foreach { expr =>
       assert(expr.foldable, s"Expression $expr should be foldable")
-      assert(
-        expr.contextIndependentFoldable,
+      assert(expr.contextIndependentFoldable,
         s"Expression $expr should be context independent foldable")
     }
   }
@@ -839,12 +754,15 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
       EqualTo(Cast(tsLit, DateType), Cast(tsLit2, DateType)),
 
       // Expressions using date/time operations
-      EqualTo(DateDiff(Cast(tsLit, DateType), Cast(tsLit2, DateType)), Literal(-1)))
+      EqualTo(
+        DateDiff(Cast(tsLit, DateType), Cast(tsLit2, DateType)),
+        Literal(-1)
+      )
+    )
 
     expressions.foreach { expr =>
       assert(expr.foldable, s"Expression $expr should be foldable")
-      assert(
-        !expr.contextIndependentFoldable,
+      assert(!expr.contextIndependentFoldable,
         s"Expression $expr should not be context independent foldable")
     }
   }

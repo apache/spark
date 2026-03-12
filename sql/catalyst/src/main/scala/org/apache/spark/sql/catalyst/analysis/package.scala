@@ -26,14 +26,14 @@ import org.apache.spark.sql.errors.QueryErrorsBase
 
 /**
  * Provides a logical query plan [[Analyzer]] and supporting classes for performing analysis.
- * Analysis consists of translating [[UnresolvedAttribute]]s and [[UnresolvedRelation]]s into
- * fully typed objects using information in a schema [[Catalog]].
+ * Analysis consists of translating [[UnresolvedAttribute]]s and [[UnresolvedRelation]]s
+ * into fully typed objects using information in a schema [[Catalog]].
  */
 package object analysis {
 
   /**
-   * Resolver should return true if the first string refers to the same entity as the second
-   * string. For example, by using case insensitive equality.
+   * Resolver should return true if the first string refers to the same entity as the second string.
+   * For example, by using case insensitive equality.
    */
   type Resolver = SqlApiAnalysis.Resolver
 
@@ -41,7 +41,6 @@ package object analysis {
   val caseSensitiveResolution = (a: String, b: String) => a == b
 
   implicit class AnalysisErrorAt(t: TreeNode[_]) extends QueryErrorsBase {
-
     /**
      * Fails the analysis at the point where a specific tree node was parsed using a provided
      * error class and message parameters.
@@ -55,8 +54,7 @@ package object analysis {
 
     /**
      * Fails the analysis at the point where a specific tree node was parsed using a provided
-     * error class, message parameters and a given cause.
-     */
+     * error class, message parameters and a given cause. */
     def failAnalysis(
         errorClass: String,
         messageParameters: Map[String, String],
@@ -89,7 +87,7 @@ package object analysis {
     def tableNotFound(name: Seq[String]): Nothing = {
       throw new AnalysisException(
         errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        messageParameters = Map("relationName" -> quoteNameParts(name)),
+        messageParameters = Map("relationName" ->  quoteNameParts(name)),
         origin = t.origin)
     }
 
@@ -103,8 +101,7 @@ package object analysis {
 
   /** Catches any AnalysisExceptions thrown by `f` and attaches `t`'s position if any. */
   def withPosition[A](t: TreeNode[_])(f: => A): A = {
-    try f
-    catch {
+    try f catch {
       case a: AnalysisException =>
         throw a.withPosition(t.origin)
     }

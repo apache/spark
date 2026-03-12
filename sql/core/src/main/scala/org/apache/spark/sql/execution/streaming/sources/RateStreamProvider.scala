@@ -31,19 +31,18 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
- * A source that generates increment long values with timestamps. Each generated row has two
- * columns: a timestamp column for the generated time and an auto increment long column starting
- * with 0L.
+ *  A source that generates increment long values with timestamps. Each generated row has two
+ *  columns: a timestamp column for the generated time and an auto increment long column starting
+ *  with 0L.
  *
- * This source supports the following options:
- *   - `rowsPerSecond` (e.g. 100, default: 1): How many rows should be generated per second.
- *   - `rampUpTime` (e.g. 5s, default: 0s): How long to ramp up before the generating speed
- *     becomes `rowsPerSecond`. Using finer granularities than seconds will be truncated to
- *     integer seconds.
- *   - `numPartitions` (e.g. 10, default: Spark's default parallelism): The partition number for
- *     the generated rows. The source will try its best to reach `rowsPerSecond`, but the query
- *     may be resource constrained, and `numPartitions` can be tweaked to help reach the desired
- *     speed.
+ *  This source supports the following options:
+ *  - `rowsPerSecond` (e.g. 100, default: 1): How many rows should be generated per second.
+ *  - `rampUpTime` (e.g. 5s, default: 0s): How long to ramp up before the generating speed
+ *    becomes `rowsPerSecond`. Using finer granularities than seconds will be truncated to integer
+ *    seconds.
+ *  - `numPartitions` (e.g. 10, default: Spark's default parallelism): The partition number for the
+ *    generated rows. The source will try its best to reach `rowsPerSecond`, but the query may
+ *    be resource constrained, and `numPartitions` can be tweaked to help reach the desired speed.
  */
 class RateStreamProvider extends SimpleTableProvider with DataSourceRegister {
   import RateStreamProvider._
@@ -63,8 +62,8 @@ class RateStreamProvider extends SimpleTableProvider with DataSourceRegister {
         s"Invalid value '$rampUpTimeSeconds'. The option 'rampUpTime' must not be negative")
     }
 
-    val numPartitions =
-      options.getInt(NUM_PARTITIONS, SparkSession.active.sparkContext.defaultParallelism)
+    val numPartitions = options.getInt(
+      NUM_PARTITIONS, SparkSession.active.sparkContext.defaultParallelism)
     if (numPartitions <= 0) {
       throw new IllegalArgumentException(
         s"Invalid value '$numPartitions'. The option 'numPartitions' must be positive")
@@ -75,9 +74,11 @@ class RateStreamProvider extends SimpleTableProvider with DataSourceRegister {
   override def shortName(): String = "rate"
 }
 
-class RateStreamTable(rowsPerSecond: Long, rampUpTimeSeconds: Long, numPartitions: Int)
-    extends Table
-    with SupportsRead {
+class RateStreamTable(
+    rowsPerSecond: Long,
+    rampUpTimeSeconds: Long,
+    numPartitions: Int)
+  extends Table with SupportsRead {
 
   override def name(): String = {
     s"RateStream(rowsPerSecond=$rowsPerSecond, rampUpTimeSeconds=$rampUpTimeSeconds, " +
@@ -90,24 +91,19 @@ class RateStreamTable(rowsPerSecond: Long, rampUpTimeSeconds: Long, numPartition
     util.EnumSet.of(TableCapability.MICRO_BATCH_READ, TableCapability.CONTINUOUS_READ)
   }
 
-  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = () =>
-    new Scan {
-      override def readSchema(): StructType = RateStreamProvider.SCHEMA
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = () => new Scan {
+    override def readSchema(): StructType = RateStreamProvider.SCHEMA
 
-      override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
-        new RateStreamMicroBatchStream(
-          rowsPerSecond,
-          rampUpTimeSeconds,
-          numPartitions,
-          options,
-          checkpointLocation)
+    override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
+      new RateStreamMicroBatchStream(
+        rowsPerSecond, rampUpTimeSeconds, numPartitions, options, checkpointLocation)
 
-      override def toContinuousStream(checkpointLocation: String): ContinuousStream =
-        new RateStreamContinuousStream(rowsPerSecond, numPartitions)
+    override def toContinuousStream(checkpointLocation: String): ContinuousStream =
+      new RateStreamContinuousStream(rowsPerSecond, numPartitions)
 
-      override def columnarSupportMode(): Scan.ColumnarSupportMode =
-        Scan.ColumnarSupportMode.UNSUPPORTED
-    }
+    override def columnarSupportMode(): Scan.ColumnarSupportMode =
+      Scan.ColumnarSupportMode.UNSUPPORTED
+  }
 }
 
 object RateStreamProvider {

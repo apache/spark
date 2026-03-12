@@ -25,6 +25,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
+
 object MetadataStructBenchmark extends SqlBasedBenchmark {
   import spark.implicits._
 
@@ -35,15 +36,11 @@ object MetadataStructBenchmark extends SqlBasedBenchmark {
     val dir = Utils.createTempDir()
     dir.delete()
     try {
-      spark
-        .range(0, NUM_ROWS, 1, 1)
-        .toDF("id")
+      spark.range(0, NUM_ROWS, 1, 1).toDF("id")
         .withColumn("num1", $"id" + 10)
         .withColumn("num2", $"id" / 10)
         .withColumn("str", concat(lit("a sample string "), $"id".cast("string")))
-        .write
-        .format(format)
-        .save(dir.getAbsolutePath)
+        .write.format(format).save(dir.getAbsolutePath)
       val df = spark.read.format(format).load(dir.getAbsolutePath)
       f(df)
     } finally {
@@ -59,14 +56,8 @@ object MetadataStructBenchmark extends SqlBasedBenchmark {
 
   private def metadataBenchmark(name: String, format: String): Unit = {
     withTempData(format) { df =>
-      val metadataCols = df
-        .select(FileFormat.METADATA_NAME)
-        .schema
-        .fields
-        .head
-        .dataType
-        .asInstanceOf[StructType]
-        .fieldNames
+      val metadataCols = df.select(FileFormat.METADATA_NAME).schema
+        .fields.head.dataType.asInstanceOf[StructType].fieldNames
 
       val benchmark = new Benchmark(name, NUM_ROWS, NUM_ITERS, output = output)
 

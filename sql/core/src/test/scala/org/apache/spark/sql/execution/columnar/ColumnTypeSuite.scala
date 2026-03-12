@@ -39,24 +39,11 @@ class ColumnTypeSuite extends SparkFunSuite {
 
   test("defaultSize") {
     val checks = Map(
-      NULL -> 0,
-      BOOLEAN -> 1,
-      BYTE -> 1,
-      SHORT -> 2,
-      INT -> 4,
-      LONG -> 8,
-      FLOAT -> 4,
-      DOUBLE -> 8,
-      COMPACT_DECIMAL(15, 10) -> 8,
-      LARGE_DECIMAL(20, 10) -> 12,
-      STRING(StringType) -> 8,
-      STRING(StringType("UTF8_LCASE")) -> 8,
-      STRING(StringType("UNICODE")) -> 8,
-      STRING(StringType("UNICODE_CI")) -> 8,
-      BINARY -> 16,
-      STRUCT_TYPE -> 20,
-      ARRAY_TYPE -> 28,
-      MAP_TYPE -> 68,
+      NULL -> 0, BOOLEAN -> 1, BYTE -> 1, SHORT -> 2, INT -> 4, LONG -> 8,
+      FLOAT -> 4, DOUBLE -> 8, COMPACT_DECIMAL(15, 10) -> 8, LARGE_DECIMAL(20, 10) -> 12,
+      STRING(StringType) -> 8, STRING(StringType("UTF8_LCASE")) -> 8,
+      STRING(StringType("UNICODE")) -> 8, STRING(StringType("UNICODE_CI")) -> 8,
+      BINARY -> 16, STRUCT_TYPE -> 20, ARRAY_TYPE -> 28, MAP_TYPE -> 68,
       CALENDAR_INTERVAL -> 16)
 
     checks.foreach { case (columnType, expectedSize) =>
@@ -67,7 +54,10 @@ class ColumnTypeSuite extends SparkFunSuite {
   }
 
   test("actualSize") {
-    def checkActualSize(columnType: ColumnType[_], value: Any, expected: Int): Unit = {
+    def checkActualSize(
+        columnType: ColumnType[_],
+        value: Any,
+        expected: Int): Unit = {
 
       assertResult(expected, s"Wrong actualSize for $columnType") {
         val row = new GenericInternalRow(1)
@@ -86,11 +76,11 @@ class ColumnTypeSuite extends SparkFunSuite {
     checkActualSize(LONG, Long.MaxValue, 8)
     checkActualSize(FLOAT, Float.MaxValue, 4)
     checkActualSize(DOUBLE, Double.MaxValue, 8)
-    Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI").foreach(collation => {
-      checkActualSize(
-        STRING(StringType(collation)),
-        "hello",
-        4 + "hello".getBytes(StandardCharsets.UTF_8).length)
+    Seq(
+      "UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI"
+    ).foreach(collation => {
+      checkActualSize(STRING(StringType(collation)),
+        "hello", 4 + "hello".getBytes(StandardCharsets.UTF_8).length)
     })
     checkActualSize(BINARY, Array.fill[Byte](4)(0.toByte), 4 + 4)
     checkActualSize(COMPACT_DECIMAL(15, 10), Decimal(0, 15, 10), 8)
@@ -153,13 +143,12 @@ class ColumnTypeSuite extends SparkFunSuite {
       buffer.rewind()
       seq.foreach { row =>
         logInfo("buffer = " + buffer + ", expected = " + row)
-        val expected =
-          converter(row.get(0, ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType)))
+        val expected = converter(row.get(0,
+          ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType)))
         val extracted = converter(columnType.extract(buffer))
-        assert(
-          expected === extracted,
+        assert(expected === extracted,
           s"Extracted value didn't equal to the original one. $expected != $extracted, buffer =" +
-            dumpBuffer(buffer.duplicate().rewind()))
+          dumpBuffer(buffer.duplicate().rewind()))
       }
     }
   }
@@ -188,9 +177,9 @@ class ColumnTypeSuite extends SparkFunSuite {
 
   test("show type name in type mismatch error") {
     val invalidType = new DataType {
-      override def defaultSize: Int = 1
-      override private[spark] def asNullable: DataType = this
-      override def typeName: String = "invalid type name"
+        override def defaultSize: Int = 1
+        override private[spark] def asNullable: DataType = this
+        override def typeName: String = "invalid type name"
     }
 
     checkError(
@@ -198,6 +187,7 @@ class ColumnTypeSuite extends SparkFunSuite {
         ColumnType(invalidType)
       },
       condition = "UNSUPPORTED_DATATYPE",
-      parameters = Map("typeName" -> "\"INVALID TYPE NAME\""))
+      parameters = Map("typeName" -> "\"INVALID TYPE NAME\"")
+    )
   }
 }

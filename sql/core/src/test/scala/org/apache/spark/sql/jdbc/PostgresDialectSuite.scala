@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+
 package org.apache.spark.sql.jdbc
 
 import java.sql.Connection
@@ -28,10 +29,10 @@ import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 class PostgresDialectSuite extends SparkFunSuite with MockitoSugar {
 
   private def createJDBCOptions(extraOptions: Map[String, String]): JDBCOptions = {
-    new JDBCOptions(
-      Map(
-        "url" -> "jdbc:postgresql://localhost:5432/test",
-        "dbtable" -> "test_table") ++ extraOptions)
+    new JDBCOptions(Map(
+      "url" -> "jdbc:postgresql://localhost:5432/test",
+      "dbtable" -> "test_table"
+    ) ++ extraOptions)
   }
 
   test("beforeFetch sets autoCommit=false with lowercase fetchsize") {

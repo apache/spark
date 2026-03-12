@@ -24,7 +24,8 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * Benchmark to measure built-in data sources write performance. To run this benchmark:
+ * Benchmark to measure built-in data sources write performance.
+ * To run this benchmark:
  * {{{
  *   By default it measures 4 data source format: Parquet, ORC, JSON, CSV.
  *   1. without sbt: bin/spark-submit --class <this class>
@@ -42,6 +43,7 @@ import org.apache.spark.util.ArrayImplicits._
  *        "sql/Test/runMain <this class> format1 [format2] [...]"
  *      Results will be written to "benchmarks/BuiltInDataSourceWriteBenchmark-results.txt".
  * }}}
+ *
  */
 object BuiltInDataSourceWriteBenchmark extends DataSourceWriteBenchmark {
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
@@ -51,17 +53,17 @@ object BuiltInDataSourceWriteBenchmark extends DataSourceWriteBenchmark {
       mainArgs.toImmutableArraySeq
     }
 
-    spark.conf.set(
-      SQLConf.PARQUET_COMPRESSION.key,
+    spark.conf.set(SQLConf.PARQUET_COMPRESSION.key,
       ParquetCompressionCodec.SNAPPY.lowerCaseName())
 
     formats.foreach { format =>
       runBenchmark(s"$format writer benchmark") {
         if (format.equals("Parquet")) {
-          ParquetProperties.WriterVersion.values().foreach { writeVersion =>
-            withSQLConf(ParquetOutputFormat.WRITER_VERSION -> writeVersion.toString) {
-              runDataSourceBenchmark("Parquet", Some(writeVersion.toString))
-            }
+          ParquetProperties.WriterVersion.values().foreach {
+            writeVersion =>
+              withSQLConf(ParquetOutputFormat.WRITER_VERSION -> writeVersion.toString) {
+                runDataSourceBenchmark("Parquet", Some(writeVersion.toString))
+              }
           }
         } else {
           runDataSourceBenchmark(format)

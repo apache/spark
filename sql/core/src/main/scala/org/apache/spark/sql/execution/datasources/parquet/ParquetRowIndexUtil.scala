@@ -28,11 +28,11 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 import org.apache.spark.sql.types.{LongType, StructField, StructType}
 
-object ParquetRowIndexUtil {
 
+object ParquetRowIndexUtil {
   /**
    * Generate row indexes for vectorized readers.
-   */
+  */
   class RowIndexGenerator(rowIndexColumnIdx: Int) {
     var rowIndexIterator: Iterator[Long] = _
 
@@ -72,13 +72,13 @@ object ParquetRowIndexUtil {
   }
 
   /**
-   * A wrapper for `ParquetRecordReader` that sets row index column to the correct value in the
-   * returned InternalRow. Used in combination with non-vectorized (parquet-mr) Parquet reader.
+   * A wrapper for `ParquetRecordReader` that sets row index column to the correct value in
+   * the returned InternalRow. Used in combination with non-vectorized (parquet-mr) Parquet reader.
    */
   private class RecordReaderWithRowIndexes(
       parent: ParquetRecordReader[InternalRow],
       rowIndexColumnIdx: Int)
-      extends RecordReader[Void, InternalRow] {
+    extends RecordReader[Void, InternalRow] {
 
     override def initialize(
         inputSplit: InputSplit,
@@ -118,9 +118,8 @@ object ParquetRowIndexUtil {
     } match {
       case Some((field: StructField, idx: Int)) =>
         if (field.dataType != LongType) {
-          throw new RuntimeException(
-            s"${ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME} " +
-              "must be of LongType")
+          throw new RuntimeException(s"${ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME} " +
+            "must be of LongType")
         }
         idx
       case _ => -1

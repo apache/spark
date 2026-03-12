@@ -30,11 +30,17 @@ class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
   //
 
   test("transpose with default index column") {
-    checkAnswer(salary.transpose(), Row("salary", 2000.0, 1000.0) :: Nil)
+    checkAnswer(
+      salary.transpose(),
+      Row("salary", 2000.0, 1000.0) :: Nil
+    )
   }
 
   test("transpose with specified index column") {
-    checkAnswer(salary.transpose($"salary"), Row("personId", 1, 0) :: Nil)
+    checkAnswer(
+      salary.transpose($"salary"),
+      Row("personId", 1, 0) :: Nil
+    )
   }
 
   //
@@ -44,7 +50,10 @@ class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
   test("enforce least common type for non-index columns") {
     val df = Seq(("x", 1, 10.0), ("y", 2, 20.0)).toDF("name", "id", "value")
     val transposedDf = df.transpose()
-    checkAnswer(transposedDf, Row("id", 1.0, 2.0) :: Row("value", 10.0, 20.0) :: Nil)
+    checkAnswer(
+      transposedDf,
+      Row("id", 1.0, 2.0) :: Row("value", 10.0, 20.0) :: Nil
+    )
     // (id,IntegerType) -> (x,DoubleType)
     // (value,DoubleType) -> (y,DoubleType)
     assertResult(DoubleType)(transposedDf.schema("x").dataType)
@@ -55,43 +64,45 @@ class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
         person.transpose()
       },
       condition = "TRANSPOSE_NO_LEAST_COMMON_TYPE",
-      parameters = Map("dt1" -> "\"STRING\"", "dt2" -> "\"INT\""))
+      parameters = Map("dt1" -> "\"STRING\"", "dt2" -> "\"INT\"")
+    )
   }
 
   test("enforce ascending order based on index column values for transposed columns") {
     val transposedDf = person.transpose($"name")
-    checkAnswer(transposedDf, Row("id", 1, 0) :: Row("age", 20, 30) :: Nil)
+    checkAnswer(
+      transposedDf,
+      Row("id", 1, 0) :: Row("age", 20, 30)  :: Nil
+    )
     // mike, jim -> jim, mike
     assertResult(Array("key", "jim", "mike"))(transposedDf.columns)
   }
 
   test("enforce AtomicType Attribute for index column values") {
     val exceptionAtomic = intercept[AnalysisException] {
-      complexData.transpose($"m") // (m,MapType(StringType,IntegerType,false))
+      complexData.transpose($"m")  // (m,MapType(StringType,IntegerType,false))
     }
-    assert(
-      exceptionAtomic.getMessage.contains(
-        "[TRANSPOSE_INVALID_INDEX_COLUMN] Invalid index column for TRANSPOSE because:" +
-          " Index column must be of atomic type, but found"))
+    assert(exceptionAtomic.getMessage.contains(
+      "[TRANSPOSE_INVALID_INDEX_COLUMN] Invalid index column for TRANSPOSE because:" +
+        " Index column must be of atomic type, but found"))
 
     val exceptionAttribute = intercept[AnalysisException] {
       // (s,StructType(StructField(key,IntegerType,false),StructField(value,StringType,true)))
       complexData.transpose($"s.key")
     }
-    assert(
-      exceptionAttribute.getMessage.contains(
-        "[TRANSPOSE_INVALID_INDEX_COLUMN] Invalid index column for TRANSPOSE because:" +
-          " Index column must be an atomic attribute"))
+    assert(exceptionAttribute.getMessage.contains(
+      "[TRANSPOSE_INVALID_INDEX_COLUMN] Invalid index column for TRANSPOSE because:" +
+        " Index column must be an atomic attribute"))
   }
 
   test("enforce transpose max values") {
     spark.conf.set(SQLConf.DATAFRAME_TRANSPOSE_MAX_VALUES.key, 1)
-    val exception = intercept[AnalysisException](person.transpose($"name"))
-    assert(
-      exception.getMessage.contains(
-        "[TRANSPOSE_EXCEED_ROW_LIMIT] Number of rows exceeds the allowed limit of"))
-    spark.conf.set(
-      SQLConf.DATAFRAME_TRANSPOSE_MAX_VALUES.key,
+    val exception = intercept[AnalysisException](
+      person.transpose($"name")
+    )
+    assert(exception.getMessage.contains(
+      "[TRANSPOSE_EXCEED_ROW_LIMIT] Number of rows exceeds the allowed limit of"))
+    spark.conf.set(SQLConf.DATAFRAME_TRANSPOSE_MAX_VALUES.key,
       SQLConf.DATAFRAME_TRANSPOSE_MAX_VALUES.defaultValue.get)
   }
 
@@ -100,46 +111,83 @@ class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
   //
 
   test("transpose empty frame w. column names") {
-    val schema = StructType(Seq(StructField("id", IntegerType), StructField("name", StringType)))
+    val schema = StructType(Seq(
+      StructField("id", IntegerType),
+      StructField("name", StringType)
+    ))
     val emptyDF = spark.createDataFrame(spark.sparkContext.emptyRDD[Row], schema)
     val transposedDF = emptyDF.transpose()
-    checkAnswer(transposedDF, Row("name") :: Nil)
+    checkAnswer(
+      transposedDF,
+      Row("name") :: Nil
+    )
     assertResult(StringType)(transposedDF.schema("key").dataType)
   }
 
   test("transpose empty frame w/o column names") {
     val emptyDF = spark.emptyDataFrame
-    checkAnswer(emptyDF.transpose(), Nil)
+    checkAnswer(
+      emptyDF.transpose(),
+      Nil
+    )
   }
 
   test("transpose frame with only index column") {
     val transposedDf = tableName.transpose()
-    checkAnswer(transposedDf, Nil)
+    checkAnswer(
+      transposedDf,
+      Nil
+    )
     assertResult(Array("key", "test"))(transposedDf.columns)
   }
 
   test("transpose frame with duplicates in index column") {
-    val df = Seq(("A", 1, 2), ("B", 3, 4), ("A", 5, 6)).toDF("id", "val1", "val2")
+    val df = Seq(
+      ("A", 1, 2),
+      ("B", 3, 4),
+      ("A", 5, 6)
+    ).toDF("id", "val1", "val2")
     val transposedDf = df.transpose()
-    checkAnswer(transposedDf, Seq(Row("val1", 1, 5, 3), Row("val2", 2, 6, 4)))
+    checkAnswer(
+      transposedDf,
+      Seq(
+        Row("val1", 1, 5, 3),
+        Row("val2", 2, 6, 4)
+      )
+    )
     assertResult(Array("key", "A", "A", "B"))(transposedDf.columns)
   }
 
   test("transpose frame with nulls in index column") {
-    val df = Seq(("A", 1, 2), ("B", 3, 4), (null, 5, 6)).toDF("id", "val1", "val2")
+    val df = Seq(
+      ("A", 1, 2),
+      ("B", 3, 4),
+      (null, 5, 6)
+    ).toDF("id", "val1", "val2")
     val transposedDf = df.transpose()
-    checkAnswer(transposedDf, Seq(Row("val1", 1, 3), Row("val2", 2, 4)))
+    checkAnswer(
+      transposedDf,
+      Seq(
+        Row("val1", 1, 3),
+        Row("val2", 2, 4)
+      )
+    )
     assertResult(Array("key", "A", "B"))(transposedDf.columns)
   }
 
   test("SPARK-50602: invalid index columns") {
-    val df = Seq(("A", 1, 2), ("B", 3, 4), (null, 5, 6)).toDF("id", "val1", "val2")
+    val df = Seq(
+      ("A", 1, 2),
+      ("B", 3, 4),
+      (null, 5, 6)
+    ).toDF("id", "val1", "val2")
 
     checkError(
       exception = intercept[AnalysisException] {
         df.transpose($"id" + lit(1))
       },
       condition = "TRANSPOSE_INVALID_INDEX_COLUMN",
-      parameters = Map("reason" -> "Index column must be an atomic attribute"))
+      parameters = Map("reason" -> "Index column must be an atomic attribute")
+    )
   }
 }

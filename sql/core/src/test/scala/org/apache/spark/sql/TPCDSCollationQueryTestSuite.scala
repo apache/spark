@@ -28,8 +28,8 @@ import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.util.Utils
 
 /**
- * End-to-end tests to validate TPC-DS query results against collation-aware modified data and
- * queries.
+ * End-to-end tests to validate TPC-DS query results against collation-aware
+ * modified data and queries.
  *
  * For each collation, table schemas are replicated into two databases in such way that in first
  * DB all table columns are collated with specified collation, while the second DB collates table
@@ -37,15 +37,15 @@ import org.apache.spark.util.Utils
  * with lowercase-converted data from tpc-ds kit and tables from second DB are populated with
  * randomized-case data.
  *
- * When running arbitrary SQL query, we convert the query to lowercase in order to move all string
- * literals contained in the query to lowercase for execution against first DB, we do this to
- * ensure results are equivalent to case-insensitive collations when queries contain uppercase
- * string literals; second DB receives original unmodified query. Results should compare equal,
- * ignoring case. We use this method to validate collations are working with arbitrary standard
- * SQL constructs.
+ * When running arbitrary SQL query, we convert the query to lowercase in order to move
+ * all string literals contained in the query to lowercase for execution against first DB,
+ * we do this to ensure results are equivalent to case-insensitive collations when queries contain
+ * uppercase string literals; second DB receives original unmodified query. Results should compare
+ * equal, ignoring case. We use this method to validate collations are working with arbitrary
+ * standard SQL constructs.
  *
- * Additionally, we perform trims on string data to properly convert it from CharType to
- * StringType and do sanity checks to verify that results are non-empty as expected.
+ * Additionally, we perform trims on string data to properly convert it from CharType
+ * to StringType and do sanity checks to verify that results are non-empty as expected.
  *
  * To run this test suite:
  * {{{
@@ -78,9 +78,8 @@ class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQuer
       Files.exists(Paths.get(s"${tpcdsDataPath.get}/$tableName"))
     }
     if (nonExistentTables.nonEmpty) {
-      fail(
-        s"Non-existent TPCDS table paths found in ${tpcdsDataPath.get}: " +
-          nonExistentTables.mkString(", "))
+      fail(s"Non-existent TPCDS table paths found in ${tpcdsDataPath.get}: " +
+        nonExistentTables.mkString(", "))
     }
   }
 
@@ -105,7 +104,7 @@ class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQuer
       override val dbName: String,
       override val collation: String,
       override val columnTransform: String)
-      extends CollationCheck(dbName, collation, columnTransform) {
+    extends CollationCheck(dbName, collation, columnTransform) {
 
     override def queryTransform: String => String = identity
   }
@@ -114,7 +113,7 @@ class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQuer
       override val dbName: String,
       override val collation: String,
       override val columnTransform: String)
-      extends CollationCheck(dbName, collation, columnTransform) {
+    extends CollationCheck(dbName, collation, columnTransform) {
 
     override def queryTransform: String => String = _.toLowerCase(Locale.ROOT)
   }
@@ -125,24 +124,25 @@ class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQuer
   val checks: Seq[Seq[CollationCheck]] = Seq(
     Seq(
       CaseSensitiveCollationCheck("tpcds_utf8", "UTF8_BINARY", "lower"),
-      CaseInsensitiveCollationCheck("tpcds_utf8_random", "UTF8_LCASE", randomizeCase)),
+      CaseInsensitiveCollationCheck("tpcds_utf8_random", "UTF8_LCASE", randomizeCase)
+    ),
     Seq(
       CaseSensitiveCollationCheck("tpcds_unicode", "UNICODE", "lower"),
-      CaseInsensitiveCollationCheck("tpcds_unicode_random", "UNICODE_CI", randomizeCase)))
+      CaseInsensitiveCollationCheck("tpcds_unicode_random", "UNICODE_CI", randomizeCase)
+    )
+  )
 
   override def createTables(): Unit = {
     spark.udf.register(
       randomizeCase,
-      functions
-        .udf((s: String) => {
-          s match {
-            case null => null
-            case _ =>
-              val random = new scala.util.Random()
-              s.map(c => if (random.nextBoolean()) c.toUpper else c.toLower)
-          }
-        })
-        .asNondeterministic())
+      functions.udf((s: String) => {
+        s match {
+          case null => null
+          case _ =>
+            val random = new scala.util.Random()
+            s.map(c => if (random.nextBoolean()) c.toUpper else c.toLower)
+        }
+      }).asNondeterministic())
     checks.flatten.foreach(check => {
       spark.sql(s"CREATE DATABASE `${check.dbName}`")
       withDB(check.dbName) {
@@ -158,23 +158,23 @@ class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQuer
               (name, colType.replaceAll(",$", ""))
             }
 
-          spark.sql(s"""
+          spark.sql(
+            s"""
                |CREATE TABLE `$tableName` (${collateStringColumns(columns, check.collation)})
                |USING parquet
                |""".stripMargin)
 
-          val transformedColumns = columns
-            .map { case (name, colType) =>
-              if (isTextColumn(colType)) {
-                // trim to support conversions from CharType
-                s"${check.columnTransform}(trim(both from $name)) AS $name"
-              } else {
-                name
-              }
+          val transformedColumns = columns.map { case (name, colType) =>
+            if (isTextColumn(colType)) {
+              // trim to support conversions from CharType
+              s"${check.columnTransform}(trim(both from $name)) AS $name"
+            } else {
+              name
             }
-            .mkString(", ")
+          }.mkString(", ")
 
-          spark.sql(s"""
+          spark.sql(
+            s"""
                |INSERT INTO TABLE `$tableName`
                |SELECT $transformedColumns
                |FROM parquet.`${tpcdsDataPath.get}/$tableName`
@@ -256,11 +256,11 @@ class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQuer
     tpcdsQueriesV2_7_0
       .filterNot(sys.env.contains("GITHUB_ACTIONS") && _.equals("q22"))
       .foreach { name =>
-        val queryString = resourceToString(
-          s"tpcds-v2.7.0/$name.sql",
-          classLoader = Thread.currentThread().getContextClassLoader)
-        test(s"$name-v2.7")(runQuery(queryString, Map.empty, emptyResultsV2_7_0.contains(name)))
-      }
+      val queryString = resourceToString(
+        s"tpcds-v2.7.0/$name.sql",
+        classLoader = Thread.currentThread().getContextClassLoader)
+      test(s"$name-v2.7")(runQuery(queryString, Map.empty, emptyResultsV2_7_0.contains(name)))
+    }
   } else {
     ignore("skipped because env 'SPARK_TPCDS_DATA' is not set") {}
   }

@@ -31,9 +31,7 @@ class CsvOutputWriter(
     val path: String,
     dataSchema: StructType,
     context: TaskAttemptContext,
-    params: CSVOptions)
-    extends OutputWriter
-    with Logging {
+    params: CSVOptions) extends OutputWriter with Logging {
 
   private val charset = Charset.forName(params.charset)
 

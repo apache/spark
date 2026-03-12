@@ -103,9 +103,9 @@ object TextInputXmlDataSource extends XmlDataSource {
       schema: StructType): Iterator[InternalRow] = {
     val lines = {
       val linesReader = Utils.createResourceUninterruptiblyIfInTaskThread(
-        new HadoopFileLinesReader(file, None, conf))
-      Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ =>
-        linesReader.close()))
+        new HadoopFileLinesReader(file, None, conf)
+      )
+      Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => linesReader.close()))
       linesReader.map { line =>
         new String(line.getBytes, 0, line.getLength, parser.options.charset)
       }
@@ -131,7 +131,9 @@ object TextInputXmlDataSource extends XmlDataSource {
   /**
    * Infers the schema from `Dataset` that stores CSV string records.
    */
-  def inferFromDataset(xml: Dataset[String], parsedOptions: XmlOptions): StructType = {
+  def inferFromDataset(
+      xml: Dataset[String],
+      parsedOptions: XmlOptions): StructType = {
     SQLExecution.withSQLConfPropagated(xml.sparkSession) {
       new XmlInferSchema(parsedOptions, xml.sparkSession.sessionState.conf.caseSensitiveAnalysis)
         .infer(xml.rdd)
@@ -143,17 +145,14 @@ object TextInputXmlDataSource extends XmlDataSource {
       inputPaths: Seq[FileStatus],
       options: XmlOptions): Dataset[String] = {
     val paths = inputPaths.map(_.getPath.toString)
-    val df = sparkSession
-      .baseRelationToDataFrame(
-        DataSource
-          .apply(
-            sparkSession,
-            paths = paths,
-            className = classOf[TextFileFormat].getName,
-            options = options.parameters ++ Map(DataSource.GLOB_PATHS_KEY -> "false"))
-          .resolveRelation(checkFilesExist = false))
-      .select("value")
-      .as[String](Encoders.STRING)
+    val df = sparkSession.baseRelationToDataFrame(
+      DataSource.apply(
+        sparkSession,
+        paths = paths,
+        className = classOf[TextFileFormat].getName,
+        options = options.parameters ++ Map(DataSource.GLOB_PATHS_KEY -> "false")
+      ).resolveRelation(checkFilesExist = false))
+      .select("value").as[String](Encoders.STRING)
 
     if (Charset.forName(options.charset) == StandardCharsets.UTF_8) {
       df
@@ -211,7 +210,7 @@ object MultiLineXmlDataSource extends XmlDataSource {
             Iterator.empty[String]
           case NonFatal(e) =>
             Utils.getRootCause(e) match {
-              case e @ (_: AccessControlException | _: BlockMissingException) => throw e
+              case e @ (_ : AccessControlException | _ : BlockMissingException) => throw e
               case _: RuntimeException | _: IOException if parsedOptions.ignoreCorruptFiles =>
                 logWarning("Skipped the rest of the content in the corrupted file", e)
                 Iterator.empty[String]
@@ -239,7 +238,8 @@ object MultiLineXmlDataSource extends XmlDataSource {
         val inputStream = () =>
           CodecStreams.createInputStreamWithCloseResource(
             portableDataStream.getConfiguration,
-            new Path(portableDataStream.getPath()))
+            new Path(portableDataStream.getPath())
+          )
         StaxXmlParser.convertStream(inputStream, parsedOptions)(identity)
       }
 
@@ -257,8 +257,8 @@ object MultiLineXmlDataSource extends XmlDataSource {
       options: XmlOptions): RDD[PortableDataStream] = {
     val paths = inputPaths.map(_.getPath)
     val name = paths.mkString(",")
-    val job =
-      Job.getInstance(sparkSession.sessionState.newHadoopConfWithOptions(options.parameters))
+    val job = Job.getInstance(sparkSession.sessionState.newHadoopConfWithOptions(
+      options.parameters))
     FileInputFormat.setInputPaths(job, paths: _*)
     val conf = job.getConfiguration
 

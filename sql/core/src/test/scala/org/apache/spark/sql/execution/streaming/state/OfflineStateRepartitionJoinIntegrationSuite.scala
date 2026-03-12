@@ -23,7 +23,7 @@ import org.apache.spark.sql.internal.SQLConf
  * Integration test suite for stream-stream join operator repartitioning.
  */
 class OfflineStateRepartitionJoinCkptV1IntegrationSuite
-    extends OfflineStateRepartitionIntegrationSuiteBase {
+  extends OfflineStateRepartitionIntegrationSuiteBase {
 
   import testImplicits._
 
@@ -59,23 +59,26 @@ class OfflineStateRepartitionJoinCkptV1IntegrationSuite
               // Batch 2: Adds more state to all column families
               AddData(inputData, (6, 6L), (7, 7L), (8, 8L), (9, 9L), (10, 10L)),
               CheckNewAnswer((6, 6, 6, 6), (8, 8, 8, 8), (10, 10, 10, 10)),
-              StopStream)
+              StopStream
+            )
           },
           verifyResumedQuery = (inputData, checkpointDir, _) => {
             val query = getStreamStreamJoinQuery(inputData)
             testStream(query)(
               StartStream(checkpointLocation = checkpointDir),
               AddData(inputData, (6, 10L), (8, 9L)),
-              CheckNewAnswer((6, 10, 6, 10), (6, 6, 6, 10), (8, 9, 8, 9), (8, 8, 8, 9)))
+              CheckNewAnswer((6, 10, 6, 10), (6, 6, 6, 10), (8, 9, 8, 9), (8, 8, 8, 9))
+            )
           },
-          storeToColumnFamilyToStateSourceOptions = storeToOptions)
+          storeToColumnFamilyToStateSourceOptions = storeToOptions
+        )
       }
     }
   }
 }
 
 class OfflineStateRepartitionJoinCkptV2IntegrationSuite
-    extends OfflineStateRepartitionJoinCkptV1IntegrationSuite {
+  extends OfflineStateRepartitionJoinCkptV1IntegrationSuite {
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark.conf.set(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key, "2")

@@ -24,8 +24,9 @@ import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 /**
  * Analyzes the given table to generate statistics, which will be used in query optimizations.
  */
-case class AnalyzeTableCommand(tableIdent: TableIdentifier, noScan: Boolean = true)
-    extends LeafRunnableCommand {
+case class AnalyzeTableCommand(
+    tableIdent: TableIdentifier,
+    noScan: Boolean = true) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     CommandUtils.analyzeTable(sparkSession, tableIdent, noScan)

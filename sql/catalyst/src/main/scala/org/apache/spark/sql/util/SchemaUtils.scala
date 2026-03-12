@@ -33,6 +33,7 @@ import org.apache.spark.sql.util.SchemaValidationMode.{ALLOW_NEW_TOP_LEVEL_FIELD
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkSchemaUtils
 
+
 /**
  * Utils for handling schemas.
  *
@@ -78,10 +79,8 @@ private[spark] object SchemaUtils {
    * Checks if an input schema has duplicate column names. This throws an exception if the
    * duplication exists.
    *
-   * @param schema
-   *   schema to check
-   * @param caseSensitiveAnalysis
-   *   whether duplication checks should be case sensitive or not
+   * @param schema schema to check
+   * @param caseSensitiveAnalysis whether duplication checks should be case sensitive or not
    */
   def checkSchemaColumnNameDuplication(
       schema: DataType,
@@ -106,10 +105,8 @@ private[spark] object SchemaUtils {
    * Checks if an input schema has duplicate column names. This throws an exception if the
    * duplication exists.
    *
-   * @param schema
-   *   schema to check
-   * @param resolver
-   *   resolver used to determine if two identifiers are equal
+   * @param schema schema to check
+   * @param resolver resolver used to determine if two identifiers are equal
    */
   def checkSchemaColumnNameDuplication(schema: StructType, resolver: Resolver): Unit = {
     checkSchemaColumnNameDuplication(schema, isCaseSensitiveAnalysis(resolver))
@@ -124,47 +121,36 @@ private[spark] object SchemaUtils {
     } else {
       throw QueryExecutionErrors.unreachableError(
         ": A resolver to check if two identifiers are equal must be " +
-          "`caseSensitiveResolution` or `caseInsensitiveResolution` in o.a.s.sql.catalyst.")
+        "`caseSensitiveResolution` or `caseInsensitiveResolution` in o.a.s.sql.catalyst.")
     }
   }
 
   /**
-   * Checks if input column names have duplicate identifiers. This throws an exception if the
-   * duplication exists.
+   * Checks if input column names have duplicate identifiers. This throws an exception if
+   * the duplication exists.
    *
-   * @param columnNames
-   *   column names to check
-   * @param resolver
-   *   resolver used to determine if two identifiers are equal
+   * @param columnNames column names to check
+   * @param resolver resolver used to determine if two identifiers are equal
    */
   def checkColumnNameDuplication(columnNames: Seq[String], resolver: Resolver): Unit = {
     checkColumnNameDuplication(columnNames, isCaseSensitiveAnalysis(resolver))
   }
 
   /**
-   * Checks if input column names have duplicate identifiers. This throws an exception if the
-   * duplication exists.
+   * Checks if input column names have duplicate identifiers. This throws an exception if
+   * the duplication exists.
    *
-   * @param columnNames
-   *   column names to check
-   * @param caseSensitiveAnalysis
-   *   whether duplication checks should be case sensitive or not
+   * @param columnNames column names to check
+   * @param caseSensitiveAnalysis whether duplication checks should be case sensitive or not
    */
-  def checkColumnNameDuplication(
-      columnNames: Seq[String],
-      caseSensitiveAnalysis: Boolean): Unit = {
+  def checkColumnNameDuplication(columnNames: Seq[String], caseSensitiveAnalysis: Boolean): Unit = {
     // scalastyle:off caselocale
     val names = if (caseSensitiveAnalysis) columnNames else columnNames.map(_.toLowerCase)
     // scalastyle:on caselocale
     if (names.distinct.length != names.length) {
-      val columnName = names
-        .groupBy(identity)
-        .toSeq
-        .sortBy(_._1)
-        .collectFirst {
-          case (x, ys) if ys.length > 1 => x
-        }
-        .get
+      val columnName = names.groupBy(identity).toSeq.sortBy(_._1).collectFirst {
+        case (x, ys) if ys.length > 1 => x
+      }.get
       throw QueryCompilationErrors.columnAlreadyExistsError(columnName)
     }
   }
@@ -211,12 +197,9 @@ private[spark] object SchemaUtils {
    * Checks if the partitioning transforms are being duplicated or not. Throws an exception if
    * duplication exists.
    *
-   * @param transforms
-   *   the schema to check for duplicates
-   * @param checkType
-   *   contextual information around the check, used in an exception message
-   * @param isCaseSensitive
-   *   Whether to be case sensitive when comparing column names
+   * @param transforms the schema to check for duplicates
+   * @param checkType contextual information around the check, used in an exception message
+   * @param isCaseSensitive Whether to be case sensitive when comparing column names
    */
   def checkTransformDuplication(
       transforms: Seq[Transform],
@@ -249,8 +232,9 @@ private[spark] object SchemaUtils {
       }
       throw new AnalysisException(
         errorClass = "_LEGACY_ERROR_TEMP_3058",
-        messageParameters =
-          Map("checkType" -> checkType, "duplicateColumns" -> duplicateColumns.mkString(", ")))
+        messageParameters = Map(
+          "checkType" -> checkType,
+          "duplicateColumns" -> duplicateColumns.mkString(", ")))
     }
   }
 
@@ -258,13 +242,10 @@ private[spark] object SchemaUtils {
    * Returns the given column's ordinal within the given `schema`. The length of the returned
    * position will be as long as how nested the column is.
    *
-   * @param column
-   *   The column to search for in the given struct. If the length of `column` is greater than 1,
-   *   we expect to enter a nested field.
-   * @param schema
-   *   The current struct we are looking at.
-   * @param resolver
-   *   The resolver to find the column.
+   * @param column The column to search for in the given struct. If the length of `column` is
+   *               greater than 1, we expect to enter a nested field.
+   * @param schema The current struct we are looking at.
+   * @param resolver The resolver to find the column.
    */
   def findColumnPosition(
       column: Seq[String],
@@ -328,8 +309,10 @@ private[spark] object SchemaUtils {
           case _ =>
             throw new AnalysisException(
               errorClass = "_LEGACY_ERROR_TEMP_3059",
-              messageParameters = Map("pos" -> pos.toString, "schema" -> schema.treeString))
-        }
+              messageParameters = Map(
+                "pos" -> pos.toString,
+                "schema" -> schema.treeString))
+      }
     }
     field._1
   }
@@ -345,10 +328,8 @@ private[spark] object SchemaUtils {
   }
 
   /**
-   * @param str
-   *   The string to be escaped.
-   * @return
-   *   The escaped string.
+   * @param str The string to be escaped.
+   * @return The escaped string.
    */
   def escapeMetaCharacters(str: String): String = SparkSchemaUtils.escapeMetaCharacters(str)
 
@@ -396,8 +377,8 @@ private[spark] object SchemaUtils {
   }
 
   /**
-   * Replaces any collated string type with non collated StringType recursively in the given data
-   * type.
+   * Replaces any collated string type with non collated StringType
+   * recursively in the given data type.
    */
   def replaceCollatedStringWithString(dt: DataType): DataType = dt match {
     case ArrayType(et, nullable) =>
@@ -415,16 +396,11 @@ private[spark] object SchemaUtils {
   /**
    * Validates schema compatibility by recursively checking type and nullability changes.
    *
-   * @param schema
-   *   the schema to validate against
-   * @param otherSchema
-   *   the other schema to check for compatibility
-   * @param resolver
-   *   the resolver that controls whether the validation is case sensitive
-   * @param mode
-   *   the validation mode that controls what changes are allowed
-   * @return
-   *   sequence of error messages describing incompatibilities, empty if fully compatible
+   * @param schema the schema to validate against
+   * @param otherSchema the other schema to check for compatibility
+   * @param resolver the resolver that controls whether the validation is case sensitive
+   * @param mode the validation mode that controls what changes are allowed
+   * @return sequence of error messages describing incompatibilities, empty if fully compatible
    */
   def validateSchemaCompatibility(
       schema: StructType,
@@ -502,8 +478,7 @@ private[spark] object SchemaUtils {
           mode,
           errors)
 
-      case (
-            MapType(keyType, valueType, valueContainsNull),
+      case (MapType(keyType, valueType, valueContainsNull),
             MapType(otherKeyType, otherValueType, otherValueContainsNull)) =>
         validateTypeCompatibility(
           keyType,
@@ -529,7 +504,7 @@ private[spark] object SchemaUtils {
           s"from ${dataType.sql} to ${otherDataType.sql}"
 
       case _ =>
-      // OK
+        // OK
     }
   }
 

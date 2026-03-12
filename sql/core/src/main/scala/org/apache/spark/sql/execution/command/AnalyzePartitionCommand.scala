@@ -32,27 +32,23 @@ import org.apache.spark.sql.util.PartitioningUtils
  * When `partitionSpec` is empty, statistics for all partitions are collected and stored in
  * Metastore.
  *
- * When `partitionSpec` mentions only some of the partition columns, all partitions with matching
- * values for specified columns are processed.
+ * When `partitionSpec` mentions only some of the partition columns, all partitions with
+ * matching values for specified columns are processed.
  *
  * If `partitionSpec` mentions unknown partition column, an `AnalysisException` is raised.
  *
- * By default, total number of rows and total size in bytes are calculated. When `noscan` is
- * `true`, only total size in bytes is computed.
+ * By default, total number of rows and total size in bytes are calculated. When `noscan`
+ * is `true`, only total size in bytes is computed.
  */
 case class AnalyzePartitionCommand(
     tableIdent: TableIdentifier,
     partitionSpec: Map[String, Option[String]],
-    noscan: Boolean = true)
-    extends LeafRunnableCommand {
+    noscan: Boolean = true) extends LeafRunnableCommand {
 
   private def getPartitionSpec(table: CatalogTable): Option[TablePartitionSpec] = {
     val normalizedPartitionSpec =
-      PartitioningUtils.normalizePartitionSpec(
-        partitionSpec,
-        table.partitionSchema,
-        table.identifier.quotedString,
-        conf.resolver)
+      PartitioningUtils.normalizePartitionSpec(partitionSpec, table.partitionSchema,
+        table.identifier.quotedString, conf.resolver)
 
     // Report an error if partition columns in partition specification do not form
     // a prefix of the list of partition columns defined in the table schema
@@ -63,10 +59,7 @@ case class AnalyzePartitionCommand(
       val schemaColumns = table.partitionColumnNames.mkString(",")
       val specColumns = normalizedPartitionSpec.keys.mkString(",")
       throw QueryCompilationErrors.unexpectedPartitionColumnPrefixError(
-        tableId.table,
-        tableId.database.get,
-        schemaColumns,
-        specColumns)
+        tableId.table, tableId.database.get, schemaColumns, specColumns)
     }
 
     val filteredSpec = normalizedPartitionSpec.filter(_._2.isDefined).transform((_, v) => v.get)
@@ -93,9 +86,7 @@ case class AnalyzePartitionCommand(
     if (partitions.isEmpty) {
       if (partitionValueSpec.isDefined) {
         throw QueryCompilationErrors.noSuchPartitionError(
-          db,
-          tableIdent.table,
-          partitionValueSpec.get)
+          db, tableIdent.table, partitionValueSpec.get)
       } else {
         // the user requested to analyze all partitions for a table which has no partitions
         // return normally, since there is nothing to do
@@ -113,13 +104,14 @@ case class AnalyzePartitionCommand(
 
     // Update the metastore if newly computed statistics are different from those
     // recorded in the metastore.
-    val (_, newPartitions) =
-      CommandUtils.calculatePartitionStats(sparkSession, tableMeta, partitions, Some(rowCounts))
+    val (_, newPartitions) = CommandUtils.calculatePartitionStats(
+      sparkSession, tableMeta, partitions, Some(rowCounts))
     if (newPartitions.nonEmpty) {
       sessionState.catalog.alterPartitions(tableMeta.identifier, newPartitions)
     }
 
     Seq.empty[Row]
   }
+
 
 }

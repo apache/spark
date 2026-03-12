@@ -32,8 +32,10 @@ class ViewResolverSuite extends QueryTest with SharedSparkSession {
   private val catalogName = "spark_catalog"
   private val col1Integer = "col1".attr.int.withNullability(false)
   private val col2String = "col2".attr.string.withNullability(false)
-  private val testTable =
-    LocalRelation.fromExternalRows(Seq(col1Integer, col2String), Seq(Row(1, "a")))
+  private val testTable = LocalRelation.fromExternalRows(
+    Seq(col1Integer, col2String),
+    Seq(Row(1, "a"))
+  )
 
   test("Temporary view") {
     withView("v1") {
@@ -45,7 +47,9 @@ class ViewResolverSuite extends QueryTest with SharedSparkSession {
           .select(col1Integer, col2String)
           .select(
             cast(col1Integer, IntegerType).as("col1"),
-            cast(col2String, StringType).as("col2")))
+            cast(col2String, StringType).as("col2")
+          )
+      )
     }
   }
 
@@ -61,11 +65,15 @@ class ViewResolverSuite extends QueryTest with SharedSparkSession {
             cast(
               col1Integer,
               IntegerType,
-              ansiEnabled = conf.ansiEnabled || conf.viewSchemaCompensation).as("col1"),
+              ansiEnabled = conf.ansiEnabled || conf.viewSchemaCompensation
+            ).as("col1"),
             cast(
               col2String,
               StringType,
-              ansiEnabled = conf.ansiEnabled || conf.viewSchemaCompensation).as("col2")))
+              ansiEnabled = conf.ansiEnabled || conf.viewSchemaCompensation
+            ).as("col2")
+          )
+      )
     }
   }
 
@@ -91,7 +99,9 @@ class ViewResolverSuite extends QueryTest with SharedSparkSession {
                 objectName = s"$catalogName.default.view1",
                 startIndex = 23,
                 stopIndex = 28,
-                fragment = "table1"))
+                fragment = "table1"
+              )
+            )
           }
         }
       }
@@ -113,14 +123,18 @@ class ViewResolverSuite extends QueryTest with SharedSparkSession {
           condition = "VIEW_EXCEED_MAX_NESTED_DEPTH",
           parameters = Map(
             "viewName" -> s"`$catalogName`.`default`.`v0`",
-            "maxNestedDepth" -> conf.maxNestedViewDepth.toString),
+            "maxNestedDepth" -> conf.maxNestedViewDepth.toString
+          ),
           queryContext = Array(
             ExpectedContext(
               objectType = "VIEW",
               objectName = s"$catalogName.default.v1",
               startIndex = 14,
               stopIndex = 15,
-              fragment = "v0")))
+              fragment = "v0"
+            )
+          )
+        )
       } finally {
         for (i <- 0 until (conf.maxNestedViewDepth + 1)) {
           spark.sql(s"DROP VIEW v${conf.maxNestedViewDepth - i};")
@@ -143,12 +157,16 @@ class ViewResolverSuite extends QueryTest with SharedSparkSession {
             cast(
               col1Integer,
               IntegerType,
-              ansiEnabled = conf.ansiEnabled || conf.viewSchemaCompensation).as("col1"),
+              ansiEnabled = conf.ansiEnabled || conf.viewSchemaCompensation
+            ).as("col1"),
             cast(
               col2String,
               StringType,
-              ansiEnabled = conf.ansiEnabled || conf.viewSchemaCompensation).as("col2")),
-        expectedOptions = new CaseInsensitiveStringMap(options))
+              ansiEnabled = conf.ansiEnabled || conf.viewSchemaCompensation
+            ).as("col2")
+          ),
+        expectedOptions = new CaseInsensitiveStringMap(options)
+      )
     }
   }
 
@@ -157,8 +175,10 @@ class ViewResolverSuite extends QueryTest with SharedSparkSession {
       expectedChild: LogicalPlan = OneRowRelation(),
       expectedOptions: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()) = {
     val relationResolution = Resolver.createRelationResolution(spark.sessionState.catalogManager)
-    val metadataResolver =
-      new MetadataResolver(spark.sessionState.catalogManager, relationResolution)
+    val metadataResolver = new MetadataResolver(
+      spark.sessionState.catalogManager,
+      relationResolution
+    )
 
     val unresolvedPlan = spark.sessionState.sqlParser.parsePlan(sqlText)
 
@@ -187,8 +207,8 @@ class ViewResolverSuite extends QueryTest with SharedSparkSession {
       .asInstanceOf[View]
     assert(resolvedView.isTempView == unresolvedView.isTempView)
     assert(
-      normalizeExprIds(resolvedView.child).prettyJson == normalizeExprIds(
-        expectedChild).prettyJson)
+      normalizeExprIds(resolvedView.child).prettyJson == normalizeExprIds(expectedChild).prettyJson
+    )
     assert(resolvedView.options == expectedOptions)
   }
 

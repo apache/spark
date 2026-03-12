@@ -59,13 +59,13 @@ case class EventTimeStats(var max: Long, var min: Long, var avg: Double, var cou
 }
 
 object EventTimeStats {
-  def zero: EventTimeStats =
-    EventTimeStats(max = Long.MinValue, min = Long.MaxValue, avg = 0.0, count = 0L)
+  def zero: EventTimeStats = EventTimeStats(
+    max = Long.MinValue, min = Long.MaxValue, avg = 0.0, count = 0L)
 }
 
 /** Accumulator that collects stats on event time in a batch. */
 class EventTimeStatsAccum(protected var currentStats: EventTimeStats = EventTimeStats.zero)
-    extends AccumulatorV2[Long, EventTimeStats] {
+  extends AccumulatorV2[Long, EventTimeStats] {
 
   override def isZero: Boolean = value == EventTimeStats.zero
   override def value: EventTimeStats = currentStats
@@ -86,8 +86,8 @@ class EventTimeStatsAccum(protected var currentStats: EventTimeStats = EventTime
 
 /**
  * Used to mark a column as the containing the event time for a given record. In addition to
- * adding appropriate metadata to this column, this operator also tracks the maximum observed
- * event time. Based on the maximum observed time and a user specified delay, we can calculate the
+ * adding appropriate metadata to this column, this operator also tracks the maximum observed event
+ * time. Based on the maximum observed time and a user specified delay, we can calculate the
  * `watermark` after which we assume we will no longer see late records for a particular time
  * period. Note that event time is measured in milliseconds.
  */
@@ -95,8 +95,7 @@ case class EventTimeWatermarkExec(
     nodeId: UUID,
     eventTime: Attribute,
     delay: CalendarInterval,
-    child: SparkPlan)
-    extends UnaryExecNode {
+    child: SparkPlan) extends UnaryExecNode {
 
   val eventTimeStats = new EventTimeStatsAccum()
   val delayMs = EventTimeWatermark.getDelayMs(delay)
@@ -124,24 +123,25 @@ case class EventTimeWatermarkExec(
 }
 
 /**
- * Updates the event time column to [[eventTime]] in the child output. Any watermark calculations
- * performed after this node will use the updated eventTimeColumn.
+ * Updates the event time column to [[eventTime]] in the child output.
+ * Any watermark calculations performed after this node will use the
+ * updated eventTimeColumn.
  *
- * This node also ensures that output emitted by the child node adheres to watermark. If the child
- * node emits rows which are older than global watermark, the node will throw an query execution
- * error and fail the user query.
+ * This node also ensures that output emitted by the child node adheres
+ * to watermark. If the child node emits rows which are older than global
+ * watermark, the node will throw an query execution error and fail the user
+ * query.
  */
 case class UpdateEventTimeColumnExec(
     eventTime: Attribute,
     delay: CalendarInterval,
     eventTimeWatermarkForLateEvents: Option[Long],
-    child: SparkPlan)
-    extends UnaryExecNode {
+    child: SparkPlan) extends UnaryExecNode {
 
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitions[InternalRow] { dataIterator =>
-      val watermarkExpression =
-        WatermarkSupport.watermarkExpression(Some(eventTime), eventTimeWatermarkForLateEvents)
+      val watermarkExpression = WatermarkSupport.watermarkExpression(
+        Some(eventTime), eventTimeWatermarkForLateEvents)
 
       if (watermarkExpression.isEmpty) {
         // watermark should always be defined in this node.
@@ -161,8 +161,7 @@ case class UpdateEventTimeColumnExec(
             val eventTimeProjection = UnsafeProjection.create(boundEventTimeExpression)
             val rowEventTime = eventTimeProjection(row)
             throw QueryExecutionErrors.emittedRowsAreOlderThanWatermark(
-              eventTimeWatermarkForLateEvents.get,
-              rowEventTime.getLong(0))
+              eventTimeWatermarkForLateEvents.get, rowEventTime.getLong(0))
           }
           row
         }

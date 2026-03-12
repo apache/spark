@@ -31,22 +31,16 @@ import org.apache.spark.unsafe.types.VariantVal
 
 class ScalaUDFSuite extends SparkFunSuite with ExpressionEvalHelper {
 
-  private def resolvedEncoder[T: TypeTag](): ExpressionEncoder[T] = {
+  private def resolvedEncoder[T : TypeTag](): ExpressionEncoder[T] = {
     ExpressionEncoder[T]().resolveAndBind()
   }
 
   test("basic") {
-    val intUdf = ScalaUDF(
-      (i: Int) => i + 1,
-      IntegerType,
-      Literal(1) :: Nil,
+    val intUdf = ScalaUDF((i: Int) => i + 1, IntegerType, Literal(1) :: Nil,
       Option(resolvedEncoder[Int]()) :: Nil)
     checkEvaluation(intUdf, 2)
 
-    val stringUdf = ScalaUDF(
-      (s: String) => s + "x",
-      StringType,
-      Literal("a") :: Nil,
+    val stringUdf = ScalaUDF((s: String) => s + "x", StringType, Literal("a") :: Nil,
       Option(resolvedEncoder[String]()) :: Nil)
     checkEvaluation(stringUdf, "ax")
   }
@@ -99,10 +93,7 @@ class ScalaUDFSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-22695: ScalaUDF should not use global variables") {
     val ctx = new CodegenContext
-    ScalaUDF(
-      (s: String) => s + "x",
-      StringType,
-      Literal("a") :: Nil,
+    ScalaUDF((s: String) => s + "x", StringType, Literal("a") :: Nil,
       Option(resolvedEncoder[String]()) :: Nil).genCode(ctx)
     assert(ctx.inlinedMutableStates.isEmpty)
   }

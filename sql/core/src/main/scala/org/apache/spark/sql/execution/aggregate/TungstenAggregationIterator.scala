@@ -35,44 +35,44 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * An iterator used to evaluate aggregate functions. It operates on [[UnsafeRow]]s.
  *
- * This iterator first uses hash-based aggregation to process input rows. It uses a hash map to
- * store groups and their corresponding aggregation buffers. If this map cannot allocate memory
- * from memory manager, it spills the map into disk and creates a new one. After processed all the
- * input, then merge all the spills together using external sorter, and do sort-based aggregation.
+ * This iterator first uses hash-based aggregation to process input rows. It uses
+ * a hash map to store groups and their corresponding aggregation buffers. If
+ * this map cannot allocate memory from memory manager, it spills the map into disk
+ * and creates a new one. After processed all the input, then merge all the spills
+ * together using external sorter, and do sort-based aggregation.
  *
  * The process has the following step:
- *   - Step 0: Do hash-based aggregation.
- *   - Step 1: Sort all entries of the hash map based on values of grouping expressions and spill
- *     them to disk.
- *   - Step 2: Create an external sorter based on the spilled sorted map entries and reset the
- *     map.
- *   - Step 3: Get a sorted [[KVIterator]] from the external sorter.
- *   - Step 4: Repeat step 0 until no more input.
- *   - Step 5: Initialize sort-based aggregation on the sorted iterator.
+ *  - Step 0: Do hash-based aggregation.
+ *  - Step 1: Sort all entries of the hash map based on values of grouping expressions and
+ *            spill them to disk.
+ *  - Step 2: Create an external sorter based on the spilled sorted map entries and reset the map.
+ *  - Step 3: Get a sorted [[KVIterator]] from the external sorter.
+ *  - Step 4: Repeat step 0 until no more input.
+ *  - Step 5: Initialize sort-based aggregation on the sorted iterator.
  * Then, this iterator works in the way of sort-based aggregation.
  *
  * The code of this class is organized as follows:
- *   - Part 1: Initializing aggregate functions.
- *   - Part 2: Methods and fields used by setting aggregation buffer values, processing input rows
- *     from inputIter, and generating output rows.
- *   - Part 3: Methods and fields used by hash-based aggregation.
- *   - Part 4: Methods and fields used when we switch to sort-based aggregation.
- *   - Part 5: Methods and fields used by sort-based aggregation.
- *   - Part 6: Loads input and process input rows.
- *   - Part 7: Public methods of this iterator.
- *   - Part 8: A utility function used to generate a result when there is no input and there is no
- *     grouping expression.
+ *  - Part 1: Initializing aggregate functions.
+ *  - Part 2: Methods and fields used by setting aggregation buffer values,
+ *            processing input rows from inputIter, and generating output
+ *            rows.
+ *  - Part 3: Methods and fields used by hash-based aggregation.
+ *  - Part 4: Methods and fields used when we switch to sort-based aggregation.
+ *  - Part 5: Methods and fields used by sort-based aggregation.
+ *  - Part 6: Loads input and process input rows.
+ *  - Part 7: Public methods of this iterator.
+ *  - Part 8: A utility function used to generate a result when there is no
+ *            input and there is no grouping expression.
  *
  * @param partIndex
  *   index of the partition
  * @param groupingExpressions
  *   expressions for grouping keys
  * @param aggregateExpressions
- *   [[AggregateExpression]] containing [[AggregateFunction]]s with mode [[Partial]],
- *   [[PartialMerge]], or [[Final]].
- * @param aggregateAttributes
- *   the attributes of the aggregateExpressions' outputs when they are stored in the final
- *   aggregation buffer.
+ * [[AggregateExpression]] containing [[AggregateFunction]]s with mode [[Partial]],
+ * [[PartialMerge]], or [[Final]].
+ * @param aggregateAttributes the attributes of the aggregateExpressions'
+ *   outputs when they are stored in the final aggregation buffer.
  * @param resultExpressions
  *   expressions for generating output rows.
  * @param newMutableProjection
@@ -98,16 +98,15 @@ class TungstenAggregationIterator(
     spillSize: SQLMetric,
     avgHashProbe: SQLMetric,
     numTasksFallBacked: SQLMetric)
-    extends AggregationIterator(
-      partIndex,
-      groupingExpressions,
-      originalInputAttributes,
-      aggregateExpressions,
-      aggregateAttributes,
-      initialInputBufferOffset,
-      resultExpressions,
-      newMutableProjection)
-    with Logging {
+  extends AggregationIterator(
+    partIndex,
+    groupingExpressions,
+    originalInputAttributes,
+    aggregateExpressions,
+    aggregateAttributes,
+    initialInputBufferOffset,
+    resultExpressions,
+    newMutableProjection) with Logging {
 
   ///////////////////////////////////////////////////////////////////////////
   // Part 1: Initializing aggregate functions.
@@ -128,8 +127,7 @@ class TungstenAggregationIterator(
   // and when we create the re-used buffer for sort-based aggregation).
   private def createNewAggregationBuffer(): UnsafeRow = {
     val bufferSchema = aggregateFunctions.flatMap(_.aggBufferAttributes)
-    val buffer: UnsafeRow = UnsafeProjection
-      .create(bufferSchema.map(_.dataType))
+    val buffer: UnsafeRow = UnsafeProjection.create(bufferSchema.map(_.dataType))
       .apply(new GenericInternalRow(bufferSchema.length))
     // Initialize declarative aggregates' buffer values
     expressionAggInitialProjection.target(buffer)(EmptyRow)
@@ -175,7 +173,8 @@ class TungstenAggregationIterator(
     DataTypeUtils.fromAttributes(groupingExpressions.map(_.toAttribute)),
     TaskContext.get(),
     1024 * 16, // initial capacity
-    TaskContext.get().taskMemoryManager().pageSizeBytes)
+    TaskContext.get().taskMemoryManager().pageSizeBytes
+  )
 
   // The function used to read and process input rows. When processing input rows,
   // it first uses hash-based aggregation by putting groups and their buffers in
@@ -264,9 +263,7 @@ class TungstenAggregationIterator(
     val newFunctions = initializeAggregateFunctions(newExpressions, 0)
     val newInputAttributes = newFunctions.flatMap(_.inputAggBufferAttributes)
     sortBasedProcessRow = generateProcessRow(
-      newExpressions,
-      newFunctions.toImmutableArraySeq,
-      newInputAttributes.toImmutableArraySeq)
+      newExpressions, newFunctions.toImmutableArraySeq, newInputAttributes.toImmutableArraySeq)
 
     // Step 5: Get the sorted iterator from the externalSorter.
     sortedKVIterator = externalSorter.sortedIterator()
@@ -384,23 +381,21 @@ class TungstenAggregationIterator(
     }
   }
 
-  TaskContext
-    .get()
-    .addTaskCompletionListener[Unit](_ => {
-      // At the end of the task, update the task's peak memory usage. Since we destroy
-      // the map to create the sorter, their memory usages should not overlap, so it is safe
-      // to just use the max of the two.
-      val mapMemory = hashMap.getPeakMemoryUsedBytes
-      val sorterMemory = Option(externalSorter).map(_.getPeakMemoryUsedBytes).getOrElse(0L)
-      val maxMemory = Math.max(mapMemory, sorterMemory)
-      val metrics = TaskContext.get().taskMetrics()
-      peakMemory.set(maxMemory)
-      spillSize.set(metrics.memoryBytesSpilled - spillSizeBefore)
-      metrics.incPeakExecutionMemory(maxMemory)
+  TaskContext.get().addTaskCompletionListener[Unit](_ => {
+    // At the end of the task, update the task's peak memory usage. Since we destroy
+    // the map to create the sorter, their memory usages should not overlap, so it is safe
+    // to just use the max of the two.
+    val mapMemory = hashMap.getPeakMemoryUsedBytes
+    val sorterMemory = Option(externalSorter).map(_.getPeakMemoryUsedBytes).getOrElse(0L)
+    val maxMemory = Math.max(mapMemory, sorterMemory)
+    val metrics = TaskContext.get().taskMetrics()
+    peakMemory.set(maxMemory)
+    spillSize.set(metrics.memoryBytesSpilled - spillSizeBefore)
+    metrics.incPeakExecutionMemory(maxMemory)
 
-      // Updating average hashmap probe
-      avgHashProbe.set(hashMap.getAvgHashProbesPerKey)
-    })
+    // Updating average hashmap probe
+    avgHashProbe.set(hashMap.getAvgHashProbesPerKey)
+  })
 
   ///////////////////////////////////////////////////////////////////////////
   // Part 7: Iterator's public methods.

@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, UnsafeProjection}
 
 class ProjectEvaluatorFactory(projectList: Seq[Expression], childOutput: Seq[Attribute])
-    extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
+  extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
 
   override def createEvaluator(): PartitionEvaluator[InternalRow, InternalRow] = {
     new ProjectPartitionEvaluator

@@ -68,6 +68,7 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
       case _ => identity
     }
 
+
   def put(key: Any, value: Any): Unit = {
     if (key == null) {
       throw QueryExecutionErrors.nullAsMapKeyNotAllowedError()
@@ -126,8 +127,7 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
    */
   def build(): ArrayBasedMapData = {
     val map = new ArrayBasedMapData(
-      new GenericArrayData(keys.toArray),
-      new GenericArrayData(values.toArray))
+      new GenericArrayData(keys.toArray), new GenericArrayData(values.toArray))
     reset()
     map
   }

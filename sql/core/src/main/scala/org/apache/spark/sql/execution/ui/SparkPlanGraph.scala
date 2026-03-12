@@ -25,11 +25,12 @@ import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.sql.execution.{SparkPlanInfo, WholeStageCodegenExec}
 
+
 /**
  * A graph used for storing information of an executionPlan of DataFrame.
  *
- * Each graph is defined with a set of nodes and a set of edges. Each node represents a node in
- * the SparkPlan tree, and each edge represents a parent-child relationship between two nodes.
+ * Each graph is defined with a set of nodes and a set of edges. Each node represents a node in the
+ * SparkPlan tree, and each edge represents a parent-child relationship between two nodes.
  */
 case class SparkPlanGraph(
     nodes: collection.Seq[SparkPlanGraphNode],
@@ -46,27 +47,24 @@ case class SparkPlanGraph(
   }
 
   /**
-   * Generate a JSON string containing node details (name, metrics, and optional children) for the
-   * detail side panel. This keeps the DOT node labels compact (name only) while providing full
-   * metrics on demand via JavaScript.
+   * Generate a JSON string containing node details (name, metrics, and optional children)
+   * for the detail side panel. This keeps the DOT node labels compact (name only) while
+   * providing full metrics on demand via JavaScript.
    */
   def makeNodeDetailsJson(metrics: Map[Long, String]): String = {
     val entries = allNodes.map { node =>
-      val metricsJson = node.metrics
-        .flatMap { m =>
-          metrics.get(m.accumulatorId).map { v =>
-            val n = StringEscapeUtils.escapeJson(m.name)
-            val mv = StringEscapeUtils.escapeJson(v)
-            val mt = StringEscapeUtils.escapeJson(m.metricType)
-            s"""{"name":"$n","value":"$mv","type":"$mt"}"""
-          }
+      val metricsJson = node.metrics.flatMap { m =>
+        metrics.get(m.accumulatorId).map { v =>
+          val n = StringEscapeUtils.escapeJson(m.name)
+          val mv = StringEscapeUtils.escapeJson(v)
+          val mt = StringEscapeUtils.escapeJson(m.metricType)
+          s"""{"name":"$n","value":"$mv","type":"$mt"}"""
         }
-        .mkString("[", ",", "]")
+      }.mkString("[", ",", "]")
       val (prefix, extra) = node match {
         case cluster: SparkPlanGraphCluster =>
           val childIds = cluster.nodes
-            .map(n => s""""node${n.id}"""")
-            .mkString("[", ",", "]")
+            .map(n => s""""node${n.id}"""").mkString("[", ",", "]")
           ("cluster", s""","children":$childIds""")
         case _ => ("node", "")
       }
@@ -125,22 +123,10 @@ object SparkPlanGraph {
         nodes += cluster
 
         buildSparkPlanGraphNode(
-          planInfo.children.head,
-          nodeIdGenerator,
-          nodes,
-          edges,
-          parent,
-          cluster,
-          exchanges)
+          planInfo.children.head, nodeIdGenerator, nodes, edges, parent, cluster, exchanges)
       case "InputAdapter" =>
         buildSparkPlanGraphNode(
-          planInfo.children.head,
-          nodeIdGenerator,
-          nodes,
-          edges,
-          parent,
-          null,
-          exchanges)
+          planInfo.children.head, nodeIdGenerator, nodes, edges, parent, null, exchanges)
       case "BroadcastQueryStage" | "ShuffleQueryStage" =>
         if (exchanges.contains(planInfo.children.head)) {
           // Point to the re-used exchange
@@ -148,23 +134,11 @@ object SparkPlanGraph {
           edges += SparkPlanGraphEdge(node.id, parent.id)
         } else {
           buildSparkPlanGraphNode(
-            planInfo.children.head,
-            nodeIdGenerator,
-            nodes,
-            edges,
-            parent,
-            null,
-            exchanges)
+            planInfo.children.head, nodeIdGenerator, nodes, edges, parent, null, exchanges)
         }
       case "TableCacheQueryStage" | "ResultQueryStage" =>
         buildSparkPlanGraphNode(
-          planInfo.children.head,
-          nodeIdGenerator,
-          nodes,
-          edges,
-          parent,
-          null,
-          exchanges)
+          planInfo.children.head, nodeIdGenerator, nodes, edges, parent, null, exchanges)
       case "Subquery" if subgraph != null =>
         // Subquery should not be included in WholeStageCodegen
         buildSparkPlanGraphNode(planInfo, nodeIdGenerator, nodes, edges, parent, null, exchanges)
@@ -179,13 +153,7 @@ object SparkPlanGraph {
         // Re-used subquery might appear before the original subquery, so skip this node and let
         // the previous `case` make sure the re-used and the original point to the same node.
         buildSparkPlanGraphNode(
-          planInfo.children.head,
-          nodeIdGenerator,
-          nodes,
-          edges,
-          parent,
-          subgraph,
-          exchanges)
+          planInfo.children.head, nodeIdGenerator, nodes, edges, parent, subgraph, exchanges)
       case "ReusedExchange" if exchanges.contains(planInfo.children.head) =>
         // Point to the re-used exchange
         val node = exchanges(planInfo.children.head)
@@ -195,10 +163,8 @@ object SparkPlanGraph {
           SQLPlanMetric(metric.name, metric.accumulatorId, metric.metricType)
         }
         val node = new SparkPlanGraphNode(
-          nodeIdGenerator.getAndIncrement(),
-          planInfo.nodeName,
-          planInfo.simpleString,
-          metrics)
+          nodeIdGenerator.getAndIncrement(), planInfo.nodeName,
+          planInfo.simpleString, metrics)
         if (subgraph == null) {
           nodes += node
         } else {
@@ -220,12 +186,9 @@ object SparkPlanGraph {
 /**
  * Represent a node in the SparkPlan tree, along with its metrics.
  *
- * @param id
- *   generated by "SparkPlanGraph". There is no duplicate id in a graph
- * @param name
- *   the name of this SparkPlan node
- * @param metrics
- *   metrics that this SparkPlan node will track
+ * @param id generated by "SparkPlanGraph". There is no duplicate id in a graph
+ * @param name the name of this SparkPlan node
+ * @param metrics metrics that this SparkPlan node will track
  */
 class SparkPlanGraphNode(
     val id: Long,
@@ -250,7 +213,7 @@ class SparkPlanGraphCluster(
     desc: String,
     val nodes: mutable.ArrayBuffer[SparkPlanGraphNode],
     metrics: collection.Seq[SQLPlanMetric])
-    extends SparkPlanGraphNode(id, name, desc, metrics) {
+  extends SparkPlanGraphNode(id, name, desc, metrics) {
 
   override def makeDotNode(metricsValue: Map[Long, String]): String = {
     val duration = metrics.filter(m =>
@@ -292,9 +255,10 @@ class SparkPlanGraphCluster(
   }
 }
 
+
 /**
- * Represent an edge in the SparkPlan tree. `fromId` is the child node id, and `toId` is the
- * parent node id.
+ * Represent an edge in the SparkPlan tree. `fromId` is the child node id, and `toId` is the parent
+ * node id.
  */
 case class SparkPlanGraphEdge(fromId: Long, toId: Long) {
 

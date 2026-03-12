@@ -26,12 +26,12 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 /**
  * A container for holding a SQL function query plan and its function identifier.
  *
- * @param function:
- *   the SQL function that this node represents.
- * @param child:
- *   the SQL function body.
+ * @param function: the SQL function that this node represents.
+ * @param child: the SQL function body.
  */
-case class SQLFunctionNode(function: SQLFunction, child: LogicalPlan) extends UnaryNode {
+case class SQLFunctionNode(
+    function: SQLFunction,
+    child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   override def stringArgs: Iterator[Any] = Iterator(function.name, child)
   override protected def withNewChildInternal(newChild: LogicalPlan): SQLFunctionNode =
@@ -40,8 +40,6 @@ case class SQLFunctionNode(function: SQLFunction, child: LogicalPlan) extends Un
   // Throw a reasonable error message when trying to call a SQL UDF with TABLE argument(s).
   if (child.containsPattern(FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION)) {
     throw QueryCompilationErrors
-      .tableValuedArgumentsNotYetImplementedForSqlFunctions(
-        "call",
-        toSQLId(function.name.funcName))
+      .tableValuedArgumentsNotYetImplementedForSqlFunctions("call", toSQLId(function.name.funcName))
   }
 }

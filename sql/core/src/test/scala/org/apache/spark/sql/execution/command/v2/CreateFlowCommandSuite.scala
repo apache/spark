@@ -18,7 +18,10 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedIdentifier, UnresolvedRelation}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateFlowCommand, InsertIntoStatement}
+import org.apache.spark.sql.catalyst.plans.logical.{
+  CreateFlowCommand,
+  InsertIntoStatement
+}
 import org.apache.spark.sql.connector.catalog.TableWritePrivilege
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.command.v1.CommandSuiteBase
@@ -32,40 +35,39 @@ class CreateFlowCommandSuite extends CommandSuiteBase with AnalysisTest {
   test("comment is correctly parsed") {
     Seq(
       ("CREATE FLOW f AS INSERT INTO a SELECT * FROM b", None),
-      ("CREATE FLOW F COMMENT 'comment' AS INSERT INTO a SELECT * FROM b", Some("comment")))
-      .foreach { case (query, commentOpt) =>
-        val plan = parser.parsePlan(query)
-        val cmd = plan.asInstanceOf[CreateFlowCommand]
-        assert(cmd.comment == commentOpt)
-      }
+      ("CREATE FLOW F COMMENT 'comment' AS INSERT INTO a SELECT * FROM b", Some("comment"))
+    ).foreach { case (query, commentOpt) =>
+      val plan = parser.parsePlan(query)
+      val cmd = plan.asInstanceOf[CreateFlowCommand]
+      assert(cmd.comment == commentOpt)
+    }
   }
 
   test("multipart flow names are correctly parsed") {
     Seq(
       ("CREATE FLOW f AS INSERT INTO a SELECT * FROM b", Seq("f")),
       ("CREATE FLOW c.f AS INSERT INTO a SELECT * FROM b", Seq("c", "f")),
-      ("CREATE FLOW c.d.f AS INSERT INTO a SELECT * FROM b", Seq("c", "d", "f"))).foreach {
-      case (query, nameParts) =>
-        val plan = parser.parsePlan(query)
-        val cmd = plan.asInstanceOf[CreateFlowCommand]
-        assert(cmd.name.asInstanceOf[UnresolvedIdentifier].nameParts == nameParts)
+      ("CREATE FLOW c.d.f AS INSERT INTO a SELECT * FROM b", Seq("c", "d", "f"))
+    ).foreach { case (query, nameParts) =>
+      val plan = parser.parsePlan(query)
+      val cmd = plan.asInstanceOf[CreateFlowCommand]
+      assert(cmd.name.asInstanceOf[UnresolvedIdentifier].nameParts == nameParts)
     }
   }
 
   test("INSERT subquery is correctly parsed") {
-    val plan = parser.parsePlan(
-      "CREATE FLOW f AS INSERT OVERWRITE a PARTITION (col1) BY NAME " +
-        "SELECT col1, col2 FROM b")
+    val plan = parser.parsePlan("CREATE FLOW f AS INSERT OVERWRITE a PARTITION (col1) BY NAME " +
+      "SELECT col1, col2 FROM b")
     val cmd = plan.asInstanceOf[CreateFlowCommand]
-    assert(
-      cmd.right == InsertIntoStatement(
-        table = UnresolvedRelation(Seq("a"))
-          .requireWritePrivileges(Seq(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)),
-        partitionSpec = Map("col1" -> None),
-        userSpecifiedCols = Seq.empty,
-        query = parser.parsePlan("SELECT col1, col2 FROM b"),
-        overwrite = true,
-        ifPartitionNotExists = false,
-        byName = true))
+    assert(cmd.right == InsertIntoStatement(
+      table = UnresolvedRelation(Seq("a"))
+        .requireWritePrivileges(Seq(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)),
+      partitionSpec = Map("col1" -> None),
+      userSpecifiedCols = Seq.empty,
+      query = parser.parsePlan("SELECT col1, col2 FROM b"),
+      overwrite = true,
+      ifPartitionNotExists = false,
+      byName = true
+    ))
   }
 }

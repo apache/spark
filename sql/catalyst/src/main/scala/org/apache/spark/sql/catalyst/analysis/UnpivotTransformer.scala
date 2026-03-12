@@ -17,7 +17,12 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{
+  AttributeReference,
+  Expression,
+  Literal,
+  NamedExpression
+}
 import org.apache.spark.sql.catalyst.plans.logical.{Expand, LogicalPlan}
 import org.apache.spark.sql.types.StringType
 
@@ -28,9 +33,9 @@ object UnpivotTransformer {
 
   /**
    * Construct an [[Expand]] node from the given [[Unpivot]] node. Do that by:
-   *   1. Constructing expressions for [[Expand]] out of [[aliases]] and [[values]].
-   *   2. Constructing output attributes.
-   *   3. Creating the [[Expand]] node using the expressions, outputs and the [[Unpivot.child]].
+   *  1. Constructing expressions for [[Expand]] out of [[aliases]] and [[values]].
+   *  2. Constructing output attributes.
+   *  3. Creating the [[Expand]] node using the expressions, outputs and the [[Unpivot.child]].
    */
   def apply(
       ids: Seq[NamedExpression],
@@ -55,11 +60,13 @@ object UnpivotTransformer {
 
     val variableAttribute =
       AttributeReference(variableColumnName, StringType, nullable = false)()
-    val valueAttributes = valueColumnNames.zipWithIndex.map { case (valueColumnName, index) =>
-      AttributeReference(
-        valueColumnName,
-        values.head(index).dataType,
-        values.map(_(index)).exists(_.nullable))()
+    val valueAttributes = valueColumnNames.zipWithIndex.map {
+      case (valueColumnName, index) =>
+        AttributeReference(
+          valueColumnName,
+          values.head(index).dataType,
+          values.map(_(index)).exists(_.nullable)
+        )()
     }
 
     val output = (ids.map(_.toAttribute) :+ variableAttribute) ++ valueAttributes

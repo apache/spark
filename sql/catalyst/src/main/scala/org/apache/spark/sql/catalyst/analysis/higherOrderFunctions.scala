@@ -25,13 +25,14 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 /**
  * Resolve the lambda variables exposed by a higher order functions.
  *
- * This rule works in two steps: [1]. Bind the anonymous variables exposed by the higher order
- * function to the lambda function's arguments; this creates named and typed lambda variables. The
- * argument names are checked for duplicates and the number of arguments are checked during this
- * step. [2]. Resolve the used lambda variables used in the lambda function's function expression
- * tree. Note that we allow the use of variables from outside the current lambda, this can either
- * be a lambda function defined in an outer scope, or a attribute in produced by the plan's child.
- * If names are duplicate, the name defined in the most inner scope is used.
+ * This rule works in two steps:
+ * [1]. Bind the anonymous variables exposed by the higher order function to the lambda function's
+ *      arguments; this creates named and typed lambda variables. The argument names are checked
+ *      for duplicates and the number of arguments are checked during this step.
+ * [2]. Resolve the used lambda variables used in the lambda function's function expression tree.
+ *      Note that we allow the use of variables from outside the current lambda, this can either
+ *      be a lambda function defined in an outer scope, or a attribute in produced by the plan's
+ *      child. If names are duplicate, the name defined in the most inner scope is used.
  */
 object ResolveLambdaVariables extends Rule[LogicalPlan] {
 
@@ -39,15 +40,14 @@ object ResolveLambdaVariables extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(
-      _.containsAnyPattern(HIGH_ORDER_FUNCTION, LAMBDA_FUNCTION, LAMBDA_VARIABLE),
-      ruleId) { case q: LogicalPlan =>
-      q.mapExpressions(resolve(_, Map.empty))
+      _.containsAnyPattern(HIGH_ORDER_FUNCTION, LAMBDA_FUNCTION, LAMBDA_VARIABLE), ruleId) {
+      case q: LogicalPlan =>
+        q.mapExpressions(resolve(_, Map.empty))
     }
   }
 
   /**
-   * Resolve lambda variables in the expression subtree, using the passed lambda variable
-   * registry.
+   * Resolve lambda variables in the expression subtree, using the passed lambda variable registry.
    */
   private def resolve(e: Expression, parentLambdaMap: LambdaVariableMap): Expression = e match {
     case _ if e.resolved => e

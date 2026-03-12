@@ -44,13 +44,14 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 
+
 /**
  * A variant implementation of [[ArrowPythonRunner]] to serve the operation
  * applyInPandasWithState.
  *
- * Unlike normal ArrowPythonRunner which both input and output (executor <-> python worker) are
- * InternalRow, applyInPandasWithState has side data (state information) in both input and output
- * along with data, which requires different struct on Arrow RecordBatch.
+ * Unlike normal ArrowPythonRunner which both input and output (executor <-> python worker)
+ * are InternalRow, applyInPandasWithState has side data (state information) in both input
+ * and output along with data, which requires different struct on Arrow RecordBatch.
  */
 class ApplyInPandasWithStatePythonRunner(
     funcs: Seq[(ChainedPythonFunctions, Long)],
@@ -65,18 +66,15 @@ class ApplyInPandasWithStatePythonRunner(
     stateValueSchema: StructType,
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
-    extends BasePythonRunner[InType, OutType](
-      funcs.map(_._1),
-      evalType,
-      argOffsets,
-      jobArtifactUUID,
-      pythonMetrics)
-    with PythonArrowInput[InType]
-    with PythonArrowOutput[OutType] {
+  extends BasePythonRunner[InType, OutType](
+    funcs.map(_._1), evalType, argOffsets, jobArtifactUUID, pythonMetrics)
+  with PythonArrowInput[InType]
+  with PythonArrowOutput[OutType] {
   ArrowUtils.failDuplicatedFieldNames(inputSchema)
 
   override val pythonExec: String =
-    SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(funcs.head._1.funcs.head.pythonExec)
+    SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
+      funcs.head._1.funcs.head.pythonExec)
 
   override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
   override val idleTimeoutSeconds: Long = SQLConf.get.pythonUDFWorkerIdleTimeoutSeconds
@@ -98,10 +96,9 @@ class ApplyInPandasWithStatePythonRunner(
   override val bufferSize: Int = {
     val configuredSize = sqlConf.pandasUDFBufferSize
     if (configuredSize < 4) {
-      logWarning(
-        log"Pandas execution requires more than 4 bytes. Please configure bigger value " +
-          log"for the configuration '${MDC(CONFIG, SQLConf.PANDAS_UDF_BUFFER_SIZE.key)}'. " +
-          log"Force using the value '4'.")
+      logWarning(log"Pandas execution requires more than 4 bytes. Please configure bigger value " +
+        log"for the configuration '${MDC(CONFIG, SQLConf.PANDAS_UDF_BUFFER_SIZE.key)}'. " +
+        log"Force using the value '4'.")
       4
     } else {
       configuredSize
@@ -117,10 +114,13 @@ class ApplyInPandasWithStatePythonRunner(
   override protected def runnerConf: Map[String, String] =
     super.runnerConf ++ initialRunnerConf ++ Map(
       SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> arrowMaxRecordsPerBatch.toString,
-      SQLConf.ARROW_EXECUTION_MAX_BYTES_PER_BATCH.key -> arrowMaxBytesPerBatch.toString)
+      SQLConf.ARROW_EXECUTION_MAX_BYTES_PER_BATCH.key -> arrowMaxBytesPerBatch.toString
+    )
 
   override protected def evalConf: Map[String, String] =
-    super.evalConf ++ Map("state_value_schema" -> stateValueSchema.json)
+    super.evalConf ++ Map(
+      "state_value_schema" -> stateValueSchema.json
+    )
 
   private val stateRowDeserializer = stateEncoder.createDeserializer()
 
@@ -129,7 +129,6 @@ class ApplyInPandasWithStatePythonRunner(
   }
 
   private var pandasWriter: ApplyInPandasWithStateWriter = _
-
   /**
    * Read the (key, state, values) from input iterator and construct Arrow RecordBatches, and
    * write constructed RecordBatches to the writer.
@@ -188,7 +187,8 @@ class ApplyInPandasWithStatePythonRunner(
       assert(
         DataTypeUtils.sameType(dataType, COUNT_COLUMN_SCHEMA_FROM_PYTHON_WORKER),
         s"Schema equality check failure! type from Arrow: $dataType, " +
-          s"expected type: $COUNT_COLUMN_SCHEMA_FROM_PYTHON_WORKER")
+        s"expected type: $COUNT_COLUMN_SCHEMA_FROM_PYTHON_WORKER"
+      )
 
       // NOTE: See ApplyInPandasWithStatePythonRunner.COUNT_COLUMN_SCHEMA_FROM_PYTHON_WORKER
       // for the schema.
@@ -204,8 +204,7 @@ class ApplyInPandasWithStatePythonRunner(
       //  UDF returns a StructType column in ColumnarBatch, select the children here
       val structVector = batch.column(ordinal).asInstanceOf[ArrowColumnVector]
       val dataType = schema(ordinal).dataType.asInstanceOf[StructType]
-      assert(
-        DataTypeUtils.sameType(dataType, expectedType),
+      assert(DataTypeUtils.sameType(dataType, expectedType),
         s"Schema equality check failure! type from Arrow: $dataType, expected type: $expectedType")
 
       val outputVectors = dataType.indices.map(structVector.getChild)
@@ -215,6 +214,7 @@ class ApplyInPandasWithStatePythonRunner(
       flattenedBatch
     }
 
+
     def constructIterForData(batch: ColumnarBatch, numRows: Int): Iterator[InternalRow] = {
       val dataBatch = getColumnarBatchForStructTypeColumn(batch, 1, outputSchema)
       dataBatch.rowIterator.asScala.take(numRows).flatMap { row =>
@@ -223,8 +223,8 @@ class ApplyInPandasWithStatePythonRunner(
     }
 
     def constructIterForState(batch: ColumnarBatch, numRows: Int): Iterator[OutTypeForState] = {
-      val stateMetadataBatch =
-        getColumnarBatchForStructTypeColumn(batch, 2, STATE_METADATA_SCHEMA_FROM_PYTHON_WORKER)
+      val stateMetadataBatch = getColumnarBatchForStructTypeColumn(batch, 2,
+        STATE_METADATA_SCHEMA_FROM_PYTHON_WORKER)
 
       stateMetadataBatch.rowIterator().asScala.take(numRows).flatMap { row =>
         implicit val formats: Formats = org.json4s.DefaultFormats
@@ -239,15 +239,13 @@ class ApplyInPandasWithStatePythonRunner(
           None
         } else {
           val pickledStateValue = row.getBinary(2)
-          Some(PythonSQLUtils.toJVMRow(pickledStateValue, stateValueSchema, stateRowDeserializer))
+          Some(PythonSQLUtils.toJVMRow(pickledStateValue, stateValueSchema,
+            stateRowDeserializer))
         }
         val oldTimeoutTimestamp = row.getLong(3)
 
-        Some(
-          (
-            keyRowAsUnsafe,
-            GroupStateImpl.fromJson(maybeObjectRow, propertiesAsJson),
-            oldTimeoutTimestamp))
+        Some((keyRowAsUnsafe, GroupStateImpl.fromJson(maybeObjectRow, propertiesAsJson),
+          oldTimeoutTimestamp))
       }
     }
 
@@ -266,8 +264,14 @@ object ApplyInPandasWithStatePythonRunner {
       StructField("properties", StringType),
       StructField("keyRowAsUnsafe", BinaryType),
       StructField("object", BinaryType),
-      StructField("oldTimeoutTimestamp", LongType)))
+      StructField("oldTimeoutTimestamp", LongType)
+    )
+  )
   val COUNT_COLUMN_SCHEMA_FROM_PYTHON_WORKER: StructType = StructType(
-    Array(StructField("dataCount", IntegerType), StructField("stateCount", IntegerType)))
+    Array(
+      StructField("dataCount", IntegerType),
+      StructField("stateCount", IntegerType)
+    )
+  )
 
 }

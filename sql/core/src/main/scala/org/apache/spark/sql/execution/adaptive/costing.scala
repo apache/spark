@@ -27,8 +27,7 @@ import org.apache.spark.util.Utils
 /**
  * An interface to represent the cost of a plan.
  *
- * @note
- *   This class is subject to be changed and/or moved in the near future.
+ * @note This class is subject to be changed and/or moved in the near future.
  */
 @Unstable
 trait Cost extends Ordered[Cost]
@@ -36,8 +35,7 @@ trait Cost extends Ordered[Cost]
 /**
  * An interface to evaluate the cost of a physical plan.
  *
- * @note
- *   This class is subject to be changed and/or moved in the near future.
+ * @note This class is subject to be changed and/or moved in the near future.
  */
 @Unstable
 trait CostEvaluator {
@@ -52,11 +50,9 @@ object CostEvaluator extends Logging {
   def instantiate(className: String, conf: SparkConf): CostEvaluator = {
     logDebug(s"Creating CostEvaluator $className")
     val evaluators = Utils.loadExtensions(classOf[CostEvaluator], Seq(className), conf)
-    require(
-      evaluators.nonEmpty,
-      "A valid AQE cost evaluator must be specified by config " +
-        s"${SQLConf.ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS.key}, but $className resulted in zero " +
-        "valid evaluator.")
+    require(evaluators.nonEmpty, "A valid AQE cost evaluator must be specified by config " +
+      s"${SQLConf.ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS.key}, but $className resulted in zero " +
+      "valid evaluator.")
     evaluators.head
   }
 }

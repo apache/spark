@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, StringTyp
 /**
  * The builder to generate V2 expressions from catalyst expressions.
  */
-class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends Logging {
+class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends Logging  {
 
   def build(): Option[V2Expression] = generateExpression(e, isPredicate)
 
@@ -51,19 +51,18 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
         translated0
       }
 
-      val modifiedExprOpt =
-        if (conf.getConf(SQLConf.DATA_SOURCE_DONT_ASSERT_ON_PREDICATE)
+      val modifiedExprOpt = if (
+        conf.getConf(SQLConf.DATA_SOURCE_DONT_ASSERT_ON_PREDICATE)
           && translated.isDefined
           && !translated.get.isInstanceOf[V2Predicate]) {
 
-          // If a predicate is expected but the translation yields something else,
-          // log a warning and proceed as if the translation was not possible.
-          logWarning(
-            log"Predicate expected but got class: ${MDC(EXPR, translated.get.describe())}")
-          None
-        } else {
-          translated
-        }
+        // If a predicate is expected but the translation yields something else,
+        // log a warning and proceed as if the translation was not possible.
+        logWarning(log"Predicate expected but got class: ${MDC(EXPR, translated.get.describe())}")
+        None
+      } else {
+        translated
+      }
 
       modifiedExprOpt.map { v =>
         assert(v.isInstanceOf[V2Predicate], s"Expected Predicate but got ${v.describe()}")
@@ -92,12 +91,10 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
   }
 
   private def generateExpression(
-      expr: Expression,
-      isPredicate: Boolean = false): Option[V2Expression] = expr match {
+      expr: Expression, isPredicate: Boolean = false): Option[V2Expression] = expr match {
     case literal: Literal => Some(translateLiteral(literal))
-    case _
-        if expr.contextIndependentFoldable
-          && SQLConf.get.getConf(SQLConf.DATA_SOURCE_V2_EXPR_FOLDING) =>
+    case _ if expr.contextIndependentFoldable
+        && SQLConf.get.getConf(SQLConf.DATA_SOURCE_V2_EXPR_FOLDING) =>
       // If the expression is context independent foldable, we can convert it to a literal.
       // This is useful for increasing the coverage of V2 expressions.
       val constantExpr = ConstantFolding.constantFolding(expr)
@@ -128,12 +125,10 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       } else {
         None
       }
-    case IsNull(col) =>
-      generateExpression(col)
-        .map(c => new V2Predicate("IS_NULL", Array[V2Expression](c)))
-    case IsNotNull(col) =>
-      generateExpression(col)
-        .map(c => new V2Predicate("IS_NOT_NULL", Array[V2Expression](c)))
+    case IsNull(col) => generateExpression(col)
+      .map(c => new V2Predicate("IS_NULL", Array[V2Expression](c)))
+    case IsNotNull(col) => generateExpression(col)
+      .map(c => new V2Predicate("IS_NOT_NULL", Array[V2Expression](c)))
     case p: StringPredicate =>
       val left = generateExpression(p.left)
       val right = generateExpression(p.right)
@@ -216,13 +211,10 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       val r = generateExpression(b.right)
       if (l.isDefined && r.isDefined) {
         b match {
-          case _: BinaryComparison
-              if l.get.isInstanceOf[LiteralValue[_]] &&
-                r.get.isInstanceOf[FieldReference] =>
-            Some(
-              new V2Predicate(
-                flipComparisonOperatorName(b.sqlOperator),
-                Array[V2Expression](r.get, l.get)))
+          case _: BinaryComparison if l.get.isInstanceOf[LiteralValue[_]] &&
+              r.get.isInstanceOf[FieldReference] =>
+            Some(new V2Predicate(flipComparisonOperatorName(b.sqlOperator),
+              Array[V2Expression](r.get, l.get)))
           case _: Predicate =>
             Some(new V2Predicate(b.sqlOperator, Array[V2Expression](l.get, r.get)))
           case _ =>
@@ -239,12 +231,11 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       } else {
         None
       }
-    case Not(child) =>
-      generateExpression(child, true) // NOT expects predicate
-        .map { v =>
-          assert(v.isInstanceOf[V2Predicate])
-          new V2Not(v.asInstanceOf[V2Predicate])
-        }
+    case Not(child) => generateExpression(child, true) // NOT expects predicate
+      .map { v =>
+        assert(v.isInstanceOf[V2Predicate])
+        new V2Not(v.asInstanceOf[V2Predicate])
+      }
     case UnaryMinus(_, true) => generateExpressionWithName("-", expr, isPredicate)
     case _: BitwiseNot => generateExpressionWithName("~", expr, isPredicate)
     case caseWhen @ CaseWhen(branches, elseValue) =>
@@ -252,7 +243,7 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       val values = branches.map(_._2).flatMap(generateExpression(_, isPredicate))
       val elseExprOpt = elseValue.flatMap(generateExpression(_, isPredicate))
       if (conditions.length == branches.length && values.length == branches.length &&
-        elseExprOpt.size == elseValue.size) {
+          elseExprOpt.size == elseValue.size) {
         val branchExpressions = conditions.zip(values).flatMap { case (c, v) =>
           Seq[V2Expression](c, v)
         }
@@ -310,21 +301,15 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
     // DayOfWeek uses Sunday = 1, Monday = 2, ... and ISO standard is Monday = 1, ...,
     // so we use the formula ((ISO_standard % 7) + 1) to do translation.
     case DayOfWeek(child) =>
-      generateExpression(child).map(v =>
-        new GeneralScalarExpression(
-          "+",
-          Array[V2Expression](
-            new GeneralScalarExpression(
-              "%",
-              Array[V2Expression](new V2Extract("DAY_OF_WEEK", v), LiteralValue(7, IntegerType))),
-            LiteralValue(1, IntegerType))))
+      generateExpression(child).map(v => new GeneralScalarExpression("+",
+        Array[V2Expression](new GeneralScalarExpression("%",
+          Array[V2Expression](new V2Extract("DAY_OF_WEEK", v), LiteralValue(7, IntegerType))),
+          LiteralValue(1, IntegerType))))
     // WeekDay uses Monday = 0, Tuesday = 1, ... and ISO standard is Monday = 1, ...,
     // so we use the formula (ISO_standard - 1) to do translation.
     case WeekDay(child) =>
-      generateExpression(child).map(v =>
-        new GeneralScalarExpression(
-          "-",
-          Array[V2Expression](new V2Extract("DAY_OF_WEEK", v), LiteralValue(1, IntegerType))))
+      generateExpression(child).map(v => new GeneralScalarExpression("-",
+        Array[V2Expression](new V2Extract("DAY_OF_WEEK", v), LiteralValue(1, IntegerType))))
     case DayOfMonth(child) =>
       generateExpression(child).map(v => new V2Extract("DAY", v))
     case DayOfYear(child) =>
@@ -352,11 +337,8 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
     case ApplyFunctionExpression(function, children) =>
       val childrenExpressions = children.flatMap(generateExpression(_))
       if (childrenExpressions.length == children.length) {
-        Some(
-          new UserDefinedScalarFunc(
-            function.name(),
-            function.canonicalName(),
-            childrenExpressions.toArray[V2Expression]))
+        Some(new UserDefinedScalarFunc(
+          function.name(), function.canonicalName(), childrenExpressions.toArray[V2Expression]))
       } else {
         None
       }
@@ -365,11 +347,8 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
         case function: ScalarFunction[_] if ScalarFunction.MAGIC_METHOD_NAME == functionName =>
           val argumentExpressions = arguments.flatMap(generateExpression(_))
           if (argumentExpressions.length == arguments.length) {
-            Some(
-              new UserDefinedScalarFunc(
-                function.name(),
-                function.canonicalName(),
-                argumentExpressions.toArray[V2Expression]))
+            Some(new UserDefinedScalarFunc(
+              function.name(), function.canonicalName(), argumentExpressions.toArray[V2Expression]))
           } else {
             None
           }
@@ -379,11 +358,8 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
     case StaticInvoke(_, _, _, arguments, _, _, _, _, Some(scalarFunc)) =>
       val argumentExpressions = arguments.flatMap(generateExpression(_))
       if (argumentExpressions.length == arguments.length) {
-        Some(
-          new UserDefinedScalarFunc(
-            scalarFunc.name(),
-            scalarFunc.canonicalName(),
-            argumentExpressions.toArray[V2Expression]))
+        Some(new UserDefinedScalarFunc(
+          scalarFunc.name(), scalarFunc.canonicalName(), argumentExpressions.toArray[V2Expression]))
       } else {
         None
       }
@@ -428,48 +404,22 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       Some(new GeneralAggregateFunc("REGR_SXY", isDistinct, Array(left, right)))
     // Translate Mode if it is deterministic or reverse is defined.
     case aggregate.Mode(PushableExpression(expr), _, _, Some(reverse)) =>
-      Some(
-        new GeneralAggregateFunc(
-          "MODE",
-          isDistinct,
-          Array.empty,
-          Array(generateSortValue(expr, !reverse))))
+      Some(new GeneralAggregateFunc(
+        "MODE", isDistinct, Array.empty, Array(generateSortValue(expr, !reverse))))
     case aggregate.Percentile(
-          PushableExpression(left),
-          PushableExpression(right),
-          LongLiteral(1L),
-          _,
-          _,
-          reverse) =>
-      Some(
-        new GeneralAggregateFunc(
-          "PERCENTILE_CONT",
-          isDistinct,
-          Array(right),
-          Array(generateSortValue(left, reverse))))
+      PushableExpression(left), PushableExpression(right), LongLiteral(1L), _, _, reverse) =>
+      Some(new GeneralAggregateFunc("PERCENTILE_CONT", isDistinct,
+        Array(right), Array(generateSortValue(left, reverse))))
     case aggregate.PercentileDisc(
-          PushableExpression(left),
-          PushableExpression(right),
-          reverse,
-          _,
-          _,
-          _) =>
-      Some(
-        new GeneralAggregateFunc(
-          "PERCENTILE_DISC",
-          isDistinct,
-          Array(right),
-          Array(generateSortValue(left, reverse))))
+      PushableExpression(left), PushableExpression(right), reverse, _, _, _) =>
+      Some(new GeneralAggregateFunc("PERCENTILE_DISC", isDistinct,
+        Array(right), Array(generateSortValue(left, reverse))))
     // TODO supports other aggregate functions
     case aggregate.V2Aggregator(aggrFunc, children, _, _) =>
       val translatedExprs = children.flatMap(PushableExpression.unapply(_))
       if (translatedExprs.length == children.length) {
-        Some(
-          new UserDefinedAggregateFunc(
-            aggrFunc.name(),
-            aggrFunc.canonicalName(),
-            isDistinct,
-            translatedExprs.toArray[V2Expression]))
+        Some(new UserDefinedAggregateFunc(aggrFunc.name(),
+          aggrFunc.canonicalName(), isDistinct, translatedExprs.toArray[V2Expression]))
       } else {
         None
       }
@@ -491,10 +441,7 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       expr: Expression,
       isPredicate: Boolean): Option[V2Expression] = {
     generateExpressionWithNameByChildren(
-      v2ExpressionName,
-      expr.children,
-      expr.dataType,
-      isPredicate)
+      v2ExpressionName, expr.children, expr.dataType, isPredicate)
   }
 
   private def generateExpressionWithNameByChildren(
@@ -507,10 +454,8 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       if (isPredicate && dataType.isInstanceOf[BooleanType]) {
         Some(new V2Predicate(v2ExpressionName, childrenExpressions.toArray[V2Expression]))
       } else {
-        Some(
-          new GeneralScalarExpression(
-            v2ExpressionName,
-            childrenExpressions.toArray[V2Expression]))
+        Some(new GeneralScalarExpression(
+          v2ExpressionName, childrenExpressions.toArray[V2Expression]))
       }
     } else {
       None

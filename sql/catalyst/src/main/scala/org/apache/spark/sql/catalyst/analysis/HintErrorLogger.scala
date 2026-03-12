@@ -29,38 +29,31 @@ object HintErrorLogger extends HintErrorHandler with Logging {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   override def hintNotRecognized(name: String, parameters: Seq[Expression]): Unit = {
-    logWarning(
-      log"Unrecognized hint: " +
-        log"${MDC(QUERY_HINT, hintToPrettyString(name, parameters))}")
+    logWarning(log"Unrecognized hint: " +
+      log"${MDC(QUERY_HINT, hintToPrettyString(name, parameters))}")
   }
 
   override def hintRelationsNotFound(
-      name: String,
-      parameters: Seq[Any],
-      invalidRelations: Set[Seq[String]]): Unit = {
+      name: String, parameters: Seq[Any], invalidRelations: Set[Seq[String]]): Unit = {
     invalidRelations.foreach { ident =>
-      logWarning(
-        log"Count not find relation '${MDC(RELATION_NAME, ident.quoted)}' " +
-          log"specified in hint '${MDC(QUERY_HINT, hintToPrettyString(name, parameters))}'.")
+      logWarning(log"Count not find relation '${MDC(RELATION_NAME, ident.quoted)}' " +
+        log"specified in hint '${MDC(QUERY_HINT, hintToPrettyString(name, parameters))}'.")
     }
   }
 
   override def joinNotFoundForJoinHint(hint: HintInfo): Unit = {
-    logWarning(
-      log"A join hint ${MDC(QUERY_HINT, hint)} is specified " +
-        log"but it is not part of a join relation.")
+    logWarning(log"A join hint ${MDC(QUERY_HINT, hint)} is specified " +
+      log"but it is not part of a join relation.")
   }
 
   override def joinHintNotSupported(hint: HintInfo, reason: String): Unit = {
-    logWarning(
-      log"Hint ${MDC(QUERY_HINT, hint)} is not supported in the query: " +
-        log"${MDC(UNSUPPORTED_HINT_REASON, reason)}.")
+    logWarning(log"Hint ${MDC(QUERY_HINT, hint)} is not supported in the query: " +
+      log"${MDC(UNSUPPORTED_HINT_REASON, reason)}.")
   }
 
   override def hintOverridden(hint: HintInfo): Unit = {
-    logWarning(
-      log"Hint ${MDC(QUERY_HINT, hint)} is overridden by another hint " +
-        log"and will not take effect.")
+    logWarning(log"Hint ${MDC(QUERY_HINT, hint)} is overridden by another hint " +
+      log"and will not take effect.")
   }
 
   private def hintToPrettyString(name: String, parameters: Seq[Any]): String = {

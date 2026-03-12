@@ -45,18 +45,15 @@ private[sql] object DataSourceV2Utils extends Logging {
 
   /**
    * Helper method that extracts and transforms session configs into k/v pairs, the k/v pairs will
-   * be used to create data source options. Only extract when `ds` implements
-   * [[SessionConfigSupport]], in this case we may fetch the specified key-prefix from `ds`, and
-   * extract session configs with config keys that start with `spark.datasource.$keyPrefix`. A
-   * session config `spark.datasource.$keyPrefix.xxx -> yyy` will be transformed into
-   * `xxx -> yyy`.
+   * be used to create data source options.
+   * Only extract when `ds` implements [[SessionConfigSupport]], in this case we may fetch the
+   * specified key-prefix from `ds`, and extract session configs with config keys that start with
+   * `spark.datasource.$keyPrefix`. A session config `spark.datasource.$keyPrefix.xxx -> yyy` will
+   * be transformed into `xxx -> yyy`.
    *
-   * @param source
-   *   a [[TableProvider]] object
-   * @param conf
-   *   the session conf
-   * @return
-   *   an immutable map that contains all the extracted and transformed k/v pairs.
+   * @param source a [[TableProvider]] object
+   * @param conf the session conf
+   * @return an immutable map that contains all the extracted and transformed k/v pairs.
    */
   def extractSessionConfigs(source: TableProvider, conf: SQLConf): Map[String, String] = {
     source match {
@@ -124,7 +121,10 @@ private[sql] object DataSourceV2Utils extends Logging {
           s"$source does not support user specified schema. Please don't specify the schema.")
       case hasCatalog: SupportsCatalogOptions =>
         val ident = hasCatalog.extractIdentifier(dsOptions)
-        val catalog = CatalogV2Util.getTableProviderCatalog(hasCatalog, catalogManager, dsOptions)
+        val catalog = CatalogV2Util.getTableProviderCatalog(
+          hasCatalog,
+          catalogManager,
+          dsOptions)
 
         val version = hasCatalog.extractTimeTravelVersion(dsOptions)
         val timestamp = hasCatalog.extractTimeTravelTimestamp(dsOptions)
@@ -139,8 +139,8 @@ private[sql] object DataSourceV2Utils extends Logging {
         } else {
           None
         }
-        val timeTravel =
-          TimeTravelSpec.create(timeTravelTimestamp, timeTravelVersion, conf.sessionLocalTimeZone)
+        val timeTravel = TimeTravelSpec.create(
+          timeTravelTimestamp, timeTravelVersion, conf.sessionLocalTimeZone)
         val tbl = CatalogV2Util.getTable(catalog, ident, timeTravel)
         (tbl, Some(catalog), Some(ident), timeTravel)
       case _ =>
@@ -184,13 +184,11 @@ private[sql] object DataSourceV2Utils extends Logging {
   }
 
   /**
-   * If `table` is a StagedTable, commit the staged changes and report the commit metrics. Do
-   * nothing if the table is not a StagedTable.
+   * If `table` is a StagedTable, commit the staged changes and report the commit metrics.
+   * Do nothing if the table is not a StagedTable.
    */
   def commitStagedChanges(
-      sparkContext: SparkContext,
-      table: Table,
-      metrics: Map[String, SQLMetric]): Unit = {
+      sparkContext: SparkContext, table: Table, metrics: Map[String, SQLMetric]): Unit = {
     table match {
       case stagedTable: StagedTable =>
         stagedTable.commitStagedChanges()
@@ -209,13 +207,9 @@ private[sql] object DataSourceV2Utils extends Logging {
   }
 
   def commitMetrics(
-      sparkContext: SparkContext,
-      tableCatalog: StagingTableCatalog): Map[String, SQLMetric] = {
-    tableCatalog
-      .supportedCustomMetrics()
-      .map { metric =>
-        metric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, metric)
-      }
-      .toMap
+      sparkContext: SparkContext, tableCatalog: StagingTableCatalog): Map[String, SQLMetric] = {
+    tableCatalog.supportedCustomMetrics().map {
+      metric => metric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, metric)
+    }.toMap
   }
 }

@@ -38,8 +38,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    * Check the provided logical plan to see if its join keys contain a watermark attribute.
    *
    * Will return false if the plan is not an equijoin.
-   * @param plan
-   *   the logical plan to check
+   * @param plan the logical plan to check
    */
   def isWatermarkInJoinKeys(plan: LogicalPlan): Boolean = {
     plan match {
@@ -53,24 +52,21 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
   }
 
   /**
-   * Get state value watermark (see [[StreamingSymmetricHashJoinExec]] for context about it) given
-   * the join condition and the event time watermark. This is how it works.
-   *   - The condition is split into conjunctive predicates, and we find the predicates of the
-   *     form `leftTime + c1 < rightTime + c2` (or <=, >, >=).
-   *   - We canonicalize the predicate and solve it with the event time watermark value to find
-   *     the value of the state watermark. This function is supposed to make best-effort attempt
-   *     to get the state watermark. If there is any error, it will return None.
+   * Get state value watermark (see [[StreamingSymmetricHashJoinExec]] for context about it)
+   * given the join condition and the event time watermark. This is how it works.
+   * - The condition is split into conjunctive predicates, and we find the predicates of the
+   *   form `leftTime + c1 < rightTime + c2`   (or <=, >, >=).
+   * - We canonicalize the predicate and solve it with the event time watermark value to find the
+   *  value of the state watermark.
+   * This function is supposed to make best-effort attempt to get the state watermark. If there is
+   * any error, it will return None.
    *
-   * @param attributesToFindStateWatermarkFor
-   *   attributes of the side whose state watermark is to be calculated
-   * @param attributesWithEventWatermark
-   *   attributes of the other side which has a watermark column
-   * @param joinCondition
-   *   join condition
-   * @param eventWatermark
-   *   watermark defined on the input event data
-   * @return
-   *   state value watermark in milliseconds, is possible.
+   * @param attributesToFindStateWatermarkFor attributes of the side whose state watermark
+   *                                         is to be calculated
+   * @param attributesWithEventWatermark  attributes of the other side which has a watermark column
+   * @param joinCondition                 join condition
+   * @param eventWatermark                watermark defined on the input event data
+   * @return state value watermark in milliseconds, is possible.
    */
   def getStateValueWatermark(
       attributesToFindStateWatermarkFor: AttributeSet,
@@ -87,22 +83,17 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     def getStateWatermarkSafely(l: Expression, r: Expression): Option[Long] = {
       try {
         getStateWatermarkFromLessThenPredicate(
-          l,
-          r,
-          attributesToFindStateWatermarkFor,
-          attributesWithEventWatermark,
-          eventWatermark)
+          l, r, attributesToFindStateWatermarkFor, attributesWithEventWatermark, eventWatermark)
       } catch {
         case NonFatal(e) =>
-          logWarning(
-            log"Error trying to extract state constraint from condition " +
-              log"${MDC(JOIN_CONDITION, joinCondition)}",
-            e)
+          logWarning(log"Error trying to extract state constraint from condition " +
+            log"${MDC(JOIN_CONDITION, joinCondition)}", e)
           None
       }
     }
 
     val allStateWatermarks = splitConjunctivePredicates(joinCondition.get).flatMap { predicate =>
+
       // The generated the state watermark cleanup expression is inclusive of the state watermark.
       // If state watermark is W, all state where timestamp <= W will be cleaned up.
       // Now when the canonicalized join condition solves to leftTime >= W, we don't want to clean
@@ -113,15 +104,13 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
         case GreaterThan(l, r) => getStateWatermarkSafely(r, l)
         case GreaterThanOrEqual(l, r) => getStateWatermarkSafely(r, l).map(_ - 1)
         case Between(input, lower, upper, _) =>
-          getStateWatermarkSafely(lower, input)
-            .map(_ - 1)
+          getStateWatermarkSafely(lower, input).map(_ - 1)
             .orElse(getStateWatermarkSafely(input, upper).map(_ - 1))
         case _ => None
       }
       if (stateWatermark.nonEmpty) {
-        logInfo(
-          log"Condition ${MDC(JOIN_CONDITION, joinCondition)} generated " +
-            log"watermark constraint = ${MDC(WATERMARK_CONSTRAINT, stateWatermark.get)}")
+        logInfo(log"Condition ${MDC(JOIN_CONDITION, joinCondition)} generated " +
+          log"watermark constraint = ${MDC(WATERMARK_CONSTRAINT, stateWatermark.get)}")
       }
       stateWatermark
     }
@@ -133,9 +122,10 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    * `LessThan(leftExpr, rightExpr)` where . For example: if we want to find the constraint for
    * leftTime using the watermark on the rightTime. Example:
    *
-   * Input: rightTime-with-watermark + c1 < leftTime + c2 Canonical form: rightTime-with-watermark
-   * + c1 + (-c2) + (-leftTime) < 0 Solving for rightTime: rightTime-with-watermark + c1 + (-c2) <
-   * leftTime With watermark value: watermark-value + c1 + (-c2) < leftTime
+   * Input:                 rightTime-with-watermark + c1 < leftTime + c2
+   * Canonical form:        rightTime-with-watermark + c1 + (-c2) + (-leftTime) < 0
+   * Solving for rightTime: rightTime-with-watermark + c1 + (-c2) < leftTime
+   * With watermark value:  watermark-value + c1 + (-c2) < leftTime
    */
   private def getStateWatermarkFromLessThenPredicate(
       leftExpr: Expression,
@@ -146,21 +136,19 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
 
     val attributesInCondition = AttributeSet(
       leftExpr.collect { case a: AttributeReference => a } ++
-        rightExpr.collect { case a: AttributeReference => a })
+      rightExpr.collect { case a: AttributeReference => a }
+    )
     if (attributesInCondition.count(attributesToFindStateWatermarkFor.contains) > 1 ||
-      attributesInCondition.count(attributesWithEventWatermark.contains) > 1) {
+        attributesInCondition.count(attributesWithEventWatermark.contains) > 1) {
       // If more than attributes present in condition from one side, then it cannot be solved
       return None
     }
 
     def containsAttributeToFindStateConstraintFor(e: Expression): Boolean = {
-      e.collectLeaves()
-        .collectFirst {
-          case a @ AttributeReference(_, _, _, _)
-              if attributesToFindStateWatermarkFor.contains(a) =>
-            a
-        }
-        .nonEmpty
+      e.collectLeaves().collectFirst {
+        case a @ AttributeReference(_, _, _, _)
+          if attributesToFindStateWatermarkFor.contains(a) => a
+      }.nonEmpty
     }
 
     // Canonicalization step 1: convert to (rightTime-with-watermark + c1) - (leftTime + c2) < 0
@@ -183,9 +171,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       return None
     }
     if (constraintTerms.isEmpty) {
-      logDebug(
-        "Failed to extract state constraint terms: no time terms in condition\n\t" +
-          terms.mkString("\n\t"))
+      logDebug("Failed to extract state constraint terms: no time terms in condition\n\t" +
+        terms.mkString("\n\t"))
       return None
     }
     val constraintTerm = constraintTerms.head
@@ -203,28 +190,25 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     // from the other terms. That is,
     // rightTime-with-watermark, c1, -c2  =>  watermark, c1, -c2  =>  watermark + c1 + (-c2)
     logDebug(s"Constraint term from join condition:\t$constraintTerm")
-    val exprWithWatermarkSubstituted = (terms - constraintTerm)
-      .map { term =>
-        term.transform {
-          case a @ AttributeReference(_, _, _, metadata)
-              if attributesWithEventWatermark.contains(a) && metadata.contains(delayKey) =>
-            Multiply(Literal(eventWatermark.get.toDouble), Literal(1000.0))
-        }
+    val exprWithWatermarkSubstituted = (terms - constraintTerm).map { term =>
+      term.transform {
+        case a @ AttributeReference(_, _, _, metadata)
+          if attributesWithEventWatermark.contains(a) && metadata.contains(delayKey) =>
+          Multiply(Literal(eventWatermark.get.toDouble), Literal(1000.0))
       }
-      .reduceLeft(Add(_, _))
+    }.reduceLeft(Add(_, _))
 
     // Calculate the constraint value
-    logInfo(
-      log"Final expression to evaluate " +
-        log"constraint:\t${MDC(WATERMARK_CONSTRAINT, exprWithWatermarkSubstituted)}")
+    logInfo(log"Final expression to evaluate " +
+      log"constraint:\t${MDC(WATERMARK_CONSTRAINT, exprWithWatermarkSubstituted)}")
     val constraintValue = exprWithWatermarkSubstituted.eval().asInstanceOf[java.lang.Double]
     Some((Double2double(constraintValue) / 1000.0).toLong)
   }
 
   /**
-   * Collect all the terms present in an expression after converting it into the form a + b + c +
-   * d where each term be either an attribute or a literal casted to long, optionally wrapped in a
-   * unary minus.
+   * Collect all the terms present in an expression after converting it into the form
+   * a + b + c + d where each term be either an attribute or a literal casted to long,
+   * optionally wrapped in a unary minus.
    */
   private def collectTerms(exprToCollectFrom: Expression): Seq[Expression] = {
     var invalid = false
@@ -236,16 +220,17 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
 
     /**
      * Recursively split the expression into its leaf terms contains attributes or literals.
-     * Returns terms only of the forms: Cast(AttributeReference),
-     * UnaryMinus(Cast(AttributeReference)), Cast(AttributeReference, Double),
-     * UnaryMinus(Cast(AttributeReference, Double)) Multiply(Literal),
-     * UnaryMinus(Multiply(Literal)) Multiply(Cast(Literal)), UnaryMinus(Multiple(Cast(Literal)))
+     * Returns terms only of the forms:
+     *    Cast(AttributeReference), UnaryMinus(Cast(AttributeReference)),
+     *    Cast(AttributeReference, Double), UnaryMinus(Cast(AttributeReference, Double))
+     *    Multiply(Literal), UnaryMinus(Multiply(Literal))
+     *    Multiply(Cast(Literal)), UnaryMinus(Multiple(Cast(Literal)))
      *
      * Note:
-     *   - If term needs to be negated for making it a commutative term, then it will be wrapped
-     *     in UnaryMinus(...)
-     *   - Each terms will be representing timestamp value or time interval in microseconds, typed
-     *     as doubles.
+     * - If term needs to be negated for making it a commutative term,
+     *   then it will be wrapped in UnaryMinus(...)
+     * - Each terms will be representing timestamp value or time interval in microseconds,
+     *   typed as doubles.
      */
     def collect(expr: Expression, negate: Boolean): Seq[Expression] = {
       expr match {
@@ -285,9 +270,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
                     log"watermark calculation. Use interval in terms of day instead.")
                 Literal(0.0)
               } else {
-                Literal(
-                  calendarInterval.days * MICROS_PER_DAY.toDouble +
-                    calendarInterval.microseconds.toDouble)
+                Literal(calendarInterval.days * MICROS_PER_DAY.toDouble +
+                  calendarInterval.microseconds.toDouble)
               }
             case _: DayTimeIntervalType =>
               // Unbox and then cast
@@ -297,9 +281,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
             case _: NumericType =>
               Multiply(Cast(lit, DoubleType), Literal(1000000.0))
             case _: TimestampType =>
-              Multiply(
-                PreciseTimestampConversion(lit, TimestampType, LongType),
-                Literal(1000000.0))
+              Multiply(PreciseTimestampConversion(lit, TimestampType, LongType), Literal(1000000.0))
           }
           Seq(negateIfNeeded(castedLit, negate))
         case a @ _ =>

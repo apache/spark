@@ -59,7 +59,9 @@ object ImplicitGroupingKeyTracker {
  * Utility object to perform metrics updates
  */
 object TWSMetricsUtils {
-  def resetMetric(metrics: Map[String, SQLMetric], metricName: String): Unit = {
+  def resetMetric(
+      metrics: Map[String, SQLMetric],
+      metricName: String): Unit = {
     metrics.get(metricName).foreach(_.reset())
   }
 
@@ -79,7 +81,10 @@ object StatefulProcessorHandleState extends Enumeration {
   val CREATED, PRE_INIT, INITIALIZED, DATA_PROCESSED, TIMER_PROCESSED, CLOSED = Value
 }
 
-class QueryInfoImpl(val queryId: UUID, val runId: UUID, val batchId: Long) extends QueryInfo {
+class QueryInfoImpl(
+    val queryId: UUID,
+    val runId: UUID,
+    val batchId: Long) extends QueryInfo {
 
   override def getQueryId: UUID = queryId
 
@@ -110,13 +115,12 @@ class StatefulProcessorHandleImpl(
     isStreaming: Boolean = true,
     batchTimestampMs: Option[Long] = None,
     metrics: Map[String, SQLMetric] = Map.empty)
-    extends StatefulProcessorHandleImplBase(timeMode, keyEncoder)
-    with Logging {
+  extends StatefulProcessorHandleImplBase(timeMode, keyEncoder) with Logging {
   import StatefulProcessorHandleState._
 
   /**
-   * Stores all the active ttl states, and is used to cleanup expired values in [[doTtlCleanup()]]
-   * function.
+   * Stores all the active ttl states, and is used to cleanup expired values
+   * in [[doTtlCleanup()]] function.
    */
   private[sql] val ttlStates: util.List[TTLState] = new util.ArrayList[TTLState]()
 
@@ -129,8 +133,7 @@ class StatefulProcessorHandleImpl(
     val (queryId, batchId) = if (!isStreaming) {
       (BATCH_QUERY_ID, 0L)
     } else if (taskCtxOpt.isDefined) {
-      (
-        taskCtxOpt.get.getLocalProperty(StreamExecution.QUERY_ID_KEY),
+      (taskCtxOpt.get.getLocalProperty(StreamExecution.QUERY_ID_KEY),
         taskCtxOpt.get.getLocalProperty(MicroBatchExecution.BATCH_ID_KEY).toLong)
     } else {
       assert(Utils.isTesting, "Failed to find query id/batch Id in task context")
@@ -190,8 +193,8 @@ class StatefulProcessorHandleImpl(
   }
 
   /**
-   * Performs the user state cleanup based on assigned TTl values. Any state which is expired will
-   * be cleaned up from StateStore.
+   * Performs the user state cleanup based on assigned TTl values. Any state
+   * which is expired will be cleaned up from StateStore.
    */
   def doTtlCleanup(): Unit = {
     val numValuesRemovedDueToTTLExpiry = metrics.get("numValuesRemovedDueToTTLExpiry").get
@@ -233,20 +236,14 @@ class StatefulProcessorHandleImpl(
     val result = if (ttlEnabled) {
       validateTTLConfig(ttlConfig, stateName)
       assert(batchTimestampMs.isDefined)
-      val valueStateWithTTL = new ValueStateImplWithTTL[T](
-        store,
-        stateName,
-        keyEncoder,
-        stateEncoder,
-        ttlConfig,
-        batchTimestampMs.get,
-        metrics)
+      val valueStateWithTTL = new ValueStateImplWithTTL[T](store, stateName,
+        keyEncoder, stateEncoder, ttlConfig, batchTimestampMs.get, metrics)
       ttlStates.add(valueStateWithTTL)
       TWSMetricsUtils.incrementMetric(metrics, "numValueStateWithTTLVars")
       valueStateWithTTL
     } else {
-      val valueStateWithoutTTL =
-        new ValueStateImpl[T](store, stateName, keyEncoder, stateEncoder, metrics)
+      val valueStateWithoutTTL = new ValueStateImpl[T](store, stateName,
+        keyEncoder, stateEncoder, metrics)
       TWSMetricsUtils.incrementMetric(metrics, "numValueStateVars")
       valueStateWithoutTTL
     }
@@ -288,20 +285,14 @@ class StatefulProcessorHandleImpl(
     val result = if (ttlEnabled) {
       validateTTLConfig(ttlConfig, stateName)
       assert(batchTimestampMs.isDefined)
-      val listStateWithTTL = new ListStateImplWithTTL[T](
-        store,
-        stateName,
-        keyEncoder,
-        stateEncoder,
-        ttlConfig,
-        batchTimestampMs.get,
-        metrics)
+      val listStateWithTTL = new ListStateImplWithTTL[T](store, stateName,
+        keyEncoder, stateEncoder, ttlConfig, batchTimestampMs.get, metrics)
       TWSMetricsUtils.incrementMetric(metrics, "numListStateWithTTLVars")
       ttlStates.add(listStateWithTTL)
       listStateWithTTL
     } else {
-      val listStateWithoutTTL =
-        new ListStateImpl[T](store, stateName, keyEncoder, stateEncoder, metrics)
+      val listStateWithoutTTL = new ListStateImpl[T](store, stateName, keyEncoder,
+        stateEncoder, metrics)
       TWSMetricsUtils.incrementMetric(metrics, "numListStateVars")
       listStateWithoutTTL
     }
@@ -332,21 +323,14 @@ class StatefulProcessorHandleImpl(
     val result = if (ttlEnabled) {
       validateTTLConfig(ttlConfig, stateName)
       assert(batchTimestampMs.isDefined)
-      val mapStateWithTTL = new MapStateImplWithTTL[K, V](
-        store,
-        stateName,
-        keyEncoder,
-        userKeyEnc,
-        valEncoder,
-        ttlConfig,
-        batchTimestampMs.get,
-        metrics)
+      val mapStateWithTTL = new MapStateImplWithTTL[K, V](store, stateName, keyEncoder, userKeyEnc,
+        valEncoder, ttlConfig, batchTimestampMs.get, metrics)
       TWSMetricsUtils.incrementMetric(metrics, "numMapStateWithTTLVars")
       ttlStates.add(mapStateWithTTL)
       mapStateWithTTL
     } else {
-      val mapStateWithoutTTL =
-        new MapStateImpl[K, V](store, stateName, keyEncoder, userKeyEnc, valEncoder, metrics)
+      val mapStateWithoutTTL = new MapStateImpl[K, V](store, stateName, keyEncoder,
+        userKeyEnc, valEncoder, metrics)
       TWSMetricsUtils.incrementMetric(metrics, "numMapStateVars")
       mapStateWithoutTTL
     }
@@ -364,12 +348,13 @@ class StatefulProcessorHandleImpl(
 }
 
 /**
- * This DriverStatefulProcessorHandleImpl is used within TransformWithExec on the driver side to
- * collect the columnFamilySchemas before any processing is actually done. We need this class
- * because we can only collect the schemas after the StatefulProcessor is initialized.
+ * This DriverStatefulProcessorHandleImpl is used within TransformWithExec
+ * on the driver side to collect the columnFamilySchemas before any processing is
+ * actually done. We need this class because we can only collect the schemas after
+ * the StatefulProcessor is initialized.
  */
 class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: ExpressionEncoder[Any])
-    extends StatefulProcessorHandleImplBase(timeMode, keyExprEnc) {
+  extends StatefulProcessorHandleImplBase(timeMode, keyExprEnc) {
 
   // Because this is only happening on the driver side, there is only
   // one task modifying and accessing these maps at a time
@@ -386,41 +371,41 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
   }
 
   /**
-   * This method returns all column family schemas, and checks and enforces nullability if need
-   * be. The nullability check and set is only set to true when Avro is enabled.
-   * @param shouldCheckNullable
-   *   Whether we need to check the nullability. This is set to true when using Python, as this is
-   *   the only avenue through which users can set nullability
-   * @param shouldSetNullable
-   *   Whether we need to set the fields as nullable. This is set to true when using Scala, as
-   *   primitive type encoders set the field to non-nullable. Changing fields from non-nullable to
-   *   nullable does not break anything (and is required for Avro encoding), so we can safely make
-   *   this change.
-   * @return
-   *   column family schemas used by this stateful processor.
+   * This method returns all column family schemas, and checks and enforces nullability
+   * if need be. The nullability check and set is only set to true when Avro is enabled.
+   * @param shouldCheckNullable Whether we need to check the nullability. This is set to
+   *                            true when using Python, as this is the only avenue through
+   *                            which users can set nullability
+   * @param shouldSetNullable Whether we need to set the fields as nullable. This is set to
+   *                          true when using Scala, as primitive type encoders set the field
+   *                          to non-nullable. Changing fields from non-nullable to nullable
+   *                          does not break anything (and is required for Avro encoding), so
+   *                          we can safely make this change.
+   * @return column family schemas used by this stateful processor.
    */
   def getColumnFamilySchemas(
       shouldCheckNullable: Boolean,
-      shouldSetNullable: Boolean): Map[String, StateStoreColFamilySchema] = {
+      shouldSetNullable: Boolean
+  ): Map[String, StateStoreColFamilySchema] = {
     val schemas = columnFamilySchemas.toMap
     schemas.map { case (colFamilyName, schema) =>
       schema.valueSchema.fields.foreach { field =>
         if (!field.nullable && shouldCheckNullable) {
           throw StateStoreErrors.twsSchemaMustBeNullable(
-            schema.colFamilyName,
-            schema.valueSchema.toString())
+            schema.colFamilyName, schema.valueSchema.toString())
         }
       }
       if (shouldSetNullable) {
-        colFamilyName -> schema.copy(valueSchema = schema.valueSchema.toNullable)
+        colFamilyName -> schema.copy(
+          valueSchema = schema.valueSchema.toNullable
+        )
       } else {
         colFamilyName -> schema
       }
     }
   }
 
-  def getStateVariableInfos: Map[String, TransformWithStateVariableInfo] =
-    stateVariableInfos.toMap
+  def getStateVariableInfos: Map[String, TransformWithStateVariableInfo] = stateVariableInfos.toMap
 
   private def checkIfDuplicateVariableDefined(stateVarName: String): Unit = {
     if (columnFamilySchemas.contains(stateVarName)) {
@@ -433,18 +418,19 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     val primaryIndex = stateNames._1
     val secondaryIndex = stateNames._2
     val timerEncoder = new TimerKeyEncoder(keyExprEnc)
-    val colFamilySchema = StateStoreColumnFamilySchemaUtils.getTimerStateSchema(
-      primaryIndex,
-      timerEncoder.schemaForKeyRow,
-      timerEncoder.schemaForValueRow)
+    val colFamilySchema = StateStoreColumnFamilySchemaUtils.
+      getTimerStateSchema(
+        primaryIndex,
+        timerEncoder.schemaForKeyRow,
+        timerEncoder.schemaForValueRow
+      )
     columnFamilySchemas.put(primaryIndex, colFamilySchema)
     val stateVariableInfo = TransformWithStateVariableUtils.getTimerState(primaryIndex)
     stateVariableInfos.put(primaryIndex, stateVariableInfo)
 
-    val secondaryColFamilySchema = StateStoreColumnFamilySchemaUtils.getSecIndexTimerStateSchema(
-      secondaryIndex,
-      timerEncoder.keySchemaForSecIndex,
-      timerEncoder.schemaForValueRow)
+    val secondaryColFamilySchema = StateStoreColumnFamilySchemaUtils.
+      getSecIndexTimerStateSchema(
+        secondaryIndex, timerEncoder.keySchemaForSecIndex, timerEncoder.schemaForValueRow)
     columnFamilySchemas.put(secondaryIndex, secondaryColFamilySchema)
   }
 
@@ -466,17 +452,19 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     }
 
     val stateEncoder = encoderFor[T]
-    val colFamilySchema = StateStoreColumnFamilySchemaUtils.getValueStateSchema(
-      stateName,
-      keyExprEnc,
-      stateEncoder,
-      ttlEnabled)
+    val colFamilySchema = StateStoreColumnFamilySchemaUtils.
+      getValueStateSchema(stateName, keyExprEnc, stateEncoder, ttlEnabled)
     checkIfDuplicateVariableDefined(stateName)
     columnFamilySchemas ++= colFamilySchema
-    val stateVariableInfo =
-      TransformWithStateVariableUtils.getValueState(stateName, ttlEnabled = ttlEnabled)
+    val stateVariableInfo = TransformWithStateVariableUtils.
+      getValueState(stateName, ttlEnabled = ttlEnabled)
     stateVariableInfos.put(stateName, stateVariableInfo)
-    addTTLSchemas(columnFamilySchemas, stateVariableInfo, stateName, keyExprEnc.schema)
+    addTTLSchemas(
+      columnFamilySchemas,
+      stateVariableInfo,
+      stateName,
+      keyExprEnc.schema
+    )
     new InvalidHandleValueState[T](stateName)
   }
 
@@ -487,7 +475,9 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     getListState(stateName, ttlConfig)(valEncoder)
   }
 
-  override def getListState[T: Encoder](stateName: String, ttlConfig: TTLConfig): ListState[T] = {
+  override def getListState[T: Encoder](
+      stateName: String,
+      ttlConfig: TTLConfig): ListState[T] = {
     verifyStateVarOperations("get_list_state", PRE_INIT)
     val ttlEnabled = if (ttlConfig.ttlDuration != null && ttlConfig.ttlDuration.isZero) {
       false
@@ -496,17 +486,19 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     }
 
     val stateEncoder = encoderFor[T]
-    val colFamilySchema = StateStoreColumnFamilySchemaUtils.getListStateSchema(
-      stateName,
-      keyExprEnc,
-      stateEncoder,
-      ttlEnabled)
+    val colFamilySchema = StateStoreColumnFamilySchemaUtils.
+      getListStateSchema(stateName, keyExprEnc, stateEncoder, ttlEnabled)
     checkIfDuplicateVariableDefined(stateName)
     columnFamilySchemas ++= colFamilySchema
-    val stateVariableInfo =
-      TransformWithStateVariableUtils.getListState(stateName, ttlEnabled = ttlEnabled)
+    val stateVariableInfo = TransformWithStateVariableUtils.
+      getListState(stateName, ttlEnabled = ttlEnabled)
     stateVariableInfos.put(stateName, stateVariableInfo)
-    addTTLSchemas(columnFamilySchemas, stateVariableInfo, stateName, keyExprEnc.schema)
+    addTTLSchemas(
+      columnFamilySchemas,
+      stateVariableInfo,
+      stateName,
+      keyExprEnc.schema
+    )
     new InvalidHandleListState[T](stateName)
   }
 
@@ -531,22 +523,18 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
 
     val userKeyEnc = encoderFor[K]
     val valEncoder = encoderFor[V]
-    val colFamilySchema = StateStoreColumnFamilySchemaUtils.getMapStateSchema(
-      stateName,
-      keyExprEnc,
-      userKeyEnc,
-      valEncoder,
-      ttlEnabled)
+    val colFamilySchema = StateStoreColumnFamilySchemaUtils.
+      getMapStateSchema(stateName, keyExprEnc, userKeyEnc, valEncoder, ttlEnabled)
     columnFamilySchemas ++= colFamilySchema
-    val stateVariableInfo =
-      TransformWithStateVariableUtils.getMapState(stateName, ttlEnabled = ttlEnabled)
+    val stateVariableInfo = TransformWithStateVariableUtils.
+      getMapState(stateName, ttlEnabled = ttlEnabled)
     stateVariableInfos.put(stateName, stateVariableInfo)
     new InvalidHandleMapState[K, V](stateName)
   }
 
   /**
-   * Gets the schema for TTL index column family which maps (expirationMs, elementKey) ->
-   * EMPTY_ROW. This is used by both one-to-one and one-to-many TTL states.
+   * Gets the schema for TTL index column family which maps (expirationMs, elementKey) -> EMPTY_ROW.
+   * This is used by both one-to-one and one-to-many TTL states.
    */
   def getTTLIndexSchema(
       stateName: String,
@@ -556,10 +544,8 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     val emptyValueSchema = StructType(Array(StructField("__empty__", NullType)))
 
     StateStoreColFamilySchema(
-      ttlIndexName,
-      0,
-      ttlIndexSchema,
-      0,
+      ttlIndexName, 0,
+      ttlIndexSchema, 0,
       emptyValueSchema,
       Some(RangeKeyScanStateEncoderSpec(ttlIndexSchema, Seq(0))))
   }
@@ -575,36 +561,34 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     val minValueSchema = getExpirationMsRowSchema()
 
     StateStoreColFamilySchema(
-      minIndexName,
-      0,
-      elementKeySchema,
-      0,
+      minIndexName, 0,
+      elementKeySchema, 0,
       minValueSchema,
       Some(NoPrefixKeyStateEncoderSpec(elementKeySchema)))
   }
 
   /**
-   * Gets the schema for count index column family which maps elementKey -> count. This is used by
-   * one-to-many TTL states to track number of entries.
+   * Gets the schema for count index column family which maps elementKey -> count.
+   * This is used by one-to-many TTL states to track number of entries.
    */
   def getCountIndexSchema(
       stateName: String,
       elementKeySchema: StructType): StateStoreColFamilySchema = {
     val countIndexName = s"$$count_$stateName"
-    val countValueSchema = StructType(Seq(StructField("count", LongType)))
+    val countValueSchema = StructType(Seq(
+      StructField("count", LongType)
+    ))
 
     StateStoreColFamilySchema(
-      countIndexName,
-      0,
-      elementKeySchema,
-      0,
+      countIndexName, 0,
+      elementKeySchema, 0,
       countValueSchema,
       Some(NoPrefixKeyStateEncoderSpec(elementKeySchema)))
   }
 
   /**
-   * Adds TTL-related column families to the schema map for value state with TTL. Value state uses
-   * one-to-one TTL state which only needs the TTL index.
+   * Adds TTL-related column families to the schema map for value state with TTL.
+   * Value state uses one-to-one TTL state which only needs the TTL index.
    */
   private def addValueStateTTLSchemas(
       columnFamilySchemas: mutable.Map[String, StateStoreColFamilySchema],
@@ -615,8 +599,8 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
   }
 
   /**
-   * Adds TTL-related column families to the schema map for list state with TTL. List state uses
-   * one-to-many TTL state which needs TTL, min expiry and count indexes.
+   * Adds TTL-related column families to the schema map for list state with TTL.
+   * List state uses one-to-many TTL state which needs TTL, min expiry and count indexes.
    */
   private def addListStateTTLSchemas(
       columnFamilySchemas: mutable.Map[String, StateStoreColFamilySchema],
@@ -656,9 +640,10 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
   }
 
   /**
-   * Methods that are only included to satisfy the interface. These methods will fail if called
-   * from the driver side, as the handle will be in the PRE_INIT phase, and all these timer
-   * operations need to be called from the INITIALIZED phase.
+   * Methods that are only included to satisfy the interface.
+   * These methods will fail if called from the driver side, as the handle
+   * will be in the PRE_INIT phase, and all these timer operations need to be
+   * called from the INITIALIZED phase.
    */
   override def registerTimer(expiryTimestampMs: Long): Unit = {
     verifyTimerOperations("register_timer")
@@ -683,14 +668,12 @@ private[sql] trait InvalidHandleState {
 
   protected def throwInitPhaseError(operation: String): Nothing = {
     throw StateStoreErrors.cannotPerformOperationWithInvalidHandleState(
-      s"$stateName.$operation",
-      PRE_INIT.toString)
+      s"$stateName.$operation", PRE_INIT.toString)
   }
 }
 
 private[sql] class InvalidHandleValueState[S](override val stateName: String)
-    extends ValueState[S]
-    with InvalidHandleState {
+  extends ValueState[S] with InvalidHandleState {
   override def exists(): Boolean = throwInitPhaseError("exists")
   override def get(): S = throwInitPhaseError("get")
   override def update(newState: S): Unit = throwInitPhaseError("update")
@@ -698,8 +681,7 @@ private[sql] class InvalidHandleValueState[S](override val stateName: String)
 }
 
 private[sql] class InvalidHandleListState[S](override val stateName: String)
-    extends ListState[S]
-    with InvalidHandleState {
+  extends ListState[S] with InvalidHandleState {
   override def exists(): Boolean = throwInitPhaseError("exists")
   override def get(): Iterator[S] = throwInitPhaseError("get")
   override def put(newState: Array[S]): Unit = throwInitPhaseError("put")
@@ -709,8 +691,7 @@ private[sql] class InvalidHandleListState[S](override val stateName: String)
 }
 
 private[sql] class InvalidHandleMapState[K, V](override val stateName: String)
-    extends MapState[K, V]
-    with InvalidHandleState {
+  extends MapState[K, V] with InvalidHandleState {
   override def exists(): Boolean = throwInitPhaseError("exists")
   override def getValue(key: K): V = throwInitPhaseError("getValue")
   override def containsKey(key: K): Boolean = throwInitPhaseError("containsKey")

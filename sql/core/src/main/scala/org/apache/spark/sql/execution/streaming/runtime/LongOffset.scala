@@ -34,8 +34,7 @@ object LongOffset {
 
   /**
    * LongOffset factory from serialized offset.
-   * @return
-   *   new LongOffset
+   * @return new LongOffset
    */
-  def apply(offset: SerializedOffset): LongOffset = new LongOffset(offset.json.toLong)
+  def apply(offset: SerializedOffset) : LongOffset = new LongOffset(offset.json.toLong)
 }

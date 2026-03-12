@@ -38,7 +38,7 @@ case class JDBCScanBuilder(
     schema: StructType,
     var jdbcOptions: JDBCOptions,
     additionalMetrics: Map[String, SQLMetric] = Map())
-    extends ScanBuilder
+  extends ScanBuilder
     with SupportsPushDownV2Filters
     with SupportsPushDownRequiredColumns
     with SupportsPushDownAggregates
@@ -87,8 +87,8 @@ case class JDBCScanBuilder(
       case _ => Array.empty[String]
     }
     jdbcOptions.numPartitions.map(_ == 1).getOrElse(true) ||
-    (aggregation.groupByExpressions().length == 1 && fieldNames.length == 1 &&
-      jdbcOptions.partitionColumn.exists(fieldNames(0).equalsIgnoreCase(_)))
+      (aggregation.groupByExpressions().length == 1 && fieldNames.length == 1 &&
+        jdbcOptions.partitionColumn.exists(fieldNames(0).equalsIgnoreCase(_)))
   }
 
   override def pushAggregation(aggregation: Aggregation): Boolean = {
@@ -133,8 +133,8 @@ case class JDBCScanBuilder(
   // host. These shouldn't be allowed.
   override def isOtherSideCompatibleForJoin(other: SupportsPushDownJoin): Boolean = {
     if (!jdbcOptions.pushDownJoin ||
-      !dialect.supportsJoin ||
-      !other.isInstanceOf[JDBCScanBuilder]) {
+        !dialect.supportsJoin ||
+        !other.isInstanceOf[JDBCScanBuilder]) {
       return false
     }
 
@@ -142,10 +142,9 @@ case class JDBCScanBuilder(
       JDBCOptions.JDBC_TABLE_NAME -
       JDBCOptions.JDBC_QUERY_STRING
 
-    val otherSideFilteredJDBCOptions =
-      other.asInstanceOf[JDBCScanBuilder].jdbcOptions.parameters -
-        JDBCOptions.JDBC_TABLE_NAME -
-        JDBCOptions.JDBC_QUERY_STRING
+    val otherSideFilteredJDBCOptions = other.asInstanceOf[JDBCScanBuilder].jdbcOptions.parameters -
+      JDBCOptions.JDBC_TABLE_NAME -
+      JDBCOptions.JDBC_QUERY_STRING
 
     filteredJDBCOptions == otherSideFilteredJDBCOptions
   };
@@ -181,7 +180,7 @@ case class JDBCScanBuilder(
       joinType: JoinType,
       leftSideRequiredColumnsWithAliases: Array[SupportsPushDownJoin.ColumnWithAlias],
       rightSideRequiredColumnsWithAliases: Array[SupportsPushDownJoin.ColumnWithAlias],
-      condition: Predicate): Boolean = {
+      condition: Predicate ): Boolean = {
     if (!jdbcOptions.pushDownJoin || !dialect.supportsJoin) {
       return false
     }
@@ -193,17 +192,15 @@ case class JDBCScanBuilder(
       case _ => None
     }
     if (!joinTypeStringOption.isDefined) {
-      logError(
-        log"Failed to push down join to JDBC due to unsupported join type " +
-          log"${MDC(JOIN_TYPE, joinType)}")
+      logError(log"Failed to push down join to JDBC due to unsupported join type " +
+        log"${MDC(JOIN_TYPE, joinType)}")
       return false
     }
 
     val compiledCondition = dialect.compileExpression(condition)
     if (!compiledCondition.isDefined) {
-      logError(
-        log"Failed to push down join to JDBC due to unsupported join condition " +
-          log"${MDC(JOIN_CONDITION, condition)}")
+      logError(log"Failed to push down join to JDBC due to unsupported join condition " +
+        log"${MDC(JOIN_CONDITION, condition)}")
       return false
     }
 
@@ -215,7 +212,9 @@ case class JDBCScanBuilder(
     requiredSchema = requiredSchema.merge(
       calculateJoinOutputSchema(
         rightSideRequiredColumnsWithAliases,
-        otherJdbcScanBuilder.finalSchema))
+        otherJdbcScanBuilder.finalSchema
+      )
+    )
 
     val joinOutputColumns = requiredSchema.fields.map(f => dialect.quoteIdentifier(f.name))
     val conditionString = compiledCondition.get
@@ -235,7 +234,8 @@ case class JDBCScanBuilder(
         JoinPushdownAliasGenerator.getSubqueryQualifier,
         joinOutputColumns,
         joinTypeStringOption.get,
-        conditionString)
+        conditionString
+      )
       .build()
 
     val newJdbcOptionsMap = jdbcOptions.parameters.originalMap +
@@ -243,9 +243,8 @@ case class JDBCScanBuilder(
 
     jdbcOptions = new JDBCOptions(newJdbcOptionsMap)
     finalSchema = requiredSchema
-    logInfo(
-      log"Updated JDBC schema due to join pushdown. " +
-        log"New schema: ${MDC(SCHEMA, finalSchema.toDDL)}")
+    logInfo(log"Updated JDBC schema due to join pushdown. " +
+      log"New schema: ${MDC(SCHEMA, finalSchema.toDDL)}")
 
     // We need to reset the pushedPredicate because it has already been consumed in previously
     // crafted SQL query.
@@ -316,14 +315,13 @@ case class JDBCScanBuilder(
     false
   }
 
-  override def isPartiallyPushed(): Boolean =
-    jdbcOptions.numPartitions.map(_ > 1).getOrElse(false)
+  override def isPartiallyPushed(): Boolean = jdbcOptions.numPartitions.map(_ > 1).getOrElse(false)
 
   override def pruneColumns(requiredSchema: StructType): Unit = {
     // JDBC doesn't support nested column pruning.
     // TODO (SPARK-32593): JDBC support nested column and nested column pruning.
-    val requiredCols =
-      requiredSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive)).toSet
+    val requiredCols = requiredSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive))
+      .toSet
     val fields = schema.fields.filter { field =>
       val colName = PartitioningUtils.getColName(field, isCaseSensitive)
       requiredCols.contains(colName)
@@ -343,16 +341,9 @@ case class JDBCScanBuilder(
     // "DEPT","NAME",MAX("SALARY"),MIN("BONUS"), instead of getting column names from
     // prunedSchema and quote them (will become "MAX(SALARY)", "MIN(BONUS)" and can't
     // be used in sql string.
-    JDBCScan(
-      JDBCRelation(schema, parts, jdbcOptions, additionalMetrics)(session),
-      finalSchema,
-      pushedPredicate,
-      pushedAggregateList,
-      pushedGroupBys,
-      tableSample,
-      pushedLimit,
-      sortOrders,
-      pushedOffset)
+    JDBCScan(JDBCRelation(schema, parts, jdbcOptions, additionalMetrics)(session),
+      finalSchema, pushedPredicate, pushedAggregateList, pushedGroupBys,
+      tableSample, pushedLimit, sortOrders, pushedOffset)
   }
 
 }

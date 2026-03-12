@@ -25,10 +25,10 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
 abstract class BaseMutableProjection extends MutableProjection
 
 /**
- * Generates byte code that produces a [[InternalRow]] object that can update itself based on a
- * new input [[InternalRow]] for a fixed set of [[Expression Expressions]]. It exposes a `target`
- * method, which is used to set the row that will be updated. The internal [[InternalRow]] object
- * created internally is used only when `target` is not used.
+ * Generates byte code that produces a [[InternalRow]] object that can update itself based on a new
+ * input [[InternalRow]] for a fixed set of [[Expression Expressions]].
+ * It exposes a `target` method, which is used to set the row that will be updated.
+ * The internal [[InternalRow]] object created internally is used only when `target` is not used.
  */
 object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableProjection] {
 
@@ -45,9 +45,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
     create(canonicalize(bind(expressions, inputSchema)), useSubexprElimination)
   }
 
-  def generate(
-      expressions: Seq[Expression],
-      useSubexprElimination: Boolean): MutableProjection = {
+  def generate(expressions: Seq[Expression], useSubexprElimination: Boolean): MutableProjection = {
     create(canonicalize(expressions), useSubexprElimination)
   }
 
@@ -66,27 +64,23 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
     val exprVals = ctx.generateExpressions(validExpr.map(_._1), useSubexprElimination)
 
     // 4-tuples: (code for projection, isNull variable name, value variable name, column index)
-    val projectionCodes: Seq[(String, String)] =
-      validExpr.zip(exprVals).map { case ((e, i), ev) =>
+    val projectionCodes: Seq[(String, String)] = validExpr.zip(exprVals).map {
+      case ((e, i), ev) =>
         val value = JavaCode.global(
           ctx.addMutableState(CodeGenerator.javaType(e.dataType), "value"),
           e.dataType)
         val (code, isNull) = if (e.nullable) {
           val isNull = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "isNull")
-          (
-            s"""
+          (s"""
               |${ev.code}
               |$isNull = ${ev.isNull};
               |$value = ${ev.value};
-            """.stripMargin,
-            JavaCode.isNullGlobal(isNull))
+            """.stripMargin, JavaCode.isNullGlobal(isNull))
         } else {
-          (
-            s"""
+          (s"""
               |${ev.code}
               |$value = ${ev.value};
-            """.stripMargin,
-            FalseLiteral)
+            """.stripMargin, FalseLiteral)
         }
         val update = CodeGenerator.updateColumn(
           "mutableRow",
@@ -95,7 +89,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
           ExprCode(isNull, value),
           e.nullable)
         (code, update)
-      }
+    }
 
     // Evaluate all the subexpressions.
     val evalSubexpr = ctx.subexprFunctionsCode

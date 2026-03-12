@@ -110,8 +110,8 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSparkSession {
     val df = data.toDF("key", "value").coalesce(2)
 
     // Test non-nullable typedMax
-    val query =
-      df.select(typedMax(lit(null)), count($"key"), typedMax(lit(null)), count($"value"))
+    val query = df.select(typedMax(lit(null)), count($"key"), typedMax(lit(null)),
+      count($"value"))
 
     // typedMax is not nullable
     val maxNull = Int.MinValue
@@ -125,10 +125,7 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSparkSession {
     val df = data.toDF("key", "value").coalesce(2)
 
     // Test nullable nullableTypedMax
-    val query = df.select(
-      nullableTypedMax(lit(null)),
-      count($"key"),
-      nullableTypedMax(lit(null)),
+    val query = df.select(nullableTypedMax(lit(null)), count($"key"), nullableTypedMax(lit(null)),
       count($"value"))
 
     // nullableTypedMax is nullable
@@ -141,14 +138,15 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSparkSession {
 
   test("dataframe aggregation with object aggregate buffer, input row contains null") {
 
-    val nullableData = (0 until 1000).map { id =>
+    val nullableData = (0 until 1000).map {id =>
       val nullableKey: Integer = if (random.nextBoolean()) null else random.nextInt(100)
       val nullableValue: Integer = if (random.nextBoolean()) null else random.nextInt(100)
       (nullableKey, nullableValue)
     }
 
     val df = nullableData.toDF("key", "value").coalesce(2)
-    val query = df.select(typedMax($"key"), count($"key"), typedMax($"value"), count($"value"))
+    val query = df.select(typedMax($"key"), count($"key"), typedMax($"value"),
+      count($"value"))
     val maxKey = nullableData.map(_._1).filter(_ != null).max
     val countKey = nullableData.map(_._1).count(_ != null)
     val maxValue = nullableData.map(_._2).filter(_ != null).max
@@ -188,10 +186,7 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSparkSession {
     // OVER (PARTITION BY a ORDER BY b ROW BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
     val w = Window.orderBy("value").partitionBy("key").rowsBetween(Long.MinValue, 0)
 
-    val query = df.select(
-      sum($"key").over(w),
-      typedMax($"key").over(w),
-      sum($"value").over(w),
+    val query = df.select(sum($"key").over(w), typedMax($"key").over(w), sum($"value").over(w),
       typedMax($"value").over(w))
 
     val expected = data.groupBy(_._1).toSeq.flatMap { group =>
@@ -225,17 +220,16 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSparkSession {
 object TypedImperativeAggregateSuite {
 
   /**
-   * Calculate the max value with object aggregation buffer. This stores class MaxValue in
-   * aggregation buffer.
+   * Calculate the max value with object aggregation buffer. This stores class MaxValue
+   * in aggregation buffer.
    */
   private case class TypedMax(
       child: Expression,
       nullable: Boolean = false,
       mutableAggBufferOffset: Int = 0,
       inputAggBufferOffset: Int = 0)
-      extends TypedImperativeAggregate[MaxValue]
-      with ImplicitCastInputTypes
-      with UnaryLike[Expression] {
+    extends TypedImperativeAggregate[MaxValue] with ImplicitCastInputTypes
+    with UnaryLike[Expression] {
 
     override def createAggregationBuffer(): MaxValue = {
       // Returns Int.MinValue if all inputs are null
@@ -276,8 +270,7 @@ object TypedImperativeAggregateSuite {
 
     override def dataType: DataType = IntegerType
 
-    override def withNewMutableAggBufferOffset(
-        newOffset: Int): TypedImperativeAggregate[MaxValue] =
+    override def withNewMutableAggBufferOffset(newOffset: Int): TypedImperativeAggregate[MaxValue] =
       copy(mutableAggBufferOffset = newOffset)
 
     override def withNewInputAggBufferOffset(newOffset: Int): TypedImperativeAggregate[MaxValue] =

@@ -22,10 +22,23 @@ import scala.collection.mutable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, TemporaryViewRelation, UnresolvedCatalogRelation}
+import org.apache.spark.sql.catalyst.catalog.{
+  CatalogTableType,
+  TemporaryViewRelation,
+  UnresolvedCatalogRelation
+}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, Table, V1Table, V2TableWithV1Fallback}
+import org.apache.spark.sql.connector.catalog.{
+  CatalogManager,
+  CatalogPlugin,
+  CatalogV2Util,
+  Identifier,
+  LookupCatalog,
+  Table,
+  V1Table,
+  V2TableWithV1Fallback
+}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -45,12 +58,11 @@ class RelationResolution(
 
   val v1SessionCatalog = catalogManager.v1SessionCatalog
 
-  private def relationCache: mutable.Map[CacheKey, LogicalPlan] =
-    AnalysisContext.get.relationCache
+  private def relationCache: mutable.Map[CacheKey, LogicalPlan] = AnalysisContext.get.relationCache
 
   /**
-   * If we are resolving database objects (relations, functions, etc.) inside views, we may need
-   * to expand single or multi-part identifiers with the current catalog and namespace of when the
+   * If we are resolving database objects (relations, functions, etc.) inside views, we may need to
+   * expand single or multi-part identifiers with the current catalog and namespace of when the
    * view was created.
    */
   def expandIdentifier(nameParts: Seq[String]): Seq[String] = {
@@ -91,12 +103,17 @@ class RelationResolution(
       u.options,
       conf.getConf(SQLConf.TIME_TRAVEL_TIMESTAMP_KEY),
       conf.getConf(SQLConf.TIME_TRAVEL_VERSION_KEY),
-      conf.sessionLocalTimeZone)
+      conf.sessionLocalTimeZone
+    )
     if (timeTravelSpec.nonEmpty && timeTravelSpecFromOptions.nonEmpty) {
       throw new AnalysisException("MULTIPLE_TIME_TRAVEL_SPEC", Map.empty[String, String])
     }
     val finalTimeTravelSpec = timeTravelSpec.orElse(timeTravelSpecFromOptions)
-    resolveTempView(u.multipartIdentifier, u.isStreaming, finalTimeTravelSpec.isDefined).orElse {
+    resolveTempView(
+      u.multipartIdentifier,
+      u.isStreaming,
+      finalTimeTravelSpec.isDefined
+    ).orElse {
       expandIdentifier(u.multipartIdentifier) match {
         case CatalogAndIdentifier(catalog, ident) =>
           val key = toCacheKey(catalog, ident, finalTimeTravelSpec)
@@ -136,7 +153,7 @@ class RelationResolution(
                 loaded.foreach(relationCache.update(key, _))
                 loaded.map(cloneWithPlanId(_, planId))
               }
-            }
+          }
         case _ => None
       }
     }
@@ -150,10 +167,11 @@ class RelationResolution(
   }
 
   private def adaptCachedRelation(cached: LogicalPlan, planId: Option[Long]): LogicalPlan = {
-    val plan = cached transform { case multi: MultiInstanceRelation =>
-      val newRelation = multi.newInstance()
-      newRelation.copyTagsFrom(multi)
-      newRelation
+    val plan = cached transform {
+      case multi: MultiInstanceRelation =>
+        val newRelation = multi.newInstance()
+        newRelation.copyTagsFrom(multi)
+        newRelation
     }
     cloneWithPlanId(plan, planId)
   }
@@ -174,15 +192,17 @@ class RelationResolution(
       // to manage partitions.
       case v1Table: V1Table
           if CatalogV2Util.isSessionCatalog(catalog)
-            || !v1Table.catalogTable.tracksPartitionsInCatalog =>
+          || !v1Table.catalogTable.tracksPartitionsInCatalog =>
         if (isStreaming) {
           if (v1Table.v1Table.tableType == CatalogTableType.VIEW) {
             throw QueryCompilationErrors.permanentViewNotSupportedByStreamingReadingAPIError(
-              ident.quoted)
+              ident.quoted
+            )
           }
           SubqueryAlias(
             catalog.name +: ident.asMultipartIdentifier,
-            UnresolvedCatalogRelation(v1Table.v1Table, options, isStreaming = true))
+            UnresolvedCatalogRelation(v1Table.v1Table, options, isStreaming = true)
+          )
         } else {
           v1SessionCatalog.getRelation(v1Table.v1Table, options)
         }
@@ -205,16 +225,14 @@ class RelationResolution(
               table.columns.toAttributes,
               Some(catalog),
               Some(ident),
-              v1Fallback))
+              v1Fallback
+            )
+          )
         } else {
           SubqueryAlias(
             catalog.name +: ident.asMultipartIdentifier,
-            DataSourceV2Relation.create(
-              table,
-              Some(catalog),
-              Some(ident),
-              options,
-              timeTravelSpec))
+            DataSourceV2Relation.create(table, Some(catalog), Some(ident), options, timeTravelSpec)
+          )
         }
     }
   }
@@ -267,7 +285,9 @@ class RelationResolution(
     }
   }
 
-  private def matchesReference(relation: DataSourceV2Relation, ref: V2TableReference): Boolean = {
+  private def matchesReference(
+      relation: DataSourceV2Relation,
+      ref: V2TableReference): Boolean = {
     relation.catalog.contains(ref.catalog) && relation.identifier.contains(ref.identifier)
   }
 
@@ -276,8 +296,8 @@ class RelationResolution(
   private def isReferredTempViewName(nameParts: Seq[String]): Boolean = {
     val resolver = conf.resolver
     AnalysisContext.get.referredTempViewNames.exists { n =>
-      (n.length == nameParts.length) && n.zip(nameParts).forall { case (a, b) =>
-        resolver(a, b)
+      (n.length == nameParts.length) && n.zip(nameParts).forall {
+        case (a, b) => resolver(a, b)
       }
     }
   }

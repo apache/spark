@@ -30,26 +30,17 @@ class NullDownPropagationSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("AnalysisNodes", Once, EliminateSubqueryAliases) ::
-        Batch(
-          "Null Down Propagation",
-          FixedPoint(50),
-          NullPropagation,
-          NullDownPropagation,
-          ConstantFolding,
-          SimplifyConditionals,
-          BooleanSimplification,
-          PruneFilters) :: Nil
+      Batch("Null Down Propagation", FixedPoint(50),
+        NullPropagation,
+        NullDownPropagation,
+        ConstantFolding,
+        SimplifyConditionals,
+        BooleanSimplification,
+        PruneFilters) :: Nil
   }
 
-  val testRelation = LocalRelation(
-    $"a".int,
-    $"b".int,
-    $"c".int,
-    $"d".string,
-    $"e".boolean,
-    $"f".boolean,
-    $"g".boolean,
-    $"h".boolean)
+  val testRelation = LocalRelation($"a".int, $"b".int, $"c".int, $"d".string,
+    $"e".boolean, $"f".boolean, $"g".boolean, $"h".boolean)
 
   private def checkCondition(input: Expression, expected: Expression): Unit = {
     val plan = testRelation.where(input).analyze

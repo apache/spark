@@ -28,20 +28,20 @@ import org.apache.spark.sql.test.SharedSparkSession
 
 /**
  * A collection of "INSERT INTO" tests that can be run through the SQL or DataFrameWriter APIs.
- * Extending test suites can implement the `doInsert` method to run the insert through either API.
+ * Extending test suites can implement the `doInsert` method to run the insert through either
+ * API.
  *
- * @param supportsDynamicOverwrite
- *   Whether the Table implementations used in the test suite support dynamic partition
- *   overwrites. If they do, we will check for the success of the operations. If not, then we will
- *   check that we failed with the right error message.
- * @param includeSQLOnlyTests
- *   Certain INSERT INTO behavior can be achieved purely through SQL, e.g. static or dynamic
- *   partition overwrites. This flag should be set to true if we would like to test these cases.
+ * @param supportsDynamicOverwrite Whether the Table implementations used in the test suite support
+ *                                 dynamic partition overwrites. If they do, we will check for the
+ *                                 success of the operations. If not, then we will check that we
+ *                                 failed with the right error message.
+ * @param includeSQLOnlyTests Certain INSERT INTO behavior can be achieved purely through SQL, e.g.
+ *                            static or dynamic partition overwrites. This flag should be set to
+ *                            true if we would like to test these cases.
  */
 abstract class InsertIntoTests(
     override protected val supportsDynamicOverwrite: Boolean,
-    override protected val includeSQLOnlyTests: Boolean)
-    extends InsertIntoSQLOnlyTests {
+    override protected val includeSQLOnlyTests: Boolean) extends InsertIntoSQLOnlyTests {
 
   import testImplicits._
 
@@ -102,6 +102,7 @@ abstract class InsertIntoTests(
     }
   }
 
+
   test("insertInto: overwrite partitioned table in static mode by position") {
     withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.STATIC.toString) {
       val t1 = s"${catalogAndNamespace}tbl"
@@ -138,7 +139,8 @@ abstract class InsertIntoTests(
       parameters = Map(
         "tableName" -> tableName,
         "tableColumns" -> "`id`, `data`, `missing`",
-        "dataColumns" -> "`id`, `data`"))
+        "dataColumns" -> "`id`, `data`")
+    )
   }
 
   test("insertInto: fails when an extra column is present") {
@@ -160,7 +162,8 @@ abstract class InsertIntoTests(
         parameters = Map(
           "tableName" -> tableName,
           "tableColumns" -> "`id`, `data`",
-          "dataColumns" -> "`id`, `data`, `fruit`"))
+          "dataColumns" -> "`id`, `data`, `fruit`")
+      )
     }
   }
 
@@ -194,7 +197,10 @@ abstract class InsertIntoTests(
   }
 }
 
-trait InsertIntoSQLOnlyTests extends QueryTest with SharedSparkSession with BeforeAndAfter {
+trait InsertIntoSQLOnlyTests
+  extends QueryTest
+  with SharedSparkSession
+  with BeforeAndAfter {
 
   import testImplicits._
 
@@ -247,14 +253,13 @@ trait InsertIntoSQLOnlyTests extends QueryTest with SharedSparkSession with Befo
       val t2 = s"${catalogAndNamespace}tbl2"
       withTableAndData(t1) { _ =>
         sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
-        val parsed = CatalystSqlParser
-          .parseMultipartIdentifier(t2)
-          .map(part => quoteIdentifier(part))
-          .mkString(".")
+        val parsed = CatalystSqlParser.parseMultipartIdentifier(t2)
+          .map(part => quoteIdentifier(part)).mkString(".")
         val e = intercept[AnalysisException] {
           sql(s"INSERT INTO $t2 VALUES (2L, 'dummy')")
         }
-        checkErrorTableNotFound(e, parsed, ExpectedContext(t2, 12, 11 + t2.length))
+        checkErrorTableNotFound(e, parsed,
+          ExpectedContext(t2, 12, 11 + t2.length))
       }
     }
 
@@ -274,7 +279,10 @@ trait InsertIntoSQLOnlyTests extends QueryTest with SharedSparkSession with Befo
           sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
           sql(s"INSERT INTO $t1 VALUES (2L, 'dummy'), (4L, 'also-deleted')")
           sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id) SELECT * FROM $view")
-          verifyTable(t1, Seq((1, "a"), (2, "b"), (3, "c")).toDF())
+          verifyTable(t1, Seq(
+            (1, "a"),
+            (2, "b"),
+            (3, "c")).toDF())
         }
       }
     }
@@ -285,7 +293,11 @@ trait InsertIntoSQLOnlyTests extends QueryTest with SharedSparkSession with Befo
         sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
         sql(s"INSERT INTO $t1 VALUES (2L, 'dummy'), (4L, 'keep')")
         sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id) SELECT * FROM $view")
-        verifyTable(t1, Seq((1, "a"), (2, "b"), (3, "c"), (4, "keep")).toDF("id", "data"))
+        verifyTable(t1, Seq(
+          (1, "a"),
+          (2, "b"),
+          (3, "c"),
+          (4, "keep")).toDF("id", "data"))
       }
     }
 
@@ -296,7 +308,10 @@ trait InsertIntoSQLOnlyTests extends QueryTest with SharedSparkSession with Befo
           sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
           sql(s"INSERT INTO $t1 VALUES (2L, 'dummy'), (4L, 'also-deleted')")
           sql(s"INSERT OVERWRITE TABLE $t1 SELECT * FROM $view")
-          verifyTable(t1, Seq((1, "a"), (2, "b"), (3, "c")).toDF("id", "data"))
+          verifyTable(t1, Seq(
+            (1, "a"),
+            (2, "b"),
+            (3, "c")).toDF("id", "data"))
         }
       }
     }
@@ -307,21 +322,26 @@ trait InsertIntoSQLOnlyTests extends QueryTest with SharedSparkSession with Befo
         sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
         sql(s"INSERT INTO $t1 VALUES (2L, 'dummy'), (4L, 'keep')")
         sql(s"INSERT OVERWRITE TABLE $t1 SELECT * FROM $view")
-        verifyTable(t1, Seq((1, "a"), (2, "b"), (3, "c"), (4, "keep")).toDF("id", "data"))
+        verifyTable(t1, Seq(
+          (1, "a"),
+          (2, "b"),
+          (3, "c"),
+          (4, "keep")).toDF("id", "data"))
       }
     }
 
     test("InsertInto: overwrite - static clause") {
       val t1 = s"${catalogAndNamespace}tbl"
       withTableAndData(t1) { view =>
-        sql(
-          s"CREATE TABLE $t1 (id bigint, data string, p1 int) " +
-            s"USING $v2Format PARTITIONED BY (p1)")
+        sql(s"CREATE TABLE $t1 (id bigint, data string, p1 int) " +
+          s"USING $v2Format PARTITIONED BY (p1)")
         sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 23), (4L, 'keep', 2)")
         sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (p1 = 23) SELECT * FROM $view")
-        verifyTable(
-          t1,
-          Seq((1, "a", 23), (2, "b", 23), (3, "c", 23), (4, "keep", 2)).toDF("id", "data", "p1"))
+        verifyTable(t1, Seq(
+          (1, "a", 23),
+          (2, "b", 23),
+          (3, "c", 23),
+          (4, "keep", 2)).toDF("id", "data", "p1"))
       }
     }
 
@@ -329,12 +349,14 @@ trait InsertIntoSQLOnlyTests extends QueryTest with SharedSparkSession with Befo
       withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.STATIC.toString) {
         val t1 = s"${catalogAndNamespace}tbl"
         withTableAndData(t1) { view =>
-          sql(
-            s"CREATE TABLE $t1 (id bigint, data string, p int) " +
-              s"USING $v2Format PARTITIONED BY (id, p)")
+          sql(s"CREATE TABLE $t1 (id bigint, data string, p int) " +
+            s"USING $v2Format PARTITIONED BY (id, p)")
           sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'also-deleted', 2)")
           sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id, p = 2) SELECT * FROM $view")
-          verifyTable(t1, Seq((1, "a", 2), (2, "b", 2), (3, "c", 2)).toDF("id", "data", "p"))
+          verifyTable(t1, Seq(
+            (1, "a", 2),
+            (2, "b", 2),
+            (3, "c", 2)).toDF("id", "data", "p"))
         }
       }
     }
@@ -343,12 +365,14 @@ trait InsertIntoSQLOnlyTests extends QueryTest with SharedSparkSession with Befo
       withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.STATIC.toString) {
         val t1 = s"${catalogAndNamespace}tbl"
         withTableAndData(t1) { view =>
-          sql(
-            s"CREATE TABLE $t1 (id bigint, data string, p int) " +
-              s"USING $v2Format PARTITIONED BY (id, p)")
+          sql(s"CREATE TABLE $t1 (id bigint, data string, p int) " +
+            s"USING $v2Format PARTITIONED BY (id, p)")
           sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'also-deleted', 2)")
           sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (p = 2, id) SELECT * FROM $view")
-          verifyTable(t1, Seq((1, "a", 2), (2, "b", 2), (3, "c", 2)).toDF("id", "data", "p"))
+          verifyTable(t1, Seq(
+            (1, "a", 2),
+            (2, "b", 2),
+            (3, "c", 2)).toDF("id", "data", "p"))
         }
       }
     }
@@ -357,12 +381,14 @@ trait InsertIntoSQLOnlyTests extends QueryTest with SharedSparkSession with Befo
       withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.STATIC.toString) {
         val t1 = s"${catalogAndNamespace}tbl"
         withTableAndData(t1) { view =>
-          sql(
-            s"CREATE TABLE $t1 (id bigint, data string, p int) " +
-              s"USING $v2Format PARTITIONED BY (id, p)")
+          sql(s"CREATE TABLE $t1 (id bigint, data string, p int) " +
+            s"USING $v2Format PARTITIONED BY (id, p)")
           sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'also-deleted', 2)")
           sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (p = 2) SELECT * FROM $view")
-          verifyTable(t1, Seq((1, "a", 2), (2, "b", 2), (3, "c", 2)).toDF("id", "data", "p"))
+          verifyTable(t1, Seq(
+            (1, "a", 2),
+            (2, "b", 2),
+            (3, "c", 2)).toDF("id", "data", "p"))
         }
       }
     }
@@ -370,56 +396,60 @@ trait InsertIntoSQLOnlyTests extends QueryTest with SharedSparkSession with Befo
     dynamicOverwriteTest("InsertInto: overwrite - mixed clause - dynamic mode") {
       val t1 = s"${catalogAndNamespace}tbl"
       withTableAndData(t1) { view =>
-        sql(
-          s"CREATE TABLE $t1 (id bigint, data string, p int) " +
-            s"USING $v2Format PARTITIONED BY (id, p)")
+        sql(s"CREATE TABLE $t1 (id bigint, data string, p int) " +
+          s"USING $v2Format PARTITIONED BY (id, p)")
         sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'keep', 2)")
         sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (p = 2, id) SELECT * FROM $view")
-        verifyTable(
-          t1,
-          Seq((1, "a", 2), (2, "b", 2), (3, "c", 2), (4, "keep", 2)).toDF("id", "data", "p"))
+        verifyTable(t1, Seq(
+          (1, "a", 2),
+          (2, "b", 2),
+          (3, "c", 2),
+          (4, "keep", 2)).toDF("id", "data", "p"))
       }
     }
 
     dynamicOverwriteTest("InsertInto: overwrite - mixed clause reordered - dynamic mode") {
       val t1 = s"${catalogAndNamespace}tbl"
       withTableAndData(t1) { view =>
-        sql(
-          s"CREATE TABLE $t1 (id bigint, data string, p int) " +
-            s"USING $v2Format PARTITIONED BY (id, p)")
+        sql(s"CREATE TABLE $t1 (id bigint, data string, p int) " +
+          s"USING $v2Format PARTITIONED BY (id, p)")
         sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'keep', 2)")
         sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id, p = 2) SELECT * FROM $view")
-        verifyTable(
-          t1,
-          Seq((1, "a", 2), (2, "b", 2), (3, "c", 2), (4, "keep", 2)).toDF("id", "data", "p"))
+        verifyTable(t1, Seq(
+          (1, "a", 2),
+          (2, "b", 2),
+          (3, "c", 2),
+          (4, "keep", 2)).toDF("id", "data", "p"))
       }
     }
 
     dynamicOverwriteTest("InsertInto: overwrite - implicit dynamic partition - dynamic mode") {
       val t1 = s"${catalogAndNamespace}tbl"
       withTableAndData(t1) { view =>
-        sql(
-          s"CREATE TABLE $t1 (id bigint, data string, p int) " +
-            s"USING $v2Format PARTITIONED BY (id, p)")
+        sql(s"CREATE TABLE $t1 (id bigint, data string, p int) " +
+          s"USING $v2Format PARTITIONED BY (id, p)")
         sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'keep', 2)")
         sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (p = 2) SELECT * FROM $view")
-        verifyTable(
-          t1,
-          Seq((1, "a", 2), (2, "b", 2), (3, "c", 2), (4, "keep", 2)).toDF("id", "data", "p"))
+        verifyTable(t1, Seq(
+          (1, "a", 2),
+          (2, "b", 2),
+          (3, "c", 2),
+          (4, "keep", 2)).toDF("id", "data", "p"))
       }
     }
 
     dynamicOverwriteTest("InsertInto: overwrite - multiple static partitions - dynamic mode") {
       val t1 = s"${catalogAndNamespace}tbl"
       withTableAndData(t1) { view =>
-        sql(
-          s"CREATE TABLE $t1 (id bigint, data string, p int) " +
-            s"USING $v2Format PARTITIONED BY (id, p)")
+        sql(s"CREATE TABLE $t1 (id bigint, data string, p int) " +
+          s"USING $v2Format PARTITIONED BY (id, p)")
         sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'keep', 2)")
         sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id = 2, p = 2) SELECT data FROM $view")
-        verifyTable(
-          t1,
-          Seq((2, "a", 2), (2, "b", 2), (2, "c", 2), (4, "keep", 2)).toDF("id", "data", "p"))
+        verifyTable(t1, Seq(
+          (2, "a", 2),
+          (2, "b", 2),
+          (2, "c", 2),
+          (4, "keep", 2)).toDF("id", "data", "p"))
       }
     }
 
@@ -444,8 +474,7 @@ trait InsertIntoSQLOnlyTests extends QueryTest with SharedSparkSession with Befo
       import testImplicits._
       val t1 = "tbl"
       withTable(t1) {
-        sql(
-          s"CREATE TABLE $t1 (`a.b` string, `c.d` string) USING $v2Format PARTITIONED BY (`a.b`)")
+        sql(s"CREATE TABLE $t1 (`a.b` string, `c.d` string) USING $v2Format PARTITIONED BY (`a.b`)")
         sql(s"INSERT OVERWRITE $t1 PARTITION (`a.b` = 'a') (`c.d`) VALUES('b')")
         verifyTable(t1, Seq("a" -> "b").toDF("id", "data"))
       }

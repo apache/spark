@@ -21,8 +21,9 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 object CollationRulesRunner {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    Seq(ApplyDefaultCollation, CollationTypeCasts).foldLeft(plan) { case (plan, rule) =>
-      rule(plan)
-    }
+    Seq(
+      ApplyDefaultCollation,
+      CollationTypeCasts
+    ).foldLeft(plan) { case (plan, rule) => rule(plan) }
   }
 }

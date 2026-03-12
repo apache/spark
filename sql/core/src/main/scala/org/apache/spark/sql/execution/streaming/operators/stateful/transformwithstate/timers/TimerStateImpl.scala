@@ -38,8 +38,7 @@ object TimerStateUtils {
   val TIMESTAMP_TO_KEY_CF = "_timestampToKey"
 
   def getTimerStateVarNames(timeMode: String): (String, String) = {
-    assert(
-      timeMode == TimeMode.EventTime.toString || timeMode == TimeMode.ProcessingTime.toString)
+    assert(timeMode == TimeMode.EventTime.toString || timeMode == TimeMode.ProcessingTime.toString)
 
     def buildTimerStateNames(baseStateName: String): (String, String) = {
       val primaryIndex = baseStateName + TimerStateUtils.KEY_TO_TIMESTAMP_CF
@@ -62,15 +61,12 @@ object TimerStateUtils {
   }
 
   def isTimerSecondaryIndexCF(colFamilyName: String): Boolean = {
-    assert(
-      isTimerCFName(colFamilyName),
-      s"Column family name must be for a timer: $colFamilyName")
+    assert(isTimerCFName(colFamilyName), s"Column family name must be for a timer: $colFamilyName")
     colFamilyName.endsWith(TIMESTAMP_TO_KEY_CF)
   }
 
   def getPrimaryIndexFromSecondaryIndexCF(colFamilyName: String): String = {
-    assert(
-      isTimerSecondaryIndexCF(colFamilyName),
+    assert(isTimerSecondaryIndexCF(colFamilyName),
       s"Column family name must be for a timer secondary index: $colFamilyName")
     colFamilyName.replace(TIMESTAMP_TO_KEY_CF, KEY_TO_TIMESTAMP_CF)
   }
@@ -83,8 +79,10 @@ object TimerStateUtils {
  * @param timeMode - mode of timeout (event time or processing time)
  * @param keyExprEnc - encoder for key expression
  */
-class TimerStateImpl(store: StateStore, timeMode: TimeMode, keyExprEnc: ExpressionEncoder[Any])
-    extends Logging {
+class TimerStateImpl(
+    store: StateStore,
+    timeMode: TimeMode,
+    keyExprEnc: ExpressionEncoder[Any]) extends Logging {
 
   private val EMPTY_ROW =
     UnsafeProjection.create(Array[DataType](NullType)).apply(InternalRow.apply(null))
@@ -102,25 +100,17 @@ class TimerStateImpl(store: StateStore, timeMode: TimeMode, keyExprEnc: Expressi
 
   private val schemaForKeyRow = rowEncoder.schemaForKeyRow
   private val keyToTsCFName = timerCFName + TimerStateUtils.KEY_TO_TIMESTAMP_CF
-  store.createColFamilyIfAbsent(
-    keyToTsCFName,
-    schemaForKeyRow,
-    schemaForValueRow,
-    PrefixKeyScanStateEncoderSpec(schemaForKeyRow, 1),
-    useMultipleValuesPerKey = false,
-    isInternal = true)
+  store.createColFamilyIfAbsent(keyToTsCFName, schemaForKeyRow,
+    schemaForValueRow, PrefixKeyScanStateEncoderSpec(schemaForKeyRow, 1),
+    useMultipleValuesPerKey = false, isInternal = true)
 
   // We maintain a secondary index that inverts the ordering of the timestamp
   // and grouping key
   private val keySchemaForSecIndex = rowEncoder.keySchemaForSecIndex
   private val tsToKeyCFName = timerCFName + TimerStateUtils.TIMESTAMP_TO_KEY_CF
-  store.createColFamilyIfAbsent(
-    tsToKeyCFName,
-    keySchemaForSecIndex,
-    schemaForValueRow,
-    RangeKeyScanStateEncoderSpec(keySchemaForSecIndex, Seq(0)),
-    useMultipleValuesPerKey = false,
-    isInternal = true)
+  store.createColFamilyIfAbsent(tsToKeyCFName, keySchemaForSecIndex,
+    schemaForValueRow, RangeKeyScanStateEncoderSpec(keySchemaForSecIndex, Seq(0)),
+    useMultipleValuesPerKey = false, isInternal = true)
 
   private def getGroupingKey(cfName: String): Any = {
     val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
@@ -150,15 +140,12 @@ class TimerStateImpl(store: StateStore, timeMode: TimeMode, keyExprEnc: Expressi
   def registerTimer(expiryTimestampMs: Long): Unit = {
     val groupingKey = getGroupingKey(keyToTsCFName)
     if (exists(groupingKey, expiryTimestampMs)) {
-      logWarning(
-        log"Failed to register timer for key=${MDC(KEY, groupingKey)} and " +
-          log"timestamp=${MDC(EXPIRY_TIMESTAMP, expiryTimestampMs)} ms since it already exists")
+      logWarning(log"Failed to register timer for key=${MDC(KEY, groupingKey)} and " +
+        log"timestamp=${MDC(EXPIRY_TIMESTAMP, expiryTimestampMs)} ms since it already exists")
     } else {
       store.put(rowEncoder.encodedKey(groupingKey, expiryTimestampMs), EMPTY_ROW, keyToTsCFName)
-      store.put(
-        rowEncoder.encodeSecIndexKey(groupingKey, expiryTimestampMs),
-        EMPTY_ROW,
-        tsToKeyCFName)
+      store.put(rowEncoder.encodeSecIndexKey(groupingKey, expiryTimestampMs),
+        EMPTY_ROW, tsToKeyCFName)
       logDebug(s"Registered timer for key=$groupingKey and timestamp=$expiryTimestampMs")
     }
   }
@@ -171,9 +158,8 @@ class TimerStateImpl(store: StateStore, timeMode: TimeMode, keyExprEnc: Expressi
     val groupingKey = getGroupingKey(keyToTsCFName)
 
     if (!exists(groupingKey, expiryTimestampMs)) {
-      logWarning(
-        log"Failed to delete timer for key=${MDC(KEY, groupingKey)} and " +
-          log"timestamp=${MDC(EXPIRY_TIMESTAMP, expiryTimestampMs)} ms since it does not exist")
+      logWarning(log"Failed to delete timer for key=${MDC(KEY, groupingKey)} and " +
+        log"timestamp=${MDC(EXPIRY_TIMESTAMP, expiryTimestampMs)} ms since it does not exist")
     } else {
       store.remove(rowEncoder.encodedKey(groupingKey, expiryTimestampMs), keyToTsCFName)
       store.remove(rowEncoder.encodeSecIndexKey(groupingKey, expiryTimestampMs), tsToKeyCFName)

@@ -25,22 +25,23 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.STREAMING_QUERY_LISTENERS
 import org.apache.spark.sql.streaming.StreamingQueryListener._
 
+
 class StreamingQueryListenersConfSuite extends StreamTest with BeforeAndAfter {
 
   import testImplicits._
 
   override protected def sparkConf: SparkConf =
-    super.sparkConf
-      .set(
-        STREAMING_QUERY_LISTENERS.key,
-        Seq(
-          classOf[TestListener].getCanonicalName,
-          classOf[TestSQLConfStreamingQueryListener].getCanonicalName).mkString(","))
+    super.sparkConf.set(STREAMING_QUERY_LISTENERS.key,
+      Seq(classOf[TestListener].getCanonicalName,
+        classOf[TestSQLConfStreamingQueryListener].getCanonicalName).mkString(","))
       .set("spark.aaa", "aaa")
       .set("spark.bbb", "bbb")
 
   test("test if the configured query listener is loaded") {
-    testStream(MemoryStream[Int].toDS())(StartStream(), StopStream)
+    testStream(MemoryStream[Int].toDS())(
+      StartStream(),
+      StopStream
+    )
 
     spark.sparkContext.listenerBus.waitUntilEmpty()
 
@@ -69,6 +70,7 @@ class TestListener(sparkConf: SparkConf) extends StreamingQueryListener {
     TestListener.queryTerminatedEvent = event
   }
 }
+
 
 class TestSQLConfStreamingQueryListener extends StreamingQueryListener {
 

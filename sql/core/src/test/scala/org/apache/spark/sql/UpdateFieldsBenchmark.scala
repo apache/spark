@@ -69,12 +69,9 @@ object UpdateFieldsBenchmark extends SqlBasedBenchmark {
   /**
    * Utility function for generating an empty DataFrame with nested columns.
    *
-   * @param maxDepth:
-   *   The depth to which to create nested columns.
-   * @param numColsAtEachDepth:
-   *   The number of columns to create at each depth.
-   * @param nullable:
-   *   This value is used to set the nullability of any StructType columns.
+   * @param maxDepth: The depth to which to create nested columns.
+   * @param numColsAtEachDepth: The number of columns to create at each depth.
+   * @param nullable: This value is used to set the nullability of any StructType columns.
    */
   def emptyNestedDf(maxDepth: Int, numColsAtEachDepth: Int, nullable: Boolean): DataFrame = {
     require(maxDepth > 0)
@@ -113,8 +110,8 @@ object UpdateFieldsBenchmark extends SqlBasedBenchmark {
       } else column
 
       // add columns at the current depth
-      val added = numsToAdd.foldLeft(dropped) { (res, num) =>
-        res.withField(nestedColName(currDepth, num), lit(num))
+      val added = numsToAdd.foldLeft(dropped) {
+        (res, num) => res.withField(nestedColName(currDepth, num), lit(num))
       }
 
       if (currDepth == maxDepth) {
@@ -189,7 +186,8 @@ object UpdateFieldsBenchmark extends SqlBasedBenchmark {
           column = col(nestedColName(0, 0)),
           numsToAdd = numsToAdd,
           numsToDrop = numsToDrop,
-          maxDepth = maxDepth).as(nestedColName(0, 0))
+          maxDepth = maxDepth
+        ).as(nestedColName(0, 0))
 
         benchmark.addCase(s"To non-nullable StructTypes using ${method.name} method") { _ =>
           nonNullableStructsDf.select(modifiedColumn).queryExecution.optimizedPlan

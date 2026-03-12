@@ -19,7 +19,13 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{BinaryExpression, Expression, QuaternaryExpression, TernaryExpression, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{
+  BinaryExpression,
+  Expression,
+  QuaternaryExpression,
+  TernaryExpression,
+  UnaryExpression
+}
 
 trait ResolvesExpressionChildren {
 
@@ -53,7 +59,8 @@ trait ResolvesExpressionChildren {
     val newChildren = Seq(
       resolveChild(unresolvedExpression.first),
       resolveChild(unresolvedExpression.second),
-      resolveChild(unresolvedExpression.third))
+      resolveChild(unresolvedExpression.third)
+    )
     unresolvedExpression.withNewChildren(newChildren)
   }
 
@@ -67,7 +74,8 @@ trait ResolvesExpressionChildren {
       resolveChild(unresolvedExpression.first),
       resolveChild(unresolvedExpression.second),
       resolveChild(unresolvedExpression.third),
-      resolveChild(unresolvedExpression.fourth))
+      resolveChild(unresolvedExpression.fourth)
+    )
     unresolvedExpression.withNewChildren(newChildren)
   }
 

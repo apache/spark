@@ -46,8 +46,7 @@ class SequentialStreamingUnionAnalysisSuite extends AnalysisTest with DataTypeEr
     assert(result.isInstanceOf[SequentialStreamingUnion])
     val su = result.asInstanceOf[SequentialStreamingUnion]
     assert(su.children.length == 3, "Should flatten to 3 children")
-    assert(
-      !su.children.exists(_.isInstanceOf[SequentialStreamingUnion]),
+    assert(!su.children.exists(_.isInstanceOf[SequentialStreamingUnion]),
       "No nested SequentialStreamingUnions")
   }
 
@@ -64,8 +63,8 @@ class SequentialStreamingUnionAnalysisSuite extends AnalysisTest with DataTypeEr
   test("FlattenSequentialStreamingUnion - multiple nested unions at same level") {
     val union1 = SequentialStreamingUnion(testRelation1, testRelation2)
     val union2 = SequentialStreamingUnion(testRelation2, testRelation3)
-    val outerUnion =
-      SequentialStreamingUnion(Seq(union1, union2), byName = false, allowMissingCol = false)
+    val outerUnion = SequentialStreamingUnion(
+      Seq(union1, union2), byName = false, allowMissingCol = false)
 
     val result = FlattenSequentialStreamingUnion(outerUnion)
 
@@ -86,17 +85,14 @@ class SequentialStreamingUnionAnalysisSuite extends AnalysisTest with DataTypeEr
     val su = result.asInstanceOf[SequentialStreamingUnion]
     // Should recursively flatten all levels: rel1, rel2, rel3, rel4
     assert(su.children.length == 4, "Should recursively flatten all nested levels")
-    assert(
-      !su.children.exists(_.isInstanceOf[SequentialStreamingUnion]),
+    assert(!su.children.exists(_.isInstanceOf[SequentialStreamingUnion]),
       "No SequentialStreamingUnion children should remain")
   }
 
   test("FlattenSequentialStreamingUnion - preserves byName parameter") {
     val innerUnion = SequentialStreamingUnion(testRelation1, testRelation2)
     val outerUnion = SequentialStreamingUnion(
-      Seq(innerUnion, testRelation3),
-      byName = true,
-      allowMissingCol = false)
+      Seq(innerUnion, testRelation3), byName = true, allowMissingCol = false)
 
     val result = FlattenSequentialStreamingUnion(outerUnion)
 
@@ -160,9 +156,7 @@ class SequentialStreamingUnionAnalysisSuite extends AnalysisTest with DataTypeEr
     val streamingRelation2 = testRelation2.copy(isStreaming = true)
 
     // Create an aggregation (stateful operation) as a child
-    val agg = Aggregate(
-      Seq($"a"),
-      Seq($"a", Count($"b").toAggregateExpression().as("count")),
+    val agg = Aggregate(Seq($"a"), Seq($"a", Count($"b").toAggregateExpression().as("count")),
       streamingRelation2)
 
     val union = SequentialStreamingUnion(streamingRelation1, agg)
@@ -181,9 +175,7 @@ class SequentialStreamingUnionAnalysisSuite extends AnalysisTest with DataTypeEr
     val streamingRelation2 = testRelation2.copy(isStreaming = true)
 
     // Create an aggregation wrapped in a Project (indirect stateful descendant)
-    val agg = Aggregate(
-      Seq($"a"),
-      Seq($"a", Count($"b").toAggregateExpression().as("count")),
+    val agg = Aggregate(Seq($"a"), Seq($"a", Count($"b").toAggregateExpression().as("count")),
       streamingRelation2)
     val projectOverAgg = Project(Seq($"a"), agg)
 
@@ -238,8 +230,7 @@ class SequentialStreamingUnionAnalysisSuite extends AnalysisTest with DataTypeEr
 
     // Verify flattening worked
     assert(flattenedUnion.children.length == 3, "Should flatten to 3 children")
-    assert(
-      !flattenedUnion.children.exists(_.isInstanceOf[SequentialStreamingUnion]),
+    assert(!flattenedUnion.children.exists(_.isInstanceOf[SequentialStreamingUnion]),
       "No nested SequentialStreamingUnions after flattening")
 
     // Step 2: Validate the flattened plan

@@ -45,7 +45,7 @@ case class JsonScan(
     pushedFilters: Array[Filter],
     partitionFilters: Seq[Expression] = Seq.empty,
     dataFilters: Seq[Expression] = Seq.empty)
-    extends TextBasedFileScan(sparkSession, options) {
+  extends TextBasedFileScan(sparkSession, options) {
 
   private val parsedOptions = new JSONOptionsInRead(
     CaseInsensitiveMap(options.asScala.toMap),
@@ -80,19 +80,13 @@ case class JsonScan(
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     // The partition values are already truncated in `FileScan.partitions`.
     // We should use `readPartitionSchema` as the partition schema here.
-    JsonPartitionReaderFactory(
-      conf,
-      broadcastedConf,
-      dataSchema,
-      readDataSchema,
-      readPartitionSchema,
-      parsedOptions,
+    JsonPartitionReaderFactory(conf, broadcastedConf,
+      dataSchema, readDataSchema, readPartitionSchema, parsedOptions,
       pushedFilters.toImmutableArraySeq)
   }
 
   override def equals(obj: Any): Boolean = obj match {
-    case j: JsonScan =>
-      super.equals(j) && dataSchema == j.dataSchema && options == j.options &&
+    case j: JsonScan => super.equals(j) && dataSchema == j.dataSchema && options == j.options &&
       equivalentFilters(pushedFilters, j.pushedFilters)
     case _ => false
   }

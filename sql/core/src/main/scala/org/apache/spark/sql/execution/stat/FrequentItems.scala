@@ -37,21 +37,23 @@ import org.apache.spark.util.Utils
 object FrequentItems extends Logging {
 
   /**
-   * Finding frequent items for columns, possibly with false positives. Using the frequent element
-   * count algorithm described in <a href="https://doi.org/10.1145/762471.762473">here</a>,
-   * proposed by Karp, Schenker, and Papadimitriou. The `support` should be greater than 1e-4. For
-   * Internal use only.
+   * Finding frequent items for columns, possibly with false positives. Using the
+   * frequent element count algorithm described in
+   * <a href="https://doi.org/10.1145/762471.762473">here</a>, proposed by Karp, Schenker,
+   * and Papadimitriou.
+   * The `support` should be greater than 1e-4.
+   * For Internal use only.
    *
-   * @param df
-   *   The input DataFrame
-   * @param cols
-   *   the names of the columns to search frequent items in
-   * @param support
-   *   The minimum frequency for an item to be considered `frequent`. Should be greater than 1e-4.
-   * @return
-   *   A Local DataFrame with the Array of frequent items for each column.
+   * @param df The input DataFrame
+   * @param cols the names of the columns to search frequent items in
+   * @param support The minimum frequency for an item to be considered `frequent`. Should be greater
+   *                than 1e-4.
+   * @return A Local DataFrame with the Array of frequent items for each column.
    */
-  def singlePassFreqItems(df: DataFrame, cols: Seq[String], support: Double): DataFrame = {
+  def singlePassFreqItems(
+      df: DataFrame,
+      cols: Seq[String],
+      support: Double): DataFrame = {
     require(support >= 1e-4 && support <= 1.0, s"Support must be in [1e-4, 1], but got $support.")
 
     // number of max items to keep counts for
@@ -70,9 +72,8 @@ case class CollectFrequentItems(
     child: Expression,
     size: Int,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0)
-    extends TypedImperativeAggregate[mutable.Map[Any, Long]]
-    with UnaryLike[Expression] {
+    inputAggBufferOffset: Int = 0) extends TypedImperativeAggregate[mutable.Map[Any, Long]]
+  with UnaryLike[Expression] {
   require(size > 0)
 
   def this(child: Expression, size: Int) = this(child, size, 0, 0)
@@ -184,8 +185,7 @@ case class CollectFrequentItems(
     }
   }
 
-  override def withNewMutableAggBufferOffset(
-      newMutableAggBufferOffset: Int): ImperativeAggregate =
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =

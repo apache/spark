@@ -27,8 +27,8 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 
 /**
  * An iterator used to evaluate
- * [[org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction]]. It assumes the input
- * rows have been sorted by values of [[groupingExpressions]].
+ * [[org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction]].
+ * It assumes the input rows have been sorted by values of [[groupingExpressions]].
  */
 class SortBasedAggregationIterator(
     partIndex: Int,
@@ -42,18 +42,19 @@ class SortBasedAggregationIterator(
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
     numOutputRows: SQLMetric,
     aggTime: SQLMetric)
-    extends AggregationIterator(
-      partIndex,
-      groupingExpressions,
-      valueAttributes,
-      aggregateExpressions,
-      aggregateAttributes,
-      initialInputBufferOffset,
-      resultExpressions,
-      newMutableProjection) {
+  extends AggregationIterator(
+    partIndex,
+    groupingExpressions,
+    valueAttributes,
+    aggregateExpressions,
+    aggregateAttributes,
+    initialInputBufferOffset,
+    resultExpressions,
+    newMutableProjection) {
 
   /**
-   * Creates a new aggregation buffer and initializes buffer values for all aggregate functions.
+   * Creates a new aggregation buffer and initializes buffer values
+   * for all aggregate functions.
    */
   private def newBuffer: InternalRow = {
     val bufferSchema = aggregateFunctions.flatMap(_.aggBufferAttributes)

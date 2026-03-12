@@ -30,14 +30,13 @@ class LimitPushdownSuite extends PlanTest {
 
   private object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("Subqueries", Once, EliminateSubqueryAliases) ::
-        Batch(
-          "Limit pushdown",
-          FixedPoint(100),
-          LimitPushDown,
-          EliminateLimits,
-          ConstantFolding,
-          BooleanSimplification) :: Nil
+      Batch("Subqueries", Once,
+        EliminateSubqueryAliases) ::
+      Batch("Limit pushdown", FixedPoint(100),
+        LimitPushDown,
+        EliminateLimits,
+        ConstantFolding,
+        BooleanSimplification) :: Nil
   }
 
   private val testRelation = LocalRelation.fromExternalRows(
@@ -89,11 +88,8 @@ class LimitPushdownSuite extends PlanTest {
       Union(testRelation.limit(3), testRelation2.select($"d", $"e", $"f").limit(4)).limit(2)
     val unionOptimized = Optimize.execute(unionQuery.analyze)
     val unionCorrectAnswer =
-      Limit(
-        2,
-        Union(
-          LocalLimit(2, testRelation),
-          LocalLimit(2, testRelation2.select($"d", $"e", $"f")))).analyze
+      Limit(2, Union(
+        LocalLimit(2, testRelation), LocalLimit(2, testRelation2.select($"d", $"e", $"f")))).analyze
     comparePlans(unionOptimized, unionCorrectAnswer)
   }
 
@@ -131,7 +127,7 @@ class LimitPushdownSuite extends PlanTest {
       } else {
         LocalLimit(1, x).join(Limit(2, y), LeftOuter, condition).limit(1).analyze
       }
-      comparePlans(Optimize.execute(originalQuery), optimized)
+      comparePlans( Optimize.execute(originalQuery), optimized)
     }
   }
 
@@ -240,18 +236,20 @@ class LimitPushdownSuite extends PlanTest {
   }
 
   test("SPARK-33433: Change Aggregate max rows to 1 if grouping is empty") {
-    val analyzed1 = Limit(1, Union(x.groupBy()(count(1)), y.groupBy()(count(1)))).analyze
+    val analyzed1 = Limit(1, Union(
+      x.groupBy()(count(1)),
+      y.groupBy()(count(1)))).analyze
     val optimized1 = Optimize.execute(analyzed1)
     comparePlans(analyzed1, optimized1)
 
     // test push down
-    val analyzed2 = Limit(1, Union(x.groupBy($"a")(count(1)), y.groupBy($"b")(count(1)))).analyze
+    val analyzed2 = Limit(1, Union(
+      x.groupBy($"a")(count(1)),
+      y.groupBy($"b")(count(1)))).analyze
     val optimized2 = Optimize.execute(analyzed2)
-    val expected2 = Limit(
-      1,
-      Union(
-        LocalLimit(1, x.groupBy($"a")(count(1))),
-        LocalLimit(1, y.groupBy($"b")(count(1))))).analyze
+    val expected2 = Limit(1, Union(
+      LocalLimit(1, x.groupBy($"a")(count(1))),
+      LocalLimit(1, y.groupBy($"b")(count(1))))).analyze
     comparePlans(expected2, optimized2)
   }
 
@@ -291,8 +289,7 @@ class LimitPushdownSuite extends PlanTest {
     }
   }
 
-  test(
-    "SPARK-34622: Fix Push down limit through join if its output is not match the LocalLimit") {
+  test("SPARK-34622: Fix Push down limit through join if its output is not match the LocalLimit") {
     val joinCondition = Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr)
     val originalQuery = x.join(y, LeftOuter, joinCondition).select("x.a".attr).limit(5)
     val optimized = Optimize.execute(originalQuery.analyze)
@@ -318,14 +315,9 @@ class LimitPushdownSuite extends PlanTest {
     comparePlans(
       Optimize.execute(
         x.groupBy("x.a".attr)("x.a".attr)
-          .select("x.a".attr.as("a1"), "x.a".attr.as("a2"))
-          .limit(1)
-          .analyze),
-      LocalLimit(1, x)
-        .select("x.a".attr)
-        .select("x.a".attr.as("a1"), "x.a".attr.as("a2"))
-        .limit(1)
-        .analyze)
+          .select("x.a".attr.as("a1"), "x.a".attr.as("a2")).limit(1).analyze),
+      LocalLimit(1, x).select("x.a".attr)
+        .select("x.a".attr.as("a1"), "x.a".attr.as("a2")).limit(1).analyze)
 
     // No push down
     comparePlans(

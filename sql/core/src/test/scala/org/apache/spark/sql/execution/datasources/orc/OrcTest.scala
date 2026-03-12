@@ -35,9 +35,17 @@ import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
- * OrcTest -> OrcSuite -> OrcSourceSuite -> HiveOrcSourceSuite -> OrcQueryTests -> OrcQuerySuite
- * -> HiveOrcQuerySuite -> OrcPartitionDiscoveryTest -> OrcPartitionDiscoverySuite ->
- * HiveOrcPartitionDiscoverySuite -> OrcFilterSuite
+ * OrcTest
+ *   -> OrcSuite
+ *       -> OrcSourceSuite
+ *       -> HiveOrcSourceSuite
+ *   -> OrcQueryTests
+ *       -> OrcQuerySuite
+ *       -> HiveOrcQuerySuite
+ *   -> OrcPartitionDiscoveryTest
+ *       -> OrcPartitionDiscoverySuite
+ *       -> HiveOrcPartitionDiscoverySuite
+ *   -> OrcFilterSuite
  */
 trait OrcTest extends QueryTest with FileBasedDataSourceTest {
 
@@ -66,48 +74,46 @@ trait OrcTest extends QueryTest with FileBasedDataSourceTest {
    * Writes `data` to a Orc file, which is then passed to `f` and will be deleted after `f`
    * returns.
    */
-  protected def withOrcFile[T <: Product: ClassTag: TypeTag](data: Seq[T])(
-      f: String => Unit): Unit = withDataSourceFile(data)(f)
+  protected def withOrcFile[T <: Product: ClassTag: TypeTag]
+      (data: Seq[T])
+      (f: String => Unit): Unit = withDataSourceFile(data)(f)
 
   /**
-   * Writes `data` to a Orc file and reads it back as a `DataFrame`, which is then passed to `f`.
-   * The Orc file will be deleted after `f` returns.
+   * Writes `data` to a Orc file and reads it back as a `DataFrame`,
+   * which is then passed to `f`. The Orc file will be deleted after `f` returns.
    */
-  protected def withOrcDataFrame[T <: Product: ClassTag: TypeTag](
-      data: Seq[T],
-      testVectorized: Boolean = true)(f: DataFrame => Unit): Unit =
-    withDataSourceDataFrame(data, testVectorized)(f)
+  protected def withOrcDataFrame[T <: Product: ClassTag: TypeTag]
+      (data: Seq[T], testVectorized: Boolean = true)
+      (f: DataFrame => Unit): Unit = withDataSourceDataFrame(data, testVectorized)(f)
 
   /**
-   * Writes `data` to a Orc file, reads it back as a `DataFrame` and registers it as a temporary
-   * table named `tableName`, then call `f`. The temporary table together with the Orc file will
-   * be dropped/deleted after `f` returns.
+   * Writes `data` to a Orc file, reads it back as a `DataFrame` and registers it as a
+   * temporary table named `tableName`, then call `f`. The temporary table together with the
+   * Orc file will be dropped/deleted after `f` returns.
    */
-  protected def withOrcTable[T <: Product: ClassTag: TypeTag](
-      data: Seq[T],
-      tableName: String,
-      testVectorized: Boolean = true)(f: => Unit): Unit =
-    withDataSourceTable(data, tableName, testVectorized)(f)
+  protected def withOrcTable[T <: Product: ClassTag: TypeTag]
+      (data: Seq[T], tableName: String, testVectorized: Boolean = true)
+      (f: => Unit): Unit = withDataSourceTable(data, tableName, testVectorized)(f)
 
-  protected def makeOrcFile[T <: Product: ClassTag: TypeTag](data: Seq[T], path: File): Unit =
-    makeDataSourceFile(data, path)
+  protected def makeOrcFile[T <: Product: ClassTag: TypeTag](
+      data: Seq[T], path: File): Unit = makeDataSourceFile(data, path)
 
-  protected def makeOrcFile[T <: Product: ClassTag: TypeTag](df: DataFrame, path: File): Unit =
-    makeDataSourceFile(df, path)
+  protected def makeOrcFile[T <: Product: ClassTag: TypeTag](
+      df: DataFrame, path: File): Unit = makeDataSourceFile(df, path)
 
   protected def checkPredicatePushDown(df: DataFrame, numRows: Int, predicate: String): Unit = {
     withTempPath { file =>
       // It needs to repartition data so that we can have several ORC files
       // in order to skip stripes in ORC.
       df.repartition(numRows).write.orc(file.getCanonicalPath)
-      val actual =
-        stripSparkFilter(spark.read.orc(file.getCanonicalPath).where(predicate)).count()
+      val actual = stripSparkFilter(spark.read.orc(file.getCanonicalPath).where(predicate)).count()
       assert(actual < numRows)
     }
   }
 
-  protected def checkNoFilterPredicate(predicate: Predicate, noneSupported: Boolean = false)(
-      implicit df: DataFrame): Unit = {
+  protected def checkNoFilterPredicate
+      (predicate: Predicate, noneSupported: Boolean = false)
+      (implicit df: DataFrame): Unit = {
     val output = predicate.collect { case a: Attribute => a }.distinct
     val query = df
       .select(output.map(e => Column(e)): _*)
@@ -122,10 +128,8 @@ trait OrcTest extends QueryTest with FileBasedDataSourceTest {
           assert(o.pushedFilters.nonEmpty, "No filter is pushed down")
           val maybeFilter = OrcFilters
             .createFilter(query.schema, o.pushedFilters.toImmutableArraySeq)
-          assert(
-            maybeFilter.isEmpty,
-            s"Couldn't generate filter predicate for " +
-              s"${o.pushedFilters.mkString("pushedFilters(", ", ", ")")}")
+          assert(maybeFilter.isEmpty, s"Couldn't generate filter predicate for " +
+            s"${o.pushedFilters.mkString("pushedFilters(", ", ", ")")}")
         }
 
       case _ => assert(false, "Can not match OrcTable in the query.")
@@ -149,18 +153,19 @@ trait OrcTest extends QueryTest with FileBasedDataSourceTest {
   }
 
   /**
-   * Takes a sequence of products `data` to generate multi-level nested dataframes as new test
-   * data. It tests both non-nested and nested dataframes which are written and read back with Orc
-   * datasource.
+   * Takes a sequence of products `data` to generate multi-level nested
+   * dataframes as new test data. It tests both non-nested and nested dataframes
+   * which are written and read back with Orc datasource.
    *
-   * This is different from [[withOrcDataFrame]] which does not test nested cases.
+   * This is different from [[withOrcDataFrame]] which does not
+   * test nested cases.
    */
-  protected def withNestedOrcDataFrame[T <: Product: ClassTag: TypeTag](data: Seq[T])(
-      runTest: (DataFrame, String, Any => Any) => Unit): Unit =
+  protected def withNestedOrcDataFrame[T <: Product: ClassTag: TypeTag](data: Seq[T])
+      (runTest: (DataFrame, String, Any => Any) => Unit): Unit =
     withNestedOrcDataFrame(spark.createDataFrame(data))(runTest)
 
-  protected def withNestedOrcDataFrame(inputDF: DataFrame)(
-      runTest: (DataFrame, String, Any => Any) => Unit): Unit = {
+  protected def withNestedOrcDataFrame(inputDF: DataFrame)
+      (runTest: (DataFrame, String, Any => Any) => Unit): Unit = {
     withNestedDataFrame(inputDF).foreach { case (newDF, colName, resultFun) =>
       withTempPath { file =>
         newDF.write.format(dataSourceName).save(file.getCanonicalPath)

@@ -33,8 +33,8 @@ import org.apache.spark.util.ArrayImplicits._
 // The classes in this file are basically moved from https://github.com/databricks/spark-sql-perf
 
 /**
- * Using ProcessBuilder.lineStream produces a stream, that uses a LinkedBlockingQueue with a
- * default capacity of Integer.MAX_VALUE.
+ * Using ProcessBuilder.lineStream produces a stream, that uses
+ * a LinkedBlockingQueue with a default capacity of Integer.MAX_VALUE.
  *
  * This causes OOM if the consumer cannot keep up with the producer.
  *
@@ -44,9 +44,9 @@ object BlockingLineStream {
 
   // See scala.sys.process.Streamed
   private final class BlockingStreamed[T](
-      val process: T => Unit,
-      val done: Int => Unit,
-      val stream: () => LazyList[T])
+    val process: T => Unit,
+    val done: Int => Unit,
+    val stream: () => LazyList[T])
 
   // See scala.sys.process.Streamed
   private object BlockingStreamed {
@@ -109,10 +109,9 @@ class Dsdgen(dsdgenDir: String) extends Serializable {
         // NOTE: RNGSEED is the RNG seed used by the data generator. Right now, it is fixed to 100.
         val parallel = if (partitions > 1) s"-parallel $partitions -child $i" else ""
         val commands = Seq(
-          "bash",
-          "-c",
+          "bash", "-c",
           s"cd $localToolsDir && ./dsdgen -table $tableName -filter Y -scale $scaleFactor " +
-            s"-RNGSEED 100 $parallel")
+          s"-RNGSEED 100 $parallel")
         BlockingLineStream(commands)
       }
     }
@@ -123,15 +122,12 @@ class Dsdgen(dsdgenDir: String) extends Serializable {
 }
 
 class TPCDSTables(spark: SparkSession, dsdgenDir: String, scaleFactor: Int)
-    extends TPCDSSchema
-    with Logging
-    with Serializable {
+  extends TPCDSSchema with Logging with Serializable {
 
   private val dataGenerator = new Dsdgen(dsdgenDir)
 
   private def tables: Seq[Table] = tableColumns.map { case (tableName, schemaString) =>
-    val partitionColumns = tablePartitionColumns
-      .getOrElse(tableName, Nil)
+    val partitionColumns = tablePartitionColumns.getOrElse(tableName, Nil)
       .map(_.stripPrefix("`").stripSuffix("`"))
     Table(tableName, partitionColumns, StructType.fromDDL(schemaString))
   }.toSeq
@@ -142,8 +138,8 @@ class TPCDSTables(spark: SparkSession, dsdgenDir: String, scaleFactor: Int)
     }
 
     private def df(numPartition: Int) = {
-      val generatedData =
-        dataGenerator.generate(spark.sparkContext, name, numPartition, scaleFactor)
+      val generatedData = dataGenerator.generate(
+        spark.sparkContext, name, numPartition, scaleFactor)
       val rows = generatedData.mapPartitions { iter =>
         iter.map { l =>
           val values = l.split("\\|", -1).dropRight(1).map { v =>
@@ -196,11 +192,9 @@ class TPCDSTables(spark: SparkSession, dsdgenDir: String, scaleFactor: Int)
 
       val writer = if (partitionColumns.nonEmpty) {
         if (clusterByPartitionColumns) {
-          val columnString = data.schema.fields
-            .map { field =>
-              field.name
-            }
-            .mkString(",")
+          val columnString = data.schema.fields.map { field =>
+            field.name
+          }.mkString(",")
           val partitionColumnString = partitionColumns.mkString(",")
           val predicates = if (filterOutNullPartitionValues) {
             partitionColumns.map(col => s"$col IS NOT NULL").mkString("WHERE ", " AND ", "")
@@ -234,7 +228,7 @@ class TPCDSTables(spark: SparkSession, dsdgenDir: String, scaleFactor: Int)
           val maxRecordPerFile = spark.sessionState.conf.getConf(SQLConf.MAX_RECORDS_PER_FILE)
 
           if (maxRecordPerFile > 0 && numRows > maxRecordPerFile) {
-            val numFiles = (numRows.toDouble / maxRecordPerFile).ceil.toInt
+            val numFiles = (numRows.toDouble/maxRecordPerFile).ceil.toInt
             logInfo(s"Coalescing into $numFiles files")
             data.coalesce(numFiles).write
           } else {
@@ -278,13 +272,8 @@ class TPCDSTables(spark: SparkSession, dsdgenDir: String, scaleFactor: Int)
 
     tablesToBeGenerated.foreach { table =>
       val tableLocation = s"$location/${table.name}"
-      table.genData(
-        tableLocation,
-        format,
-        overwrite,
-        clusterByPartitionColumns,
-        filterOutNullPartitionValues,
-        numPartitions)
+      table.genData(tableLocation, format, overwrite, clusterByPartitionColumns,
+        filterOutNullPartitionValues, numPartitions)
     }
   }
 }
@@ -417,7 +406,7 @@ class GenTPCDSDataConfig(args: Array[String]) {
 
 /**
  * This class generates TPCDS table data by using tpcds-kit:
- *   - https://github.com/databricks/tpcds-kit
+ *  - https://github.com/databricks/tpcds-kit
  *
  * To run this:
  * {{{
@@ -439,8 +428,10 @@ object GenTPCDSData {
       .master(config.master)
       .getOrCreate()
 
-    val tables =
-      new TPCDSTables(spark, dsdgenDir = config.dsdgenDir, scaleFactor = config.scaleFactor)
+    val tables = new TPCDSTables(
+      spark,
+      dsdgenDir = config.dsdgenDir,
+      scaleFactor = config.scaleFactor)
 
     tables.genData(
       location = config.location,

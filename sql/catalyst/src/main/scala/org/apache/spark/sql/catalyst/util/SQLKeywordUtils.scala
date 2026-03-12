@@ -27,15 +27,11 @@ private[sql] object SQLKeywordUtils extends SQLConfHelper {
   final private val regex = "'([A-Z_]+)'".r
 
   lazy val keywords: Seq[String] = {
-    (0 until SqlBaseLexer.VOCABULARY.getMaxTokenType)
-      .map { idx =>
-        SqlBaseLexer.VOCABULARY.getLiteralName(idx)
-      }
-      .collect {
-        case lit if lit != null && regex.pattern.matcher(lit).matches() =>
-          regex.findFirstMatchIn(lit).get.group(1)
-      }
-      .sorted
+    (0 until SqlBaseLexer.VOCABULARY.getMaxTokenType).map { idx =>
+      SqlBaseLexer.VOCABULARY.getLiteralName(idx)
+    }.collect { case lit if lit != null && regex.pattern.matcher(lit).matches() =>
+      regex.findFirstMatchIn(lit).get.group(1)
+    }.sorted
   }
 
   /**

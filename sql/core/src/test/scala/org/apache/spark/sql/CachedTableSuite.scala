@@ -64,7 +64,9 @@ import org.apache.spark.util.{AccumulatorContext, Utils}
 private case class BigData(s: String)
 
 @SlowSQLTest
-class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
+class CachedTableSuite extends QueryTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   override def sparkConf: SparkConf = super.sparkConf
@@ -107,19 +109,18 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
   private def getNumInMemoryRelations(ds: classic.Dataset[_]): Int = {
     val plan = ds.queryExecution.withCachedData
     var sum = plan.collect { case _: InMemoryRelation => 1 }.sum
-    plan.transformAllExpressions { case e: SubqueryExpression =>
-      sum += getNumInMemoryRelations(e.plan)
-      e
+    plan.transformAllExpressions {
+      case e: SubqueryExpression =>
+        sum += getNumInMemoryRelations(e.plan)
+        e
     }
     sum
   }
 
   private def getNumInMemoryTablesInSubquery(plan: SparkPlan): Int = {
-    plan.expressions
-      .flatMap(_.collect { case sub: ExecSubqueryExpression =>
-        getNumInMemoryTablesRecursively(sub.plan)
-      })
-      .sum
+    plan.expressions.flatMap(_.collect {
+      case sub: ExecSubqueryExpression => getNumInMemoryTablesRecursively(sub.plan)
+    }).sum
   }
 
   private def getNumInMemoryTablesRecursively(plan: SparkPlan): Int = {
@@ -170,8 +171,7 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
       val e = intercept[TempTableAlreadyExistsException] {
         sql("CACHE TABLE tempView AS SELECT 1")
       }
-      checkError(
-        e,
+      checkError(e,
         condition = "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
         parameters = Map("relationName" -> "`tempView`"))
     }
@@ -197,10 +197,7 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
   test("too big for memory") {
     withTempView("bigData") {
       val data = "*".repeat(1000)
-      sparkContext
-        .parallelize(1 to 200000, 1)
-        .map(_ => BigData(data))
-        .toDF()
+      sparkContext.parallelize(1 to 200000, 1).map(_ => BigData(data)).toDF()
         .createOrReplaceTempView("bigData")
       spark.table("bigData").persist(StorageLevel.MEMORY_AND_DISK)
       assert(spark.table("bigData").count() === 200000L)
@@ -250,14 +247,9 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
 
     spark.catalog.cacheTable("testData")
     assertResult(0, "Double InMemoryRelations found, cacheTable() is not idempotent") {
-      spark
-        .table("testData")
-        .queryExecution
-        .withCachedData
-        .collect {
-          case r: InMemoryRelation if r.cachedPlan.isInstanceOf[InMemoryTableScanExec] => r
-        }
-        .size
+      spark.table("testData").queryExecution.withCachedData.collect {
+        case r: InMemoryRelation if r.cachedPlan.isInstanceOf[InMemoryTableScanExec] => r
+      }.size
     }
 
     uncacheTable("testData")
@@ -277,7 +269,9 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
     withTempView("selectStar") {
       sql("SELECT * FROM testData").createOrReplaceTempView("selectStar")
       spark.catalog.cacheTable("selectStar")
-      checkAnswer(sql("SELECT * FROM selectStar WHERE key = 1"), Seq(Row(1, "1")))
+      checkAnswer(
+        sql("SELECT * FROM selectStar WHERE key = 1"),
+        Seq(Row(1, "1")))
       uncacheTable("selectStar")
     }
   }
@@ -353,7 +347,9 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
       "Lazily cached in-memory table shouldn't be materialized eagerly")
 
     sql("SELECT COUNT(*) FROM testData").collect()
-    assert(isMaterialized(rddId), "Lazily cached in-memory table should have been materialized")
+    assert(
+      isMaterialized(rddId),
+      "Lazily cached in-memory table should have been materialized")
 
     uncacheTable("testData")
     eventually(timeout(10.seconds)) {
@@ -382,8 +378,7 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
 
   test("SQL interface cache SELECT ... support storageLevel(DISK_ONLY)") {
     withTempView("testCacheSelect") {
-      sql(
-        "CACHE TABLE testCacheSelect OPTIONS('storageLevel' 'DISK_ONLY') SELECT * FROM testData")
+      sql("CACHE TABLE testCacheSelect OPTIONS('storageLevel' 'DISK_ONLY') SELECT * FROM testData")
       assertCached(spark.table("testCacheSelect"))
       val rddId = rddIdOf("testCacheSelect")
       assert(isExpectStorageLevel(rddId, Disk))
@@ -407,7 +402,9 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
       "Lazily cached in-memory table shouldn't be materialized eagerly")
 
     sql("SELECT COUNT(*) FROM testData").collect()
-    assert(isMaterialized(rddId), "Lazily cached in-memory table should have been materialized")
+    assert(
+      isMaterialized(rddId),
+      "Lazily cached in-memory table should have been materialized")
     assert(isExpectStorageLevel(rddId, Disk))
   }
 
@@ -477,24 +474,14 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
 
       val toBeCleanedAccIds = new HashSet[Long]
 
-      val accId1 = spark
-        .table("t1")
-        .queryExecution
-        .withCachedData
-        .collect { case i: InMemoryRelation =>
-          i.cacheBuilder.sizeInBytesStats.id
-        }
-        .head
+      val accId1 = spark.table("t1").queryExecution.withCachedData.collect {
+        case i: InMemoryRelation => i.cacheBuilder.sizeInBytesStats.id
+      }.head
       toBeCleanedAccIds += accId1
 
-      val accId2 = spark
-        .table("t1")
-        .queryExecution
-        .withCachedData
-        .collect { case i: InMemoryRelation =>
-          i.cacheBuilder.sizeInBytesStats.id
-        }
-        .head
+      val accId2 = spark.table("t1").queryExecution.withCachedData.collect {
+        case i: InMemoryRelation => i.cacheBuilder.sizeInBytesStats.id
+      }.head
       toBeCleanedAccIds += accId2
 
       val cleanerListener = new CleanerListener {
@@ -514,8 +501,7 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
       System.gc()
 
       eventually(timeout(10.seconds)) {
-        assert(
-          toBeCleanedAccIds.synchronized { toBeCleanedAccIds.isEmpty },
+        assert(toBeCleanedAccIds.synchronized { toBeCleanedAccIds.isEmpty },
           "batchStats accumulators should be cleared after GC when uncacheTable")
       }
 
@@ -526,14 +512,12 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
 
   test("SPARK-10327 Cache Table is not working while subquery has alias in its project list") {
     withTempView("abc") {
-      sparkContext
-        .parallelize((1, 1) :: (2, 2) :: Nil)
-        .toDF("key", "value")
-        .selectExpr("key", "value", "key+1")
-        .createOrReplaceTempView("abc")
+      sparkContext.parallelize((1, 1) :: (2, 2) :: Nil)
+        .toDF("key", "value").selectExpr("key", "value", "key+1").createOrReplaceTempView("abc")
       spark.catalog.cacheTable("abc")
 
-      val sparkPlan = sql("""select a.key, b.key, c.key from
+      val sparkPlan = sql(
+        """select a.key, b.key, c.key from
           |abc a join abc b on a.key=b.key
           |join abc c on a.key=c.key""".stripMargin).queryExecution.sparkPlan
 
@@ -549,9 +533,8 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       df.collect()
     }
-    assert(collect(df.queryExecution.executedPlan) { case e: ShuffleExchangeExec =>
-      e
-    }.size == expected)
+    assert(
+      collect(df.queryExecution.executedPlan) { case e: ShuffleExchangeExec => e }.size == expected)
   }
 
   test("A cached table preserves the partitioning and ordering of its cached SparkPlan") {
@@ -560,8 +543,7 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
       val table3x = testData.union(testData).union(testData)
       table3x.createOrReplaceTempView("testData3x")
 
-      sql("SELECT key, value FROM testData3x ORDER BY key").createOrReplaceTempView(
-        "orderedTable")
+      sql("SELECT key, value FROM testData3x ORDER BY key").createOrReplaceTempView("orderedTable")
       spark.catalog.cacheTable("orderedTable")
       assertCached(spark.table("orderedTable"))
       // Should not have an exchange as the query is already sorted on the group by key.
@@ -583,14 +565,12 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
 
           // Joining them should result in no exchanges.
           verifyNumExchanges(sql("SELECT * FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a"), 0)
-          checkAnswer(
-            sql("SELECT * FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a"),
+          checkAnswer(sql("SELECT * FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a"),
             sql("SELECT * FROM testData t1 JOIN testData2 t2 ON t1.key = t2.a"))
 
           // Grouping on the partition key should result in no exchanges
           verifyNumExchanges(sql("SELECT count(*) FROM t1 GROUP BY key"), 0)
-          checkAnswer(
-            sql("SELECT count(*) FROM t1 GROUP BY key"),
+          checkAnswer(sql("SELECT count(*) FROM t1 GROUP BY key"),
             sql("SELECT count(*) FROM testData GROUP BY key"))
 
           uncacheTable("t1")
@@ -675,7 +655,9 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
 
         val query = sql("SELECT value, key from t1 group by key, value")
         verifyNumExchanges(query, 0)
-        checkAnswer(query, testData.distinct().select($"value", $"key"))
+        checkAnswer(
+          query,
+          testData.distinct().select($"value", $"key"))
         uncacheTable("t1")
       }
 
@@ -692,16 +674,13 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
         spark.catalog.cacheTable("t2")
 
         val query =
-          sql(
-            "SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a and t1.value = t2.b")
+          sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a and t1.value = t2.b")
         verifyNumExchanges(query, 1)
         assert(
           stripAQEPlan(query.queryExecution.executedPlan).outputPartitioning.numPartitions === 6)
         checkAnswer(
           query,
-          df1
-            .join(df2, $"key" === $"a" && $"value" === $"b")
-            .select($"key", $"value", $"a", $"b"))
+          df1.join(df2, $"key" === $"a" && $"value" === $"b").select($"key", $"value", $"a", $"b"))
         uncacheTable("t1")
         uncacheTable("t2")
       }
@@ -714,10 +693,14 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
       selectStar.createOrReplaceTempView("selectStar")
 
       spark.catalog.cacheTable("selectStar")
-      checkAnswer(selectStar, Seq(Row(1, "1")))
+      checkAnswer(
+        selectStar,
+        Seq(Row(1, "1")))
 
       uncacheTable("selectStar")
-      checkAnswer(selectStar, Seq(Row(1, "1")))
+      checkAnswer(
+        selectStar,
+        Seq(Row(1, "1")))
     }
   }
 
@@ -736,7 +719,8 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
       Seq(1).toDF("c1").createOrReplaceTempView("t1")
       spark.catalog.cacheTable("t1")
       val ds =
-        sql("""
+        sql(
+          """
             |SELECT * FROM t1
             |WHERE
             |NOT EXISTS (SELECT * FROM t1)
@@ -758,7 +742,8 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
 
       // Nested predicate subquery
       val ds =
-        sql("""
+        sql(
+        """
           |SELECT * FROM t1
           |WHERE
           |c1 IN (SELECT c1 FROM t2 WHERE c1 IN (SELECT c1 FROM t3 WHERE c1 = 1))
@@ -767,7 +752,8 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
 
       // Scalar subquery and predicate subquery
       val ds2 =
-        sql("""
+        sql(
+          """
             |SELECT * FROM (SELECT c1, max(c1) FROM t1 GROUP BY c1)
             |WHERE
             |c1 = (SELECT max(c1) FROM t2 GROUP BY c1)
@@ -833,7 +819,8 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
 
       // Additional predicate in the subquery plan should cause a cache miss
       val cachedMissDs =
-        sql("""
+      sql(
+        """
           |SELECT * FROM t1
           |WHERE
           |NOT EXISTS (SELECT * FROM t2 where c1 = 0)
@@ -1011,13 +998,13 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
 
           // dropping a temp view trigger cache invalidation on dependents iff the config is
           // turned off
-          assert(
-            storeAnalyzed ==
-              spark.sharedState.cacheManager.lookupCachedData(oldView).isDefined)
+          assert(storeAnalyzed ==
+            spark.sharedState.cacheManager.lookupCachedData(oldView).isDefined)
           if (!storeAnalyzed) {
             // t2 should become invalid after t1 is dropped
             val e = intercept[AnalysisException](spark.catalog.isCached("t2"))
-            checkErrorTableNotFound(e, "`t1`", ExpectedContext("VIEW", "t2", 14, 15, "t1"))
+            checkErrorTableNotFound(e, "`t1`",
+              ExpectedContext("VIEW", "t2", 14, 15, "t1"))
           }
         }
       }
@@ -1028,13 +1015,8 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
     Seq(true, false).foreach { storeAnalyzed =>
       withSQLConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW.key -> storeAnalyzed.toString) {
         withTable("t") {
-          spark
-            .range(1, 10)
-            .toDF("key")
-            .withColumn("value", $"key" * 2)
-            .write
-            .format("json")
-            .saveAsTable("t")
+          spark.range(1, 10).toDF("key").withColumn("value", $"key" * 2)
+            .write.format("json").saveAsTable("t")
           withView("t1") {
             withTempView("t2") {
               sql("CREATE VIEW t1 AS SELECT * FROM t WHERE key > 1")
@@ -1053,7 +1035,8 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
               if (!storeAnalyzed) {
                 // t2 should become invalid after t1 is dropped
                 val e = intercept[AnalysisException](spark.catalog.isCached("t2"))
-                checkErrorTableNotFound(e, "`t1`", ExpectedContext("VIEW", "t2", 14, 15, "t1"))
+                checkErrorTableNotFound(e, "`t1`",
+                  ExpectedContext("VIEW", "t2", 14, 15, "t1"))
               }
             }
           }
@@ -1064,13 +1047,8 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
 
   test("SPARK-24596 Non-cascading Cache Invalidation - uncache table") {
     withTable("t") {
-      spark
-        .range(1, 10)
-        .toDF("key")
-        .withColumn("value", $"key" * 2)
-        .write
-        .format("json")
-        .saveAsTable("t")
+      spark.range(1, 10).toDF("key").withColumn("value", $"key" * 2)
+        .write.format("json").saveAsTable("t")
       withTempView("t1", "t2") {
         sql("CACHE TABLE t")
         sql("CACHE TABLE t1 AS SELECT * FROM t WHERE key > 1")
@@ -1095,8 +1073,8 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
       def checkHintExists(): Unit = {
         // Test the broadcast hint.
         val joinPlan = df.join(df2, "id").queryExecution.optimizedPlan
-        val joinHints = joinPlan.collect { case Join(_, _, _, _, hint) =>
-          hint
+        val joinHints = joinPlan.collect {
+          case Join(_, _, _, _, hint) => hint
         }
         assert(joinHints.size == 1)
         assert(joinHints(0).leftHint.get.strategy.contains(expectedHint))
@@ -1125,8 +1103,7 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
     testHint(broadcast(spark.range(1000)).filter($"id" > 100), BROADCAST)
     // If there are 2 adjacent hints, the top one takes effect.
     testHint(
-      spark
-        .range(1000)
+      spark.range(1000)
         .hint("SHUFFLE_MERGE")
         .hint("SHUFFLE_HASH")
         .as("df"),
@@ -1135,8 +1112,7 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
 
   test("analyzes column statistics in cached query") {
     def query(): classic.DataFrame = {
-      spark
-        .range(100)
+      spark.range(100)
         .selectExpr("id % 3 AS c0", "id % 5 AS c1", "2 AS c2")
         .groupBy("c0")
         .agg(avg("c1").as("v1"), sum("c2").as("v2"))
@@ -1182,8 +1158,7 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
             // storage level.
             spark.catalog.cacheTable(s"$db.cachedTable", MEMORY_ONLY)
             assertCached(spark.table(s"$db.cachedTable"), s"$db.cachedTable", MEMORY_ONLY)
-            assert(
-              spark.catalog.isCached(s"$db.cachedTable"),
+            assert(spark.catalog.isCached(s"$db.cachedTable"),
               s"Table '$db.cachedTable' should be cached.")
 
             // Refresh the table 'cachedTable' in temp db with qualified table name, and then check
@@ -1192,8 +1167,7 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
             // storage level 'MEMORY_AND_DISK', instead of 'MEMORY_ONLY'.
             spark.catalog.refreshTable(s"$db.cachedTable")
             assertCached(spark.table(s"$db.cachedTable"), s"$db.cachedTable", MEMORY_ONLY)
-            assert(
-              spark.catalog.isCached(s"$db.cachedTable"),
+            assert(spark.catalog.isCached(s"$db.cachedTable"),
               s"Table '$db.cachedTable' should be cached after refreshing with its qualified name.")
 
             // Change the active database to the temp db and refresh the table with unqualified
@@ -1204,8 +1178,7 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
             activateDatabase(db) {
               spark.catalog.refreshTable("cachedTable")
               assertCached(spark.table("cachedTable"), s"$db.cachedTable", MEMORY_ONLY)
-              assert(
-                spark.catalog.isCached("cachedTable"),
+              assert(spark.catalog.isCached("cachedTable"),
                 s"Table '$db.cachedTable' should be cached after refreshing with its " +
                   "unqualified name.")
             }
@@ -1229,7 +1202,8 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
             // name and storage level.
             spark.catalog.cacheTable("cachedTable", MEMORY_AND_DISK_2)
             assertCached(spark.table("cachedTable"), "cachedTable", MEMORY_AND_DISK_2)
-            assert(spark.catalog.isCached("cachedTable"), "Table 'cachedTable' should be cached.")
+            assert(spark.catalog.isCached("cachedTable"),
+              "Table 'cachedTable' should be cached.")
 
             // Refresh the table 'cachedTable' in default db with unqualified table name, and then
             // check whether the table is still cached with the same name and storage level.
@@ -1237,8 +1211,7 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
             // storage level 'MEMORY_AND_DISK', instead of 'MEMORY_AND_DISK2'.
             spark.catalog.refreshTable("cachedTable")
             assertCached(spark.table("cachedTable"), "cachedTable", MEMORY_AND_DISK_2)
-            assert(
-              spark.catalog.isCached("cachedTable"),
+            assert(spark.catalog.isCached("cachedTable"),
               "Table 'cachedTable' should be cached after refreshing with its unqualified name.")
 
             // Change the active database to the temp db and refresh the table with qualified
@@ -1249,8 +1222,7 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
             activateDatabase(db) {
               spark.catalog.refreshTable("default.cachedTable")
               assertCached(spark.table("default.cachedTable"), "cachedTable", MEMORY_AND_DISK_2)
-              assert(
-                spark.catalog.isCached("default.cachedTable"),
+              assert(spark.catalog.isCached("default.cachedTable"),
                 "Table 'cachedTable' should be cached after refreshing with its qualified name.")
             }
           }
@@ -1262,13 +1234,10 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
   test("cache supports for intervals") {
     withTable("interval_cache", "t1") {
       Seq((1, "1 second"), (2, "2 seconds"), (2, null))
-        .toDF("k", "v")
-        .write
-        .saveAsTable("interval_cache")
+        .toDF("k", "v").write.saveAsTable("interval_cache")
       sql("CACHE TABLE t1 AS SELECT k, cast(v as interval) FROM interval_cache")
       assert(spark.catalog.isCached("t1"))
-      checkAnswer(
-        sql("SELECT * FROM t1 WHERE k = 1"),
+      checkAnswer(sql("SELECT * FROM t1 WHERE k = 1"),
         Row(1, new CalendarInterval(0, 0, DateTimeConstants.MICROS_PER_SECOND)))
       sql("UNCACHE TABLE t1")
       assert(!spark.catalog.isCached("t1"))
@@ -1277,13 +1246,12 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
 
   test("SPARK-35243: cache supports for YearMonthIntervalType and DayTimeIntervalType") {
     withTempView("ymi_dti_interval_cache") {
-      Seq((1, Period.ofYears(1), Duration.ofDays(1)), (2, Period.ofYears(2), Duration.ofDays(2)))
-        .toDF("k", "v1", "v2")
-        .createTempView("ymi_dti_interval_cache")
+      Seq((1, Period.ofYears(1), Duration.ofDays(1)),
+        (2, Period.ofYears(2), Duration.ofDays(2)))
+        .toDF("k", "v1", "v2").createTempView("ymi_dti_interval_cache")
       sql("CACHE TABLE tmp AS SELECT k, v1, v2 FROM ymi_dti_interval_cache")
       assert(spark.catalog.isCached("tmp"))
-      checkAnswer(
-        sql("SELECT * FROM tmp WHERE k = 1"),
+      checkAnswer(sql("SELECT * FROM tmp WHERE k = 1"),
         Row(1, Period.ofYears(1), Duration.ofDays(1)))
       sql("UNCACHE TABLE tmp")
       assert(!spark.catalog.isCached("tmp"))
@@ -1378,13 +1346,11 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
 
   test("SPARK-33729: REFRESH TABLE should not use cached/stale plan") {
     def moveParquetFiles(src: File, dst: File): Unit = {
-      src
-        .listFiles(new FilenameFilter {
-          override def accept(dir: File, name: String): Boolean = name.endsWith("parquet")
-        })
-        .foreach { f =>
-          Files.move(f.toPath, Paths.get(dst.getAbsolutePath, f.getName))
-        }
+      src.listFiles(new FilenameFilter {
+        override def accept(dir: File, name: String): Boolean = name.endsWith("parquet")
+      }).foreach { f =>
+        Files.move(f.toPath, Paths.get(dst.getAbsolutePath, f.getName))
+      }
       // cleanup the rest of the files
       src.listFiles().foreach(_.delete())
       src.delete()
@@ -1447,14 +1413,15 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
       // Create new partition (part = 1) in the filesystem
       val information = sql("SHOW TABLE EXTENDED LIKE 't' PARTITION (part = 0)")
         .select("information")
-        .first()
-        .getString(0)
+        .first().getString(0)
       val part0Loc = information
         .split("\\r?\\n")
         .filter(_.startsWith("Location:"))
         .head
         .replace("Location: file:", "")
-      Utils.copyDirectory(new File(part0Loc), new File(part0Loc.replace("part=0", "part=1")))
+      Utils.copyDirectory(
+        new File(part0Loc),
+        new File(part0Loc.replace("part=0", "part=1")))
 
       sql("ALTER TABLE t RECOVER PARTITIONS")
       assert(spark.catalog.isCached("t"))
@@ -1472,9 +1439,8 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
 
           val oldView = spark.table("view2")
           spark.catalog.dropTempView("view1")
-          assert(
-            storeAnalyzed ==
-              spark.sharedState.cacheManager.lookupCachedData(oldView).isDefined)
+          assert(storeAnalyzed ==
+            spark.sharedState.cacheManager.lookupCachedData(oldView).isDefined)
         }
       }
     }
@@ -1492,9 +1458,8 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
 
             val oldView = spark.table("view2")
             spark.catalog.dropGlobalTempView("view1")
-            assert(
-              storeAnalyzed ==
-                spark.sharedState.cacheManager.lookupCachedData(oldView).isDefined)
+            assert(storeAnalyzed ==
+              spark.sharedState.cacheManager.lookupCachedData(oldView).isDefined)
           }
         }
       }
@@ -1509,7 +1474,8 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
       checkAnswer(sql("SELECT * FROM v"), Row(1) :: Nil)
       sql(s"DROP TABLE $t")
       val e = intercept[AnalysisException](sql("SELECT * FROM v"))
-      checkErrorTableNotFound(e, s"`$t`", ExpectedContext("VIEW", "v", 14, 13 + t.length, t))
+      checkErrorTableNotFound(e, s"`$t`",
+        ExpectedContext("VIEW", "v", 14, 13 + t.length, t))
     }
   }
 
@@ -1523,9 +1489,8 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
 
           val oldView = spark.table("view2")
           spark.catalog.uncacheTable("view1")
-          assert(
-            storeAnalyzed ==
-              spark.sharedState.cacheManager.lookupCachedData(oldView).isDefined,
+          assert(storeAnalyzed ==
+            spark.sharedState.cacheManager.lookupCachedData(oldView).isDefined,
             s"when storeAnalyzed = $storeAnalyzed")
         }
       }
@@ -1544,9 +1509,8 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
 
             val oldView = spark.table("view2")
             spark.catalog.uncacheTable(s"$db.view1")
-            assert(
-              storeAnalyzed ==
-                spark.sharedState.cacheManager.lookupCachedData(oldView).isDefined,
+            assert(storeAnalyzed ==
+              spark.sharedState.cacheManager.lookupCachedData(oldView).isDefined,
               s"when storeAnalyzed = $storeAnalyzed")
           }
         }
@@ -1677,8 +1641,7 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
   }
 
   test("SPARK-35332: Make cache plan disable configs configurable - check AQE") {
-    withSQLConf(
-      SQLConf.SHUFFLE_PARTITIONS.key -> "2",
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "2",
       SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
 
@@ -1687,7 +1650,8 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
         override def onOtherEvent(event: SparkListenerEvent): Unit = {
           event match {
             case SparkListenerSQLAdaptiveExecutionUpdate(_, _, sparkPlanInfo) =>
-              if (sparkPlanInfo.simpleString.startsWith("AdaptiveSparkPlan isFinalPlan=true")) {
+              if (sparkPlanInfo.simpleString.startsWith(
+                  "AdaptiveSparkPlan isFinalPlan=true")) {
                 finalPlan = sparkPlanInfo
               }
             case _ => // ignore other events
@@ -1695,9 +1659,8 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
         }
       }
 
-      def findNodeInSparkPlanInfo(
-          root: SparkPlanInfo,
-          cond: SparkPlanInfo => Boolean): Option[SparkPlanInfo] = {
+      def findNodeInSparkPlanInfo(root: SparkPlanInfo, cond: SparkPlanInfo => Boolean):
+      Option[SparkPlanInfo] = {
         if (cond(root)) {
           Some(root)
         } else {
@@ -1706,12 +1669,12 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
       }
 
       def cachedFinalStageCoalesced(sparkPlanInfo: SparkPlanInfo): Boolean = {
-        val inMemoryScanNode =
-          findNodeInSparkPlanInfo(sparkPlanInfo, _.nodeName.contains("TableCacheQueryStage"))
-        val aqeNode =
-          findNodeInSparkPlanInfo(inMemoryScanNode.get, _.nodeName.contains("AdaptiveSparkPlan"))
-        val aqePlanRoot =
-          findNodeInSparkPlanInfo(inMemoryScanNode.get, _.nodeName.contains("ResultQueryStage"))
+        val inMemoryScanNode = findNodeInSparkPlanInfo(sparkPlanInfo,
+          _.nodeName.contains("TableCacheQueryStage"))
+        val aqeNode = findNodeInSparkPlanInfo(inMemoryScanNode.get,
+          _.nodeName.contains("AdaptiveSparkPlan"))
+        val aqePlanRoot = findNodeInSparkPlanInfo(inMemoryScanNode.get,
+          _.nodeName.contains("ResultQueryStage"))
         aqePlanRoot.get.children.head.nodeName == "AQEShuffleRead"
       }
 
@@ -1722,9 +1685,8 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
           spark.sparkContext.addSparkListener(listener)
 
           withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "false") {
-            sql(
-              "CACHE TABLE t1 as SELECT /*+ REPARTITION */ * FROM (" +
-                "SELECT distinct (id+1) FROM t0)")
+            sql("CACHE TABLE t1 as SELECT /*+ REPARTITION */ * FROM (" +
+              "SELECT distinct (id+1) FROM t0)")
             assert(spark.table("t1").rdd.partitions.length == 2)
             spark.sparkContext.listenerBus.waitUntilEmpty()
             assert(finalPlan != null && !cachedFinalStageCoalesced(finalPlan))
@@ -1732,9 +1694,8 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
 
           finalPlan = null // reset finalPlan
           withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true") {
-            sql(
-              "CACHE TABLE t2 as SELECT /*+ REPARTITION */ * FROM (" +
-                "SELECT distinct (id-1) FROM t0)")
+            sql("CACHE TABLE t2 as SELECT /*+ REPARTITION */ * FROM (" +
+              "SELECT distinct (id-1) FROM t0)")
             assert(spark.table("t2").rdd.partitions.length == 1)
             spark.sparkContext.listenerBus.waitUntilEmpty()
             assert(finalPlan != null && cachedFinalStageCoalesced(finalPlan))
@@ -1749,8 +1710,7 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
   test("SPARK-35332: Make cache plan disable configs configurable - check bucket scan") {
     withTable("t1", "t2", "t3") {
       Seq(1, 2, 3).foreach { i =>
-        spark
-          .range(1, 2)
+        spark.range(1, 2)
           .write
           .format("parquet")
           .bucketBy(2, "id")
@@ -1758,8 +1718,7 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
       }
 
       withCache("t1", "t2", "t3") {
-        withSQLConf(
-          SQLConf.BUCKETING_ENABLED.key -> "true",
+        withSQLConf(SQLConf.BUCKETING_ENABLED.key -> "true",
           SQLConf.FILES_MIN_PARTITION_NUM.key -> "1",
           SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "false") {
           sql("CACHE TABLE t1")
@@ -1797,8 +1756,7 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
       withTempView("t") {
         spark.range(10).createOrReplaceTempView("t")
 
-        Seq(
-          () => spark.table("t").cache(),
+        Seq(() => spark.table("t").cache(),
           () => spark.catalog.cacheTable("t"),
           () => spark.sql("CACHE TABLE t")).foreach { f =>
           withCache("t") {
@@ -1842,7 +1800,8 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
                     |""".stripMargin
       sql(s"cache table q1 as $query")
       val df = sql(query)
-      checkAnswer(df, Row(0, 1, 0, 1) :: Row(1, 2, 1, 2) :: Nil)
+      checkAnswer(df,
+        Row(0, 1, 0, 1) :: Row(1, 2, 1, 2) :: Nil)
       assert(getNumInMemoryRelations(df) == 1)
     }
   }
@@ -1861,9 +1820,8 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
   }
 
   Seq(true, false).foreach { callerEnableAQE =>
-    test(
-      s"SPARK-49982: AQE negative caching with in memory table cache - callerEnableAQE=" +
-        callerEnableAQE) {
+    test(s"SPARK-49982: AQE negative caching with in memory table cache - callerEnableAQE=" +
+      callerEnableAQE) {
       val triggered = new AtomicBoolean(false)
       val func: Long => Boolean = (i: Long) => {
         if (!triggered.get()) {
@@ -1876,9 +1834,7 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
         // make sure the cached plan is AQE plan
         withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
           val df1 = spark.range(1024).select($"id".as("key1"))
-          val df2 = spark
-            .range(2048)
-            .select($"id".as("key2"))
+          val df2 = spark.range(2048).select($"id".as("key2"))
             .withColumn("group_key", $"key2" % 1024)
           val df = df1.filter(expr("func(key1)")).hint("MERGE").join(df2, $"key1" === $"key2")
           df.cache()
@@ -2145,12 +2101,14 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
       val baseRelation = DataSourceV2Relation.create(baseTable, Some(cat), Some(ident))
       assert(cacheManager.lookupCachedData(spark, baseRelation).isDefined)
       val v1Table = cat.loadTable(ident, version1)
-      val v1Relation =
-        baseRelation.copy(table = v1Table, timeTravelSpec = Some(AsOfVersion(version1)))
+      val v1Relation = baseRelation.copy(
+        table = v1Table,
+        timeTravelSpec = Some(AsOfVersion(version1)))
       assert(cacheManager.lookupCachedData(spark, v1Relation).isDefined)
       val v2Table = cat.loadTable(ident, version2)
-      val v2Relation =
-        baseRelation.copy(table = v2Table, timeTravelSpec = Some(AsOfVersion(version2)))
+      val v2Relation = baseRelation.copy(
+        table = v2Table,
+        timeTravelSpec = Some(AsOfVersion(version2)))
       assert(cacheManager.lookupCachedData(spark, v2Relation).isDefined)
 
       // uncache using DataSourceV2Relation directly
@@ -2451,7 +2409,9 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
 
       // verify view is recached correctly
       assertCached(sql("SELECT * FROM v"))
-      checkAnswer(sql("SELECT * FROM v"), Seq(Row(1), Row(2), Row(3), Row(4)))
+      checkAnswer(
+        sql("SELECT * FROM v"),
+        Seq(Row(1), Row(2), Row(3), Row(4)))
     }
   }
 
@@ -2532,7 +2492,9 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
 
         // verify view is recached correctly
         assertCached(sql("SELECT * FROM v"))
-        checkAnswer(sql("SELECT * FROM v"), Seq(Row(1), Row(2), Row(3), Row(4)))
+        checkAnswer(
+          sql("SELECT * FROM v"),
+          Seq(Row(1), Row(2), Row(3), Row(4)))
       }
     }
   }
@@ -2638,19 +2600,22 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
 
   test("SPARK-46741: Cache Table with CTE should work") {
     withTempView("t1", "t2") {
-      sql("""
+      sql(
+        """
           |CREATE TEMPORARY VIEW t1
           |AS
           |SELECT * FROM VALUES (0, 0), (1, 1), (2, 2) AS t(c1, c2)
           |""".stripMargin)
-      sql("""
+      sql(
+        """
           |CREATE TEMPORARY VIEW t2 AS
           |WITH v as (
           |  SELECT c1 + c1 c3 FROM t1
           |)
           |SELECT SUM(c3) s FROM v
           |""".stripMargin)
-      sql("""
+      sql(
+        """
           |CACHE TABLE cache_nested_cte_table
           |WITH
           |v AS (
@@ -2669,7 +2634,8 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
       assert(inMemoryTableScan.size == 1)
       checkAnswer(df, Row(5) :: Nil)
 
-      sql("""
+      sql(
+        """
           |CACHE TABLE cache_subquery_cte_table
           |WITH v AS (
           |  SELECT c1 * c2 c3 from t1
@@ -2684,7 +2650,8 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
           |)
           |""".stripMargin)
 
-      val cteInSubquery = sql("""
+      val cteInSubquery = sql(
+        """
           |SELECT * FROM cache_subquery_cte_table
           |""".stripMargin)
 
@@ -2716,7 +2683,10 @@ class CachedTableSuite extends QueryTest with SharedSparkSession with AdaptiveSp
 
   private def cacheManager = spark.sharedState.cacheManager
 
-  private def pinTable(catalogName: String, ident: Identifier, version: String): Unit = {
+  private def pinTable(
+      catalogName: String,
+      ident: Identifier,
+      version: String): Unit = {
     catalog(catalogName) match {
       case inMemory: BasicInMemoryTableCatalog => inMemory.pinTable(ident, version)
       case _ => fail(s"can't pin $ident in $catalogName")

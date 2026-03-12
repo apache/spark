@@ -49,8 +49,7 @@ abstract class SymmetricHashJoinStateManagerBaseSuite extends StreamTest with Be
   protected def inputValueAttributesWithWatermark: AttributeReference
   protected def joinKeyExpressions: Seq[Expression]
 
-  private def inputValueGen =
-    UnsafeProjection.create(inputValueAttributes.map(_.dataType).toArray)
+  private def inputValueGen = UnsafeProjection.create(inputValueAttributes.map(_.dataType).toArray)
   private def joinKeyGen = UnsafeProjection.create(joinKeyExpressions.map(_.dataType).toArray)
 
   protected def toInputValue(key: Int, value: Int): UnsafeRow = {
@@ -63,19 +62,20 @@ abstract class SymmetricHashJoinStateManagerBaseSuite extends StreamTest with Be
 
   protected def toValueInt(inputValueRow: UnsafeRow): Int = inputValueRow.getInt(1)
 
-  protected def append(key: Int, value: Int)(implicit
-      manager: SymmetricHashJoinStateManager): Unit = {
+  protected def append(key: Int, value: Int)
+                      (implicit manager: SymmetricHashJoinStateManager): Unit = {
     // we only put matched = false for simplicity - StreamingJoinSuite will test the functionality
     manager.append(toJoinKeyRow(key), toInputValue(key, value), matched = false)
   }
 
-  protected def appendAndTest(key: Int, values: Int*)(implicit
-      manager: SymmetricHashJoinStateManager): Unit = {
-    values.foreach { value => append(key, value) }
+  protected def appendAndTest(key: Int, values: Int*)
+                             (implicit manager: SymmetricHashJoinStateManager): Unit = {
+    values.foreach { value => append(key, value)}
     require(get(key) === values)
   }
 
-  protected def getNumValues(key: Int)(implicit manager: SymmetricHashJoinStateManager): Int = {
+  protected def getNumValues(key: Int)
+                            (implicit manager: SymmetricHashJoinStateManager): Int = {
     manager.get(toJoinKeyRow(key)).size
   }
 
@@ -84,8 +84,8 @@ abstract class SymmetricHashJoinStateManagerBaseSuite extends StreamTest with Be
   }
 
   /** Remove keys (and corresponding values) where `time <= threshold` */
-  protected def removeByKey(threshold: Long)(implicit
-      manager: SymmetricHashJoinStateManager): Long = {
+  protected def removeByKey(threshold: Long)
+                           (implicit manager: SymmetricHashJoinStateManager): Long = {
     manager match {
       case evictByTimestamp: SupportsEvictByTimestamp =>
         evictByTimestamp.evictByTimestamp(threshold)
@@ -103,8 +103,8 @@ abstract class SymmetricHashJoinStateManagerBaseSuite extends StreamTest with Be
   }
 
   /** Remove keys (and corresponding values) where `time <= threshold` */
-  protected def removeAndReturnByKey(threshold: Long)(implicit
-      manager: SymmetricHashJoinStateManager): Iterator[KeyToValuePair] = {
+  protected def removeAndReturnByKey(threshold: Long)(
+      implicit manager: SymmetricHashJoinStateManager): Iterator[KeyToValuePair] = {
     manager match {
       case evictByTimestamp: SupportsEvictByTimestamp =>
         evictByTimestamp.evictAndReturnByTimestamp(threshold)
@@ -122,8 +122,8 @@ abstract class SymmetricHashJoinStateManagerBaseSuite extends StreamTest with Be
   }
 
   /** Remove values where `time <= threshold` */
-  protected def removeByValue(watermark: Long)(implicit
-      manager: SymmetricHashJoinStateManager): Long = {
+  protected def removeByValue(watermark: Long)
+                             (implicit manager: SymmetricHashJoinStateManager): Long = {
     manager match {
       case evictByTimestamp: SupportsEvictByTimestamp =>
         evictByTimestamp.evictByTimestamp(watermark)
@@ -136,8 +136,8 @@ abstract class SymmetricHashJoinStateManagerBaseSuite extends StreamTest with Be
   }
 
   /** Remove values where `time <= threshold` */
-  protected def removeAndReturnByValue(watermark: Long)(implicit
-      manager: SymmetricHashJoinStateManager): Iterator[KeyToValuePair] = {
+  protected def removeAndReturnByValue(watermark: Long)(
+      implicit manager: SymmetricHashJoinStateManager): Iterator[KeyToValuePair] = {
     manager match {
       case evictByTimestamp: SupportsEvictByTimestamp =>
         evictByTimestamp.evictAndReturnByTimestamp(watermark)
@@ -149,8 +149,8 @@ abstract class SymmetricHashJoinStateManagerBaseSuite extends StreamTest with Be
     }
   }
 
-  protected def assertNumRows(stateFormatVersion: Int, target: Long)(implicit
-      manager: SymmetricHashJoinStateManager): Unit = {
+  protected def assertNumRows(stateFormatVersion: Int, target: Long)(
+    implicit manager: SymmetricHashJoinStateManager): Unit = {
     // This suite originally uses HDFSBackStateStoreProvider, which provides instantaneous metrics
     // for numRows.
     // But for version 3 with virtual column families, RocksDBStateStoreProvider updates metrics
@@ -166,7 +166,8 @@ abstract class SymmetricHashJoinStateManagerBaseSuite extends StreamTest with Be
       joinKeyExprs: Seq[Expression],
       stateFormatVersion: Int,
       skipNullsForStreamStreamJoins: Boolean = false,
-      metric: Option[SQLMetric] = None)(f: SymmetricHashJoinStateManager => Unit): Unit = {
+      metric: Option[SQLMetric] = None)
+    (f: SymmetricHashJoinStateManager => Unit): Unit = {
     // HDFS store providers do not support virtual column families
     val storeProvider = if (stateFormatVersion >= 3) {
       classOf[RocksDBStateStoreProvider].getName
@@ -177,22 +178,14 @@ abstract class SymmetricHashJoinStateManagerBaseSuite extends StreamTest with Be
       withSQLConf(
         SQLConf.STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS.key ->
           skipNullsForStreamStreamJoins.toString,
-        SQLConf.STATE_STORE_PROVIDER_CLASS.key -> storeProvider) {
+        SQLConf.STATE_STORE_PROVIDER_CLASS.key -> storeProvider
+      ) {
         val storeConf = new StateStoreConf(spark.sessionState.conf)
-        val stateInfo =
-          StatefulOperatorStateInfo(file.getAbsolutePath, UUID.randomUUID, 0, 0, 5, None)
+        val stateInfo = StatefulOperatorStateInfo(
+          file.getAbsolutePath, UUID.randomUUID, 0, 0, 5, None)
         val manager = SymmetricHashJoinStateManager(
-          LeftSide,
-          inputValueAttribs,
-          joinKeyExprs,
-          Some(stateInfo),
-          storeConf,
-          new Configuration,
-          partitionId = 0,
-          None,
-          None,
-          stateFormatVersion,
-          metric,
+          LeftSide, inputValueAttribs, joinKeyExprs, Some(stateInfo), storeConf, new Configuration,
+          partitionId = 0, None, None, stateFormatVersion, metric,
           joinStoreGenerator = new JoinStateManagerStoreGenerator())
         try {
           f(manager)
@@ -212,7 +205,8 @@ abstract class SymmetricHashJoinStateManagerBaseSuite extends StreamTest with Be
       storeVersion: Int,
       changelogCheckpoint: Boolean,
       skipNullsForStreamStreamJoins: Boolean = false,
-      metric: Option[SQLMetric] = None)(f: SymmetricHashJoinStateManager => Unit): Unit = {
+      metric: Option[SQLMetric] = None)
+    (f: SymmetricHashJoinStateManager => Unit): Unit = {
     // HDFS store providers do not support virtual column families
     val storeProvider = if (stateFormatVersion >= 3) {
       classOf[RocksDBStateStoreProvider].getName
@@ -224,27 +218,14 @@ abstract class SymmetricHashJoinStateManagerBaseSuite extends StreamTest with Be
         skipNullsForStreamStreamJoins.toString,
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> storeProvider,
       "spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled" ->
-        changelogCheckpoint.toString) {
+        changelogCheckpoint.toString
+    ) {
       val storeConf = new StateStoreConf(spark.sessionState.conf)
       val stateInfo = StatefulOperatorStateInfo(
-        checkpointDir.getAbsolutePath,
-        UUID.randomUUID,
-        0,
-        storeVersion,
-        5,
-        None)
+        checkpointDir.getAbsolutePath, UUID.randomUUID, 0, storeVersion, 5, None)
       val manager = SymmetricHashJoinStateManager(
-        LeftSide,
-        inputValueAttribs,
-        joinKeyExprs,
-        Some(stateInfo),
-        storeConf,
-        new Configuration,
-        partitionId = 0,
-        None,
-        None,
-        stateFormatVersion,
-        metric,
+        LeftSide, inputValueAttribs, joinKeyExprs, Some(stateInfo), storeConf, new Configuration,
+        partitionId = 0, None, None, stateFormatVersion, metric,
         joinStoreGenerator = new JoinStateManagerStoreGenerator())
       try {
         f(manager)
@@ -258,16 +239,15 @@ abstract class SymmetricHashJoinStateManagerBaseSuite extends StreamTest with Be
 
 class SymmetricHashJoinStateManagerSuite extends SymmetricHashJoinStateManagerBaseSuite {
   private val watermarkMetadata = new MetadataBuilder()
-    .putLong(EventTimeWatermark.delayKey, 10)
-    .build()
+    .putLong(EventTimeWatermark.delayKey, 10).build()
   private val inputValueSchema = new StructType()
     .add(StructField("key", IntegerType))
     .add(StructField("time", IntegerType, metadata = watermarkMetadata))
 
   override protected val inputValueAttributes = toAttributes(inputValueSchema)
   override protected val inputValueAttributesWithWatermark = inputValueAttributes(1)
-  override protected val joinKeyExpressions =
-    Seq[Expression](Literal(false), inputValueAttributes(0), Literal(10.0))
+  override protected val joinKeyExpressions = Seq[Expression](
+    Literal(false), inputValueAttributes(0), Literal(10.0))
 
   // V4 is excluded because it does not use indexed values (SupportsIndexedKeys) and therefore
   // cannot have the null-hole problem that these tests exercise via updateNumValuesTestOnly.
@@ -287,8 +267,7 @@ class SymmetricHashJoinStateManagerSuite extends SymmetricHashJoinStateManagerBa
   }
 
   versionsInTest.foreach { version =>
-    test(
-      s"SPARK-35689: StreamingJoinStateManager V${version} - " +
+    test(s"SPARK-35689: StreamingJoinStateManager V${version} - " +
         "printable key of keyWithIndexToValue") {
 
       val keyExprs = Seq[Expression](
@@ -301,16 +280,11 @@ class SymmetricHashJoinStateManagerSuite extends SymmetricHashJoinStateManagerBa
       withJoinStateManager(inputValueAttributes, keyExprs, version) { manager =>
         assert(manager.isInstanceOf[SupportsIndexedKeys])
 
-        val currentKey = keyGen.apply(
-          new GenericInternalRow(
-            Array[Any](
-              false,
-              10.0,
-              UTF8String.fromString("string"),
-              Timestamp.valueOf("2021-6-8 10:25:50").getTime)))
+        val currentKey = keyGen.apply(new GenericInternalRow(Array[Any](
+          false, 10.0, UTF8String.fromString("string"),
+          Timestamp.valueOf("2021-6-8 10:25:50").getTime)))
 
-        val projectedRow = manager
-          .asInstanceOf[SupportsIndexedKeys]
+        val projectedRow = manager.asInstanceOf[SupportsIndexedKeys]
           .getInternalRowOfKeyWithIndex(currentKey)
         assert(s"$projectedRow" == "[false,10.0,string,1623173150000]")
       }
@@ -319,38 +293,37 @@ class SymmetricHashJoinStateManagerSuite extends SymmetricHashJoinStateManagerBa
 
   /* Test removeByValue with nulls simulated by updating numValues on the state manager */
   private def testAllOperationsWithNulls(stateFormatVersion: Int): Unit = {
-    withJoinStateManager(inputValueAttributes, joinKeyExpressions, stateFormatVersion) {
-      manager =>
-        implicit val mgr = manager
+    withJoinStateManager(inputValueAttributes, joinKeyExpressions, stateFormatVersion) { manager =>
+      implicit val mgr = manager
 
-        appendAndTest(40, 100, 200, 300)
-        appendAndTest(50, 125)
-        appendAndTest(60, 275) // prepare for testing removeByValue
-        assertNumRows(stateFormatVersion, 5)
+      appendAndTest(40, 100, 200, 300)
+      appendAndTest(50, 125)
+      appendAndTest(60, 275)              // prepare for testing removeByValue
+      assertNumRows(stateFormatVersion, 5)
 
-        updateNumValues(40, 5) // update total values to 5 to create 2 nulls
-        removeByValue(125)
-        assert(get(40) === Seq(200, 300))
-        assert(get(50) === Seq.empty)
-        assert(get(60) === Seq(275)) // should remove only some values, not all and nulls
-        assertNumRows(stateFormatVersion, 3)
+      updateNumValues(40, 5)   // update total values to 5 to create 2 nulls
+      removeByValue(125)
+      assert(get(40) === Seq(200, 300))
+      assert(get(50) === Seq.empty)
+      assert(get(60) === Seq(275))        // should remove only some values, not all and nulls
+      assertNumRows(stateFormatVersion, 3)
 
-        append(40, 50)
-        assert(get(40) === Seq(50, 200, 300))
-        assertNumRows(stateFormatVersion, 4)
-        updateNumValues(40, 4) // update total values to 4 to create 1 null
+      append(40, 50)
+      assert(get(40) === Seq(50, 200, 300))
+      assertNumRows(stateFormatVersion, 4)
+      updateNumValues(40, 4)   // update total values to 4 to create 1 null
 
-        removeByValue(200)
-        assert(get(40) === Seq(300))
-        assert(get(60) === Seq(275)) // should remove only some values, not all and nulls
-        assertNumRows(stateFormatVersion, 2)
-        updateNumValues(40, 2) // update total values to simulate nulls
-        updateNumValues(60, 4)
+      removeByValue(200)
+      assert(get(40) === Seq(300))
+      assert(get(60) === Seq(275))        // should remove only some values, not all and nulls
+      assertNumRows(stateFormatVersion, 2)
+      updateNumValues(40, 2)   // update total values to simulate nulls
+      updateNumValues(60, 4)
 
-        removeByValue(300)
-        assert(get(40) === Seq.empty)
-        assert(get(60) === Seq.empty) // should remove all values now including nulls
-        assertNumRows(stateFormatVersion, 0)
+      removeByValue(300)
+      assert(get(40) === Seq.empty)
+      assert(get(60) === Seq.empty)       // should remove all values now including nulls
+      assertNumRows(stateFormatVersion, 0)
     }
   }
 
@@ -358,38 +331,33 @@ class SymmetricHashJoinStateManagerSuite extends SymmetricHashJoinStateManagerBa
   private def testAllOperationsWithNullsInMiddle(stateFormatVersion: Int): Unit = {
     // Test with skipNullsForStreamStreamJoins set to false which would throw a
     // NullPointerException while iterating and also return null values as part of get
-    withJoinStateManager(inputValueAttributes, joinKeyExpressions, stateFormatVersion) {
-      manager =>
-        implicit val mgr = manager
+    withJoinStateManager(inputValueAttributes, joinKeyExpressions, stateFormatVersion) { manager =>
+      implicit val mgr = manager
 
-        val ex = intercept[Exception] {
-          appendAndTest(40, 50, 200, 300)
-          assertNumRows(stateFormatVersion, 3)
-          updateNumValues(40, 4) // create a null at the end
-          append(40, 400)
-          updateNumValues(40, 7) // create nulls in between and end
-          removeByValue(50)
-        }
-        assert(ex.isInstanceOf[NullPointerException])
-        assert(getNumValues(40) === 7) // we should get 7 with no nulls skipped
+      val ex = intercept[Exception] {
+        appendAndTest(40, 50, 200, 300)
+        assertNumRows(stateFormatVersion, 3)
+        updateNumValues(40, 4) // create a null at the end
+        append(40, 400)
+        updateNumValues(40, 7) // create nulls in between and end
+        removeByValue(50)
+      }
+      assert(ex.isInstanceOf[NullPointerException])
+      assert(getNumValues(40) === 7)        // we should get 7 with no nulls skipped
 
-        removeByValue(300)
-        assert(getNumValues(40) === 1) // only 400 should remain
-        assert(get(40) === Seq(400))
-        removeByValue(400)
-        assert(get(40) === Seq.empty)
-        assertNumRows(stateFormatVersion, 0) // ensure all elements removed
+      removeByValue(300)
+      assert(getNumValues(40) === 1)         // only 400 should remain
+      assert(get(40) === Seq(400))
+      removeByValue(400)
+      assert(get(40) === Seq.empty)
+      assertNumRows(stateFormatVersion, 0)   // ensure all elements removed
     }
 
     // Test with skipNullsForStreamStreamJoins set to true which would skip nulls
     // and continue iterating as part of removeByValue as well as get
     val metric = new SQLMetric("sum")
-    withJoinStateManager(
-      inputValueAttributes,
-      joinKeyExpressions,
-      stateFormatVersion,
-      true,
-      Some(metric)) { manager =>
+    withJoinStateManager(inputValueAttributes, joinKeyExpressions, stateFormatVersion, true,
+        Some(metric)) { manager =>
       implicit val mgr = manager
 
       appendAndTest(40, 50, 200, 300)
@@ -408,34 +376,31 @@ class SymmetricHashJoinStateManagerSuite extends SymmetricHashJoinStateManagerBa
 
       removeByValue(50)
 
-      assert(getNumValues(40) === 3) // we should now get (400, 200, 300) with nulls skipped
+      assert(getNumValues(40) === 3)       // we should now get (400, 200, 300) with nulls skipped
 
       removeByValue(300)
-      assert(getNumValues(40) === 1) // only 400 should remain
+      assert(getNumValues(40) === 1)         // only 400 should remain
       assert(get(40) === Seq(400))
       removeByValue(400)
       assert(get(40) === Seq.empty)
-      assertNumRows(stateFormatVersion, 0) // ensure all elements removed
+      assertNumRows(stateFormatVersion, 0)   // ensure all elements removed
     }
   }
 
-  protected def updateNumValues(key: Int, numValues: Long)(implicit
-      manager: SymmetricHashJoinStateManager): Unit = {
+  protected def updateNumValues(key: Int, numValues: Long)
+                               (implicit manager: SymmetricHashJoinStateManager): Unit = {
     assert(manager.isInstanceOf[SupportsIndexedKeys])
-    manager
-      .asInstanceOf[SupportsIndexedKeys]
-      .updateNumValuesTestOnly(toJoinKeyRow(key), numValues)
+    manager.asInstanceOf[SupportsIndexedKeys].updateNumValuesTestOnly(toJoinKeyRow(key), numValues)
   }
 }
 
 class SymmetricHashJoinStateManagerEventTimeInKeySuite
-    extends SymmetricHashJoinStateManagerBaseSuite {
+  extends SymmetricHashJoinStateManagerBaseSuite {
 
   private val versionsInTest = SymmetricHashJoinStateManager.supportedVersions
 
   private val watermarkMetadata = new MetadataBuilder()
-    .putLong(EventTimeWatermark.delayKey, 10)
-    .build()
+    .putLong(EventTimeWatermark.delayKey, 10).build()
   private val inputValueSchema = new StructType()
     .add(StructField("time", IntegerType, metadata = watermarkMetadata))
     .add(StructField("value", IntegerType))
@@ -444,8 +409,10 @@ class SymmetricHashJoinStateManagerEventTimeInKeySuite
     toAttributes(inputValueSchema)
   override protected val inputValueAttributesWithWatermark: AttributeReference =
     inputValueAttributes(0)
-  override protected val joinKeyExpressions: Seq[Expression] =
-    Seq[Expression](Literal(false), inputValueAttributesWithWatermark, Literal(10.0))
+  override protected val joinKeyExpressions: Seq[Expression] = Seq[Expression](
+    Literal(false),
+    inputValueAttributesWithWatermark,
+    Literal(10.0))
 
   versionsInTest.foreach { ver =>
     test(s"StreamingJoinStateManager V$ver - all operations") {
@@ -467,30 +434,30 @@ class SymmetricHashJoinStateManagerEventTimeInKeySuite
       stateFormatVersion = stateFormatVersion) { manager =>
       implicit val mgr = manager
 
-      assert(get(20) === Seq.empty) // initially empty
+      assert(get(20) === Seq.empty)     // initially empty
       append(20, 2)
-      assert(get(20) === Seq(2)) // should first value correctly
+      assert(get(20) === Seq(2))        // should first value correctly
       assertNumRows(stateFormatVersion, 1)
 
       append(20, 3)
-      assert(get(20) === Seq(2, 3)) // should append new values
+      assert(get(20) === Seq(2, 3))     // should append new values
       append(20, 3)
-      assert(get(20) === Seq(2, 3, 3)) // should append another copy if same value added again
+      assert(get(20) === Seq(2, 3, 3))  // should append another copy if same value added again
       assertNumRows(stateFormatVersion, 3)
 
       assert(get(30) === Seq.empty)
       append(30, 1)
       assert(get(30) === Seq(1))
-      assert(get(20) === Seq(2, 3, 3)) // add another key-value should not affect existing ones
+      assert(get(20) === Seq(2, 3, 3))  // add another key-value should not affect existing ones
       assertNumRows(stateFormatVersion, 4)
 
       assert(removeByKey(25) === 3)
       assert(get(20) === Seq.empty)
-      assert(get(30) === Seq(1)) // should remove 20, not 30
+      assert(get(30) === Seq(1))        // should remove 20, not 30
       assertNumRows(stateFormatVersion, 1)
 
       assert(removeByKey(30) === 1)
-      assert(get(30) === Seq.empty) // should remove 30
+      assert(get(30) === Seq.empty)     // should remove 30
       assertNumRows(stateFormatVersion, 0)
     }
   }
@@ -506,16 +473,17 @@ class SymmetricHashJoinStateManagerEventTimeInKeySuite
         checkpointDir,
         storeVersion = 0,
         changelogCheckpoint = changelogCheckpoint) { manager =>
+
         implicit val mgr = manager
 
-        assert(get(20) === Seq.empty) // initially empty
+        assert(get(20) === Seq.empty)     // initially empty
         append(20, 2)
-        assert(get(20) === Seq(2)) // should first value correctly
+        assert(get(20) === Seq(2))        // should first value correctly
 
         append(20, 3)
-        assert(get(20) === Seq(2, 3)) // should append new values
+        assert(get(20) === Seq(2, 3))     // should append new values
         append(20, 3)
-        assert(get(20) === Seq(2, 3, 3)) // should append another copy if same value added again
+        assert(get(20) === Seq(2, 3, 3))  // should append another copy if same value added again
 
         mgr.commit()
       }
@@ -527,16 +495,17 @@ class SymmetricHashJoinStateManagerEventTimeInKeySuite
         checkpointDir,
         storeVersion = 1,
         changelogCheckpoint = changelogCheckpoint) { manager =>
+
         implicit val mgr = manager
 
         assert(get(30) === Seq.empty)
         append(30, 1)
         assert(get(30) === Seq(1))
-        assert(get(20) === Seq(2, 3, 3)) // add another key-value should not affect existing ones
+        assert(get(20) === Seq(2, 3, 3))  // add another key-value should not affect existing ones
 
         assert(removeByKey(25) === 3)
         assert(get(20) === Seq.empty)
-        assert(get(30) === Seq(1)) // should remove 20, not 30
+        assert(get(30) === Seq(1))        // should remove 20, not 30
 
         mgr.commit()
       }
@@ -548,10 +517,11 @@ class SymmetricHashJoinStateManagerEventTimeInKeySuite
         checkpointDir,
         storeVersion = 2,
         changelogCheckpoint = changelogCheckpoint) { manager =>
+
         implicit val mgr = manager
 
         assert(removeByKey(30) === 1)
-        assert(get(30) === Seq.empty) // should remove 30
+        assert(get(30) === Seq.empty)     // should remove 30
 
         mgr.commit()
       }
@@ -560,21 +530,21 @@ class SymmetricHashJoinStateManagerEventTimeInKeySuite
 
   versionsInTest.foreach { ver =>
     test(s"StreamingJoinStateManager V$ver - evictAndReturnByKey returns correct rows") {
-      withJoinStateManager(inputValueAttributes, joinKeyExpressions, stateFormatVersion = ver) {
-        manager =>
-          implicit val mgr = manager
+      withJoinStateManager(
+        inputValueAttributes, joinKeyExpressions, stateFormatVersion = ver) { manager =>
+        implicit val mgr = manager
 
-          append(20, 2)
-          append(20, 3)
-          append(30, 1)
+        append(20, 2)
+        append(20, 3)
+        append(30, 1)
 
-          val evicted = removeAndReturnByKey(25)
-          val evictedPairs = evicted.map(p => (toValueInt(p.value), p.matched)).toSeq
-          assert(evictedPairs.map(_._1).sorted === Seq(2, 3))
-          assert(evictedPairs.forall(!_._2))
+        val evicted = removeAndReturnByKey(25)
+        val evictedPairs = evicted.map(p => (toValueInt(p.value), p.matched)).toSeq
+        assert(evictedPairs.map(_._1).sorted === Seq(2, 3))
+        assert(evictedPairs.forall(!_._2))
 
-          assert(get(20) === Seq.empty)
-          assert(get(30) === Seq(1))
+        assert(get(20) === Seq.empty)
+        assert(get(30) === Seq(1))
       }
     }
   }
@@ -584,12 +554,8 @@ class SymmetricHashJoinStateManagerEventTimeInKeySuite
     test(s"StreamingJoinStateManager V$ver - matched flag update + eviction roundtrip") {
       withTempDir { checkpointDir =>
         withJoinStateManagerWithCheckpointDir(
-          inputValueAttributes,
-          joinKeyExpressions,
-          ver,
-          checkpointDir,
-          storeVersion = 0,
-          changelogCheckpoint = false) { manager =>
+          inputValueAttributes, joinKeyExpressions, ver,
+          checkpointDir, storeVersion = 0, changelogCheckpoint = false) { manager =>
           implicit val mgr = manager
 
           append(20, 2)
@@ -597,12 +563,11 @@ class SymmetricHashJoinStateManagerEventTimeInKeySuite
           append(30, 1)
 
           val dummyRow = new GenericInternalRow(0)
-          val matched = manager
-            .getJoinedRows(
-              toJoinKeyRow(20),
-              row => new JoinedRow(row, dummyRow),
-              jr => jr.getInt(1) == 2)
-            .toSeq
+          val matched = manager.getJoinedRows(
+            toJoinKeyRow(20),
+            row => new JoinedRow(row, dummyRow),
+            jr => jr.getInt(1) == 2
+          ).toSeq
           // Here we ensure consumption of the iterator provided by getJoinedRows.
           assert(matched.size == 1)
 
@@ -610,12 +575,8 @@ class SymmetricHashJoinStateManagerEventTimeInKeySuite
         }
 
         withJoinStateManagerWithCheckpointDir(
-          inputValueAttributes,
-          joinKeyExpressions,
-          ver,
-          checkpointDir,
-          storeVersion = 1,
-          changelogCheckpoint = false) { manager =>
+          inputValueAttributes, joinKeyExpressions, ver,
+          checkpointDir, storeVersion = 1, changelogCheckpoint = false) { manager =>
           implicit val mgr = manager
 
           val evicted = removeAndReturnByKey(25)
@@ -632,57 +593,52 @@ class SymmetricHashJoinStateManagerEventTimeInKeySuite
 
   // V1 excluded: V1 converter does not persist matched flags (SPARK-26154)
   versionsInTest.filter(_ >= 2).foreach { ver =>
-    test(
-      s"StreamingJoinStateManager V$ver - " +
+    test(s"StreamingJoinStateManager V$ver - " +
         "getJoinedRows with excludeRowsAlreadyMatched") {
-      withJoinStateManager(inputValueAttributes, joinKeyExpressions, stateFormatVersion = ver) {
-        manager =>
-          implicit val mgr = manager
+      withJoinStateManager(
+        inputValueAttributes, joinKeyExpressions, stateFormatVersion = ver) { manager =>
+        implicit val mgr = manager
 
-          append(20, 2)
-          append(20, 3)
-          append(20, 4)
+        append(20, 2)
+        append(20, 3)
+        append(20, 4)
 
-          val dummyRow = new GenericInternalRow(0)
-          val firstPass = manager
-            .getJoinedRows(
-              toJoinKeyRow(20),
-              row => new JoinedRow(row, dummyRow),
-              // intentionally exclude 4, which should be only returned in next pass
-              jr => jr.getInt(1) < 4)
-            .toSeq
-          assert(firstPass.size == 2)
+        val dummyRow = new GenericInternalRow(0)
+        val firstPass = manager.getJoinedRows(
+          toJoinKeyRow(20),
+          row => new JoinedRow(row, dummyRow),
+          // intentionally exclude 4, which should be only returned in next pass
+          jr => jr.getInt(1) < 4
+        ).toSeq
+        assert(firstPass.size == 2)
 
-          val secondPass = manager
-            .getJoinedRows(
-              toJoinKeyRow(20),
-              row => new JoinedRow(row, dummyRow),
-              _ => true,
-              excludeRowsAlreadyMatched = true)
-            .map(_.getInt(1))
-            .toSeq
-          assert(secondPass === Seq(4))
+        val secondPass = manager.getJoinedRows(
+          toJoinKeyRow(20),
+          row => new JoinedRow(row, dummyRow),
+          _ => true,
+          excludeRowsAlreadyMatched = true
+        ).map(_.getInt(1)).toSeq
+        assert(secondPass === Seq(4))
       }
     }
   }
 }
 
 class SymmetricHashJoinStateManagerEventTimeInValueSuite
-    extends SymmetricHashJoinStateManagerBaseSuite {
+  extends SymmetricHashJoinStateManagerBaseSuite {
 
   private val versionsInTest = SymmetricHashJoinStateManager.supportedVersions
 
   private val watermarkMetadata = new MetadataBuilder()
-    .putLong(EventTimeWatermark.delayKey, 10)
-    .build()
+    .putLong(EventTimeWatermark.delayKey, 10).build()
   private val inputValueSchema = new StructType()
     .add(StructField("key", IntegerType))
     .add(StructField("time", IntegerType, metadata = watermarkMetadata))
 
   protected override val inputValueAttributes = toAttributes(inputValueSchema)
   protected override val inputValueAttributesWithWatermark = inputValueAttributes(1)
-  protected override val joinKeyExpressions =
-    Seq[Expression](Literal(false), inputValueAttributes(0), Literal(10.0))
+  protected override val joinKeyExpressions = Seq[Expression](
+    Literal(false), inputValueAttributes(0), Literal(10.0))
 
   versionsInTest.foreach { ver =>
     test(s"StreamingJoinStateManager V$ver - all operations") {
@@ -706,13 +662,13 @@ class SymmetricHashJoinStateManagerEventTimeInValueSuite
 
       appendAndTest(40, 100, 200, 300)
       appendAndTest(50, 125)
-      appendAndTest(60, 275) // prepare for testing removeByValue
+      appendAndTest(60, 275)              // prepare for testing removeByValue
       assertNumRows(stateFormatVersion, 5)
 
       assert(removeByValue(125) === 2)
       assert(get(40) === Seq(200, 300))
       assert(get(50) === Seq.empty)
-      assert(get(60) === Seq(275)) // should remove only some values, not all
+      assert(get(60) === Seq(275))        // should remove only some values, not all
       assertNumRows(stateFormatVersion, 3)
 
       append(40, 50)
@@ -721,12 +677,12 @@ class SymmetricHashJoinStateManagerEventTimeInValueSuite
 
       assert(removeByValue(200) === 2)
       assert(get(40) === Seq(300))
-      assert(get(60) === Seq(275)) // should remove only some values, not all
+      assert(get(60) === Seq(275))        // should remove only some values, not all
       assertNumRows(stateFormatVersion, 2)
 
       assert(removeByValue(300) === 2)
       assert(get(40) === Seq.empty)
-      assert(get(60) === Seq.empty) // should remove all values now
+      assert(get(60) === Seq.empty)       // should remove all values now
       assertNumRows(stateFormatVersion, 0)
     }
   }
@@ -742,6 +698,7 @@ class SymmetricHashJoinStateManagerEventTimeInValueSuite
         checkpointDir,
         storeVersion = 0,
         changelogCheckpoint = changelogCheckpoint) { manager =>
+
         implicit val mgr = manager
 
         appendAndTest(40, 100, 200, 300)
@@ -758,12 +715,13 @@ class SymmetricHashJoinStateManagerEventTimeInValueSuite
         checkpointDir,
         storeVersion = 1,
         changelogCheckpoint = changelogCheckpoint) { manager =>
+
         implicit val mgr = manager
 
         assert(removeByValue(125) === 2)
         assert(get(40) === Seq(200, 300))
         assert(get(50) === Seq.empty)
-        assert(get(60) === Seq(275)) // should remove only some values, not all
+        assert(get(60) === Seq(275))        // should remove only some values, not all
 
         mgr.commit()
       }
@@ -775,6 +733,7 @@ class SymmetricHashJoinStateManagerEventTimeInValueSuite
         checkpointDir,
         storeVersion = 2,
         changelogCheckpoint = changelogCheckpoint) { manager =>
+
         implicit val mgr = manager
 
         append(40, 50)
@@ -790,11 +749,12 @@ class SymmetricHashJoinStateManagerEventTimeInValueSuite
         checkpointDir,
         storeVersion = 3,
         changelogCheckpoint = changelogCheckpoint) { manager =>
+
         implicit val mgr = manager
 
         assert(removeByValue(200) === 2)
         assert(get(40) === Seq(300))
-        assert(get(60) === Seq(275)) // should remove only some values, not all
+        assert(get(60) === Seq(275))        // should remove only some values, not all
 
         mgr.commit()
       }
@@ -806,11 +766,12 @@ class SymmetricHashJoinStateManagerEventTimeInValueSuite
         checkpointDir,
         storeVersion = 4,
         changelogCheckpoint = changelogCheckpoint) { manager =>
+
         implicit val mgr = manager
 
         assert(removeByValue(300) === 2)
         assert(get(40) === Seq.empty)
-        assert(get(60) === Seq.empty) // should remove all values now
+        assert(get(60) === Seq.empty)       // should remove all values now
 
         mgr.commit()
       }
@@ -819,22 +780,22 @@ class SymmetricHashJoinStateManagerEventTimeInValueSuite
 
   versionsInTest.foreach { ver =>
     test(s"StreamingJoinStateManager V$ver - evictAndReturnByValue returns correct rows") {
-      withJoinStateManager(inputValueAttributes, joinKeyExpressions, stateFormatVersion = ver) {
-        manager =>
-          implicit val mgr = manager
+      withJoinStateManager(
+        inputValueAttributes, joinKeyExpressions, stateFormatVersion = ver) { manager =>
+        implicit val mgr = manager
 
-          appendAndTest(40, 100, 200, 300)
-          appendAndTest(50, 125)
-          appendAndTest(60, 275)
+        appendAndTest(40, 100, 200, 300)
+        appendAndTest(50, 125)
+        appendAndTest(60, 275)
 
-          val evicted = removeAndReturnByValue(125)
-          val evictedPairs = evicted.map(p => (toValueInt(p.value), p.matched)).toSeq
-          assert(evictedPairs.map(_._1).sorted === Seq(100, 125))
-          assert(evictedPairs.forall(!_._2))
+        val evicted = removeAndReturnByValue(125)
+        val evictedPairs = evicted.map(p => (toValueInt(p.value), p.matched)).toSeq
+        assert(evictedPairs.map(_._1).sorted === Seq(100, 125))
+        assert(evictedPairs.forall(!_._2))
 
-          assert(get(40) === Seq(200, 300))
-          assert(get(50) === Seq.empty)
-          assert(get(60) === Seq(275))
+        assert(get(40) === Seq(200, 300))
+        assert(get(50) === Seq.empty)
+        assert(get(60) === Seq(275))
       }
     }
   }
@@ -844,35 +805,26 @@ class SymmetricHashJoinStateManagerEventTimeInValueSuite
     test(s"StreamingJoinStateManager V$ver - matched flag update + eviction roundtrip") {
       withTempDir { checkpointDir =>
         withJoinStateManagerWithCheckpointDir(
-          inputValueAttributes,
-          joinKeyExpressions,
-          ver,
-          checkpointDir,
-          storeVersion = 0,
-          changelogCheckpoint = false) { manager =>
+          inputValueAttributes, joinKeyExpressions, ver,
+          checkpointDir, storeVersion = 0, changelogCheckpoint = false) { manager =>
           implicit val mgr = manager
 
           appendAndTest(40, 100, 200, 300)
 
           val dummyRow = new GenericInternalRow(0)
-          val matched = manager
-            .getJoinedRows(
-              toJoinKeyRow(40),
-              row => new JoinedRow(row, dummyRow),
-              jr => jr.getInt(1) == 100)
-            .toSeq
+          val matched = manager.getJoinedRows(
+            toJoinKeyRow(40),
+            row => new JoinedRow(row, dummyRow),
+            jr => jr.getInt(1) == 100
+          ).toSeq
           assert(matched.size == 1)
 
           mgr.commit()
         }
 
         withJoinStateManagerWithCheckpointDir(
-          inputValueAttributes,
-          joinKeyExpressions,
-          ver,
-          checkpointDir,
-          storeVersion = 1,
-          changelogCheckpoint = false) { manager =>
+          inputValueAttributes, joinKeyExpressions, ver,
+          checkpointDir, storeVersion = 1, changelogCheckpoint = false) { manager =>
           implicit val mgr = manager
 
           val evicted = removeAndReturnByValue(125)
@@ -888,34 +840,30 @@ class SymmetricHashJoinStateManagerEventTimeInValueSuite
 
   // V1 excluded: V1 converter does not persist matched flags (SPARK-26154)
   versionsInTest.filter(_ >= 2).foreach { ver =>
-    test(
-      s"StreamingJoinStateManager V$ver - " +
+    test(s"StreamingJoinStateManager V$ver - " +
         "getJoinedRows with excludeRowsAlreadyMatched") {
-      withJoinStateManager(inputValueAttributes, joinKeyExpressions, stateFormatVersion = ver) {
-        manager =>
-          implicit val mgr = manager
+      withJoinStateManager(
+        inputValueAttributes, joinKeyExpressions, stateFormatVersion = ver) { manager =>
+        implicit val mgr = manager
 
-          appendAndTest(40, 100, 200, 300)
+        appendAndTest(40, 100, 200, 300)
 
-          val dummyRow = new GenericInternalRow(0)
-          val firstPass = manager
-            .getJoinedRows(
-              toJoinKeyRow(40),
-              row => new JoinedRow(row, dummyRow),
-              // intentionally exclude 300, which should be only returned in next pass
-              jr => jr.getInt(1) < 300)
-            .toSeq
-          assert(firstPass.size == 2)
+        val dummyRow = new GenericInternalRow(0)
+        val firstPass = manager.getJoinedRows(
+          toJoinKeyRow(40),
+          row => new JoinedRow(row, dummyRow),
+          // intentionally exclude 300, which should be only returned in next pass
+          jr => jr.getInt(1) < 300
+        ).toSeq
+        assert(firstPass.size == 2)
 
-          val secondPass = manager
-            .getJoinedRows(
-              toJoinKeyRow(40),
-              row => new JoinedRow(row, dummyRow),
-              _ => true,
-              excludeRowsAlreadyMatched = true)
-            .map(_.getInt(1))
-            .toSeq
-          assert(secondPass === Seq(300))
+        val secondPass = manager.getJoinedRows(
+          toJoinKeyRow(40),
+          row => new JoinedRow(row, dummyRow),
+          _ => true,
+          excludeRowsAlreadyMatched = true
+        ).map(_.getInt(1)).toSeq
+        assert(secondPass === Seq(300))
       }
     }
   }

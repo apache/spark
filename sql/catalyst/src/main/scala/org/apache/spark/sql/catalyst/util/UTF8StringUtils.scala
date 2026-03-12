@@ -39,7 +39,11 @@ object UTF8StringUtils {
   def toByteExact(s: UTF8String, context: QueryContext): Byte =
     withException(s.toByteExact, context, ByteType, s)
 
-  private def withException[A](f: => A, context: QueryContext, to: DataType, s: UTF8String): A = {
+  private def withException[A](
+      f: => A,
+      context: QueryContext,
+      to: DataType,
+      s: UTF8String): A = {
     try {
       f
     } catch {

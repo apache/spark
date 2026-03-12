@@ -77,7 +77,10 @@ trait ShowPartitionsSuiteBase extends QueryTest with DDLCommandTestUtils {
           sql(s"SHOW PARTITIONS $t PARTITION(abcd=2015, xyz=1)")
         },
         condition = "PARTITIONS_NOT_FOUND",
-        parameters = Map("partitionList" -> "`abcd`", "tableName" -> expectedTableName))
+        parameters = Map(
+          "partitionList" -> "`abcd`",
+          "tableName" -> expectedTableName)
+      )
     }
   }
 
@@ -87,9 +90,9 @@ trait ShowPartitionsSuiteBase extends QueryTest with DDLCommandTestUtils {
       runShowPartitionsSql(
         s"show partitions $t",
         Row("year=2015/month=1") ::
-          Row("year=2015/month=2") ::
-          Row("year=2016/month=2") ::
-          Row("year=2016/month=3") :: Nil)
+        Row("year=2015/month=2") ::
+        Row("year=2016/month=2") ::
+        Row("year=2016/month=3") :: Nil)
     }
   }
 
@@ -99,14 +102,14 @@ trait ShowPartitionsSuiteBase extends QueryTest with DDLCommandTestUtils {
       runShowPartitionsSql(
         s"show partitions $t PARTITION(year=2015)",
         Row("year=2015/month=1") ::
-          Row("year=2015/month=2") :: Nil)
+        Row("year=2015/month=2") :: Nil)
       runShowPartitionsSql(
         s"show partitions $t PARTITION(year=2015, month=1)",
         Row("year=2015/month=1") :: Nil)
       runShowPartitionsSql(
         s"show partitions $t PARTITION(month=2)",
         Row("year=2015/month=2") ::
-          Row("year=2016/month=2") :: Nil)
+        Row("year=2016/month=2") :: Nil)
     }
   }
 
@@ -116,7 +119,7 @@ trait ShowPartitionsSuiteBase extends QueryTest with DDLCommandTestUtils {
       runShowPartitionsSql(
         s"show partitions $t",
         Row("year=2016/month=3/hour=10/minute=10/sec=10/extra=1") ::
-          Row("year=2016/month=4/hour=10/minute=10/sec=10/extra=1") :: Nil)
+        Row("year=2016/month=4/hour=10/minute=10/sec=10/extra=1") :: Nil)
     }
   }
 
@@ -129,13 +132,13 @@ trait ShowPartitionsSuiteBase extends QueryTest with DDLCommandTestUtils {
       sql(s"INSERT INTO $t PARTITION(year = 2015, month = 1) SELECT 1, 1")
       Seq(
         true -> "PARTITION(year = 2015, month = 1)",
-        false -> "PARTITION(YEAR = 2015, Month = 1)").foreach {
-        case (caseSensitive, partitionSpec) =>
-          withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-            runShowPartitionsSql(
-              s"SHOW PARTITIONS $t $partitionSpec",
-              Row("year=2015/month=1") :: Nil)
-          }
+        false -> "PARTITION(YEAR = 2015, Month = 1)"
+      ).foreach { case (caseSensitive, partitionSpec) =>
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+          runShowPartitionsSql(
+            s"SHOW PARTITIONS $t $partitionSpec",
+            Row("year=2015/month=1") :: Nil)
+        }
       }
     }
   }

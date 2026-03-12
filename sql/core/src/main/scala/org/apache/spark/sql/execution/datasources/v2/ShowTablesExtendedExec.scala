@@ -40,9 +40,7 @@ case class ShowTablesExtendedExec(
     output: Seq[Attribute],
     catalog: TableCatalog,
     namespace: Seq[String],
-    pattern: String)
-    extends V2CommandExec
-    with LeafExecNode {
+    pattern: String) extends V2CommandExec with LeafExecNode {
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
 
@@ -53,13 +51,10 @@ case class ShowTablesExtendedExec(
       if (StringUtils.filterPattern(Seq(tableIdent.name()), pattern).nonEmpty) {
         val table = catalog.loadTable(tableIdent)
         val information = getTableDetails(catalog.name, tableIdent, table)
-        rows += toCatalystRow(
-          tableIdent.namespace().quoted,
-          tableIdent.name(),
-          false,
+        rows += toCatalystRow(tableIdent.namespace().quoted, tableIdent.name(), false,
           s"$information\n")
+        }
       }
-    }
 
     // fetch temp views, includes: global temp view, local temp view
     val sessionCatalog = session.sessionState.catalog
@@ -103,15 +98,11 @@ case class ShowTablesExtendedExec(
       })
 
     val properties =
-      conf
-        .redactOptions(table.properties.asScala.toMap)
-        .toList
+      conf.redactOptions(table.properties.asScala.toMap).toList
         .filter(kv => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(kv._1))
-        .sortBy(_._1)
-        .map { case (key, value) =>
-          key + "=" + value
-        }
-        .mkString("[", ",", "]")
+        .sortBy(_._1).map {
+        case (key, value) => key + "=" + value
+      }.mkString("[", ",", "]")
     if (!table.properties().isEmpty) {
       results.put("Table Properties", properties.mkString("[", ", ", "]"))
     }
@@ -119,23 +110,17 @@ case class ShowTablesExtendedExec(
     // Partition Provider & Partition Columns
     if (table.supportsPartitions && table.asPartitionable.partitionSchema().nonEmpty) {
       results.put("Partition Provider", "Catalog")
-      results.put(
-        "Partition Columns",
-        table.asPartitionable
-          .partitionSchema()
-          .map(field => quoteIdentifier(field.name))
-          .mkString("[", ", ", "]"))
+      results.put("Partition Columns", table.asPartitionable.partitionSchema().map(
+        field => quoteIdentifier(field.name)).mkString("[", ", ", "]"))
     }
 
     if (table.columns().nonEmpty) {
       results.put("Schema", CatalogV2Util.v2ColumnsToStructType(table.columns()).treeString)
     }
 
-    results
-      .map { case (key, value) =>
-        if (value.isEmpty) key else s"$key: $value"
-      }
-      .mkString("", "\n", "")
+    results.map { case (key, value) =>
+      if (value.isEmpty) key else s"$key: $value"
+    }.mkString("", "\n", "")
   }
 }
 
@@ -147,17 +132,13 @@ case class ShowTablePartitionExec(
     catalog: TableCatalog,
     tableIndent: Identifier,
     table: SupportsPartitionManagement,
-    partSpec: ResolvedPartitionSpec)
-    extends V2CommandExec
-    with LeafExecNode {
+    partSpec: ResolvedPartitionSpec) extends V2CommandExec with LeafExecNode {
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
-    val information = getTablePartitionDetails(tableIndent, table, partSpec)
-    rows += toCatalystRow(
-      tableIndent.namespace.quoted,
-      tableIndent.name(),
-      false,
-      s"$information\n")
+    val information = getTablePartitionDetails(tableIndent,
+      table, partSpec)
+    rows += toCatalystRow(tableIndent.namespace.quoted,
+      tableIndent.name(), false, s"$information\n")
 
     rows.toSeq
   }
@@ -182,8 +163,8 @@ case class ShowTablePartitionExec(
     val timeZoneId = conf.sessionLocalTimeZone
     for (i <- 0 until len) {
       val dataType = partitionSchema(i).dataType
-      val partValueUTF8String =
-        ToPrettyString(Literal(row.get(i, dataType), dataType), Some(timeZoneId)).eval(null)
+      val partValueUTF8String = ToPrettyString(Literal(row.get(i, dataType), dataType),
+        Some(timeZoneId)).eval(null)
       val partValueStr = if (partValueUTF8String == null) "null" else partValueUTF8String.toString
       partitions(i) = escapePathName(partitionSchema(i).name) + "=" + escapePathName(partValueStr)
     }
@@ -193,20 +174,16 @@ case class ShowTablePartitionExec(
     // "Partition Parameters"
     val metadata = partitionTable.loadPartitionMetadata(ident)
     if (!metadata.isEmpty) {
-      val metadataValues = metadata.asScala
-        .map { case (key, value) =>
-          if (value.isEmpty) key else s"$key: $value"
-        }
-        .mkString("{", ", ", "}")
+      val metadataValues = metadata.asScala.map { case (key, value) =>
+        if (value.isEmpty) key else s"$key: $value"
+      }.mkString("{", ", ", "}")
       results.put("Partition Parameters", metadataValues)
     }
 
     // TODO "Created Time", "Last Access", "Partition Statistics"
 
-    results
-      .map { case (key, value) =>
-        if (value.isEmpty) key else s"$key: $value"
-      }
-      .mkString("", "\n", "")
+    results.map { case (key, value) =>
+      if (value.isEmpty) key else s"$key: $value"
+    }.mkString("", "\n", "")
   }
 }

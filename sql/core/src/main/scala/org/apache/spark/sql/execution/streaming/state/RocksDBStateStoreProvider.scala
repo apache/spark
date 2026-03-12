@@ -39,18 +39,15 @@ import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.{NonFateSharingCache, Utils}
 
 private[sql] class RocksDBStateStoreProvider
-    extends StateStoreProvider
-    with Logging
-    with Closeable
-    with SupportsFineGrainedReplay {
+  extends StateStoreProvider with Logging with Closeable
+  with SupportsFineGrainedReplay {
   import RocksDBStateStoreProvider._
 
   class RocksDBStateStore(
       lastVersion: Long,
       private[RocksDBStateStoreProvider] val stamp: Long,
       private[RocksDBStateStoreProvider] var readOnly: Boolean,
-      private[RocksDBStateStoreProvider] var forceSnapshotOnCommit: Boolean)
-      extends StateStore {
+      private[RocksDBStateStoreProvider] var forceSnapshotOnCommit: Boolean) extends StateStore {
 
     private sealed trait OPERATION
     private case object UPDATE extends OPERATION
@@ -70,19 +67,19 @@ private[sql] class RocksDBStateStoreProvider
     @volatile private var isValidated = false
 
     /**
-     * Map defining all valid state transitions for the RocksDB state store. Key: (currentState,
-     * operation) -> Value: nextState
+     * Map defining all valid state transitions for the RocksDB state store.
+     * Key: (currentState, operation) -> Value: nextState
      *
      * Valid transitions:
-     *   - (UPDATING, UPDATE) -> UPDATING: Continue updating
-     *   - (UPDATING, ABORT) -> ABORTED: Abort during update
-     *   - (UPDATING, RELEASE) -> RELEASED: Release during update
-     *   - (UPDATING, COMMIT) -> COMMITTED: Direct commit
-     *   - (COMMITTED, METRICS) -> COMMITTED: Allow metrics after commit
-     *   - (ABORTED, ABORT) -> ABORTED: Abort is idempotent
-     *   - (ABORTED, METRICS) -> ABORTED: Allow metrics after abort
-     *   - (RELEASED, RELEASE) -> RELEASED: Release is idempotent
-     *   - (RELEASED, METRICS) -> RELEASED: Allow metrics after release
+     * - (UPDATING, UPDATE) -> UPDATING: Continue updating
+     * - (UPDATING, ABORT) -> ABORTED: Abort during update
+     * - (UPDATING, RELEASE) -> RELEASED: Release during update
+     * - (UPDATING, COMMIT) -> COMMITTED: Direct commit
+     * - (COMMITTED, METRICS) -> COMMITTED: Allow metrics after commit
+     * - (ABORTED, ABORT) -> ABORTED: Abort is idempotent
+     * - (ABORTED, METRICS) -> ABORTED: Allow metrics after abort
+     * - (RELEASED, RELEASE) -> RELEASED: Release is idempotent
+     * - (RELEASED, METRICS) -> RELEASED: Allow metrics after release
      */
     private val allowedStateTransitions: Map[(STATE, OPERATION), STATE] = Map(
       // From UPDATING state
@@ -93,24 +90,23 @@ private[sql] class RocksDBStateStoreProvider
       // From COMMITTED state
       (COMMITTED, METRICS) -> COMMITTED,
       // From ABORTED state
-      (ABORTED, ABORT) -> ABORTED, // Idempotent
+      (ABORTED, ABORT) -> ABORTED,  // Idempotent
       (ABORTED, METRICS) -> ABORTED,
       // From RELEASED state
-      (RELEASED, RELEASE) -> RELEASED, // Idempotent
-      (RELEASED, METRICS) -> RELEASED)
+      (RELEASED, RELEASE) -> RELEASED,  // Idempotent
+      (RELEASED, METRICS) -> RELEASED
+    )
 
     override def id: StateStoreId = RocksDBStateStoreProvider.this.stateStoreId
 
     override def version: Long = lastVersion
 
     /**
-     * Validates the expected state, throws exception if state is not as expected. Returns the
-     * current state
+     * Validates the expected state, throws exception if state is not as expected.
+     * Returns the current state
      *
-     * @param possibleStates
-     *   Expected possible states
-     * @return
-     *   current state of StateStore
+     * @param possibleStates Expected possible states
+     * @return current state of StateStore
      */
     private def validateState(possibleStates: STATE*): STATE = {
       if (!possibleStates.contains(state)) {
@@ -121,18 +117,18 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     /**
-     * Throws error if transition is illegal. MUST be called for every StateStore method.
+     * Throws error if transition is illegal.
+     * MUST be called for every StateStore method.
      *
-     * @param operation
-     *   The transition type of the operation.
+     * @param operation The transition type of the operation.
      */
     private def validateAndTransitionState(operation: OPERATION): Unit = {
       val oldState = state
 
       // Operations requiring stamp verification
       val needsStampVerification = operation match {
-        case ABORT if state == ABORTED => false // ABORT is idempotent
-        case RELEASE if state == RELEASED => false // RELEASE is idempotent
+        case ABORT if state == ABORTED => false     // ABORT is idempotent
+        case RELEASE if state == RELEASED => false  // RELEASE is idempotent
         case UPDATE | ABORT | RELEASE | COMMIT => true
         case METRICS => false
       }
@@ -160,11 +156,10 @@ private[sql] class RocksDBStateStoreProvider
       }
 
       if (operation != UPDATE) {
-        logInfo(
-          log"Transitioned state from ${MDC(LogKeys.STATE_STORE_STATE, oldState)} " +
-            log"to ${MDC(LogKeys.STATE_STORE_STATE, newState)} " +
-            log"for StateStoreId ${MDC(LogKeys.STATE_STORE_ID, stateStoreId)} " +
-            log"with transition ${MDC(LogKeys.OPERATION, operation.toString)}")
+        logInfo(log"Transitioned state from ${MDC(LogKeys.STATE_STORE_STATE, oldState)} " +
+          log"to ${MDC(LogKeys.STATE_STORE_STATE, newState)} " +
+          log"for StateStoreId ${MDC(LogKeys.STATE_STORE_ID, stateStoreId)} " +
+          log"with transition ${MDC(LogKeys.OPERATION, operation.toString)}")
       }
       state = newState
     }
@@ -232,14 +227,19 @@ private[sql] class RocksDBStateStoreProvider
         keyStateEncoderSpec,
         valueSchema,
         stateSchemaProvider,
-        Some(colFamilyName))
-      val keyEncoder =
-        RocksDBStateEncoder.getKeyEncoder(dataEncoder, keyStateEncoderSpec, useColumnFamilies)
+        Some(colFamilyName)
+      )
+      val keyEncoder = RocksDBStateEncoder.getKeyEncoder(
+        dataEncoder,
+        keyStateEncoderSpec,
+        useColumnFamilies
+      )
       val valueEncoder = RocksDBStateEncoder.getValueEncoder(
         dataEncoder,
         valueSchema,
         useMultipleValuesPerKey,
-        rocksDB.delimiterSize)
+        rocksDB.delimiterSize
+      )
       keyValueEncoderMap.putIfAbsent(colFamilyName, (keyEncoder, valueEncoder, cfId))
     }
 
@@ -254,18 +254,15 @@ private[sql] class RocksDBStateStoreProvider
 
       if (!isValidated && value != null && !useColumnFamilies) {
         StateStoreProvider.validateStateRowFormat(
-          key,
-          keySchema,
-          value,
-          valueSchema,
-          stateStoreId,
-          storeConf)
+          key, keySchema, value, valueSchema, stateStoreId, storeConf)
         isValidated = true
       }
       value
     }
 
-    override def multiGet(keys: Array[UnsafeRow], colFamilyName: String): Iterator[UnsafeRow] = {
+    override def multiGet(
+        keys: Array[UnsafeRow],
+        colFamilyName: String): Iterator[UnsafeRow] = {
       validateAndTransitionState(UPDATE)
       verify(keys != null && keys.forall(_ != null), "Keys cannot be null")
       verifyColFamilyOperations("multiGet", colFamilyName)
@@ -287,12 +284,12 @@ private[sql] class RocksDBStateStoreProvider
     /**
      * Provides an iterator containing all values of a non-null key.
      *
-     * Inside RocksDB, the values are merged together and stored as a byte Array. This operation
-     * relies on state store value encoder to be able to split the single array into multiple
-     * values.
+     * Inside RocksDB, the values are merged together and stored as a byte Array.
+     * This operation relies on state store value encoder to be able to split the
+     * single array into multiple values.
      *
-     * Also see [[MultiValuedStateEncoder]] which supports encoding/decoding multiple values per
-     * key.
+     * Also see [[MultiValuedStateEncoder]] which supports encoding/decoding multiple
+     * values per key.
      */
     override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
       validateAndTransitionState(UPDATE)
@@ -303,10 +300,8 @@ private[sql] class RocksDBStateStoreProvider
       val valueEncoder = kvEncoder._2
       val keyEncoder = kvEncoder._1
 
-      verify(
-        valueEncoder.supportsMultipleValuesPerKey,
-        "valuesIterator requires a encoder " +
-          "that supports multiple values for a single key.")
+      verify(valueEncoder.supportsMultipleValuesPerKey, "valuesIterator requires a encoder " +
+      "that supports multiple values for a single key.")
 
       if (storeConf.rowChecksumEnabled) {
         // getMergedValues provides better perf for row checksum, since it avoids copying values
@@ -319,9 +314,7 @@ private[sql] class RocksDBStateStoreProvider
       }
     }
 
-    override def merge(
-        key: UnsafeRow,
-        value: UnsafeRow,
+    override def merge(key: UnsafeRow, value: UnsafeRow,
         colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
       validateAndTransitionState(UPDATE)
       verify(state == UPDATING, "Cannot merge after already committed or aborted")
@@ -330,10 +323,8 @@ private[sql] class RocksDBStateStoreProvider
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       val keyEncoder = kvEncoder._1
       val valueEncoder = kvEncoder._2
-      verify(
-        valueEncoder.supportsMultipleValuesPerKey,
-        "Merge operation requires an encoder" +
-          " which supports multiple values for a single key")
+      verify(valueEncoder.supportsMultipleValuesPerKey, "Merge operation requires an encoder" +
+        " which supports multiple values for a single key")
       verify(key != null, "Key cannot be null")
       require(value != null, "Cannot merge a null value")
 
@@ -419,8 +410,7 @@ private[sql] class RocksDBStateStoreProvider
       verifyColFamilyOperations("deleteRange", colFamilyName)
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
-      verify(
-        kvEncoder._1.supportsDeleteRange,
+      verify(kvEncoder._1.supportsDeleteRange,
         "deleteRange requires a RangeKeyScanStateEncoderSpec for ordered key encoding")
       val encodedBeginKey = kvEncoder._1.encodeKey(beginKey)
       val encodedEndKey = kvEncoder._1.encodeKey(endKey)
@@ -439,15 +429,11 @@ private[sql] class RocksDBStateStoreProvider
         val rocksDbIter = rocksDB.iterator(colFamilyName)
 
         val iter = rocksDbIter.map { kv =>
-          rowPair.withRows(kvEncoder._1.decodeKey(kv.key), kvEncoder._2.decodeValue(kv.value))
+          rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
+            kvEncoder._2.decodeValue(kv.value))
           if (!isValidated && rowPair.value != null && !useColumnFamilies) {
             StateStoreProvider.validateStateRowFormat(
-              rowPair.key,
-              keySchema,
-              rowPair.value,
-              valueSchema,
-              stateStoreId,
-              storeConf)
+              rowPair.key, keySchema, rowPair.value, valueSchema, stateStoreId, storeConf)
             isValidated = true
           }
           rowPair
@@ -458,15 +444,11 @@ private[sql] class RocksDBStateStoreProvider
         val rocksDbIter = rocksDB.iterator()
 
         val iter = rocksDbIter.map { kv =>
-          rowPair.withRows(kvEncoder._1.decodeKey(kv.key), kvEncoder._2.decodeValue(kv.value))
+          rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
+            kvEncoder._2.decodeValue(kv.value))
           if (!isValidated && rowPair.value != null && !useColumnFamilies) {
             StateStoreProvider.validateStateRowFormat(
-              rowPair.key,
-              keySchema,
-              rowPair.value,
-              valueSchema,
-              stateStoreId,
-              storeConf)
+              rowPair.key, keySchema, rowPair.value, valueSchema, stateStoreId, storeConf)
             isValidated = true
           }
           rowPair
@@ -500,12 +482,7 @@ private[sql] class RocksDBStateStoreProvider
           rowPair.withRows(keyRow, valueRow)
           if (!isValidated && rowPair.value != null && !useColumnFamilies) {
             StateStoreProvider.validateStateRowFormat(
-              rowPair.key,
-              keySchema,
-              rowPair.value,
-              valueSchema,
-              stateStoreId,
-              storeConf)
+              rowPair.key, keySchema, rowPair.value, valueSchema, stateStoreId, storeConf)
             isValidated = true
           }
           rowPair
@@ -522,14 +499,16 @@ private[sql] class RocksDBStateStoreProvider
       verifyColFamilyOperations("prefixScan", colFamilyName)
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
-      require(kvEncoder._1.supportPrefixKeyScan, "Prefix scan requires setting prefix key!")
+      require(kvEncoder._1.supportPrefixKeyScan,
+        "Prefix scan requires setting prefix key!")
 
       val rowPair = new UnsafeRowPair()
       val prefix = kvEncoder._1.encodePrefixKey(prefixKey)
 
       val rocksDbIter = rocksDB.prefixScan(prefix, colFamilyName)
       val iter = rocksDbIter.map { kv =>
-        rowPair.withRows(kvEncoder._1.decodeKey(kv.key), kvEncoder._2.decodeValue(kv.value))
+        rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
+          kvEncoder._2.decodeValue(kv.value))
         rowPair
       }
 
@@ -537,14 +516,12 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     override def prefixScanWithMultiValues(
-        prefixKey: UnsafeRow,
-        colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+        prefixKey: UnsafeRow, colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
       validateAndTransitionState(UPDATE)
       verifyColFamilyOperations("prefixScanWithMultiValues", colFamilyName)
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
-      verify(
-        kvEncoder._1.supportPrefixKeyScan,
+      verify(kvEncoder._1.supportPrefixKeyScan,
         "prefixScanWithMultiValues requires encoder supporting prefix scan!")
       verify(
         kvEncoder._2.supportsMultipleValuesPerKey,
@@ -562,12 +539,7 @@ private[sql] class RocksDBStateStoreProvider
           rowPair.withRows(keyRow, valueRow)
           if (!isValidated && rowPair.value != null && !useColumnFamilies) {
             StateStoreProvider.validateStateRowFormat(
-              rowPair.key,
-              keySchema,
-              rowPair.value,
-              valueSchema,
-              stateStoreId,
-              storeConf)
+              rowPair.key, keySchema, rowPair.value, valueSchema, stateStoreId, storeConf)
             isValidated = true
           }
           rowPair
@@ -588,9 +560,8 @@ private[sql] class RocksDBStateStoreProvider
         checkpointInfo = Some(newCheckpointInfo)
         storedMetrics = rocksDB.metricsOpt
         validateAndTransitionState(COMMIT)
-        logInfo(
-          log"Committed ${MDC(VERSION_NUM, newVersion)} " +
-            log"for ${MDC(STATE_STORE_ID, id)}")
+        logInfo(log"Committed ${MDC(VERSION_NUM, newVersion)} " +
+          log"for ${MDC(STATE_STORE_ID, id)}")
 
         // Report the commit to StateStoreCoordinator for tracking
         if (storeConf.commitValidationEnabled) {
@@ -607,9 +578,8 @@ private[sql] class RocksDBStateStoreProvider
     override def release(): Unit = {
       assert(readOnly, "Release can only be called on a read-only store")
       if (state != RELEASED) {
-        logInfo(
-          log"Releasing ${MDC(VERSION_NUM, version + 1)} " +
-            log"for ${MDC(STATE_STORE_ID, id)}")
+        logInfo(log"Releasing ${MDC(VERSION_NUM, version + 1)} " +
+          log"for ${MDC(STATE_STORE_ID, id)}")
         rocksDB.release()
         validateAndTransitionState(RELEASE)
       } else {
@@ -622,17 +592,15 @@ private[sql] class RocksDBStateStoreProvider
       if (validateState(UPDATING, ABORTED) != ABORTED) {
         try {
           validateAndTransitionState(ABORT)
-          logInfo(
-            log"Aborting ${MDC(VERSION_NUM, version + 1)} " +
-              log"for ${MDC(STATE_STORE_ID, id)}")
+          logInfo(log"Aborting ${MDC(VERSION_NUM, version + 1)} " +
+            log"for ${MDC(STATE_STORE_ID, id)}")
           rocksDB.rollback()
         } finally {
           stateMachine.releaseStamp(stamp)
         }
       } else {
-        logInfo(
-          log"Skipping abort for ${MDC(VERSION_NUM, version + 1)} " +
-            log"for ${MDC(STATE_STORE_ID, id)} as we already aborted")
+        logInfo(log"Skipping abort for ${MDC(VERSION_NUM, version + 1)} " +
+          log"for ${MDC(STATE_STORE_ID, id)} as we already aborted")
       }
     }
 
@@ -686,6 +654,7 @@ private[sql] class RocksDBStateStoreProvider
           CUSTOM_METRIC_FILESYNC_TIME -> commitLatencyMs("fileSync"),
           CUSTOM_METRIC_CHANGE_LOG_WRITER_COMMIT_TIME -> commitLatencyMs("changeLogWriterCommit"),
           CUSTOM_METRIC_SAVE_ZIP_FILES_TIME -> commitLatencyMs("saveZipFiles"),
+
           CUSTOM_METRIC_LOAD_FROM_SNAPSHOT_TIME -> loadMetrics("loadFromSnapshot"),
           CUSTOM_METRIC_LOAD_TIME -> loadMetrics("load"),
           CUSTOM_METRIC_REPLAY_CHANGE_LOG -> loadMetrics("replayChangelog"),
@@ -701,34 +670,31 @@ private[sql] class RocksDBStateStoreProvider
           CUSTOM_METRIC_STALL_TIME -> nativeOpsLatencyMillis("writerStallDuration"),
           CUSTOM_METRIC_TOTAL_COMPACT_TIME -> sumNativeOpsLatencyMillis("compaction"),
           CUSTOM_METRIC_COMPACT_READ_BYTES -> nativeOpsMetrics("totalBytesReadByCompaction"),
-          CUSTOM_METRIC_COMPACT_WRITTEN_BYTES -> nativeOpsMetrics(
-            "totalBytesWrittenByCompaction"),
+          CUSTOM_METRIC_COMPACT_WRITTEN_BYTES -> nativeOpsMetrics("totalBytesWrittenByCompaction"),
           CUSTOM_METRIC_FLUSH_WRITTEN_BYTES -> nativeOpsMetrics("totalBytesWrittenByFlush"),
           CUSTOM_METRIC_PINNED_BLOCKS_MEM_USAGE -> rocksDBMetrics.pinnedBlocksMemUsage,
           CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES_KEYS -> rocksDBMetrics.numInternalKeys,
           CUSTOM_METRIC_NUM_EXTERNAL_COL_FAMILIES -> internalColFamilyCnt(),
           CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES -> externalColFamilyCnt(),
           CUSTOM_METRIC_NUM_SNAPSHOTS_AUTO_REPAIRED -> rocksDBMetrics.numSnapshotsAutoRepaired,
-          CUSTOM_METRIC_FORCE_SNAPSHOT -> (if (forceSnapshotOnCommit) 1L
-                                           else 0L)) ++ rocksDBMetrics.zipFileBytesUncompressed
-          .map(bytes => Map(CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED -> bytes))
-          .getOrElse(Map())
+          CUSTOM_METRIC_FORCE_SNAPSHOT -> (if (forceSnapshotOnCommit) 1L else 0L)
+        ) ++ rocksDBMetrics.zipFileBytesUncompressed.map(bytes =>
+          Map(CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED -> bytes)).getOrElse(Map())
 
         val stateStoreInstanceMetrics = Map[StateStoreInstanceMetric, Long](
           CUSTOM_INSTANCE_METRIC_SNAPSHOT_LAST_UPLOADED
-            .withNewId(
-              id.partitionId,
-              id.storeName) -> rocksDBMetrics.lastUploadedSnapshotVersion)
+            .withNewId(id.partitionId, id.storeName) -> rocksDBMetrics.lastUploadedSnapshotVersion
+        )
 
         StateStoreMetrics(
           rocksDBMetrics.numUncommittedKeys,
           rocksDBMetrics.totalMemUsageBytes,
           stateStoreCustomMetrics,
-          stateStoreInstanceMetrics)
+          stateStoreInstanceMetrics
+        )
       } else {
-        logInfo(
-          log"Failed to collect metrics for store_id=${MDC(STATE_STORE_ID, id)} " +
-            log"and version=${MDC(VERSION_NUM, version)}")
+        logInfo(log"Failed to collect metrics for store_id=${MDC(STATE_STORE_ID, id)} " +
+          log"and version=${MDC(VERSION_NUM, version)}")
         StateStoreMetrics(0, 0, Map.empty, Map.empty)
       }
     }
@@ -737,9 +703,8 @@ private[sql] class RocksDBStateStoreProvider
       validateAndTransitionState(METRICS)
       checkpointInfo match {
         case Some(info) => info
-        case None =>
-          throw StateStoreErrors.stateStoreOperationOutOfOrder(
-            "Cannot get checkpointInfo without committing the store")
+        case None => throw StateStoreErrors.stateStoreOperationOutOfOrder(
+          "Cannot get checkpointInfo without committing the store")
       }
     }
 
@@ -792,18 +757,16 @@ private[sql] class RocksDBStateStoreProvider
     this.useColumnFamilies = useColumnFamilies
     this.stateStoreEncoding = storeConf.stateStoreEncodingFormat
     this.stateSchemaProvider = stateSchemaProvider
-    this.rocksDBEventForwarder = Some(
-      RocksDBEventForwarder(StateStoreProvider.getRunId(hadoopConf), stateStoreId))
+    this.rocksDBEventForwarder =
+      Some(RocksDBEventForwarder(StateStoreProvider.getRunId(hadoopConf), stateStoreId))
 
     // Initialize StateStoreProviderId for memory tracking
     val queryRunId = UUID.fromString(StateStoreProvider.getRunId(hadoopConf))
     this.stateStoreProviderId = StateStoreProviderId(stateStoreId, queryRunId)
 
     if (useMultipleValuesPerKey) {
-      require(
-        useColumnFamilies,
-        "Multiple values per key support requires column families to be" +
-          " enabled in RocksDBStateStore.")
+      require(useColumnFamilies, "Multiple values per key support requires column families to be" +
+        " enabled in RocksDBStateStore.")
     }
 
     rocksDB // lazy initialization
@@ -832,22 +795,24 @@ private[sql] class RocksDBStateStoreProvider
       stateSchemaProvider,
       Some(StateStore.DEFAULT_COL_FAMILY_NAME))
 
-    val keyEncoder =
-      RocksDBStateEncoder.getKeyEncoder(dataEncoder, keyStateEncoderSpec, useColumnFamilies)
+    val keyEncoder = RocksDBStateEncoder.getKeyEncoder(
+      dataEncoder,
+      keyStateEncoderSpec,
+      useColumnFamilies)
     val valueEncoder = RocksDBStateEncoder.getValueEncoder(
       dataEncoder,
       valueSchema,
       useMultipleValuesPerKey,
-      rocksDB.delimiterSize)
+      rocksDB.delimiterSize
+    )
 
     var cfId: Short = 0
     if (useColumnFamilies) {
-      cfId =
-        rocksDB.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+      cfId = rocksDB.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME,
+        isInternal = false)
     }
 
-    keyValueEncoderMap.putIfAbsent(
-      StateStore.DEFAULT_COL_FAMILY_NAME,
+    keyValueEncoderMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME,
       (keyEncoder, valueEncoder, cfId))
   }
 
@@ -861,20 +826,13 @@ private[sql] class RocksDBStateStoreProvider
   /**
    * Creates and returns a state store with the specified parameters.
    *
-   * @param version
-   *   The version of the state store to load
-   * @param uniqueId
-   *   Optional unique identifier for checkpoint
-   * @param readOnly
-   *   Whether to open the store in read-only mode
-   * @param existingStore
-   *   Optional existing store to reuse instead of creating a new one
-   * @param forceSnapshotOnCommit
-   *   Whether to force a snapshot upload on commit
-   * @param loadEmpty
-   *   If true, creates an empty store at this version without loading previous data
-   * @return
-   *   The loaded state store
+   * @param version The version of the state store to load
+   * @param uniqueId Optional unique identifier for checkpoint
+   * @param readOnly Whether to open the store in read-only mode
+   * @param existingStore Optional existing store to reuse instead of creating a new one
+   * @param forceSnapshotOnCommit Whether to force a snapshot upload on commit
+   * @param loadEmpty If true, creates an empty store at this version without loading previous data
+   * @return The loaded state store
    */
   private def loadStateStore(
       version: Long,
@@ -963,7 +921,8 @@ private[sql] class RocksDBStateStoreProvider
       uniqueId,
       readOnly = false,
       forceSnapshotOnCommit = forceSnapshotOnCommit,
-      loadEmpty = loadEmpty)
+      loadEmpty = loadEmpty
+    )
   }
 
   override def upgradeReadStoreToWriteStore(
@@ -971,27 +930,22 @@ private[sql] class RocksDBStateStoreProvider
       version: Long,
       uniqueId: Option[String] = None,
       forceSnapshotOnCommit: Boolean = false): StateStore = {
-    assert(
-      version == readStore.version,
+    assert(version == readStore.version,
       s"Can only upgrade readStore to writeStore with the same version," +
         s" readStoreVersion: ${readStore.version}, writeStoreVersion: ${version}")
-    assert(
-      this.stateStoreId == readStore.id,
-      "Can only upgrade readStore to writeStore with" +
-        " the same stateStoreId")
-    assert(
-      readStore.isInstanceOf[RocksDBStateStore],
-      "Can only upgrade state store if it is a " +
-        "RocksDBStateStore")
-    loadStateStore(
-      version,
+    assert(this.stateStoreId == readStore.id, "Can only upgrade readStore to writeStore with" +
+      " the same stateStoreId")
+    assert(readStore.isInstanceOf[RocksDBStateStore], "Can only upgrade state store if it is a " +
+      "RocksDBStateStore")
+    loadStateStore(version,
       uniqueId,
       readOnly = false,
       existingStore = Some(readStore.asInstanceOf[RocksDBStateStore]),
       forceSnapshotOnCommit = forceSnapshotOnCommit)
   }
 
-  override def getReadStore(version: Long, uniqueId: Option[String] = None): StateStore = {
+  override def getReadStore(
+      version: Long, uniqueId: Option[String] = None): StateStore = {
     loadStateStore(version, uniqueId, readOnly = true)
   }
 
@@ -1003,7 +957,8 @@ private[sql] class RocksDBStateStoreProvider
       // SPARK-46547 - Swallow non-fatal exception in maintenance task to avoid deadlock between
       // maintenance thread and streaming aggregation operator
       case NonFatal(ex) =>
-        logWarning(s"Ignoring error while performing maintenance operations with exception=", ex)
+        logWarning(s"Ignoring error while performing maintenance operations with exception=",
+          ex)
     }
   }
 
@@ -1032,8 +987,7 @@ private[sql] class RocksDBStateStoreProvider
   @volatile private var rocksDBEventForwarder: Option[RocksDBEventForwarder] = _
   @volatile private var stateStoreProviderId: StateStoreProviderId = _
   // Exposed for testing
-  @volatile private[sql] var sparkConf: SparkConf = Option(SparkEnv.get)
-    .map(_.conf)
+  @volatile private[sql] var sparkConf: SparkConf = Option(SparkEnv.get).map(_.conf)
     .getOrElse(new SparkConf)
 
   protected def createRocksDB(
@@ -1066,21 +1020,13 @@ private[sql] class RocksDBStateStoreProvider
       s"partId=${stateStoreId.partitionId},name=${stateStoreId.storeName})"
     val loggingId = stateStoreProviderId.toString
     val localRootDir = Utils.createExecutorLocalTempDir(sparkConf, storeIdStr)
-    createRocksDB(
-      dfsRootDir,
-      RocksDBConf(storeConf),
-      localRootDir,
-      hadoopConf,
-      loggingId,
-      useColumnFamilies,
-      storeConf.enableStateStoreCheckpointIds,
-      stateStoreId.partitionId,
+    createRocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, loggingId,
+      useColumnFamilies, storeConf.enableStateStoreCheckpointIds, stateStoreId.partitionId,
       rocksDBEventForwarder,
       Some(s"${stateStoreProviderId.toString}_${UUID.randomUUID().toString}"))
   }
 
-  private val keyValueEncoderMap = new java.util.concurrent.ConcurrentHashMap[
-    String,
+  private val keyValueEncoderMap = new java.util.concurrent.ConcurrentHashMap[String,
     (RocksDBKeyStateEncoder, RocksDBValueStateEncoder, Short)]
 
   private val multiColFamiliesDisabledStr = "multiple column families is disabled in " +
@@ -1094,18 +1040,12 @@ private[sql] class RocksDBStateStoreProvider
    * Get the state store of endVersion by applying delta files on the snapshot of snapshotVersion.
    * If snapshot for snapshotVersion does not exist, an error will be thrown.
    *
-   * @param snapshotVersion
-   *   checkpoint version of the snapshot to start with
-   * @param endVersion
-   *   checkpoint version to end with
-   * @param readOnly
-   *   whether the state store should be read-only
-   * @param snapshotVersionStateStoreCkptId
-   *   state store checkpoint ID of the snapshot version
-   * @param endVersionStateStoreCkptId
-   *   state store checkpoint ID of the end version
-   * @return
-   *   [[StateStore]]
+   * @param snapshotVersion checkpoint version of the snapshot to start with
+   * @param endVersion   checkpoint version to end with
+   * @param readOnly whether the state store should be read-only
+   * @param snapshotVersionStateStoreCkptId state store checkpoint ID of the snapshot version
+   * @param endVersionStateStoreCkptId state store checkpoint ID of the end version
+   * @return [[StateStore]]
    */
   override def replayStateFromSnapshot(
       snapshotVersion: Long,
@@ -1133,7 +1073,8 @@ private[sql] class RocksDBStateStoreProvider
           stateMachine.releaseStamp(stamp)
           throw e
       }
-    } catch {
+    }
+    catch {
       case e: OutOfMemoryError =>
         throw QueryExecutionErrors.notEnoughMemoryToLoadStore(
           stateStoreId.toString,
@@ -1147,7 +1088,8 @@ private[sql] class RocksDBStateStoreProvider
       startVersion: Long,
       endVersion: Long,
       colFamilyNameOpt: Option[String] = None,
-      endVersionStateStoreCkptId: Option[String] = None): StateStoreChangeDataReader = {
+      endVersionStateStoreCkptId: Option[String] = None):
+    StateStoreChangeDataReader = {
     val statePath = stateStoreId.storeCheckpointLocation()
     val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
     new RocksDBStateStoreChangeDataReader(
@@ -1171,12 +1113,13 @@ private[sql] class RocksDBStateStoreProvider
    * @param operationName - name of the store operation
    * @param colFamilyName - name of the column family
    */
-  private def verifyColFamilyOperations(operationName: String, colFamilyName: String): Unit = {
+  private def verifyColFamilyOperations(
+      operationName: String,
+      colFamilyName: String): Unit = {
     if (colFamilyName != StateStore.DEFAULT_COL_FAMILY_NAME) {
       // if the state store instance does not support multiple column families, throw an exception
       if (!useColumnFamilies) {
-        throw StateStoreErrors.unsupportedOperationException(
-          operationName,
+        throw StateStoreErrors.unsupportedOperationException(operationName,
           multiColFamiliesDisabledStr)
       }
 
@@ -1188,8 +1131,7 @@ private[sql] class RocksDBStateStoreProvider
 
       // if the column family does not exist, throw an exception
       if (!rocksDB.checkColFamilyExists(colFamilyName)) {
-        throw StateStoreErrors.unsupportedOperationOnMissingColumnFamily(
-          operationName,
+        throw StateStoreErrors.unsupportedOperationOnMissingColumnFamily(operationName,
           colFamilyName)
       }
     }
@@ -1207,8 +1149,7 @@ private[sql] class RocksDBStateStoreProvider
       isInternal: Boolean = false): Unit = {
     // if the state store instance does not support multiple column families, throw an exception
     if (!useColumnFamilies) {
-      throw StateStoreErrors.unsupportedOperationException(
-        operationName,
+      throw StateStoreErrors.unsupportedOperationException(operationName,
         multiColFamiliesDisabledStr)
     }
 
@@ -1227,12 +1168,14 @@ private[sql] class RocksDBStateStoreProvider
   }
 }
 
+
 case class StateRowEncoderCacheKey(
     queryRunId: String,
     operatorId: Long,
     partitionId: Int,
     stateStoreName: String,
-    colFamilyName: String)
+    colFamilyName: String
+)
 
 object RocksDBStateStoreProvider {
   // Version as a single byte that specifies the encoding of the row data in RocksDB
@@ -1249,13 +1192,11 @@ object RocksDBStateStoreProvider {
   /**
    * Encodes a virtual column family ID into a byte array suitable for RocksDB.
    *
-   * This method creates a fixed-size byte array prefixed with the virtual column family ID, which
-   * is used to partition data within RocksDB.
+   * This method creates a fixed-size byte array prefixed with the virtual column family ID,
+   * which is used to partition data within RocksDB.
    *
-   * @param virtualColFamilyId
-   *   The column family identifier to encode
-   * @return
-   *   A byte array containing the encoded column family ID
+   * @param virtualColFamilyId The column family identifier to encode
+   * @return A byte array containing the encoded column family ID
    */
   def getColumnFamilyIdAsBytes(virtualColFamilyId: Short): Array[Byte] = {
     val encodedBytes = new Array[Byte](RocksDBStateStoreProvider.VIRTUAL_COL_FAMILY_PREFIX_BYTES)
@@ -1269,18 +1210,23 @@ object RocksDBStateStoreProvider {
    * @param vcfId - virtual column family id
    * @return - encoded byte array with virtual column family id prefix
    */
-  def encodeStateRowWithPrefix(data: Array[Byte], vcfId: Short): Array[Byte] = {
+  def encodeStateRowWithPrefix(
+      data: Array[Byte],
+      vcfId: Short): Array[Byte] = {
     // Create result array big enough for all prefixes plus data
-    val result = new Array[Byte](
-      RocksDBStateStoreProvider.VIRTUAL_COL_FAMILY_PREFIX_BYTES
-        + data.length)
+    val result = new Array[Byte](RocksDBStateStoreProvider.VIRTUAL_COL_FAMILY_PREFIX_BYTES
+      + data.length)
     val offset = Platform.BYTE_ARRAY_OFFSET +
       RocksDBStateStoreProvider.VIRTUAL_COL_FAMILY_PREFIX_BYTES
 
     Platform.putShort(result, Platform.BYTE_ARRAY_OFFSET, vcfId)
 
     // Write the actual data
-    Platform.copyMemory(data, Platform.BYTE_ARRAY_OFFSET, result, offset, data.length)
+    Platform.copyMemory(
+      data, Platform.BYTE_ARRAY_OFFSET,
+      result, offset,
+      data.length
+    )
 
     result
   }
@@ -1304,10 +1250,13 @@ object RocksDBStateStoreProvider {
     val offset = Platform.BYTE_ARRAY_OFFSET +
       RocksDBStateStoreProvider.VIRTUAL_COL_FAMILY_PREFIX_BYTES
 
-    val key = new Array[Byte](
-      data.length -
-        RocksDBStateStoreProvider.VIRTUAL_COL_FAMILY_PREFIX_BYTES)
-    Platform.copyMemory(data, offset, key, Platform.BYTE_ARRAY_OFFSET, key.length)
+    val key = new Array[Byte](data.length -
+      RocksDBStateStoreProvider.VIRTUAL_COL_FAMILY_PREFIX_BYTES)
+    Platform.copyMemory(
+      data, offset,
+      key, Platform.BYTE_ARRAY_OFFSET,
+      key.length
+    )
 
     key
   }
@@ -1317,7 +1266,8 @@ object RocksDBStateStoreProvider {
     NonFateSharingCache(
       maximumSize = MAX_AVRO_ENCODERS_IN_CACHE,
       expireAfterAccessTime = AVRO_ENCODER_LIFETIME_HOURS,
-      expireAfterAccessTimeUnit = TimeUnit.HOURS)
+      expireAfterAccessTimeUnit = TimeUnit.HOURS
+    )
 
   /**
    * Creates and returns a data encoder for the state store based on the specified encoding type.
@@ -1325,21 +1275,16 @@ object RocksDBStateStoreProvider {
    * when possible.
    *
    * The method supports two encoding types:
-   *   - Avro: Uses Apache Avro for serialization with schema evolution support
-   *   - UnsafeRow: Uses Spark's internal row format for optimal performance
+   * - Avro: Uses Apache Avro for serialization with schema evolution support
+   * - UnsafeRow: Uses Spark's internal row format for optimal performance
    *
-   * @param stateStoreEncoding
-   *   The encoding type to use ("avro" or "unsaferow")
-   * @param encoderCacheKey
-   *   A unique key for caching the encoder instance, typically combining query ID, operator ID,
-   *   partition ID, and column family name
-   * @param keyStateEncoderSpec
-   *   Specification for how to encode keys, including schema and any prefix/range scan
-   *   requirements
-   * @param valueSchema
-   *   The schema for the values to be encoded
-   * @return
-   *   A RocksDBDataEncoder instance configured for the specified encoding type
+   * @param stateStoreEncoding The encoding type to use ("avro" or "unsaferow")
+   * @param encoderCacheKey A unique key for caching the encoder instance, typically combining
+   *                       query ID, operator ID, partition ID, and column family name
+   * @param keyStateEncoderSpec Specification for how to encode keys, including schema and any
+   *                           prefix/range scan requirements
+   * @param valueSchema The schema for the values to be encoded
+   * @return A RocksDBDataEncoder instance configured for the specified encoding type
    */
   def getDataEncoder(
       stateStoreEncoding: String,
@@ -1354,53 +1299,54 @@ object RocksDBStateStoreProvider {
       new java.util.concurrent.Callable[RocksDBDataEncoder] {
         override def call(): RocksDBDataEncoder = {
           if (stateStoreEncoding == Avro.toString) {
-            assert(
-              columnFamilyName.isDefined,
+            assert(columnFamilyName.isDefined,
               "Column family name must be defined for Avro encoding")
             new AvroStateEncoder(
               keyStateEncoderSpec,
               valueSchema,
               stateSchemaProvider,
-              columnFamilyName.get)
+              columnFamilyName.get
+            )
           } else {
-            new UnsafeRowDataEncoder(keyStateEncoderSpec, valueSchema)
+            new UnsafeRowDataEncoder(
+              keyStateEncoderSpec,
+              valueSchema
+            )
           }
         }
-      })
+      }
+    )
   }
 
   // Native operation latencies report as latency in microseconds
   // as SQLMetrics support millis. Convert the value to millis
-  val CUSTOM_METRIC_GET_TIME =
-    StateStoreCustomTimingMetric("rocksdbGetLatency", "RocksDB: total get call latency")
-  val CUSTOM_METRIC_PUT_TIME =
-    StateStoreCustomTimingMetric("rocksdbPutLatency", "RocksDB: total put call latency")
+  val CUSTOM_METRIC_GET_TIME = StateStoreCustomTimingMetric(
+    "rocksdbGetLatency", "RocksDB: total get call latency")
+  val CUSTOM_METRIC_PUT_TIME = StateStoreCustomTimingMetric(
+    "rocksdbPutLatency", "RocksDB: total put call latency")
 
-  val CUSTOM_METRIC_GET_COUNT =
-    StateStoreCustomSumMetric("rocksdbGetCount", "RocksDB: number of get calls")
-  val CUSTOM_METRIC_PUT_COUNT =
-    StateStoreCustomSumMetric("rocksdbPutCount", "RocksDB: number of put calls")
+  val CUSTOM_METRIC_GET_COUNT = StateStoreCustomSumMetric(
+    "rocksdbGetCount", "RocksDB: number of get calls")
+  val CUSTOM_METRIC_PUT_COUNT = StateStoreCustomSumMetric(
+    "rocksdbPutCount", "RocksDB: number of put calls")
 
   // Commit latency detailed breakdown
-  val CUSTOM_METRIC_FLUSH_TIME =
-    StateStoreCustomTimingMetric("rocksdbCommitFlushLatency", "RocksDB: commit - flush time")
-  val CUSTOM_METRIC_COMMIT_COMPACT_TIME =
-    StateStoreCustomTimingMetric("rocksdbCommitCompactLatency", "RocksDB: commit - compact time")
+  val CUSTOM_METRIC_FLUSH_TIME = StateStoreCustomTimingMetric(
+    "rocksdbCommitFlushLatency", "RocksDB: commit - flush time")
+  val CUSTOM_METRIC_COMMIT_COMPACT_TIME = StateStoreCustomTimingMetric(
+    "rocksdbCommitCompactLatency", "RocksDB: commit - compact time")
   val CUSTOM_METRIC_CHECKPOINT_TIME = StateStoreCustomTimingMetric(
-    "rocksdbCommitCheckpointLatency",
-    "RocksDB: commit - checkpoint time")
+    "rocksdbCommitCheckpointLatency", "RocksDB: commit - checkpoint time")
   val CUSTOM_METRIC_FILESYNC_TIME = StateStoreCustomTimingMetric(
-    "rocksdbCommitFileSyncLatencyMs",
-    "RocksDB: commit - file sync to external storage time")
-  val CUSTOM_METRIC_FILES_COPIED =
-    StateStoreCustomSumMetric("rocksdbFilesCopied", "RocksDB: file manager - files copied")
-  val CUSTOM_METRIC_BYTES_COPIED =
-    StateStoreCustomSizeMetric("rocksdbBytesCopied", "RocksDB: file manager - bytes copied")
-  val CUSTOM_METRIC_FILES_REUSED =
-    StateStoreCustomSumMetric("rocksdbFilesReused", "RocksDB: file manager - files reused")
+    "rocksdbCommitFileSyncLatencyMs", "RocksDB: commit - file sync to external storage time")
+  val CUSTOM_METRIC_FILES_COPIED = StateStoreCustomSumMetric(
+    "rocksdbFilesCopied", "RocksDB: file manager - files copied")
+  val CUSTOM_METRIC_BYTES_COPIED = StateStoreCustomSizeMetric(
+    "rocksdbBytesCopied", "RocksDB: file manager - bytes copied")
+  val CUSTOM_METRIC_FILES_REUSED = StateStoreCustomSumMetric(
+    "rocksdbFilesReused", "RocksDB: file manager - files reused")
   val CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED = StateStoreCustomSizeMetric(
-    "rocksdbZipFileBytesUncompressed",
-    "RocksDB: file manager - uncompressed zip file bytes")
+    "rocksdbZipFileBytesUncompressed", "RocksDB: file manager - uncompressed zip file bytes")
   val CUSTOM_METRIC_CHANGE_LOG_WRITER_COMMIT_TIME = StateStoreCustomTimingMetric(
     "rocksdbChangeLogWriterCommitLatencyMs",
     "RocksDB: commit - changelog commit time")
@@ -1466,51 +1412,30 @@ object RocksDBStateStoreProvider {
     "RocksDB: number of internal column families")
 
   // Total SST file size
-  val CUSTOM_METRIC_SST_FILE_SIZE =
-    StateStoreCustomSizeMetric("rocksdbSstFileSize", "RocksDB: size of all SST files")
+  val CUSTOM_METRIC_SST_FILE_SIZE = StateStoreCustomSizeMetric(
+    "rocksdbSstFileSize", "RocksDB: size of all SST files")
   val CUSTOM_METRIC_NUM_SNAPSHOTS_AUTO_REPAIRED = StateStoreCustomSumMetric(
     "rocksdbNumSnapshotsAutoRepaired",
     "RocksDB: number of snapshots that were automatically repaired during store load")
 
   val CUSTOM_METRIC_FORCE_SNAPSHOT = StateStoreCustomSumMetric(
-    "rocksdbForceSnapshotCount",
-    "RocksDB: number of stores that had forced snapshot on commit")
+    "rocksdbForceSnapshotCount", "RocksDB: number of stores that had forced snapshot on commit")
 
   val ALL_CUSTOM_METRICS = Seq(
-    CUSTOM_METRIC_SST_FILE_SIZE,
-    CUSTOM_METRIC_GET_TIME,
-    CUSTOM_METRIC_PUT_TIME,
-    CUSTOM_METRIC_FLUSH_TIME,
-    CUSTOM_METRIC_COMMIT_COMPACT_TIME,
-    CUSTOM_METRIC_CHECKPOINT_TIME,
-    CUSTOM_METRIC_FILESYNC_TIME,
-    CUSTOM_METRIC_BYTES_COPIED,
-    CUSTOM_METRIC_FILES_COPIED,
-    CUSTOM_METRIC_FILES_REUSED,
-    CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED,
-    CUSTOM_METRIC_CHANGE_LOG_WRITER_COMMIT_TIME,
-    CUSTOM_METRIC_SAVE_ZIP_FILES_TIME,
-    CUSTOM_METRIC_GET_COUNT,
-    CUSTOM_METRIC_PUT_COUNT,
-    CUSTOM_METRIC_BLOCK_CACHE_MISS,
-    CUSTOM_METRIC_BLOCK_CACHE_HITS,
-    CUSTOM_METRIC_BYTES_READ,
-    CUSTOM_METRIC_BYTES_WRITTEN,
-    CUSTOM_METRIC_ITERATOR_BYTES_READ,
-    CUSTOM_METRIC_STALL_TIME,
-    CUSTOM_METRIC_TOTAL_COMPACT_TIME,
-    CUSTOM_METRIC_COMPACT_READ_BYTES,
-    CUSTOM_METRIC_COMPACT_WRITTEN_BYTES,
-    CUSTOM_METRIC_FLUSH_WRITTEN_BYTES,
-    CUSTOM_METRIC_PINNED_BLOCKS_MEM_USAGE,
-    CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES_KEYS,
-    CUSTOM_METRIC_NUM_EXTERNAL_COL_FAMILIES,
-    CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES,
-    CUSTOM_METRIC_LOAD_FROM_SNAPSHOT_TIME,
-    CUSTOM_METRIC_LOAD_TIME,
-    CUSTOM_METRIC_REPLAY_CHANGE_LOG,
-    CUSTOM_METRIC_NUM_REPLAY_CHANGE_LOG_FILES,
-    CUSTOM_METRIC_NUM_SNAPSHOTS_AUTO_REPAIRED,
+    CUSTOM_METRIC_SST_FILE_SIZE, CUSTOM_METRIC_GET_TIME, CUSTOM_METRIC_PUT_TIME,
+    CUSTOM_METRIC_FLUSH_TIME, CUSTOM_METRIC_COMMIT_COMPACT_TIME,
+    CUSTOM_METRIC_CHECKPOINT_TIME, CUSTOM_METRIC_FILESYNC_TIME,
+    CUSTOM_METRIC_BYTES_COPIED, CUSTOM_METRIC_FILES_COPIED, CUSTOM_METRIC_FILES_REUSED,
+    CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED, CUSTOM_METRIC_CHANGE_LOG_WRITER_COMMIT_TIME,
+    CUSTOM_METRIC_SAVE_ZIP_FILES_TIME, CUSTOM_METRIC_GET_COUNT, CUSTOM_METRIC_PUT_COUNT,
+    CUSTOM_METRIC_BLOCK_CACHE_MISS, CUSTOM_METRIC_BLOCK_CACHE_HITS, CUSTOM_METRIC_BYTES_READ,
+    CUSTOM_METRIC_BYTES_WRITTEN, CUSTOM_METRIC_ITERATOR_BYTES_READ, CUSTOM_METRIC_STALL_TIME,
+    CUSTOM_METRIC_TOTAL_COMPACT_TIME, CUSTOM_METRIC_COMPACT_READ_BYTES,
+    CUSTOM_METRIC_COMPACT_WRITTEN_BYTES, CUSTOM_METRIC_FLUSH_WRITTEN_BYTES,
+    CUSTOM_METRIC_PINNED_BLOCKS_MEM_USAGE, CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES_KEYS,
+    CUSTOM_METRIC_NUM_EXTERNAL_COL_FAMILIES, CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES,
+    CUSTOM_METRIC_LOAD_FROM_SNAPSHOT_TIME, CUSTOM_METRIC_LOAD_TIME, CUSTOM_METRIC_REPLAY_CHANGE_LOG,
+    CUSTOM_METRIC_NUM_REPLAY_CHANGE_LOG_FILES, CUSTOM_METRIC_NUM_SNAPSHOTS_AUTO_REPAIRED,
     CUSTOM_METRIC_FORCE_SNAPSHOT)
 
   val CUSTOM_INSTANCE_METRIC_SNAPSHOT_LAST_UPLOADED = StateStoreSnapshotLastUploadInstanceMetric()
@@ -1528,25 +1453,20 @@ class RocksDBStateStoreChangeDataReader(
     endVersion: Long,
     endVersionStateStoreCkptId: Option[String],
     compressionCodec: CompressionCodec,
-    keyValueEncoderMap: ConcurrentHashMap[
-      String,
-      (RocksDBKeyStateEncoder, RocksDBValueStateEncoder, Short)],
+    keyValueEncoderMap:
+      ConcurrentHashMap[String, (RocksDBKeyStateEncoder, RocksDBValueStateEncoder, Short)],
     storeConf: StateStoreConf,
     colFamilyNameOpt: Option[String] = None)
-    extends StateStoreChangeDataReader(
-      storeId,
-      fm,
-      stateLocation,
-      startVersion,
-      endVersion,
-      compressionCodec,
-      storeConf,
-      colFamilyNameOpt) {
+  extends StateStoreChangeDataReader(
+    storeId, fm, stateLocation, startVersion, endVersion, compressionCodec,
+    storeConf, colFamilyNameOpt) {
 
   override protected val versionsAndUniqueIds: Array[(Long, Option[String])] =
     if (endVersionStateStoreCkptId.isDefined) {
-      val fullVersionLineage =
-        rocksDB.getFullLineage(startVersion, endVersion, endVersionStateStoreCkptId)
+      val fullVersionLineage = rocksDB.getFullLineage(
+        startVersion,
+        endVersion,
+        endVersionStateStoreCkptId)
       fullVersionLineage
         .sortBy(_.version)
         .map(item => (item.version, Some(item.checkpointUniqueId)))
@@ -1559,9 +1479,8 @@ class RocksDBStateStoreChangeDataReader(
   override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, Long) = {
     var currRecord: (RecordType.Value, Array[Byte], Array[Byte]) = null
     val currEncoder: (RocksDBKeyStateEncoder, RocksDBValueStateEncoder, Short) =
-      keyValueEncoderMap.get(
-        colFamilyNameOpt
-          .getOrElse(StateStore.DEFAULT_COL_FAMILY_NAME))
+      keyValueEncoderMap.get(colFamilyNameOpt
+        .getOrElse(StateStore.DEFAULT_COL_FAMILY_NAME))
 
     if (colFamilyNameOpt.isDefined) {
       // If we are reading records for a particular column family, the corresponding vcf id
@@ -1581,32 +1500,28 @@ class RocksDBStateStoreChangeDataReader(
             "DELETE_RANGE_RECORD is not supported in the state data source change feed. " +
               "Range deletions cannot be expanded into individual key-value change records.")
         }
-        val keyBytes =
-          if (storeConf.rowChecksumEnabled
-            && nextRecord._1 == RecordType.DELETE_RECORD) {
-            // remove checksum and decode to the original key
-            KeyValueChecksumEncoder
-              .decodeAndVerifyKeyRowWithChecksum(readVerifier, nextRecord._2)
-          } else {
-            nextRecord._2
-          }
+        val keyBytes = if (storeConf.rowChecksumEnabled
+          && nextRecord._1 == RecordType.DELETE_RECORD) {
+          // remove checksum and decode to the original key
+          KeyValueChecksumEncoder
+            .decodeAndVerifyKeyRowWithChecksum(readVerifier, nextRecord._2)
+        } else {
+          nextRecord._2
+        }
         val colFamilyIdBytes: Array[Byte] =
           RocksDBStateStoreProvider.getColumnFamilyIdAsBytes(currEncoder._3)
         val endIndex = colFamilyIdBytes.size
         // Function checks for byte arrays being equal
         // from index 0 to endIndex - 1 (both inclusive)
-        if (java.util.Arrays.equals(keyBytes, 0, endIndex, colFamilyIdBytes, 0, endIndex)) {
-          val valueBytes =
-            if (storeConf.rowChecksumEnabled &&
-              nextRecord._1 != RecordType.DELETE_RECORD) {
-              KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
-                readVerifier,
-                keyBytes,
-                nextRecord._3,
-                rocksDB.delimiterSize)
-            } else {
-              nextRecord._3
-            }
+        if (java.util.Arrays.equals(keyBytes, 0, endIndex,
+          colFamilyIdBytes, 0, endIndex)) {
+          val valueBytes = if (storeConf.rowChecksumEnabled &&
+            nextRecord._1 != RecordType.DELETE_RECORD) {
+            KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
+              readVerifier, keyBytes, nextRecord._3, rocksDB.delimiterSize)
+          } else {
+            nextRecord._3
+          }
           val extractedKey = RocksDBStateStoreProvider.decodeStateRowWithPrefix(keyBytes)
           val result = (nextRecord._1, extractedKey, valueBytes)
           currRecord = result
@@ -1626,10 +1541,7 @@ class RocksDBStateStoreChangeDataReader(
             (nextRecord._1, key, nextRecord._3)
           case _ =>
             val value = KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
-              readVerifier,
-              nextRecord._2,
-              nextRecord._3,
-              rocksDB.delimiterSize)
+              readVerifier, nextRecord._2, nextRecord._3, rocksDB.delimiterSize)
             (nextRecord._1, nextRecord._2, value)
         }
       } else {
@@ -1650,25 +1562,29 @@ class RocksDBStateStoreChangeDataReader(
 /**
  * Class used to relay events reported from a RocksDB instance to the state store coordinator.
  *
- * We pass this into the RocksDB instance to report specific events like snapshot uploads. This
- * should only be used to report back to the coordinator for metrics and monitoring purposes.
+ * We pass this into the RocksDB instance to report specific events like snapshot uploads.
+ * This should only be used to report back to the coordinator for metrics and monitoring purposes.
  */
 private[state] case class RocksDBEventForwarder(queryRunId: String, stateStoreId: StateStoreId) {
   // Build the state store provider ID from the query run ID and the state store ID
   private val providerId = StateStoreProviderId(stateStoreId, UUID.fromString(queryRunId))
 
   /**
-   * Callback function from RocksDB to report events to the coordinator. Information from the
-   * store provider such as the state store ID and query run ID are attached here to report back
-   * to the coordinator.
+   * Callback function from RocksDB to report events to the coordinator.
+   * Information from the store provider such as the state store ID and query run ID are
+   * attached here to report back to the coordinator.
    *
-   * @param version
-   *   The snapshot version that was just uploaded from RocksDB
+   * @param version The snapshot version that was just uploaded from RocksDB
    */
   def reportSnapshotUploaded(version: Long): Unit = {
     // Report the state store provider ID and the version to the coordinator
     val currentTimestamp = System.currentTimeMillis()
     StateStoreProvider.coordinatorRef.foreach(
-      _.snapshotUploaded(providerId, version, currentTimestamp))
+      _.snapshotUploaded(
+        providerId,
+        version,
+        currentTimestamp
+      )
+    )
   }
 }

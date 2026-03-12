@@ -22,9 +22,9 @@ import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * This base suite contains unified tests for the `SHOW TABLES` command that check V1 table
- * catalogs. The tests that cannot run for all V1 catalogs are located in more specific test
- * suites:
+ * This base suite contains unified tests for the `SHOW TABLES` command that check V1
+ * table catalogs. The tests that cannot run for all V1 catalogs are located in more
+ * specific test suites:
  *
  *   - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.ShowTablesSuite`
  *   - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.ShowTablesSuite`
@@ -57,7 +57,8 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase with command.Tests
         runShowTablesSql("SHOW TABLES FROM a.b", Seq())
       },
       condition = "_LEGACY_ERROR_TEMP_1126",
-      parameters = Map("catalog" -> "a.b"))
+      parameters = Map("catalog" -> "a.b")
+    )
   }
 
   test("SHOW TABLE EXTENDED from default") {
@@ -82,26 +83,28 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase with command.Tests
       sql(s"INSERT INTO $t PARTITION(year = 2015, month = 1) SELECT 1, 1")
       Seq(
         true -> "PARTITION(year = 2015, month = 1)",
-        false -> "PARTITION(YEAR = 2015, Month = 1)").foreach {
-        case (caseSensitive, partitionSpec) =>
-          withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-            val df = sql(s"SHOW TABLE EXTENDED IN ns LIKE 'part_table' $partitionSpec")
-            val information = df.select("information").first().getString(0)
-            assert(information.contains("Partition Values: [year=2015, month=1]"))
-          }
+        false -> "PARTITION(YEAR = 2015, Month = 1)"
+      ).foreach { case (caseSensitive, partitionSpec) =>
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+          val df = sql(s"SHOW TABLE EXTENDED IN ns LIKE 'part_table' $partitionSpec")
+          val information = df.select("information").first().getString(0)
+          assert(information.contains("Partition Values: [year=2015, month=1]"))
+        }
       }
     }
   }
 
   test("no database specified") {
-    Seq(s"SHOW TABLES IN $catalog", s"SHOW TABLE EXTENDED IN $catalog LIKE '*tbl'").foreach {
-      showTableCmd =>
-        checkError(
-          exception = intercept[AnalysisException] {
-            sql(showTableCmd)
-          },
-          condition = "MISSING_DATABASE_FOR_V1_SESSION_CATALOG",
-          parameters = Map.empty)
+    Seq(
+      s"SHOW TABLES IN $catalog",
+      s"SHOW TABLE EXTENDED IN $catalog LIKE '*tbl'").foreach { showTableCmd =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(showTableCmd)
+        },
+        condition = "MISSING_DATABASE_FOR_V1_SESSION_CATALOG",
+        parameters = Map.empty
+      )
     }
   }
 
@@ -112,24 +115,20 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase with command.Tests
       withTable("tbl") {
         sql("CREATE TABLE tbl(col1 int, col2 string) USING parquet")
         checkAnswer(sql("show tables"), Row("ns", "tbl", false))
-        assert(
-          sql("show tables").schema.fieldNames ===
-            Seq("namespace", "tableName", "isTemporary"))
+        assert(sql("show tables").schema.fieldNames ===
+          Seq("namespace", "tableName", "isTemporary"))
         assert(sql("show table extended like 'tbl'").collect()(0).length == 4)
-        assert(
-          sql("show table extended like 'tbl'").schema.fieldNames ===
-            Seq("namespace", "tableName", "isTemporary", "information"))
+        assert(sql("show table extended like 'tbl'").schema.fieldNames ===
+          Seq("namespace", "tableName", "isTemporary", "information"))
 
         // Keep the legacy output schema
         withSQLConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> "true") {
           checkAnswer(sql("show tables"), Row("ns", "tbl", false))
-          assert(
-            sql("show tables").schema.fieldNames ===
-              Seq("database", "tableName", "isTemporary"))
+          assert(sql("show tables").schema.fieldNames ===
+            Seq("database", "tableName", "isTemporary"))
           assert(sql("show table extended like 'tbl'").collect()(0).length == 4)
-          assert(
-            sql("show table extended like 'tbl'").schema.fieldNames ===
-              Seq("database", "tableName", "isTemporary", "information"))
+          assert(sql("show table extended like 'tbl'").schema.fieldNames ===
+            Seq("database", "tableName", "isTemporary", "information"))
         }
       }
     }
@@ -160,12 +159,13 @@ class ShowTablesSuite extends ShowTablesSuiteBase with CommandSuiteBase {
       catalog: String,
       namespace: String,
       table: String): (String, Map[String, String]) = {
-    ("_LEGACY_ERROR_TEMP_1251", Map("action" -> "SHOW TABLE EXTENDED", "tableName" -> table))
+    ("_LEGACY_ERROR_TEMP_1251",
+      Map("action" -> "SHOW TABLE EXTENDED", "tableName" -> table))
   }
 
   protected override def extendedPartExpectedResult: String =
     super.extendedPartExpectedResult +
-      """
+    """
       |Location: <location>
       |Created Time: <created time>
       |Last Access: <last access>""".stripMargin
@@ -187,9 +187,8 @@ class ShowTablesSuite extends ShowTablesSuiteBase with CommandSuiteBase {
       withView(viewName) {
         sql(s"CREATE VIEW $catalog.$namespace.$viewName AS SELECT id FROM $t")
         val result = sql(s"SHOW TABLE EXTENDED in $namespace LIKE '$viewName*'").sort("tableName")
-        assert(
-          result.schema.fieldNames ===
-            Seq("namespace", "tableName", "isTemporary", "information"))
+        assert(result.schema.fieldNames ===
+          Seq("namespace", "tableName", "isTemporary", "information"))
         val resultCollect = result.collect()
         assert(resultCollect.length == 1)
         assert(resultCollect(0).length == 4)

@@ -112,28 +112,23 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("allowNonNumericNumbers on") {
-    val str =
-      """{"c0":NaN, "c1":+INF, "c2":+Infinity, "c3":Infinity, "c4":-INF, "c5":-Infinity}"""
+    val str = """{"c0":NaN, "c1":+INF, "c2":+Infinity, "c3":Infinity, "c4":-INF, "c5":-Infinity}"""
     val df = spark.read.option("allowNonNumericNumbers", true).json(Seq(str).toDS())
 
-    assert(
-      df.schema ===
-        new StructType()
-          .add("c0", "double")
-          .add("c1", "double")
-          .add("c2", "double")
-          .add("c3", "double")
-          .add("c4", "double")
-          .add("c5", "double"))
+    assert(df.schema ===
+      new StructType()
+        .add("c0", "double")
+        .add("c1", "double")
+        .add("c2", "double")
+        .add("c3", "double")
+        .add("c4", "double")
+        .add("c5", "double"))
     checkAnswer(
       df,
       Row(
         Double.NaN,
-        Double.PositiveInfinity,
-        Double.PositiveInfinity,
-        Double.PositiveInfinity,
-        Double.NegativeInfinity,
-        Double.NegativeInfinity))
+        Double.PositiveInfinity, Double.PositiveInfinity, Double.PositiveInfinity,
+        Double.NegativeInfinity, Double.NegativeInfinity))
   }
 
   test("allowNonNumericNumbers on - quoted") {
@@ -141,25 +136,20 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSparkSession {
       """{"c0":"NaN", "c1":"+INF", "c2":"+Infinity", "c3":"Infinity", "c4":"-INF",
         |"c5":"-Infinity"}""".stripMargin
     val df = spark.read
-      .schema(
-        new StructType()
-          .add("c0", "double")
-          .add("c1", "double")
-          .add("c2", "double")
-          .add("c3", "double")
-          .add("c4", "double")
-          .add("c5", "double"))
-      .option("allowNonNumericNumbers", true)
-      .json(Seq(str).toDS())
+      .schema(new StructType()
+        .add("c0", "double")
+        .add("c1", "double")
+        .add("c2", "double")
+        .add("c3", "double")
+        .add("c4", "double")
+        .add("c5", "double"))
+      .option("allowNonNumericNumbers", true).json(Seq(str).toDS())
     checkAnswer(
       df,
       Row(
         Double.NaN,
-        Double.PositiveInfinity,
-        Double.PositiveInfinity,
-        Double.PositiveInfinity,
-        Double.NegativeInfinity,
-        Double.NegativeInfinity))
+        Double.PositiveInfinity, Double.PositiveInfinity, Double.PositiveInfinity,
+        Double.NegativeInfinity, Double.NegativeInfinity))
   }
 
   test("allowNonNumericNumbers off - quoted") {
@@ -167,23 +157,22 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSparkSession {
       """{"c0":"NaN", "c1":"+INF", "c2":"+Infinity", "c3":"Infinity", "c4":"-INF",
         |"c5":"-Infinity"}""".stripMargin
     val df = spark.read
-      .schema(
-        new StructType()
-          .add("c0", "double")
-          .add("c1", "double")
-          .add("c2", "double")
-          .add("c3", "double")
-          .add("c4", "double")
-          .add("c5", "double"))
-      .option("allowNonNumericNumbers", false)
-      .json(Seq(str).toDS())
-    checkAnswer(df, Row(null, null, null, null, null, null))
+      .schema(new StructType()
+        .add("c0", "double")
+        .add("c1", "double")
+        .add("c2", "double")
+        .add("c3", "double")
+        .add("c4", "double")
+        .add("c5", "double"))
+      .option("allowNonNumericNumbers", false).json(Seq(str).toDS())
+    checkAnswer(
+      df,
+      Row(null, null, null, null, null, null))
   }
 
   test("allowBackslashEscapingAnyCharacter off") {
     val str = """{"name": "Cazen Lee", "price": "\$10"}"""
-    val df =
-      spark.read.option("allowBackslashEscapingAnyCharacter", "false").json(Seq(str).toDS())
+    val df = spark.read.option("allowBackslashEscapingAnyCharacter", "false").json(Seq(str).toDS())
 
     assert(df.schema.head.name == "_corrupt_record")
   }

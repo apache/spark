@@ -34,7 +34,8 @@ import org.apache.spark.tags.ExtendedSQLTest
 class OrcV1FilterSuite extends OrcFilterSuite {
 
   override protected def sparkConf: SparkConf =
-    super.sparkConf
+    super
+      .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "orc")
 
   override def checkFilterPredicate(
@@ -47,17 +48,12 @@ class OrcV1FilterSuite extends OrcFilterSuite {
       .where(Column(predicate))
 
     var maybeRelation: Option[HadoopFsRelation] = None
-    val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan
-      .collect {
-        case PhysicalOperation(
-              _,
-              filters,
-              LogicalRelationWithTable(orcRelation: HadoopFsRelation, _)) =>
-          maybeRelation = Some(orcRelation)
-          filters
-      }
-      .flatten
-      .reduceLeftOption(And)
+    val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
+      case PhysicalOperation(_, filters,
+        LogicalRelationWithTable(orcRelation: HadoopFsRelation, _)) =>
+        maybeRelation = Some(orcRelation)
+        filters
+    }.flatten.reduceLeftOption(And)
     assert(maybeAnalyzedPredicate.isDefined, "No filter is analyzed from the given query")
 
     val (_, selectedFilters, _) =
@@ -69,8 +65,9 @@ class OrcV1FilterSuite extends OrcFilterSuite {
     checker(maybeFilter.get)
   }
 
-  override def checkFilterPredicate(predicate: Predicate, filterOperator: Operator)(implicit
-      df: DataFrame): Unit = {
+  override def checkFilterPredicate
+      (predicate: Predicate, filterOperator: Operator)
+      (implicit df: DataFrame): Unit = {
     def checkComparisonOperator(filter: SearchArgument) = {
       val operator = filter.getLeaves.asScala
       assert(operator.map(_.getOperator).contains(filterOperator))
@@ -78,8 +75,9 @@ class OrcV1FilterSuite extends OrcFilterSuite {
     checkFilterPredicate(df, predicate, checkComparisonOperator)
   }
 
-  override def checkFilterPredicate(predicate: Predicate, stringExpr: String)(implicit
-      df: DataFrame): Unit = {
+  override def checkFilterPredicate
+      (predicate: Predicate, stringExpr: String)
+      (implicit df: DataFrame): Unit = {
     def checkLogicalOperator(filter: SearchArgument) = {
       // HIVE-24458 changes toString format and provides `toOldString` for old style.
       assert(filter.asInstanceOf[SearchArgumentImpl].toOldString == stringExpr)
@@ -87,25 +85,21 @@ class OrcV1FilterSuite extends OrcFilterSuite {
     checkFilterPredicate(df, predicate, checkLogicalOperator)
   }
 
-  override def checkNoFilterPredicate(predicate: Predicate, noneSupported: Boolean = false)(
-      implicit df: DataFrame): Unit = {
+  override def checkNoFilterPredicate
+      (predicate: Predicate, noneSupported: Boolean = false)
+      (implicit df: DataFrame): Unit = {
     val output = predicate.collect { case a: Attribute => a }.distinct
     val query = df
       .select(output.map(e => Column(e)): _*)
       .where(Column(predicate))
 
     var maybeRelation: Option[HadoopFsRelation] = None
-    val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan
-      .collect {
-        case PhysicalOperation(
-              _,
-              filters,
-              LogicalRelationWithTable(orcRelation: HadoopFsRelation, _)) =>
-          maybeRelation = Some(orcRelation)
-          filters
-      }
-      .flatten
-      .reduceLeftOption(And)
+    val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
+      case PhysicalOperation(_, filters,
+        LogicalRelationWithTable(orcRelation: HadoopFsRelation, _)) =>
+        maybeRelation = Some(orcRelation)
+        filters
+    }.flatten.reduceLeftOption(And)
     assert(maybeAnalyzedPredicate.isDefined, "No filter is analyzed from the given query")
 
     val (_, selectedFilters, _) =

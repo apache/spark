@@ -29,12 +29,12 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  * child node will provide inputs as sorted by group keys + the start time of session window.
  *
  * When merging windows, it also applies aggregations on merged window, which eliminates the
- * necessity on buffering inputs (which requires copying rows) and update the session spec for
- * each input.
+ * necessity on buffering inputs (which requires copying rows) and update the session spec
+ * for each input.
  *
- * This class receives requiredChildDistribution from caller, to enable merging session in local
- * partition before shuffling. Specifying both parameters to None won't trigger shuffle, but sort
- * would still happen per local partition.
+ * This class receives requiredChildDistribution from caller, to enable merging session in
+ * local partition before shuffling. Specifying both parameters to None won't trigger shuffle,
+ * but sort would still happen per local partition.
  *
  * Refer [[MergingSessionsIterator]] for more details.
  */
@@ -48,8 +48,7 @@ case class MergingSessionsExec(
     aggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
-    child: SparkPlan)
-    extends BaseAggregateExec {
+    child: SparkPlan) extends BaseAggregateExec {
 
   private val keyWithoutSessionExpressions = groupingExpressions.diff(Seq(sessionExpression))
 
@@ -85,7 +84,8 @@ case class MergingSessionsExec(
           aggregateAttributes,
           initialInputBufferOffset,
           resultExpressions,
-          (expressions, inputSchema) => MutableProjection.create(expressions, inputSchema),
+          (expressions, inputSchema) =>
+            MutableProjection.create(expressions, inputSchema),
           numOutputRows)
         if (!hasInput && groupingExpressions.isEmpty) {
           // There is no input and there is no grouping expressions.

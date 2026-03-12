@@ -42,14 +42,26 @@ class SimplifyDateTimeConversionsSuite extends PlanTest {
 
     val originalQuery = testRelation
       .select(
-        DateFormatClass(GetTimestamp(df, pattern, TimestampType), pattern) as "c1",
-        GetTimestamp(DateFormatClass(gt, pattern), pattern, TimestampType) as "c2")
+        DateFormatClass(
+          GetTimestamp(
+            df,
+            pattern,
+            TimestampType),
+          pattern) as "c1",
+        GetTimestamp(
+          DateFormatClass(
+            gt,
+            pattern),
+          pattern,
+          TimestampType) as "c2")
       .analyze
 
     val optimized = Optimize.execute(originalQuery)
 
     val expected = testRelation
-      .select(df as "c1", gt as "c2")
+      .select(
+        df as "c1",
+        gt as "c2")
       .analyze
 
     comparePlans(optimized, expected)

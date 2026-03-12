@@ -34,22 +34,16 @@ import org.apache.spark.sql.execution.datasources._
  *   SELECT ...
  * }}}
  *
- * @param storage
- *   storage format used to describe how the query result is stored.
- * @param provider
- *   the data source type to be used
- * @param query
- *   the logical plan representing data to write to
- * @param overwrite
- *   whether overwrites existing directory
+ * @param storage storage format used to describe how the query result is stored.
+ * @param provider the data source type to be used
+ * @param query the logical plan representing data to write to
+ * @param overwrite whether overwrites existing directory
  */
 case class InsertIntoDataSourceDirCommand(
     storage: CatalogStorageFormat,
     provider: String,
     query: LogicalPlan,
-    overwrite: Boolean)
-    extends LeafRunnableCommand
-    with CTEInChildren {
+    overwrite: Boolean) extends LeafRunnableCommand with CTEInChildren {
 
   override def innerChildren: Seq[LogicalPlan] = query :: Nil
 

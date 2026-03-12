@@ -42,9 +42,8 @@ object IdentityColumn {
           .capabilities()
           .contains(TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_IDENTITY_COLUMNS)) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
-          catalog,
-          ident,
-          operation = "identity column")
+          catalog, ident, operation = "identity column"
+        )
       }
     }
   }
@@ -61,11 +60,10 @@ object IdentityColumn {
    */
   def getIdentityInfo(field: StructField): Option[IdentityColumnSpec] = {
     if (isIdentityColumn(field)) {
-      Some(
-        new IdentityColumnSpec(
-          field.metadata.getLong(IDENTITY_INFO_START),
-          field.metadata.getLong(IDENTITY_INFO_STEP),
-          field.metadata.getBoolean(IDENTITY_INFO_ALLOW_EXPLICIT_INSERT)))
+      Some(new IdentityColumnSpec(
+        field.metadata.getLong(IDENTITY_INFO_START),
+        field.metadata.getLong(IDENTITY_INFO_STEP),
+        field.metadata.getBoolean(IDENTITY_INFO_ALLOW_EXPLICIT_INSERT)))
     } else {
       None
     }

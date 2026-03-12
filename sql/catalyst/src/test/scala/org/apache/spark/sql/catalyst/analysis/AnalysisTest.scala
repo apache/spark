@@ -75,9 +75,7 @@ trait AnalysisTest extends PlanTest {
 
   protected def getAnalyzer: Analyzer = {
     val catalog = new SessionCatalog(
-      new InMemoryCatalog,
-      FunctionRegistry.builtin,
-      TableFunctionRegistry.builtin)
+      new InMemoryCatalog, FunctionRegistry.builtin, TableFunctionRegistry.builtin)
     catalog.createDatabase(
       CatalogDatabase("default", "", new URI("loc"), Map.empty),
       ignoreIfExists = false)
@@ -86,10 +84,7 @@ trait AnalysisTest extends PlanTest {
     createTempView(catalog, "TaBlE3", TestRelations.testRelation3, overrideIfExists = true)
     createGlobalTempView(catalog, "TaBlE4", TestRelations.testRelation4, overrideIfExists = true)
     createGlobalTempView(catalog, "TaBlE5", TestRelations.testRelation5, overrideIfExists = true)
-    createTempView(
-      catalog,
-      "streamingTable",
-      TestRelations.streamingRelation,
+    createTempView(catalog, "streamingTable", TestRelations.streamingRelation,
       overrideIfExists = true)
     new Analyzer(catalog) {
       catalogManager.tempVariableManager.create(
@@ -100,9 +95,7 @@ trait AnalysisTest extends PlanTest {
       catalogManager.tempVariableManager.create(
         Seq("testVarNull", "testVarNull"),
         VariableDefinition(
-          Identifier.of(Array("testVarNull"), "testVarNull"),
-          null,
-          Literal(null, StringType)),
+          Identifier.of(Array("testVarNull"), "testVarNull"), null, Literal(null, StringType)),
         overrideIfExists = true)
       override val extendedResolutionRules = extendedAnalysisRules
     }
@@ -153,8 +146,7 @@ trait AnalysisTest extends PlanTest {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
       val analyzer = getAnalyzer
       val analysisAttempt = analyzer.execute(inputPlan)
-      try analyzer.checkAnalysis(analysisAttempt)
-      catch {
+      try analyzer.checkAnalysis(analysisAttempt) catch {
         case a: AnalysisException =>
           fail(
             s"""
@@ -163,8 +155,7 @@ trait AnalysisTest extends PlanTest {
               |
               |Partial Analysis
               |$analysisAttempt
-            """.stripMargin,
-            a)
+            """.stripMargin, a)
       }
     }
   }
@@ -179,10 +170,10 @@ trait AnalysisTest extends PlanTest {
         analyzer.checkAnalysis(analyzer.execute(inputPlan))
       }
 
-      if (!expectedErrors
-          .map(_.toLowerCase(Locale.ROOT))
-          .forall(e.getMessage.toLowerCase(Locale.ROOT).contains)) {
-        fail(s"""Exception message should contain the following substrings:
+      if (!expectedErrors.map(_.toLowerCase(Locale.ROOT)).forall(
+          e.getMessage.toLowerCase(Locale.ROOT).contains)) {
+        fail(
+          s"""Exception message should contain the following substrings:
              |
              |  ${expectedErrors.mkString("\n  ")}
              |
@@ -209,7 +200,8 @@ trait AnalysisTest extends PlanTest {
         exception = e,
         condition = expectedErrorCondition,
         parameters = expectedMessageParameters,
-        queryContext = queryContext)
+        queryContext = queryContext
+      )
     }
   }
 
@@ -224,12 +216,12 @@ trait AnalysisTest extends PlanTest {
       exception = e,
       condition = errorClass,
       parameters = parameters,
-      queryContext = queryContext)
+      queryContext = queryContext
+    )
   }
 
-  protected def interceptParseException(
-      parser: String => Any)(sqlCommand: String, messages: String*)(
-      condition: Option[String] = None): Unit = {
+  protected def interceptParseException(parser: String => Any)(
+    sqlCommand: String, messages: String*)(condition: Option[String] = None): Unit = {
     val e = parseException(parser)(sqlCommand)
     messages.foreach { message =>
       assert(e.message.contains(message))

@@ -40,13 +40,13 @@ import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Trait to indicate the expression does not throw an exception by itself when they are evaluated.
- * For example, UDFs, [[AssertTrue]], etc can throw an exception when they are executed. In such
- * case, it is necessary to call [[Expression.eval]], and the optimization rule should not ignore
- * it.
+ * For example, UDFs, [[AssertTrue]], etc can throw an exception when they are executed.
+ * In such case, it is necessary to call [[Expression.eval]], and the optimization rule should
+ * not ignore it.
  *
  * This trait can be used in an optimization rule such as
- * [[org.apache.spark.sql.catalyst.optimizer.ConstantFolding]] to fold the expressions that do not
- * need to execute, for example, `size(array(c0, c1, c2))`.
+ * [[org.apache.spark.sql.catalyst.optimizer.ConstantFolding]] to fold the expressions that
+ * do not need to execute, for example, `size(array(c0, c1, c2))`.
  */
 trait NoThrow
 
@@ -63,8 +63,7 @@ trait NoThrow
   since = "1.1.0",
   group = "array_funcs")
 case class CreateArray(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
-    extends Expression
-    with NoThrow {
+  extends Expression with NoThrow {
 
   def this(children: Seq[Expression]) = {
     this(children, SQLConf.get.getConf(SQLConf.LEGACY_CREATE_EMPTY_COLLECTION_USING_STRING_TYPE))
@@ -90,8 +89,7 @@ case class CreateArray(children: Seq[Expression], useStringTypeWhenEmpty: Boolea
 
   override def dataType: ArrayType = {
     ArrayType(
-      TypeCoercion
-        .findCommonTypeDifferentOnlyInNullFlags(children.map(_.dataType))
+      TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(children.map(_.dataType))
         .getOrElse(defaultElementType),
       containsNull = children.exists(_.nullable))
   }
@@ -114,8 +112,7 @@ case class CreateArray(children: Seq[Expression], useStringTypeWhenEmpty: Boolea
 
   override def prettyName: String = "array"
 
-  override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[Expression]): CreateArray =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): CreateArray =
     copy(children = newChildren)
 }
 
@@ -125,21 +122,15 @@ object CreateArray {
   }
 }
 
-private[sql] object GenArrayData {
-
+private [sql] object GenArrayData {
   /**
    * Return Java code pieces based on DataType and array size to allocate ArrayData class
    *
-   * @param ctx
-   *   a [[CodegenContext]]
-   * @param elementType
-   *   data type of underlying array elements
-   * @param elementsExpr
-   *   concatenated set of [[Expression]] for each element of an underlying array
-   * @param functionName
-   *   string to include in the error message
-   * @return
-   *   (array allocation, concatenated assignments to each array elements, arrayData name)
+   * @param ctx a [[CodegenContext]]
+   * @param elementType data type of underlying array elements
+   * @param elementsExpr concatenated set of [[Expression]] for each element of an underlying array
+   * @param functionName string to include in the error message
+   * @return (array allocation, concatenated assignments to each array elements, arrayData name)
    */
   def genCodeToCreateArrayData(
       ctx: CodegenContext,
@@ -150,15 +141,12 @@ private[sql] object GenArrayData {
     val numElements = s"${elementsExpr.length}L"
 
     val initialization = CodeGenerator.createArrayData(
-      arrayDataName,
-      elementType,
-      numElements,
-      s" $functionName failed.")
+      arrayDataName, elementType, numElements, s" $functionName failed.")
 
     val assignments = elementsExpr.zipWithIndex.map { case (expr, i) =>
       val eval = expr.genCode(ctx)
-      val setArrayElement =
-        CodeGenerator.setArrayElement(arrayDataName, elementType, i.toString, eval.value)
+      val setArrayElement = CodeGenerator.setArrayElement(
+        arrayDataName, elementType, i.toString, eval.value)
 
       val assignment = if (!expr.nullable) {
         setArrayElement
@@ -186,12 +174,11 @@ private[sql] object GenArrayData {
 }
 
 /**
- * Returns a catalyst Map containing the evaluation of all children expressions as keys and
- * values. The children are a flatted sequence of kv pairs, e.g. (key1, value1, key2, value2, ...)
+ * Returns a catalyst Map containing the evaluation of all children expressions as keys and values.
+ * The children are a flatted sequence of kv pairs, e.g. (key1, value1, key2, value2, ...)
  */
 @ExpressionDescription(
-  usage =
-    "_FUNC_(key0, value0, key1, value1, ...) - Creates a map with the given key/value pairs.",
+  usage = "_FUNC_(key0, value0, key1, value1, ...) - Creates a map with the given key/value pairs.",
   examples = """
     Examples:
       > SELECT _FUNC_(1.0, '2', 3.0, '4');
@@ -200,8 +187,7 @@ private[sql] object GenArrayData {
   since = "2.0.0",
   group = "map_funcs")
 case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
-    extends Expression
-    with NoThrow {
+  extends Expression with NoThrow {
 
   def this(children: Seq[Expression]) = {
     this(children, SQLConf.get.getConf(SQLConf.LEGACY_CREATE_EMPTY_COLLECTION_USING_STRING_TYPE))
@@ -227,21 +213,24 @@ case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size % 2 != 0) {
       throw QueryCompilationErrors.wrongNumArgsError(
-        toSQLId(prettyName),
-        Seq("2n (n > 0)"),
-        children.length)
+        toSQLId(prettyName), Seq("2n (n > 0)"), children.length
+      )
     } else if (!TypeCoercion.haveSameType(keys.map(_.dataType))) {
       DataTypeMismatch(
         errorSubClass = "CREATE_MAP_KEY_DIFF_TYPES",
         messageParameters = Map(
           "functionName" -> toSQLId(prettyName),
-          "dataType" -> keys.map(key => toSQLType(key.dataType)).mkString("[", ", ", "]")))
+          "dataType" -> keys.map(key => toSQLType(key.dataType)).mkString("[", ", ", "]")
+        )
+      )
     } else if (!TypeCoercion.haveSameType(values.map(_.dataType))) {
       DataTypeMismatch(
         errorSubClass = "CREATE_MAP_VALUE_DIFF_TYPES",
         messageParameters = Map(
           "functionName" -> toSQLId(prettyName),
-          "dataType" -> values.map(value => toSQLType(value.dataType)).mkString("[", ", ", "]")))
+          "dataType" -> values.map(value => toSQLType(value.dataType)).mkString("[", ", ", "]")
+        )
+      )
     } else {
       TypeUtils.checkForMapKeyType(dataType.keyType)
     }
@@ -249,11 +238,9 @@ case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
 
   override lazy val dataType: MapType = {
     MapType(
-      keyType = TypeCoercion
-        .findCommonTypeDifferentOnlyInNullFlags(keys.map(_.dataType))
+      keyType = TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(keys.map(_.dataType))
         .getOrElse(defaultElementType),
-      valueType = TypeCoercion
-        .findCommonTypeDifferentOnlyInNullFlags(values.map(_.dataType))
+      valueType = TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(values.map(_.dataType))
         .getOrElse(defaultElementType),
       valueContainsNull = values.exists(_.nullable))
   }
@@ -320,8 +307,7 @@ object CreateMap {
   since = "2.4.0",
   group = "map_funcs")
 case class MapFromArrays(left: Expression, right: Expression)
-    extends BinaryExpression
-    with ExpectsInputTypes {
+  extends BinaryExpression with ExpectsInputTypes {
   override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, ArrayType)
 
@@ -353,20 +339,16 @@ case class MapFromArrays(left: Expression, right: Expression)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(
-      ctx,
-      ev,
-      (keyArrayData, valueArrayData) => {
-        val builderTerm = ctx.addReferenceObj("mapBuilder", mapBuilder)
-        s"${ev.value} = $builderTerm.from($keyArrayData.copy(), $valueArrayData.copy());"
-      })
+    nullSafeCodeGen(ctx, ev, (keyArrayData, valueArrayData) => {
+      val builderTerm = ctx.addReferenceObj("mapBuilder", mapBuilder)
+      s"${ev.value} = $builderTerm.from($keyArrayData.copy(), $valueArrayData.copy());"
+    })
   }
 
   override def prettyName: String = "map_from_arrays"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): MapFromArrays =
+      newLeft: Expression, newRight: Expression): MapFromArrays =
     copy(left = newLeft, right = newRight)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(MAP_FROM_ARRAYS)
@@ -389,10 +371,10 @@ case object NamePlaceholder extends LeafExpression with Unevaluable {
  * Returns a Row containing the evaluation of all children expressions.
  */
 object CreateStruct {
-
   /**
-   * Returns a named struct with generated names or using the names when available. It should not
-   * be used for `struct` expressions or functions explicitly called by users.
+   * Returns a named struct with generated names or using the names when available.
+   * It should not be used for `struct` expressions or functions explicitly called
+   * by users.
    */
   def apply(children: Seq[Expression]): CreateNamedStruct = {
     CreateNamedStruct(children.zipWithIndex.flatMap {
@@ -404,8 +386,7 @@ object CreateStruct {
       // We should always use the last part of the column name (`c` in the above example) as the
       // alias name inside CreateNamedStruct.
       case (u: UnresolvedAttribute, _) => Seq(Literal(u.nameParts.last), u)
-      case (u @ UnresolvedExtractValue(_, e: Literal), _)
-          if e.dataType.isInstanceOf[StringType] =>
+      case (u @ UnresolvedExtractValue(_, e: Literal), _) if e.dataType.isInstanceOf[StringType] =>
         Seq(e, u)
       case (a: Alias, _) => Seq(Literal(a.name), a)
       case (e: NamedExpression, _) if e.resolved => Seq(Literal(e.name), e)
@@ -416,9 +397,9 @@ object CreateStruct {
   }
 
   /**
-   * Returns a named struct with a pretty SQL name. It will show the pretty SQL string in its
-   * output column name as if `struct(...)` was called. Should be used for `struct` expressions or
-   * functions explicitly called by users.
+   * Returns a named struct with a pretty SQL name. It will show the pretty SQL string
+   * in its output column name as if `struct(...)` was called. Should be
+   * used for `struct` expressions or functions explicitly called by users.
    */
   def create(children: Seq[Expression]): CreateNamedStruct = {
     val expr = CreateStruct(children)
@@ -453,13 +434,11 @@ object CreateStruct {
 /**
  * Creates a struct with the given field names and values
  *
- * @param children
- *   Seq(name1, val1, name2, val2, ...)
+ * @param children Seq(name1, val1, name2, val2, ...)
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage =
-    "_FUNC_(name1, val1, name2, val2, ...) - Creates a struct with the given field names and values.",
+  usage = "_FUNC_(name1, val1, name2, val2, ...) - Creates a struct with the given field names and values.",
   examples = """
     Examples:
       > SELECT _FUNC_("a", 1, "b", 2, "c", 3);
@@ -469,13 +448,9 @@ object CreateStruct {
   group = "struct_funcs")
 // scalastyle:on line.size.limit
 case class CreateNamedStruct(children: Seq[Expression]) extends Expression with NoThrow {
-  lazy val (nameExprs, valExprs) = children
-    .grouped(2)
-    .map { case Seq(name, value) =>
-      (name, value)
-    }
-    .toList
-    .unzip
+  lazy val (nameExprs, valExprs) = children.grouped(2).map {
+    case Seq(name, value) => (name, value)
+  }.toList.unzip
 
   lazy val names = nameExprs.map(_.eval(EmptyRow))
 
@@ -488,13 +463,14 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
   final override val nodePatterns: Seq[TreePattern] = Seq(CREATE_NAMED_STRUCT)
 
   override lazy val dataType: StructType = {
-    val fields = names.zip(valExprs).map { case (name, expr) =>
-      val metadata = expr match {
-        case ne: NamedExpression => ne.metadata
-        case gsf: GetStructField => gsf.metadata
-        case _ => Metadata.empty
-      }
-      StructField(name.toString, expr.dataType, expr.nullable, metadata)
+    val fields = names.zip(valExprs).map {
+      case (name, expr) =>
+        val metadata = expr match {
+          case ne: NamedExpression => ne.metadata
+          case gsf: GetStructField => gsf.metadata
+          case _ => Metadata.empty
+        }
+        StructField(name.toString, expr.dataType, expr.nullable, metadata)
     }
     StructType(fields)
   }
@@ -502,24 +478,26 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size % 2 != 0) {
       throw QueryCompilationErrors.wrongNumArgsError(
-        toSQLId(prettyName),
-        Seq("2n (n > 0)"),
-        children.length)
+        toSQLId(prettyName), Seq("2n (n > 0)"), children.length
+      )
     } else {
-      val invalidNames =
-        nameExprs.filterNot(e => e.foldable && e.dataType.isInstanceOf[StringType])
+      val invalidNames = nameExprs.filterNot(e => e.foldable && e.dataType.isInstanceOf[StringType])
       if (invalidNames.nonEmpty) {
         DataTypeMismatch(
           errorSubClass = "CREATE_NAMED_STRUCT_WITHOUT_FOLDABLE_STRING",
-          messageParameters =
-            Map("inputExprs" -> invalidNames.map(toSQLExpr(_)).mkString("[", ", ", "]")))
+          messageParameters = Map(
+            "inputExprs" -> invalidNames.map(toSQLExpr(_)).mkString("[", ", ", "]")
+          )
+        )
       } else if (!names.contains(null)) {
         TypeCheckResult.TypeCheckSuccess
       } else {
         DataTypeMismatch(
           errorSubClass = "UNEXPECTED_NULL",
-          messageParameters =
-            Map("exprName" -> nameExprs.map(toSQLExpr).mkString("[", ", ", "]")))
+          messageParameters = Map(
+            "exprName" -> nameExprs.map(toSQLExpr).mkString("[", ", ", "]")
+          )
+        )
       }
     }
   }
@@ -528,8 +506,8 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
    * Returns Aliased [[Expression]]s that could be used to construct a flattened version of this
    * StructType.
    */
-  def flatten: Seq[NamedExpression] = valExprs.zip(names).map { case (v, n) =>
-    Alias(v, n.toString)()
+  def flatten: Seq[NamedExpression] = valExprs.zip(names).map {
+    case (v, n) => Alias(v, n.toString)()
   }
 
   override def eval(input: InternalRow): Any = {
@@ -555,14 +533,13 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
       funcName = "createNamedStruct",
       extraArguments = "Object[]" -> values :: Nil)
 
-    ev.copy(
-      code = code"""
+    ev.copy(code =
+      code"""
          |Object[] $values = new Object[${valExprs.size}];
          |$valuesCode
          |final InternalRow ${ev.value} = new $rowClass($values);
          |$values = null;
-       """.stripMargin,
-      isNull = FalseLiteral)
+       """.stripMargin, isNull = FalseLiteral)
   }
 
   // There is an alias set at `CreateStruct.create`. If there is an alias,
@@ -570,15 +547,13 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
   // respect it in the SQL string as `struct(...)`.
   override def prettyName: String = getTagValue(FUNC_ALIAS).getOrElse("named_struct")
 
-  override def sql: String = getTagValue(FUNC_ALIAS)
-    .map { alias =>
-      val childrenSQL = children.indices.filter(_ % 2 == 1).map(children(_).sql).mkString(", ")
-      s"$alias($childrenSQL)"
-    }
-    .getOrElse(super.sql)
+  override def sql: String = getTagValue(FUNC_ALIAS).map { alias =>
+    val childrenSQL = children.indices.filter(_ % 2 == 1).map(children(_).sql).mkString(", ")
+    s"$alias($childrenSQL)"
+  }.getOrElse(super.sql)
 
   override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[Expression]): CreateNamedStruct = copy(children = newChildren)
+    newChildren: IndexedSeq[Expression]): CreateNamedStruct = copy(children = newChildren)
 }
 
 /**
@@ -586,8 +561,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage =
-    "_FUNC_(text[, pairDelim[, keyValueDelim]]) - Creates a map after splitting the text into key/value pairs using delimiters. Default delimiters are ',' for `pairDelim` and ':' for `keyValueDelim`. Both `pairDelim` and `keyValueDelim` are treated as regular expressions.",
+  usage = "_FUNC_(text[, pairDelim[, keyValueDelim]]) - Creates a map after splitting the text into key/value pairs using delimiters. Default delimiters are ',' for `pairDelim` and ':' for `keyValueDelim`. Both `pairDelim` and `keyValueDelim` are treated as regular expressions.",
   examples = """
     Examples:
       > SELECT _FUNC_('a:1,b:2,c:3', ',', ':');
@@ -599,15 +573,17 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
   group = "map_funcs")
 // scalastyle:on line.size.limit
 case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: Expression)
-    extends TernaryExpression
-    with ExpectsInputTypes {
+  extends TernaryExpression with ExpectsInputTypes {
   override def nullIntolerant: Boolean = true
   def this(child: Expression, pairDelim: Expression) = {
     this(child, pairDelim, Literal.create(":", StringType))
   }
 
   def this(child: Expression) = {
-    this(child, Literal.create(",", StringType), Literal.create(":", StringType))
+    this(
+      child,
+      Literal.create(",", StringType),
+      Literal.create(":", StringType))
   }
 
   override def stateful: Boolean = true
@@ -632,22 +608,14 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
       inputString: Any,
       stringDelimiter: Any,
       keyValueDelimiter: Any): Any = {
-    val keyValues = CollationAwareUTF8String.splitSQL(
-      inputString.asInstanceOf[UTF8String],
-      stringDelimiter.asInstanceOf[UTF8String],
-      -1,
-      collationId,
-      legacySplitTruncate)
+    val keyValues = CollationAwareUTF8String.splitSQL(inputString.asInstanceOf[UTF8String],
+      stringDelimiter.asInstanceOf[UTF8String], -1, collationId, legacySplitTruncate)
     val keyValueDelimiterUTF8String = keyValueDelimiter.asInstanceOf[UTF8String]
 
     var i = 0
     while (i < keyValues.length) {
       val keyValueArray = CollationAwareUTF8String.splitSQL(
-        keyValues(i),
-        keyValueDelimiterUTF8String,
-        2,
-        collationId,
-        legacySplitTruncate)
+        keyValues(i), keyValueDelimiterUTF8String, 2, collationId, legacySplitTruncate)
       val key = keyValueArray(0)
       val value = if (keyValueArray.length < 2) null else keyValueArray(1)
       mapBuilder.put(key, value)
@@ -660,11 +628,8 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
     val builderTerm = ctx.addReferenceObj("mapBuilder", mapBuilder)
     val keyValues = ctx.freshName("kvs")
 
-    nullSafeCodeGen(
-      ctx,
-      ev,
-      (text, pd, kvd) =>
-        s"""
+    nullSafeCodeGen(ctx, ev, (text, pd, kvd) =>
+      s"""
          |UTF8String[] $keyValues =
          |  CollationAwareUTF8String.splitSQL($text, $pd, -1, $collationId, $legacySplitTruncate);
          |for(UTF8String kvEntry: $keyValues) {
@@ -673,16 +638,18 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
          |  $builderTerm.put(kv[0], kv.length == 2 ? kv[1] : null);
          |}
          |${ev.value} = $builderTerm.build();
-         |""".stripMargin)
+         |""".stripMargin
+    )
   }
 
   override def prettyName: String = "str_to_map"
 
   override protected def withNewChildrenInternal(
-      newFirst: Expression,
-      newSecond: Expression,
-      newThird: Expression): Expression =
-    copy(text = newFirst, pairDelim = newSecond, keyValueDelim = newThird)
+      newFirst: Expression, newSecond: Expression, newThird: Expression): Expression = copy(
+    text = newFirst,
+    pairDelim = newSecond,
+    keyValueDelim = newThird
+  )
 }
 
 /**
@@ -692,16 +659,16 @@ trait StructFieldsOperation extends Expression with Unevaluable {
 
   val resolver: Resolver = SQLConf.get.resolver
 
-  override def dataType: DataType =
-    throw SparkException.internalError("StructFieldsOperation.dataType should not be called.")
+  override def dataType: DataType = throw SparkException.internalError(
+    "StructFieldsOperation.dataType should not be called.")
 
-  override def nullable: Boolean =
-    throw SparkException.internalError("StructFieldsOperation.nullable should not be called.")
+  override def nullable: Boolean = throw SparkException.internalError(
+    "StructFieldsOperation.nullable should not be called.")
 
   /**
-   * Returns an updated list of StructFields and Expressions that will ultimately be used as the
-   * fields argument for [[StructType]] and as the children argument for [[CreateNamedStruct]]
-   * respectively inside of [[UpdateFields]].
+   * Returns an updated list of StructFields and Expressions that will ultimately be used
+   * as the fields argument for [[StructType]] and as the children argument for
+   * [[CreateNamedStruct]] respectively inside of [[UpdateFields]].
    */
   def apply(values: Seq[(StructField, Expression)]): Seq[(StructField, Expression)]
 }
@@ -713,8 +680,7 @@ trait StructFieldsOperation extends Expression with Unevaluable {
  * children, and thereby enable the analyzer to resolve and transform valExpr as necessary.
  */
 case class WithField(name: String, valExpr: Expression)
-    extends StructFieldsOperation
-    with UnaryLike[Expression] {
+  extends StructFieldsOperation with UnaryLike[Expression] {
 
   override def apply(values: Seq[(StructField, Expression)]): Seq[(StructField, Expression)] = {
     val newFieldExpr = (StructField(name, valExpr.dataType, valExpr.nullable), valExpr)
@@ -752,7 +718,7 @@ case class DropField(name: String) extends StructFieldsOperation with LeafLike[E
  * Updates fields in a struct.
  */
 case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperation])
-    extends Unevaluable {
+  extends Unevaluable {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UPDATE_FIELDS)
 
@@ -765,20 +731,23 @@ case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperat
           "paramIndex" -> ordinalNumber(0),
           "requiredType" -> toSQLType(StructType),
           "inputSql" -> toSQLExpr(structExpr),
-          "inputType" -> toSQLType(structExpr.dataType)))
+          "inputType" -> toSQLType(structExpr.dataType))
+      )
     } else if (newExprs.isEmpty) {
-      DataTypeMismatch(errorSubClass = "CANNOT_DROP_ALL_FIELDS", messageParameters = Map.empty)
+      DataTypeMismatch(
+        errorSubClass = "CANNOT_DROP_ALL_FIELDS",
+        messageParameters = Map.empty
+      )
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
   }
 
-  override def children: Seq[Expression] = structExpr +: fieldOps.collect { case e: Expression =>
-    e
+  override def children: Seq[Expression] = structExpr +: fieldOps.collect {
+    case e: Expression => e
   }
 
-  override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[Expression]): Expression =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     super.legacyWithNewChildren(newChildren)
 
   override def dataType: StructType = StructType(newFields)
@@ -803,8 +772,8 @@ case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperat
   lazy val newExprs: Seq[Expression] = newFieldExprs.map(_._2)
 
   lazy val evalExpr: Expression = {
-    val createNamedStructExpr = CreateNamedStruct(newFieldExprs.flatMap { case (field, expr) =>
-      Seq(Literal(field.name), expr)
+    val createNamedStructExpr = CreateNamedStruct(newFieldExprs.flatMap {
+      case (field, expr) => Seq(Literal(field.name), expr)
     })
 
     if (structExpr.nullable) {
@@ -843,7 +812,7 @@ object UpdateFields {
   private def updateFieldsHelper(
       structExpr: Expression,
       namePartsRemaining: Seq[String],
-      valueFunc: String => StructFieldsOperation): UpdateFields = {
+      valueFunc: String => StructFieldsOperation) : UpdateFields = {
     val fieldName = namePartsRemaining.head
     if (namePartsRemaining.length == 1) {
       UpdateFields(structExpr, valueFunc(fieldName) :: Nil)

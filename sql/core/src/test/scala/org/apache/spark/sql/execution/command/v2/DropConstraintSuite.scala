@@ -33,7 +33,8 @@ class DropConstraintSuite extends QueryTest with CommandSuiteBase with DDLComman
         exception = e,
         condition = "CONSTRAINT_DOES_NOT_EXIST",
         sqlState = "42704",
-        parameters = Map("constraintName" -> "c1", "tableName" -> "test_catalog.ns.tbl"))
+        parameters = Map("constraintName" -> "c1", "tableName" -> "test_catalog.ns.tbl")
+      )
     }
   }
 
@@ -54,7 +55,12 @@ class DropConstraintSuite extends QueryTest with CommandSuiteBase with DDLComman
         condition = "TABLE_OR_VIEW_NOT_FOUND",
         sqlState = "42P01",
         parameters = Map("relationName" -> "`test_catalog`.`ns`.`tbl`"),
-        context = ExpectedContext(fragment = "test_catalog.ns.tbl", start = 12, stop = 30))
+        context = ExpectedContext(
+          fragment = "test_catalog.ns.tbl",
+          start = 12,
+          stop = 30
+        )
+      )
     }
   }
 

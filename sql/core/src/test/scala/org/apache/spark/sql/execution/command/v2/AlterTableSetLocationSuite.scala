@@ -26,12 +26,11 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.execution.command
 
 /**
- * The class contains tests for the `ALTER TABLE .. SET LOCATION` command to check V2 table
- * catalogs.
+ * The class contains tests for the `ALTER TABLE .. SET LOCATION` command to
+ * check V2 table catalogs.
  */
 class AlterTableSetLocationSuite
-    extends command.AlterTableSetLocationSuiteBase
-    with CommandSuiteBase {
+  extends command.AlterTableSetLocationSuiteBase with CommandSuiteBase {
 
   private def getTableMetadata(tableName: String): Table = {
     val nameParts = spark.sessionState.sqlParser.parseMultipartIdentifier(tableName)
@@ -48,9 +47,8 @@ class AlterTableSetLocationSuite
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(
-        table.properties === withDefaultOwnership(
-          Map("provider" -> "foo", "location" -> "s3://bucket/path")).asJava)
+      assert(table.properties === withDefaultOwnership(
+        Map("provider" -> "foo", "location" -> "s3://bucket/path")).asJava)
     }
   }
 
@@ -63,7 +61,8 @@ class AlterTableSetLocationSuite
           sql(s"ALTER TABLE $t PARTITION(ds='2017-06-10') SET LOCATION 's3://bucket/path'")
         },
         condition = "_LEGACY_ERROR_TEMP_1045",
-        parameters = Map.empty)
+        parameters = Map.empty
+      )
     }
   }
 }

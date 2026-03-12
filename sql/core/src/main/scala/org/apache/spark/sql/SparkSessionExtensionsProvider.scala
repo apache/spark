@@ -23,8 +23,9 @@ import org.apache.spark.annotation.{DeveloperApi, Since}
 /**
  * Base trait for implementations used by [[SparkSessionExtensions]]
  *
- * For example, now we have an external function named `Age` to register as an extension for
- * SparkSession:
+ *
+ * For example, now we have an external function named `Age` to register as an extension for SparkSession:
+ *
  *
  * {{{
  *   package org.apache.spark.examples.extensions
@@ -39,7 +40,8 @@ import org.apache.spark.annotation.{DeveloperApi, Since}
  *   }
  * }}}
  *
- * We need to create our extension which inherits [[SparkSessionExtensionsProvider]] Example:
+ * We need to create our extension which inherits [[SparkSessionExtensionsProvider]]
+ * Example:
  *
  * {{{
  *   package org.apache.spark.examples.extensions
@@ -58,18 +60,16 @@ import org.apache.spark.annotation.{DeveloperApi, Since}
  *   }
  * }}}
  *
- * Then, we can inject `MyExtensions` in three ways, <ul> <li>withExtensions of
- * [[SparkSession.Builder]]</li> <li>Config - spark.sql.extensions</li>
- * <li>[[java.util.ServiceLoader]] - Add to
- * src/main/resources/META-INF/services/org.apache.spark.sql.SparkSessionExtensionsProvider</li>
+ * Then, we can inject `MyExtensions` in three ways,
+ * <ul>
+ *   <li>withExtensions of [[SparkSession.Builder]]</li>
+ *   <li>Config - spark.sql.extensions</li>
+ *   <li>[[java.util.ServiceLoader]] - Add to src/main/resources/META-INF/services/org.apache.spark.sql.SparkSessionExtensionsProvider</li>
  * </ul>
  *
- * @see
- *   [[SparkSessionExtensions]]
- * @see
- *   [[SparkSession.Builder]]
- * @see
- *   [[java.util.ServiceLoader]]
+ * @see [[SparkSessionExtensions]]
+ * @see [[SparkSession.Builder]]
+ * @see [[java.util.ServiceLoader]]
  *
  * @since 3.2.0
  */

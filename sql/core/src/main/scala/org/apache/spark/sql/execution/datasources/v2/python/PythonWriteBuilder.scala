@@ -18,9 +18,12 @@ package org.apache.spark.sql.execution.datasources.v2.python
 
 import org.apache.spark.sql.connector.write._
 
-class PythonWriteBuilder(ds: PythonDataSourceV2, shortName: String, info: LogicalWriteInfo)
-    extends WriteBuilder
-    with SupportsTruncate {
+
+class PythonWriteBuilder(
+    ds: PythonDataSourceV2,
+    shortName: String,
+    info: LogicalWriteInfo
+  ) extends WriteBuilder with SupportsTruncate {
 
   private var isTruncate = false
 

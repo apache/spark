@@ -29,9 +29,7 @@ import org.apache.spark.sql.types.IntegerType
 class RemoveRedundantAggregatesSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch(
-      "RemoveRedundantAggregates",
-      FixedPoint(10),
+    val batches = Batch("RemoveRedundantAggregates", FixedPoint(10),
       RemoveRedundantAggregates,
       RemoveNoopOperators) :: Nil
   }
@@ -44,7 +42,8 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
     Seq(
       count(e),
       PythonUDAF("pyUDAF", null, IntegerType, Seq(e), udfDeterministic = true)
-        .toAggregateExpression())
+        .toAggregateExpression()
+    )
   }
 
   test("Remove redundant aggregate") {
@@ -190,12 +189,10 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
 
   test("SPARK-36194: Remove aggregation from left semi/anti join if aggregation the same") {
     Seq(LeftSemi, LeftAnti).foreach { joinType =>
-      val originalQuery = x
-        .groupBy($"a", $"b")($"a", $"b")
+      val originalQuery = x.groupBy($"a", $"b")($"a", $"b")
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
         .groupBy("x.a".attr, "x.b".attr)("x.a".attr, "x.b".attr)
-      val correctAnswer = x
-        .groupBy($"a", $"b")($"a", $"b")
+      val correctAnswer = x.groupBy($"a", $"b")($"a", $"b")
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
 
       val optimized = Optimize.execute(originalQuery.analyze)
@@ -205,12 +202,10 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
 
   test("SPARK-36194: Remove aggregation from left semi/anti join with alias") {
     Seq(LeftSemi, LeftAnti).foreach { joinType =>
-      val originalQuery = x
-        .groupBy($"a", $"b")($"a", $"b".as("d"))
+      val originalQuery = x.groupBy($"a", $"b")($"a", $"b".as("d"))
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "d".attr === "y.b".attr))
         .groupBy("x.a".attr, "d".attr)("x.a".attr, "d".attr)
-      val correctAnswer = x
-        .groupBy($"a", $"b")($"a", $"b".as("d"))
+      val correctAnswer = x.groupBy($"a", $"b")($"a", $"b".as("d"))
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "d".attr === "y.b".attr))
 
       val optimized = Optimize.execute(originalQuery.analyze)
@@ -218,15 +213,12 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
     }
   }
 
-  test(
-    "SPARK-36194: Remove aggregation from left semi/anti join if it is the sub aggregateExprs") {
+  test("SPARK-36194: Remove aggregation from left semi/anti join if it is the sub aggregateExprs") {
     Seq(LeftSemi, LeftAnti).foreach { joinType =>
-      val originalQuery = x
-        .groupBy($"a", $"b")($"a", $"b")
+      val originalQuery = x.groupBy($"a", $"b")($"a", $"b")
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
         .groupBy("x.a".attr, "x.b".attr)("x.a".attr)
-      val correctAnswer = x
-        .groupBy($"a", $"b")($"a", $"b")
+      val correctAnswer = x.groupBy($"a", $"b")($"a", $"b")
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
         .select("x.a".attr)
 
@@ -237,14 +229,12 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
 
   test("SPARK-36194: Transform down to remove more aggregates") {
     Seq(LeftSemi, LeftAnti).foreach { joinType =>
-      val originalQuery = x
-        .groupBy($"a", $"b")($"a", $"b")
+      val originalQuery = x.groupBy($"a", $"b")($"a", $"b")
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
         .groupBy("x.a".attr, "x.b".attr)("x.a".attr, "x.b".attr)
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
         .groupBy("x.a".attr, "x.b".attr)("x.a".attr)
-      val correctAnswer = x
-        .groupBy($"a", $"b")($"a", $"b")
+      val correctAnswer = x.groupBy($"a", $"b")($"a", $"b")
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
         .select("x.a".attr)
@@ -267,13 +257,11 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
   }
 
   test("SPARK-36194: Child distinct keys are subsets and aggregateExpressions are foldable") {
-    val originalQuery = x
-      .groupBy($"a", $"b")($"a", $"b")
+    val originalQuery = x.groupBy($"a", $"b")($"a", $"b")
       .join(y, LeftSemi, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
       .groupBy("x.a".attr, "x.b".attr)(TrueLiteral)
       .analyze
-    val correctAnswer = x
-      .groupBy($"a", $"b")($"a", $"b")
+    val correctAnswer = x.groupBy($"a", $"b")($"a", $"b")
       .join(y, LeftSemi, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
       .select(TrueLiteral)
       .analyze
@@ -283,15 +271,13 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
 
   test("SPARK-36194: Negative case: child distinct keys is not the subset of required keys") {
     Seq(LeftSemi, LeftAnti).foreach { joinType =>
-      val originalQuery1 = x
-        .groupBy($"a", $"b")($"a", $"b")
+      val originalQuery1 = x.groupBy($"a", $"b")($"a", $"b")
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
         .groupBy("x.a".attr)("x.a".attr)
         .analyze
       comparePlans(Optimize.execute(originalQuery1), originalQuery1)
 
-      val originalQuery2 = x
-        .groupBy($"a", $"b")($"a", $"b")
+      val originalQuery2 = x.groupBy($"a", $"b")($"a", $"b")
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
         .groupBy("x.a".attr)(count("x.b".attr))
         .analyze
@@ -306,9 +292,7 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
 
   test("SPARK-53155: global lower aggregation should not be removed") {
     object OptimizeNonRemovedRedundantAgg extends RuleExecutor[LogicalPlan] {
-      val batches = Batch(
-        "RemoveRedundantAggregates",
-        FixedPoint(10),
+      val batches = Batch("RemoveRedundantAggregates", FixedPoint(10),
         PropagateEmptyRelation,
         RemoveRedundantAggregates) :: Nil
     }

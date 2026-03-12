@@ -27,7 +27,6 @@ import org.apache.spark.sql.types.{StructType, TimestampType}
 import org.apache.spark.util.NextIterator
 
 sealed trait StreamingSessionWindowStateManager extends Serializable {
-
   /**
    * Returns the schema for key of the state.
    */
@@ -44,38 +43,36 @@ sealed trait StreamingSessionWindowStateManager extends Serializable {
   def getNumColsForPrefixKey: Int
 
   /**
-   * Extracts the key without session window from the row. This can be used to group session
-   * windows by key.
+   * Extracts the key without session window from the row.
+   * This can be used to group session windows by key.
    */
   def extractKeyWithoutSession(value: UnsafeRow): UnsafeRow
 
   /**
-   * Returns true if the session of the given value doesn't exist in the store, or the value in
-   * the session is different to the stored value of the session in the store. This can be used to
-   * control the output in UPDATE mode.
+   * Returns true if the session of the given value doesn't exist in the store, or the value
+   * in the session is different to the stored value of the session in the store.
+   * This can be used to control the output in UPDATE mode.
    */
   def newOrModified(store: ReadStateStore, value: UnsafeRow): Boolean
 
   /**
    * Returns all sessions for the key.
    *
-   * @param key
-   *   The key without session, which can be retrieved from {@code extractKeyWithoutSession}.
+   * @param key The key without session, which can be retrieved from
+   *            {@code extractKeyWithoutSession}.
    */
   def getSessions(store: ReadStateStore, key: UnsafeRow): Iterator[UnsafeRow]
 
   /**
    * Replaces all sessions for the key to given one.
    *
-   * @param key
-   *   The key without session, which can be retrieved from {@code extractKeyWithoutSession}.
-   * @param sessions
-   *   The all sessions including existing sessions if it's active. Existing sessions which aren't
-   *   included in this parameter will be removed.
-   * @return
-   *   A tuple having two elements
-   *   1. number of added/updated rows
-   *   2. number of deleted rows
+   * @param key The key without session, which can be retrieved from
+   *            {@code extractKeyWithoutSession}.
+   * @param sessions The all sessions including existing sessions if it's active.
+   *                 Existing sessions which aren't included in this parameter will be removed.
+   * @return A tuple having two elements
+   *         1. number of added/updated rows
+   *         2. number of deleted rows
    */
   def updateSessions(store: StateStore, key: UnsafeRow, sessions: Seq[UnsafeRow]): (Long, Long)
 
@@ -83,14 +80,13 @@ sealed trait StreamingSessionWindowStateManager extends Serializable {
    * Removes using a predicate on values, with returning removed values via iterator.
    *
    * At a high level, this produces an iterator over the (key, value, matched) tuples such that
-   * value satisfies the predicate, where producing an element removes the value from the state
-   * store and producing all elements with a given key updates it accordingly.
+   * value satisfies the predicate, where producing an element removes the value from the
+   * state store and producing all elements with a given key updates it accordingly.
    *
    * This implies the iterator must be consumed fully without any other operations on this manager
    * or the underlying store being interleaved.
    *
-   * @param removalCondition
-   *   The predicate on removing the key-value.
+   * @param removalCondition The predicate on removing the key-value.
    */
   def removeByValueCondition(
       store: StateStore,
@@ -122,11 +118,8 @@ object StreamingSessionWindowStateManager {
       inputRowAttributes: Seq[Attribute],
       stateFormatVersion: Int): StreamingSessionWindowStateManager = {
     stateFormatVersion match {
-      case 1 =>
-        new StreamingSessionWindowStateManagerImplV1(
-          keyWithoutSessionExpressions,
-          sessionExpression,
-          inputRowAttributes)
+      case 1 => new StreamingSessionWindowStateManagerImplV1(
+        keyWithoutSessionExpressions, sessionExpression, inputRowAttributes)
       case _ => throw new IllegalArgumentException(s"Version $stateFormatVersion is invalid")
     }
   }
@@ -136,21 +129,20 @@ class StreamingSessionWindowStateManagerImplV1(
     keyWithoutSessionExpressions: Seq[Attribute],
     sessionExpression: Attribute,
     valueAttributes: Seq[Attribute])
-    extends StreamingSessionWindowStateManager
-    with Logging {
+  extends StreamingSessionWindowStateManager with Logging {
 
   private val stateKeyStructType = keyWithoutSessionExpressions.toStructType
     .add("sessionStartTime", TimestampType, nullable = false)
 
   private val stateKeyExprs = keyWithoutSessionExpressions :+ Literal(1L)
   private val indexOrdinalInSessionStart = keyWithoutSessionExpressions.size
-  @transient private lazy val keyRowGenerator =
-    UnsafeProjection.create(keyWithoutSessionExpressions, valueAttributes)
-  @transient private lazy val stateKeyRowGenerator =
-    UnsafeProjection.create(stateKeyExprs, keyWithoutSessionExpressions)
+  @transient private lazy val keyRowGenerator = UnsafeProjection.create(
+    keyWithoutSessionExpressions, valueAttributes)
+  @transient private lazy val stateKeyRowGenerator = UnsafeProjection.create(stateKeyExprs,
+    keyWithoutSessionExpressions)
 
-  @transient private lazy val helper =
-    new StreamingSessionWindowHelper(sessionExpression, valueAttributes)
+  @transient private lazy val helper = new StreamingSessionWindowHelper(
+    sessionExpression, valueAttributes)
 
   override def getStateKeySchema: StructType = stateKeyStructType
 
@@ -185,8 +177,7 @@ class StreamingSessionWindowStateManagerImplV1(
     // Below two will be used multiple times - need to make sure this is not a stream or iterator.
     val newValues = sessions.toList
     val savedStates = getSessionsWithKeys(store, key)
-      .map(pair => (pair.key.copy(), pair.value.copy()))
-      .toList
+      .map(pair => (pair.key.copy(), pair.value.copy())).toList
     putRows(store, key, savedStates, newValues)
   }
 
@@ -291,8 +282,8 @@ class StreamingSessionWindowHelper(sessionExpression: Attribute, inputSchema: Se
 }
 
 /**
- * The State key is the session key (i.e. partition key) and the sessionStartTime. Drop the last
- * field (sessionStartTime) to get the partition key.
+ * The State key is the session key (i.e. partition key) and the sessionStartTime.
+ * Drop the last field (sessionStartTime) to get the partition key.
  */
 class StreamingSessionWindowStatePartitionKeyExtractor(stateKeySchema: StructType)
-    extends DropLastNFieldsStatePartitionKeyExtractor(stateKeySchema, numLastColsToDrop = 1)
+  extends DropLastNFieldsStatePartitionKeyExtractor(stateKeySchema, numLastColsToDrop = 1)

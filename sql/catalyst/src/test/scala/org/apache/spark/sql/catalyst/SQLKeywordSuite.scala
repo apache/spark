@@ -30,34 +30,12 @@ trait SQLKeywordUtils extends SparkFunSuite with SQLHelper {
 
   val sqlSyntaxDefs = {
     val sqlBaseParserPath =
-      getWorkspaceFilePath(
-        "sql",
-        "api",
-        "src",
-        "main",
-        "antlr4",
-        "org",
-        "apache",
-        "spark",
-        "sql",
-        "catalyst",
-        "parser",
-        "SqlBaseParser.g4").toFile
+      getWorkspaceFilePath("sql", "api", "src", "main", "antlr4", "org",
+        "apache", "spark", "sql", "catalyst", "parser", "SqlBaseParser.g4").toFile
 
     val sqlBaseLexerPath =
-      getWorkspaceFilePath(
-        "sql",
-        "api",
-        "src",
-        "main",
-        "antlr4",
-        "org",
-        "apache",
-        "spark",
-        "sql",
-        "catalyst",
-        "parser",
-        "SqlBaseLexer.g4").toFile
+      getWorkspaceFilePath("sql", "api", "src", "main", "antlr4", "org",
+        "apache", "spark", "sql", "catalyst", "parser", "SqlBaseLexer.g4").toFile
 
     (Files.readString(sqlBaseParserPath.toPath) +
       Files.readString(sqlBaseLexerPath.toPath)).split("\n")
@@ -69,17 +47,13 @@ trait SQLKeywordUtils extends SparkFunSuite with SQLHelper {
     val docPath = {
       getWorkspaceFilePath("docs", "sql-ref-ansi-compliance.md").toFile
     }
-    Files
-      .readString(docPath.toPath)
-      .split("\n")
-      .dropWhile(!_.startsWith("|Keyword|"))
-      .drop(2)
-      .takeWhile(_.startsWith("|"))
+    Files.readString(docPath.toPath).split("\n")
+      .dropWhile(!_.startsWith("|Keyword|")).drop(2).takeWhile(_.startsWith("|"))
       .map(_.stripPrefix("|").split("\\|").map(_.trim))
   }
 
-  private def parseAntlrGrammars[T](startTag: String, endTag: String)(
-      f: PartialFunction[String, Seq[T]]): Set[T] = {
+  private def parseAntlrGrammars[T](startTag: String, endTag: String)
+      (f: PartialFunction[String, Seq[T]]): Set[T] = {
     val keywords = new mutable.ArrayBuffer[T]
     val default = (_: String) => Nil
     var startTagFound = false
@@ -97,11 +71,10 @@ trait SQLKeywordUtils extends SparkFunSuite with SQLHelper {
         }
       }
     }
-    assert(
-      keywords.nonEmpty && startTagFound && parseFinished,
+    assert(keywords.nonEmpty && startTagFound && parseFinished,
       "cannot extract keywords from the `SqlBaseParser.g4` or `SqlBaseLexer.g4` file, " +
-        s"so please check if the start/end tags (`$startTag` and `$endTag`) " +
-        "are placed correctly in the file.")
+      s"so please check if the start/end tags (`$startTag` and `$endTag`) " +
+      "are placed correctly in the file.")
     keywords.toSet
   }
 
@@ -109,39 +82,40 @@ trait SQLKeywordUtils extends SparkFunSuite with SQLHelper {
   // we need to map a symbol to actual literal strings.
   val symbolsToExpandIntoDifferentLiterals = {
     val kwDef = """([A-Z_]+):(.+);""".r
-    val keywords =
-      parseAntlrGrammars("//--SPARK-KEYWORD-LIST-START", "//--SPARK-KEYWORD-LIST-END") {
-        case kwDef(symbol, literalDef) =>
-          val splitDefs = literalDef.split("""\|""")
-          val hasMultipleLiterals = splitDefs.length > 1
-          // The case where a symbol has multiple literal definitions,
-          // e.g., `DATABASES: 'DATABASES' | 'SCHEMAS';`.
-          if (hasMultipleLiterals) {
-            // Filters out inappropriate entries, e.g., `!` in `NOT: 'NOT' | '!';`
-            val litDef = """([A-Z_]+)""".r
-            val literals = splitDefs.map(_.replaceAll("'", "").trim).toSeq.flatMap {
-              case litDef(lit) => Some(lit)
-              case _ => None
-            }
-            (symbol, literals) :: Nil
-          } else {
-            val literal = literalDef.split("\\{")(0).replaceAll("'", "").trim
-            // The case where a symbol string and its literal string are different,
-            // e.g., `SETMINUS: 'MINUS';`.
-            if (symbol != literal) {
-              (symbol, literal :: Nil) :: Nil
-            } else {
-              Nil
-            }
+    val keywords = parseAntlrGrammars(
+        "//--SPARK-KEYWORD-LIST-START", "//--SPARK-KEYWORD-LIST-END") {
+      case kwDef(symbol, literalDef) =>
+        val splitDefs = literalDef.split("""\|""")
+        val hasMultipleLiterals = splitDefs.length > 1
+        // The case where a symbol has multiple literal definitions,
+        // e.g., `DATABASES: 'DATABASES' | 'SCHEMAS';`.
+        if (hasMultipleLiterals) {
+          // Filters out inappropriate entries, e.g., `!` in `NOT: 'NOT' | '!';`
+          val litDef = """([A-Z_]+)""".r
+          val literals = splitDefs.map(_.replaceAll("'", "").trim).toSeq.flatMap {
+            case litDef(lit) => Some(lit)
+            case _ => None
           }
-      }
+          (symbol, literals) :: Nil
+        } else {
+          val literal = literalDef.split("\\{")(0).replaceAll("'", "").trim
+          // The case where a symbol string and its literal string are different,
+          // e.g., `SETMINUS: 'MINUS';`.
+          if (symbol != literal) {
+            (symbol, literal :: Nil) :: Nil
+          } else {
+            Nil
+          }
+        }
+    }
     keywords.toMap
   }
 
   // All the SQL keywords defined in `SqlBaseLexer.g4`
   val allCandidateKeywords: Set[String] = {
     val kwDef = """([A-Z_]+):.+;""".r
-    parseAntlrGrammars("//--SPARK-KEYWORD-LIST-START", "//--SPARK-KEYWORD-LIST-END") {
+    parseAntlrGrammars(
+        "//--SPARK-KEYWORD-LIST-START", "//--SPARK-KEYWORD-LIST-END") {
       // Parses a pattern, e.g., `AFTER: 'AFTER';`
       case kwDef(symbol) =>
         if (symbolsToExpandIntoDifferentLiterals.contains(symbol)) {
@@ -187,9 +161,8 @@ class SQLKeywordSuite extends SQLKeywordUtils {
     if (allCandidateKeywords != documentedKeywords) {
       val undocumented = (allCandidateKeywords -- documentedKeywords).toSeq.sorted
       val overdocumented = (documentedKeywords -- allCandidateKeywords).toSeq.sorted
-      fail(
-        "Some keywords are not documented: " + undocumented.mkString(", ") +
-          " Extras: " + overdocumented.mkString(", "))
+      fail("Some keywords are not documented: " + undocumented.mkString(", ") +
+        " Extras: " + overdocumented.mkString(", "))
     }
   }
 
@@ -203,9 +176,8 @@ class SQLKeywordSuite extends SQLKeywordUtils {
     if (nonReservedKeywordsInAnsiMode != nonReservedInDoc) {
       val misImplemented = ((nonReservedInDoc -- nonReservedKeywordsInAnsiMode) ++
         (nonReservedKeywordsInAnsiMode -- nonReservedInDoc)).toSeq.sorted
-      fail(
-        "Some keywords are documented and implemented inconsistently: " +
-          misImplemented.mkString(", "))
+      fail("Some keywords are documented and implemented inconsistently: " +
+        misImplemented.mkString(", "))
     }
   }
 
@@ -219,22 +191,19 @@ class SQLKeywordSuite extends SQLKeywordUtils {
     if (nonReservedKeywordsInDefaultMode != nonReservedInDoc) {
       val misImplemented = ((nonReservedInDoc -- nonReservedKeywordsInDefaultMode) ++
         (nonReservedKeywordsInDefaultMode -- nonReservedInDoc)).toSeq.sorted
-      fail(
-        "Some keywords are documented and implemented inconsistently: " +
-          misImplemented.mkString(", "))
+      fail("Some keywords are documented and implemented inconsistently: " +
+        misImplemented.mkString(", "))
     }
   }
 
   test("SQL 2016 keywords are documented correctly") {
     withTempDir { dir =>
       val tmpFile = new File(dir, "tmp")
-      val is = Thread
-        .currentThread()
-        .getContextClassLoader
+      val is = Thread.currentThread().getContextClassLoader
         .getResourceAsStream("ansi-sql-2016-reserved-keywords.txt")
       Files.copy(is, tmpFile.toPath)
-      val reservedKeywordsInSql2016 =
-        Files.readAllLines(tmpFile.toPath).asScala.filterNot(_.startsWith("--")).map(_.trim).toSet
+      val reservedKeywordsInSql2016 = Files.readAllLines(tmpFile.toPath)
+        .asScala.filterNot(_.startsWith("--")).map(_.trim).toSet
       val documented = keywordsInDoc.filter(_.last == "reserved").map(_.head).toSet
       assert((documented -- reservedKeywordsInSql2016).isEmpty)
     }

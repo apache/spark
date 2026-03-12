@@ -40,7 +40,7 @@ import org.apache.spark.sql.internal.SQLConf
  *     `org.apache.spark.sql.execution.command.v1.CreateNamespaceSuiteBase`
  *     - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.CreateNamespaceSuite`
  *     - V1 Hive External catalog:
- *       `org.apache.spark.sql.hive.execution.command.CreateNamespaceSuite`
+*        `org.apache.spark.sql.hive.execution.command.CreateNamespaceSuite`
  */
 trait CreateNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -92,15 +92,15 @@ trait CreateNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
     withNamespace(ns) {
       sql(s"CREATE NAMESPACE $ns")
 
-      val parsed = CatalystSqlParser
-        .parseMultipartIdentifier(namespace)
-        .map(part => quoteIdentifier(part))
-        .mkString(".")
+      val parsed = CatalystSqlParser.parseMultipartIdentifier(namespace)
+        .map(part => quoteIdentifier(part)).mkString(".")
 
       val e = intercept[NamespaceAlreadyExistsException] {
         sql(s"CREATE NAMESPACE $ns")
       }
-      checkError(e, condition = "SCHEMA_ALREADY_EXISTS", parameters = Map("schemaName" -> parsed))
+      checkError(e,
+        condition = "SCHEMA_ALREADY_EXISTS",
+        parameters = Map("schemaName" -> parsed))
 
       // The following will be no-op since the namespace already exists.
       sql(s"CREATE NAMESPACE IF NOT EXISTS $ns")
@@ -122,17 +122,14 @@ trait CreateNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
       CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
         withNamespace(ns) {
           sql(s"CREATE NAMESPACE $ns WITH DBPROPERTIES('$key'='foo')")
-          assert(
-            sql(s"DESC NAMESPACE EXTENDED $ns")
-              .toDF("k", "v")
-              .where("k='Properties'")
-              .where("v=''")
-              .count() == 1,
-            s"$key is a reserved namespace property and ignored")
+          assert(sql(s"DESC NAMESPACE EXTENDED $ns")
+            .toDF("k", "v")
+            .where("k='Properties'")
+            .where("v=''")
+            .count() == 1, s"$key is a reserved namespace property and ignored")
           val meta =
             getCatalog(catalog).asNamespaceCatalog.loadNamespaceMetadata(namespaceArray)
-          assert(
-            meta.get(key) == null || !meta.get(key).contains("foo"),
+          assert(meta.get(key) == null || !meta.get(key).contains("foo"),
             "reserved properties should not have side effects")
         }
       }
@@ -141,8 +138,7 @@ trait CreateNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   protected def getNamespaceLocation(catalog: String, namespace: Array[String]): String = {
     val metadata = getCatalog(catalog).asNamespaceCatalog
-      .loadNamespaceMetadata(namespace)
-      .asScala
+      .loadNamespaceMetadata(namespace).asScala
     metadata(SupportsNamespaces.PROP_LOCATION)
   }
 

@@ -27,23 +27,20 @@ class ShowPartitionsParserSuite extends AnalysisTest {
     Seq(
       "SHOW PARTITIONS t1" -> ShowPartitions(UnresolvedTable(Seq("t1"), commandName), None),
       "SHOW PARTITIONS db1.t1" -> ShowPartitions(
-        UnresolvedTable(Seq("db1", "t1"), commandName),
-        None),
+        UnresolvedTable(Seq("db1", "t1"), commandName), None),
       "SHOW PARTITIONS t1 PARTITION(partcol1='partvalue', partcol2='partvalue')" ->
         ShowPartitions(
           UnresolvedTable(Seq("t1"), commandName),
-          Some(
-            UnresolvedPartitionSpec(Map("partcol1" -> "partvalue", "partcol2" -> "partvalue")))),
+          Some(UnresolvedPartitionSpec(Map("partcol1" -> "partvalue", "partcol2" -> "partvalue")))),
       "SHOW PARTITIONS a.b.c" -> ShowPartitions(
-        UnresolvedTable(Seq("a", "b", "c"), commandName),
-        None),
+        UnresolvedTable(Seq("a", "b", "c"), commandName), None),
       "SHOW PARTITIONS a.b.c PARTITION(ds='2017-06-10')" ->
         ShowPartitions(
           UnresolvedTable(Seq("a", "b", "c"), commandName),
-          Some(UnresolvedPartitionSpec(Map("ds" -> "2017-06-10"))))).foreach {
-      case (sql, expected) =>
-        val parsed = parsePlan(sql)
-        comparePlans(parsed, expected)
+          Some(UnresolvedPartitionSpec(Map("ds" -> "2017-06-10"))))
+    ).foreach { case (sql, expected) =>
+      val parsed = parsePlan(sql)
+      comparePlans(parsed, expected)
     }
   }
 
@@ -53,6 +50,9 @@ class ShowPartitionsParserSuite extends AnalysisTest {
       condition = "INVALID_SQL_SYNTAX.EMPTY_PARTITION_VALUE",
       sqlState = "42000",
       parameters = Map("partKey" -> "`b`"),
-      context = ExpectedContext(fragment = "PARTITION (a='1', b)", start = 25, stop = 44))
+      context = ExpectedContext(
+        fragment = "PARTITION (a='1', b)",
+        start = 25,
+        stop = 44))
   }
 }

@@ -28,16 +28,13 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * An internal v2 table implementation that wraps the original table and a logical row-level
  * operation for DELETE, UPDATE, MERGE commands that require rewriting data.
  *
- * The purpose of this table is to make the existing scan and write planning rules work with
- * commands that require coordination between the scan and the write (so that the write knows what
- * to replace).
+ * The purpose of this table is to make the existing scan and write planning rules work
+ * with commands that require coordination between the scan and the write (so that the write
+ * knows what to replace).
  */
 private[sql] case class RowLevelOperationTable(
     table: Table with SupportsRowLevelOperations,
-    operation: RowLevelOperation)
-    extends Table
-    with SupportsRead
-    with SupportsWrite {
+    operation: RowLevelOperation) extends Table with SupportsRead with SupportsWrite {
 
   override def name: String = table.name
   override def columns: Array[Column] = table.columns()

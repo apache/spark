@@ -27,23 +27,19 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
-class InjectRuntimeFilterSuite
-    extends QueryTest
-    with SharedSparkSession
-    with AdaptiveSparkPlanHelper {
+class InjectRuntimeFilterSuite extends QueryTest with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    val schema = new StructType()
-      .add("a1", IntegerType, nullable = true)
+    val schema = new StructType().add("a1", IntegerType, nullable = true)
       .add("b1", IntegerType, nullable = true)
       .add("c1", IntegerType, nullable = true)
       .add("d1", IntegerType, nullable = true)
       .add("e1", IntegerType, nullable = true)
       .add("f1", IntegerType, nullable = true)
 
-    val data1 = Seq(
-      Seq(null, 47, null, 4, 6, 48),
+    val data1 = Seq(Seq(null, 47, null, 4, 6, 48),
       Seq(73, 63, null, 92, null, null),
       Seq(76, 10, 74, 98, 37, 5),
       Seq(0, 63, null, null, null, null),
@@ -68,16 +64,15 @@ class InjectRuntimeFilterSuite
     val rddRow1 = rdd1.map(s => Row.fromSeq(s))
     spark.createDataFrame(rddRow1, schema).write.saveAsTable("bf1")
 
-    val schema2 = new StructType()
-      .add("a2", IntegerType, nullable = true)
+    val schema2 = new StructType().add("a2", IntegerType, nullable = true)
       .add("b2", IntegerType, nullable = true)
       .add("c2", IntegerType, nullable = true)
       .add("d2", IntegerType, nullable = true)
       .add("e2", IntegerType, nullable = true)
       .add("f2", IntegerType, nullable = true)
 
-    val data2 = Seq(
-      Seq(67, 17, 45, 91, null, null),
+
+    val data2 = Seq(Seq(67, 17, 45, 91, null, null),
       Seq(98, 63, 0, 89, null, 40),
       Seq(null, 76, 68, 75, 20, 19),
       Seq(8, null, null, null, 78, null),
@@ -102,16 +97,14 @@ class InjectRuntimeFilterSuite
     val rddRow2 = rdd2.map(s => Row.fromSeq(s))
     spark.createDataFrame(rddRow2, schema2).write.saveAsTable("bf2")
 
-    val schema3 = new StructType()
-      .add("a3", IntegerType, nullable = true)
+    val schema3 = new StructType().add("a3", IntegerType, nullable = true)
       .add("b3", IntegerType, nullable = true)
       .add("c3", IntegerType, nullable = true)
       .add("d3", IntegerType, nullable = true)
       .add("e3", IntegerType, nullable = true)
       .add("f3", IntegerType, nullable = true)
 
-    val data3 = Seq(
-      Seq(67, 17, 45, 91, null, null),
+    val data3 = Seq(Seq(67, 17, 45, 91, null, null),
       Seq(98, 63, 0, 89, null, 40),
       Seq(null, 76, 68, 75, 20, 19),
       Seq(8, null, null, null, 78, null),
@@ -136,16 +129,15 @@ class InjectRuntimeFilterSuite
     val rddRow3 = rdd3.map(s => Row.fromSeq(s))
     spark.createDataFrame(rddRow3, schema3).write.saveAsTable("bf3")
 
-    val schema4 = new StructType()
-      .add("a4", IntegerType, nullable = true)
+
+    val schema4 = new StructType().add("a4", IntegerType, nullable = true)
       .add("b4", IntegerType, nullable = true)
       .add("c4", IntegerType, nullable = true)
       .add("d4", IntegerType, nullable = true)
       .add("e4", IntegerType, nullable = true)
       .add("f4", IntegerType, nullable = true)
 
-    val data4 = Seq(
-      Seq(67, 17, 45, 91, null, null),
+    val data4 = Seq(Seq(67, 17, 45, 91, null, null),
       Seq(98, 63, 0, 89, null, 40),
       Seq(null, 76, 68, 75, 20, 19),
       Seq(8, null, null, null, 78, null),
@@ -170,16 +162,14 @@ class InjectRuntimeFilterSuite
     val rddRow4 = rdd4.map(s => Row.fromSeq(s))
     spark.createDataFrame(rddRow4, schema4).write.saveAsTable("bf4")
 
-    val schema5part = new StructType()
-      .add("a5", IntegerType, nullable = true)
+    val schema5part = new StructType().add("a5", IntegerType, nullable = true)
       .add("b5", IntegerType, nullable = true)
       .add("c5", IntegerType, nullable = true)
       .add("d5", IntegerType, nullable = true)
       .add("e5", IntegerType, nullable = true)
       .add("f5", IntegerType, nullable = true)
 
-    val data5part = Seq(
-      Seq(67, 17, 45, 91, null, null),
+    val data5part = Seq(Seq(67, 17, 45, 91, null, null),
       Seq(98, 63, 0, 89, null, 40),
       Seq(null, 76, 68, 75, 20, 19),
       Seq(8, null, null, null, 78, null),
@@ -202,16 +192,10 @@ class InjectRuntimeFilterSuite
       Seq(24, null, null, 40, null, null))
     val rdd5part = spark.sparkContext.parallelize(data5part)
     val rddRow5part = rdd5part.map(s => Row.fromSeq(s))
-    spark
-      .createDataFrame(rddRow5part, schema5part)
-      .write
-      .partitionBy("f5")
+    spark.createDataFrame(rddRow5part, schema5part).write.partitionBy("f5")
       .saveAsTable("bf5part")
-    spark
-      .createDataFrame(rddRow5part, schema5part)
-      .filter("a5 > 30")
-      .write
-      .partitionBy("f5")
+    spark.createDataFrame(rddRow5part, schema5part).filter("a5 > 30")
+      .write.partitionBy("f5")
       .saveAsTable("bf5filtered")
 
     sql("analyze table bf1 compute statistics for columns a1, b1, c1, d1, e1, f1")
@@ -227,8 +211,7 @@ class InjectRuntimeFilterSuite
   }
 
   protected override def afterAll(): Unit = try {
-    conf.setConfString(
-      SQLConf.OPTIMIZER_EXCLUDED_RULES.key,
+    conf.setConfString(SQLConf.OPTIMIZER_EXCLUDED_RULES.key,
       SQLConf.OPTIMIZER_EXCLUDED_RULES.defaultValueString)
 
     sql("DROP TABLE IF EXISTS bf1")
@@ -268,22 +251,24 @@ class InjectRuntimeFilterSuite
   }
 
   def getNumBloomFilters(plan: LogicalPlan): Integer = {
-    val numBloomFilterAggs = plan.collect { case Filter(condition, _) =>
-      condition.collect {
-        case subquery: org.apache.spark.sql.catalyst.expressions.ScalarSubquery =>
-          subquery.plan.collect { case Aggregate(_, aggregateExpressions, _, _) =>
+    val numBloomFilterAggs = plan.collect {
+      case Filter(condition, _) => condition.collect {
+        case subquery: org.apache.spark.sql.catalyst.expressions.ScalarSubquery
+        => subquery.plan.collect {
+          case Aggregate(_, aggregateExpressions, _, _) =>
             aggregateExpressions.map {
-              case Alias(AggregateExpression(bfAgg: BloomFilterAggregate, _, _, _, _), _) =>
+              case Alias(AggregateExpression(bfAgg : BloomFilterAggregate, _, _, _, _),
+              _) =>
                 assert(bfAgg.estimatedNumItemsExpression.isInstanceOf[Literal])
                 assert(bfAgg.numBitsExpression.isInstanceOf[Literal])
                 1
             }.sum
-          }.sum
+        }.sum
       }.sum
     }.sum
-    val numMightContains = plan.collect { case Filter(condition, _) =>
-      condition.collect { case BloomFilterMightContain(_, _) =>
-        1
+    val numMightContains = plan.collect {
+      case Filter(condition, _) => condition.collect {
+        case BloomFilterMightContain(_, _) => 1
       }.sum
     }.sum
     assert(numBloomFilterAggs == numMightContains)
@@ -298,11 +283,9 @@ class InjectRuntimeFilterSuite
 
     plan.collectFirst {
       case Filter(condition, _) if condition.collectFirst {
-            case subquery: org.apache.spark.sql.catalyst.expressions.ScalarSubquery
-                if takesEffect(subquery.plan) =>
-              true
-          }.nonEmpty =>
-        true
+        case subquery: org.apache.spark.sql.catalyst.expressions.ScalarSubquery
+          if takesEffect(subquery.plan) => true
+      }.nonEmpty => true
     }.nonEmpty
   }
 
@@ -315,113 +298,74 @@ class InjectRuntimeFilterSuite
   }
 
   test("Runtime bloom filter join: simple") {
-    withSQLConf(
-      SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
-      assertRewroteWithBloomFilter(
-        "select * from bf1 join bf2 on bf1.c1 = bf2.c2 " +
-          "where bf2.a2 = 62")
+      assertRewroteWithBloomFilter("select * from bf1 join bf2 on bf1.c1 = bf2.c2 " +
+        "where bf2.a2 = 62")
       assertDidNotRewriteWithBloomFilter("select * from bf1 join bf2 on bf1.c1 = bf2.c2")
     }
   }
 
   test("Runtime bloom filter join: two joins") {
-    withSQLConf(
-      SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
       // bf2 as creation side and inject runtime filter for bf1 and bf3.
-      assertRewroteWithBloomFilter(
-        "select * from bf1 join bf2 join bf3 on bf1.c1 = bf2.c2 " +
-          "and bf3.c3 = bf2.c2 where bf2.a2 = 5",
-        2)
-      assertRewroteWithBloomFilter(
-        "select * from bf1 left outer join bf2 join bf3 on " +
-          "bf1.c1 = bf2.c2 and bf3.c3 = bf2.c2 where bf2.a2 = 5",
-        2)
-      assertRewroteWithBloomFilter(
-        "select * from bf1 right outer join bf2 join bf3 on " +
-          "bf1.c1 = bf2.c2 and bf3.c3 = bf2.c2 where bf2.a2 = 5",
-        2)
+      assertRewroteWithBloomFilter("select * from bf1 join bf2 join bf3 on bf1.c1 = bf2.c2 " +
+        "and bf3.c3 = bf2.c2 where bf2.a2 = 5", 2)
+      assertRewroteWithBloomFilter("select * from bf1 left outer join bf2 join bf3 on " +
+        "bf1.c1 = bf2.c2 and bf3.c3 = bf2.c2 where bf2.a2 = 5", 2)
+      assertRewroteWithBloomFilter("select * from bf1 right outer join bf2 join bf3 on " +
+        "bf1.c1 = bf2.c2 and bf3.c3 = bf2.c2 where bf2.a2 = 5", 2)
       // bf1 and bf2 hasn't shuffle. bf1 as creation side and inject runtime filter for bf3.
-      assertRewroteWithBloomFilter(
-        "select * from (select * from bf1 left semi join bf2 on " +
-          "bf1.c1 = bf2.c2 where bf1.a1 = 5) as a join bf3 on bf3.c3 = a.c1")
-      assertRewroteWithBloomFilter(
-        "select * from (select * from bf1 left anti join bf2 on " +
-          "bf1.c1 = bf2.c2 where bf1.a1 = 5) as a join bf3 on bf3.c3 = a.c1")
+      assertRewroteWithBloomFilter("select * from (select * from bf1 left semi join bf2 on " +
+        "bf1.c1 = bf2.c2 where bf1.a1 = 5) as a join bf3 on bf3.c3 = a.c1")
+      assertRewroteWithBloomFilter("select * from (select * from bf1 left anti join bf2 on " +
+        "bf1.c1 = bf2.c2 where bf1.a1 = 5) as a join bf3 on bf3.c3 = a.c1")
       // bf1 as creation side and inject runtime filter for bf2 and bf3.
-      assertRewroteWithBloomFilter(
-        "select * from bf1 join bf2 join bf3 on bf1.c1 = bf2.c2 " +
-          "and bf3.c3 = bf1.c1 where bf1.a1 = 5",
-        2)
-      assertRewroteWithBloomFilter(
-        "select * from bf1 left outer join bf2 join bf3 on " +
-          "bf1.c1 = bf2.c2 and bf3.c3 = bf1.c1 where bf1.a1 = 5",
-        2)
-      assertRewroteWithBloomFilter(
-        "select * from bf1 right outer join bf2 join bf3 on " +
-          "bf1.c1 = bf2.c2 and bf3.c3 = bf1.c1 where bf1.a1 = 5",
-        2)
+      assertRewroteWithBloomFilter("select * from bf1 join bf2 join bf3 on bf1.c1 = bf2.c2 " +
+        "and bf3.c3 = bf1.c1 where bf1.a1 = 5", 2)
+      assertRewroteWithBloomFilter("select * from bf1 left outer join bf2 join bf3 on " +
+        "bf1.c1 = bf2.c2 and bf3.c3 = bf1.c1 where bf1.a1 = 5", 2)
+      assertRewroteWithBloomFilter("select * from bf1 right outer join bf2 join bf3 on " +
+        "bf1.c1 = bf2.c2 and bf3.c3 = bf1.c1 where bf1.a1 = 5", 2)
       // bf2 as creation side and inject runtime filter for bf1 and bf3(join keys are transitive).
-      assertRewroteWithBloomFilter(
-        "select * from (select * from bf1 join bf2 on " +
-          "bf1.c1 = bf2.c2 where bf2.a2 = 5) as a join bf3 on bf3.c3 = a.c1",
-        2)
-      assertRewroteWithBloomFilter(
-        "select * from (select * from bf1 left join bf2 on " +
-          "bf1.c1 = bf2.c2 where bf2.a2 = 5) as a join bf3 on bf3.c3 = a.c1",
-        2)
-      assertRewroteWithBloomFilter(
-        "select * from (select * from bf1 right join bf2 on " +
-          "bf1.c1 = bf2.c2 where bf2.a2 = 5) as a join bf3 on bf3.c3 = a.c1",
-        2)
-      assertRewroteWithBloomFilter(
-        "select * from bf1 join bf2 join bf3 on bf1.c1 = bf2.c2 " +
-          "and bf3.c3 = bf1.c1 where bf2.a2 = 5",
-        2)
-      assertRewroteWithBloomFilter(
-        "select * from bf1 left outer join bf2 join bf3 on " +
-          "bf1.c1 = bf2.c2 and bf3.c3 = bf1.c1 where bf2.a2 = 5",
-        2)
-      assertRewroteWithBloomFilter(
-        "select * from bf1 right outer join bf2 join bf3 on " +
-          "bf1.c1 = bf2.c2 and bf3.c3 = bf1.c1 where bf2.a2 = 5",
-        2)
+      assertRewroteWithBloomFilter("select * from (select * from bf1 join bf2 on " +
+        "bf1.c1 = bf2.c2 where bf2.a2 = 5) as a join bf3 on bf3.c3 = a.c1", 2)
+      assertRewroteWithBloomFilter("select * from (select * from bf1 left join bf2 on " +
+        "bf1.c1 = bf2.c2 where bf2.a2 = 5) as a join bf3 on bf3.c3 = a.c1", 2)
+      assertRewroteWithBloomFilter("select * from (select * from bf1 right join bf2 on " +
+        "bf1.c1 = bf2.c2 where bf2.a2 = 5) as a join bf3 on bf3.c3 = a.c1", 2)
+      assertRewroteWithBloomFilter("select * from bf1 join bf2 join bf3 on bf1.c1 = bf2.c2 " +
+        "and bf3.c3 = bf1.c1 where bf2.a2 = 5", 2)
+      assertRewroteWithBloomFilter("select * from bf1 left outer join bf2 join bf3 on " +
+        "bf1.c1 = bf2.c2 and bf3.c3 = bf1.c1 where bf2.a2 = 5", 2)
+      assertRewroteWithBloomFilter("select * from bf1 right outer join bf2 join bf3 on " +
+        "bf1.c1 = bf2.c2 and bf3.c3 = bf1.c1 where bf2.a2 = 5", 2)
     }
 
-    withSQLConf(
-      SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1200") {
       // bf1 as creation side and inject runtime filter for bf2 and bf3.
-      assertRewroteWithBloomFilter(
-        "select * from (select * from bf1 left semi join bf2 on " +
-          "bf1.c1 = bf2.c2 where bf1.a1 = 5) as a join bf3 on bf3.c3 = a.c1",
-        2)
+      assertRewroteWithBloomFilter("select * from (select * from bf1 left semi join bf2 on " +
+        "bf1.c1 = bf2.c2 where bf1.a1 = 5) as a join bf3 on bf3.c3 = a.c1", 2)
       // left anti join unsupported. bf1 as creation side and inject runtime filter for bf3.
-      assertRewroteWithBloomFilter(
-        "select * from (select * from bf1 left anti join bf2 on " +
-          "bf1.c1 = bf2.c2 where bf1.a1 = 5) as a join bf3 on bf3.c3 = a.c1")
+      assertRewroteWithBloomFilter("select * from (select * from bf1 left anti join bf2 on " +
+        "bf1.c1 = bf2.c2 where bf1.a1 = 5) as a join bf3 on bf3.c3 = a.c1")
       // bf2 as creation side and inject runtime filter for bf1 and bf3(by passing key).
-      assertRewroteWithBloomFilter(
-        "select * from (select * from bf1 left semi join bf2 on " +
-          "(bf1.c1 = bf2.c2 and bf2.a2 = 5)) as a join bf3 on bf3.c3 = a.c1",
-        2)
+      assertRewroteWithBloomFilter("select * from (select * from bf1 left semi join bf2 on " +
+        "(bf1.c1 = bf2.c2 and bf2.a2 = 5)) as a join bf3 on bf3.c3 = a.c1", 2)
       // left anti join unsupported.
       // bf2 as creation side and inject runtime filter for bf3(by passing key).
-      assertDidNotRewriteWithBloomFilter(
-        "select * from (select * from bf1 left anti join bf2 " +
-          "on (bf1.c1 = bf2.c2 and bf2.a2 = 5)) as a join bf3 on bf3.c3 = a.c1")
+      assertDidNotRewriteWithBloomFilter("select * from (select * from bf1 left anti join bf2 " +
+        "on (bf1.c1 = bf2.c2 and bf2.a2 = 5)) as a join bf3 on bf3.c3 = a.c1")
       // left anti join unsupported and hasn't selective filter.
-      assertRewroteWithBloomFilter(
-        "select * from (select * from bf1 left anti join bf2 on " +
-          "(bf1.c1 = bf2.c2 and bf1.a1 = 5)) as a join bf3 on bf3.c3 = a.c1",
-        0)
+      assertRewroteWithBloomFilter("select * from (select * from bf1 left anti join bf2 on " +
+        "(bf1.c1 = bf2.c2 and bf1.a1 = 5)) as a join bf3 on bf3.c3 = a.c1", 0)
     }
   }
 
   test("Runtime bloom filter join: two filters single join") {
-    withSQLConf(
-      SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
       var planDisabled: LogicalPlan = null
       var planEnabled: LogicalPlan = null
@@ -444,8 +388,7 @@ class InjectRuntimeFilterSuite
   }
 
   test("Runtime bloom filter join: test the number of filter threshold") {
-    withSQLConf(
-      SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
       var planDisabled: LogicalPlan = null
       var planEnabled: LogicalPlan = null
@@ -460,16 +403,14 @@ class InjectRuntimeFilterSuite
       }
 
       for (numFilterThreshold <- 0 to 3) {
-        withSQLConf(
-          SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "true",
+        withSQLConf( SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "true",
           SQLConf.RUNTIME_FILTER_NUMBER_THRESHOLD.key -> numFilterThreshold.toString) {
           planEnabled = sql(query).queryExecution.optimizedPlan
           checkAnswer(sql(query), expectedAnswer)
         }
         if (numFilterThreshold < 3) {
-          assert(
-            getNumBloomFilters(planEnabled) == getNumBloomFilters(planDisabled)
-              + numFilterThreshold)
+          assert(getNumBloomFilters(planEnabled) == getNumBloomFilters(planDisabled)
+            + numFilterThreshold)
         } else {
           assert(getNumBloomFilters(planEnabled) == getNumBloomFilters(planDisabled) + 2)
         }
@@ -478,8 +419,7 @@ class InjectRuntimeFilterSuite
   }
 
   test("Runtime bloom filter join: insert one bloom filter per column") {
-    withSQLConf(
-      SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
       var planDisabled: LogicalPlan = null
       var planEnabled: LogicalPlan = null
@@ -501,103 +441,87 @@ class InjectRuntimeFilterSuite
     }
   }
 
-  test(
-    "Runtime bloom filter join: do not add bloom filter if dpp filter exists " +
-      "on the same column") {
-    withSQLConf(
-      SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+  test("Runtime bloom filter join: do not add bloom filter if dpp filter exists " +
+    "on the same column") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
-      assertDidNotRewriteWithBloomFilter(
-        "select * from bf5part join bf2 on " +
-          "bf5part.f5 = bf2.c2 where bf2.a2 = 62")
+      assertDidNotRewriteWithBloomFilter("select * from bf5part join bf2 on " +
+        "bf5part.f5 = bf2.c2 where bf2.a2 = 62")
     }
   }
 
-  test(
-    "Runtime bloom filter join: add bloom filter if dpp filter exists on " +
-      "a different column") {
-    withSQLConf(
-      SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+  test("Runtime bloom filter join: add bloom filter if dpp filter exists on " +
+    "a different column") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
-      assertRewroteWithBloomFilter(
-        "select * from bf5part join bf2 on " +
-          "bf5part.c5 = bf2.c2 and bf5part.f5 = bf2.f2 where bf2.a2 = 62")
+      assertRewroteWithBloomFilter("select * from bf5part join bf2 on " +
+        "bf5part.c5 = bf2.c2 and bf5part.f5 = bf2.f2 where bf2.a2 = 62")
     }
   }
 
   test("Runtime bloom filter join: BF rewrite triggering threshold test") {
     // Filter creation side data size is 3409 bytes. On the filter application side, an individual
     // scan's byte size is 3362.
-    withSQLConf(
-      SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "3000",
-      SQLConf.RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> "4000") {
-      assertRewroteWithBloomFilter(
-        "select * from bf1 join bf2 on bf1.c1 = bf2.c2 " +
-          "where bf2.a2 = 62")
+      SQLConf.RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> "4000"
+    ) {
+      assertRewroteWithBloomFilter("select * from bf1 join bf2 on bf1.c1 = bf2.c2 " +
+        "where bf2.a2 = 62")
     }
-    withSQLConf(
-      SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "50",
-      SQLConf.RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> "50") {
-      assertDidNotRewriteWithBloomFilter(
-        "select * from bf1 join bf2 on bf1.c1 = bf2.c2 " +
-          "where bf2.a2 = 62")
+      SQLConf.RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> "50"
+    ) {
+      assertDidNotRewriteWithBloomFilter("select * from bf1 join bf2 on bf1.c1 = bf2.c2 " +
+        "where bf2.a2 = 62")
     }
-    withSQLConf(
-      SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "5000",
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "5000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "3000",
-      SQLConf.RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> "4000") {
+      SQLConf.RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> "4000"
+    ) {
       // Rewrite should not be triggered as the Bloom filter application side scan size is small.
-      assertDidNotRewriteWithBloomFilter(
-        "select * from bf1 join bf2 on bf1.c1 = bf2.c2 "
-          + "where bf2.a2 = 62")
+      assertDidNotRewriteWithBloomFilter("select * from bf1 join bf2 on bf1.c1 = bf2.c2 "
+        + "where bf2.a2 = 62")
     }
-    withSQLConf(
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "32",
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "32",
       SQLConf.RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> "4000") {
       // Test that the max scan size rather than an individual scan size on the filter
       // application side matters. `bf5filtered` has 15049 bytes and `bf2` has 3409 bytes.
       withSQLConf(
         SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "5000") {
-        assertRewroteWithBloomFilter(
-          "select * from " +
-            "(select * from bf5filtered union all select * from bf2) t " +
-            "join bf3 on t.c5 = bf3.c3 where bf3.a3 = 5",
-          2)
+        assertRewroteWithBloomFilter("select * from " +
+          "(select * from bf5filtered union all select * from bf2) t " +
+          "join bf3 on t.c5 = bf3.c3 where bf3.a3 = 5", 2)
       }
       withSQLConf(
         SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "16000") {
-        assertDidNotRewriteWithBloomFilter(
-          "select * from " +
-            "(select * from bf5filtered union all select * from bf2) t " +
-            "join bf3 on t.c5 = bf3.c3 where bf3.a3 = 5")
+        assertDidNotRewriteWithBloomFilter("select * from " +
+          "(select * from bf5filtered union all select * from bf2) t " +
+          "join bf3 on t.c5 = bf3.c3 where bf3.a3 = 5")
       }
     }
   }
 
   test("Runtime bloom filter join: simple expressions only") {
-    withSQLConf(
-      SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
       val squared = (s: Long) => {
         s * s
       }
       spark.udf.register("square", squared)
-      assertDidNotRewriteWithBloomFilter(
-        "select * from bf1 join bf2 on " +
-          "bf1.c1 = bf2.c2 where square(bf2.a2) = 62")
-      assertDidNotRewriteWithBloomFilter(
-        "select * from bf1 join bf2 on " +
-          "bf1.c1 = square(bf2.c2) where bf2.a2 = 62")
+      assertDidNotRewriteWithBloomFilter("select * from bf1 join bf2 on " +
+        "bf1.c1 = bf2.c2 where square(bf2.a2) = 62" )
+      assertDidNotRewriteWithBloomFilter("select * from bf1 join bf2 on " +
+        "bf1.c1 = square(bf2.c2) where bf2.a2 = 62" )
     }
   }
 
   test("Support Left Semi join in row level runtime filters") {
-    withSQLConf(
-      SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "32") {
-      assertRewroteWithBloomFilter("""
+      assertRewroteWithBloomFilter(
+        """
           |SELECT *
           |FROM   bf1 LEFT SEMI
           |JOIN   (SELECT * FROM bf2 WHERE bf2.a2 = 62) tmp
@@ -608,7 +532,8 @@ class InjectRuntimeFilterSuite
 
   test("Runtime Filter supports pruning side has Aggregate") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000") {
-      assertRewroteWithBloomFilter("""
+      assertRewroteWithBloomFilter(
+        """
           |SELECT *
           |FROM   (SELECT c1 AS aliased_c1, d1 FROM bf1 GROUP BY c1, d1) bf1
           |       JOIN bf2 ON bf1.aliased_c1 = bf2.c2
@@ -619,7 +544,8 @@ class InjectRuntimeFilterSuite
 
   test("Runtime Filter supports pruning side has Window") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000") {
-      assertRewroteWithBloomFilter("""
+      assertRewroteWithBloomFilter(
+        """
           |SELECT *
           |FROM   (SELECT *,
           |               Row_number() OVER (PARTITION BY c1 ORDER BY f1) rn
@@ -631,8 +557,7 @@ class InjectRuntimeFilterSuite
   }
 
   test("Merge runtime bloom filters") {
-    withSQLConf(
-      SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000",
       SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "true",
       // Re-enable `MergeScalarSubqueries`
@@ -646,13 +571,12 @@ class InjectRuntimeFilterSuite
       val plan = df.queryExecution.executedPlan
 
       val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
-      val reusedSubqueryIds = collectWithSubqueries(plan) { case rs: ReusedSubqueryExec =>
-        rs.child.id
+      val reusedSubqueryIds = collectWithSubqueries(plan) {
+        case rs: ReusedSubqueryExec => rs.child.id
       }
 
       assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
-      assert(
-        reusedSubqueryIds.size == 1,
+      assert(reusedSubqueryIds.size == 1,
         "Missing or unexpected reused ReusedSubqueryExec in the plan")
     }
   }

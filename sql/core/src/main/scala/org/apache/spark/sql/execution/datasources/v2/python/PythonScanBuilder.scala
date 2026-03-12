@@ -22,6 +22,7 @@ import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
+
 class PythonScanBuilder(
     ds: PythonDataSourceV2,
     shortName: String,

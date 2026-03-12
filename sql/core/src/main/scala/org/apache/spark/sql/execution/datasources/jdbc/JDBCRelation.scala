@@ -52,27 +52,22 @@ private[sql] object JDBCRelation extends Logging {
 
   val schemaFetchName = "Remote JDBC schema fetch time"
   val schemaFetchKey = "remoteSchemaFetchTime"
-
   /**
-   * Given a partitioning schematic (a column of integral type, a number of partitions, and upper
-   * and lower bounds on the column's value), generate WHERE clauses for each partition so that
-   * each row in the table appears exactly once. The parameters minValue and maxValue are advisory
-   * in that incorrect values may cause the partitioning to be poor, but no data will fail to be
-   * represented.
+   * Given a partitioning schematic (a column of integral type, a number of
+   * partitions, and upper and lower bounds on the column's value), generate
+   * WHERE clauses for each partition so that each row in the table appears
+   * exactly once.  The parameters minValue and maxValue are advisory in that
+   * incorrect values may cause the partitioning to be poor, but no data
+   * will fail to be represented.
    *
-   * Null value predicate is added to the first partition where clause to include the rows with
-   * null value for the partitions column.
+   * Null value predicate is added to the first partition where clause to include
+   * the rows with null value for the partitions column.
    *
-   * @param schema
-   *   resolved schema of a JDBC table
-   * @param resolver
-   *   function used to determine if two identifiers are equal
-   * @param timeZoneId
-   *   timezone ID to be used if a partition column type is date or timestamp
-   * @param jdbcOptions
-   *   JDBC options that contains url
-   * @return
-   *   an array of partitions with where clause for each partition
+   * @param schema resolved schema of a JDBC table
+   * @param resolver function used to determine if two identifiers are equal
+   * @param timeZoneId timezone ID to be used if a partition column type is date or timestamp
+   * @param jdbcOptions JDBC options that contains url
+   * @return an array of partitions with where clause for each partition
    */
   def columnPartition(
       schema: StructType,
@@ -88,31 +83,21 @@ private[sql] object JDBCRelation extends Logging {
       val numPartitions = jdbcOptions.numPartitions
 
       if (partitionColumn.isEmpty) {
-        assert(
-          lowerBound.isEmpty && upperBound.isEmpty,
-          "When 'partitionColumn' is not " +
-            s"specified, '$JDBC_LOWER_BOUND' and '$JDBC_UPPER_BOUND' are expected to be empty")
+        assert(lowerBound.isEmpty && upperBound.isEmpty, "When 'partitionColumn' is not " +
+          s"specified, '$JDBC_LOWER_BOUND' and '$JDBC_UPPER_BOUND' are expected to be empty")
         null
       } else {
-        assert(
-          lowerBound.nonEmpty && upperBound.nonEmpty && numPartitions.nonEmpty,
+        assert(lowerBound.nonEmpty && upperBound.nonEmpty && numPartitions.nonEmpty,
           s"When 'partitionColumn' is specified, '$JDBC_LOWER_BOUND', '$JDBC_UPPER_BOUND', and " +
             s"'$JDBC_NUM_PARTITIONS' are also required")
 
         val (column, columnType) = verifyAndGetNormalizedPartitionColumn(
-          schema,
-          partitionColumn.get,
-          resolver,
-          jdbcOptions)
+          schema, partitionColumn.get, resolver, jdbcOptions)
 
         val lowerBoundValue = toInternalBoundValue(lowerBound.get, columnType, timeZoneId)
         val upperBoundValue = toInternalBoundValue(upperBound.get, columnType, timeZoneId)
         JDBCPartitioningInfo(
-          column,
-          columnType,
-          lowerBoundValue,
-          upperBoundValue,
-          numPartitions.get)
+          column, columnType, lowerBoundValue, upperBoundValue, numPartitions.get)
       }
     }
 
@@ -123,25 +108,23 @@ private[sql] object JDBCRelation extends Logging {
 
     val lowerBound = partitioning.lowerBound
     val upperBound = partitioning.upperBound
-    require(
-      lowerBound <= upperBound,
+    require (lowerBound <= upperBound,
       "Operation not allowed: the lower bound of partitioning column is larger than the upper " +
-        s"bound. Lower bound: $lowerBound; Upper bound: $upperBound")
+      s"bound. Lower bound: $lowerBound; Upper bound: $upperBound")
 
     val boundValueToString: Long => String =
       toBoundValueInWhereClause(_, partitioning.columnType, timeZoneId)
     val numPartitions =
       if ((upperBound - lowerBound) >= partitioning.numPartitions || /* check for overflow */
-        (upperBound - lowerBound) < 0) {
+          (upperBound - lowerBound) < 0) {
         partitioning.numPartitions
       } else {
-        logWarning(
-          log"The number of partitions is reduced because the specified number of " +
-            log"partitions is less than the difference between upper bound and lower bound. " +
-            log"Updated number of partitions: ${MDC(NEW_VALUE, upperBound - lowerBound)}; " +
-            log"Input number of partitions: ${MDC(OLD_VALUE, partitioning.numPartitions)}; " +
-            log"Lower bound: ${MDC(LOWER_BOUND, boundValueToString(lowerBound))}; " +
-            log"Upper bound: ${MDC(UPPER_BOUND, boundValueToString(upperBound))}.")
+        logWarning(log"The number of partitions is reduced because the specified number of " +
+          log"partitions is less than the difference between upper bound and lower bound. " +
+          log"Updated number of partitions: ${MDC(NEW_VALUE, upperBound - lowerBound)}; " +
+          log"Input number of partitions: ${MDC(OLD_VALUE, partitioning.numPartitions)}; " +
+          log"Lower bound: ${MDC(LOWER_BOUND, boundValueToString(lowerBound))}; " +
+          log"Upper bound: ${MDC(UPPER_BOUND, boundValueToString(upperBound))}.")
         upperBound - lowerBound
       }
 
@@ -186,9 +169,8 @@ private[sql] object JDBCRelation extends Logging {
     }
     val partitions = ans.toArray
     val clauses = partitions.map(_.asInstanceOf[JDBCPartition].whereClause).mkString(", ")
-    logInfo(
-      log"Number of partitions: ${MDC(NUM_PARTITIONS, numPartitions)}, " +
-        log"WHERE clauses of these partitions: ${MDC(CLAUSES, clauses)}")
+    logInfo(log"Number of partitions: ${MDC(NUM_PARTITIONS, numPartitions)}, " +
+      log"WHERE clauses of these partitions: ${MDC(CLAUSES, clauses)}")
     partitions
   }
 
@@ -199,16 +181,13 @@ private[sql] object JDBCRelation extends Logging {
       resolver: Resolver,
       jdbcOptions: JDBCOptions): (String, DataType) = {
     val dialect = JdbcDialects.get(jdbcOptions.url)
-    val column = schema
-      .find { f =>
-        resolver(f.name, columnName) || resolver(dialect.quoteIdentifier(f.name), columnName)
-      }
-      .getOrElse {
-        val maxNumToStringFields = SQLConf.get.maxToStringFields
-        throw QueryCompilationErrors.userDefinedPartitionNotFoundInJDBCRelationError(
-          columnName,
-          schema.simpleString(maxNumToStringFields))
-      }
+    val column = schema.find { f =>
+      resolver(f.name, columnName) || resolver(dialect.quoteIdentifier(f.name), columnName)
+    }.getOrElse {
+      val maxNumToStringFields = SQLConf.get.maxToStringFields
+      throw QueryCompilationErrors.userDefinedPartitionNotFoundInJDBCRelationError(
+        columnName, schema.simpleString(maxNumToStringFields))
+    }
     column.dataType match {
       case _: NumericType | DateType | TimestampType =>
       case _ =>
@@ -243,8 +222,8 @@ private[sql] object JDBCRelation extends Logging {
         case DateType =>
           DateFormatter().format(value.toInt)
         case TimestampType =>
-          val timestampFormatter =
-            TimestampFormatter.getFractionFormatter(DateTimeUtils.getZoneId(timeZoneId))
+          val timestampFormatter = TimestampFormatter.getFractionFormatter(
+            DateTimeUtils.getZoneId(timeZoneId))
           timestampFormatter.format(value)
       }
       s"'$dateTimeStr'"
@@ -256,21 +235,19 @@ private[sql] object JDBCRelation extends Logging {
   }
 
   /**
-   * Takes a (schema, table) specification and returns the table's Catalyst schema. If
-   * `customSchema` defined in the JDBC options, replaces the schema's dataType with the custom
-   * schema's type.
+   * Takes a (schema, table) specification and returns the table's Catalyst schema.
+   * If `customSchema` defined in the JDBC options, replaces the schema's dataType with the
+   * custom schema's type.
    *
-   * @param resolver
-   *   function used to determine if two identifiers are equal
-   * @param jdbcOptions
-   *   JDBC options that contains url, table and other information.
-   * @return
-   *   resolved Catalyst schema of a JDBC table
+   * @param resolver function used to determine if two identifiers are equal
+   * @param jdbcOptions JDBC options that contains url, table and other information.
+   * @return resolved Catalyst schema of a JDBC table
    */
   def getSchema(resolver: Resolver, jdbcOptions: JDBCOptions): StructType = {
     val tableSchema = JDBCRDD.resolveTable(jdbcOptions)
     jdbcOptions.customSchema match {
-      case Some(customSchema) => JdbcUtils.getCustomSchema(tableSchema, customSchema, resolver)
+      case Some(customSchema) => JdbcUtils.getCustomSchema(
+        tableSchema, customSchema, resolver)
       case None => tableSchema
     }
   }
@@ -278,14 +255,16 @@ private[sql] object JDBCRelation extends Logging {
   /**
    * Resolves a Catalyst schema of a JDBC table and returns [[JDBCRelation]] with the schema.
    */
-  def apply(parts: Array[Partition], jdbcOptions: JDBCOptions)(
+  def apply(
+      parts: Array[Partition],
+      jdbcOptions: JDBCOptions)(
       sparkSession: SparkSession): JDBCRelation = {
     val remoteSchemaFetchMetric = JdbcUtils.createSchemaFetchMetric(sparkSession.sparkContext)
     val schema = SQLMetrics.withTimingNs(remoteSchemaFetchMetric) {
       JDBCRelation.getSchema(sparkSession.sessionState.conf.resolver, jdbcOptions)
     }
-    JDBCRelation(schema, parts, jdbcOptions, Map(schemaFetchKey -> remoteSchemaFetchMetric))(
-      sparkSession)
+    JDBCRelation(schema, parts, jdbcOptions,
+      Map(schemaFetchKey -> remoteSchemaFetchMetric))(sparkSession)
   }
 }
 
@@ -294,9 +273,9 @@ private[sql] case class JDBCRelation(
     parts: Array[Partition],
     jdbcOptions: JDBCOptions,
     additionalMetrics: Map[String, SQLMetric] = Map())(@transient val sparkSession: SparkSession)
-    extends BaseRelation
-    with PrunedFilteredScan
-    with InsertableRelation {
+  extends BaseRelation
+  with PrunedFilteredScan
+  with InsertableRelation {
 
   override def sqlContext: SQLContext = sparkSession.sqlContext
 
@@ -320,16 +299,14 @@ private[sql] case class JDBCRelation(
       Array.empty[Predicate]
     }
     // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
-    JDBCRDD
-      .scanTable(
-        sparkSession.sparkContext,
-        schema,
-        requiredColumns,
-        pushedPredicates,
-        parts,
-        jdbcOptions,
-        additionalMetrics = additionalMetrics)
-      .asInstanceOf[RDD[Row]]
+    JDBCRDD.scanTable(
+      sparkSession.sparkContext,
+      schema,
+      requiredColumns,
+      pushedPredicates,
+      parts,
+      jdbcOptions,
+      additionalMetrics = additionalMetrics).asInstanceOf[RDD[Row]]
   }
 
   def buildScan(
@@ -342,22 +319,20 @@ private[sql] case class JDBCRelation(
       sortOrders: Array[String],
       offset: Int): RDD[Row] = {
     // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
-    JDBCRDD
-      .scanTable(
-        sparkSession.sparkContext,
-        schema,
-        requiredColumns,
-        predicates,
-        parts,
-        jdbcOptions,
-        Some(finalSchema),
-        groupByColumns,
-        tableSample,
-        limit,
-        sortOrders,
-        offset,
-        additionalMetrics)
-      .asInstanceOf[RDD[Row]]
+    JDBCRDD.scanTable(
+      sparkSession.sparkContext,
+      schema,
+      requiredColumns,
+      predicates,
+      parts,
+      jdbcOptions,
+      Some(finalSchema),
+      groupByColumns,
+      tableSample,
+      limit,
+      sortOrders,
+      offset,
+      additionalMetrics).asInstanceOf[RDD[Row]]
   }
 
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {

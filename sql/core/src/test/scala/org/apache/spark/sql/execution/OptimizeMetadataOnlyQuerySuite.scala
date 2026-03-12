@@ -32,8 +32,7 @@ class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSparkSession {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    val data = (1 to 10)
-      .map(i => (i, s"data-$i", i % 2, if ((i % 2) == 0) "even" else "odd"))
+    val data = (1 to 10).map(i => (i, s"data-$i", i % 2, if ((i % 2) == 0) "even" else "odd"))
       .toDF("col1", "col2", "partcol1", "partcol2")
     data.write.partitionBy("partcol1", "partcol2").mode("append").saveAsTable("srcpart")
   }
@@ -47,15 +46,15 @@ class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSparkSession {
   }
 
   private def assertMetadataOnlyQuery(df: DataFrame): Unit = {
-    val localRelations = df.queryExecution.optimizedPlan.collect { case l: LocalRelation =>
-      l
+    val localRelations = df.queryExecution.optimizedPlan.collect {
+      case l: LocalRelation => l
     }
     assert(localRelations.size == 1)
   }
 
   private def assertNotMetadataOnlyQuery(df: DataFrame): Unit = {
-    val localRelations = df.queryExecution.optimizedPlan.collect { case l: LocalRelation =>
-      l
+    val localRelations = df.queryExecution.optimizedPlan.collect {
+      case l: LocalRelation => l
     }
     assert(localRelations.size == 0)
   }
@@ -117,7 +116,8 @@ class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSparkSession {
       |)
       |AND partcol2 = 'even'
       |GROUP BY partcol1
-      |""".stripMargin)
+      |""".stripMargin
+  )
 
   testNotMetadataOnly(
     "Don't optimize metadata only query for non-partition columns",
@@ -148,13 +148,12 @@ class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSparkSession {
   test("Incorrect result caused by the rule OptimizeMetadataOnlyQuery") {
     // This test case is only for file source V1. As the rule OptimizeMetadataOnlyQuery is disabled
     // by default, we can skip testing file source v2 in current stage.
-    withSQLConf(OPTIMIZER_METADATA_ONLY.key -> "true", SQLConf.USE_V1_SOURCE_LIST.key -> "json") {
+    withSQLConf(OPTIMIZER_METADATA_ONLY.key -> "true",
+      SQLConf.USE_V1_SOURCE_LIST.key -> "json") {
       withTempPath { path =>
         val tablePath = new File(s"${path.getCanonicalPath}/cOl3=c/cOl1=a/cOl5=e")
-        Seq(("a", "b", "c", "d", "e"))
-          .toDF("cOl1", "cOl2", "cOl3", "cOl4", "cOl5")
-          .write
-          .json(tablePath.getCanonicalPath)
+        Seq(("a", "b", "c", "d", "e")).toDF("cOl1", "cOl2", "cOl3", "cOl4", "cOl5")
+          .write.json(tablePath.getCanonicalPath)
 
         val df = spark.read.json(path.getCanonicalPath).select("CoL1", "CoL5", "CoL3").distinct()
         checkAnswer(df, Row("a", "e", "c"))

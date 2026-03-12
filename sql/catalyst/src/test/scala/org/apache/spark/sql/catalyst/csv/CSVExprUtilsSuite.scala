@@ -35,7 +35,7 @@ class CSVExprUtilsSuite extends SparkFunSuite {
 
   test("Does not accept null delimiter") {
     checkError(
-      exception = intercept[SparkIllegalArgumentException] {
+      exception = intercept[SparkIllegalArgumentException]{
         CSVExprUtils.toDelimiterStr(null)
       },
       condition = "INVALID_DELIMITER_VALUE.NULL_VALUE",
@@ -44,7 +44,7 @@ class CSVExprUtilsSuite extends SparkFunSuite {
 
   test("Does not accept delimiter larger than one character") {
     checkError(
-      exception = intercept[SparkIllegalArgumentException] {
+      exception = intercept[SparkIllegalArgumentException]{
         CSVExprUtils.toChar("ab")
       },
       condition = "INVALID_DELIMITER_VALUE.DELIMITER_LONGER_THAN_EXPECTED",
@@ -53,7 +53,7 @@ class CSVExprUtilsSuite extends SparkFunSuite {
 
   test("Throws exception for unsupported escaped characters") {
     checkError(
-      exception = intercept[SparkIllegalArgumentException] {
+      exception = intercept[SparkIllegalArgumentException]{
         CSVExprUtils.toChar("""\1""")
       },
       condition = "INVALID_DELIMITER_VALUE.UNSUPPORTED_SPECIAL_CHARACTER",
@@ -62,7 +62,7 @@ class CSVExprUtilsSuite extends SparkFunSuite {
 
   test("string with one backward slash is prohibited") {
     checkError(
-      exception = intercept[SparkIllegalArgumentException] {
+      exception = intercept[SparkIllegalArgumentException]{
         CSVExprUtils.toChar("""\""")
       },
       condition = "INVALID_DELIMITER_VALUE.SINGLE_BACKSLASH",
@@ -71,7 +71,7 @@ class CSVExprUtilsSuite extends SparkFunSuite {
 
   test("output proper error message for empty string") {
     checkError(
-      exception = intercept[SparkIllegalArgumentException] {
+      exception = intercept[SparkIllegalArgumentException]{
         CSVExprUtils.toChar("")
       },
       condition = "INVALID_DELIMITER_VALUE.EMPTY_STRING",
@@ -93,7 +93,8 @@ class CSVExprUtilsSuite extends SparkFunSuite {
     // tab in the middle of some other letters
     ("""ba\tr""", Some("ba\tr"), None),
     // null character, expressed in Unicode literal syntax
-    ("\u0000", Some("\u0000"), None))
+    ("\u0000", Some("\u0000"), None)
+  )
 
   test("should correctly produce separator strings, or exceptions, from input") {
     forAll(testCases) { (input, separatorStr, expectedErrorClass) =>

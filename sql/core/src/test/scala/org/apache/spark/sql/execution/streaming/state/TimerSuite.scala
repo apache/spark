@@ -25,11 +25,12 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
 import org.apache.spark.sql.streaming.TimeMode
 
 /**
- * Class that adds unit tests for Timer State used in arbitrary stateful operators such as
- * transformWithState
+ * Class that adds unit tests for Timer State used in arbitrary stateful
+ * operators such as transformWithState
  */
 class TimerSuite extends StateVariableSuiteBase {
-  private def testWithTimeMode(testName: String)(testFunc: TimeMode => Unit): Unit = {
+  private def testWithTimeMode(testName: String)
+      (testFunc: TimeMode => Unit): Unit = {
     Seq("Processing", "Event").foreach { timeoutMode =>
       test(s"$timeoutMode timer - " + testName) {
         timeoutMode match {
@@ -45,7 +46,8 @@ class TimerSuite extends StateVariableSuiteBase {
       val store = provider.getStore(0)
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
-      val timerState = new TimerStateImpl(store, timeMode, stringEncoder)
+      val timerState = new TimerStateImpl(store, timeMode,
+        stringEncoder)
       timerState.registerTimer(1L * 1000)
       assert(timerState.listTimers().toSet === Set(1000L))
       assert(timerState.getExpiredTimers(Long.MaxValue).toSeq === Seq(("test_key", 1000L)))
@@ -63,18 +65,18 @@ class TimerSuite extends StateVariableSuiteBase {
       val store = provider.getStore(0)
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
-      val timerState1 = new TimerStateImpl(store, timeMode, stringEncoder)
-      val timerState2 = new TimerStateImpl(store, timeMode, stringEncoder)
+      val timerState1 = new TimerStateImpl(store, timeMode,
+        stringEncoder)
+      val timerState2 = new TimerStateImpl(store, timeMode,
+        stringEncoder)
       timerState1.registerTimer(1L * 1000)
       timerState2.registerTimer(15L * 1000)
       assert(timerState1.listTimers().toSet === Set(15000L, 1000L))
-      assert(
-        timerState1.getExpiredTimers(Long.MaxValue).toSeq ===
-          Seq(("test_key", 1000L), ("test_key", 15000L)))
+      assert(timerState1.getExpiredTimers(Long.MaxValue).toSeq ===
+        Seq(("test_key", 1000L), ("test_key", 15000L)))
       // if timestamp equals to expiryTimestampsMs, it will be considered expired
-      assert(
-        timerState1.getExpiredTimers(15000L).toSeq ===
-          Seq(("test_key", 1000L), ("test_key", 15000L)))
+      assert(timerState1.getExpiredTimers(15000L).toSeq ===
+        Seq(("test_key", 1000L), ("test_key", 15000L)))
       assert(timerState1.listTimers().toSet === Set(15000L, 1000L))
 
       timerState1.registerTimer(20L * 1000)
@@ -89,24 +91,24 @@ class TimerSuite extends StateVariableSuiteBase {
       val store = provider.getStore(0)
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key1")
-      val timerState1 = new TimerStateImpl(store, timeMode, stringEncoder)
+      val timerState1 = new TimerStateImpl(store, timeMode,
+        stringEncoder)
       timerState1.registerTimer(1L * 1000)
       timerState1.registerTimer(2L * 1000)
       assert(timerState1.listTimers().toSet === Set(1000L, 2000L))
       ImplicitGroupingKeyTracker.removeImplicitKey()
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key2")
-      val timerState2 = new TimerStateImpl(store, timeMode, stringEncoder)
+      val timerState2 = new TimerStateImpl(store, timeMode,
+        stringEncoder)
       timerState2.registerTimer(15L * 1000)
       ImplicitGroupingKeyTracker.removeImplicitKey()
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key1")
-      assert(
-        timerState1.getExpiredTimers(Long.MaxValue).toSeq ===
-          Seq(("test_key1", 1000L), ("test_key1", 2000L), ("test_key2", 15000L)))
-      assert(
-        timerState1.getExpiredTimers(10000L).toSeq ===
-          Seq(("test_key1", 1000L), ("test_key1", 2000L)))
+      assert(timerState1.getExpiredTimers(Long.MaxValue).toSeq ===
+        Seq(("test_key1", 1000L), ("test_key1", 2000L), ("test_key2", 15000L)))
+      assert(timerState1.getExpiredTimers(10000L).toSeq ===
+        Seq(("test_key1", 1000L), ("test_key1", 2000L)))
       assert(timerState1.listTimers().toSet === Set(1000L, 2000L))
       ImplicitGroupingKeyTracker.removeImplicitKey()
 
@@ -116,53 +118,51 @@ class TimerSuite extends StateVariableSuiteBase {
     }
   }
 
-  testWithTimeMode(
-    "Range scan on second index timer key - " +
-      "verify timestamp is sorted for single instance") { timeMode =>
+  testWithTimeMode("Range scan on second index timer key - " +
+    "verify timestamp is sorted for single instance") { timeMode =>
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
-      val timerState = new TimerStateImpl(store, timeMode, stringEncoder)
-      val timerTimerstamps =
-        Seq(931L, 8000L, 452300L, 4200L, 90L, 1L, 2L, 8L, 3L, 35L, 6L, 9L, 5L)
+      val timerState = new TimerStateImpl(store, timeMode,
+        stringEncoder)
+      val timerTimerstamps = Seq(931L, 8000L, 452300L, 4200L, 90L, 1L, 2L, 8L, 3L, 35L, 6L, 9L, 5L)
       // register/put unordered timestamp into rocksDB
       timerTimerstamps.foreach(timerState.registerTimer)
-      assert(
-        timerState.getExpiredTimers(Long.MaxValue).toSeq.map(_._2) === timerTimerstamps.sorted)
-      assert(
-        timerState.getExpiredTimers(4200L).toSeq.map(_._2) ===
-          timerTimerstamps.sorted.takeWhile(_ <= 4200L))
+      assert(timerState.getExpiredTimers(Long.MaxValue).toSeq.map(_._2) === timerTimerstamps.sorted)
+      assert(timerState.getExpiredTimers(4200L).toSeq.map(_._2) ===
+        timerTimerstamps.sorted.takeWhile(_ <= 4200L))
       assert(timerState.getExpiredTimers(Long.MinValue).toSeq === Seq.empty)
       ImplicitGroupingKeyTracker.removeImplicitKey()
     }
   }
 
-  testWithTimeMode(
-    "test range scan on second index timer key - " +
-      "verify timestamp is sorted for multiple instances") { timeMode =>
+  testWithTimeMode("test range scan on second index timer key - " +
+    "verify timestamp is sorted for multiple instances") { timeMode =>
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key1")
-      val timerState1 = new TimerStateImpl(store, timeMode, stringEncoder)
+      val timerState1 = new TimerStateImpl(store, timeMode,
+        stringEncoder)
       val timerTimestamps1 = Seq(64L, 32L, 1024L, 4096L, 0L, 1L)
       timerTimestamps1.foreach(timerState1.registerTimer)
 
-      val timerState2 = new TimerStateImpl(store, timeMode, stringEncoder)
+      val timerState2 = new TimerStateImpl(store, timeMode,
+        stringEncoder)
       val timerTimestamps2 = Seq(931L, 8000L, 452300L, 4200L)
       timerTimestamps2.foreach(timerState2.registerTimer)
       ImplicitGroupingKeyTracker.removeImplicitKey()
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key3")
-      val timerState3 = new TimerStateImpl(store, timeMode, stringEncoder)
+      val timerState3 = new TimerStateImpl(store, timeMode,
+        stringEncoder)
       val timerTimerStamps3 = Seq(1L, 2L, 8L, 3L)
       timerTimerStamps3.foreach(timerState3.registerTimer)
       ImplicitGroupingKeyTracker.removeImplicitKey()
 
-      assert(
-        timerState1.getExpiredTimers(Long.MaxValue).toSeq.map(_._2) ===
-          (timerTimestamps1 ++ timerTimestamps2 ++ timerTimerStamps3).sorted)
+      assert(timerState1.getExpiredTimers(Long.MaxValue).toSeq.map(_._2) ===
+        (timerTimestamps1 ++ timerTimestamps2 ++ timerTimerStamps3).sorted)
       assert(timerState1.getExpiredTimers(Long.MinValue).toSeq === Seq.empty)
       assert(timerState1.getExpiredTimers(8000L).toSeq.map(_._2) ===
         (timerTimestamps1 ++ timerTimestamps2 ++ timerTimerStamps3).sorted.takeWhile(_ <= 8000L))
@@ -173,15 +173,12 @@ class TimerSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       ImplicitGroupingKeyTracker.setImplicitKey(TestClass(1L, "k1"))
-      val timerState = new TimerStateImpl(
-        store,
-        timeMode,
+      val timerState = new TimerStateImpl(store, timeMode,
         encoderFor(Encoders.product[TestClass]).asInstanceOf[ExpressionEncoder[Any]])
 
       timerState.registerTimer(1L * 1000)
       assert(timerState.listTimers().toSet === Set(1000L))
-      assert(
-        timerState.getExpiredTimers(Long.MaxValue).toSeq === Seq((TestClass(1L, "k1"), 1000L)))
+      assert(timerState.getExpiredTimers(Long.MaxValue).toSeq === Seq((TestClass(1L, "k1"), 1000L)))
       assert(timerState.getExpiredTimers(Long.MinValue).toSeq === Seq.empty[Long])
 
       timerState.registerTimer(20L * 1000)
@@ -207,7 +204,8 @@ class TimerSuite extends StateVariableSuiteBase {
       ttlEnabled = false,
       expectedNumColFamilies = 2,
       groupingKeyToExpectedCount = Map("key1" -> 2, "key2" -> 1),
-      timeMode = timeMode)
+      timeMode = timeMode
+    )
   }
 }
 

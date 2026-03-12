@@ -22,8 +22,7 @@ import org.apache.spark.sql.{AnalysisException, Row}
 abstract class DeltaBasedUpdateTableSuiteBase extends UpdateTableSuiteBase {
 
   test("nullable row ID attrs") {
-    createAndInitTable(
-      "pk INT, salary INT, dep STRING",
+    createAndInitTable("pk INT, salary INT, dep STRING",
       """{ "pk": 1, "salary": 300, "dep": 'hr' }
         |{ "pk": 2, "salary": 150, "dep": 'software' }
         |{ "pk": 3, "salary": 120, "dep": 'hr' }
@@ -34,12 +33,12 @@ abstract class DeltaBasedUpdateTableSuiteBase extends UpdateTableSuiteBase {
         sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE pk = 1")
       },
       condition = "NULLABLE_ROW_ID_ATTRIBUTES",
-      parameters = Map("nullableRowIdAttrs" -> "pk#\\d+"))
+      parameters = Map("nullableRowIdAttrs" -> "pk#\\d+")
+    )
   }
 
   test("update with assignments to row ID") {
-    createAndInitTable(
-      "pk INT NOT NULL, id INT, dep STRING",
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
         |{ "pk": 2, "id": 2, "dep": "software" }
         |{ "pk": 3, "id": 3, "dep": "hr" }
@@ -53,8 +52,7 @@ abstract class DeltaBasedUpdateTableSuiteBase extends UpdateTableSuiteBase {
   }
 
   test("update with nondeterministic conditions") {
-    createAndInitTable(
-      "pk INT NOT NULL, id INT, dep STRING",
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
         |{ "pk": 2, "id": 2, "dep": "software" }
         |{ "pk": 3, "id": 3, "dep": "hr" }
@@ -69,12 +67,12 @@ abstract class DeltaBasedUpdateTableSuiteBase extends UpdateTableSuiteBase {
       context = ExpectedContext(
         fragment = "UPDATE cat.ns1.test_table SET dep = 'invalid' WHERE id <= 1 AND rand() > 0.5",
         start = 0,
-        stop = 75))
+        stop = 75)
+    )
   }
 
   test("update with schema pruning") {
-    createAndInitTable(
-      "pk INT NOT NULL, id INT, salary INT, dep STRING",
+    createAndInitTable("pk INT NOT NULL, id INT, salary INT, dep STRING",
       """{ "pk": 1, "id": 1, "salary": 100, "dep": "hr" }
         |{ "pk": 2, "id": 2, "salary": 200, "dep": "software" }
         |{ "pk": 3, "id": 3, "salary": 300, "dep": "hr" }

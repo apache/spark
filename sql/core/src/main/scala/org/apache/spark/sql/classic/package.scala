@@ -23,14 +23,13 @@ import org.apache.spark.sql.execution.SparkStrategy
 /**
  * Allows the execution of relational queries, including those expressed in SQL using Spark.
  *
- * @groupname dataType Data types
- * @groupdesc Spark
- *   SQL data types.
- * @groupprio dataType -3
- * @groupname field Field
- * @groupprio field -2
- * @groupname row Row
- * @groupprio row -1
+ *  @groupname dataType Data types
+ *  @groupdesc Spark SQL data types.
+ *  @groupprio dataType -3
+ *  @groupname field Field
+ *  @groupprio field -2
+ *  @groupname row Row
+ *  @groupprio row -1
  */
 package object classic {
   type DataFrame = Dataset[Row]

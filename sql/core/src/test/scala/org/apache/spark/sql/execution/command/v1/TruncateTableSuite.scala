@@ -30,9 +30,9 @@ import org.apache.spark.sql.execution.command.FakeLocalFsFileSystem
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * This base suite contains unified tests for the `TRUNCATE TABLE` command that check V1 table
- * catalogs. The tests that cannot run for all V1 catalogs are located in more specific test
- * suites:
+ * This base suite contains unified tests for the `TRUNCATE TABLE` command that check V1
+ * table catalogs. The tests that cannot run for all V1 catalogs are located in more
+ * specific test suites:
  *
  *   - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.TruncateTableSuite`
  *   - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.TruncateTableSuite`
@@ -53,12 +53,9 @@ trait TruncateTableSuiteBase extends command.TruncateTableSuiteBase {
           sql(s"INSERT INTO $t SELECT 1")
           checkAnswer(spark.table(t), Row(1))
 
-          val tablePath = new Path(
-            spark.sessionState.catalog
-              .getTableMetadata(TableIdentifier("tbl", Some("ns")))
-              .storage
-              .locationUri
-              .get)
+          val tablePath = new Path(spark.sessionState.catalog
+            .getTableMetadata(TableIdentifier("tbl", Some("ns")))
+            .storage.locationUri.get)
 
           val hadoopConf = spark.sessionState.newHadoopConf()
           val fs = tablePath.getFileSystem(hadoopConf)
@@ -69,13 +66,11 @@ trait TruncateTableSuiteBase extends command.TruncateTableSuiteBase {
 
           // Set ACL to table path.
           val customAcl = new java.util.ArrayList[AclEntry]()
-          customAcl.add(
-            new AclEntry.Builder()
-              .setName("test")
-              .setType(AclEntryType.USER)
-              .setScope(AclEntryScope.ACCESS)
-              .setPermission(FsAction.READ)
-              .build())
+          customAcl.add(new AclEntry.Builder()
+            .setName("test")
+            .setType(AclEntryType.USER)
+            .setScope(AclEntryScope.ACCESS)
+            .setPermission(FsAction.READ).build())
           fs.setAcl(tablePath, customAcl)
           assert(fs.getAclStatus(tablePath).getEntries().get(0) == customAcl.get(0))
 
@@ -100,18 +95,15 @@ trait TruncateTableSuiteBase extends command.TruncateTableSuiteBase {
             val user = new AclEntry.Builder()
               .setType(AclEntryType.USER)
               .setScope(AclEntryScope.ACCESS)
-              .setPermission(FsAction.ALL)
-              .build()
+              .setPermission(FsAction.ALL).build()
             val group = new AclEntry.Builder()
               .setType(AclEntryType.GROUP)
               .setScope(AclEntryScope.ACCESS)
-              .setPermission(FsAction.ALL)
-              .build()
+              .setPermission(FsAction.ALL).build()
             val other = new AclEntry.Builder()
               .setType(AclEntryType.OTHER)
               .setScope(AclEntryScope.ACCESS)
-              .setPermission(FsAction.ALL)
-              .build()
+              .setPermission(FsAction.ALL).build()
             assert(aclEntries.get(1) == user)
             assert(aclEntries.get(2) == group)
             assert(aclEntries.get(3) == other)
@@ -210,7 +202,8 @@ class TruncateTableSuite extends TruncateTableSuiteBase with CommandSuiteBase {
             sql(s"TRUNCATE TABLE $t")
           },
           condition = "_LEGACY_ERROR_TEMP_1266",
-          parameters = Map("tableIdentWithDB" -> "`spark_catalog`.`ns`.`tbl`"))
+          parameters = Map("tableIdentWithDB" -> "`spark_catalog`.`ns`.`tbl`")
+        )
       }
     }
   }

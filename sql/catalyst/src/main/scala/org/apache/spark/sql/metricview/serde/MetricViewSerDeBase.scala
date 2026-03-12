@@ -45,8 +45,7 @@ private[sql] trait YamlMapperProviderBase {
     // Disable pretty flow so that it doesn't add unnecessary newlines after dashes
     options.setPrettyFlow(false)
 
-    val yamlFactory = YAMLFactory
-      .builder()
+    val yamlFactory = YAMLFactory.builder()
       // Minimize quotes around strings when possible
       .configure(YAMLGenerator.Feature.MINIMIZE_QUOTES, true)
       // Don't force numbers to be quoted as strings (preserve numeric types)
@@ -70,39 +69,37 @@ private[sql] trait YamlMapperProviderBase {
 }
 
 /**
- * Common YAML parsing logic shared by version-specific YAML parsers. This trait provides the core
- * parsing functionality while allowing version-specific implementations to specify the target
- * type and YAML configuration.
+ * Common YAML parsing logic shared by version-specific YAML parsers.
+ * This trait provides the core parsing functionality while allowing version-specific
+ * implementations to specify the target type and YAML configuration.
  */
 private[sql] trait BaseMetricViewYAMLDeserializer[T] {
-
   /**
-   * The YAML utilities to use for deserialization. Subclasses can override this to provide
-   * version-specific YAML behavior.
+   * The YAML utilities to use for deserialization.
+   * Subclasses can override this to provide version-specific YAML behavior.
    */
   protected def yamlMapperProvider: YamlMapperProviderBase
 
   /**
    * Parse YAML content into the specified type.
-   * @param yamlContent
-   *   The YAML content to parse
-   * @return
-   *   The parsed MetricView of type T
+   * @param yamlContent The YAML content to parse
+   * @return The parsed MetricView of type T
    */
   def parseYaml(yamlContent: String): T = {
     try {
       yamlMapperProvider.mapperWithAllFields.readValue(yamlContent, getTargetClass)
     } catch {
       case NonFatal(e) =>
-        throw MetricViewYAMLParsingException(s"Failed to parse YAML: ${e.getMessage}", Some(e))
+        throw MetricViewYAMLParsingException(
+          s"Failed to parse YAML: ${e.getMessage}",
+          Some(e)
+        )
     }
   }
-
   /**
-   * Get the target class for deserialization. This must be implemented by version-specific
-   * implementations.
-   * @return
-   *   The Class object for the target type
+   * Get the target class for deserialization.
+   * This must be implemented by version-specific implementations.
+   * @return The Class object for the target type
    */
   protected def getTargetClass: Class[T]
 }
@@ -117,7 +114,8 @@ private[sql] trait BaseMetricViewYAMLSerializer[T] {
       case NonFatal(e) =>
         throw MetricViewYAMLParsingException(
           s"Failed to serialize to YAML: ${e.getMessage}",
-          Some(e))
+          Some(e)
+        )
     }
   }
 }
@@ -127,9 +125,17 @@ private[sql] trait ColumnBase {
   def expr: String
   def toCanonical(ordinal: Int, isDimension: Boolean): Column = {
     if (isDimension) {
-      Column(name = name, expression = DimensionExpression(expr), ordinal = ordinal)
+      Column(
+        name = name,
+        expression = DimensionExpression(expr),
+        ordinal = ordinal
+      )
     } else {
-      Column(name = name, expression = MeasureExpression(expr), ordinal = ordinal)
+      Column(
+        name = name,
+        expression = MeasureExpression(expr),
+        ordinal = ordinal
+      )
     }
   }
 }
@@ -148,30 +154,29 @@ private[sql] trait MetricViewBase {
   // canonical form should be able to represent both syntaxes.
   def toCanonical: MetricView = {
     // Convert dimensions with proper ordinals (0 to dimensions.length-1)
-    val dimensionsCanonical = dimensions.zipWithIndex.map { case (column, index) =>
-      column.toCanonical(index, isDimension = true)
+    val dimensionsCanonical = dimensions.zipWithIndex.map {
+      case (column, index) => column.toCanonical(index, isDimension = true)
     }
     // Convert measures with proper ordinals
     // (dimensions.length to dimensions.length + measures.length - 1)
-    val measuresCanonical = measures.zipWithIndex.map { case (column, index) =>
-      column.toCanonical(dimensions.length + index, isDimension = false)
+    val measuresCanonical = measures.zipWithIndex.map {
+      case (column, index) =>
+        column.toCanonical(dimensions.length + index, isDimension = false)
     }
     MetricView(
       version = version,
       from = Source(source),
       where = filter,
-      select = dimensionsCanonical ++ measuresCanonical)
+      select = dimensionsCanonical ++ measuresCanonical
+    )
   }
 }
 
 private[sql] object MetricViewBase {
-
   /**
    * Factory method to create the appropriate version-specific MetricView from canonical form.
-   * @param canonical
-   *   The canonical MetricView to convert from
-   * @return
-   *   The appropriate version-specific MetricView
+   * @param canonical The canonical MetricView to convert from
+   * @return The appropriate version-specific MetricView
    */
   def fromCanonical(canonical: MetricView): MetricViewBase = {
     canonical.version match {

@@ -42,7 +42,7 @@ class DummyFileTable(
     paths: Seq[String],
     expectedDataSchema: StructType,
     userSpecifiedSchema: Option[StructType])
-    extends FileTable(sparkSession, options, paths, userSpecifiedSchema) {
+  extends FileTable(sparkSession, options, paths, userSpecifiedSchema) {
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] = Some(expectedDataSchema)
 
   override def name(): String = "Dummy"
@@ -85,8 +85,9 @@ class FileTableSuite extends QueryTest with SharedSparkSession {
       val pathName = dir.getCanonicalPath
       df.write.partitionBy("p").text(pathName)
       val options = new CaseInsensitiveStringMap(Map("path" -> pathName).asJava)
-      val userSpecifiedSchema = Some(
-        StructType(Seq(StructField("v", StringType, true), StructField("p", IntegerType, true))))
+      val userSpecifiedSchema = Some(StructType(Seq(
+        StructField("v", StringType, true),
+        StructField("p", IntegerType, true))))
       val expectedDataSchema = StructType(Seq(StructField("v", StringType, true)))
       val table =
         new DummyFileTable(spark, options, Seq(pathName), expectedDataSchema, userSpecifiedSchema)
@@ -95,21 +96,21 @@ class FileTableSuite extends QueryTest with SharedSparkSession {
   }
 
   allFileBasedDataSources.foreach { format =>
-    test(
-      "SPARK-49519, SPARK-50287: Merge options of table and relation when " +
-        s"constructing ScanBuilder and WriteBuilder in FileFormat - $format") {
+    test("SPARK-49519, SPARK-50287: Merge options of table and relation when " +
+      s"constructing ScanBuilder and WriteBuilder in FileFormat - $format") {
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
         val userSpecifiedSchema = StructType(Seq(StructField("c1", StringType)))
 
         DataSource.lookupDataSourceV2(format, spark.sessionState.conf) match {
           case Some(provider) =>
-            val dsOptions =
-              new CaseInsensitiveStringMap(Map("k1" -> "v1", "k2" -> "ds_v2").asJava)
-            val table = provider
-              .getTable(userSpecifiedSchema, Array.empty, dsOptions.asCaseSensitiveMap())
-              .asInstanceOf[FileTable]
-            val tableOptions =
-              new CaseInsensitiveStringMap(Map("k2" -> "table_v2", "k3" -> "v3").asJava)
+            val dsOptions = new CaseInsensitiveStringMap(
+              Map("k1" -> "v1", "k2" -> "ds_v2").asJava)
+            val table = provider.getTable(
+              userSpecifiedSchema,
+              Array.empty,
+              dsOptions.asCaseSensitiveMap()).asInstanceOf[FileTable]
+            val tableOptions = new CaseInsensitiveStringMap(
+              Map("k2" -> "table_v2", "k3" -> "v3").asJava)
 
             val mergedReadOptions = table.newScanBuilder(tableOptions) match {
               case csv: CSVScanBuilder => csv.options
@@ -124,11 +125,8 @@ class FileTableSuite extends QueryTest with SharedSparkSession {
             assert(mergedReadOptions.get("k3") === "v3")
 
             val writeInfo = LogicalWriteInfoImpl("query-id", userSpecifiedSchema, tableOptions)
-            val mergedWriteOptions = table
-              .newWriteBuilder(writeInfo)
-              .build()
-              .asInstanceOf[FileWrite]
-              .options
+            val mergedWriteOptions = table.newWriteBuilder(writeInfo).build()
+              .asInstanceOf[FileWrite].options
             assert(mergedWriteOptions.size === 3)
             assert(mergedWriteOptions.get("k1") === "v1")
             assert(mergedWriteOptions.get("k2") === "table_v2")

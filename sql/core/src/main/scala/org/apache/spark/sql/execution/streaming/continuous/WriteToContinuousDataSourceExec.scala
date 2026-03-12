@@ -31,12 +31,9 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 /**
  * The physical plan for writing data into a continuous processing [[StreamingWrite]].
  */
-case class WriteToContinuousDataSourceExec(
-    write: StreamingWrite,
-    query: SparkPlan,
+case class WriteToContinuousDataSourceExec(write: StreamingWrite, query: SparkPlan,
     customMetrics: Seq[CustomMetric])
-    extends UnaryExecNode
-    with Logging {
+  extends UnaryExecNode with Logging {
 
   override def child: SparkPlan = query
   override def output: Seq[Attribute] = Nil
@@ -47,17 +44,15 @@ case class WriteToContinuousDataSourceExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     val queryRdd = query.execute()
-    val writerFactory =
-      write.createStreamingWriterFactory(PhysicalWriteInfoImpl(queryRdd.getNumPartitions))
+    val writerFactory = write.createStreamingWriterFactory(
+      PhysicalWriteInfoImpl(queryRdd.getNumPartitions))
     val rdd = new ContinuousWriteRDD(queryRdd, writerFactory, metrics)
 
-    logInfo(
-      log"Start processing data source write support: ${MDC(STREAMING_WRITE, write)}. " +
-        log"The input RDD has ${MDC(NUM_PARTITIONS, rdd.partitions.length)} partitions.")
-    EpochCoordinatorRef
-      .get(
-        sparkContext.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
-        sparkContext.env)
+    logInfo(log"Start processing data source write support: ${MDC(STREAMING_WRITE, write)}. " +
+      log"The input RDD has ${MDC(NUM_PARTITIONS, rdd.partitions.length)} partitions.")
+    EpochCoordinatorRef.get(
+      sparkContext.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
+      sparkContext.env)
       .askSync[Unit](SetWriterPartitions(rdd.getNumPartitions))
 
     try {
@@ -66,12 +61,12 @@ case class WriteToContinuousDataSourceExec(
       rdd.collect()
     } catch {
       case _: InterruptedException =>
-      // Interruption is how continuous queries are ended, so accept and ignore the exception.
+        // Interruption is how continuous queries are ended, so accept and ignore the exception.
     }
 
     sparkContext.emptyRDD
   }
 
   override protected def withNewChildInternal(
-      newChild: SparkPlan): WriteToContinuousDataSourceExec = copy(query = newChild)
+    newChild: SparkPlan): WriteToContinuousDataSourceExec = copy(query = newChild)
 }

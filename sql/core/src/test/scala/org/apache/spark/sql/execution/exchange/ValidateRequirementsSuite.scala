@@ -36,17 +36,11 @@ class ValidateRequirementsSuite extends SharedSparkSession {
       rightPartitionNum: Int,
       success: Boolean): Unit = {
     val table1 =
-      spark
-        .range(10)
-        .select($"id" + 1 as Symbol("a1"), $"id" + 2 as Symbol("b1"), $"id" + 3 as Symbol("c1"))
-        .queryExecution
-        .executedPlan
+      spark.range(10).select($"id" + 1 as Symbol("a1"), $"id" + 2 as Symbol("b1"),
+        $"id" + 3 as Symbol("c1")).queryExecution.executedPlan
     val table2 =
-      spark
-        .range(10)
-        .select($"id" + 1 as Symbol("a2"), $"id" + 2 as Symbol("b2"), $"id" + 3 as Symbol("c2"))
-        .queryExecution
-        .executedPlan
+      spark.range(10).select($"id" + 1 as Symbol("a2"), $"id" + 2 as Symbol("b2"),
+        $"id" + 3 as Symbol("c2")).queryExecution.executedPlan
 
     val leftKeys = joinKeyIndices.map(table1.output)
     val rightKeys = joinKeyIndices.map(table2.output)
@@ -55,14 +49,10 @@ class ValidateRequirementsSuite extends SharedSparkSession {
     val rightPartitioning =
       HashPartitioning(rightPartitionKeyIndices.map(table2.output), rightPartitionNum)
     val left =
-      SortExec(
-        leftKeys.map(SortOrder(_, Ascending)),
-        false,
+      SortExec(leftKeys.map(SortOrder(_, Ascending)), false,
         ShuffleExchangeExec(leftPartitioning, table1))
     val right =
-      SortExec(
-        rightKeys.map(SortOrder(_, Ascending)),
-        false,
+      SortExec(rightKeys.map(SortOrder(_, Ascending)), false,
         ShuffleExchangeExec(rightPartitioning, table2))
 
     val plan = SortMergeJoinExec(leftKeys, rightKeys, Inner, None, left, right)
@@ -99,14 +89,10 @@ class ValidateRequirementsSuite extends SharedSparkSession {
     val leftPartitioning = HashPartitioning(table1.output, 1)
     val rightPartitioning = SinglePartition
     val left =
-      SortExec(
-        table1.output.map(SortOrder(_, Ascending)),
-        false,
+      SortExec(table1.output.map(SortOrder(_, Ascending)), false,
         ShuffleExchangeExec(leftPartitioning, table1))
     val right =
-      SortExec(
-        table2.output.map(SortOrder(_, Ascending)),
-        false,
+      SortExec(table2.output.map(SortOrder(_, Ascending)), false,
         ShuffleExchangeExec(rightPartitioning, table2))
 
     val plan = SortMergeJoinExec(table1.output, table2.output, Inner, None, left, right)
@@ -119,23 +105,14 @@ class ValidateRequirementsSuite extends SharedSparkSession {
       partNums: Seq[Int],
       success: Boolean): Unit = {
     val table1 =
-      spark
-        .range(10)
-        .select($"id" + 1 as Symbol("a1"), $"id" + 2 as Symbol("b1"), $"id" + 3 as Symbol("c1"))
-        .queryExecution
-        .executedPlan
+      spark.range(10).select($"id" + 1 as Symbol("a1"), $"id" + 2 as Symbol("b1"),
+        $"id" + 3 as Symbol("c1")).queryExecution.executedPlan
     val table2 =
-      spark
-        .range(10)
-        .select($"id" + 1 as Symbol("a2"), $"id" + 2 as Symbol("b2"), $"id" + 3 as Symbol("c2"))
-        .queryExecution
-        .executedPlan
+      spark.range(10).select($"id" + 1 as Symbol("a2"), $"id" + 2 as Symbol("b2"),
+        $"id" + 3 as Symbol("c2")).queryExecution.executedPlan
     val table3 =
-      spark
-        .range(10)
-        .select($"id" + 1 as Symbol("a3"), $"id" + 2 as Symbol("b3"), $"id" + 3 as Symbol("c3"))
-        .queryExecution
-        .executedPlan
+      spark.range(10).select($"id" + 1 as Symbol("a3"), $"id" + 2 as Symbol("b3"),
+        $"id" + 3 as Symbol("c3")).queryExecution.executedPlan
 
     val key1 = joinKeyIndices1.map(_._1).map(table1.output)
     val key2 = joinKeyIndices1.map(_._2).map(table2.output)
@@ -145,28 +122,14 @@ class ValidateRequirementsSuite extends SharedSparkSession {
     val partitioning2 = HashPartitioning(key2, partNums(1))
     val partitioning3 = HashPartitioning(key3, partNums(2))
     val joinRel1 =
-      SortExec(
-        key1.map(SortOrder(_, Ascending)),
-        false,
-        ShuffleExchangeExec(partitioning1, table1))
+      SortExec(key1.map(SortOrder(_, Ascending)), false, ShuffleExchangeExec(partitioning1, table1))
     val joinRel2 =
-      SortExec(
-        key2.map(SortOrder(_, Ascending)),
-        false,
-        ShuffleExchangeExec(partitioning2, table2))
+      SortExec(key2.map(SortOrder(_, Ascending)), false, ShuffleExchangeExec(partitioning2, table2))
     val joinRel3 =
-      SortExec(
-        key3.map(SortOrder(_, Ascending)),
-        false,
-        ShuffleExchangeExec(partitioning3, table3))
+      SortExec(key3.map(SortOrder(_, Ascending)), false, ShuffleExchangeExec(partitioning3, table3))
 
-    val plan = SortMergeJoinExec(
-      key3,
-      key4,
-      Inner,
-      None,
-      joinRel3,
-      SortMergeJoinExec(key1, key2, Inner, None, joinRel1, joinRel2))
+    val plan = SortMergeJoinExec(key3, key4, Inner, None,
+      joinRel3, SortMergeJoinExec(key1, key2, Inner, None, joinRel1, joinRel2))
     assert(ValidateRequirements.validate(plan) == success, plan)
   }
 

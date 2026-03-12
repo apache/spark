@@ -33,8 +33,7 @@ import org.apache.spark.util.collection.Utils
 object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] {
 
   // CTE_id - (CTE_definition, precedence, predicates_to_push_down, attributes_to_prune)
-  private type CTEMap =
-    mutable.HashMap[Long, (CTERelationDef, Int, Seq[Expression], AttributeSet)]
+  private type CTEMap = mutable.HashMap[Long, (CTERelationDef, Int, Seq[Expression], AttributeSet)]
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (!plan.isInstanceOf[Subquery] && plan.containsPattern(CTE)) {
@@ -49,18 +48,18 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] {
   private def restoreCTEDefAttrs(
       input: Seq[Expression],
       mapping: Map[Attribute, Expression]): Seq[Expression] = {
-    input.map(e =>
-      e.transform { case a: Attribute =>
+    input.map(e => e.transform {
+      case a: Attribute =>
         mapping.keys.find(_.semanticEquals(a)).map(mapping).getOrElse(a)
-      })
+    })
   }
 
   /**
    * Gather all the predicates and referenced attributes on different points of CTE references
    * using pattern `ScanOperation` (which takes care of determinism) and combine those predicates
-   * and attributes that belong to the same CTE definition. For the same CTE definition, if any of
-   * its references does not have predicates, the combined predicate will be a TRUE literal, which
-   * means there will be no predicate push-down.
+   * and attributes that belong to the same CTE definition.
+   * For the same CTE definition, if any of its references does not have predicates, the combined
+   * predicate will be a TRUE literal, which means there will be no predicate push-down.
    */
   private def gatherPredicatesAndAttributes(plan: LogicalPlan, cteMap: CTEMap): Unit = {
     plan match {
@@ -78,20 +77,17 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] {
           preds
         } else {
           // Make sure we only push down predicates that do not contain forward CTE references.
-          val filteredPredicates = restoreCTEDefAttrs(
-            predicates.filter(_.find {
-              case s: SubqueryExpression =>
-                s.plan.find {
-                  case r: CTERelationRef =>
-                    // If the ref's ID does not exist in the map or if ref's corresponding precedence
-                    // is bigger than that of the current CTE we are pushing predicates for, it
-                    // indicates a forward reference and we should exclude this predicate.
-                    !cteMap.contains(r.cteId) || cteMap(r.cteId)._2 >= precedence
-                  case _ => false
-                }.nonEmpty
+          val filteredPredicates = restoreCTEDefAttrs(predicates.filter(_.find {
+            case s: SubqueryExpression => s.plan.find {
+              case r: CTERelationRef =>
+                // If the ref's ID does not exist in the map or if ref's corresponding precedence
+                // is bigger than that of the current CTE we are pushing predicates for, it
+                // indicates a forward reference and we should exclude this predicate.
+                !cteMap.contains(r.cteId) || cteMap(r.cteId)._2 >= precedence
               case _ => false
-            }.isEmpty),
-            attrMapping).filter(_.references.forall(cteDef.outputSet.contains))
+            }.nonEmpty
+            case _ => false
+          }.isEmpty), attrMapping).filter(_.references.forall(cteDef.outputSet.contains))
           if (filteredPredicates.isEmpty) {
             Seq(Literal.TrueLiteral)
           } else {
@@ -121,42 +117,42 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] {
    * existing predicate and it can be hard to extract only the non-overlapping part, we also keep
    * the original CTE definition plan without any predicate push-down in that temporary field so
    * that when we do a new predicate push-down, we can construct a new plan with all latest
-   * predicates over the original plan without having to figure out the exact predicate
-   * difference.
+   * predicates over the original plan without having to figure out the exact predicate difference.
    */
-  private def pushdownPredicatesAndAttributes(plan: LogicalPlan, cteMap: CTEMap): LogicalPlan =
-    plan.transformWithSubqueries {
-      case cteDef @ CTERelationDef(child, id, originalPlanWithPredicates, _, _) =>
-        val (_, _, newPreds, newAttrSet) = cteMap(id)
-        val originalPlan = originalPlanWithPredicates.map(_._1).getOrElse(child)
-        val preds = originalPlanWithPredicates.map(_._2).getOrElse(Seq.empty)
-        if (!isTruePredicate(newPreds) &&
+  private def pushdownPredicatesAndAttributes(
+      plan: LogicalPlan,
+      cteMap: CTEMap): LogicalPlan = plan.transformWithSubqueries {
+    case cteDef @ CTERelationDef(child, id, originalPlanWithPredicates, _, _) =>
+      val (_, _, newPreds, newAttrSet) = cteMap(id)
+      val originalPlan = originalPlanWithPredicates.map(_._1).getOrElse(child)
+      val preds = originalPlanWithPredicates.map(_._2).getOrElse(Seq.empty)
+      if (!isTruePredicate(newPreds) &&
           newPreds.exists(newPred => !preds.exists(_.semanticEquals(newPred)))) {
-          val newCombinedPred = newPreds.reduce(Or)
-          val newChild = if (needsPruning(originalPlan, newAttrSet)) {
-            Project(newAttrSet.toSeq, originalPlan)
-          } else {
-            originalPlan
-          }
-          CTERelationDef(Filter(newCombinedPred, newChild), id, Some((originalPlan, newPreds)))
-        } else if (needsPruning(cteDef.child, newAttrSet)) {
-          CTERelationDef(Project(newAttrSet.toSeq, cteDef.child), id, Some((originalPlan, preds)))
+        val newCombinedPred = newPreds.reduce(Or)
+        val newChild = if (needsPruning(originalPlan, newAttrSet)) {
+          Project(newAttrSet.toSeq, originalPlan)
         } else {
-          cteDef
+          originalPlan
         }
+        CTERelationDef(Filter(newCombinedPred, newChild), id, Some((originalPlan, newPreds)))
+      } else if (needsPruning(cteDef.child, newAttrSet)) {
+        CTERelationDef(Project(newAttrSet.toSeq, cteDef.child), id, Some((originalPlan, preds)))
+      } else {
+        cteDef
+      }
 
-      case cteRef @ CTERelationRef(cteId, _, output, _, _, _, _, _) =>
-        val (cteDef, _, _, newAttrSet) = cteMap(cteId)
-        if (needsPruning(cteDef.child, newAttrSet)) {
-          val indices = newAttrSet.toSeq.map(cteDef.output.indexOf)
-          val newOutput = indices.map(output)
-          cteRef.copy(output = newOutput)
-        } else {
-          // Do not change the order of output columns if no column is pruned, in which case there
-          // might be no Project and the order is important.
-          cteRef
-        }
-    }
+    case cteRef @ CTERelationRef(cteId, _, output, _, _, _, _, _) =>
+      val (cteDef, _, _, newAttrSet) = cteMap(cteId)
+      if (needsPruning(cteDef.child, newAttrSet)) {
+        val indices = newAttrSet.toSeq.map(cteDef.output.indexOf)
+        val newOutput = indices.map(output)
+        cteRef.copy(output = newOutput)
+      } else {
+        // Do not change the order of output columns if no column is pruned, in which case there
+        // might be no Project and the order is important.
+        cteRef
+      }
+  }
 
   private def isTruePredicate(predicates: Seq[Expression]): Boolean = {
     predicates.length == 1 && predicates.head == Literal.TrueLiteral

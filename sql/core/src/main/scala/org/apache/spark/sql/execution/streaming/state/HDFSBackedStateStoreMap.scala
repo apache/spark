@@ -33,11 +33,8 @@ trait HDFSBackedStateStoreMap {
   def putAll(map: HDFSBackedStateStoreMap): Unit
   def remove(key: UnsafeRow): UnsafeRowWrapper
   def iterator(): Iterator[UnsafeRowPair]
-
-  /**
-   * Returns entries in the underlying map and skips additional checks done by [[iterator]].
-   * [[iterator]] should be preferred over this.
-   */
+  /** Returns entries in the underlying map and skips additional checks done by [[iterator]].
+   * [[iterator]] should be preferred over this. */
   def entryIterator(): Iterator[Entry[UnsafeRow, UnsafeRowWrapper]]
   def prefixScan(prefixKey: UnsafeRow): Iterator[UnsafeRowPair]
 }
@@ -85,8 +82,7 @@ class NoPrefixHDFSBackedStateStoreMap(private val readVerifier: Option[KeyValueI
     HDFSBackedStateStoreMap.getAndVerifyValueRow(key, map.get(key), readVerifier)
   }
 
-  override def put(key: UnsafeRow, value: UnsafeRowWrapper): UnsafeRowWrapper =
-    map.put(key, value)
+  override def put(key: UnsafeRow, value: UnsafeRowWrapper): UnsafeRowWrapper = map.put(key, value)
 
   def putAll(other: HDFSBackedStateStoreMap): Unit = {
     other match {
@@ -106,10 +102,8 @@ class NoPrefixHDFSBackedStateStoreMap(private val readVerifier: Option[KeyValueI
     }
   }
 
-  /**
-   * Returns entries in the underlying map and skips additional checks done by [[iterator]].
-   * [[iterator]] should be preferred over this.
-   */
+  /** Returns entries in the underlying map and skips additional checks done by [[iterator]].
+   * [[iterator]] should be preferred over this. */
   override def entryIterator(): Iterator[Entry[UnsafeRow, UnsafeRowWrapper]] = {
     map.entrySet.asScala.iterator
   }
@@ -122,15 +116,14 @@ class NoPrefixHDFSBackedStateStoreMap(private val readVerifier: Option[KeyValueI
 class PrefixScannableHDFSBackedStateStoreMap(
     keySchema: StructType,
     numColsPrefixKey: Int,
-    private val readVerifier: Option[KeyValueIntegrityVerifier])
-    extends HDFSBackedStateStoreMap {
+    private val readVerifier: Option[KeyValueIntegrityVerifier]) extends HDFSBackedStateStoreMap {
 
   private val map = new HDFSBackedStateStoreMap.MapType()
 
   // We are using ConcurrentHashMap here with the same rationalization we use ConcurrentHashMap on
   // HDFSBackedStateStoreMap.MapType.
-  private val prefixKeyToKeysMap =
-    new java.util.concurrent.ConcurrentHashMap[UnsafeRow, mutable.Set[UnsafeRow]]()
+  private val prefixKeyToKeysMap = new java.util.concurrent.ConcurrentHashMap[
+    UnsafeRow, mutable.Set[UnsafeRow]]()
 
   private val prefixKeyFieldsWithIdx: Seq[(StructField, Int)] = {
     keySchema.zipWithIndex.take(numColsPrefixKey)
@@ -151,18 +144,16 @@ class PrefixScannableHDFSBackedStateStoreMap(
     val ret = map.put(key, value)
 
     val prefixKey = prefixKeyProjection(key).copy()
-    prefixKeyToKeysMap.compute(
-      prefixKey,
-      (_, v) => {
-        if (v == null) {
-          val set = new mutable.HashSet[UnsafeRow]()
-          set.add(key)
-          set
-        } else {
-          v.add(key)
-          v
-        }
-      })
+    prefixKeyToKeysMap.compute(prefixKey, (_, v) => {
+      if (v == null) {
+        val set = new mutable.HashSet[UnsafeRow]()
+        set.add(key)
+        set
+      } else {
+        v.add(key)
+        v
+      }
+    })
 
     ret
   }
@@ -189,12 +180,10 @@ class PrefixScannableHDFSBackedStateStoreMap(
 
     if (ret != null) {
       val prefixKey = prefixKeyProjection(key).copy()
-      prefixKeyToKeysMap.computeIfPresent(
-        prefixKey,
-        (_, v) => {
-          v.remove(key)
-          if (v.isEmpty) null else v
-        })
+      prefixKeyToKeysMap.computeIfPresent(prefixKey, (_, v) => {
+        v.remove(key)
+        if (v.isEmpty) null else v
+      })
     }
 
     ret
@@ -209,18 +198,15 @@ class PrefixScannableHDFSBackedStateStoreMap(
     }
   }
 
-  /**
-   * Returns entries in the underlying map and skips additional checks done by [[iterator]].
-   * [[iterator]] should be preferred over this.
-   */
+  /** Returns entries in the underlying map and skips additional checks done by [[iterator]].
+   * [[iterator]] should be preferred over this. */
   override def entryIterator(): Iterator[Entry[UnsafeRow, UnsafeRowWrapper]] = {
     map.entrySet.asScala.iterator
   }
 
   override def prefixScan(prefixKey: UnsafeRow): Iterator[UnsafeRowPair] = {
     val unsafeRowPair = new UnsafeRowPair()
-    prefixKeyToKeysMap
-      .getOrDefault(prefixKey, mutable.Set.empty[UnsafeRow])
+    prefixKeyToKeysMap.getOrDefault(prefixKey, mutable.Set.empty[UnsafeRow])
       .iterator
       .map { keyRow =>
         val valueRow = HDFSBackedStateStoreMap

@@ -41,23 +41,31 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("from_xml") {
     val xmlData = """<row><a>1</a></row>"""
     val schema = StructType(StructField("a", IntegerType) :: Nil)
-    checkEvaluation(XmlToStructs(schema, Map.empty, Literal(xmlData), UTC_OPT), InternalRow(1))
+    checkEvaluation(
+      XmlToStructs(schema, Map.empty, Literal(xmlData), UTC_OPT),
+      InternalRow(1)
+    )
   }
 
   test("from_xml- invalid data") {
     val xmlData = """<row><a>1</row>"""
     val schema = StructType(StructField("a", IntegerType) :: Nil)
-    checkEvaluation(XmlToStructs(schema, Map.empty, Literal(xmlData), UTC_OPT), InternalRow(null))
+    checkEvaluation(
+      XmlToStructs(schema, Map.empty, Literal(xmlData), UTC_OPT),
+      InternalRow(null)
+    )
 
     val exception = intercept[TestFailedException] {
       checkEvaluation(
         XmlToStructs(schema, Map("mode" -> FailFastMode.name), Literal(xmlData), UTC_OPT),
-        InternalRow(null))
+        InternalRow(null)
+      )
     }.getCause
     checkError(
       exception = exception.asInstanceOf[SparkException],
       condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
-      parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST"))
+      parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST")
+    )
   }
 
   test("from_xml - input=array, schema=array, output=row of array") {
@@ -134,7 +142,8 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val schema = StructType(StructField("a", IntegerType) :: Nil)
     checkEvaluation(
       XmlToStructs(schema, Map.empty, Literal.create(null, StringType), UTC_OPT),
-      null)
+      null
+    )
   }
 
   test("from_xml with timestamp") {
@@ -147,12 +156,14 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     c.set(2016, 0, 1, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 123)
 
+
     // The result doesn't change because the xml string includes timezone string ("Z" here),
     // which means the string represents the timestamp string in the timezone regardless of
     // the timeZoneId parameter.
     checkEvaluation(
       XmlToStructs(schema, Map.empty, Literal.create(xmlData1, StringType), UTC_OPT),
-      InternalRow(c.getTimeInMillis * 1000L))
+      InternalRow(c.getTimeInMillis * 1000L)
+    )
 
     val xmlData2 = s"""
                      |<row>
@@ -169,16 +180,17 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss"),
           Literal.create(xmlData2, StringType),
           Option(zid.getId)),
-        InternalRow(c.getTimeInMillis * 1000L))
+        InternalRow(c.getTimeInMillis * 1000L)
+      )
       checkEvaluation(
         XmlToStructs(
           schema,
-          Map(
-            "timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
+          Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
             DateTimeUtils.TIMEZONE_OPTION -> zid.getId),
           Literal.create(xmlData2, StringType),
           UTC_OPT),
-        InternalRow(c.getTimeInMillis * 1000L))
+        InternalRow(c.getTimeInMillis * 1000L)
+      )
     }
   }
 
@@ -186,13 +198,15 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val schema = StructType(StructField("a", IntegerType) :: Nil)
     checkEvaluation(
       XmlToStructs(schema, Map.empty, Literal.create(" ", StringType), UTC_OPT),
-      InternalRow(null))
+      InternalRow(null)
+    )
   }
 
   test("to_xml escaping") {
     val schema = StructType(StructField("\"quote", IntegerType) :: Nil)
     val struct = Literal.create(create_row(1), schema)
-    GenerateUnsafeProjection.generate(StructsToXml(Map.empty, struct, UTC_OPT) :: Nil)
+    GenerateUnsafeProjection.generate(
+      StructsToXml(Map.empty, struct, UTC_OPT) :: Nil)
   }
 
   test("to_xml - struct") {
@@ -202,7 +216,8 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       StructsToXml(Map.empty, struct, UTC_OPT),
       s"""|<ROW>
           |    <a>1</a>
-          |</ROW>""".stripMargin)
+          |</ROW>""".stripMargin
+    )
   }
 
   test("to_xml - array") {
@@ -212,27 +227,36 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
                      |    <a>1</a>
                      |    <a>2</a>
                      |</ROW>""".stripMargin
-    checkEvaluation(StructsToXml(Map.empty, Literal.create(input, inputSchema), UTC_OPT), output)
+    checkEvaluation(
+      StructsToXml(Map.empty, Literal.create(input, inputSchema), UTC_OPT),
+      output)
   }
 
   test("to_xml - row with empty array") {
     val inputSchema = StructType(StructField("a", ArrayType(IntegerType)) :: Nil)
     val input = Row(Array(null))
     val output = """<ROW/>"""
-    checkEvaluation(StructsToXml(Map.empty, Literal.create(input, inputSchema), UTC_OPT), output)
+    checkEvaluation(
+      StructsToXml(Map.empty, Literal.create(input, inputSchema), UTC_OPT),
+      output)
   }
 
   test("to_xml - empty row") {
     val inputSchema = StructType(StructField("a", ArrayType(IntegerType)) :: Nil)
     val input = Row(null)
     val output = """<ROW/>"""
-    checkEvaluation(StructsToXml(Map.empty, Literal.create(input, inputSchema), UTC_OPT), output)
+    checkEvaluation(
+      StructsToXml(Map.empty, Literal.create(input, inputSchema), UTC_OPT),
+      output)
   }
 
   test("to_xml null input column") {
     val schema = StructType(StructField("a", IntegerType) :: Nil)
     val struct = Literal.create(null, schema)
-    checkEvaluation(StructsToXml(Map.empty, struct, UTC_OPT), null)
+    checkEvaluation(
+      StructsToXml(Map.empty, struct, UTC_OPT),
+      null
+    )
   }
 
   test("to_xml with timestamp") {
@@ -246,38 +270,40 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       StructsToXml(Map.empty, struct, UTC_OPT),
       s"""|<ROW>
           |    <t>2016-01-01T00:00:00.000Z</t>
-          |</ROW>""".stripMargin)
+          |</ROW>""".stripMargin
+    )
     checkEvaluation(
       StructsToXml(Map.empty, struct, Option(PST.getId)),
       s"""|<ROW>
           |    <t>2015-12-31T16:00:00.000-08:00</t>
-          |</ROW>""".stripMargin)
+          |</ROW>""".stripMargin
+    )
 
     checkEvaluation(
       StructsToXml(
-        Map(
-          "timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
+        Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
           DateTimeUtils.TIMEZONE_OPTION -> UTC_OPT.get),
         struct,
         UTC_OPT),
-      s"""|<ROW>
+        s"""|<ROW>
             |    <t>2016-01-01T00:00:00</t>
-            |</ROW>""".stripMargin)
+            |</ROW>""".stripMargin
+    )
     checkEvaluation(
       StructsToXml(
-        Map(
-          "timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
+        Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
           DateTimeUtils.TIMEZONE_OPTION -> PST.getId),
         struct,
         UTC_OPT),
-      s"""|<ROW>
+        s"""|<ROW>
             |    <t>2015-12-31T16:00:00</t>
-            |</ROW>""".stripMargin)
+            |</ROW>""".stripMargin
+    )
   }
 
   test("to_xml - row with array of maps") {
-    val inputSchema =
-      StructType(StructField("f", ArrayType(MapType(StringType, IntegerType))) :: Nil)
+    val inputSchema = StructType(
+      StructField("f", ArrayType(MapType(StringType, IntegerType))) :: Nil)
     val input = Row(Array(Map("a" -> 1), Map("a" -> 2)))
     val output = s"""|<ROW>
                      |    <f>
@@ -287,7 +313,9 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
                      |        <a>2</a>
                      |    </f>
                      |</ROW>""".stripMargin
-    checkEvaluation(StructsToXml(Map.empty, Literal.create(input, inputSchema), UTC_OPT), output)
+    checkEvaluation(
+      StructsToXml(Map.empty, Literal.create(input, inputSchema), UTC_OPT),
+      output)
   }
 
   test("to_xml - row with single map") {
@@ -298,7 +326,9 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
                      |        <a>1</a>
                      |    </f>
                      |</ROW>""".stripMargin
-    checkEvaluation(StructsToXml(Map.empty, Literal.create(input, inputSchema), UTC_OPT), output)
+    checkEvaluation(
+      StructsToXml(Map.empty, Literal.create(input, inputSchema), UTC_OPT),
+      output)
   }
 
   test("from_xml missing fields") {
@@ -320,8 +350,7 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("infer schema of xml strings") {
-    checkEvaluation(
-      new SchemaOfXml(Literal.create("""<ROW><col>0</col></ROW>""")),
+    checkEvaluation(new SchemaOfXml(Literal.create("""<ROW><col>0</col></ROW>""")),
       "STRUCT<col: BIGINT>")
     val input = s"""|<ROW>
                     |    <col0>a</col0>
@@ -337,8 +366,7 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("infer schema of Xml strings by using options") {
     checkEvaluation(
-      new SchemaOfXml(
-        Literal.create("""<ROW><col>01</col></ROW>"""),
+      new SchemaOfXml(Literal.create("""<ROW><col>01</col></ROW>"""),
         CreateMap(Seq(Literal.create("allowNumericLeadingZeros"), Literal.create("true")))),
       "STRUCT<col: BIGINT>")
   }
@@ -357,8 +385,7 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
       checkEvaluation(
         XmlToStructs(schema, options, Literal.create(dateStr), UTC_OPT),
-        InternalRow(17836)
-      ) // number of days from 1970-01-01
+        InternalRow(17836)) // number of days from 1970-01-01
     }
   }
 
@@ -368,9 +395,7 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         schema = StructType.fromDDL("i int, _unparsed boolean"),
         options = Map("columnNameOfCorruptRecord" -> "_unparsed"),
         child = Literal.create("""{"i":"a"}"""),
-        timeZoneId = UTC_OPT),
-      null,
-      "INVALID_CORRUPT_RECORD_TYPE",
+        timeZoneId = UTC_OPT), null, "INVALID_CORRUPT_RECORD_TYPE",
       Map("columnName" -> "`_unparsed`", "actualType" -> "\"BOOLEAN\""))
   }
 
@@ -378,8 +403,8 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val decimalVal = new java.math.BigDecimal("1000.001")
     val decimalType = new DecimalType(10, 5)
     val expected = Decimal(decimalVal, decimalType.precision, decimalType.scale)
-    val decimalFormat =
-      new DecimalFormat("", new DecimalFormatSymbols(Locale.forLanguageTag(langTag)))
+    val decimalFormat = new DecimalFormat("",
+      new DecimalFormatSymbols(Locale.forLanguageTag(langTag)))
     val input = s"""|<ROW>
                     |    <d>${decimalFormat.format(expected.toBigDecimal)}</d>
                     |</ROW>""".stripMargin
@@ -406,11 +431,13 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       val options = Map("locale" -> langTag, "prefersDecimal" -> "true")
       val (_, input) = decimalInput(langTag)
 
-      checkEvaluation(SchemaOfXml(Literal.create(input), options), expectedType)
+      checkEvaluation(
+        SchemaOfXml(Literal.create(input), options),
+        expectedType)
     }
 
     Seq("en-US", "ko-KR", "ru-RU", "de-DE").foreach {
-      checkDecimalInfer(_, """STRUCT<d: DECIMAL(7,3)>""")
+        checkDecimalInfer(_, """STRUCT<d: DECIMAL(7,3)>""")
     }
   }
 
@@ -422,7 +449,8 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       (3, "14:30:45.123"),
       (4, "14:30:45.1234"),
       (5, "14:30:45.12345"),
-      (6, "14:30:45.123456"))
+      (6, "14:30:45.123456")
+    )
 
     testData.foreach { case (precision, timeStr) =>
       val schema = StructType(StructField("time", TimeType(precision)) :: Nil)
@@ -432,44 +460,40 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       // Test from_xml
       checkEvaluation(
         XmlToStructs(schema, Map("rowTag" -> "record"), Literal(xmlInput), UTC_OPT),
-        InternalRow(timeValue))
+        InternalRow(timeValue)
+      )
 
       // Test roundtrip (to_xml -> from_xml)
       val struct = Literal.create(InternalRow(timeValue), schema)
       val xmlResult = StructsToXml(Map("rowTag" -> "record"), struct, UTC_OPT)
       checkEvaluation(
         XmlToStructs(schema, Map("rowTag" -> "record"), xmlResult, UTC_OPT),
-        InternalRow(timeValue))
+        InternalRow(timeValue)
+      )
     }
 
     // Test custom format: HH-mm-ss.SSSSSS
     val customSchema = StructType(StructField("time", TimeType(6)) :: Nil)
-    val customTimeValue =
-      SparkDateTimeUtils.stringToTimeAnsi(UTF8String.fromString("14:30:45.123456"))
+    val customTimeValue = SparkDateTimeUtils.stringToTimeAnsi(
+      UTF8String.fromString("14:30:45.123456"))
     val customXmlInput = """<record><time>14-30-45.123456</time></record>"""
 
     // Test parsing with custom format
     checkEvaluation(
-      XmlToStructs(
-        customSchema,
-        Map("rowTag" -> "record", "timeFormat" -> "HH-mm-ss.SSSSSS"),
-        Literal(customXmlInput),
-        UTC_OPT),
-      InternalRow(customTimeValue))
+      XmlToStructs(customSchema, Map("rowTag" -> "record", "timeFormat" -> "HH-mm-ss.SSSSSS"),
+        Literal(customXmlInput), UTC_OPT),
+      InternalRow(customTimeValue)
+    )
 
     // Test roundtrip with custom format
     val customStruct = Literal.create(InternalRow(customTimeValue), customSchema)
     val customXmlResult = StructsToXml(
-      Map("rowTag" -> "record", "timeFormat" -> "HH-mm-ss.SSSSSS"),
-      customStruct,
-      UTC_OPT)
+      Map("rowTag" -> "record", "timeFormat" -> "HH-mm-ss.SSSSSS"), customStruct, UTC_OPT)
     checkEvaluation(
-      XmlToStructs(
-        customSchema,
-        Map("rowTag" -> "record", "timeFormat" -> "HH-mm-ss.SSSSSS"),
-        customXmlResult,
-        UTC_OPT),
-      InternalRow(customTimeValue))
+      XmlToStructs(customSchema, Map("rowTag" -> "record", "timeFormat" -> "HH-mm-ss.SSSSSS"),
+        customXmlResult, UTC_OPT),
+      InternalRow(customTimeValue)
+    )
   }
 
   test("TIME type with arrays") {
@@ -483,14 +507,16 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Test parsing array
     checkEvaluation(
       XmlToStructs(schema, Map("rowTag" -> "record"), Literal(xmlInput), UTC_OPT),
-      InternalRow(times))
+      InternalRow(times)
+    )
 
     // Test roundtrip
     val struct = Literal.create(InternalRow(times), schema)
     val xmlResult = StructsToXml(Map("rowTag" -> "record"), struct, UTC_OPT)
     checkEvaluation(
       XmlToStructs(schema, Map("rowTag" -> "record"), xmlResult, UTC_OPT),
-      InternalRow(times))
+      InternalRow(times)
+    )
   }
 
 }

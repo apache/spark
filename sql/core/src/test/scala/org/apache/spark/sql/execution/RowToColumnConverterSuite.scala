@@ -82,14 +82,9 @@ class RowToColumnConverterSuite extends SparkFunSuite {
     }
     val vectors = convertRows(rows, schema)
     rows.zipWithIndex.map { case (row, i) =>
-      val result = vectors.head
-        .getArray(i)
-        .array()
-        .array
+      val result = vectors.head.getArray(i).array().array
         .map(_.asInstanceOf[ArrayData].array)
-      val expected = row
-        .getArray(0)
-        .array
+      val expected = row.getArray(0).array
         .map(_.asInstanceOf[ArrayData].array)
       assert(result === expected)
     }
@@ -99,10 +94,9 @@ class RowToColumnConverterSuite extends SparkFunSuite {
     val mapType = MapType(IntegerType, StringType)
     val schema = StructType(Seq(StructField("m", mapType)))
     val rows = (0 until 100).map { i =>
-      InternalRow(
-        new ArrayBasedMapData(
-          new GenericArrayData(0 until i),
-          new GenericArrayData((0 until i).map(j => UTF8String.fromString(s"str$j")))))
+      InternalRow(new ArrayBasedMapData(
+        new GenericArrayData(0 until i),
+        new GenericArrayData((0 until i).map(j => UTF8String.fromString(s"str$j")))))
     }
     val vectors = convertRows(rows, schema)
     rows.zipWithIndex.map { case (row, i) =>
@@ -117,16 +111,15 @@ class RowToColumnConverterSuite extends SparkFunSuite {
     val mapType = MapType(IntegerType, StringType, valueContainsNull = true)
     val schema = StructType(Seq(StructField("m", mapType, nullable = false)))
     val rows = (0 until 100).map { i =>
-      InternalRow(
-        new ArrayBasedMapData(
-          new GenericArrayData(0 until i),
-          new GenericArrayData((0 until i).map { j =>
-            if (j % 3 == 0) {
-              null
-            } else {
-              UTF8String.fromString(s"str$j")
-            }
-          })))
+      InternalRow(new ArrayBasedMapData(
+        new GenericArrayData(0 until i),
+        new GenericArrayData((0 until i).map { j =>
+          if (j % 3 == 0) {
+            null
+          } else {
+            UTF8String.fromString(s"str$j")
+          }
+        })))
     }
     val vectors = convertRows(rows, schema)
     rows.zipWithIndex.map { case (row, i) =>

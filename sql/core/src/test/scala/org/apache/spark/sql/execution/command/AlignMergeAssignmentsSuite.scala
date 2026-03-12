@@ -29,7 +29,8 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
 
   test("align assignments (primitive types)") {
     val (matchedActions, notMatchedActions, notMatchedBySourceActions) =
-      parseAndAlignAssignments("""MERGE INTO primitive_table t USING primitive_table_src s
+      parseAndAlignAssignments(
+        """MERGE INTO primitive_table t USING primitive_table_src s
           |ON t.l = s.l
           |WHEN MATCHED THEN
           | UPDATE SET t.txt = 'a', t.i = s.i
@@ -42,9 +43,9 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
       case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
-                Assignment(i: AttributeReference, AssertNotNull(iValue: AttributeReference, _)),
-                Assignment(l: AttributeReference, lValue: AttributeReference),
-                Assignment(txt: AttributeReference, StringLiteral("a"))) =>
+              Assignment(i: AttributeReference, AssertNotNull(iValue: AttributeReference, _)),
+              Assignment(l: AttributeReference, lValue: AttributeReference),
+              Assignment(txt: AttributeReference, StringLiteral("a"))) =>
 
             assert(i.name == "i" && iValue.name == "i" && i != iValue)
             assert(l.name == "l" && l == lValue)
@@ -62,9 +63,9 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
       case Seq(InsertAction(None, assignments)) =>
         assignments match {
           case Seq(
-                Assignment(i: AttributeReference, AssertNotNull(iValue: AttributeReference, _)),
-                Assignment(l: AttributeReference, lValue: AttributeReference),
-                Assignment(txt: AttributeReference, txtValue: AttributeReference)) =>
+              Assignment(i: AttributeReference, AssertNotNull(iValue: AttributeReference, _)),
+              Assignment(l: AttributeReference, lValue: AttributeReference),
+              Assignment(txt: AttributeReference, txtValue: AttributeReference)) =>
 
             assert(i.name == "i" && iValue.name == "i" && i != iValue)
             assert(l.name == "l" && lValue.name == "l" && l != lValue)
@@ -82,9 +83,9 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
       case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
-                Assignment(i: AttributeReference, AssertNotNull(_: Cast, _)),
-                Assignment(l: AttributeReference, lValue: AttributeReference),
-                Assignment(txt: AttributeReference, StringLiteral("error"))) =>
+              Assignment(i: AttributeReference, AssertNotNull(_: Cast, _)),
+              Assignment(l: AttributeReference, lValue: AttributeReference),
+              Assignment(txt: AttributeReference, StringLiteral("error"))) =>
 
             assert(i.name == "i")
             assert(l.name == "l" && l == lValue)
@@ -101,7 +102,8 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
 
   test("align assignments (top-level structs)") {
     val (matchedActions, notMatchedActions, notMatchedBySourceActions) =
-      parseAndAlignAssignments("""MERGE INTO nested_struct_table t USING nested_struct_table_src s
+      parseAndAlignAssignments(
+        """MERGE INTO nested_struct_table t USING nested_struct_table_src s
           |ON t.i = s.i
           |WHEN MATCHED THEN
           | UPDATE SET t.s = named_struct('n_s', named_struct('dn_i', 1, 'dn_l', 100L), 'n_i', 1)
@@ -117,18 +119,14 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
     def checkStruct(value: CreateNamedStruct): Unit = {
       value.children match {
         case Seq(
-              StringLiteral("n_i"),
-              GetStructField(_, _, Some("n_i")),
-              StringLiteral("n_s"),
-              nsValue: CreateNamedStruct) =>
+            StringLiteral("n_i"), GetStructField(_, _, Some("n_i")),
+            StringLiteral("n_s"), nsValue: CreateNamedStruct) =>
 
           nsValue.children match {
             case Seq(
-                  StringLiteral("dn_i"),
-                  GetStructField(_, _, Some("dn_i")),
-                  StringLiteral("dn_l"),
-                  GetStructField(_, _, Some("dn_l"))) =>
-            // OK
+                StringLiteral("dn_i"), GetStructField(_, _, Some("dn_i")),
+                StringLiteral("dn_l"), GetStructField(_, _, Some("dn_l"))) =>
+              // OK
 
             case nsValueChildren =>
               fail(s"Unexpected children for 's.n_s': $nsValueChildren")
@@ -143,9 +141,9 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
       case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
-                Assignment(i: AttributeReference, iValue: AttributeReference),
-                Assignment(s: AttributeReference, sValue: CreateNamedStruct),
-                Assignment(txt: AttributeReference, txtValue: AttributeReference)) =>
+              Assignment(i: AttributeReference, iValue: AttributeReference),
+              Assignment(s: AttributeReference, sValue: CreateNamedStruct),
+              Assignment(txt: AttributeReference, txtValue: AttributeReference)) =>
 
             assert(i.name == "i" && i == iValue)
 
@@ -166,9 +164,9 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
       case Seq(InsertAction(None, assignments)) =>
         assignments match {
           case Seq(
-                Assignment(i: AttributeReference, IntegerLiteral(1)),
-                Assignment(s: AttributeReference, sValue: CreateNamedStruct),
-                Assignment(txt: AttributeReference, StringLiteral("new"))) =>
+              Assignment(i: AttributeReference, IntegerLiteral(1)),
+              Assignment(s: AttributeReference, sValue: CreateNamedStruct),
+              Assignment(txt: AttributeReference, StringLiteral("new"))) =>
 
             assert(i.name == "i")
 
@@ -189,9 +187,9 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
       case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
-                Assignment(i: AttributeReference, iValue: AttributeReference),
-                Assignment(s: AttributeReference, sValue: CreateNamedStruct),
-                Assignment(txt: AttributeReference, txtValue: AttributeReference)) =>
+              Assignment(i: AttributeReference, iValue: AttributeReference),
+              Assignment(s: AttributeReference, sValue: CreateNamedStruct),
+              Assignment(txt: AttributeReference, txtValue: AttributeReference)) =>
 
             assert(i.name == "i" && i == iValue)
 
@@ -222,19 +220,19 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
       case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
-                Assignment(i: AttributeReference, iValue: AttributeReference),
-                Assignment(s: AttributeReference, sValue: CreateNamedStruct),
-                Assignment(txt: AttributeReference, txtValue: AttributeReference)) =>
+              Assignment(i: AttributeReference, iValue: AttributeReference),
+              Assignment(s: AttributeReference, sValue: CreateNamedStruct),
+              Assignment(txt: AttributeReference, txtValue: AttributeReference)) =>
 
             assert(i.name == "i" && i == iValue)
 
             assert(s.name == "s")
             sValue.children match {
               case Seq(
-                    StringLiteral("n_i"),
-                    GetStructField(_, _, Some("n_i")),
-                    StringLiteral("n_s"),
-                    GetStructField(source: AttributeReference, _, Some("n_s"))) =>
+                  StringLiteral("n_i"),
+                  GetStructField(_, _, Some("n_i")),
+                  StringLiteral("n_s"),
+                  GetStructField(source: AttributeReference, _, Some("n_s"))) =>
 
                 assert(source.name == "s" && s != source)
 
@@ -255,7 +253,8 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
 
   test("align assignments (nested structs)") {
     val (matchedActions, notMatchedActions, notMatchedBySourceActions) =
-      parseAndAlignAssignments("""MERGE INTO nested_struct_table t USING nested_struct_table_src s
+      parseAndAlignAssignments(
+        """MERGE INTO nested_struct_table t USING nested_struct_table_src s
           |ON t.i = s.i
           |WHEN MATCHED THEN
           | UPDATE SET t.s.n_s = named_struct('dn_l', 1L, 'dn_i', 1)
@@ -271,11 +270,9 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
     def checkNestedStruct(value: CreateNamedStruct): Unit = {
       value.children match {
         case Seq(
-              StringLiteral("dn_i"),
-              GetStructField(_, _, Some("dn_i")),
-              StringLiteral("dn_l"),
-              GetStructField(_, _, Some("dn_l"))) =>
-        // OK
+            StringLiteral("dn_i"), GetStructField(_, _, Some("dn_i")),
+            StringLiteral("dn_l"), GetStructField(_, _, Some("dn_l"))) =>
+          // OK
 
         case nsValueChildren =>
           fail(s"Unexpected children for 's.n_s': $nsValueChildren")
@@ -286,19 +283,17 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
       case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
-                Assignment(i: AttributeReference, iValue: AttributeReference),
-                Assignment(s: AttributeReference, sValue: CreateNamedStruct),
-                Assignment(txt: AttributeReference, txtValue: AttributeReference)) =>
+              Assignment(i: AttributeReference, iValue: AttributeReference),
+              Assignment(s: AttributeReference, sValue: CreateNamedStruct),
+              Assignment(txt: AttributeReference, txtValue: AttributeReference)) =>
 
             assert(i.name == "i" && i == iValue)
 
             assert(s.name == "s")
             sValue.children match {
               case Seq(
-                    StringLiteral("n_i"),
-                    GetStructField(_, _, Some("n_i")),
-                    StringLiteral("n_s"),
-                    nsValue: CreateNamedStruct) =>
+                  StringLiteral("n_i"), GetStructField(_, _, Some("n_i")),
+                  StringLiteral("n_s"), nsValue: CreateNamedStruct) =>
                 checkNestedStruct(nsValue)
 
               case sValueChildren =>
@@ -319,19 +314,17 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
       case Seq(InsertAction(None, assignments)) =>
         assignments match {
           case Seq(
-                Assignment(i: AttributeReference, IntegerLiteral(1)),
-                Assignment(s: AttributeReference, sValue: CreateNamedStruct),
-                Assignment(txt: AttributeReference, StringLiteral("new"))) =>
+              Assignment(i: AttributeReference, IntegerLiteral(1)),
+              Assignment(s: AttributeReference, sValue: CreateNamedStruct),
+              Assignment(txt: AttributeReference, StringLiteral("new"))) =>
 
             assert(i.name == "i")
 
             assert(s.name == "s")
             sValue.children match {
               case Seq(
-                    StringLiteral("n_i"),
-                    GetStructField(_, _, Some("n_i")),
-                    StringLiteral("n_s"),
-                    nsValue: CreateNamedStruct) =>
+                  StringLiteral("n_i"), GetStructField(_, _, Some("n_i")),
+                  StringLiteral("n_s"), nsValue: CreateNamedStruct) =>
                 checkNestedStruct(nsValue)
 
               case sValueChildren =>
@@ -352,19 +345,17 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
       case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
-                Assignment(i: AttributeReference, iValue: AttributeReference),
-                Assignment(s: AttributeReference, sValue: CreateNamedStruct),
-                Assignment(txt: AttributeReference, txtValue: AttributeReference)) =>
+              Assignment(i: AttributeReference, iValue: AttributeReference),
+              Assignment(s: AttributeReference, sValue: CreateNamedStruct),
+              Assignment(txt: AttributeReference, txtValue: AttributeReference)) =>
 
             assert(i.name == "i" && i == iValue)
 
             assert(s.name == "s")
             sValue.children match {
               case Seq(
-                    StringLiteral("n_i"),
-                    GetStructField(_, _, Some("n_i")),
-                    StringLiteral("n_s"),
-                    nsValue: CreateNamedStruct) =>
+                  StringLiteral("n_i"), GetStructField(_, _, Some("n_i")),
+                  StringLiteral("n_s"), nsValue: CreateNamedStruct) =>
                 checkNestedStruct(nsValue)
 
               case sValueChildren =>
@@ -384,7 +375,8 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
 
   test("align assignments (char and varchar types)") {
     val (matchedActions, notMatchedActions, notMatchedBySourceActions) =
-      parseAndAlignAssignments("""MERGE INTO char_varchar_table t USING char_varchar_table src
+      parseAndAlignAssignments(
+        """MERGE INTO char_varchar_table t USING char_varchar_table src
           |ON t.c = src.c
           |WHEN MATCHED THEN
           | UPDATE SET
@@ -412,10 +404,8 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
     def checkStruct(value: CreateNamedStruct): Unit = {
       value.children match {
         case Seq(
-              StringLiteral("n_i"),
-              GetStructField(_, _, Some("n_i")),
-              StringLiteral("n_vc"),
-              invoke: StaticInvoke) =>
+            StringLiteral("n_i"), GetStructField(_, _, Some("n_i")),
+            StringLiteral("n_vc"), invoke: StaticInvoke) =>
 
           assert(invoke.arguments.length == 2)
           assert(invoke.functionName == "varcharTypeWriteSideCheck")
@@ -428,12 +418,9 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
     def checkArray(value: ArrayTransform): Unit = {
       val lambda = value.function.asInstanceOf[LambdaFunction]
       lambda.function match {
-        case CreateNamedStruct(
-              Seq(
-                StringLiteral("n_i"),
-                GetStructField(_, _, Some("n_i")),
-                StringLiteral("n_vc"),
-                invoke: StaticInvoke)) =>
+        case CreateNamedStruct(Seq(
+            StringLiteral("n_i"), GetStructField(_, _, Some("n_i")),
+            StringLiteral("n_vc"), invoke: StaticInvoke)) =>
 
           assert(invoke.arguments.length == 2)
           assert(invoke.functionName == "varcharTypeWriteSideCheck")
@@ -447,12 +434,9 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
       val keyTransform = value.left.asInstanceOf[ArrayTransform]
       val keyLambda = keyTransform.function.asInstanceOf[LambdaFunction]
       keyLambda.function match {
-        case CreateNamedStruct(
-              Seq(
-                StringLiteral("n_i"),
-                GetStructField(_, _, Some("n_i")),
-                StringLiteral("n_vc"),
-                invoke: StaticInvoke)) =>
+        case CreateNamedStruct(Seq(
+            StringLiteral("n_i"), GetStructField(_, _, Some("n_i")),
+            StringLiteral("n_vc"), invoke: StaticInvoke)) =>
 
           assert(invoke.arguments.length == 2)
           assert(invoke.functionName == "varcharTypeWriteSideCheck")
@@ -466,12 +450,9 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
       val valueTransform = value.right.asInstanceOf[ArrayTransform]
       val valueLambda = valueTransform.function.asInstanceOf[LambdaFunction]
       valueLambda.function match {
-        case CreateNamedStruct(
-              Seq(
-                StringLiteral("n_i"),
-                GetStructField(_, _, Some("n_i")),
-                StringLiteral("n_vc"),
-                invoke: StaticInvoke)) =>
+        case CreateNamedStruct(Seq(
+            StringLiteral("n_i"), GetStructField(_, _, Some("n_i")),
+            StringLiteral("n_vc"), invoke: StaticInvoke)) =>
 
           assert(invoke.arguments.length == 2)
           assert(invoke.functionName == "varcharTypeWriteSideCheck")
@@ -485,11 +466,11 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
       case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
-                Assignment(c: AttributeReference, cValue: StaticInvoke),
-                Assignment(s: AttributeReference, sValue: CreateNamedStruct),
-                Assignment(a: AttributeReference, aValue: ArrayTransform),
-                Assignment(mk: AttributeReference, mkValue: MapFromArrays),
-                Assignment(mv: AttributeReference, mvValue: MapFromArrays)) =>
+              Assignment(c: AttributeReference, cValue: StaticInvoke),
+              Assignment(s: AttributeReference, sValue: CreateNamedStruct),
+              Assignment(a: AttributeReference, aValue: ArrayTransform),
+              Assignment(mk: AttributeReference, mkValue: MapFromArrays),
+              Assignment(mv: AttributeReference, mvValue: MapFromArrays)) =>
 
             assert(c.name == "c")
             assert(cValue.arguments.length == 2)
@@ -519,11 +500,11 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
       case Seq(InsertAction(None, assignments)) =>
         assignments match {
           case Seq(
-                Assignment(c: AttributeReference, cValue: StaticInvoke),
-                Assignment(s: AttributeReference, sValue: CreateNamedStruct),
-                Assignment(a: AttributeReference, aValue: ArrayTransform),
-                Assignment(mk: AttributeReference, mkValue: MapFromArrays),
-                Assignment(mv: AttributeReference, mvValue: MapFromArrays)) =>
+              Assignment(c: AttributeReference, cValue: StaticInvoke),
+              Assignment(s: AttributeReference, sValue: CreateNamedStruct),
+              Assignment(a: AttributeReference, aValue: ArrayTransform),
+              Assignment(mk: AttributeReference, mkValue: MapFromArrays),
+              Assignment(mv: AttributeReference, mvValue: MapFromArrays)) =>
 
             assert(c.name == "c")
             assert(cValue.arguments.length == 2)
@@ -553,11 +534,11 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
       case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
-                Assignment(c: AttributeReference, cValue: StaticInvoke),
-                Assignment(s: AttributeReference, sValue: CreateNamedStruct),
-                Assignment(a: AttributeReference, aValue: ArrayTransform),
-                Assignment(mk: AttributeReference, mkValue: MapFromArrays),
-                Assignment(mv: AttributeReference, mvValue: MapFromArrays)) =>
+              Assignment(c: AttributeReference, cValue: StaticInvoke),
+              Assignment(s: AttributeReference, sValue: CreateNamedStruct),
+              Assignment(a: AttributeReference, aValue: ArrayTransform),
+              Assignment(mk: AttributeReference, mkValue: MapFromArrays),
+              Assignment(mv: AttributeReference, mvValue: MapFromArrays)) =>
 
             assert(c.name == "c")
             assert(cValue.arguments.length == 2)
@@ -599,11 +580,13 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
 
           // two updates to a nested column
           val e = intercept[AnalysisException] {
-            parseAndResolve(s"""MERGE INTO nested_struct_table t USING nested_struct_table src
+            parseAndResolve(
+              s"""MERGE INTO nested_struct_table t USING nested_struct_table src
                  |ON t.i = src.i
                  |$clause THEN
                  | UPDATE SET s.n_i = 1, s.n_s = null, s.n_i = -1
-                 |""".stripMargin)
+                 |""".stripMargin
+            )
           }
           if (policy == StoreAssignmentPolicy.ANSI) {
             checkError(
@@ -611,7 +594,8 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
               condition = "DATATYPE_MISMATCH.INVALID_ROW_LEVEL_OPERATION_ASSIGNMENTS",
               parameters = Map(
                 "sqlExpr" -> "\"s.n_i = 1\", \"s.n_s = NULL\", \"s.n_i = -1\"",
-                "errors" -> "\n- Multiple assignments for 's.n_i': 1, -1"))
+                "errors" -> "\n- Multiple assignments for 's.n_i': 1, -1")
+            )
           } else {
             checkError(
               exception = e,
@@ -620,7 +604,8 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
                 "tableName" -> "``",
                 "colName" -> "`s`.`n_s`",
                 "srcType" -> "\"VOID\"",
-                "targetType" -> "\"STRUCT<DN_I:INT,DN_L:BIGINT>\""))
+                "targetType" -> "\"STRUCT<DN_I:INT,DN_L:BIGINT>\"")
+            )
           }
 
           // conflicting updates to a nested struct and its fields
@@ -673,31 +658,32 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
   test("ANSI mode in UPDATE assignments") {
     withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> StoreAssignmentPolicy.ANSI.toString) {
       Seq("WHEN MATCHED", "WHEN NOT MATCHED BY SOURCE").foreach { clause =>
-        val plan1 = parseAndResolve(s"""MERGE INTO primitive_table t USING primitive_table_src src
+        val plan1 = parseAndResolve(
+          s"""MERGE INTO primitive_table t USING primitive_table_src src
              |ON t.l = src.l
              |$clause THEN
              | UPDATE SET i = NULL
              |""".stripMargin)
         assertNullCheckExists(plan1, Seq("i"))
 
-        val plan2 =
-          parseAndResolve(s"""MERGE INTO nested_struct_table t USING nested_struct_table src
+        val plan2 = parseAndResolve(
+          s"""MERGE INTO nested_struct_table t USING nested_struct_table src
              |ON t.i = src.i
              |$clause THEN
              | UPDATE SET s.n_i = NULL
              |""".stripMargin)
         assertNullCheckExists(plan2, Seq("s", "n_i"))
 
-        val plan3 =
-          parseAndResolve(s"""MERGE INTO nested_struct_table t USING nested_struct_table src
+        val plan3 = parseAndResolve(
+          s"""MERGE INTO nested_struct_table t USING nested_struct_table src
              |ON t.i = src.i
              |$clause THEN
              | UPDATE SET s.n_s.dn_i = NULL
              |""".stripMargin)
         assertNullCheckExists(plan3, Seq("s", "n_s", "dn_i"))
 
-        val plan4 =
-          parseAndResolve(s"""MERGE INTO nested_struct_table t USING nested_struct_table src
+        val plan4 = parseAndResolve(
+          s"""MERGE INTO nested_struct_table t USING nested_struct_table src
              |ON t.i = src.i
              |$clause THEN
              | UPDATE SET s.n_s = named_struct('dn_i', NULL, 'dn_l', 1L)
@@ -731,7 +717,8 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
                 checkError(
                   exception = e,
                   condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-                  parameters = Map("tableName" -> "``", "colName" -> "`s`.`n_s`.`dn_l`"))
+                  parameters = Map("tableName" -> "``", "colName" -> "`s`.`n_s`.`dn_l`")
+                )
               }
             }
           }
@@ -757,7 +744,8 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
           "Cannot safely cast")
 
         val (matchedActions, _, notMatchedBySourceActions) =
-          parseAndAlignAssignments(s"""MERGE INTO primitive_table t USING primitive_table_src src
+          parseAndAlignAssignments(
+            s"""MERGE INTO primitive_table t USING primitive_table_src src
                |ON t.i = src.i
                |$clause THEN
                | UPDATE SET i = 1L, txt = 'new', l = 10L
@@ -768,13 +756,12 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
           case Seq(UpdateAction(_, assignments, _)) =>
             assignments match {
               case Seq(
-                    Assignment(
+                  Assignment(
                       i: AttributeReference,
                       CheckOverflowInTableInsert(
-                        Cast(LongLiteral(1L), IntegerType, _, EvalMode.ANSI),
-                        _)),
-                    Assignment(l: AttributeReference, LongLiteral(10L)),
-                    Assignment(txt: AttributeReference, StringLiteral("new"))) =>
+                          Cast(LongLiteral(1L), IntegerType, _, EvalMode.ANSI), _)),
+                  Assignment(l: AttributeReference, LongLiteral(10L)),
+                  Assignment(txt: AttributeReference, StringLiteral("new"))) =>
 
                 assert(i.name == "i")
                 assert(l.name == "l")
@@ -793,7 +780,8 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
 
   test("ANSI mode in INSERT assignments") {
     withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> StoreAssignmentPolicy.ANSI.toString) {
-      val plan1 = parseAndResolve("""MERGE INTO primitive_table t USING primitive_table_src src
+      val plan1 = parseAndResolve(
+        """MERGE INTO primitive_table t USING primitive_table_src src
           |ON t.l = src.l
           |WHEN NOT MATCHED THEN
           | INSERT (i, l, txt) VALUES (NULL, 1, 'value')
@@ -810,7 +798,8 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
         "Cannot safely cast")
 
       val (_, notMatchedActions, _) =
-        parseAndAlignAssignments("""MERGE INTO primitive_table t USING primitive_table_src src
+        parseAndAlignAssignments(
+          """MERGE INTO primitive_table t USING primitive_table_src src
             |ON t.i = src.i
             |WHEN NOT MATCHED THEN
             | INSERT (i, l, txt) VALUES (1L, 10L, 'new')
@@ -820,13 +809,12 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
         case Seq(InsertAction(_, assignments)) =>
           assignments match {
             case Seq(
-                  Assignment(
+                Assignment(
                     i: AttributeReference,
                     CheckOverflowInTableInsert(
-                      Cast(LongLiteral(1L), IntegerType, _, EvalMode.ANSI),
-                      _)),
-                  Assignment(l: AttributeReference, LongLiteral(10L)),
-                  Assignment(txt: AttributeReference, StringLiteral("new"))) =>
+                        Cast(LongLiteral(1L), IntegerType, _, EvalMode.ANSI), _)),
+                Assignment(l: AttributeReference, LongLiteral(10L)),
+                Assignment(txt: AttributeReference, StringLiteral("new"))) =>
 
               assert(i.name == "i")
               assert(l.name == "l")
@@ -845,31 +833,32 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
   test("strict mode in UPDATE assignments") {
     withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> StoreAssignmentPolicy.STRICT.toString) {
       Seq("WHEN MATCHED", "WHEN NOT MATCHED BY SOURCE").foreach { clause =>
-        val plan1 = parseAndResolve(s"""MERGE INTO primitive_table t USING primitive_table_src src
+        val plan1 = parseAndResolve(
+          s"""MERGE INTO primitive_table t USING primitive_table_src src
              |ON t.l = src.l
              |$clause THEN
              | UPDATE SET i = CAST(NULL AS INT)
              |""".stripMargin)
         assertNullCheckExists(plan1, Seq("i"))
 
-        val plan2 =
-          parseAndResolve(s"""MERGE INTO nested_struct_table t USING nested_struct_table src
+        val plan2 = parseAndResolve(
+          s"""MERGE INTO nested_struct_table t USING nested_struct_table src
              |ON t.i = src.i
              |$clause THEN
              | UPDATE SET s.n_i = CAST(NULL AS INT)
              |""".stripMargin)
         assertNullCheckExists(plan2, Seq("s", "n_i"))
 
-        val plan3 =
-          parseAndResolve(s"""MERGE INTO nested_struct_table t USING nested_struct_table src
+        val plan3 = parseAndResolve(
+          s"""MERGE INTO nested_struct_table t USING nested_struct_table src
              |ON t.i = src.i
              |$clause THEN
              | UPDATE SET s.n_s.dn_i = CAST(NULL AS INT)
              |""".stripMargin)
         assertNullCheckExists(plan3, Seq("s", "n_s", "dn_i"))
 
-        val plan4 =
-          parseAndResolve(s"""MERGE INTO nested_struct_table t USING nested_struct_table src
+        val plan4 = parseAndResolve(
+          s"""MERGE INTO nested_struct_table t USING nested_struct_table src
              |ON t.i = src.i
              |$clause THEN
              | UPDATE SET s.n_s = named_struct('dn_i', CAST (NULL AS INT), 'dn_l', 1L)
@@ -911,7 +900,8 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
 
         // dn_i is a required field but not provided
         val e = intercept[AnalysisException] {
-          parseAndResolve(s"""MERGE INTO nested_struct_table t USING nested_struct_table src
+          parseAndResolve(
+            s"""MERGE INTO nested_struct_table t USING nested_struct_table src
                |ON t.i = src.i
                |$clause THEN
                | UPDATE SET s.n_s = named_struct('dn_l', 2L)
@@ -920,7 +910,10 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
         checkError(
           exception = e,
           condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-          parameters = Map("tableName" -> "``", "colName" -> "`s`.`n_s`.`dn_i`"))
+          parameters = Map(
+            "tableName" -> "``",
+            "colName" -> "`s`.`n_s`.`dn_i`")
+        )
 
         // strict mode does NOT allow string to int casts
         assertAnalysisException(
@@ -957,7 +950,8 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
 
   test("align assignments with default values") {
     val (matchedActions, notMatchedActions, notMatchedBySourceActions) =
-      parseAndAlignAssignments("""MERGE INTO default_values_table t USING default_values_table s
+      parseAndAlignAssignments(
+        """MERGE INTO default_values_table t USING default_values_table s
           |ON t.b = s.b
           |WHEN MATCHED THEN
           | UPDATE SET t.i = DEFAULT
@@ -972,8 +966,8 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
       case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
-                Assignment(b: AttributeReference, bValue: AttributeReference),
-                Assignment(i: AttributeReference, IntegerLiteral(42))) =>
+              Assignment(b: AttributeReference, bValue: AttributeReference),
+              Assignment(i: AttributeReference, IntegerLiteral(42))) =>
 
             assert(b.name == "b" && b == bValue)
             assert(i.name == "i")
@@ -991,8 +985,8 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
       case InsertAction(Some(_), assignments) =>
         assignments match {
           case Seq(
-                Assignment(b: AttributeReference, BooleanLiteral(false)),
-                Assignment(i: AttributeReference, IntegerLiteral(42))) =>
+              Assignment(b: AttributeReference, BooleanLiteral(false)),
+              Assignment(i: AttributeReference, IntegerLiteral(42))) =>
 
             assert(b.name == "b")
             assert(i.name == "i")
@@ -1008,8 +1002,8 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
       case InsertAction(None, assignments) =>
         assignments match {
           case Seq(
-                Assignment(b: AttributeReference, BooleanLiteral(false)),
-                Assignment(i: AttributeReference, IntegerLiteral(42))) =>
+              Assignment(b: AttributeReference, BooleanLiteral(false)),
+              Assignment(i: AttributeReference, IntegerLiteral(42))) =>
 
             assert(b.name == "b")
             assert(i.name == "i")
@@ -1026,8 +1020,8 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
       case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
-                Assignment(b: AttributeReference, bValue: AttributeReference),
-                Assignment(i: AttributeReference, IntegerLiteral(42))) =>
+              Assignment(b: AttributeReference, bValue: AttributeReference),
+              Assignment(i: AttributeReference, IntegerLiteral(42))) =>
 
             assert(b.name == "b" && b == bValue)
             assert(i.name == "i")
@@ -1045,8 +1039,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
       query: String): (Seq[MergeAction], Seq[MergeAction], Seq[MergeAction]) = {
 
     parseAndResolve(query) match {
-      case m: MergeIntoTable =>
-        (m.matchedActions, m.notMatchedActions, m.notMatchedBySourceActions)
+      case m: MergeIntoTable => (m.matchedActions, m.notMatchedActions, m.notMatchedBySourceActions)
       case plan => fail("Expected MergeIntoTable, but got:\n" + plan.treeString)
     }
   }

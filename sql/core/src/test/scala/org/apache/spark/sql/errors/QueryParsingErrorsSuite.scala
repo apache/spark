@@ -41,11 +41,14 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       exception = parseException(query),
       condition = "FAILED_TO_PARSE_TOO_COMPLEX",
       parameters = Map(),
-      context = ExpectedContext(query, start = 0, stop = query.length - 1))
+      context = ExpectedContext(
+        query,
+        start = 0,
+        stop = query.length - 1)
+    )
   }
 
-  test(
-    "EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES: duplicate aliases provided in using statement") {
+  test("EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES: duplicate aliases provided in using statement") {
     val query = "EXECUTE IMMEDIATE 'SELECT 1707 WHERE ? = 1' USING 1 as first" +
       ", 2 as first, 3 as second, 4 as second, 5 as third"
     checkError(
@@ -55,7 +58,8 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       context = ExpectedContext(
         "USING 1 as first, 2 as first, 3 as second, 4 as second, 5 as third",
         start = 44,
-        stop = 109))
+        stop = 109)
+    )
   }
 
   test("UNRESOLVED_COLUMN: Execute immediate with unresolved column in INTO clause") {
@@ -64,7 +68,11 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       exception = intercept[AnalysisException](sql(query)),
       condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
       parameters = Map("objectName" -> "`a`"),
-      context = ExpectedContext(start = 48, stop = 48, fragment = "a"))
+      context = ExpectedContext(
+        start = 48,
+        stop = 48,
+        fragment = "a")
+    )
   }
 
   test("NAMED_PARAMETER_SUPPORT_DISABLED: named arguments not turned on") {
@@ -72,7 +80,8 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       checkError(
         exception = parseException("SELECT explode(arr => array(10, 20))"),
         condition = "NAMED_PARAMETER_SUPPORT_DISABLED",
-        parameters = Map("functionName" -> toSQLId("explode"), "argument" -> toSQLId("arr")))
+        parameters = Map("functionName"-> toSQLId("explode"), "argument" -> toSQLId("arr"))
+      )
     }
   }
 
@@ -90,8 +99,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
 
   test("UNSUPPORTED_FEATURE: LATERAL join with USING join not supported") {
     checkError(
-      exception =
-        parseException("SELECT * FROM t1 JOIN LATERAL (SELECT c1 + c2 AS c2) USING (c2)"),
+      exception = parseException("SELECT * FROM t1 JOIN LATERAL (SELECT c1 + c2 AS c2) USING (c2)"),
       condition = "UNSUPPORTED_FEATURE.LATERAL_JOIN_USING",
       sqlState = "0A000",
       context = ExpectedContext(
@@ -107,8 +115,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       "LEFT SEMI" -> (17, 72),
       "LEFT ANTI" -> (17, 72)).foreach { case (joinType, (start, stop)) =>
       checkError(
-        exception = parseException(
-          s"SELECT * FROM t1 $joinType JOIN LATERAL (SELECT c1 + c2 AS c3) ON c2 = c3"),
+        exception = parseException(s"SELECT * FROM t1 $joinType JOIN LATERAL (SELECT c1 + c2 AS c3) ON c2 = c3"),
         condition = "INVALID_LATERAL_JOIN_TYPE",
         parameters = Map("joinType" -> joinType),
         context = ExpectedContext(
@@ -118,21 +125,20 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
     }
   }
 
-  test(
-    "INVALID_SQL_SYNTAX.LATERAL_WITHOUT_SUBQUERY_OR_TABLE_VALUED_FUNC: " +
-      "LATERAL can only be used with subquery") {
+  test("INVALID_SQL_SYNTAX.LATERAL_WITHOUT_SUBQUERY_OR_TABLE_VALUED_FUNC: " +
+    "LATERAL can only be used with subquery") {
     Seq(
       ", LATERAL t2" -> ("FROM t1, LATERAL t2", 9, 27),
       " JOIN LATERAL t2" -> ("JOIN LATERAL t2", 17, 31),
       ", LATERAL (t2 JOIN t3)" -> ("FROM t1, LATERAL (t2 JOIN t3)", 9, 37),
       ", LATERAL (LATERAL t2)" -> ("FROM t1, LATERAL (LATERAL t2)", 9, 37),
-      ", LATERAL VALUES (0, 1)" -> ("FROM t1, LATERAL VALUES (0, 1)", 9, 38)).foreach {
-      case (sqlText, (fragment, start, stop)) =>
-        checkError(
-          exception = parseException(s"SELECT * FROM t1$sqlText"),
-          condition = "INVALID_SQL_SYNTAX.LATERAL_WITHOUT_SUBQUERY_OR_TABLE_VALUED_FUNC",
-          sqlState = "42000",
-          context = ExpectedContext(fragment, start, stop))
+      ", LATERAL VALUES (0, 1)" -> ("FROM t1, LATERAL VALUES (0, 1)", 9, 38)
+    ).foreach { case (sqlText, (fragment, start, stop)) =>
+      checkError(
+        exception = parseException(s"SELECT * FROM t1$sqlText"),
+        condition = "INVALID_SQL_SYNTAX.LATERAL_WITHOUT_SUBQUERY_OR_TABLE_VALUED_FUNC",
+        sqlState = "42000",
+        context = ExpectedContext(fragment, start, stop))
     }
   }
 
@@ -142,7 +148,10 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       condition = "INCOMPATIBLE_JOIN_TYPES",
       parameters = Map("joinType1" -> "NATURAL", "joinType2" -> "CROSS"),
       sqlState = "42613",
-      context = ExpectedContext(fragment = "NATURAL CROSS JOIN b", start = 16, stop = 35))
+      context = ExpectedContext(
+        fragment = "NATURAL CROSS JOIN b",
+        start = 16,
+        stop = 35))
   }
 
   test("INVALID_SQL_SYNTAX.REPETITIVE_WINDOW_DEFINITION: redefine window") {
@@ -151,8 +160,10 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       condition = "INVALID_SQL_SYNTAX.REPETITIVE_WINDOW_DEFINITION",
       sqlState = "42000",
       parameters = Map("windowName" -> "`win`"),
-      context =
-        ExpectedContext(fragment = "WINDOW win AS win, win AS win2", start = 31, stop = 60))
+      context = ExpectedContext(
+        fragment = "WINDOW win AS win, win AS win2",
+        start = 31,
+        stop = 60))
   }
 
   test("INVALID_SQL_SYNTAX.INVALID_WINDOW_REFERENCE: invalid window reference") {
@@ -161,7 +172,10 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       condition = "INVALID_SQL_SYNTAX.INVALID_WINDOW_REFERENCE",
       sqlState = "42000",
       parameters = Map("windowName" -> "`win`"),
-      context = ExpectedContext(fragment = "WINDOW win AS win", start = 31, stop = 47))
+      context = ExpectedContext(
+        fragment = "WINDOW win AS win",
+        start = 31,
+        stop = 47))
   }
 
   test("INVALID_SQL_SYNTAX.UNRESOLVED_WINDOW_REFERENCE: window reference cannot be resolved") {
@@ -170,7 +184,10 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       condition = "INVALID_SQL_SYNTAX.UNRESOLVED_WINDOW_REFERENCE",
       sqlState = "42000",
       parameters = Map("windowName" -> "`win2`"),
-      context = ExpectedContext(fragment = "WINDOW win AS win2", start = 31, stop = 48))
+      context = ExpectedContext(
+        fragment = "WINDOW win AS win2",
+        start = 31,
+        stop = 48))
   }
 
   test("UNSUPPORTED_FEATURE: TRANSFORM does not support DISTINCT/ALL") {
@@ -179,7 +196,10 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       exception = parseException(sqlText),
       condition = "UNSUPPORTED_FEATURE.TRANSFORM_DISTINCT_ALL",
       sqlState = "0A000",
-      context = ExpectedContext(fragment = sqlText, start = 0, stop = 44))
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = 44))
   }
 
   test("UNSUPPORTED_FEATURE: In-memory mode does not support TRANSFORM with serde") {
@@ -189,7 +209,10 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       exception = parseException(sqlText),
       condition = "UNSUPPORTED_FEATURE.TRANSFORM_NON_HIVE",
       sqlState = "0A000",
-      context = ExpectedContext(fragment = sqlText, start = 0, stop = 97))
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = 97))
   }
 
   test("INVALID_SQL_SYNTAX.TRANSFORM_WRONG_NUM_ARGS: Wrong number arguments for transform") {
@@ -197,8 +220,14 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       exception = parseException("CREATE TABLE table(col int) PARTITIONED BY (years(col,col))"),
       condition = "INVALID_SQL_SYNTAX.TRANSFORM_WRONG_NUM_ARGS",
       sqlState = "42000",
-      parameters = Map("transform" -> "`years`", "expectedNum" -> "1", "actualNum" -> "2"),
-      context = ExpectedContext(fragment = "years(col,col)", start = 44, stop = 57))
+      parameters = Map(
+        "transform" -> "`years`",
+        "expectedNum" -> "1",
+        "actualNum" -> "2"),
+      context = ExpectedContext(
+        fragment = "years(col,col)",
+        start = 44,
+        stop = 57))
   }
 
   test("INVALID_SQL_SYNTAX.SHOW_FUNCTIONS_INVALID_SCOPE: Invalid scope in show functions") {
@@ -208,7 +237,10 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       condition = "INVALID_SQL_SYNTAX.SHOW_FUNCTIONS_INVALID_SCOPE",
       sqlState = "42000",
       parameters = Map("scope" -> "`sys`"),
-      context = ExpectedContext(fragment = sqlText, start = 0, stop = 17))
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = 17))
   }
 
   test("INVALID_SQL_SYNTAX.SHOW_FUNCTIONS_INVALID_PATTERN: Invalid pattern in show functions") {
@@ -218,19 +250,24 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       condition = "INVALID_SQL_SYNTAX.SHOW_FUNCTIONS_INVALID_PATTERN",
       sqlState = "42000",
       parameters = Map("pattern" -> "`f1`"),
-      context = ExpectedContext(fragment = sqlText1, start = 0, stop = 22))
+      context = ExpectedContext(
+        fragment = sqlText1,
+        start = 0,
+        stop = 22))
     val sqlText2 = "SHOW FUNCTIONS IN db LIKE f1"
     checkError(
       exception = parseException(sqlText2),
       condition = "INVALID_SQL_SYNTAX.SHOW_FUNCTIONS_INVALID_PATTERN",
       sqlState = "42000",
       parameters = Map("pattern" -> "`f1`"),
-      context = ExpectedContext(fragment = sqlText2, start = 0, stop = 27))
+      context = ExpectedContext(
+        fragment = sqlText2,
+        start = 0,
+        stop = 27))
   }
 
-  test(
-    "INVALID_SQL_SYNTAX.CREATE_ROUTINE_WITH_IF_NOT_EXISTS_AND_REPLACE: " +
-      "Create function with both if not exists and replace") {
+  test("INVALID_SQL_SYNTAX.CREATE_ROUTINE_WITH_IF_NOT_EXISTS_AND_REPLACE: " +
+    "Create function with both if not exists and replace") {
     val sqlText =
       """CREATE OR REPLACE FUNCTION IF NOT EXISTS func1 as
         |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
@@ -240,12 +277,14 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       exception = parseException(sqlText),
       condition = "INVALID_SQL_SYNTAX.CREATE_ROUTINE_WITH_IF_NOT_EXISTS_AND_REPLACE",
       sqlState = "42000",
-      context = ExpectedContext(fragment = sqlText, start = 0, stop = 142))
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = 142))
   }
 
-  test(
-    "INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_IF_NOT_EXISTS: " +
-      "Create temporary function with if not exists") {
+  test("INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_IF_NOT_EXISTS: " +
+    "Create temporary function with if not exists") {
     val sqlText =
       """CREATE TEMPORARY FUNCTION IF NOT EXISTS func1 as
         |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
@@ -255,7 +294,10 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       exception = parseException(sqlText),
       condition = "INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_IF_NOT_EXISTS",
       sqlState = "42000",
-      context = ExpectedContext(fragment = sqlText, start = 0, stop = 141))
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = 141))
   }
 
   test("INVALID_TEMP_OBJ_QUALIFIER: Create temporary function with invalid multi-part name") {
@@ -268,14 +310,18 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       exception = parseException(sqlText),
       condition = "INVALID_TEMP_OBJ_QUALIFIER",
       sqlState = "42602",
-      parameters =
-        Map("objectType" -> "FUNCTION", "objectName" -> "`func`", "qualifier" -> "`ns`.`db`"),
-      context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1))
+      parameters = Map(
+        "objectType" -> "FUNCTION",
+        "objectName" -> "`func`",
+        "qualifier" -> "`ns`.`db`"),
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = sqlText.length - 1))
   }
 
-  test(
-    "INVALID_TEMP_OBJ_QUALIFIER: " +
-      "Specifying invalid database while creating temporary function") {
+  test("INVALID_TEMP_OBJ_QUALIFIER: " +
+    "Specifying invalid database while creating temporary function") {
     val sqlText =
       """CREATE TEMPORARY FUNCTION db.func as
         |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
@@ -285,9 +331,14 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       exception = parseException(sqlText),
       condition = "INVALID_TEMP_OBJ_QUALIFIER",
       sqlState = "42602",
-      parameters =
-        Map("objectType" -> "FUNCTION", "objectName" -> "`func`", "qualifier" -> "`db`"),
-      context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1))
+      parameters = Map(
+        "objectType" -> "FUNCTION",
+        "objectName" -> "`func`",
+        "qualifier" -> "`db`"),
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = sqlText.length - 1))
   }
 
   test("INVALID_TEMP_OBJ_QUALIFIER: Drop temporary function with invalid qualification") {
@@ -296,29 +347,38 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       exception = parseException(sqlText),
       condition = "INVALID_TEMP_OBJ_QUALIFIER",
       sqlState = "42602",
-      parameters =
-        Map("objectType" -> "FUNCTION", "objectName" -> "`func`", "qualifier" -> "`db`"),
-      context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1))
+      parameters = Map(
+        "objectType" -> "FUNCTION",
+        "objectName" -> "`func`",
+        "qualifier" -> "`db`"),
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = sqlText.length - 1))
   }
 
   test("DUPLICATE_KEY: Found duplicate partition keys") {
     checkError(
-      exception = parseException(
-        "INSERT OVERWRITE TABLE table PARTITION(p1='1', p1='1') SELECT 'col1', 'col2'"),
+      exception = parseException("INSERT OVERWRITE TABLE table PARTITION(p1='1', p1='1') SELECT 'col1', 'col2'"),
       condition = "DUPLICATE_KEY",
       sqlState = "23505",
       parameters = Map("keyColumn" -> "`p1`"),
-      context = ExpectedContext(fragment = "PARTITION(p1='1', p1='1')", start = 29, stop = 53))
+      context = ExpectedContext(
+        fragment = "PARTITION(p1='1', p1='1')",
+        start = 29,
+        stop = 53))
   }
 
   test("DUPLICATE_KEY: in table properties") {
     checkError(
-      exception =
-        parseException("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('key1' = '1', 'key1' = '2')"),
+      exception = parseException("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('key1' = '1', 'key1' = '2')"),
       condition = "DUPLICATE_KEY",
       sqlState = "23505",
       parameters = Map("keyColumn" -> "`key1`"),
-      context = ExpectedContext(fragment = "('key1' = '1', 'key1' = '2')", start = 39, stop = 66))
+      context = ExpectedContext(
+        fragment = "('key1' = '1', 'key1' = '2')",
+        start = 39,
+        stop = 66))
   }
 
   test("PARSE_EMPTY_STATEMENT: empty input") {
@@ -351,7 +411,8 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       exception = parseException(sqlCommand),
       condition = "PARSE_SYNTAX_ERROR",
       sqlState = "42601",
-      parameters = Map("error" -> errorString, "hint" -> hint))
+      parameters = Map("error" -> errorString, "hint" -> hint)
+    )
   }
 
   test("PARSE_SYNTAX_ERROR: named arguments invalid syntax") {
@@ -406,9 +467,8 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       parameters = Map("error" -> "end of input", "hint" -> ""))
   }
 
-  test(
-    "PARSE_SYNTAX_ERROR - SPARK-21136: " +
-      "misleading error message due to problematic antlr grammar") {
+  test("PARSE_SYNTAX_ERROR - SPARK-21136: " +
+    "misleading error message due to problematic antlr grammar") {
     checkError(
       exception = parseException("select * from a left join_ b on a.id = b.id"),
       condition = "PARSE_SYNTAX_ERROR",
@@ -430,25 +490,30 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
 
   test("INVALID_SQL_SYNTAX.EMPTY_PARTITION_VALUE: show table partition key must set value") {
     checkError(
-      exception =
-        parseException("SHOW TABLE EXTENDED IN default LIKE 'employee' PARTITION (grade)"),
+      exception = parseException("SHOW TABLE EXTENDED IN default LIKE 'employee' PARTITION (grade)"),
       condition = "INVALID_SQL_SYNTAX.EMPTY_PARTITION_VALUE",
       sqlState = "42000",
       parameters = Map("partKey" -> "`grade`"),
-      context = ExpectedContext(fragment = "PARTITION (grade)", start = 47, stop = 63))
+      context = ExpectedContext(
+        fragment = "PARTITION (grade)",
+        start = 47,
+        stop = 63))
   }
 
-  test(
-    "INVALID_SQL_SYNTAX.INVALID_COLUMN_REFERENCE: " +
-      "expected a column reference for transform bucket") {
+  test("INVALID_SQL_SYNTAX.INVALID_COLUMN_REFERENCE: " +
+    "expected a column reference for transform bucket") {
     checkError(
-      exception = parseException(
-        "CREATE TABLE my_tab(a INT, b STRING) " +
-          "USING parquet PARTITIONED BY (bucket(32, a, 66))"),
+      exception = parseException("CREATE TABLE my_tab(a INT, b STRING) " +
+        "USING parquet PARTITIONED BY (bucket(32, a, 66))"),
       condition = "INVALID_SQL_SYNTAX.INVALID_COLUMN_REFERENCE",
       sqlState = "42000",
-      parameters = Map("transform" -> "`bucket`", "expr" -> "66"),
-      context = ExpectedContext(fragment = "bucket(32, a, 66)", start = 67, stop = 83))
+      parameters = Map(
+        "transform" -> "`bucket`",
+        "expr" -> "66"),
+      context = ExpectedContext(
+        fragment = "bucket(32, a, 66)",
+        start = 67,
+        stop = 83))
   }
 
   test("UNSUPPORTED_FEATURE: DESC TABLE COLUMN for a specific partition") {
@@ -457,7 +522,10 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       exception = parseException(sqlText),
       condition = "UNSUPPORTED_FEATURE.DESC_TABLE_COLUMN_PARTITION",
       sqlState = "0A000",
-      context = ExpectedContext(fragment = sqlText, start = 0, stop = 68))
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = 68))
   }
 
   test("INVALID_SQL_SYNTAX.EMPTY_PARTITION_VALUE: PARTITION specification is incomplete") {
@@ -467,19 +535,25 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       condition = "INVALID_SQL_SYNTAX.EMPTY_PARTITION_VALUE",
       sqlState = "42000",
       parameters = Map("partKey" -> "`grade`"),
-      context = ExpectedContext(fragment = sqlText, start = 0, stop = 49))
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = 49))
   }
 
   test("UNSUPPORTED_FEATURE: cannot set reserved namespace property") {
-    val sqlText =
-      "CREATE NAMESPACE IF NOT EXISTS a.b.c WITH PROPERTIES ('location'='/home/user/db')"
+    val sqlText = "CREATE NAMESPACE IF NOT EXISTS a.b.c WITH PROPERTIES ('location'='/home/user/db')"
     checkError(
       exception = parseException(sqlText),
       condition = "UNSUPPORTED_FEATURE.SET_NAMESPACE_PROPERTY",
       sqlState = "0A000",
-      parameters =
-        Map("property" -> "location", "msg" -> "please use the LOCATION clause to specify it"),
-      context = ExpectedContext(fragment = sqlText, start = 0, stop = 80))
+      parameters = Map(
+        "property" -> "location",
+        "msg" -> "please use the LOCATION clause to specify it"),
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = 80))
   }
 
   test("UNSUPPORTED_FEATURE: cannot set reserved table property") {
@@ -489,9 +563,13 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       exception = parseException(sqlText),
       condition = "UNSUPPORTED_FEATURE.SET_TABLE_PROPERTY",
       sqlState = "0A000",
-      parameters =
-        Map("property" -> "provider", "msg" -> "please use the USING clause to specify it"),
-      context = ExpectedContext(fragment = sqlText, start = 0, stop = 101))
+      parameters = Map(
+        "property" -> "provider",
+        "msg" -> "please use the USING clause to specify it"),
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = 101))
   }
 
   test("INVALID_PROPERTY_KEY: invalid property key for set quoted configuration") {
@@ -500,7 +578,10 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       exception = parseException(sqlText),
       condition = "INVALID_PROPERTY_KEY",
       parameters = Map("key" -> "\"\"", "value" -> "\"value\""),
-      context = ExpectedContext(fragment = sqlText, start = 0, stop = 11))
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = 11))
   }
 
   test("INVALID_PROPERTY_VALUE: invalid property value for set quoted configuration") {
@@ -508,18 +589,23 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       exception = parseException("set `key`=1;2;;"),
       condition = "INVALID_PROPERTY_VALUE",
       parameters = Map("value" -> "\"1;2;;\"", "key" -> "\"key\""),
-      context = ExpectedContext(fragment = "set `key`=1;2", start = 0, stop = 12))
+      context = ExpectedContext(
+        fragment = "set `key`=1;2",
+        start = 0,
+        stop = 12))
   }
 
   test("UNSUPPORTED_FEATURE: cannot set Properties and DbProperties at the same time") {
-    val sqlText =
-      "CREATE NAMESPACE IF NOT EXISTS a.b.c WITH PROPERTIES ('a'='a', 'b'='b', 'c'='c') " +
-        "WITH DBPROPERTIES('a'='a', 'b'='b', 'c'='c')"
+    val sqlText = "CREATE NAMESPACE IF NOT EXISTS a.b.c WITH PROPERTIES ('a'='a', 'b'='b', 'c'='c') " +
+      "WITH DBPROPERTIES('a'='a', 'b'='b', 'c'='c')"
     checkError(
       exception = parseException(sqlText),
       condition = "UNSUPPORTED_FEATURE.SET_PROPERTIES_AND_DBPROPERTIES",
       sqlState = "0A000",
-      context = ExpectedContext(fragment = sqlText, start = 0, stop = 124))
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = 124))
   }
 
   test("INCOMPLETE_TYPE_DEFINITION: array type definition is incomplete") {
@@ -616,8 +702,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       context = ExpectedContext(fragment = "STRUCT", start = 50, stop = 55))
   }
 
-  test(
-    "INCOMPLETE_TYPE_DEFINITION: error position for multi-line CREATE FUNCTION return params") {
+  test("INCOMPLETE_TYPE_DEFINITION: error position for multi-line CREATE FUNCTION return params") {
     val sqlText =
       """CREATE OR REPLACE FUNCTION my_func(x INT)
         |RETURNS TABLE(result STRUCT)
@@ -661,7 +746,10 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       exception = parseException("select * from test where test.t like 'pattern%' escape '##'"),
       condition = "INVALID_ESC",
       parameters = Map("invalidEscape" -> "'##'"),
-      context = ExpectedContext(fragment = "like 'pattern%' escape '##'", start = 32, stop = 58))
+      context = ExpectedContext(
+        fragment = "like 'pattern%' escape '##'",
+        start = 32,
+        stop = 58))
   }
 
   test("INVALID_SQL_SYNTAX.EMPTY_IN_PREDICATE: Empty IN clause") {
@@ -672,7 +760,10 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       condition = "INVALID_SQL_SYNTAX.EMPTY_IN_PREDICATE",
       sqlState = "42000",
       parameters = Map.empty,
-      context = ExpectedContext(fragment = "IN ()", start = 33, stop = 37))
+      context = ExpectedContext(
+        fragment = "IN ()",
+        start = 33,
+        stop = 37))
 
     // Test with expression IN ()
     // PredicateContext captures "IN ()" starting at position 39
@@ -681,7 +772,10 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       condition = "INVALID_SQL_SYNTAX.EMPTY_IN_PREDICATE",
       sqlState = "42000",
       parameters = Map.empty,
-      context = ExpectedContext(fragment = "IN ()", start = 39, stop = 43))
+      context = ExpectedContext(
+        fragment = "IN ()",
+        start = 39,
+        stop = 43))
 
     // Test with NOT IN ()
     // PredicateContext captures "NOT IN ()" starting at position 33
@@ -690,6 +784,9 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       condition = "INVALID_SQL_SYNTAX.EMPTY_IN_PREDICATE",
       sqlState = "42000",
       parameters = Map.empty,
-      context = ExpectedContext(fragment = "NOT IN ()", start = 33, stop = 41))
+      context = ExpectedContext(
+        fragment = "NOT IN ()",
+        start = 33,
+        stop = 41))
   }
 }

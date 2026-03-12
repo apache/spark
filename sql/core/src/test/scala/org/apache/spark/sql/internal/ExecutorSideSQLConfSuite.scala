@@ -43,8 +43,7 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
   // Create a new [[SparkSession]] running in local-cluster mode.
   override def beforeAll(): Unit = {
     super.beforeAll()
-    spark = SparkSession
-      .builder()
+    spark = SparkSession.builder()
       .master("local-cluster[2,1,1024]")
       .appName("testing")
       .getOrCreate()
@@ -63,8 +62,7 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
     pairs.foreach { case (k, v) =>
       SQLConf.get.setConfString(k, v)
     }
-    try f
-    finally {
+    try f finally {
       pairs.foreach { case (k, _) =>
         SQLConf.get.unsetConf(k)
       }
@@ -73,13 +71,10 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
 
   test("ReadOnlySQLConf is correctly created at the executor side") {
     withSQLConf("spark.sql.x" -> "a") {
-      val checks = spark
-        .range(10)
-        .mapPartitions { _ =>
-          val conf = SQLConf.get
-          Iterator(conf.isInstanceOf[ReadOnlySQLConf] && conf.getConfString("spark.sql.x") == "a")
-        }
-        .collect()
+      val checks = spark.range(10).mapPartitions { _ =>
+        val conf = SQLConf.get
+        Iterator(conf.isInstanceOf[ReadOnlySQLConf] && conf.getConfString("spark.sql.x") == "a")
+      }.collect()
       assert(checks.forall(_ == true))
     }
   }
@@ -97,30 +92,26 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
 
   test("SPARK-24727 CODEGEN_CACHE_MAX_ENTRIES is correctly referenced at the executor side") {
     withSQLConf(StaticSQLConf.CODEGEN_CACHE_MAX_ENTRIES.key -> "300") {
-      val checks = spark
-        .range(10)
-        .mapPartitions { _ =>
-          val conf = SQLConf.get
-          Iterator(conf.isInstanceOf[ReadOnlySQLConf] &&
-            conf.getConfString(StaticSQLConf.CODEGEN_CACHE_MAX_ENTRIES.key) == "300")
-        }
-        .collect()
+      val checks = spark.range(10).mapPartitions { _ =>
+        val conf = SQLConf.get
+        Iterator(conf.isInstanceOf[ReadOnlySQLConf] &&
+          conf.getConfString(StaticSQLConf.CODEGEN_CACHE_MAX_ENTRIES.key) == "300")
+      }.collect()
       assert(checks.forall(_ == true))
     }
   }
 
-  test(
-    "SPARK-22219: refactor to control to generate comment",
+  test("SPARK-22219: refactor to control to generate comment",
     DisableAdaptiveExecution("WSCG rule is applied later in AQE")) {
     Seq(true, false).foreach { flag =>
       withSQLConf(StaticSQLConf.CODEGEN_COMMENTS.key -> flag.toString) {
         // with AQE on, the WholeStageCodegen rule is applied when running QueryStageExec.
-        val res = codegenStringSeq(
-          spark.range(10).groupBy(col("id") * 2).count().queryExecution.executedPlan)
+        val res = codegenStringSeq(spark.range(10).groupBy(col("id") * 2).count()
+          .queryExecution.executedPlan)
         assert(res.length == 2)
         assert(res.forall { case (_, code, _) =>
           (code.contains("* Codegened pipeline") == flag) &&
-          (code.contains("// input[") == flag)
+            (code.contains("// input[") == flag)
         })
       }
     }

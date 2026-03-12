@@ -47,7 +47,8 @@ class IdentifierClauseParserSuite extends AnalysisTest {
         Seq("val"),
         table("unpivot_test"))
         .where(coalesce($"val").isNotNull)
-        .select(star()))
+        .select(star())
+    )
   }
 
   test("UNPIVOT multi-value column alias with IDENTIFIER()") {
@@ -63,7 +64,8 @@ class IdentifierClauseParserSuite extends AnalysisTest {
         Seq("v1", "v2"),
         table("unpivot_test"))
         .where(coalesce($"v1", $"v2").isNotNull)
-        .select(star()))
+        .select(star())
+    )
   }
 
   test("PIVOT column with IDENTIFIER()") {
@@ -76,7 +78,8 @@ class IdentifierClauseParserSuite extends AnalysisTest {
         Seq(Literal("Q1"), Literal("Q2")),
         Seq(UnresolvedFunction("SUM", Seq($"revenue"), isDistinct = false)),
         table("pivot_test"))
-        .select(star()))
+        .select(star())
+    )
   }
 
   test("PIVOT value alias with IDENTIFIER()") {
@@ -87,10 +90,14 @@ class IdentifierClauseParserSuite extends AnalysisTest {
       Pivot(
         None,
         $"quarter",
-        Seq(Alias(Literal("Q1"), "first_quarter")(), Alias(Literal("Q2"), "second_quarter")()),
+        Seq(
+          Alias(Literal("Q1"), "first_quarter")(),
+          Alias(Literal("Q2"), "second_quarter")()
+        ),
         Seq(Alias(UnresolvedFunction("SUM", Seq($"revenue"), isDistinct = false), "total")()),
         table("pivot_test"))
-        .select(star()))
+        .select(star())
+    )
   }
 
   test("Lambda variable name with IDENTIFIER()") {
@@ -106,13 +113,22 @@ class IdentifierClauseParserSuite extends AnalysisTest {
                 "array",
                 Seq(Literal(1), Literal(2), Literal(3)),
                 isDistinct = false),
-              LambdaFunction(lambdaVar + Literal(1), Seq(lambdaVar))),
-            isDistinct = false)))
+              LambdaFunction(
+                lambdaVar + Literal(1),
+                Seq(lambdaVar)
+              )
+            ),
+            isDistinct = false
+          )
+        )
+    )
   }
 
   test("Struct field names with IDENTIFIER() in CAST") {
-    val structType =
-      StructType(Seq(StructField("field1", IntegerType), StructField("field2", StringType)))
+    val structType = StructType(Seq(
+      StructField("field1", IntegerType),
+      StructField("field2", StringType)
+    ))
     comparePlans(
       parsePlan(
         "SELECT CAST(named_struct('field1', 1, 'field2', 'a') AS " +
@@ -124,7 +140,10 @@ class IdentifierClauseParserSuite extends AnalysisTest {
               "named_struct",
               Seq(Literal("field1"), Literal(1), Literal("field2"), Literal("a")),
               isDistinct = false),
-            structType)))
+            structType
+          )
+        )
+    )
   }
 
   test("Struct field access with IDENTIFIER()") {
@@ -136,7 +155,8 @@ class IdentifierClauseParserSuite extends AnalysisTest {
 
     comparePlans(
       resolvedPlan,
-      table("struct_field_test").select(UnresolvedExtractValue($"data", Literal("field1"))))
+      table("struct_field_test").select(UnresolvedExtractValue($"data", Literal("field1")))
+    )
   }
 
   test("Struct field access with multiple IDENTIFIER() parts") {
@@ -149,7 +169,12 @@ class IdentifierClauseParserSuite extends AnalysisTest {
     comparePlans(
       resolvedPlan,
       table("t").select(
-        UnresolvedExtractValue(UnresolvedExtractValue($"a", Literal("b")), Literal("c"))))
+        UnresolvedExtractValue(
+          UnresolvedExtractValue($"a", Literal("b")),
+          Literal("c")
+        )
+      )
+    )
   }
 
   test("Partition spec with IDENTIFIER() for partition column name") {
@@ -167,7 +192,9 @@ class IdentifierClauseParserSuite extends AnalysisTest {
         Nil,
         values,
         overwrite = false,
-        ifPartitionNotExists = false))
+        ifPartitionNotExists = false
+      )
+    )
   }
 
   test("Pipe operator alias with IDENTIFIER()") {
@@ -180,7 +207,13 @@ class IdentifierClauseParserSuite extends AnalysisTest {
         Seq($"c1", $"c2"),
         SubqueryAlias(
           "pipe_alias",
-          Project(Seq(UnresolvedStar(None)), SubqueryAlias("T", values)))))
+          Project(
+            Seq(UnresolvedStar(None)),
+            SubqueryAlias("T", values)
+          )
+        )
+      )
+    )
   }
 
   test("Pipe operator alias with IDENTIFIER() - second variant") {
@@ -191,7 +224,15 @@ class IdentifierClauseParserSuite extends AnalysisTest {
         "SELECT c1, c2 FROM VALUES(1, 2) AS T(c1, c2) |> AS IDENTIFIER('my_result') |> SELECT *"),
       Project(
         Seq(UnresolvedStar(None)),
-        SubqueryAlias("my_result", Project(Seq($"c1", $"c2"), SubqueryAlias("T", values)))))
+        SubqueryAlias(
+          "my_result",
+          Project(
+            Seq($"c1", $"c2"),
+            SubqueryAlias("T", values)
+          )
+        )
+      )
+    )
   }
 
   test("Resource type ADD is a keyword - should fail") {
@@ -202,7 +243,9 @@ class IdentifierClauseParserSuite extends AnalysisTest {
       context = ExpectedContext(
         fragment = "ADD IDENTIFIER('file') '/tmp/test.txt'",
         start = 0,
-        stop = 37))
+        stop = 37
+      )
+    )
   }
 
   test("Resource type LIST is a keyword - should fail") {
@@ -210,7 +253,12 @@ class IdentifierClauseParserSuite extends AnalysisTest {
       exception = intercept("LIST IDENTIFIER('files')"),
       condition = "INVALID_SQL_SYNTAX.UNSUPPORTED_SQL_STATEMENT",
       parameters = Map("sqlText" -> "LIST IDENTIFIER('files')"),
-      context = ExpectedContext(fragment = "LIST IDENTIFIER('files')", start = 0, stop = 23))
+      context = ExpectedContext(
+        fragment = "LIST IDENTIFIER('files')",
+        start = 0,
+        stop = 23
+      )
+    )
   }
 
   test("CREATE FUNCTION USING resource type is a keyword - should fail") {
@@ -219,14 +267,16 @@ class IdentifierClauseParserSuite extends AnalysisTest {
         "CREATE FUNCTION keyword_test_func AS 'com.example.Test' " +
           "USING IDENTIFIER('jar') '/path/to.jar'"),
       condition = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'('", "hint" -> ""))
+      parameters = Map("error" -> "'('", "hint" -> "")
+    )
   }
 
   test("ANALYZE TABLE NOSCAN is a keyword - should fail") {
     checkError(
-      exception =
-        intercept("ANALYZE TABLE analyze_keyword_test COMPUTE STATISTICS IDENTIFIER('noscan')"),
+      exception = intercept(
+        "ANALYZE TABLE analyze_keyword_test COMPUTE STATISTICS IDENTIFIER('noscan')"),
       condition = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'('", "hint" -> ""))
+      parameters = Map("error" -> "'('", "hint" -> "")
+    )
   }
 }

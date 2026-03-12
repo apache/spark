@@ -27,7 +27,9 @@ import org.apache.spark.sql.execution.columnar.{DefaultCachedBatch, DefaultCache
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.storage.StorageLevel
 
-class CacheTableInKryoSuite extends QueryTest with SQLTestUtils with SharedSparkSession {
+class CacheTableInKryoSuite extends QueryTest
+  with SQLTestUtils
+  with SharedSparkSession {
 
   override def sparkConf: SparkConf = {
     super.sparkConf
@@ -44,16 +46,16 @@ class CacheTableInKryoSuite extends QueryTest with SQLTestUtils with SharedSpark
 
   test("SPARK-51790: UTF8String should be registered in KryoSerializer") {
     withTable("t1") {
-      sql("""
+      sql(
+        """
           |CREATE TABLE t1 AS
           |  SELECT * from
           |  VALUES ('apache', 'spark', 'community'),
           |         ('Apache', 'Spark', 'Community')
           |  as t(a, b, c)
           |""".stripMargin)
-      checkAnswer(
-        sql("SELECT a, b, c FROM t1").persist(StorageLevel.DISK_ONLY),
-        Seq(Row("apache", "spark", "community"), Row("Apache", "Spark", "Community")))
+        checkAnswer(sql("SELECT a, b, c FROM t1").persist(StorageLevel.DISK_ONLY),
+            Seq(Row("apache", "spark", "community"), Row("Apache", "Spark", "Community")))
     }
   }
 
@@ -76,9 +78,7 @@ class CacheTableInKryoSuite extends QueryTest with SQLTestUtils with SharedSpark
 
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
-        ser.write(
-          kryo,
-          ks.newKryoOutput(),
+        ser.write(kryo, ks.newKryoOutput(),
           DefaultCachedBatch(1, Seq(Array.empty[Byte], null).toArray, InternalRow.empty))
       },
       condition = "INVALID_KRYO_SERIALIZER_NO_DATA",

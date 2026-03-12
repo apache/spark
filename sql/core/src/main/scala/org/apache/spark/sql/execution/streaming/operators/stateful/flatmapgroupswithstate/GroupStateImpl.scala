@@ -36,23 +36,21 @@ import org.apache.spark.util.Utils
 /**
  * Internal implementation of the [[TestGroupState]] interface. Methods are not thread-safe.
  *
- * @param optionalValue
- *   Optional value of the state
- * @param batchProcessingTimeMs
- *   Processing time of current batch, used to calculate timestamp for processing time timeouts
- * @param timeoutConf
- *   Type of timeout configured. Based on this, different operations will be supported.
- * @param hasTimedOut
- *   Whether the key for which this state wrapped is being created is getting timed out or not.
+ * @param optionalValue Optional value of the state
+ * @param batchProcessingTimeMs Processing time of current batch, used to calculate timestamp
+ *                              for processing time timeouts
+ * @param timeoutConf     Type of timeout configured. Based on this, different operations will
+ *                        be supported.
+ * @param hasTimedOut     Whether the key for which this state wrapped is being created is
+ *                        getting timed out or not.
  */
-private[sql] class GroupStateImpl[S] private (
+private[sql] class GroupStateImpl[S] private(
     optionalValue: Option[S],
     batchProcessingTimeMs: Long,
     eventTimeWatermarkMs: Long,
     timeoutConf: GroupStateTimeout,
     override val hasTimedOut: Boolean,
-    watermarkPresent: Boolean)
-    extends TestGroupState[S] {
+    watermarkPresent: Boolean) extends TestGroupState[S] {
   // NOTE: if you're adding new properties here, fix:
   // - `json` and `fromJson` methods of this class in Scala
   // - pyspark.sql.streaming.state.GroupStateImpl in Python
@@ -184,24 +182,23 @@ private[sql] class GroupStateImpl[S] private (
     }
   }
 
-  private[sql] def json(): String = compact(
-    render(
-      new JObject(
-        // Constructor
-        "optionalValue" -> JNull :: // Note that optionalValue will be manually serialized.
-          "batchProcessingTimeMs" -> JLong(batchProcessingTimeMs) ::
-          "eventTimeWatermarkMs" -> JLong(eventTimeWatermarkMs) ::
-          "timeoutConf" -> JString(
-            Utils.stripDollars(Utils.getSimpleName(timeoutConf.getClass))) ::
-          "hasTimedOut" -> JBool(hasTimedOut) ::
-          "watermarkPresent" -> JBool(watermarkPresent) ::
+  private[sql] def json(): String = compact(render(new JObject(
+    // Constructor
+    "optionalValue" -> JNull :: // Note that optionalValue will be manually serialized.
+    "batchProcessingTimeMs" -> JLong(batchProcessingTimeMs) ::
+    "eventTimeWatermarkMs" -> JLong(eventTimeWatermarkMs) ::
+    "timeoutConf" -> JString(Utils.stripDollars(Utils.getSimpleName(timeoutConf.getClass))) ::
+    "hasTimedOut" -> JBool(hasTimedOut) ::
+    "watermarkPresent" -> JBool(watermarkPresent) ::
 
-          // Internal state
-          "defined" -> JBool(defined) ::
-          "updated" -> JBool(updated) ::
-          "removed" -> JBool(removed) ::
-          "timeoutTimestamp" -> JLong(timeoutTimestamp) :: Nil)))
+    // Internal state
+    "defined" -> JBool(defined) ::
+    "updated" -> JBool(updated) ::
+    "removed" -> JBool(removed) ::
+    "timeoutTimestamp" -> JLong(timeoutTimestamp) :: Nil
+  )))
 }
+
 
 private[sql] object GroupStateImpl {
   // Value used represent the lack of valid timestamp as a long
@@ -225,12 +222,8 @@ private[sql] object GroupStateImpl {
     }
 
     new GroupStateImpl[S](
-      optionalValue,
-      batchProcessingTimeMs,
-      eventTimeWatermarkMs,
-      timeoutConf,
-      hasTimedOut,
-      watermarkPresent)
+      optionalValue, batchProcessingTimeMs, eventTimeWatermarkMs,
+      timeoutConf, hasTimedOut, watermarkPresent)
   }
 
   def createForBatch(
@@ -270,7 +263,8 @@ private[sql] object GroupStateImpl {
     newGroupState.defined = hmap("defined").asInstanceOf[Boolean]
     newGroupState.updated = hmap("updated").asInstanceOf[Boolean]
     newGroupState.removed = hmap("removed").asInstanceOf[Boolean]
-    newGroupState.timeoutTimestamp = hmap("timeoutTimestamp").asInstanceOf[Number].longValue()
+    newGroupState.timeoutTimestamp =
+      hmap("timeoutTimestamp").asInstanceOf[Number].longValue()
 
     newGroupState
   }

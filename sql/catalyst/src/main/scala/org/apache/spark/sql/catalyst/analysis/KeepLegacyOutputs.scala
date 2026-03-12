@@ -30,18 +30,18 @@ object KeepLegacyOutputs extends Rule[LogicalPlan] {
     if (!conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
       plan
     } else {
-      plan.resolveOperatorsUpWithPruning(_.containsPattern(COMMAND)) {
+      plan.resolveOperatorsUpWithPruning(
+        _.containsPattern(COMMAND)) {
         case s: ShowTables =>
           assert(s.output.length == 3)
           val newOutput = s.output.head.withName("database") +: s.output.tail
           s.copy(output = newOutput)
         case d: DescribeNamespace =>
           assert(d.output.length == 2)
-          d.copy(output = Seq(
-            d.output.head.withName("database_description_item"),
+          d.copy(output = Seq(d.output.head.withName("database_description_item"),
             d.output.last.withName("database_description_value")))
         case s: ShowTableProperties if s.propertyKey.isDefined =>
-          s.copy(output = Seq(s.output.last))
+           s.copy(output = Seq(s.output.last))
       }
     }
   }

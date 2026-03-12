@@ -150,8 +150,7 @@ case class TupleSketchAggDouble(
  * Keys are hashed internally based on their type and value - the same logical value in different
  * types (e.g., String("123") and Int(123)) will be treated as distinct keys. However, summary
  * value types must be consistent across all calls; mixing types can produce incorrect results or
- * precision loss. The value type suffix in the function name (e.g., _integer) ensures type
- * safety.
+ * precision loss. The value type suffix in the function name (e.g., _integer) ensures type safety.
  *
  * See [[https://datasketches.apache.org/docs/Tuple/TupleSketches.html]] for more information.
  *
@@ -488,12 +487,12 @@ abstract class TupleSketchAggBase[U, S <: UpdatableSummary[U]]
   since = "4.2.0")
 // scalastyle:on line.size.limit
 object TupleSketchAggDoubleExpressionBuilder extends ExpressionBuilder {
-  final val defaultFunctionSignature = FunctionSignature(
-    Seq(
-      InputParameter("key"),
-      InputParameter("summary"),
-      InputParameter("lgNomEntries", Some(Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))),
-      InputParameter("mode", Some(Literal(TupleSummaryMode.Sum.toString)))))
+  final val defaultFunctionSignature = FunctionSignature(Seq(
+    InputParameter("key"),
+    InputParameter("summary"),
+    InputParameter("lgNomEntries", Some(Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))),
+    InputParameter("mode", Some(Literal(TupleSummaryMode.Sum.toString)))
+  ))
   override def functionSignature: Option[FunctionSignature] = Some(defaultFunctionSignature)
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     // The rearrange method ensures expressions.size == 4 with defaults filled in
@@ -520,12 +519,12 @@ object TupleSketchAggDoubleExpressionBuilder extends ExpressionBuilder {
   since = "4.2.0")
 // scalastyle:on line.size.limit
 object TupleSketchAggIntegerExpressionBuilder extends ExpressionBuilder {
-  final val defaultFunctionSignature = FunctionSignature(
-    Seq(
-      InputParameter("key"),
-      InputParameter("summary"),
-      InputParameter("lgNomEntries", Some(Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))),
-      InputParameter("mode", Some(Literal(TupleSummaryMode.Sum.toString)))))
+  final val defaultFunctionSignature = FunctionSignature(Seq(
+    InputParameter("key"),
+    InputParameter("summary"),
+    InputParameter("lgNomEntries", Some(Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))),
+    InputParameter("mode", Some(Literal(TupleSummaryMode.Sum.toString)))
+  ))
   override def functionSignature: Option[FunctionSignature] = Some(defaultFunctionSignature)
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     // The rearrange method ensures expressions.size == 4 with defaults filled in

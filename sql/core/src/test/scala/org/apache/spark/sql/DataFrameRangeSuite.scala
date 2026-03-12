@@ -29,6 +29,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
+
 class DataFrameRangeSuite extends QueryTest with SharedSparkSession with Eventually {
 
   test("SPARK-7150 range api") {
@@ -129,12 +130,11 @@ class DataFrameRangeSuite extends QueryTest with SharedSparkSession with Eventua
       val expCount = (start until end by step).size
       val expSum = (start until end by step).sum
 
-      val res =
-        spark.range(start, end, step, partitions).toDF("id").agg(count("id"), sum("id")).collect()
+      val res = spark.range(start, end, step, partitions).toDF("id").
+        agg(count("id"), sum("id")).collect()
 
-      withClue(
-        s"seed = $seed start = $start end = $end step = $step partitions = " +
-          s"$partitions codegen = $codegenEnabled") {
+      withClue(s"seed = $seed start = $start end = $end step = $step partitions = " +
+        s"$partitions codegen = $codegenEnabled") {
         assert(!res.isEmpty)
         assert(res.head.getLong(0) == expCount)
         if (expCount > 0) {
@@ -153,11 +153,8 @@ class DataFrameRangeSuite extends QueryTest with SharedSparkSession with Eventua
 
     sparkContext.addSparkListener(listener)
     val ex = intercept[SparkException] {
-      spark
-        .range(0, 100000000000L, 1, 1)
-        .toDF("id")
-        .agg(sum("id"))
-        .collect()
+      spark.range(0, 100000000000L, 1, 1)
+        .toDF("id").agg(sum("id")).collect()
     }
     ex.getCause() match {
       case null =>
@@ -183,9 +180,8 @@ class DataFrameRangeSuite extends QueryTest with SharedSparkSession with Eventua
     }
   }
 
-  testWithWholeStageCodegenOnAndOff(
-    "SPARK-21041 SparkSession.range()'s behavior is " +
-      "inconsistent with SparkContext.range()") { _ =>
+  testWithWholeStageCodegenOnAndOff("SPARK-21041 SparkSession.range()'s behavior is " +
+    "inconsistent with SparkContext.range()") { _ =>
     val start = java.lang.Long.MAX_VALUE - 3
     val end = java.lang.Long.MIN_VALUE + 2
     assert(spark.range(start, end, 1).collect().length == 0)

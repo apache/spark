@@ -44,7 +44,8 @@ class StreamRealTimeModeAllowlistSuite extends StreamRealTimeModeE2ESuiteBase {
         condition = "STREAMING_REAL_TIME_MODE.INPUT_STREAM_NOT_SUPPORTED",
         parameters = Map(
           "className" ->
-            "org.apache.spark.sql.execution.streaming.sources.RateStreamMicroBatchStream"))
+            "org.apache.spark.sql.execution.streaming.sources.RateStreamMicroBatchStream")
+      )
     }
   }
 
@@ -53,8 +54,7 @@ class StreamRealTimeModeAllowlistSuite extends StreamRealTimeModeE2ESuiteBase {
       val inputData = LowLatencyMemoryStream[Int](2)
       val staticDf = spark.range(1, 31, 1, 10).selectExpr("id AS join_key", "id AS join_value")
 
-      val df = inputData
-        .toDF()
+      val df = inputData.toDF()
         .select(col("value").as("key"), col("value").as("value"))
         .join(staticDf, col("value") === col("join_key"))
         .select(
@@ -72,7 +72,9 @@ class StreamRealTimeModeAllowlistSuite extends StreamRealTimeModeE2ESuiteBase {
               "org.apache.spark.sql.execution.SortExec, " +
                 "org.apache.spark.sql.execution.exchange.ShuffleExchangeExec, " +
                 "org.apache.spark.sql.execution.joins.SortMergeJoinExec are"
-            )))
+              )
+          )
+        )
       }
     }
   }
@@ -95,7 +97,8 @@ class StreamRealTimeModeAllowlistSuite extends StreamRealTimeModeE2ESuiteBase {
       condition = "STREAMING_REAL_TIME_MODE.OPERATOR_OR_SINK_NOT_IN_ALLOWLIST",
       parameters = Map(
         "errorType" -> "sink",
-        "message" -> "org.apache.spark.sql.execution.datasources.noop.NoopTable$ is"))
+        "message" -> "org.apache.spark.sql.execution.datasources.noop.NoopTable$ is"
+      ))
 
     withSQLConf(SQLConf.STREAMING_REAL_TIME_MODE_ALLOWLIST_CHECK.key -> "false") {
       val tmp = query.start()
@@ -106,33 +109,33 @@ class StreamRealTimeModeAllowlistSuite extends StreamRealTimeModeE2ESuiteBase {
 
   // TODO(SPARK-54237) : Remove this test after RTM can shuffle to multiple stages
   test("repartition not allowed") {
-    val inputData = LowLatencyMemoryStream[Int](2)
+      val inputData = LowLatencyMemoryStream[Int](2)
 
-    val df = inputData
-      .toDF()
-      .select(col("value").as("key"))
-      .repartition(4, col("key"))
+      val df = inputData.toDF()
+        .select(col("value").as("key"))
+        .repartition(4, col("key"))
 
-    val query = runStreamingQuery("repartition_allowlist", df)
+      val query = runStreamingQuery("repartition_allowlist", df)
 
-    eventually(timeout(60.seconds)) {
-      checkError(
-        exception = query.exception.get.getCause.asInstanceOf[SparkIllegalArgumentException],
-        condition = "STREAMING_REAL_TIME_MODE.OPERATOR_OR_SINK_NOT_IN_ALLOWLIST",
-        parameters = Map(
-          "errorType" -> "operator",
-          "message" -> (
-            "org.apache.spark.sql.execution.exchange.ShuffleExchangeExec is"
-          )))
-    }
+      eventually(timeout(60.seconds)) {
+        checkError(
+          exception = query.exception.get.getCause.asInstanceOf[SparkIllegalArgumentException],
+          condition = "STREAMING_REAL_TIME_MODE.OPERATOR_OR_SINK_NOT_IN_ALLOWLIST",
+          parameters = Map(
+            "errorType" -> "operator",
+            "message" -> (
+                "org.apache.spark.sql.execution.exchange.ShuffleExchangeExec is"
+              )
+          )
+        )
+      }
   }
 
   // TODO(SPARK-54236) : Remove this test after RTM supports stateful queries
   test("stateful queries not allowed") {
     val inputData = LowLatencyMemoryStream[Int](2)
 
-    val df = inputData
-      .toDF()
+    val df = inputData.toDF()
       .select(col("value").as("key"))
       .groupBy(col("key"))
       .count()
@@ -152,7 +155,9 @@ class StreamRealTimeModeAllowlistSuite extends StreamRealTimeModeE2ESuiteBase {
               "org.apache.spark.sql.execution.streaming" +
               ".operators.stateful.StateStoreRestoreExec, " +
               "org.apache.spark.sql.execution.streaming.operators.stateful.StateStoreSaveExec are"
-          )))
+            )
+        )
+      )
     }
   }
 }

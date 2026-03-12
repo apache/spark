@@ -51,8 +51,8 @@ case class DescribeRelationJsonCommand(
         "json_metadata",
         StringType,
         nullable = false,
-        new MetadataBuilder().putString("comment", "JSON metadata of the table").build())()))
-    extends UnaryRunnableCommand {
+        new MetadataBuilder().putString("comment", "JSON metadata of the table").build())()
+    )) extends UnaryRunnableCommand {
   private lazy val timestampFormatter =
     TimestampFormatter("yyyy-MM-dd'T'HH:mm:ss'Z'", ZoneOffset.UTC, isParsing = false)
 
@@ -91,10 +91,7 @@ case class DescribeRelationJsonCommand(
           // Outputs the partition-specific info for the DDL command:
           // "DESCRIBE [EXTENDED|FORMATTED] table_name PARTITION (partitionVal*)"
           describePartitionInfoJson(
-            sparkSession,
-            sparkSession.sessionState.catalog,
-            metadata,
-            jsonMap)
+            sparkSession, sparkSession.sessionState.catalog, metadata, jsonMap)
         } else {
           describeFormattedTableInfoJson(metadata, jsonMap)
         }
@@ -114,7 +111,10 @@ case class DescribeRelationJsonCommand(
       value: JValue,
       jsonMap: mutable.LinkedHashMap[String, JValue]): Unit = {
     // Rename some JSON keys that are pre-named in describe table implementation
-    val renames = Map("inputformat" -> "input_format", "outputformat" -> "output_format")
+    val renames = Map(
+      "inputformat" -> "input_format",
+      "outputformat" -> "output_format"
+    )
 
     val timestampKeys = Set("created_time", "last_access")
 
@@ -157,42 +157,54 @@ case class DescribeRelationJsonCommand(
         JObject(
           "name" -> JString("array"),
           "element_type" -> jsonType(arrayType.elementType),
-          "element_nullable" -> JBool(arrayType.containsNull))
+          "element_nullable" -> JBool(arrayType.containsNull)
+        )
 
       case mapType: MapType =>
         JObject(
           "name" -> JString("map"),
           "key_type" -> jsonType(mapType.keyType),
           "value_type" -> jsonType(mapType.valueType),
-          "value_nullable" -> JBool(mapType.valueContainsNull))
+          "value_nullable" -> JBool(mapType.valueContainsNull)
+        )
 
       case structType: StructType =>
         val fieldsJson = structType.fields.map { field =>
           val baseJson = List(
             "name" -> JString(field.name),
             "type" -> jsonType(field.dataType),
-            "nullable" -> JBool(field.nullable))
-          val commentJson =
-            field.getComment().map(comment => "comment" -> JString(comment)).toList
+            "nullable" -> JBool(field.nullable)
+          )
+          val commentJson = field.getComment().map(comment => "comment" -> JString(comment)).toList
           val defaultJson =
             field.getCurrentDefaultValue().map(default => "default" -> JString(default)).toList
 
           JObject(baseJson ++ commentJson ++ defaultJson: _*)
         }.toList
 
-        JObject("name" -> JString("struct"), "fields" -> JArray(fieldsJson))
+        JObject(
+          "name" -> JString("struct"),
+          "fields" -> JArray(fieldsJson)
+        )
 
       case decimalType: DecimalType =>
         JObject(
           "name" -> JString("decimal"),
           "precision" -> JInt(decimalType.precision),
-          "scale" -> JInt(decimalType.scale))
+          "scale" -> JInt(decimalType.scale)
+        )
 
       case varcharType: VarcharType =>
-        JObject("name" -> JString("varchar"), "length" -> JInt(varcharType.length))
+        JObject(
+          "name" -> JString("varchar"),
+          "length" -> JInt(varcharType.length)
+        )
 
       case charType: CharType =>
-        JObject("name" -> JString("char"), "length" -> JInt(charType.length))
+        JObject(
+          "name" -> JString("char"),
+          "length" -> JInt(charType.length)
+        )
 
       // Only override TimestampType; TimestampType_NTZ type is already timestamp_ntz
       case _: TimestampType =>
@@ -204,7 +216,8 @@ case class DescribeRelationJsonCommand(
         JObject(
           "name" -> JString("interval"),
           "start_unit" -> JString(getFieldName(yearMonthIntervalType.startField)),
-          "end_unit" -> JString(getFieldName(yearMonthIntervalType.endField)))
+          "end_unit" -> JString(getFieldName(yearMonthIntervalType.endField))
+        )
 
       case dayTimeIntervalType: DayTimeIntervalType =>
         def getFieldName(field: Byte): String = DayTimeIntervalType.fieldToString(field)
@@ -212,10 +225,14 @@ case class DescribeRelationJsonCommand(
         JObject(
           "name" -> JString("interval"),
           "start_unit" -> JString(getFieldName(dayTimeIntervalType.startField)),
-          "end_unit" -> JString(getFieldName(dayTimeIntervalType.endField)))
+          "end_unit" -> JString(getFieldName(dayTimeIntervalType.endField))
+        )
 
       case stringType: StringType =>
-        JObject("name" -> JString("string"), "collation" -> JString(stringType.collationName))
+        JObject(
+          "name" -> JString("string"),
+          "collation" -> JString(stringType.collationName)
+        )
 
       case _ =>
         JObject("name" -> JString(dataType.simpleString))
@@ -226,9 +243,7 @@ case class DescribeRelationJsonCommand(
       schema: StructType,
       jsonMap: mutable.LinkedHashMap[String, JValue]): Unit = {
     val columnsJson = jsonType(StructType(schema.fields))
-      .asInstanceOf[JObject]
-      .find(_.isInstanceOf[JArray])
-      .get
+      .asInstanceOf[JObject].find(_.isInstanceOf[JArray]).get
     addKeyValueToMap("columns", columnsJson, jsonMap)
   }
 
@@ -244,16 +259,15 @@ case class DescribeRelationJsonCommand(
   }
 
   private def describeClusteringInfoJson(
-      table: CatalogTable,
-      jsonMap: mutable.LinkedHashMap[String, JValue]): Unit = {
+      table: CatalogTable, jsonMap: mutable.LinkedHashMap[String, JValue]): Unit = {
     table.clusterBySpec.foreach { clusterBySpec =>
       val clusteringColumnsJson = JArray(clusterBySpec.columnNames.map { fieldNames =>
         val nestedFieldOpt = table.schema.findNestedField(fieldNames.fieldNames.toIndexedSeq)
-        assert(
-          nestedFieldOpt.isDefined,
+        assert(nestedFieldOpt.isDefined,
           "The clustering column " +
             s"${fieldNames.fieldNames.map(quoteIfNeeded).mkString(".")} " +
-            s"was not found in the table schema ${table.schema.catalogString}.")
+            s"was not found in the table schema ${table.schema.catalogString}."
+        )
         JString(fieldNames.fieldNames.map(quoteIfNeeded).mkString("."))
       }.toList)
 
@@ -262,8 +276,7 @@ case class DescribeRelationJsonCommand(
   }
 
   private def describeFormattedTableInfoJson(
-      table: CatalogTable,
-      jsonMap: mutable.LinkedHashMap[String, JValue]): Unit = {
+      table: CatalogTable, jsonMap: mutable.LinkedHashMap[String, JValue]): Unit = {
     table.bucketSpec match {
       case Some(spec) =>
         spec.toJsonLinkedHashMap.foreach { case (key, value) =>

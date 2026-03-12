@@ -58,21 +58,18 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
           |}
         """.stripMargin
 
-      writeDirect(
-        avroStylePath,
-        avroStyleSchema,
-        { rc =>
-          rc.message {
-            rc.field("f", 0) {
-              rc.group {
-                rc.field("array", 0) {
-                  rc.addInteger(0)
-                  rc.addInteger(1)
-                }
+      writeDirect(avroStylePath, avroStyleSchema, { rc =>
+        rc.message {
+          rc.field("f", 0) {
+            rc.group {
+              rc.field("array", 0) {
+                rc.addInteger(0)
+                rc.addInteger(1)
               }
             }
           }
-        })
+        }
+      })
 
       logParquetSchema(avroStylePath)
 
@@ -82,21 +79,22 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
           |}
         """.stripMargin
 
-      writeDirect(
-        protobufStylePath,
-        protobufStyleSchema,
-        { rc =>
-          rc.message {
-            rc.field("f", 0) {
-              rc.addInteger(2)
-              rc.addInteger(3)
-            }
+      writeDirect(protobufStylePath, protobufStyleSchema, { rc =>
+        rc.message {
+          rc.field("f", 0) {
+            rc.addInteger(2)
+            rc.addInteger(3)
           }
-        })
+        }
+      })
 
       logParquetSchema(protobufStylePath)
 
-      checkAnswer(spark.read.parquet(dir.getCanonicalPath), Seq(Row(Seq(0, 1)), Row(Seq(2, 3))))
+      checkAnswer(
+        spark.read.parquet(dir.getCanonicalPath),
+        Seq(
+          Row(Seq(0, 1)),
+          Row(Seq(2, 3))))
     }
   }
 
@@ -107,36 +105,36 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
     Seq(false, true).foreach { legacyMode =>
       Seq(false, true).foreach { offheapEnabled =>
         withSQLConf(
-          SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key -> legacyMode.toString,
-          SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString) {
+            SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key -> legacyMode.toString,
+            SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString) {
           withTempPath { tableDir =>
             val schema1 = StructType(
-              StructField(
-                "col-0",
-                ArrayType(
-                  StructType(StructField("col-0", IntegerType, true) ::
-                    Nil),
-                  containsNull =
-                    false // allows to create 2-level Parquet LIST type in legacy mode
-                )) ::
-                Nil)
+              StructField("col-0", ArrayType(
+                StructType(
+                  StructField("col-0", IntegerType, true) ::
+                  Nil
+                ),
+                containsNull = false // allows to create 2-level Parquet LIST type in legacy mode
+              )) ::
+              Nil
+            )
             val row1 = Row(Seq(Row(1)))
-            val df1 =
-              spark.createDataFrame(spark.sparkContext.parallelize(row1 :: Nil, 1), schema1)
+            val df1 = spark.createDataFrame(spark.sparkContext.parallelize(row1 :: Nil, 1), schema1)
             df1.write.parquet(tableDir.getAbsolutePath)
 
             val schema2 = StructType(
-              StructField(
-                "col-0",
-                ArrayType(
-                  StructType(StructField("col-0", IntegerType, true) ::
-                    StructField("col-1", IntegerType, true) :: // additional field
-                    Nil),
-                  containsNull = false)) ::
-                Nil)
+              StructField("col-0", ArrayType(
+                StructType(
+                  StructField("col-0", IntegerType, true) ::
+                  StructField("col-1", IntegerType, true) :: // additional field
+                  Nil
+                ),
+                containsNull = false
+              )) ::
+              Nil
+            )
             val row2 = Row(Seq(Row(1, 2)))
-            val df2 =
-              spark.createDataFrame(spark.sparkContext.parallelize(row2 :: Nil, 1), schema2)
+            val df2 = spark.createDataFrame(spark.sparkContext.parallelize(row2 :: Nil, 1), schema2)
             df2.write.mode("append").parquet(tableDir.getAbsolutePath)
 
             // Reading of data should succeed and should not fail with
@@ -144,7 +142,11 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
             withAllParquetReaders {
               checkAnswer(
                 spark.read.schema(schema2).parquet(tableDir.getAbsolutePath),
-                Seq(Row(Seq(Row(1, null))), Row(Seq(Row(1, 2)))))
+                Seq(
+                  Row(Seq(Row(1, null))),
+                  Row(Seq(Row(1, 2)))
+                )
+              )
             }
           }
         }
@@ -159,14 +161,19 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
 
     // here are the timestamps in the impala file, as they were saved by impala
     val impalaFileData =
-      Seq("2001-01-01 01:01:01", "2002-02-02 02:02:02", "2003-03-03 03:03:03").map(
-        java.sql.Timestamp.valueOf)
-    val impalaPath =
-      Thread.currentThread().getContextClassLoader.getResource(impalaFile).toURI.getPath
+      Seq(
+        "2001-01-01 01:01:01",
+        "2002-02-02 02:02:02",
+        "2003-03-03 03:03:03"
+      ).map(java.sql.Timestamp.valueOf)
+    val impalaPath = Thread.currentThread().getContextClassLoader.getResource(impalaFile)
+      .toURI.getPath
     withTempPath { tableDir =>
-      val ts = Seq("2004-04-04 04:04:04", "2005-05-05 05:05:05", "2006-06-06 06:06:06").map { s =>
-        java.sql.Timestamp.valueOf(s)
-      }
+      val ts = Seq(
+        "2004-04-04 04:04:04",
+        "2005-05-05 05:05:05",
+        "2006-06-06 06:06:06"
+      ).map { s => java.sql.Timestamp.valueOf(s) }
       import testImplicits._
       // match the column names of the file from impala
       val df = spark.createDataset(ts).toDF().repartition(1).withColumnRenamed("value", "ts")
@@ -176,12 +183,10 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
       Seq(false, true).foreach { int96TimestampConversion =>
         withAllParquetReaders {
           withSQLConf(
-            (
-              SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key,
-              SQLConf.ParquetOutputTimestampType.INT96.toString),
-            (
-              SQLConf.PARQUET_INT96_TIMESTAMP_CONVERSION.key,
-              int96TimestampConversion.toString())) {
+              (SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key,
+                SQLConf.ParquetOutputTimestampType.INT96.toString),
+              (SQLConf.PARQUET_INT96_TIMESTAMP_CONVERSION.key, int96TimestampConversion.toString())
+          ) {
             val readBack = spark.read.parquet(tableDir.getAbsolutePath).collect()
             assert(readBack.length === 6)
             // if we apply the conversion, we'll get the "right" values, as saved by impala in the
@@ -191,16 +196,16 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
               impalaFileData
             } else {
               impalaFileData.map { ts =>
-                DateTimeUtils.toJavaTimestamp(
-                  DateTimeUtils.convertTz(
-                    DateTimeUtils.fromJavaTimestamp(ts),
-                    ZoneOffset.UTC,
-                    DateTimeUtils.getZoneId(conf.sessionLocalTimeZone)))
+                DateTimeUtils.toJavaTimestamp(DateTimeUtils.convertTz(
+                  DateTimeUtils.fromJavaTimestamp(ts),
+                  ZoneOffset.UTC,
+                  DateTimeUtils.getZoneId(conf.sessionLocalTimeZone)))
               }
             }
             val fullExpectations = (ts ++ impalaExpectations).map(_.toString).sorted.toArray
             val actual = readBack.map(_.getTimestamp(0).toString).sorted
-            withClue(s"int96TimestampConversion = $int96TimestampConversion; " +
+            withClue(
+              s"int96TimestampConversion = $int96TimestampConversion; " +
               s"vectorized = ${SQLConf.get.parquetVectorizedReaderEnabled}") {
               assert(fullExpectations === actual)
 
@@ -218,23 +223,18 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
 
               val hadoopConf = spark.sessionState.newHadoopConf()
               val fs = new Path(tableDir.getAbsolutePath).getFileSystem(hadoopConf)
-              val parts = fs.listStatus(
-                new Path(tableDir.getAbsolutePath),
-                new PathFilter {
-                  override def accept(path: Path): Boolean = !path.getName.startsWith("_")
-                })
+              val parts = fs.listStatus(new Path(tableDir.getAbsolutePath), new PathFilter {
+                override def accept(path: Path): Boolean = !path.getName.startsWith("_")
+              })
               // grab the meta data from the parquet file.  The next section of asserts just make
               // sure the test is configured correctly.
               assert(parts.size == 2)
               parts.foreach { part =>
                 val oneFooter = ParquetFooterReader.readFooter(
-                  HadoopInputFile.fromStatus(part, hadoopConf),
-                  NO_FILTER)
+                  HadoopInputFile.fromStatus(part, hadoopConf), NO_FILTER)
                 assert(oneFooter.getFileMetaData.getSchema.getColumns.size === 1)
-                val typeName = oneFooter.getFileMetaData.getSchema.getColumns
-                  .get(0)
-                  .getPrimitiveType
-                  .getPrimitiveTypeName
+                val typeName = oneFooter
+                  .getFileMetaData.getSchema.getColumns.get(0).getPrimitiveType.getPrimitiveTypeName
                 assert(typeName === PrimitiveTypeName.INT96)
                 val oneBlockMeta = oneFooter.getBlocks().get(0)
                 val oneBlockColumnMeta = oneBlockMeta.getColumns().get(0)
@@ -248,8 +248,7 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
               // These queries should return the entire dataset with the conversion applied,
               // but if the predicates were applied to the raw values in parquet, they would
               // incorrectly filter data out.
-              val query = spark.read
-                .parquet(tableDir.getAbsolutePath)
+              val query = spark.read.parquet(tableDir.getAbsolutePath)
                 .where("ts > '2001-01-01 01:00:00'")
               val countWithFilter = query.count()
               val exp = if (int96TimestampConversion) 6 else 5

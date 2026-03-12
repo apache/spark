@@ -36,8 +36,7 @@ class PythonWorkerLogsSuite extends QueryTest with SharedSparkSession {
   protected override def afterEach(): Unit = {
     try {
       val blockManager = spark.sparkContext.env.blockManager
-      blockManager
-        .getMatchingBlockIds(_.isInstanceOf[PythonWorkerLogBlockId])
+      blockManager.getMatchingBlockIds(_.isInstanceOf[PythonWorkerLogBlockId])
         .foreach(blockManager.removeBlock(_))
     } finally {
       super.afterEach()
@@ -55,7 +54,9 @@ class PythonWorkerLogsSuite extends QueryTest with SharedSparkSession {
         parameters = Map(
           "featureName" -> "Python Worker Logging",
           "configKey" -> "spark.sql.pyspark.worker.logging.enabled",
-          "configValue" -> "true"))
+          "configValue" -> "true"
+        )
+      )
     }
   }
 
@@ -66,10 +67,12 @@ class PythonWorkerLogsSuite extends QueryTest with SharedSparkSession {
 
   private def prepareLogs(sessionId: String): Unit = {
     val blockManager = spark.sparkContext.env.blockManager
-    val logBlockWriter =
-      blockManager.getRollingLogWriter(new PythonWorkerLogBlockIdGenerator(sessionId, "1234"))
-    logBlockWriter.writeLog(PythonWorkerLogLine(0L, 1L, """{"level":"INFO","msg":"msg1"}"""))
-    logBlockWriter.writeLog(PythonWorkerLogLine(1L, 2L, """{"level":"ERROR","msg":"msg2"}"""))
+    val logBlockWriter = blockManager.getRollingLogWriter(
+      new PythonWorkerLogBlockIdGenerator(sessionId, "1234"))
+    logBlockWriter.writeLog(
+      PythonWorkerLogLine(0L, 1L, """{"level":"INFO","msg":"msg1"}"""))
+    logBlockWriter.writeLog(
+      PythonWorkerLogLine(1L, 2L, """{"level":"ERROR","msg":"msg2"}"""))
     logBlockWriter.close()
   }
 
@@ -78,7 +81,9 @@ class PythonWorkerLogsSuite extends QueryTest with SharedSparkSession {
 
     val df = spark.tvf.python_worker_logs()
     assert(df.count() == 2)
-    checkAnswer(df.select($"level", $"msg"), Seq(Row("INFO", "msg1"), Row("ERROR", "msg2")))
+    checkAnswer(
+      df.select($"level", $"msg"),
+      Seq(Row("INFO", "msg1"), Row("ERROR", "msg2")))
   }
 
   test("can't read logs for another session") {

@@ -28,27 +28,31 @@ class SSBQuerySuite extends BenchmarkQueryTest {
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    sql("""
+    sql(
+      """
         |CREATE TABLE `part` (`p_partkey` INT, `p_name` STRING, `p_mfgr` STRING,
         |`p_category` STRING, `p_brand1` STRING, `p_color` STRING, `p_type` STRING, `p_size` INT,
         |`p_container` STRING)
         |USING parquet
       """.stripMargin)
 
-    sql("""
+    sql(
+      """
         |CREATE TABLE `supplier` (`s_suppkey` INT, `s_name` STRING, `s_address` STRING,
         |`s_city` STRING, `s_nation` STRING, `s_region` STRING, `s_phone` STRING)
         |USING parquet
       """.stripMargin)
 
-    sql("""
+    sql(
+      """
         |CREATE TABLE `customer` (`c_custkey` INT, `c_name` STRING, `c_address` STRING,
         |`c_city` STRING, `c_nation` STRING, `c_region` STRING, `c_phone` STRING,
         |`c_mktsegment` STRING)
         |USING parquet
       """.stripMargin)
 
-    sql("""
+    sql(
+      """
         |CREATE TABLE `date` (`d_datekey` INT, `d_date` STRING, `d_dayofweek` STRING,
         |`d_month` STRING, `d_year` INT, `d_yearmonthnum` INT, `d_yearmonth` STRING,
         |`d_daynuminweek` INT, `d_daynuminmonth` INT, `d_daynuminyear` INT, `d_monthnuminyear` INT,
@@ -57,7 +61,8 @@ class SSBQuerySuite extends BenchmarkQueryTest {
         |USING parquet
       """.stripMargin)
 
-    sql("""
+    sql(
+      """
         |CREATE TABLE `lineorder` (`lo_orderkey` INT, `lo_linenumber` INT, `lo_custkey` INT,
         |`lo_partkey` INT, `lo_suppkey` INT, `lo_orderdate` INT, `lo_orderpriority` STRING,
         |`lo_shippriority` STRING, `lo_quantity` INT, `lo_extendedprice` INT,
@@ -67,12 +72,12 @@ class SSBQuerySuite extends BenchmarkQueryTest {
       """.stripMargin)
   }
 
-  val ssbQueries =
-    Seq("1.1", "1.2", "1.3", "2.1", "2.2", "2.3", "3.1", "3.2", "3.3", "3.4", "4.1", "4.2", "4.3")
+  val ssbQueries = Seq(
+    "1.1", "1.2", "1.3", "2.1", "2.2", "2.3", "3.1", "3.2", "3.3", "3.4", "4.1", "4.2", "4.3")
 
   ssbQueries.foreach { name =>
-    val queryString =
-      resourceToString(s"ssb/$name.sql", classLoader = Thread.currentThread.getContextClassLoader)
+    val queryString = resourceToString(s"ssb/$name.sql",
+      classLoader = Thread.currentThread.getContextClassLoader)
     test(name) {
       // check the plans can be properly generated
       val plan = sql(queryString).queryExecution.executedPlan

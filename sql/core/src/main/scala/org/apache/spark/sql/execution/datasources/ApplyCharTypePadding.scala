@@ -31,8 +31,8 @@ import org.apache.spark.sql.internal.SQLConf
  * When reading values from column/field of type CHAR(N), right-pad the values to length N, if the
  * read-side padding config is turned on.
  *
- * When comparing char type column/field with string literal or char type column/field, right-pad
- * the shorter one to the longer length.
+ * When comparing char type column/field with string literal or char type column/field,
+ * right-pad the shorter one to the longer length.
  */
 object ApplyCharTypePadding extends Rule[LogicalPlan] {
 
@@ -44,27 +44,22 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
     if (conf.readSideCharPadding) {
       val newPlan = plan.resolveOperatorsUpWithNewOutput {
         case r: LogicalRelation =>
-          ApplyCharTypePaddingHelper.readSidePadding(
-            r,
-            () => r.copy(output = r.output.map(CharVarcharUtils.cleanAttrMetadata)))
+          ApplyCharTypePaddingHelper.readSidePadding(r, () =>
+            r.copy(output = r.output.map(CharVarcharUtils.cleanAttrMetadata)))
         case r: DataSourceV2Relation =>
-          ApplyCharTypePaddingHelper.readSidePadding(
-            r,
-            () => r.copy(output = r.output.map(CharVarcharUtils.cleanAttrMetadata)))
+          ApplyCharTypePaddingHelper.readSidePadding(r, () =>
+            r.copy(output = r.output.map(CharVarcharUtils.cleanAttrMetadata)))
         case r: HiveTableRelation =>
-          ApplyCharTypePaddingHelper.readSidePadding(
-            r,
-            () => {
-              val cleanedDataCols = r.dataCols.map(CharVarcharUtils.cleanAttrMetadata)
-              val cleanedPartCols = r.partitionCols.map(CharVarcharUtils.cleanAttrMetadata)
-              r.copy(dataCols = cleanedDataCols, partitionCols = cleanedPartCols)
-            })
+          ApplyCharTypePaddingHelper.readSidePadding(r, () => {
+            val cleanedDataCols = r.dataCols.map(CharVarcharUtils.cleanAttrMetadata)
+            val cleanedPartCols = r.partitionCols.map(CharVarcharUtils.cleanAttrMetadata)
+            r.copy(dataCols = cleanedDataCols, partitionCols = cleanedPartCols)
+          })
       }
       ApplyCharTypePaddingHelper.paddingForStringComparison(newPlan, padCharCol = false)
     } else {
       ApplyCharTypePaddingHelper.paddingForStringComparison(
-        plan,
-        padCharCol = !conf.getConf(SQLConf.LEGACY_NO_CHAR_PADDING_IN_PREDICATE))
+        plan, padCharCol = !conf.getConf(SQLConf.LEGACY_NO_CHAR_PADDING_IN_PREDICATE))
     }
   }
 }

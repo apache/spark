@@ -36,7 +36,7 @@ class ExamplePoint(val x: Double, val y: Double) extends Serializable {
     that match {
       case e: ExamplePoint =>
         (this.x == e.x || (this.x.isNaN && e.x.isNaN) || (this.x.isInfinity && e.x.isInfinity)) &&
-        (this.y == e.y || (this.y.isNaN && e.y.isNaN) || (this.y.isInfinity && e.y.isInfinity))
+          (this.y == e.y || (this.y.isNaN && e.y.isNaN) || (this.y.isInfinity && e.y.isInfinity))
       case _ => false
     }
   }
@@ -160,8 +160,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       .add("structOfStructOfString", new StructType().add("struct", structOfString))
       .add("structOfArray", new StructType().add("array", arrayOfString))
       .add("structOfMap", new StructType().add("map", mapOfString))
-      .add(
-        "structOfArrayAndMap",
+      .add("structOfArrayAndMap",
         new StructType().add("array", arrayOfString).add("map", mapOfString))
       .add("structOfUDT", structOfUDT))
 
@@ -237,15 +236,20 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       "struct",
       new StructType()
         .add("i", IntegerType, nullable = false)
-        .add("s", new StructType().add("int", IntegerType, nullable = false), nullable = false),
+        .add(
+          "s",
+          new StructType().add("int", IntegerType, nullable = false),
+          nullable = false),
       nullable = false)
     val encoder = ExpressionEncoder(schema).resolveAndBind()
     assert(encoder.serializer.length == 1)
-    assert(
-      encoder.serializer.head.dataType ==
-        new StructType()
-          .add("i", IntegerType, nullable = false)
-          .add("s", new StructType().add("int", IntegerType, nullable = false), nullable = false))
+    assert(encoder.serializer.head.dataType ==
+      new StructType()
+      .add("i", IntegerType, nullable = false)
+      .add(
+        "s",
+        new StructType().add("int", IntegerType, nullable = false),
+        nullable = false))
     assert(encoder.serializer.head.nullable == false)
   }
 
@@ -266,7 +270,8 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       Array(1, 10000, Int.MaxValue),
       Array(1.toLong, 1000000.toLong, Long.MaxValue),
       Array(1.1.toFloat, 123.456.toFloat, Float.MaxValue),
-      Array(11.1111, 123456.7890123, Double.MaxValue))
+      Array(11.1111, 123456.7890123, Double.MaxValue)
+    )
     val convertedBack = roundTrip(encoder, Row.fromSeq(input))
     input.zipWithIndex.map { case (array, index) =>
       assert(convertedBack.getSeq(index) === array)
@@ -304,37 +309,33 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       val encoder = ExpressionEncoder(schema)
       toRow(encoder, Row(1.toShort))
     }
-    assert(
-      e1.getCause.getMessage.contains("The external type java.lang.Short " +
-        "is not valid for the type \"INT\""))
+    assert(e1.getCause.getMessage.contains("The external type java.lang.Short " +
+      "is not valid for the type \"INT\""))
 
     val e2 = intercept[RuntimeException] {
       val schema = new StructType().add("a", StringType)
       val encoder = ExpressionEncoder(schema)
       toRow(encoder, Row(1))
     }
-    assert(
-      e2.getCause.getMessage.contains("The external type java.lang.Integer " +
-        "is not valid for the type \"STRING\""))
+    assert(e2.getCause.getMessage.contains("The external type java.lang.Integer " +
+      "is not valid for the type \"STRING\""))
 
     val e3 = intercept[RuntimeException] {
-      val schema =
-        new StructType().add("a", new StructType().add("b", IntegerType).add("c", StringType))
+      val schema = new StructType().add("a",
+        new StructType().add("b", IntegerType).add("c", StringType))
       val encoder = ExpressionEncoder(schema)
       toRow(encoder, Row(1 -> "a"))
     }
-    assert(
-      e3.getCause.getMessage.contains("The external type scala.Tuple2 is not valid " +
-        "for the type \"STRUCT<b: INT, c: STRING>\""))
+    assert(e3.getCause.getMessage.contains("The external type scala.Tuple2 is not valid " +
+      "for the type \"STRUCT<b: INT, c: STRING>\""))
 
     val e4 = intercept[RuntimeException] {
       val schema = new StructType().add("a", ArrayType(TimestampType))
       val encoder = ExpressionEncoder(schema)
       toRow(encoder, Row(Array("a")))
     }
-    assert(
-      e4.getCause.getMessage.contains("The external type java.lang.String is not valid " +
-        "for the type \"TIMESTAMP\""))
+    assert(e4.getCause.getMessage.contains("The external type java.lang.String is not valid " +
+      "for the type \"TIMESTAMP\""))
   }
 
   private def roundTripArray[T](dt: DataType, nullable: Boolean, data: Array[T]): Unit = {
@@ -431,9 +432,8 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     containsNull <- Seq(true, false)
     nullable <- Seq(true, false)
   } {
-    test(
-      "RowEncoder should preserve array nullability: " +
-        s"ArrayType($elementType, containsNull = $containsNull), nullable = $nullable") {
+    test("RowEncoder should preserve array nullability: " +
+      s"ArrayType($elementType, containsNull = $containsNull), nullable = $nullable") {
       val schema = new StructType().add("array", ArrayType(elementType, containsNull), nullable)
       val encoder = ExpressionEncoder(schema).resolveAndBind()
       assert(encoder.serializer.length == 1)
@@ -448,12 +448,11 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     valueContainsNull <- Seq(true, false)
     nullable <- Seq(true, false)
   } {
-    test(
-      "RowEncoder should preserve map nullability: " +
-        s"MapType($keyType, $valueType, valueContainsNull = $valueContainsNull), " +
-        s"nullable = $nullable") {
-      val schema =
-        new StructType().add("map", MapType(keyType, valueType, valueContainsNull), nullable)
+    test("RowEncoder should preserve map nullability: " +
+      s"MapType($keyType, $valueType, valueContainsNull = $valueContainsNull), " +
+      s"nullable = $nullable") {
+      val schema = new StructType().add(
+        "map", MapType(keyType, valueType, valueContainsNull), nullable)
       val encoder = ExpressionEncoder(schema).resolveAndBind()
       assert(encoder.serializer.length == 1)
       assert(encoder.serializer.head.dataType == MapType(keyType, valueType, valueContainsNull))
@@ -481,8 +480,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
                 s"""
                    |schema: ${schema.simpleString}
                    |input: ${input}
-                 """.stripMargin,
-                e)
+                 """.stripMargin, e)
           }
         }
       }
@@ -500,9 +498,8 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
         val encoder = ExpressionEncoder(schema, lenient = true).resolveAndBind()
         val instant = java.time.Instant.parse("2019-02-26T16:56:00Z")
         val ld = java.time.LocalDate.parse("2022-03-08")
-        val row = encoder
-          .createSerializer()
-          .apply(Row(instant, java.sql.Timestamp.from(instant), ld, java.sql.Date.valueOf(ld)))
+        val row = encoder.createSerializer().apply(
+          Row(instant, java.sql.Timestamp.from(instant), ld, java.sql.Date.valueOf(ld)))
         val expectedMicros = DateTimeUtils.instantToMicros(instant)
         assert(row.getLong(0) === expectedMicros)
         assert(row.getLong(1) === expectedMicros)
@@ -515,12 +512,9 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
 
   test("Encoding an mutable.ArraySeq in scala-2.13") {
     val schema = new StructType()
-      .add(
-        "headers",
-        ArrayType(
-          new StructType()
-            .add("key", StringType)
-            .add("value", BinaryType)))
+      .add("headers", ArrayType(new StructType()
+        .add("key", StringType)
+        .add("value", BinaryType)))
     val encoder = ExpressionEncoder(schema, lenient = true).resolveAndBind()
     val data = Row(mutable.ArraySeq.make(Array(Row("key", "value".getBytes))))
     val row = encoder.createSerializer()(data)
@@ -537,7 +531,8 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
             val row = toRow(encoder, Row(value))
           }),
           condition = "EXCEED_LIMIT_LENGTH",
-          parameters = Map("limit" -> "5"))
+          parameters = Map("limit" -> "5")
+        )
       }
     }
   }
@@ -556,7 +551,8 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
             val value = fromRow(toEncoder, row)
           }),
           condition = "EXCEED_LIMIT_LENGTH",
-          parameters = Map("limit" -> "5"))
+          parameters = Map("limit" -> "5")
+        )
       }
     }
   }

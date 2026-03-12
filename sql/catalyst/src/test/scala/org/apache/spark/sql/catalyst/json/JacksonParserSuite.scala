@@ -39,10 +39,10 @@ class JacksonParserSuite extends SparkFunSuite {
 
   test("skipping rows using pushdown filters") {
     def check(
-        input: String = """{"i":1, "s": "a"}""",
-        schema: StructType = StructType.fromDDL("i INTEGER"),
-        filters: Seq[Filter],
-        expected: Seq[InternalRow]): Unit = {
+      input: String = """{"i":1, "s": "a"}""",
+      schema: StructType = StructType.fromDDL("i INTEGER"),
+      filters: Seq[Filter],
+      expected: Seq[InternalRow]): Unit = {
       val options = new JSONOptions(Map.empty[String, String], "GMT", "")
       val parser = new JacksonParser(schema, options, false, filters)
       val createParser = CreateJacksonParser.string _

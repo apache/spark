@@ -35,7 +35,9 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
     val df = Seq("""<ROW><a>1</a></ROW>""").toDS()
     val schema = new StructType().add("a", IntegerType)
 
-    checkAnswer(df.select(from_xml($"value", schema)), Row(Row(1)) :: Nil)
+    checkAnswer(
+      df.select(from_xml($"value", schema)),
+      Row(Row(1)) :: Nil)
   }
 
   test("SPARK-48300: from_xml - Codegen Support") {
@@ -63,7 +65,9 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
     val schema = new StructType().add("a", IntegerType)
     val options = Map("rowTag" -> "foo").asJava
 
-    checkAnswer(df.select(from_xml($"value", schema, options)), Row(Row(1)) :: Nil)
+    checkAnswer(
+      df.select(from_xml($"value", schema, options)),
+      Row(Row(1)) :: Nil)
   }
 
   test("from_xml with option (dateFormat)") {
@@ -80,14 +84,18 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
     val df = Seq("""<ROW><a>1</a></ROW>""").toDS()
     val schema = new StructType().add("b", IntegerType)
 
-    checkAnswer(df.select(from_xml($"value", schema)), Row(Row(null)) :: Nil)
+    checkAnswer(
+      df.select(from_xml($"value", schema)),
+      Row(Row(null)) :: Nil)
   }
 
   test("from_xml invalid xml") {
     val df = Seq("""<ROW><a>1</ROW>""").toDS()
     val schema = new StructType().add("a", IntegerType)
 
-    checkAnswer(df.select(from_xml($"value", schema)), Row(Row(null)) :: Nil)
+    checkAnswer(
+      df.select(from_xml($"value", schema)),
+      Row(Row(null)) :: Nil)
   }
 
   test("from_xml - xml doesn't conform to the array type") {
@@ -101,7 +109,9 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
     val df = Seq(s"""<ROW> <a>1</a> <a>2</a> </ROW>""".stripMargin).toDS()
     val schema = StructType(StructField("a", ArrayType(IntegerType)) :: Nil)
 
-    checkAnswer(df.select(from_xml($"value", schema)), Row(Row(Array(1, 2))))
+    checkAnswer(
+      df.select(from_xml($"value", schema)),
+      Row(Row(Array(1, 2))))
   }
 
   test("from_xml uses DDL strings for defining a schema - java") {
@@ -114,50 +124,62 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
   test("SPARK-48363: from_xml with non struct schema") {
     checkError(
       exception = intercept[AnalysisException] {
-        Seq("1")
-          .toDS()
-          .select(from_xml($"value", lit("ARRAY<int>"), Map[String, String]().asJava))
+        Seq("1").toDS().select(from_xml($"value", lit("ARRAY<int>"), Map[String, String]().asJava))
       },
       condition = "DATATYPE_MISMATCH.INVALID_XML_SCHEMA",
-      parameters = Map("schema" -> "\"ARRAY<INT>\"", "sqlExpr" -> "\"from_xml(value)\""),
-      context = ExpectedContext(fragment = "from_xml", getCurrentClassCallSitePattern))
+      parameters = Map(
+        "schema" -> "\"ARRAY<INT>\"",
+        "sqlExpr" -> "\"from_xml(value)\""
+      ),
+      context = ExpectedContext(fragment = "from_xml", getCurrentClassCallSitePattern)
+    )
 
     checkError(
       exception = intercept[AnalysisException] {
         Seq("1").toDF("xml").selectExpr(s"from_xml(xml, 'ARRAY<int>')")
       },
       condition = "DATATYPE_MISMATCH.INVALID_XML_SCHEMA",
-      parameters = Map("schema" -> "\"ARRAY<INT>\"", "sqlExpr" -> "\"from_xml(xml)\""),
-      context = ExpectedContext(fragment = "from_xml(xml, 'ARRAY<int>')", start = 0, stop = 26))
+      parameters = Map(
+        "schema" -> "\"ARRAY<INT>\"",
+        "sqlExpr" -> "\"from_xml(xml)\""
+      ),
+      context = ExpectedContext(
+        fragment = "from_xml(xml, 'ARRAY<int>')",
+        start = 0,
+        stop = 26
+      )
+    )
   }
 
   test("to_xml - struct") {
     val schema = StructType(StructField("a", IntegerType, nullable = false) :: Nil)
     val data = Seq(Row(1))
-    val df = spark
-      .createDataFrame(spark.sparkContext.parallelize(data), schema)
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
       .withColumn("a", struct($"a"))
 
     val expected =
       s"""|<ROW>
           |    <a>1</a>
           |</ROW>""".stripMargin
-    checkAnswer(df.select(to_xml($"a")), Row(expected) :: Nil)
+    checkAnswer(
+      df.select(to_xml($"a")),
+      Row(expected) :: Nil)
   }
 
   test("to_xml ISO default - old dates") {
     withSQLConf("spark.sql.session.timeZone" -> "America/Los_Angeles") {
       val schema = StructType(StructField("a", TimestampType, nullable = false) :: Nil)
       val data = Seq(Row(java.sql.Timestamp.valueOf("1800-01-01 00:00:00.0")))
-      val df = spark
-        .createDataFrame(spark.sparkContext.parallelize(data), schema)
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
         .withColumn("a", struct($"a"))
 
       val expected =
         s"""|<ROW>
             |    <a>1800-01-01T00:00:00.000-07:52:58</a>
             |</ROW>""".stripMargin
-      checkAnswer(df.select(to_xml($"a")), Row(expected) :: Nil)
+      checkAnswer(
+        df.select(to_xml($"a")),
+        Row(expected) :: Nil)
     }
   }
 
@@ -165,40 +187,40 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
     val options = Map("timestampFormat" -> "dd/MM/yyyy HH:mm")
     val schema = StructType(StructField("a", TimestampType, nullable = false) :: Nil)
     val data = Seq(Row(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0")))
-    val df = spark
-      .createDataFrame(spark.sparkContext.parallelize(data), schema)
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
       .withColumn("a", struct($"a"))
 
     val expected =
       s"""|<ROW>
           |    <a>26/08/2015 18:00</a>
           |</ROW>""".stripMargin
-    checkAnswer(df.select(to_xml($"a", options.asJava)), Row(expected) :: Nil)
+    checkAnswer(
+      df.select(to_xml($"a", options.asJava)),
+      Row(expected) :: Nil)
   }
 
   test("to_xml with option (dateFormat)") {
     val options = Map("dateFormat" -> "dd/MM/yyyy")
     val schema = StructType(StructField("a", DateType, nullable = false) :: Nil)
     val data = Seq(Row(java.sql.Date.valueOf("2015-08-26")))
-    val df = spark
-      .createDataFrame(spark.sparkContext.parallelize(data), schema)
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
       .withColumn("a", struct($"a"))
 
     val expected =
       s"""|<ROW>
           |    <a>26/08/2015</a>
           |</ROW>""".stripMargin
-    checkAnswer(df.select(to_xml($"a", options.asJava)), Row(expected) :: Nil)
+    checkAnswer(
+      df.select(to_xml($"a", options.asJava)),
+      Row(expected) :: Nil)
   }
 
   test("roundtrip in to_xml and from_xml - struct") {
     val schemaOne = StructType(StructField("a", IntegerType, nullable = false) :: Nil)
     val dataOne = Seq(Row(1, 2, 3))
-    val df1 = spark
-      .createDataFrame(spark.sparkContext.parallelize(dataOne), schemaOne)
+    val df1 = spark.createDataFrame(spark.sparkContext.parallelize(dataOne), schemaOne)
       .withColumn("a", struct($"a"))
-    val readBackOne = df1
-      .select(to_xml($"a").as("xml"))
+    val readBackOne = df1.select(to_xml($"a").as("xml"))
       .select(from_xml($"xml", schemaOne).as("a"))
     checkAnswer(df1, readBackOne)
 
@@ -208,8 +230,7 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
           |</ROW>""".stripMargin
     val schemaTwo = new StructType().add("a", IntegerType)
     val dfTwo = Seq(Some(xml), None).toDF("xml")
-    val readBackTwo = dfTwo
-      .select(from_xml($"xml", schemaTwo).as("struct"))
+    val readBackTwo = dfTwo.select(from_xml($"xml", schemaTwo).as("struct"))
       .select(to_xml($"struct").as("xml"))
     checkAnswer(dfTwo, readBackTwo)
   }
@@ -217,11 +238,9 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
   test("roundtrip in to_xml and from_xml - array") {
     val schemaOne = StructType(StructField("a", ArrayType(IntegerType), nullable = false) :: Nil)
     val dataOne = Seq(Row(Array(1, 2, 3)))
-    val df1 = spark
-      .createDataFrame(spark.sparkContext.parallelize(dataOne), schemaOne)
+    val df1 = spark.createDataFrame(spark.sparkContext.parallelize(dataOne), schemaOne)
       .withColumn("a", struct($"a"))
-    val readBackOne = df1
-      .select(to_xml($"a").as("xml"))
+    val readBackOne = df1.select(to_xml($"a").as("xml"))
       .select(from_xml($"xml", schemaOne).as("a"))
     checkAnswer(df1, readBackOne)
 
@@ -232,8 +251,7 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
           |</ROW>""".stripMargin
     val schemaTwo = new StructType().add("a", ArrayType(IntegerType))
     val dfTwo = Seq(Some(xml), None).toDF("xml")
-    val readBackTwo = dfTwo
-      .select(from_xml($"xml", schemaTwo).as("struct"))
+    val readBackTwo = dfTwo.select(from_xml($"xml", schemaTwo).as("struct"))
       .select(to_xml($"struct").as("xml"))
     checkAnswer(dfTwo, readBackTwo)
   }
@@ -241,14 +259,15 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
   test("Support to_xml in SQL") {
     val schemaOne = StructType(StructField("a", IntegerType, nullable = false) :: Nil)
     val dataOne = Seq(Row(1))
-    val df1 = spark
-      .createDataFrame(spark.sparkContext.parallelize(dataOne), schemaOne)
+    val df1 = spark.createDataFrame(spark.sparkContext.parallelize(dataOne), schemaOne)
       .withColumn("a", struct($"a"))
     val xml =
       s"""|<ROW>
           |    <a>1</a>
           |</ROW>""".stripMargin
-    checkAnswer(df1.selectExpr("to_xml(a)"), Row(xml) :: Nil)
+    checkAnswer (
+      df1.selectExpr("to_xml(a)"),
+      Row(xml) :: Nil)
 
     val xml2 =
       s"""|<ROW>
@@ -256,8 +275,7 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
           |</ROW>""".stripMargin
     val schema2 = StructType(StructField("a", TimestampType, nullable = false) :: Nil)
     val dataTwo = Seq(Row(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0")))
-    val df2 = spark
-      .createDataFrame(spark.sparkContext.parallelize(dataTwo), schema2)
+    val df2 = spark.createDataFrame(spark.sparkContext.parallelize(dataTwo), schema2)
       .withColumn("a", struct($"a"))
     checkAnswer(
       df2.selectExpr("to_xml(a, map('timestampFormat', 'dd/MM/yyyy HH:mm'))"),
@@ -269,8 +287,12 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
       },
       condition = "INVALID_OPTIONS.NON_MAP_FUNCTION",
       parameters = Map.empty,
-      context =
-        ExpectedContext(fragment = "to_xml(a, named_struct('a', 1))", start = 0, stop = 30))
+      context = ExpectedContext(
+        fragment = "to_xml(a, named_struct('a', 1))",
+        start = 0,
+        stop = 30
+      )
+    )
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -278,7 +300,12 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
       },
       condition = "INVALID_OPTIONS.NON_STRING_TYPE",
       parameters = Map("mapType" -> "\"MAP<STRING, INT>\""),
-      context = ExpectedContext(fragment = "to_xml(a, map('a', 1))", start = 0, stop = 21))
+      context = ExpectedContext(
+        fragment = "to_xml(a, map('a', 1))",
+        start = 0,
+        stop = 21
+      )
+    )
   }
 
   test("Support from_xml in SQL") {
@@ -287,7 +314,9 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
           |    <a>1</a>
           |</ROW>""".stripMargin
     val df1 = Seq(xml).toDS()
-    checkAnswer(df1.selectExpr("from_xml(value, 'a INT')"), Row(Row(1)) :: Nil)
+    checkAnswer(
+      df1.selectExpr("from_xml(value, 'a INT')"),
+      Row(Row(1)) :: Nil)
 
     val xml2 =
       s"""|<ROW>
@@ -323,16 +352,28 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
       },
       condition = "INVALID_SCHEMA.NON_STRING_LITERAL",
       parameters = Map("inputSchema" -> "\"1\""),
-      context = ExpectedContext(fragment = "from_xml(value, 1)", start = 0, stop = 17))
+      context = ExpectedContext(
+        fragment = "from_xml(value, 1)",
+        start = 0,
+        stop = 17
+      )
+    )
     checkError(
       exception = intercept[AnalysisException] {
         df3.selectExpr("""from_xml(value, 'time InvalidType')""")
       },
       condition = "PARSE_SYNTAX_ERROR",
       sqlState = "42601",
-      parameters = Map("error" -> "'InvalidType'", "hint" -> ""),
-      context =
-        ExpectedContext(fragment = "from_xml(value, 'time InvalidType')", start = 0, stop = 34))
+      parameters = Map(
+        "error" -> "'InvalidType'",
+        "hint" -> ""
+      ),
+      context = ExpectedContext(
+        fragment = "from_xml(value, 'time InvalidType')",
+        start = 0,
+        stop = 34
+      )
+    )
     checkError(
       exception = intercept[AnalysisException] {
         df3.selectExpr("from_xml(value, 'time Timestamp', named_struct('a', 1))")
@@ -342,7 +383,9 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
       context = ExpectedContext(
         fragment = "from_xml(value, 'time Timestamp', named_struct('a', 1))",
         start = 0,
-        stop = 54))
+        stop = 54
+      )
+    )
     checkError(
       exception = intercept[AnalysisException] {
         df3.selectExpr("from_xml(value, 'time Timestamp', map('a', 1))")
@@ -352,7 +395,9 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
       context = ExpectedContext(
         fragment = "from_xml(value, 'time Timestamp', map('a', 1))",
         start = 0,
-        stop = 45))
+        stop = 45
+      )
+    )
   }
 
   test("infers schemas of xml strings and pass them to from_xml") {
@@ -364,22 +409,20 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
           |</ROW>""".stripMargin
     val in = Seq(xml).toDS()
     val out = in.select(from_xml($"value", schema_of_xml(xml)) as "parsed")
-    val expected = StructType(
-      StructField(
-        "parsed",
-        StructType(StructField("a", ArrayType(LongType, true), true) :: Nil),
-        true) :: Nil)
+    val expected = StructType(StructField(
+      "parsed",
+      StructType(StructField(
+        "a",
+        ArrayType(LongType, true), true) :: Nil),
+      true) :: Nil)
 
     assert(out.schema == expected)
   }
 
   test("infers schemas using options") {
-    val df = spark
-      .range(1)
-      .select(
-        schema_of_xml(
-          lit("<ROW><a>1</a></ROW>"),
-          Map("allowUnquotedFieldNames" -> "true").asJava))
+    val df = spark.range(1)
+      .select(schema_of_xml(lit("<ROW><a>1</a></ROW>"),
+        Map("allowUnquotedFieldNames" -> "true").asJava))
     checkAnswer(df, Seq(Row("STRUCT<a: BIGINT>")))
   }
 
@@ -423,8 +466,7 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
     val df = Seq(badRec, """<ROW><a>1</a><b>12</b></ROW>""").toDS()
 
     checkAnswer(
-      df.select(
-        from_xml($"value", schema, Map("columnNameOfCorruptRecord" -> "_unparsed").asJava)),
+      df.select(from_xml($"value", schema, Map("columnNameOfCorruptRecord" -> "_unparsed").asJava)),
       Row(Row(null, badRec, null)) :: Row(Row(1, null, null)) :: Nil)
   }
 
@@ -458,9 +500,8 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
       s"""|<ROW>
           |    <t>$s</t>
           |</ROW>""".stripMargin
-    val df = Seq(java.sql.Timestamp.valueOf(s))
-      .toDF("t")
-      .select(to_xml(struct($"t"), Map("timestampFormat" -> "yyyy-MM-dd HH:mm:ss.SSSSSS").asJava))
+    val df = Seq(java.sql.Timestamp.valueOf(s)).toDF("t").select(
+      to_xml(struct($"t"), Map("timestampFormat" -> "yyyy-MM-dd HH:mm:ss.SSSSSS").asJava))
     checkAnswer(df, Row(xml))
   }
 
@@ -468,28 +509,24 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
     val options = Map[String, String]().asJava
     val schema = regexp_replace(lit("dpt_org_id INT, dpt_org_city STRING"), "dpt_org_", "")
     checkAnswer(
-      Seq("""<ROW><id>1</id><city>Moscow</city></ROW>""")
-        .toDS()
+      Seq("""<ROW><id>1</id><city>Moscow</city></ROW>""").toDS()
         .select(from_xml($"value", schema, options)),
       Row(Row(1, "Moscow")))
 
     checkError(
       exception = intercept[AnalysisException] {
-        Seq(("""<ROW><i>1</i></ROW>""", "i int"))
-          .toDF("xml", "schema")
-          .select(from_xml($"xml", $"schema", options))
-          .collect()
+        Seq(("""<ROW><i>1</i></ROW>""", "i int")).toDF("xml", "schema")
+          .select(from_xml($"xml", $"schema", options)).collect()
       },
       condition = "INVALID_SCHEMA.NON_STRING_LITERAL",
       parameters = Map("inputSchema" -> "\"schema\""),
-      context = ExpectedContext(fragment = "from_xml", getCurrentClassCallSitePattern))
+      context = ExpectedContext(fragment = "from_xml", getCurrentClassCallSitePattern)
+    )
   }
 
   test("schema_of_xml - infers the schema of foldable XML string") {
     val input = regexp_replace(
-      lit("""<ROW><item_id>1</item_id><item_price>0.1</item_price></ROW>"""),
-      "item_",
-      "")
+      lit("""<ROW><item_id>1</item_id><item_price>0.1</item_price></ROW>"""), "item_", "")
     checkAnswer(
       spark.range(1).select(schema_of_xml(input)),
       Seq(Row("STRUCT<id: BIGINT, price: DOUBLE>")))
@@ -497,13 +534,16 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("schema_of_xml - empty string as string") {
     Seq("""<ROW><id></id></ROW>""").foreach { input =>
-      checkAnswer(spark.range(1).select(schema_of_xml(input)), Seq(Row("STRUCT<id: STRING>")))
+      checkAnswer(
+        spark.range(1).select(schema_of_xml(input)),
+        Seq(Row("STRUCT<id: STRING>")))
     }
   }
 
   test("optional datetime parser does not affect xml time formatting") {
     val s = "2015-08-26 12:34:46"
-    def toDF(p: String): DataFrame = sql(s"""
+    def toDF(p: String): DataFrame = sql(
+      s"""
          |SELECT
          | to_xml(
          |   named_struct('time', timestamp'$s'), map('timestampFormat', "$p")
@@ -522,39 +562,30 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
       (3, LocalTime.of(14, 30, 45, 123000000), "14:30:45.123"),
       (4, LocalTime.of(14, 30, 45, 123400000), "14:30:45.1234"),
       (5, LocalTime.of(14, 30, 45, 123450000), "14:30:45.12345"),
-      (6, LocalTime.of(14, 30, 45, 123456000), "14:30:45.123456"))
+      (6, LocalTime.of(14, 30, 45, 123456000), "14:30:45.123456")
+    )
 
     testData.foreach { case (precision, time, timeStr) =>
       val schema = new StructType().add("time", TimeType(precision))
 
       // Test from_xml
       val xmlInput = s"""<record><time>$timeStr</time></record>"""
-      val parseResult = Seq(xmlInput)
-        .toDS()
+      val parseResult = Seq(xmlInput).toDS()
         .select(from_xml($"value", schema, Map("rowTag" -> "record").asJava))
-        .collect()
-        .head
-        .getAs[Row](0)
-        .getAs[LocalTime](0)
+        .collect().head.getAs[Row](0).getAs[LocalTime](0)
       assert(parseResult == time, s"from_xml failed for precision $precision")
 
       // Test to_xml
       val df = Seq(time).toDF("time").select($"time".cast(TimeType(precision)))
-      val xmlResult = df
-        .select(to_xml(struct($"time"), Map("rowTag" -> "record").asJava))
-        .collect()
-        .head
-        .getString(0)
+      val xmlResult = df.select(to_xml(struct($"time"), Map("rowTag" -> "record").asJava))
+        .collect().head.getString(0)
       assert(xmlResult.contains(timeStr), s"to_xml failed for precision $precision")
 
       // Test roundtrip
       val roundtrip = df
         .select(to_xml(struct($"time"), Map("rowTag" -> "record").asJava).as("xml"))
         .select(from_xml($"xml", schema, Map("rowTag" -> "record").asJava).as("struct"))
-        .select($"struct.time")
-        .collect()
-        .head
-        .getAs[LocalTime](0)
+        .select($"struct.time").collect().head.getAs[LocalTime](0)
       assert(roundtrip == time, s"Roundtrip failed for precision $precision")
     }
 
@@ -564,23 +595,16 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
     val customOptions = Map("rowTag" -> "record", "timeFormat" -> "HH-mm-ss.SSSSSS").asJava
 
     val customXmlInput = """<record><time>14-30-45.123456</time></record>"""
-    val customParseResult = Seq(customXmlInput)
-      .toDS()
+    val customParseResult = Seq(customXmlInput).toDS()
       .select(from_xml($"value", customSchema, customOptions))
-      .collect()
-      .head
-      .getAs[Row](0)
-      .getAs[LocalTime](0)
+      .collect().head.getAs[Row](0).getAs[LocalTime](0)
     assert(customParseResult == customTime, "Custom format from_xml failed")
 
     val customDF = Seq(customTime).toDF("time").select($"time".cast(TimeType(6)))
     val customRoundtrip = customDF
       .select(to_xml(struct($"time"), customOptions).as("xml"))
       .select(from_xml($"xml", customSchema, customOptions).as("struct"))
-      .select($"struct.time")
-      .collect()
-      .head
-      .getAs[LocalTime](0)
+      .select($"struct.time").collect().head.getAs[LocalTime](0)
     assert(customRoundtrip == customTime, "Custom format roundtrip failed")
   }
 }

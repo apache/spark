@@ -30,38 +30,39 @@ import org.apache.spark.sql.types._
 /**
  * Unwrap casts in binary comparison or `In/InSet` operations with patterns like following:
  *
- *   - `BinaryComparison(Cast(fromExp, toType), Literal(value, toType))`
- *   - `BinaryComparison(Literal(value, toType), Cast(fromExp, toType))`
- *   - `In(Cast(fromExp, toType), Seq(Literal(v1, toType), Literal(v2, toType), ...)`
- *   - `InSet(Cast(fromExp, toType), Set(v1, v2, ...))`
+ * - `BinaryComparison(Cast(fromExp, toType), Literal(value, toType))`
+ * - `BinaryComparison(Literal(value, toType), Cast(fromExp, toType))`
+ * - `In(Cast(fromExp, toType), Seq(Literal(v1, toType), Literal(v2, toType), ...)`
+ * - `InSet(Cast(fromExp, toType), Set(v1, v2, ...))`
  *
- * This rule optimizes expressions with the above pattern by either replacing the cast with
- * simpler constructs, or moving the cast from the expression side to the literal side, which
- * enables them to be optimized away later and pushed down to data sources.
+ * This rule optimizes expressions with the above pattern by either replacing the cast with simpler
+ * constructs, or moving the cast from the expression side to the literal side, which enables them
+ * to be optimized away later and pushed down to data sources.
  *
- * Currently this only handles cases where: 1). `fromType` (of `fromExp`) and `toType` are of
- * numeric types (i.e., short, int, float, decimal, etc), boolean type or datetime type 2).
- * `fromType` can be safely coerced to `toType` without precision loss (e.g., short to int, int to
- * long, but not long to int, nor int to boolean)
+ * Currently this only handles cases where:
+ *   1). `fromType` (of `fromExp`) and `toType` are of numeric types (i.e., short, int, float,
+ *     decimal, etc), boolean type or datetime type
+ *   2). `fromType` can be safely coerced to `toType` without precision loss (e.g., short to int,
+ *     int to long, but not long to int, nor int to boolean)
  *
  * If the above conditions are satisfied, the rule checks to see if the literal `value` is within
  * range `(min, max)`, where `min` and `max` are the minimum and maximum value of `fromType`,
  * respectively. If this is true then it means we may safely cast `value` to `fromType` and thus
  * able to move the cast to the literal side. That is:
  *
- * `cast(fromExp, toType) op value` ==> `fromExp op cast(value, fromType)`
+ *   `cast(fromExp, toType) op value` ==> `fromExp op cast(value, fromType)`
  *
  * Note there are some exceptions to the above: if casting from `value` to `fromType` causes
  * rounding up or down, the above conversion will no longer be valid. Instead, the rule does the
  * following:
  *
  * if casting `value` to `fromType` causes rounding up:
- *   - `cast(fromExp, toType) > value` ==> `fromExp >= cast(value, fromType)`
- *   - `cast(fromExp, toType) >= value` ==> `fromExp >= cast(value, fromType)`
- *   - `cast(fromExp, toType) === value` ==> if(isnull(fromExp), null, false)
- *   - `cast(fromExp, toType) <=> value` ==> false (if `fromExp` is deterministic)
- *   - `cast(fromExp, toType) <= value` ==> `fromExp < cast(value, fromType)`
- *   - `cast(fromExp, toType) < value` ==> `fromExp < cast(value, fromType)`
+ *  - `cast(fromExp, toType) > value` ==> `fromExp >= cast(value, fromType)`
+ *  - `cast(fromExp, toType) >= value` ==> `fromExp >= cast(value, fromType)`
+ *  - `cast(fromExp, toType) === value` ==> if(isnull(fromExp), null, false)
+ *  - `cast(fromExp, toType) <=> value` ==> false (if `fromExp` is deterministic)
+ *  - `cast(fromExp, toType) <= value` ==> `fromExp < cast(value, fromType)`
+ *  - `cast(fromExp, toType) < value` ==> `fromExp < cast(value, fromType)`
  *
  * Similarly for the case when casting `value` to `fromType` causes rounding down.
  *
@@ -69,43 +70,44 @@ import org.apache.spark.sql.types._
  * cases and try to replace each with simpler constructs.
  *
  * if `value > max`, the cases are of following:
- *   - `cast(fromExp, toType) > value` ==> if(isnull(fromExp), null, false)
- *   - `cast(fromExp, toType) >= value` ==> if(isnull(fromExp), null, false)
- *   - `cast(fromExp, toType) === value` ==> if(isnull(fromExp), null, false)
- *   - `cast(fromExp, toType) <=> value` ==> false (if `fromExp` is deterministic)
- *   - `cast(fromExp, toType) <= value` ==> if(isnull(fromExp), null, true)
- *   - `cast(fromExp, toType) < value` ==> if(isnull(fromExp), null, true)
+ *  - `cast(fromExp, toType) > value` ==> if(isnull(fromExp), null, false)
+ *  - `cast(fromExp, toType) >= value` ==> if(isnull(fromExp), null, false)
+ *  - `cast(fromExp, toType) === value` ==> if(isnull(fromExp), null, false)
+ *  - `cast(fromExp, toType) <=> value` ==> false (if `fromExp` is deterministic)
+ *  - `cast(fromExp, toType) <= value` ==> if(isnull(fromExp), null, true)
+ *  - `cast(fromExp, toType) < value` ==> if(isnull(fromExp), null, true)
  *
  * if `value == max`, the cases are of following:
- *   - `cast(fromExp, toType) > value` ==> if(isnull(fromExp), null, false)
- *   - `cast(fromExp, toType) >= value` ==> fromExp == max
- *   - `cast(fromExp, toType) === value` ==> fromExp == max
- *   - `cast(fromExp, toType) <=> value` ==> fromExp <=> max
- *   - `cast(fromExp, toType) <= value` ==> if(isnull(fromExp), null, true)
- *   - `cast(fromExp, toType) < value` ==> fromExp =!= max
+ *  - `cast(fromExp, toType) > value` ==> if(isnull(fromExp), null, false)
+ *  - `cast(fromExp, toType) >= value` ==> fromExp == max
+ *  - `cast(fromExp, toType) === value` ==> fromExp == max
+ *  - `cast(fromExp, toType) <=> value` ==> fromExp <=> max
+ *  - `cast(fromExp, toType) <= value` ==> if(isnull(fromExp), null, true)
+ *  - `cast(fromExp, toType) < value` ==> fromExp =!= max
  *
  * Similarly for the cases when `value == min` and `value < min`.
  *
  * Further, the above `if(isnull(fromExp), null, false)` is represented using conjunction
- * `and(isnull(fromExp), null)`, to enable further optimization and filter pushdown to data
- * sources. Similarly, `if(isnull(fromExp), null, true)` is represented with
- * `or(isnotnull(fromExp), null)`.
+ * `and(isnull(fromExp), null)`, to enable further optimization and filter pushdown to data sources.
+ * Similarly, `if(isnull(fromExp), null, true)` is represented with `or(isnotnull(fromExp), null)`.
  *
- * For `In/InSet` operation, first the rule transform the expression to Equals: `Seq(
- * EqualTo(Cast(fromExp, toType), Literal(v1, toType)), EqualTo(Cast(fromExp, toType), Literal(v2,
- * toType)), ... )` and using the same rule with `BinaryComparison` show as before to optimize
- * each `EqualTo`.
+ * For `In/InSet` operation, first the rule transform the expression to Equals:
+ * `Seq(
+ *   EqualTo(Cast(fromExp, toType), Literal(v1, toType)),
+ *   EqualTo(Cast(fromExp, toType), Literal(v2, toType)),
+ *   ...
+ * )`
+ * and using the same rule with `BinaryComparison` show as before to optimize each `EqualTo`.
  */
 object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan =
-    plan.transformWithPruning(_.containsAnyPattern(BINARY_COMPARISON, IN, INSET), ruleId) {
-      case l: LogicalPlan =>
-        l.transformExpressionsUpWithPruning(
-          _.containsAnyPattern(BINARY_COMPARISON, IN, INSET),
-          ruleId) { case e @ (BinaryComparison(_, _) | In(_, _) | InSet(_, _)) =>
-          unwrapCast(e).getOrElse(e)
-        }
-    }
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsAnyPattern(BINARY_COMPARISON, IN, INSET), ruleId) {
+    case l: LogicalPlan =>
+      l.transformExpressionsUpWithPruning(
+        _.containsAnyPattern(BINARY_COMPARISON, IN, INSET), ruleId) {
+        case e @ (BinaryComparison(_, _) | In(_, _) | InSet(_, _)) => unwrapCast(e).getOrElse(e)
+      }
+  }
 
   private def unwrapCast(exp: Expression): Option[Expression] = exp match {
     // Not a canonical form. In this case we first canonicalize the expression by swapping the
@@ -127,26 +129,24 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     // In case both sides have numeric type, optimize the comparison by removing casts or
     // moving cast to the literal side.
     case be @ BinaryComparison(
-          Cast(fromExp, toType: NumericType, _, _),
-          Literal(value, literalType))
+      Cast(fromExp, toType: NumericType, _, _), Literal(value, literalType))
         if canImplicitlyCast(fromExp, toType, literalType) && value != null =>
       Some(simplifyNumericComparison(be, fromExp, toType, value))
 
     case be @ BinaryComparison(
-          Cast(fromExp, _, timeZoneId, evalMode),
-          date @ Literal(value, DateType))
+      Cast(fromExp, _, timeZoneId, evalMode), date @ Literal(value, DateType))
         if AnyTimestampType.acceptsType(fromExp.dataType) && value != null =>
       Some(unwrapDateToTimestamp(be, fromExp, date, timeZoneId, evalMode))
 
-    case be @ BinaryComparison(Cast(fromExp, _, timeZoneId, evalMode), ts @ Literal(value, _))
+    case be @ BinaryComparison(
+      Cast(fromExp, _, timeZoneId, evalMode), ts @ Literal(value, _))
         if fromExp.dataType == DateType && AnyTimestampType.acceptsType(ts.dataType) &&
           value != null =>
       Some(unwrapTimestampToDate(be, fromExp, ts, timeZoneId, evalMode))
 
     // Timestamp/Timestamp_NTZ -> Timestamp_NTZ/Timestamp
     case be @ BinaryComparison(
-          c @ Cast(fromExp, _, timeZoneId, evalMode),
-          Literal(value, literalType))
+      c @ Cast(fromExp, _, timeZoneId, evalMode), Literal(value, literalType))
         if AnyTimestampType.acceptsType(fromExp.dataType) &&
           AnyTimestampType.acceptsType(literalType) && value != null =>
       // datetime with timezone is tricky, do a round trip to check if the rewrite is okay.
@@ -168,13 +168,14 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     // type.
     // 3. this rule doesn't optimize In when `in.list` contains an expression that is not literal.
     case in @ In(Cast(fromExp, toType: NumericType, tz, mode), list @ Seq(firstLit, _*))
-        if canImplicitlyCast(fromExp, toType, firstLit.dataType) && in.inSetConvertible =>
+      if canImplicitlyCast(fromExp, toType, firstLit.dataType) && in.inSetConvertible =>
 
-      val buildIn = { (nullList: ArrayBuffer[Literal], canCastList: ArrayBuffer[Literal]) =>
-        // cast null value to fromExp.dataType, to make sure the new return list is in the same
-        // data type.
-        val newList = nullList.map(lit => Cast(lit, fromExp.dataType, tz, mode)) ++ canCastList
-        In(fromExp, newList.toSeq)
+      val buildIn = {
+        (nullList: ArrayBuffer[Literal], canCastList: ArrayBuffer[Literal]) =>
+          // cast null value to fromExp.dataType, to make sure the new return list is in the same
+          // data type.
+          val newList = nullList.map(lit => Cast(lit, fromExp.dataType, tz, mode)) ++ canCastList
+          In(fromExp, newList.toSeq)
       }
       simplifyIn(fromExp, toType, list, buildIn)
 
@@ -182,11 +183,15 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     // the same data type, so simply check `fromExp.dataType` can implicitly cast to `toType` and
     // both `fromExp.dataType` and `toType` is numeric type or not.
     case InSet(Cast(fromExp, toType: NumericType, _, _), hset)
-        if hset.nonEmpty && canImplicitlyCast(fromExp, toType, toType) =>
+      if hset.nonEmpty && canImplicitlyCast(fromExp, toType, toType) =>
       val buildInSet =
         (nullList: ArrayBuffer[Literal], canCastList: ArrayBuffer[Literal]) =>
           InSet(fromExp, (nullList ++ canCastList).map(_.value).toSet)
-      simplifyIn(fromExp, toType, hset.map(v => Literal.create(v, toType)).toSeq, buildInSet)
+      simplifyIn(
+        fromExp,
+        toType,
+        hset.map(v => Literal.create(v, toType)).toSeq,
+        buildInSet)
 
     case _ => None
   }
@@ -315,9 +320,9 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
   }
 
   /**
-   * Move the cast to the literal side, because we can only get the minimum value of timestamp, so
-   * some BinaryComparison needs to be changed, such as CAST(ts AS date) > DATE '2023-01-01' ===>
-   * ts >= TIMESTAMP '2023-01-02 00:00:00'
+   * Move the cast to the literal side, because we can only get the minimum value of timestamp,
+   * so some BinaryComparison needs to be changed,
+   * such as CAST(ts AS date) > DATE '2023-01-01' ===> ts >= TIMESTAMP '2023-01-02 00:00:00'
    */
   private def unwrapDateToTimestamp(
       exp: BinaryComparison,
@@ -332,12 +337,10 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       case _: GreaterThanOrEqual =>
         GreaterThanOrEqual(fromExp, Cast(date, fromExp.dataType, tz, evalMode))
       case _: EqualTo =>
-        And(
-          GreaterThanOrEqual(fromExp, Cast(date, fromExp.dataType, tz, evalMode)),
+        And(GreaterThanOrEqual(fromExp, Cast(date, fromExp.dataType, tz, evalMode)),
           LessThan(fromExp, Cast(dateAddOne, fromExp.dataType, tz, evalMode)))
       case EqualNullSafe(left, _) if !left.nullable =>
-        And(
-          GreaterThanOrEqual(fromExp, Cast(date, fromExp.dataType, tz, evalMode)),
+        And(GreaterThanOrEqual(fromExp, Cast(date, fromExp.dataType, tz, evalMode)),
           LessThan(fromExp, Cast(dateAddOne, fromExp.dataType, tz, evalMode)))
       case _: LessThan =>
         LessThan(fromExp, Cast(date, fromExp.dataType, tz, evalMode))
@@ -454,6 +457,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     }
   }
 
+
   /**
    * Check if the input `fromExp` can be safely cast to `toType` without any loss of precision,
    * i.e., the conversion is injective. Note this only handles the case when both sides are of
@@ -464,9 +468,9 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       toType: DataType,
       literalType: DataType): Boolean = {
     DataTypeUtils.sameType(toType, literalType) &&
-    !fromExp.foldable &&
-    toType.isInstanceOf[NumericType] &&
-    canUnwrapCast(fromExp.dataType, toType)
+      !fromExp.foldable &&
+      toType.isInstanceOf[NumericType] &&
+      canUnwrapCast(fromExp.dataType, toType)
   }
 
   private def canUnwrapCast(from: DataType, to: DataType): Boolean = (from, to) match {

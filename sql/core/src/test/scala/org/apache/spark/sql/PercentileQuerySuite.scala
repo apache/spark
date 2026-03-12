@@ -31,14 +31,13 @@ class PercentileQuerySuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-39567: Support Ansi Interval type in Percentile") {
     withTempView(table) {
-      Seq(
-        (Period.ofMonths(100), Duration.ofSeconds(100L)),
+      Seq((Period.ofMonths(100), Duration.ofSeconds(100L)),
         (Period.ofMonths(200), Duration.ofSeconds(200L)),
         (Period.ofMonths(300), Duration.ofSeconds(300L)))
-        .toDF("col1", "col2")
-        .createOrReplaceTempView(table)
+        .toDF("col1", "col2").createOrReplaceTempView(table)
       checkAnswer(
-        spark.sql(s"""SELECT
+        spark.sql(
+          s"""SELECT
             |  CAST(percentile(col1, 0.5) AS STRING),
             |  SUM(null),
             |  CAST(percentile(col2, 0.5) AS STRING)

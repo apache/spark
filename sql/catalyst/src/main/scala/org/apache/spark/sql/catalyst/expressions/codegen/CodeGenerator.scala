@@ -54,14 +54,13 @@ import org.apache.spark.util.{LongAccumulator, NonFateSharingCache, ParentClassL
 /**
  * Java source for evaluating an [[Expression]] given a [[InternalRow]] of input.
  *
- * @param code
- *   The sequence of statements required to evaluate the expression. It should be empty string, if
- *   `isNull` and `value` are already existed, or no code needed to evaluate them (literals).
- * @param isNull
- *   A term that holds a boolean value representing whether the expression evaluated to null.
- * @param value
- *   A term for a (possibly primitive) value of the result of the evaluation. Not valid if
- *   `isNull` is set to `true`.
+ * @param code The sequence of statements required to evaluate the expression.
+ *             It should be empty string, if `isNull` and `value` are already existed, or no code
+ *             needed to evaluate them (literals).
+ * @param isNull A term that holds a boolean value representing whether the expression evaluated
+ *                 to null.
+ * @param value A term for a (possibly primitive) value of the result of the evaluation. Not
+ *              valid if `isNull` is set to `true`.
  */
 case class ExprCode(var code: Block, var isNull: ExprValue, var value: ExprValue)
 
@@ -82,13 +81,12 @@ object ExprCode {
 /**
  * State used for subexpression elimination.
  *
- * @param eval
- *   The source code for evaluating the subexpression.
- * @param children
- *   The sequence of subexpressions as the children expressions. Before evaluating this
- *   subexpression, we should evaluate all children subexpressions first. This is used if we want
- *   to selectively evaluate particular subexpressions, instead of all at once. In the case, we
- *   need to make sure we evaluate all children subexpressions too.
+ * @param eval The source code for evaluating the subexpression.
+ * @param children The sequence of subexpressions as the children expressions. Before
+ *                 evaluating this subexpression, we should evaluate all children
+ *                 subexpressions first. This is used if we want to selectively evaluate
+ *                 particular subexpressions, instead of all at once. In the case, we need
+ *                 to make sure we evaluate all children subexpressions too.
  */
 case class SubExprEliminationState(eval: ExprCode, children: Seq[SubExprEliminationState])
 
@@ -97,7 +95,9 @@ object SubExprEliminationState {
     new SubExprEliminationState(eval, Seq.empty)
   }
 
-  def apply(eval: ExprCode, children: Seq[SubExprEliminationState]): SubExprEliminationState = {
+  def apply(
+      eval: ExprCode,
+      children: Seq[SubExprEliminationState]): SubExprEliminationState = {
     new SubExprEliminationState(eval, children.reverse)
   }
 }
@@ -105,10 +105,10 @@ object SubExprEliminationState {
 /**
  * Codes and common subexpressions mapping used for subexpression elimination.
  *
- * @param states
- *   Foreach expression that is participating in subexpression elimination, the state to use.
- * @param exprCodesNeedEvaluate
- *   Some expression codes that need to be evaluated before calling common subexpressions.
+ * @param states Foreach expression that is participating in subexpression elimination,
+ *               the state to use.
+ * @param exprCodesNeedEvaluate Some expression codes that need to be evaluated before
+ *                              calling common subexpressions.
  */
 case class SubExprCodes(
     states: Map[ExpressionEquals, SubExprEliminationState],
@@ -117,14 +117,13 @@ case class SubExprCodes(
 /**
  * The main information about a new added function.
  *
- * @param functionName
- *   String representing the name of the function
- * @param innerClassName
- *   Optional value which is empty if the function is added to the outer class, otherwise it
- *   contains the name of the inner class in which the function has been added.
- * @param innerClassInstance
- *   Optional value which is empty if the function is added to the outer class, otherwise it
- *   contains the name of the instance of the inner class in the outer class.
+ * @param functionName String representing the name of the function
+ * @param innerClassName Optional value which is empty if the function is added to
+ *                       the outer class, otherwise it contains the name of the
+ *                       inner class in which the function has been added.
+ * @param innerClassInstance Optional value which is empty if the function is added to
+ *                           the outer class, otherwise it contains the name of the
+ *                           instance of the inner class in the outer class.
  */
 private[codegen] case class NewFunctionSpec(
     functionName: String,
@@ -163,10 +162,10 @@ class CodegenContext extends Logging {
    * Holding the variable name of the input row of the current operator, will be used by
    * `BoundReference` to generate code.
    *
-   * Note that if `currentVars` is not null, `BoundReference` prefers `currentVars` over
-   * `INPUT_ROW` to generate code. If you want to make sure the generated code use `INPUT_ROW`,
-   * you need to set `currentVars` to null, or set `currentVars(i)` to null for certain columns,
-   * before calling `Expression.genCode`.
+   * Note that if `currentVars` is not null, `BoundReference` prefers `currentVars` over `INPUT_ROW`
+   * to generate code. If you want to make sure the generated code use `INPUT_ROW`, you need to set
+   * `currentVars` to null, or set `currentVars(i)` to null for certain columns, before calling
+   * `Expression.genCode`.
    */
   var INPUT_ROW = "i"
 
@@ -178,7 +177,8 @@ class CodegenContext extends Logging {
 
   /**
    * Holding expressions' inlined mutable states like `MonotonicallyIncreasingID.count` as a
-   * 2-tuple: java type, variable name. As an example, ("int", "count") will produce code:
+   * 2-tuple: java type, variable name.
+   * As an example, ("int", "count") will produce code:
    * {{{
    *   private int count;
    * }}}
@@ -192,9 +192,9 @@ class CodegenContext extends Logging {
     mutable.ArrayBuffer.empty[(String, String)]
 
   /**
-   * The mapping between mutable state types and corresponding compacted arrays. The keys are java
-   * type string. The values are [[MutableStateArrays]] which encapsulates the compacted arrays
-   * for the mutable states with the same java type.
+   * The mapping between mutable state types and corresponding compacted arrays.
+   * The keys are java type string. The values are [[MutableStateArrays]] which encapsulates
+   * the compacted arrays for the mutable states with the same java type.
    *
    * Exposed for tests only.
    */
@@ -229,8 +229,8 @@ class CodegenContext extends Logging {
 
     /**
      * Returns the reference of next available slot in current compacted array. The size of each
-     * compacted array is controlled by the constant `MUTABLESTATEARRAY_SIZE_LIMIT`. Once reaching
-     * the threshold, new compacted array is created.
+     * compacted array is controlled by the constant `MUTABLESTATEARRAY_SIZE_LIMIT`.
+     * Once reaching the threshold, new compacted array is created.
      */
     def getNextSlot(): String = {
       if (currentIndex < MUTABLESTATEARRAY_SIZE_LIMIT) {
@@ -257,35 +257,33 @@ class CodegenContext extends Logging {
   /**
    * Add a mutable state as a field to the generated class. c.f. the comments above.
    *
-   * @param javaType
-   *   Java type of the field. Note that short names can be used for some types, e.g. InternalRow,
-   *   UnsafeRow, UnsafeArrayData, etc. Other types will have to specify the fully-qualified Java
-   *   type name. See the code in doCompile() for the list of default imports available. Also,
-   *   generic type arguments are accepted but ignored.
-   * @param variableName
-   *   Name of the field.
-   * @param initFunc
-   *   Function includes statement(s) to put into the init() method to initialize this field. The
-   *   argument is the name of the mutable state variable. If left blank, the field will be
-   *   default-initialized.
-   * @param forceInline
-   *   whether the declaration and initialization code may be inlined rather than compacted.
-   *   Please set `true` into forceInline for one of the followings:
-   *   1. use the original name of the status
-   *   2. expect to non-frequently generate the status (e.g. not much sort operators in one stage)
-   * @param useFreshName
-   *   If this is false and the mutable state ends up inlining in the outer class, the name is not
-   *   changed
-   * @return
-   *   the name of the mutable state variable, which is the original name or fresh name if the
-   *   variable is inlined to the outer class, or an array access if the variable is to be stored
-   *   in an array of variables of the same type. A variable will be inlined into the outer class
-   *   when one of the following conditions are satisfied:
-   *   1. forceInline is true
-   *   2. its type is primitive type and the total number of the inlined mutable variables is less
-   *      than `OUTER_CLASS_VARIABLES_THRESHOLD`
-   *   3. its type is multi-dimensional array When a variable is compacted into an array, the max
-   *      size of the array for compaction is given by `MUTABLESTATEARRAY_SIZE_LIMIT`.
+   * @param javaType Java type of the field. Note that short names can be used for some types,
+   *                 e.g. InternalRow, UnsafeRow, UnsafeArrayData, etc. Other types will have to
+   *                 specify the fully-qualified Java type name. See the code in doCompile() for
+   *                 the list of default imports available.
+   *                 Also, generic type arguments are accepted but ignored.
+   * @param variableName Name of the field.
+   * @param initFunc Function includes statement(s) to put into the init() method to initialize
+   *                 this field. The argument is the name of the mutable state variable.
+   *                 If left blank, the field will be default-initialized.
+   * @param forceInline whether the declaration and initialization code may be inlined rather than
+   *                    compacted. Please set `true` into forceInline for one of the followings:
+   *                    1. use the original name of the status
+   *                    2. expect to non-frequently generate the status
+   *                       (e.g. not much sort operators in one stage)
+   * @param useFreshName If this is false and the mutable state ends up inlining in the outer
+   *                     class, the name is not changed
+   * @return the name of the mutable state variable, which is the original name or fresh name if
+   *         the variable is inlined to the outer class, or an array access if the variable is to
+   *         be stored in an array of variables of the same type.
+   *         A variable will be inlined into the outer class when one of the following conditions
+   *         are satisfied:
+   *         1. forceInline is true
+   *         2. its type is primitive type and the total number of the inlined mutable variables
+   *            is less than `OUTER_CLASS_VARIABLES_THRESHOLD`
+   *         3. its type is multi-dimensional array
+   *         When a variable is compacted into an array, the max size of the array for compaction
+   *         is given by `MUTABLESTATEARRAY_SIZE_LIMIT`.
    */
   def addMutableState(
       javaType: String,
@@ -315,22 +313,19 @@ class CodegenContext extends Logging {
   }
 
   /**
-   * Add an immutable state as a field to the generated class only if it does not exist yet a
-   * field with that name. This helps reducing the number of the generated class' fields, since
-   * the same variable can be reused by many functions.
+   * Add an immutable state as a field to the generated class only if it does not exist yet a field
+   * with that name. This helps reducing the number of the generated class' fields, since the same
+   * variable can be reused by many functions.
    *
    * Even though the added variables are not declared as final, they should never be reassigned in
    * the generated code to prevent errors and unexpected behaviors.
    *
    * Internally, this method calls `addMutableState`.
    *
-   * @param javaType
-   *   Java type of the field.
-   * @param variableName
-   *   Name of the field.
-   * @param initFunc
-   *   Function includes statement(s) to put into the init() method to initialize this field. The
-   *   argument is the name of the mutable state variable.
+   * @param javaType Java type of the field.
+   * @param variableName Name of the field.
+   * @param initFunc Function includes statement(s) to put into the init() method to initialize
+   *                 this field. The argument is the name of the mutable state variable.
    */
   def addImmutableStateIfNotExists(
       javaType: String,
@@ -342,14 +337,10 @@ class CodegenContext extends Logging {
       immutableStates(variableName) = (javaType, initFunc(variableName))
     } else {
       val (prevJavaType, prevInitCode) = existingImmutableState.get
-      assert(
-        prevJavaType == javaType,
-        s"$variableName has already been defined with type " +
-          s"$prevJavaType and now it is tried to define again with type $javaType.")
-      assert(
-        prevInitCode == initFunc(variableName),
-        s"$variableName has already been defined " +
-          s"with different initialization statements.")
+      assert(prevJavaType == javaType, s"$variableName has already been defined with type " +
+        s"$prevJavaType and now it is tried to define again with type $javaType.")
+      assert(prevInitCode == initFunc(variableName), s"$variableName has already been defined " +
+        s"with different initialization statements.")
     }
   }
 
@@ -408,8 +399,8 @@ class CodegenContext extends Logging {
   }
 
   /**
-   * Code statements to initialize states that depend on the partition index. An integer
-   * `partitionIndex` will be made available within the scope.
+   * Code statements to initialize states that depend on the partition index.
+   * An integer `partitionIndex` will be made available within the scope.
    */
   val partitionInitializationStatements: mutable.ArrayBuffer[String] = mutable.ArrayBuffer.empty
 
@@ -422,17 +413,17 @@ class CodegenContext extends Logging {
   }
 
   /**
-   * Holds expressions that are equivalent. Used to perform subexpression elimination during
-   * codegen.
+   * Holds expressions that are equivalent. Used to perform subexpression elimination
+   * during codegen.
    *
-   * For expressions that appear more than once, generate additional code to prevent recomputing
-   * the value.
+   * For expressions that appear more than once, generate additional code to prevent
+   * recomputing the value.
    *
-   * For example, consider two expression generated from this SQL statement: SELECT (col1 + col2),
-   * (col1 + col2) / col3.
+   * For example, consider two expression generated from this SQL statement:
+   *  SELECT (col1 + col2), (col1 + col2) / col3.
    *
-   * equivalentExpressions will match the tree containing `col1 + col2` and it will only be
-   * evaluated once.
+   *  equivalentExpressions will match the tree containing `col1 + col2` and it will only
+   *  be evaluated once.
    */
   private val equivalentExpressions: EquivalentExpressions = new EquivalentExpressions
 
@@ -485,17 +476,14 @@ class CodegenContext extends Logging {
    * function will be returned. Otherwise, the function will be inlined to the `OuterClass` the
    * simple `funcName` will be returned.
    *
-   * @param funcName
-   *   the class-unqualified name of the function
-   * @param funcCode
-   *   the body of the function
-   * @param inlineToOuterClass
-   *   whether the given code must be inlined to the `OuterClass`. This can be necessary when a
-   *   function is declared outside of the context it is eventually referenced and a returned
-   *   qualified function name cannot otherwise be accessed.
-   * @return
-   *   the name of the function, qualified by class if it will be inlined to a private, inner
-   *   class
+   * @param funcName the class-unqualified name of the function
+   * @param funcCode the body of the function
+   * @param inlineToOuterClass whether the given code must be inlined to the `OuterClass`. This
+   *                           can be necessary when a function is declared outside of the context
+   *                           it is eventually referenced and a returned qualified function name
+   *                           cannot otherwise be accessed.
+   * @return the name of the function, qualified by class if it will be inlined to a private,
+   *         inner class
    */
   def addNewFunction(
       funcName: String,
@@ -554,10 +542,10 @@ class CodegenContext extends Logging {
 
     // Nested, private sub-classes have no mutable state (though they do reference the outer class'
     // mutable state), so we declare and initialize them inline to the OuterClass.
-    val initNestedClasses =
-      classes.filter(_._1 != outerClassName).map { case (className, classInstance) =>
+    val initNestedClasses = classes.filter(_._1 != outerClassName).map {
+      case (className, classInstance) =>
         s"private $className $classInstance = new $className();"
-      }
+    }
 
     val declareNestedClasses = classFunctions.filter { case (k, _) => k != outerClassName }.map {
       case (className, functions) =>
@@ -580,8 +568,7 @@ class CodegenContext extends Logging {
 
   /**
    * Add extra source code to the outermost generated class.
-   * @param code
-   *   verbatim source code of the inner class to be added.
+   * @param code verbatim source code of the inner class to be added.
    */
   def addInnerClass(code: String): Unit = {
     extraClasses.append(code)
@@ -648,18 +635,16 @@ class CodegenContext extends Logging {
     case CalendarIntervalType => s"$c1.equals($c2)"
     case NullType => "false"
     case _ =>
-      throw QueryExecutionErrors.cannotGenerateCodeForIncomparableTypeError("equality", dataType)
+      throw QueryExecutionErrors.cannotGenerateCodeForIncomparableTypeError(
+        "equality", dataType)
   }
 
   /**
    * Generates code for comparing two expressions.
    *
-   * @param dataType
-   *   data type of the expressions
-   * @param c1
-   *   name of the variable of expression 1's output
-   * @param c2
-   *   name of the variable of expression 2's output
+   * @param dataType data type of the expressions
+   * @param c1 name of the variable of expression 1's output
+   * @param c2 name of the variable of expression 2's output
    */
   def genComp(dataType: DataType, c1: String, c2: String): String = dataType match {
     // java boolean doesn't support > or < operator
@@ -758,11 +743,8 @@ class CodegenContext extends Logging {
      """.stripMargin
   }
 
-  private def genCompElementsAt(
-      arrayA: String,
-      arrayB: String,
-      i: String,
-      elementType: DataType): String = {
+  private def genCompElementsAt(arrayA: String, arrayB: String, i: String,
+    elementType : DataType): String = {
     val elementA = freshName("elementA")
     val isNullA = freshName("isNullA")
     val elementB = freshName("elementB")
@@ -791,12 +773,9 @@ class CodegenContext extends Logging {
   /**
    * Generates code for greater of two expressions.
    *
-   * @param dataType
-   *   data type of the expressions
-   * @param c1
-   *   name of the variable of expression 1's output
-   * @param c2
-   *   name of the variable of expression 2's output
+   * @param dataType data type of the expressions
+   * @param c1 name of the variable of expression 1's output
+   * @param c2 name of the variable of expression 2's output
    */
   def genGreater(dataType: DataType, c1: String, c2: String): String = javaType(dataType) match {
     case JAVA_BYTE | JAVA_SHORT | JAVA_INT | JAVA_LONG => s"$c1 > $c2"
@@ -806,12 +785,9 @@ class CodegenContext extends Logging {
   /**
    * Generates code for updating `partialResult` if `item` is smaller than it.
    *
-   * @param dataType
-   *   data type of the expressions
-   * @param partialResult
-   *   `ExprCode` representing the partial result which has to be updated
-   * @param item
-   *   `ExprCode` representing the new expression to evaluate for the result
+   * @param dataType data type of the expressions
+   * @param partialResult `ExprCode` representing the partial result which has to be updated
+   * @param item `ExprCode` representing the new expression to evaluate for the result
    */
   def reassignIfSmaller(dataType: DataType, partialResult: ExprCode, item: ExprCode): String = {
     s"""
@@ -826,12 +802,9 @@ class CodegenContext extends Logging {
   /**
    * Generates code for updating `partialResult` if `item` is greater than it.
    *
-   * @param dataType
-   *   data type of the expressions
-   * @param partialResult
-   *   `ExprCode` representing the partial result which has to be updated
-   * @param item
-   *   `ExprCode` representing the new expression to evaluate for the result
+   * @param dataType data type of the expressions
+   * @param partialResult `ExprCode` representing the partial result which has to be updated
+   * @param item `ExprCode` representing the new expression to evaluate for the result
    */
   def reassignIfGreater(dataType: DataType, partialResult: ExprCode, item: ExprCode): String = {
     s"""
@@ -847,12 +820,9 @@ class CodegenContext extends Logging {
    * Generates code to do null safe execution, i.e. only execute the code when the input is not
    * null by adding null check if necessary.
    *
-   * @param nullable
-   *   used to decide whether we should add null check or not.
-   * @param isNull
-   *   the code to check if the input is null.
-   * @param execute
-   *   the code that should only be executed when the input is not null.
+   * @param nullable used to decide whether we should add null check or not.
+   * @param isNull the code to check if the input is null.
+   * @param execute the code that should only be executed when the input is not null.
    */
   def nullSafeExec(nullable: Boolean, isNull: String)(execute: String): String = {
     if (nullable) {
@@ -867,19 +837,19 @@ class CodegenContext extends Logging {
   }
 
   /**
-   * Generates code to do null safe execution when accessing properties of complex ArrayData
-   * elements.
+   * Generates code to do null safe execution when accessing properties of complex
+   * ArrayData elements.
    *
-   * @param nullElements
-   *   used to decide whether the ArrayData might contain null or not.
-   * @param isNull
-   *   a variable indicating whether the result will be evaluated to null or not.
-   * @param arrayData
-   *   a variable name representing the ArrayData.
-   * @param execute
-   *   the code that should be executed only if the ArrayData doesn't contain any null.
+   * @param nullElements used to decide whether the ArrayData might contain null or not.
+   * @param isNull a variable indicating whether the result will be evaluated to null or not.
+   * @param arrayData a variable name representing the ArrayData.
+   * @param execute the code that should be executed only if the ArrayData doesn't contain
+   *                any null.
    */
-  def nullArrayElementsSaveExec(nullElements: Boolean, isNull: String, arrayData: String)(
+  def nullArrayElementsSaveExec(
+      nullElements: Boolean,
+      isNull: String,
+      arrayData: String)(
       execute: String): String = {
     val i = freshName("idx")
     if (nullElements) {
@@ -897,29 +867,23 @@ class CodegenContext extends Logging {
   }
 
   /**
-   * Splits the generated code of expressions into multiple functions, because function has 64kb
-   * code size limit in JVM. If the class to which the function would be inlined would grow beyond
-   * 1000kb, we declare a private, inner sub-class, and the function is inlined to it instead,
-   * because classes have a constant pool limit of 65,536 named values.
+   * Splits the generated code of expressions into multiple functions, because function has
+   * 64kb code size limit in JVM. If the class to which the function would be inlined would grow
+   * beyond 1000kb, we declare a private, inner sub-class, and the function is inlined to it
+   * instead, because classes have a constant pool limit of 65,536 named values.
    *
    * Note that different from `splitExpressions`, we will extract the current inputs of this
    * context and pass them to the generated functions. The input is `INPUT_ROW` for normal codegen
    * path, and `currentVars` for whole stage codegen path. Whole stage codegen path is not
    * supported yet.
    *
-   * @param expressions
-   *   the codes to evaluate expressions.
-   * @param funcName
-   *   the split function name base.
-   * @param extraArguments
-   *   the list of (type, name) of the arguments of the split function, except for the current
-   *   inputs like `ctx.INPUT_ROW`.
-   * @param returnType
-   *   the return type of the split function.
-   * @param makeSplitFunction
-   *   makes split function body, e.g. add preparation or cleanup.
-   * @param foldFunctions
-   *   folds the split function calls.
+   * @param expressions the codes to evaluate expressions.
+   * @param funcName the split function name base.
+   * @param extraArguments the list of (type, name) of the arguments of the split function,
+   *                       except for the current inputs like `ctx.INPUT_ROW`.
+   * @param returnType the return type of the split function.
+   * @param makeSplitFunction makes split function body, e.g. add preparation or cleanup.
+   * @param foldFunctions folds the split function calls.
    */
   def splitExpressionsWithCurrentInputs(
       expressions: Seq[String],
@@ -943,23 +907,17 @@ class CodegenContext extends Logging {
   }
 
   /**
-   * Splits the generated code of expressions into multiple functions, because function has 64kb
-   * code size limit in JVM. If the class to which the function would be inlined would grow beyond
-   * 1000kb, we declare a private, inner sub-class, and the function is inlined to it instead,
-   * because classes have a constant pool limit of 65,536 named values.
+   * Splits the generated code of expressions into multiple functions, because function has
+   * 64kb code size limit in JVM. If the class to which the function would be inlined would grow
+   * beyond 1000kb, we declare a private, inner sub-class, and the function is inlined to it
+   * instead, because classes have a constant pool limit of 65,536 named values.
    *
-   * @param expressions
-   *   the codes to evaluate expressions.
-   * @param funcName
-   *   the split function name base.
-   * @param arguments
-   *   the list of (type, name) of the arguments of the split function.
-   * @param returnType
-   *   the return type of the split function.
-   * @param makeSplitFunction
-   *   makes split function body, e.g. add preparation or cleanup.
-   * @param foldFunctions
-   *   folds the split function calls.
+   * @param expressions the codes to evaluate expressions.
+   * @param funcName the split function name base.
+   * @param arguments the list of (type, name) of the arguments of the split function.
+   * @param returnType the return type of the split function.
+   * @param makeSplitFunction makes split function body, e.g. add preparation or cleanup.
+   * @param foldFunctions folds the split function calls.
    */
   def splitExpressions(
       expressions: Seq[String],
@@ -978,8 +936,7 @@ class CodegenContext extends Logging {
         // Passing global variables to the split method is dangerous, as any mutating to it is
         // ignored and may lead to unexpected behavior.
         arguments.foreach { case (_, name) =>
-          assert(
-            !mutableStateNames.contains(name),
+          assert(!mutableStateNames.contains(name),
             s"split function argument $name cannot be a global variable.")
         }
       }
@@ -996,12 +953,10 @@ class CodegenContext extends Logging {
         addNewFunctionInternal(name, code, inlineToOuterClass = false)
       }
 
-      val (outerClassFunctions, innerClassFunctions) =
-        functions.partition(_.innerClassName.isEmpty)
+      val (outerClassFunctions, innerClassFunctions) = functions.partition(_.innerClassName.isEmpty)
 
       val argsString = arguments.map(_._2).mkString(", ")
-      val outerClassFunctionCalls =
-        outerClassFunctions.map(f => s"${f.functionName}($argsString)")
+      val outerClassFunctionCalls = outerClassFunctions.map(f => s"${f.functionName}($argsString)")
 
       val innerClassFunctionCalls = generateInnerClassesFunctionCalls(
         innerClassFunctions,
@@ -1016,11 +971,10 @@ class CodegenContext extends Logging {
   }
 
   /**
-   * Splits the generated code of expressions into multiple sequences of String based on a
-   * threshold of length of a String
+   * Splits the generated code of expressions into multiple sequences of String
+   * based on a threshold of length of a String
    *
-   * @param expressions
-   *   the codes to evaluate expressions.
+   * @param expressions the codes to evaluate expressions.
    */
   private def buildCodeBlocks(expressions: Seq[String]): Seq[String] = {
     val blocks = new ArrayBuffer[String]()
@@ -1045,27 +999,22 @@ class CodegenContext extends Logging {
   }
 
   /**
-   * Here we handle all the methods which have been added to the inner classes and not to the
-   * outer class. Since they can be many, their direct invocation in the outer class adds many
-   * entries to the outer class' constant pool. This can cause the constant pool to past JVM
-   * limit. Moreover, this can cause also the outer class method where all the invocations are
-   * performed to grow beyond the 64k limit. To avoid these problems, we group them and we call
-   * only the grouping methods in the outer class.
+   * Here we handle all the methods which have been added to the inner classes and
+   * not to the outer class.
+   * Since they can be many, their direct invocation in the outer class adds many entries
+   * to the outer class' constant pool. This can cause the constant pool to past JVM limit.
+   * Moreover, this can cause also the outer class method where all the invocations are
+   * performed to grow beyond the 64k limit.
+   * To avoid these problems, we group them and we call only the grouping methods in the
+   * outer class.
    *
-   * @param functions
-   *   a [[Seq]] of [[NewFunctionSpec]] defined in the inner classes
-   * @param funcName
-   *   the split function name base.
-   * @param arguments
-   *   the list of (type, name) of the arguments of the split function.
-   * @param returnType
-   *   the return type of the split function.
-   * @param makeSplitFunction
-   *   makes split function body, e.g. add preparation or cleanup.
-   * @param foldFunctions
-   *   folds the split function calls.
-   * @return
-   *   an [[Iterable]] containing the methods' invocations
+   * @param functions a [[Seq]] of [[NewFunctionSpec]] defined in the inner classes
+   * @param funcName the split function name base.
+   * @param arguments the list of (type, name) of the arguments of the split function.
+   * @param returnType the return type of the split function.
+   * @param makeSplitFunction makes split function body, e.g. add preparation or cleanup.
+   * @param foldFunctions folds the split function calls.
+   * @return an [[Iterable]] containing the methods' invocations
    */
   private def generateInnerClassesFunctionCalls(
       functions: Seq[NewFunctionSpec],
@@ -1147,8 +1096,7 @@ class CodegenContext extends Logging {
    * evaluating a subexpression, this method will clean up the code block to avoid duplicate
    * evaluation.
    */
-  def evaluateSubExprEliminationState(
-      subExprStates: Iterable[SubExprEliminationState]): String = {
+  def evaluateSubExprEliminationState(subExprStates: Iterable[SubExprEliminationState]): String = {
     val code = new StringBuilder()
 
     subExprStates.foreach { state =>
@@ -1161,17 +1109,14 @@ class CodegenContext extends Logging {
   }
 
   /**
-   * Checks and sets up the state and codegen for subexpression elimination in whole-stage
-   * codegen.
+   * Checks and sets up the state and codegen for subexpression elimination in whole-stage codegen.
    *
    * This finds the common subexpressions, generates the code snippets that evaluate those
-   * expressions and populates the mapping of common subexpressions to the generated code
-   * snippets.
+   * expressions and populates the mapping of common subexpressions to the generated code snippets.
    *
    * The generated code snippet for subexpression is wrapped in `SubExprEliminationState`, which
    * contains an `ExprCode` and the children `SubExprEliminationState` if any. The `ExprCode`
-   * includes java source code, result variable name and is-null variable name of the
-   * subexpression.
+   * includes java source code, result variable name and is-null variable name of the subexpression.
    *
    * Besides, this also returns a sequences of `ExprCode` which are expression codes that need to
    * be evaluated (as their input parameters) before evaluating subexpressions.
@@ -1185,8 +1130,8 @@ class CodegenContext extends Logging {
    *   2. Generate code of subexpressions as a whole block of code (non-split case)
    *   3. Check if the total length of the above block is larger than the split-threshold. If so,
    *      try to split it in step 4, otherwise returning the non-split code block.
-   *   4. Check if parameter lengths of all subexpressions satisfy the JVM limitation, if so, try
-   *      to split, otherwise returning the non-split code block.
+   *   4. Check if parameter lengths of all subexpressions satisfy the JVM limitation, if so,
+   *      try to split, otherwise returning the non-split code block.
    *   5. For each subexpression, generating a function and put the code into it. To evaluate the
    *      subexpression, just call the function.
    *
@@ -1243,9 +1188,7 @@ class CodegenContext extends Logging {
 
     val needSplit = nonSplitCode.map(_.eval.code.length).sum > SQLConf.get.methodSplitThreshold
     val (subExprsMap, exprCodes) = if (needSplit) {
-      if (inputVarsForAllFuncs
-          .map(calculateParamLengthFromExprValues)
-          .forall(isValidParamLength)) {
+      if (inputVarsForAllFuncs.map(calculateParamLengthFromExprValues).forall(isValidParamLength)) {
         val localSubExprEliminationExprs =
           mutable.HashMap.empty[ExpressionEquals, SubExprEliminationState]
 
@@ -1316,9 +1259,9 @@ class CodegenContext extends Logging {
   }
 
   /**
-   * Checks and sets up the state and codegen for subexpression elimination. This finds the common
-   * subexpressions, generates the functions that evaluate those expressions and populates the
-   * mapping of common subexpressions to the generated functions.
+   * Checks and sets up the state and codegen for subexpression elimination. This finds the
+   * common subexpressions, generates the functions that evaluate those expressions and populates
+   * the mapping of common subexpressions to the generated functions.
    */
   private def subexpressionElimination(expressions: Seq[Expression]): Unit = {
     // Add each expression tree and compute the common subexpressions.
@@ -1360,8 +1303,7 @@ class CodegenContext extends Logging {
       val subExprCode = s"${addNewFunction(fnName, fn)}($INPUT_ROW);"
       subexprFunctions += subExprCode
       val state = SubExprEliminationState(
-        ExprCode(
-          code"$subExprCode",
+        ExprCode(code"$subExprCode",
           JavaCode.isNullGlobal(isNull),
           JavaCode.global(value, expr.dataType)))
       subExprEliminationExprs += ExpressionEquals(expr) -> state
@@ -1391,17 +1333,16 @@ class CodegenContext extends Logging {
   /**
    * Register a comment and return the corresponding place holder
    *
-   * @param placeholderId
-   *   an optionally specified identifier for the comment's placeholder. The caller should make
-   *   sure this identifier is unique within the compilation unit. If this argument is not
-   *   specified, a fresh identifier will be automatically created and used as the placeholder.
-   * @param force
-   *   whether to force registering the comments
+   * @param placeholderId an optionally specified identifier for the comment's placeholder.
+   *                      The caller should make sure this identifier is unique within the
+   *                      compilation unit. If this argument is not specified, a fresh identifier
+   *                      will be automatically created and used as the placeholder.
+   * @param force whether to force registering the comments
    */
-  def registerComment(
-      text: => String,
-      placeholderId: String = "",
-      force: Boolean = false): Block = {
+   def registerComment(
+       text: => String,
+       placeholderId: String = "",
+       force: Boolean = false): Block = {
     if (force || SQLConf.get.codegenComments) {
       val name = if (placeholderId != "") {
         assert(!placeHolderToComments.contains(placeholderId))
@@ -1434,7 +1375,7 @@ abstract class GeneratedClass {
  * A wrapper for the source code to be compiled by [[CodeGenerator]].
  */
 class CodeAndComment(val body: String, val comment: collection.Map[String, String])
-    extends Serializable {
+  extends Serializable {
   override def equals(that: Any): Boolean = that match {
     case t: CodeAndComment if t.body == body => true
     case _ => false
@@ -1444,17 +1385,17 @@ class CodeAndComment(val body: String, val comment: collection.Map[String, Strin
 }
 
 /**
- * A base class for generators of byte code to perform expression evaluation. Includes a set of
- * helpers for referring to Catalyst types and building trees that perform evaluation of
- * individual expressions.
+ * A base class for generators of byte code to perform expression evaluation.  Includes a set of
+ * helpers for referring to Catalyst types and building trees that perform evaluation of individual
+ * expressions.
  */
 abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Logging {
 
   protected val genericMutableRowType: String = classOf[GenericInternalRow].getName
 
   /**
-   * Generates a class for a given input expression. Called when there is not cached code already
-   * available.
+   * Generates a class for a given input expression.  Called when there is not cached code
+   * already available.
    */
   protected def create(in: InType): OutType
 
@@ -1475,8 +1416,8 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   def generate(expressions: InType): OutType = create(canonicalize(expressions))
 
   /**
-   * Create a new codegen context for expression evaluator, used to store those expressions that
-   * don't support codegen
+   * Create a new codegen context for expression evaluator, used to store those
+   * expressions that don't support codegen
    */
   def newCodeGenContext(): CodegenContext = {
     new CodegenContext
@@ -1543,8 +1484,7 @@ object CodeGenerator extends Logging {
   /**
    * Compile the Java source code into a Java class, using Janino.
    *
-   * @return
-   *   a pair of a generated class and the bytecode statistics of generated functions.
+   * @return a pair of a generated class and the bytecode statistics of generated functions.
    */
   def compile(code: CodeAndComment): (GeneratedClass, ByteCodeStats) = try {
     val classLoaderRef = new HashableWeakReference(Utils.getContextOrSparkClassLoader)
@@ -1596,7 +1536,8 @@ object CodeGenerator extends Logging {
       classOf[CollationAwareUTF8String].getName,
       classOf[CollationFactory].getName,
       classOf[CollationSupport].getName,
-      QueryExecutionErrors.getClass.getName.stripSuffix("$"))
+      QueryExecutionErrors.getClass.getName.stripSuffix("$")
+    )
     evaluator.setExtendedClass(classOf[GeneratedClass])
 
     logBasedOnLevel(SQLConf.get.codegenLogLevel) {
@@ -1605,20 +1546,19 @@ object CodeGenerator extends Logging {
       log"\n${MDC(LogKeys.CODE, CodeFormatter.format(code))}"
     }
 
-    val codeStats =
-      try {
-        evaluator.cook("generated.java", code.body)
-        updateAndGetCompilationStats(evaluator)
-      } catch {
-        case e: InternalCompilerException =>
-          logError("Failed to compile the generated Java code.", e)
-          logGeneratedCode(code)
-          throw QueryExecutionErrors.internalCompilerError(e)
-        case e: CompileException =>
-          logError("Failed to compile the generated Java code.", e)
-          logGeneratedCode(code)
-          throw QueryExecutionErrors.compilerError(e)
-      }
+    val codeStats = try {
+      evaluator.cook("generated.java", code.body)
+      updateAndGetCompilationStats(evaluator)
+    } catch {
+      case e: InternalCompilerException =>
+        logError("Failed to compile the generated Java code.", e)
+        logGeneratedCode(code)
+        throw QueryExecutionErrors.internalCompilerError(e)
+      case e: CompileException =>
+        logError("Failed to compile the generated Java code.", e)
+        logGeneratedCode(code)
+        throw QueryExecutionErrors.compilerError(e)
+    }
 
     (evaluator.getClazz().getConstructor().newInstance().asInstanceOf[GeneratedClass], codeStats)
   }
@@ -1633,9 +1573,9 @@ object CodeGenerator extends Logging {
   }
 
   /**
-   * Returns the bytecode statistics (max method bytecode size, max constant pool size, and # of
-   * inner classes) of generated classes by inspecting Janino classes. Also, this method updates
-   * the metrics information.
+   * Returns the bytecode statistics (max method bytecode size, max constant pool size, and
+   * # of inner classes) of generated classes by inspecting Janino classes.
+   * Also, this method updates the metrics information.
    */
   private def updateAndGetCompilationStats(evaluator: ClassBodyEvaluator): ByteCodeStats = {
     // First retrieve the generated classes.
@@ -1654,11 +1594,10 @@ object CodeGenerator extends Logging {
             CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(byteCodeSize)
 
             if (byteCodeSize > DEFAULT_JVM_HUGE_METHOD_LIMIT) {
-              logInfo(
-                log"Generated method too long to be JIT compiled: " +
-                  log"${MDC(LogKeys.CLASS_NAME, cf.getThisClassName)}." +
-                  log"${MDC(LogKeys.METHOD_NAME, method.getName)} is " +
-                  log"${MDC(LogKeys.BYTECODE_SIZE, byteCodeSize)} bytes")
+              logInfo(log"Generated method too long to be JIT compiled: " +
+                log"${MDC(LogKeys.CLASS_NAME, cf.getThisClassName)}." +
+                log"${MDC(LogKeys.METHOD_NAME, method.getName)} is " +
+                log"${MDC(LogKeys.BYTECODE_SIZE, byteCodeSize)} bytes")
             }
 
             byteCodeSize
@@ -1684,14 +1623,14 @@ object CodeGenerator extends Logging {
    * A cache of generated classes.
    *
    * From the Guava Docs: A Cache is similar to ConcurrentMap, but not quite the same. The most
-   * fundamental difference is that a ConcurrentMap persists all elements that are added to it
-   * until they are explicitly removed. A Cache on the other hand is generally configured to evict
-   * entries automatically, in order to constrain its memory footprint. Note that this cache does
-   * not use weak keys/values and thus does not respond to memory pressure.
+   * fundamental difference is that a ConcurrentMap persists all elements that are added to it until
+   * they are explicitly removed. A Cache on the other hand is generally configured to evict entries
+   * automatically, in order to constrain its memory footprint.  Note that this cache does not use
+   * weak keys/values and thus does not respond to memory pressure.
    *
-   * Codegen can be slow. Use a non fate sharing cache in case a query gets canceled during
-   * codegen while other queries wait on the same code, so that those other queries don't get
-   * wrongly aborted. See [[NonFateSharingCache]] for more details.
+   * Codegen can be slow. Use a non fate sharing cache in case a query gets canceled during codegen
+   * while other queries wait on the same code, so that those other queries don't get wrongly
+   * aborted. See [[NonFateSharingCache]] for more details.
    */
   private val cache = {
     val loadFunc: ((HashableWeakReference, CodeAndComment)) => (GeneratedClass, ByteCodeStats) = {
@@ -1743,22 +1682,20 @@ object CodeGenerator extends Logging {
     dataType match {
       case udt: UserDefinedType[_] => getValue(input, udt.sqlType, ordinal)
       case _ if isPrimitiveType(jt) => s"$input.get${primitiveTypeName(jt)}($ordinal)"
-      case _ =>
-        PhysicalDataType(dataType) match {
-          case _: PhysicalArrayType => s"$input.getArray($ordinal)"
-          case PhysicalBinaryType => s"$input.getBinary($ordinal)"
-          case _: PhysicalGeographyType => s"$input.getGeography($ordinal)"
-          case _: PhysicalGeometryType => s"$input.getGeometry($ordinal)"
-          case PhysicalCalendarIntervalType => s"$input.getInterval($ordinal)"
-          case t: PhysicalDecimalType =>
-            s"$input.getDecimal($ordinal, ${t.precision}, ${t.scale})"
-          case _: PhysicalMapType => s"$input.getMap($ordinal)"
-          case PhysicalNullType => "null"
-          case _: PhysicalStringType => s"$input.getUTF8String($ordinal)"
-          case t: PhysicalStructType => s"$input.getStruct($ordinal, ${t.fields.length})"
-          case PhysicalVariantType => s"$input.getVariant($ordinal)"
-          case _ => s"($jt)$input.get($ordinal, null)"
-        }
+      case _ => PhysicalDataType(dataType) match {
+        case _: PhysicalArrayType => s"$input.getArray($ordinal)"
+        case PhysicalBinaryType => s"$input.getBinary($ordinal)"
+        case _: PhysicalGeographyType => s"$input.getGeography($ordinal)"
+        case _: PhysicalGeometryType => s"$input.getGeometry($ordinal)"
+        case PhysicalCalendarIntervalType => s"$input.getInterval($ordinal)"
+        case t: PhysicalDecimalType => s"$input.getDecimal($ordinal, ${t.precision}, ${t.scale})"
+        case _: PhysicalMapType => s"$input.getMap($ordinal)"
+        case PhysicalNullType => "null"
+        case _: PhysicalStringType => s"$input.getUTF8String($ordinal)"
+        case t: PhysicalStructType => s"$input.getStruct($ordinal, ${t.fields.length})"
+        case PhysicalVariantType => s"$input.getVariant($ordinal)"
+        case _ => s"($jt)$input.get($ordinal, null)"
+      }
     }
   }
 
@@ -1766,17 +1703,12 @@ object CodeGenerator extends Logging {
    * Generates code creating a [[UnsafeArrayData]] or
    * [[org.apache.spark.sql.catalyst.util.GenericArrayData]] based on given parameters.
    *
-   * @param arrayName
-   *   name of the array to create
-   * @param elementType
-   *   data type of the elements in source array
-   * @param numElements
-   *   code representing the number of elements the array should contain
-   * @param additionalErrorMessage
-   *   string to include in the error message
+   * @param arrayName name of the array to create
+   * @param elementType data type of the elements in source array
+   * @param numElements code representing the number of elements the array should contain
+   * @param additionalErrorMessage string to include in the error message
    *
-   * @return
-   *   code representing the allocation of [[ArrayData]]
+   * @return code representing the allocation of [[ArrayData]]
    */
   def createArrayData(
       arrayName: String,
@@ -1797,22 +1729,16 @@ object CodeGenerator extends Logging {
   /**
    * Generates assignment code for an [[ArrayData]]
    *
-   * @param dstArray
-   *   name of the array to be assigned
-   * @param elementType
-   *   data type of the elements in destination and source arrays
-   * @param srcArray
-   *   name of the array to be read
-   * @param needNullCheck
-   *   value which shows whether a nullcheck is required for the returning assignment
-   * @param dstArrayIndex
-   *   an index variable to access each element of destination array
-   * @param srcArrayIndex
-   *   an index variable to access each element of source array
+   * @param dstArray name of the array to be assigned
+   * @param elementType data type of the elements in destination and source arrays
+   * @param srcArray name of the array to be read
+   * @param needNullCheck value which shows whether a nullcheck is required for the returning
+   *                      assignment
+   * @param dstArrayIndex an index variable to access each element of destination array
+   * @param srcArrayIndex an index variable to access each element of source array
    *
-   * @return
-   *   code representing an assignment to each element of the [[ArrayData]], which requires a pair
-   *   of destination and source loop index variables
+   * @return code representing an assignment to each element of the [[ArrayData]], which requires
+   *         a pair of destination and source loop index variables
    */
   def createArrayAssignment(
       dstArray: String,
@@ -1821,10 +1747,7 @@ object CodeGenerator extends Logging {
       dstArrayIndex: String,
       srcArrayIndex: String,
       needNullCheck: Boolean): String = {
-    CodeGenerator.setArrayElement(
-      dstArray,
-      elementType,
-      dstArrayIndex,
+    CodeGenerator.setArrayElement(dstArray, elementType, dstArrayIndex,
       CodeGenerator.getValue(srcArray, elementType, srcArrayIndex),
       if (needNullCheck) Some(s"$srcArray.isNullAt($srcArrayIndex)") else None)
   }
@@ -1851,8 +1774,7 @@ object CodeGenerator extends Logging {
   /**
    * Update a column in MutableRow from ExprCode.
    *
-   * @param isVectorized
-   *   True if the underlying row is of type `ColumnarBatch.Row`, false otherwise
+   * @param isVectorized True if the underlying row is of type `ColumnarBatch.Row`, false otherwise
    */
   def updateColumn(
       row: String,
@@ -1976,12 +1898,12 @@ object CodeGenerator extends Logging {
   /**
    * This methods returns two values in a Tuple.
    *
-   * First value: Extracts all the input variables from references and subexpression elimination
-   * states for a given `expr`. This result will be used to split the generated code of
-   * expressions into multiple functions.
+   * First value: Extracts all the input variables from references and subexpression
+   * elimination states for a given `expr`. This result will be used to split the
+   * generated code of expressions into multiple functions.
    *
-   * Second value: Returns the set of `ExprCodes`s which are necessary codes before evaluating
-   * subexpressions.
+   * Second value: Returns the set of `ExprCodes`s which are necessary codes before
+   * evaluating subexpressions.
    */
   def getLocalInputVariableValues(
       ctx: CodegenContext,
@@ -1996,18 +1918,16 @@ object CodeGenerator extends Logging {
     }
 
     // Collects local variables from a given `expr` tree
-    val collectLocalVariable = (ev: ExprValue) =>
-      ev match {
-        case vv: VariableValue => argSet += vv
-        case _ =>
-      }
+    val collectLocalVariable = (ev: ExprValue) => ev match {
+      case vv: VariableValue => argSet += vv
+      case _ =>
+    }
 
     val stack = mutable.Stack[Expression](expr)
     while (stack.nonEmpty) {
       stack.pop() match {
-        case ref: BoundReference
-            if ctx.currentVars != null &&
-              ctx.currentVars(ref.ordinal) != null =>
+        case ref: BoundReference if ctx.currentVars != null &&
+            ctx.currentVars(ref.ordinal) != null =>
           val exprCode = ctx.currentVars(ref.ordinal)
           // If the referred variable is not evaluated yet.
           if (exprCode.code != EmptyBlock) {
@@ -2050,25 +1970,24 @@ object CodeGenerator extends Logging {
     case udt: UserDefinedType[_] => javaType(udt.sqlType)
     case ObjectType(cls) if cls.isArray => s"${javaType(ObjectType(cls.getComponentType))}[]"
     case ObjectType(cls) => cls.getName
-    case _ =>
-      PhysicalDataType(dt) match {
-        case _: PhysicalArrayType => "ArrayData"
-        case PhysicalBinaryType => "byte[]"
-        case PhysicalBooleanType => JAVA_BOOLEAN
-        case PhysicalByteType => JAVA_BYTE
-        case PhysicalCalendarIntervalType => "CalendarInterval"
-        case PhysicalIntegerType => JAVA_INT
-        case _: PhysicalDecimalType => "Decimal"
-        case PhysicalDoubleType => JAVA_DOUBLE
-        case PhysicalFloatType => JAVA_FLOAT
-        case PhysicalLongType => JAVA_LONG
-        case _: PhysicalMapType => "MapData"
-        case PhysicalShortType => JAVA_SHORT
-        case _: PhysicalStringType => "UTF8String"
-        case _: PhysicalStructType => "InternalRow"
-        case _: PhysicalVariantType => "VariantVal"
-        case _ => "Object"
-      }
+    case _ => PhysicalDataType(dt) match {
+      case _: PhysicalArrayType => "ArrayData"
+      case PhysicalBinaryType => "byte[]"
+      case PhysicalBooleanType => JAVA_BOOLEAN
+      case PhysicalByteType => JAVA_BYTE
+      case PhysicalCalendarIntervalType => "CalendarInterval"
+      case PhysicalIntegerType => JAVA_INT
+      case _: PhysicalDecimalType => "Decimal"
+      case PhysicalDoubleType => JAVA_DOUBLE
+      case PhysicalFloatType => JAVA_FLOAT
+      case PhysicalLongType => JAVA_LONG
+      case _: PhysicalMapType => "MapData"
+      case PhysicalShortType => JAVA_SHORT
+      case _: PhysicalStringType => "UTF8String"
+      case _: PhysicalStructType => "InternalRow"
+      case _: PhysicalVariantType => "VariantVal"
+      case _ => "Object"
+    }
   }
 
   def javaClass(dt: DataType): Class[_] =
@@ -2124,10 +2043,8 @@ object CodeGenerator extends Logging {
 
   /**
    * Returns the representation of default value for a given Java Type.
-   * @param jt
-   *   the string name of the Java type
-   * @param typedNull
-   *   if true, for null literals, return a typed (with a cast) version
+   * @param jt the string name of the Java type
+   * @param typedNull if true, for null literals, return a typed (with a cast) version
    */
   def defaultValue(jt: String, typedNull: Boolean): String = jt match {
     case JAVA_BOOLEAN => "false"
@@ -2145,8 +2062,8 @@ object CodeGenerator extends Logging {
 
   /**
    * Returns the length of parameters for a Java method descriptor. `this` contributes one unit
-   * and a parameter of type long or double contributes two units. Besides, for nullable
-   * parameter, we also need to pass a boolean parameter for the null status.
+   * and a parameter of type long or double contributes two units. Besides, for nullable parameter,
+   * we also need to pass a boolean parameter for the null status.
    */
   def calculateParamLength(params: Seq[Expression]): Int = {
     def paramLengthForExpr(input: Expression): Int = {

@@ -76,11 +76,8 @@ private[sql] object CatalogV2Implicits {
           if (sortCol.isEmpty) {
             bucketSpec = Some(BucketSpec(numBuckets, col.map(_.fieldNames.mkString(".")), Nil))
           } else {
-            bucketSpec = Some(
-              BucketSpec(
-                numBuckets,
-                col.map(_.fieldNames.mkString(".")),
-                sortCol.map(_.fieldNames.mkString("."))))
+            bucketSpec = Some(BucketSpec(numBuckets, col.map(_.fieldNames.mkString(".")),
+              sortCol.map(_.fieldNames.mkString("."))))
           }
 
         case ClusterByTransform(columnNames) =>
@@ -131,10 +128,10 @@ private[sql] object CatalogV2Implicits {
     }
 
     def asProcedureCatalog: ProcedureCatalog = plugin match {
-      case procedureCatalog: ProcedureCatalog =>
-        procedureCatalog
-      case _ =>
-        throw QueryCompilationErrors.missingCatalogProceduresAbilityError(plugin)
+        case procedureCatalog: ProcedureCatalog =>
+          procedureCatalog
+        case _ =>
+          throw QueryCompilationErrors.missingCatalogProceduresAbilityError(plugin)
     }
   }
 
@@ -176,13 +173,11 @@ private[sql] object CatalogV2Implicits {
 
     /**
      * Tries to convert catalog identifier to the table identifier. Table identifier does not
-     * support multiple namespaces (nested namespaces), so if identifier contains nested
-     * namespace, conversion cannot be done
-     * @param catalogName
-     *   Catalog name. Identifier represents just one object in catalog, so it has no catalog name
-     *   needed for table identifier creation
-     * @return
-     *   Table identifier if conversion can be done, None otherwise
+     * support multiple namespaces (nested namespaces), so if identifier contains nested namespace,
+     * conversion cannot be done
+     * @param catalogName Catalog name. Identifier represents just one object in catalog, so it has
+     *                    no catalog name needed for table identifier creation
+     * @return Table identifier if conversion can be done, None otherwise
      */
     def asTableIdentifierOpt(catalogName: Option[String]): Option[TableIdentifier] = {
       ident.namespace().toImmutableArraySeq match {

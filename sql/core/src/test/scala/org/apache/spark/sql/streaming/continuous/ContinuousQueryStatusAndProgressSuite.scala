@@ -24,8 +24,7 @@ import org.apache.spark.tags.SlowSQLTest
 
 @SlowSQLTest
 class ContinuousQueryStatusAndProgressSuite extends ContinuousSuiteBase {
-  test(
-    "StreamingQueryStatus - ContinuousExecution isDataAvailable and isTriggerActive " +
+  test("StreamingQueryStatus - ContinuousExecution isDataAvailable and isTriggerActive " +
       "should be false") {
     import testImplicits._
 

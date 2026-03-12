@@ -30,6 +30,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
 
+
 class OptimizerStructuralIntegrityCheckerSuite extends PlanTest {
 
   object OptimizeRuleBreakSI extends Rule[LogicalPlan] {
@@ -55,11 +56,10 @@ class OptimizerStructuralIntegrityCheckerSuite extends PlanTest {
     }
   }
 
-  object Optimize
-      extends Optimizer(
-        new CatalogManager(
-          FakeV2SessionCatalog,
-          new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry))) {
+  object Optimize extends Optimizer(
+    new CatalogManager(
+      FakeV2SessionCatalog,
+      new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry))) {
     val newBatch = Batch("OptimizeRuleBreakSI", Once, OptimizeRuleBreakSI)
     override def defaultBatches: Seq[Batch] = Seq(newBatch) ++ super.defaultBatches
   }
@@ -77,7 +77,8 @@ class OptimizerStructuralIntegrityCheckerSuite extends PlanTest {
 
   test("check for invalid plan after execution of rule - special expression in wrong operator") {
     val analyzed =
-      Aggregate(Nil, Seq[NamedExpression](max($"id") as "m"), LocalRelation($"id".long)).analyze
+      Aggregate(Nil, Seq[NamedExpression](max($"id") as "m"),
+        LocalRelation($"id".long)).analyze
     assert(analyzed.resolved)
 
     // Should fail verification with the OptimizeRuleBreakSI rule
@@ -97,7 +98,8 @@ class OptimizerStructuralIntegrityCheckerSuite extends PlanTest {
       $"c1".struct(new StructType().add("f1", "boolean")),
       $"c2".array(new StructType().add("f1", "boolean")),
       $"c3".array(BooleanType),
-      new DslAttr($"c4").map(StringType, BooleanType))
+      new DslAttr($"c4").map(StringType, BooleanType)
+    )
 
     def assertCheckFailed(expr: Expression): Unit = {
       val analyzed = Filter(expr, input).analyze
@@ -125,7 +127,8 @@ class OptimizerStructuralIntegrityCheckerSuite extends PlanTest {
 
   test("check for invalid plan before execution of any rule") {
     val analyzed =
-      Aggregate(Nil, Seq[NamedExpression](max($"id") as "m"), LocalRelation($"id".long)).analyze
+      Aggregate(Nil, Seq[NamedExpression](max($"id") as "m"),
+        LocalRelation($"id".long)).analyze
     val invalidPlan = OptimizeRuleBreakSI.apply(analyzed)
 
     // Should fail verification right at the beginning

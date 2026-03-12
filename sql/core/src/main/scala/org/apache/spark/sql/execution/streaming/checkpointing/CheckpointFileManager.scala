@@ -39,13 +39,13 @@ import org.apache.spark.util.Utils
  * An interface to abstract out all operation related to streaming checkpoints. Most importantly,
  * the key operation this interface provides is `createAtomic(path, overwrite)` which returns a
  * `CancellableFSDataOutputStream`. This method is used by [[HDFSMetadataLog]] and
- * [[org.apache.spark.sql.execution.streaming.state.StateStore StateStore]] implementations to
- * write a complete checkpoint file atomically (i.e. no partial file will be visible), with or
+ * [[org.apache.spark.sql.execution.streaming.state.StateStore StateStore]] implementations
+ * to write a complete checkpoint file atomically (i.e. no partial file will be visible), with or
  * without overwrite.
  *
- * This higher-level interface above the Hadoop FileSystem is necessary because different
- * implementation of FileSystem/FileContext may have different combination of operations to
- * provide the desired atomic guarantees (e.g. write-to-temp-file-and-rename,
+ * This higher-level interface above the Hadoop FileSystem is necessary because
+ * different implementation of FileSystem/FileContext may have different combination of operations
+ * to provide the desired atomic guarantees (e.g. write-to-temp-file-and-rename,
  * direct-write-and-cancel-on-failure) and this abstraction allow different implementations while
  * keeping the usage simple (`createAtomic` -> `close` or `cancel`).
  */
@@ -56,13 +56,12 @@ trait CheckpointFileManager {
   /**
    * Create a file and make its contents available atomically after the output stream is closed.
    *
-   * @param path
-   *   Path to create
-   * @param overwriteIfPossible
-   *   If true, then the implementations must do a best-effort attempt to overwrite the file if it
-   *   already exists. It should not throw any exception if the file exists. However, if false,
-   *   then the implementation must not overwrite if the file already exists and must throw
-   *   `FileAlreadyExistsException` in that case.
+   * @param path                Path to create
+   * @param overwriteIfPossible If true, then the implementations must do a best-effort attempt to
+   *                            overwrite the file if it already exists. It should not throw
+   *                            any exception if the file exists. However, if false, then the
+   *                            implementation must not overwrite if the file already exists and
+   *                            must throw `FileAlreadyExistsException` in that case.
    */
   def createAtomic(path: Path, overwriteIfPossible: Boolean): CancellableFSDataOutputStream
 
@@ -90,7 +89,8 @@ trait CheckpointFileManager {
   def isLocal: Boolean
 
   /**
-   * Creates the checkpoint path if it does not exist, and returns the qualified checkpoint path.
+   * Creates the checkpoint path if it does not exist, and returns the qualified
+   * checkpoint path.
    */
   def createCheckpointDirectory(): Path
 
@@ -103,63 +103,53 @@ object CheckpointFileManager extends Logging {
    * Additional methods in CheckpointFileManager implementations that allows
    * [[RenameBasedFSDataOutputStream]] get atomicity by write-to-temp-file-and-rename
    */
-  sealed trait RenameHelperMethods { self =>
-    CheckpointFileManager
-
+  sealed trait RenameHelperMethods { self => CheckpointFileManager
     /** Create a file with overwrite. */
     def createTempFile(path: Path): FSDataOutputStream
 
     /**
      * Rename a file.
      *
-     * @param srcPath
-     *   Source path to rename
-     * @param dstPath
-     *   Destination path to rename to
-     * @param overwriteIfPossible
-     *   If true, then the implementations must do a best-effort attempt to overwrite the file if
-     *   it already exists. It should not throw any exception if the file exists. However, if
-     *   false, then the implementation must not overwrite if the file already exists and must
-     *   throw `FileAlreadyExistsException` in that case.
+     * @param srcPath             Source path to rename
+     * @param dstPath             Destination path to rename to
+     * @param overwriteIfPossible If true, then the implementations must do a best-effort attempt to
+     *                            overwrite the file if it already exists. It should not throw
+     *                            any exception if the file exists. However, if false, then the
+     *                            implementation must not overwrite if the file already exists and
+     *                            must throw `FileAlreadyExistsException` in that case.
      */
     def renameTempFile(srcPath: Path, dstPath: Path, overwriteIfPossible: Boolean): Unit
   }
 
   /**
-   * An interface to add the cancel() operation to [[FSDataOutputStream]]. This is used mainly by
-   * `CheckpointFileManager.createAtomic` to write a file atomically.
+   * An interface to add the cancel() operation to [[FSDataOutputStream]]. This is used
+   * mainly by `CheckpointFileManager.createAtomic` to write a file atomically.
    *
-   * @see
-   *   [[CheckpointFileManager]].
+   * @see [[CheckpointFileManager]].
    */
   abstract class CancellableFSDataOutputStream(protected val underlyingStream: OutputStream)
-      extends FSDataOutputStream(underlyingStream, null) {
-
+    extends FSDataOutputStream(underlyingStream, null) {
     /** Cancel the `underlyingStream` and ensure that the output file is not generated. */
     def cancel(): Unit
   }
 
   /**
-   * An implementation of [[CancellableFSDataOutputStream]] that writes a file atomically by
-   * writing to a temporary file and then renames.
+   * An implementation of [[CancellableFSDataOutputStream]] that writes a file atomically by writing
+   * to a temporary file and then renames.
    */
   sealed class RenameBasedFSDataOutputStream(
       fm: CheckpointFileManager with RenameHelperMethods,
       finalPath: Path,
       tempPath: Path,
       overwriteIfPossible: Boolean)
-      extends CancellableFSDataOutputStream(fm.createTempFile(tempPath)) {
+    extends CancellableFSDataOutputStream(fm.createTempFile(tempPath)) {
 
-    def this(
-        fm: CheckpointFileManager with RenameHelperMethods,
-        path: Path,
-        overwrite: Boolean) = {
+    def this(fm: CheckpointFileManager with RenameHelperMethods, path: Path, overwrite: Boolean) = {
       this(fm, path, generateTempPath(path), overwrite)
     }
 
-    logInfo(
-      log"Writing atomically to ${MDC(FINAL_PATH, finalPath)} using temp file " +
-        log"${MDC(TEMP_PATH, tempPath)}")
+    logInfo(log"Writing atomically to ${MDC(FINAL_PATH, finalPath)} using temp file " +
+      log"${MDC(TEMP_PATH, tempPath)}")
     @volatile private var terminated = false
 
     override def close(): Unit = synchronized {
@@ -170,23 +160,19 @@ object CheckpointFileManager extends Logging {
           fm.renameTempFile(tempPath, finalPath, overwriteIfPossible)
         } catch {
           case fe: FileAlreadyExistsException =>
-            logWarning(
-              log"Failed to rename temp file ${MDC(TEMP_PATH, tempPath)} to " +
-                log"${MDC(PATH, finalPath)} because file exists",
-              fe)
+            logWarning(log"Failed to rename temp file ${MDC(TEMP_PATH, tempPath)} to " +
+              log"${MDC(PATH, finalPath)} because file exists", fe)
             if (!overwriteIfPossible) throw fe
         }
 
         // Optionally, check if the renamed file exists
         if (SQLConf.get.checkpointRenamedFileCheck && !fm.exists(finalPath)) {
-          throw new IllegalStateException(
-            s"Renamed temp file $tempPath to $finalPath. " +
-              s"But $finalPath does not exist.")
+          throw new IllegalStateException(s"Renamed temp file $tempPath to $finalPath. " +
+            s"But $finalPath does not exist.")
         }
 
-        logInfo(
-          log"Renamed temp file ${MDC(TEMP_PATH, tempPath)} to " +
-            log"${MDC(FINAL_PATH, finalPath)}")
+        logInfo(log"Renamed temp file ${MDC(TEMP_PATH, tempPath)} to " +
+          log"${MDC(FINAL_PATH, finalPath)}")
       } finally {
         terminated = true
       }
@@ -199,10 +185,8 @@ object CheckpointFileManager extends Logging {
           underlyingStream.close()
         } catch {
           case NonFatal(e) =>
-            logWarning(
-              log"Error cancelling write to ${MDC(PATH, finalPath)}, continuing to " +
-                log"delete temp path ${MDC(TEMP_PATH, tempPath)}",
-              e)
+            logWarning(log"Error cancelling write to ${MDC(PATH, finalPath)}, continuing to " +
+              log"delete temp path ${MDC(TEMP_PATH, tempPath)}", e)
         }
         fm.delete(tempPath)
       } catch {
@@ -214,28 +198,24 @@ object CheckpointFileManager extends Logging {
     }
   }
 
+
   /** Create an instance of [[CheckpointFileManager]] based on the path and configuration. */
   def create(path: Path, hadoopConf: Configuration): CheckpointFileManager = {
-    val fileManagerClass =
-      hadoopConf.get(SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key)
+    val fileManagerClass = hadoopConf.get(
+      SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key)
     if (fileManagerClass != null) {
       try {
-        return Utils
-          .classForName(fileManagerClass)
+        return Utils.classForName(fileManagerClass)
           .getConstructor(classOf[Path], classOf[Configuration])
           .newInstance(path, hadoopConf)
           .asInstanceOf[CheckpointFileManager]
       } catch {
         case e: InvocationTargetException if e.getCause != null =>
-          throw StreamingErrors.cannotLoadCheckpointFileManagerClass(
-            path.toString,
-            fileManagerClass,
-            e.getCause)
+          throw StreamingErrors.cannotLoadCheckpointFileManagerClass(path.toString,
+            fileManagerClass, e.getCause)
         case NonFatal(e) =>
-          throw StreamingErrors.cannotLoadCheckpointFileManagerClass(
-            path.toString,
-            fileManagerClass,
-            e)
+          throw StreamingErrors.cannotLoadCheckpointFileManagerClass(path.toString,
+              fileManagerClass, e)
       }
     }
     try {
@@ -263,11 +243,10 @@ object CheckpointFileManager extends Logging {
   }
 }
 
+
 /** An implementation of [[CheckpointFileManager]] using Hadoop's [[FileSystem]] API. */
 class FileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration)
-    extends CheckpointFileManager
-    with RenameHelperMethods
-    with Logging {
+  extends CheckpointFileManager with RenameHelperMethods with Logging {
 
   import CheckpointFileManager._
 
@@ -297,10 +276,7 @@ class FileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration
 
   override def exists(path: Path): Boolean = fs.exists(path)
 
-  override def renameTempFile(
-      srcPath: Path,
-      dstPath: Path,
-      overwriteIfPossible: Boolean): Unit = {
+  override def renameTempFile(srcPath: Path, dstPath: Path, overwriteIfPossible: Boolean): Unit = {
     if (!overwriteIfPossible && fs.exists(dstPath)) {
       throw QueryExecutionErrors.renamePathAsExistsPathError(srcPath, dstPath)
     }
@@ -316,9 +292,8 @@ class FileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration
         throw QueryExecutionErrors.renameSrcPathNotFoundError(srcPath)
       } else {
         val e = QueryExecutionErrors.failedRenameTempFileError(srcPath, dstPath)
-        logWarning(
-          log"Failed to rename temp file ${MDC(TEMP_PATH, srcPath)} to " +
-            log"${MDC(PATH, dstPath)} as FileSystem.rename returned false.")
+        logWarning(log"Failed to rename temp file ${MDC(TEMP_PATH, srcPath)} to " +
+          log"${MDC(PATH, dstPath)} as FileSystem.rename returned false.")
         throw e
       }
     }
@@ -329,7 +304,7 @@ class FileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration
       fs.delete(path, true)
     } catch {
       case e: FileNotFoundException =>
-      // ignore if file has already been deleted
+        // ignore if file has already been deleted
     }
   }
 
@@ -345,11 +320,9 @@ class FileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration
   }
 }
 
-abstract class AbstractFileContextBasedCheckpointFileManager(
-    path: Path,
-    hadoopConf: Configuration)
-    extends CheckpointFileManager
-    with Logging {
+
+abstract class AbstractFileContextBasedCheckpointFileManager(path: Path, hadoopConf: Configuration)
+  extends CheckpointFileManager with Logging {
 
   protected val fc = if (path.toUri.getScheme == null) {
     FileContext.getFileContext(hadoopConf)
@@ -395,8 +368,8 @@ abstract class AbstractFileContextBasedCheckpointFileManager(
 }
 
 class FileContextBasedCheckpointFileManager(path: Path, hadoopConf: Configuration)
-    extends AbstractFileContextBasedCheckpointFileManager(path, hadoopConf)
-    with RenameHelperMethods {
+  extends AbstractFileContextBasedCheckpointFileManager(path, hadoopConf)
+  with RenameHelperMethods {
 
   import CheckpointFileManager._
 
@@ -404,9 +377,7 @@ class FileContextBasedCheckpointFileManager(path: Path, hadoopConf: Configuratio
     import CreateFlag._
     import Options._
     fc.create(
-      path,
-      EnumSet.of(CREATE, OVERWRITE),
-      CreateOpts.checksumParam(ChecksumOpt.createDisabled()))
+      path, EnumSet.of(CREATE, OVERWRITE), CreateOpts.checksumParam(ChecksumOpt.createDisabled()))
   }
 
   override def createAtomic(
@@ -415,11 +386,9 @@ class FileContextBasedCheckpointFileManager(path: Path, hadoopConf: Configuratio
     new RenameBasedFSDataOutputStream(this, path, overwriteIfPossible)
   }
 
-  override def renameTempFile(
-      srcPath: Path,
-      dstPath: Path,
-      overwriteIfPossible: Boolean): Unit = {
+  override def renameTempFile(srcPath: Path, dstPath: Path, overwriteIfPossible: Boolean): Unit = {
     import Options.Rename._
     fc.rename(srcPath, dstPath, if (overwriteIfPossible) OVERWRITE else NONE)
   }
 }
+

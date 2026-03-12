@@ -33,8 +33,8 @@ class FlatMapGroupsWithStateWithInitialStateSuite extends StateStoreMetricsTest 
   import testImplicits._
 
   /**
-   * FlatMapGroupsWithState function that returns the key, value as passed to it along with the
-   * updated state. The state is incremented for every value.
+   * FlatMapGroupsWithState function that returns the key, value as passed to it
+   * along with the updated state. The state is incremented for every value.
    */
   val flatMapGroupsWithStateFunc =
     (key: String, values: Iterator[String], state: GroupState[RunningCount]) => {
@@ -63,9 +63,8 @@ class FlatMapGroupsWithStateWithInitialStateSuite extends StateStoreMetricsTest 
     }
 
   Seq("1", "2", "6").foreach { shufflePartitions =>
-    testWithAllStateVersions(
-      s"flatMapGroupsWithState - initial " +
-        s"state - all cases - shuffle partitions ${shufflePartitions}") {
+    testWithAllStateVersions(s"flatMapGroupsWithState - initial " +
+      s"state - all cases - shuffle partitions ${shufflePartitions}") {
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> shufflePartitions) {
         // We will test them on different shuffle partition configuration to make sure the
         // grouping by key will still work. On higher number of shuffle partitions its possible
@@ -74,16 +73,16 @@ class FlatMapGroupsWithStateWithInitialStateSuite extends StateStoreMetricsTest 
           ("keyInStateAndData-1", new RunningCount(1)),
           ("keyInStateAndData-2", new RunningCount(2)),
           ("keyNoUpdate", new RunningCount(2)), // state.update will not be called
-          ("keyOnlyInState-1", new RunningCount(1))).toDS()
+          ("keyOnlyInState-1", new RunningCount(1))
+        ).toDS()
 
         val it = initialState.groupByKey(x => x._1).mapValues(_._2)
         val inputData = MemoryStream[String]
         val result =
-          inputData
-            .toDS()
+          inputData.toDS()
             .groupByKey(x => x)
-            .flatMapGroupsWithState(Update, GroupStateTimeout.NoTimeout, it)(
-              flatMapGroupsWithStateFunc)
+            .flatMapGroupsWithState(
+              Update, GroupStateTimeout.NoTimeout, it)(flatMapGroupsWithStateFunc)
 
         testStream(result, Update)(
           AddData(inputData, "keyOnlyInData", "keyInStateAndData-2"),
@@ -101,9 +100,11 @@ class FlatMapGroupsWithStateWithInitialStateSuite extends StateStoreMetricsTest 
           AddData(inputData, "keyInStateAndData-1"),
           CheckNewAnswer(
             // state incremented by 1
-            ("keyInStateAndData-1", Seq[String]("keyInStateAndData-1"), "2")),
+            ("keyInStateAndData-1", Seq[String]("keyInStateAndData-1"), "2")
+          ),
           assertNumStateRows(total = 5, updated = 1),
-          StopStream)
+          StopStream
+        )
       }
     }
   }
@@ -136,8 +137,7 @@ class FlatMapGroupsWithStateWithInitialStateSuite extends StateStoreMetricsTest 
 
     val inputData = MemoryStream[User]
     val result =
-      inputData
-        .toDS()
+      inputData.toDS()
         .groupByKey(x => x)
         .flatMapGroupsWithState(Update, NoTimeout(), ds)(stateFunc)
 
@@ -147,36 +147,39 @@ class FlatMapGroupsWithStateWithInitialStateSuite extends StateStoreMetricsTest 
         (("keyInStateAndData", "1"), Seq[String]("keyInStateAndData"), "2"),
         (("keyOnlyInState", "1"), Seq[String](), "1"),
         (("keyNoUpdate", "2"), Seq[String](), "2"),
-        (("keyOnlyInData", "1"), Seq[String]("keyOnlyInData"), "1")),
+        (("keyOnlyInData", "1"), Seq[String]("keyOnlyInData"), "1")
+      ),
       assertNumStateRows(total = 4, updated = 3), // (keyOnlyInState, 2) does not call update()
       // Stop and Start stream to make sure initial state doesn't get applied again.
       StopStream,
       StartStream(),
       AddData(inputData, User("keyOnlyInData", "1")),
-      CheckNewAnswer((("keyOnlyInData", "1"), Seq[String]("keyOnlyInData"), "2")),
+      CheckNewAnswer(
+        (("keyOnlyInData", "1"), Seq[String]("keyOnlyInData"), "2")
+      ),
       assertNumStateRows(total = 4, updated = 1),
-      StopStream)
+      StopStream
+    )
   }
 
   testQuietly("flatMapGroupsWithState - initial state - duplicate keys") {
-    val initialState = Seq(("a", new RunningCount(2)), ("a", new RunningCount(1)))
-      .toDS()
-      .groupByKey(_._1)
-      .mapValues(_._2)
+    val initialState = Seq(
+      ("a", new RunningCount(2)),
+      ("a", new RunningCount(1))
+    ).toDS().groupByKey(_._1).mapValues(_._2)
 
     val inputData = MemoryStream[String]
     val result =
-      inputData
-        .toDS()
+      inputData.toDS()
         .groupByKey(x => x)
         .flatMapGroupsWithState(Update, NoTimeout(), initialState)(flatMapGroupsWithStateFunc)
     testStream(result, Update)(
       AddData(inputData, "a"),
       ExpectFailure[SparkException] { e =>
-        assert(
-          e.getCause.getMessage.contains("The initial state provided contained " +
-            "multiple rows(state) with the same key"))
-      })
+        assert(e.getCause.getMessage.contains("The initial state provided contained " +
+          "multiple rows(state) with the same key"))
+      }
+    )
   }
 
   Seq(NoTimeout(), EventTimeTimeout(), ProcessingTimeTimeout()).foreach { timeout =>
@@ -188,13 +191,15 @@ class FlatMapGroupsWithStateWithInitialStateSuite extends StateStoreMetricsTest 
         (s"keyInStateAndData-1-$timeout", new RunningCount(1)),
         ("keyInStateAndData-2", new RunningCount(2)),
         ("keyNoUpdate", new RunningCount(2)), // state.update will not be called
-        ("keyOnlyInState-1", new RunningCount(1))).toDS().groupByKey(x => x._1).mapValues(_._2)
+        ("keyOnlyInState-1", new RunningCount(1))
+      ).toDS().groupByKey(x => x._1).mapValues(_._2)
 
-      val inputData = Seq(("keyOnlyInData"), ("keyInStateAndData-2"))
-      val result = inputData
-        .toDS()
-        .groupByKey(x => x)
-        .flatMapGroupsWithState(Update, timeout, initialState)(flatMapGroupsWithStateFunc)
+      val inputData = Seq(
+        ("keyOnlyInData"), ("keyInStateAndData-2")
+      )
+      val result = inputData.toDS().groupByKey(x => x)
+        .flatMapGroupsWithState(
+          Update, timeout, initialState)(flatMapGroupsWithStateFunc)
 
       val expected = Seq(
         ("keyOnlyInState-1", Seq[String](), "1"),
@@ -208,22 +213,19 @@ class FlatMapGroupsWithStateWithInitialStateSuite extends StateStoreMetricsTest 
   }
 
   testQuietly("flatMapGroupsWithState - initial state - batch mode - duplicate state") {
-    val initialState = Seq(("a", new RunningCount(1)), ("a", new RunningCount(2)))
-      .toDS()
-      .groupByKey(x => x._1)
-      .mapValues(_._2)
+    val initialState = Seq(
+      ("a", new RunningCount(1)),
+      ("a", new RunningCount(2))
+    ).toDS().groupByKey(x => x._1).mapValues(_._2)
 
     val e = intercept[SparkException] {
-      Seq("a", "b")
-        .toDS()
-        .groupByKey(x => x)
+      Seq("a", "b").toDS().groupByKey(x => x)
         .flatMapGroupsWithState(Update, NoTimeout(), initialState)(flatMapGroupsWithStateFunc)
         .show()
     }
-    assert(
-      e.getMessage.contains(
-        "The initial state provided contained multiple rows(state) with the same key." +
-          " Make sure to de-duplicate the initial state before passing it."))
+    assert(e.getMessage.contains(
+      "The initial state provided contained multiple rows(state) with the same key." +
+        " Make sure to de-duplicate the initial state before passing it."))
   }
 
   testQuietly("flatMapGroupsWithState - initial state - streaming initial state") {
@@ -233,13 +235,11 @@ class FlatMapGroupsWithStateWithInitialStateSuite extends StateStoreMetricsTest 
     val inputData = MemoryStream[String]
 
     val result =
-      inputData
-        .toDS()
+      inputData.toDS()
         .groupByKey(x => x)
         .flatMapGroupsWithState(
-          Update,
-          NoTimeout(),
-          initialStateData.toDS().groupByKey(_._1).mapValues(_._2))(flatMapGroupsWithStateFunc)
+          Update, NoTimeout(), initialStateData.toDS().groupByKey(_._1).mapValues(_._2)
+        )(flatMapGroupsWithStateFunc)
 
     val e = intercept[AnalysisException] {
       result.writeStream
@@ -256,28 +256,30 @@ class FlatMapGroupsWithStateWithInitialStateSuite extends StateStoreMetricsTest 
   test("flatMapGroupsWithState - initial state - initial state has flatMapGroupsWithState") {
     val initialStateDS = Seq(("keyInStateAndData", new RunningCount(1))).toDS()
     val initialState: KeyValueGroupedDataset[String, RunningCount] =
-      initialStateDS
-        .groupByKey(_._1)
-        .mapValues(_._2)
-        .mapGroupsWithState(GroupStateTimeout.NoTimeout())(
+      initialStateDS.groupByKey(_._1).mapValues(_._2)
+        .mapGroupsWithState(
+          GroupStateTimeout.NoTimeout())(
           (key: String, values: Iterator[RunningCount], state: GroupState[Boolean]) => {
             (key, values.next())
-          })
-        .groupByKey(_._1)
-        .mapValues(_._2)
+          }
+        ).groupByKey(_._1).mapValues(_._2)
 
     val inputData = MemoryStream[String]
 
     val result =
-      inputData
-        .toDS()
+      inputData.toDS()
         .groupByKey(x => x)
-        .flatMapGroupsWithState(Update, NoTimeout(), initialState)(flatMapGroupsWithStateFunc)
+        .flatMapGroupsWithState(
+          Update, NoTimeout(), initialState
+        )(flatMapGroupsWithStateFunc)
 
     testStream(result, Update)(
       AddData(inputData, "keyInStateAndData"),
-      CheckNewAnswer(("keyInStateAndData", Seq[String]("keyInStateAndData"), "2")),
-      StopStream)
+      CheckNewAnswer(
+        ("keyInStateAndData", Seq[String]("keyInStateAndData"), "2")
+      ),
+      StopStream
+    )
   }
 
   testWithAllStateVersions("mapGroupsWithState - initial state - null key") {
@@ -288,15 +290,14 @@ class FlatMapGroupsWithStateWithInitialStateSuite extends StateStoreMetricsTest 
         state.update(new RunningCount(count))
         (key, state.get.count.toString)
       }
-    val initialState = Seq(("key", new RunningCount(5)), (null, new RunningCount(2)))
-      .toDS()
-      .groupByKey(_._1)
-      .mapValues(_._2)
+    val initialState = Seq(
+      ("key", new RunningCount(5)),
+      (null, new RunningCount(2))
+    ).toDS().groupByKey(_._1).mapValues(_._2)
 
     val inputData = MemoryStream[String]
     val result =
-      inputData
-        .toDS()
+      inputData.toDS()
         .groupByKey(x => x)
         .mapGroupsWithState(NoTimeout(), initialState)(mapGroupsWithStateFunc)
     testStream(result, Update)(
@@ -306,7 +307,8 @@ class FlatMapGroupsWithStateWithInitialStateSuite extends StateStoreMetricsTest 
         (null, "3") // incremented by 1
       ),
       assertNumStateRows(total = 2, updated = 2),
-      StopStream)
+      StopStream
+    )
   }
 
   testWithAllStateVersions("flatMapGroupsWithState - initial state - processing time timeout") {
@@ -326,11 +328,11 @@ class FlatMapGroupsWithStateWithInitialStateSuite extends StateStoreMetricsTest 
 
     val clock = new StreamManualClock
     val inputData = MemoryStream[(String, Long)]
-    val initialState = Seq(("c", new RunningCount(2))).toDS().groupByKey(_._1).mapValues(_._2)
+    val initialState = Seq(
+      ("c", new RunningCount(2))
+    ).toDS().groupByKey(_._1).mapValues(_._2)
     val result =
-      inputData
-        .toDF()
-        .toDF("key", "time")
+      inputData.toDF().toDF("key", "time")
         .selectExpr("key", "timestamp_seconds(time) as timestamp")
         .withWatermark("timestamp", "10 second")
         .as[(String, Long)]
@@ -345,28 +347,29 @@ class FlatMapGroupsWithStateWithInitialStateSuite extends StateStoreMetricsTest 
       AdvanceManualClock(10 * 1000),
       AddData(inputData, ("b", 1L)), // this will trigger c and a to get timed out
       AdvanceManualClock(1 * 1000),
-      CheckNewAnswer(("a", "-1"), ("b", "1"), ("c", "-1")))
+      CheckNewAnswer(("a", "-1"), ("b", "1"), ("c", "-1"))
+    )
   }
 
   // if the keys part of initial state df are different than the keys in the input data, then
   // they will not be emitted as part of the result with skipEmittingInitialStateKeys set to true
-  testWithAllStateVersions(
-    "flatMapGroupsWithState - initial state - " +
-      s"skipEmittingInitialStateKeys=true") {
+  testWithAllStateVersions("flatMapGroupsWithState - initial state - " +
+    s"skipEmittingInitialStateKeys=true") {
     withSQLConf(SQLConf.FLATMAPGROUPSWITHSTATE_SKIP_EMITTING_INITIAL_STATE_KEYS.key -> "true") {
-      val initialState =
-        Seq(("apple", 1L), ("orange", 2L), ("mango", 5L)).toDS().groupByKey(_._1).mapValues(_._2)
+      val initialState = Seq(
+        ("apple", 1L),
+        ("orange", 2L),
+        ("mango", 5L)).toDS().groupByKey(_._1).mapValues(_._2)
 
       val fruitCountFunc = (key: String, values: Iterator[String], state: GroupState[Long]) => {
-        val count = state.getOption.map(x => x).getOrElse(0L) + values.size
+        val count = state.getOption.map( x => x).getOrElse(0L) + values.size
         state.update(count)
         Iterator.single((key, count))
       }
 
       val inputData = MemoryStream[String]
       val result =
-        inputData
-          .toDS()
+        inputData.toDS()
           .groupByKey(x => x)
           .flatMapGroupsWithState(Update, NoTimeout(), initialState)(fruitCountFunc)
       testStream(result, Update)(
@@ -375,29 +378,30 @@ class FlatMapGroupsWithStateWithInitialStateSuite extends StateStoreMetricsTest 
         CheckNewAnswer(("apple", 2), ("banana", 1)),
         AddData(inputData, "orange"),
         CheckNewAnswer(("orange", 3)),
-        StopStream)
+        StopStream
+      )
     }
   }
 
   // if the keys part of initial state df are different than the keys in the input data, then
   // they will be emitted as part of the result with skipEmittedInitialStateKeys set to false
-  testWithAllStateVersions(
-    "flatMapGroupsWithState - initial state - " +
-      s"skipEmittingInitialStateKeys=false") {
+  testWithAllStateVersions("flatMapGroupsWithState - initial state - " +
+    s"skipEmittingInitialStateKeys=false") {
     withSQLConf(SQLConf.FLATMAPGROUPSWITHSTATE_SKIP_EMITTING_INITIAL_STATE_KEYS.key -> "false") {
-      val initialState =
-        Seq(("apple", 1L), ("orange", 2L), ("mango", 5L)).toDS().groupByKey(_._1).mapValues(_._2)
+      val initialState = Seq(
+        ("apple", 1L),
+        ("orange", 2L),
+        ("mango", 5L)).toDS().groupByKey(_._1).mapValues(_._2)
 
       val fruitCountFunc = (key: String, values: Iterator[String], state: GroupState[Long]) => {
-        val count = state.getOption.map(x => x).getOrElse(0L) + values.size
+        val count = state.getOption.map( x => x).getOrElse(0L) + values.size
         state.update(count)
         Iterator.single((key, count))
       }
 
       val inputData = MemoryStream[String]
       val result =
-        inputData
-          .toDS()
+        inputData.toDS()
           .groupByKey(x => x)
           .flatMapGroupsWithState(Update, NoTimeout(), initialState)(fruitCountFunc)
       testStream(result, Update)(
@@ -406,21 +410,23 @@ class FlatMapGroupsWithStateWithInitialStateSuite extends StateStoreMetricsTest 
         CheckNewAnswer(("apple", 2), ("banana", 1), ("orange", 2), ("mango", 5)),
         AddData(inputData, "orange"),
         CheckNewAnswer(("orange", 3)),
-        StopStream)
+        StopStream
+      )
     }
   }
 
   // if the keys part of the initial state and the first batch are the same, then the result
   // is the same irrespective of the value of skipEmittingInitialStateKeys
   Seq(true, false).foreach { skipEmittingInitialStateKeys =>
-    testWithAllStateVersions(
-      "flatMapGroupsWithState - initial state and initial batch " +
-        s"have same keys and skipEmittingInitialStateKeys=$skipEmittingInitialStateKeys") {
+    testWithAllStateVersions("flatMapGroupsWithState - initial state and initial batch " +
+      s"have same keys and skipEmittingInitialStateKeys=$skipEmittingInitialStateKeys") {
       withSQLConf(
         SQLConf.FLATMAPGROUPSWITHSTATE_SKIP_EMITTING_INITIAL_STATE_KEYS.key ->
-          skipEmittingInitialStateKeys.toString) {
-        val initialState =
-          Seq(("apple", 1L), ("orange", 2L)).toDS().groupByKey(_._1).mapValues(_._2)
+        skipEmittingInitialStateKeys.toString
+      ) {
+        val initialState = Seq(
+          ("apple", 1L),
+          ("orange", 2L)).toDS().groupByKey(_._1).mapValues(_._2)
 
         val fruitCountFunc = (key: String, values: Iterator[String], state: GroupState[Long]) => {
           val count = state.getOption.map(x => x).getOrElse(0L) + values.size
@@ -430,8 +436,7 @@ class FlatMapGroupsWithStateWithInitialStateSuite extends StateStoreMetricsTest 
 
         val inputData = MemoryStream[String]
         val result =
-          inputData
-            .toDS()
+          inputData.toDS()
             .groupByKey(x => x)
             .flatMapGroupsWithState(Update, NoTimeout(), initialState)(fruitCountFunc)
         testStream(result, Update)(
@@ -444,20 +449,20 @@ class FlatMapGroupsWithStateWithInitialStateSuite extends StateStoreMetricsTest 
           AddData(inputData, "orange"),
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(("orange", 4)),
-          StopStream)
+          StopStream
+        )
       }
     }
   }
 
   Seq(true, false).foreach { skipEmittingInitialStateKeys =>
-    testWithAllStateVersions(
-      "flatMapGroupsWithState - batch query and " +
-        s"skipEmittingInitialStateKeys=$skipEmittingInitialStateKeys") {
-      withSQLConf(
-        SQLConf.FLATMAPGROUPSWITHSTATE_SKIP_EMITTING_INITIAL_STATE_KEYS.key ->
-          skipEmittingInitialStateKeys.toString) {
-        val initialState =
-          Seq(("apple", 1L), ("orange", 2L)).toDS().groupByKey(_._1).mapValues(_._2)
+    testWithAllStateVersions("flatMapGroupsWithState - batch query and " +
+      s"skipEmittingInitialStateKeys=$skipEmittingInitialStateKeys") {
+      withSQLConf(SQLConf.FLATMAPGROUPSWITHSTATE_SKIP_EMITTING_INITIAL_STATE_KEYS.key ->
+        skipEmittingInitialStateKeys.toString) {
+        val initialState = Seq(
+          ("apple", 1L),
+          ("orange", 2L)).toDS().groupByKey(_._1).mapValues(_._2)
 
         val fruitCountFunc = (key: String, values: Iterator[String], state: GroupState[Long]) => {
           val count = state.getOption.map(x => x).getOrElse(0L) + values.size
@@ -467,8 +472,7 @@ class FlatMapGroupsWithStateWithInitialStateSuite extends StateStoreMetricsTest 
 
         val inputData = Seq("orange", "mango")
         val result =
-          inputData
-            .toDS()
+          inputData.toDS()
             .groupByKey(x => x)
             .flatMapGroupsWithState(Update, NoTimeout(), initialState)(fruitCountFunc)
         val df = result.toDF()

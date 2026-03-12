@@ -25,26 +25,20 @@ class CommandUtilsSuite extends SparkFunSuite {
   test("Check if compareAndGetNewStats returns correct results") {
     val oldStats1 = CatalogStatistics(sizeInBytes = 10, rowCount = Some(100))
     val newStats1 = CommandUtils.compareAndGetNewStats(
-      Some(oldStats1),
-      newTotalSize = 10,
-      newRowCount = Some(100))
+      Some(oldStats1), newTotalSize = 10, newRowCount = Some(100))
     assert(newStats1.isEmpty)
-    val newStats2 =
-      CommandUtils.compareAndGetNewStats(Some(oldStats1), newTotalSize = -1, newRowCount = None)
+    val newStats2 = CommandUtils.compareAndGetNewStats(
+      Some(oldStats1), newTotalSize = -1, newRowCount = None)
     assert(newStats2.isEmpty)
     val newStats3 = CommandUtils.compareAndGetNewStats(
-      Some(oldStats1),
-      newTotalSize = 20,
-      newRowCount = Some(-1))
+      Some(oldStats1), newTotalSize = 20, newRowCount = Some(-1))
     assert(newStats3.isDefined)
     newStats3.foreach { stat =>
       assert(stat.sizeInBytes === 20)
       assert(stat.rowCount.isEmpty)
     }
     val newStats4 = CommandUtils.compareAndGetNewStats(
-      Some(oldStats1),
-      newTotalSize = -1,
-      newRowCount = Some(200))
+      Some(oldStats1), newTotalSize = -1, newRowCount = Some(200))
     assert(newStats4.isDefined)
     newStats4.foreach { stat =>
       assert(stat.sizeInBytes === 10)
@@ -56,9 +50,7 @@ class CommandUtilsSuite extends SparkFunSuite {
     // Tests for large values
     val oldStats2 = CatalogStatistics(sizeInBytes = BigInt(Long.MaxValue) * 2)
     val newStats5 = CommandUtils.compareAndGetNewStats(
-      Some(oldStats2),
-      newTotalSize = BigInt(Long.MaxValue) * 2,
-      None)
+      Some(oldStats2), newTotalSize = BigInt(Long.MaxValue) * 2, None)
     assert(newStats5.isEmpty)
   }
 }

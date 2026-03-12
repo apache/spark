@@ -64,8 +64,7 @@ object OrcUtils extends Logging {
   def listOrcFiles(pathStr: String, conf: Configuration): Seq[Path] = {
     val origPath = new Path(pathStr)
     val fs = origPath.getFileSystem(conf)
-    val paths = SparkHadoopUtil.get
-      .listLeafStatuses(fs, origPath)
+    val paths = SparkHadoopUtil.get.listLeafStatuses(fs, origPath)
       .filterNot(_.isDirectory)
       .map(_.getPath)
       .filterNot(_.getName.startsWith("_"))
@@ -73,10 +72,8 @@ object OrcUtils extends Logging {
     paths
   }
 
-  def readSchema(
-      file: Path,
-      conf: Configuration,
-      ignoreCorruptFiles: Boolean): Option[TypeDescription] = {
+  def readSchema(file: Path, conf: Configuration, ignoreCorruptFiles: Boolean)
+      : Option[TypeDescription] = {
     val fs = file.getFileSystem(conf)
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
     try {
@@ -121,9 +118,10 @@ object OrcUtils extends Logging {
       val fieldNames = orcType.getFieldNames.asScala
       val fieldTypes = orcType.getChildren.asScala
       val fields = new ArrayBuffer[StructField]()
-      fieldNames.zip(fieldTypes).foreach { case (fieldName, fieldType) =>
-        val catalystType = toCatalystType(fieldType)
-        fields += StructField(fieldName, catalystType)
+      fieldNames.zip(fieldTypes).foreach {
+        case (fieldName, fieldType) =>
+          val catalystType = toCatalystType(fieldType)
+          fields += StructField(fieldName, catalystType)
       }
       StructType(fields.toArray)
     }
@@ -145,10 +143,8 @@ object OrcUtils extends Logging {
     CharVarcharUtils.replaceCharVarcharWithStringInSchema(toStructType(schema))
   }
 
-  def readSchema(
-      sparkSession: SparkSession,
-      files: Seq[FileStatus],
-      options: Map[String, String]): Option[StructType] = {
+  def readSchema(sparkSession: SparkSession, files: Seq[FileStatus], options: Map[String, String])
+      : Option[StructType] = {
     val ignoreCorruptFiles = new FileSourceOptions(CaseInsensitiveMap(options)).ignoreCorruptFiles
     val conf = sparkSession.sessionState.newHadoopConfWithOptions(options)
     files.iterator.map(file => readSchema(file.getPath, conf, ignoreCorruptFiles)).collectFirst {
@@ -159,42 +155,32 @@ object OrcUtils extends Logging {
   }
 
   /**
-   * Reads ORC file schemas in multi-threaded manner, using native version of ORC. This is visible
-   * for testing.
+   * Reads ORC file schemas in multi-threaded manner, using native version of ORC.
+   * This is visible for testing.
    */
   def readOrcSchemasInParallel(
-      files: Seq[FileStatus],
-      conf: Configuration,
-      ignoreCorruptFiles: Boolean): Seq[StructType] = {
-    ThreadUtils
-      .parmap(files, "readingOrcSchemas", 8) { currentFile =>
-        OrcUtils.readSchema(currentFile.getPath, conf, ignoreCorruptFiles).map(toCatalystSchema)
-      }
-      .flatten
+    files: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean): Seq[StructType] = {
+    ThreadUtils.parmap(files, "readingOrcSchemas", 8) { currentFile =>
+      OrcUtils.readSchema(currentFile.getPath, conf, ignoreCorruptFiles).map(toCatalystSchema)
+    }.flatten
   }
 
-  def inferSchema(
-      sparkSession: SparkSession,
-      files: Seq[FileStatus],
-      options: Map[String, String]): Option[StructType] = {
+  def inferSchema(sparkSession: SparkSession, files: Seq[FileStatus], options: Map[String, String])
+    : Option[StructType] = {
     val orcOptions = new OrcOptions(options, sparkSession.sessionState.conf)
     if (orcOptions.mergeSchema) {
       SchemaMergeUtils.mergeSchemasInParallel(
-        sparkSession,
-        options,
-        files,
-        OrcUtils.readOrcSchemasInParallel)
+        sparkSession, options, files, OrcUtils.readOrcSchemasInParallel)
     } else {
       OrcUtils.readSchema(sparkSession, files, options)
     }
   }
 
   /**
-   * @return
-   *   Returns the combination of requested column ids from the given ORC file and boolean flag to
-   *   find if the pruneCols is allowed or not. Requested Column id can be -1, which means the
-   *   requested column doesn't exist in the ORC file. Returns None if the given ORC file is
-   *   empty.
+   * @return Returns the combination of requested column ids from the given ORC file and
+   *         boolean flag to find if the pruneCols is allowed or not. Requested Column id can be
+   *         -1, which means the requested column doesn't exist in the ORC file. Returns None
+   *         if the given ORC file is empty.
    */
   def requestedColumnIds(
       isCaseSensitive: Boolean,
@@ -202,9 +188,7 @@ object OrcUtils extends Logging {
       requiredSchema: StructType,
       orcSchema: TypeDescription,
       conf: Configuration): Option[(Array[Int], Boolean)] = {
-    def checkTimestampCompatibility(
-        orcCatalystSchema: StructType,
-        dataSchema: StructType): Unit = {
+    def checkTimestampCompatibility(orcCatalystSchema: StructType, dataSchema: StructType): Unit = {
       orcCatalystSchema.fields.map(_.dataType).zip(dataSchema.fields.map(_.dataType)).foreach {
         case (TimestampType, TimestampNTZType) =>
           throw QueryExecutionErrors.cannotConvertOrcTimestampToTimestampNTZError()
@@ -229,59 +213,49 @@ object OrcUtils extends Logging {
         // `orc.force.positional.evolution=true` was set (possibly because columns were renamed so
         // the physical schema doesn't match the data schema).
         // In these cases we map the physical schema to the data schema by index.
-        assert(
-          orcFieldNames.length <= dataSchema.length,
-          "The given data schema " +
-            s"${dataSchema.catalogString} (length:${dataSchema.length}) " +
-            s"has fewer ${orcFieldNames.length - dataSchema.length} fields than " +
-            s"the actual ORC physical schema $orcSchema (length:${orcFieldNames.length}), " +
-            "no idea which columns were dropped, fail to read.")
+        assert(orcFieldNames.length <= dataSchema.length, "The given data schema " +
+          s"${dataSchema.catalogString} (length:${dataSchema.length}) " +
+          s"has fewer ${orcFieldNames.length - dataSchema.length} fields than " +
+          s"the actual ORC physical schema $orcSchema (length:${orcFieldNames.length}), " +
+          "no idea which columns were dropped, fail to read.")
         // for ORC file written by Hive, no field names
         // in the physical schema, there is a need to send the
         // entire dataSchema instead of required schema.
         // So pruneCols is not done in this case
-        Some(
-          requiredSchema.fieldNames.map { name =>
-            val index = dataSchema.fieldIndex(name)
-            if (index < orcFieldNames.length) {
-              index
+        Some(requiredSchema.fieldNames.map { name =>
+          val index = dataSchema.fieldIndex(name)
+          if (index < orcFieldNames.length) {
+            index
+          } else {
+            -1
+          }
+        }, false)
+      } else {
+        if (isCaseSensitive) {
+          Some(requiredSchema.fieldNames.zipWithIndex.map { case (name, idx) =>
+            if (orcFieldNames.indexWhere(caseSensitiveResolution(_, name)) != -1) {
+              idx
             } else {
               -1
             }
-          },
-          false)
-      } else {
-        if (isCaseSensitive) {
-          Some(
-            requiredSchema.fieldNames.zipWithIndex.map { case (name, idx) =>
-              if (orcFieldNames.indexWhere(caseSensitiveResolution(_, name)) != -1) {
-                idx
-              } else {
-                -1
-              }
-            },
-            true)
+          }, true)
         } else {
           // Do case-insensitive resolution only if in case-insensitive mode
           val caseInsensitiveOrcFieldMap = orcFieldNames.groupBy(_.toLowerCase(Locale.ROOT))
-          Some(
-            requiredSchema.fieldNames.zipWithIndex.map { case (requiredFieldName, idx) =>
-              caseInsensitiveOrcFieldMap
-                .get(requiredFieldName.toLowerCase(Locale.ROOT))
-                .map { matchedOrcFields =>
-                  if (matchedOrcFields.size > 1) {
-                    // Need to fail if there is ambiguity, i.e. more than one field is matched.
-                    val matchedOrcFieldsString = matchedOrcFields.mkString("[", ", ", "]")
-                    throw QueryExecutionErrors.foundDuplicateFieldInCaseInsensitiveModeError(
-                      requiredFieldName,
-                      matchedOrcFieldsString)
-                  } else {
-                    idx
-                  }
+          Some(requiredSchema.fieldNames.zipWithIndex.map { case (requiredFieldName, idx) =>
+            caseInsensitiveOrcFieldMap
+              .get(requiredFieldName.toLowerCase(Locale.ROOT))
+              .map { matchedOrcFields =>
+                if (matchedOrcFields.size > 1) {
+                  // Need to fail if there is ambiguity, i.e. more than one field is matched.
+                  val matchedOrcFieldsString = matchedOrcFields.mkString("[", ", ", "]")
+                  throw QueryExecutionErrors.foundDuplicateFieldInCaseInsensitiveModeError(
+                    requiredFieldName, matchedOrcFieldsString)
+                } else {
+                  idx
                 }
-                .getOrElse(-1)
-            },
-            true)
+              }.getOrElse(-1)
+          }, true)
         }
       }
     }
@@ -378,22 +352,16 @@ object OrcUtils extends Logging {
   }
 
   /**
-   * Returns the result schema to read from ORC file. In addition, It sets the schema string to
-   * 'orc.mapred.input.schema' so ORC reader can use later.
+   * Returns the result schema to read from ORC file. In addition, It sets
+   * the schema string to 'orc.mapred.input.schema' so ORC reader can use later.
    *
-   * @param canPruneCols
-   *   Flag to decide whether pruned cols schema is send to resultSchema or to send the entire
-   *   dataSchema to resultSchema.
-   * @param dataSchema
-   *   Schema of the orc files.
-   * @param resultSchema
-   *   Result data schema created after pruning cols.
-   * @param partitionSchema
-   *   Schema of partitions.
-   * @param conf
-   *   Hadoop Configuration.
-   * @return
-   *   Returns the result schema as string.
+   * @param canPruneCols Flag to decide whether pruned cols schema is send to resultSchema
+   *                     or to send the entire dataSchema to resultSchema.
+   * @param dataSchema   Schema of the orc files.
+   * @param resultSchema Result data schema created after pruning cols.
+   * @param partitionSchema Schema of partitions.
+   * @param conf Hadoop Configuration.
+   * @return Returns the result schema as string.
    */
   def orcResultSchemaString(
       canPruneCols: Boolean,
@@ -413,14 +381,13 @@ object OrcUtils extends Logging {
   /**
    * Checks if `dataType` supports columnar reads.
    *
-   * @param dataType
-   *   Data type of the orc files.
-   * @param nestedColumnEnabled
-   *   True if columnar reads is enabled for nested column types.
-   * @return
-   *   Returns true if data type supports columnar reads.
+   * @param dataType Data type of the orc files.
+   * @param nestedColumnEnabled True if columnar reads is enabled for nested column types.
+   * @return Returns true if data type supports columnar reads.
    */
-  def supportColumnarReads(dataType: DataType, nestedColumnEnabled: Boolean): Boolean = {
+  def supportColumnarReads(
+      dataType: DataType,
+      nestedColumnEnabled: Boolean): Boolean = {
     dataType match {
       case _: AtomicType => true
       case st: StructType if nestedColumnEnabled =>
@@ -429,21 +396,20 @@ object OrcUtils extends Logging {
         supportColumnarReads(elementType, nestedColumnEnabled)
       case MapType(keyType, valueType, _) if nestedColumnEnabled =>
         supportColumnarReads(keyType, nestedColumnEnabled) &&
-        supportColumnarReads(valueType, nestedColumnEnabled)
+          supportColumnarReads(valueType, nestedColumnEnabled)
       case _ => false
     }
   }
 
   /**
-   * When the partial aggregates (Max/Min/Count) are pushed down to ORC, we don't need to read
-   * data from ORC and aggregate at Spark layer. Instead we want to get the partial aggregates
+   * When the partial aggregates (Max/Min/Count) are pushed down to ORC, we don't need to read data
+   * from ORC and aggregate at Spark layer. Instead we want to get the partial aggregates
    * (Max/Min/Count) result using the statistics information from ORC file footer, and then
    * construct an InternalRow from these aggregate results.
    *
    * NOTE: if statistics is missing from ORC file footer, exception would be thrown.
    *
-   * @return
-   *   Aggregate results in the format of InternalRow
+   * @return Aggregate results in the format of InternalRow
    */
   def createAggInternalRowFromFooter(
       reader: Reader,
@@ -456,12 +422,10 @@ object OrcUtils extends Logging {
     var columnsStatistics: OrcColumnStatistics = null
     try {
       columnsStatistics = OrcFooterReader.readStatistics(reader)
-    } catch {
-      case e: Exception =>
-        throw new SparkException(
-          s"Cannot read columns statistics in file: $filePath. Please consider disabling " +
-            s"ORC aggregate push down by setting 'spark.sql.orc.aggregatePushdown' to false.",
-          e)
+    } catch { case e: Exception =>
+      throw new SparkException(
+        s"Cannot read columns statistics in file: $filePath. Please consider disabling " +
+        s"ORC aggregate push down by setting 'spark.sql.orc.aggregatePushdown' to false.", e)
     }
 
     // Get column statistics with column name.
@@ -491,28 +455,25 @@ object OrcUtils extends Logging {
             case ShortType => new ShortWritable(value.toShort)
             case IntegerType => new IntWritable(value.toInt)
             case LongType => new LongWritable(value)
-            case _ =>
-              throw new IllegalArgumentException(
-                s"getMinMaxFromColumnStatistics should not take type $dataType " +
-                  "for IntegerColumnStatistics")
+            case _ => throw new IllegalArgumentException(
+              s"getMinMaxFromColumnStatistics should not take type $dataType " +
+              "for IntegerColumnStatistics")
           }
         case s: DoubleColumnStatistics =>
           val value = if (isMax) s.getMaximum else s.getMinimum
           dataType match {
             case FloatType => new FloatWritable(value.toFloat)
             case DoubleType => new DoubleWritable(value)
-            case _ =>
-              throw new IllegalArgumentException(
-                s"getMinMaxFromColumnStatistics should not take type $dataType " +
-                  "for DoubleColumnStatistics")
+            case _ => throw new IllegalArgumentException(
+              s"getMinMaxFromColumnStatistics should not take type $dataType " +
+                "for DoubleColumnStatistics")
           }
         case s: DateColumnStatistics =>
           new DateWritable(
             if (isMax) s.getMaximumDayOfEpoch.toInt else s.getMinimumDayOfEpoch.toInt)
-        case _ =>
-          throw new IllegalArgumentException(
-            s"getMinMaxFromColumnStatistics should not take ${statistics.getClass.getName}: " +
-              s"$statistics as the ORC column statistics")
+        case _ => throw new IllegalArgumentException(
+          s"getMinMaxFromColumnStatistics should not take ${statistics.getClass.getName}: " +
+            s"$statistics as the ORC column statistics")
       }
     }
 
@@ -554,12 +515,12 @@ object OrcUtils extends Logging {
             s"createAggInternalRowFromFooter should not take $x as the aggregate expression")
       }.toImmutableArraySeq
 
-    val orcValuesDeserializer =
-      new OrcDeserializer(schemaWithoutGroupBy, (0 until schemaWithoutGroupBy.length).toArray)
+    val orcValuesDeserializer = new OrcDeserializer(schemaWithoutGroupBy,
+      (0 until schemaWithoutGroupBy.length).toArray)
     val resultRow = orcValuesDeserializer.deserializeFromValues(aggORCValues)
     if (aggregation.groupByExpressions.nonEmpty) {
-      val reOrderedPartitionValues =
-        AggregatePushDownUtils.reOrderPartitionCol(partitionSchema, aggregation, partitionValues)
+      val reOrderedPartitionValues = AggregatePushDownUtils.reOrderPartitionCol(
+        partitionSchema, aggregation, partitionValues)
       new JoinedRow(reOrderedPartitionValues, resultRow)
     } else {
       resultRow

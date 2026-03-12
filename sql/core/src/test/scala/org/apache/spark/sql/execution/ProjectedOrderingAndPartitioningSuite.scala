@@ -27,8 +27,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
 
 class ProjectedOrderingAndPartitioningSuite
-    extends SharedSparkSession
-    with AdaptiveSparkPlanHelper {
+  extends SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   test("SPARK-42049: Improve AliasAwareOutputExpression - ordering - multi-alias") {
@@ -40,19 +39,13 @@ class ProjectedOrderingAndPartitioningSuite
           case 5 =>
             assert(outputOrdering.size == 1)
             assert(outputOrdering.head.sameOrderExpressions.size == 2)
-            assert(
-              outputOrdering.head.sameOrderExpressions
-                .map(_.asInstanceOf[Attribute].name)
-                .toSet
-                .subsetOf(Set("x", "y", "z")))
+            assert(outputOrdering.head.sameOrderExpressions.map(_.asInstanceOf[Attribute].name)
+              .toSet.subsetOf(Set("x", "y", "z")))
           case 2 =>
             assert(outputOrdering.size == 1)
             assert(outputOrdering.head.sameOrderExpressions.size == 1)
-            assert(
-              outputOrdering.head.sameOrderExpressions
-                .map(_.asInstanceOf[Attribute].name)
-                .toSet
-                .subsetOf(Set("x", "y", "z")))
+            assert(outputOrdering.head.sameOrderExpressions.map(_.asInstanceOf[Attribute].name)
+              .toSet.subsetOf(Set("x", "y", "z")))
           case 1 =>
             assert(outputOrdering.size == 1)
             assert(outputOrdering.head.sameOrderExpressions.size == 0)
@@ -72,25 +65,18 @@ class ProjectedOrderingAndPartitioningSuite
           case 5 =>
             val p = outputPartitioning.asInstanceOf[PartitioningCollection].partitionings
             assert(p.size == 3)
-            assert(
-              p.flatMap(_.asInstanceOf[HashPartitioning].expressions
-                .map(_.asInstanceOf[Attribute].name))
-                .toSet == Set("x", "y", "z"))
+            assert(p.flatMap(_.asInstanceOf[HashPartitioning].expressions
+              .map(_.asInstanceOf[Attribute].name)).toSet == Set("x", "y", "z"))
           case 2 =>
             val p = outputPartitioning.asInstanceOf[PartitioningCollection].partitionings
             assert(p.size == 2)
             p.flatMap(_.asInstanceOf[HashPartitioning].expressions
-              .map(_.asInstanceOf[Attribute].name))
-              .toSet
-              .subsetOf(Set("x", "y", "z"))
+              .map(_.asInstanceOf[Attribute].name)).toSet.subsetOf(Set("x", "y", "z"))
           case 1 =>
             val p = outputPartitioning.asInstanceOf[HashPartitioning]
             assert(p.expressions.size == 1)
-            assert(
-              p.expressions
-                .map(_.asInstanceOf[Attribute].name)
-                .toSet
-                .subsetOf(Set("x", "y", "z")))
+            assert(p.expressions.map(_.asInstanceOf[Attribute].name)
+              .toSet.subsetOf(Set("x", "y", "z")))
           case 0 =>
             assert(outputPartitioning.isInstanceOf[UnknownPartitioning])
         }
@@ -99,11 +85,8 @@ class ProjectedOrderingAndPartitioningSuite
   }
 
   test("SPARK-42049: Improve AliasAwareOutputExpression - ordering - multi-references") {
-    val df = spark
-      .range(2)
-      .selectExpr("id as a", "id as b")
-      .orderBy($"a" + $"b")
-      .selectExpr("a as x", "b as y")
+    val df = spark.range(2).selectExpr("id as a", "id as b")
+      .orderBy($"a" + $"b").selectExpr("a as x", "b as y")
     val outputOrdering = df.queryExecution.optimizedPlan.outputOrdering
     assert(outputOrdering.size == 1)
     assert(outputOrdering.head.sql == "(x + y) ASC NULLS FIRST")
@@ -111,11 +94,8 @@ class ProjectedOrderingAndPartitioningSuite
   }
 
   test("SPARK-42049: Improve AliasAwareOutputExpression - partitioning - multi-references") {
-    val df = spark
-      .range(2)
-      .selectExpr("id as a", "id as b")
-      .repartition($"a" + $"b")
-      .selectExpr("a as x", "b as y")
+    val df = spark.range(2).selectExpr("id as a", "id as b")
+      .repartition($"a" + $"b").selectExpr("a as x", "b as y")
     val outputPartitioning = stripAQEPlan(df.queryExecution.executedPlan).outputPartitioning
     // (a + b), (a + y), (x + b) are pruned since their references are not the subset of output
     outputPartitioning match {
@@ -126,23 +106,22 @@ class ProjectedOrderingAndPartitioningSuite
 
   test("SPARK-46609: Avoid exponential explosion in PartitioningPreservingUnaryExecNode") {
     withSQLConf(SQLConf.EXPRESSION_PROJECTION_CANDIDATE_LIMIT.key -> "2") {
-      val output =
-        Seq(AttributeReference("a", StringType)(), AttributeReference("b", StringType)())
+      val output = Seq(AttributeReference("a", StringType)(), AttributeReference("b", StringType)())
       val plan = ProjectExec(
         Seq(
           Alias(output(0), "a1")(),
           Alias(output(0), "a2")(),
           Alias(output(1), "b1")(),
-          Alias(output(1), "b2")()),
-        DummyLeafPlanExec(output))
-      assert(
-        plan.outputPartitioning.asInstanceOf[PartitioningCollection].partitionings.length == 2)
+          Alias(output(1), "b2")()
+        ),
+        DummyLeafPlanExec(output)
+      )
+      assert(plan.outputPartitioning.asInstanceOf[PartitioningCollection].partitionings.length == 2)
     }
   }
 
-  test(
-    "SPARK-42049: Improve AliasAwareOutputExpression - multi-references to complex " +
-      "expressions") {
+  test("SPARK-42049: Improve AliasAwareOutputExpression - multi-references to complex " +
+    "expressions") {
     val df2 = spark.range(2).repartition($"id" + $"id").selectExpr("id + id as a", "id + id as b")
     val outputPartitioning = stripAQEPlan(df2.queryExecution.executedPlan).outputPartitioning
     val partitionings = outputPartitioning.asInstanceOf[PartitioningCollection].partitionings
@@ -158,21 +137,16 @@ class ProjectedOrderingAndPartitioningSuite
     assert(outputOrdering.head.sameOrderExpressions.map(_.sql) == Seq("a"))
   }
 
-  test(
-    "SPARK-42049: Improve AliasAwareOutputExpression - multi-references to children of " +
-      "complex expressions") {
+  test("SPARK-42049: Improve AliasAwareOutputExpression - multi-references to children of " +
+    "complex expressions") {
     val df2 = spark.range(2).repartition($"id" + $"id").selectExpr("id as a", "id as b")
     val outputPartitioning = stripAQEPlan(df2.queryExecution.executedPlan).outputPartitioning
     val partitionings = outputPartitioning.asInstanceOf[PartitioningCollection].partitionings
     // (a + b) is the same as (b + a) so expect only one
-    assert(
-      partitionings.map {
-        case p: HashPartitioning => p.sql
-        case _ => fail(s"Unexpected $outputPartitioning")
-      } == Seq(
-        "hashpartitioning((b + b))",
-        "hashpartitioning((a + b))",
-        "hashpartitioning((a + a))"))
+    assert(partitionings.map {
+      case p: HashPartitioning => p.sql
+      case _ => fail(s"Unexpected $outputPartitioning")
+    } == Seq("hashpartitioning((b + b))", "hashpartitioning((a + b))", "hashpartitioning((a + a))"))
 
     val df = spark.range(2).orderBy($"id" + $"id").selectExpr("id as a", "id as b")
     val outputOrdering = df.queryExecution.optimizedPlan.outputOrdering
@@ -182,38 +156,27 @@ class ProjectedOrderingAndPartitioningSuite
     assert(outputOrdering.head.sameOrderExpressions.map(_.sql) == Seq("(a + b)", "(a + a)"))
   }
 
-  test(
-    "SPARK-42049: Improve AliasAwareOutputExpression - multi-references to complex " +
-      "expressions and to their children") {
-    val df2 = spark
-      .range(2)
-      .repartition($"id" + $"id")
+  test("SPARK-42049: Improve AliasAwareOutputExpression - multi-references to complex " +
+    "expressions and to their children") {
+    val df2 = spark.range(2).repartition($"id" + $"id")
       .selectExpr("id + id as aa", "id + id as bb", "id as a", "id as b")
     val outputPartitioning = stripAQEPlan(df2.queryExecution.executedPlan).outputPartitioning
     val partitionings = outputPartitioning.asInstanceOf[PartitioningCollection].partitionings
     // (a + b) is the same as (b + a) so expect only one
-    assert(
-      partitionings.map {
-        case p: HashPartitioning => p.sql
-        case _ => fail(s"Unexpected $outputPartitioning")
-      } == Seq(
-        "hashpartitioning(bb)",
-        "hashpartitioning(aa)",
-        "hashpartitioning((b + b))",
-        "hashpartitioning((a + b))",
-        "hashpartitioning((a + a))"))
+    assert(partitionings.map {
+      case p: HashPartitioning => p.sql
+      case _ => fail(s"Unexpected $outputPartitioning")
+    } == Seq("hashpartitioning(bb)", "hashpartitioning(aa)", "hashpartitioning((b + b))",
+      "hashpartitioning((a + b))", "hashpartitioning((a + a))"))
 
-    val df = spark
-      .range(2)
-      .orderBy($"id" + $"id")
+    val df = spark.range(2).orderBy($"id" + $"id")
       .selectExpr("id + id as aa", "id + id as bb", "id as a", "id as b")
     val outputOrdering = df.queryExecution.optimizedPlan.outputOrdering
     assert(outputOrdering.size == 1)
     assert(outputOrdering.head.sql == "bb ASC NULLS FIRST")
     // (a + b) is the same as (b + a) so expect only one
-    assert(
-      outputOrdering.head.sameOrderExpressions.map(_.sql) ==
-        Seq("aa", "(b + b)", "(a + b)", "(a + a)"))
+    assert(outputOrdering.head.sameOrderExpressions.map(_.sql) ==
+      Seq("aa", "(b + b)", "(a + b)", "(a + a)"))
   }
 
   test("SPARK-42049: Improve AliasAwareOutputExpression - ordering partly projected") {

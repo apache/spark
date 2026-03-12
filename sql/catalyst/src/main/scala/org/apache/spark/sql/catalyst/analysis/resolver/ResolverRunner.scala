@@ -18,29 +18,36 @@
 package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, CleanupAliases, PullOutNondeterministic}
+import org.apache.spark.sql.catalyst.analysis.{
+  AnalysisContext,
+  CleanupAliases,
+  PullOutNondeterministic
+}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Wrapper class for [[Resolver]] and single-pass resolution. This class encapsulates single-pass
- * resolution, rewriting and validation of resolved plan. The plan rewrite is necessary in order
- * to either fully resolve the plan or stay compatible with the fixed-point analyzer.
+ * resolution, rewriting and validation of resolved plan. The plan rewrite is necessary in order to
+ * either fully resolve the plan or stay compatible with the fixed-point analyzer.
  */
 class ResolverRunner(
     resolver: Resolver,
     extendedResolutionChecks: Seq[LogicalPlan => Unit] = Seq.empty,
-    extendedRewriteRules: Seq[Rule[LogicalPlan]] = Seq.empty)
-    extends ResolverMetricTracker
+    extendedRewriteRules: Seq[Rule[LogicalPlan]] = Seq.empty
+) extends ResolverMetricTracker
     with SQLConfHelper {
 
   /**
    * Sequence of post-resolution rules that should be applied on the result of single-pass
    * resolution.
    */
-  private val planRewriteRules: Seq[Rule[LogicalPlan]] =
-    Seq(PruneMetadataColumns, CleanupAliases, PullOutNondeterministic)
+  private val planRewriteRules: Seq[Rule[LogicalPlan]] = Seq(
+    PruneMetadataColumns,
+    CleanupAliases,
+    PullOutNondeterministic
+  )
 
   /**
    * `planRewriter` is used to rewrite the plan and the subqueries inside by applying
@@ -55,10 +62,10 @@ class ResolverRunner(
 
   /**
    * Entry point for the resolver. This method performs following 4 steps:
-   *   - Resolves the plan in a bottom-up using [[Resolver]], single-pass manner.
-   *   - Rewrites the plan using rules configured in the [[planRewriter]].
-   *   - Validates the final result internally using [[ResolutionValidator]].
-   *   - Validates the final result using [[extendedResolutionChecks]].
+   *  - Resolves the plan in a bottom-up using [[Resolver]], single-pass manner.
+   *  - Rewrites the plan using rules configured in the [[planRewriter]].
+   *  - Validates the final result internally using [[ResolutionValidator]].
+   *  - Validates the final result using [[extendedResolutionChecks]].
    */
   def resolve(
       plan: LogicalPlan,

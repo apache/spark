@@ -55,9 +55,8 @@ object LocalRelation {
 /**
  * Logical plan node for scanning data from a local collection.
  *
- * @param data
- *   The local collection holding the data. It doesn't need to be sent to executors and then
- *   doesn't need to be serializable.
+ * @param data The local collection holding the data. It doesn't need to be sent to executors
+ *             and then doesn't need to be serializable.
  */
 case class LocalRelation(
     output: Seq[Attribute],
@@ -65,14 +64,12 @@ case class LocalRelation(
     // Indicates whether this relation has data from a streaming source.
     override val isStreaming: Boolean = false,
     @transient stream: Option[SparkDataStream] = None)
-    extends LeafNode
-    with StreamSourceAwareLogicalPlan
-    with analysis.MultiInstanceRelation {
+  extends LeafNode
+  with StreamSourceAwareLogicalPlan
+  with analysis.MultiInstanceRelation {
 
   // A local relation must have resolved output.
-  require(
-    output.forall(_.resolved),
-    "Unresolved attributes found when constructing LocalRelation.")
+  require(output.forall(_.resolved), "Unresolved attributes found when constructing LocalRelation.")
 
   override def withStream(stream: SparkDataStream): LocalRelation = {
     copy(stream = Some(stream))
@@ -81,7 +78,7 @@ case class LocalRelation(
   override def getStream: Option[SparkDataStream] = stream
 
   /**
-   * Returns an identical copy of this relation with new exprIds for all attributes. Different
+   * Returns an identical copy of this relation with new exprIds for all attributes.  Different
    * attributes are required when a relation is going to be included multiple times in the same
    * query.
    */
@@ -98,18 +95,16 @@ case class LocalRelation(
   }
 
   override def computeStats(): Statistics = {
-    val rowCount: Option[BigInt] =
-      if (Utils.isTesting &&
-        conf.getConfString("spark.sql.test.localRelationRowCount", "false") != "true") {
-        // LocalRelation is heavily used in tests and we should not report row count by default in
-        // tests to keep the test coverage, in case the plan is overly optimized.
-        None
-      } else {
-        Some(data.length)
-      }
+    val rowCount: Option[BigInt] = if (Utils.isTesting &&
+      conf.getConfString("spark.sql.test.localRelationRowCount", "false") != "true") {
+      // LocalRelation is heavily used in tests and we should not report row count by default in
+      // tests to keep the test coverage, in case the plan is overly optimized.
+      None
+    } else {
+      Some(data.length)
+    }
     Statistics(
-      sizeInBytes = EstimationUtils.getSizePerRow(output) * data.length,
-      rowCount = rowCount)
+      sizeInBytes = EstimationUtils.getSizePerRow(output) * data.length, rowCount = rowCount)
   }
 
   def toSQL(inlineTableName: String): String = {

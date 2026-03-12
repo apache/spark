@@ -26,8 +26,10 @@ import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 /**
  * Physical plan node for dropping an index.
  */
-case class DropIndexExec(table: SupportsIndex, indexName: String, ignoreIfNotExists: Boolean)
-    extends LeafV2CommandExec {
+case class DropIndexExec(
+    table: SupportsIndex,
+    indexName: String,
+    ignoreIfNotExists: Boolean) extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
     try {
       table.dropIndex(indexName)

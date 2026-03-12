@@ -23,27 +23,24 @@ import org.apache.spark.sql.execution.command
 
 /**
  * This base suite contains unified tests for the `SHOW TBLPROPERTIES` command that checks V1
- * table catalogs. The tests that cannot run for all V1 catalogs are located in more specific test
- * suites:
+ * table catalogs. The tests that cannot run for all V1 catalogs are located in more
+ * specific test suites:
  *
  *   - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.ShowTblPropertiesSuite`
  *   - V1 Hive External catalog:
  *     `org.apache.spark.sql.hive.execution.command.ShowTblPropertiesSuite`
  */
-trait ShowTblPropertiesSuiteBase
-    extends command.ShowTblPropertiesSuiteBase
+trait ShowTblPropertiesSuiteBase extends command.ShowTblPropertiesSuiteBase
     with command.TestsV1AndV2Commands {
 
   test("SHOW TBLPROPERTIES FOR VIEW") {
     val v = "testview"
     withView(v) {
       spark.sql(s"CREATE VIEW $v TBLPROPERTIES('p1'='v1', 'p2'='v2') AS SELECT 1 AS c1")
-      checkAnswer(
-        sql(s"SHOW TBLPROPERTIES $v").filter("key != 'transient_lastDdlTime'"),
+      checkAnswer(sql(s"SHOW TBLPROPERTIES $v").filter("key != 'transient_lastDdlTime'"),
         Seq(Row("p1", "v1"), Row("p2", "v2")))
       checkAnswer(sql(s"SHOW TBLPROPERTIES $v('p1')"), Row("p1", "v1"))
-      checkAnswer(
-        sql(s"SHOW TBLPROPERTIES $v('p3')"),
+      checkAnswer(sql(s"SHOW TBLPROPERTIES $v('p3')"),
         Row("p3", s"Table $SESSION_CATALOG_NAME.default.$v does not have property: p3"))
     }
   }
@@ -58,8 +55,8 @@ trait ShowTblPropertiesSuiteBase
 }
 
 /**
- * The class contains tests for the `SHOW TBLPROPERTIES` command to check V1 In-Memory table
- * catalog.
+ * The class contains tests for the `SHOW TBLPROPERTIES` command to check V1 In-Memory
+ * table catalog.
  */
 class ShowTblPropertiesSuite extends ShowTblPropertiesSuiteBase with CommandSuiteBase {
   override def commandVersion: String = super[ShowTblPropertiesSuiteBase].commandVersion

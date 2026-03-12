@@ -38,7 +38,8 @@ object PythonSQLMetrics {
   val pythonSizeMetricsDesc: Map[String, String] = {
     Map(
       "pythonDataSent" -> "data sent to Python workers",
-      "pythonDataReceived" -> "data returned from Python workers")
+      "pythonDataReceived" -> "data returned from Python workers"
+    )
   }
 
   val pythonTimingMetricsDesc: Map[String, String] = {
@@ -46,7 +47,8 @@ object PythonSQLMetrics {
       "pythonBootTime" -> "time to start Python workers",
       "pythonInitTime" -> "time to initialize Python workers",
       "pythonTotalTime" -> "time to run Python workers",
-      "pythonProcessingTime" -> "time to execute Python code")
+      "pythonProcessingTime" -> "time to execute Python code"
+    )
   }
 
   val pythonOtherMetricsDesc: Map[String, String] = {

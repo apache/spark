@@ -73,9 +73,9 @@ trait FileWrite extends Write {
   }
 
   /**
-   * Prepares a write job and returns an [[OutputWriterFactory]]. Client side job preparation can
-   * be put here. For example, user defined output committer can be configured here by setting the
-   * output committer class in the conf of spark.sql.sources.outputCommitterClass.
+   * Prepares a write job and returns an [[OutputWriterFactory]].  Client side job preparation can
+   * be put here.  For example, user defined output committer can be configured here
+   * by setting the output committer class in the conf of spark.sql.sources.outputCommitterClass.
    */
   def prepareWrite(
       sqlConf: SQLConf,
@@ -89,14 +89,12 @@ trait FileWrite extends Write {
     assert(queryId != null, "Missing query ID")
 
     if (paths.length != 1) {
-      throw new IllegalArgumentException(
-        "Expected exactly one path to be specified, but " +
-          s"got: ${paths.mkString(", ")}")
+      throw new IllegalArgumentException("Expected exactly one path to be specified, but " +
+        s"got: ${paths.mkString(", ")}")
     }
     if (!allowDuplicatedColumnNames) {
       SchemaUtils.checkColumnNameDuplication(
-        schema.fields.map(_.name).toImmutableArraySeq,
-        caseSensitiveAnalysis)
+        schema.fields.map(_.name).toImmutableArraySeq, caseSensitiveAnalysis)
     }
     DataSource.validateSchema(formatName, schema, sqlConf)
 
@@ -143,13 +141,12 @@ trait FileWrite extends Write {
       bucketSpec = None,
       path = pathName,
       customPartitionLocations = Map.empty,
-      maxRecordsPerFile = caseInsensitiveOptions
-        .get("maxRecordsPerFile")
-        .map(_.toLong)
+      maxRecordsPerFile = caseInsensitiveOptions.get("maxRecordsPerFile").map(_.toLong)
         .getOrElse(sparkSession.sessionState.conf.maxRecordsPerFile),
-      timeZoneId = caseInsensitiveOptions
-        .get(DateTimeUtils.TIMEZONE_OPTION)
+      timeZoneId = caseInsensitiveOptions.get(DateTimeUtils.TIMEZONE_OPTION)
         .getOrElse(sparkSession.sessionState.conf.sessionLocalTimeZone),
-      statsTrackers = Seq(statsTracker))
+      statsTrackers = Seq(statsTracker)
+    )
   }
 }
+

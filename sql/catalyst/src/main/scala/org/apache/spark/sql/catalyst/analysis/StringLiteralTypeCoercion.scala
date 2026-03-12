@@ -28,22 +28,20 @@ import org.apache.spark.sql.types.{IntegerType, StringType}
 object StringLiteralTypeCoercion {
   def apply(expression: Expression): Expression = expression match {
     case DateAdd(l, r) if r.dataType.isInstanceOf[StringType] && r.foldable =>
-      val days =
-        try {
-          Cast(r, IntegerType, ansiEnabled = true).eval().asInstanceOf[Int]
-        } catch {
-          case e: NumberFormatException =>
-            throw QueryCompilationErrors.secondArgumentOfFunctionIsNotIntegerError("date_add", e)
-        }
+      val days = try {
+        Cast(r, IntegerType, ansiEnabled = true).eval().asInstanceOf[Int]
+      } catch {
+        case e: NumberFormatException =>
+          throw QueryCompilationErrors.secondArgumentOfFunctionIsNotIntegerError("date_add", e)
+      }
       DateAdd(l, Literal(days))
     case DateSub(l, r) if r.dataType.isInstanceOf[StringType] && r.foldable =>
-      val days =
-        try {
-          Cast(r, IntegerType, ansiEnabled = true).eval().asInstanceOf[Int]
-        } catch {
-          case e: NumberFormatException =>
-            throw QueryCompilationErrors.secondArgumentOfFunctionIsNotIntegerError("date_sub", e)
-        }
+      val days = try {
+        Cast(r, IntegerType, ansiEnabled = true).eval().asInstanceOf[Int]
+      } catch {
+        case e: NumberFormatException =>
+          throw QueryCompilationErrors.secondArgumentOfFunctionIsNotIntegerError("date_sub", e)
+      }
       DateSub(l, Literal(days))
     case other => other
   }

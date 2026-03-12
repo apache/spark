@@ -26,8 +26,12 @@ class ShowTablesParserSuite extends AnalysisTest with SharedSparkSession {
   private val catalog = "test_catalog"
 
   test("show tables") {
-    comparePlans(parsePlan("SHOW TABLES"), ShowTables(CurrentNamespace, None))
-    comparePlans(parsePlan("SHOW TABLES '*test*'"), ShowTables(CurrentNamespace, Some("*test*")))
+    comparePlans(
+      parsePlan("SHOW TABLES"),
+      ShowTables(CurrentNamespace, None))
+    comparePlans(
+      parsePlan("SHOW TABLES '*test*'"),
+      ShowTables(CurrentNamespace, Some("*test*")))
     comparePlans(
       parsePlan("SHOW TABLES LIKE '*test*'"),
       ShowTables(CurrentNamespace, Some("*test*")))
@@ -62,21 +66,17 @@ class ShowTablesParserSuite extends AnalysisTest with SharedSparkSession {
         UnresolvedTable(Seq("*test*"), "SHOW TABLE EXTENDED ... PARTITION ..."),
         UnresolvedPartitionSpec(Map("ds" -> "2008-04-09", "hr" -> "11"))))
     comparePlans(
-      parsePlan(
-        s"SHOW TABLE EXTENDED FROM $catalog.ns1.ns2 LIKE '*test*' " +
-          "PARTITION(ds='2008-04-09')"),
+      parsePlan(s"SHOW TABLE EXTENDED FROM $catalog.ns1.ns2 LIKE '*test*' " +
+        "PARTITION(ds='2008-04-09')"),
       ShowTablePartition(
-        UnresolvedTable(
-          Seq(catalog, "ns1", "ns2", "*test*"),
+        UnresolvedTable(Seq(catalog, "ns1", "ns2", "*test*"),
           "SHOW TABLE EXTENDED ... PARTITION ..."),
         UnresolvedPartitionSpec(Map("ds" -> "2008-04-09"))))
     comparePlans(
-      parsePlan(
-        s"SHOW TABLE EXTENDED IN $catalog.ns1.ns2 LIKE '*test*' " +
-          "PARTITION(ds='2008-04-09')"),
+      parsePlan(s"SHOW TABLE EXTENDED IN $catalog.ns1.ns2 LIKE '*test*' " +
+        "PARTITION(ds='2008-04-09')"),
       ShowTablePartition(
-        UnresolvedTable(
-          Seq(catalog, "ns1", "ns2", "*test*"),
+        UnresolvedTable(Seq(catalog, "ns1", "ns2", "*test*"),
           "SHOW TABLE EXTENDED ... PARTITION ..."),
         UnresolvedPartitionSpec(Map("ds" -> "2008-04-09"))))
   }

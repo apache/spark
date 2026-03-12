@@ -30,7 +30,7 @@ import org.apache.spark.util.AccumulatorV2
 /**
  * Accumulator that computes a global aggregate.
  */
-class AggregatingAccumulator private (
+class AggregatingAccumulator private(
     bufferSchema: Seq[DataType],
     initialValues: Seq[Expression],
     updateExpressions: Seq[Expression],
@@ -39,7 +39,7 @@ class AggregatingAccumulator private (
     imperatives: Array[ImperativeAggregate],
     typedImperatives: Array[TypedImperativeAggregate[_]],
     @transient private val conf: SQLConf)
-    extends AccumulatorV2[InternalRow, InternalRow] {
+  extends AccumulatorV2[InternalRow, InternalRow] {
   assert(bufferSchema.size == initialValues.size)
   assert(bufferSchema.size == updateExpressions.size)
   assert(mergeExpressions == null || bufferSchema.size == mergeExpressions.size)
@@ -57,8 +57,7 @@ class AggregatingAccumulator private (
     // Initialize the buffer. Note that we do not use a code generated projection here because
     // generating and compiling a projection is probably more expensive than using an interpreted
     // projection.
-    InterpretedMutableProjection
-      .createProjection(initialValues)
+    InterpretedMutableProjection.createProjection(initialValues)
       .target(buffer)
       .apply(InternalRow.empty)
     imperatives.foreach(_.initialize(buffer))
@@ -152,40 +151,39 @@ class AggregatingAccumulator private (
     }
   }
 
-  override def merge(other: AccumulatorV2[InternalRow, InternalRow]): Unit =
-    withSQLConf(true, ()) {
-      if (!other.isZero) {
-        other match {
-          case agg: AggregatingAccumulator =>
-            val buffer = getOrCreateBuffer()
-            val otherBuffer = agg.buffer
-            mergeProjection.target(buffer)(joinedRow.withRight(otherBuffer))
-            var i = 0
-            while (i < imperatives.length) {
-              imperatives(i).merge(buffer, otherBuffer)
+  override def merge(
+      other: AccumulatorV2[InternalRow, InternalRow]): Unit = withSQLConf(true, ()) {
+    if (!other.isZero) {
+      other match {
+        case agg: AggregatingAccumulator =>
+          val buffer = getOrCreateBuffer()
+          val otherBuffer = agg.buffer
+          mergeProjection.target(buffer)(joinedRow.withRight(otherBuffer))
+          var i = 0
+          while (i < imperatives.length) {
+            imperatives(i).merge(buffer, otherBuffer)
+            i += 1
+          }
+          i = 0
+          if (isAtDriverSide) {
+            while (i < typedImperatives.length) {
+              // The input buffer stores serialized data
+              typedImperatives(i).merge(buffer, otherBuffer)
               i += 1
             }
-            i = 0
-            if (isAtDriverSide) {
-              while (i < typedImperatives.length) {
-                // The input buffer stores serialized data
-                typedImperatives(i).merge(buffer, otherBuffer)
-                i += 1
-              }
-            } else {
-              while (i < typedImperatives.length) {
-                // The input buffer stores deserialized object
-                typedImperatives(i).mergeBuffersObjects(buffer, otherBuffer)
-                i += 1
-              }
+          } else {
+            while (i < typedImperatives.length) {
+              // The input buffer stores deserialized object
+              typedImperatives(i).mergeBuffersObjects(buffer, otherBuffer)
+              i += 1
             }
-          case _ =>
-            throw QueryExecutionErrors.cannotMergeClassWithOtherClassError(
-              this.getClass.getName,
-              other.getClass.getName)
-        }
+          }
+        case _ =>
+          throw QueryExecutionErrors.cannotMergeClassWithOtherClassError(
+            this.getClass.getName, other.getClass.getName)
       }
     }
+  }
 
   override def value: InternalRow = withSQLConf(false, InternalRow.empty) {
     // Either use the existing buffer or create a temporary one.
@@ -237,13 +235,10 @@ class AggregatingAccumulator private (
 }
 
 object AggregatingAccumulator {
-
   /**
    * Create an aggregating accumulator for the given functions and input schema.
    */
-  def apply(
-      functions: Seq[Expression],
-      inputAttributes: Seq[Attribute]): AggregatingAccumulator = {
+  def apply(functions: Seq[Expression], inputAttributes: Seq[Attribute]): AggregatingAccumulator = {
     // There are a couple of things happening here:
     // - Collect the schema's of the aggregate and input aggregate buffers. These are needed to bind
     //   the expressions which will be done when we create the accumulator.
@@ -270,10 +265,9 @@ object AggregatingAccumulator {
         mergeExpressions ++= agg.mergeExpressions
         agg.evaluateExpression
       case AggregateExpression(agg: ImperativeAggregate, _, _, _, _) =>
-        val imperative = BindReferences.bindReference(
-          agg
-            .withNewMutableAggBufferOffset(aggBufferAttributes.size)
-            .withNewInputAggBufferOffset(inputAggBufferAttributes.size),
+        val imperative = BindReferences.bindReference(agg
+          .withNewMutableAggBufferOffset(aggBufferAttributes.size)
+          .withNewInputAggBufferOffset(inputAggBufferAttributes.size),
           inputAttributeSeq)
         imperative match {
           case typedImperative: TypedImperativeAggregate[_] =>

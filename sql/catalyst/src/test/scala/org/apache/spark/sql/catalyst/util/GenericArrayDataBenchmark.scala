@@ -21,7 +21,8 @@ import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * Benchmark for [[GenericArrayData]]. To run this benchmark:
+ * Benchmark for [[GenericArrayData]].
+ * To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class> --jars <spark core test jar> <spark catalyst test jar>

@@ -31,22 +31,23 @@ class ReplaceIntegerLiteralsWithOrdinalsDataframeSuite extends QueryTest with Sh
     withSQLConf(SQLConf.GROUP_BY_ORDINAL.key -> "true") {
       val groupedDataset = sql(query).groupBy(lit(1))
 
-      assert(groupedDataset.groupingExprs.collect { case ordinal @ UnresolvedOrdinal(1) =>
-        ordinal
+      assert(groupedDataset.groupingExprs.collect {
+        case ordinal @ UnresolvedOrdinal(1) => ordinal
       }.nonEmpty)
 
       checkError(
         exception = intercept[AnalysisException](sql(query).groupBy(lit(-1)).count()),
         condition = "GROUP_BY_POS_OUT_OF_RANGE",
         parameters = Map("index" -> "-1", "size" -> "2"),
-        context = ExpectedContext(fragment = "lit", getCurrentClassCallSitePattern))
+        context = ExpectedContext(fragment = "lit", getCurrentClassCallSitePattern)
+      )
     }
 
     withSQLConf(SQLConf.GROUP_BY_ORDINAL.key -> "false") {
       val groupedDataset = sql(query).groupBy(lit(1))
 
-      assert(groupedDataset.groupingExprs.collect { case ordinal @ UnresolvedOrdinal(1) =>
-        ordinal
+      assert(groupedDataset.groupingExprs.collect {
+        case ordinal @ UnresolvedOrdinal(1) => ordinal
       }.isEmpty)
     }
   }
@@ -55,7 +56,10 @@ class ReplaceIntegerLiteralsWithOrdinalsDataframeSuite extends QueryTest with Sh
     val sqlText = "SELECT * FROM VALUES(2,1),(1,2)"
 
     withSQLConf(SQLConf.ORDER_BY_ORDINAL.key -> "true") {
-      val queries = Seq(sql(sqlText).orderBy(lit(1)), sql(sqlText).sort(lit(1)))
+      val queries = Seq(
+        sql(sqlText).orderBy(lit(1)),
+        sql(sqlText).sort(lit(1))
+      )
 
       for (query <- queries) {
         val unresolvedPlan = query.queryExecution.logical
@@ -75,16 +79,21 @@ class ReplaceIntegerLiteralsWithOrdinalsDataframeSuite extends QueryTest with Sh
       checkError(
         exception = intercept[AnalysisException](sql(sqlText).orderBy(lit(-1))),
         condition = "ORDER_BY_POS_OUT_OF_RANGE",
-        parameters = Map("index" -> "-1", "size" -> "2"))
+        parameters = Map("index" -> "-1", "size" -> "2")
+      )
 
       checkError(
         exception = intercept[AnalysisException](sql(sqlText).sort(lit(-1))),
         condition = "ORDER_BY_POS_OUT_OF_RANGE",
-        parameters = Map("index" -> "-1", "size" -> "2"))
+        parameters = Map("index" -> "-1", "size" -> "2")
+      )
     }
 
     withSQLConf(SQLConf.ORDER_BY_ORDINAL.key -> "false") {
-      val queries = Seq(sql(sqlText).orderBy(lit(1)), sql(sqlText).sort(lit(1)))
+      val queries = Seq(
+        sql(sqlText).orderBy(lit(1)),
+        sql(sqlText).sort(lit(1))
+      )
 
       for (query <- queries) {
         val unresolvedPlan = query.queryExecution.logical

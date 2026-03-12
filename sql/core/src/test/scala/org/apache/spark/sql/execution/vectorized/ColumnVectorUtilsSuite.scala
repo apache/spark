@@ -25,8 +25,8 @@ import org.apache.spark.unsafe.types.UTF8String
 
 class ColumnVectorUtilsSuite extends SparkFunSuite {
 
-  private def testConstantColumnVector(name: String, size: Int, dt: DataType)(
-      f: ConstantColumnVector => Unit): Unit = {
+  private def testConstantColumnVector(name: String, size: Int, dt: DataType)
+    (f: ConstantColumnVector => Unit): Unit = {
     test(name) {
       val vector = new ConstantColumnVector(size, dt)
       f(vector)
@@ -35,6 +35,7 @@ class ColumnVectorUtilsSuite extends SparkFunSuite {
   }
 
   testConstantColumnVector("fill null", 10, IntegerType) { vector =>
+
     ColumnVectorUtils.populate(vector, InternalRow(null), 0)
 
     assert(vector.hasNull)
@@ -124,7 +125,8 @@ class ColumnVectorUtilsSuite extends SparkFunSuite {
     }
   }
 
-  testConstantColumnVector("fill calendar interval", 10, CalendarIntervalType) { vector =>
+  testConstantColumnVector("fill calendar interval", 10,
+    CalendarIntervalType) { vector =>
     val interval = new CalendarInterval(3, 5, 1000000)
     ColumnVectorUtils.populate(vector, InternalRow(interval), 0)
     (0 until 10).foreach { i =>
@@ -132,30 +134,27 @@ class ColumnVectorUtilsSuite extends SparkFunSuite {
     }
   }
 
-  testConstantColumnVector("not supported: fill map", 10, MapType(IntegerType, BooleanType)) {
-    vector =>
-      val message = intercept[RuntimeException] {
-        ColumnVectorUtils.populate(vector, InternalRow("fakeMap"), 0)
-      }.getMessage
-      assert(
-        message == "DataType MAP<INT, BOOLEAN> is not supported in column vectorized reader.")
+  testConstantColumnVector("not supported: fill map", 10,
+    MapType(IntegerType, BooleanType)) { vector =>
+    val message = intercept[RuntimeException] {
+      ColumnVectorUtils.populate(vector, InternalRow("fakeMap"), 0)
+    }.getMessage
+    assert(message == "DataType MAP<INT, BOOLEAN> is not supported in column vectorized reader.")
   }
 
-  testConstantColumnVector(
-    "not supported: fill struct",
-    10,
+  testConstantColumnVector("not supported: fill struct", 10,
     new StructType()
       .add(StructField("name", StringType))
       .add(StructField("age", IntegerType))) { vector =>
     val message = intercept[RuntimeException] {
       ColumnVectorUtils.populate(vector, InternalRow("fakeStruct"), 0)
     }.getMessage
-    assert(
-      message ==
-        "DataType STRUCT<name: STRING, age: INT> is not supported in column vectorized reader.")
+    assert(message ==
+      "DataType STRUCT<name: STRING, age: INT> is not supported in column vectorized reader.")
   }
 
-  testConstantColumnVector("not supported: fill array", 10, ArrayType(IntegerType)) { vector =>
+  testConstantColumnVector("not supported: fill array", 10,
+    ArrayType(IntegerType)) { vector =>
     val message = intercept[RuntimeException] {
       ColumnVectorUtils.populate(vector, InternalRow("fakeArray"), 0)
     }.getMessage

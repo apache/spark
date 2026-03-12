@@ -22,37 +22,38 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, Literal, Va
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
- * Utility object for handling SQL parameter binding in USING clauses. This provides a single
- * source of truth for parameter binding logic used by:
- *   - EXECUTE IMMEDIATE
- *   - OPEN CURSOR (parameterized cursors)
+ * Utility object for handling SQL parameter binding in USING clauses.
+ * This provides a single source of truth for parameter binding logic used by:
+ * - EXECUTE IMMEDIATE
+ * - OPEN CURSOR (parameterized cursors)
  *
- * The implementation is based on EXECUTE IMMEDIATE's parameter handling to ensure consistent
- * behavior across all SQL features that support USING clauses.
+ * The implementation is based on EXECUTE IMMEDIATE's parameter handling to ensure
+ * consistent behavior across all SQL features that support USING clauses.
  */
 object ParameterBindingUtils {
 
   /**
-   * Builds parameter arrays for the session.sql() API from a sequence of expressions. Handles
-   * both named parameters (using Alias) and positional parameters.
+   * Builds parameter arrays for the session.sql() API from a sequence of expressions.
+   * Handles both named parameters (using Alias) and positional parameters.
    *
    * This method supports two modes:
-   *   1. Extract names from Alias nodes in args (EXECUTE IMMEDIATE style)
-   *   2. Use pre-extracted names provided separately (OPEN CURSOR style, where names are
-   *      extracted at parse time to survive analysis phase)
+   * 1. Extract names from Alias nodes in args (EXECUTE IMMEDIATE style)
+   * 2. Use pre-extracted names provided separately (OPEN CURSOR style, where names are
+   *    extracted at parse time to survive analysis phase)
    *
-   * Named parameters: USING x + 1 AS param1, y + 2 AS param2 Result: values=[<value1>, <value2>],
-   * names=["param1", "param2"]
+   * Named parameters:
+   *   USING x + 1 AS param1, y + 2 AS param2
+   *   Result: values=[<value1>, <value2>], names=["param1", "param2"]
    *
-   * Positional parameters: USING x + 1, y + 2 Result: values=[<value1>, <value2>], names=["", ""]
+   * Positional parameters:
+   *   USING x + 1, y + 2
+   *   Result: values=[<value1>, <value2>], names=["", ""]
    *
-   * @param args
-   *   Parameter expressions from the USING clause
-   * @param preExtractedNames
-   *   Optional pre-extracted parameter names (for cases where Alias nodes don't survive
-   *   analysis). If provided, must have same length as args.
-   * @return
-   *   Tuple of (parameter values as Literals, parameter names)
+   * @param args Parameter expressions from the USING clause
+   * @param preExtractedNames Optional pre-extracted parameter names (for cases where Alias
+   *                          nodes don't survive analysis). If provided, must have same length
+   *                          as args.
+   * @return Tuple of (parameter values as Literals, parameter names)
    */
   def buildUnifiedParameters(
       args: Seq[Expression],
@@ -63,10 +64,9 @@ object ParameterBindingUtils {
     args.zipWithIndex.foreach { case (expr, idx) =>
       val (paramExpr, paramName) = if (preExtractedNames.nonEmpty) {
         // Use pre-extracted names (OPEN CURSOR style)
-        assert(
-          preExtractedNames.length == args.length,
+        assert(preExtractedNames.length == args.length,
           s"preExtractedNames length (${preExtractedNames.length}) must match " +
-            s"args length (${args.length})")
+          s"args length (${args.length})")
         (expr, preExtractedNames(idx))
       } else {
         // Extract names from Alias nodes (EXECUTE IMMEDIATE style)
@@ -85,22 +85,19 @@ object ParameterBindingUtils {
   }
 
   /**
-   * Evaluates a parameter expression and returns its value wrapped as a Literal. This preserves
-   * type information, which is critical for parameters like DATE literals.
+   * Evaluates a parameter expression and returns its value wrapped as a Literal.
+   * This preserves type information, which is critical for parameters like DATE literals.
    *
    * Supported expressions:
-   *   - VariableReference: Evaluated to their current value
-   *   - Foldable expressions: Constants, literals, and compile-time evaluable expressions
+   * - VariableReference: Evaluated to their current value
+   * - Foldable expressions: Constants, literals, and compile-time evaluable expressions
    *
    * Unsupported expressions:
-   *   - Non-foldable expressions (e.g., column references, subqueries)
+   * - Non-foldable expressions (e.g., column references, subqueries)
    *
-   * @param expr
-   *   The expression to evaluate
-   * @return
-   *   Literal with evaluated value and type information
-   * @throws QueryCompilationErrors
-   *   if expression is not foldable
+   * @param expr The expression to evaluate
+   * @return Literal with evaluated value and type information
+   * @throws QueryCompilationErrors if expression is not foldable
    */
   def evaluateParameterExpression(expr: Expression): Any = {
     expr match {

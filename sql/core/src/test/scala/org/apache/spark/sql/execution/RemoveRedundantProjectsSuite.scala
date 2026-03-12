@@ -26,7 +26,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 abstract class RemoveRedundantProjectsSuiteBase
-    extends QueryTest
+  extends QueryTest
     with SharedSparkSession
     with AdaptiveSparkPlanHelper {
   import testImplicits._
@@ -59,17 +59,9 @@ abstract class RemoveRedundantProjectsSuiteBase
     super.beforeAll()
     tmpPath.delete()
     val path = tmpPath.getAbsolutePath
-    spark
-      .range(100)
-      .selectExpr(
-        "id % 10 as key",
-        "cast(id * 2 as int) as a",
-        "cast(id * 3 as int) as b",
-        "cast(id as string) as c",
-        "array(id, id + 1, id + 3) as d")
-      .write
-      .partitionBy("key")
-      .parquet(path)
+    spark.range(100).selectExpr("id % 10 as key", "cast(id * 2 as int) as a",
+      "cast(id * 3 as int) as b", "cast(id as string) as c", "array(id, id + 1, id + 3) as d")
+      .write.partitionBy("key").parquet(path)
     spark.read.parquet(path).createOrReplaceTempView("testView")
   }
 
@@ -134,8 +126,7 @@ abstract class RemoveRedundantProjectsSuiteBase
 
   test("generate should require column ordering") {
     withTempView("testData") {
-      spark
-        .range(0, 10, 1)
+      spark.range(0, 10, 1)
         .selectExpr("id as key", "id * 2 as a", "id * 3 as b")
         .createOrReplaceTempView("testData")
 
@@ -150,8 +141,7 @@ abstract class RemoveRedundantProjectsSuiteBase
       // the query will be incorrect.
       val newPlan = stripAQEPlan(plan) transform {
         case g @ GenerateExec(_, requiredChildOutput, _, _, child) =>
-          g.copy(
-            requiredChildOutput = requiredChildOutput.reverse,
+          g.copy(requiredChildOutput = requiredChildOutput.reverse,
             child = ProjectExec(requiredChildOutput.reverse, child))
       }
 
@@ -159,17 +149,15 @@ abstract class RemoveRedundantProjectsSuiteBase
       val rule = RemoveRedundantProjects
       val newExecutedPlan = rule.apply(newPlan)
       // The manually added ProjectExec node shouldn't be removed.
-      assert(collectWithSubqueries(newExecutedPlan) { case p: ProjectExec =>
-        p
+      assert(collectWithSubqueries(newExecutedPlan) {
+        case p: ProjectExec => p
       }.size == numProjects + 1)
 
       // Check the original plan's output and the new plan's output are the same.
       val expectedRows = plan.executeCollect()
       val actualRows = newExecutedPlan.executeCollect()
       assert(expectedRows.length == actualRows.length)
-      expectedRows.zip(actualRows).foreach { case (expected, actual) =>
-        assert(expected == actual)
-      }
+      expectedRows.zip(actualRows).foreach { case (expected, actual) => assert(expected == actual) }
     }
   }
 
@@ -186,26 +174,18 @@ abstract class RemoveRedundantProjectsSuiteBase
 
   test("SPARK-33697: UnionExec should require column ordering") {
     withTable("t1", "t2") {
-      spark
-        .range(-10, 20)
+      spark.range(-10, 20)
         .selectExpr(
           "id",
           "date_add(date '1950-01-01', cast(id as int)) as datecol",
           "cast(id as string) strcol")
-        .write
-        .mode("overwrite")
-        .format("parquet")
-        .saveAsTable("t1")
-      spark
-        .range(-10, 20)
+        .write.mode("overwrite").format("parquet").saveAsTable("t1")
+      spark.range(-10, 20)
         .selectExpr(
           "cast(id as string) strcol",
           "id",
           "date_add(date '1950-01-01', cast(id as int)) as datecol")
-        .write
-        .mode("overwrite")
-        .format("parquet")
-        .saveAsTable("t2")
+        .write.mode("overwrite").format("parquet").saveAsTable("t2")
 
       val queryTemplate =
         """
@@ -217,10 +197,9 @@ abstract class RemoveRedundantProjectsSuiteBase
           |)
           |""".stripMargin
 
-      Seq(("UNION", 1, 2), ("UNION ALL", 1, 2)).foreach {
-        case (setOperation, enabled, disabled) =>
-          val query = queryTemplate.format(setOperation)
-          assertProjectExec(query, enabled = enabled, disabled = disabled)
+      Seq(("UNION", 1, 2), ("UNION ALL", 1, 2)).foreach { case (setOperation, enabled, disabled) =>
+        val query = queryTemplate.format(setOperation)
+        assertProjectExec(query, enabled = enabled, disabled = disabled)
       }
     }
   }
@@ -257,19 +236,13 @@ abstract class RemoveRedundantProjectsSuiteBase
   }
 
   Seq("true", "false").foreach { codegenEnabled =>
-    test(
-      "SPARK-35287: project generating unsafe row for DataSourceV2ScanRelation " +
-        s"should not be removed (codegen=$codegenEnabled)") {
+    test("SPARK-35287: project generating unsafe row for DataSourceV2ScanRelation " +
+      s"should not be removed (codegen=$codegenEnabled)") {
       withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled) {
         withTempPath { path =>
           val format = classOf[SimpleWritableDataSource].getName
-          spark
-            .range(3)
-            .select($"id" as "i", $"id" as "j")
-            .write
-            .format(format)
-            .mode("overwrite")
-            .save(path.getCanonicalPath)
+          spark.range(3).select($"id" as "i", $"id" as "j")
+            .write.format(format).mode("overwrite").save(path.getCanonicalPath)
 
           val df =
             spark.read.format(format).load(path.getCanonicalPath).filter($"i" > 0).orderBy($"i")
@@ -280,10 +253,8 @@ abstract class RemoveRedundantProjectsSuiteBase
   }
 }
 
-class RemoveRedundantProjectsSuite
-    extends RemoveRedundantProjectsSuiteBase
-    with DisableAdaptiveExecutionSuite
+class RemoveRedundantProjectsSuite extends RemoveRedundantProjectsSuiteBase
+  with DisableAdaptiveExecutionSuite
 
-class RemoveRedundantProjectsSuiteAE
-    extends RemoveRedundantProjectsSuiteBase
-    with EnableAdaptiveExecutionSuite
+class RemoveRedundantProjectsSuiteAE extends RemoveRedundantProjectsSuiteBase
+  with EnableAdaptiveExecutionSuite

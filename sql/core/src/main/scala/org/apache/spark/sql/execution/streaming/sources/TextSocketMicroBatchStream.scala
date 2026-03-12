@@ -40,8 +40,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * multiple reasons, including no support for fault recovery.
  */
 class TextSocketMicroBatchStream(host: String, port: Int, numPartitions: Int)
-    extends MicroBatchStream
-    with Logging {
+  extends MicroBatchStream with Logging {
 
   @GuardedBy("this")
   private var socket: Socket = null
@@ -50,8 +49,8 @@ class TextSocketMicroBatchStream(host: String, port: Int, numPartitions: Int)
   private var readThread: Thread = null
 
   /**
-   * All batches from `lastCommittedOffset + 1` to `currentOffset`, inclusive. Stored in a
-   * ListBuffer to facilitate removing committed batches.
+   * All batches from `lastCommittedOffset + 1` to `currentOffset`, inclusive.
+   * Stored in a ListBuffer to facilitate removing committed batches.
    */
   @GuardedBy("this")
   private val batches = new ListBuffer[(UTF8String, Long)]
@@ -87,7 +86,8 @@ class TextSocketMicroBatchStream(host: String, port: Int, numPartitions: Int)
             TextSocketMicroBatchStream.this.synchronized {
               val newData = (
                 UTF8String.fromString(line),
-                DateTimeUtils.millisToMicros(Calendar.getInstance().getTimeInMillis))
+                DateTimeUtils.millisToMicros(Calendar.getInstance().getTimeInMillis)
+              )
               currentOffset += 1
               batches.append(newData)
             }

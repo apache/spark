@@ -26,16 +26,16 @@ import org.apache.spark.sql.execution.SparkPlan
 /**
  * Logical plan node for holding data from a command.
  *
- * `commandLogicalPlan` and `commandPhysicalPlan` are just used to display the plan tree for
- * EXPLAIN. `rows` may not be serializable and ideally we should not send `rows` to the executors.
+ * `commandLogicalPlan` and `commandPhysicalPlan` are just used to display the plan tree
+ * for EXPLAIN.
+ * `rows` may not be serializable and ideally we should not send `rows` to the executors.
  * Thus marking them as transient.
  */
 case class CommandResult(
     output: Seq[Attribute],
     @transient commandLogicalPlan: LogicalPlan,
     @transient commandPhysicalPlan: SparkPlan,
-    @transient rows: Seq[InternalRow])
-    extends LeafNode {
+    @transient rows: Seq[InternalRow]) extends LeafNode {
   override def innerChildren: Seq[QueryPlan[_]] = Seq(commandLogicalPlan)
 
   override def computeStats(): Statistics =

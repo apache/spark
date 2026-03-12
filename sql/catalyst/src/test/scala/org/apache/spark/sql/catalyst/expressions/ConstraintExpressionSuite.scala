@@ -40,8 +40,6 @@ class ConstraintExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
 
   test("CheckInvariant: throws exception if column 'a' <= 0") {
     checkExceptionInExpression[SparkRuntimeException](
-      expr,
-      InternalRow(-1),
-      expectedMessage("-1"))
+      expr, InternalRow(-1), expectedMessage("-1"))
   }
 }

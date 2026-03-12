@@ -36,30 +36,30 @@ import org.apache.spark.sql.types._
  * Helper object for building ORC `SearchArgument`s, which are used for ORC predicate push-down.
  *
  * Due to limitation of ORC `SearchArgument` builder, we had to implement separate checking and
- * conversion passes through the Filter to make sure we only convert predicates that are known to
- * be convertible.
+ * conversion passes through the Filter to make sure we only convert predicates that are known
+ * to be convertible.
  *
- * An ORC `SearchArgument` must be built in one pass using a single builder. For example, you
- * can't build `a = 1` and `b = 2` first, and then combine them into `a = 1 AND b = 2`. This is
- * quite different from the cases in Spark SQL or Parquet, where complex filters can be easily
- * built using existing simpler ones.
+ * An ORC `SearchArgument` must be built in one pass using a single builder.  For example, you can't
+ * build `a = 1` and `b = 2` first, and then combine them into `a = 1 AND b = 2`.  This is quite
+ * different from the cases in Spark SQL or Parquet, where complex filters can be easily built using
+ * existing simpler ones.
  *
  * The annoying part is that, `SearchArgument` builder methods like `startAnd()`, `startOr()`, and
- * `startNot()` mutate internal state of the builder instance. This forces us to translate all
+ * `startNot()` mutate internal state of the builder instance.  This forces us to translate all
  * convertible filters with a single builder instance. However, if we try to translate a filter
  * before checking whether it can be converted or not, we may end up with a builder whose internal
  * state is inconsistent in the case of an inconvertible filter.
  *
- * For example, to convert an `And` filter with builder `b`, we call `b.startAnd()` first, and
- * then try to convert its children. Say we convert `left` child successfully, but find that
- * `right` child is inconvertible. Alas, `b.startAnd()` call can't be rolled back, and `b` is
- * inconsistent now.
+ * For example, to convert an `And` filter with builder `b`, we call `b.startAnd()` first, and then
+ * try to convert its children.  Say we convert `left` child successfully, but find that `right`
+ * child is inconvertible.  Alas, `b.startAnd()` call can't be rolled back, and `b` is inconsistent
+ * now.
  *
  * The workaround employed here is to trim the Spark filters before trying to convert them. This
  * way, we can only do the actual conversion on the part of the Filter that is known to be
  * convertible.
  *
- * P.S.: Hive seems to use `SearchArgument` together with `ExprNodeGenericFuncDesc` only. Usage of
+ * P.S.: Hive seems to use `SearchArgument` together with `ExprNodeGenericFuncDesc` only.  Usage of
  * builder methods mentioned above can only be found in test code, where all tested filters are
  * known to be convertible.
  */
@@ -85,51 +85,52 @@ private[sql] object OrcFilters extends OrcFiltersBase {
       filters: Seq[Filter]): Seq[Filter] = {
     import org.apache.spark.sql.sources._
 
-    def convertibleFiltersHelper(filter: Filter, canPartialPushDown: Boolean): Option[Filter] =
-      filter match {
-        // At here, it is not safe to just convert one side and remove the other side
-        // if we do not understand what the parent filters are.
-        //
-        // Here is an example used to explain the reason.
-        // Let's say we have NOT(a = 2 AND b in ('1')) and we do not understand how to
-        // convert b in ('1'). If we only convert a = 2, we will end up with a filter
-        // NOT(a = 2), which will generate wrong results.
-        //
-        // Pushing one side of AND down is only safe to do at the top level or in the child
-        // AND before hitting NOT or OR conditions, and in this case, the unsupported predicate
-        // can be safely removed.
-        case And(left, right) =>
-          val leftResultOptional = convertibleFiltersHelper(left, canPartialPushDown)
-          val rightResultOptional = convertibleFiltersHelper(right, canPartialPushDown)
-          (leftResultOptional, rightResultOptional) match {
-            case (Some(leftResult), Some(rightResult)) => Some(And(leftResult, rightResult))
-            case (Some(leftResult), None) if canPartialPushDown => Some(leftResult)
-            case (None, Some(rightResult)) if canPartialPushDown => Some(rightResult)
-            case _ => None
-          }
+    def convertibleFiltersHelper(
+        filter: Filter,
+        canPartialPushDown: Boolean): Option[Filter] = filter match {
+      // At here, it is not safe to just convert one side and remove the other side
+      // if we do not understand what the parent filters are.
+      //
+      // Here is an example used to explain the reason.
+      // Let's say we have NOT(a = 2 AND b in ('1')) and we do not understand how to
+      // convert b in ('1'). If we only convert a = 2, we will end up with a filter
+      // NOT(a = 2), which will generate wrong results.
+      //
+      // Pushing one side of AND down is only safe to do at the top level or in the child
+      // AND before hitting NOT or OR conditions, and in this case, the unsupported predicate
+      // can be safely removed.
+      case And(left, right) =>
+        val leftResultOptional = convertibleFiltersHelper(left, canPartialPushDown)
+        val rightResultOptional = convertibleFiltersHelper(right, canPartialPushDown)
+        (leftResultOptional, rightResultOptional) match {
+          case (Some(leftResult), Some(rightResult)) => Some(And(leftResult, rightResult))
+          case (Some(leftResult), None) if canPartialPushDown => Some(leftResult)
+          case (None, Some(rightResult)) if canPartialPushDown => Some(rightResult)
+          case _ => None
+        }
 
-        // The Or predicate is convertible when both of its children can be pushed down.
-        // That is to say, if one/both of the children can be partially pushed down, the Or
-        // predicate can be partially pushed down as well.
-        //
-        // Here is an example used to explain the reason.
-        // Let's say we have
-        // (a1 AND a2) OR (b1 AND b2),
-        // a1 and b1 is convertible, while a2 and b2 is not.
-        // The predicate can be converted as
-        // (a1 OR b1) AND (a1 OR b2) AND (a2 OR b1) AND (a2 OR b2)
-        // As per the logical in And predicate, we can push down (a1 OR b1).
-        case Or(left, right) =>
-          for {
-            lhs <- convertibleFiltersHelper(left, canPartialPushDown)
-            rhs <- convertibleFiltersHelper(right, canPartialPushDown)
-          } yield Or(lhs, rhs)
-        case Not(pred) =>
-          val childResultOptional = convertibleFiltersHelper(pred, canPartialPushDown = false)
-          childResultOptional.map(Not)
-        case other =>
-          for (_ <- buildLeafSearchArgument(dataTypeMap, other, newBuilder())) yield other
-      }
+      // The Or predicate is convertible when both of its children can be pushed down.
+      // That is to say, if one/both of the children can be partially pushed down, the Or
+      // predicate can be partially pushed down as well.
+      //
+      // Here is an example used to explain the reason.
+      // Let's say we have
+      // (a1 AND a2) OR (b1 AND b2),
+      // a1 and b1 is convertible, while a2 and b2 is not.
+      // The predicate can be converted as
+      // (a1 OR b1) AND (a1 OR b2) AND (a2 OR b1) AND (a2 OR b2)
+      // As per the logical in And predicate, we can push down (a1 OR b1).
+      case Or(left, right) =>
+        for {
+          lhs <- convertibleFiltersHelper(left, canPartialPushDown)
+          rhs <- convertibleFiltersHelper(right, canPartialPushDown)
+        } yield Or(lhs, rhs)
+      case Not(pred) =>
+        val childResultOptional = convertibleFiltersHelper(pred, canPartialPushDown = false)
+        childResultOptional.map(Not)
+      case other =>
+        for (_ <- buildLeafSearchArgument(dataTypeMap, other, newBuilder())) yield other
+    }
     filters.flatMap { filter =>
       convertibleFiltersHelper(filter, true)
     }
@@ -140,8 +141,8 @@ private[sql] object OrcFilters extends OrcFiltersBase {
    */
   def getPredicateLeafType(dataType: DataType): PredicateLeaf.Type = dataType match {
     case BooleanType => PredicateLeaf.Type.BOOLEAN
-    case ByteType | ShortType | IntegerType | LongType | _: AnsiIntervalType | TimestampNTZType =>
-      PredicateLeaf.Type.LONG
+    case ByteType | ShortType | IntegerType | LongType |
+         _: AnsiIntervalType | TimestampNTZType => PredicateLeaf.Type.LONG
     case FloatType | DoubleType => PredicateLeaf.Type.FLOAT
     case StringType => PredicateLeaf.Type.STRING
     case DateType => PredicateLeaf.Type.DATE
@@ -153,8 +154,8 @@ private[sql] object OrcFilters extends OrcFiltersBase {
   /**
    * Cast literal values for filters.
    *
-   * We need to cast to long because ORC raises exceptions at 'checkLiteralType' of
-   * SearchArgumentImpl.java.
+   * We need to cast to long because ORC raises exceptions
+   * at 'checkLiteralType' of SearchArgumentImpl.java.
    */
   private def castLiteralValue(value: Any, dataType: DataType): Any = dataType match {
     case ByteType | ShortType | IntegerType | LongType =>
@@ -179,14 +180,10 @@ private[sql] object OrcFilters extends OrcFiltersBase {
   /**
    * Build a SearchArgument and return the builder so far.
    *
-   * @param dataTypeMap
-   *   a map from the attribute name to its data type.
-   * @param expression
-   *   the input predicates, which should be fully convertible to SearchArgument.
-   * @param builder
-   *   the input SearchArgument.Builder.
-   * @return
-   *   the builder so far.
+   * @param dataTypeMap a map from the attribute name to its data type.
+   * @param expression the input predicates, which should be fully convertible to SearchArgument.
+   * @param builder the input SearchArgument.Builder.
+   * @return the builder so far.
    */
   private def buildSearchArgument(
       dataTypeMap: Map[String, OrcPrimitiveField],
@@ -219,14 +216,10 @@ private[sql] object OrcFilters extends OrcFiltersBase {
   /**
    * Build a SearchArgument for a leaf predicate and return the builder so far.
    *
-   * @param dataTypeMap
-   *   a map from the attribute name to its data type.
-   * @param expression
-   *   the input filter predicates.
-   * @param builder
-   *   the input SearchArgument.Builder.
-   * @return
-   *   the builder so far.
+   * @param dataTypeMap a map from the attribute name to its data type.
+   * @param expression the input filter predicates.
+   * @param builder the input SearchArgument.Builder.
+   * @return the builder so far.
    */
   private def buildLeafSearchArgument(
       dataTypeMap: Map[String, OrcPrimitiveField],
@@ -243,76 +236,46 @@ private[sql] object OrcFilters extends OrcFiltersBase {
     expression match {
       case EqualTo(name, value) if dataTypeMap.contains(name) =>
         val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
-        Some(
-          builder
-            .startAnd()
-            .equals(dataTypeMap(name).fieldName, getType(name), castedValue)
-            .end())
+        Some(builder.startAnd()
+          .equals(dataTypeMap(name).fieldName, getType(name), castedValue).end())
 
       case EqualNullSafe(name, value) if dataTypeMap.contains(name) =>
         val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
-        Some(
-          builder
-            .startAnd()
-            .nullSafeEquals(dataTypeMap(name).fieldName, getType(name), castedValue)
-            .end())
+        Some(builder.startAnd()
+          .nullSafeEquals(dataTypeMap(name).fieldName, getType(name), castedValue).end())
 
       case LessThan(name, value) if dataTypeMap.contains(name) =>
         val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
-        Some(
-          builder
-            .startAnd()
-            .lessThan(dataTypeMap(name).fieldName, getType(name), castedValue)
-            .end())
+        Some(builder.startAnd()
+          .lessThan(dataTypeMap(name).fieldName, getType(name), castedValue).end())
 
       case LessThanOrEqual(name, value) if dataTypeMap.contains(name) =>
         val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
-        Some(
-          builder
-            .startAnd()
-            .lessThanEquals(dataTypeMap(name).fieldName, getType(name), castedValue)
-            .end())
+        Some(builder.startAnd()
+          .lessThanEquals(dataTypeMap(name).fieldName, getType(name), castedValue).end())
 
       case GreaterThan(name, value) if dataTypeMap.contains(name) =>
         val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
-        Some(
-          builder
-            .startNot()
-            .lessThanEquals(dataTypeMap(name).fieldName, getType(name), castedValue)
-            .end())
+        Some(builder.startNot()
+          .lessThanEquals(dataTypeMap(name).fieldName, getType(name), castedValue).end())
 
       case GreaterThanOrEqual(name, value) if dataTypeMap.contains(name) =>
         val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
-        Some(
-          builder
-            .startNot()
-            .lessThan(dataTypeMap(name).fieldName, getType(name), castedValue)
-            .end())
+        Some(builder.startNot()
+          .lessThan(dataTypeMap(name).fieldName, getType(name), castedValue).end())
 
       case IsNull(name) if dataTypeMap.contains(name) =>
-        Some(
-          builder
-            .startAnd()
-            .isNull(dataTypeMap(name).fieldName, getType(name))
-            .end())
+        Some(builder.startAnd()
+          .isNull(dataTypeMap(name).fieldName, getType(name)).end())
 
       case IsNotNull(name) if dataTypeMap.contains(name) =>
-        Some(
-          builder
-            .startNot()
-            .isNull(dataTypeMap(name).fieldName, getType(name))
-            .end())
+        Some(builder.startNot()
+          .isNull(dataTypeMap(name).fieldName, getType(name)).end())
 
       case In(name, values) if dataTypeMap.contains(name) =>
         val castedValues = values.map(v => castLiteralValue(v, dataTypeMap(name).fieldType))
-        Some(
-          builder
-            .startAnd()
-            .in(
-              dataTypeMap(name).fieldName,
-              getType(name),
-              castedValues.map(_.asInstanceOf[AnyRef]): _*)
-            .end())
+        Some(builder.startAnd().in(dataTypeMap(name).fieldName, getType(name),
+          castedValues.map(_.asInstanceOf[AnyRef]): _*).end())
 
       case _ => None
     }

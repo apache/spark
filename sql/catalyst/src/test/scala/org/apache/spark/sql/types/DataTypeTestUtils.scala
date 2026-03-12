@@ -28,18 +28,21 @@ object DataTypeTestUtils {
   /**
    * Instances of all [[IntegralType]]s.
    */
-  val integralType: Set[IntegralType] = Set(ByteType, ShortType, IntegerType, LongType)
+  val integralType: Set[IntegralType] = Set(
+    ByteType, ShortType, IntegerType, LongType
+  )
 
   /**
-   * Instances of all [[FractionalType]]s, including both fixed- and unlimited-precision decimal
-   * types.
+   * Instances of all [[FractionalType]]s, including both fixed- and unlimited-precision
+   * decimal types.
    */
   val fractionalTypes: Set[FractionalType] = Set(
     DecimalType.USER_DEFAULT,
     DecimalType(20, 5),
     DecimalType.SYSTEM_DEFAULT,
     DoubleType,
-    FloatType)
+    FloatType
+  )
 
   /**
    * Instances of all [[NumericType]]s.
@@ -66,8 +69,9 @@ object DataTypeTestUtils {
     YearMonthIntervalType(YEAR),
     YearMonthIntervalType(MONTH))
 
-  val timeTypes: Seq[TimeType] =
-    Seq(TimeType(TimeType.MIN_PRECISION), TimeType(TimeType.MAX_PRECISION))
+  val timeTypes: Seq[TimeType] = Seq(
+    TimeType(TimeType.MIN_PRECISION),
+    TimeType(TimeType.MAX_PRECISION))
 
   val unsafeRowMutableFieldTypes: Seq[DataType] = Seq(
     NullType,
@@ -79,7 +83,8 @@ object DataTypeTestUtils {
     DoubleType,
     DateType,
     TimestampType,
-    TimestampNTZType)
+    TimestampNTZType
+  )
 
   /**
    * Instances of all [[NumericType]]s and [[CalendarIntervalType]]

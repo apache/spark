@@ -39,21 +39,22 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
   }
 
   protected override def afterAll(): Unit = {
-    SQLConf.get.setConf(
-      SQLConf.OPTIMIZE_ONE_ROW_RELATION_SUBQUERY,
+    SQLConf.get.setConf(SQLConf.OPTIMIZE_ONE_ROW_RELATION_SUBQUERY,
       optimizeOneRowRelationSubqueryEnabled)
     super.afterAll()
   }
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("Subquery", Once, OptimizeOneRowRelationSubquery, PullupCorrelatedPredicates) ::
-        Batch("Cleanup", FixedPoint(10), CleanupAliases) :: Nil
+      Batch("Subquery", Once,
+        OptimizeOneRowRelationSubquery,
+        PullupCorrelatedPredicates) ::
+      Batch("Cleanup", FixedPoint(10),
+        CleanupAliases) :: Nil
   }
 
   private def assertHasDomainJoin(plan: LogicalPlan): Unit = {
-    assert(
-      plan.collectWithSubqueries { case d: DomainJoin => d }.nonEmpty,
+    assert(plan.collectWithSubqueries { case d: DomainJoin => d }.nonEmpty,
       s"Plan does not contain DomainJoin:\n$plan")
   }
 
@@ -101,8 +102,7 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
 
   test("Optimize lateral subquery with multiple projects") {
     Seq(Inner, LeftOuter, Cross).foreach { joinType =>
-      val inner = t0
-        .select($"a".as("a1"), $"b".as("b1"))
+      val inner = t0.select($"a".as("a1"), $"b".as("b1"))
         .select(($"a1" + $"b1").as("c1"), ($"a1" - $"b1").as("c2"))
       val query = t1.lateralJoin(inner, joinType, None)
       val optimized = Optimize.execute(query.analyze)
@@ -148,8 +148,8 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
   test("Should not optimize lateral join with non-empty join conditions") {
     Seq(Inner, LeftOuter).foreach { joinType =>
       // SELECT * FROM t1 JOIN LATERAL (SELECT a AS a1, b AS b1) ON a = b1
-      val query =
-        t1.lateralJoin(t0.select($"a".as("a1"), $"b".as("b1")), joinType, Some($"a" === $"b1"))
+      val query = t1.lateralJoin(t0.select($"a".as("a1"), $"b".as("b1")),
+        joinType, Some($"a" === $"b1"))
       val optimized = Optimize.execute(query.analyze)
       assertHasDomainJoin(optimized)
     }
@@ -159,10 +159,8 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
     // SELECT (SELECT (SELECT a WHERE a = 1) FROM (SELECT a AS a)) FROM t1
     // Filter (a = 1) cannot be optimized.
     val inner = t0.select($"a").where($"a" === 1)
-    val subquery = t0
-      .select($"a".as("a"))
-      .select(ScalarSubquery(inner).as("s"))
-      .select($"s" + 1)
+    val subquery = t0.select($"a".as("a"))
+      .select(ScalarSubquery(inner).as("s")).select($"s" + 1)
     val query = t1.select(ScalarSubquery(subquery).as("sub"))
     val optimized = Optimize.execute(query.analyze)
     assertHasDomainJoin(optimized)
@@ -170,7 +168,9 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
 
   test("SPARK-41441: optimize lateral subquery with Generate") {
     val query1 = t3.lateralJoin(t0.generate(Explode($"arr")))
-    comparePlans(Optimize.execute(query1.analyze), t3.generate(Explode($"arr")).analyze)
+    comparePlans(
+      Optimize.execute(query1.analyze),
+      t3.generate(Explode($"arr")).analyze)
 
     // Should not optimize when the lateral subquery plan is more complex.
     val query2 = t3.lateralJoin(t0.generate(Explode($"arr")).where($"col" > 0))
@@ -181,23 +181,22 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
   test("SPARK-41961: optimize lateral subquery with table-valued functions") {
     // SELECT * FROM t3 JOIN LATERAL EXPLODE(arr)
     val query1 = t3.lateralJoin(UnresolvedTableValuedFunction("explode", $"arr" :: Nil))
-    comparePlans(Optimize.execute(query1.analyze), t3.generate(Explode($"arr")).analyze)
+    comparePlans(
+      Optimize.execute(query1.analyze),
+      t3.generate(Explode($"arr")).analyze)
 
     // SELECT * FROM t3 JOIN LATERAL EXPLODE(arr) t(v)
     val query2 = t3.lateralJoin(
-      SubqueryAlias(
-        "t",
-        UnresolvedTVFAliases(
-          "explode" :: Nil,
-          UnresolvedTableValuedFunction("explode", $"arr" :: Nil),
-          "v" :: Nil)))
+      SubqueryAlias("t",
+        UnresolvedTVFAliases("explode" :: Nil,
+          UnresolvedTableValuedFunction("explode", $"arr" :: Nil), "v" :: Nil)))
     comparePlans(
       Optimize.execute(query2.analyze),
       t3.generate(Explode($"arr")).select($"a", $"b", $"arr", $"col".as("v")).analyze)
 
     // SELECT col FROM t3 JOIN LATERAL (SELECT * FROM EXPLODE(arr) WHERE col > 0)
-    val query3 =
-      t3.lateralJoin(UnresolvedTableValuedFunction("explode", $"arr" :: Nil).where($"col" > 0))
+    val query3 = t3.lateralJoin(
+      UnresolvedTableValuedFunction("explode", $"arr" :: Nil).where($"col" > 0))
     val optimized = Optimize.execute(query3.analyze)
     optimized.exists(_.isInstanceOf[Generate])
     assertHasDomainJoin(optimized)

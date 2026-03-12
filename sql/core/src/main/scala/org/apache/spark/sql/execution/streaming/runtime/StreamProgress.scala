@@ -28,12 +28,12 @@ import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, Offset
  */
 class StreamProgress(
     val baseMap: immutable.Map[SparkDataStream, OffsetV2] =
-      new immutable.HashMap[SparkDataStream, OffsetV2])
-    extends scala.collection.immutable.Map[SparkDataStream, OffsetV2] {
+        new immutable.HashMap[SparkDataStream, OffsetV2])
+  extends scala.collection.immutable.Map[SparkDataStream, OffsetV2] {
 
   /**
-   * Unified method to convert StreamProgress to appropriate OffsetSeq format. Handles both
-   * VERSION_1 (OffsetSeq) and VERSION_2 (OffsetMap) based on metadata version.
+   * Unified method to convert StreamProgress to appropriate OffsetSeq format.
+   * Handles both VERSION_1 (OffsetSeq) and VERSION_2 (OffsetMap) based on metadata version.
    */
   def toOffsets(
       sources: Seq[SparkDataStream],
@@ -49,7 +49,9 @@ class StreamProgress(
     }
   }
 
-  def toOffsetSeq(source: Seq[SparkDataStream], metadata: OffsetSeqMetadataBase): OffsetSeq = {
+  def toOffsetSeq(
+      source: Seq[SparkDataStream],
+      metadata: OffsetSeqMetadataBase): OffsetSeq = {
     OffsetSeq(source.map(get), Some(metadata.asInstanceOf[OffsetSeqMetadata]))
   }
 
@@ -59,8 +61,7 @@ class StreamProgress(
     // Compute reverse mapping only when needed
     val sourceToIdMap = sourceIdMap.map(_.swap)
     val offsetsMap = baseMap.map { case (source, offset) =>
-      val sourceId = sourceToIdMap.getOrElse(
-        source,
+      val sourceId = sourceToIdMap.getOrElse(source,
         throw new IllegalArgumentException(s"Source $source not found in sourceToIdMap"))
       sourceId -> Some(offset)
     }
@@ -69,11 +70,9 @@ class StreamProgress(
   }
 
   override def toString: String =
-    baseMap.map { case (k, v) => s"$k: $v" }.mkString("{", ",", "}")
+    baseMap.map { case (k, v) => s"$k: $v"}.mkString("{", ",", "}")
 
-  override def updated[B1 >: OffsetV2](
-      key: SparkDataStream,
-      value: B1): Map[SparkDataStream, B1] =
+  override def updated[B1 >: OffsetV2](key: SparkDataStream, value: B1): Map[SparkDataStream, B1] =
     baseMap + (key -> value)
 
   override def get(key: SparkDataStream): Option[OffsetV2] = baseMap.get(key)

@@ -35,9 +35,14 @@ class EliminateSortsSuite extends AnalysisTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("Default", FixedPoint(10), FoldablePropagation, LimitPushDown) ::
-        Batch("Eliminate Sorts", Once, EliminateSorts, RemoveRedundantSorts) ::
-        Batch("Collapse Project", Once, CollapseProject) :: Nil
+      Batch("Default", FixedPoint(10),
+        FoldablePropagation,
+        LimitPushDown) ::
+      Batch("Eliminate Sorts", Once,
+        EliminateSorts,
+        RemoveRedundantSorts) ::
+      Batch("Collapse Project", Once,
+        CollapseProject) :: Nil
   }
 
   object PushDownOptimizer extends RuleExecutor[LogicalPlan] {
@@ -47,8 +52,12 @@ class EliminateSortsSuite extends AnalysisTest {
 
   val testRelation = LocalRelation.fromExternalRows(
     Seq("a".attr.int, "b".attr.int, "c".attr.int),
-    1.to(12).map(_ => Row(1, 2, 3)))
-  val testRelationB = LocalRelation.fromExternalRows(Seq("d".attr.int), 1.to(12).map(_ => Row(1)))
+    1.to(12).map(_ => Row(1, 2, 3))
+  )
+  val testRelationB = LocalRelation.fromExternalRows(
+    Seq("d".attr.int),
+    1.to(12).map(_ => Row(1))
+  )
 
   test("Empty order by clause") {
     val x = testRelation
@@ -89,8 +98,7 @@ class EliminateSortsSuite extends AnalysisTest {
   test("Remove no-op alias") {
     val x = testRelation
 
-    val query = x
-      .select($"a".as("x"), Literal(1).as("y"), $"b")
+    val query = x.select($"a".as("x"), Literal(1).as("y"), $"b")
       .orderBy($"x".asc, $"y".asc, $"b".desc)
     val optimized = Optimize.execute(analyzer.execute(query))
     val correctAnswer = analyzer.execute(
@@ -109,8 +117,7 @@ class EliminateSortsSuite extends AnalysisTest {
 
   test("SPARK-33183: remove redundant sort by") {
     val orderedPlan = testRelation.select($"a", $"b").orderBy($"a".asc, $"b".desc_nullsFirst)
-    val unnecessaryReordered = LocalLimit(2, orderedPlan)
-      .select($"a")
+    val unnecessaryReordered = LocalLimit(2, orderedPlan).select($"a")
       .sortBy($"a".asc, $"b".desc_nullsFirst)
     val optimized = Optimize.execute(unnecessaryReordered.analyze)
     val correctAnswer = LocalLimit(2, orderedPlan).select($"a").analyze
@@ -174,10 +181,7 @@ class EliminateSortsSuite extends AnalysisTest {
   }
 
   test("different sorts are not simplified if limit is in between") {
-    val orderedPlan = testRelation
-      .select($"a", $"b")
-      .orderBy($"b".desc)
-      .limit(Literal(10))
+    val orderedPlan = testRelation.select($"a", $"b").orderBy($"b".desc).limit(Literal(10))
       .orderBy($"a".asc)
     val optimized = Optimize.execute(orderedPlan.analyze)
     val correctAnswer = orderedPlan.analyze
@@ -247,26 +251,23 @@ class EliminateSortsSuite extends AnalysisTest {
 
     val orderedThrice = orderedTwiceWithBoth.select(($"b" + 1).as("c")).orderBy($"c".asc)
     val optimizedThrice = Optimize.execute(orderedThrice.analyze)
-    val correctAnswerThrice = testRelation
-      .select($"b")
-      .where($"b" > Literal(0))
-      .select(($"b" + 1).as("c"))
-      .orderBy($"c".asc)
-      .analyze
+    val correctAnswerThrice = testRelation.select($"b").where($"b" > Literal(0))
+      .select(($"b" + 1).as("c")).orderBy($"c".asc).analyze
     comparePlans(optimizedThrice, correctAnswerThrice)
   }
 
   test("remove orderBy in groupBy clause with order irrelevant aggs") {
     Seq(
-      (e: Expression) => min(e),
-      (e: Expression) => minDistinct(e),
-      (e: Expression) => max(e),
-      (e: Expression) => maxDistinct(e),
-      (e: Expression) => count(e),
-      (e: Expression) => countDistinct(e),
-      (e: Expression) => bitAnd(e),
-      (e: Expression) => bitOr(e),
-      (e: Expression) => bitXor(e)).foreach(agg => {
+      (e : Expression) => min(e),
+      (e : Expression) => minDistinct(e),
+      (e : Expression) => max(e),
+      (e : Expression) => maxDistinct(e),
+      (e : Expression) => count(e),
+      (e : Expression) => countDistinct(e),
+      (e : Expression) => bitAnd(e),
+      (e : Expression) => bitOr(e),
+      (e : Expression) => bitXor(e)
+    ).foreach(agg => {
       val projectPlan = testRelation.select($"a", $"b")
       val unnecessaryOrderByPlan = projectPlan.orderBy($"a".asc, $"b".desc)
       val groupByPlan = unnecessaryOrderByPlan.groupBy($"a")(agg($"b"))
@@ -304,8 +305,8 @@ class EliminateSortsSuite extends AnalysisTest {
   }
 
   test("should not remove orderBy in groupBy clause with PythonUDF as aggs") {
-    val pythonUdf =
-      PythonUDF("pyUDF", null, IntegerType, Seq.empty, PythonEvalType.SQL_BATCHED_UDF, true)
+    val pythonUdf = PythonUDF("pyUDF", null,
+      IntegerType, Seq.empty, PythonEvalType.SQL_BATCHED_UDF, true)
     val projectPlan = testRelation.select($"a", $"b")
     val orderByPlan = projectPlan.orderBy($"a".asc, $"b".desc)
     val groupByPlan = orderByPlan.groupBy($"a")(pythonUdf)
@@ -315,8 +316,8 @@ class EliminateSortsSuite extends AnalysisTest {
   }
 
   test("should not remove orderBy in groupBy clause with ScalaUDF as aggs") {
-    val scalaUdf =
-      ScalaUDF((s: Int) => s, IntegerType, $"a" :: Nil, Option(ExpressionEncoder[Int]()) :: Nil)
+    val scalaUdf = ScalaUDF((s: Int) => s, IntegerType, $"a" :: Nil,
+      Option(ExpressionEncoder[Int]()) :: Nil)
     val projectPlan = testRelation.select($"a", $"b")
     val orderByPlan = projectPlan.orderBy($"a".asc, $"b".desc)
     val groupByPlan = orderByPlan.groupBy($"a")(scalaUdf)
@@ -373,8 +374,7 @@ class EliminateSortsSuite extends AnalysisTest {
     val optimized = Optimize.execute(joinPlan.analyze)
     val correctAnswer = LocalLimit(10, projectPlan)
       .join(LocalLimit(10, projectPlanB), LeftOuter)
-      .limit(10)
-      .analyze
+      .limit(10).analyze
     comparePlans(optimized, correctAnswer)
   }
 
@@ -396,9 +396,8 @@ class EliminateSortsSuite extends AnalysisTest {
   test("SPARK-33183: remove consecutive global sorts with the same ordering") {
     Seq(
       (testRelation.orderBy($"a".asc).orderBy($"a".asc), testRelation.orderBy($"a".asc)),
-      (
-        testRelation.orderBy($"a".asc, $"b".desc).orderBy($"a".asc),
-        testRelation.orderBy($"a".asc))).foreach { case (ordered, answer) =>
+      (testRelation.orderBy($"a".asc, $"b".desc).orderBy($"a".asc), testRelation.orderBy($"a".asc))
+    ).foreach { case (ordered, answer) =>
       val optimized = Optimize.execute(ordered.analyze)
       comparePlans(optimized, answer.analyze)
     }
@@ -422,7 +421,8 @@ class EliminateSortsSuite extends AnalysisTest {
     val correctAnswer = testRelation.orderBy($"a".asc).analyze
     Seq(
       testRelation.sortBy($"a".asc).orderBy($"a".asc),
-      testRelation.orderBy($"a".asc).sortBy($"a".asc).orderBy($"a".asc)).foreach { ordered =>
+      testRelation.orderBy($"a".asc).sortBy($"a".asc).orderBy($"a".asc)
+    ).foreach { ordered =>
       val optimized = Optimize.execute(ordered.analyze)
       comparePlans(optimized, correctAnswer)
     }
@@ -432,22 +432,19 @@ class EliminateSortsSuite extends AnalysisTest {
     // global -> local
     val plan = testRelation.orderBy($"a".asc).sortBy($"c".asc).analyze
     val expect = RepartitionByExpression($"a".asc :: Nil, testRelation, None)
-      .sortBy($"c".asc)
-      .analyze
+      .sortBy($"c".asc).analyze
     comparePlans(Optimize.execute(plan), expect)
 
     // global -> global -> local
     val plan2 = testRelation.orderBy($"a".asc).orderBy($"b".asc).sortBy($"c".asc).analyze
     val expected2 = RepartitionByExpression($"b".asc :: Nil, testRelation, None)
-      .sortBy($"c".asc)
-      .analyze
+      .sortBy($"c".asc).analyze
     comparePlans(Optimize.execute(plan2), expected2)
 
     // local -> global -> local
     val plan3 = testRelation.sortBy($"a".asc).orderBy($"b".asc).sortBy($"c".asc).analyze
     val expected3 = RepartitionByExpression($"b".asc :: Nil, testRelation, None)
-      .sortBy($"c".asc)
-      .analyze
+      .sortBy($"c".asc).analyze
     comparePlans(Optimize.execute(plan3), expected3)
   }
 
@@ -484,13 +481,11 @@ class EliminateSortsSuite extends AnalysisTest {
   }
 
   test("SPARK-46378: Still remove Sort after converting Aggregate to Project") {
-    val originalPlan = testRelation
-      .orderBy($"a".asc)
+    val originalPlan = testRelation.orderBy($"a".asc)
       .groupBy($"a")($"a")
       .limit(1)
 
-    val correctAnswer = testRelation
-      .localLimit(1)
+    val correctAnswer = testRelation.localLimit(1)
       .select($"a")
       .limit(1)
 

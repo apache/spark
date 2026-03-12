@@ -31,6 +31,7 @@ import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, BooleanType, DataType, IntegerType, LongType, StringType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
 
+
 /**
  * The HllSketchAgg function utilizes a Datasketches HllSketch instance to count a probabilistic
  * approximation of the number of unique values in a given column, and outputs the binary
@@ -38,10 +39,8 @@ import org.apache.spark.unsafe.types.UTF8String
  *
  * See [[https://datasketches.apache.org/docs/HLL/HLL.html]] for more information.
  *
- * @param left
- *   child expression against which unique counting will occur
- * @param right
- *   the log-base-2 of K, where K is the number of buckets or slots for the sketch
+ * @param left child expression against which unique counting will occur
+ * @param right the log-base-2 of K, where K is the number of buckets or slots for the sketch
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -62,9 +61,7 @@ case class HllSketchAgg(
     right: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
-    extends TypedImperativeAggregate[HllSketch]
-    with BinaryLike[Expression]
-    with ExpectsInputTypes {
+  extends TypedImperativeAggregate[HllSketch] with BinaryLike[Expression] with ExpectsInputTypes {
 
   // Hllsketch config - mark as lazy so that they're not evaluated during tree transformation.
 
@@ -102,9 +99,8 @@ case class HllSketchAgg(
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): HllSketchAgg =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
-  override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): HllSketchAgg =
+  override protected def withNewChildrenInternal(newLeft: Expression,
+                                                 newRight: Expression): HllSketchAgg =
     copy(left = newLeft, right = newRight)
 
   // Overrides for TypedImperativeAggregate
@@ -127,8 +123,7 @@ case class HllSketchAgg(
   /**
    * Instantiate an HllSketch instance using the lgConfigK param.
    *
-   * @return
-   *   an HllSketch instance
+   * @return an HllSketch instance
    */
   override def createAggregationBuffer(): HllSketch = {
     new HllSketch(lgConfigK, targetType)
@@ -137,15 +132,14 @@ case class HllSketchAgg(
   /**
    * Evaluate the input row and update the HllSketch instance with the row's value. The update
    * function only supports a subset of Spark SQL types, and an exception will be thrown for
-   * unsupported types. Notes:
+   * unsupported types.
+   * Notes:
    *   - Null values are ignored.
    *   - Empty byte arrays are ignored.
    *   - Strings that are collation-equal to the empty string are ignored.
    *
-   * @param sketch
-   *   The HllSketch instance.
-   * @param input
-   *   an input row
+   * @param sketch The HllSketch instance.
+   * @param input  an input row
    */
   override def update(sketch: HllSketch, input: InternalRow): HllSketch = {
     val v = left.eval(input)
@@ -165,10 +159,9 @@ case class HllSketchAgg(
             sketch.update(collation.sortKeyFunction.apply(str))
           }
         case BinaryType => sketch.update(v.asInstanceOf[Array[Byte]])
-        case dataType =>
-          throw new SparkUnsupportedOperationException(
-            errorClass = "_LEGACY_ERROR_TEMP_3121",
-            messageParameters = Map("dataType" -> dataType.toString))
+        case dataType => throw new SparkUnsupportedOperationException(
+          errorClass = "_LEGACY_ERROR_TEMP_3121",
+          messageParameters = Map("dataType" -> dataType.toString))
       }
     }
     sketch
@@ -177,10 +170,8 @@ case class HllSketchAgg(
   /**
    * Merges an input HllSketch into the sketch which is acting as the aggregation buffer.
    *
-   * @param sketch
-   *   the HllSketch instance used to store the aggregation result.
-   * @param input
-   *   an input HllSketch instance
+   * @param sketch the HllSketch instance used to store the aggregation result.
+   * @param input an input HllSketch instance
    */
   override def merge(sketch: HllSketch, input: HllSketch): HllSketch = {
     val union = new Union(sketch.getLgConfigK)
@@ -192,16 +183,14 @@ case class HllSketchAgg(
   /**
    * Returns an HllSketch derived from the input column or expression
    *
-   * @param sketch
-   *   HllSketch instance used as an aggregation buffer
-   * @return
-   *   A binary sketch which can be evaluated or merged
+   * @param sketch HllSketch instance used as an aggregation buffer
+   * @return A binary sketch which can be evaluated or merged
    */
   override def eval(sketch: HllSketch): Any = {
     sketch.toUpdatableByteArray
   }
 
-  /** Convert the underlying HllSketch into an updatable byte array */
+  /** Convert the underlying HllSketch into an updatable byte array  */
   override def serialize(sketch: HllSketch): Array[Byte] = {
     sketch.toUpdatableByteArray
   }
@@ -213,7 +202,8 @@ case class HllSketchAgg(
 }
 
 /**
- * Companion object to HllSketchAgg, meant to encapsulate static shared functions like checkLgK
+ * Companion object to HllSketchAgg, meant to encapsulate static
+ * shared functions like checkLgK
  */
 object HllSketchAgg {
   // lgConfigK min/max values copied from Dataksketches HllUtil. These
@@ -225,25 +215,20 @@ object HllSketchAgg {
   // Replicate Datasketches' HllUtil's checkLgK implementation, as we can't reference it directly.
   def checkLgK(lgConfigK: Int): Unit = {
     if (lgConfigK < minLgConfigK || lgConfigK > maxLgConfigK) {
-      throw QueryExecutionErrors.hllInvalidLgK(
-        function = "hll_sketch_agg",
-        min = minLgConfigK,
-        max = maxLgConfigK,
-        value = lgConfigK)
+      throw QueryExecutionErrors.hllInvalidLgK(function = "hll_sketch_agg",
+        min = minLgConfigK, max = maxLgConfigK, value = lgConfigK)
     }
   }
 }
 
 /**
- * The HllUnionAgg function ingests and merges Datasketches HllSketch instances previously
- * produced by the HllSketchBinary function, and outputs the merged HllSketch.
+ * The HllUnionAgg function ingests and merges Datasketches HllSketch instances previously produced
+ * by the HllSketchBinary function, and outputs the merged HllSketch.
  *
  * See [[https://datasketches.apache.org/docs/HLL/HLL.html]] for more information.
  *
- * @param left
- *   Child expression against which unique counting will occur
- * @param right
- *   Allow sketches with different lgConfigK values
+ * @param left Child expression against which unique counting will occur
+ * @param right Allow sketches with different lgConfigK values
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -264,7 +249,7 @@ case class HllUnionAgg(
     right: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
-    extends TypedImperativeAggregate[Option[Union]]
+  extends TypedImperativeAggregate[Option[Union]]
     with BinaryLike[Expression]
     with ExpectsInputTypes {
 
@@ -293,15 +278,14 @@ case class HllUnionAgg(
 
   // Copy constructors required by ImperativeAggregate
 
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): HllUnionAgg =
-    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int):
+  HllUnionAgg = copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): HllUnionAgg =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
-  override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): HllUnionAgg = copy(left = newLeft, right = newRight)
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression):
+  HllUnionAgg = copy(left = newLeft, right = newRight)
 
   // Overrides for TypedImperativeAggregate
 
@@ -314,11 +298,10 @@ case class HllUnionAgg(
   override def nullable: Boolean = false
 
   /**
-   * Defer instantiation of the Union instance until we've deserialized our first hll sketch, and
-   * use that sketch's lgConfigK value
+   * Defer instantiation of the Union instance until we've deserialized
+   * our first hll sketch, and use that sketch's lgConfigK value
    *
-   * @return
-   *   None
+   * @return None
    */
   override def createAggregationBuffer(): Option[Union] = {
     None
@@ -328,10 +311,8 @@ case class HllUnionAgg(
    * Helper method to compare lgConfigKs and throw an exception if `allowDifferentLgConfigK` isn't
    * true and configs don't match.
    *
-   * @param left
-   *   An lgConfigK value
-   * @param right
-   *   An lgConfigK value
+   * @param left An lgConfigK value
+   * @param right An lgConfigK value
    */
   def compareLgConfigK(left: Int, right: Int): Unit = {
     if (!allowDifferentLgConfigK && left != right) {
@@ -342,10 +323,8 @@ case class HllUnionAgg(
   /**
    * Update the Union instance with the HllSketch byte array obtained from the row.
    *
-   * @param unionOption
-   *   A previously initialized Union instance, or None
-   * @param input
-   *   An input row
+   * @param unionOption A previously initialized Union instance, or None
+   * @param input An input row
    */
   override def update(unionOption: Option[Union], input: InternalRow): Option[Union] = {
     val v = left.eval(input)
@@ -359,8 +338,8 @@ case class HllUnionAgg(
             union.update(sketch)
             Some(union)
           } catch {
-            case _: SketchesArgumentException | _: java.lang.Error |
-                _: ArrayIndexOutOfBoundsException =>
+            case _: SketchesArgumentException | _: java.lang.Error
+                 | _: ArrayIndexOutOfBoundsException =>
               throw QueryExecutionErrors.hllInvalidInputSketchBuffer(prettyName)
           }
         case _ =>
@@ -374,10 +353,8 @@ case class HllUnionAgg(
   /**
    * Merges an input Union into the union which is acting as the aggregation buffer.
    *
-   * @param unionOption
-   *   The Union instance used to store the aggregation result
-   * @param inputOption
-   *   An input Union instance
+   * @param unionOption The Union instance used to store the aggregation result
+   * @param inputOption An input Union instance
    */
   override def merge(unionOption: Option[Union], inputOption: Option[Union]): Option[Union] = {
     (unionOption, inputOption) match {
@@ -398,10 +375,8 @@ case class HllUnionAgg(
   /**
    * Returns an HllSketch derived from the merged HllSketches
    *
-   * @param unionOption
-   *   Union instance used as an aggregation buffer
-   * @return
-   *   A binary sketch which can be evaluated or merged
+   * @param unionOption Union instance used as an aggregation buffer
+   * @return A binary sketch which can be evaluated or merged
    */
   override def eval(unionOption: Option[Union]): Any = {
     unionOption match {
@@ -411,7 +386,7 @@ case class HllUnionAgg(
     }
   }
 
-  /** Convert the underlying Union into an updatable byte array */
+  /** Convert the underlying Union into an updatable byte array  */
   override def serialize(unionOption: Option[Union]): Array[Byte] = {
     unionOption match {
       case Some(union) => union.toUpdatableByteArray
@@ -424,7 +399,7 @@ case class HllUnionAgg(
   override def deserialize(buffer: Array[Byte]): Option[Union] = {
     if (buffer.length != 0) {
       Some(Union.heapify(buffer))
-      // unclear if these scenarios can ever occur
+    // unclear if these scenarios can ever occur
     } else {
       None
     }

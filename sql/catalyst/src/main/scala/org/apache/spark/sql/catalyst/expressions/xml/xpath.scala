@@ -32,9 +32,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * This is not the world's most efficient implementation due to type conversion, but works.
  */
 abstract class XPathExtract
-    extends BinaryExpression
-    with RuntimeReplaceable
-    with ExpectsInputTypes {
+  extends BinaryExpression with RuntimeReplaceable with ExpectsInputTypes {
   override def left: Expression = xml
   override def right: Expression = path
 
@@ -53,7 +51,9 @@ abstract class XPathExtract
         messageParameters = Map(
           "inputName" -> toSQLId("path"),
           "inputType" -> toSQLType(StringTypeWithCollation(supportsTrimCollation = true)),
-          "inputExpr" -> toSQLExpr(path)))
+          "inputExpr" -> toSQLExpr(path)
+        )
+      )
     } else {
       super.checkInputDataTypes()
     }
@@ -77,8 +77,7 @@ abstract class XPathExtract
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage =
-    "_FUNC_(xml, xpath) - Returns true if the XPath expression evaluates to true, or if a matching node is found.",
+  usage = "_FUNC_(xml, xpath) - Returns true if the XPath expression evaluates to true, or if a matching node is found.",
   examples = """
     Examples:
       > SELECT _FUNC_('<a><b>1</b></a>','a/b');
@@ -94,14 +93,12 @@ case class XPathBoolean(xml: Expression, path: Expression) extends XPathExtract 
   override def prettyName: String = "xpath_boolean"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): XPathBoolean = copy(xml = newLeft, path = newRight)
+    newLeft: Expression, newRight: Expression): XPathBoolean = copy(xml = newLeft, path = newRight)
 }
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage =
-    "_FUNC_(xml, xpath) - Returns a short integer value, or the value zero if no match is found, or a match is found but the value is non-numeric.",
+  usage = "_FUNC_(xml, xpath) - Returns a short integer value, or the value zero if no match is found, or a match is found but the value is non-numeric.",
   examples = """
     Examples:
       > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
@@ -118,14 +115,12 @@ case class XPathShort(xml: Expression, path: Expression) extends XPathExtract {
   override def dataType: DataType = ShortType
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): XPathShort = copy(xml = newLeft, path = newRight)
+    newLeft: Expression, newRight: Expression): XPathShort = copy(xml = newLeft, path = newRight)
 }
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage =
-    "_FUNC_(xml, xpath) - Returns an integer value, or the value zero if no match is found, or a match is found but the value is non-numeric.",
+  usage = "_FUNC_(xml, xpath) - Returns an integer value, or the value zero if no match is found, or a match is found but the value is non-numeric.",
   examples = """
     Examples:
       > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
@@ -142,14 +137,12 @@ case class XPathInt(xml: Expression, path: Expression) extends XPathExtract {
   override def dataType: DataType = IntegerType
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): Expression = copy(xml = newLeft, path = newRight)
+    newLeft: Expression, newRight: Expression): Expression = copy(xml = newLeft, path = newRight)
 }
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage =
-    "_FUNC_(xml, xpath) - Returns a long integer value, or the value zero if no match is found, or a match is found but the value is non-numeric.",
+  usage = "_FUNC_(xml, xpath) - Returns a long integer value, or the value zero if no match is found, or a match is found but the value is non-numeric.",
   examples = """
     Examples:
       > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
@@ -166,14 +159,12 @@ case class XPathLong(xml: Expression, path: Expression) extends XPathExtract {
   override def dataType: DataType = LongType
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): XPathLong = copy(xml = newLeft, path = newRight)
+    newLeft: Expression, newRight: Expression): XPathLong = copy(xml = newLeft, path = newRight)
 }
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage =
-    "_FUNC_(xml, xpath) - Returns a float value, the value zero if no match is found, or NaN if a match is found but the value is non-numeric.",
+  usage = "_FUNC_(xml, xpath) - Returns a float value, the value zero if no match is found, or NaN if a match is found but the value is non-numeric.",
   examples = """
     Examples:
       > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
@@ -190,14 +181,12 @@ case class XPathFloat(xml: Expression, path: Expression) extends XPathExtract {
   override def dataType: DataType = FloatType
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): XPathFloat = copy(xml = newLeft, path = newRight)
+    newLeft: Expression, newRight: Expression): XPathFloat = copy(xml = newLeft, path = newRight)
 }
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage =
-    "_FUNC_(xml, xpath) - Returns a double value, the value zero if no match is found, or NaN if a match is found but the value is non-numeric.",
+  usage = "_FUNC_(xml, xpath) - Returns a double value, the value zero if no match is found, or NaN if a match is found but the value is non-numeric.",
   examples = """
     Examples:
       > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
@@ -215,14 +204,12 @@ case class XPathDouble(xml: Expression, path: Expression) extends XPathExtract {
   override def dataType: DataType = DoubleType
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): XPathDouble = copy(xml = newLeft, path = newRight)
+    newLeft: Expression, newRight: Expression): XPathDouble = copy(xml = newLeft, path = newRight)
 }
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage =
-    "_FUNC_(xml, xpath) - Returns the text contents of the first xml node that matches the XPath expression.",
+  usage = "_FUNC_(xml, xpath) - Returns the text contents of the first xml node that matches the XPath expression.",
   examples = """
     Examples:
       > SELECT _FUNC_('<a><b>b</b><c>cc</c></a>','a/c');
@@ -232,22 +219,20 @@ case class XPathDouble(xml: Expression, path: Expression) extends XPathExtract {
   group = "xml_funcs")
 // scalastyle:on line.size.limit
 case class XPathString(xml: Expression, path: Expression)
-    extends XPathExtract
-    with DefaultStringProducingExpression {
+  extends XPathExtract
+  with DefaultStringProducingExpression {
 
   @transient override lazy val evaluator: XPathEvaluator = XPathStringEvaluator(pathUTF8String)
 
   override def prettyName: String = "xpath_string"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): Expression = copy(xml = newLeft, path = newRight)
+    newLeft: Expression, newRight: Expression): Expression = copy(xml = newLeft, path = newRight)
 }
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage =
-    "_FUNC_(xml, xpath) - Returns a string array of values within the nodes of xml that match the XPath expression.",
+  usage = "_FUNC_(xml, xpath) - Returns a string array of values within the nodes of xml that match the XPath expression.",
   examples = """
     Examples:
       > SELECT _FUNC_('<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>','a/b/text()');
@@ -259,8 +244,8 @@ case class XPathString(xml: Expression, path: Expression)
   group = "xml_funcs")
 // scalastyle:on line.size.limit
 case class XPathList(xml: Expression, path: Expression)
-    extends XPathExtract
-    with DefaultStringProducingExpression {
+  extends XPathExtract
+  with DefaultStringProducingExpression {
 
   @transient override lazy val evaluator: XPathEvaluator = XPathListEvaluator(pathUTF8String)
 
@@ -268,6 +253,5 @@ case class XPathList(xml: Expression, path: Expression)
   override def dataType: DataType = ArrayType(super.dataType)
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): XPathList = copy(xml = newLeft, path = newRight)
+    newLeft: Expression, newRight: Expression): XPathList = copy(xml = newLeft, path = newRight)
 }

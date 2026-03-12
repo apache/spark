@@ -37,8 +37,7 @@ trait V1WriteCommandSuiteBase extends SQLTestUtils with AdaptiveSparkPlanHelper 
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    (0 to 20)
-      .map(i => (i, i % 5, (i % 10).toString))
+    (0 to 20).map(i => (i, i % 5, (i % 10).toString))
       .toDF("i", "j", "k")
       .write
       .saveAsTable("t0")
@@ -65,9 +64,7 @@ trait V1WriteCommandSuiteBase extends SQLTestUtils with AdaptiveSparkPlanHelper 
       orderingMatched: Boolean,
       hasEmpty2Null: Boolean = false)(query: => Unit): Unit = {
     executeAndCheckOrderingAndCustomValidate(
-      hasLogicalSort,
-      Some(orderingMatched),
-      hasEmpty2Null)(query)(_ => ())
+      hasLogicalSort, Some(orderingMatched), hasEmpty2Null)(query)(_ => ())
   }
 
   /**
@@ -76,8 +73,8 @@ trait V1WriteCommandSuiteBase extends SQLTestUtils with AdaptiveSparkPlanHelper 
   protected def executeAndCheckOrderingAndCustomValidate(
       hasLogicalSort: Boolean,
       orderingMatched: Option[Boolean],
-      hasEmpty2Null: Boolean = false)(
-      query: => Unit)(customValidate: LogicalPlan => Unit): Unit = {
+      hasEmpty2Null: Boolean = false)(query: => Unit)(
+      customValidate: LogicalPlan => Unit): Unit = {
     @volatile var optimizedPlan: LogicalPlan = null
 
     val listener = new QueryExecutionListener {
@@ -95,10 +92,7 @@ trait V1WriteCommandSuiteBase extends SQLTestUtils with AdaptiveSparkPlanHelper 
           case _ =>
         }
       }
-      override def onFailure(
-          funcName: String,
-          qe: QueryExecution,
-          exception: Exception): Unit = {}
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
     }
     spark.listenerManager.register(listener)
 
@@ -106,8 +100,7 @@ trait V1WriteCommandSuiteBase extends SQLTestUtils with AdaptiveSparkPlanHelper 
 
     orderingMatched.foreach { matched =>
       // Check whether the output ordering is matched before FileFormatWriter executes rdd.
-      assert(
-        FileFormatWriter.outputOrderingMatched == matched,
+      assert(FileFormatWriter.outputOrderingMatched == matched,
         s"Expect orderingMatched: $matched, " +
           s"Actual: ${FileFormatWriter.outputOrderingMatched}")
     }
@@ -117,15 +110,13 @@ trait V1WriteCommandSuiteBase extends SQLTestUtils with AdaptiveSparkPlanHelper 
     assert(optimizedPlan != null)
     // Check whether exists a logical sort node of the write query.
     // If user specified sort matches required ordering, the sort node may not at the top of query.
-    assert(
-      optimizedPlan.exists(_.isInstanceOf[Sort]) == hasLogicalSort,
+    assert(optimizedPlan.exists(_.isInstanceOf[Sort]) == hasLogicalSort,
       s"Expect hasLogicalSort: $hasLogicalSort," +
         s"Actual: ${optimizedPlan.exists(_.isInstanceOf[Sort])}")
 
     // Check empty2null conversion.
     val empty2nullExpr = optimizedPlan.exists(p => V1WritesUtils.hasEmptyToNull(p.expressions))
-    assert(
-      empty2nullExpr == hasEmpty2Null,
+    assert(empty2nullExpr == hasEmpty2Null,
       s"Expect hasEmpty2Null: $hasEmpty2Null, Actual: $empty2nullExpr. Plan:\n$optimizedPlan")
 
     customValidate(optimizedPlan)
@@ -163,9 +154,7 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
     withPlannedWrite { enabled =>
       withTable("t") {
         executeAndCheckOrdering(
-          hasLogicalSort = enabled,
-          orderingMatched = enabled,
-          hasEmpty2Null = enabled) {
+          hasLogicalSort = enabled, orderingMatched = enabled, hasEmpty2Null = enabled) {
           sql("CREATE TABLE t USING PARQUET PARTITIONED BY (k) AS SELECT * FROM t0")
         }
       }
@@ -175,15 +164,14 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
   test("v1 write with partition, bucketed and sort columns") {
     withPlannedWrite { enabled =>
       withTable("t") {
-        sql("""
+        sql(
+          """
             |CREATE TABLE t(i INT, j INT) USING PARQUET
             |PARTITIONED BY (k STRING)
             |CLUSTERED BY (i, j) SORTED BY (j) INTO 2 BUCKETS
             |""".stripMargin)
         executeAndCheckOrdering(
-          hasLogicalSort = enabled,
-          orderingMatched = enabled,
-          hasEmpty2Null = enabled) {
+          hasLogicalSort = enabled, orderingMatched = enabled, hasEmpty2Null = enabled) {
           sql("INSERT INTO t SELECT * FROM t0")
         }
       }
@@ -193,7 +181,8 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
   test("v1 write with already sorted plan - non-string partition column") {
     withPlannedWrite { enabled =>
       withTable("t") {
-        sql("""
+        sql(
+          """
             |CREATE TABLE t(i INT, k STRING) USING PARQUET
             |PARTITIONED BY (j INT)
             |""".stripMargin)
@@ -207,14 +196,13 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
   test("v1 write with already sorted plan - string partition column") {
     withPlannedWrite { enabled =>
       withTable("t") {
-        sql("""
+        sql(
+          """
             |CREATE TABLE t(i INT, j INT) USING PARQUET
             |PARTITIONED BY (k STRING)
             |""".stripMargin)
         executeAndCheckOrdering(
-          hasLogicalSort = true,
-          orderingMatched = true,
-          hasEmpty2Null = enabled) {
+          hasLogicalSort = true, orderingMatched = true, hasEmpty2Null = enabled) {
           sql("INSERT INTO t SELECT * FROM t0 ORDER BY k")
         }
       }
@@ -225,12 +213,14 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       withPlannedWrite { enabled =>
         withTable("t") {
-          sql("""
+          sql(
+            """
               |CREATE TABLE t(b INT, value STRING) USING PARQUET
               |PARTITIONED BY (key INT)
               |""".stripMargin)
           executeAndCheckOrdering(hasLogicalSort = true, orderingMatched = true) {
-            sql("""
+            sql(
+              """
                 |INSERT INTO t
                 |SELECT b, value, key
                 |FROM testData JOIN testData2 ON key = a
@@ -246,37 +236,21 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
             assert(executedPlan.isInstanceOf[WriteFilesExecBase])
             executedPlan.asInstanceOf[WriteFilesExecBase].child
           } else {
-            executedPlan.transformDown { case a: AdaptiveSparkPlanExec =>
-              stripAQEPlan(a)
+            executedPlan.transformDown {
+              case a: AdaptiveSparkPlanExec => stripAQEPlan(a)
             }
           }
 
           // assert the outer most sort in the executed plan
-          assert(
-            plan
-              .collectFirst { case s: SortExec =>
-                s
-              }
-              .exists {
-                case SortExec(
-                      Seq(
-                        SortOrder(
-                          AttributeReference("key", IntegerType, _, _),
-                          Ascending,
-                          NullsFirst,
-                          _),
-                        SortOrder(
-                          AttributeReference("value", StringType, _, _),
-                          Ascending,
-                          NullsFirst,
-                          _)),
-                      false,
-                      _,
-                      _) =>
-                  true
-                case _ => false
-              },
-            plan)
+          assert(plan.collectFirst {
+            case s: SortExec => s
+          }.exists {
+            case SortExec(Seq(
+              SortOrder(AttributeReference("key", IntegerType, _, _), Ascending, NullsFirst, _),
+              SortOrder(AttributeReference("value", StringType, _, _), Ascending, NullsFirst, _)
+            ), false, _, _) => true
+            case _ => false
+          }, plan)
         }
       }
     }
@@ -285,15 +259,15 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
   test("SPARK-41914: v1 write with AQE and in-partition sorted - string partition column") {
     withPlannedWrite { enabled =>
       withTable("t") {
-        sql("""
+        sql(
+          """
             |CREATE TABLE t(key INT, b INT) USING PARQUET
             |PARTITIONED BY (value STRING)
             |""".stripMargin)
         executeAndCheckOrdering(
-          hasLogicalSort = true,
-          orderingMatched = true,
-          hasEmpty2Null = enabled) {
-          sql("""
+          hasLogicalSort = true, orderingMatched = true, hasEmpty2Null = enabled) {
+          sql(
+            """
               |INSERT INTO t
               |SELECT key, b, value
               |FROM testData JOIN testData2 ON key = a
@@ -309,37 +283,21 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
           assert(executedPlan.isInstanceOf[WriteFilesExecBase])
           executedPlan.asInstanceOf[WriteFilesExecBase].child
         } else {
-          executedPlan.transformDown { case a: AdaptiveSparkPlanExec =>
-            stripAQEPlan(a)
+          executedPlan.transformDown {
+            case a: AdaptiveSparkPlanExec => stripAQEPlan(a)
           }
         }
 
         // assert the outer most sort in the executed plan
-        assert(
-          plan
-            .collectFirst { case s: SortExec =>
-              s
-            }
-            .exists {
-              case SortExec(
-                    Seq(
-                      SortOrder(
-                        AttributeReference("value", StringType, _, _),
-                        Ascending,
-                        NullsFirst,
-                        _),
-                      SortOrder(
-                        AttributeReference("key", IntegerType, _, _),
-                        Ascending,
-                        NullsFirst,
-                        _)),
-                    false,
-                    _,
-                    _) =>
-                true
-              case _ => false
-            },
-          plan)
+        assert(plan.collectFirst {
+          case s: SortExec => s
+        }.exists {
+          case SortExec(Seq(
+            SortOrder(AttributeReference("value", StringType, _, _), Ascending, NullsFirst, _),
+            SortOrder(AttributeReference("key", IntegerType, _, _), Ascending, NullsFirst, _)
+          ), false, _, _) => true
+          case _ => false
+        }, plan)
       }
     }
   }
@@ -348,9 +306,7 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
     withPlannedWrite { enabled =>
       withTempPath { path =>
         executeAndCheckOrdering(
-          hasLogicalSort = enabled,
-          orderingMatched = enabled,
-          hasEmpty2Null = enabled) {
+          hasLogicalSort = enabled, orderingMatched = enabled, hasEmpty2Null = enabled) {
           Seq((0, None), (1, Some("")), (2, None), (3, Some("x")))
             .toDF("id", "p")
             .write
@@ -360,9 +316,8 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
             spark.read.parquet(path.toString).where("p IS NULL").sort($"id"),
             Seq(Row(0, null), Row(1, null), Row(2, null)))
           // Check the empty string and null values should be written to the same file.
-          val files = path
-            .listFiles()
-            .filterNot(f => f.getName.startsWith(".") || f.getName.startsWith("_"))
+          val files = path.listFiles().filterNot(
+            f => f.getName.startsWith(".") || f.getName.startsWith("_"))
           assert(files.length == 2)
         }
       }
@@ -372,7 +327,8 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
   test("v1 write with AQE changing SMJ to BHJ") {
     withPlannedWrite { enabled =>
       withTable("t") {
-        sql("""
+        sql(
+          """
             |CREATE TABLE t(key INT, value STRING) USING PARQUET
             |PARTITIONED BY (a INT)
             |""".stripMargin)
@@ -383,7 +339,8 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
           // In this case AQE should still add back the sort node from the logical plan
           // during re-planning, and ordering should be matched in FileFormatWriter.
           executeAndCheckOrdering(hasLogicalSort = enabled, orderingMatched = enabled) {
-            sql("""
+            sql(
+              """
                 |INSERT INTO t
                 |SELECT key, value, a
                 |FROM testData JOIN testData2 ON key = a
@@ -398,14 +355,16 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
   test("SPARK-37194: Avoid unnecessary sort in v1 write if it's not dynamic partition") {
     withPlannedWrite { enabled =>
       withTable("t") {
-        sql("""
+        sql(
+          """
             |CREATE TABLE t(key INT, value STRING) USING PARQUET
             |PARTITIONED BY (p1 INT, p2 STRING)
             |""".stripMargin)
 
         // partition columns are static
         executeAndCheckOrdering(hasLogicalSort = false, orderingMatched = true) {
-          sql("""
+          sql(
+            """
               |INSERT INTO t PARTITION(p1=1, p2='a')
               |SELECT key, value FROM testData
               |""".stripMargin)
@@ -413,10 +372,9 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
 
         // one static partition column and one dynamic partition column
         executeAndCheckOrdering(
-          hasLogicalSort = enabled,
-          orderingMatched = enabled,
-          hasEmpty2Null = enabled) {
-          sql("""
+          hasLogicalSort = enabled, orderingMatched = enabled, hasEmpty2Null = enabled) {
+          sql(
+            """
               |INSERT INTO t PARTITION(p1=1, p2)
               |SELECT key, value, value FROM testData
               |""".stripMargin)
@@ -424,10 +382,9 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
 
         // partition columns are dynamic
         executeAndCheckOrdering(
-          hasLogicalSort = enabled,
-          orderingMatched = enabled,
-          hasEmpty2Null = enabled) {
-          sql("""
+          hasLogicalSort = enabled, orderingMatched = enabled, hasEmpty2Null = enabled) {
+          sql(
+            """
               |INSERT INTO t PARTITION(p1, p2)
               |SELECT key, value, key, value FROM testData
               |""".stripMargin)
@@ -440,10 +397,9 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
     withPlannedWrite { enabled =>
       withTable("t") {
         executeAndCheckOrdering(
-          hasLogicalSort = enabled,
-          orderingMatched = enabled,
-          hasEmpty2Null = enabled) {
-          sql("""
+          hasLogicalSort = enabled, orderingMatched = enabled, hasEmpty2Null = enabled) {
+          sql(
+            """
               |CREATE TABLE t USING PARQUET
               |PARTITIONED BY (k) AS
               |SELECT SUM(i) AS i, SUM(j) AS j, k
@@ -457,14 +413,17 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
   test("v1 write with sort by literal column preserve custom order") {
     withPlannedWrite { enabled =>
       withTable("t") {
-        sql("""
+        sql(
+          """
             |CREATE TABLE t(i INT, j INT, k STRING) USING PARQUET
             |PARTITIONED BY (k)
             |""".stripMargin)
         // Skip checking orderingMatched temporarily to avoid touching `FileFormatWriter`,
         // see details at https://github.com/apache/spark/pull/52584#issuecomment-3407716019
-        executeAndCheckOrderingAndCustomValidate(hasLogicalSort = true, orderingMatched = None) {
-          sql("""
+        executeAndCheckOrderingAndCustomValidate(
+          hasLogicalSort = true, orderingMatched = None) {
+          sql(
+            """
               |INSERT OVERWRITE t
               |SELECT i, j, '0' as k FROM t0 SORT BY k, i
               |""".stripMargin)

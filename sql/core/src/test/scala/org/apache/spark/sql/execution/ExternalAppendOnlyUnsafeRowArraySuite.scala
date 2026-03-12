@@ -31,8 +31,8 @@ import org.apache.spark.util.collection.unsafe.sort.{UnsafeSorterIterator, Unsaf
 class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSparkContext {
   private val random = new java.util.Random()
 
-  private def withExternalArray(inMemoryThreshold: Int, spillThreshold: Int)(
-      f: ExternalAppendOnlyUnsafeRowArray => Unit): Unit = {
+  private def withExternalArray(inMemoryThreshold: Int, spillThreshold: Int)
+                               (f: ExternalAppendOnlyUnsafeRowArray => Unit): Unit = {
     sc = new SparkContext("local", "test", new SparkConf(false))
 
     val taskContext = MemoryTestingUtils.fakeTaskContext(SparkEnv.get)
@@ -50,8 +50,7 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
         Long.MaxValue,
         spillThreshold,
         Long.MaxValue)
-      try f(array)
-      finally {
+      try f(array) finally {
         array.clear()
       }
     } finally {
@@ -203,9 +202,9 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
       val exception =
         intercept[ArrayIndexOutOfBoundsException](array.generateIterator(startIndex = -10))
 
-      assert(
-        exception.getMessage.contains(
-          "Invalid `startIndex` provided for generating iterator over the array"))
+      assert(exception.getMessage.contains(
+        "Invalid `startIndex` provided for generating iterator over the array")
+      )
     }
   }
 
@@ -217,9 +216,8 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
       val exception =
         intercept[ArrayIndexOutOfBoundsException](
           array.generateIterator(startIndex = spillThreshold * 10))
-      assert(
-        exception.getMessage.contains(
-          "Invalid `startIndex` provided for generating iterator over the array"))
+      assert(exception.getMessage.contains(
+        "Invalid `startIndex` provided for generating iterator over the array"))
     }
   }
 
@@ -232,9 +230,8 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
         intercept[ArrayIndexOutOfBoundsException](
           array.generateIterator(startIndex = spillThreshold * 10))
 
-      assert(
-        exception.getMessage.contains(
-          "Invalid `startIndex` provided for generating iterator over the array"))
+      assert(exception.getMessage.contains(
+        "Invalid `startIndex` provided for generating iterator over the array"))
     }
   }
 
@@ -395,14 +392,14 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
       field.setAccessible(true)
       field.get(obj)
     }
-    def checkUnsafeSorterSpillReaderClosed(unsafeSorterIterator: UnsafeSorterIterator): Unit =
-      unsafeSorterIterator match {
-        case reader: UnsafeSorterSpillReader =>
-          // If UnsafeSorterSpillReader is not closed, `in` and `din` are not null
-          assert(getFieldValue(reader, "in") == null)
-          assert(getFieldValue(reader, "din") == null)
-        case _ => // do noting
-      }
+    def checkUnsafeSorterSpillReaderClosed(
+        unsafeSorterIterator: UnsafeSorterIterator): Unit = unsafeSorterIterator match {
+      case reader: UnsafeSorterSpillReader =>
+        // If UnsafeSorterSpillReader is not closed, `in` and `din` are not null
+        assert(getFieldValue(reader, "in") == null)
+        assert(getFieldValue(reader, "din") == null)
+      case _ => // do noting
+    }
     // Only check `SpillableArrayIterator` because `InMemoryBufferIterator` not open the file handle
     if (iterator.getClass.getSimpleName.equals("SpillableArrayIterator")) {
       val chainedIterator = getFieldValue(iterator, "iterator")
@@ -410,9 +407,7 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
       assert(current.isInstanceOf[UnsafeSorterIterator])
       checkUnsafeSorterSpillReaderClosed(current.asInstanceOf[UnsafeSorterIterator])
       val iterators = getFieldValue(chainedIterator, "iterators")
-      iterators
-        .asInstanceOf[util.Queue[UnsafeSorterIterator]]
-        .asScala
+      iterators.asInstanceOf[util.Queue[UnsafeSorterIterator]].asScala
         .foreach(checkUnsafeSorterSpillReaderClosed)
     }
   }

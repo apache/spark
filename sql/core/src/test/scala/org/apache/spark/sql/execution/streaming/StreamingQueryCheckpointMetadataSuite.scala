@@ -32,8 +32,8 @@ class StreamingQueryCheckpointMetadataSuite extends StreamTest {
   import testImplicits._
 
   /**
-   * Creates checkpoint metadata with optional offset and commit log data. Returns the initialized
-   * metadata and checkpoint root path.
+   * Creates checkpoint metadata with optional offset and commit log data.
+   * Returns the initialized metadata and checkpoint root path.
    */
   private def createCheckpointWithLogs(
       dir: File,
@@ -76,7 +76,8 @@ class StreamingQueryCheckpointMetadataSuite extends StreamTest {
     checkError(
       exception = exception,
       condition = "STREAMING_CHECKPOINT_MISSING_METADATA_FILE",
-      parameters = Map("checkpointLocation" -> checkpointRoot))
+      parameters = Map("checkpointLocation" -> checkpointRoot)
+    )
   }
 
   /**
@@ -93,15 +94,13 @@ class StreamingQueryCheckpointMetadataSuite extends StreamTest {
 
   /**
    * Runs e2e test for streaming query with corrupted checkpoint.
-   * @param validationEnabled
-   *   if true, expects restart to fail and if false, expects success
+   * @param validationEnabled if true, expects restart to fail and if false, expects success
    */
   private def testE2ECorruptedCheckpoint(validationEnabled: Boolean): Unit = {
     withTempDir { checkpointDir =>
       withTempDir { outputDir =>
         val inputData = MemoryStream[Int]
-        var query = inputData
-          .toDF()
+        var query = inputData.toDF()
           .writeStream
           .format("parquet")
           .option("checkpointLocation", checkpointDir.getAbsolutePath)
@@ -125,8 +124,7 @@ class StreamingQueryCheckpointMetadataSuite extends StreamTest {
             val metadataPath = new Path(new Path(checkpointDir.getAbsolutePath), "metadata")
             val fs = metadataPath.getFileSystem(spark.sessionState.newHadoopConf())
             val exception = intercept[SparkRuntimeException] {
-              inputData
-                .toDF()
+              inputData.toDF()
                 .writeStream
                 .format("parquet")
                 .option("checkpointLocation", checkpointDir.getAbsolutePath)
@@ -137,11 +135,11 @@ class StreamingQueryCheckpointMetadataSuite extends StreamTest {
             checkError(
               exception = exception,
               condition = "STREAMING_CHECKPOINT_MISSING_METADATA_FILE",
-              parameters = Map("checkpointLocation" -> qualifiedPath.toString))
+              parameters = Map("checkpointLocation" -> qualifiedPath.toString)
+            )
           } else {
             // Should succeed - validation is disabled
-            query = inputData
-              .toDF()
+            query = inputData.toDF()
               .writeStream
               .format("parquet")
               .option("checkpointLocation", checkpointDir.getAbsolutePath)
@@ -198,8 +196,7 @@ class StreamingQueryCheckpointMetadataSuite extends StreamTest {
 
   test("invalid case: missing metadata with both offset and commit logs non-empty") {
     withTempDir { dir =>
-      val (_, checkpointRoot) =
-        createCheckpointWithLogs(dir, addOffsets = true, addCommits = true)
+      val (_, checkpointRoot) = createCheckpointWithLogs(dir, addOffsets = true, addCommits = true)
       deleteMetadataFile(checkpointRoot)
       assertMissingMetadataError(checkpointRoot)
     }

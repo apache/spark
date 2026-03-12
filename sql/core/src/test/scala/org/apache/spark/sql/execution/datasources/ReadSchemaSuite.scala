@@ -21,45 +21,53 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Read schema suites have the following hierarchy and aims to guarantee users a
- * backward-compatible read-schema change coverage on file-based data sources, and to prevent
- * future regressions.
+ * Read schema suites have the following hierarchy and aims to guarantee users
+ * a backward-compatible read-schema change coverage on file-based data sources, and
+ * to prevent future regressions.
  *
- * ReadSchemaSuite -> CSVReadSchemaSuite -> HeaderCSVReadSchemaSuite
+ *   ReadSchemaSuite
+ *     -> CSVReadSchemaSuite
+ *     -> HeaderCSVReadSchemaSuite
  *
- * -> JsonReadSchemaSuite
+ *     -> JsonReadSchemaSuite
  *
- * -> OrcReadSchemaSuite -> VectorizedOrcReadSchemaSuite -> MergedOrcReadSchemaSuite
+ *     -> OrcReadSchemaSuite
+ *     -> VectorizedOrcReadSchemaSuite
+ *     -> MergedOrcReadSchemaSuite
  *
- * -> ParquetReadSchemaSuite -> VectorizedParquetReadSchemaSuite -> MergedParquetReadSchemaSuite
+ *     -> ParquetReadSchemaSuite
+ *     -> VectorizedParquetReadSchemaSuite
+ *     -> MergedParquetReadSchemaSuite
  *
- * -> AvroReadSchemaSuite
+ *     -> AvroReadSchemaSuite
  */
 
 /**
  * All file-based data sources supports column addition and removal at the end.
  */
-abstract class ReadSchemaSuite extends AddColumnTest with HideColumnAtTheEndTest {
+abstract class ReadSchemaSuite
+  extends AddColumnTest
+  with HideColumnAtTheEndTest {
 
   var originalConf: Boolean = _
 }
 
 class CSVReadSchemaSuite
-    extends ReadSchemaSuite
-    with IntegralTypeTest
-    with ToDoubleTypeTest
-    with ToDecimalTypeTest
-    with ToStringTypeTest {
+  extends ReadSchemaSuite
+  with IntegralTypeTest
+  with ToDoubleTypeTest
+  with ToDecimalTypeTest
+  with ToStringTypeTest {
 
   override val format: String = "csv"
 }
 
 class HeaderCSVReadSchemaSuite
-    extends ReadSchemaSuite
-    with IntegralTypeTest
-    with ToDoubleTypeTest
-    with ToDecimalTypeTest
-    with ToStringTypeTest {
+  extends ReadSchemaSuite
+  with IntegralTypeTest
+  with ToDoubleTypeTest
+  with ToDecimalTypeTest
+  with ToStringTypeTest {
 
   override val format: String = "csv"
 
@@ -67,27 +75,27 @@ class HeaderCSVReadSchemaSuite
 }
 
 class JsonReadSchemaSuite
-    extends ReadSchemaSuite
-    with AddColumnIntoTheMiddleTest
-    with HideColumnInTheMiddleTest
-    with AddNestedColumnTest
-    with HideNestedColumnTest
-    with ChangePositionTest
-    with IntegralTypeTest
-    with ToDoubleTypeTest
-    with ToDecimalTypeTest
-    with ToStringTypeTest {
+  extends ReadSchemaSuite
+  with AddColumnIntoTheMiddleTest
+  with HideColumnInTheMiddleTest
+  with AddNestedColumnTest
+  with HideNestedColumnTest
+  with ChangePositionTest
+  with IntegralTypeTest
+  with ToDoubleTypeTest
+  with ToDecimalTypeTest
+  with ToStringTypeTest {
 
   override val format: String = "json"
 }
 
 class OrcReadSchemaSuite
-    extends ReadSchemaSuite
-    with AddColumnIntoTheMiddleTest
-    with HideColumnInTheMiddleTest
-    with AddNestedColumnTest
-    with HideNestedColumnTest
-    with ChangePositionTest {
+  extends ReadSchemaSuite
+  with AddColumnIntoTheMiddleTest
+  with HideColumnInTheMiddleTest
+  with AddNestedColumnTest
+  with HideNestedColumnTest
+  with ChangePositionTest {
 
   override val format: String = "orc"
 
@@ -104,15 +112,15 @@ class OrcReadSchemaSuite
 }
 
 class VectorizedOrcReadSchemaSuite
-    extends ReadSchemaSuite
-    with AddColumnIntoTheMiddleTest
-    with HideColumnInTheMiddleTest
-    with AddNestedColumnTest
-    with HideNestedColumnTest
-    with ChangePositionTest
-    with BooleanTypeTest
-    with IntegralTypeTest
-    with ToDoubleTypeTest {
+  extends ReadSchemaSuite
+  with AddColumnIntoTheMiddleTest
+  with HideColumnInTheMiddleTest
+  with AddNestedColumnTest
+  with HideNestedColumnTest
+  with ChangePositionTest
+  with BooleanTypeTest
+  with IntegralTypeTest
+  with ToDoubleTypeTest {
 
   override val format: String = "orc"
 
@@ -129,32 +137,33 @@ class VectorizedOrcReadSchemaSuite
 }
 
 class MergedOrcReadSchemaSuite
-    extends ReadSchemaSuite
-    with AddColumnIntoTheMiddleTest
-    with HideColumnInTheMiddleTest
-    with AddNestedColumnTest
-    with HideNestedColumnTest
-    with ChangePositionTest
-    with BooleanTypeTest
-    with IntegralTypeTest
-    with ToDoubleTypeTest {
+  extends ReadSchemaSuite
+  with AddColumnIntoTheMiddleTest
+  with HideColumnInTheMiddleTest
+  with AddNestedColumnTest
+  with HideNestedColumnTest
+  with ChangePositionTest
+  with BooleanTypeTest
+  with IntegralTypeTest
+  with ToDoubleTypeTest {
 
   override val format: String = "orc"
 
   override protected def sparkConf: SparkConf =
-    super.sparkConf
+    super
+      .sparkConf
       .set(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key, "true")
 }
 
 class ParquetReadSchemaSuite
-    extends ReadSchemaSuite
-    with AddColumnIntoTheMiddleTest
-    with HideColumnInTheMiddleTest
-    with AddNestedColumnTest
-    with HideNestedColumnTest
-    with ChangePositionTest
-    with IntegralTypeTest
-    with ToDoubleTypeTest {
+  extends ReadSchemaSuite
+  with AddColumnIntoTheMiddleTest
+  with HideColumnInTheMiddleTest
+  with AddNestedColumnTest
+  with HideNestedColumnTest
+  with ChangePositionTest
+  with IntegralTypeTest
+  with ToDoubleTypeTest {
 
   override val format: String = "parquet"
 
@@ -171,14 +180,14 @@ class ParquetReadSchemaSuite
 }
 
 class VectorizedParquetReadSchemaSuite
-    extends ReadSchemaSuite
-    with AddColumnIntoTheMiddleTest
-    with HideColumnInTheMiddleTest
-    with AddNestedColumnTest
-    with HideNestedColumnTest
-    with ChangePositionTest
-    with IntegralTypeTest
-    with ToDoubleTypeTest {
+  extends ReadSchemaSuite
+  with AddColumnIntoTheMiddleTest
+  with HideColumnInTheMiddleTest
+  with AddNestedColumnTest
+  with HideNestedColumnTest
+  with ChangePositionTest
+  with IntegralTypeTest
+  with ToDoubleTypeTest {
 
   override val format: String = "parquet"
 
@@ -195,14 +204,14 @@ class VectorizedParquetReadSchemaSuite
 }
 
 class MergedParquetReadSchemaSuite
-    extends ReadSchemaSuite
-    with AddColumnIntoTheMiddleTest
-    with HideColumnInTheMiddleTest
-    with AddNestedColumnTest
-    with HideNestedColumnTest
-    with ChangePositionTest
-    with IntegralTypeTest
-    with ToDoubleTypeTest {
+  extends ReadSchemaSuite
+  with AddColumnIntoTheMiddleTest
+  with HideColumnInTheMiddleTest
+  with AddNestedColumnTest
+  with HideNestedColumnTest
+  with ChangePositionTest
+  with IntegralTypeTest
+  with ToDoubleTypeTest {
 
   override val format: String = "parquet"
 

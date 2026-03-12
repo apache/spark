@@ -40,8 +40,7 @@ class StaxXmlGenerator(
     options: XmlOptions,
     validateStructure: Boolean = true) {
 
-  require(
-    options.attributePrefix.nonEmpty,
+  require(options.attributePrefix.nonEmpty,
     "'attributePrefix' option should not be empty string.")
   private val indentDisabled = options.indent == ""
 
@@ -132,12 +131,11 @@ class StaxXmlGenerator(
    * Transforms a single Row to XML
    *
    * @param row
-   *   The row to convert
+   * The row to convert
    */
   def write(row: InternalRow): Unit = {
     schema match {
-      case st: StructType
-          if st.fields.forall(f => options.singleVariantColumn.contains(f.name)) =>
+      case st: StructType if st.fields.forall(f => options.singleVariantColumn.contains(f.name)) =>
         // If the top-level field is a StructType with only the single Variant column, we ignore
         // the single variant column layer and directly write the Variant value under the row tag
         writeChildElement(options.rowTag, VariantType, row.getVariant(0))
@@ -168,7 +166,7 @@ class StaxXmlGenerator(
     (dt, v) match {
       // If this is meant to be attribute, write an attribute
       case (_, null) | (NullType, _)
-          if name.startsWith(options.attributePrefix) && name != options.valueTag =>
+        if name.startsWith(options.attributePrefix) && name != options.valueTag =>
         Option(options.nullValue).foreach {
           gen.writeAttribute(name.substring(options.attributePrefix.length), _)
         }
@@ -245,8 +243,10 @@ class StaxXmlGenerator(
     case (_, _) =>
       throw new SparkIllegalArgumentException(
         errorClass = "_LEGACY_ERROR_TEMP_3238",
-        messageParameters = scala.collection.immutable
-          .Map("v" -> v.toString, "class" -> v.getClass.toString, "dt" -> dt.toString))
+        messageParameters = scala.collection.immutable.Map(
+          "v" -> v.toString,
+          "class" -> v.getClass.toString,
+          "dt" -> dt.toString))
   }
 
   def writeMapData(mapType: MapType, map: MapData): Unit = {
@@ -274,12 +274,9 @@ class StaxXmlGenerator(
   /**
    * Write a Variant field to XML
    *
-   * @param name
-   *   The name of the field
-   * @param v
-   *   The original Variant entity
-   * @param pos
-   *   The position in the Variant data array where the field value starts
+   * @param name The name of the field
+   * @param v The original Variant entity
+   * @param pos The position in the Variant data array where the field value starts
    */
   private def writeVariant(name: String, v: VariantVal, pos: Int): Unit = {
     VariantUtil.getType(v.getValue, pos) match {
@@ -293,15 +290,12 @@ class StaxXmlGenerator(
   }
 
   /**
-   * Write a Variant object to XML. A Variant object is serialized as an XML element, with the
-   * child fields serialized as XML nodes recursively.
+   * Write a Variant object to XML. A Variant object is serialized as an XML element, with the child
+   * fields serialized as XML nodes recursively.
    *
-   * @param name
-   *   The name of the object field, which is used as the XML element name
-   * @param v
-   *   The original Variant entity
-   * @param pos
-   *   The position in the Variant data array where the object value starts
+   * @param name The name of the object field, which is used as the XML element name
+   * @param v The original Variant entity
+   * @param pos The position in the Variant data array where the object value starts
    */
   private def writeVariantObject(name: String, v: VariantVal, pos: Int): Unit = {
     gen.writeStartElement(name)
@@ -321,32 +315,32 @@ class StaxXmlGenerator(
         }
 
         // Partition the fields of the object into XML attributes and elements
-        val (attributes, elements) = elementInfo.partition { case (f, _) =>
-          // Similar to the reader, we use attributePrefx option to determine whether the field is
-          // an attribute or not.
-          // In addition, we also check if the field is a value tag, in case the value tag also
-          // starts with the attribute prefix.
-          f.startsWith(options.attributePrefix) && f != options.valueTag
+        val (attributes, elements) = elementInfo.partition {
+          case (f, _) =>
+            // Similar to the reader, we use attributePrefx option to determine whether the field is
+            // an attribute or not.
+            // In addition, we also check if the field is a value tag, in case the value tag also
+            // starts with the attribute prefix.
+            f.startsWith(options.attributePrefix) && f != options.valueTag
         }
 
         // We need to write attributes first before the elements.
-        (attributes ++ elements).foreach { case (field, elementPos) =>
-          writeVariant(field, v, elementPos)
+        (attributes ++ elements).foreach {
+          case (field, elementPos) =>
+            writeVariant(field, v, elementPos)
         }
-      })
+      }
+    )
     gen.writeEndElement()
   }
 
   /**
-   * Write a Variant array to XML. A Variant array is flattened and written as a sequence of XML
-   * element with the same element name as the array field name.
+   * Write a Variant array to XML. A Variant array is flattened and written as a sequence of
+   * XML element with the same element name as the array field name.
    *
-   * @param name
-   *   The name of the array field
-   * @param v
-   *   The original Variant entity
-   * @param pos
-   *   The position in the Variant data array where the array value starts
+   * @param name The name of the array field
+   * @param v The original Variant entity
+   * @param pos The position in the Variant data array where the array value starts
    */
   private def writeVariantArray(name: String, v: VariantVal, pos: Int): Unit = {
     VariantUtil.handleArray(
@@ -370,18 +364,16 @@ class StaxXmlGenerator(
             writeVariant(name, v, elementPos)
           }
         }
-      })
+      }
+    )
   }
 
   /**
    * Write a Variant primitive field to XML
    *
-   * @param name
-   *   The name of the field
-   * @param v
-   *   The original Variant entity
-   * @param pos
-   *   The position in the Variant data array where the field value starts
+   * @param name The name of the field
+   * @param v The original Variant entity
+   * @param pos The position in the Variant data array where the field value starts
    */
   private def writeVariantPrimitive(name: String, v: VariantVal, pos: Int): Unit = {
     val primitiveVal: String = VariantUtil.getType(v.getValue, pos) match {
@@ -402,7 +394,8 @@ class StaxXmlGenerator(
         timestampFormatter.format(VariantUtil.getLong(v.getValue, pos))
       case VariantUtil.Type.TIMESTAMP_NTZ =>
         timestampNTZFormatter.format(
-          DateTimeUtils.microsToLocalDateTime(VariantUtil.getLong(v.getValue, pos)))
+          DateTimeUtils.microsToLocalDateTime(VariantUtil.getLong(v.getValue, pos))
+        )
       case VariantUtil.Type.FLOAT => VariantUtil.getFloat(v.getValue, pos).toString
       case VariantUtil.Type.BINARY =>
         Base64.getEncoder.encodeToString(VariantUtil.getBinary(v.getValue, pos))
@@ -416,7 +409,10 @@ class StaxXmlGenerator(
     // Handle attributes first
     val isAttribute = name.startsWith(options.attributePrefix) && name != options.valueTag
     if (isAttribute && primitiveVal != null) {
-      gen.writeAttribute(name.substring(options.attributePrefix.length), value)
+      gen.writeAttribute(
+        name.substring(options.attributePrefix.length),
+        value
+      )
       return
     }
 

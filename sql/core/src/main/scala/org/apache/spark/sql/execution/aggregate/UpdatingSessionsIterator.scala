@@ -44,8 +44,7 @@ class UpdatingSessionsIterator(
     inputSchema: Seq[Attribute],
     inMemoryThreshold: Int,
     spillThreshold: Int,
-    sizeInBytesSpillThreshold: Long)
-    extends Iterator[InternalRow] {
+    sizeInBytesSpillThreshold: Long) extends Iterator[InternalRow] {
 
   private val groupingWithoutSession: Seq[NamedExpression] =
     groupingExpressions.diff(Seq(sessionExpression))
@@ -189,8 +188,7 @@ class UpdatingSessionsIterator(
   private val join2 = new JoinedRow
 
   private val valueProj = GenerateUnsafeProjection.generate(valuesExpressions, inputSchema)
-  private val restoreProj = GenerateUnsafeProjection.generate(
-    inputSchema,
+  private val restoreProj = GenerateUnsafeProjection.generate(inputSchema,
     groupingWithoutSession.map(_.toAttribute) ++ Seq(sessionExpression.toAttribute) ++
       valuesExpressions.map(_.toAttribute))
 

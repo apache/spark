@@ -77,10 +77,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         plan = qe.analyzed
 
       }
-      override def onFailure(
-          funcName: String,
-          qe: QueryExecution,
-          exception: Exception): Unit = {}
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
     }
     spark.listenerManager.register(listener)
 
@@ -117,7 +114,9 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     spark.table("source").writeTo("testcat.table_name").append()
 
-    checkAnswer(spark.table("testcat.table_name"), Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
 
     spark.table("source2").writeTo("testcat.table_name").append()
 
@@ -130,8 +129,12 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
     spark.table("testcat.table_name").createOrReplaceTempView("temp_view")
     spark.table("source").writeTo("temp_view").append()
-    checkAnswer(spark.table("testcat.table_name"), Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
-    checkAnswer(spark.table("temp_view"), Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+    checkAnswer(
+      spark.table("temp_view"),
+      Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
   }
 
   test("Append: by name not position") {
@@ -141,16 +144,15 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     checkError(
       exception = intercept[AnalysisException] {
-        spark
-          .table("source")
-          .withColumnRenamed("data", "d")
-          .writeTo("testcat.table_name")
-          .append()
+        spark.table("source").withColumnRenamed("data", "d").writeTo("testcat.table_name").append()
       },
       condition = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_COLUMNS",
-      parameters = Map("tableName" -> "`testcat`.`table_name`", "extraColumns" -> "`d`"))
+      parameters = Map("tableName" -> "`testcat`.`table_name`", "extraColumns" -> "`d`")
+    )
 
-    checkAnswer(spark.table("testcat.table_name"), Seq())
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq())
   }
 
   test("Append: fail if table does not exist") {
@@ -168,7 +170,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         spark.table("source").writeTo("temp_view").append()
       },
       condition = "VIEW_WRITE_NOT_ALLOWED",
-      parameters = Map("name" -> "temp_view"))
+      parameters = Map("name" -> "temp_view")
+    )
   }
 
   test("Append: fail if it writes to a view") {
@@ -178,7 +181,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         spark.table("source").writeTo("v").append()
       },
       condition = "VIEW_WRITE_NOT_ALLOWED",
-      parameters = Map("name" -> "`spark_catalog`.`default`.`v`"))
+      parameters = Map("name" -> "`spark_catalog`.`default`.`v`")
+    )
   }
 
   test("Append: fail if it writes to a v1 table") {
@@ -186,9 +190,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     val exc = intercept[AnalysisException] {
       spark.table("source").writeTo("table_name").append()
     }
-    assert(
-      exc.getMessage.contains(
-        s"Cannot write into v1 table: `$SESSION_CATALOG_NAME`.`default`.`table_name`"))
+    assert(exc.getMessage.contains(
+      s"Cannot write into v1 table: `$SESSION_CATALOG_NAME`.`default`.`table_name`"))
   }
 
   test("Overwrite: overwrite by expression: true") {
@@ -199,11 +202,15 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     spark.table("source").writeTo("testcat.table_name").append()
 
-    checkAnswer(spark.table("testcat.table_name"), Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
 
     spark.table("source2").writeTo("testcat.table_name").overwrite(lit(true))
 
-    checkAnswer(spark.table("testcat.table_name"), Seq(Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
   }
 
   test("Overwrite: overwrite by expression: id = 3") {
@@ -214,7 +221,9 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     spark.table("source").writeTo("testcat.table_name").append()
 
-    checkAnswer(spark.table("testcat.table_name"), Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
 
     spark.table("source2").writeTo("testcat.table_name").overwrite($"id" === 3)
 
@@ -229,8 +238,12 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     spark.table("testcat.table_name").createOrReplaceTempView("temp_view")
 
     spark.table("source2").writeTo("testcat.table_name").overwrite(lit(true))
-    checkAnswer(spark.table("testcat.table_name"), Seq(Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
-    checkAnswer(spark.table("temp_view"), Seq(Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
+    checkAnswer(
+      spark.table("temp_view"),
+      Seq(Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
   }
 
   test("Overwrite: by name not position") {
@@ -240,16 +253,16 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     checkError(
       exception = intercept[AnalysisException] {
-        spark
-          .table("source")
-          .withColumnRenamed("data", "d")
-          .writeTo("testcat.table_name")
-          .overwrite(lit(true))
+        spark.table("source").withColumnRenamed("data", "d")
+          .writeTo("testcat.table_name").overwrite(lit(true))
       },
       condition = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_COLUMNS",
-      parameters = Map("tableName" -> "`testcat`.`table_name`", "extraColumns" -> "`d`"))
+      parameters = Map("tableName" -> "`testcat`.`table_name`", "extraColumns" -> "`d`")
+    )
 
-    checkAnswer(spark.table("testcat.table_name"), Seq())
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq())
   }
 
   test("Overwrite: fail if table does not exist") {
@@ -267,7 +280,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         spark.table("source").writeTo("temp_view").overwrite(lit(true))
       },
       condition = "VIEW_WRITE_NOT_ALLOWED",
-      parameters = Map("name" -> "temp_view"))
+      parameters = Map("name" -> "temp_view")
+    )
   }
 
   test("Overwrite: fail if it writes to a view") {
@@ -277,7 +291,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         spark.table("source").writeTo("v").overwrite(lit(true))
       },
       condition = "VIEW_WRITE_NOT_ALLOWED",
-      parameters = Map("name" -> "`spark_catalog`.`default`.`v`"))
+      parameters = Map("name" -> "`spark_catalog`.`default`.`v`")
+    )
   }
 
   test("Overwrite: fail if it writes to a v1 table") {
@@ -285,9 +300,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     val exc = intercept[AnalysisException] {
       spark.table("source").writeTo("table_name").overwrite(lit(true))
     }
-    assert(
-      exc.getMessage.contains(
-        s"Cannot write into v1 table: `$SESSION_CATALOG_NAME`.`default`.`table_name`"))
+    assert(exc.getMessage.contains(
+      s"Cannot write into v1 table: `$SESSION_CATALOG_NAME`.`default`.`table_name`"))
   }
 
   test("OverwritePartitions: overwrite conflicting partitions") {
@@ -298,13 +312,12 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     spark.table("source").writeTo("testcat.table_name").append()
 
-    checkAnswer(spark.table("testcat.table_name"), Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
 
-    spark
-      .table("source2")
-      .withColumn("id", $"id" - 2)
-      .writeTo("testcat.table_name")
-      .overwritePartitions()
+    spark.table("source2").withColumn("id", $"id" - 2)
+        .writeTo("testcat.table_name").overwritePartitions()
 
     checkAnswer(
       spark.table("testcat.table_name"),
@@ -318,11 +331,15 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     spark.table("source").writeTo("testcat.table_name").append()
 
-    checkAnswer(spark.table("testcat.table_name"), Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
 
     spark.table("source2").writeTo("testcat.table_name").overwritePartitions()
 
-    checkAnswer(spark.table("testcat.table_name"), Seq(Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
   }
 
   test("OverwritePartitions: write to a temp view of v2 relation") {
@@ -331,8 +348,12 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     spark.table("testcat.table_name").createOrReplaceTempView("temp_view")
 
     spark.table("source2").writeTo("testcat.table_name").overwritePartitions()
-    checkAnswer(spark.table("testcat.table_name"), Seq(Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
-    checkAnswer(spark.table("temp_view"), Seq(Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
+    checkAnswer(
+      spark.table("temp_view"),
+      Seq(Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
   }
 
   test("OverwritePartitions: by name not position") {
@@ -342,16 +363,16 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     checkError(
       exception = intercept[AnalysisException] {
-        spark
-          .table("source")
-          .withColumnRenamed("data", "d")
-          .writeTo("testcat.table_name")
-          .overwritePartitions()
+        spark.table("source").withColumnRenamed("data", "d")
+          .writeTo("testcat.table_name").overwritePartitions()
       },
       condition = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_COLUMNS",
-      parameters = Map("tableName" -> "`testcat`.`table_name`", "extraColumns" -> "`d`"))
+      parameters = Map("tableName" -> "`testcat`.`table_name`", "extraColumns" -> "`d`")
+    )
 
-    checkAnswer(spark.table("testcat.table_name"), Seq())
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq())
   }
 
   test("OverwritePartitions: fail if table does not exist") {
@@ -360,7 +381,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     }
 
     checkErrorTableNotFound(exc, "`testcat`.`table_name`")
-  }
+   }
 
   test("OverwritePartitions: fail if it writes to a temp view that is not v2 relation") {
     spark.range(10).createOrReplaceTempView("temp_view")
@@ -369,7 +390,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         spark.table("source").writeTo("temp_view").overwritePartitions()
       },
       condition = "VIEW_WRITE_NOT_ALLOWED",
-      parameters = Map("name" -> "temp_view"))
+      parameters = Map("name" -> "temp_view")
+    )
   }
 
   test("OverwritePartitions: fail if it writes to a view") {
@@ -379,7 +401,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         spark.table("source").writeTo("v").overwritePartitions()
       },
       condition = "VIEW_WRITE_NOT_ALLOWED",
-      parameters = Map("name" -> "`spark_catalog`.`default`.`v`"))
+      parameters = Map("name" -> "`spark_catalog`.`default`.`v`")
+    )
   }
 
   test("OverwritePartitions: fail if it writes to a v1 table") {
@@ -387,22 +410,22 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     val exc = intercept[AnalysisException] {
       spark.table("source").writeTo("table_name").overwritePartitions()
     }
-    assert(
-      exc.getMessage.contains(
-        s"Cannot write into v1 table: `$SESSION_CATALOG_NAME`.`default`.`table_name`"))
+    assert(exc.getMessage.contains(
+      s"Cannot write into v1 table: `$SESSION_CATALOG_NAME`.`default`.`table_name`"))
   }
 
   test("Create: basic behavior") {
     spark.table("source").writeTo("testcat.table_name").create()
 
-    checkAnswer(spark.table("testcat.table_name"), Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
 
     val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
-    assert(
-      table.columns sameElements
-        Array(ColumnV2.create("id", LongType), ColumnV2.create("data", StringType)))
+    assert(table.columns sameElements
+      Array(ColumnV2.create("id", LongType), ColumnV2.create("data", StringType)))
     assert(table.partitioning.isEmpty)
     assert(table.properties == defaultOwnership.asJava)
   }
@@ -410,14 +433,15 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
   test("Create: with using") {
     spark.table("source").writeTo("testcat.table_name").using("foo").create()
 
-    checkAnswer(spark.table("testcat.table_name"), Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
 
     val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
-    assert(
-      table.columns sameElements
-        Array(ColumnV2.create("id", LongType), ColumnV2.create("data", StringType)))
+    assert(table.columns sameElements
+      Array(ColumnV2.create("id", LongType), ColumnV2.create("data", StringType)))
     assert(table.partitioning.isEmpty)
     assert(table.properties === (Map("provider" -> "foo") ++ defaultOwnership).asJava)
   }
@@ -425,14 +449,15 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
   test("Create: with property") {
     spark.table("source").writeTo("testcat.table_name").tableProperty("prop", "value").create()
 
-    checkAnswer(spark.table("testcat.table_name"), Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
 
     val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
-    assert(
-      table.columns sameElements
-        Array(ColumnV2.create("id", LongType), ColumnV2.create("data", StringType)))
+    assert(table.columns sameElements
+      Array(ColumnV2.create("id", LongType), ColumnV2.create("data", StringType)))
     assert(table.partitioning.isEmpty)
     assert(table.properties === (Map("prop" -> "value") ++ defaultOwnership).asJava)
   }
@@ -440,25 +465,25 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
   test("Create: identity partitioned table") {
     spark.table("source").writeTo("testcat.table_name").partitionedBy($"id").create()
 
-    checkAnswer(spark.table("testcat.table_name"), Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
 
     val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
-    assert(
-      table.columns sameElements
-        Array(ColumnV2.create("id", LongType), ColumnV2.create("data", StringType)))
+    assert(table.columns sameElements
+      Array(ColumnV2.create("id", LongType), ColumnV2.create("data", StringType)))
     assert(table.partitioning === Seq(IdentityTransform(FieldReference("id"))))
     assert(table.properties == defaultOwnership.asJava)
   }
 
   test("Create: partitioned by years(ts)") {
-    spark
-      .table("source")
-      .withColumn("ts", lit("2019-06-01 10:00:00.000000").cast("timestamp"))
-      .writeTo("testcat.table_name")
-      .partitionedBy(partitioning.years($"ts"))
-      .create()
+    spark.table("source")
+        .withColumn("ts", lit("2019-06-01 10:00:00.000000").cast("timestamp"))
+        .writeTo("testcat.table_name")
+        .partitionedBy(partitioning.years($"ts"))
+        .create()
 
     val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
@@ -467,12 +492,11 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
   }
 
   test("Create: partitioned by months(ts)") {
-    spark
-      .table("source")
-      .withColumn("ts", lit("2019-06-01 10:00:00.000000").cast("timestamp"))
-      .writeTo("testcat.table_name")
-      .partitionedBy(partitioning.months($"ts"))
-      .create()
+    spark.table("source")
+        .withColumn("ts", lit("2019-06-01 10:00:00.000000").cast("timestamp"))
+        .writeTo("testcat.table_name")
+        .partitionedBy(partitioning.months($"ts"))
+        .create()
 
     val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
@@ -481,12 +505,11 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
   }
 
   test("Create: partitioned by days(ts)") {
-    spark
-      .table("source")
-      .withColumn("ts", lit("2019-06-01 10:00:00.000000").cast("timestamp"))
-      .writeTo("testcat.table_name")
-      .partitionedBy(partitioning.days($"ts"))
-      .create()
+    spark.table("source")
+        .withColumn("ts", lit("2019-06-01 10:00:00.000000").cast("timestamp"))
+        .writeTo("testcat.table_name")
+        .partitionedBy(partitioning.days($"ts"))
+        .create()
 
     val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
@@ -495,12 +518,11 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
   }
 
   test("Create: partitioned by hours(ts)") {
-    spark
-      .table("source")
-      .withColumn("ts", lit("2019-06-01 10:00:00.000000").cast("timestamp"))
-      .writeTo("testcat.table_name")
-      .partitionedBy(partitioning.hours($"ts"))
-      .create()
+    spark.table("source")
+        .withColumn("ts", lit("2019-06-01 10:00:00.000000").cast("timestamp"))
+        .writeTo("testcat.table_name")
+        .partitionedBy(partitioning.hours($"ts"))
+        .create()
 
     val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
@@ -509,23 +531,20 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
   }
 
   test("Create: partitioned by bucket(4, id)") {
-    spark
-      .table("source")
-      .writeTo("testcat.table_name")
-      .partitionedBy(partitioning.bucket(4, $"id"))
-      .create()
+    spark.table("source")
+        .writeTo("testcat.table_name")
+        .partitionedBy(partitioning.bucket(4, $"id"))
+        .create()
 
     val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
-    assert(
-      table.partitioning ===
+    assert(table.partitioning ===
         Seq(BucketTransform(LiteralValue(4, IntegerType), Seq(FieldReference("id")))))
   }
 
   test("Create: cluster by") {
-    spark
-      .table("source")
+    spark.table("source")
       .writeTo("testcat.table_name")
       .clusterBy("id")
       .create()
@@ -550,9 +569,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     // table should not have been changed
     assert(table.name === "testcat.table_name")
-    assert(
-      table.columns sameElements
-        Array(ColumnV2.create("id", LongType), ColumnV2.create("data", StringType)))
+    assert(table.columns sameElements
+      Array(ColumnV2.create("id", LongType), ColumnV2.create("data", StringType)))
     assert(table.partitioning === Seq(IdentityTransform(FieldReference("id"))))
     assert(table.properties === (Map("provider" -> "foo") ++ defaultOwnership).asJava)
   }
@@ -561,18 +579,15 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     val provider = classOf[InMemoryV1Provider].getName
 
     withSQLConf((SQLConf.USE_V1_SOURCE_LIST.key, provider)) {
-      spark
-        .range(10)
+      spark.range(10)
         .writeTo("table_name")
-        .option("compression", "zstd")
-        .option("name", "table_name")
+        .option("compression", "zstd").option("name", "table_name")
         .using(provider)
         .create()
       val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("table_name"))
 
-      assert(
-        table.identifier ===
-          TableIdentifier("table_name", Some("default"), Some(SESSION_CATALOG_NAME)))
+      assert(table.identifier ===
+        TableIdentifier("table_name", Some("default"), Some(SESSION_CATALOG_NAME)))
       assert(table.storage.properties.contains("compression"))
       assert(table.storage.properties.getOrElse("compression", "foo") == "zstd")
     }
@@ -583,23 +598,22 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       "CREATE TABLE testcat.table_name (id bigint, data string) USING foo PARTITIONED BY (id)")
     spark.sql("INSERT INTO TABLE testcat.table_name SELECT * FROM source")
 
-    checkAnswer(spark.table("testcat.table_name"), Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
 
     val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     // validate the initial table
     assert(table.name === "testcat.table_name")
-    assert(
-      table.columns sameElements
-        Array(ColumnV2.create("id", LongType), ColumnV2.create("data", StringType)))
+    assert(table.columns sameElements
+      Array(ColumnV2.create("id", LongType), ColumnV2.create("data", StringType)))
     assert(table.partitioning === Seq(IdentityTransform(FieldReference("id"))))
     assert(table.properties === (Map("provider" -> "foo") ++ defaultOwnership).asJava)
 
-    spark
-      .table("source2")
-      .withColumn("even_or_odd", when(($"id" % 2) === 0, "even").otherwise("odd"))
-      .writeTo("testcat.table_name")
-      .replace()
+    spark.table("source2")
+        .withColumn("even_or_odd", when(($"id" % 2) === 0, "even").otherwise("odd"))
+        .writeTo("testcat.table_name").replace()
 
     checkAnswer(
       spark.table("testcat.table_name"),
@@ -609,11 +623,10 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     // validate the replacement table
     assert(replaced.name === "testcat.table_name")
-    assert(
-      replaced.columns sameElements Array(
-        ColumnV2.create("id", LongType),
-        ColumnV2.create("data", StringType),
-        ColumnV2.create("even_or_odd", StringType)))
+    assert(replaced.columns sameElements Array(
+      ColumnV2.create("id", LongType),
+      ColumnV2.create("data", StringType),
+      ColumnV2.create("even_or_odd", StringType)))
     assert(replaced.partitioning.isEmpty)
     assert(replaced.properties === defaultOwnership.asJava)
   }
@@ -622,24 +635,22 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
     spark.sql("INSERT INTO TABLE testcat.table_name SELECT * FROM source")
 
-    checkAnswer(spark.table("testcat.table_name"), Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
 
     val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     // validate the initial table
     assert(table.name === "testcat.table_name")
-    assert(
-      table.columns sameElements
-        Array(ColumnV2.create("id", LongType), ColumnV2.create("data", StringType)))
+    assert(table.columns sameElements
+      Array(ColumnV2.create("id", LongType), ColumnV2.create("data", StringType)))
     assert(table.partitioning.isEmpty)
     assert(table.properties === (Map("provider" -> "foo") ++ defaultOwnership).asJava)
 
-    spark
-      .table("source2")
-      .withColumn("even_or_odd", when(($"id" % 2) === 0, "even").otherwise("odd"))
-      .writeTo("testcat.table_name")
-      .partitionedBy($"id")
-      .replace()
+    spark.table("source2")
+        .withColumn("even_or_odd", when(($"id" % 2) === 0, "even").otherwise("odd"))
+        .writeTo("testcat.table_name").partitionedBy($"id").replace()
 
     checkAnswer(
       spark.table("testcat.table_name"),
@@ -649,11 +660,10 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     // validate the replacement table
     assert(replaced.name === "testcat.table_name")
-    assert(
-      replaced.columns sameElements Array(
-        ColumnV2.create("id", LongType),
-        ColumnV2.create("data", StringType),
-        ColumnV2.create("even_or_odd", StringType)))
+    assert(replaced.columns sameElements Array(
+      ColumnV2.create("id", LongType),
+      ColumnV2.create("data", StringType),
+      ColumnV2.create("even_or_odd", StringType)))
     assert(replaced.partitioning === Seq(IdentityTransform(FieldReference("id"))))
     assert(replaced.properties === defaultOwnership.asJava)
   }
@@ -662,24 +672,22 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
     spark.sql("INSERT INTO TABLE testcat.table_name SELECT * FROM source")
 
-    checkAnswer(spark.table("testcat.table_name"), Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
 
     val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     // validate the initial table
     assert(table.name === "testcat.table_name")
-    assert(
-      table.columns sameElements
-        Array(ColumnV2.create("id", LongType), ColumnV2.create("data", StringType)))
+    assert(table.columns sameElements
+      Array(ColumnV2.create("id", LongType), ColumnV2.create("data", StringType)))
     assert(table.partitioning.isEmpty)
     assert(table.properties === (Map("provider" -> "foo") ++ defaultOwnership).asJava)
 
-    spark
-      .table("source2")
-      .withColumn("even_or_odd", when(($"id" % 2) === 0, "even").otherwise("odd"))
-      .writeTo("testcat.table_name")
-      .clusterBy("id")
-      .replace()
+    spark.table("source2")
+        .withColumn("even_or_odd", when(($"id" % 2) === 0, "even").otherwise("odd"))
+        .writeTo("testcat.table_name").clusterBy("id").replace()
 
     checkAnswer(
       spark.table("testcat.table_name"),
@@ -689,12 +697,10 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     // validate the replacement table
     assert(replaced.name === "testcat.table_name")
-    assert(
-      replaced.columns sameElements
-        Array(
-          ColumnV2.create("id", LongType),
-          ColumnV2.create("data", StringType),
-          ColumnV2.create("even_or_odd", StringType)))
+    assert(replaced.columns sameElements
+      Array(ColumnV2.create("id", LongType),
+        ColumnV2.create("data", StringType),
+        ColumnV2.create("even_or_odd", StringType)))
     assert(replaced.partitioning === Seq(ClusterByTransform(Seq(FieldReference("id")))))
     assert(replaced.properties === defaultOwnership.asJava)
   }
@@ -710,15 +716,16 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
   test("CreateOrReplace: table does not exist") {
     spark.table("source2").writeTo("testcat.table_name").createOrReplace()
 
-    checkAnswer(spark.table("testcat.table_name"), Seq(Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
 
     val replaced = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     // validate the replacement table
     assert(replaced.name === "testcat.table_name")
-    assert(
-      replaced.columns sameElements
-        Array(ColumnV2.create("id", LongType), ColumnV2.create("data", StringType)))
+    assert(replaced.columns sameElements
+      Array(ColumnV2.create("id", LongType), ColumnV2.create("data", StringType)))
     assert(replaced.partitioning.isEmpty)
     assert(replaced.properties === defaultOwnership.asJava)
   }
@@ -728,23 +735,22 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       "CREATE TABLE testcat.table_name (id bigint, data string) USING foo PARTITIONED BY (id)")
     spark.sql("INSERT INTO TABLE testcat.table_name SELECT * FROM source")
 
-    checkAnswer(spark.table("testcat.table_name"), Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
 
     val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     // validate the initial table
     assert(table.name === "testcat.table_name")
-    assert(
-      table.columns sameElements
-        Array(ColumnV2.create("id", LongType), ColumnV2.create("data", StringType)))
+    assert(table.columns sameElements
+      Array(ColumnV2.create("id", LongType), ColumnV2.create("data", StringType)))
     assert(table.partitioning === Seq(IdentityTransform(FieldReference("id"))))
     assert(table.properties === (Map("provider" -> "foo") ++ defaultOwnership).asJava)
 
-    spark
-      .table("source2")
-      .withColumn("even_or_odd", when(($"id" % 2) === 0, "even").otherwise("odd"))
-      .writeTo("testcat.table_name")
-      .createOrReplace()
+    spark.table("source2")
+        .withColumn("even_or_odd", when(($"id" % 2) === 0, "even").otherwise("odd"))
+        .writeTo("testcat.table_name").createOrReplace()
 
     checkAnswer(
       spark.table("testcat.table_name"),
@@ -754,53 +760,39 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     // validate the replacement table
     assert(replaced.name === "testcat.table_name")
-    assert(
-      replaced.columns sameElements Array(
-        ColumnV2.create("id", LongType),
-        ColumnV2.create("data", StringType),
-        ColumnV2.create("even_or_odd", StringType)))
+    assert(replaced.columns sameElements Array(
+      ColumnV2.create("id", LongType),
+      ColumnV2.create("data", StringType),
+      ColumnV2.create("even_or_odd", StringType)))
     assert(replaced.partitioning.isEmpty)
     assert(replaced.properties === defaultOwnership.asJava)
   }
 
   test("SPARK-30289 Create: partitioned by nested column") {
-    val schema = new StructType().add(
-      "ts",
-      new StructType()
-        .add("created", TimestampType)
-        .add("modified", TimestampType)
-        .add("timezone", StringType))
+    val schema = new StructType().add("ts", new StructType()
+      .add("created", TimestampType)
+      .add("modified", TimestampType)
+      .add("timezone", StringType))
 
     val data = Seq(
-      Row(
-        Row(
-          Timestamp.valueOf("2019-06-01 10:00:00"),
-          Timestamp.valueOf("2019-09-02 07:00:00"),
-          "America/Los_Angeles")),
-      Row(
-        Row(
-          Timestamp.valueOf("2019-08-26 18:00:00"),
-          Timestamp.valueOf("2019-09-26 18:00:00"),
-          "America/Los_Angeles")),
-      Row(
-        Row(
-          Timestamp.valueOf("2018-11-23 18:00:00"),
-          Timestamp.valueOf("2018-12-22 18:00:00"),
-          "America/New_York")))
+      Row(Row(Timestamp.valueOf("2019-06-01 10:00:00"), Timestamp.valueOf("2019-09-02 07:00:00"),
+        "America/Los_Angeles")),
+      Row(Row(Timestamp.valueOf("2019-08-26 18:00:00"), Timestamp.valueOf("2019-09-26 18:00:00"),
+        "America/Los_Angeles")),
+      Row(Row(Timestamp.valueOf("2018-11-23 18:00:00"), Timestamp.valueOf("2018-12-22 18:00:00"),
+        "America/New_York")))
     val df = spark.createDataFrame(spark.sparkContext.parallelize(data, 1), schema)
 
     df.writeTo("testcat.table_name")
       .partitionedBy($"ts.timezone")
       .create()
 
-    val table = catalog("testcat")
-      .loadTable(Identifier.of(Array(), "table_name"))
+    val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
       .asInstanceOf[InMemoryTable]
 
     assert(table.name === "testcat.table_name")
-    assert(
-      table.partitioning ===
-        Seq(IdentityTransform(FieldReference(Array("ts", "timezone").toImmutableArraySeq))))
+    assert(table.partitioning ===
+      Seq(IdentityTransform(FieldReference(Array("ts", "timezone").toImmutableArraySeq))))
     checkAnswer(spark.table(table.name), data)
     assert(table.dataMap.toArray.length == 2)
     assert(table.dataMap(Seq(UTF8String.fromString("America/Los_Angeles"))).head.rows.size == 2)
@@ -812,50 +804,38 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
   }
 
   test("SPARK-30289 Create: partitioned by multiple transforms on nested columns") {
-    spark
-      .table("source")
-      .withColumn(
-        "ts",
-        struct(
-          lit("2019-06-01 10:00:00.000000").cast("timestamp") as "created",
-          lit("2019-09-02 07:00:00.000000").cast("timestamp") as "modified",
-          lit("America/Los_Angeles") as "timezone"))
+    spark.table("source")
+      .withColumn("ts", struct(
+        lit("2019-06-01 10:00:00.000000").cast("timestamp") as "created",
+        lit("2019-09-02 07:00:00.000000").cast("timestamp") as "modified",
+        lit("America/Los_Angeles") as "timezone"))
       .writeTo("testcat.table_name")
       .partitionedBy(
-        years($"ts.created"),
-        months($"ts.created"),
-        days($"ts.created"),
-        hours($"ts.created"),
-        years($"ts.modified"),
-        months($"ts.modified"),
-        days($"ts.modified"),
-        hours($"ts.modified"))
+        years($"ts.created"), months($"ts.created"), days($"ts.created"), hours($"ts.created"),
+        years($"ts.modified"), months($"ts.modified"), days($"ts.modified"), hours($"ts.modified")
+      )
       .create()
 
     val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
-    assert(
-      table.partitioning === Seq(
-        YearsTransform(FieldReference(Array("ts", "created").toImmutableArraySeq)),
-        MonthsTransform(FieldReference(Array("ts", "created").toImmutableArraySeq)),
-        DaysTransform(FieldReference(Array("ts", "created").toImmutableArraySeq)),
-        HoursTransform(FieldReference(Array("ts", "created").toImmutableArraySeq)),
-        YearsTransform(FieldReference(Array("ts", "modified").toImmutableArraySeq)),
-        MonthsTransform(FieldReference(Array("ts", "modified").toImmutableArraySeq)),
-        DaysTransform(FieldReference(Array("ts", "modified").toImmutableArraySeq)),
-        HoursTransform(FieldReference(Array("ts", "modified").toImmutableArraySeq))))
+    assert(table.partitioning === Seq(
+      YearsTransform(FieldReference(Array("ts", "created").toImmutableArraySeq)),
+      MonthsTransform(FieldReference(Array("ts", "created").toImmutableArraySeq)),
+      DaysTransform(FieldReference(Array("ts", "created").toImmutableArraySeq)),
+      HoursTransform(FieldReference(Array("ts", "created").toImmutableArraySeq)),
+      YearsTransform(FieldReference(Array("ts", "modified").toImmutableArraySeq)),
+      MonthsTransform(FieldReference(Array("ts", "modified").toImmutableArraySeq)),
+      DaysTransform(FieldReference(Array("ts", "modified").toImmutableArraySeq)),
+      HoursTransform(FieldReference(Array("ts", "modified").toImmutableArraySeq))))
   }
 
   test("SPARK-30289 Create: partitioned by bucket(4, ts.timezone)") {
-    spark
-      .table("source")
-      .withColumn(
-        "ts",
-        struct(
-          lit("2019-06-01 10:00:00.000000").cast("timestamp") as "created",
-          lit("2019-09-02 07:00:00.000000").cast("timestamp") as "modified",
-          lit("America/Los_Angeles") as "timezone"))
+    spark.table("source")
+      .withColumn("ts", struct(
+        lit("2019-06-01 10:00:00.000000").cast("timestamp") as "created",
+        lit("2019-09-02 07:00:00.000000").cast("timestamp") as "modified",
+        lit("America/Los_Angeles") as "timezone"))
       .writeTo("testcat.table_name")
       .partitionedBy(partitioning.bucket(4, $"ts.timezone"))
       .create()
@@ -863,8 +843,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
-    assert(table.partitioning === Seq(
-      BucketTransform(LiteralValue(4, IntegerType), Seq(FieldReference(Seq("ts", "timezone"))))))
+    assert(table.partitioning === Seq(BucketTransform(LiteralValue(4, IntegerType),
+      Seq(FieldReference(Seq("ts", "timezone"))))))
   }
 
   test("can not be called on streaming Dataset/DataFrame") {

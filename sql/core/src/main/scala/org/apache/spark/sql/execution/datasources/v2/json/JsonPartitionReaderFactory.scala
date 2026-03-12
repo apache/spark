@@ -31,20 +31,13 @@ import org.apache.spark.util.SerializableConfiguration
 /**
  * A factory used to create JSON readers.
  *
- * @param sqlConf
- *   SQL configuration.
- * @param broadcastedConf
- *   Broadcast serializable Hadoop Configuration.
- * @param dataSchema
- *   Schema of JSON files.
- * @param readDataSchema
- *   Required schema of JSON files.
- * @param partitionSchema
- *   Schema of partitions.
- * @param options
- *   Options for parsing JSON files.
- * @param filters
- *   The filters pushed down to JSON datasource.
+ * @param sqlConf SQL configuration.
+ * @param broadcastedConf Broadcast serializable Hadoop Configuration.
+ * @param dataSchema Schema of JSON files.
+ * @param readDataSchema Required schema of JSON files.
+ * @param partitionSchema Schema of partitions.
+ * @param options Options for parsing JSON files.
+ * @param filters The filters pushed down to JSON datasource.
  */
 case class JsonPartitionReaderFactory(
     sqlConf: SQLConf,
@@ -53,23 +46,23 @@ case class JsonPartitionReaderFactory(
     readDataSchema: StructType,
     partitionSchema: StructType,
     options: JSONOptionsInRead,
-    filters: Seq[Filter])
-    extends FilePartitionReaderFactory {
+    filters: Seq[Filter]) extends FilePartitionReaderFactory {
 
   override def buildReader(partitionedFile: PartitionedFile): PartitionReader[InternalRow] = {
     val actualSchema =
       StructType(readDataSchema.filterNot(_.name == options.columnNameOfCorruptRecord))
-    val parser = new JacksonParser(actualSchema, options, allowArrayAsStructs = true, filters)
+    val parser = new JacksonParser(
+      actualSchema,
+      options,
+      allowArrayAsStructs = true,
+      filters)
     val iter = JsonDataSource(options).readFile(
       broadcastedConf.value.value,
       partitionedFile,
       parser,
       readDataSchema)
     val fileReader = new PartitionReaderFromIterator[InternalRow](iter)
-    new PartitionReaderWithPartitionValues(
-      fileReader,
-      readDataSchema,
-      partitionSchema,
-      partitionedFile.partitionValues)
+    new PartitionReaderWithPartitionValues(fileReader, readDataSchema,
+      partitionSchema, partitionedFile.partitionValues)
   }
 }

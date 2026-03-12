@@ -21,7 +21,6 @@ package org.apache.spark.sql.catalyst.plans.logical
  * A logical plan node that requires execution during analysis.
  */
 trait ExecutableDuringAnalysis extends LogicalPlan {
-
   /**
    * Returns the logical plan node that should be used for EXPLAIN.
    */

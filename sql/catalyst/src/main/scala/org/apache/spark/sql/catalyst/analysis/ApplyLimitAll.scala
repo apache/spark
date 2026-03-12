@@ -23,30 +23,26 @@ import org.apache.spark.sql.catalyst.rules.Rule
 /**
  * Limit All is usually a no-op operation in spark, used for compatibility with other database
  * systems. However, in the case of recursive CTEs there is a default value (controlled by a flag)
- * of the maximum number of rows that a recursive CTE may return, which can be overridden by a
- * Limit operator above the UnionLoop node. Since this is a case where a Limit operator actually
- * increases the number of rows a node should return, Limit All stops being a no-op node
- * semantically, and should be used to enable unlimited looping in recursive CTEs.
+ * of the maximum number of rows that a recursive CTE may return, which can be overridden by a Limit
+ * operator above the UnionLoop node. Since this is a case where a Limit operator actually increases
+ * the number of rows a node should return, Limit All stops being a no-op node semantically, and
+ * should be used to enable unlimited looping in recursive CTEs.
  */
 object ApplyLimitAll extends Rule[LogicalPlan] {
-  private def applyLimitAllToPlan(
-      plan: LogicalPlan,
-      isInLimitAll: Boolean = false): LogicalPlan = {
+  private def applyLimitAllToPlan(plan: LogicalPlan, isInLimitAll: Boolean = false): LogicalPlan = {
     plan match {
       case la: LimitAll =>
         applyLimitAllToPlan(la.child, isInLimitAll = true)
       case cteRef: CTERelationRef if isInLimitAll =>
         cteRef.copy(isUnlimitedRecursion = true)
       // Allow-list for pushing down Limit All.
-      case _: Project | _: Filter | _: Join | _: Union | _: Offset | _: BaseEvalPython |
-          _: Aggregate | _: Window | _: SubqueryAlias =>
-        plan.withNewChildren(
-          plan.children
-            .map(child => applyLimitAllToPlan(child, isInLimitAll)))
+      case _: Project | _: Filter | _: Join | _: Union | _: Offset |
+           _: BaseEvalPython | _: Aggregate | _: Window | _: SubqueryAlias =>
+        plan.withNewChildren(plan.children
+          .map(child => applyLimitAllToPlan(child, isInLimitAll)))
       case other =>
-        other.withNewChildren(
-          plan.children
-            .map(child => applyLimitAllToPlan(child, isInLimitAll = false)))
+        other.withNewChildren(plan.children
+          .map(child => applyLimitAllToPlan(child, isInLimitAll = false)))
     }
   }
 

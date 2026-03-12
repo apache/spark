@@ -21,8 +21,8 @@ import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, IntegralDivi
 import org.apache.spark.sql.types.{ByteType, IntegerType, LongType, ShortType}
 
 /**
- * Type coercion helper that matches against [[IntegralDivide]] expressions in order to type
- * coerce children to [[LongType]].
+ * Type coercion helper that matches against [[IntegralDivide]] expressions in order to type coerce
+ * children to [[LongType]].
  */
 object IntegralDivisionTypeCoercion {
   def apply(expression: Expression): Expression = expression match {

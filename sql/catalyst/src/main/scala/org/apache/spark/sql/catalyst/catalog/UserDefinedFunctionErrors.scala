@@ -71,7 +71,9 @@ object UserDefinedFunctionErrors extends QueryErrorsBase {
         "obj" -> "FUNCTION",
         "objName" -> toSQLId(routineName),
         "tempObj" -> "VIEW",
-        "tempObjName" -> toSQLId(tempViewName)))
+        "tempObjName" -> toSQLId(tempViewName)
+      )
+    )
   }
 
   def invalidTempFuncReference(routineName: Seq[String], tempFuncName: String): Throwable = {
@@ -81,7 +83,9 @@ object UserDefinedFunctionErrors extends QueryErrorsBase {
         "obj" -> "FUNCTION",
         "objName" -> toSQLId(routineName),
         "tempObj" -> "FUNCTION",
-        "tempObjName" -> toSQLId(tempFuncName)))
+        "tempObjName" -> toSQLId(tempFuncName)
+      )
+    )
   }
 
   def invalidTempVarReference(routineName: Seq[String], varName: Seq[String]): Throwable = {

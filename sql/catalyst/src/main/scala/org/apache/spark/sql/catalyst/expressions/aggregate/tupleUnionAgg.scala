@@ -366,11 +366,11 @@ abstract class TupleUnionAggBase[S <: Summary]
   since = "4.2.0")
 // scalastyle:on line.size.limit
 object TupleUnionAggDoubleExpressionBuilder extends ExpressionBuilder {
-  final val defaultFunctionSignature = FunctionSignature(
-    Seq(
-      InputParameter("child"),
-      InputParameter("lgNomEntries", Some(Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))),
-      InputParameter("mode", Some(Literal(TupleSummaryMode.Sum.toString)))))
+  final val defaultFunctionSignature = FunctionSignature(Seq(
+    InputParameter("child"),
+    InputParameter("lgNomEntries", Some(Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))),
+    InputParameter("mode", Some(Literal(TupleSummaryMode.Sum.toString)))
+  ))
   override def functionSignature: Option[FunctionSignature] = Some(defaultFunctionSignature)
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     // The rearrange method ensures expressions.size == 3 with defaults filled in
@@ -395,11 +395,11 @@ object TupleUnionAggDoubleExpressionBuilder extends ExpressionBuilder {
   since = "4.2.0")
 // scalastyle:on line.size.limit
 object TupleUnionAggIntegerExpressionBuilder extends ExpressionBuilder {
-  final val defaultFunctionSignature = FunctionSignature(
-    Seq(
-      InputParameter("child"),
-      InputParameter("lgNomEntries", Some(Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))),
-      InputParameter("mode", Some(Literal(TupleSummaryMode.Sum.toString)))))
+  final val defaultFunctionSignature = FunctionSignature(Seq(
+    InputParameter("child"),
+    InputParameter("lgNomEntries", Some(Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))),
+    InputParameter("mode", Some(Literal(TupleSummaryMode.Sum.toString)))
+  ))
   override def functionSignature: Option[FunctionSignature] = Some(defaultFunctionSignature)
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     // The rearrange method ensures expressions.size == 3 with defaults filled in

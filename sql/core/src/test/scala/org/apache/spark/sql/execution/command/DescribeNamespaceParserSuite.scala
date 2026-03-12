@@ -29,14 +29,11 @@ class DescribeNamespaceParserSuite extends AnalysisTest {
       comparePlans(parsePlan(sql.replace("NAMESPACE", "SCHEMA")), expected)
     }
 
-    check(
-      "DESCRIBE NAMESPACE EXTENDED a.b",
+    check("DESCRIBE NAMESPACE EXTENDED a.b",
       DescribeNamespace(UnresolvedNamespace(Seq("a", "b")), extended = true))
-    check(
-      "DESCRIBE NAMESPACE a.b",
+    check("DESCRIBE NAMESPACE a.b",
       DescribeNamespace(UnresolvedNamespace(Seq("a", "b")), extended = false))
-    check(
-      "DESCRIBE NAMESPACE `a.b`",
+    check("DESCRIBE NAMESPACE `a.b`",
       DescribeNamespace(UnresolvedNamespace(Seq("a.b")), extended = false))
   }
 }

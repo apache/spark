@@ -35,13 +35,14 @@ private[sql] class OracleConnectionProvider extends SecureConnectionProvider {
   override def getConnection(driver: Driver, options: Map[String, String]): Connection = {
     val jdbcOptions = new JDBCOptions(options)
     setAuthenticationConfig(driver, jdbcOptions)
-    UserGroupInformation
-      .loginUserFromKeytabAndReturnUGI(jdbcOptions.principal, jdbcOptions.keytab)
-      .doAs(new PrivilegedExceptionAction[Connection]() {
-        override def run(): Connection = {
-          OracleConnectionProvider.super.getConnection(driver, options)
+    UserGroupInformation.loginUserFromKeytabAndReturnUGI(jdbcOptions.principal, jdbcOptions.keytab)
+      .doAs(
+        new PrivilegedExceptionAction[Connection]() {
+          override def run(): Connection = {
+            OracleConnectionProvider.super.getConnection(driver, options)
+          }
         }
-      })
+      )
   }
 
   override def getAdditionalProperties(options: JDBCOptions): Properties = {

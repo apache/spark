@@ -37,8 +37,8 @@ class GeneratedProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
     val N = 1000
     val wideRow1 = new GenericInternalRow((0 until N).toArray[Any])
     val schema1 = StructType((1 to N).map(i => StructField("", IntegerType)))
-    val wideRow2 =
-      new GenericInternalRow((0 until N).map(i => UTF8String.fromString(i.toString)).toArray[Any])
+    val wideRow2 = new GenericInternalRow(
+      (0 until N).map(i => UTF8String.fromString(i.toString)).toArray[Any])
     val schema2 = StructType((1 to N).map(i => StructField("", StringType)))
     val joined = new JoinedRow(wideRow1, wideRow2)
     val joinedSchema = StructType(schema1 ++ schema2)
@@ -88,8 +88,8 @@ class GeneratedProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
     val N = 4000
     val wideRow1 = new GenericInternalRow((0 until N).toArray[Any])
     val schema1 = StructType((1 to N).map(i => StructField("", IntegerType)))
-    val wideRow2 =
-      new GenericInternalRow((0 until N).map(i => UTF8String.fromString(i.toString)).toArray[Any])
+    val wideRow2 = new GenericInternalRow(
+      (0 until N).map(i => UTF8String.fromString(i.toString)).toArray[Any])
     val schema2 = StructType((1 to N).map(i => StructField("", StringType)))
     val joined = new JoinedRow(wideRow1, wideRow2)
     val joinedSchema = StructType(schema1 ++ schema2)
@@ -155,18 +155,13 @@ class GeneratedProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("padding bytes should be zeroed out") {
-    val types =
-      Seq(BooleanType, ByteType, ShortType, IntegerType, FloatType, BinaryType, StringType)
+    val types = Seq(BooleanType, ByteType, ShortType, IntegerType, FloatType, BinaryType,
+      StringType)
     val struct = StructType(types.map(StructField("", _, true)))
     val fields = Array[DataType](StringType, struct)
     val unsafeProj = UnsafeProjection.create(fields)
 
-    val innerRow = InternalRow(
-      false,
-      1.toByte,
-      2.toShort,
-      3,
-      4.0f,
+    val innerRow = InternalRow(false, 1.toByte, 2.toShort, 3, 4.0f,
       "".getBytes(StandardCharsets.UTF_8),
       UTF8String.fromString(""))
     val row1 = InternalRow(UTF8String.fromString(""), innerRow)
@@ -231,8 +226,8 @@ class GeneratedProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
     val N = 6000
     val wideRow1 = new GenericInternalRow(new Array[Any](N))
     val schema1 = StructType((1 to N).map(i => StructField("", IntegerType)))
-    val wideRow2 =
-      new GenericInternalRow(Array.tabulate[Any](N)(i => UTF8String.fromString(i.toString)))
+    val wideRow2 = new GenericInternalRow(
+      Array.tabulate[Any](N)(i => UTF8String.fromString(i.toString)))
     val schema2 = StructType((1 to N).map(i => StructField("", StringType)))
     val joined = new JoinedRow(wideRow1, wideRow2)
     val joinedSchema = StructType(schema1 ++ schema2)
@@ -268,8 +263,8 @@ class GeneratedProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
         val sum = Add(mul2, sqrt)
 
         val proj = SafeProjection.create(Seq(sum))
-        val result =
-          (d1: Double, d2: Double) => ((d1 * d2) * (d1 * d2)) + Math.sqrt((d1 * d2) * (d1 * d2))
+        val result = (d1: Double, d2: Double) =>
+          ((d1 * d2) * (d1 * d2)) + Math.sqrt((d1 * d2) * (d1 * d2))
 
         val inputRows = Seq(
           InternalRow.fromSeq(Seq(1.0, 2.0)),
@@ -277,9 +272,16 @@ class GeneratedProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
           InternalRow.fromSeq(Seq(1.0, null)),
           InternalRow.fromSeq(Seq(null, 2.0)),
           InternalRow.fromSeq(Seq(3.0, 4.0)),
-          InternalRow.fromSeq(Seq(null, null)))
-        val expectedResults =
-          Seq(result(1.0, 2.0), result(2.0, 3.0), null, null, result(3.0, 4.0), null)
+          InternalRow.fromSeq(Seq(null, null))
+        )
+        val expectedResults = Seq(
+          result(1.0, 2.0),
+          result(2.0, 3.0),
+          null,
+          null,
+          result(3.0, 4.0),
+          null
+        )
 
         inputRows.zip(expectedResults).foreach { case (inputRow, expected) =>
           val projRow = proj.apply(inputRow)

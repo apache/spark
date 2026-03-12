@@ -25,8 +25,8 @@ import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Resolver for [[SemiStructuredExtract]]. Resolves [[SemiStructuredExtract]] by resolving its
- * children, replacing it with the proper semi-structured field extraction method and applying
- * type coercion to the result.
+ * children, replacing it with the proper semi-structured field extraction method and applying type
+ * coercion to the result.
  */
 class SemiStructuredExtractResolver(expressionResolver: ExpressionResolver)
     extends TreeNodeResolver[SemiStructuredExtract, Expression]
@@ -57,19 +57,21 @@ class SemiStructuredExtractResolver(expressionResolver: ExpressionResolver)
         case _: VariantType =>
           val extractResult = VariantGet(
             child = semiStructuredExtractWithResolvedChildren.child,
-            path =
-              Literal(UTF8String.fromString(semiStructuredExtractWithResolvedChildren.field)),
+            path = Literal(UTF8String.fromString(semiStructuredExtractWithResolvedChildren.field)),
             targetType = VariantType,
-            failOnError = true)
+            failOnError = true
+          )
           timezoneAwareExpressionResolver.resolve(extractResult)
         case _ =>
           throw new AnalysisException(
             errorClass = "COLUMN_IS_NOT_VARIANT_TYPE",
-            messageParameters = Map.empty)
+            messageParameters = Map.empty
+          )
       }
 
     coerceExpressionTypes(
       expression = semiStructuredExtractWithProperExtractionMethod,
-      expressionTreeTraversal = expressionResolver.getExpressionTreeTraversals.current)
+      expressionTreeTraversal = expressionResolver.getExpressionTreeTraversals.current
+    )
   }
 }

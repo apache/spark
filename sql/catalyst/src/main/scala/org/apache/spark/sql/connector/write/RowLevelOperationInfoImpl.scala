@@ -22,5 +22,4 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 private[sql] case class RowLevelOperationInfoImpl(
     command: Command,
-    options: CaseInsensitiveStringMap)
-    extends RowLevelOperationInfo
+    options: CaseInsensitiveStringMap) extends RowLevelOperationInfo

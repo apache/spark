@@ -38,15 +38,12 @@ object StringUtils extends Logging {
    *
    * Underscores (_) are converted to '.' and percent signs (%) are converted to '.*', other
    * characters are quoted literally. Escaping is done according to the rules specified in
-   * [[org.apache.spark.sql.catalyst.expressions.Like]] usage documentation. An invalid pattern
-   * will throw an [[AnalysisException]].
+   * [[org.apache.spark.sql.catalyst.expressions.Like]] usage documentation. An invalid pattern will
+   * throw an [[AnalysisException]].
    *
-   * @param pattern
-   *   the SQL pattern to convert
-   * @param escapeChar
-   *   the escape string contains one character.
-   * @return
-   *   the equivalent Java regular expression of the pattern
+   * @param pattern the SQL pattern to convert
+   * @param escapeChar the escape string contains one character.
+   * @return the equivalent Java regular expression of the pattern
    */
   def escapeLikeRegex(pattern: String, escapeChar: Char): String = {
     val in = pattern.iterator
@@ -59,10 +56,8 @@ object StringUtils extends Logging {
           c match {
             case '_' | '%' => out ++= Pattern.quote(Character.toString(c))
             case c if c == escapeChar => out ++= Pattern.quote(Character.toString(c))
-            case _ =>
-              throw QueryCompilationErrors.escapeCharacterInTheMiddleError(
-                pattern,
-                Character.toString(c))
+            case _ => throw QueryCompilationErrors.escapeCharacterInTheMiddleError(
+              pattern, Character.toString(c))
           }
         case c if c == escapeChar =>
           throw QueryCompilationErrors.escapeCharacterAtTheEndError(pattern)
@@ -89,9 +84,9 @@ object StringUtils extends Logging {
       // For example: Seq(`abc`.`def`.`t1`, `abc`.`def`.`t2`) => Seq(`t1`, `t2`)
       if (baseParts.size == 1 && candidates.groupBy(_.dropRight(1)).size == 1) {
         candidates.map(_.takeRight(1))
-        // Group by the qualifier excluding table name. If all identifiers have the same prefix
-        // (namespace) excluding table names, strip this prefix.
-        // For example: Seq(`abc`.`def`.`t1`, `abc`.`xyz`.`t2`) => Seq(`def`.`t1`, `xyz`.`t2`)
+      // Group by the qualifier excluding table name. If all identifiers have the same prefix
+      // (namespace) excluding table names, strip this prefix.
+      // For example: Seq(`abc`.`def`.`t1`, `abc`.`xyz`.`t2`) => Seq(`def`.`t1`, `xyz`.`t2`)
       } else if (baseParts.size <= 2 && candidates.groupBy(_.dropRight(2)).size == 1) {
         candidates.map(_.takeRight(2))
       } else {
@@ -112,20 +107,18 @@ object StringUtils extends Logging {
 
   /**
    * This utility can be used for filtering pattern in the "Like" of "Show Tables / Functions" DDL
-   * @param names
-   *   the names list to be filtered
-   * @param pattern
-   *   the filter pattern, only '*' and '|' are allowed as wildcards, others will follow regular
-   *   expression convention, case insensitive match and white spaces on both ends will be ignored
-   * @return
-   *   the filtered names list in order
+   * @param names the names list to be filtered
+   * @param pattern the filter pattern, only '*' and '|' are allowed as wildcards, others will
+   *                follow regular expression convention, case insensitive match and white spaces
+   *                on both ends will be ignored
+   * @return the filtered names list in order
    */
   def filterPattern(names: Seq[String], pattern: String): Seq[String] = {
     val funcNames = scala.collection.mutable.SortedSet.empty[String]
     pattern.trim().split("\\|").foreach { subPattern =>
       try {
         val regex = ("(?i)" + subPattern.replaceAll("\\*", ".*")).r
-        funcNames ++= names.filter { name => regex.pattern.matcher(name).matches() }
+        funcNames ++= names.filter{ name => regex.pattern.matcher(name).matches() }
       } catch {
         case _: PatternSyntaxException =>
       }
@@ -134,8 +127,8 @@ object StringUtils extends Logging {
   }
 
   /**
-   * A string concatenator for plan strings. Uses length from a configured value, and prints a
-   * warning the first time a plan is truncated.
+   * A string concatenator for plan strings.  Uses length from a configured value, and
+   *  prints a warning the first time a plan is truncated.
    */
   class PlanStringConcat extends StringConcat(Math.max(0, SQLConf.get.maxPlanStringLength - 30)) {
     override def toString: String = {
@@ -163,15 +156,13 @@ object StringUtils extends Logging {
 
   /**
    * Removes comments from a SQL command. Visible for testing only.
-   * @param command
-   *   The SQL command to remove comments from.
-   * @param replaceWithWhitespace
-   *   If true, replaces the comment with whitespace instead of stripping them in order to ensure
-   *   query length and character positions are preserved.
+   * @param command The SQL command to remove comments from.
+   * @param replaceWithWhitespace If true, replaces the comment with whitespace instead of
+   *                              stripping them in order to ensure query length and character
+   *                              positions are preserved.
    */
   protected[util] def stripComment(
-      command: String,
-      replaceWithWhitespace: Boolean = false): String = {
+      command: String, replaceWithWhitespace: Boolean = false): String = {
     // Important characters
     val SINGLE_QUOTE = '\''
     val DOUBLE_QUOTE = '"'
@@ -265,8 +256,7 @@ object StringUtils extends Logging {
   /**
    * Check if query is SQL Script.
    *
-   * @param query
-   *   The query string.
+   * @param query The query string.
    */
   def isSqlScript(query: String): Boolean = {
     val cleanText = stripComment(query).trim.toUpperCase(Locale.ROOT)
@@ -278,8 +268,7 @@ object StringUtils extends Logging {
   /**
    * Check if text is create SQL Stored Procedure command.
    *
-   * @param cleanText
-   *   The query text, already stripped of comments and capitalized
+   * @param cleanText The query text, already stripped of comments and capitalized
    */
   private def isCreateSqlStoredProcedureText(cleanText: String): Boolean = {
     import scala.util.matching.Regex
@@ -395,7 +384,8 @@ object StringUtils extends Logging {
           // Check if there's non-comment characters(non space, non newline characters) before
           // multiline comments.
           hasPrecedingNonCommentString = beginIndex != index && containsNonWhiteSpaceCharacters(
-            line.substring(beginIndex, index))
+            line.substring(beginIndex, index)
+          )
         }
       }
       // set the escape

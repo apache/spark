@@ -56,22 +56,20 @@ abstract class DebuggingSuiteBase extends SharedSparkSession {
     df.collect()
     val res = codegenStringSeq(df.queryExecution.executedPlan)
     assert(res.length == 2)
-    assert(res.forall { case (subtree, code, _) =>
-      subtree.contains("Range") && code.contains("Object[]")
-    })
+    assert(res.forall{ case (subtree, code, _) =>
+      subtree.contains("Range") && code.contains("Object[]")})
   }
 
   case class DummyCodeGeneratorPlan(useInnerClass: Boolean)
-      extends CodegenSupport
-      with LeafExecNode {
+      extends CodegenSupport with LeafExecNode {
     override def output: Seq[Attribute] = toAttributes(StructType.fromDDL("d int"))
-    override def inputRDDs(): Seq[RDD[InternalRow]] = Seq(
-      spark.sparkContext.emptyRDD[InternalRow])
+    override def inputRDDs(): Seq[RDD[InternalRow]] = Seq(spark.sparkContext.emptyRDD[InternalRow])
     override protected def doExecute(): RDD[InternalRow] = sys.error("Not used")
     override protected def doProduce(ctx: CodegenContext): String = {
       if (useInnerClass) {
         val innerClassName = ctx.freshName("innerClass")
-        ctx.addInnerClass(s"""
+        ctx.addInnerClass(
+          s"""
              |public class $innerClassName {
              |  public $innerClassName() {}
              |}
@@ -89,9 +87,8 @@ abstract class DebuggingSuiteBase extends SharedSparkSession {
       assert(genCodes.length == 1)
       val (_, _, codeStats) = genCodes.head
       val expectedNumInnerClasses = if (useInnerClass) 1 else 0
-      assert(
-        codeStats.maxMethodCodeSize > 0 && codeStats.maxConstPoolSize > 0 &&
-          codeStats.numInnerClasses == expectedNumInnerClasses)
+      assert(codeStats.maxMethodCodeSize > 0 && codeStats.maxConstPoolSize > 0 &&
+        codeStats.numInnerClasses == expectedNumInnerClasses)
 
       val debugCodegenStr = codegenString(plan)
       assert(debugCodegenStr.contains("maxMethodCodeSize:"))
@@ -116,10 +113,8 @@ class DebuggingSuite extends DebuggingSuiteBase with DisableAdaptiveExecutionSui
 
     val output = captured.toString()
     val hashedModeString = "HashedRelationBroadcastMode(List(input[0, bigint, false]),false)"
-    assert(
-      output
-        .replaceAll("\\[plan_id=\\d+\\]", "[plan_id=x]")
-        .contains(s"""== BroadcastExchange $hashedModeString, [plan_id=x] ==
+    assert(output.replaceAll("\\[plan_id=\\d+\\]", "[plan_id=x]").contains(
+      s"""== BroadcastExchange $hashedModeString, [plan_id=x] ==
          |Tuples output: 0
          | id LongType: {}
          |== WholeStageCodegen (1) ==
@@ -142,10 +137,10 @@ class DebuggingSuite extends DebuggingSuiteBase with DisableAdaptiveExecutionSui
         df.debug()
       }
 
-      val output = captured
-        .toString()
+      val output = captured.toString()
         .replaceAll("== FileScan parquet \\[id#\\d+L] .* ==", "== FileScan parquet [id#xL] ==")
-      assert(output.contains("""== FileScan parquet [id#xL] ==
+      assert(output.contains(
+        """== FileScan parquet [id#xL] ==
           |Tuples output: 0
           | id LongType: {}
           |""".stripMargin))

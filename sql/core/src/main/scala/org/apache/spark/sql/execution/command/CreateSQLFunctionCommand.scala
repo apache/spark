@@ -34,7 +34,8 @@ import org.apache.spark.sql.execution.command.CreateUserDefinedFunctionCommand._
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 
 /**
- * The DDL command that creates a SQL function. For example:
+ * The DDL command that creates a SQL function.
+ * For example:
  * {{{
  *    CREATE [OR REPLACE] [TEMPORARY] FUNCTION [IF NOT EXISTS] [db_name.]function_name
  *    ([param_name param_type [COMMENT param_comment], ...])
@@ -72,8 +73,7 @@ case class CreateSQLFunctionCommand(
     val catalog = sparkSession.sessionState.catalog
     val conf = sparkSession.sessionState.conf
 
-    val inputParam =
-      inputParamText.map(UserDefinedFunction.parseRoutineParam(_, parser, collation))
+    val inputParam = inputParamText.map(UserDefinedFunction.parseRoutineParam(_, parser, collation))
     val returnType = parseReturnTypeText(returnTypeText, isTableFunc, parser, collation)
 
     val function = SQLFunction(
@@ -108,33 +108,29 @@ case class CreateSQLFunctionCommand(
         // Qualify the input parameters with the function name so that attributes referencing
         // the function input parameters can be resolved correctly.
         val qualifier = Seq(name.funcName)
-        val input = param.map(p =>
-          Alias(
-            {
-              val defaultExpr = p.getDefault()
-              if (defaultExpr.isEmpty) {
-                Literal.create(null, p.dataType)
-              } else {
-                val defaultPlan = parseDefault(defaultExpr.get, parser)
-                if (SubqueryExpression.hasSubquery(defaultPlan)) {
-                  throw new AnalysisException(
-                    errorClass = "USER_DEFINED_FUNCTIONS.NOT_A_VALID_DEFAULT_EXPRESSION",
-                    messageParameters =
-                      Map("functionName" -> name.funcName, "parameterName" -> p.name))
-                } else if (defaultPlan.containsPattern(UNRESOLVED_ATTRIBUTE)) {
-                  // TODO(SPARK-50698): use parsed expression instead of expression string.
-                  defaultPlan.collect { case a: UnresolvedAttribute =>
+        val input = param.map(p => Alias(
+          {
+            val defaultExpr = p.getDefault()
+            if (defaultExpr.isEmpty) {
+              Literal.create(null, p.dataType)
+            } else {
+              val defaultPlan = parseDefault(defaultExpr.get, parser)
+              if (SubqueryExpression.hasSubquery(defaultPlan)) {
+                throw new AnalysisException(
+                  errorClass = "USER_DEFINED_FUNCTIONS.NOT_A_VALID_DEFAULT_EXPRESSION",
+                  messageParameters =
+                    Map("functionName" -> name.funcName, "parameterName" -> p.name))
+              } else if (defaultPlan.containsPattern(UNRESOLVED_ATTRIBUTE)) {
+                // TODO(SPARK-50698): use parsed expression instead of expression string.
+                defaultPlan.collect {
+                  case a: UnresolvedAttribute =>
                     throw QueryCompilationErrors.unresolvedAttributeError(
-                      "UNRESOLVED_COLUMN",
-                      a.sql,
-                      Seq.empty,
-                      a.origin)
-                  }
+                      "UNRESOLVED_COLUMN", a.sql, Seq.empty, a.origin)
                 }
-                Cast(defaultPlan, p.dataType)
               }
-            },
-            p.name)(qualifier = qualifier))
+              Cast(defaultPlan, p.dataType)
+            }
+          }, p.name)(qualifier = qualifier))
         Project(input, OneRowRelation())
       } else {
         OneRowRelation()
@@ -144,21 +140,19 @@ case class CreateSQLFunctionCommand(
       val (unresolvedPlan, analyzedPlan, inferredReturnType) = if (!isTableFunc) {
         // Build SQL scalar function plan.
         val outputExpr = if (query.isDefined) ScalarSubquery(query.get) else expression.get
-        val plan: LogicalPlan = returnType
-          .map { t =>
-            val retType: DataType = t match {
-              case Left(t) => t
-              case _ =>
-                throw SparkException.internalError("Unexpected return type for a scalar SQL UDF.")
-            }
-            val outputCast = Seq(Alias(Cast(outputExpr, retType), name.funcName)())
-            Project(outputCast, inputPlan)
+        val plan: LogicalPlan = returnType.map { t =>
+          val retType: DataType = t match {
+            case Left(t) => t
+            case _ => throw SparkException.internalError(
+              "Unexpected return type for a scalar SQL UDF.")
           }
-          .getOrElse {
-            // If no explicit RETURNS clause is present, infer the result type from the function body.
-            val outputAlias = Seq(Alias(outputExpr, name.funcName)())
-            Project(outputAlias, inputPlan)
-          }
+          val outputCast = Seq(Alias(Cast(outputExpr, retType), name.funcName)())
+          Project(outputCast, inputPlan)
+        }.getOrElse {
+          // If no explicit RETURNS clause is present, infer the result type from the function body.
+          val outputAlias = Seq(Alias(outputExpr, name.funcName)())
+          Project(outputAlias, inputPlan)
+        }
 
         // Check cyclic function reference before running the analyzer.
         checkCyclicFunctionReference(catalog, name, plan)
@@ -194,10 +188,8 @@ case class CreateSQLFunctionCommand(
         val newPlan = analyzed match {
           case Project(_, j: LateralJoin) => j
           case j: LateralJoin => j
-          case _ =>
-            throw SparkException.internalError(
-              "Unexpected plan returned when " +
-                s"creating a SQL TVF: ${analyzed.getClass.getSimpleName}.")
+          case _ => throw SparkException.internalError("Unexpected plan returned when " +
+            s"creating a SQL TVF: ${analyzed.getClass.getSimpleName}.")
         }
         val maybeResolved = newPlan.asInstanceOf[LateralJoin].right.plan
 
@@ -205,30 +197,26 @@ case class CreateSQLFunctionCommand(
         checkFunctionBodyAnalysis(analyzer, function, maybeResolved)
 
         // Get the function's return schema.
-        val returnParam: StructType = returnType
-          .map {
-            case Right(t) => t
-            case Left(_) =>
-              throw SparkException.internalError(
-                "Unexpected return schema for a SQL table function.")
+        val returnParam: StructType = returnType.map {
+          case Right(t) => t
+          case Left(_) => throw SparkException.internalError(
+            "Unexpected return schema for a SQL table function.")
+        }.getOrElse {
+          // If no explicit RETURNS clause is present, infer the result type from the function body.
+          // To detect this, we search for instances of the UnresolvedAlias expression. Examples:
+          // CREATE TABLE t USING PARQUET AS VALUES (0, 1), (1, 2) AS tab(c1, c2);
+          // SELECT c1 FROM t           -->  UnresolvedAttribute: 'c1
+          // SELECT c1 + 1 FROM t       -->  UnresolvedAlias: unresolvedalias(('c1 + 1), None)
+          // SELECT c1 + 1 AS a FROM t  -->  Alias: ('c1 + 1) AS a#2
+          query.get match {
+            case Project(projectList, _) if projectList.exists(_.isInstanceOf[UnresolvedAlias]) =>
+              throw UserDefinedFunctionErrors.missingColumnNamesForSqlTableUdf(name.funcName)
+            case _ =>
+              StructType(analyzed.asInstanceOf[LateralJoin].right.plan.output.map { col =>
+                StructField(col.name, resolveReturnType(col.dataType, collation))
+              })
           }
-          .getOrElse {
-            // If no explicit RETURNS clause is present, infer the result type from the function body.
-            // To detect this, we search for instances of the UnresolvedAlias expression. Examples:
-            // CREATE TABLE t USING PARQUET AS VALUES (0, 1), (1, 2) AS tab(c1, c2);
-            // SELECT c1 FROM t           -->  UnresolvedAttribute: 'c1
-            // SELECT c1 + 1 FROM t       -->  UnresolvedAlias: unresolvedalias(('c1 + 1), None)
-            // SELECT c1 + 1 AS a FROM t  -->  Alias: ('c1 + 1) AS a#2
-            query.get match {
-              case Project(projectList, _)
-                  if projectList.exists(_.isInstanceOf[UnresolvedAlias]) =>
-                throw UserDefinedFunctionErrors.missingColumnNamesForSqlTableUdf(name.funcName)
-              case _ =>
-                StructType(analyzed.asInstanceOf[LateralJoin].right.plan.output.map { col =>
-                  StructField(col.name, resolveReturnType(col.dataType, collation))
-                })
-            }
-          }
+        }
 
         // Check the return columns cannot have NOT NULL specified.
         checkParameterNotNull(returnParam, returnTypeText)
@@ -244,7 +232,9 @@ case class CreateSQLFunctionCommand(
             messageParameters = Map(
               "outputSize" -> s"$outputSize",
               "returnParamSize" -> s"${returnParam.size}",
-              "name" -> s"$name"))
+              "name" -> s"$name"
+            )
+          )
         }
 
         (plan, analyzed, Right(returnParam))
@@ -268,7 +258,8 @@ case class CreateSQLFunctionCommand(
         returnType = inferredReturnType,
         deterministic = Some(function.deterministic.getOrElse(deterministic)),
         containsSQL = Some(function.containsSQL.getOrElse(!readsSQLData)),
-        properties = properties)
+        properties = properties
+      )
     }
 
     if (isTemp) {
@@ -311,18 +302,20 @@ case class CreateSQLFunctionCommand(
     if (!isSQLFunction(info.getClassName)) {
       throw new AnalysisException(
         errorClass = "USER_DEFINED_FUNCTIONS.CANNOT_REPLACE_NON_SQL_UDF_WITH_SQL_UDF",
-        messageParameters = Map("name" -> s"$name"))
+        messageParameters = Map("name" -> s"$name")
+      )
     }
   }
 
   /**
-   * Collect all temporary views and functions and return the identifiers separately This func
-   * traverses the unresolved plan `child`. Below are the reasons: 1) Analyzer replaces unresolved
-   * temporary views by a SubqueryAlias with the corresponding logical plan. After replacement, it
-   * is impossible to detect whether the SubqueryAlias is added/generated from a temporary view.
+   * Collect all temporary views and functions and return the identifiers separately
+   * This func traverses the unresolved plan `child`. Below are the reasons:
+   * 1) Analyzer replaces unresolved temporary views by a SubqueryAlias with the corresponding
+   * logical plan. After replacement, it is impossible to detect whether the SubqueryAlias is
+   * added/generated from a temporary view.
    * 2) The temp functions are represented by multiple classes. Most are inaccessible from this
-   * package (e.g., HiveGenericUDF). 3) Temporary SQL functions, once resolved, cannot be
-   * identified as temp functions.
+   * package (e.g., HiveGenericUDF).
+   * 3) Temporary SQL functions, once resolved, cannot be identified as temp functions.
    */
   private def collectTemporaryObjectsInUnresolvedPlan(
       catalog: SessionCatalog,
@@ -333,11 +326,10 @@ case class CreateSQLFunctionCommand(
         case UnresolvedRelation(nameParts, _, _) if catalog.isTempView(nameParts) =>
           Seq(nameParts)
         case w: UnresolvedWith if !w.resolved => w.innerChildren.flatMap(collectTempViews)
-        case plan if !plan.resolved =>
-          plan.expressions.flatMap(_.flatMap {
-            case e: SubqueryExpression => collectTempViews(e.plan)
-            case _ => Seq.empty
-          })
+        case plan if !plan.resolved => plan.expressions.flatMap(_.flatMap {
+          case e: SubqueryExpression => collectTempViews(e.plan)
+          case _ => Seq.empty
+        })
         case _ => Seq.empty
       }.distinct
     }
@@ -349,7 +341,7 @@ case class CreateSQLFunctionCommand(
           plan.expressions.flatMap(_.flatMap {
             case e: SubqueryExpression => collectTempFunctions(e.plan)
             case e: UnresolvedFunction
-                if catalog.isTemporaryFunction(e.nameParts.asFunctionIdentifier) =>
+              if catalog.isTemporaryFunction(e.nameParts.asFunctionIdentifier) =>
               Seq(e.nameParts.asFunctionIdentifier.funcName)
             case _ => Seq.empty
           })
@@ -360,8 +352,8 @@ case class CreateSQLFunctionCommand(
   }
 
   /**
-   * Permanent functions are not allowed to reference temp objects, including temp functions and
-   * temp views.
+   * Permanent functions are not allowed to reference temp objects, including temp functions
+   * and temp views.
    */
   private def verifyTemporaryObjectsNotExists(
       catalog: SessionCatalog,
@@ -374,19 +366,16 @@ case class CreateSQLFunctionCommand(
       val (tempViews, tempFunctions) = collectTemporaryObjectsInUnresolvedPlan(catalog, child)
       tempViews.foreach { nameParts =>
         throw UserDefinedFunctionErrors.invalidTempViewReference(
-          routineName = name.asMultipart,
-          tempViewName = nameParts)
+          routineName = name.asMultipart, tempViewName = nameParts)
       }
       tempFunctions.foreach { funcName =>
         throw UserDefinedFunctionErrors.invalidTempFuncReference(
-          routineName = name.asMultipart,
-          tempFuncName = funcName)
+          routineName = name.asMultipart, tempFuncName = funcName)
       }
       val tempVars = ViewHelper.collectTemporaryVariables(analyzed)
       tempVars.foreach { varName =>
         throw UserDefinedFunctionErrors.invalidTempVarReference(
-          routineName = name.asMultipart,
-          varName = varName)
+          routineName = name.asMultipart, varName = varName)
       }
     }
   }
@@ -415,7 +404,7 @@ case class CreateSQLFunctionCommand(
             }
             val plan = catalog.makeSQLTableFunctionPlan(f.name, f.function, f.inputs, f.output)
             checkPlan(plan, newPath)
-          }
+        }
         case p: LogicalPlan =>
           p.expressions.foreach(checkExpression(_, path))
       }
@@ -447,26 +436,26 @@ case class CreateSQLFunctionCommand(
   }
 
   /**
-   * Check if the SQL function body contains aggregate/window/generate functions. Note subqueries
-   * inside the SQL function body can contain aggregate/window/generate functions.
+   * Check if the SQL function body contains aggregate/window/generate functions.
+   * Note subqueries inside the SQL function body can contain aggregate/window/generate functions.
    */
   private def checkAggOrWindowOrGeneratorExpr(plan: LogicalPlan): Unit = {
     if (plan.resolved) {
       plan.transformAllExpressions {
-        case e
-            if e.isInstanceOf[WindowExpression] || e.isInstanceOf[Generator] ||
-              e.isInstanceOf[AggregateExpression] =>
+        case e if e.isInstanceOf[WindowExpression] || e.isInstanceOf[Generator] ||
+          e.isInstanceOf[AggregateExpression] =>
           throw new AnalysisException(
             errorClass = "USER_DEFINED_FUNCTIONS.CANNOT_CONTAIN_COMPLEX_FUNCTIONS",
-            messageParameters = Map("queryText" -> s"${exprText.orElse(queryText).get}"))
+            messageParameters = Map("queryText" -> s"${exprText.orElse(queryText).get}")
+          )
       }
     }
   }
 
   /**
-   * Derive the SQL data access routine of the function and check if the SQL function matches its
-   * data access routine. If the data access is CONTAINS SQL, the expression should not access
-   * operators and expressions that read SQL data.
+   * Derive the SQL data access routine of the function and check if the SQL function matches
+   * its data access routine. If the data access is CONTAINS SQL, the expression should not
+   * access operators and expressions that read SQL data.
    *
    * Returns true is SQL data access routine is READS SQL DATA, otherwise returns false.
    */
@@ -474,28 +463,27 @@ case class CreateSQLFunctionCommand(
     // Find logical plan nodes that read SQL data.
     val readsSQLData = plan.find {
       case _: View => true
-      case p if p.children.isEmpty =>
-        p match {
-          case _: OneRowRelation | _: LocalRelation | _: Range => false
-          case _ => true
-        }
+      case p if p.children.isEmpty => p match {
+        case _: OneRowRelation | _: LocalRelation | _: Range => false
+        case _ => true
+      }
       case f: SQLFunctionNode => f.function.containsSQL.contains(false)
       case p: LogicalPlan =>
         lazy val sub = p.subqueries.exists(deriveSQLDataAccess)
         // If the SQL function contains another SQL function that has SQL data access routine
         // to be READS SQL DATA, then this SQL function will also be READS SQL DATA.
-        p.expressions.exists(expr =>
-          expr.find {
-            case f: SQLScalarFunction => f.function.containsSQL.contains(false)
-            case sub: SubqueryExpression => deriveSQLDataAccess(sub.plan)
-            case _ => false
-          }.isDefined)
+        p.expressions.exists(expr => expr.find {
+          case f: SQLScalarFunction => f.function.containsSQL.contains(false)
+          case sub: SubqueryExpression => deriveSQLDataAccess(sub.plan)
+          case _ => false
+        }.isDefined)
     }.isDefined
 
     if (containsSQL.contains(true) && readsSQLData) {
       throw new AnalysisException(
         errorClass = "INVALID_SQL_FUNCTION_DATA_ACCESS",
-        messageParameters = Map.empty)
+        messageParameters = Map.empty
+      )
     }
 
     readsSQLData
@@ -503,10 +491,10 @@ case class CreateSQLFunctionCommand(
 
   /**
    * Generate the function properties, including:
-   *   1. the SQL configs when creating the function.
-   *   2. the catalog and database name when creating the function. This will be used to provide
-   *      context during nested function resolution.
-   *   3. referred temporary object names if the function is a temp function.
+   * 1. the SQL configs when creating the function.
+   * 2. the catalog and database name when creating the function. This will be used to provide
+   *    context during nested function resolution.
+   * 3. referred temporary object names if the function is a temp function.
    */
   private def generateFunctionProperties(
       session: SparkSession,

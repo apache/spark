@@ -22,10 +22,8 @@ import org.apache.spark.sql.types._
 
 /**
  * An example class to demonstrate UDT in Scala, Java, and Python.
- * @param x
- *   x coordinate
- * @param y
- *   y coordinate
+ * @param x x coordinate
+ * @param y y coordinate
  */
 @SQLUserDefinedType(udt = classOf[ExamplePointUDT])
 private[sql] class ExamplePoint(val x: Double, val y: Double) extends Serializable {

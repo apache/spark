@@ -38,20 +38,12 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches: List[Batch] =
-      Batch(
-        "Unwrap casts in binary comparison",
-        FixedPoint(10),
+      Batch("Unwrap casts in binary comparison", FixedPoint(10),
         UnwrapCastInBinaryComparison) :: Nil
   }
 
-  val testRelation: LocalRelation = LocalRelation(
-    $"a".short,
-    $"b".float,
-    $"c".decimal(5, 2),
-    $"d".boolean,
-    $"e".timestamp,
-    $"f".timestampNTZ,
-    $"g".date)
+  val testRelation: LocalRelation = LocalRelation($"a".short, $"b".float,
+    $"c".decimal(5, 2), $"d".boolean, $"e".timestamp, $"f".timestampNTZ, $"g".date)
   val f: BoundReference = $"a".short.canBeNull.at(0)
   val f2: BoundReference = $"b".float.canBeNull.at(1)
   val f3: BoundReference = $"c".decimal(5, 2).canBeNull.at(2)
@@ -135,14 +127,10 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
       assertEquivalent(castInt(f) < v, f < v.toShort)
     })
 
-    Seq(
-      3.14.toFloat.toDouble,
-      -1000.0.toFloat.toDouble,
-      20.0.toFloat.toDouble,
-      -2.414.toFloat.toDouble,
-      Float.MinValue.toDouble,
-      Float.MaxValue.toDouble,
-      Float.PositiveInfinity.toDouble).foreach(v => {
+    Seq(3.14.toFloat.toDouble, -1000.0.toFloat.toDouble,
+      20.0.toFloat.toDouble, -2.414.toFloat.toDouble,
+      Float.MinValue.toDouble, Float.MaxValue.toDouble, Float.PositiveInfinity.toDouble
+    ).foreach(v => {
       assertEquivalent(castDouble(f2) > v, f2 > v.toFloat)
       assertEquivalent(castDouble(f2) >= v, f2 >= v.toFloat)
       assertEquivalent(castDouble(f2) === v, f2 === v.toFloat)
@@ -202,9 +190,9 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     assertEquivalent(Literal(30) <= castInt(f), Literal(30.toShort, ShortType) <= f)
   }
 
-  test("unwrap cast should skip when expression is non-deterministic or foldable") {
-    Seq(positiveLong, negativeLong).foreach(v => {
-      val e = Cast(Rand(0), LongType) <=> v
+ test("unwrap cast should skip when expression is non-deterministic or foldable") {
+   Seq(positiveLong, negativeLong).foreach (v => {
+     val e = Cast(Rand(0), LongType) <=> v
       assertEquivalent(e, e, evaluate = false)
       val e2 = Cast(Literal(30), LongType) >= v
       assertEquivalent(e2, e2, evaluate = false)
@@ -213,13 +201,8 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
 
   test("SPARK-42741: Do not unwrap casts in binary comparison when literal is null") {
     val intLit = Literal.create(null, IntegerType)
-    Seq(
-      castInt(f) > intLit,
-      castInt(f) >= intLit,
-      castInt(f) === intLit,
-      castInt(f) <=> intLit,
-      castInt(f) <= intLit,
-      castInt(f) < intLit).foreach { be =>
+    Seq(castInt(f) > intLit, castInt(f) >= intLit, castInt(f) === intLit, castInt(f) <=> intLit,
+      castInt(f) <= intLit, castInt(f) < intLit).foreach { be =>
       assertEquivalent(be, be)
     }
   }
@@ -284,22 +267,25 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
       falseIfNotNull(f))
 
     // in.list is empty
-    checkInAndInSet(In(Cast(f, IntegerType), Seq.empty), Cast(f, IntegerType).in())
+    checkInAndInSet(
+      In(Cast(f, IntegerType), Seq.empty), Cast(f, IntegerType).in())
 
     // in.list contains null value
-    checkInAndInSet(In(Cast(f, IntegerType), Seq(intLit)), f.in(intLit.cast(ShortType)))
+    checkInAndInSet(
+      In(Cast(f, IntegerType), Seq(intLit)), f.in(intLit.cast(ShortType)))
     checkInAndInSet(
       In(Cast(f, IntegerType), Seq(intLit, intLit)),
       f.in(intLit.cast(ShortType), intLit.cast(ShortType)))
     checkInAndInSet(
-      In(Cast(f, IntegerType), Seq(intLit, 1)),
-      f.in(intLit.cast(ShortType), 1.toShort))
+      In(Cast(f, IntegerType), Seq(intLit, 1)), f.in(intLit.cast(ShortType), 1.toShort))
     checkInAndInSet(
       In(Cast(f, LongType), Seq(longLit, 1.toLong, Long.MaxValue)),
-      f.in(longLit.cast(ShortType), 1.toShort))
+      f.in(longLit.cast(ShortType), 1.toShort)
+    )
     checkInAndInSet(
       In(Cast(f, LongType), Seq(longLit, Long.MaxValue)),
-      f.in(longLit.cast(ShortType)))
+      f.in(longLit.cast(ShortType))
+    )
   }
 
   test("SPARK-39896: unwrap cast when the literal of In/InSet downcast failed") {
@@ -314,7 +300,9 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
 
     val doubleValue = 1.0
     val doubleValue1 = 100.6
-    checkInAndInSet(In(castDouble(f), Seq(doubleValue1, doubleValue)), f.in(doubleValue.toShort))
+    checkInAndInSet(
+      In(castDouble(f), Seq(doubleValue1, doubleValue)),
+      f.in(doubleValue.toShort))
 
     // Cases for rounding up: 3.14 will be rounded to 3.14000010... after casting to float
     val doubleValue2 = 3.14
@@ -330,9 +318,8 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
       f3.in(decimal(decimalValue2)))
   }
 
-  test(
-    "SPARK-36130: unwrap In should skip when in.list contains an expression that " +
-      "is not literal") {
+  test("SPARK-36130: unwrap In should skip when in.list contains an expression that " +
+    "is not literal") {
     val add = Cast(f2, DoubleType) + 1.0d
     val doubleLit = Literal.create(null, DoubleType)
     assertEquivalent(In(Cast(f2, DoubleType), Seq(add)), In(Cast(f2, DoubleType), Seq(add)))
@@ -409,15 +396,13 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
         (f6 >= castTimestampNTZ(dateLit) && f6 < castTimestampNTZ(dateAddOne)))
     assertEquivalent(
       castDate(f5) <=> dateLit || castDate(f6) <=> dateLit,
-      (f5 >= castTimestamp(dateLit) && f5 < castTimestamp(dateAddOne)) || castDate(
-        f6) <=> dateLit)
+      (f5 >= castTimestamp(dateLit) && f5 < castTimestamp(dateAddOne)) || castDate(f6) <=> dateLit)
     assertEquivalent(
       dateLit < castDate(f5) || dateLit < castDate(f6),
       castTimestamp(dateAddOne) <= f5 || castTimestampNTZ(dateAddOne) <= f6)
 
     // Null date literal should be handled by NullPropagation
-    assertEquivalent(
-      castDate(f5) > nullLit || castDate(f6) > nullLit,
+    assertEquivalent(castDate(f5) > nullLit || castDate(f6) > nullLit,
       castDate(f5) > nullLit || castDate(f6) > nullLit)
   }
 
@@ -552,7 +537,8 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
         (Short.MaxValue, Float.PositiveInfinity, decimal2(Short.MaxValue), true, ts3, ts3, dt1),
         (Short.MinValue, Float.NegativeInfinity, decimal2(Short.MinValue), false, ts4, ts4, dt1),
         (0.toShort, Float.MaxValue, decimal2(0), null, null, null, null),
-        (0.toShort, Float.MinValue, decimal2(0.01), null, null, null, null)).foreach(v => {
+        (0.toShort, Float.MinValue, decimal2(0.01), null, null, null, null)
+      ).foreach(v => {
         val row = create_row(v._1, v._2, v._3, v._4, v._5, v._6, v._7)
         checkEvaluation(e1, e2.eval(row), row)
       })

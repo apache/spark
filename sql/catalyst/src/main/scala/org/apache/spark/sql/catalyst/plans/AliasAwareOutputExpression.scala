@@ -29,7 +29,6 @@ import org.apache.spark.sql.internal.SQLConf
 trait AliasAwareOutputExpression extends SQLConfHelper {
   protected val aliasCandidateLimit = conf.getConf(SQLConf.EXPRESSION_PROJECTION_CANDIDATE_LIMIT)
   protected def outputExpressions: Seq[NamedExpression]
-
   /**
    * This method can be used to strip expression which does not affect the result, for example:
    * strip the expression which is ordering agnostic for output ordering.
@@ -46,8 +45,7 @@ trait AliasAwareOutputExpression extends SQLConfHelper {
     val aliases = mutable.Map[Expression, mutable.ArrayBuffer[Attribute]]()
     outputExpressions.reverse.foreach {
       case a @ Alias(child, _) =>
-        val buffer =
-          aliases.getOrElseUpdate(strip(child).canonicalized, mutable.ArrayBuffer.empty)
+        val buffer = aliases.getOrElseUpdate(strip(child).canonicalized, mutable.ArrayBuffer.empty)
         if (buffer.size < aliasCandidateLimit) {
           buffer += a.toAttribute
         }
@@ -88,8 +86,8 @@ trait AliasAwareOutputExpression extends SQLConfHelper {
  * A trait that handles aliases in the `orderingExpressions` to produce `outputOrdering` that
  * satisfies ordering requirements.
  */
-trait AliasAwareQueryOutputOrdering[T <: QueryPlan[T]] extends AliasAwareOutputExpression {
-  self: QueryPlan[T] =>
+trait AliasAwareQueryOutputOrdering[T <: QueryPlan[T]]
+  extends AliasAwareOutputExpression { self: QueryPlan[T] =>
   protected def orderingExpressions: Seq[SortOrder]
 
   override protected def strip(expr: Expression): Expression = expr match {
@@ -105,14 +103,13 @@ trait AliasAwareQueryOutputOrdering[T <: QueryPlan[T]] extends AliasAwareOutputE
       // but if only `b AS y` can be projected we can't return `Seq(SortOrder(y))`.
       orderingExpressions.iterator.map { sortOrder =>
         val orderingSet = mutable.Set.empty[Expression]
-        val sameOrderings = sortOrder.children
-          .to(LazyList)
+        val sameOrderings = sortOrder.children.to(LazyList)
           .flatMap(projectExpression)
           .filter(e => orderingSet.add(e.canonicalized))
           .take(aliasCandidateLimit)
         if (sameOrderings.nonEmpty) {
-          Some(
-            sortOrder.copy(child = sameOrderings.head, sameOrderExpressions = sameOrderings.tail))
+          Some(sortOrder.copy(child = sameOrderings.head,
+            sameOrderExpressions = sameOrderings.tail))
         } else {
           None
         }

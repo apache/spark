@@ -35,9 +35,9 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * Physical plan node for show create table.
  */
-case class ShowCreateTableExec(output: Seq[Attribute], resolvedTable: ResolvedTable)
-    extends V2CommandExec
-    with LeafExecNode {
+case class ShowCreateTableExec(
+    output: Seq[Attribute],
+    resolvedTable: ResolvedTable) extends V2CommandExec with LeafExecNode {
   override protected def run(): Seq[InternalRow] = {
     val builder = new StringBuilder
     showCreateTable(resolvedTable, builder)
@@ -53,11 +53,9 @@ case class ShowCreateTableExec(output: Seq[Attribute], resolvedTable: ResolvedTa
     showTableUsing(table, builder)
 
     val tableOptions = table.properties.asScala
-      .filter { case (k, _) => k.startsWith(TableCatalog.OPTION_PREFIX) }
-      .map { case (k, v) =>
-        k.drop(TableCatalog.OPTION_PREFIX.length) -> v
-      }
-      .toMap
+      .filter { case (k, _) => k.startsWith(TableCatalog.OPTION_PREFIX) }.map {
+        case (k, v) => k.drop(TableCatalog.OPTION_PREFIX.length) -> v
+      }.toMap
     showTableOptions(builder, tableOptions)
     showTablePartitioning(table, builder)
     showTableComment(table, builder)
@@ -69,9 +67,8 @@ case class ShowCreateTableExec(output: Seq[Attribute], resolvedTable: ResolvedTa
   private def showTableDataColumns(table: Table, builder: StringBuilder): Unit = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     val rawSchema = CharVarcharUtils.getRawSchema(table.columns.asSchema, conf)
-    val schemaWithExplicitCollations = DataTypeUtils
-      .replaceNonCollatedTypesWithExplicitUTF8Binary(rawSchema)
-      .asInstanceOf[StructType]
+    val schemaWithExplicitCollations = DataTypeUtils.replaceNonCollatedTypesWithExplicitUTF8Binary(
+        rawSchema).asInstanceOf[StructType]
     val columns = schemaWithExplicitCollations.fields.map(_.toDDL)
     val constraints = table.constraints().map(_.toDDL)
     builder ++= concatByMultiLines(columns ++ constraints)
@@ -87,8 +84,9 @@ case class ShowCreateTableExec(output: Seq[Attribute], resolvedTable: ResolvedTa
       builder: StringBuilder,
       tableOptions: Map[String, String]): Unit = {
     if (tableOptions.nonEmpty) {
-      val props = conf.redactOptions(tableOptions).toSeq.sortBy(_._1).map { case (key, value) =>
-        s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
+      val props = conf.redactOptions(tableOptions).toSeq.sortBy(_._1).map {
+        case (key, value) =>
+          s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
       }
       builder ++= "OPTIONS "
       builder ++= concatByMultiLines(props)
@@ -104,11 +102,8 @@ case class ShowCreateTableExec(output: Seq[Attribute], resolvedTable: ResolvedTa
           if (sortCol.isEmpty) {
             bucketSpec = Some(BucketSpec(numBuckets, col.map(_.fieldNames.mkString(".")), Nil))
           } else {
-            bucketSpec = Some(
-              BucketSpec(
-                numBuckets,
-                col.map(_.fieldNames.mkString(".")),
-                sortCol.map(_.fieldNames.mkString("."))))
+            bucketSpec = Some(BucketSpec(numBuckets, col.map(_.fieldNames.mkString(".")),
+              sortCol.map(_.fieldNames.mkString("."))))
           }
         case t =>
           transforms += t.describe()
@@ -151,10 +146,10 @@ case class ShowCreateTableExec(output: Seq[Attribute], resolvedTable: ResolvedTa
         !tableOptions.contains(key)
       }
     if (showProps.nonEmpty) {
-      val props =
-        conf.redactOptions(showProps.toMap).toSeq.sortBy(_._1).map { case (key, value) =>
+      val props = conf.redactOptions(showProps.toMap).toSeq.sortBy(_._1).map {
+        case (key, value) =>
           s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
-        }
+      }
 
       builder ++= "TBLPROPERTIES "
       builder ++= concatByMultiLines(props)
@@ -169,8 +164,7 @@ case class ShowCreateTableExec(output: Seq[Attribute], resolvedTable: ResolvedTa
 
   private def showTableCollation(table: Table, builder: StringBuilder): Unit = {
     Option(table.properties.get(TableCatalog.PROP_COLLATION))
-      .map("DEFAULT COLLATION " + _ + "\n")
-      .foreach(builder.append)
+      .map("DEFAULT COLLATION " + _ + "\n").foreach(builder.append)
   }
 
   private def concatByMultiLines(iter: Iterable[String]): String = {

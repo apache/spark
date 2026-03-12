@@ -25,8 +25,7 @@ class NoopSuite extends SharedSparkSession {
   test("materialisation of all rows") {
     val numElems = 10
     val accum = spark.sparkContext.longAccumulator
-    spark
-      .range(numElems)
+    spark.range(numElems)
       .map { x =>
         accum.add(1)
         x
@@ -42,8 +41,7 @@ class NoopSuite extends SharedSparkSession {
     val numElems = 100
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      spark
-        .range(numElems)
+      spark.range(numElems)
         .select($"id" mod 10 as "key", $"id" as "value")
         .write
         .partitionBy("key")
@@ -57,11 +55,9 @@ class NoopSuite extends SharedSparkSession {
           accum.add(1)
           x
         }
-        .write
-        .mode("append")
-        .format("noop")
-        .save()
+        .write.mode("append").format("noop").save()
       assert(accum.value == numElems)
     }
   }
 }
+

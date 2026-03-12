@@ -46,38 +46,25 @@ class FileSourceCustomMetadataStructSuite extends QueryTest with SharedSparkSess
     .add("fileNum", IntegerType)
     .add("x", LongType)
 
-  def withTempData(testFileFormat: String, fileSchema: StructType)(
-      f: (DataFrame, FileStatus, FileStatus) => Unit): Unit = {
+  def withTempData(
+    testFileFormat: String, fileSchema: StructType)(
+    f: (DataFrame, FileStatus, FileStatus) => Unit): Unit = {
 
     withTempDir { dir =>
       val f0 = new File(dir, "data/f0").getCanonicalPath
-      spark
-        .range(101, 103)
-        .select(
-          lit(0).as("fileNum"),
-          col("id").as("x"),
-          when(col("id") % 2 === 0, lit(9)).as("y"))
+      spark.range(101, 103)
+        .select(lit(0).as("fileNum"), col("id").as("x"), when(col("id") % 2 === 0, lit(9)).as("y"))
         .coalesce(1)
-        .write
-        .format(testFileFormat)
-        .save(f0)
+        .write.format(testFileFormat).save(f0)
 
       val f1 = new File(dir, "data/f1").getCanonicalPath
-      spark
-        .range(111, 113)
-        .select(
-          lit(1).as("fileNum"),
-          col("id").as("x"),
-          when(col("id") % 2 === 0, lit(7)).as("y"))
+      spark.range(111, 113)
+        .select(lit(1).as("fileNum"), col("id").as("x"), when(col("id") % 2 === 0, lit(7)).as("y"))
         .coalesce(1)
-        .write
-        .format(testFileFormat)
-        .save(f1)
+        .write.format(testFileFormat).save(f1)
 
       // 2. read both f0 and f1
-      val df = spark.read
-        .format(testFileFormat)
-        .schema(fileSchema)
+      val df = spark.read.format(testFileFormat).schema(fileSchema)
         .load(new File(dir, "data").getCanonicalPath + "/*")
 
       val hadoopConf = spark.sessionState.newHadoopConfWithOptions(Map.empty)
@@ -95,15 +82,15 @@ class FileSourceCustomMetadataStructSuite extends QueryTest with SharedSparkSess
       val realF1 = getFileStatus("data/f1")
       assert(
         df.inputFiles.map(new Path(_).getName).toSet ==
-          Seq(realF0, realF1).map(_.getPath.getName).toSet)
+        Seq(realF0, realF1).map(_.getPath.getName).toSet)
       f(df, realF0, realF1)
     }
   }
 
   def createDF(format: FileFormat, files: Seq[FileStatusWithMetadata]): DataFrame = {
     val index = TestFileIndex(files)
-    val fsRelation =
-      HadoopFsRelation(index, index.partitionSchema, FILE_SCHEMA, None, format, Map.empty)(spark)
+    val fsRelation = HadoopFsRelation(
+      index, index.partitionSchema, FILE_SCHEMA, None, format, Map.empty)(spark)
     Dataset.ofRows(spark, LogicalRelation(fsRelation))
   }
 
@@ -138,13 +125,8 @@ class FileSourceCustomMetadataStructSuite extends QueryTest with SharedSparkSess
       // Query with repeated metadata fields
       checkAnswer(
         df.select(
-          "_metadata.bar",
-          "_metadata.foo",
-          "fileNum",
-          "x",
-          "_metadata.row_index",
-          "_metadata.foo",
-          "_metadata.bar"),
+          "_metadata.bar", "_metadata.foo", "fileNum", "x", "_metadata.row_index",
+          "_metadata.foo", "_metadata.bar"),
         Seq(
           Row("000", 0, 0, 101L, 0L, 0, "000"),
           Row("000", 0, 0, 102L, 1L, 0, "000"),
@@ -157,27 +139,20 @@ class FileSourceCustomMetadataStructSuite extends QueryTest with SharedSparkSess
     withTempData("parquet", FILE_SCHEMA) { (_, f0, f1) =>
       val format = new TestFileFormat(extraConstantMetadataFields) {
         val extractPartitionNumber = { pf: PartitionedFile =>
-          pf.toPath.toString
-            .split("/")
-            .collectFirst {
-              case "f0" => 9990
-              case "f1" => 9991
-            }
-            .get
+          pf.toPath.toString.split("/").collectFirst {
+            case "f0" => 9990
+            case "f1" => 9991
+          }.get
         }
         val extractPartitionName = { pf: PartitionedFile =>
-          pf.toPath.toString
-            .split("/")
-            .collectFirst {
-              case "f0" => "f0f"
-              case "f1" => "f1f"
-            }
-            .get
+          pf.toPath.toString.split("/").collectFirst {
+            case "f0" => "f0f"
+            case "f1" => "f1f"
+          }.get
         }
         override def fileConstantMetadataExtractors: Map[String, PartitionedFile => Any] = {
           super.fileConstantMetadataExtractors ++ Map(
-            "foo" -> extractPartitionNumber,
-            "bar" -> extractPartitionName)
+            "foo" -> extractPartitionNumber, "bar" -> extractPartitionName)
         }
       }
       val files = Seq(FileStatusWithMetadata(f0), FileStatusWithMetadata(f1))
@@ -203,11 +178,8 @@ class FileSourceCustomMetadataStructSuite extends QueryTest with SharedSparkSess
 
       checkAnswer(
         df.select(
-          col("fileNum"),
-          col("x"),
-          col("_metadata.row_index"),
-          col("_metadata.foo").as("foofoo"),
-          col("_metadata.bar").as("barbar"))
+            col("fileNum"), col("x"), col("_metadata.row_index"),
+            col("_metadata.foo").as("foofoo"), col("_metadata.bar").as("barbar"))
           .where("foofoo != 10 and barbar != '999'"),
         Seq(
           Row(0, 101L, 0L, 0, "000"),
@@ -217,23 +189,21 @@ class FileSourceCustomMetadataStructSuite extends QueryTest with SharedSparkSess
 
       checkAnswer(
         df.select(
-          col("fileNum"),
-          col("x"),
-          col("_metadata.row_index"),
-          col("_metadata.foo").as("foofoo"),
-          col("_metadata.bar").as("barbar"))
+            col("fileNum"), col("x"), col("_metadata.row_index"),
+            col("_metadata.foo").as("foofoo"), col("_metadata.bar").as("barbar"))
           .where("foofoo != 0"),
-        Seq(Row(1, 111L, 0L, 1, "111"), Row(1, 112L, 1L, 1, "111")))
+        Seq(
+          Row(1, 111L, 0L, 1, "111"),
+          Row(1, 112L, 1L, 1, "111")))
 
       checkAnswer(
         df.select(
-          col("fileNum"),
-          col("x"),
-          col("_metadata.row_index"),
-          col("_metadata.foo").as("foofoo"),
-          col("_metadata.bar").as("barbar"))
+            col("fileNum"), col("x"), col("_metadata.row_index"),
+            col("_metadata.foo").as("foofoo"), col("_metadata.bar").as("barbar"))
           .where("barbar != '111'"),
-        Seq(Row(0, 101L, 0L, 0, "000"), Row(0, 102L, 1L, 0, "000")))
+        Seq(
+          Row(0, 101L, 0L, 0, "000"),
+          Row(0, 102L, 1L, 0, "000")))
     }
   }
 
@@ -242,8 +212,7 @@ class FileSourceCustomMetadataStructSuite extends QueryTest with SharedSparkSess
       val format = new TestFileFormat(extraConstantMetadataFields)
       val files = Seq(
         FileStatusWithMetadata(f0, Map("foo" -> 0)), // no entry for bar
-        FileStatusWithMetadata(f1, Map("foo" -> null, "bar" -> "111"))
-      ) // set foo null
+        FileStatusWithMetadata(f1, Map("foo" -> null, "bar" -> "111"))) // set foo null
       val df = createDF(format, files)
 
       // Query in declared order
@@ -267,13 +236,8 @@ class FileSourceCustomMetadataStructSuite extends QueryTest with SharedSparkSess
       // Query with repeated metadata fields
       checkAnswer(
         df.select(
-          "_metadata.bar",
-          "_metadata.foo",
-          "fileNum",
-          "x",
-          "_metadata.row_index",
-          "_metadata.foo",
-          "_metadata.bar"),
+          "_metadata.bar", "_metadata.foo", "fileNum", "x", "_metadata.row_index",
+          "_metadata.foo", "_metadata.bar"),
         Seq(
           Row(null, 0, 0, 101L, 0L, 0, null),
           Row(null, 0, 0, 102L, 1L, 0, null),
@@ -293,7 +257,11 @@ class FileSourceCustomMetadataStructSuite extends QueryTest with SharedSparkSess
 
       checkAnswer(
         df.select("fileNum", "x", "_metadata.baz"),
-        Seq(Row(0, 101L, 0L), Row(0, 102L, 1L), Row(1, 111L, 0L), Row(1, 112L, 1L)))
+        Seq(
+          Row(0, 101L, 0L),
+          Row(0, 102L, 1L),
+          Row(1, 111L, 0L),
+          Row(1, 112L, 1L)))
     }
   }
 
@@ -315,7 +283,11 @@ class FileSourceCustomMetadataStructSuite extends QueryTest with SharedSparkSess
       // Query in declared order
       checkAnswer(
         df.select("fileNum", "x", "_metadata.baz"),
-        Seq(Row(0, 101L, null), Row(0, 102L, 9), Row(1, 111L, null), Row(1, 112L, 7)))
+        Seq(
+          Row(0, 101L, null),
+          Row(0, 102L, 9),
+          Row(1, 111L, null),
+          Row(1, 112L, 7)))
     }
   }
 
@@ -331,12 +303,18 @@ class FileSourceCustomMetadataStructSuite extends QueryTest with SharedSparkSess
       checkAnswer(
         df.select(col("fileNum"), col("x"), col("_metadata.baz").as("bazbaz"))
           .where("bazbaz != 999"),
-        Seq(Row(0, 101L, 0L), Row(0, 102L, 1L), Row(1, 111L, 0L), Row(1, 112L, 1L)))
+        Seq(
+          Row(0, 101L, 0L),
+          Row(0, 102L, 1L),
+          Row(1, 111L, 0L),
+          Row(1, 112L, 1L)))
 
       checkAnswer(
         df.select(col("fileNum"), col("x"), col("_metadata.baz").as("bazbaz"))
           .where("bazbaz != 0"),
-        Seq(Row(0, 102L, 1L), Row(1, 112L, 1L)))
+        Seq(
+          Row(0, 102L, 1L),
+          Row(1, 112L, 1L)))
     }
   }
 
@@ -371,10 +349,7 @@ class FileSourceCustomMetadataStructSuite extends QueryTest with SharedSparkSess
 
       checkAnswer(
         df.select(
-          "fileNum",
-          "x",
-          s"_metadata.${ROW_INDEX}",
-          s"_metadata.${FILE_SIZE}",
+          "fileNum", "x", s"_metadata.${ROW_INDEX}", s"_metadata.${FILE_SIZE}",
           s"_metadata.${FILE_NAME}"),
         Seq(
           Row(0, 101L, 0L, f0.getLen, f0.getPath.getName),
@@ -389,9 +364,8 @@ object FileSourceCustomMetadataStructSuite {
   case class TestFileIndex(files: Seq[FileStatusWithMetadata]) extends FileIndex {
     // The main override of interest for our testing, but we only care about the listing
     // itself -- partition and data filters are intentionally ignored.
-    override def listFiles(
-        partitionFilters: Seq[Expression],
-        dataFilters: Seq[Expression]): Seq[PartitionDirectory] = {
+    override def listFiles(partitionFilters: Seq[Expression], dataFilters: Seq[Expression])
+        : Seq[PartitionDirectory] = {
       Seq(PartitionDirectory(InternalRow.empty, files))
     }
 

@@ -59,31 +59,17 @@ class ArrayDataIndexedSeqSuite extends SparkFunSuite {
           seq(index)
         },
         condition = "INTERNAL_ERROR",
-        parameters =
-          Map("message" -> s"Index $index must be between 0 and the length of the ArrayData."))
+        parameters = Map(
+          "message" -> s"Index $index must be between 0 and the length of the ArrayData."))
     }
   }
 
   private def testArrayData(): Unit = {
-    val elementTypes = Seq(
-      BooleanType,
-      ByteType,
-      ShortType,
-      IntegerType,
-      LongType,
-      FloatType,
-      DoubleType,
-      DecimalType.USER_DEFAULT,
-      StringType,
-      BinaryType,
-      DateType,
-      TimestampType,
-      CalendarIntervalType,
-      new ExamplePointUDT())
+    val elementTypes = Seq(BooleanType, ByteType, ShortType, IntegerType, LongType, FloatType,
+      DoubleType, DecimalType.USER_DEFAULT, StringType, BinaryType, DateType, TimestampType,
+      CalendarIntervalType, new ExamplePointUDT())
     val arrayTypes = elementTypes.flatMap { elementType =>
-      Seq(
-        ArrayType(elementType, containsNull = false),
-        ArrayType(elementType, containsNull = true))
+      Seq(ArrayType(elementType, containsNull = false), ArrayType(elementType, containsNull = true))
     }
     val random = new Random(100)
     arrayTypes.foreach { dt =>

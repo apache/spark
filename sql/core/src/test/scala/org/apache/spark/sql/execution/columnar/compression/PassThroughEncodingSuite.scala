@@ -82,7 +82,7 @@ class PassThroughSuite extends SparkFunSuite {
       val mutableRow = new GenericInternalRow(1)
 
       if (input.nonEmpty) {
-        input.foreach {
+        input.foreach{
           assert(decoder.hasNext)
           assertResult(_, "Wrong decoded value") {
             decoder.next(mutableRow, 0)
@@ -117,8 +117,7 @@ class PassThroughSuite extends SparkFunSuite {
       assertResult(PassThrough.typeId, "Wrong compression scheme ID")(buffer.getInt())
 
       val decoder = PassThrough.decoder(buffer, columnType)
-      val columnVector = new OnHeapColumnVector(
-        input.length,
+      val columnVector = new OnHeapColumnVector(input.length,
         ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType))
       decoder.decompress(columnVector, input.length)
 

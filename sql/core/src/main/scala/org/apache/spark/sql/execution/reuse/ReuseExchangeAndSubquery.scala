@@ -28,9 +28,10 @@ import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec}
  * Find out duplicated exchanges and subqueries in the whole spark plan including subqueries, then
  * use the same exchange or subquery for all the references.
  *
- * Note that the Spark plan is a mutually recursive data structure: SparkPlan -> Expr -> Subquery
- * -> SparkPlan -> Expr -> Subquery -> ... Therefore, in this rule, we recursively rewrite the
- * exchanges and subqueries in a bottom-up way, in one go.
+ * Note that the Spark plan is a mutually recursive data structure:
+ * SparkPlan -> Expr -> Subquery -> SparkPlan -> Expr -> Subquery -> ...
+ * Therefore, in this rule, we recursively rewrite the exchanges and subqueries in a bottom-up way,
+ * in one go.
  */
 case object ReuseExchangeAndSubquery extends Rule[SparkPlan] {
 
@@ -54,8 +55,7 @@ case object ReuseExchangeAndSubquery extends Rule[SparkPlan] {
               case sub: ExecSubqueryExpression =>
                 val subquery = reuse(sub.plan).asInstanceOf[BaseSubqueryExec]
                 val newSubquery = if (conf.subqueryReuseEnabled) {
-                  val cachedSubquery =
-                    subqueries.getOrElseUpdate(subquery.canonicalized, subquery)
+                  val cachedSubquery = subqueries.getOrElseUpdate(subquery.canonicalized, subquery)
                   if (cachedSubquery.ne(subquery)) {
                     ReusedSubqueryExec(cachedSubquery)
                   } else {

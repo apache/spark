@@ -52,9 +52,7 @@ object ResolveMergeIntoSchemaEvolution extends Rule[LogicalPlan] {
           val remainingChanges = mergeWithNewTarget.pendingSchemaChanges
           if (remainingChanges.nonEmpty) {
             throw QueryCompilationErrors.unsupportedAutoSchemaEvolutionChangesError(
-              catalog,
-              ident,
-              remainingChanges)
+              catalog, ident, remainingChanges)
           }
 
           mergeWithNewTarget
@@ -73,15 +71,18 @@ object ResolveMergeIntoSchemaEvolution extends Rule[LogicalPlan] {
       case e: IllegalArgumentException if !e.isInstanceOf[SparkThrowable] =>
         throw QueryExecutionErrors.unsupportedTableChangeError(e)
       case NonFatal(e) =>
-        throw QueryCompilationErrors.failedAutoSchemaEvolutionError(catalog, ident, e)
+        throw QueryCompilationErrors.failedAutoSchemaEvolutionError(
+          catalog, ident, e)
     }
   }
 
-  private def replaceMergeTarget(merge: MergeIntoTable, newTable: Table): MergeIntoTable = {
+  private def replaceMergeTarget(
+      merge: MergeIntoTable,
+      newTable: Table): MergeIntoTable = {
     val oldOutput = merge.targetTable.output
     val newOutput = DataTypeUtils.toAttributes(newTable.columns)
-    val newTargetTable = merge.targetTable.transform { case r: DataSourceV2Relation =>
-      r.copy(table = newTable, output = newOutput)
+    val newTargetTable = merge.targetTable.transform {
+      case r: DataSourceV2Relation => r.copy(table = newTable, output = newOutput)
     }
     val mergeWithNewTargetTable = merge.copy(targetTable = newTargetTable)
     rewriteAttrs(mergeWithNewTargetTable, oldOutput, newOutput)

@@ -31,11 +31,10 @@ import org.apache.spark.sql.execution.datasources.parquet.ParquetWriteSupport
 /**
  * A wrapper around ParquetOutputWriter that defers creating the writer until some number of input
  * rows have been buffered and analyzed to determine an appropriate schema for shredded Variant.
- * @inferrenceHelper
- *   An object that is aware of the input schema. It takes the buffered rows, and returns a schema
- *   that replaces VariantType with its shredded representation. If `shreddingSchemaForced` is
- *   true, shredding schema inference is not performed because a forced schema is assumed to be
- *   used.
+ * @inferrenceHelper An object that is aware of the input schema. It takes the buffered rows, and
+ * returns a schema that replaces VariantType with its shredded representation.
+ * If `shreddingSchemaForced` is true, shredding schema inference is not performed because a forced
+ * schema is assumed to be used.
  */
 // NOTE: This class is instantiated and used on executor side only, no need to be serializable.
 class ParquetOutputWriterWithVariantShredding(

@@ -45,22 +45,17 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
       expectedVersion: Int = 1,
       batchId: Option[Long] = None): Unit = {
     val statePath = new Path(checkpointDir, s"state/$operatorId")
-    val operatorMetadata = OperatorStateMetadataReader
-      .createReader(
-        statePath,
-        hadoopConf,
-        expectedVersion,
-        batchId.getOrElse(OperatorStateMetadataUtils.getLastOffsetBatch(spark, checkpointDir)))
-      .read()
+    val operatorMetadata = OperatorStateMetadataReader.createReader(statePath,
+      hadoopConf, expectedVersion, batchId.getOrElse(
+        OperatorStateMetadataUtils.getLastOffsetBatch(spark, checkpointDir))).read()
     assert(operatorMetadata.isDefined)
     assert(operatorMetadata.get.version == expectedVersion)
 
     if (expectedVersion == 1) {
       val operatorMetadataV1 = operatorMetadata.get.asInstanceOf[OperatorStateMetadataV1]
       val expectedMetadataV1 = expectedMetadata.asInstanceOf[OperatorStateMetadataV1]
-      assert(
-        operatorMetadataV1.operatorInfo == expectedMetadata.operatorInfo &&
-          operatorMetadataV1.stateStoreInfo.sameElements(expectedMetadataV1.stateStoreInfo))
+      assert(operatorMetadataV1.operatorInfo == expectedMetadata.operatorInfo &&
+        operatorMetadataV1.stateStoreInfo.sameElements(expectedMetadataV1.stateStoreInfo))
     } else {
       val operatorMetadataV2 = operatorMetadata.get.asInstanceOf[OperatorStateMetadataV2]
       val expectedMetadataV2 = expectedMetadata.asInstanceOf[OperatorStateMetadataV2]
@@ -76,8 +71,8 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
 
   test("Serialize and deserialize stateful operator metadata") {
     withTempDir { checkpointDir =>
-      val offsetLog =
-        new OffsetSeqLog(spark, new Path(checkpointDir.toString, DIR_NAME_OFFSETS).toString)
+      val offsetLog = new OffsetSeqLog(spark,
+        new Path(checkpointDir.toString, DIR_NAME_OFFSETS).toString)
       val batch0 = OffsetSeq.fill(LongOffset(0), LongOffset(1), LongOffset(2))
       offsetLog.add(0, batch0)
       val statePath = new Path(checkpointDir.toString, "state/0")
@@ -88,34 +83,26 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
       checkOperatorStateMetadata(checkpointDir.toString, 0, operatorMetadata)
       val df = spark.read.format("state-metadata").load(checkpointDir.toString)
       // Commit log is empty, there is no available batch id.
-      checkAnswer(
-        df,
-        Seq(
-          Row(1, "Join", "store1", 200, -1L, -1L, null),
+      checkAnswer(df, Seq(Row(1, "Join", "store1", 200, -1L, -1L, null),
           Row(1, "Join", "store2", 200, -1L, -1L, null),
           Row(1, "Join", "store3", 200, -1L, -1L, null),
-          Row(1, "Join", "store4", 200, -1L, -1L, null)))
-      checkAnswer(
-        df.select(df.metadataColumn("_numColsPrefixKey")),
+          Row(1, "Join", "store4", 200, -1L, -1L, null)
+        ))
+      checkAnswer(df.select(df.metadataColumn("_numColsPrefixKey")),
         Seq(Row(1), Row(1), Row(1), Row(1)))
 
       // verify that explicitly passing batchId has no effect if the operator is written with
       // schema version v1
-      val testBatchId =
-        OperatorStateMetadataUtils.getLastOffsetBatch(spark, checkpointDir.toString) + 1
-      val testDf = spark.read
-        .format("state-metadata")
-        .option("batchId", testBatchId)
-        .load(checkpointDir.toString)
-      checkAnswer(
-        testDf,
-        Seq(
-          Row(1, "Join", "store1", 200, -1L, -1L, null),
+      val testBatchId = OperatorStateMetadataUtils.getLastOffsetBatch(spark,
+        checkpointDir.toString) + 1
+      val testDf = spark.read.format("state-metadata")
+        .option("batchId", testBatchId).load(checkpointDir.toString)
+      checkAnswer(testDf, Seq(Row(1, "Join", "store1", 200, -1L, -1L, null),
           Row(1, "Join", "store2", 200, -1L, -1L, null),
           Row(1, "Join", "store3", 200, -1L, -1L, null),
-          Row(1, "Join", "store4", 200, -1L, -1L, null)))
-      checkAnswer(
-        testDf.select(testDf.metadataColumn("_numColsPrefixKey")),
+          Row(1, "Join", "store4", 200, -1L, -1L, null)
+        ))
+      checkAnswer(testDf.select(testDf.metadataColumn("_numColsPrefixKey")),
         Seq(Row(1), Row(1), Row(1), Row(1)))
     }
   }
@@ -124,8 +111,7 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
     withTempDir { checkpointDir =>
       val inputData = MemoryStream[Int]
       val aggregated =
-        inputData
-          .toDF()
+        inputData.toDF()
           .groupBy($"value")
           .agg(count("*"))
           .as[(Int, Long)]
@@ -134,10 +120,10 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
         StartStream(checkpointLocation = checkpointDir.toString),
         AddData(inputData, 3),
         CheckLastBatch((3, 1)),
-        StopStream)
+        StopStream
+      )
 
-      val expectedMetadata = OperatorStateMetadataV1(
-        OperatorInfoV1(0, "stateStoreSave"),
+      val expectedMetadata = OperatorStateMetadataV1(OperatorInfoV1(0, "stateStoreSave"),
         Array(StateStoreMetadataV1("default", 0, numShufflePartitions)))
       checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata)
     }
@@ -145,16 +131,13 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
 
   test("Stateful operator metadata for streaming transformWithState") {
     withTempDir { checkpointDir =>
-      withSQLConf(
-        SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-          classOf[RocksDBStateStoreProvider].getName,
+      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName,
         SQLConf.SHUFFLE_PARTITIONS.key -> numShufflePartitions.toString) {
         val inputData = MemoryStream[String]
-        val result = inputData
-          .toDS()
+        val result = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new RunningCountStatefulProcessor(),
+          .transformWithState(new RunningCountStatefulProcessor(),
             TimeMode.None(),
             OutputMode.Update())
 
@@ -162,26 +145,23 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
           StartStream(checkpointLocation = checkpointDir.toString),
           AddData(inputData, "a"),
           CheckNewAnswer(("a", "1")),
-          StopStream)
+          StopStream
+        )
       }
 
       // Assign some placeholder values to the state store metadata since they are generated
       // dynamically by the operator.
-      val expectedMetadata = OperatorStateMetadataV2(
-        OperatorInfoV1(0, "transformWithStateExec"),
-        Array(StateStoreMetadataV2("default", 0, numShufflePartitions, List.empty)),
+      val expectedMetadata = OperatorStateMetadataV2(OperatorInfoV1(0, "transformWithStateExec"),
+        Array(StateStoreMetadataV2(
+          "default", 0, numShufflePartitions, List.empty)),
         "")
       checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata, 2)
 
       // Verify that the state store metadata is not available for invalid batches.
       val ex = intercept[Exception] {
-        val invalidBatchId =
-          OperatorStateMetadataUtils.getLastOffsetBatch(spark, checkpointDir.toString) + 1
-        checkOperatorStateMetadata(
-          checkpointDir.toString,
-          0,
-          expectedMetadata,
-          2,
+        val invalidBatchId = OperatorStateMetadataUtils.getLastOffsetBatch(spark,
+          checkpointDir.toString) + 1
+        checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata, 2,
           Some(invalidBatchId))
       }
 
@@ -189,18 +169,23 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
         ex.asInstanceOf[SparkRuntimeException],
         "STDS_FAILED_TO_READ_OPERATOR_METADATA",
         Some("42K03"),
-        Map("checkpointLocation" -> ".*", "batchId" -> ".*"),
+        Map(
+          "checkpointLocation" -> ".*",
+          "batchId" -> ".*"),
         matchPVals = true)
 
       val ex1 = intercept[Exception] {
-        checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata, 2, Some(-1))
+        checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata, 2,
+          Some(-1))
       }
 
       checkError(
         ex1.asInstanceOf[SparkRuntimeException],
         "STDS_FAILED_TO_READ_OPERATOR_METADATA",
         Some("42K03"),
-        Map("checkpointLocation" -> ".*", "batchId" -> ".*"),
+        Map(
+          "checkpointLocation" -> ".*",
+          "batchId" -> ".*"),
         matchPVals = true)
     }
   }
@@ -220,7 +205,8 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
         CheckAnswer(),
         AddData(input2, 1, 10), // 1 arrived on input1 first, then input2, should join
         CheckNewAnswer((1, 2, 3)),
-        StopStream)
+        StopStream
+      )
 
       val expectedStateStoreInfo = Array(
         StateStoreMetadataV1("left-keyToNumValues", 0, numShufflePartitions),
@@ -228,22 +214,18 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
         StateStoreMetadataV1("right-keyToNumValues", 0, numShufflePartitions),
         StateStoreMetadataV1("right-keyWithIndexToValue", 0, numShufflePartitions))
 
-      val expectedMetadata =
-        OperatorStateMetadataV1(OperatorInfoV1(0, "symmetricHashJoin"), expectedStateStoreInfo)
+      val expectedMetadata = OperatorStateMetadataV1(
+        OperatorInfoV1(0, "symmetricHashJoin"), expectedStateStoreInfo)
       checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata)
 
-      val df = spark.read
-        .format("state-metadata")
+      val df = spark.read.format("state-metadata")
         .load(checkpointDir.toString)
-      checkAnswer(
-        df,
-        Seq(
-          Row(0, "symmetricHashJoin", "left-keyToNumValues", 5, 0L, 1L, null),
+      checkAnswer(df, Seq(Row(0, "symmetricHashJoin", "left-keyToNumValues", 5, 0L, 1L, null),
           Row(0, "symmetricHashJoin", "left-keyWithIndexToValue", 5, 0L, 1L, null),
           Row(0, "symmetricHashJoin", "right-keyToNumValues", 5, 0L, 1L, null),
-          Row(0, "symmetricHashJoin", "right-keyWithIndexToValue", 5, 0L, 1L, null)))
-      checkAnswer(
-        df.select(df.metadataColumn("_numColsPrefixKey")),
+          Row(0, "symmetricHashJoin", "right-keyWithIndexToValue", 5, 0L, 1L, null)
+        ))
+      checkAnswer(df.select(df.metadataColumn("_numColsPrefixKey")),
         Seq(Row(0), Row(0), Row(0), Row(0)))
     }
   }
@@ -253,7 +235,8 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
     withTempDir { checkpointDir =>
       withSQLConf(
         SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
-        SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "3") {
+        SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "3"
+      ) {
         val input1 = MemoryStream[Int]
         val input2 = MemoryStream[Int]
 
@@ -267,7 +250,8 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
           CheckAnswer(),
           AddData(input2, 1, 10),
           CheckNewAnswer((1, 2, 3)),
-          StopStream)
+          StopStream
+        )
 
         val expectedStateStoreInfo =
           Array(StateStoreMetadataV2("default", 0, numShufflePartitions, List.empty))
@@ -278,19 +262,23 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
         val expectedMetadata = OperatorStateMetadataV2(
           OperatorInfoV1(0, "symmetricHashJoin"),
           expectedStateStoreInfo,
-          expectedProperties.json)
+          expectedProperties.json
+        )
         checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata, 2)
 
         // Verify that the state store metadata is not available for invalid batches.
         val ex = intercept[Exception] {
-          val invalidBatchId =
-            OperatorStateMetadataUtils.getLastOffsetBatch(spark, checkpointDir.toString) + 1
+          val invalidBatchId = OperatorStateMetadataUtils.getLastOffsetBatch(
+            spark,
+            checkpointDir.toString
+          ) + 1
           checkOperatorStateMetadata(
             checkpointDir.toString,
             0,
             expectedMetadata,
             2,
-            Some(invalidBatchId))
+            Some(invalidBatchId)
+          )
         }
 
         checkError(
@@ -298,7 +286,8 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
           "STDS_FAILED_TO_READ_OPERATOR_METADATA",
           Some("42K03"),
           Map("checkpointLocation" -> ".*", "batchId" -> ".*"),
-          matchPVals = true)
+          matchPVals = true
+        )
 
         val ex1 = intercept[Exception] {
           checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata, 2, Some(-1))
@@ -309,12 +298,14 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
           "STDS_FAILED_TO_READ_OPERATOR_METADATA",
           Some("42K03"),
           Map("checkpointLocation" -> ".*", "batchId" -> ".*"),
-          matchPVals = true)
+          matchPVals = true
+        )
 
         val df = spark.read.format("state-metadata").load(checkpointDir.toString)
         checkAnswer(
           df,
-          Seq(Row(0, "symmetricHashJoin", "default", 5, 0L, 1L, expectedProperties.json)))
+          Seq(Row(0, "symmetricHashJoin", "default", 5, 0L, 1L, expectedProperties.json))
+        )
       }
     }
   }
@@ -324,8 +315,7 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
       val input = MemoryStream[(String, Long)]
       val sessionWindow: Column = session_window($"eventTime", "10 seconds")
 
-      val events = input
-        .toDF()
+      val events = input.toDF()
         .select($"_1".as("value"), $"_2".as("timestamp"))
         .withColumn("eventTime", $"timestamp".cast("timestamp"))
         .withWatermark("eventTime", "30 seconds")
@@ -334,30 +324,30 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
       val streamingDf = events
         .groupBy(sessionWindow as Symbol("session"), $"sessionId")
         .agg(count("*").as("numEvents"))
-        .selectExpr(
-          "sessionId",
-          "CAST(session.start AS LONG)",
-          "CAST(session.end AS LONG)",
+        .selectExpr("sessionId", "CAST(session.start AS LONG)", "CAST(session.end AS LONG)",
           "CAST(session.end AS LONG) - CAST(session.start AS LONG) AS durationMs",
           "numEvents")
 
       testStream(streamingDf, OutputMode.Complete())(
         StartStream(checkpointLocation = checkpointDir.toString),
-        AddData(
-          input,
+        AddData(input,
           ("hello world spark streaming", 40L),
-          ("world hello structured streaming", 41L)),
+          ("world hello structured streaming", 41L)
+        ),
         CheckNewAnswer(
           ("hello", 40, 51, 11, 2),
           ("world", 40, 51, 11, 2),
           ("streaming", 40, 51, 11, 2),
           ("spark", 40, 50, 10, 1),
-          ("structured", 41, 51, 10, 1)),
-        StopStream)
+          ("structured", 41, 51, 10, 1)
+        ),
+        StopStream
+      )
 
       val expectedMetadata = OperatorStateMetadataV1(
         OperatorInfoV1(0, "sessionWindowStateStoreSaveExec"),
-        Array(StateStoreMetadataV1("default", 1, spark.sessionState.conf.numShufflePartitions)))
+        Array(StateStoreMetadataV1("default", 1, spark.sessionState.conf.numShufflePartitions))
+      )
       checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata)
 
       val df = spark.read.format("state-metadata").load(checkpointDir.toString)
@@ -370,38 +360,31 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
     withTempDir { checkpointDir =>
       val inputData = MemoryStream[Int]
 
-      val stream = inputData
-        .toDF()
+      val stream = inputData.toDF()
         .withColumn("eventTime", timestamp_seconds($"value"))
         .withWatermark("eventTime", "0 seconds")
         .groupBy(window($"eventTime", "5 seconds").as("window"))
         .agg(count("*").as("count"))
         .groupBy(window($"window", "10 seconds"))
         .agg(count("*").as("count"), sum("count").as("sum"))
-        .select(
-          $"window".getField("start").cast("long").as[Long],
-          $"count".as[Long],
-          $"sum".as[Long])
+        .select($"window".getField("start").cast("long").as[Long],
+          $"count".as[Long], $"sum".as[Long])
 
       testStream(stream)(
         StartStream(checkpointLocation = checkpointDir.toString),
         AddData(inputData, 10 to 21: _*),
         CheckNewAnswer((10, 2, 10)),
-        StopStream)
-      val expectedMetadata0 = OperatorStateMetadataV1(
-        OperatorInfoV1(0, "stateStoreSave"),
+        StopStream
+      )
+      val expectedMetadata0 = OperatorStateMetadataV1(OperatorInfoV1(0, "stateStoreSave"),
         Array(StateStoreMetadataV1("default", 0, numShufflePartitions)))
-      val expectedMetadata1 = OperatorStateMetadataV1(
-        OperatorInfoV1(1, "stateStoreSave"),
+      val expectedMetadata1 = OperatorStateMetadataV1(OperatorInfoV1(1, "stateStoreSave"),
         Array(StateStoreMetadataV1("default", 0, numShufflePartitions)))
       checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata0)
       checkOperatorStateMetadata(checkpointDir.toString, 1, expectedMetadata1)
 
       val df = spark.read.format("state-metadata").load(checkpointDir.toString)
-      checkAnswer(
-        df,
-        Seq(
-          Row(0, "stateStoreSave", "default", 5, 0L, 1L, null),
+      checkAnswer(df, Seq(Row(0, "stateStoreSave", "default", 5, 0L, 1L, null),
           Row(1, "stateStoreSave", "default", 5, 0L, 1L, null)))
       checkAnswer(df.select(df.metadataColumn("_numColsPrefixKey")), Seq(Row(0), Row(0)))
     }
@@ -411,10 +394,7 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
     val exc = intercept[StateDataSourceUnspecifiedRequiredOption] {
       spark.read.format("state-metadata").load().collect()
     }
-    checkError(
-      exc,
-      "STDS_REQUIRED_OPTION_UNSPECIFIED",
-      "42601",
+    checkError(exc, "STDS_REQUIRED_OPTION_UNSPECIFIED", "42601",
       Map("optionName" -> StateSourceOptions.PATH))
   }
 
@@ -422,8 +402,7 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
     withTempDir { checkpointDir =>
       val inputData = MemoryStream[Int]
       val aggregated =
-        inputData
-          .toDF()
+        inputData.toDF()
           .groupBy($"value")
           .agg(count("*"))
           .as[(Int, Long)]
@@ -432,7 +411,8 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
         StartStream(checkpointLocation = checkpointDir.toString),
         AddData(inputData, 3),
         CheckLastBatch((3, 1)),
-        StopStream)
+        StopStream
+      )
 
       // Delete operator metadata path
       val metadataPath = new Path(checkpointDir.toString, s"state/0/_metadata/metadata")
@@ -444,7 +424,8 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
         StartStream(checkpointLocation = checkpointDir.toString),
         AddData(inputData, 3),
         CheckLastBatch((3, 2)),
-        StopStream)
+        StopStream
+      )
     }
   }
 
@@ -486,7 +467,8 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
               Map(
                 "OpsInMetadataSeq" -> opsInMetadataSeq.map(formatPairString).mkString(", "),
                 "OpsInCurBatchSeq" -> opsInCurBatchSeq.map(formatPairString).mkString(", ")))
-          })
+          }
+        )
       }
     }
   }
@@ -521,7 +503,8 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
             "STREAMING_STATEFUL_OPERATOR_MISSING_STATE_DIRECTORY",
             "42K03",
             Map("OpsInCurBatchSeq" -> formatPairString(0L -> "dedupe")))
-        })
+        }
+      )
     }
   }
 
@@ -558,7 +541,8 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
             "STREAMING_STATEFUL_OPERATOR_MISSING_STATE_DIRECTORY",
             "42K03",
             Map("OpsInCurBatchSeq" -> formatPairString(0L -> "dedupe")))
-        })
+        }
+      )
     }
   }
 }

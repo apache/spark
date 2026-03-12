@@ -26,50 +26,42 @@ import org.apache.spark.util.ManualClock
 /**
  * Testing utility for transformWithState stateful processors.
  *
- * This class enables unit testing of StatefulProcessor business logic by simulating the behavior
- * of transformWithState. It processes input rows and returns output rows equivalent to those that
- * would be produced by the processor in an actual Spark streaming query.
+ * This class enables unit testing of StatefulProcessor business logic by simulating the
+ * behavior of transformWithState. It processes input rows and returns output rows equivalent
+ * to those that would be produced by the processor in an actual Spark streaming query.
  *
  * '''Supported:'''
- *   - Processing input rows and producing output rows via `test()`.
- *   - Initial state setup via constructor parameter.
- *   - Direct state manipulation via `updateValueState`, `updateListState`, `updateMapState`.
- *   - Direct state inspection via `peekValueState`, `peekListState`, `peekMapState`.
- *   - Timers in ProcessingTime mode (use `setProcessingTime` to fire timers).
- *   - Timers in EventTime mode (use `setWatermark` to manually set the watermark and fire expired
- *     timers).
- *   - Late event filtering in EventTime mode.
+ *  - Processing input rows and producing output rows via `test()`.
+ *  - Initial state setup via constructor parameter.
+ *  - Direct state manipulation via `updateValueState`, `updateListState`, `updateMapState`.
+ *  - Direct state inspection via `peekValueState`, `peekListState`, `peekMapState`.
+ *  - Timers in ProcessingTime mode (use `setProcessingTime` to fire timers).
+ *  - Timers in EventTime mode (use `setWatermark` to manually set the watermark
+ *    and fire expired timers).
+ *  - Late event filtering in EventTime mode.
  *
  * '''Not Supported:'''
- *   - '''TTL'''. States persist indefinitely, even if TTLConfig is set.
- *   - '''Automatic watermark propagation''': In production Spark streaming, the watermark is
- *     computed from event times and propagated at the end of each microbatch. TwsTester does not
- *     simulate this behavior because it processes keys individually rather than in batches. To
- *     test watermark-dependent logic, use `setWatermark()` to manually set the watermark to the
- *     desired value before calling `test()`.
+ *  - '''TTL'''. States persist indefinitely, even if TTLConfig is set.
+ *  - '''Automatic watermark propagation''': In production Spark streaming, the watermark is
+ *    computed from event times and propagated at the end of each microbatch. TwsTester does
+ *    not simulate this behavior because it processes keys individually rather than in batches.
+ *    To test watermark-dependent logic, use `setWatermark()` to manually set the watermark
+ *    to the desired value before calling `test()`.
  *
  * '''Use Cases:'''
- *   - '''Primary''': Unit testing business logic in `handleInputRows` implementations.
- *   - '''Not recommended''': End-to-end testing or performance testing - use actual Spark
- *     streaming queries for those scenarios.
+ *  - '''Primary''': Unit testing business logic in `handleInputRows` implementations.
+ *  - '''Not recommended''': End-to-end testing or performance testing - use actual Spark
+ *    streaming queries for those scenarios.
  *
- * @param processor
- *   the StatefulProcessor to test.
- * @param initialState
- *   initial state for each key as a list of (key, state) tuples.
- * @param timeMode
- *   time mode (None, ProcessingTime or EventTime).
- * @param outputMode
- *   output mode (Append, Update, or Complete).
- * @param eventTimeExtractor
- *   function to extract event time (in milliseconds) from input rows. Required when using
- *   TimeMode.EventTime. Used for late event filtering.
- * @tparam K
- *   the type of grouping key.
- * @tparam I
- *   the type of input rows.
- * @tparam O
- *   the type of output rows.
+ * @param processor the StatefulProcessor to test.
+ * @param initialState initial state for each key as a list of (key, state) tuples.
+ * @param timeMode time mode (None, ProcessingTime or EventTime).
+ * @param outputMode output mode (Append, Update, or Complete).
+ * @param eventTimeExtractor function to extract event time (in milliseconds) from input rows.
+ *                           Required when using TimeMode.EventTime. Used for late event filtering.
+ * @tparam K the type of grouping key.
+ * @tparam I the type of input rows.
+ * @tparam O the type of output rows.
  * @since 4.2.0
  */
 class TwsTester[K, I, O](
@@ -82,7 +74,8 @@ class TwsTester[K, I, O](
   if (timeMode == TimeMode.EventTime()) {
     require(
       eventTimeExtractor.isDefined,
-      "eventTimeExtractor is required when using TimeMode.EventTime.")
+      "eventTimeExtractor is required when using TimeMode.EventTime."
+    )
   }
 
   private val processingTimeClock = new ManualClock(0L)
@@ -96,14 +89,16 @@ class TwsTester[K, I, O](
     case _ =>
       require(
         initialState.isEmpty,
-        "Initial state is provided, but the stateful processor doesn't support initial state.")
+        "Initial state is provided, but the stateful processor doesn't support initial state."
+      )
   }
 
   private def handleInitialState[S](): Unit = {
     val p = processor.asInstanceOf[StatefulProcessorWithInitialState[K, I, O, S]]
-    initialState.foreach { case (key, state) =>
-      ImplicitGroupingKeyTracker.setImplicitKey(key)
-      p.handleInitialState(key, state.asInstanceOf[S], getTimerValues())
+    initialState.foreach {
+      case (key, state) =>
+        ImplicitGroupingKeyTracker.setImplicitKey(key)
+        p.handleInitialState(key, state.asInstanceOf[S], getTimerValues())
     }
   }
 
@@ -113,15 +108,12 @@ class TwsTester[K, I, O](
    * In EventTime mode, late events (where event time &lt;= current watermark) are filtered out
    * before reaching the processor, matching the behavior of real Spark streaming.
    *
-   * The watermark is not automatically advanced based on event times. Use `setWatermark()` to
-   * manually set the watermark before calling `test()`.
+   * The watermark is not automatically advanced based on event times. Use `setWatermark()`
+   * to manually set the watermark before calling `test()`.
    *
-   * @param key
-   *   the grouping key
-   * @param values
-   *   input rows to process
-   * @return
-   *   all output rows produced by the processor
+   * @param key the grouping key
+   * @param values input rows to process
+   * @return all output rows produced by the processor
    */
   def test(key: K, values: List[I]): List[O] = {
     ImplicitGroupingKeyTracker.setImplicitKey(key)
@@ -152,8 +144,8 @@ class TwsTester[K, I, O](
   }
 
   /** Sets the list state for a given key. */
-  def updateListState[T](stateName: String, key: K, value: List[T])(implicit
-      ct: ClassTag[T]): Unit = {
+  def updateListState[T](stateName: String, key: K, value: List[T])(
+      implicit ct: ClassTag[T]): Unit = {
     ImplicitGroupingKeyTracker.setImplicitKey(key)
     handle.updateListState[T](stateName, value)
   }
@@ -211,23 +203,23 @@ class TwsTester[K, I, O](
   /**
    * Sets the simulated processing time and fires all expired timers.
    *
-   * Call this after `test()` to simulate time passage and trigger any timers registered with
-   * `registerTimer()`. Timers with expiry time &lt;= current processing time will fire, invoking
-   * `handleExpiredTimer` for each. This mirrors Spark's behavior where timers are processed after
-   * input data within a microbatch.
+   * Call this after `test()` to simulate time passage and trigger any timers registered
+   * with `registerTimer()`. Timers with expiry time &lt;= current processing time will fire,
+   * invoking `handleExpiredTimer` for each. This mirrors Spark's behavior where timers
+   * are processed after input data within a microbatch.
    *
-   * @param currentTimeMs
-   *   the processing time to set in milliseconds
-   * @return
-   *   output rows emitted by `handleExpiredTimer` for all fired timers
+   * @param currentTimeMs the processing time to set in milliseconds
+   * @return output rows emitted by `handleExpiredTimer` for all fired timers
    */
   def setProcessingTime(currentTimeMs: Long): List[O] = {
     require(
       timeMode == TimeMode.ProcessingTime(),
-      "setProcessingTime is only supported with TimeMode.ProcessingTime.")
+      "setProcessingTime is only supported with TimeMode.ProcessingTime."
+    )
     require(
       currentTimeMs > processingTimeClock.getTimeMillis(),
-      "Processing time must move forward.")
+      "Processing time must move forward."
+    )
     processingTimeClock.setTime(currentTimeMs)
     handleExpiredTimers()
   }
@@ -235,19 +227,18 @@ class TwsTester[K, I, O](
   /**
    * Sets the watermark and fires all expired event-time timers.
    *
-   * Use this in EventTime mode to manually set the watermark. This is the only way to set the
-   * watermark in TwsTester, as automatic watermark propagation based on event times is not
-   * supported. Timers with expiry time &lt;= new watermark will fire.
+   * Use this in EventTime mode to manually set the watermark. This is the only way to
+   * set the watermark in TwsTester, as automatic watermark propagation based on event
+   * times is not supported. Timers with expiry time &lt;= new watermark will fire.
    *
-   * @param currentWatermarkMs
-   *   the watermark to set in milliseconds
-   * @return
-   *   output rows emitted by `handleExpiredTimer` for all fired timers
+   * @param currentWatermarkMs the watermark to set in milliseconds
+   * @return output rows emitted by `handleExpiredTimer` for all fired timers
    */
   def setWatermark(currentWatermarkMs: Long): List[O] = {
     require(
       timeMode == TimeMode.EventTime(),
-      "setWatermark is only supported with TimeMode.EventTime.")
+      "setWatermark is only supported with TimeMode.EventTime."
+    )
     require(currentWatermarkMs > this.currentWatermarkMs, "Watermark must move forward.")
     this.currentWatermarkMs = currentWatermarkMs
     handle.setWatermark(currentWatermarkMs)

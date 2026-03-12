@@ -84,14 +84,11 @@ case class MonotonicallyIncreasingID() extends LeafExpression with Nondeterminis
     val partitionMaskTerm = "partitionMask"
     ctx.addImmutableStateIfNotExists(CodeGenerator.JAVA_LONG, partitionMaskTerm)
     ctx.addPartitionInitializationStatement(s"$countTerm = 0L;")
-    ctx.addPartitionInitializationStatement(
-      s"$partitionMaskTerm = ((long) partitionIndex) << 33;")
+    ctx.addPartitionInitializationStatement(s"$partitionMaskTerm = ((long) partitionIndex) << 33;")
 
-    ev.copy(
-      code = code"""
+    ev.copy(code = code"""
       final ${CodeGenerator.javaType(dataType)} ${ev.value} = $partitionMaskTerm + $countTerm;
-      $countTerm++;""",
-      isNull = FalseLiteral)
+      $countTerm++;""", isNull = FalseLiteral)
   }
 
   override def nodeName: String = "monotonically_increasing_id"

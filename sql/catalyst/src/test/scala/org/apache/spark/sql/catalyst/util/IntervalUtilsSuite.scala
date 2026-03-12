@@ -45,7 +45,8 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
         stringToInterval(UTF8String.fromString(input))
       },
       condition = "INVALID_INTERVAL_FORMAT.INPUT_IS_NULL",
-      parameters = Map("input" -> Option(input).map(_.toString).getOrElse("null")))
+      parameters = Map(
+        "input" -> Option(input).map(_.toString).getOrElse("null")))
     assert(safeStringToInterval(UTF8String.fromString(input)) === null)
   }
 
@@ -55,7 +56,8 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
         stringToInterval(UTF8String.fromString(input))
       },
       condition = "INVALID_INTERVAL_FORMAT.INPUT_IS_EMPTY",
-      parameters = Map("input" -> Option(input).map(_.toString).getOrElse("null")))
+      parameters = Map(
+        "input" -> Option(input).map(_.toString).getOrElse("null")))
     assert(safeStringToInterval(UTF8String.fromString(input)) === null)
   }
 
@@ -65,8 +67,9 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
         stringToInterval(UTF8String.fromString(input))
       },
       condition = "INVALID_INTERVAL_FORMAT.INVALID_PREFIX",
-      parameters =
-        Map("input" -> Option(input).map(_.toString).getOrElse("null"), "prefix" -> prefix))
+      parameters = Map(
+        "input" -> Option(input).map(_.toString).getOrElse("null"),
+        "prefix" -> prefix))
     assert(safeStringToInterval(UTF8String.fromString(input)) === null)
   }
 
@@ -76,8 +79,9 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
         stringToInterval(UTF8String.fromString(input))
       },
       condition = "INVALID_INTERVAL_FORMAT.UNRECOGNIZED_NUMBER",
-      parameters =
-        Map("input" -> Option(input).map(_.toString).getOrElse("null"), "number" -> number))
+      parameters = Map(
+        "input" -> Option(input).map(_.toString).getOrElse("null"),
+        "number" -> number))
     assert(safeStringToInterval(UTF8String.fromString(input)) === null)
   }
 
@@ -87,7 +91,8 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
         stringToInterval(UTF8String.fromString(input))
       },
       condition = "INVALID_INTERVAL_FORMAT.ARITHMETIC_EXCEPTION",
-      parameters = Map("input" -> Option(input).map(_.toString).getOrElse("null")))
+      parameters = Map(
+        "input" -> Option(input).map(_.toString).getOrElse("null")))
     assert(safeStringToInterval(UTF8String.fromString(input)) === null)
   }
 
@@ -97,8 +102,9 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
         stringToInterval(UTF8String.fromString(input))
       },
       condition = "INVALID_INTERVAL_FORMAT.INVALID_VALUE",
-      parameters =
-        Map("input" -> Option(input).map(_.toString).getOrElse("null"), "value" -> value))
+      parameters = Map(
+        "input" -> Option(input).map(_.toString).getOrElse("null"),
+        "value" -> value))
     assert(safeStringToInterval(UTF8String.fromString(input)) === null)
   }
 
@@ -108,8 +114,9 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
         stringToInterval(UTF8String.fromString(input))
       },
       condition = "INVALID_INTERVAL_FORMAT.INVALID_PRECISION",
-      parameters =
-        Map("input" -> Option(input).map(_.toString).getOrElse("null"), "value" -> value))
+      parameters = Map(
+        "input" -> Option(input).map(_.toString).getOrElse("null"),
+        "value" -> value))
     assert(safeStringToInterval(UTF8String.fromString(input)) === null)
   }
 
@@ -119,8 +126,9 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
         stringToInterval(UTF8String.fromString(input))
       },
       condition = "INVALID_INTERVAL_FORMAT.INVALID_FRACTION",
-      parameters =
-        Map("input" -> Option(input).map(_.toString).getOrElse("null"), "unit" -> unit))
+      parameters = Map(
+        "input" -> Option(input).map(_.toString).getOrElse("null"),
+        "unit" -> unit))
     assert(safeStringToInterval(UTF8String.fromString(input)) === null)
   }
 
@@ -130,8 +138,9 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
         stringToInterval(UTF8String.fromString(input))
       },
       condition = "INVALID_INTERVAL_FORMAT.INVALID_UNIT",
-      parameters =
-        Map("input" -> Option(input).map(_.toString).getOrElse("null"), "unit" -> unit))
+      parameters = Map(
+        "input" -> Option(input).map(_.toString).getOrElse("null"),
+        "unit" -> unit))
     assert(safeStringToInterval(UTF8String.fromString(input)) === null)
   }
 
@@ -141,8 +150,9 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
         stringToInterval(UTF8String.fromString(input))
       },
       condition = "INVALID_INTERVAL_FORMAT.MISSING_NUMBER",
-      parameters =
-        Map("input" -> Option(input).map(_.toString).getOrElse("null"), "word" -> word))
+      parameters = Map(
+        "input" -> Option(input).map(_.toString).getOrElse("null"),
+        "word" -> word))
     assert(safeStringToInterval(UTF8String.fromString(input)) === null)
   }
 
@@ -152,15 +162,14 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
         stringToInterval(UTF8String.fromString(input))
       },
       condition = "INVALID_INTERVAL_FORMAT.MISSING_UNIT",
-      parameters =
-        Map("input" -> Option(input).map(_.toString).getOrElse("null"), "word" -> word))
+      parameters = Map(
+        "input" -> Option(input).map(_.toString).getOrElse("null"),
+        "word" -> word))
     assert(safeStringToInterval(UTF8String.fromString(input)) === null)
   }
 
   private def failFuncWithInvalidInput(
-      input: String,
-      errorMsg: String,
-      converter: String => CalendarInterval): Unit = {
+      input: String, errorMsg: String, converter: String => CalendarInterval): Unit = {
     withClue("Expected to throw an exception for the invalid input") {
       val e = intercept[IllegalArgumentException](converter(input))
       assert(e.getMessage.contains(errorMsg))
@@ -168,11 +177,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   private def testSingleUnit(
-      unit: String,
-      number: Int,
-      months: Int,
-      days: Int,
-      microseconds: Long): Unit = {
+    unit: String, number: Int, months: Int, days: Int, microseconds: Long): Unit = {
     for (prefix <- Seq("interval ", "")) {
       val input1 = prefix + number + " " + unit
       val input2 = prefix + number + " " + unit + "s"
@@ -279,33 +284,27 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     assert(fromYearMonthString("+99-10") === new CalendarInterval(99 * 12 + 10, 0, 0L))
     assert(fromYearMonthString("-8-10") === new CalendarInterval(-8 * 12 - 10, 0, 0L))
     failFuncWithInvalidInput("99-15", "year-month", fromYearMonthString)
-    failFuncWithInvalidInput(
-      "9a9-15",
-      "Interval string does not match year-month format",
+    failFuncWithInvalidInput("9a9-15", "Interval string does not match year-month format",
       fromYearMonthString)
 
     // whitespaces
     assert(fromYearMonthString("99-10 ") === new CalendarInterval(99 * 12 + 10, 0, 0L))
     assert(fromYearMonthString("+99-10\t") === new CalendarInterval(99 * 12 + 10, 0, 0L))
     assert(fromYearMonthString("\t\t-8-10\t") === new CalendarInterval(-8 * 12 - 10, 0, 0L))
-    failFuncWithInvalidInput(
-      "99\t-15",
-      "Interval string does not match year-month format",
+    failFuncWithInvalidInput("99\t-15", "Interval string does not match year-month format",
       fromYearMonthString)
-    failFuncWithInvalidInput(
-      "-\t99-15",
-      "Interval string does not match year-month format",
+    failFuncWithInvalidInput("-\t99-15", "Interval string does not match year-month format",
       fromYearMonthString)
 
     assert(fromYearMonthString("178956970-6") == new CalendarInterval(Int.MaxValue - 1, 0, 0))
     assert(fromYearMonthString("178956970-7") == new CalendarInterval(Int.MaxValue, 0, 0))
 
-    val e1 = intercept[IllegalArgumentException] {
+    val e1 = intercept[IllegalArgumentException]{
       assert(fromYearMonthString("178956970-8") == new CalendarInterval(Int.MinValue, 0, 0))
     }.getMessage
     assert(e1.contains("year-month"))
     assert(fromYearMonthString("-178956970-8") == new CalendarInterval(Int.MinValue, 0, 0))
-    val e2 = intercept[IllegalArgumentException] {
+    val e2 = intercept[IllegalArgumentException]{
       assert(fromYearMonthString("-178956970-9") == new CalendarInterval(Int.MinValue, 0, 0))
     }.getMessage
     assert(e2.contains("year-month"))
@@ -313,17 +312,18 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
 
   test("from day-time string - legacy") {
     withSQLConf(SQLConf.LEGACY_FROM_DAYTIME_STRING.key -> "true") {
-      assert(
-        fromDayTimeString("5 12:40:30.999999999") ===
-          new CalendarInterval(
-            0,
-            5,
-            12 * MICROS_PER_HOUR +
-              40 * MICROS_PER_MINUTE +
-              30 * MICROS_PER_SECOND + 999999L))
-      assert(
-        fromDayTimeString("10 0:12:0.888") ===
-          new CalendarInterval(0, 10, 12 * MICROS_PER_MINUTE + millisToMicros(888)))
+      assert(fromDayTimeString("5 12:40:30.999999999") ===
+        new CalendarInterval(
+          0,
+          5,
+          12 * MICROS_PER_HOUR +
+            40 * MICROS_PER_MINUTE +
+            30 * MICROS_PER_SECOND + 999999L))
+      assert(fromDayTimeString("10 0:12:0.888") ===
+        new CalendarInterval(
+          0,
+          10,
+          12 * MICROS_PER_MINUTE + millisToMicros(888)))
       assert(fromDayTimeString("-3 0:0:0") === new CalendarInterval(0, -3, 0L))
 
       checkError(
@@ -334,15 +334,20 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
           "msg" -> "requirement failed: hour 30 outside range [0, 23]",
           "input" -> "5 30:12:20"),
         condition = "INVALID_INTERVAL_FORMAT.DAY_TIME_PARSING",
-        sqlState = Some("22006"))
+        sqlState = Some("22006")
+      )
 
       checkError(
         exception = intercept[SparkIllegalArgumentException] {
           fromDayTimeString("5 12:40:30.999999999", 0, 0)
         },
-        parameters = Map("from" -> "day", "to" -> "day", "input" -> "5 12:40:30.999999999"),
+        parameters = Map(
+          "from" -> "day",
+          "to" -> "day",
+          "input" -> "5 12:40:30.999999999"),
         condition = "INVALID_INTERVAL_FORMAT.UNSUPPORTED_FROM_TO_EXPRESSION",
-        sqlState = Some("22006"))
+        sqlState = Some("22006")
+      )
 
       failFuncWithInvalidInput("5 30:12:20", "hour 30 outside range", fromDayTimeString)
       failFuncWithInvalidInput("5 30-12", "must match day-time format", fromDayTimeString)
@@ -364,7 +369,8 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
         duration(s"${Integer.MAX_VALUE} month", TimeUnit.SECONDS, 31)
       },
       condition = "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION",
-      parameters = Map.empty)
+      parameters = Map.empty
+    )
   }
 
   test("interval overflow with large day values") {
@@ -379,7 +385,8 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
         duration("106751991 days 4 hours 0 minutes 54.776 seconds", TimeUnit.MICROSECONDS)
       },
       condition = "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION",
-      parameters = Map.empty)
+      parameters = Map.empty
+    )
   }
 
   test("negative interval") {
@@ -409,7 +416,8 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       },
       condition = "INVALID_INTERVAL_FORMAT.SECOND_NANO_FORMAT",
       parameters = Map("input" -> "33.33.33"),
-      sqlState = Some("22006"))
+      sqlState = Some("22006")
+    )
   }
 
   test("subtract one interval by another") {
@@ -461,9 +469,8 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       var interval = new CalendarInterval(0, 0, 0)
       assert(interval === func(interval, 10))
       interval = new CalendarInterval(1, 3, 30 * MICROS_PER_SECOND)
-      assert(
-        new CalendarInterval(0, 1, 12 * MICROS_PER_HOUR + 15 * MICROS_PER_SECOND) ===
-          func(interval, 2))
+      assert(new CalendarInterval(0, 1, 12 * MICROS_PER_HOUR + 15 * MICROS_PER_SECOND) ===
+        func(interval, 2))
       assert(new CalendarInterval(2, 6, MICROS_PER_MINUTE) === func(interval, 0.5))
       interval = new CalendarInterval(-1, 0, -30 * MICROS_PER_SECOND)
       assert(new CalendarInterval(0, 0, -15 * MICROS_PER_SECOND) === func(interval, 2))
@@ -471,11 +478,8 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     }
 
     var interval = new CalendarInterval(Int.MaxValue, Int.MaxValue, 0)
-    assert(
-      divide(interval, 0.9) === new CalendarInterval(
-        Int.MaxValue,
-        Int.MaxValue,
-        ((Int.MaxValue / 9.0) * MICROS_PER_DAY).round))
+    assert(divide(interval, 0.9) === new CalendarInterval(Int.MaxValue, Int.MaxValue,
+      ((Int.MaxValue / 9.0) * MICROS_PER_DAY).round))
     val e1 = intercept[ArithmeticException](divideExact(interval, 0.9))
     assert(e1.getMessage.contains("overflow"))
 
@@ -505,10 +509,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     check("+12:40:30.123456789", HOUR, SECOND, "12 hours 40 minutes 30.123456 seconds")
     check("-12:40:30.123456789", HOUR, SECOND, "-12 hours -40 minutes -30.123456 seconds")
     checkFail("5 12:40:30", HOUR, SECOND, "Interval string does not match day-time format")
-    checkFail(
-      "12:40:30.0123456789",
-      HOUR,
-      SECOND,
+    checkFail("12:40:30.0123456789", HOUR, SECOND,
       "Interval string does not match day-time format")
 
     check("40:30.123456789", MINUTE, SECOND, "40 minutes 30.123456 seconds")
@@ -528,11 +529,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
 
     check("5 12:40:30.123", DAY, SECOND, "5 days 12 hours 40 minutes 30.123 seconds")
     check("+5 12:40:30.123456", DAY, SECOND, "5 days 12 hours 40 minutes 30.123456 seconds")
-    check(
-      "-5 12:40:30.123456789",
-      DAY,
-      SECOND,
-      "-5 days -12 hours -40 minutes -30.123456 seconds")
+    check("-5 12:40:30.123456789", DAY, SECOND, "-5 days -12 hours -40 minutes -30.123456 seconds")
     checkFail("5 12", DAY, SECOND, "Interval string does not match day-time format")
 
     checkFail("5 30:12:20", DAY, SECOND, "hour 30 outside range")
@@ -587,9 +584,8 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     assert(durationToMicros(Duration.ZERO) === 0)
     assert(durationToMicros(Duration.ofSeconds(-1)) === -1000000)
     assert(durationToMicros(Duration.ofNanos(123456)) === 123)
-    assert(
-      durationToMicros(Duration.ofDays(106751991)) ===
-        (Long.MaxValue / MICROS_PER_DAY) * MICROS_PER_DAY)
+    assert(durationToMicros(Duration.ofDays(106751991)) ===
+      (Long.MaxValue / MICROS_PER_DAY) * MICROS_PER_DAY)
 
     val errMsg = intercept[ArithmeticException] {
       durationToMicros(Duration.ofDays(106751991 + 1))
@@ -703,10 +699,10 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       -24 -> ("-2-0", "INTERVAL '-2-0' YEAR TO MONTH"),
       24 -> ("2-0", "INTERVAL '2-0' YEAR TO MONTH"),
       Int.MinValue -> ("-178956970-8", "INTERVAL '-178956970-8' YEAR TO MONTH"),
-      Int.MaxValue -> ("178956970-7", "INTERVAL '178956970-7' YEAR TO MONTH")).foreach {
-      case (months, (hiveIntervalStr, ansiIntervalStr)) =>
-        assert(toYearMonthIntervalString(months, ANSI_STYLE, YEAR, MONTH) === ansiIntervalStr)
-        assert(toYearMonthIntervalString(months, HIVE_STYLE, YEAR, MONTH) === hiveIntervalStr)
+      Int.MaxValue -> ("178956970-7", "INTERVAL '178956970-7' YEAR TO MONTH")
+    ).foreach { case (months, (hiveIntervalStr, ansiIntervalStr)) =>
+      assert(toYearMonthIntervalString(months, ANSI_STYLE, YEAR, MONTH) === ansiIntervalStr)
+      assert(toYearMonthIntervalString(months, HIVE_STYLE, YEAR, MONTH) === hiveIntervalStr)
     }
   }
 
@@ -718,10 +714,10 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       -12 -> ("-1-0", "INTERVAL '-12' MONTH"),
       12 -> ("1-0", "INTERVAL '12' MONTH"),
       -13 -> ("-1-1", "INTERVAL '-13' MONTH"),
-      13 -> ("1-1", "INTERVAL '13' MONTH")).foreach {
-      case (months, (hiveIntervalStr, ansiIntervalStr)) =>
-        assert(toYearMonthIntervalString(months, ANSI_STYLE, MONTH, MONTH) === ansiIntervalStr)
-        assert(toYearMonthIntervalString(months, HIVE_STYLE, MONTH, MONTH) === hiveIntervalStr)
+      13 -> ("1-1", "INTERVAL '13' MONTH")
+    ).foreach { case (months, (hiveIntervalStr, ansiIntervalStr)) =>
+      assert(toYearMonthIntervalString(months, ANSI_STYLE, MONTH, MONTH) === ansiIntervalStr)
+      assert(toYearMonthIntervalString(months, HIVE_STYLE, MONTH, MONTH) === hiveIntervalStr)
     }
   }
 
@@ -729,17 +725,14 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     Seq(
       0L -> ("0 00:00:00.000000000", "INTERVAL '0 00:00:00' DAY TO SECOND"),
       -1L -> ("-0 00:00:00.000001000", "INTERVAL '-0 00:00:00.000001' DAY TO SECOND"),
-      10 * MICROS_PER_MILLIS -> (
-        "0 00:00:00.010000000",
-        "INTERVAL '0 00:00:00.01' DAY TO SECOND"),
+      10 * MICROS_PER_MILLIS -> ("0 00:00:00.010000000", "INTERVAL '0 00:00:00.01' DAY TO SECOND"),
       (-123 * MICROS_PER_DAY - 3 * MICROS_PER_SECOND) ->
         ("-123 00:00:03.000000000", "INTERVAL '-123 00:00:03' DAY TO SECOND"),
-      Long.MinValue -> (
-        "-106751991 04:00:54.775808000",
-        "INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND")).foreach {
-      case (micros, (hiveIntervalStr, ansiIntervalStr)) =>
-        assert(toDayTimeIntervalString(micros, ANSI_STYLE, DAY, SECOND) === ansiIntervalStr)
-        assert(toDayTimeIntervalString(micros, HIVE_STYLE, DAY, SECOND) === hiveIntervalStr)
+      Long.MinValue -> ("-106751991 04:00:54.775808000",
+        "INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND")
+    ).foreach { case (micros, (hiveIntervalStr, ansiIntervalStr)) =>
+      assert(toDayTimeIntervalString(micros, ANSI_STYLE, DAY, SECOND) === ansiIntervalStr)
+      assert(toDayTimeIntervalString(micros, HIVE_STYLE, DAY, SECOND) === hiveIntervalStr)
     }
   }
 
@@ -751,18 +744,17 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       -12 -> ("-1-0", "INTERVAL '-12' MONTH"),
       12 -> ("1-0", "INTERVAL '12' MONTH"),
       -13 -> ("-1-1", "INTERVAL '-13' MONTH"),
-      13 -> ("1-1", "INTERVAL '13' MONTH")).foreach {
-      case (months, (hiveIntervalStr, ansiIntervalStr)) =>
-        assert(toYearMonthIntervalString(months, ANSI_STYLE, MONTH, MONTH) === ansiIntervalStr)
-        assert(toYearMonthIntervalString(months, HIVE_STYLE, MONTH, MONTH) === hiveIntervalStr)
+      13 -> ("1-1", "INTERVAL '13' MONTH")
+    ).foreach { case (months, (hiveIntervalStr, ansiIntervalStr)) =>
+      assert(toYearMonthIntervalString(months, ANSI_STYLE, MONTH, MONTH) === ansiIntervalStr)
+      assert(toYearMonthIntervalString(months, HIVE_STYLE, MONTH, MONTH) === hiveIntervalStr)
     }
   }
 
   test("SPARK-35734: Format day-time intervals using type fields") {
     Seq(
       0L ->
-        (
-          "INTERVAL '0 00:00:00' DAY TO SECOND",
+        ("INTERVAL '0 00:00:00' DAY TO SECOND",
           "INTERVAL '0 00:00' DAY TO MINUTE",
           "INTERVAL '0 00' DAY TO HOUR",
           "INTERVAL '00:00:00' HOUR TO SECOND",
@@ -773,8 +765,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
           "INTERVAL '00' MINUTE",
           "INTERVAL '00' SECOND"),
       -1L ->
-        (
-          "INTERVAL '-0 00:00:00.000001' DAY TO SECOND",
+        ("INTERVAL '-0 00:00:00.000001' DAY TO SECOND",
           "INTERVAL '-0 00:00' DAY TO MINUTE",
           "INTERVAL '-0 00' DAY TO HOUR",
           "INTERVAL '-00:00:00.000001' HOUR TO SECOND",
@@ -785,8 +776,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
           "INTERVAL '-00' MINUTE",
           "INTERVAL '-00.000001' SECOND"),
       10 * MICROS_PER_MILLIS ->
-        (
-          "INTERVAL '0 00:00:00.01' DAY TO SECOND",
+        ("INTERVAL '0 00:00:00.01' DAY TO SECOND",
           "INTERVAL '0 00:00' DAY TO MINUTE",
           "INTERVAL '0 00' DAY TO HOUR",
           "INTERVAL '00:00:00.01' HOUR TO SECOND",
@@ -797,8 +787,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
           "INTERVAL '00' MINUTE",
           "INTERVAL '00.01' SECOND"),
       (-123 * MICROS_PER_DAY - 3 * MICROS_PER_SECOND) ->
-        (
-          "INTERVAL '-123 00:00:03' DAY TO SECOND",
+        ("INTERVAL '-123 00:00:03' DAY TO SECOND",
           "INTERVAL '-123 00:00' DAY TO MINUTE",
           "INTERVAL '-123 00' DAY TO HOUR",
           "INTERVAL '-2952:00:03' HOUR TO SECOND",
@@ -809,8 +798,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
           "INTERVAL '-177120' MINUTE",
           "INTERVAL '-10627203' SECOND"),
       Long.MinValue ->
-        (
-          "INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND",
+        ("INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND",
           "INTERVAL '-106751991 04:00' DAY TO MINUTE",
           "INTERVAL '-106751991 04' DAY TO HOUR",
           "INTERVAL '-2562047788:00:54.775808' HOUR TO SECOND",
@@ -821,8 +809,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
           "INTERVAL '-153722867280' MINUTE",
           "INTERVAL '-9223372036854.775808' SECOND"),
       69159782123456L ->
-        (
-          "INTERVAL '800 11:03:02.123456' DAY TO SECOND",
+        ("INTERVAL '800 11:03:02.123456' DAY TO SECOND",
           "INTERVAL '800 11:03' DAY TO MINUTE",
           "INTERVAL '800 11' DAY TO HOUR",
           "INTERVAL '19211:03:02.123456' HOUR TO SECOND",
@@ -833,8 +820,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
           "INTERVAL '1152663' MINUTE",
           "INTERVAL '69159782.123456' SECOND"),
       -69159782123456L ->
-        (
-          "INTERVAL '-800 11:03:02.123456' DAY TO SECOND",
+        ("INTERVAL '-800 11:03:02.123456' DAY TO SECOND",
           "INTERVAL '-800 11:03' DAY TO MINUTE",
           "INTERVAL '-800 11' DAY TO HOUR",
           "INTERVAL '-19211:03:02.123456' HOUR TO SECOND",
@@ -843,20 +829,20 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
           "INTERVAL '-800' DAY",
           "INTERVAL '-19211' HOUR",
           "INTERVAL '-1152663' MINUTE",
-          "INTERVAL '-69159782.123456' SECOND")).foreach {
+          "INTERVAL '-69159782.123456' SECOND")
+    ).foreach {
       case (
-            micros,
-            (
-              dayToSec,
-              dayToMinute,
-              dayToHour,
-              hourToSec,
-              hourToMinute,
-              minuteToSec,
-              day,
-              hour,
-              minute,
-              sec)) =>
+        micros, (
+          dayToSec,
+          dayToMinute,
+          dayToHour,
+          hourToSec,
+          hourToMinute,
+          minuteToSec,
+          day,
+          hour,
+          minute,
+          sec)) =>
         assert(toDayTimeIntervalString(micros, ANSI_STYLE, DAY, SECOND) === dayToSec)
         assert(toDayTimeIntervalString(micros, ANSI_STYLE, DAY, MINUTE) === dayToMinute)
         assert(toDayTimeIntervalString(micros, ANSI_STYLE, DAY, HOUR) === dayToHour)
@@ -883,15 +869,14 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       -24 -> ("INTERVAL '-2-0' YEAR TO MONTH", "INTERVAL '-2' YEAR", "INTERVAL '-24' MONTH"),
       24 -> ("INTERVAL '2-0' YEAR TO MONTH", "INTERVAL '2' YEAR", "INTERVAL '24' MONTH"),
       Int.MinValue ->
-        (
-          "INTERVAL '-178956970-8' YEAR TO MONTH",
+        ("INTERVAL '-178956970-8' YEAR TO MONTH",
           "INTERVAL '-178956970' YEAR",
           "INTERVAL '-2147483648' MONTH"),
       Int.MaxValue ->
-        (
-          "INTERVAL '178956970-7' YEAR TO MONTH",
+        ("INTERVAL '178956970-7' YEAR TO MONTH",
           "INTERVAL '178956970' YEAR",
-          "INTERVAL '2147483647' MONTH")).foreach { case (months, (yearToMonth, year, month)) =>
+          "INTERVAL '2147483647' MONTH")
+    ).foreach { case (months, (yearToMonth, year, month)) =>
       assert(toYearMonthIntervalString(months, ANSI_STYLE, YEAR, MONTH) === yearToMonth)
       assert(toYearMonthIntervalString(months, ANSI_STYLE, YEAR, YEAR) === year)
       assert(toYearMonthIntervalString(months, ANSI_STYLE, MONTH, MONTH) === month)
@@ -908,11 +893,10 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       ("12:40:99.999999999", 99, HOUR, SECOND),
       ("40:60", 60, MINUTE, SECOND),
       ("40:60.999999999", 60, MINUTE, SECOND),
-      ("40:99.999999999", 99, MINUTE, SECOND)).foreach { case (input, second, from, to) =>
+      ("40:99.999999999", 99, MINUTE, SECOND)
+    ).foreach { case(input, second, from, to) =>
       failFuncWithInvalidInput(
-        input,
-        s"second $second outside range [0, 59]",
-        s => fromDayTimeString(s, from, to))
+        input, s"second $second outside range [0, 59]", s => fromDayTimeString(s, from, to))
     }
   }
 }

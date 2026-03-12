@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
@@ -37,8 +38,7 @@ import org.apache.spark.unsafe.types.VariantVal
 // Unit tests for variant shredding inference.
 class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with ParquetTest {
   override def sparkConf: SparkConf = {
-    super.sparkConf
-      .set(SQLConf.PUSH_VARIANT_INTO_SCAN.key, "true")
+    super.sparkConf.set(SQLConf.PUSH_VARIANT_INTO_SCAN.key, "true")
       .set(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key, "true")
       .set(SQLConf.VARIANT_INFER_SHREDDING_SCHEMA.key, "true")
       // We cannot check the physical shredding schemas if the variant logical type annotation is
@@ -47,9 +47,9 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
   }
 
   private def withTempTable(tableNames: String*)(f: => Unit): Unit = {
-    try f
-    finally tableNames.foreach(spark.catalog.dropTempView)
+    try f finally tableNames.foreach(spark.catalog.dropTempView)
   }
+
 
   private def testWithTempDir(name: String)(block: File => Unit): Unit = test(name) {
     withTempDir { dir =>
@@ -59,14 +59,11 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
 
   def getFooters(dir: File): Seq[org.apache.parquet.hadoop.Footer] = {
     val fs = FileSystem.get(spark.sessionState.newHadoopConf())
-    val fileStatuses = fs
-      .listStatus(new Path(dir.getPath))
+    val fileStatuses = fs.listStatus(new Path(dir.getPath))
       .filter(_.getPath.toString.endsWith(".parquet"))
       .toIndexedSeq
     ParquetFileFormat.readParquetFootersInParallel(
-      spark.sessionState.newHadoopConf(),
-      fileStatuses,
-      ignoreCorruptFiles = false)
+      spark.sessionState.newHadoopConf(), fileStatuses, ignoreCorruptFiles = false)
   }
 
   // Checks that exactly one parquet file exists at the provided path, and returns its schema.
@@ -84,9 +81,8 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
     val actual = getFileSchema(dir)
     // Depending on the data, Spark may be able to infer that the top-level column is
     // non-nullable, so accept either one.
-    assert(
-      actual == StructType(Seq(StructField("v", expected, nullable = false))) ||
-        actual == StructType(Seq(StructField("v", expected, nullable = true))))
+    assert(actual == StructType(Seq(StructField("v", expected, nullable = false))) ||
+      actual == StructType(Seq(StructField("v", expected, nullable = true))))
   }
 
   // Given a DF with a field named "v", check that the string representation and schema_of_variant
@@ -94,16 +90,17 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
   // shredding.
   def checkStringAndSchema(dir: File, expected: DataFrame, field: String = "v"): Unit = {
     checkAnswer(
-      spark.read
-        .parquet(dir.getAbsolutePath)
-        .selectExpr(s"$field::string", s"schema_of_variant($field)"),
-      expected.selectExpr(s"$field::string", s"schema_of_variant($field)").collect())
+      spark.read.parquet(dir.getAbsolutePath).selectExpr(s"$field::string",
+        s"schema_of_variant($field)"),
+      expected.selectExpr(s"$field::string", s"schema_of_variant($field)").collect()
+    )
   }
 
   testWithTempDir("infer shredding schema basic") { dir =>
     // Check that we can write and read normally when shredding is enabled if
     // we don't provide a shredding schema.
-    val df = spark.sql("""
+    val df = spark.sql(
+      """
         | select parse_json('{"a": ' || id || ', "b": "' || id || '"}') as v
         | from range(0, 3, 1, 1)
         |""".stripMargin)
@@ -127,7 +124,8 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
         // These rules are a bit arbitrary, and the second one especially is mainly done to
         // keep the algorithm simple, but validate it here, and we can consider revisiting it
         // in the future.
-        val df = spark.sql(s"""
+        val df = spark.sql(
+          s"""
              | select case when id % $inverseFreq = 0 then
              |  parse_json('{"a": ' || id ||
              |  ', "rareArray": [{"x": 1}, {"x": 2}, {"y": 3}]' ||
@@ -153,11 +151,10 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
           DataType.fromDDL("struct<a long, b string, rareArray2 array<struct<x long>>>")
         } else {
           // All fields appear in at least 10% of rows, so should be in the inferred schema.
-          DataType.fromDDL(
-            "struct<a long, b string, " +
-              "rareArray array<struct<x long, y long>>, " +
-              "rareArray2 array<struct<x long, y long>>, " +
-              "rareField string>")
+          DataType.fromDDL( "struct<a long, b string, " +
+                "rareArray array<struct<x long, y long>>, " +
+                "rareArray2 array<struct<x long, y long>>, " +
+                "rareField string>")
         }
         checkFileSchema(expected, dir)
         checkStringAndSchema(dir, df)
@@ -170,14 +167,13 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
       // If this changes, we should change the test, or set it explicitly.
       assert(SQLConf.VARIANT_SHREDDING_MAX_SCHEMA_WIDTH.defaultValue.get == 300)
       withTempDir { dir =>
+
         // Each field is a 2-element object. the leaf fields will consume 4 columns, and
         // the value column for the field will consume one, for a total of 5, so we should
         // hit the limit at around 60 columns.
-        val bigObject = (0 until topLevelFields)
-          .map { i =>
-            s""" "col_$i": {"x": $i, "y": "${i + 1}"}  """
-          }
-          .mkString(start = "{", sep = ",", end = "}")
+        val bigObject = (0 until topLevelFields).map { i =>
+          s""" "col_$i": {"x": $i, "y": "${i + 1}"}  """
+        }.mkString(start = "{", sep = ",", end = "}")
         val df = spark.sql(
           // In addition to the large object, add a smaller one. Once we hit the limit, we should
           // not shred that one, becaused it comes later in the schema.
@@ -207,50 +203,47 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
   }
 
   testWithTempDir("infer shredding key as data") { dir =>
-    // The first 10 fields in each object include the row ID in the field name, so they'll be
-    // unique. Because we impose a 1000-field limit when building up the schema, we'll end up
-    // dropping all but the first 1000, so we won't include the non-unique fields in the schema.
-    // Since the unique names are below the count threshold, we'll end up with an unshredded
-    // schema.
-    // In the future, we could consider trying to improve this by dropping the least-common fields
-    // when we hit the limit of 1000.
-    val bigObject = (0 until 100)
-      .map { i =>
+      // The first 10 fields in each object include the row ID in the field name, so they'll be
+      // unique. Because we impose a 1000-field limit when building up the schema, we'll end up
+      // dropping all but the first 1000, so we won't include the non-unique fields in the schema.
+      // Since the unique names are below the count threshold, we'll end up with an unshredded
+      // schema.
+      // In the future, we could consider trying to improve this by dropping the least-common fields
+      // when we hit the limit of 1000.
+      val bigObject = (0 until 100).map { i =>
         if (i < 50) {
           s""" "first_${i}_' || id || '": {"x": $i, "y": "${i + 1}"}  """
         } else {
           s""" "last_${i}": {"x": $i, "y": "${i + 1}"}  """
         }
-      }
-      .mkString(start = "{", sep = ",", end = "}")
-    val df = spark.sql(
-      // In addition to the large object, add a smaller one. It should be shredded correctly.
-      s"""select parse_json('$bigObject') as v,
+      }.mkString(start = "{", sep = ",", end = "}")
+      val df = spark.sql(
+        // In addition to the large object, add a smaller one. It should be shredded correctly.
+        s"""select parse_json('$bigObject') as v,
                    parse_json('{"x": ' || id || ', "y": 2}') as v2
           from range(0, 100, 1, 1) """)
-    df.write.mode("overwrite").parquet(dir.getAbsolutePath)
-    val footers = getFooters(dir)
-    assert(footers.size == 1)
+      df.write.mode("overwrite").parquet(dir.getAbsolutePath)
+      val footers = getFooters(dir)
+      assert(footers.size == 1)
 
-    // We can't call checkFileSchema, because it only handles the case of one Variant column in
-    // the file.
-    val largeExpected = SparkShreddingUtils.variantShreddingSchema(DataType.fromDDL("variant"))
-    val smallExpected =
-      SparkShreddingUtils.variantShreddingSchema(DataType.fromDDL("struct<x long, y long>"))
-    val actual = getFileSchema(dir)
-    assert(
-      actual == StructType(
-        Seq(
-          StructField("v", largeExpected, nullable = false),
-          StructField("v2", smallExpected, nullable = false))))
-    checkStringAndSchema(dir, df)
+      // We can't call checkFileSchema, because it only handles the case of one Variant column in
+      // the file.
+      val largeExpected = SparkShreddingUtils.variantShreddingSchema(DataType.fromDDL("variant"))
+      val smallExpected = SparkShreddingUtils.variantShreddingSchema(
+        DataType.fromDDL("struct<x long, y long>"))
+      val actual = getFileSchema(dir)
+      assert(actual == StructType(Seq(
+              StructField("v", largeExpected, nullable = false),
+              StructField("v2", smallExpected, nullable = false))))
+      checkStringAndSchema(dir, df)
   }
 
   testWithTempDir("infer shredding from sparse data") { dir =>
     // Infer a schema when there is only one row per batch.
     // The second case only starts at row 4096 * 2048, but we should still see it when
     // we infer a schema, since there is only one active row per batch.
-    val df = spark.sql("""
+    val df = spark.sql(
+      """
         | select
         |  case when floor(id / (4096 * 2048)) = 0 then
         |    parse_json('{"a": ' || id || ', "c": "' || id || '"}')
@@ -269,7 +262,8 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
     // When the first batch is less than max batch size, the writer buffers it, and eventually
     // infers a schema based on the buffered data and non-buffered data. Ensure that we behave
     // correctly if either batch is all-null.
-    val df = spark.sql("""
+    val df = spark.sql(
+      """
         | select
         |  case when id >= 4096 then
         |    parse_json('{"a": ' || id || ', "b": "' || id || '"}')
@@ -288,7 +282,8 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
 
   testWithTempDir("infer shredding null after non-null") { dir =>
     // Same as the previous test, but the first batch is non-null, and the second is all-null.
-    val df = spark.sql("""
+    val df = spark.sql(
+      """
         | select
         |  case when id < 4096 then
         |    parse_json('{"a": ' || id || ', "b": "' || id || '"}')
@@ -307,7 +302,8 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
 
   testWithTempDir("infer shredding with empty file") { dir =>
     // When there is no data, we shoul produce a sane schema.
-    val df = spark.sql("""
+    val df = spark.sql(
+      """
         | select
         |  case when id < 4096 then
         |    parse_json('{"a": ' || id || ', "b": "' || id || '"}')
@@ -324,7 +320,8 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
 
   testWithTempDir("infer a simple schema when data is null") { dir =>
     // The second case only starts at row 4096, so we won't use it in the shredding schema.
-    val df = spark.sql("""
+    val df = spark.sql(
+      """
         | select
         |  case when floor(id / 4096) = 0 then null
         |  else parse_json('{"a": ' || id || ', "b": "' || id || '"}')
@@ -338,7 +335,8 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
 
   testWithTempDir("infer a schema when data is mostly null") { dir =>
     // Even if there is only one non-null row, use it to infer a schema.
-    val df = spark.sql("""
+    val df = spark.sql(
+      """
         | select
         |  case when id % 4096 != 123 then null
         |  else parse_json('{"a": ' || id || ', "b": "' || id || '"}')
@@ -353,7 +351,8 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
 
   testWithTempDir("infer a schema when there is one row") { dir =>
     // The second case only starts at row 4096, so we won't use it in the shredding schema.
-    val df = spark.sql(""" select parse_json('{"a": ' || id || ', "b": "' || id || '"}') as v
+    val df = spark.sql(
+      """ select parse_json('{"a": ' || id || ', "b": "' || id || '"}') as v
         | from range(0, 1, 1, 1)
         |""".stripMargin)
     df.write.mode("overwrite").parquet(dir.getAbsolutePath)
@@ -363,7 +362,8 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
   }
 
   testWithTempDir("Nested variant values") { dir =>
-    val df = spark.sql("""
+    val df = spark.sql(
+      """
         | select
         |  struct(
         |    struct(
@@ -383,35 +383,20 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
     // of the spec "The Parquet columns used to store variant metadata and values must be accessed
     // by name, not by position", so this should be okay, but should we do anything to be
     // consistent between the shredded and unshredded versions?
-    val unshreddedSchema = StructType(
-      Seq(
-        StructField("value", BinaryType, nullable = false),
-        StructField("metadata", BinaryType, nullable = false)))
+    val unshreddedSchema = StructType(Seq(
+      StructField("value", BinaryType, nullable = false),
+      StructField("metadata", BinaryType, nullable = false)))
     // Only the nested struct field should be shredded, none of the fields that are in an array.
-    val expected =
-      StructType(
-        Seq(
-          StructField(
-            "s",
-            StructType(
-              Seq(
-                StructField(
-                  "s1",
-                  StructType(Seq(
-                    StructField("id", LongType, nullable = false),
-                    StructField("v", shreddedSchema, nullable = false),
-                    StructField(
-                      "a",
-                      ArrayType(unshreddedSchema, containsNull = false),
-                      nullable = false))),
-                  nullable = false),
-                StructField(
-                  "a1",
-                  ArrayType(
-                    StructType(Seq(StructField("v2", unshreddedSchema, nullable = false))),
-                    containsNull = false),
-                  nullable = false))),
-            nullable = false)))
+    val expected = StructType(Seq(StructField("s", StructType(Seq(
+      StructField("s1", StructType(Seq(
+        StructField("id", LongType, nullable = false),
+        StructField("v", shreddedSchema, nullable = false),
+        StructField("a", ArrayType(unshreddedSchema, containsNull = false), nullable = false))),
+        nullable = false),
+      StructField("a1", ArrayType(StructType(Seq(
+        StructField("v2", unshreddedSchema, nullable = false))), containsNull = false),
+        nullable = false))),
+      nullable = false)))
     val actual = getFileSchema(dir)
     assert(actual == expected)
     // I think the binary should be identical, but right now the reader doesn't support reading
@@ -419,8 +404,12 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
     // TODO(cashmand) re-enable once we have support.
     // checkAnswer(spark.read.parquet(dir.getAbsolutePath), df.collect())
     checkAnswer(
-      spark.read.parquet(dir.getAbsolutePath).selectExpr("s.s1.id", "s.s1.v", "s.s1.a", "s.a1"),
-      df.selectExpr("s.s1.id", "s.s1.v", "s.s1.a", "s.a1").collect())
+      spark.read.parquet(dir.getAbsolutePath).selectExpr(
+        "s.s1.id", "s.s1.v", "s.s1.a", "s.a1"
+      ),
+      df.selectExpr(
+        "s.s1.id", "s.s1.v", "s.s1.a", "s.a1"
+      ).collect())
   }
 
   test("infer shredding with mixed scale") {
@@ -432,7 +421,8 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
       // d: Test that Long.MinValue is handled correctly, merges appropriately with decimals.
       // e: Test that an integer (127) that fits in int8_t but not Decimal(2, 0) is correctly
       //    merged with an integer that is represented as a Decimal(18, 0)
-      val df = spark.sql(s"""
+      val df = spark.sql(
+        s"""
           | select
           | case when id % 3 = 0 then
           |   parse_json('{"a": -123456789012345, "b": ' || id || ', "c": 0.1, "d": -123,
@@ -451,7 +441,7 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
       // always use a scale of at least 18, to leave room for larger values.
       val expected = DataType.fromDDL(
         "struct<a decimal(38, 5), b variant, c decimal(18, 18), d decimal(38, 10), " +
-          "       e decimal(38, 3)>")
+        "       e decimal(38, 3)>")
 
       checkFileSchema(expected, dir)
       // We can't call checkStringAndSchema, because the schema_of_variant doesn't match: the
@@ -464,41 +454,33 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
         df.selectExpr("v::string").collect())
 
       // Check that the values were actually shredded into typed_value.
-      val fullSchema =
-        StructType(Seq(StructField("v", SparkShreddingUtils.variantShreddingSchema(expected))))
+      val fullSchema = StructType(Seq(StructField("v",
+        SparkShreddingUtils.variantShreddingSchema(expected))))
       val shreddedDf = spark.read.schema(fullSchema).parquet(dir.getAbsolutePath)
-      checkAnswer(
-        shreddedDf.selectExpr("v.typed_value.a.value"),
+      checkAnswer(shreddedDf.selectExpr("v.typed_value.a.value"),
         Seq(Row(null), Row(null), Row(null)))
-      checkAnswer(
-        shreddedDf.selectExpr("v.typed_value.c.value"),
+      checkAnswer(shreddedDf.selectExpr("v.typed_value.c.value"),
         Seq(Row(null), Row(null), Row(null)))
-      checkAnswer(
-        shreddedDf.selectExpr("v.typed_value.d.value"),
+      checkAnswer(shreddedDf.selectExpr("v.typed_value.d.value"),
         Seq(Row(null), Row(null), Row(null)))
-      checkAnswer(
-        shreddedDf.selectExpr("v.typed_value.e.value"),
+      checkAnswer(shreddedDf.selectExpr("v.typed_value.e.value"),
         Seq(Row(null), Row(null), Row(null)))
-      checkAnswer(
-        shreddedDf.selectExpr("v.typed_value.a.typed_value"),
+      checkAnswer(shreddedDf.selectExpr("v.typed_value.a.typed_value"),
         Seq(
           Row(BigDecimal("-123456789012345")),
           Row(BigDecimal("0.03000")),
           Row(BigDecimal("-1.10000"))))
-      checkAnswer(
-        shreddedDf.selectExpr("v.typed_value.c.typed_value"),
+      checkAnswer(shreddedDf.selectExpr("v.typed_value.c.typed_value"),
         Seq(
           Row(BigDecimal("0.100000000000000000")),
           Row(BigDecimal("-0.123456789012345678")),
           Row(BigDecimal("0.120000000000000000"))))
-      checkAnswer(
-        shreddedDf.selectExpr("v.typed_value.d.typed_value"),
+      checkAnswer(shreddedDf.selectExpr("v.typed_value.d.typed_value"),
         Seq(
           Row(BigDecimal("-123.0000000000")),
           Row(BigDecimal("0.1234567890")),
           Row(BigDecimal("-9223372036854775808.0000000000"))))
-      checkAnswer(
-        shreddedDf.selectExpr("v.typed_value.e.typed_value"),
+      checkAnswer(shreddedDf.selectExpr("v.typed_value.e.typed_value"),
         Seq(
           Row(BigDecimal("127.000")),
           Row(BigDecimal("123456789012345678.000")),
@@ -508,16 +490,19 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
 
   // Test with a few values of maxRecordsPerFile. It is the other situation besides partitioning
   // where we write multiple files within a task. 0 means no limit.
-  Seq((0, 100), (0, 50000), (23, 200), (9950, 50000)).foreach {
-    case (maxRecordsPerFile, numRows) =>
-      Seq(false, true).foreach { useSort =>
-        val sortStr = if (useSort) "sorted" else "clustered"
-        testWithTempDir(
+  Seq((0, 100),
+      (0, 50000),
+      (23, 200),
+      (9950, 50000)).foreach { case (maxRecordsPerFile, numRows) =>
+    Seq(false, true).foreach { useSort =>
+      val sortStr = if (useSort) "sorted" else "clustered"
+      testWithTempDir(
           s"infer shredding with partitions: $numRows $sortStr rows, " +
-            s"$maxRecordsPerFile per file") { dir =>
-          withSQLConf(SQLConf.MAX_RECORDS_PER_FILE.key -> maxRecordsPerFile.toString) {
-            val sortClause = if (useSort) "sort by p, v:a::string" else ""
-            val df = spark.sql(s"""
+          s"$maxRecordsPerFile per file") { dir =>
+        withSQLConf(SQLConf.MAX_RECORDS_PER_FILE.key -> maxRecordsPerFile.toString) {
+          val sortClause = if (useSort) "sort by p, v:a::string" else ""
+          val df = spark.sql(
+            s"""
               | select
               |   id % 5 as p,
               |   case
@@ -528,34 +513,31 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
               | from range(0, $numRows, 1, 1)
               | $sortClause
               |""".stripMargin)
-            df.write.mode("overwrite").partitionBy("p").parquet(dir.getAbsolutePath)
-            // Depending on the data, Spark may be able to infer that the top-level column is
-            // non-nullable, so accept either one.
-            val possibleSchemas = Seq(
-              "struct<a long, b string>",
-              "struct<a decimal(18, 1), b: string>",
-              "struct<a string, b string>")
-              .map(DataType.fromDDL)
-              .map(SparkShreddingUtils.variantShreddingSchema(_))
-              .map(shreddedType =>
-                StructType(Seq(StructField("v", shreddedType, nullable = false))))
-            // Each partition is stored in a sub-directory
-            dir.listFiles().filter(_.isDirectory).foreach { subdir =>
-              // We compute a new shredding schema for every partition. Check that each schema we see
-              // is in the list of possibliities.
-              val footers = getFooters(subdir)
-              footers.foreach { footer =>
-                val actual = new ParquetToSparkSchemaConverter()
-                  .convert(footer.getParquetMetadata.getFileMetaData.getSchema)
-                assert(possibleSchemas.contains(actual))
-              }
+          df.write.mode("overwrite").partitionBy("p").parquet(dir.getAbsolutePath)
+          // Depending on the data, Spark may be able to infer that the top-level column is
+          // non-nullable, so accept either one.
+          val possibleSchemas = Seq(
+            "struct<a long, b string>",
+            "struct<a decimal(18, 1), b: string>",
+            "struct<a string, b string>")
+            .map(DataType.fromDDL)
+            .map(SparkShreddingUtils.variantShreddingSchema(_))
+            .map(shreddedType => StructType(Seq(StructField("v", shreddedType, nullable = false))))
+          // Each partition is stored in a sub-directory
+          dir.listFiles().filter(_.isDirectory).foreach { subdir =>
+            // We compute a new shredding schema for every partition. Check that each schema we see
+            // is in the list of possibliities.
+            val footers = getFooters(subdir)
+            footers.foreach { footer =>
+              val actual = new ParquetToSparkSchemaConverter()
+                .convert(footer.getParquetMetadata.getFileMetaData.getSchema)
+              assert(possibleSchemas.contains(actual))
             }
-            checkAnswer(
-              spark.read.parquet(dir.getAbsolutePath).selectExpr("p", "v"),
-              df.collect())
           }
+          checkAnswer(spark.read.parquet(dir.getAbsolutePath).selectExpr("p", "v"), df.collect())
         }
       }
+    }
   }
 
   // Spark hits JSON parsing limits at depth 1000. Ensure that we can shred until fairly close
@@ -568,7 +550,8 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
         val deepArray = "[" * depth + "1" + "]" * depth
         val deepStruct = """{"a": """ * depth + "1" + "}" * depth
         val deepMixed = """[{"a": """ * (depth / 2) + "1" + "}]" * (depth / 2)
-        val df = spark.sql(s"""select parse_json('$deepArray') as a,
+        val df = spark.sql(
+          s"""select parse_json('$deepArray') as a,
                      parse_json('$deepStruct') as s,
                      parse_json('$deepMixed') as m
             from range(0, 100, 1, 1) """)
@@ -597,7 +580,8 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
 
   testWithTempDir("non-json types") { dir =>
     // Ensure that we infer a correct schema for types that do not appear in JSON.
-    val df = spark.sql("""
+    val df = spark.sql(
+      """
         | -- Note: field names must be alphabetically ordered, or binary details will differ and
         | -- cause `checkAnswer` to fail.
         | select
@@ -614,7 +598,7 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
         |""".stripMargin)
     df.write.mode("overwrite").parquet(dir.getAbsolutePath)
     val expected = DataType.fromDDL(
-      "struct<_bin binary, _bool boolean, _date date, _float float, _time timestamp, " +
+        "struct<_bin binary, _bool boolean, _date date, _float float, _time timestamp, " +
         "_time_ntz timestamp_ntz>")
     checkFileSchema(expected, dir)
     checkAnswer(spark.read.parquet(dir.getAbsolutePath), df.collect())
@@ -643,8 +627,7 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
     }
     // Ensure that we infer a correct schema for types that do not appear in JSON.
     val writeSchema = DataType.fromDDL("struct<v variant>").asInstanceOf[StructType]
-    val df =
-      Dataset.ofRows(spark, LogicalRDD(DataTypeUtils.toAttributes(writeSchema), rdd)(spark))
+    val df = Dataset.ofRows(spark, LogicalRDD(DataTypeUtils.toAttributes(writeSchema), rdd)(spark))
     df.write.mode("overwrite").parquet(dir.getAbsolutePath)
     // The field should not be shredded.
     val expected = DataType.fromDDL("struct<a variant, b long>")

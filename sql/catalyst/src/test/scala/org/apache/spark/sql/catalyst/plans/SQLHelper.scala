@@ -32,15 +32,15 @@ import org.apache.spark.util.Utils
 trait SQLHelper extends SQLConfHelper {
 
   /**
-   * Generates a temporary path without creating the actual file/directory, then pass it to `f`.
-   * If a file/directory is created there by `f`, it will be delete after `f` returns.
+   * Generates a temporary path without creating the actual file/directory, then pass it to `f`. If
+   * a file/directory is created there by `f`, it will be delete after `f` returns.
    */
   protected def withTempPath(f: File => Unit): Unit = {
     val path = Utils.createTempDir()
     path.delete()
-    try f(path)
-    finally Utils.deleteRecursively(path)
+    try f(path) finally Utils.deleteRecursively(path)
   }
+
 
   def testSpecialDatetimeValues[T](test: ZoneId => T): Unit = {
     DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>

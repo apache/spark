@@ -37,6 +37,7 @@ import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
 
+
 /**
  * Performs stream-stream join using symmetric hash join algorithm. It works as follows.
  *
@@ -140,10 +141,7 @@ case class StreamingSymmetricHashJoinExec(
     stateWatermarkPredicates: JoinStateWatermarkPredicates,
     stateFormatVersion: Int,
     left: SparkPlan,
-    right: SparkPlan)
-    extends BinaryExecNode
-    with StateStoreWriter
-    with SchemaValidationUtils {
+    right: SparkPlan) extends BinaryExecNode with StateStoreWriter with SchemaValidationUtils {
 
   def this(
       leftKeys: Seq[Expression],
@@ -155,24 +153,17 @@ case class StreamingSymmetricHashJoinExec(
       right: SparkPlan) = {
 
     this(
-      leftKeys,
-      rightKeys,
-      joinType,
-      JoinConditionSplitPredicates(condition, left, right),
+      leftKeys, rightKeys, joinType, JoinConditionSplitPredicates(condition, left, right),
       stateInfo = None,
-      eventTimeWatermarkForLateEvents = None,
-      eventTimeWatermarkForEviction = None,
-      stateWatermarkPredicates = JoinStateWatermarkPredicates(),
-      stateFormatVersion,
-      left,
-      right)
+      eventTimeWatermarkForLateEvents = None, eventTimeWatermarkForEviction = None,
+      stateWatermarkPredicates = JoinStateWatermarkPredicates(), stateFormatVersion, left, right)
   }
 
   if (stateFormatVersion < 2 && joinType != Inner) {
     throw new IllegalArgumentException(
       s"The query is using stream-stream $joinType join with state" +
-        s" format version ${stateFormatVersion} - correctness issue is discovered. Please discard" +
-        " the checkpoint and rerun the query. See SPARK-26154 for more details.")
+      s" format version ${stateFormatVersion} - correctness issue is discovered. Please discard" +
+      " the checkpoint and rerun the query. See SPARK-26154 for more details.")
   }
 
   private lazy val errorMessageForJoinType =
@@ -183,23 +174,20 @@ case class StreamingSymmetricHashJoinExec(
   }
 
   private def throwBadStateFormatVersionException(): Nothing = {
-    throw new IllegalStateException(
-      "Unexpected state format version! " +
-        s"version $stateFormatVersion")
+    throw new IllegalStateException("Unexpected state format version! " +
+      s"version $stateFormatVersion")
   }
 
   require(
     joinType == Inner || joinType == LeftOuter || joinType == RightOuter || joinType == FullOuter ||
-      joinType == LeftSemi,
+    joinType == LeftSemi,
     errorMessageForJoinType)
 
   // The assertion against join keys is same as hash join for batch query.
-  require(
-    leftKeys.length == rightKeys.length &&
-      leftKeys
-        .map(_.dataType)
-        .zip(rightKeys.map(_.dataType))
-        .forall(types => DataTypeUtils.sameType(types._1, types._2)),
+  require(leftKeys.length == rightKeys.length &&
+    leftKeys.map(_.dataType)
+      .zip(rightKeys.map(_.dataType))
+      .forall(types => DataTypeUtils.sameType(types._1, types._2)),
     "Join keys from two sides should have same length and types")
 
   private val storeConf = new StateStoreConf(conf)
@@ -261,12 +249,10 @@ case class StreamingSymmetricHashJoinExec(
     val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
     if (useVirtualColumnFamilies) {
       // Use MetadataV2 for join operators that use virtual column families
-      val stateStoreInfo = stateStoreNames
-        .zip(stateSchemaPaths)
-        .map { case (storeName, schemaPath) =>
+      val stateStoreInfo = stateStoreNames.zip(stateSchemaPaths).map {
+        case (storeName, schemaPath) =>
           StateStoreMetadataV2(storeName, 0, info.numPartitions, schemaPath)
-        }
-        .toArray
+      }.toArray
       val properties = StreamingJoinOperatorProperties(useVirtualColumnFamilies)
       OperatorStateMetadataV2(operatorInfo, stateStoreInfo, properties.json)
     } else {
@@ -281,17 +267,9 @@ case class StreamingSymmetricHashJoinExec(
     assert(useVirtualColumnFamilies)
     // We only have one state store for the join, but there are four distinct schemas
     SymmetricHashJoinStateManager
-      .getSchemasForStateStoreWithColFamily(
-        LeftSide,
-        left.output,
-        leftKeys,
-        stateFormatVersion) ++
-      SymmetricHashJoinStateManager
-        .getSchemasForStateStoreWithColFamily(
-          RightSide,
-          right.output,
-          rightKeys,
-          stateFormatVersion)
+      .getSchemasForStateStoreWithColFamily(LeftSide, left.output, leftKeys, stateFormatVersion) ++
+    SymmetricHashJoinStateManager
+      .getSchemasForStateStoreWithColFamily(RightSide, right.output, rightKeys, stateFormatVersion)
   }
 
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
@@ -315,46 +293,26 @@ case class StreamingSymmetricHashJoinExec(
       val stateSchemaDir = stateSchemaDirPath()
 
       validateAndWriteStateSchema(
-        hadoopConf,
-        batchId,
-        stateSchemaVersion,
-        info,
-        stateSchemaDir,
-        session)
+        hadoopConf, batchId, stateSchemaVersion, info, stateSchemaDir, session
+      )
     } else {
       var result: Map[String, (StructType, StructType)] = Map.empty
       // get state schema for state stores on left side of the join
-      result ++= SymmetricHashJoinStateManager.getSchemaForStateStores(
-        LeftSide,
-        left.output,
-        leftKeys,
-        stateFormatVersion)
+      result ++= SymmetricHashJoinStateManager.getSchemaForStateStores(LeftSide,
+        left.output, leftKeys, stateFormatVersion)
 
       // get state schema for state stores on right side of the join
-      result ++= SymmetricHashJoinStateManager.getSchemaForStateStores(
-        RightSide,
-        right.output,
-        rightKeys,
-        stateFormatVersion)
+      result ++= SymmetricHashJoinStateManager.getSchemaForStateStores(RightSide,
+        right.output, rightKeys, stateFormatVersion)
 
       // validate and maybe evolve schema for all state stores across both sides of the join
       result.map { case (stateStoreName, (keySchema, valueSchema)) =>
         // we have to add the default column family schema because the RocksDBStateEncoder
         // expects this entry to be present in the stateSchemaProvider.
-        val newStateSchema = List(
-          StateStoreColFamilySchema(
-            StateStore.DEFAULT_COL_FAMILY_NAME,
-            0,
-            keySchema,
-            0,
-            valueSchema))
-        StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(
-          getStateInfo,
-          hadoopConf,
-          newStateSchema,
-          session.sessionState,
-          stateSchemaVersion,
-          storeName = stateStoreName)
+        val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME, 0,
+          keySchema, 0, valueSchema))
+        StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
+          newStateSchema, session.sessionState, stateSchemaVersion, storeName = stateStoreName)
       }.toList
     }
   }
@@ -362,13 +320,8 @@ case class StreamingSymmetricHashJoinExec(
   protected override def doExecute(): RDD[InternalRow] = {
     val stateStoreCoord = session.sessionState.streamingQueryManager.stateStoreCoordinator
     metrics // initialize metrics
-    left
-      .execute()
-      .stateStoreAwareZipPartitions(
-        right.execute(),
-        stateInfo.get,
-        stateStoreNames,
-        stateStoreCoord)(processPartitions)
+    left.execute().stateStoreAwareZipPartitions(
+      right.execute(), stateInfo.get, stateStoreNames, stateStoreCoord)(processPartitions)
   }
 
   private def processPartitions(
@@ -376,8 +329,7 @@ case class StreamingSymmetricHashJoinExec(
       leftInputIter: Iterator[InternalRow],
       rightInputIter: Iterator[InternalRow]): Iterator[InternalRow] = {
     if (stateInfo.isEmpty) {
-      throw new IllegalStateException(
-        s"Cannot execute join as state info was not specified\n$this")
+      throw new IllegalStateException(s"Cannot execute join as state info was not specified\n$this")
     }
 
     val numOutputRows = longMetric("numOutputRows")
@@ -399,9 +351,7 @@ case class StreamingSymmetricHashJoinExec(
 
     assert(stateInfo.isDefined, "State info not defined")
     val checkpointIds = SymmetricHashJoinStateManager.getStateStoreCheckpointIds(
-      partitionId,
-      stateInfo.get.stateStoreCkptIds,
-      useVirtualColumnFamilies)
+      partitionId, stateInfo.get.stateStoreCkptIds, useVirtualColumnFamilies)
 
     val inputSchema = left.output ++ right.output
     val postJoinFilter =
@@ -411,31 +361,15 @@ case class StreamingSymmetricHashJoinExec(
     val joinStateManagerStoreGenerator = new JoinStateManagerStoreGenerator()
     val joinerManager = OneSideHashJoinerManager(
       new OneSideHashJoiner(
-        LeftSide,
-        left.output,
-        leftKeys,
-        leftInputIter,
-        condition.leftSideOnly,
-        postJoinFilter,
-        stateWatermarkPredicates.left,
-        partitionId,
-        checkpointIds.left.keyToNumValues,
-        checkpointIds.left.keyWithIndexToValue,
-        skippedNullValueCount,
-        joinStateManagerStoreGenerator),
+        LeftSide, left.output, leftKeys, leftInputIter,
+        condition.leftSideOnly, postJoinFilter, stateWatermarkPredicates.left, partitionId,
+        checkpointIds.left.keyToNumValues, checkpointIds.left.keyWithIndexToValue,
+        skippedNullValueCount, joinStateManagerStoreGenerator),
       new OneSideHashJoiner(
-        RightSide,
-        right.output,
-        rightKeys,
-        rightInputIter,
-        condition.rightSideOnly,
-        postJoinFilter,
-        stateWatermarkPredicates.right,
-        partitionId,
-        checkpointIds.right.keyToNumValues,
-        checkpointIds.right.keyWithIndexToValue,
-        skippedNullValueCount,
-        joinStateManagerStoreGenerator))
+        RightSide, right.output, rightKeys, rightInputIter,
+        condition.rightSideOnly, postJoinFilter, stateWatermarkPredicates.right, partitionId,
+        checkpointIds.right.keyToNumValues, checkpointIds.right.keyWithIndexToValue,
+        skippedNullValueCount, joinStateManagerStoreGenerator))
 
     //  Join one side input using the other side's buffered/state rows. Here is how it is done.
     //
@@ -473,8 +407,7 @@ case class StreamingSymmetricHashJoinExec(
     // this will be prepended to a second iterator producing other rows; for inner and left semi
     // joins, this is the full output.
     val hashJoinOutputIter = CompletionIterator[InternalRow, Iterator[InternalRow]](
-      leftOutputIter ++ rightOutputIter,
-      onHashJoinOutputCompletion())
+      leftOutputIter ++ rightOutputIter, onHashJoinOutputCompletion())
 
     val outputIter: Iterator[InternalRow] = joinType match {
       case Inner | LeftSemi =>
@@ -501,15 +434,13 @@ case class StreamingSymmetricHashJoinExec(
 
         val initIterFn = { () =>
           val removedRowIter = joinerManager.leftSideJoiner.removeAndReturnOldState()
-          removedRowIter
-            .filterNot { kv =>
-              stateFormatVersion match {
-                case 1 => matchesWithRightSideState(new UnsafeRowPair(kv.key, kv.value))
-                case 2 | 3 => kv.matched
-                case _ => throwBadStateFormatVersionException()
-              }
+          removedRowIter.filterNot { kv =>
+            stateFormatVersion match {
+              case 1 => matchesWithRightSideState(new UnsafeRowPair(kv.key, kv.value))
+              case 2 | 3 => kv.matched
+              case _ => throwBadStateFormatVersionException()
             }
-            .map(pair => joinedRow.withLeft(pair.value).withRight(nullRight))
+          }.map(pair => joinedRow.withLeft(pair.value).withRight(nullRight))
         }
 
         // NOTE: we need to make sure `outerOutputIter` is evaluated "after" exhausting all of
@@ -529,15 +460,13 @@ case class StreamingSymmetricHashJoinExec(
 
         val initIterFn = { () =>
           val removedRowIter = joinerManager.rightSideJoiner.removeAndReturnOldState()
-          removedRowIter
-            .filterNot { kv =>
-              stateFormatVersion match {
-                case 1 => matchesWithLeftSideState(new UnsafeRowPair(kv.key, kv.value))
-                case 2 | 3 => kv.matched
-                case _ => throwBadStateFormatVersionException()
-              }
+          removedRowIter.filterNot { kv =>
+            stateFormatVersion match {
+              case 1 => matchesWithLeftSideState(new UnsafeRowPair(kv.key, kv.value))
+              case 2 | 3 => kv.matched
+              case _ => throwBadStateFormatVersionException()
             }
-            .map(pair => joinedRow.withLeft(nullLeft).withRight(pair.value))
+          }.map(pair => joinedRow.withLeft(nullLeft).withRight(pair.value))
         }
 
         // NOTE: we need to make sure `outerOutputIter` is evaluated "after" exhausting all of
@@ -556,15 +485,13 @@ case class StreamingSymmetricHashJoinExec(
 
         val leftSideInitIterFn = { () =>
           val removedRowIter = joinerManager.leftSideJoiner.removeAndReturnOldState()
-          removedRowIter
-            .filterNot(isKeyToValuePairMatched)
+          removedRowIter.filterNot(isKeyToValuePairMatched)
             .map(pair => joinedRow.withLeft(pair.value).withRight(nullRight))
         }
 
         val rightSideInitIterFn = { () =>
           val removedRowIter = joinerManager.rightSideJoiner.removeAndReturnOldState()
-          removedRowIter
-            .filterNot(isKeyToValuePairMatched)
+          removedRowIter.filterNot(isKeyToValuePairMatched)
             .map(pair => joinedRow.withLeft(nullLeft).withRight(pair.value))
         }
 
@@ -648,41 +575,35 @@ case class StreamingSymmetricHashJoinExec(
     }
 
     CompletionIterator[InternalRow, Iterator[InternalRow]](
-      outputIterWithMetrics,
-      onOutputCompletion)
+      outputIterWithMetrics, onOutputCompletion)
   }
 
   /**
    * Internal helper class to consume input rows, generate join output rows using other sides
    * buffered state rows, and finally clean up this sides buffered state rows
    *
-   * @param joinSide
-   *   The JoinSide - either left or right.
-   * @param inputAttributes
-   *   The input attributes for this side of the join.
-   * @param joinKeys
-   *   The join keys.
-   * @param inputIter
-   *   The iterator of input rows on this side to be joined.
-   * @param preJoinFilterExpr
-   *   A filter over rows on this side. This filter rejects rows that could never pass the overall
-   *   join condition no matter what other side row they're joined with.
-   * @param postJoinFilter
-   *   A filter over joined rows. This filter completes the application of the overall join
-   *   condition, assuming that preJoinFilter on both sides of the join has already been passed.
-   *   Passed as a function rather than expression to avoid creating the predicate twice; we also
-   *   need this filter later on in the parent exec.
-   * @param stateWatermarkPredicate
-   *   The state watermark predicate. See [[StreamingSymmetricHashJoinExec]] for further
-   *   description of state watermarks.
-   * @param oneSideStateInfo
-   *   Reconstructed state info for this side
-   * @param partitionId
-   *   A partition ID of source RDD.
-   * @param joinStateManagerStoreGenerator
-   *   The state store generator responsible for getting the state store for this join side. The
-   *   generator will re-use the same store for both sides when the join implementation uses
-   *   virtual column families for join version 3.
+   * @param joinSide The JoinSide - either left or right.
+   * @param inputAttributes The input attributes for this side of the join.
+   * @param joinKeys The join keys.
+   * @param inputIter The iterator of input rows on this side to be joined.
+   * @param preJoinFilterExpr A filter over rows on this side. This filter rejects rows that could
+   *                          never pass the overall join condition no matter what other side row
+   *                          they're joined with.
+   * @param postJoinFilter A filter over joined rows. This filter completes the application of
+   *                       the overall join condition, assuming that preJoinFilter on both sides
+   *                       of the join has already been passed.
+   *                       Passed as a function rather than expression to avoid creating the
+   *                       predicate twice; we also need this filter later on in the parent exec.
+   * @param stateWatermarkPredicate The state watermark predicate. See
+   *                                [[StreamingSymmetricHashJoinExec]] for further description of
+   *                                state watermarks.
+   * @param oneSideStateInfo  Reconstructed state info for this side
+   * @param partitionId A partition ID of source RDD.
+   * @param joinStateManagerStoreGenerator The state store generator responsible for getting the
+   *                                       state store for this join side. The generator will
+   *                                       re-use the same store for both sides when the join
+   *                                       implementation uses virtual column families for join
+   *                                       version 3.
    */
   private class OneSideHashJoiner(
       joinSide: JoinSide,
@@ -724,18 +645,14 @@ case class StreamingSymmetricHashJoinExec(
         // the schema to generated predicate. See [[StreamingSymmetricHashJoinHelper]].
         Predicate.create(expr, Seq.empty).eval _
       case _ =>
-        Predicate
-          .create(Literal(false), Seq.empty)
-          .eval _ // false = do not remove if no predicate
+        Predicate.create(Literal(false), Seq.empty).eval _ // false = do not remove if no predicate
     }
 
     private[this] val stateValueWatermarkPredicateFunc = stateWatermarkPredicate match {
       case Some(JoinStateValueWatermarkPredicate(expr, _)) =>
         Predicate.create(expr, inputAttributes).eval _
       case _ =>
-        Predicate
-          .create(Literal(false), Seq.empty)
-          .eval _ // false = do not remove if no predicate
+        Predicate.create(Literal(false), Seq.empty).eval _  // false = do not remove if no predicate
     }
 
     private[this] var updatedStateRowsCount = 0
@@ -745,22 +662,20 @@ case class StreamingSymmetricHashJoinExec(
     /**
      * Generate joined rows by consuming input from this side, and matching it with the buffered
      * rows (i.e. state) of the other side.
-     * @param otherSideJoiner
-     *   Joiner of the other side
-     * @param generateJoinedRow
-     *   Function to generate the joined row from the input row from this side and the matched row
-     *   from the other side
+     * @param otherSideJoiner   Joiner of the other side
+     * @param generateJoinedRow Function to generate the joined row from the
+     *                          input row from this side and the matched row from the other side
      */
-    def storeAndJoinWithOtherSide(otherSideJoiner: OneSideHashJoiner)(
-        generateJoinedRow: (InternalRow, InternalRow) => JoinedRow): Iterator[InternalRow] = {
+    def storeAndJoinWithOtherSide(
+        otherSideJoiner: OneSideHashJoiner)(
+        generateJoinedRow: (InternalRow, InternalRow) => JoinedRow)
+      : Iterator[InternalRow] = {
 
-      val watermarkAttribute = WatermarkSupport.findEventTimeColumn(
-        inputAttributes,
+      val watermarkAttribute = WatermarkSupport.findEventTimeColumn(inputAttributes,
         allowMultipleEventTimeColumns = !allowMultipleStatefulOperators)
       val nonLateRows =
         WatermarkSupport.watermarkExpression(
-          watermarkAttribute,
-          eventTimeWatermarkForLateEvents) match {
+          watermarkAttribute, eventTimeWatermarkForLateEvents) match {
           case Some(watermarkExpr) =>
             val predicate = Predicate.create(watermarkExpr, inputAttributes)
             applyRemovingRowsOlderThanWatermark(inputIter, predicate)
@@ -821,7 +736,7 @@ case class StreamingSymmetricHashJoinExec(
         key: UnsafeRow,
         thisRow: UnsafeRow,
         subIter: Iterator[InternalRow])
-        extends CompletionIterator[InternalRow, Iterator[InternalRow]](subIter) {
+      extends CompletionIterator[InternalRow, Iterator[InternalRow]](subIter) {
 
       private val iteratorNotEmpty: Boolean = super.hasNext
 
@@ -851,11 +766,11 @@ case class StreamingSymmetricHashJoinExec(
             !stateKeyWatermarkPredicateFunc(key) && !stateValueWatermarkPredicateFunc(thisRow)
 
           isNotEvictingInThisBatch ||
-          // if the input is producing "unmatched row" in this batch
-          (
-            (joinType == RightOuter && !iteratorNotEmpty) ||
-              (joinType == FullOuter && !iteratorNotEmpty)
-          )
+            // if the input is producing "unmatched row" in this batch
+            (
+              (joinType == RightOuter && !iteratorNotEmpty) ||
+                (joinType == FullOuter && !iteratorNotEmpty)
+            )
         }
 
         if (shouldAddToState) {
@@ -901,16 +816,14 @@ case class StreamingSymmetricHashJoinExec(
     }
 
     /**
-     * Builds an iterator over old state key-value pairs, removing them lazily as they're
-     * produced.
+     * Builds an iterator over old state key-value pairs, removing them lazily as they're produced.
      *
-     * @note
-     *   This iterator must be consumed fully before any other operations are made against this
-     *   joiner's join state manager. For efficiency reasons, the intermediate states of the
-     *   iterator leave the state manager in an undefined state.
+     * @note This iterator must be consumed fully before any other operations are made
+     * against this joiner's join state manager. For efficiency reasons, the intermediate states of
+     * the iterator leave the state manager in an undefined state.
      *
-     * We do this to avoid requiring either two passes or full materialization when processing the
-     * rows for outer join.
+     * We do this to avoid requiring either two passes or full materialization when
+     * processing the rows for outer join.
      */
     def removeAndReturnOldState(): Iterator[KeyToValuePair] = {
       stateWatermarkPredicate match {
@@ -952,12 +865,11 @@ case class StreamingSymmetricHashJoinExec(
   }
 
   /**
-   * Case class used to manage both left and right side's joiners, combining information from both
-   * sides when necessary.
+   * Case class used to manage both left and right side's joiners, combining
+   * information from both sides when necessary.
    */
   private case class OneSideHashJoinerManager(
-      leftSideJoiner: OneSideHashJoiner,
-      rightSideJoiner: OneSideHashJoiner) {
+      leftSideJoiner: OneSideHashJoiner, rightSideJoiner: OneSideHashJoiner) {
 
     def removeOldState(): Long = {
       leftSideJoiner.removeOldState() + rightSideJoiner.removeOldState()
@@ -972,7 +884,9 @@ case class StreamingSymmetricHashJoinExec(
         // Since both sides use the same state store, the metrics are already combined
         leftSideJoiner.getMetrics
       } else {
-        StateStoreMetrics.combine(Seq(leftSideJoiner.getMetrics, rightSideJoiner.getMetrics))
+        StateStoreMetrics.combine(
+          Seq(leftSideJoiner.getMetrics, rightSideJoiner.getMetrics)
+        )
       }
     }
 
@@ -995,13 +909,16 @@ case class StreamingSymmetricHashJoinExec(
           storeCheckpointInfo.partitionId,
           storeCheckpointInfo.batchVersion,
           storeCheckpointInfo.stateStoreCkptId.map(Array(_)),
-          storeCheckpointInfo.baseStateStoreCkptId.map(Array(_)))
+          storeCheckpointInfo.baseStateStoreCkptId.map(Array(_))
+        )
       } else {
         // Merge checkpoint info from both sides
         SymmetricHashJoinStateManager.mergeStateStoreCheckpointInfo(
           JoinStateStoreCkptInfo(
             leftSideJoiner.getLatestCheckpointInfo(),
-            rightSideJoiner.getLatestCheckpointInfo()))
+            rightSideJoiner.getLatestCheckpointInfo()
+          )
+        )
       }
     }
 
@@ -1013,12 +930,11 @@ case class StreamingSymmetricHashJoinExec(
   }
 
   override protected def withNewChildrenInternal(
-      newLeft: SparkPlan,
-      newRight: SparkPlan): StreamingSymmetricHashJoinExec =
+      newLeft: SparkPlan, newRight: SparkPlan): StreamingSymmetricHashJoinExec =
     copy(left = newLeft, right = newRight)
 
-  private class LazilyInitializingJoinedRowIterator(initFn: () => Iterator[JoinedRow])
-      extends Iterator[JoinedRow] {
+  private class LazilyInitializingJoinedRowIterator(
+      initFn: () => Iterator[JoinedRow]) extends Iterator[JoinedRow] {
     private lazy val iter: Iterator[JoinedRow] = initFn()
 
     override def hasNext: Boolean = iter.hasNext
@@ -1029,8 +945,8 @@ case class StreamingSymmetricHashJoinExec(
   // of skipped null values as custom metric of stream join operator.
   override def customStatefulOperatorMetrics: Seq[StatefulOperatorCustomMetric] =
     if (storeConf.skipNullsForStreamStreamJoins) {
-      Seq(
-        StatefulOperatorCustomSumMetric("skippedNullValueCount", "number of skipped null values"))
+      Seq(StatefulOperatorCustomSumMetric("skippedNullValueCount",
+        "number of skipped null values"))
     } else {
       Nil
     }
@@ -1043,12 +959,7 @@ case class StreamingSymmetricHashJoinExec(
   override def produceOutputWatermark(inputWatermarkMs: Long): Option[Long] = {
     val (leftStateWatermark, rightStateWatermark) =
       StreamingSymmetricHashJoinHelper.getStateWatermark(
-        left.output,
-        right.output,
-        leftKeys,
-        rightKeys,
-        condition.full,
-        Some(inputWatermarkMs),
+        left.output, right.output, leftKeys, rightKeys, condition.full, Some(inputWatermarkMs),
         !allowMultipleStatefulOperators)
 
     Some((leftStateWatermark ++ rightStateWatermark ++ Some(inputWatermarkMs)).min)

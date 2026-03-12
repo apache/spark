@@ -76,8 +76,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
     go to (spark.sparkContext.ui.get.webUrl.stripSuffix("/") + path)
   }
 
-  test(
-    "SPARK-30984: Structured Streaming UI should be activated when running a streaming query") {
+  test("SPARK-30984: Structured Streaming UI should be activated when running a streaming query") {
     quietly {
       withSparkSession(newSparkSession()) { spark =>
         import spark.implicits._
@@ -93,27 +92,16 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
           val input2 = spark.readStream.format("rate").load()
           val input3 = spark.readStream.format("rate").load()
           val activeQuery =
-            input1
-              .selectExpr("timestamp", "mod(value, 100) as mod", "value")
+            input1.selectExpr("timestamp", "mod(value, 100) as mod", "value")
               .withWatermark("timestamp", "0 second")
               .groupBy(windowFn($"timestamp", "10 seconds", "2 seconds"), $"mod")
               .agg(avg("value").as("avg_value"))
-              .writeStream
-              .format("noop")
-              .trigger(Trigger.ProcessingTime("5 seconds"))
-              .start()
+              .writeStream.format("noop").trigger(Trigger.ProcessingTime("5 seconds")).start()
           val completedQuery =
             input2.join(input3, "value").writeStream.format("noop").start()
           completedQuery.stop()
-          val failedQuery = spark.readStream
-            .format("rate")
-            .load()
-            .select("value")
-            .as[Long]
-            .map(_ / 0)
-            .writeStream
-            .format("noop")
-            .start()
+          val failedQuery = spark.readStream.format("rate").load().select("value").as[Long]
+            .map(_ / 0).writeStream.format("noop").start()
           try {
             failedQuery.awaitTermination()
           } catch {
@@ -126,38 +114,20 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
 
             findAll(cssSelector("h3")).map(_.text).toSeq should contain("Streaming Query")
 
-            val arrow = 0x25be.toChar
+            val arrow = 0x25BE.toChar
             findAll(cssSelector("""#active-table th""")).map(_.text).toList should be {
-              List(
-                "Name",
-                "Status",
-                "ID",
-                "Run ID",
-                s"Start Time $arrow",
-                "Duration",
-                "Avg Input /sec",
-                "Avg Process /sec",
-                "Latest Batch")
+              List("Name", "Status", "ID", "Run ID", s"Start Time $arrow", "Duration",
+                "Avg Input /sec", "Avg Process /sec", "Latest Batch")
             }
             val activeQueries =
               findAll(cssSelector("""#active-table td""")).map(_.text).toSeq
             activeQueries should contain(activeQuery.id.toString)
             activeQueries should contain(activeQuery.runId.toString)
             findAll(cssSelector("""#completed-table th"""))
-              .map(_.text)
-              .toList should be {
-              List(
-                "Name",
-                "Status",
-                "ID",
-                "Run ID",
-                s"Start Time $arrow",
-                "Duration",
-                "Avg Input /sec",
-                "Avg Process /sec",
-                "Latest Batch",
-                "Error")
-            }
+              .map(_.text).toList should be {
+                List("Name", "Status", "ID", "Run ID", s"Start Time $arrow", "Duration",
+                  "Avg Input /sec", "Avg Process /sec", "Latest Batch", "Error")
+              }
             val completedQueries =
               findAll(cssSelector("""#completed-table td""")).map(_.text).toSeq
             completedQueries should contain(completedQuery.id.toString)
@@ -171,29 +141,27 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
             go to activeQueryLink
 
             findAll(cssSelector("h3"))
-              .map(_.text)
-              .toSeq should contain("Streaming Query Statistics")
+              .map(_.text).toSeq should contain("Streaming Query Statistics")
             val summaryText = findAll(cssSelector("div strong")).map(_.text).toSeq
-            summaryText should contain("Name:")
-            summaryText should contain("Id:")
-            summaryText should contain("RunId:")
+            summaryText should contain ("Name:")
+            summaryText should contain ("Id:")
+            summaryText should contain ("RunId:")
             findAll(cssSelector("""#stat-table th""")).map(_.text).toSeq should be {
               List("", "Timelines", "Histograms")
             }
-            summaryText should contain("Input Rate (?)")
-            summaryText should contain("Process Rate (?)")
-            summaryText should contain("Input Rows (?)")
-            summaryText should contain("Batch Duration (?)")
-            summaryText should contain("Operation Duration (?)")
-            summaryText should contain("Global Watermark Gap (?)")
-            summaryText should contain("Aggregated Number Of Total State Rows (?)")
-            summaryText should contain("Aggregated Number Of Updated State Rows (?)")
-            summaryText should contain("Aggregated Number Of Removed State Rows (?)")
-            summaryText should contain("Aggregated State Memory Used In Bytes (?)")
-            summaryText should contain("Aggregated Number Of Late Rows Dropped By Watermark (?)")
-            summaryText should contain(
-              "Aggregated Custom Metric stateOnCurrentVersionSizeBytes" +
-                " (?)")
+            summaryText should contain ("Input Rate (?)")
+            summaryText should contain ("Process Rate (?)")
+            summaryText should contain ("Input Rows (?)")
+            summaryText should contain ("Batch Duration (?)")
+            summaryText should contain ("Operation Duration (?)")
+            summaryText should contain ("Global Watermark Gap (?)")
+            summaryText should contain ("Aggregated Number Of Total State Rows (?)")
+            summaryText should contain ("Aggregated Number Of Updated State Rows (?)")
+            summaryText should contain ("Aggregated Number Of Removed State Rows (?)")
+            summaryText should contain ("Aggregated State Memory Used In Bytes (?)")
+            summaryText should contain ("Aggregated Number Of Late Rows Dropped By Watermark (?)")
+            summaryText should contain ("Aggregated Custom Metric stateOnCurrentVersionSizeBytes" +
+              " (?)")
             summaryText should not contain ("Aggregated Custom Metric loadedMapCacheHitCount (?)")
             summaryText should not contain ("Aggregated Custom Metric loadedMapCacheMissCount (?)")
           }

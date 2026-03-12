@@ -30,7 +30,7 @@ import org.apache.spark.sql.internal.SQLConf
  * Resolves the identifier expressions and builds the original plans/expressions.
  */
 class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch])
-    extends Rule[LogicalPlan] {
+  extends Rule[LogicalPlan] {
 
   private val executor = new RuleExecutor[LogicalPlan] {
     override def batches: Seq[Batch] = earlyBatches.asInstanceOf[Seq[Batch]]
@@ -48,7 +48,8 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
           if (referredTempVars.nonEmpty) {
             throw QueryCompilationErrors.notAllowedToCreatePermanentViewByReferencingTempVarError(
               Seq("unknown"),
-              referredTempVars.head)
+              referredTempVars.head
+            )
           }
           createView.copy(child = analyzedChild, query = analyzedQuery)
         }
@@ -59,17 +60,16 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
   private def apply0(
       plan: LogicalPlan,
       referredTempVars: Option[mutable.ArrayBuffer[Seq[String]]] = None): LogicalPlan =
-    plan.resolveOperatorsUpWithPruning(
-      _.containsAnyPattern(UNRESOLVED_IDENTIFIER, PLAN_WITH_UNRESOLVED_IDENTIFIER)) {
+    plan.resolveOperatorsUpWithPruning(_.containsAnyPattern(
+      UNRESOLVED_IDENTIFIER, PLAN_WITH_UNRESOLVED_IDENTIFIER)) {
       case p: PlanWithUnresolvedIdentifier if p.identifierExpr.resolved && p.childrenResolved =>
 
         if (referredTempVars.isDefined) {
           referredTempVars.get ++= collectTemporaryVariablesInLogicalPlan(p)
         }
 
-        executor.execute(
-          p.planBuilder
-            .apply(IdentifierResolution.evalIdentifierExpr(p.identifierExpr), p.children))
+        executor.execute(p.planBuilder.apply(
+          IdentifierResolution.evalIdentifierExpr(p.identifierExpr), p.children))
       case other =>
         other.transformExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_IDENTIFIER)) {
           case e: ExpressionWithUnresolvedIdentifier if e.identifierExpr.resolved =>
@@ -79,8 +79,7 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
             }
 
             e.exprBuilder.apply(
-              IdentifierResolution.evalIdentifierExpr(e.identifierExpr),
-              e.otherExprs)
+              IdentifierResolution.evalIdentifierExpr(e.identifierExpr), e.otherExprs)
         }
     }
 

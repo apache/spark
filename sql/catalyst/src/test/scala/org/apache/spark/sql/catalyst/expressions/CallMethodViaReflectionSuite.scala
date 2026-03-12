@@ -66,35 +66,36 @@ class CallMethodViaReflectionSuite extends SparkFunSuite with ExpressionEvalHelp
     val wrongClassName = "some-random-class"
     val ret = createExpr(wrongClassName, "method").checkInputDataTypes()
     assert(ret.isFailure)
-    assert(
-      ret ==
-        DataTypeMismatch(
-          errorSubClass = "UNEXPECTED_CLASS_TYPE",
-          messageParameters = Map("className" -> wrongClassName)))
+    assert(ret ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_CLASS_TYPE",
+        messageParameters = Map("className" -> wrongClassName)
+      )
+    )
   }
 
   test("method not found because name does not match") {
     val wrongMethodName = "notfoundmethod"
     val ret = createExpr(staticClassName, wrongMethodName).checkInputDataTypes()
     assert(ret.isFailure)
-    assert(
-      ret ==
-        DataTypeMismatch(
-          errorSubClass = "UNEXPECTED_STATIC_METHOD",
-          messageParameters =
-            Map("methodName" -> wrongMethodName, "className" -> staticClassName)))
+    assert(ret ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_STATIC_METHOD",
+        messageParameters = Map("methodName" -> wrongMethodName, "className" -> staticClassName)
+      )
+    )
   }
 
   test("method not found because there is no static method") {
     val wrongMethodName = "method1"
     val ret = createExpr(dynamicClassName, wrongMethodName).checkInputDataTypes()
     assert(ret.isFailure)
-    assert(
-      ret ==
-        DataTypeMismatch(
-          errorSubClass = "UNEXPECTED_STATIC_METHOD",
-          messageParameters =
-            Map("methodName" -> wrongMethodName, "className" -> dynamicClassName)))
+    assert(ret ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_STATIC_METHOD",
+        messageParameters = Map("methodName" -> wrongMethodName, "className" -> dynamicClassName)
+      )
+    )
   }
 
   test("input type checking") {
@@ -107,7 +108,8 @@ class CallMethodViaReflectionSuite extends SparkFunSuite with ExpressionEvalHelp
         "functionName" -> "`reflect`",
         "expectedNum" -> "> 1",
         "actualNum" -> "0",
-        "docroot" -> SPARK_DOC_ROOT))
+        "docroot" -> SPARK_DOC_ROOT)
+    )
     checkError(
       exception = intercept[AnalysisException] {
         CallMethodViaReflection(Seq(Literal(staticClassName))).checkInputDataTypes()
@@ -117,37 +119,37 @@ class CallMethodViaReflectionSuite extends SparkFunSuite with ExpressionEvalHelp
         "functionName" -> "`reflect`",
         "expectedNum" -> "> 1",
         "actualNum" -> "1",
-        "docroot" -> SPARK_DOC_ROOT))
-    assert(
-      CallMethodViaReflection(Seq(Literal(staticClassName), Literal(1))).checkInputDataTypes() ==
-        DataTypeMismatch(
-          errorSubClass = "NON_FOLDABLE_INPUT",
-          messageParameters =
-            Map("inputName" -> "`method`", "inputType" -> "\"STRING\"", "inputExpr" -> "\"1\"")))
+        "docroot" -> SPARK_DOC_ROOT)
+    )
+    assert(CallMethodViaReflection(
+      Seq(Literal(staticClassName), Literal(1))).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "`method`",
+          "inputType" -> "\"STRING\"",
+          "inputExpr" -> "\"1\"")
+      )
+    )
     assert(createExpr(staticClassName, "method1").checkInputDataTypes().isSuccess)
   }
 
   test("unsupported type checking") {
     val ret = createExpr(staticClassName, "method1", new Timestamp(1)).checkInputDataTypes()
     assert(ret.isFailure)
-    assert(
-      ret ==
-        DataTypeMismatch(
-          errorSubClass = "UNEXPECTED_INPUT_TYPE",
-          messageParameters = Map(
-            "paramIndex" -> ordinalNumber(2),
-            "requiredType" -> toSQLType(
-              TypeCollection(
-                BooleanType,
-                ByteType,
-                ShortType,
-                IntegerType,
-                LongType,
-                FloatType,
-                DoubleType,
-                StringType)),
-            "inputSql" -> "\"TIMESTAMP '1969-12-31 16:00:00.001'\"",
-            "inputType" -> "\"TIMESTAMP\"")))
+    assert(ret ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(2),
+          "requiredType" -> toSQLType(
+            TypeCollection(BooleanType, ByteType, ShortType,
+              IntegerType, LongType, FloatType, DoubleType, StringType)),
+          "inputSql" -> "\"TIMESTAMP '1969-12-31 16:00:00.001'\"",
+          "inputType" -> "\"TIMESTAMP\""
+        )
+      )
+    )
   }
 
   test("invoking methods using acceptable types") {
@@ -165,7 +167,8 @@ class CallMethodViaReflectionSuite extends SparkFunSuite with ExpressionEvalHelp
   private def createExpr(className: String, methodName: String, args: Any*) = {
     CallMethodViaReflection(
       Literal.create(className, StringType) +:
-        Literal.create(methodName, StringType) +:
-        args.map(Literal.apply))
+      Literal.create(methodName, StringType) +:
+      args.map(Literal.apply)
+    )
   }
 }

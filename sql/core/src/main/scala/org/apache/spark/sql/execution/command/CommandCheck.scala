@@ -29,7 +29,8 @@ object CommandCheck extends (LogicalPlan => Unit) with SQLConfHelper {
   override def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
       case AnalyzeColumnCommand(_, colsOpt, allColumns) if !allColumns =>
-        colsOpt.foreach(SchemaUtils.checkColumnNameDuplication(_, conf.caseSensitiveAnalysis))
+        colsOpt.foreach(SchemaUtils.checkColumnNameDuplication(
+          _, conf.caseSensitiveAnalysis))
 
       case _ =>
     }

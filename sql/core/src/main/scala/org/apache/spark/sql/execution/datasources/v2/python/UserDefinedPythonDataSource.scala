@@ -48,17 +48,16 @@ import org.apache.spark.unsafe.types.VariantVal
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * A user-defined Python data source. This is used by the Python API. Defines the interation
- * between Python and JVM.
+ * A user-defined Python data source. This is used by the Python API.
+ * Defines the interation between Python and JVM.
  *
- * @param dataSourceCls
- *   The Python data source class.
+ * @param dataSourceCls The Python data source class.
  */
 case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
 
   /**
-   * (Driver-side) Run Python process, and get the pickled Python Data Source instance and its
-   * schema.
+   * (Driver-side) Run Python process, and get the pickled Python Data Source
+   * instance and its schema.
    */
   def createDataSourceInPython(
       shortName: String,
@@ -72,8 +71,8 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
   }
 
   /**
-   * (Driver-side) Run Python process to push down filters, get the updated data source instance
-   * and the filter pushdown result.
+   * (Driver-side) Run Python process to push down filters, get the updated
+   * data source instance and the filter pushdown result.
    */
   def pushdownFiltersInPython(
       pythonResult: PythonDataSourceCreationResult,
@@ -82,7 +81,8 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
     val runner = new UserDefinedPythonDataSourceFilterPushdownRunner(
       createPythonFunction(pythonResult.dataSource),
       outputSchema,
-      filters)
+      filters
+    )
     if (runner.isAnyFilterSupported) {
       Some(runner.runInPython())
     } else {
@@ -91,8 +91,8 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
   }
 
   /**
-   * (Driver-side) Run Python process, and get the partition read functions, and partition
-   * information.
+   * (Driver-side) Run Python process, and get the partition read functions, and
+   * partition information.
    */
   def createReadInfoInPython(
       pythonResult: PythonDataSourceCreationResult,
@@ -130,8 +130,8 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
       writer: Array[Byte],
       messages: Array[WriterCommitMessage],
       abort: Boolean = false): Unit = {
-    new UserDefinedPythonDataSourceCommitRunner(dataSourceCls, writer, messages, abort)
-      .runInPython()
+    new UserDefinedPythonDataSourceCommitRunner(
+      dataSourceCls, writer, messages, abort).runInPython()
   }
 
   /**
@@ -178,13 +178,12 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
   def createPythonMetrics(): Array[CustomMetric] = {
     // Do not add other metrics such as number of rows,
     // that is already included via DSv2.
-    PythonSQLMetrics.pythonSizeMetricsDesc.map { case (k, v) =>
-      new PythonCustomMetric(k, v)
-    }.toArray
+    PythonSQLMetrics.pythonSizeMetricsDesc
+      .map { case (k, v) => new PythonCustomMetric(k, v)}.toArray
   }
 
   def createPythonTaskMetrics(taskMetrics: Map[String, Long]): Array[CustomTaskMetric] = {
-    taskMetrics.map { case (k, v) => new PythonCustomTaskMetric(k, v) }.toArray
+    taskMetrics.map { case (k, v) => new PythonCustomTaskMetric(k, v)}.toArray
   }
 
   def createPythonFunction(pickledFunc: Array[Byte]): PythonFunction = {
@@ -200,7 +199,6 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
 }
 
 object UserDefinedPythonDataSource {
-
   /**
    * The schema of the input to the Python data source read function.
    */
@@ -223,7 +221,8 @@ object UserDefinedPythonDataSource {
 /**
  * All Data Sources in Python
  */
-case class PythonLookupAllDataSourcesResult(names: Array[String], dataSources: Array[Array[Byte]])
+case class PythonLookupAllDataSourcesResult(
+    names: Array[String], dataSources: Array[Array[Byte]])
 
 /**
  * A runner used to look up Python Data Sources available in Python path.
@@ -234,9 +233,9 @@ private class UserDefinedPythonDataSourceLookupRunner(lookupSources: PythonFunct
   override val workerModule = "pyspark.sql.worker.lookup_data_sources"
 
   override protected def runnerConf: Map[String, String] = {
-    super.runnerConf ++ SQLConf.get.pythonDataSourceProfiler
-      .map(p => Map(SQLConf.PYTHON_DATA_SOURCE_PROFILER.key -> p))
-      .getOrElse(Map.empty)
+    super.runnerConf ++ SQLConf.get.pythonDataSourceProfiler.map(p =>
+      Map(SQLConf.PYTHON_DATA_SOURCE_PROFILER.key -> p)
+    ).getOrElse(Map.empty)
   }
 
   override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
@@ -250,9 +249,7 @@ private class UserDefinedPythonDataSourceLookupRunner(lookupSources: PythonFunct
     if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryCompilationErrors.pythonDataSourceError(
-        action = "lookup",
-        tpe = "instance",
-        msg = msg)
+        action = "lookup", tpe = "instance", msg = msg)
     }
 
     val shortNames = ArrayBuffer.empty[String]
@@ -275,7 +272,9 @@ private class UserDefinedPythonDataSourceLookupRunner(lookupSources: PythonFunct
 /**
  * Used to store the result of creating a Python data source in the Python process.
  */
-case class PythonDataSourceCreationResult(dataSource: Array[Byte], schema: StructType)
+case class PythonDataSourceCreationResult(
+    dataSource: Array[Byte],
+    schema: StructType)
 
 /**
  * A runner used to create a Python data source in a Python process and return the result.
@@ -285,14 +284,14 @@ private class UserDefinedPythonDataSourceRunner(
     provider: String,
     userSpecifiedSchema: Option[StructType],
     options: CaseInsensitiveMap[String])
-    extends PythonPlannerRunner[PythonDataSourceCreationResult](dataSourceCls) {
+  extends PythonPlannerRunner[PythonDataSourceCreationResult](dataSourceCls) {
 
   override val workerModule = "pyspark.sql.worker.create_data_source"
 
   override protected def runnerConf: Map[String, String] = {
-    super.runnerConf ++ SQLConf.get.pythonDataSourceProfiler
-      .map(p => Map(SQLConf.PYTHON_DATA_SOURCE_PROFILER.key -> p))
-      .getOrElse(Map.empty)
+    super.runnerConf ++ SQLConf.get.pythonDataSourceProfiler.map(p =>
+      Map(SQLConf.PYTHON_DATA_SOURCE_PROFILER.key -> p)
+    ).getOrElse(Map.empty)
   }
 
   override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
@@ -321,9 +320,7 @@ private class UserDefinedPythonDataSourceRunner(
     if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryCompilationErrors.pythonDataSourceError(
-        action = "create",
-        tpe = "instance",
-        msg = msg)
+        action = "create", tpe = "instance", msg = msg)
     }
 
     // Receive the pickled data source.
@@ -348,12 +345,12 @@ private class UserDefinedPythonDataSourceRunner(
 }
 
 /**
- * @param isFilterPushed
- *   A sequence of bools indicating whether each filter is pushed down.
+ * @param isFilterPushed A sequence of bools indicating whether each filter is pushed down.
  */
 case class PythonFilterPushdownResult(
     readInfo: PythonDataSourceReadInfo,
-    isFilterPushed: collection.Seq[Boolean])
+    isFilterPushed: collection.Seq[Boolean]
+)
 
 /**
  * Push down filters to a Python data source.
@@ -379,7 +376,8 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
       @JsonInclude(JsonInclude.Include.NON_DEFAULT)
       isNegated: Boolean,
       @JsonIgnore
-      index: Int)
+      index: Int
+  )
 
   private val mapper = new ObjectMapper().registerModules(DefaultScalaModule)
 
@@ -391,76 +389,79 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
         throw QueryCompilationErrors.pythonDataSourceError(
           action = "plan",
           tpe = "filter",
-          msg = s"Cannot find field $columnPath in schema"))
+          msg = s"Cannot find field $columnPath in schema"
+        )
+      )
     (columnPath, field)
   }
 
-  private val serializedFilters = filters.zipWithIndex.flatMap { case (filter, i) =>
-    // Unwrap Not filter
-    val (childFilter, isNegated) = filter match {
-      case sources.Not(f) => (f, true)
-      case _ => (filter, false)
-    }
-
-    def construct(
-        name: String,
-        attribute: String,
-        value: Option[Any],
-        mapDataType: DataType => DataType = identity): Option[SerializedFilter] = {
-      val (columnPath, field) = getField(attribute)
-      val dataType = mapDataType(field.dataType)
-      val variant = for (v <- value) yield {
-        val catalystValue = CatalystTypeConverters.convertToCatalyst(v)
-        try {
-          VariantExpressionEvalUtils.castToVariant(catalystValue, dataType)
-        } catch {
-          case _: MatchError =>
-            // filter is unsupported if we can't cast it to variant
-            return None
-        }
+  private val serializedFilters = filters.zipWithIndex.flatMap {
+    case (filter, i) =>
+      // Unwrap Not filter
+      val (childFilter, isNegated) = filter match {
+        case sources.Not(f) => (f, true)
+        case _ => (filter, false)
       }
-      Some(SerializedFilter(name, columnPath, variant, isNegated, i))
-    }
 
-    childFilter match {
-      case sources.EqualTo(attribute, value) =>
-        construct("EqualTo", attribute, Some(value))
-      case sources.EqualNullSafe(attribute, value) =>
-        construct("EqualNullSafe", attribute, Some(value))
-      case sources.GreaterThan(attribute, value) =>
-        construct("GreaterThan", attribute, Some(value))
-      case sources.GreaterThanOrEqual(attribute, value) =>
-        construct("GreaterThanOrEqual", attribute, Some(value))
-      case sources.LessThan(attribute, value) =>
-        construct("LessThan", attribute, Some(value))
-      case sources.LessThanOrEqual(attribute, value) =>
-        construct("LessThanOrEqual", attribute, Some(value))
-      case sources.In(attribute, value) =>
-        construct("In", attribute, Some(value), ArrayType(_))
-      case sources.IsNull(attribute) =>
-        construct("IsNull", attribute, None)
-      case sources.IsNotNull(attribute) =>
-        construct("IsNotNull", attribute, None)
-      case sources.StringStartsWith(attribute, value) =>
-        construct("StringStartsWith", attribute, Some(value))
-      case sources.StringEndsWith(attribute, value) =>
-        construct("StringEndsWith", attribute, Some(value))
-      case sources.StringContains(attribute, value) =>
-        construct("StringContains", attribute, Some(value))
-      // collation aware filters are currently not supported
-      // And, Or are currently not supported
-      case _ =>
-        None
-    }
+      def construct(
+          name: String,
+          attribute: String,
+          value: Option[Any],
+          mapDataType: DataType => DataType = identity): Option[SerializedFilter] = {
+        val (columnPath, field) = getField(attribute)
+        val dataType = mapDataType(field.dataType)
+        val variant = for (v <- value) yield {
+          val catalystValue = CatalystTypeConverters.convertToCatalyst(v)
+          try {
+            VariantExpressionEvalUtils.castToVariant(catalystValue, dataType)
+          } catch {
+            case _: MatchError =>
+              // filter is unsupported if we can't cast it to variant
+              return None
+          }
+        }
+        Some(SerializedFilter(name, columnPath, variant, isNegated, i))
+      }
+
+      childFilter match {
+        case sources.EqualTo(attribute, value) =>
+          construct("EqualTo", attribute, Some(value))
+        case sources.EqualNullSafe(attribute, value) =>
+          construct("EqualNullSafe", attribute, Some(value))
+        case sources.GreaterThan(attribute, value) =>
+          construct("GreaterThan", attribute, Some(value))
+        case sources.GreaterThanOrEqual(attribute, value) =>
+          construct("GreaterThanOrEqual", attribute, Some(value))
+        case sources.LessThan(attribute, value) =>
+          construct("LessThan", attribute, Some(value))
+        case sources.LessThanOrEqual(attribute, value) =>
+          construct("LessThanOrEqual", attribute, Some(value))
+        case sources.In(attribute, value) =>
+          construct("In", attribute, Some(value), ArrayType(_))
+        case sources.IsNull(attribute) =>
+          construct("IsNull", attribute, None)
+        case sources.IsNotNull(attribute) =>
+          construct("IsNotNull", attribute, None)
+        case sources.StringStartsWith(attribute, value) =>
+          construct("StringStartsWith", attribute, Some(value))
+        case sources.StringEndsWith(attribute, value) =>
+          construct("StringEndsWith", attribute, Some(value))
+        case sources.StringContains(attribute, value) =>
+          construct("StringContains", attribute, Some(value))
+        // collation aware filters are currently not supported
+        // And, Or are currently not supported
+        case _ =>
+          None
+      }
   }
 
   // See the logic in `pyspark.sql.worker.data_source_pushdown_filters.py`.
   override val workerModule = "pyspark.sql.worker.data_source_pushdown_filters"
 
   override protected def runnerConf: Map[String, String] = {
-    super.runnerConf ++ SQLConf.get.pythonDataSourceProfiler
-      .map(p => Map(SQLConf.PYTHON_DATA_SOURCE_PROFILER.key -> p))
-      .getOrElse(Map.empty)
+    super.runnerConf ++ SQLConf.get.pythonDataSourceProfiler.map(p =>
+      Map(SQLConf.PYTHON_DATA_SOURCE_PROFILER.key -> p)
+    ).getOrElse(Map.empty)
   }
 
   def isAnyFilterSupported: Boolean = serializedFilters.nonEmpty
@@ -480,8 +481,7 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
     dataOut.writeBoolean(SQLConf.get.pysparkBinaryAsBytes)
   }
 
-  override protected def receiveFromPython(
-      dataIn: DataInputStream): PythonFilterPushdownResult = {
+  override protected def receiveFromPython(dataIn: DataInputStream): PythonFilterPushdownResult = {
     // Receive the read function and the partitions. Also check for exceptions.
     val readInfo = PythonDataSourceReadInfo.receive(dataIn)
 
@@ -493,11 +493,16 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
       isFilterPushed(serializedFilters(i).index) = true
     }
 
-    PythonFilterPushdownResult(readInfo = readInfo, isFilterPushed = isFilterPushed)
+    PythonFilterPushdownResult(
+      readInfo = readInfo,
+      isFilterPushed = isFilterPushed
+    )
   }
 }
 
-case class PythonDataSourceReadInfo(func: Array[Byte], partitions: Seq[Array[Byte]])
+case class PythonDataSourceReadInfo(
+    func: Array[Byte],
+    partitions: Seq[Array[Byte]])
 
 object PythonDataSourceReadInfo {
   def receive(dataIn: DataInputStream): PythonDataSourceReadInfo = {
@@ -508,7 +513,8 @@ object PythonDataSourceReadInfo {
       throw QueryCompilationErrors.pythonDataSourceError(
         action = "initialize",
         tpe = "reader",
-        msg = msg)
+        msg = msg
+      )
     }
 
     // Receive the pickled 'read' function.
@@ -522,7 +528,8 @@ object PythonDataSourceReadInfo {
       throw QueryCompilationErrors.pythonDataSourceError(
         action = "generate",
         tpe = "read partitions",
-        msg = msg)
+        msg = msg
+      )
     }
     for (_ <- 0 until numPartitions) {
       val pickledPartition: Array[Byte] = PythonWorkerUtils.readBytes(dataIn)
@@ -536,27 +543,23 @@ object PythonDataSourceReadInfo {
 /**
  * Send information to a Python process to plan a Python data source read.
  *
- * @param func
- *   a Python data source instance
- * @param inputSchema
- *   input schema to the data source read from its child plan
- * @param outputSchema
- *   output schema of the Python data source
+ * @param func a Python data source instance
+ * @param inputSchema input schema to the data source read from its child plan
+ * @param outputSchema output schema of the Python data source
  */
 private class UserDefinedPythonDataSourceReadRunner(
     func: PythonFunction,
     inputSchema: StructType,
     outputSchema: StructType,
-    isStreaming: Boolean)
-    extends PythonPlannerRunner[PythonDataSourceReadInfo](func) {
+    isStreaming: Boolean) extends PythonPlannerRunner[PythonDataSourceReadInfo](func) {
 
   // See the logic in `pyspark.sql.worker.plan_data_source_read.py`.
   override val workerModule = "pyspark.sql.worker.plan_data_source_read"
 
   override protected def runnerConf: Map[String, String] = {
-    super.runnerConf ++ SQLConf.get.pythonDataSourceProfiler
-      .map(p => Map(SQLConf.PYTHON_DATA_SOURCE_PROFILER.key -> p))
-      .getOrElse(Map.empty)
+    super.runnerConf ++ SQLConf.get.pythonDataSourceProfiler.map(p =>
+      Map(SQLConf.PYTHON_DATA_SOURCE_PROFILER.key -> p)
+    ).getOrElse(Map.empty)
   }
 
   override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
@@ -588,8 +591,8 @@ private class UserDefinedPythonDataSourceReadRunner(
 case class PythonDataSourceWriteInfo(func: Array[Byte], writer: Array[Byte])
 
 /**
- * A runner that creates a Python data source writer instance and returns a Python function to be
- * used to write data into the data source.
+ * A runner that creates a Python data source writer instance and returns a Python function
+ * to be used to write data into the data source.
  */
 private class UserDefinedPythonDataSourceWriteRunner(
     dataSourceCls: PythonFunction,
@@ -597,15 +600,14 @@ private class UserDefinedPythonDataSourceWriteRunner(
     inputSchema: StructType,
     options: Map[String, String],
     overwrite: Boolean,
-    isStreaming: Boolean)
-    extends PythonPlannerRunner[PythonDataSourceWriteInfo](dataSourceCls) {
+    isStreaming: Boolean) extends PythonPlannerRunner[PythonDataSourceWriteInfo](dataSourceCls) {
 
   override val workerModule: String = "pyspark.sql.worker.write_into_data_source"
 
   override protected def runnerConf: Map[String, String] = {
-    super.runnerConf ++ SQLConf.get.pythonDataSourceProfiler
-      .map(p => Map(SQLConf.PYTHON_DATA_SOURCE_PROFILER.key -> p))
-      .getOrElse(Map.empty)
+    super.runnerConf ++ SQLConf.get.pythonDataSourceProfiler.map(p =>
+      Map(SQLConf.PYTHON_DATA_SOURCE_PROFILER.key -> p)
+    ).getOrElse(Map.empty)
   }
 
   override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
@@ -635,16 +637,15 @@ private class UserDefinedPythonDataSourceWriteRunner(
     dataOut.writeBoolean(SQLConf.get.pysparkBinaryAsBytes)
   }
 
-  override protected def receiveFromPython(dataIn: DataInputStream): PythonDataSourceWriteInfo = {
+  override protected def receiveFromPython(
+      dataIn: DataInputStream): PythonDataSourceWriteInfo = {
 
     // Receive the picked UDF or an exception raised in Python worker.
     val length = dataIn.readInt()
     if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryCompilationErrors.pythonDataSourceError(
-        action = "initialize",
-        tpe = "writer",
-        msg = msg)
+        action = "initialize", tpe = "writer", msg = msg)
     }
 
     // Receive the pickled data source write function.
@@ -658,21 +659,20 @@ private class UserDefinedPythonDataSourceWriteRunner(
 }
 
 /**
- * A runner that takes a Python data source writer and a list of commit messages, and invokes the
- * `commit` or `abort` method of the writer in Python.
+ * A runner that takes a Python data source writer and a list of commit messages,
+ * and invokes the `commit` or `abort` method of the writer in Python.
  */
 private class UserDefinedPythonDataSourceCommitRunner(
     dataSourceCls: PythonFunction,
     writer: Array[Byte],
     messages: Array[WriterCommitMessage],
-    abort: Boolean)
-    extends PythonPlannerRunner[Unit](dataSourceCls) {
+    abort: Boolean) extends PythonPlannerRunner[Unit](dataSourceCls) {
   override val workerModule: String = "pyspark.sql.worker.commit_data_source_write"
 
   override protected def runnerConf: Map[String, String] = {
-    super.runnerConf ++ SQLConf.get.pythonDataSourceProfiler
-      .map(p => Map(SQLConf.PYTHON_DATA_SOURCE_PROFILER.key -> p))
-      .getOrElse(Map.empty)
+    super.runnerConf ++ SQLConf.get.pythonDataSourceProfiler.map(p =>
+      Map(SQLConf.PYTHON_DATA_SOURCE_PROFILER.key -> p)
+    ).getOrElse(Map.empty)
   }
 
   override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
@@ -687,8 +687,7 @@ private class UserDefinedPythonDataSourceCommitRunner(
         dataOut.writeInt(SpecialLengths.NULL)
       } else {
         PythonWorkerUtils.writeBytes(
-          message.asInstanceOf[PythonWriterCommitMessage].pickledMessage,
-          dataOut)
+          message.asInstanceOf[PythonWriterCommitMessage].pickledMessage, dataOut)
       }
     }
 
@@ -702,9 +701,7 @@ private class UserDefinedPythonDataSourceCommitRunner(
     if (code == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryCompilationErrors.pythonDataSourceError(
-        action = "commit or abort",
-        tpe = "write",
-        msg = msg)
+        action = "commit or abort", tpe = "write", msg = msg)
     }
     assert(code == 0, s"Python commit job should run successfully, but got exit code: $code")
   }

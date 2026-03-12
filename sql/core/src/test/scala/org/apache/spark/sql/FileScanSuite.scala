@@ -61,7 +61,7 @@ trait FileScanSuiteBase extends SharedSparkSession {
   }
 
   type ScanBuilder = (
-      SparkSession,
+    SparkSession,
       PartitioningAwareFileIndex,
       StructType,
       StructType,
@@ -87,7 +87,8 @@ trait FileScanSuiteBase extends SharedSparkSession {
     val optionsNotEqual =
       new CaseInsensitiveStringMap(JMap.copyOf(JMap.of("key2", "value2")))
     val partitionFilters = Seq(And(IsNull($"data".int), LessThan($"data".int, 0)))
-    val partitionFiltersNotEqual = Seq(And(IsNull($"data".int), LessThan($"data".int, 1)))
+    val partitionFiltersNotEqual = Seq(And(IsNull($"data".int),
+      LessThan($"data".int, 1)))
     val dataFilters = Seq(And(IsNull($"data".int), LessThan($"data".int, 0)))
     val dataFiltersNotEqual = Seq(And(IsNull($"data".int), LessThan($"data".int, 1)))
 
@@ -353,26 +354,21 @@ trait FileScanSuiteBase extends SharedSparkSession {
 
 class FileScanSuite extends FileScanSuiteBase {
   val scanBuilders = Seq[(String, ScanBuilder, Seq[String])](
-    (
-      "ParquetScan",
+    ("ParquetScan",
       (s, fi, ds, rds, rps, f, o, pf, df) =>
         ParquetScan(s, s.sessionState.newHadoopConf(), fi, ds, rds, rps, f, o, None, pf, df),
       Seq.empty),
-    (
-      "OrcScan",
+    ("OrcScan",
       (s, fi, ds, rds, rps, f, o, pf, df) =>
         OrcScan(s, s.sessionState.newHadoopConf(), fi, ds, rds, rps, o, None, f, pf, df),
       Seq.empty),
-    (
-      "CSVScan",
+    ("CSVScan",
       (s, fi, ds, rds, rps, f, o, pf, df) => CSVScan(s, fi, ds, rds, rps, o, f, pf, df),
       Seq.empty),
-    (
-      "JsonScan",
+    ("JsonScan",
       (s, fi, ds, rds, rps, f, o, pf, df) => JsonScan(s, fi, ds, rds, rps, o, f, pf, df),
       Seq.empty),
-    (
-      "TextScan",
+    ("TextScan",
       (s, fi, ds, rds, rps, _, o, pf, df) => TextScan(s, fi, ds, rds, rps, o, pf, df),
       Seq("dataSchema", "pushedFilters")))
 

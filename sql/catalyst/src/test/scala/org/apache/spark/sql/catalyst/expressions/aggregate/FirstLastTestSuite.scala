@@ -32,16 +32,23 @@ class FirstLastTestSuite extends SparkFunSuite {
   }
 
   test("update") {
-    val result = evaluator.update(InternalRow(1), InternalRow(9), InternalRow(-1))
+    val result = evaluator.update(
+      InternalRow(1),
+      InternalRow(9),
+      InternalRow(-1))
     assert(result === InternalRow(-1, true))
   }
 
   test("update - ignore nulls") {
-    val result1 =
-      evaluatorIgnoreNulls.update(InternalRow(null), InternalRow(9), InternalRow(null))
+    val result1 = evaluatorIgnoreNulls.update(
+      InternalRow(null),
+      InternalRow(9),
+      InternalRow(null))
     assert(result1 === InternalRow(9, true))
 
-    val result2 = evaluatorIgnoreNulls.update(InternalRow(null), InternalRow(null))
+    val result2 = evaluatorIgnoreNulls.update(
+      InternalRow(null),
+      InternalRow(null))
     assert(result2 === InternalRow(null, false))
   }
 

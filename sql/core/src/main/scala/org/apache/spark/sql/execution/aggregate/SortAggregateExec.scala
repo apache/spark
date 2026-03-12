@@ -41,8 +41,8 @@ case class SortAggregateExec(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
-    extends AggregateCodegenSupport
-    with OrderPreservingUnaryExecNode {
+  extends AggregateCodegenSupport
+  with OrderPreservingUnaryExecNode {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
@@ -77,7 +77,8 @@ case class SortAggregateExec(
           aggregateAttributes,
           initialInputBufferOffset,
           resultExpressions,
-          (expressions, inputSchema) => MutableProjection.create(expressions, inputSchema),
+          (expressions, inputSchema) =>
+            MutableProjection.create(expressions, inputSchema),
           numOutputRows,
           aggTime)
         if (!hasInput && groupingExpressions.isEmpty) {
@@ -95,7 +96,7 @@ case class SortAggregateExec(
   override def supportCodegen: Boolean = {
     // TODO(SPARK-32750): Support sort aggregate code-gen with grouping keys
     super.supportCodegen && conf.getConf(SQLConf.ENABLE_SORT_AGGREGATE_CODEGEN) &&
-    groupingExpressions.isEmpty
+      groupingExpressions.isEmpty
   }
 
   protected override def needHashTable: Boolean = false

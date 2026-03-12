@@ -39,8 +39,8 @@ import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.util.Utils
 
 /**
- * A trait that can be mixed-in with [[BasePythonRunner]]. It implements the logic from JVM (an
- * iterator of internal rows + additional data if required) to Python (Arrow).
+ * A trait that can be mixed-in with [[BasePythonRunner]]. It implements the logic from
+ * JVM (an iterator of internal rows + additional data if required) to Python (Arrow).
  */
 private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
   protected def schema: StructType
@@ -171,6 +171,7 @@ private[python] trait BasicPythonArrowInput extends PythonArrowInput[Iterator[In
   }
 }
 
+
 private[python] trait BatchedPythonArrowInput extends BasicPythonArrowInput {
   self: BasePythonRunner[Iterator[InternalRow], _] =>
   // Marker inside the input iterator to indicate the start of the next batch.
@@ -190,12 +191,7 @@ private[python] trait BatchedPythonArrowInput extends BasicPythonArrowInput {
       val startData = dataOut.size()
 
       val numRowsInBatch = BatchedPythonArrowInput.writeSizedBatch(
-        arrowWriter,
-        writer,
-        nextBatchStart,
-        maxBytesPerBatch,
-        maxRecordsPerBatch,
-        unloader,
+        arrowWriter, writer, nextBatchStart, maxBytesPerBatch, maxRecordsPerBatch, unloader,
         dataOut)
       assert(0 < numRowsInBatch && numRowsInBatch <= maxRecordsPerBatch, numRowsInBatch)
 
@@ -210,7 +206,6 @@ private[python] trait BatchedPythonArrowInput extends BasicPythonArrowInput {
 }
 
 private[python] object BatchedPythonArrowInput {
-
   /**
    * Split a group into smaller Arrow batches within
    * a separate and complete Arrow streaming format in order
@@ -290,12 +285,8 @@ private[python] trait GroupedPythonArrowInput { self: RowInputArrowPythonRunner 
             dataOut.writeInt(1) // Notify that there is a group to read.
             assert(writer == null || writer.isClosed)
             writer = ArrowWriterWrapper.createAndStartArrowWriter(
-              schema,
-              timeZoneId,
-              pythonExec,
-              largeVarTypes,
-              dataOut,
-              context)
+              schema, timeZoneId, pythonExec,
+              largeVarTypes, dataOut, context)
             // Set the unloader with compression after creating the writer
             writer.unloader = new VectorUnloader(writer.root, true, self.codec, true)
             nextBatchStart = inputIterator.next()
@@ -303,14 +294,9 @@ private[python] trait GroupedPythonArrowInput { self: RowInputArrowPythonRunner 
         }
         if (nextBatchStart.hasNext) {
           val startData = dataOut.size()
-          val numRowsInBatch: Int = BatchedPythonArrowInput.writeSizedBatch(
-            writer.arrowWriter,
-            writer.streamWriter,
-            nextBatchStart,
-            maxBytesPerBatch,
-            maxRecordsPerBatch,
-            writer.unloader,
-            dataOut)
+          val numRowsInBatch: Int = BatchedPythonArrowInput.writeSizedBatch(writer.arrowWriter,
+            writer.streamWriter, nextBatchStart, maxBytesPerBatch, maxRecordsPerBatch,
+            writer.unloader, dataOut)
           if (!nextBatchStart.hasNext) {
             writer.streamWriter.end()
             // We don't need a try catch block here as the close() method is registered with

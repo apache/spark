@@ -32,8 +32,8 @@ class TransformWithStateUnsafeRowSuite extends TransformWithStateSuite {
 
   import testImplicits._
 
-  override protected def test(testName: String, testTags: Tag*)(testBody: => Any)(implicit
-      pos: Position): Unit = {
+  override protected def test(testName: String, testTags: Tag*)(testBody: => Any)
+                             (implicit pos: Position): Unit = {
     super.test(s"$testName (encoding = UnsafeRow)", testTags: _*) {
       withSQLConf(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> "unsaferow") {
         testBody
@@ -42,18 +42,15 @@ class TransformWithStateUnsafeRowSuite extends TransformWithStateSuite {
   }
 
   test("test that invalid schema evolution fails query for column family") {
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName,
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
       withTempDir { checkpointDir =>
         val inputData = MemoryStream[String]
-        val result1 = inputData
-          .toDS()
+        val result1 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new RunningCountStatefulProcessor(),
+          .transformWithState(new RunningCountStatefulProcessor(),
             TimeMode.None(),
             OutputMode.Update())
 
@@ -61,41 +58,38 @@ class TransformWithStateUnsafeRowSuite extends TransformWithStateSuite {
           StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
           AddData(inputData, "a"),
           CheckNewAnswer(("a", "1")),
-          StopStream)
-        val result2 = inputData
-          .toDS()
+          StopStream
+        )
+        val result2 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new RunningCountStatefulProcessorInt(),
+          .transformWithState(new RunningCountStatefulProcessorInt(),
             TimeMode.None(),
             OutputMode.Update())
 
         testStream(result2, OutputMode.Update())(
           StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
           AddData(inputData, "a"),
-          ExpectFailure[StateStoreValueSchemaNotCompatible] { (t: Throwable) =>
-            {
+          ExpectFailure[StateStoreValueSchemaNotCompatible] {
+            (t: Throwable) => {
               assert(t.getMessage.contains("Please check number and type of fields."))
             }
-          })
+          }
+        )
       }
     }
   }
 
   test("test that introducing TTL after restart fails query") {
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName,
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
       withTempDir { checkpointDir =>
         val inputData = MemoryStream[String]
         val clock = new StreamManualClock
-        val result = inputData
-          .toDS()
+        val result = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new RunningCountStatefulProcessor(),
+          .transformWithState(new RunningCountStatefulProcessor(),
             TimeMode.ProcessingTime(),
             OutputMode.Update())
 
@@ -108,12 +102,11 @@ class TransformWithStateUnsafeRowSuite extends TransformWithStateSuite {
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(("a", "1")),
           AdvanceManualClock(1 * 1000),
-          StopStream)
-        val result2 = inputData
-          .toDS()
+          StopStream
+        )
+        val result2 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(
-            new RunningCountStatefulProcessorWithTTL(),
+          .transformWithState(new RunningCountStatefulProcessorWithTTL(),
             TimeMode.ProcessingTime(),
             OutputMode.Update())
         testStream(result2, OutputMode.Update())(
@@ -131,8 +124,11 @@ class TransformWithStateUnsafeRowSuite extends TransformWithStateSuite {
                 "storedValueSchema" -> "StructType(StructField(value,LongType,false))",
                 "newValueSchema" ->
                   ("StructType(StructField(value,StructType(StructField(value,LongType,false))," +
-                    "true),StructField(ttlExpirationMs,LongType,true))")))
-          })
+                    "true),StructField(ttlExpirationMs,LongType,true))")
+              )
+            )
+          }
+        )
       }
     }
   }

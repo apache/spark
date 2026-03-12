@@ -54,8 +54,7 @@ class ExecutionListenerManagerSuite extends SparkFunSuite with LocalSparkSession
       .set(QUERY_EXECUTION_LISTENERS, Seq(classOf[SQLConfQueryExecutionListener].getName()))
       .set("spark.aaa", "aaa")
     val sc = new SparkContext(conf)
-    spark = SparkSession
-      .builder()
+    spark = SparkSession.builder()
       .sparkContext(sc)
       .config("spark.bbb", "bbb")
       .getOrCreate()

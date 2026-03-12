@@ -27,7 +27,8 @@ import org.apache.spark.sql.catalyst.rules._
 class FoldablePropagationSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("Foldable Propagation", FixedPoint(20), FoldablePropagation) :: Nil
+      Batch("Foldable Propagation", FixedPoint(20),
+        FoldablePropagation) :: Nil
   }
 
   val testRelation = LocalRelation($"a".int, $"b".int)
@@ -41,8 +42,7 @@ class FoldablePropagationSuite extends PlanTest {
     val correctAnswer = OneRowRelation()
       .select(Literal(1).as("a"), Literal(2).as("b"))
       .subquery("T")
-      .select(Literal(1).as("a"), Literal(2).as("b"))
-      .analyze
+      .select(Literal(1).as("a"), Literal(2).as("b")).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -54,8 +54,7 @@ class FoldablePropagationSuite extends PlanTest {
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = testRelation
       .select($"a".as("x"), "str".as("y"), $"b".as("z"))
-      .select($"x", "str".as("y"), $"z")
-      .analyze
+      .select($"x", "str".as("y"), $"z").analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -67,8 +66,7 @@ class FoldablePropagationSuite extends PlanTest {
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = testRelation
       .select("str".as("y"))
-      .where("str".as("y") === "str" && "str" === "str".as("y"))
-      .analyze
+      .where("str".as("y") === "str" && "str" === "str".as("y")).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -80,8 +78,7 @@ class FoldablePropagationSuite extends PlanTest {
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = testRelation
       .select($"a".as("x"), "str".as("y"), $"b")
-      .orderBy($"x".asc, SortOrder("str", Ascending), $"b".desc)
-      .analyze
+      .orderBy($"x".asc, SortOrder("str", Ascending), $"b".desc).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -93,11 +90,9 @@ class FoldablePropagationSuite extends PlanTest {
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = testRelation
       .select($"a".as("x"), Literal(42).as("y"), $"b")
-      .groupBy($"x", Literal(42).as("y"), $"b")(
-        sum($"x"),
+      .groupBy($"x", Literal(42).as("y"), $"b")(sum($"x"),
         avg(Literal(42)).as("AVG"),
-        count($"b"))
-      .analyze
+        count($"b")).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -112,12 +107,10 @@ class FoldablePropagationSuite extends PlanTest {
     val correctAnswer = testRelation
       .select($"a".as("x"), Literal(42).as("y"), $"b")
       .where($"x" > 1 && Literal(42).as("y") === 2016 && $"b" > 1)
-      .groupBy($"x", Literal(42).as("y"), $"b")(
-        sum($"x"),
+      .groupBy($"x", Literal(42).as("y"), $"b")(sum($"x"),
         avg(Literal(42)).as("AVG"),
         count($"b"))
-      .orderBy($"x".asc, $"AVG".asc)
-      .analyze
+      .orderBy($"x".asc, $"AVG".asc).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -131,28 +124,23 @@ class FoldablePropagationSuite extends PlanTest {
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = Union(
       Seq(
-        testRelation
-          .select(Literal(1).as("x"), $"a")
+        testRelation.select(Literal(1).as("x"), $"a")
           .select(Literal(1).as("x"), (Literal(1).as("x") + $"a").as("(x + a)")),
-        testRelation
-          .select(Literal(2).as("x"), $"a")
+        testRelation.select(Literal(2).as("x"), $"a")
           .select(Literal(2).as("x"), (Literal(2).as("x") + $"a").as("(x + a)"))))
-      .select($"x")
-      .analyze
+      .select($"x").analyze
     comparePlans(optimized, correctAnswer)
   }
 
   test("Propagate in inner join") {
-    val ta = testRelation
-      .select($"a", Literal(1).as("tag"))
+    val ta = testRelation.select($"a", Literal(1).as("tag"))
       .union(testRelation.select($"a".as("a"), Literal(2).as("tag")))
       .subquery("ta")
-    val tb = testRelation
-      .select($"a", Literal(1).as("tag"))
+    val tb = testRelation.select($"a", Literal(1).as("tag"))
       .union(testRelation.select($"a".as("a"), Literal(2).as("tag")))
       .subquery("tb")
-    val query =
-      ta.join(tb, Inner, Some("ta.a".attr === "tb.a".attr && "ta.tag".attr === "tb.tag".attr))
+    val query = ta.join(tb, Inner,
+      Some("ta.a".attr === "tb.a".attr && "ta.tag".attr === "tb.tag".attr))
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = query.analyze
     comparePlans(optimized, correctAnswer)
@@ -169,8 +157,9 @@ class FoldablePropagationSuite extends PlanTest {
       OneRowRelation().select(c1, c2))
     val query = expand.where(a1.isNotNull).select(a1, a2).analyze
     val optimized = Optimize.execute(query)
-    val correctExpand = expand.copy(projections =
-      Seq(Seq(Literal(null), Literal(2)), Seq(Literal(1), Literal(null))))
+    val correctExpand = expand.copy(projections = Seq(
+      Seq(Literal(null), Literal(2)),
+      Seq(Literal(1), Literal(null))))
     val correctAnswer = correctExpand.where(a1.isNotNull).select(a1, a2).analyze
     comparePlans(optimized, correctAnswer)
   }
@@ -179,18 +168,18 @@ class FoldablePropagationSuite extends PlanTest {
     val left = LocalRelation($"a".int).select($"a", Literal(1).as("b"))
     val right = LocalRelation($"c".int).select($"c", Literal(1).as("d"))
 
-    val join =
-      left.join(right, joinType = LeftOuter, condition = Some($"a" === $"c" && $"b" === $"d"))
+    val join = left.join(
+      right,
+      joinType = LeftOuter,
+      condition = Some($"a" === $"c" && $"b" === $"d"))
     val query = join.select(($"b" + 3).as("res")).analyze
     val optimized = Optimize.execute(query)
 
-    val correctAnswer = left
-      .join(
-        right,
-        joinType = LeftOuter,
-        condition = Some($"a" === $"c" && Literal(1) === Literal(1)))
-      .select((Literal(1) + 3).as("res"))
-      .analyze
+    val correctAnswer = left.join(
+      right,
+      joinType = LeftOuter,
+      condition = Some($"a" === $"c" && Literal(1) === Literal(1)))
+      .select((Literal(1) + 3).as("res")).analyze
     comparePlans(optimized, correctAnswer)
   }
 
@@ -214,8 +203,7 @@ class FoldablePropagationSuite extends PlanTest {
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = testRelation
       .groupBy($"a")($"a", sum($"b").as("b"), Literal(1).as("c"))
-      .select($"a", $"b", Literal(1).as("c"))
-      .analyze
+      .select($"a", $"b", Literal(1).as("c")).analyze
     comparePlans(optimized, correctAnswer)
   }
 
@@ -227,16 +215,14 @@ class FoldablePropagationSuite extends PlanTest {
     comparePlans(optimized, expected)
   }
 
-  test(
-    "SPARK-48419: Foldable propagation replace foldable column should use origin column name") {
+  test("SPARK-48419: Foldable propagation replace foldable column should use origin column name") {
     val query = testRelation
       .select($"a".as("x"), "str".as("Y"), $"b".as("z"))
       .select($"x", $"y", $"z")
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = testRelation
       .select($"a".as("x"), "str".as("Y"), $"b".as("z"))
-      .select($"x", "str".as("y"), $"z")
-      .analyze
+      .select($"x", "str".as("y"), $"z").analyze
     comparePlans(optimized, correctAnswer)
   }
 }

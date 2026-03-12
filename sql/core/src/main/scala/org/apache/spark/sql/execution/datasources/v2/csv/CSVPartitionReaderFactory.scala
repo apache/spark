@@ -31,18 +31,12 @@ import org.apache.spark.util.SerializableConfiguration
 /**
  * A factory used to create CSV readers.
  *
- * @param sqlConf
- *   SQL configuration.
- * @param broadcastedConf
- *   Broadcasted serializable Hadoop Configuration.
- * @param dataSchema
- *   Schema of CSV files.
- * @param readDataSchema
- *   Required data schema in the batch scan.
- * @param partitionSchema
- *   Schema of partitions.
- * @param options
- *   Options for parsing CSV files.
+ * @param sqlConf SQL configuration.
+ * @param broadcastedConf Broadcasted serializable Hadoop Configuration.
+ * @param dataSchema Schema of CSV files.
+ * @param readDataSchema Required data schema in the batch scan.
+ * @param partitionSchema Schema of partitions.
+ * @param options Options for parsing CSV files.
  */
 case class CSVPartitionReaderFactory(
     sqlConf: SQLConf,
@@ -51,8 +45,7 @@ case class CSVPartitionReaderFactory(
     readDataSchema: StructType,
     partitionSchema: StructType,
     options: CSVOptions,
-    filters: Seq[Filter])
-    extends FilePartitionReaderFactory {
+    filters: Seq[Filter]) extends FilePartitionReaderFactory {
 
   override def buildReader(file: PartitionedFile): PartitionReader[InternalRow] = {
     val conf = broadcastedConf.value.value
@@ -60,7 +53,11 @@ case class CSVPartitionReaderFactory(
       dataSchema.filterNot(_.name == options.columnNameOfCorruptRecord))
     val actualReadDataSchema = StructType(
       readDataSchema.filterNot(_.name == options.columnNameOfCorruptRecord))
-    val parser = new UnivocityParser(actualDataSchema, actualReadDataSchema, options, filters)
+    val parser = new UnivocityParser(
+      actualDataSchema,
+      actualReadDataSchema,
+      options,
+      filters)
     val schema = if (options.isColumnPruningEnabled(readDataSchema)) {
       actualReadDataSchema
     } else {
@@ -68,16 +65,15 @@ case class CSVPartitionReaderFactory(
     }
     val isStartOfFile = file.start == 0
     val headerChecker = new CSVHeaderChecker(
-      schema,
-      options,
-      source = s"CSV file: ${file.urlEncodedPath}",
-      isStartOfFile)
-    val iter = CSVDataSource(options).readFile(conf, file, parser, headerChecker, readDataSchema)
+      schema, options, source = s"CSV file: ${file.urlEncodedPath}", isStartOfFile)
+    val iter = CSVDataSource(options).readFile(
+      conf,
+      file,
+      parser,
+      headerChecker,
+      readDataSchema)
     val fileReader = new PartitionReaderFromIterator[InternalRow](iter)
-    new PartitionReaderWithPartitionValues(
-      fileReader,
-      readDataSchema,
-      partitionSchema,
-      file.partitionValues)
+    new PartitionReaderWithPartitionValues(fileReader, readDataSchema,
+      partitionSchema, file.partitionValues)
   }
 }

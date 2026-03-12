@@ -89,11 +89,7 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
     LastOptions.parameters = parameters
     LastOptions.schema = schema
     LastOptions.mockStreamSourceProvider.createSource(
-      spark,
-      metadataPath,
-      schema,
-      providerName,
-      parameters)
+      spark, metadataPath, schema, providerName, parameters)
     new Source {
       override def schema: StructType = fakeSchema
 
@@ -114,10 +110,8 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
       outputMode: OutputMode): Sink = {
     LastOptions.sinkParameters = parameters
     LastOptions.partitionColumns = partitionColumns
-    LastOptions.clusteringColumns = parameters
-      .get(DataSourceUtils.CLUSTERING_COLUMNS_KEY)
-      .map(DataSourceUtils.decodePartitioningColumns)
-      .getOrElse(Nil)
+    LastOptions.clusteringColumns = parameters.get(DataSourceUtils.CLUSTERING_COLUMNS_KEY)
+      .map(DataSourceUtils.decodePartitioningColumns).getOrElse(Nil)
     LastOptions.mockStreamSinkProvider.createSink(spark, parameters, partitionColumns, outputMode)
     (_: Long, _: DataFrame) => {}
   }
@@ -174,11 +168,11 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     map.put("opt3", "3")
 
     val df = spark.readStream
-      .format("org.apache.spark.sql.streaming.test")
-      .option("opt1", "1")
-      .options(Map("opt2" -> "2"))
-      .options(map)
-      .load()
+        .format("org.apache.spark.sql.streaming.test")
+        .option("opt1", "1")
+        .options(Map("opt2" -> "2"))
+        .options(map)
+        .load()
 
     assert(LastOptions.parameters("opt1") == "1")
     assert(LastOptions.parameters("opt2") == "2")
@@ -466,9 +460,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
       .format("org.apache.spark.sql.streaming.test")
       .load()
 
-    val q = df1
-      .union(df2)
-      .writeStream
+    val q = df1.union(df2).writeStream
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", checkpointLocation.toString)
       .trigger(ProcessingTime(10.seconds))
@@ -503,6 +495,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
+
   test("check foreach() does not support partitioning") {
     val df = spark.readStream
       .format("org.apache.spark.sql.streaming.test")
@@ -523,9 +516,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     withTempDir { dir =>
       val path = dir.getCanonicalPath
       intercept[AnalysisException] {
-        spark
-          .range(10)
-          .writeStream
+        spark.range(10).writeStream
           .outputMode("append")
           .partitionBy("id")
           .format("parquet")
@@ -539,8 +530,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     val df = ms.toDF().toDF("a")
     val tableName = "test"
     def startQuery: StreamingQuery = {
-      val writer = df
-        .groupBy("a")
+      val writer = df.groupBy("a")
         .count()
         .writeStream
         .format("memory")
@@ -557,14 +547,20 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     q.processAllAvailable()
     q.stop()
 
-    checkAnswer(spark.table(tableName), Seq(Row(0, 1), Row(1, 1)))
+    checkAnswer(
+      spark.table(tableName),
+      Seq(Row(0, 1), Row(1, 1))
+    )
     spark.sql(s"drop table $tableName")
     // verify table is dropped
     intercept[AnalysisException](spark.table(tableName).collect())
     val q2 = startQuery
     ms.addData(0)
     q2.processAllAvailable()
-    checkAnswer(spark.table(tableName), Seq(Row(0, 2), Row(1, 1)))
+    checkAnswer(
+      spark.table(tableName),
+      Seq(Row(0, 2), Row(1, 1))
+    )
 
     q2.stop()
   }
@@ -577,8 +573,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     testMemorySinkCheckpointRecovery(checkpointLoc, provideInWriter = true)
   }
 
-  test(
-    "SPARK-18927: MemorySink can recover from a checkpoint provided in conf in Complete Mode") {
+  test("SPARK-18927: MemorySink can recover from a checkpoint provided in conf in Complete Mode") {
     val checkpointLoc = newMetadataDir
     val checkpointDir = new File(checkpointLoc, "offsets")
     Utils.createDirectory(checkpointDir)
@@ -616,11 +611,10 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
       val createArray = udf { (length: Long) =>
         for (i <- 1 to length.toInt) yield i.toString
       }
-      spark
-        .range(4)
-        .select(createArray($"id" + 1) as Symbol("ex"), $"id", $"id" % 4 as Symbol("part"))
-        .coalesce(1)
-        .write
+      spark.range(4)
+        .select(createArray($"id" + 1) as Symbol("ex"), $"id",
+          $"id" % 4 as Symbol("part"))
+        .coalesce(1).write
         .partitionBy("part", "id")
         .mode("overwrite")
         .parquet(src.toString)
@@ -636,13 +630,10 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
         .format("parquet")
         .load(src.toString)
 
-      assert(
-        sdf.schema.toList === List(
-          StructField("ex", ArrayType(StringType)),
-          StructField("part", IntegerType), // inferred partitionColumn dataType
-          StructField("id", StringType)
-        )
-      ) // used user provided partitionColumn dataType
+      assert(sdf.schema.toList === List(
+        StructField("ex", ArrayType(StringType)),
+        StructField("part", IntegerType), // inferred partitionColumn dataType
+        StructField("id", StringType))) // used user provided partitionColumn dataType
 
       val sq = sdf.writeStream
         .queryName("corruption_test")
@@ -653,7 +644,8 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
         spark.table("corruption_test"),
         // notice how `part` is ordered before `id`
         Row(Array("1"), 0, "0") :: Row(Array("1", "2"), 1, "1") ::
-          Row(Array("1", "2", "3"), 2, "2") :: Row(Array("1", "2", "3", "4"), 3, "3") :: Nil)
+          Row(Array("1", "2", "3"), 2, "2") :: Row(Array("1", "2", "3", "4"), 3, "3") :: Nil
+      )
       sq.stop()
     }
   }
@@ -672,12 +664,10 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
             .option("checkpointLocation", userCheckpointPath.getAbsolutePath)
             .start()
             .stop()
-          assert(
-            checkpointPath.listFiles().isEmpty,
+          assert(checkpointPath.listFiles().isEmpty,
             "SQLConf path is used even if user specified checkpointLoc: " +
               s"${checkpointPath.listFiles().mkString("Locations(", ", ", ")")} is not empty")
-          assert(
-            userCheckpointPath.exists(),
+          assert(userCheckpointPath.exists(),
             s"The user specified checkpointLoc (userCheckpointPath) is not created")
         }
       }
@@ -715,13 +705,11 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  test(
-    "configured checkpoint dir should not be deleted if a query is stopped without errors and" +
-      " force temp checkpoint deletion enabled") {
+  test("configured checkpoint dir should not be deleted if a query is stopped without errors and" +
+    " force temp checkpoint deletion enabled") {
     import testImplicits._
     withTempDir { checkpointPath =>
-      withSQLConf(
-        SQLConf.CHECKPOINT_LOCATION.key -> checkpointPath.getAbsolutePath,
+      withSQLConf(SQLConf.CHECKPOINT_LOCATION.key -> checkpointPath.getAbsolutePath,
         SQLConf.FORCE_DELETE_TEMP_CHECKPOINT_LOCATION.key -> "true") {
         val ds = MemoryStream[Int].toDS()
         val query = ds.writeStream.format("console").start()
@@ -736,8 +724,8 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     import testImplicits._
     val query = MemoryStream[Int].toDS().writeStream.format("console").start()
     query.processAllAvailable()
-    val checkpointDir =
-      new Path(query.asInstanceOf[StreamingQueryWrapper].streamingQuery.resolvedCheckpointRoot)
+    val checkpointDir = new Path(
+      query.asInstanceOf[StreamingQueryWrapper].streamingQuery.resolvedCheckpointRoot)
     val fs = checkpointDir.getFileSystem(spark.sessionState.newHadoopConf())
     assert(fs.exists(checkpointDir))
     query.stop()
@@ -748,9 +736,8 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     testTempCheckpointWithFailedQuery(false)
   }
 
-  testQuietly(
-    "temp checkpoint should be deleted if a query is stopped with an error and force" +
-      " temp checkpoint deletion enabled") {
+  testQuietly("temp checkpoint should be deleted if a query is stopped with an error and force" +
+    " temp checkpoint deletion enabled") {
     withSQLConf(SQLConf.FORCE_DELETE_TEMP_CHECKPOINT_LOCATION.key -> "true") {
       testTempCheckpointWithFailedQuery(true)
     }
@@ -794,9 +781,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     spark.conf.set("testKey1", 0)
     val queries = (1 to 10).map { i =>
       spark.conf.set("testKey1", i)
-      input
-        .toDF()
-        .writeStream
+      input.toDF().writeStream
         .foreachBatch { (df: Dataset[Row], id: Long) =>
           val v = df.sparkSession.conf.get("testKey1").toInt
           if (i != v) {
@@ -815,9 +800,8 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
   test("SPARK-32516: 'path' cannot coexist with load()'s path parameter") {
     def verifyLoadFails(f: => DataFrame): Unit = {
       val e = intercept[AnalysisException](f)
-      assert(
-        e.getMessage.contains(
-          "Either remove the path option, or call load() without the parameter"))
+      assert(e.getMessage.contains(
+        "Either remove the path option, or call load() without the parameter"))
     }
 
     verifyLoadFails(spark.readStream.option("path", "tmp1").parquet("tmp2"))
@@ -844,9 +828,8 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
 
     def verifyStartFails(f: => StreamingQuery): Unit = {
       val e = intercept[AnalysisException](f)
-      assert(
-        e.getMessage.contains(
-          "Either remove the path option, or call start() without the parameter"))
+      assert(e.getMessage.contains(
+        "Either remove the path option, or call start() without the parameter"))
     }
 
     verifyStartFails(
@@ -862,8 +845,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
 
     withClue("SPARK-32516: legacy behavior") {
       withTempDir { checkpointPath =>
-        withSQLConf(
-          SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key -> "true",
+        withSQLConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key -> "true",
           SQLConf.CHECKPOINT_LOCATION.key -> checkpointPath.getAbsolutePath) {
           df.writeStream
             .format("org.apache.spark.sql.streaming.test")

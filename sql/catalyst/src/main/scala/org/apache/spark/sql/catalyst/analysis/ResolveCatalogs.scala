@@ -36,8 +36,7 @@ import org.apache.spark.util.ArrayImplicits._
  * Resolves the catalog of the name parts for table/view/function/namespace.
  */
 class ResolveCatalogs(val catalogManager: CatalogManager)
-    extends Rule[LogicalPlan]
-    with LookupCatalog {
+  extends Rule[LogicalPlan] with LookupCatalog {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
     // We only support temp variables for now and the system catalog is not properly implemented
@@ -50,7 +49,8 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
             if (c.replace) {
               throw new AnalysisException(
                 "INVALID_VARIABLE_DECLARATION.REPLACE_LOCAL_VARIABLE",
-                Map("varName" -> toSQLId(nameParts)))
+                Map("varName" -> toSQLId(nameParts))
+              )
             }
 
             if (nameParts.length != 1) {
@@ -59,14 +59,13 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
                 Map("varName" -> toSQLId(nameParts)))
             }
 
-            SqlScriptingContextManager
-              .get()
-              .flatMap(_.getVariableManager)
+            SqlScriptingContextManager.get().flatMap(_.getVariableManager)
               .getOrElse(throw SparkException.internalError(
                 "Scripting local variable manager should be present in SQL script."))
               .qualify(nameParts.last)
           } else {
-            val resolvedIdentifier = catalogManager.tempVariableManager.qualify(nameParts.last)
+            val resolvedIdentifier
+            = catalogManager.tempVariableManager.qualify(nameParts.last)
 
             assertValidSessionVariableNameParts(nameParts, resolvedIdentifier)
             resolvedIdentifier
@@ -78,8 +77,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     case d @ DropVariable(UnresolvedIdentifier(nameParts, _), _) =>
       if (withinLocalVariableScope) {
         throw new AnalysisException(
-          "UNSUPPORTED_FEATURE.SQL_SCRIPTING_DROP_TEMPORARY_VARIABLE",
-          Map.empty)
+          "UNSUPPORTED_FEATURE.SQL_SCRIPTING_DROP_TEMPORARY_VARIABLE", Map.empty)
       }
       val resolved = catalogManager.tempVariableManager.qualify(nameParts.last)
       assertValidSessionVariableNameParts(nameParts, resolved)
@@ -88,39 +86,26 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     case CreateFunction(UnresolvedIdentifier(nameParts, _), _, _, _, _)
         if isSystemBuiltinName(nameParts) =>
       throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
-        "CREATE",
-        nameParts.last)
+        "CREATE", nameParts.last)
 
-    case CreateUserDefinedFunction(
-          UnresolvedIdentifier(nameParts, _),
-          _,
-          _,
-          _,
-          _,
-          _,
-          _,
-          _,
-          _,
-          _,
-          _,
-          _,
-          _) if isSystemBuiltinName(nameParts) =>
+    case CreateUserDefinedFunction(UnresolvedIdentifier(nameParts, _),
+        _, _, _, _, _, _, _, _, _, _, _, _)
+        if isSystemBuiltinName(nameParts) =>
       throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
-        "CREATE",
-        nameParts.last)
+        "CREATE", nameParts.last)
 
-    case DropFunction(UnresolvedIdentifier(nameParts, _), _) if isSystemBuiltinName(nameParts) =>
+    case DropFunction(UnresolvedIdentifier(nameParts, _), _)
+        if isSystemBuiltinName(nameParts) =>
       throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
-        "DROP",
-        nameParts.last)
+        "DROP", nameParts.last)
 
     case d @ DropFunction(u @ UnresolvedIdentifier(nameParts, _), _) =>
       d.copy(child = resolveFunctionIdentifier(nameParts, u.origin))
 
-    case RefreshFunction(UnresolvedIdentifier(nameParts, _)) if isSystemBuiltinName(nameParts) =>
+    case RefreshFunction(UnresolvedIdentifier(nameParts, _))
+        if isSystemBuiltinName(nameParts) =>
       throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
-        "REFRESH",
-        nameParts.last)
+        "REFRESH", nameParts.last)
 
     case r @ RefreshFunction(u @ UnresolvedIdentifier(nameParts, _)) =>
       r.copy(child = resolveFunctionIdentifier(nameParts, u.origin))
@@ -170,14 +155,14 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
   private def isSystemBuiltinName(nameParts: Seq[String]): Boolean = {
     nameParts.length == 3 &&
-    nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
-    nameParts(1).equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
+      nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+      nameParts(1).equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
   }
 
   /**
-   * Resolves a function identifier, checking for builtin and temp functions first. Only
-   * unqualified (1-part) names get special builtin/temp handling; multi-part names go through
-   * standard catalog resolution.
+   * Resolves a function identifier, checking for builtin and temp functions first.
+   * Only unqualified (1-part) names get special builtin/temp handling; multi-part names
+   * go through standard catalog resolution.
    */
   private def resolveFunctionIdentifier(
       nameParts: Seq[String],
@@ -207,17 +192,20 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       fetchMetadata: Boolean): ResolvedNamespace = {
     catalog match {
       case supportsNS: SupportsNamespaces if fetchMetadata =>
-        ResolvedNamespace(catalog, ns, supportsNS.loadNamespaceMetadata(ns.toArray).asScala.toMap)
+        ResolvedNamespace(
+          catalog,
+          ns,
+          supportsNS.loadNamespaceMetadata(ns.toArray).asScala.toMap)
       case _ =>
         ResolvedNamespace(catalog, ns)
     }
   }
 
   /**
-   * Whether we are within a local variable scope. This is true when we are directly inside a SQL
-   * script and local variable rules apply (unqualified DECLARE only, no OR REPLACE, no DROP).
-   * EXECUTE IMMEDIATE inside a script is not within a local variable scope, since it works with
-   * session variables as if it were outside the script.
+   * Whether we are within a local variable scope. This is true when we are directly inside a
+   * SQL script and local variable rules apply (unqualified DECLARE only, no OR REPLACE, no DROP).
+   * EXECUTE IMMEDIATE inside a script is not within a local variable scope, since it works
+   * with session variables as if it were outside the script.
    */
   private def withinLocalVariableScope: Boolean =
     SqlScriptingContextManager.get().flatMap(_.getVariableManager).isDefined
@@ -228,7 +216,10 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     if (!validSessionVariableName(nameParts)) {
       throw QueryCompilationErrors.unresolvedVariableError(
         nameParts,
-        Seq(resolvedIdentifier.catalog.name(), resolvedIdentifier.identifier.namespace().head))
+        Seq(
+          resolvedIdentifier.catalog.name(),
+          resolvedIdentifier.identifier.namespace().head)
+      )
     }
 
     def validSessionVariableName(nameParts: Seq[String]): Boolean = nameParts.length match {
@@ -240,10 +231,8 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
       // When there are 3 nameParts the variable must be a fully qualified session variable
       // i.e. "system.session.<varName>"
-      case 3
-          if nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
-            nameParts(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) =>
-        true
+      case 3 if nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+        nameParts(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) => true
 
       case _ => false
     }

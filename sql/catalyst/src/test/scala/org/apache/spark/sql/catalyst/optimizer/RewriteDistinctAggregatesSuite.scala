@@ -45,7 +45,9 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
 
   test("single distinct group with partial aggregates") {
     val input = testRelation
-      .groupBy($"a", $"d")(countDistinct($"e", $"c").as("agg1"), max($"b").as("agg2"))
+      .groupBy($"a", $"d")(
+        countDistinct($"e", $"c").as("agg1"),
+        max($"b").as("agg2"))
       .analyze
     val rewrite = RewriteDistinctAggregates(input)
     comparePlans(input, rewrite)
@@ -108,16 +110,14 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
     }
   }
 
-  test(
-    "SPARK-49261: Literals in grouping expressions shouldn't result in unresolved aggregation") {
+  test("SPARK-49261: Literals in grouping expressions shouldn't result in unresolved aggregation") {
     val relation = testRelation2
       .select(Literal(6).as("gb"), $"a", $"b", $"c", $"d")
     val input = relation
       .groupBy($"a", $"gb")(
         countDistinct($"b").as("agg1"),
         countDistinct($"d").as("agg2"),
-        Round(sum($"c").as("sum1"), 6))
-      .analyze
+        Round(sum($"c").as("sum1"), 6)).analyze
     val rewriteFold = FoldablePropagation(input)
     // without the fix, the below produces an unresolved plan
     val rewrite = RewriteDistinctAggregates(rewriteFold)

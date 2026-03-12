@@ -161,7 +161,8 @@ class CheckpointFileManagerSuite extends SharedSparkSession {
         parameters = Map(
           "path" -> "/",
           "className" -> classOf[ConstructorFailureTestManager].getName,
-          "msg" -> "java.lang.IllegalStateException: error"))
+          "msg" -> "java.lang.IllegalStateException: error")
+      )
     }
   }
 
@@ -175,7 +176,8 @@ class CheckpointFileManagerSuite extends SharedSparkSession {
     checkError(
       ex,
       condition = "CANNOT_LOAD_CHECKPOINT_FILE_MANAGER.UNCATEGORIZED",
-      parameters = Map("path" -> "/"))
+      parameters = Map("path" -> "/")
+    )
   }
 
   test("SPARK-52824: CheckpointFileManager.create() throws error when class cannot be found") {
@@ -191,14 +193,14 @@ class CheckpointFileManagerSuite extends SharedSparkSession {
         parameters = Map(
           "path" -> "/",
           "className" -> "notarealclass",
-          "msg" -> "java.lang.ClassNotFoundException: notarealclass"))
+          "msg" -> "java.lang.ClassNotFoundException: notarealclass")
+      )
     }
   }
 }
 
 abstract class CheckpointFileManagerTestsOnLocalFs
-    extends CheckpointFileManagerTests
-    with SQLHelper {
+  extends CheckpointFileManagerTests with SQLHelper {
 
   protected def withTempHadoopPath(p: Path => Unit): Unit = {
     withTempDir { f: File =>
@@ -211,11 +213,8 @@ abstract class CheckpointFileManagerTestsOnLocalFs
     // crc file should not be leaked when origin file doesn't exist.
     // The implementation of Hadoop filesystem may filter out checksum file, so
     // listing files from local filesystem.
-    val fileNames = new File(path.toString)
-      .listFiles()
-      .toSeq
-      .filter(p => p.isFile)
-      .map(p => p.getName)
+    val fileNames = new File(path.toString).listFiles().toSeq
+      .filter(p => p.isFile).map(p => p.getName)
     val crcFiles = fileNames.filter(n => n.startsWith(".") && n.endsWith(".crc"))
     val originFileNamesForExistingCrcFiles = crcFiles.map { name =>
       // remove first "." and last ".crc"
@@ -223,8 +222,7 @@ abstract class CheckpointFileManagerTestsOnLocalFs
     }
 
     // Check all origin files exist for all crc files.
-    assert(
-      originFileNamesForExistingCrcFiles.toSet.subsetOf(fileNames.toSet),
+    assert(originFileNamesForExistingCrcFiles.toSet.subsetOf(fileNames.toSet),
       s"Some of origin files for crc files don't exist - crc files: $crcFiles / " +
         s"expected origin files: $originFileNamesForExistingCrcFiles / actual files: $fileNames")
   }
@@ -242,9 +240,10 @@ class FileSystemBasedCheckpointFileManagerSuite extends CheckpointFileManagerTes
   }
 }
 
+
 /** A fake implementation to test different characteristics of CheckpointFileManager interface */
 class CreateAtomicTestManager(path: Path, hadoopConf: Configuration)
-    extends FileSystemBasedCheckpointFileManager(path, hadoopConf) {
+  extends FileSystemBasedCheckpointFileManager(path, hadoopConf) {
 
   import CheckpointFileManager._
 
@@ -277,13 +276,13 @@ object CreateAtomicTestManager {
 
 /** A fake implementation to test constructor failure */
 class ConstructorFailureTestManager(path: Path, hadoopConf: Configuration)
-    extends FileSystemBasedCheckpointFileManager(path, hadoopConf) {
+  extends FileSystemBasedCheckpointFileManager(path, hadoopConf) {
   throw new IllegalStateException("error")
 }
 
 /**
- * CheckpointFileManagerSuiteFileSystem to test fallback of the CheckpointFileManager from
- * FileContext to FileSystem API.
+ * CheckpointFileManagerSuiteFileSystem to test fallback of the CheckpointFileManager
+ * from FileContext to FileSystem API.
  */
 private class CheckpointFileManagerSuiteFileSystem extends RawLocalFileSystem {
   import CheckpointFileManagerSuiteFileSystem.scheme

@@ -27,8 +27,8 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * The trait contains settings and utility functions. It can be mixed to the test suites for
  * datasource v2 catalogs (in-memory test catalogs). This trait complements the trait
- * `org.apache.spark.sql.execution.command.DDLCommandTestUtils` with common utility functions for
- * all unified datasource V1 and V2 test suites.
+ * `org.apache.spark.sql.execution.command.DDLCommandTestUtils` with common utility functions
+ * for all unified datasource V1 and V2 test suites.
  */
 trait CommandSuiteBase extends SharedSparkSession {
   def catalogVersion: String = "V2" // The catalog version is added to test names
@@ -45,11 +45,13 @@ trait CommandSuiteBase extends SharedSparkSession {
     .set(s"spark.sql.catalog.$nonPartitionCatalog", classOf[InMemoryTableCatalog].getName)
     .set(s"spark.sql.catalog.$atomicCatalog", classOf[StagingInMemoryTableCatalog].getName)
     .set(s"spark.sql.catalog.fun_$catalog", classOf[InMemoryCatalog].getName)
-    .set(
-      s"spark.sql.catalog.$rowLevelOPCatalog",
+    .set(s"spark.sql.catalog.$rowLevelOPCatalog",
       classOf[InMemoryRowLevelOperationTableCatalog].getName)
 
-  def checkLocation(t: String, spec: TablePartitionSpec, expected: String): Unit = {
+  def checkLocation(
+      t: String,
+      spec: TablePartitionSpec,
+      expected: String): Unit = {
     import CatalogV2Implicits._
 
     val tablePath = t.split('.')
@@ -61,8 +63,7 @@ trait CommandSuiteBase extends SharedSparkSession {
     val partTable = catalogPlugin.asTableCatalog
       .loadTable(Identifier.of(namespaces, tableName))
       .asInstanceOf[InMemoryPartitionTable]
-    val ident = ResolvePartitionSpec.convertToPartIdent(
-      spec,
+    val ident = ResolvePartitionSpec.convertToPartIdent(spec,
       partTable.partitionSchema.fields.toImmutableArraySeq)
     val partMetadata = partTable.loadPartitionMetadata(ident)
 
@@ -70,11 +71,10 @@ trait CommandSuiteBase extends SharedSparkSession {
     assert(partMetadata.get("location") === expected)
   }
 
-  def loadTable(catalog: String, schema: String, table: String): InMemoryTable = {
+  def loadTable(catalog: String, schema : String, table: String): InMemoryTable = {
     import CatalogV2Implicits._
     val catalogPlugin = spark.sessionState.catalogManager.catalog(catalog)
-    catalogPlugin.asTableCatalog
-      .loadTable(Identifier.of(Array(schema), table))
+    catalogPlugin.asTableCatalog.loadTable(Identifier.of(Array(schema), table))
       .asInstanceOf[InMemoryTable]
   }
 }

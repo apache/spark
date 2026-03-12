@@ -25,8 +25,8 @@ import org.apache.spark.sql.internal.SQLConf.STATEFUL_OPERATOR_USE_STRICT_DISTRI
 /**
  * This object is to provide clustered distribution for stateful operator with ensuring backward
  * compatibility. Please read through the NOTE on the classdoc of
- * [[StatefulOpClusteredDistribution]] before making any changes. Please refer SPARK-38204 for
- * details.
+ * [[StatefulOpClusteredDistribution]] before making any changes. Please refer SPARK-38204
+ * for details.
  *
  * Do not use methods in this object for stateful operators which already uses
  * [[StatefulOpClusteredDistribution]] as its required child distribution.

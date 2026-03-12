@@ -74,9 +74,6 @@ class OrcCodecSuite extends FileSourceCodecSuite {
   // Exclude "BROTLI" because its dependencies
   // require adding different jars according to different OSs
   override protected def availableCodecs =
-    OrcCompressionCodec
-      .values()
-      .filter(_ != OrcCompressionCodec.BROTLI)
-      .map(_.lowerCaseName())
-      .toSeq
+    OrcCompressionCodec.values().filter(_ != OrcCompressionCodec.BROTLI)
+      .map(_.lowerCaseName()).toSeq
 }

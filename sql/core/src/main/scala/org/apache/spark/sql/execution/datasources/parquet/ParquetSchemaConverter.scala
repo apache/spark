@@ -43,20 +43,16 @@ import org.apache.spark.sql.types.{EdgeInterpolationAlgorithm => SparkEdgeInterp
  * Parquet format backwards-compatibility rules are respected when converting Parquet
  * [[MessageType]] schemas.
  *
- * @see
- *   https://github.com/apache/parquet-format/blob/master/LogicalTypes.md
+ * @see https://github.com/apache/parquet-format/blob/master/LogicalTypes.md
  *
- * @param assumeBinaryIsString
- *   Whether unannotated BINARY fields should be assumed to be Spark SQL [[StringType]] fields.
- * @param assumeInt96IsTimestamp
- *   Whether unannotated INT96 fields should be assumed to be Spark SQL [[TimestampType]] fields.
- * @param caseSensitive
- *   Whether use case sensitive analysis when comparing Spark catalyst read schema with Parquet
- *   schema.
- * @param inferTimestampNTZ
- *   Whether TimestampNTZType type is enabled.
- * @param nanosAsLong
- *   Whether timestamps with nanos are converted to long.
+ * @param assumeBinaryIsString Whether unannotated BINARY fields should be assumed to be Spark SQL
+ *        [[StringType]] fields.
+ * @param assumeInt96IsTimestamp Whether unannotated INT96 fields should be assumed to be Spark SQL
+ *        [[TimestampType]] fields.
+ * @param caseSensitive Whether use case sensitive analysis when comparing Spark catalyst read
+ *                      schema with Parquet schema.
+ * @param inferTimestampNTZ Whether TimestampNTZType type is enabled.
+ * @param nanosAsLong Whether timestamps with nanos are converted to long.
  */
 class ParquetToSparkSchemaConverter(
     assumeBinaryIsString: Boolean = SQLConf.PARQUET_BINARY_AS_STRING.defaultValue.get,
@@ -83,11 +79,9 @@ class ParquetToSparkSchemaConverter(
     caseSensitive = conf.get(SQLConf.CASE_SENSITIVE.key).toBoolean,
     inferTimestampNTZ = conf.get(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key).toBoolean,
     nanosAsLong = conf.get(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key).toBoolean,
-    useFieldId = conf.getBoolean(
-      SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key,
+    useFieldId = conf.getBoolean(SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key,
       SQLConf.PARQUET_FIELD_ID_READ_ENABLED.defaultValue.get),
-    ignoreVariantAnnotation = conf.getBoolean(
-      SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.key,
+    ignoreVariantAnnotation = conf.getBoolean(SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.key,
       SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.defaultValue.get))
 
   /**
@@ -100,14 +94,14 @@ class ParquetToSparkSchemaConverter(
   }
 
   /**
-   * Convert `parquetSchema` into a [[ParquetColumn]] which contains its corresponding Spark SQL
-   * [[StructType]] along with other information such as the maximum repetition and definition
+   * Convert `parquetSchema` into a [[ParquetColumn]] which contains its corresponding Spark
+   * SQL [[StructType]] along with other information such as the maximum repetition and definition
    * level of each node, column descriptor for the leave nodes, etc.
    *
-   * If `sparkReadSchema` is not empty, when deriving Spark SQL type from a Parquet field this
-   * will check if the same field also exists in the schema. If so, it will use the Spark SQL
-   * type. This is necessary since conversion from Parquet to Spark could cause precision loss.
-   * For instance, Spark read schema is smallint/tinyint but Parquet only support int.
+   * If `sparkReadSchema` is not empty, when deriving Spark SQL type from a Parquet field this will
+   * check if the same field also exists in the schema. If so, it will use the Spark SQL type.
+   * This is necessary since conversion from Parquet to Spark could cause precision loss. For
+   * instance, Spark read schema is smallint/tinyint but Parquet only support int.
    */
   def convertParquetColumn(
       parquetSchema: MessageType,
@@ -139,17 +133,15 @@ class ParquetToSparkSchemaConverter(
 
     val converted = (0 until groupColumn.getChildrenCount).map { i =>
       val field = groupColumn.getChild(i)
-      val fieldFromReadSchema = schemaMapOpt
-        .flatMap { schemaMap =>
-          schemaMap.get(normalizeFieldName(field.getName))
+      val fieldFromReadSchema = schemaMapOpt.flatMap { schemaMap =>
+        schemaMap.get(normalizeFieldName(field.getName))
+      }.orElse {
+        val parquetFieldId = Option(field.getType.getId).map(_.intValue())
+        (parquetFieldId, schemaIdMapOpt) match {
+          case (Some(id), Some(map)) => map.get(id)
+          case _ => None
         }
-        .orElse {
-          val parquetFieldId = Option(field.getType.getId).map(_.intValue())
-          (parquetFieldId, schemaIdMapOpt) match {
-            case (Some(id), Some(map)) => map.get(id)
-            case _ => None
-          }
-        }
+      }
       var fieldReadType = fieldFromReadSchema.map(_.dataType)
 
       // If a field is repeated here then it is neither contained by a `LIST` nor `MAP`
@@ -181,23 +173,18 @@ class ParquetToSparkSchemaConverter(
       field.getType.getRepetition match {
         case OPTIONAL | REQUIRED =>
           val nullable = field.getType.getRepetition == OPTIONAL
-          (StructField(fieldName, convertedField.sparkType, nullable = nullable), convertedField)
+          (StructField(fieldName, convertedField.sparkType, nullable = nullable),
+              convertedField)
 
         case REPEATED =>
           // A repeated field that is neither contained by a `LIST`- or `MAP`-annotated group nor
           // annotated by `LIST` or `MAP` should be interpreted as a required list of required
           // elements where the element type is the type of the field.
           val arrayType = ArrayType(convertedField.sparkType, containsNull = false)
-          (
-            StructField(fieldName, arrayType, nullable = false),
-            ParquetColumn(
-              arrayType,
-              None,
-              convertedField.repetitionLevel - 1,
-              convertedField.definitionLevel - 1,
-              required = true,
-              convertedField.path,
-              Seq(convertedField.copy(required = true))))
+          (StructField(fieldName, arrayType, nullable = false),
+              ParquetColumn(arrayType, None, convertedField.repetitionLevel - 1,
+                convertedField.definitionLevel - 1, required = true, convertedField.path,
+                Seq(convertedField.copy(required = true))))
       }
     }
 
@@ -212,13 +199,14 @@ class ParquetToSparkSchemaConverter(
    * additional information such as the Parquet column's repetition & definition level, column
    * path, column descriptor etc.
    */
-  def convertField(field: ColumnIO, sparkReadType: Option[DataType] = None): ParquetColumn = {
+  def convertField(
+      field: ColumnIO,
+      sparkReadType: Option[DataType] = None): ParquetColumn = {
     val targetType = sparkReadType.map {
       _.transformRecursively { case t: UserDefinedType[_] => t.sqlType }
     }
     field match {
-      case primitiveColumn: PrimitiveColumnIO =>
-        convertPrimitiveField(primitiveColumn, targetType)
+      case primitiveColumn: PrimitiveColumnIO => convertPrimitiveField(primitiveColumn, targetType)
       case groupColumn: GroupColumnIO if targetType.contains(VariantType) =>
         if (SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_READING_SHREDDED)) {
           // We need the underlying file type regardless of the config.
@@ -269,116 +257,112 @@ class ParquetToSparkSchemaConverter(
 
     val isUnknownType = typeAnnotation.isInstanceOf[UnknownLogicalTypeAnnotation]
     val nullTypeOpt = Option.when(isUnknownType)(NullType)
-    val sparkType = sparkReadType
-      .orElse(nullTypeOpt)
-      .getOrElse(typeName match {
-        case BOOLEAN => BooleanType
+    val sparkType = sparkReadType.orElse(nullTypeOpt).getOrElse(typeName match {
+      case BOOLEAN => BooleanType
 
-        case FLOAT => FloatType
+      case FLOAT => FloatType
 
-        case DOUBLE => DoubleType
+      case DOUBLE => DoubleType
 
-        case INT32 =>
-          typeAnnotation match {
-            case intTypeAnnotation: IntLogicalTypeAnnotation if intTypeAnnotation.isSigned =>
-              intTypeAnnotation.getBitWidth match {
-                case 8 => ByteType
-                case 16 => ShortType
-                case 32 => IntegerType
-                case _ => illegalType()
-              }
-            case null => IntegerType
-            case _: DateLogicalTypeAnnotation => DateType
-            case _: DecimalLogicalTypeAnnotation => makeDecimalType(Decimal.MAX_INT_DIGITS)
-            case intTypeAnnotation: IntLogicalTypeAnnotation if !intTypeAnnotation.isSigned =>
-              intTypeAnnotation.getBitWidth match {
-                case 8 => ShortType
-                case 16 => IntegerType
-                case 32 => LongType
-                case _ => illegalType()
-              }
-            case t: TimestampLogicalTypeAnnotation if t.getUnit == TimeUnit.MILLIS =>
-              typeNotImplemented()
-            case _ => illegalType()
-          }
+      case INT32 =>
+        typeAnnotation match {
+          case intTypeAnnotation: IntLogicalTypeAnnotation if intTypeAnnotation.isSigned =>
+            intTypeAnnotation.getBitWidth match {
+              case 8 => ByteType
+              case 16 => ShortType
+              case 32 => IntegerType
+              case _ => illegalType()
+            }
+          case null => IntegerType
+          case _: DateLogicalTypeAnnotation => DateType
+          case _: DecimalLogicalTypeAnnotation => makeDecimalType(Decimal.MAX_INT_DIGITS)
+          case intTypeAnnotation: IntLogicalTypeAnnotation if !intTypeAnnotation.isSigned =>
+            intTypeAnnotation.getBitWidth match {
+              case 8 => ShortType
+              case 16 => IntegerType
+              case 32 => LongType
+              case _ => illegalType()
+            }
+          case t: TimestampLogicalTypeAnnotation if t.getUnit == TimeUnit.MILLIS =>
+            typeNotImplemented()
+          case _ => illegalType()
+        }
 
-        case INT64 =>
-          typeAnnotation match {
-            case intTypeAnnotation: IntLogicalTypeAnnotation if intTypeAnnotation.isSigned =>
-              intTypeAnnotation.getBitWidth match {
-                case 64 => LongType
-                case _ => illegalType()
-              }
-            case null => LongType
-            case _: DecimalLogicalTypeAnnotation => makeDecimalType(Decimal.MAX_LONG_DIGITS)
-            case intTypeAnnotation: IntLogicalTypeAnnotation if !intTypeAnnotation.isSigned =>
-              intTypeAnnotation.getBitWidth match {
-                // The precision to hold the largest unsigned long is:
-                // `java.lang.Long.toUnsignedString(-1).length` = 20
-                case 64 => DecimalType(20, 0)
-                case _ => illegalType()
-              }
-            case timestamp: TimestampLogicalTypeAnnotation
-                if timestamp.getUnit == TimeUnit.MICROS || timestamp.getUnit == TimeUnit.MILLIS =>
-              if (timestamp.isAdjustedToUTC || !inferTimestampNTZ) {
-                TimestampType
-              } else {
-                TimestampNTZType
-              }
-            // SPARK-40819: NANOS are not supported as a Timestamp, convert to LongType without
-            // timezone awareness to address behaviour regression introduced by SPARK-34661
-            case timestamp: TimestampLogicalTypeAnnotation
-                if timestamp.getUnit == TimeUnit.NANOS && nanosAsLong =>
-              LongType
-            case time: TimeLogicalTypeAnnotation
-                if time.getUnit == TimeUnit.MICROS && !time.isAdjustedToUTC =>
-              TimeType(TimeType.MICROS_PRECISION)
-            case _ =>
-              illegalType()
-          }
+      case INT64 =>
+        typeAnnotation match {
+          case intTypeAnnotation: IntLogicalTypeAnnotation if intTypeAnnotation.isSigned =>
+            intTypeAnnotation.getBitWidth match {
+              case 64 => LongType
+              case _ => illegalType()
+            }
+          case null => LongType
+          case _: DecimalLogicalTypeAnnotation => makeDecimalType(Decimal.MAX_LONG_DIGITS)
+          case intTypeAnnotation: IntLogicalTypeAnnotation if !intTypeAnnotation.isSigned =>
+            intTypeAnnotation.getBitWidth match {
+              // The precision to hold the largest unsigned long is:
+              // `java.lang.Long.toUnsignedString(-1).length` = 20
+              case 64 => DecimalType(20, 0)
+              case _ => illegalType()
+            }
+          case timestamp: TimestampLogicalTypeAnnotation
+            if timestamp.getUnit == TimeUnit.MICROS || timestamp.getUnit == TimeUnit.MILLIS =>
+            if (timestamp.isAdjustedToUTC || !inferTimestampNTZ) {
+              TimestampType
+            } else {
+              TimestampNTZType
+            }
+          // SPARK-40819: NANOS are not supported as a Timestamp, convert to LongType without
+          // timezone awareness to address behaviour regression introduced by SPARK-34661
+          case timestamp: TimestampLogicalTypeAnnotation
+            if timestamp.getUnit == TimeUnit.NANOS && nanosAsLong =>
+            LongType
+          case time: TimeLogicalTypeAnnotation
+            if time.getUnit == TimeUnit.MICROS && !time.isAdjustedToUTC =>
+            TimeType(TimeType.MICROS_PRECISION)
+          case _ =>
+            illegalType()
+        }
 
-        case INT96 =>
-          ParquetSchemaConverter.checkConversionRequirement(
-            assumeInt96IsTimestamp,
-            "INT96 is not supported unless it's interpreted as timestamp. " +
-              s"Please try to set ${SQLConf.PARQUET_INT96_AS_TIMESTAMP.key} to true.")
-          TimestampType
+      case INT96 =>
+        ParquetSchemaConverter.checkConversionRequirement(
+          assumeInt96IsTimestamp,
+          "INT96 is not supported unless it's interpreted as timestamp. " +
+            s"Please try to set ${SQLConf.PARQUET_INT96_AS_TIMESTAMP.key} to true.")
+        TimestampType
 
-        case BINARY =>
-          typeAnnotation match {
-            case _: StringLogicalTypeAnnotation | _: EnumLogicalTypeAnnotation |
-                _: JsonLogicalTypeAnnotation =>
-              StringType
-            case null if assumeBinaryIsString => StringType
-            case null => BinaryType
-            case _: BsonLogicalTypeAnnotation => BinaryType
-            case _: DecimalLogicalTypeAnnotation => makeDecimalType()
-            case geom: GeometryLogicalTypeAnnotation =>
-              GeometryType(Option(geom.getCrs).getOrElse(LogicalTypeAnnotation.DEFAULT_CRS))
-            case geog: GeographyLogicalTypeAnnotation =>
-              val crs = Option(geog.getCrs).getOrElse(LogicalTypeAnnotation.DEFAULT_CRS)
-              val sparkAlgorithm = if (geog.getAlgorithm != null) {
-                SparkEdgeInterpolationAlgorithm
-                  .fromString(geog.getAlgorithm.toString)
-                  .getOrElse(SparkEdgeInterpolationAlgorithm.SPHERICAL)
-              } else {
-                SparkEdgeInterpolationAlgorithm.SPHERICAL
-              }
-              GeographyType(crs, sparkAlgorithm)
-            case _ => illegalType()
-          }
+      case BINARY =>
+        typeAnnotation match {
+          case _: StringLogicalTypeAnnotation | _: EnumLogicalTypeAnnotation |
+               _: JsonLogicalTypeAnnotation => StringType
+          case null if assumeBinaryIsString => StringType
+          case null => BinaryType
+          case _: BsonLogicalTypeAnnotation => BinaryType
+          case _: DecimalLogicalTypeAnnotation => makeDecimalType()
+          case geom: GeometryLogicalTypeAnnotation =>
+            GeometryType(Option(geom.getCrs).getOrElse(LogicalTypeAnnotation.DEFAULT_CRS))
+          case geog: GeographyLogicalTypeAnnotation =>
+            val crs = Option(geog.getCrs).getOrElse(LogicalTypeAnnotation.DEFAULT_CRS)
+            val sparkAlgorithm = if (geog.getAlgorithm != null) {
+              SparkEdgeInterpolationAlgorithm.fromString(geog.getAlgorithm.toString)
+                .getOrElse(SparkEdgeInterpolationAlgorithm.SPHERICAL)
+            } else {
+              SparkEdgeInterpolationAlgorithm.SPHERICAL
+            }
+            GeographyType(crs, sparkAlgorithm)
+          case _ => illegalType()
+        }
 
-        case FIXED_LEN_BYTE_ARRAY =>
-          typeAnnotation match {
-            case _: DecimalLogicalTypeAnnotation =>
-              makeDecimalType(Decimal.maxPrecisionForBytes(parquetType.getTypeLength))
-            case _: IntervalLogicalTypeAnnotation => typeNotImplemented()
-            case null => BinaryType
-            case _ => illegalType()
-          }
+      case FIXED_LEN_BYTE_ARRAY =>
+        typeAnnotation match {
+          case _: DecimalLogicalTypeAnnotation =>
+            makeDecimalType(Decimal.maxPrecisionForBytes(parquetType.getTypeLength))
+          case _: IntervalLogicalTypeAnnotation => typeNotImplemented()
+          case null => BinaryType
+          case _ => illegalType()
+        }
 
-        case _ => illegalType()
-      })
+      case _ => illegalType()
+    })
 
     ParquetColumn(sparkType, primitiveColumn)
   }
@@ -417,8 +401,7 @@ class ParquetToSparkSchemaConverter(
           ParquetSchemaConverter.checkConversionRequirement(
             sparkReadType.forall(_.isInstanceOf[VariantType]),
             s"Invalid Spark read type: expected $field to be variant type but found " +
-              s"${if (sparkReadType.isEmpty) { "None" }
-                else { sparkReadType.get.sql }}")
+              s"${if (sparkReadType.isEmpty) { "None" } else {sparkReadType.get.sql} }")
           if (SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_READING_SHREDDED)) {
             val col = convertInternal(groupColumn)
             col.copy(sparkType = VariantType, variantFileType = Some(col))
@@ -442,8 +425,7 @@ class ParquetToSparkSchemaConverter(
       // See: https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#lists
       case _: ListLogicalTypeAnnotation =>
         ParquetSchemaConverter.checkConversionRequirement(
-          field.getFieldCount == 1,
-          s"Invalid list type $field")
+          field.getFieldCount == 1, s"Invalid list type $field")
         ParquetSchemaConverter.checkConversionRequirement(
           sparkReadType.forall(_.isInstanceOf[ArrayType]),
           s"Invalid Spark read type: expected $field to be list type but found $sparkReadType")
@@ -451,8 +433,7 @@ class ParquetToSparkSchemaConverter(
         val repeated = groupColumn.getChild(0)
         val repeatedType = repeated.getType
         ParquetSchemaConverter.checkConversionRequirement(
-          repeatedType.isRepetition(REPEATED),
-          s"Invalid list type $field")
+          repeatedType.isRepetition(REPEATED), s"Invalid list type $field")
         val sparkReadElementType = sparkReadType.map(_.asInstanceOf[ArrayType].elementType)
 
         if (isElementType(repeatedType, field.getName)) {
@@ -466,19 +447,15 @@ class ParquetToSparkSchemaConverter(
           // we should mark the primitive field as required
           if (repeatedType.isPrimitive) converted = converted.copy(required = true)
 
-          ParquetColumn(
-            ArrayType(convertedType, containsNull = false),
-            groupColumn,
-            Seq(converted))
+          ParquetColumn(ArrayType(convertedType, containsNull = false),
+            groupColumn, Seq(converted))
         } else {
           val element = repeated.asInstanceOf[GroupColumnIO].getChild(0)
           val converted = convertField(element, sparkReadElementType)
           val convertedType = getSparkTypeIfApplicable(sparkReadElementType, converted)
           val optional = element.getType.isRepetition(OPTIONAL)
-          ParquetColumn(
-            ArrayType(convertedType, containsNull = optional),
-            groupColumn,
-            Seq(converted))
+          ParquetColumn(ArrayType(convertedType, containsNull = optional),
+            groupColumn, Seq(converted))
         }
 
       // scalastyle:off
@@ -509,9 +486,9 @@ class ParquetToSparkSchemaConverter(
         val convertedValueType = getSparkTypeIfApplicable(sparkReadValueType, convertedValue)
         val valueOptional = value.getType.isRepetition(OPTIONAL)
         ParquetColumn(
-          MapType(convertedKeyType, convertedValueType, valueContainsNull = valueOptional),
-          groupColumn,
-          Seq(convertedKey, convertedValue))
+          MapType(convertedKeyType, convertedValueType,
+            valueContainsNull = valueOptional),
+          groupColumn, Seq(convertedKey, convertedValue))
       case _ =>
         throw QueryCompilationErrors.unrecognizedParquetTypeError(field.toString)
     }
@@ -525,25 +502,23 @@ class ParquetToSparkSchemaConverter(
     // Find the binary columns, and validate that they have the correct type.
     val valueAndMetadata = Seq("value", "metadata").map { colName =>
       val idx = (0 until groupColumn.getChildrenCount)
-        .find(groupColumn.getChild(_).getName == colName)
+          .find(groupColumn.getChild(_).getName == colName)
       if (idx.isEmpty) {
         throw QueryCompilationErrors.invalidVariantMissingFieldError(colName)
       }
       val child = groupColumn.getChild(idx.get)
       // The value and metadata cannot be individually null, only the full struct can.
       if (child.getType.getRepetition != REQUIRED ||
-        !child.isInstanceOf[PrimitiveColumnIO] ||
-        child.asInstanceOf[PrimitiveColumnIO].getPrimitive != BINARY) {
+          !child.isInstanceOf[PrimitiveColumnIO] ||
+          child.asInstanceOf[PrimitiveColumnIO].getPrimitive != BINARY) {
         throw QueryCompilationErrors.invalidVariantNullableOrNotBinaryFieldError(colName)
       }
       child
     }
-    ParquetColumn(
-      VariantType,
-      groupColumn,
-      Seq(
-        convertField(valueAndMetadata(0), Some(BinaryType)),
-        convertField(valueAndMetadata(1), Some(BinaryType))))
+    ParquetColumn(VariantType, groupColumn, Seq(
+      convertField(valueAndMetadata(0), Some(BinaryType)),
+      convertField(valueAndMetadata(1), Some(BinaryType))
+    ))
   }
 
   // scalastyle:off
@@ -602,16 +577,13 @@ class ParquetToSparkSchemaConverter(
 /**
  * This converter class is used to convert Spark SQL [[StructType]] to Parquet [[MessageType]].
  *
- * @param writeLegacyParquetFormat
- *   Whether to use legacy Parquet format compatible with Spark 1.4 and prior versions when
- *   converting a Catalyst [[StructType]] to a Parquet [[MessageType]]. When set to false, use
- *   standard format defined in parquet-format spec. This argument only affects Parquet write
- *   path.
- * @param outputTimestampType
- *   which parquet timestamp type to use when writing.
- * @param useFieldId
- *   whether we should include write field id to Parquet schema. Set this to false via
- *   `spark.sql.parquet.fieldId.write.enabled = false` to disable writing field ids.
+ * @param writeLegacyParquetFormat Whether to use legacy Parquet format compatible with Spark 1.4
+ *        and prior versions when converting a Catalyst [[StructType]] to a Parquet [[MessageType]].
+ *        When set to false, use standard format defined in parquet-format spec.  This argument only
+ *        affects Parquet write path.
+ * @param outputTimestampType which parquet timestamp type to use when writing.
+ * @param useFieldId whether we should include write field id to Parquet schema. Set this to false
+ *        via `spark.sql.parquet.fieldId.write.enabled = false` to disable writing field ids.
  */
 class SparkToParquetSchemaConverter(
     writeLegacyParquetFormat: Boolean = SQLConf.PARQUET_WRITE_LEGACY_FORMAT.defaultValue.get,
@@ -671,16 +643,12 @@ class SparkToParquetSchemaConverter(
         Types.primitive(BOOLEAN, repetition).named(field.name)
 
       case ByteType =>
-        Types
-          .primitive(INT32, repetition)
-          .as(LogicalTypeAnnotation.intType(8, true))
-          .named(field.name)
+        Types.primitive(INT32, repetition)
+          .as(LogicalTypeAnnotation.intType(8, true)).named(field.name)
 
       case ShortType =>
-        Types
-          .primitive(INT32, repetition)
-          .as(LogicalTypeAnnotation.intType(16, true))
-          .named(field.name)
+        Types.primitive(INT32, repetition)
+          .as(LogicalTypeAnnotation.intType(16, true)).named(field.name)
 
       case IntegerType | _: YearMonthIntervalType =>
         Types.primitive(INT32, repetition).named(field.name)
@@ -695,37 +663,27 @@ class SparkToParquetSchemaConverter(
         Types.primitive(DOUBLE, repetition).named(field.name)
 
       case _: StringType =>
-        Types
-          .primitive(BINARY, repetition)
-          .as(LogicalTypeAnnotation.stringType())
-          .named(field.name)
+        Types.primitive(BINARY, repetition)
+          .as(LogicalTypeAnnotation.stringType()).named(field.name)
 
       case geom: GeometryType =>
-        Types
-          .primitive(BINARY, repetition)
-          .as(LogicalTypeAnnotation.geometryType(geom.crs))
-          .named(field.name)
+        Types.primitive(BINARY, repetition)
+          .as(LogicalTypeAnnotation.geometryType(geom.crs)).named(field.name)
 
       case geog: GeographyType =>
         val logicalType = LogicalTypeAnnotation.geographyType(
           geog.crs,
           EdgeInterpolationAlgorithm.valueOf(geog.algorithm.toString))
-        Types
-          .primitive(BINARY, repetition)
-          .as(logicalType)
-          .named(field.name)
+        Types.primitive(BINARY, repetition)
+          .as(logicalType).named(field.name)
 
       case DateType =>
-        Types
-          .primitive(INT32, repetition)
-          .as(LogicalTypeAnnotation.dateType())
-          .named(field.name)
+        Types.primitive(INT32, repetition)
+          .as(LogicalTypeAnnotation.dateType()).named(field.name)
 
       case _: TimeType =>
-        Types
-          .primitive(INT64, repetition)
-          .as(LogicalTypeAnnotation.timeType(false, TimeUnit.MICROS))
-          .named(field.name)
+        Types.primitive(INT64, repetition)
+          .as(LogicalTypeAnnotation.timeType(false, TimeUnit.MICROS)).named(field.name)
 
       // NOTE: Spark SQL can write timestamp values to Parquet using INT96, TIMESTAMP_MICROS or
       // TIMESTAMP_MILLIS. TIMESTAMP_MICROS is recommended but INT96 is the default to keep the
@@ -748,32 +706,24 @@ class SparkToParquetSchemaConverter(
       // timestamp subfields.
       case TimestampType =>
         if (inShredded) {
-          Types
-            .primitive(INT64, repetition)
-            .as(LogicalTypeAnnotation.timestampType(true, TimeUnit.MICROS))
-            .named(field.name)
+          Types.primitive(INT64, repetition)
+            .as(LogicalTypeAnnotation.timestampType(true, TimeUnit.MICROS)).named(field.name)
         } else {
           outputTimestampType match {
             case SQLConf.ParquetOutputTimestampType.INT96 =>
               Types.primitive(INT96, repetition).named(field.name)
             case SQLConf.ParquetOutputTimestampType.TIMESTAMP_MICROS =>
-              Types
-                .primitive(INT64, repetition)
-                .as(LogicalTypeAnnotation.timestampType(true, TimeUnit.MICROS))
-                .named(field.name)
+              Types.primitive(INT64, repetition)
+                .as(LogicalTypeAnnotation.timestampType(true, TimeUnit.MICROS)).named(field.name)
             case SQLConf.ParquetOutputTimestampType.TIMESTAMP_MILLIS =>
-              Types
-                .primitive(INT64, repetition)
-                .as(LogicalTypeAnnotation.timestampType(true, TimeUnit.MILLIS))
-                .named(field.name)
+              Types.primitive(INT64, repetition)
+                .as(LogicalTypeAnnotation.timestampType(true, TimeUnit.MILLIS)).named(field.name)
           }
         }
 
       case TimestampNTZType =>
-        Types
-          .primitive(INT64, repetition)
-          .as(LogicalTypeAnnotation.timestampType(false, TimeUnit.MICROS))
-          .named(field.name)
+        Types.primitive(INT64, repetition)
+          .as(LogicalTypeAnnotation.timestampType(false, TimeUnit.MICROS)).named(field.name)
       case BinaryType =>
         Types.primitive(BINARY, repetition).named(field.name)
 
@@ -841,13 +791,11 @@ class SparkToParquetSchemaConverter(
         // `array` as its element name as below. Therefore, we build manually
         // the correct group type here via the builder. (See SPARK-16777)
         Types
-          .buildGroup(repetition)
-          .as(LogicalTypeAnnotation.listType())
-          .addField(
-            Types
-              .buildGroup(REPEATED)
-              .addField(convertField(StructField("array", elementType, nullable), inShredded))
-              .named("bag"))
+          .buildGroup(repetition).as(LogicalTypeAnnotation.listType())
+          .addField(Types
+            .buildGroup(REPEATED)
+            .addField(convertField(StructField("array", elementType, nullable), inShredded))
+            .named("bag"))
           .named(field.name)
 
       // Spark 1.4.x and prior versions convert ArrayType with non-nullable elements into a 2-level
@@ -860,11 +808,9 @@ class SparkToParquetSchemaConverter(
 
         // Here too, we should not use `listOfElements`. (See SPARK-16777)
         Types
-          .buildGroup(repetition)
-          .as(LogicalTypeAnnotation.listType())
+          .buildGroup(repetition).as(LogicalTypeAnnotation.listType())
           // "array" is the name chosen by parquet-avro (1.7.0 and prior version)
-          .addField(
-            convertField(StructField("array", elementType, nullable), REPEATED, inShredded))
+          .addField(convertField(StructField("array", elementType, nullable), REPEATED, inShredded))
           .named(field.name)
 
       // Spark 1.4.x and prior versions convert MapType into a 3-level group annotated by
@@ -893,12 +839,11 @@ class SparkToParquetSchemaConverter(
         //   }
         // }
         Types
-          .buildGroup(repetition)
-          .as(LogicalTypeAnnotation.listType())
-          .addField(Types
-            .repeatedGroup()
-            .addField(convertField(StructField("element", elementType, containsNull), inShredded))
-            .named("list"))
+          .buildGroup(repetition).as(LogicalTypeAnnotation.listType())
+          .addField(
+            Types.repeatedGroup()
+              .addField(convertField(StructField("element", elementType, containsNull), inShredded))
+              .named("list"))
           .named(field.name)
 
       case MapType(keyType, valueType, valueContainsNull) =>
@@ -909,15 +854,14 @@ class SparkToParquetSchemaConverter(
         //   }
         // }
         Types
-          .buildGroup(repetition)
-          .as(LogicalTypeAnnotation.mapType())
+          .buildGroup(repetition).as(LogicalTypeAnnotation.mapType())
           .addField(
             Types
               .repeatedGroup()
               .addField(convertField(StructField("key", keyType, nullable = false), inShredded))
               .addField(
-                convertField(StructField("value", valueType, valueContainsNull), inShredded))
-              .named("key_value"))
+                convertField(StructField("value", valueType, valueContainsNull), inShredded)
+              ).named("key_value"))
           .named(field.name)
 
       // ===========
@@ -926,13 +870,12 @@ class SparkToParquetSchemaConverter(
 
       case VariantType =>
         (if (annotateVariantLogicalType) {
-           Types.buildGroup(repetition).as(LogicalTypeAnnotation.variantType(1))
-         } else {
-           Types.buildGroup(repetition)
-         })
+          Types.buildGroup(repetition).as(LogicalTypeAnnotation.variantType(1))
+        } else {
+          Types.buildGroup(repetition)
+        })
           .addField(convertField(StructField("value", BinaryType, nullable = false), inShredded))
-          .addField(
-            convertField(StructField("metadata", BinaryType, nullable = false), inShredded))
+          .addField(convertField(StructField("metadata", BinaryType, nullable = false), inShredded))
           .named(field.name)
 
       case s: StructType if SparkShreddingUtils.isVariantShreddingStruct(s) =>
@@ -948,19 +891,15 @@ class SparkToParquetSchemaConverter(
         group.named(field.name)
 
       case StructType(fields) =>
-        fields
-          .foldLeft(Types.buildGroup(repetition)) { (builder, field) =>
-            builder.addField(convertField(field, inShredded))
-          }
-          .named(field.name)
+        fields.foldLeft(Types.buildGroup(repetition)) { (builder, field) =>
+          builder.addField(convertField(field, inShredded))
+        }.named(field.name)
 
       case udt: UserDefinedType[_] =>
         convertField(field.copy(dataType = udt.sqlType), inShredded)
 
       case NullType => // Selected primitive type here doesn't have significance.
-        Types
-          .primitive(BOOLEAN, repetition)
-          .named(field.name)
+        Types.primitive(BOOLEAN, repetition).named(field.name)
           .withLogicalTypeAnnotation(LogicalTypeAnnotation.unknownType())
 
       case _ =>

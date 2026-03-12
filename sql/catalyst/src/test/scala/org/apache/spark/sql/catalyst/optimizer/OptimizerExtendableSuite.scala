@@ -34,15 +34,17 @@ class OptimizerExtendableSuite extends SparkFunSuite {
   }
 
   /**
-   * This class represents a dummy extended optimizer that takes the batches of the Optimizer and
-   * adds custom ones.
+   * This class represents a dummy extended optimizer that takes the batches of the
+   * Optimizer and adds custom ones.
    */
   class ExtendedOptimizer extends SimpleTestOptimizer {
 
     // rules set to DummyRule, would not be executed anyways
     val myBatches: Seq[Batch] = {
-      Batch("once", Once, DummyRule) ::
-        Batch("fixedPoint", FixedPoint(100), DummyRule) :: Nil
+      Batch("once", Once,
+        DummyRule) ::
+      Batch("fixedPoint", FixedPoint(100),
+        DummyRule) :: Nil
     }
 
     override def defaultBatches: Seq[Batch] = super.defaultBatches ++ myBatches

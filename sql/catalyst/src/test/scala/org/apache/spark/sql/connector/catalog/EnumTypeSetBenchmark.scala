@@ -24,7 +24,8 @@ import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 
 /**
- * Benchmark for EnumSet vs HashSet hold enumeration type To run this benchmark:
+ * Benchmark for EnumSet vs HashSet hold enumeration type
+ * To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class> --jars <spark core test jar> <spark catalyst test jar>
@@ -58,20 +59,12 @@ object EnumTypeSetBenchmark extends BenchmarkBase {
     util.EnumSet.of(BATCH_READ, CONTINUOUS_READ, TRUNCATE, V1_BATCH_WRITE, OVERWRITE_BY_FILTER)
 
   def allItemsHashSet(): util.Set[TableCapability] =
-    Set(
-      BATCH_READ,
-      MICRO_BATCH_READ,
-      CONTINUOUS_READ,
-      BATCH_WRITE,
-      STREAMING_WRITE,
-      TRUNCATE,
-      OVERWRITE_BY_FILTER,
-      OVERWRITE_DYNAMIC,
-      ACCEPT_ANY_SCHEMA,
-      V1_BATCH_WRITE).asJava
+    Set( BATCH_READ, MICRO_BATCH_READ, CONTINUOUS_READ, BATCH_WRITE, STREAMING_WRITE, TRUNCATE,
+      OVERWRITE_BY_FILTER, OVERWRITE_DYNAMIC, ACCEPT_ANY_SCHEMA, V1_BATCH_WRITE).asJava
 
   def allItemsEnumSet(): util.Set[TableCapability] =
     util.EnumSet.allOf(classOf[TableCapability])
+
 
   def testCreateSetWithEnumType(
       valuesPerIteration: Int,
@@ -83,11 +76,11 @@ object EnumTypeSetBenchmark extends BenchmarkBase {
       new Benchmark(s"Test create $sizeLiteral Set", valuesPerIteration, output = output)
 
     benchmark.addCase("Use HashSet") { _: Int =>
-      for (_ <- 0L until valuesPerIteration) { creatHashSetFunctions.apply() }
+      for (_ <- 0L until valuesPerIteration) {creatHashSetFunctions.apply()}
     }
 
     benchmark.addCase("Use EnumSet") { _: Int =>
-      for (_ <- 0L until valuesPerIteration) { creatEnumSetFunctions.apply() }
+      for (_ <- 0L until valuesPerIteration) {creatEnumSetFunctions.apply()}
     }
     benchmark.run()
   }
@@ -102,8 +95,8 @@ object EnumTypeSetBenchmark extends BenchmarkBase {
 
     val benchmark = new Benchmark(
       s"Test contains use $sizeLiteral Set",
-      valuesPerIteration * capabilities.length,
-      output = output)
+        valuesPerIteration * capabilities.length,
+        output = output)
 
     benchmark.addCase("Use HashSet") { _: Int =>
       for (_ <- 0L until valuesPerIteration) {
@@ -153,66 +146,34 @@ object EnumTypeSetBenchmark extends BenchmarkBase {
     // Test Contains
     testContainsOperation(valuesPerIteration, "empty", emptyHashSet(), emptyEnumSet())
     testContainsOperation(valuesPerIteration, "1 item", oneItemHashSet(), oneItemEnumSet())
-    testContainsOperation(valuesPerIteration, "3 items", threeItemsHashSet(), threeItemsEnumSet())
+    testContainsOperation(valuesPerIteration,
+      "3 items", threeItemsHashSet(), threeItemsEnumSet())
     testContainsOperation(valuesPerIteration, "5 items", fiveItemsHashSet(), fiveItemsEnumSet())
-    testContainsOperation(
-      valuesPerIteration,
-      s"${TableCapability.values().length} items",
-      allItemsHashSet(),
-      allItemsEnumSet())
+    testContainsOperation(valuesPerIteration, s"${TableCapability.values().length} items",
+      allItemsHashSet(), allItemsEnumSet())
 
     // Test Create
-    testCreateSetWithEnumType(
-      valuesPerIteration,
-      "empty",
-      () => emptyHashSet(),
-      () => emptyEnumSet())
-    testCreateSetWithEnumType(
-      valuesPerIteration,
-      "1 item",
-      () => oneItemHashSet(),
-      () => oneItemEnumSet())
-    testCreateSetWithEnumType(
-      valuesPerIteration,
-      "3 items",
-      () => threeItemsHashSet(),
-      () => threeItemsEnumSet())
-    testCreateSetWithEnumType(
-      valuesPerIteration,
-      "5 items",
-      () => fiveItemsHashSet(),
-      () => fiveItemsEnumSet())
-    testCreateSetWithEnumType(
-      valuesPerIteration,
-      s"${TableCapability.values().length} items",
-      () => allItemsHashSet(),
-      () => allItemsEnumSet())
+    testCreateSetWithEnumType(valuesPerIteration,
+      "empty", () => emptyHashSet(), () => emptyEnumSet())
+    testCreateSetWithEnumType(valuesPerIteration,
+      "1 item", () => oneItemHashSet(), () => oneItemEnumSet())
+    testCreateSetWithEnumType(valuesPerIteration, "3 items",
+      () => threeItemsHashSet(), () => threeItemsEnumSet())
+    testCreateSetWithEnumType(valuesPerIteration, "5 items",
+      () => fiveItemsHashSet(), () => fiveItemsEnumSet())
+    testCreateSetWithEnumType(valuesPerIteration, s"${TableCapability.values().length} items",
+      () => allItemsHashSet(), () => allItemsEnumSet())
 
     // Test Create and Contains
-    testCreateAndContainsOperation(
-      valuesPerIteration,
-      "empty",
-      () => emptyHashSet(),
-      () => emptyEnumSet())
-    testCreateAndContainsOperation(
-      valuesPerIteration,
-      "1 item",
-      () => oneItemHashSet(),
-      () => oneItemEnumSet())
-    testCreateAndContainsOperation(
-      valuesPerIteration,
-      "3 items",
-      () => threeItemsHashSet(),
-      () => threeItemsEnumSet())
-    testCreateAndContainsOperation(
-      valuesPerIteration,
-      "5 items",
-      () => fiveItemsHashSet(),
-      () => fiveItemsEnumSet())
-    testCreateAndContainsOperation(
-      valuesPerIteration,
-      s"${TableCapability.values().length} items",
-      () => allItemsHashSet(),
-      () => allItemsEnumSet())
+    testCreateAndContainsOperation(valuesPerIteration, "empty",
+      () => emptyHashSet(), () => emptyEnumSet())
+    testCreateAndContainsOperation(valuesPerIteration, "1 item",
+      () => oneItemHashSet(), () => oneItemEnumSet())
+    testCreateAndContainsOperation(valuesPerIteration, "3 items",
+      () => threeItemsHashSet(), () => threeItemsEnumSet())
+    testCreateAndContainsOperation(valuesPerIteration, "5 items",
+      () => fiveItemsHashSet(), () => fiveItemsEnumSet())
+    testCreateAndContainsOperation(valuesPerIteration, s"${TableCapability.values().length} items",
+      () => allItemsHashSet(), () => allItemsEnumSet())
   }
 }

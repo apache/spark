@@ -75,26 +75,24 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
    * Generate a VALUES clause with the given number of rows using basic literals.
    */
   private def generateValuesWithLiterals(numRows: Int = 10): String = {
-    val rows = (1 to numRows)
-      .map { i =>
-        val id = i
-        val firstName = s"'FirstName_$id'"
-        val lastName = s"'LastName_$id'"
-        val age = (20 + i % 50) // Just a simple pattern for age
-        val gender = if (i % 2 == 0) "'M'" else "'F'"
-        val email = s"'user_$id@example.com'"
-        val phoneNumber = s"'555-${1000 + i}'"
-        val address = s"'$id Fake St'"
-        val city = "'Anytown'"
-        val state = "'CA'"
-        val zipCode = "'12345'"
-        val country = "'USA'"
-        val registrationDate = s"'2021-${1 + i % 12}-01'" // Varying the month part of the date
+    val rows = (1 to numRows).map { i =>
+      val id = i
+      val firstName = s"'FirstName_$id'"
+      val lastName = s"'LastName_$id'"
+      val age = (20 + i % 50) // Just a simple pattern for age
+      val gender = if (i % 2 == 0) "'M'" else "'F'"
+      val email = s"'user_$id@example.com'"
+      val phoneNumber = s"'555-${1000 + i}'"
+      val address = s"'$id Fake St'"
+      val city = "'Anytown'"
+      val state = "'CA'"
+      val zipCode = "'12345'"
+      val country = "'USA'"
+      val registrationDate = s"'2021-${1 + i % 12}-01'" // Varying the month part of the date
 
-        s"($id, $firstName, $lastName, $age, $gender, $email, $phoneNumber," +
-          s" $address, $city, $state, $zipCode, $country, $registrationDate)"
-      }
-      .mkString(",\n")
+      s"($id, $firstName, $lastName, $age, $gender, $email, $phoneNumber," +
+        s" $address, $city, $state, $zipCode, $country, $registrationDate)"
+    }.mkString(",\n")
 
     s" VALUES $rows"
   }
@@ -103,8 +101,7 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
    * Traverse the plan and check for the presence of the given node type.
    */
   private def traversePlanAndCheckForNodeType[T <: LogicalPlan](
-      plan: LogicalPlan,
-      nodeType: Class[T]): Boolean = plan match {
+      plan: LogicalPlan, nodeType: Class[T]): Boolean = plan match {
     case node if nodeType.isInstance(node) => true
     case n: Project =>
       // If the plan node is a Project, we need to check the expressions in the project list
@@ -119,10 +116,9 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
    * Traverse the expression and check for the presence of the given node type.
    */
   private def traverseExpressionAndCheckForNodeType[T <: LogicalPlan](
-      expression: Expression,
-      nodeType: Class[T]): Boolean = expression match {
-    case scalarSubquery: ScalarSubquery =>
-      scalarSubquery.plan.exists(traversePlanAndCheckForNodeType(_, nodeType))
+        expression: Expression, nodeType: Class[T]): Boolean = expression match {
+    case scalarSubquery: ScalarSubquery => scalarSubquery.plan.exists(
+      traversePlanAndCheckForNodeType(_, nodeType))
     case _ =>
       expression.children.exists(traverseExpressionAndCheckForNodeType(_, nodeType))
   }
@@ -130,7 +126,8 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
   /**
    * Generate an INSERT INTO VALUES statement with both literals and expressions.
    */
-  private def generateInsertStatementsWithComplexExpressions(tableName: String): String = {
+  private def generateInsertStatementsWithComplexExpressions(
+      tableName: String): String = {
     s"""
       INSERT INTO $tableName (id, first_name, last_name, age, gender,
         email, phone_number, address, city, state, zip_code, country, registration_date) VALUES
@@ -153,13 +150,13 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
     val rowCount = 10
     var firstTableName: Option[String] = None
     Seq(true, false).foreach { eagerEvalOfUnresolvedInlineTableEnabled =>
+
       // Create a table with a randomly generated name.
       val tableName = createTable
 
       // Set the feature flag for the InsertIntoValues improvement.
-      withSQLConf(
-        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key ->
-          eagerEvalOfUnresolvedInlineTableEnabled.toString) {
+      withSQLConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key ->
+        eagerEvalOfUnresolvedInlineTableEnabled.toString) {
 
         // Generate an INSERT INTO VALUES statement.
         val sqlStatement = generateInsertStatementWithLiterals(tableName, rowCount)
@@ -179,8 +176,7 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
 
         // Double check that the insertion was successful.
         val countStar = spark.sql(s"SELECT count(*) FROM $tableName").collect()
-        assert(
-          countStar.head.getLong(0) == rowCount,
+        assert(countStar.head.getLong(0) == rowCount,
           "The number of rows in the table should match the number of rows inserted.")
 
         // Check that both insertions will produce equivalent tables.
@@ -202,9 +198,8 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
       val tableName = createTable
 
       // Set the feature flag for the InsertIntoValues improvement.
-      withSQLConf(
-        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key ->
-          eagerEvalOfUnresolvedInlineTableEnabled.toString) {
+      withSQLConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key ->
+        eagerEvalOfUnresolvedInlineTableEnabled.toString) {
 
         // Generate an INSERT INTO VALUES statement.
         val sqlStatement = generateInsertStatementsWithComplexExpressions(tableName)
@@ -225,9 +220,9 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
         if (firstTableName.isEmpty) {
           firstTableName = Some(tableName)
         } else {
-          val df1 = spark.table(firstTableName.get)
-          val df2 = spark.table(tableName)
-          checkAnswer(df1, df2)
+            val df1 = spark.table(firstTableName.get)
+            val df2 = spark.table(tableName)
+            checkAnswer(df1, df2)
         }
       }
     }
@@ -240,9 +235,8 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
       val tableName = createTable
 
       // Set the feature flag for the InsertIntoValues improvement.
-      withSQLConf(
-        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key ->
-          eagerEvalOfUnresolvedInlineTableEnabled.toString) {
+      withSQLConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key ->
+        eagerEvalOfUnresolvedInlineTableEnabled.toString) {
 
         // Generate an INSERT INTO VALUES statement that omits all columns
         // containing a DEFAULT value.
@@ -262,8 +256,8 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
         spark.sql(sqlStatement)
 
         // Verify that the default values are applied correctly.
-        val resultRow = spark
-          .sql(s"""
+        val resultRow = spark.sql(
+          s"""
         SELECT
           first_name,
           last_name,
@@ -276,30 +270,24 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
           zip_code,
           country,
           registration_date
-        FROM $tableName WHERE id = 1""")
-          .collect()
+        FROM $tableName WHERE id = 1""").collect()
 
         // Checking that the default values are applied correctly.
         assert(resultRow.head.getString(0) == "John", "Default name should be 'John'")
         assert(resultRow.head.getString(1) == "Doe", "Default last name should be 'Doe'")
         assert(resultRow.head.getString(2) == "M", "Default gender should be 'M'")
-        assert(
-          resultRow.head.getString(3) == "john.doe@databricks.com",
+        assert(resultRow.head.getString(3) == "john.doe@databricks.com",
           "Default email should be 'john.doe@databricks.com'")
-        assert(
-          resultRow.head.getString(4) == "555-555-5555",
+        assert(resultRow.head.getString(4) == "555-555-5555",
           "Default phone number should be '555-555-5555'")
-        assert(
-          resultRow.head.getString(5) == "123 John Doe St",
+        assert(resultRow.head.getString(5) == "123 John Doe St",
           "Default address should be '123 John Doe St'")
-        assert(
-          resultRow.head.getString(6) == "John Doe City",
+        assert(resultRow.head.getString(6) == "John Doe City",
           "Default city should be 'John Doe City'")
         assert(resultRow.head.getString(7) == "CA", "Default state should be 'CA'")
         assert(resultRow.head.getString(8) == "12345", "Default zip code should be '12345'")
         assert(resultRow.head.getString(9) == "USA", "Default country should be 'USA'")
-        assert(
-          resultRow.head.getString(10) == "2021-01-01",
+        assert(resultRow.head.getString(10) == "2021-01-01",
           "Default registration date should be '2021-01-01'")
 
         // Check that both insertions will produce equivalent tables.
@@ -319,9 +307,8 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
     val flagVals = Seq(true, false)
     flagVals.foreach { eagerEvalOfUnresolvedInlineTableEnabled =>
       // Set the feature flag for the InsertIntoValues improvement.
-      withSQLConf(
-        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key ->
-          eagerEvalOfUnresolvedInlineTableEnabled.toString) {
+      withSQLConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key ->
+        eagerEvalOfUnresolvedInlineTableEnabled.toString) {
 
         // Generate a subquery with a VALUES clause.
         val sqlStatement = s"SELECT * FROM (${generateValuesWithLiterals()});"
@@ -354,9 +341,8 @@ class InlineTableParsingImprovementsSuite extends QueryTest with SharedSparkSess
     val flagVals = Seq(true, false)
     flagVals.foreach { eagerEvalOfUnresolvedInlineTableEnabled =>
       // Set the feature flag for the InsertIntoValues improvement.
-      withSQLConf(
-        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key ->
-          eagerEvalOfUnresolvedInlineTableEnabled.toString) {
+      withSQLConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key ->
+        eagerEvalOfUnresolvedInlineTableEnabled.toString) {
 
         // Generate a subquery with a VALUES clause in the projection list.
         val sqlStatement = s"SELECT (SELECT COUNT(*) FROM ${generateValuesWithLiterals()});"

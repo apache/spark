@@ -31,10 +31,8 @@ class RatePerMicroBatchProviderSuite extends StreamTest {
   import testImplicits._
 
   test("RatePerMicroBatchProvider in registry") {
-    val ds = DataSource
-      .lookupDataSource("rate-micro-batch", spark.sessionState.conf)
-      .getConstructor()
-      .newInstance()
+    val ds = DataSource.lookupDataSource("rate-micro-batch", spark.sessionState.conf)
+      .getConstructor().newInstance()
     assert(ds.isInstanceOf[RatePerMicroBatchProvider], "Could not find rate-micro-batch source")
   }
 
@@ -55,7 +53,8 @@ class RatePerMicroBatchProviderSuite extends StreamTest {
       CheckLastBatch((10 until 20).map(v => new java.sql.Timestamp(1050L) -> v): _*),
       AdvanceManualClock(10),
       waitUntilBatchProcessed(clock),
-      CheckLastBatch((20 until 30).map(v => new java.sql.Timestamp(1100L) -> v): _*))
+      CheckLastBatch((20 until 30).map(v => new java.sql.Timestamp(1100L) -> v): _*)
+    )
   }
 
   test("restart") {
@@ -68,24 +67,22 @@ class RatePerMicroBatchProviderSuite extends StreamTest {
 
       val clock = new StreamManualClock
       testStream(input)(
-        StartStream(
-          checkpointLocation = dir.getAbsolutePath,
-          trigger = Trigger.ProcessingTime(10),
-          triggerClock = clock),
+        StartStream(checkpointLocation = dir.getAbsolutePath,
+          trigger = Trigger.ProcessingTime(10), triggerClock = clock),
         waitUntilBatchProcessed(clock),
         CheckLastBatch(0 until 10: _*),
         AdvanceManualClock(10),
         waitUntilBatchProcessed(clock),
         CheckLastBatch(10 until 20: _*),
-        StopStream)
+        StopStream
+      )
 
       testStream(input)(
-        StartStream(
-          checkpointLocation = dir.getAbsolutePath,
-          trigger = Trigger.ProcessingTime(10),
-          triggerClock = clock),
+        StartStream(checkpointLocation = dir.getAbsolutePath,
+          trigger = Trigger.ProcessingTime(10), triggerClock = clock),
         waitUntilBatchProcessed(clock),
-        CheckLastBatch(20 until 30: _*))
+        CheckLastBatch(20 until 30: _*)
+      )
     }
   }
 
@@ -108,31 +105,28 @@ class RatePerMicroBatchProviderSuite extends StreamTest {
 
       val clock = new StreamManualClock
       testStream(input)(
-        StartStream(
-          checkpointLocation = dir.getAbsolutePath,
-          trigger = Trigger.ProcessingTime(10),
-          triggerClock = clock),
+        StartStream(checkpointLocation = dir.getAbsolutePath,
+          trigger = Trigger.ProcessingTime(10), triggerClock = clock),
         waitUntilBatchProcessed(clock),
         CheckLastBatch(0 until 10: _*),
-        StopStream)
+        StopStream
+      )
 
       testStream(input)(
-        StartStream(
-          checkpointLocation = dir.getAbsolutePath,
-          trigger = triggerToTest,
+        StartStream(checkpointLocation = dir.getAbsolutePath, trigger = triggerToTest,
           triggerClock = clock),
         ProcessAllAvailable(),
         CheckLastBatch(10 until 20: _*),
-        StopStream)
+        StopStream
+      )
 
       testStream(input)(
-        StartStream(
-          checkpointLocation = dir.getAbsolutePath,
-          trigger = Trigger.ProcessingTime(10),
-          triggerClock = clock),
+        StartStream(checkpointLocation = dir.getAbsolutePath,
+          trigger = Trigger.ProcessingTime(10), triggerClock = clock),
         waitUntilBatchProcessed(clock),
         CheckLastBatch(20 until 30: _*),
-        StopStream)
+        StopStream
+      )
     }
   }
 
@@ -160,7 +154,8 @@ class RatePerMicroBatchProviderSuite extends StreamTest {
     testStream(input)(
       StartStream(trigger = Trigger.ProcessingTime(10), triggerClock = clock),
       waitUntilBatchProcessed(clock),
-      CheckLastBatch(0 until 6: _*))
+      CheckLastBatch(0 until 6: _*)
+    )
   }
 
   testQuietly("illegal option values") {
@@ -177,8 +172,7 @@ class RatePerMicroBatchProviderSuite extends StreamTest {
           stream = stream.option("rowsPerBatch", "1")
         }
 
-        stream
-          .load()
+        stream.load()
           .writeStream
           .format("console")
           .start()
@@ -195,9 +189,7 @@ class RatePerMicroBatchProviderSuite extends StreamTest {
     testIllegalOptionValue("numPartitions", "0", Seq("0", "numPartitions", "positive"))
 
     // RatePerMicroBatchProvider allows setting below options to 0
-    testIllegalOptionValue(
-      "advanceMillisPerBatch",
-      "-1",
+    testIllegalOptionValue("advanceMillisPerBatch", "-1",
       Seq("-1", "advanceMillisPerBatch", "non-negative"))
     testIllegalOptionValue("startTimestamp", "-1", Seq("-1", "startTimestamp", "non-negative"))
   }
@@ -215,9 +207,8 @@ class RatePerMicroBatchProviderSuite extends StreamTest {
       parameters = Map("provider" -> "RatePerMicroBatchProvider"))
   }
 
-  test(
-    "malformed state when the query is restarted with a newer" +
-      " timestamp and reprocess batch 0") {
+  test("malformed state when the query is restarted with a newer" +
+    " timestamp and reprocess batch 0") {
     withTempDir { ckpt =>
       var firstFailure = true
       def foreachBatchFn(df: DataFrame, batchId: Long): Unit = {
@@ -244,19 +235,20 @@ class RatePerMicroBatchProviderSuite extends StreamTest {
 
       val ex = intercept[StreamingQueryException] {
         spark.readStream
-          .format("rate-micro-batch")
-          .option("rowsPerBatch", "1")
-          .option("startTimestamp", System.currentTimeMillis().toString)
-          .load()
-          .writeStream
-          .option("checkpointLocation", ckpt.getAbsolutePath)
-          .foreachBatch(foreachBatchFn _)
-          .start()
-          .awaitTermination()
+         .format("rate-micro-batch")
+         .option("rowsPerBatch", "1")
+         .option("startTimestamp", System.currentTimeMillis().toString)
+         .load()
+         .writeStream
+         .option("checkpointLocation", ckpt.getAbsolutePath)
+         .foreachBatch(foreachBatchFn _)
+         .start()
+         .awaitTermination()
       }
       assert(
         ex.getCause.asInstanceOf[SparkThrowable].getCondition ==
-          "MALFORMED_STATE_IN_RATE_PER_MICRO_BATCH_SOURCE.INVALID_TIMESTAMP")
+        "MALFORMED_STATE_IN_RATE_PER_MICRO_BATCH_SOURCE.INVALID_TIMESTAMP"
+      )
     }
   }
 }

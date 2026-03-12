@@ -29,16 +29,8 @@ class RewriteAsOfJoinSuite extends PlanTest {
   test("simple") {
     val left = LocalRelation($"a".int, $"b".int, $"c".int)
     val right = LocalRelation($"a".int, $"b".int, $"d".int)
-    val query = AsOfJoin(
-      left,
-      right,
-      left.output(0),
-      right.output(0),
-      None,
-      Inner,
-      tolerance = None,
-      allowExactMatches = true,
-      direction = AsOfJoinDirection("backward"))
+    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
+      tolerance = None, allowExactMatches = true, direction = AsOfJoinDirection("backward"))
 
     val rewritten = RewriteAsOfJoin(query.analyze)
 
@@ -46,19 +38,18 @@ class RewriteAsOfJoinSuite extends PlanTest {
     val rightStruct = CreateStruct(right.output)
     val orderExpression = OuterReference(left.output(0)) - right.output(0)
     val nearestRight = MinBy(rightStruct, orderExpression)
-      .toAggregateExpression()
-      .as("__nearest_right__")
+      .toAggregateExpression().as("__nearest_right__")
 
     val scalarSubquery = left.select(
-      left.output :+ ScalarSubquery(right.where(filter).groupBy()(nearestRight), left.output)
-        .as("__right__"): _*)
+      left.output :+ ScalarSubquery(
+        right.where(filter).groupBy()(nearestRight),
+        left.output).as("__right__"): _*)
     val correctAnswer = scalarSubquery
       .where(scalarSubquery.output.last.isNotNull)
-      .select(
-        left.output :+
-          GetStructField(scalarSubquery.output.last, 0).as("a") :+
-          GetStructField(scalarSubquery.output.last, 1).as("b") :+
-          GetStructField(scalarSubquery.output.last, 2).as("d"): _*)
+      .select(left.output :+
+        GetStructField(scalarSubquery.output.last, 0).as("a") :+
+        GetStructField(scalarSubquery.output.last, 1).as("b") :+
+        GetStructField(scalarSubquery.output.last, 2).as("d"): _*)
 
     comparePlans(rewritten, correctAnswer, checkAnalysis = false)
   }
@@ -66,16 +57,9 @@ class RewriteAsOfJoinSuite extends PlanTest {
   test("condition") {
     val left = LocalRelation($"a".int, $"b".int, $"c".int)
     val right = LocalRelation($"a".int, $"b".int, $"d".int)
-    val query = AsOfJoin(
-      left,
-      right,
-      left.output(0),
-      right.output(0),
-      Some(left.output(1) === right.output(1)),
-      Inner,
-      tolerance = None,
-      allowExactMatches = true,
-      direction = AsOfJoinDirection("backward"))
+    val query = AsOfJoin(left, right, left.output(0), right.output(0),
+      Some(left.output(1) === right.output(1)), Inner,
+      tolerance = None, allowExactMatches = true, direction = AsOfJoinDirection("backward"))
 
     val rewritten = RewriteAsOfJoin(query.analyze)
 
@@ -84,19 +68,18 @@ class RewriteAsOfJoinSuite extends PlanTest {
     val rightStruct = CreateStruct(right.output)
     val orderExpression = OuterReference(left.output(0)) - right.output(0)
     val nearestRight = MinBy(rightStruct, orderExpression)
-      .toAggregateExpression()
-      .as("__nearest_right__")
+      .toAggregateExpression().as("__nearest_right__")
 
     val scalarSubquery = left.select(
-      left.output :+ ScalarSubquery(right.where(filter).groupBy()(nearestRight), left.output)
-        .as("__right__"): _*)
+      left.output :+ ScalarSubquery(
+        right.where(filter).groupBy()(nearestRight),
+        left.output).as("__right__"): _*)
     val correctAnswer = scalarSubquery
       .where(scalarSubquery.output.last.isNotNull)
-      .select(
-        left.output :+
-          GetStructField(scalarSubquery.output.last, 0).as("a") :+
-          GetStructField(scalarSubquery.output.last, 1).as("b") :+
-          GetStructField(scalarSubquery.output.last, 2).as("d"): _*)
+      .select(left.output :+
+        GetStructField(scalarSubquery.output.last, 0).as("a") :+
+        GetStructField(scalarSubquery.output.last, 1).as("b") :+
+        GetStructField(scalarSubquery.output.last, 2).as("d"): _*)
 
     comparePlans(rewritten, correctAnswer, checkAnalysis = false)
   }
@@ -104,16 +87,8 @@ class RewriteAsOfJoinSuite extends PlanTest {
   test("left outer") {
     val left = LocalRelation($"a".int, $"b".int, $"c".int)
     val right = LocalRelation($"a".int, $"b".int, $"d".int)
-    val query = AsOfJoin(
-      left,
-      right,
-      left.output(0),
-      right.output(0),
-      None,
-      Inner,
-      tolerance = None,
-      allowExactMatches = true,
-      direction = AsOfJoinDirection("backward"))
+    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
+      tolerance = None, allowExactMatches = true, direction = AsOfJoinDirection("backward"))
 
     val rewritten = RewriteAsOfJoin(query.analyze)
 
@@ -121,19 +96,18 @@ class RewriteAsOfJoinSuite extends PlanTest {
     val rightStruct = CreateStruct(right.output)
     val orderExpression = OuterReference(left.output(0)) - right.output(0)
     val nearestRight = MinBy(rightStruct, orderExpression)
-      .toAggregateExpression()
-      .as("__nearest_right__")
+      .toAggregateExpression().as("__nearest_right__")
 
     val scalarSubquery = left.select(
-      left.output :+ ScalarSubquery(right.where(filter).groupBy()(nearestRight), left.output)
-        .as("__right__"): _*)
+      left.output :+ ScalarSubquery(
+        right.where(filter).groupBy()(nearestRight),
+        left.output).as("__right__"): _*)
     val correctAnswer = scalarSubquery
       .where(scalarSubquery.output.last.isNotNull)
-      .select(
-        left.output :+
-          GetStructField(scalarSubquery.output.last, 0).as("a") :+
-          GetStructField(scalarSubquery.output.last, 1).as("b") :+
-          GetStructField(scalarSubquery.output.last, 2).as("d"): _*)
+      .select(left.output :+
+        GetStructField(scalarSubquery.output.last, 0).as("a") :+
+        GetStructField(scalarSubquery.output.last, 1).as("b") :+
+        GetStructField(scalarSubquery.output.last, 2).as("d"): _*)
 
     comparePlans(rewritten, correctAnswer, checkAnalysis = false)
   }
@@ -141,16 +115,8 @@ class RewriteAsOfJoinSuite extends PlanTest {
   test("tolerance") {
     val left = LocalRelation($"a".int, $"b".int, $"c".int)
     val right = LocalRelation($"a".int, $"b".int, $"d".int)
-    val query = AsOfJoin(
-      left,
-      right,
-      left.output(0),
-      right.output(0),
-      None,
-      Inner,
-      tolerance = Some(1),
-      allowExactMatches = true,
-      direction = AsOfJoinDirection("backward"))
+    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
+      tolerance = Some(1), allowExactMatches = true, direction = AsOfJoinDirection("backward"))
 
     val rewritten = RewriteAsOfJoin(query.analyze)
 
@@ -159,19 +125,18 @@ class RewriteAsOfJoinSuite extends PlanTest {
     val rightStruct = CreateStruct(right.output)
     val orderExpression = OuterReference(left.output(0)) - right.output(0)
     val nearestRight = MinBy(rightStruct, orderExpression)
-      .toAggregateExpression()
-      .as("__nearest_right__")
+      .toAggregateExpression().as("__nearest_right__")
 
     val scalarSubquery = left.select(
-      left.output :+ ScalarSubquery(right.where(filter).groupBy()(nearestRight), left.output)
-        .as("__right__"): _*)
+      left.output :+ ScalarSubquery(
+        right.where(filter).groupBy()(nearestRight),
+        left.output).as("__right__"): _*)
     val correctAnswer = scalarSubquery
       .where(scalarSubquery.output.last.isNotNull)
-      .select(
-        left.output :+
-          GetStructField(scalarSubquery.output.last, 0).as("a") :+
-          GetStructField(scalarSubquery.output.last, 1).as("b") :+
-          GetStructField(scalarSubquery.output.last, 2).as("d"): _*)
+      .select(left.output :+
+        GetStructField(scalarSubquery.output.last, 0).as("a") :+
+        GetStructField(scalarSubquery.output.last, 1).as("b") :+
+        GetStructField(scalarSubquery.output.last, 2).as("d"): _*)
 
     comparePlans(rewritten, correctAnswer, checkAnalysis = false)
   }
@@ -179,16 +144,8 @@ class RewriteAsOfJoinSuite extends PlanTest {
   test("allowExactMatches = false") {
     val left = LocalRelation($"a".int, $"b".int, $"c".int)
     val right = LocalRelation($"a".int, $"b".int, $"d".int)
-    val query = AsOfJoin(
-      left,
-      right,
-      left.output(0),
-      right.output(0),
-      None,
-      LeftOuter,
-      tolerance = None,
-      allowExactMatches = false,
-      direction = AsOfJoinDirection("backward"))
+    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, LeftOuter,
+      tolerance = None, allowExactMatches = false, direction = AsOfJoinDirection("backward"))
 
     val rewritten = RewriteAsOfJoin(query.analyze)
 
@@ -196,18 +153,17 @@ class RewriteAsOfJoinSuite extends PlanTest {
     val rightStruct = CreateStruct(right.output)
     val orderExpression = OuterReference(left.output(0)) - right.output(0)
     val nearestRight = MinBy(rightStruct, orderExpression)
-      .toAggregateExpression()
-      .as("__nearest_right__")
+      .toAggregateExpression().as("__nearest_right__")
 
     val scalarSubquery = left.select(
-      left.output :+ ScalarSubquery(right.where(filter).groupBy()(nearestRight), left.output)
-        .as("__right__"): _*)
+      left.output :+ ScalarSubquery(
+        right.where(filter).groupBy()(nearestRight),
+        left.output).as("__right__"): _*)
     val correctAnswer = scalarSubquery
-      .select(
-        left.output :+
-          GetStructField(scalarSubquery.output.last, 0).as("a") :+
-          GetStructField(scalarSubquery.output.last, 1).as("b") :+
-          GetStructField(scalarSubquery.output.last, 2).as("d"): _*)
+      .select(left.output :+
+        GetStructField(scalarSubquery.output.last, 0).as("a") :+
+        GetStructField(scalarSubquery.output.last, 1).as("b") :+
+        GetStructField(scalarSubquery.output.last, 2).as("d"): _*)
 
     comparePlans(rewritten, correctAnswer, checkAnalysis = false)
   }
@@ -215,16 +171,8 @@ class RewriteAsOfJoinSuite extends PlanTest {
   test("tolerance & allowExactMatches = false") {
     val left = LocalRelation($"a".int, $"b".int, $"c".int)
     val right = LocalRelation($"a".int, $"b".int, $"d".int)
-    val query = AsOfJoin(
-      left,
-      right,
-      left.output(0),
-      right.output(0),
-      None,
-      Inner,
-      tolerance = Some(1),
-      allowExactMatches = false,
-      direction = AsOfJoinDirection("backward"))
+    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
+      tolerance = Some(1), allowExactMatches = false, direction = AsOfJoinDirection("backward"))
 
     val rewritten = RewriteAsOfJoin(query.analyze)
 
@@ -233,19 +181,18 @@ class RewriteAsOfJoinSuite extends PlanTest {
     val rightStruct = CreateStruct(right.output)
     val orderExpression = OuterReference(left.output(0)) - right.output(0)
     val nearestRight = MinBy(rightStruct, orderExpression)
-      .toAggregateExpression()
-      .as("__nearest_right__")
+      .toAggregateExpression().as("__nearest_right__")
 
     val scalarSubquery = left.select(
-      left.output :+ ScalarSubquery(right.where(filter).groupBy()(nearestRight), left.output)
-        .as("__right__"): _*)
+      left.output :+ ScalarSubquery(
+        right.where(filter).groupBy()(nearestRight),
+        left.output).as("__right__"): _*)
     val correctAnswer = scalarSubquery
       .where(scalarSubquery.output.last.isNotNull)
-      .select(
-        left.output :+
-          GetStructField(scalarSubquery.output.last, 0).as("a") :+
-          GetStructField(scalarSubquery.output.last, 1).as("b") :+
-          GetStructField(scalarSubquery.output.last, 2).as("d"): _*)
+      .select(left.output :+
+        GetStructField(scalarSubquery.output.last, 0).as("a") :+
+        GetStructField(scalarSubquery.output.last, 1).as("b") :+
+        GetStructField(scalarSubquery.output.last, 2).as("d"): _*)
 
     comparePlans(rewritten, correctAnswer, checkAnalysis = false)
   }
@@ -253,16 +200,8 @@ class RewriteAsOfJoinSuite extends PlanTest {
   test("direction = forward") {
     val left = LocalRelation($"a".int, $"b".int, $"c".int)
     val right = LocalRelation($"a".int, $"b".int, $"d".int)
-    val query = AsOfJoin(
-      left,
-      right,
-      left.output(0),
-      right.output(0),
-      None,
-      Inner,
-      tolerance = None,
-      allowExactMatches = true,
-      direction = AsOfJoinDirection("forward"))
+    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
+      tolerance = None, allowExactMatches = true, direction = AsOfJoinDirection("forward"))
 
     val rewritten = RewriteAsOfJoin(query.analyze)
 
@@ -270,19 +209,18 @@ class RewriteAsOfJoinSuite extends PlanTest {
     val rightStruct = CreateStruct(right.output)
     val orderExpression = right.output(0) - OuterReference(left.output(0))
     val nearestRight = MinBy(rightStruct, orderExpression)
-      .toAggregateExpression()
-      .as("__nearest_right__")
+      .toAggregateExpression().as("__nearest_right__")
 
     val scalarSubquery = left.select(
-      left.output :+ ScalarSubquery(right.where(filter).groupBy()(nearestRight), left.output)
-        .as("__right__"): _*)
+      left.output :+ ScalarSubquery(
+        right.where(filter).groupBy()(nearestRight),
+        left.output).as("__right__"): _*)
     val correctAnswer = scalarSubquery
       .where(scalarSubquery.output.last.isNotNull)
-      .select(
-        left.output :+
-          GetStructField(scalarSubquery.output.last, 0).as("a") :+
-          GetStructField(scalarSubquery.output.last, 1).as("b") :+
-          GetStructField(scalarSubquery.output.last, 2).as("d"): _*)
+      .select(left.output :+
+        GetStructField(scalarSubquery.output.last, 0).as("a") :+
+        GetStructField(scalarSubquery.output.last, 1).as("b") :+
+        GetStructField(scalarSubquery.output.last, 2).as("d"): _*)
 
     comparePlans(rewritten, correctAnswer, checkAnalysis = false)
   }
@@ -290,39 +228,29 @@ class RewriteAsOfJoinSuite extends PlanTest {
   test("direction = nearest") {
     val left = LocalRelation($"a".int, $"b".int, $"c".int)
     val right = LocalRelation($"a".int, $"b".int, $"d".int)
-    val query = AsOfJoin(
-      left,
-      right,
-      left.output(0),
-      right.output(0),
-      None,
-      Inner,
-      tolerance = None,
-      allowExactMatches = true,
-      direction = AsOfJoinDirection("nearest"))
+    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
+      tolerance = None, allowExactMatches = true, direction = AsOfJoinDirection("nearest"))
 
     val rewritten = RewriteAsOfJoin(query.analyze)
 
     val filter = true
     val rightStruct = CreateStruct(right.output)
-    val orderExpression = If(
-      OuterReference(left.output(0)) > right.output(0),
+    val orderExpression = If(OuterReference(left.output(0)) > right.output(0),
       OuterReference(left.output(0)) - right.output(0),
       right.output(0) - OuterReference(left.output(0)))
     val nearestRight = MinBy(rightStruct, orderExpression)
-      .toAggregateExpression()
-      .as("__nearest_right__")
+      .toAggregateExpression().as("__nearest_right__")
 
     val scalarSubquery = left.select(
-      left.output :+ ScalarSubquery(right.where(filter).groupBy()(nearestRight), left.output)
-        .as("__right__"): _*)
+      left.output :+ ScalarSubquery(
+        right.where(filter).groupBy()(nearestRight),
+        left.output).as("__right__"): _*)
     val correctAnswer = scalarSubquery
       .where(scalarSubquery.output.last.isNotNull)
-      .select(
-        left.output :+
-          GetStructField(scalarSubquery.output.last, 0).as("a") :+
-          GetStructField(scalarSubquery.output.last, 1).as("b") :+
-          GetStructField(scalarSubquery.output.last, 2).as("d"): _*)
+      .select(left.output :+
+        GetStructField(scalarSubquery.output.last, 0).as("a") :+
+        GetStructField(scalarSubquery.output.last, 1).as("b") :+
+        GetStructField(scalarSubquery.output.last, 2).as("d"): _*)
 
     comparePlans(rewritten, correctAnswer, checkAnalysis = false)
   }
@@ -330,16 +258,8 @@ class RewriteAsOfJoinSuite extends PlanTest {
   test("tolerance & allowExactMatches = false & direction = nearest") {
     val left = LocalRelation($"a".int, $"b".int, $"c".int)
     val right = LocalRelation($"a".int, $"b".int, $"d".int)
-    val query = AsOfJoin(
-      left,
-      right,
-      left.output(0),
-      right.output(0),
-      None,
-      Inner,
-      tolerance = Some(1),
-      allowExactMatches = false,
-      direction = AsOfJoinDirection("nearest"))
+    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
+      tolerance = Some(1), allowExactMatches = false, direction = AsOfJoinDirection("nearest"))
 
     val rewritten = RewriteAsOfJoin(query.analyze)
 
@@ -347,24 +267,22 @@ class RewriteAsOfJoinSuite extends PlanTest {
       ((right.output(0) > OuterReference(left.output(0)) - 1) &&
         (right.output(0) < OuterReference(left.output(0)) + 1))
     val rightStruct = CreateStruct(right.output)
-    val orderExpression = If(
-      OuterReference(left.output(0)) > right.output(0),
+    val orderExpression = If(OuterReference(left.output(0)) > right.output(0),
       OuterReference(left.output(0)) - right.output(0),
       right.output(0) - OuterReference(left.output(0)))
     val nearestRight = MinBy(rightStruct, orderExpression)
-      .toAggregateExpression()
-      .as("__nearest_right__")
+      .toAggregateExpression().as("__nearest_right__")
 
     val scalarSubquery = left.select(
-      left.output :+ ScalarSubquery(right.where(filter).groupBy()(nearestRight), left.output)
-        .as("__right__"): _*)
+      left.output :+ ScalarSubquery(
+        right.where(filter).groupBy()(nearestRight),
+        left.output).as("__right__"): _*)
     val correctAnswer = scalarSubquery
       .where(scalarSubquery.output.last.isNotNull)
-      .select(
-        left.output :+
-          GetStructField(scalarSubquery.output.last, 0).as("a") :+
-          GetStructField(scalarSubquery.output.last, 1).as("b") :+
-          GetStructField(scalarSubquery.output.last, 2).as("d"): _*)
+      .select(left.output :+
+        GetStructField(scalarSubquery.output.last, 0).as("a") :+
+        GetStructField(scalarSubquery.output.last, 1).as("b") :+
+        GetStructField(scalarSubquery.output.last, 2).as("d"): _*)
 
     comparePlans(rewritten, correctAnswer, checkAnalysis = false)
   }

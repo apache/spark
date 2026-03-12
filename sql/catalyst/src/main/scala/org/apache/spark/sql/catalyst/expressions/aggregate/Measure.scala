@@ -29,8 +29,7 @@ import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType}
 // the measure (as input argument).
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage =
-    "_FUNC_(expr) - this function is used and can only be used to calculate a measure defined in a metric view.",
+  usage = "_FUNC_(expr) - this function is used and can only be used to calculate a measure defined in a metric view.",
   examples = """
     Examples:
       > SELECT dimension_col, _FUNC_(measure_col)
@@ -43,8 +42,7 @@ import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType}
   since = "4.2.0")
 // scalastyle:on line.size.limit
 case class Measure(child: Expression)
-    extends UnevaluableAggregateFunc
-    with ExpectsInputTypes
+  extends UnevaluableAggregateFunc with ExpectsInputTypes
     with UnaryLike[Expression] {
 
   override protected def withNewChildInternal(newChild: Expression): Measure =

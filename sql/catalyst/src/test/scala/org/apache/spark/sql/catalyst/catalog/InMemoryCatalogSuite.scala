@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+
 /** Test suite for the [[InMemoryCatalog]]. */
 class InMemoryCatalogSuite extends ExternalCatalogSuite {
 

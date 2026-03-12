@@ -24,12 +24,11 @@ import org.apache.spark.sql.execution.command
 
 /**
  * This base suite contains unified tests for the `ALTER TABLE .. RENAME` command that check V1
- * table catalogs. The tests that cannot run for all V1 catalogs are located in more specific test
- * suites:
+ * table catalogs. The tests that cannot run for all V1 catalogs are located in more
+ * specific test suites:
  *
  *   - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.AlterTableRenameSuite`
- *   - V1 Hive External catalog:
- *     `org.apache.spark.sql.hive.execution.command.AlterTableRenameSuite`
+ *   - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.AlterTableRenameSuite`
  */
 trait AlterTableRenameSuiteBase extends command.AlterTableRenameSuiteBase with QueryErrorsBase {
   test("destination database is different") {
@@ -43,7 +42,8 @@ trait AlterTableRenameSuiteBase extends command.AlterTableRenameSuiteBase with Q
             sql(s"ALTER TABLE $src RENAME TO dst_ns.dst_tbl")
           },
           condition = "_LEGACY_ERROR_TEMP_1073",
-          parameters = Map("db" -> "src_ns", "newDb" -> "dst_ns"))
+          parameters = Map("db" -> "src_ns", "newDb" -> "dst_ns")
+        )
       }
     }
   }
@@ -76,14 +76,16 @@ trait AlterTableRenameSuiteBase extends command.AlterTableRenameSuiteBase with Q
             sql(s"ALTER TABLE $src RENAME TO ns.dst_tbl")
           },
           condition = "LOCATION_ALREADY_EXISTS",
-          parameters = Map("location" -> s"'$dst_dir'", "identifier" -> toSQLId(dst)))
+          parameters = Map(
+            "location" -> s"'$dst_dir'",
+            "identifier" -> toSQLId(dst)))
       }
     }
   }
 }
 
 /**
- * The class contains tests for the `ALTER TABLE .. RENAME` command to check V1 In-Memory table
- * catalog.
+ * The class contains tests for the `ALTER TABLE .. RENAME` command to check
+ * V1 In-Memory table catalog.
  */
 class AlterTableRenameSuite extends AlterTableRenameSuiteBase with CommandSuiteBase

@@ -27,7 +27,10 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.test.SharedSparkSession
 
 class AliasResolverSuite extends QueryTest with SharedSparkSession {
-  private val table = LocalRelation.fromExternalRows(Seq("a".attr.int), Seq(Row(1)))
+  private val table = LocalRelation.fromExternalRows(
+    Seq("a".attr.int),
+    Seq(Row(1))
+  )
 
   test("Implicit alias resolution") {
     val query = table.select("a".attr + 1)
@@ -64,11 +67,12 @@ class AliasResolverSuite extends QueryTest with SharedSparkSession {
       expectedResolverRunnerResult: LogicalPlan): Unit = {
     val resolver = new Resolver(
       catalogManager = spark.sessionState.catalogManager,
-      extensions = spark.sessionState.analyzer.singlePassResolverExtensions)
-    val resolverRunner = new ResolverRunner(
-      new Resolver(
-        catalogManager = spark.sessionState.catalogManager,
-        extensions = spark.sessionState.analyzer.singlePassResolverExtensions))
+      extensions = spark.sessionState.analyzer.singlePassResolverExtensions
+    )
+    val resolverRunner = new ResolverRunner(new Resolver(
+      catalogManager = spark.sessionState.catalogManager,
+      extensions = spark.sessionState.analyzer.singlePassResolverExtensions
+    ))
 
     val resolverResult = resolver.resolve(query)
     val resolverRunnerResult = resolverRunner.resolve(query)

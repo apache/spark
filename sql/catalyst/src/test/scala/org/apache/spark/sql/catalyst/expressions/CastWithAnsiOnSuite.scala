@@ -54,19 +54,11 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     // Integer types: suggest config change
     val configParams = Map(
       "config" -> toSQLConf(SQLConf.ANSI_ENABLED.key),
-      "configVal" -> toSQLValue("false", StringType))
+      "configVal" -> toSQLValue("false", StringType)
+    )
+    checkNumericTypeCast(1.toByte, ByteType, BinaryType, "CAST_WITH_CONF_SUGGESTION", configParams)
     checkNumericTypeCast(
-      1.toByte,
-      ByteType,
-      BinaryType,
-      "CAST_WITH_CONF_SUGGESTION",
-      configParams)
-    checkNumericTypeCast(
-      1.toShort,
-      ShortType,
-      BinaryType,
-      "CAST_WITH_CONF_SUGGESTION",
-      configParams)
+      1.toShort, ShortType, BinaryType, "CAST_WITH_CONF_SUGGESTION", configParams)
     checkNumericTypeCast(1, IntegerType, BinaryType, "CAST_WITH_CONF_SUGGESTION", configParams)
     checkNumericTypeCast(1L, LongType, BinaryType, "CAST_WITH_CONF_SUGGESTION", configParams)
 
@@ -81,29 +73,23 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     assert(Seq(IntegerType, ShortType, ByteType).contains(dt))
     Seq(Int.MaxValue + 1L, Int.MinValue - 1L).foreach { value =>
       checkExceptionInExpression[ArithmeticException](cast(value, dt), "overflow")
+      checkExceptionInExpression[ArithmeticException](cast(Decimal(value.toString), dt), "overflow")
       checkExceptionInExpression[ArithmeticException](
-        cast(Decimal(value.toString), dt),
-        "overflow")
+        cast(Literal(value * 1.5f, FloatType), dt), "overflow")
       checkExceptionInExpression[ArithmeticException](
-        cast(Literal(value * 1.5f, FloatType), dt),
-        "overflow")
-      checkExceptionInExpression[ArithmeticException](
-        cast(Literal(value * 1.0, DoubleType), dt),
-        "overflow")
+        cast(Literal(value * 1.0, DoubleType), dt), "overflow")
     }
   }
 
   private def testLongMaxAndMin(dt: DataType): Unit = {
     assert(Seq(LongType, IntegerType).contains(dt))
-    Seq(Decimal(Long.MaxValue) + Decimal(1), Decimal(Long.MinValue) - Decimal(1)).foreach {
-      value =>
-        checkExceptionInExpression[ArithmeticException](cast(value, dt), "overflow")
-        checkExceptionInExpression[ArithmeticException](
-          cast((value * Decimal(1.1)).toFloat, dt),
-          "overflow")
-        checkExceptionInExpression[ArithmeticException](
-          cast((value * Decimal(1.1)).toDouble, dt),
-          "overflow")
+    Seq(Decimal(Long.MaxValue) + Decimal(1), Decimal(Long.MinValue) - Decimal(1)).foreach { value =>
+      checkExceptionInExpression[ArithmeticException](
+        cast(value, dt), "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        cast((value * Decimal(1.1)).toFloat, dt), "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        cast((value * Decimal(1.1)).toDouble, dt), "overflow")
     }
   }
 
@@ -112,11 +98,9 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     Seq(Byte.MaxValue + 1, Byte.MinValue - 1).foreach { value =>
       checkExceptionInExpression[ArithmeticException](cast(value, ByteType), "overflow")
       checkExceptionInExpression[ArithmeticException](
-        cast(Literal(value.toFloat, FloatType), ByteType),
-        "overflow")
+        cast(Literal(value.toFloat, FloatType), ByteType), "overflow")
       checkExceptionInExpression[ArithmeticException](
-        cast(Literal(value.toDouble, DoubleType), ByteType),
-        "overflow")
+        cast(Literal(value.toDouble, DoubleType), ByteType), "overflow")
     }
 
     Seq(Byte.MaxValue, 0.toByte, Byte.MinValue).foreach { value =>
@@ -133,11 +117,9 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     Seq(Short.MaxValue + 1, Short.MinValue - 1).foreach { value =>
       checkExceptionInExpression[ArithmeticException](cast(value, ShortType), "overflow")
       checkExceptionInExpression[ArithmeticException](
-        cast(Literal(value.toFloat, FloatType), ShortType),
-        "overflow")
+        cast(Literal(value.toFloat, FloatType), ShortType), "overflow")
       checkExceptionInExpression[ArithmeticException](
-        cast(Literal(value.toDouble, DoubleType), ShortType),
-        "overflow")
+        cast(Literal(value.toDouble, DoubleType), ShortType), "overflow")
     }
 
     Seq(Short.MaxValue, 0.toShort, Short.MinValue).foreach { value =>
@@ -159,8 +141,8 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
       checkEvaluation(cast(Decimal(value.toString), IntegerType), value)
       checkEvaluation(cast(Literal(value * 1.0, DoubleType), IntegerType), value)
     }
-    checkEvaluation(cast(Int.MaxValue + 0.9d, IntegerType), Int.MaxValue)
-    checkEvaluation(cast(Int.MinValue - 0.9d, IntegerType), Int.MinValue)
+    checkEvaluation(cast(Int.MaxValue + 0.9D, IntegerType), Int.MaxValue)
+    checkEvaluation(cast(Int.MinValue - 0.9D, IntegerType), Int.MinValue)
   }
 
   test("ANSI mode: Throw exception on casting out-of-range value to long type") {
@@ -171,22 +153,19 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
       checkEvaluation(cast(value.toString, LongType), value)
       checkEvaluation(cast(Decimal(value.toString), LongType), value)
     }
-    checkEvaluation(cast(Long.MaxValue + 0.9f, LongType), Long.MaxValue)
-    checkEvaluation(cast(Long.MinValue - 0.9f, LongType), Long.MinValue)
-    checkEvaluation(cast(Long.MaxValue + 0.9d, LongType), Long.MaxValue)
-    checkEvaluation(cast(Long.MinValue - 0.9d, LongType), Long.MinValue)
+    checkEvaluation(cast(Long.MaxValue + 0.9F, LongType), Long.MaxValue)
+    checkEvaluation(cast(Long.MinValue - 0.9F, LongType), Long.MinValue)
+    checkEvaluation(cast(Long.MaxValue + 0.9D, LongType), Long.MaxValue)
+    checkEvaluation(cast(Long.MinValue - 0.9D, LongType), Long.MinValue)
   }
 
   test("ANSI mode: Throw exception on casting out-of-range value to decimal type") {
     checkExceptionInExpression[ArithmeticException](
-      cast(Literal("134.12"), DecimalType(3, 2)),
-      "cannot be represented")
+      cast(Literal("134.12"), DecimalType(3, 2)), "cannot be represented")
     checkExceptionInExpression[ArithmeticException](
-      cast(Literal(BigDecimal(134.12)), DecimalType(3, 2)),
-      "cannot be represented")
+      cast(Literal(BigDecimal(134.12)), DecimalType(3, 2)), "cannot be represented")
     checkExceptionInExpression[ArithmeticException](
-      cast(Literal(134.12), DecimalType(3, 2)),
-      "cannot be represented")
+      cast(Literal(134.12), DecimalType(3, 2)), "cannot be represented")
   }
 
   test("ANSI mode: disallow type conversions between Numeric types and Date type") {
@@ -220,12 +199,15 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     checkInvalidCastFromNumericTypeToBinaryType()
     val binaryLiteral = Literal(new Array[Byte](1.toByte), BinaryType)
     numericTypes.foreach { numericType =>
-      assert(
-        cast(binaryLiteral, numericType).checkInputDataTypes() ==
-          DataTypeMismatch(
-            errorSubClass = "CAST_WITHOUT_SUGGESTION",
-            messageParameters =
-              Map("srcType" -> "\"BINARY\"", "targetType" -> toSQLType(numericType))))
+      assert(cast(binaryLiteral, numericType).checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "CAST_WITHOUT_SUGGESTION",
+          messageParameters = Map(
+            "srcType" -> "\"BINARY\"",
+            "targetType" -> toSQLType(numericType)
+          )
+        )
+      )
     }
   }
 
@@ -239,14 +221,16 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     val arrayResult = cast(arrayIntLiteral, arrayBinaryType).checkInputDataTypes()
     evalMode match {
       case EvalMode.ANSI =>
-        assert(
-          arrayResult ==
-            DataTypeMismatch(
-              errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
-              messageParameters = Map(
-                "srcType" -> toSQLType(arrayIntType),
-                "targetType" -> toSQLType(arrayBinaryType),
-                "functionNames" -> "`try_cast`")))
+        assert(arrayResult ==
+          DataTypeMismatch(
+            errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
+            messageParameters = Map(
+              "srcType" -> toSQLType(arrayIntType),
+              "targetType" -> toSQLType(arrayBinaryType),
+              "functionNames" -> "`try_cast`"
+            )
+          )
+        )
       case _ =>
     }
   }
@@ -257,48 +241,49 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     val sourceArrayType = ArrayType(VariantType, containsNull = false)
     val targetArrayType = ArrayType(StringType, containsNull = false)
     val variantArray = Literal.create(Seq(variantVal), sourceArrayType)
-    assert(
-      cast(variantArray, targetArrayType).checkInputDataTypes() == DataTypeMismatch(
-        errorSubClass = "CAST_WITHOUT_SUGGESTION",
-        messageParameters = Map(
-          "srcType" -> toSQLType(sourceArrayType),
-          "targetType" -> toSQLType(targetArrayType))))
+    assert(cast(variantArray, targetArrayType).checkInputDataTypes() == DataTypeMismatch(
+      errorSubClass = "CAST_WITHOUT_SUGGESTION",
+      messageParameters = Map(
+        "srcType" -> toSQLType(sourceArrayType),
+        "targetType" -> toSQLType(targetArrayType)
+      )
+    ))
     // make sure containsNull = true works
     val targetArrayType2 = ArrayType(StringType, containsNull = true)
-    assert(
-      cast(variantArray, targetArrayType2).checkInputDataTypes() ==
-        TypeCheckResult.TypeCheckSuccess)
+    assert(cast(variantArray, targetArrayType2).checkInputDataTypes() ==
+      TypeCheckResult.TypeCheckSuccess)
 
     // Struct
     val sourceStructType = StructType(Array(StructField("v", VariantType, nullable = false)))
     val targetStructType = StructType(Array(StructField("v", StringType, nullable = false)))
     val variantStruct = Literal.create(Row(variantVal), sourceStructType)
-    assert(
-      cast(variantStruct, targetStructType).checkInputDataTypes() == DataTypeMismatch(
-        errorSubClass = "CAST_WITHOUT_SUGGESTION",
-        messageParameters = Map(
-          "srcType" -> toSQLType(sourceStructType),
-          "targetType" -> toSQLType(targetStructType))))
+    assert(cast(variantStruct, targetStructType).checkInputDataTypes() == DataTypeMismatch(
+      errorSubClass = "CAST_WITHOUT_SUGGESTION",
+      messageParameters = Map(
+        "srcType" -> toSQLType(sourceStructType),
+        "targetType" -> toSQLType(targetStructType)
+      )
+    ))
     // make sure nullable = true works
     val targetStructType2 = StructType(Array(StructField("v", StringType, nullable = true)))
-    assert(
-      cast(variantStruct, targetStructType2).checkInputDataTypes() ==
-        TypeCheckResult.TypeCheckSuccess)
+    assert(cast(variantStruct, targetStructType2).checkInputDataTypes() ==
+      TypeCheckResult.TypeCheckSuccess)
 
     // Map
     val sourceMapType = MapType(StringType, VariantType, valueContainsNull = false)
     val targetMapType = MapType(StringType, StringType, valueContainsNull = false)
     val variantMap = Literal.create(Map("k" -> variantVal), sourceMapType)
-    assert(
-      cast(variantMap, targetMapType).checkInputDataTypes() == DataTypeMismatch(
-        errorSubClass = "CAST_WITHOUT_SUGGESTION",
-        messageParameters =
-          Map("srcType" -> toSQLType(sourceMapType), "targetType" -> toSQLType(targetMapType))))
+    assert(cast(variantMap, targetMapType).checkInputDataTypes() == DataTypeMismatch(
+      errorSubClass = "CAST_WITHOUT_SUGGESTION",
+      messageParameters = Map(
+        "srcType" -> toSQLType(sourceMapType),
+        "targetType" -> toSQLType(targetMapType)
+      )
+    ))
     // make sure valueContainsNull = true works
     val targetMapType2 = MapType(StringType, StringType, valueContainsNull = true)
-    assert(
-      cast(variantMap, targetMapType2).checkInputDataTypes() ==
-        TypeCheckResult.TypeCheckSuccess)
+    assert(cast(variantMap, targetMapType2).checkInputDataTypes() ==
+      TypeCheckResult.TypeCheckSuccess)
   }
 
   test("ANSI mode: disallow type conversions between Datatime types and Boolean types") {
@@ -306,22 +291,27 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     val checkResult1 = cast(timestampLiteral, BooleanType).checkInputDataTypes()
     evalMode match {
       case EvalMode.ANSI =>
-        assert(
-          checkResult1 ==
-            DataTypeMismatch(
-              errorSubClass = "CAST_WITH_CONF_SUGGESTION",
-              messageParameters = Map(
-                "srcType" -> "\"TIMESTAMP\"",
-                "targetType" -> "\"BOOLEAN\"",
-                "config" -> "\"spark.sql.ansi.enabled\"",
-                "configVal" -> "'false'")))
+        assert(checkResult1 ==
+          DataTypeMismatch(
+            errorSubClass = "CAST_WITH_CONF_SUGGESTION",
+            messageParameters = Map(
+              "srcType" -> "\"TIMESTAMP\"",
+              "targetType" -> "\"BOOLEAN\"",
+              "config" -> "\"spark.sql.ansi.enabled\"",
+              "configVal" -> "'false'"
+            )
+          )
+        )
       case EvalMode.TRY =>
-        assert(
-          checkResult1 ==
-            DataTypeMismatch(
-              errorSubClass = "CAST_WITHOUT_SUGGESTION",
-              messageParameters =
-                Map("srcType" -> "\"TIMESTAMP\"", "targetType" -> "\"BOOLEAN\"")))
+        assert(checkResult1 ==
+          DataTypeMismatch(
+            errorSubClass = "CAST_WITHOUT_SUGGESTION",
+            messageParameters = Map(
+              "srcType" -> "\"TIMESTAMP\"",
+              "targetType" -> "\"BOOLEAN\""
+            )
+          )
+        )
       case _ =>
     }
 
@@ -329,21 +319,27 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     val checkResult2 = cast(dateLiteral, BooleanType).checkInputDataTypes()
     evalMode match {
       case EvalMode.ANSI =>
-        assert(
-          checkResult2 ==
-            DataTypeMismatch(
-              errorSubClass = "CAST_WITH_CONF_SUGGESTION",
-              messageParameters = Map(
-                "srcType" -> "\"DATE\"",
-                "targetType" -> "\"BOOLEAN\"",
-                "config" -> "\"spark.sql.ansi.enabled\"",
-                "configVal" -> "'false'")))
+        assert(checkResult2 ==
+          DataTypeMismatch(
+            errorSubClass = "CAST_WITH_CONF_SUGGESTION",
+            messageParameters = Map(
+              "srcType" -> "\"DATE\"",
+              "targetType" -> "\"BOOLEAN\"",
+              "config" -> "\"spark.sql.ansi.enabled\"",
+              "configVal" -> "'false'"
+            )
+          )
+        )
       case EvalMode.TRY =>
-        assert(
-          checkResult2 ==
-            DataTypeMismatch(
-              errorSubClass = "CAST_WITHOUT_SUGGESTION",
-              messageParameters = Map("srcType" -> "\"DATE\"", "targetType" -> "\"BOOLEAN\"")))
+        assert(checkResult2 ==
+          DataTypeMismatch(
+            errorSubClass = "CAST_WITHOUT_SUGGESTION",
+            messageParameters = Map(
+              "srcType" -> "\"DATE\"",
+              "targetType" -> "\"BOOLEAN\""
+            )
+          )
+        )
       case _ =>
     }
 
@@ -351,57 +347,69 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     val checkResult3 = cast(booleanLiteral, TimestampType).checkInputDataTypes()
     evalMode match {
       case EvalMode.ANSI =>
-        assert(
-          checkResult3 ==
-            DataTypeMismatch(
-              errorSubClass = "CAST_WITH_CONF_SUGGESTION",
-              messageParameters = Map(
-                "srcType" -> "\"BOOLEAN\"",
-                "targetType" -> "\"TIMESTAMP\"",
-                "config" -> "\"spark.sql.ansi.enabled\"",
-                "configVal" -> "'false'")))
+        assert(checkResult3 ==
+          DataTypeMismatch(
+            errorSubClass = "CAST_WITH_CONF_SUGGESTION",
+            messageParameters = Map(
+              "srcType" -> "\"BOOLEAN\"",
+              "targetType" -> "\"TIMESTAMP\"",
+              "config" -> "\"spark.sql.ansi.enabled\"",
+              "configVal" -> "'false'"
+            )
+          )
+        )
       case EvalMode.TRY =>
-        assert(
-          checkResult3 ==
-            DataTypeMismatch(
-              errorSubClass = "CAST_WITHOUT_SUGGESTION",
-              messageParameters =
-                Map("srcType" -> "\"BOOLEAN\"", "targetType" -> "\"TIMESTAMP\"")))
+        assert(checkResult3 ==
+          DataTypeMismatch(
+            errorSubClass = "CAST_WITHOUT_SUGGESTION",
+            messageParameters = Map(
+              "srcType" -> "\"BOOLEAN\"",
+              "targetType" -> "\"TIMESTAMP\""
+            )
+          )
+        )
       case _ =>
     }
 
     val checkResult4 = cast(booleanLiteral, DateType).checkInputDataTypes()
     evalMode match {
       case EvalMode.ANSI =>
-        assert(
-          checkResult4 ==
-            DataTypeMismatch(
-              errorSubClass = "CAST_WITHOUT_SUGGESTION",
-              messageParameters = Map("srcType" -> "\"BOOLEAN\"", "targetType" -> "\"DATE\"")))
+        assert(checkResult4 ==
+          DataTypeMismatch(
+            errorSubClass = "CAST_WITHOUT_SUGGESTION",
+            messageParameters = Map(
+              "srcType" -> "\"BOOLEAN\"",
+              "targetType" -> "\"DATE\""
+            )
+          )
+        )
       case EvalMode.TRY =>
-        assert(
-          checkResult4 ==
-            DataTypeMismatch(
-              errorSubClass = "CAST_WITHOUT_SUGGESTION",
-              messageParameters = Map("srcType" -> "\"BOOLEAN\"", "targetType" -> "\"DATE\"")))
+        assert(checkResult4 ==
+          DataTypeMismatch(
+            errorSubClass = "CAST_WITHOUT_SUGGESTION",
+            messageParameters = Map(
+              "srcType" -> "\"BOOLEAN\"",
+              "targetType" -> "\"DATE\""
+            )
+          )
+        )
       case _ =>
     }
   }
 
   private def castErrMsg(v: Any, to: DataType, from: DataType = StringType): String = {
     s"The value ${toSQLValue(v, from)} of the type ${toSQLType(from)} " +
-      s"cannot be cast to ${toSQLType(to)} because it is malformed."
+    s"cannot be cast to ${toSQLType(to)} because it is malformed."
   }
 
   private def castErrMsg(l: Literal, to: DataType, from: DataType): String = {
     s"The value ${toSQLValue(l.eval(), from)} of the type ${toSQLType(from)} " +
-      s"cannot be cast to ${toSQLType(to)} because it is malformed."
+    s"cannot be cast to ${toSQLType(to)} because it is malformed."
   }
 
   test("cast from invalid string to numeric should throw NumberFormatException") {
     def check(value: String, dataType: DataType): Unit = {
-      checkExceptionInExpression[NumberFormatException](
-        cast(value, dataType),
+      checkExceptionInExpression[NumberFormatException](cast(value, dataType),
         castErrMsg(value, dataType))
     }
     // cast to IntegerType
@@ -419,45 +427,28 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     }
   }
 
-  protected def checkCastToNumericError(
-      l: Literal,
-      to: DataType,
-      expectedDataTypeInErrorMsg: DataType,
-      tryCastResult: Any): Unit = {
+  protected def checkCastToNumericError(l: Literal, to: DataType,
+      expectedDataTypeInErrorMsg: DataType, tryCastResult: Any): Unit = {
     checkExceptionInExpression[NumberFormatException](
-      cast(l, to),
-      castErrMsg("true", expectedDataTypeInErrorMsg))
+      cast(l, to), castErrMsg("true", expectedDataTypeInErrorMsg))
   }
 
   test("cast from invalid string array to numeric array should throw NumberFormatException") {
-    val array =
-      Literal.create(Seq("123", "true", "f", null), ArrayType(StringType, containsNull = true))
+    val array = Literal.create(Seq("123", "true", "f", null),
+      ArrayType(StringType, containsNull = true))
 
-    checkCastToNumericError(
-      array,
-      ArrayType(ByteType, containsNull = true),
-      ByteType,
+    checkCastToNumericError(array, ArrayType(ByteType, containsNull = true), ByteType,
       Seq(123.toByte, null, null, null))
-    checkCastToNumericError(
-      array,
-      ArrayType(ShortType, containsNull = true),
-      ShortType,
+    checkCastToNumericError(array, ArrayType(ShortType, containsNull = true), ShortType,
       Seq(123.toShort, null, null, null))
-    checkCastToNumericError(
-      array,
-      ArrayType(IntegerType, containsNull = true),
-      IntegerType,
+    checkCastToNumericError(array, ArrayType(IntegerType, containsNull = true), IntegerType,
       Seq(123, null, null, null))
-    checkCastToNumericError(
-      array,
-      ArrayType(LongType, containsNull = true),
-      LongType,
+    checkCastToNumericError(array, ArrayType(LongType, containsNull = true), LongType,
       Seq(123L, null, null, null))
   }
 
   test("Fast fail for cast string type to decimal type in ansi mode") {
-    checkEvaluation(
-      cast("12345678901234567890123456789012345678", DecimalType(38, 0)),
+    checkEvaluation(cast("12345678901234567890123456789012345678", DecimalType(38, 0)),
       Decimal("12345678901234567890123456789012345678"))
     checkExceptionInExpression[ArithmeticException](
       cast("123456789012345678901234567890123456789", DecimalType(38, 0)),
@@ -466,19 +457,16 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
       cast("12345678901234567890123456789012345678", DecimalType(38, 1)),
       "cannot be represented as Decimal(38, 1)")
 
-    checkEvaluation(
-      cast("0.00000000000000000000000000000000000001", DecimalType(38, 0)),
+    checkEvaluation(cast("0.00000000000000000000000000000000000001", DecimalType(38, 0)),
       Decimal("0"))
-    checkEvaluation(
-      cast("0.00000000000000000000000000000000000000000001", DecimalType(38, 0)),
+    checkEvaluation(cast("0.00000000000000000000000000000000000000000001", DecimalType(38, 0)),
       Decimal("0"))
-    checkEvaluation(
-      cast("0.00000000000000000000000000000000000001", DecimalType(38, 18)),
+    checkEvaluation(cast("0.00000000000000000000000000000000000001", DecimalType(38, 18)),
       Decimal("0E-18"))
-    checkEvaluation(cast("6E-120", DecimalType(38, 0)), Decimal("0"))
+    checkEvaluation(cast("6E-120", DecimalType(38, 0)),
+      Decimal("0"))
 
-    checkEvaluation(
-      cast("6E+37", DecimalType(38, 0)),
+    checkEvaluation(cast("6E+37", DecimalType(38, 0)),
       Decimal("60000000000000000000000000000000000000"))
     checkExceptionInExpression[ArithmeticException](
       cast("6E+38", DecimalType(38, 0)),
@@ -494,8 +482,7 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
 
   protected def checkCastToBooleanError(l: Literal, to: DataType, tryCastResult: Any): Unit = {
     checkExceptionInExpression[SparkRuntimeException](
-      cast(l, to),
-      """cannot be cast to "BOOLEAN"""")
+      cast(l, to), """cannot be cast to "BOOLEAN"""")
   }
 
   test("ANSI mode: cast string to boolean with parse error") {
@@ -513,20 +500,16 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     checkCastToTimestampError(Literal(1.0 / 0.0), TimestampType)
     checkCastToTimestampError(Literal(Float.NaN), TimestampType)
     checkCastToTimestampError(Literal(1.0f / 0.0f), TimestampType)
-    Seq(
-      Long.MinValue.toDouble,
-      Long.MaxValue.toDouble,
-      Long.MinValue.toFloat,
+    Seq(Long.MinValue.toDouble, Long.MaxValue.toDouble, Long.MinValue.toFloat,
       Long.MaxValue.toFloat).foreach { v =>
       checkExceptionInExpression[SparkArithmeticException](
-        cast(Literal(v), TimestampType),
-        "overflow")
+        cast(Literal(v), TimestampType), "overflow")
     }
   }
 
   private def castOverflowErrMsg(v: Any, from: DataType, to: DataType): String = {
     s"The value ${toSQLValue(v, from)} of the type ${toSQLType(from)} cannot be " +
-      s"cast to ${toSQLType(to)} due to an overflow."
+    s"cast to ${toSQLType(to)} due to an overflow."
   }
 
   test("cast a timestamp before the epoch 1970-01-01 00:00:00Z II") {
@@ -556,10 +539,10 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
   }
 
   test("cast from array II") {
-    val array =
-      Literal.create(Seq("123", "true", "f", null), ArrayType(StringType, containsNull = true))
-    val array_notNull =
-      Literal.create(Seq("123", "true", "f"), ArrayType(StringType, containsNull = false))
+    val array = Literal.create(Seq("123", "true", "f", null),
+      ArrayType(StringType, containsNull = true))
+    val array_notNull = Literal.create(Seq("123", "true", "f"),
+      ArrayType(StringType, containsNull = false))
 
     {
       val to: DataType = ArrayType(BooleanType, containsNull = true)
@@ -576,11 +559,11 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     }
 
     {
-      val ret =
-        cast(array_notNull, ArrayType(BooleanType, containsNull = evalMode == EvalMode.TRY))
+      val ret = cast(array_notNull, ArrayType(BooleanType, containsNull = evalMode == EvalMode.TRY))
       assert(ret.resolved)
       if (!isTryCast) {
-        checkExceptionInExpression[SparkRuntimeException](ret, """cannot be cast to "BOOLEAN"""")
+        checkExceptionInExpression[SparkRuntimeException](
+          ret, """cannot be cast to "BOOLEAN"""")
       } else {
         checkEvaluation(ret, Array(null, true, false))
       }
@@ -594,7 +577,7 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     val answer = Literal.create(Seq(1, 2), to).value
     checkEvaluation(cast(array, to), answer)
 
-    val overflowArray = Literal.create(Seq(Int.MaxValue + 1.0d), from)
+    val overflowArray = Literal.create(Seq(Int.MaxValue + 1.0D), from)
     if (!isTryCast) {
       checkExceptionInExpression[ArithmeticException](cast(overflowArray, to), "overflow")
     } else {
@@ -630,7 +613,9 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
       val ret = cast(map, MapType(IntegerType, StringType, valueContainsNull = true))
       if (!isTryCast) {
         assert(ret.resolved)
-        checkExceptionInExpression[NumberFormatException](ret, castErrMsg("a", IntegerType))
+        checkExceptionInExpression[NumberFormatException](
+          ret,
+          castErrMsg("a", IntegerType))
       } else {
         assert(!ret.resolved)
       }
@@ -640,7 +625,9 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
       val ret = cast(map_notNull, MapType(StringType, BooleanType, valueContainsNull = false))
       if (!isTryCast) {
         assert(ret.resolved)
-        checkExceptionInExpression[SparkRuntimeException](ret, castErrMsg("123", BooleanType))
+        checkExceptionInExpression[SparkRuntimeException](
+          ret,
+          castErrMsg("123", BooleanType))
       } else {
         assert(!ret.resolved)
       }
@@ -650,7 +637,9 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
       val ret = cast(map_notNull, MapType(IntegerType, StringType, valueContainsNull = true))
       if (!isTryCast) {
         assert(ret.resolved)
-        checkExceptionInExpression[NumberFormatException](ret, castErrMsg("a", IntegerType))
+        checkExceptionInExpression[NumberFormatException](
+          ret,
+          castErrMsg("a", IntegerType))
       } else {
         assert(!ret.resolved)
       }
@@ -675,8 +664,12 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
 
   test("cast from struct II") {
     checkNullCast(
-      StructType(Seq(StructField("a", StringType), StructField("b", IntegerType))),
-      StructType(Seq(StructField("a", StringType), StructField("b", StringType))))
+      StructType(Seq(
+        StructField("a", StringType),
+        StructField("b", IntegerType))),
+      StructType(Seq(
+        StructField("a", StringType),
+        StructField("b", StringType))))
 
     val struct = Literal.create(
       InternalRow(
@@ -684,57 +677,52 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
         UTF8String.fromString("true"),
         UTF8String.fromString("f"),
         null),
-      StructType(
-        Seq(
-          StructField("a", StringType, nullable = true),
-          StructField("b", StringType, nullable = true),
-          StructField("c", StringType, nullable = true),
-          StructField("d", StringType, nullable = true))))
+      StructType(Seq(
+        StructField("a", StringType, nullable = true),
+        StructField("b", StringType, nullable = true),
+        StructField("c", StringType, nullable = true),
+        StructField("d", StringType, nullable = true))))
     val struct_notNull = Literal.create(
       InternalRow(
         UTF8String.fromString("123"),
         UTF8String.fromString("true"),
         UTF8String.fromString("f")),
-      StructType(
-        Seq(
-          StructField("a", StringType, nullable = false),
-          StructField("b", StringType, nullable = false),
-          StructField("c", StringType, nullable = false))))
+      StructType(Seq(
+        StructField("a", StringType, nullable = false),
+        StructField("b", StringType, nullable = false),
+        StructField("c", StringType, nullable = false))))
 
     {
-      val to: DataType = StructType(
-        Seq(
-          StructField("a", BooleanType, nullable = true),
-          StructField("b", BooleanType, nullable = true),
-          StructField("c", BooleanType, nullable = true),
-          StructField("d", BooleanType, nullable = true)))
+      val to: DataType = StructType(Seq(
+        StructField("a", BooleanType, nullable = true),
+        StructField("b", BooleanType, nullable = true),
+        StructField("c", BooleanType, nullable = true),
+        StructField("d", BooleanType, nullable = true)))
       val ret = cast(struct, to)
       assert(ret.resolved)
       checkCastToBooleanError(struct, to, InternalRow(null, true, false, null))
     }
 
     {
-      val to: DataType = StructType(
-        Seq(
-          StructField("a", BooleanType, nullable = true),
-          StructField("b", BooleanType, nullable = true),
-          StructField("c", BooleanType, nullable = true)))
+      val to: DataType = StructType(Seq(
+        StructField("a", BooleanType, nullable = true),
+        StructField("b", BooleanType, nullable = true),
+        StructField("c", BooleanType, nullable = true)))
       val ret = cast(struct_notNull, to)
       assert(ret.resolved)
       checkCastToBooleanError(struct_notNull, to, InternalRow(null, true, false))
     }
 
     {
-      val ret = cast(
-        struct_notNull,
-        StructType(
-          Seq(
-            StructField("a", BooleanType, nullable = true),
-            StructField("b", BooleanType, nullable = true),
-            StructField("c", BooleanType, nullable = false))))
+      val ret = cast(struct_notNull, StructType(Seq(
+        StructField("a", BooleanType, nullable = true),
+        StructField("b", BooleanType, nullable = true),
+        StructField("c", BooleanType, nullable = false))))
       if (!isTryCast) {
         assert(ret.resolved)
-        checkExceptionInExpression[SparkRuntimeException](ret, castErrMsg("123", BooleanType))
+        checkExceptionInExpression[SparkRuntimeException](
+          ret,
+          castErrMsg("123", BooleanType))
       } else {
         assert(!ret.resolved)
       }
@@ -759,30 +747,33 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
 
   test("complex casting") {
     val complex = Literal.create(
-      Row(Seq("123", "true", "f"), Map("a" -> "123", "b" -> "true", "c" -> "f"), Row(0)),
-      StructType(
-        Seq(
-          StructField("a", ArrayType(StringType, containsNull = false), nullable = true),
-          StructField(
-            "m",
-            MapType(StringType, StringType, valueContainsNull = false),
-            nullable = true),
-          StructField("s", StructType(Seq(StructField("i", IntegerType, nullable = true)))))))
+      Row(
+        Seq("123", "true", "f"),
+        Map("a" -> "123", "b" -> "true", "c" -> "f"),
+        Row(0)),
+      StructType(Seq(
+        StructField("a",
+          ArrayType(StringType, containsNull = false), nullable = true),
+        StructField("m",
+          MapType(StringType, StringType, valueContainsNull = false), nullable = true),
+        StructField("s",
+          StructType(Seq(
+            StructField("i", IntegerType, nullable = true)))))))
 
-    val ret = cast(
-      complex,
-      StructType(
-        Seq(
-          StructField("a", ArrayType(IntegerType, containsNull = true), nullable = true),
-          StructField(
-            "m",
-            MapType(StringType, BooleanType, valueContainsNull = false),
-            nullable = true),
-          StructField("s", StructType(Seq(StructField("l", LongType, nullable = true)))))))
+    val ret = cast(complex, StructType(Seq(
+      StructField("a",
+        ArrayType(IntegerType, containsNull = true), nullable = true),
+      StructField("m",
+        MapType(StringType, BooleanType, valueContainsNull = false), nullable = true),
+      StructField("s",
+        StructType(Seq(
+          StructField("l", LongType, nullable = true)))))))
 
     if (!isTryCast) {
       assert(ret.resolved)
-      checkExceptionInExpression[NumberFormatException](ret, castErrMsg("true", IntegerType))
+      checkExceptionInExpression[NumberFormatException](
+        ret,
+        castErrMsg("true", IntegerType))
     } else {
       assert(!ret.resolved)
     }
@@ -830,17 +821,20 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
 
   test("SPARK-26218: Fix the corner case of codegen when casting float to Integer") {
     checkExceptionInExpression[ArithmeticException](
-      cast(cast(Literal("2147483648"), FloatType), IntegerType),
-      "overflow")
+      cast(cast(Literal("2147483648"), FloatType), IntegerType), "overflow")
   }
 
   test("SPARK-35720: cast invalid string input to timestamp without time zone") {
-    Seq("00:00:00", "a", "123", "a2021-06-17", "2021-06-17abc", "2021-06-17 00:00:00ABC")
-      .foreach { invalidInput =>
-        checkExceptionInExpression[DateTimeException](
-          cast(invalidInput, TimestampNTZType),
-          castErrMsg(invalidInput, TimestampNTZType))
-      }
+    Seq("00:00:00",
+      "a",
+      "123",
+      "a2021-06-17",
+      "2021-06-17abc",
+      "2021-06-17 00:00:00ABC").foreach { invalidInput =>
+      checkExceptionInExpression[DateTimeException](
+        cast(invalidInput, TimestampNTZType),
+        castErrMsg(invalidInput, TimestampNTZType))
+    }
   }
 
   test("SPARK-39749: cast Decimal to string") {
@@ -863,15 +857,18 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     if (!isTryCast) {
       // In ANSI mode, a NUMERIC_VALUE_OUT_OF_RANGE exception is thrown.
       checkError(
-        exception =
-          intercept[SparkArithmeticException](cast(largeTime, DecimalType(2, 0)).eval()),
+        exception = intercept[SparkArithmeticException](
+          cast(largeTime, DecimalType(2, 0)).eval()
+        ),
         condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
         parameters = Map(
           "value" -> "86399.123456000",
           "precision" -> "2",
           "scale" -> "0",
-          "config" -> """"spark.sql.ansi.enabled""""),
-        queryContext = Array(ExpectedContext(fragment = "", start = -1, stop = -1)))
+          "config" -> """"spark.sql.ansi.enabled""""
+        ),
+        queryContext = Array(ExpectedContext(fragment = "", start = -1, stop = -1))
+      )
     } else {
       // In TRY_CAST mode, null is returned instead of throwing an exception.
       checkEvaluation(cast(largeTime, DecimalType(2, 0)), null)
@@ -889,7 +886,8 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
       (largeTime6, ShortType),
       (largeTime6, ByteType),
       (largeTime4, ShortType),
-      (largeTime4, ByteType)).foreach { case (timeValue, targetType) =>
+      (largeTime4, ByteType)
+    ).foreach { case (timeValue, targetType) =>
       checkErrorInExpression[SparkArithmeticException](
         cast(timeValue, targetType),
         "CAST_OVERFLOW",
@@ -897,7 +895,9 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
           "value" -> s"TIME '${timeValue.toString}'",
           "sourceType" -> s"\"${timeValue.dataType.sql}\"",
           "targetType" -> s"\"${targetType.sql}\"",
-          "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
+          "ansiConfig" -> "\"spark.sql.ansi.enabled\""
+        )
+      )
     }
   }
 }

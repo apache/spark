@@ -20,8 +20,8 @@ package org.apache.spark.sql.test
 import org.scalatest.flatspec.AnyFlatSpec
 
 /**
- * The purpose of this suite is to make sure that generic FlatSpec-based scala tests work with a
- * shared spark session
+ * The purpose of this suite is to make sure that generic FlatSpec-based scala
+ * tests work with a shared spark session
  */
 class GenericFlatSpecSuite extends AnyFlatSpec with SharedSparkSessionBase {
   import testImplicits._
@@ -32,7 +32,7 @@ class GenericFlatSpecSuite extends AnyFlatSpec with SharedSparkSessionBase {
     assert(8 === ds.count())
   }
   it should "have the specified number of unique elements" in {
-    assert(8 === ds.distinct().count())
+      assert(8 === ds.distinct().count())
   }
   it should "have the specified number of elements in each column" in {
     assert(8 === ds.select("_1").count())

@@ -35,16 +35,17 @@ private[protobuf] class SQLExecutionUIDataSerializer extends ProtobufSerDe[SQLEx
     setStringField(ui.details, builder.setDetails)
     setStringField(ui.physicalPlanDescription, builder.setPhysicalPlanDescription)
     if (ui.modifiedConfigs != null) {
-      ui.modifiedConfigs.foreach { case (k, v) =>
-        builder.putModifiedConfigs(k, v)
+      ui.modifiedConfigs.foreach {
+        case (k, v) => builder.putModifiedConfigs(k, v)
       }
     }
     ui.metrics.foreach(m => builder.addMetrics(SQLPlanMetricSerializer.serialize(m)))
     builder.setSubmissionTime(ui.submissionTime)
     ui.completionTime.foreach(ct => builder.setCompletionTime(ct.getTime))
     ui.errorMessage.foreach(builder.setErrorMessage)
-    ui.jobs.foreach { case (id, status) =>
-      builder.putJobs(id.toLong, JobExecutionStatusSerializer.serialize(status))
+    ui.jobs.foreach {
+      case (id, status) =>
+        builder.putJobs(id.toLong, JobExecutionStatusSerializer.serialize(status))
     }
     ui.stages.foreach(stageId => builder.addStages(stageId.toLong))
     val metricValues = ui.metricValues
@@ -52,8 +53,8 @@ private[protobuf] class SQLExecutionUIDataSerializer extends ProtobufSerDe[SQLEx
       builder.setMetricValuesIsNull(true)
     } else {
       builder.setMetricValuesIsNull(false)
-      metricValues.foreach { case (k, v) =>
-        builder.putMetricValues(k, v)
+      metricValues.foreach {
+        case (k, v) => builder.putMetricValues(k, v)
       }
     }
     if (ui.queryId != null) {
@@ -69,14 +70,14 @@ private[protobuf] class SQLExecutionUIDataSerializer extends ProtobufSerDe[SQLEx
     val errorMessage = getOptional(ui.hasErrorMessage, () => ui.getErrorMessage)
     val metrics =
       ui.getMetricsList.asScala.map(m => SQLPlanMetricSerializer.deserialize(m))
-    val jobs = ui.getJobsMap.asScala.map { case (jobId, status) =>
-      jobId.toInt -> JobExecutionStatusSerializer.deserialize(status)
+    val jobs = ui.getJobsMap.asScala.map {
+      case (jobId, status) => jobId.toInt -> JobExecutionStatusSerializer.deserialize(status)
     }.toMap
     val metricValues = if (ui.getMetricValuesIsNull) {
       null
     } else {
-      ui.getMetricValuesMap.asScala.map { case (k, v) =>
-        k.toLong -> v
+      ui.getMetricValuesMap.asScala.map {
+        case (k, v) => k.toLong -> v
       }.toMap
     }
 
@@ -95,6 +96,7 @@ private[protobuf] class SQLExecutionUIDataSerializer extends ProtobufSerDe[SQLEx
       jobs = jobs,
       stages = ui.getStagesList.asScala.map(_.toInt).toSet,
       metricValues = metricValues,
-      queryId = if (ui.hasQueryId) UUID.fromString(ui.getQueryId) else null)
+      queryId = if (ui.hasQueryId) UUID.fromString(ui.getQueryId) else null
+    )
   }
 }

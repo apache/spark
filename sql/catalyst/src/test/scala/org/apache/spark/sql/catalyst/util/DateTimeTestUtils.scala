@@ -85,7 +85,10 @@ object DateTimeTestUtils {
   }
 
   // Returns number of days since epoch for the given date
-  def days(year: Int, month: Byte = 1, day: Byte = 1): Int = {
+  def days(
+      year: Int,
+      month: Byte = 1,
+      day: Byte = 1): Int = {
     LocalDate.of(year, month, day).toEpochDay.toInt
   }
 
@@ -111,7 +114,11 @@ object DateTimeTestUtils {
   }
 
   // Returns nanoseconds since midnight
-  def localTime(hour: Byte = 0, minute: Byte = 0, sec: Byte = 0, micros: Int = 0): Long = {
+  def localTime(
+      hour: Byte = 0,
+      minute: Byte = 0,
+      sec: Byte = 0,
+      micros: Int = 0): Long = {
     val nanos = TimeUnit.MICROSECONDS.toNanos(micros).toInt
     val localTime = LocalTime.of(hour, minute, sec, nanos)
     localTimeToNanos(localTime)

@@ -31,20 +31,19 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 
 /**
- * This function counts the approximate number of distinct values (ndv) in intervals constructed
- * from endpoints specified in `endpointsExpression`. The endpoints should be sorted into
- * ascending order. E.g., given an array of endpoints (endpoint_1, endpoint_2, ... endpoint_N),
- * returns the approximate ndv's for intervals [endpoint_1, endpoint_2], (endpoint_2, endpoint_3],
- * ... (endpoint_N-1, endpoint_N]. To count ndv's in these intervals, apply the
- * HyperLogLogPlusPlus algorithm in each of them.
- * @param child
- *   to estimate the ndv's of.
- * @param endpointsExpression
- *   An array expression to construct the intervals. It must be foldable, and its elements should
- *   be sorted into ascending order. Duplicate endpoints are allowed, e.g. (1, 5, 5, 10), and ndv
- *   for interval (5, 5] would be 1.
- * @param relativeSD
- *   The maximum relative standard deviation allowed in the HyperLogLogPlusPlus algorithm.
+ * This function counts the approximate number of distinct values (ndv) in
+ * intervals constructed from endpoints specified in `endpointsExpression`. The endpoints should be
+ * sorted into ascending order. E.g., given an array of endpoints
+ * (endpoint_1, endpoint_2, ... endpoint_N), returns the approximate ndv's for intervals
+ * [endpoint_1, endpoint_2], (endpoint_2, endpoint_3], ... (endpoint_N-1, endpoint_N].
+ * To count ndv's in these intervals, apply the HyperLogLogPlusPlus algorithm in each of them.
+ * @param child to estimate the ndv's of.
+ * @param endpointsExpression An array expression to construct the intervals. It must be foldable,
+ *                            and its elements should be sorted into ascending order.
+ *                            Duplicate endpoints are allowed, e.g. (1, 5, 5, 10), and ndv for
+ *                            interval (5, 5] would be 1.
+ * @param relativeSD The maximum relative standard deviation allowed
+ *                   in the HyperLogLogPlusPlus algorithm.
  */
 case class ApproxCountDistinctForIntervals(
     child: Expression,
@@ -52,10 +51,10 @@ case class ApproxCountDistinctForIntervals(
     relativeSD: Double = 0.05,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
-    extends TypedImperativeAggregate[Array[Long]]
-    with ExpectsInputTypes
-    with BinaryLike[Expression]
-    with QueryErrorsBase {
+  extends TypedImperativeAggregate[Array[Long]]
+  with ExpectsInputTypes
+  with BinaryLike[Expression]
+  with QueryErrorsBase {
 
   def this(child: Expression, endpointsExpression: Expression, relativeSD: Expression) = {
     this(
@@ -67,15 +66,8 @@ case class ApproxCountDistinctForIntervals(
   }
 
   override def inputTypes: Seq[AbstractDataType] = {
-    Seq(
-      TypeCollection(
-        NumericType,
-        TimestampType,
-        DateType,
-        TimestampNTZType,
-        YearMonthIntervalType,
-        DayTimeIntervalType),
-      ArrayType)
+    Seq(TypeCollection(NumericType, TimestampType, DateType, TimestampNTZType,
+      YearMonthIntervalType, DayTimeIntervalType), ArrayType)
   }
 
   // Mark as lazy so that endpointsExpression is not evaluated during tree transformation.
@@ -97,9 +89,8 @@ case class ApproxCountDistinctForIntervals(
           "inputType" -> toSQLType(endpointsExpression.dataType)))
     } else {
       endpointsExpression.dataType match {
-        case ArrayType(
-              _: NumericType | DateType | TimestampType | TimestampNTZType | _: AnsiIntervalType,
-              _) =>
+        case ArrayType(_: NumericType | DateType | TimestampType | TimestampNTZType |
+           _: AnsiIntervalType, _) =>
           if (endpoints.length < 2) {
             DataTypeMismatch(
               errorSubClass = "WRONG_NUM_ENDPOINTS",
@@ -108,13 +99,8 @@ case class ApproxCountDistinctForIntervals(
             TypeCheckSuccess
           }
         case inputType =>
-          val requiredElemTypes = toSQLType(
-            TypeCollection(
-              NumericType,
-              DateType,
-              TimestampType,
-              TimestampNTZType,
-              AnsiIntervalType))
+          val requiredElemTypes = toSQLType(TypeCollection(
+            NumericType, DateType, TimestampType, TimestampNTZType, AnsiIntervalType))
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_INPUT_TYPE",
             messageParameters = Map(
@@ -154,8 +140,7 @@ case class ApproxCountDistinctForIntervals(
       // convert the value into a double value for searching in the double array
       val doubleValue = child.dataType match {
         case n: NumericType =>
-          PhysicalNumericType
-            .numeric(n)
+          PhysicalNumericType.numeric(n)
             .toDouble(value.asInstanceOf[PhysicalNumericType#InternalType])
         case _: DateType | _: YearMonthIntervalType =>
           value.asInstanceOf[Int].toDouble
@@ -205,7 +190,7 @@ case class ApproxCountDistinctForIntervals(
       // The value is not found, binarySearch returns (-(<i>insertion point</i>) - 1).
       // The <i>insertion point</i> is defined as the point at which the key would be inserted
       // into the array: the index of the first element greater than the key.
-      val insertionPoint = -(index + 1)
+      val insertionPoint = - (index + 1)
       if (insertionPoint == 0) 0 else insertionPoint - 1
     }
   }
@@ -241,13 +226,13 @@ case class ApproxCountDistinctForIntervals(
     ndvArray
   }
 
-  override def withNewMutableAggBufferOffset(
-      newMutableAggBufferOffset: Int): ApproxCountDistinctForIntervals = {
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int)
+    : ApproxCountDistinctForIntervals = {
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
   }
 
-  override def withNewInputAggBufferOffset(
-      newInputAggBufferOffset: Int): ApproxCountDistinctForIntervals = {
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int)
+    : ApproxCountDistinctForIntervals = {
     copy(inputAggBufferOffset = newInputAggBufferOffset)
   }
 
@@ -288,7 +273,6 @@ case class ApproxCountDistinctForIntervals(
   }
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): ApproxCountDistinctForIntervals =
+      newLeft: Expression, newRight: Expression): ApproxCountDistinctForIntervals =
     copy(child = newLeft, endpointsExpression = newRight)
 }

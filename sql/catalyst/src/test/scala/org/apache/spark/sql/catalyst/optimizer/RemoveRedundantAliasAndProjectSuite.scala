@@ -87,10 +87,8 @@ class RemoveRedundantAliasAndProjectSuite extends PlanTest {
   test("remove redundant project with self-join") {
     val relation = LocalRelation($"a".int)
     val fragment = relation.select($"a" as "a")
-    val query = fragment
-      .select($"a" as "a")
-      .join(fragment.select($"a" as "a"))
-      .analyze
+    val query = fragment.select($"a" as "a")
+      .join(fragment.select($"a" as "a")).analyze
     val optimized = Optimize.execute(query)
     val expected = relation.join(relation).analyze
     comparePlans(optimized, expected)
@@ -99,11 +97,8 @@ class RemoveRedundantAliasAndProjectSuite extends PlanTest {
   test("alias removal should not break after push project through union") {
     val r1 = LocalRelation($"a".int)
     val r2 = LocalRelation($"b".int)
-    val query = r1
-      .select($"a" as "a")
-      .union(r2.select($"b" as "b"))
-      .select($"a")
-      .analyze
+    val query = r1.select($"a" as "a")
+      .union(r2.select($"b" as "b")).select($"a").analyze
     val optimized = Optimize.execute(query)
     val expected = r1.select($"a" as "a").union(r2).analyze
     comparePlans(optimized, expected)
@@ -152,8 +147,10 @@ class RemoveRedundantAliasAndProjectSuite extends PlanTest {
       Exists(
         LocalRelation(b),
         outerAttrs = Seq(a_alias_attr),
-        joinCond = Seq(EqualTo(a_alias_attr, b))),
-      Project(Seq(a_alias), LocalRelation(a)))
+        joinCond = Seq(EqualTo(a_alias_attr, b))
+      ),
+      Project(Seq(a_alias), LocalRelation(a))
+    )
 
     // The alias would not be removed if excluding subquery references is enabled.
     val expectedWhenExcluded = query
@@ -163,8 +160,13 @@ class RemoveRedundantAliasAndProjectSuite extends PlanTest {
     //  :  +- LocalRelation <empty>, [b#2]
     //    +- LocalRelation <empty>, [a#0]
     val expectedWhenNotExcluded = Filter(
-      Exists(LocalRelation(b), outerAttrs = Seq(a), joinCond = Seq(EqualTo(a, b))),
-      LocalRelation(a))
+      Exists(
+        LocalRelation(b),
+        outerAttrs = Seq(a),
+        joinCond = Seq(EqualTo(a, b))
+      ),
+      LocalRelation(a)
+    )
 
     withSQLConf(SQLConf.EXCLUDE_SUBQUERY_EXP_REFS_FROM_REMOVE_REDUNDANT_ALIASES.key -> "true") {
       val optimized = Optimize.execute(query)
@@ -194,36 +196,37 @@ class RemoveRedundantAliasAndProjectSuite extends PlanTest {
     //  +- LocalRelation <empty>, [a#0]
     // This plan would then fail later with the error -- conflicting a#0 in join condition.
 
-    val query = Project(
-      Seq(
-        Alias(
-          CaseWhen(
-            Seq(
-              (
-                Exists(
-                  LocalRelation(a),
-                  outerAttrs = Seq(a_alias_attr),
-                  joinCond = Seq(EqualTo(a_alias_attr, a))),
-                Literal(1))),
-            Some(Literal(2))),
-          "result")()),
-      Project(Seq(a_alias), LocalRelation(a)))
+    val query = Project(Seq(
+      Alias(
+        CaseWhen(Seq((
+          Exists(
+            LocalRelation(a),
+            outerAttrs = Seq(a_alias_attr),
+            joinCond = Seq(EqualTo(a_alias_attr, a))
+          ), Literal(1))),
+          Some(Literal(2))),
+        "result"
+      )()),
+      Project(Seq(a_alias), LocalRelation(a))
+    )
 
     // The alias would not be removed if excluding subquery references is enabled.
     val expectedWhenExcluded = query
 
     // The alias would be removed and we would have conflicting expression ID(s) in the join cond
-    val expectedWhenNotEnabled = Project(
-      Seq(
-        Alias(
-          CaseWhen(
-            Seq(
-              (
-                Exists(LocalRelation(a), outerAttrs = Seq(a), joinCond = Seq(EqualTo(a, a))),
-                Literal(1))),
-            Some(Literal(2))),
-          "result")()),
-      LocalRelation(a))
+    val expectedWhenNotEnabled = Project(Seq(
+      Alias(
+        CaseWhen(Seq((
+          Exists(
+            LocalRelation(a),
+            outerAttrs = Seq(a),
+            joinCond = Seq(EqualTo(a, a))
+          ), Literal(1))),
+          Some(Literal(2))),
+        "result"
+      )()),
+      LocalRelation(a)
+    )
 
     withSQLConf(SQLConf.EXCLUDE_SUBQUERY_EXP_REFS_FROM_REMOVE_REDUNDANT_ALIASES.key -> "true") {
       val optimized = Optimize.execute(query)
@@ -236,13 +239,24 @@ class RemoveRedundantAliasAndProjectSuite extends PlanTest {
     }
   }
 
-  test(
-    "SPARK-53308: Don't remove aliases in RemoveRedundantAliases that would cause duplicates") {
+  test("SPARK-53308: Don't remove aliases in RemoveRedundantAliases that would cause duplicates") {
     val exprId = NamedExpression.newExprId
     val attribute = AttributeReference("attr", IntegerType)(exprId = exprId)
-    val project = Project(Seq(Alias(attribute, "attr")(), attribute), LocalRelation(attribute))
+    val project = Project(
+      Seq(
+        Alias(attribute, "attr")(),
+        attribute
+      ),
+      LocalRelation(attribute)
+    )
     val projectWithoutAlias =
-      Project(Seq(attribute, attribute), LocalRelation(attribute))
+      Project(
+        Seq(
+          attribute,
+          attribute
+        ),
+        LocalRelation(attribute)
+      )
     val union = Union(Seq(project, project))
 
     withSQLConf(SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "true") {

@@ -29,20 +29,17 @@ import org.apache.spark.sql.catalyst.expressions.{BoundReference, HllSketchEstim
 import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType, LongType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
+
 class DatasketchesHllSketchSuite extends SparkFunSuite {
 
-  def simulateUpdateMerge[T](
-      dataType: DataType,
-      input: Seq[Any],
-      numSketches: Integer = 5): (Long, NumericRange[Long]) = {
+  def simulateUpdateMerge[T](dataType: DataType, input: Seq[Any], numSketches: Integer = 5):
+    (Long, NumericRange[Long]) = {
 
     // create a map of agg function instances
-    val aggFunctionMap = Seq
-      .tabulate(numSketches)(index => {
-        val sketch = new HllSketchAgg(BoundReference(0, dataType, nullable = true))
-        index -> (sketch, sketch.createAggregationBuffer())
-      })
-      .toMap
+    val aggFunctionMap = Seq.tabulate(numSketches)(index => {
+      val sketch = new HllSketchAgg(BoundReference(0, dataType, nullable = true))
+      index -> (sketch, sketch.createAggregationBuffer())
+    }).toMap
 
     // randomly update agg function instances
     input.map(value => {
@@ -50,7 +47,8 @@ class DatasketchesHllSketchSuite extends SparkFunSuite {
       aggFunction.update(aggBuffer, InternalRow(value))
     })
 
-    def serializeDeserialize(tuple: (HllSketchAgg, HllSketch)): (HllSketchAgg, HllSketch) = {
+    def serializeDeserialize(tuple: (HllSketchAgg, HllSketch)):
+      (HllSketchAgg, HllSketch) = {
       val (agg, buf) = tuple
       val serialized = agg.serialize(buf)
       (agg, agg.deserialize(serialized))
@@ -81,16 +79,13 @@ class DatasketchesHllSketchSuite extends SparkFunSuite {
 
     val stringRange = Seq.tabulate(1000)(i => UTF8String.fromString(Random.nextString(i)))
     val (stringEstimate, stringEstimateRange) = simulateUpdateMerge(StringType, stringRange)
-    assert(
-      stringEstimate == stringRange.size ||
-        stringEstimateRange.contains(stringRange.size.toLong))
+    assert(stringEstimate == stringRange.size ||
+      stringEstimateRange.contains(stringRange.size.toLong))
 
-    val binaryRange =
-      Seq.tabulate(1000)(i => UTF8String.fromString(Random.nextString(i)).getBytes)
+    val binaryRange = Seq.tabulate(1000)(i => UTF8String.fromString(Random.nextString(i)).getBytes)
     val (binaryEstimate, binaryEstimateRange) = simulateUpdateMerge(BinaryType, binaryRange)
-    assert(
-      binaryEstimate == binaryRange.size ||
-        binaryEstimateRange.contains(binaryRange.size.toLong))
+    assert(binaryEstimate == binaryRange.size ||
+      binaryEstimateRange.contains(binaryRange.size.toLong))
   }
 
   test("Test lgMaxK results in downsampling sketches with larger lgConfigK") {
@@ -130,14 +125,15 @@ class DatasketchesHllSketchSuite extends SparkFunSuite {
     // Setting bits 0-1 of byte 7 to 0b11 (=3) causes CurMode.fromOrdinal(3) to throw
     // ArrayIndexOutOfBoundsException since CurMode only has ordinals 0, 1, 2.
     // This happens in PreambleUtil.extractCurMode() before other validations run.
-    val invalidBinary = Array[Byte](2, // byte 0: preInts = 2 (LIST_PREINTS, passes check)
-      1, // byte 1: serVer = 1 (valid)
-      7, // byte 2: famId = 7 (HLL family)
-      12, // byte 3: lgK = 12 (valid range 4-21)
-      0, // byte 4: unused
-      0, // byte 5: flags = 0
-      0, // byte 6: unused
-      3 // byte 7: modeByte with bits 0-1 = 0b11 = 3 (INVALID curMode ordinal!)
+    val invalidBinary = Array[Byte](
+      2,    // byte 0: preInts = 2 (LIST_PREINTS, passes check)
+      1,    // byte 1: serVer = 1 (valid)
+      7,    // byte 2: famId = 7 (HLL family)
+      12,   // byte 3: lgK = 12 (valid range 4-21)
+      0,    // byte 4: unused
+      0,    // byte 5: flags = 0
+      0,    // byte 6: unused
+      3     // byte 7: modeByte with bits 0-1 = 0b11 = 3 (INVALID curMode ordinal!)
     )
 
     val exception = intercept[Exception] {
@@ -149,10 +145,12 @@ class DatasketchesHllSketchSuite extends SparkFunSuite {
     assert(
       !exception.isInstanceOf[ArrayIndexOutOfBoundsException],
       s"ArrayIndexOutOfBoundsException should be caught and converted to " +
-        s"HLL_INVALID_INPUT_SKETCH_BUFFER error, but got: ${exception.getClass.getName}")
+        s"HLL_INVALID_INPUT_SKETCH_BUFFER error, but got: ${exception.getClass.getName}"
+    )
     assert(
       exception.getMessage.contains("HLL_INVALID_INPUT_SKETCH_BUFFER"),
       s"Expected HLL_INVALID_INPUT_SKETCH_BUFFER error, " +
-        s"but got: ${exception.getClass.getName}: ${exception.getMessage}")
+        s"but got: ${exception.getClass.getName}: ${exception.getMessage}"
+    )
   }
 }

@@ -26,18 +26,17 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types.LongType
 
+
 class RewriteSubquerySuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Column Pruning", FixedPoint(100), ColumnPruning) ::
-        Batch(
-          "Rewrite Subquery",
-          FixedPoint(1),
-          RewritePredicateSubquery,
-          ColumnPruning,
-          CollapseProject,
-          RemoveNoopOperators) :: Nil
+      Batch("Rewrite Subquery", FixedPoint(1),
+        RewritePredicateSubquery,
+        ColumnPruning,
+        CollapseProject,
+        RemoveNoopOperators) :: Nil
   }
 
   test("Column pruning after rewriting predicate subquery") {
@@ -60,17 +59,11 @@ class RewriteSubquerySuite extends PlanTest {
     val relation2 = LocalRelation($"c".int, $"d".int)
     val exists = $"exists".boolean.notNull
 
-    val query = relation1
-      .where(
-        $"b" === 1
-          || Not($"a".in(ListQuery(relation2.select($"c")))))
-      .select($"a")
+    val query = relation1.where($"b" === 1
+      || Not($"a".in(ListQuery(relation2.select($"c"))))).select($"a")
     val correctAnswer = relation1
-      .join(
-        relation2.select($"c"),
-        ExistenceJoin(exists),
-        Some($"a" === $"c"
-          || IsNull($"a" === $"c")))
+      .join(relation2.select($"c"), ExistenceJoin(exists), Some($"a" === $"c"
+        || IsNull($"a" === $"c")))
       .where($"b" === 1 || Not(exists))
       .select($"a")
       .analyze
@@ -81,11 +74,8 @@ class RewriteSubquerySuite extends PlanTest {
 
   test("SPARK-34598: Filters without subquery must not be modified by RewritePredicateSubquery") {
     val relation = LocalRelation($"a".int, $"b".int, $"c".int, $"d".int)
-    val query = relation
-      .where(
-        ($"a" === 1 || $"b" === 2)
-          && ($"c" === 3 && $"d" === 4))
-      .select($"a")
+    val query = relation.where(($"a" === 1 || $"b" === 2)
+      && ($"c" === 3 && $"d" === 4)).select($"a")
     val tracker = new QueryPlanningTracker
     Optimize.executeAndTrack(query.analyze, tracker)
     assert(tracker.rules(RewritePredicateSubquery.ruleName).numEffectiveInvocations == 0)
@@ -100,12 +90,10 @@ class RewriteSubquerySuite extends PlanTest {
       .select($"col2")
       .groupBy()(sum($"col2").as("_aggregateexpression"))
     val correctAnswer = aggregate
-      .join(
-        relation1.select(Cast($"c3", LongType).as("c3")),
+      .join(relation1.select(Cast($"c3", LongType).as("c3")),
         ExistenceJoin($"exists".boolean.withNullability(false)),
         Some($"_aggregateexpression" === $"c3"))
-      .select($"exists".as("(sum(col2) IN (listquery()))"))
-      .analyze
+      .select($"exists".as("(sum(col2) IN (listquery()))")).analyze
     comparePlans(optimized, correctAnswer)
   }
 }

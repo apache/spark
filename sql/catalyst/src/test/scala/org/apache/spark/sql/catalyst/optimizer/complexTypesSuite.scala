@@ -29,26 +29,26 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
- * SPARK-18601 discusses simplification direct access to complex types creators. i.e.
- * {{{create_named_struct(square, `x` * `x`).square}}} can be simplified to {{{`x` * `x`}}}. sam
- * applies to create_array and create_map
- */
+* SPARK-18601 discusses simplification direct access to complex types creators.
+* i.e. {{{create_named_struct(square, `x` * `x`).square}}} can be simplified to {{{`x` * `x`}}}.
+* sam applies to create_array and create_map
+*/
 class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
 
   object Optimizer extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("Finish Analysis", Once, PullOutGroupingExpressions) ::
-        Batch("collapse projections", FixedPoint(10), CollapseProject) ::
-        Batch(
-          "Constant Folding",
-          FixedPoint(10),
-          NullPropagation,
-          ConstantFolding,
-          BooleanSimplification,
-          SimplifyConditionals,
-          SimplifyBinaryComparison,
-          OptimizeUpdateFields,
-          SimplifyExtractValueOps) :: Nil
+      Batch("Finish Analysis", Once,
+        PullOutGroupingExpressions) ::
+      Batch("collapse projections", FixedPoint(10),
+        CollapseProject) ::
+      Batch("Constant Folding", FixedPoint(10),
+         NullPropagation,
+         ConstantFolding,
+         BooleanSimplification,
+         SimplifyConditionals,
+         SimplifyBinaryComparison,
+         OptimizeUpdateFields,
+         SimplifyExtractValueOps) :: Nil
   }
 
   private val idAtt = ($"id").long.notNull
@@ -65,7 +65,11 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
 
   test("explicit get from namedStruct") {
     val query = relation
-      .select(GetStructField(CreateNamedStruct(Seq("att", $"id")), 0, None) as "outerAtt")
+      .select(
+        GetStructField(
+          CreateNamedStruct(Seq("att", $"id" )),
+          0,
+          None) as "outerAtt")
     val expected = relation.select($"id" as "outerAtt")
 
     checkRule(query, expected)
@@ -91,34 +95,54 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
 
   test("collapse multiple CreateNamedStruct/GetStructField pairs") {
     val query = relation
-      .select(CreateNamedStruct(Seq("att1", $"id", "att2", $"id" * $"id")) as "struct1")
+      .select(
+        CreateNamedStruct(Seq(
+          "att1", $"id",
+          "att2", $"id" * $"id")) as "struct1")
       .select(
         GetStructField($"struct1", 0, None) as "struct1Att1",
         GetStructField($"struct1", 1, None) as "struct1Att2")
 
     val expected =
-      relation.select($"id" as "struct1Att1", ($"id" * $"id") as "struct1Att2")
+      relation.
+        select(
+          $"id" as "struct1Att1",
+          ($"id" * $"id") as "struct1Att2")
 
     checkRule(query, expected)
   }
 
   test("collapsed2 - deduced names") {
     val query = relation
-      .select(CreateNamedStruct(Seq("att1", $"id", "att2", $"id" * $"id")) as "struct1")
-      .select(GetStructField($"struct1", 0, None), GetStructField($"struct1", 1, None))
+      .select(
+        CreateNamedStruct(Seq(
+          "att1", $"id",
+          "att2", $"id" * $"id")) as "struct1")
+      .select(
+        GetStructField($"struct1", 0, None),
+        GetStructField($"struct1", 1, None))
 
     val expected =
-      relation.select($"id" as "struct1.att1", ($"id" * $"id") as "struct1.att2")
+      relation.
+        select(
+          $"id" as "struct1.att1",
+          ($"id" * $"id") as "struct1.att2")
 
     checkRule(query, expected)
   }
 
   test("simplified array ops") {
     val rel = relation.select(
-      CreateArray(
-        Seq(
-          CreateNamedStruct(Seq("att1", $"id", "att2", $"id" * $"id")),
-          CreateNamedStruct(Seq("att1", $"id" + 1L, "att2", $"id")))) as "arr")
+      CreateArray(Seq(
+        CreateNamedStruct(Seq(
+          "att1", $"id",
+          "att2", $"id" * $"id")),
+        CreateNamedStruct(Seq(
+          "att1", $"id" + 1L,
+          "att2", $"id")
+       ))
+      ) as "arr"
+    )
     val field = StructField("att1", LongType, false)
 
     // Can simplify as both the two extractions result to cheap expression: $"id"
@@ -157,12 +181,9 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
   test("simplify map ops") {
     val rel = relation
       .select(
-        CreateMap(
-          Seq(
-            "r1",
-            CreateNamedStruct(Seq("att1", $"id", "att2", $"id" + 1L)),
-            "r2",
-            CreateNamedStruct(Seq("att1", $"id" + 1L, "att2", $"id")))) as "m")
+        CreateMap(Seq(
+          "r1", CreateNamedStruct(Seq("att1", $"id", "att2", $"id" + 1L)),
+          "r2", CreateNamedStruct(Seq("att1", $"id" + 1L, "att2", $"id")))) as "m")
     val structType = new StructType().add("att1", LongType, false).add("att2", LongType, false)
 
     // Can simplify as both the two extractions result to cheap expression: $"id"
@@ -199,59 +220,43 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
   test("simplify map ops, constant lookup, dynamic keys") {
     val query = relation.select(
       GetMapValue(
-        CreateMap(
-          Seq(
-            $"id",
-            ($"id" + 1L),
-            ($"id" + 1L),
-            ($"id" + 2L),
-            ($"id" + 2L),
-            ($"id" + 3L),
-            Literal(13L),
-            $"id",
-            ($"id" + 3L),
-            ($"id" + 4L),
-            ($"id" + 4L),
-            ($"id" + 5L))),
+        CreateMap(Seq(
+          $"id", ($"id" + 1L),
+          ($"id" + 1L), ($"id" + 2L),
+          ($"id" + 2L), ($"id" + 3L),
+          Literal(13L), $"id",
+          ($"id" + 3L), ($"id" + 4L),
+          ($"id" + 4L), ($"id" + 5L))),
         13L) as "a")
 
     val expected = relation
       .select(
-        CaseWhen(
-          Seq(
-            (EqualTo(13L, $"id"), ($"id" + 1L)),
-            (EqualTo(13L, ($"id" + 1L)), ($"id" + 2L)),
-            (EqualTo(13L, ($"id" + 2L)), ($"id" + 3L)),
-            (Literal(true), $"id"))) as "a")
+        CaseWhen(Seq(
+          (EqualTo(13L, $"id"), ($"id" + 1L)),
+          (EqualTo(13L, ($"id" + 1L)), ($"id" + 2L)),
+          (EqualTo(13L, ($"id" + 2L)), ($"id" + 3L)),
+          (Literal(true), $"id"))) as "a")
     checkRule(query, expected)
   }
 
-  test(
-    "simplify map ops, dynamic lookup, dynamic keys, lookup is equivalent to one of the keys") {
+  test("simplify map ops, dynamic lookup, dynamic keys, lookup is equivalent to one of the keys") {
     val query = relation
       .select(
         GetMapValue(
-          CreateMap(
-            Seq(
-              $"id",
-              ($"id" + 1L),
-              ($"id" + 1L),
-              ($"id" + 2L),
-              ($"id" + 2L),
-              ($"id" + 3L),
-              ($"id" + 3L),
-              ($"id" + 4L),
-              ($"id" + 4L),
-              ($"id" + 5L))),
-          ($"id" + 3L)) as "a")
+          CreateMap(Seq(
+            $"id", ($"id" + 1L),
+            ($"id" + 1L), ($"id" + 2L),
+            ($"id" + 2L), ($"id" + 3L),
+            ($"id" + 3L), ($"id" + 4L),
+            ($"id" + 4L), ($"id" + 5L))),
+            ($"id" + 3L)) as "a")
     val expected = relation
       .select(
-        CaseWhen(
-          Seq(
-            (EqualTo($"id" + 3L, $"id"), ($"id" + 1L)),
-            (EqualTo($"id" + 3L, ($"id" + 1L)), ($"id" + 2L)),
-            (EqualTo($"id" + 3L, ($"id" + 2L)), ($"id" + 3L)),
-            (Literal(true), ($"id" + 4L)))) as "a")
+        CaseWhen(Seq(
+          (EqualTo($"id" + 3L, $"id"), ($"id" + 1L)),
+          (EqualTo($"id" + 3L, ($"id" + 1L)), ($"id" + 2L)),
+          (EqualTo($"id" + 3L, ($"id" + 2L)), ($"id" + 3L)),
+          (Literal(true), ($"id" + 4L)))) as "a")
     checkRule(query, expected)
   }
 
@@ -259,18 +264,12 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     val rel = relation
       .select(
         GetMapValue(
-          CreateMap(
-            Seq(
-              $"id",
-              ($"id" + 1L),
-              ($"id" + 1L),
-              ($"id" + 2L),
-              ($"id" + 2L),
-              ($"id" + 3L),
-              ($"id" + 3L),
-              ($"id" + 4L),
-              ($"id" + 4L),
-              ($"id" + 5L))),
+          CreateMap(Seq(
+            $"id", ($"id" + 1L),
+            ($"id" + 1L), ($"id" + 2L),
+            ($"id" + 2L), ($"id" + 3L),
+            ($"id" + 3L), ($"id" + 4L),
+            ($"id" + 4L), ($"id" + 5L))),
           $"id" + 30L) as "a")
     val expected = relation.select(
       CaseWhen(Seq(
@@ -286,37 +285,23 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     val rel = relation
       .select(
         GetMapValue(
-          CreateMap(
-            Seq(
-              $"id",
-              ($"id" + 1L),
-              ($"id" + 1L),
-              ($"id" + 2L),
-              ($"id" + 2L),
-              ($"id" + 3L),
-              Literal(14L),
-              $"id",
-              ($"id" + 3L),
-              ($"id" + 4L),
-              ($"id" + 4L),
-              ($"id" + 5L))),
+          CreateMap(Seq(
+            $"id", ($"id" + 1L),
+            ($"id" + 1L), ($"id" + 2L),
+            ($"id" + 2L), ($"id" + 3L),
+            Literal(14L), $"id",
+            ($"id" + 3L), ($"id" + 4L),
+            ($"id" + 4L), ($"id" + 5L))),
           13L) as "a")
 
     val expected = relation
       .select(
-        CaseKeyWhen(
-          13L,
-          Seq(
-            $"id",
-            ($"id" + 1L),
-            ($"id" + 1L),
-            ($"id" + 2L),
-            ($"id" + 2L),
-            ($"id" + 3L),
-            ($"id" + 3L),
-            ($"id" + 4L),
-            ($"id" + 4L),
-            ($"id" + 5L))) as "a")
+        CaseKeyWhen(13L,
+          Seq($"id", ($"id" + 1L),
+            ($"id" + 1L), ($"id" + 2L),
+            ($"id" + 2L), ($"id" + 3L),
+            ($"id" + 3L), ($"id" + 4L),
+            ($"id" + 4L), ($"id" + 5L))) as "a")
 
     checkRule(rel, expected)
   }
@@ -325,50 +310,45 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     val rel = relation
       .select(
         GetMapValue(
-          CreateMap(
-            Seq(
-              $"id",
-              ($"id" + 1L),
-              ($"id" + 1L),
-              ($"id" + 2L),
-              ($"id" + 2L),
-              Literal.create(null, LongType),
-              Literal(2L),
-              $"id",
-              ($"id" + 3L),
-              ($"id" + 4L),
-              ($"id" + 4L),
-              ($"id" + 5L))),
-          2L) as "a")
+          CreateMap(Seq(
+            $"id", ($"id" + 1L),
+            ($"id" + 1L), ($"id" + 2L),
+            ($"id" + 2L), Literal.create(null, LongType),
+            Literal(2L), $"id",
+            ($"id" + 3L), ($"id" + 4L),
+            ($"id" + 4L), ($"id" + 5L))),
+          2L ) as "a")
 
-    val expected =
-      relation
-        .select(
-          CaseWhen(
-            Seq(
-              (EqualTo(2L, $"id"), ($"id" + 1L)),
-              // these two are possible matches, we can't tell until runtime
-              (EqualTo(2L, ($"id" + 1L)), ($"id" + 2L)),
-              (EqualTo(2L, $"id" + 2L), Literal.create(null, LongType)),
-              // this is a definite match (two constants),
-              // but it cannot override a potential match with ('id + 2L),
-              // which is exactly what [[Coalesce]] would do in this case.
-              (Literal.TrueLiteral, $"id"))) as "a")
+    val expected = relation
+      .select(
+        CaseWhen(Seq(
+          (EqualTo(2L, $"id"), ($"id" + 1L)),
+          // these two are possible matches, we can't tell until runtime
+          (EqualTo(2L, ($"id" + 1L)), ($"id" + 2L)),
+          (EqualTo(2L, $"id" + 2L), Literal.create(null, LongType)),
+          // this is a definite match (two constants),
+          // but it cannot override a potential match with ('id + 2L),
+          // which is exactly what [[Coalesce]] would do in this case.
+          (Literal.TrueLiteral, $"id"))) as "a")
     checkRule(rel, expected)
   }
 
   test("SPARK-23500: Simplify array ops that are not at the top node") {
     val query = LocalRelation($"id".long)
       .select(
-        CreateArray(
-          Seq(
-            CreateNamedStruct(Seq("att1", $"id", "att2", $"id" * $"id")),
-            CreateNamedStruct(Seq("att1", $"id", "att2", ($"id" + 1) * ($"id" + 1))))) as "arr")
+        CreateArray(Seq(
+          CreateNamedStruct(Seq(
+            "att1", $"id",
+            "att2", $"id" * $"id")),
+          CreateNamedStruct(Seq(
+            "att1", $"id",
+            "att2", ($"id" + 1) * ($"id" + 1))
+          ))
+        ) as "arr")
       .select(
         GetStructField(GetArrayItem($"arr", 1), 0, None) as "a1",
         GetArrayItem(
-          GetArrayStructFields(
-            $"arr",
+          GetArrayStructFields($"arr",
             StructField("att1", LongType, nullable = false),
             ordinal = 0,
             numFields = 1,
@@ -377,7 +357,9 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
       .orderBy($"id".asc)
 
     val expected = LocalRelation($"id".long)
-      .select($"id" as "a1", $"id" as "a2")
+      .select(
+        $"id" as "a1",
+        $"id" as "a2")
       .orderBy($"id".asc)
     checkRule(query, expected)
   }
@@ -385,14 +367,20 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
   test("SPARK-23500: Simplify map ops that are not top nodes") {
     val query =
       LocalRelation($"id".long)
-        .select(CreateMap(Seq("r1", $"id", "r2", $"id" + 1L)) as "m")
-        .select(GetMapValue($"m", "r1") as "a1", GetMapValue($"m", "r32") as "a2")
+        .select(
+          CreateMap(Seq(
+            "r1", $"id",
+            "r2", $"id" + 1L)) as "m")
+        .select(
+          GetMapValue($"m", "r1") as "a1",
+          GetMapValue($"m", "r32") as "a2")
         .orderBy($"id".asc)
         .select($"a1", $"a2")
 
     val expected =
-      LocalRelation($"id".long)
-        .select($"id" as "a1", Literal.create(null, LongType) as "a2")
+      LocalRelation($"id".long).select(
+        $"id" as "a1",
+        Literal.create(null, LongType) as "a2")
         .orderBy($"id".asc)
     checkRule(query, expected)
   }
@@ -424,21 +412,22 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
   test("SPARK-23500: Ensure that aggregation expressions are not simplified") {
     // Make sure that aggregation exprs are correctly ignored. Maps can't be used in
     // grouping exprs so aren't tested here.
-    val structAggRel = relation.groupBy(CreateNamedStruct(Seq("att1", $"nullable_id")))(
+    val structAggRel = relation.groupBy(
+      CreateNamedStruct(Seq("att1", $"nullable_id")))(
       GetStructField(CreateNamedStruct(Seq("att1", $"nullable_id")), 0, None))
     checkRule(structAggRel, structAggRel)
 
-    val arrayAggRel = relation.groupBy(CreateArray(Seq($"nullable_id")))(
-      GetArrayItem(CreateArray(Seq($"nullable_id")), 0))
+    val arrayAggRel = relation.groupBy(
+      CreateArray(Seq($"nullable_id")))(GetArrayItem(CreateArray(Seq($"nullable_id")), 0))
     checkRule(arrayAggRel, arrayAggRel)
   }
 
   test("SPARK-23500: namedStruct and getField in the same Project #1") {
     val originalQuery =
       testRelation
-        .select(namedStruct("col1", $"b", "col2", $"c").as("s1"), $"a", $"b")
         .select(
-          $"s1" getField "col2" as "s1Col2",
+          namedStruct("col1", $"b", "col2", $"c").as("s1"), $"a", $"b")
+        .select($"s1" getField "col2" as "s1Col2",
           namedStruct("col1", $"a", "col2", $"b").as("s2"))
         .select($"s1Col2", $"s2" getField "col2" as "s2Col2")
     val correctAnswer =
@@ -486,7 +475,9 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
       def query(relation: LocalRelation): LogicalPlan =
         relation.select(GetStructField(UpdateFields($"struct1", fieldOps), ordinal).as("res"))
 
-      checkRule(query(testStructRelation), testStructRelation.select(expected.as("res")))
+      checkRule(
+        query(testStructRelation),
+        testStructRelation.select(expected.as("res")))
 
       checkRule(
         query(testNullableStructRelation),
@@ -512,22 +503,10 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     check(WithField("b", Literal(2)) :: Nil, 1, Literal(2))
 
     // add multiple attributes, extract an attribute from the original struct
-    check(
-      WithField("c", Literal(3)) :: WithField("c", Literal(4)) :: Nil,
-      0,
-      GetStructField($"struct1", 0))
-    check(
-      WithField("c", Literal(3)) :: WithField("d", Literal(4)) :: Nil,
-      0,
-      GetStructField($"struct1", 0))
-    check(
-      WithField("c", Literal(3)) :: WithField("c", Literal(4)) :: Nil,
-      1,
-      GetStructField($"struct1", 1))
-    check(
-      WithField("c", Literal(3)) :: WithField("d", Literal(4)) :: Nil,
-      1,
-      GetStructField($"struct1", 1))
+    check(WithField("c", Literal(3)) :: WithField("c", Literal(4)) :: Nil, 0, GetStructField($"struct1", 0))
+    check(WithField("c", Literal(3)) :: WithField("d", Literal(4)) :: Nil, 0, GetStructField($"struct1", 0))
+    check(WithField("c", Literal(3)) :: WithField("c", Literal(4)) :: Nil, 1, GetStructField($"struct1", 1))
+    check(WithField("c", Literal(3)) :: WithField("d", Literal(4)) :: Nil, 1, GetStructField($"struct1", 1))
     // add multiple attributes, extract newly added attribute
     check(WithField("c", Literal(3)) :: WithField("c", Literal(4)) :: Nil, 2, Literal(4))
     check(WithField("c", Literal(4)) :: WithField("c", Literal(3)) :: Nil, 2, Literal(3))
@@ -591,11 +570,9 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     // we can just return GetStructField in both the non-nullable and nullable struct scenario
 
     def addFieldFromSameStructAndThenExtractIt(relation: LocalRelation): LogicalPlan =
-      relation.select(
-        GetStructField(
-          UpdateFields($"struct1", WithField("b", GetStructField($"struct1", 0)) :: Nil),
-          1)
-          .as("res"))
+      relation.select(GetStructField(
+        UpdateFields($"struct1", WithField("b", GetStructField($"struct1", 0)) :: Nil), 1)
+        .as("res"))
 
     checkRule(
       addFieldFromSameStructAndThenExtractIt(testStructRelation),
@@ -610,11 +587,9 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     // in the nullable struct scenario
 
     def addFieldFromAnotherStructAndThenExtractIt(relation: LocalRelation): LogicalPlan =
-      relation.select(
-        GetStructField(
-          UpdateFields($"struct1", WithField("b", GetStructField($"struct2", 0)) :: Nil),
-          1)
-          .as("res"))
+      relation.select(GetStructField(
+        UpdateFields($"struct1", WithField("b", GetStructField($"struct2", 0)) :: Nil), 1)
+        .as("res"))
 
     checkRule(
       addFieldFromAnotherStructAndThenExtractIt(testStructRelation),
@@ -633,7 +608,9 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
         UpdateFields(
           UpdateFields(
             UpdateFields(
-              UpdateFields($"struct1", WithField("c", Literal(1)) :: Nil),
+              UpdateFields(
+                $"struct1",
+                WithField("c", Literal(1)) :: Nil),
               WithField("d", Literal(2)) :: Nil),
             WithField("e", Literal(3)) :: Nil),
           WithField("f", Literal(4)) :: Nil)
@@ -643,7 +620,9 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
 
     // extract newly added field
 
-    checkRule(query(testStructRelation, 5), testStructRelation.select(Literal(4) as "res"))
+    checkRule(
+      query(testStructRelation, 5),
+      testStructRelation.select(Literal(4) as "res"))
 
     checkRule(
       query(testNullableStructRelation, 5),
@@ -714,38 +693,27 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
   test("simplify add multiple nested fields to non-nullable struct") {
     // this scenario is possible if users add multiple nested columns to a non-nullable struct
     // using the Column.withField API in a non-performant way
-    val structLevel2 = LocalRelation($"a1".struct($"a2".struct($"a3".int.notNull)).notNull)
+    val structLevel2 = LocalRelation(
+      $"a1".struct(
+        $"a2".struct($"a3".int.notNull)).notNull)
 
     val query = {
-      val addB3toA1A2 = UpdateFields(
-        $"a1",
-        Seq(
-          WithField(
-            "a2",
-            UpdateFields(GetStructField($"a1", 0), Seq(WithField("b3", Literal(2)))))))
+      val addB3toA1A2 = UpdateFields($"a1", Seq(WithField("a2",
+        UpdateFields(GetStructField($"a1", 0), Seq(WithField("b3", Literal(2)))))))
 
       structLevel2.select(
         UpdateFields(
           addB3toA1A2,
-          Seq(
-            WithField(
-              "a2",
-              UpdateFields(GetStructField(addB3toA1A2, 0), Seq(WithField("c3", Literal(3)))))))
-          .as("a1"))
+          Seq(WithField("a2", UpdateFields(
+            GetStructField(addB3toA1A2, 0), Seq(WithField("c3", Literal(3))))))).as("a1"))
     }
 
     val expected = structLevel2.select(
-      UpdateFields(
-        $"a1",
-        Seq(
-          // scalastyle:off line.size.limit
-          WithField(
-            "a2",
-            UpdateFields(
-              GetStructField($"a1", 0),
-              WithField("b3", 2) :: WithField("c3", 3) :: Nil))
-          // scalastyle:on line.size.limit
-        )).as("a1"))
+      UpdateFields($"a1", Seq(
+        // scalastyle:off line.size.limit
+        WithField("a2", UpdateFields(GetStructField($"a1", 0), WithField("b3", 2) :: WithField("c3", 3) :: Nil))
+        // scalastyle:on line.size.limit
+      )).as("a1"))
 
     checkRule(query, expected)
   }
@@ -753,43 +721,33 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
   test("simplify add multiple nested fields to nullable struct") {
     // this scenario is possible if users add multiple nested columns to a nullable struct
     // using the Column.withField API in a non-performant way
-    val structLevel2 = LocalRelation($"a1".struct($"a2".struct($"a3".int.notNull)))
+    val structLevel2 = LocalRelation(
+      $"a1".struct(
+        $"a2".struct($"a3".int.notNull)))
 
     val query = {
-      val addB3toA1A2 = UpdateFields(
-        $"a1",
-        Seq(
-          WithField(
-            "a2",
-            UpdateFields(GetStructField($"a1", 0), Seq(WithField("b3", Literal(2)))))))
+      val addB3toA1A2 = UpdateFields($"a1", Seq(WithField("a2",
+        UpdateFields(GetStructField($"a1", 0), Seq(WithField("b3", Literal(2)))))))
 
       structLevel2.select(
         UpdateFields(
           addB3toA1A2,
-          Seq(
-            WithField(
-              "a2",
-              UpdateFields(GetStructField(addB3toA1A2, 0), Seq(WithField("c3", Literal(3)))))))
-          .as("a1"))
+          Seq(WithField("a2", UpdateFields(
+            GetStructField(addB3toA1A2, 0), Seq(WithField("c3", Literal(3))))))).as("a1"))
     }
 
     val expected = {
-      val repeatedExpr =
-        UpdateFields(GetStructField($"a1", 0), WithField("b3", Literal(2)) :: Nil)
-      val repeatedExprDataType = StructType(
-        Seq(
-          StructField("a3", IntegerType, nullable = false),
-          StructField("b3", IntegerType, nullable = false)))
+      val repeatedExpr = UpdateFields(GetStructField($"a1", 0), WithField("b3", Literal(2)) :: Nil)
+      val repeatedExprDataType = StructType(Seq(
+        StructField("a3", IntegerType, nullable = false),
+        StructField("b3", IntegerType, nullable = false)))
 
       structLevel2.select(
-        UpdateFields(
-          $"a1",
-          Seq(
-            WithField(
-              "a2",
-              UpdateFields(
-                If(IsNull($"a1"), Literal(null, repeatedExprDataType), repeatedExpr),
-                WithField("c3", Literal(3)) :: Nil)))).as("a1"))
+        UpdateFields($"a1", Seq(
+          WithField("a2", UpdateFields(
+            If(IsNull($"a1"), Literal(null, repeatedExprDataType), repeatedExpr),
+            WithField("c3", Literal(3)) :: Nil))
+        )).as("a1"))
     }
 
     checkRule(query, expected)
@@ -799,30 +757,26 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     // this scenario is possible if users drop multiple nested columns in a non-nullable struct
     // using the Column.dropFields API in a non-performant way
     val structLevel2 = LocalRelation(
-      $"a1"
-        .struct($"a2".struct($"a3".int.notNull, $"b3".int.notNull, $"c3".int.notNull).notNull)
-        .notNull)
+      $"a1".struct(
+        $"a2".struct($"a3".int.notNull, $"b3".int.notNull, $"c3".int.notNull).notNull
+      ).notNull)
 
     val query = {
-      val dropA1A2B = UpdateFields(
-        $"a1",
-        Seq(WithField("a2", UpdateFields(GetStructField($"a1", 0), Seq(DropField("b3"))))))
+      val dropA1A2B = UpdateFields($"a1", Seq(WithField("a2", UpdateFields(
+        GetStructField($"a1", 0), Seq(DropField("b3"))))))
 
       structLevel2.select(
         UpdateFields(
           dropA1A2B,
-          Seq(WithField("a2", UpdateFields(GetStructField(dropA1A2B, 0), Seq(DropField("c3"))))))
-          .as("a1"))
+          Seq(WithField("a2", UpdateFields(
+            GetStructField(dropA1A2B, 0), Seq(DropField("c3")))))).as("a1"))
     }
 
     val expected = structLevel2.select(
-      UpdateFields(
-        $"a1",
-        Seq(
-          WithField(
-            "a2",
-            UpdateFields(GetStructField($"a1", 0), Seq(DropField("b3"), DropField("c3"))))))
-        .as("a1"))
+      UpdateFields($"a1", Seq(
+        WithField("a2", UpdateFields(GetStructField($"a1", 0), Seq(DropField("b3"),
+          DropField("c3"))))
+      )).as("a1"))
 
     checkRule(query, expected)
   }
@@ -831,36 +785,33 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     // this scenario is possible if users drop multiple nested columns in a nullable struct
     // using the Column.dropFields API in a non-performant way
     val structLevel2 = LocalRelation(
-      $"a1".struct($"a2".struct($"a3".int.notNull, $"b3".int.notNull, $"c3".int.notNull)))
+      $"a1".struct(
+        $"a2".struct($"a3".int.notNull, $"b3".int.notNull, $"c3".int.notNull)
+      ))
 
     val query = {
-      val dropA1A2B = UpdateFields(
-        $"a1",
-        Seq(WithField("a2", UpdateFields(GetStructField($"a1", 0), Seq(DropField("b3"))))))
+      val dropA1A2B = UpdateFields($"a1", Seq(WithField("a2", UpdateFields(
+        GetStructField($"a1", 0), Seq(DropField("b3"))))))
 
       structLevel2.select(
         UpdateFields(
           dropA1A2B,
-          Seq(WithField("a2", UpdateFields(GetStructField(dropA1A2B, 0), Seq(DropField("c3"))))))
-          .as("a1"))
+          Seq(WithField("a2", UpdateFields(
+            GetStructField(dropA1A2B, 0), Seq(DropField("c3")))))).as("a1"))
     }
 
     val expected = {
       val repeatedExpr = UpdateFields(GetStructField($"a1", 0), DropField("b3") :: Nil)
-      val repeatedExprDataType = StructType(
-        Seq(
-          StructField("a3", IntegerType, nullable = false),
-          StructField("c3", IntegerType, nullable = false)))
+      val repeatedExprDataType = StructType(Seq(
+        StructField("a3", IntegerType, nullable = false),
+        StructField("c3", IntegerType, nullable = false)))
 
       structLevel2.select(
-        UpdateFields(
-          $"a1",
-          Seq(
-            WithField(
-              "a2",
-              UpdateFields(
-                If(IsNull($"a1"), Literal(null, repeatedExprDataType), repeatedExpr),
-                DropField("c3") :: Nil)))).as("a1"))
+        UpdateFields($"a1", Seq(
+          WithField("a2", UpdateFields(
+            If(IsNull($"a1"), Literal(null, repeatedExprDataType), repeatedExpr),
+            DropField("c3") :: Nil))
+        )).as("a1"))
     }
 
     checkRule(query, expected)

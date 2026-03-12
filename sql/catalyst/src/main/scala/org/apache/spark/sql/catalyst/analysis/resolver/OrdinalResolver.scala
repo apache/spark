@@ -38,9 +38,7 @@ class OrdinalResolver(expressionResolver: ExpressionResolver)
     scopes.current.getOrdinalReplacementExpressions match {
       case Some(resolvedAggregateExpressions: OrdinalReplacementGroupingExpressions)
           if conf.groupByOrdinal =>
-        replaceOrdinalInGroupingExpressions(
-          unresolvedOrdinal.ordinal,
-          resolvedAggregateExpressions)
+        replaceOrdinalInGroupingExpressions(unresolvedOrdinal.ordinal, resolvedAggregateExpressions)
       case Some(sortOrderCandidates: OrdinalReplacementSortOrderExpressions)
           if conf.orderByOrdinal =>
         replaceOrdinalInSortOrderExpressions(unresolvedOrdinal.ordinal, sortOrderCandidates)
@@ -51,18 +49,18 @@ class OrdinalResolver(expressionResolver: ExpressionResolver)
   /**
    * Replaces the ordinals with the actual expressions from the resolved aggregate expression list
    * or throws if any of aggregate expression are irregular. Handles following invalid cases:
-   *   - ordinal value is greater than output list size.
-   *   - ordinal value refers to aggregate function.
-   *   - star in aggregate expressions when grouping by ordinal.
+   *  - ordinal value is greater than output list size.
+   *  - ordinal value refers to aggregate function.
+   *  - star in aggregate expressions when grouping by ordinal.
    *
    * If the resulting expression is an [[Alias]], return its child.
    *
    * For example, for the query:
    *
-   * {{{SELECT col1 + 1, col1, col2 AS a FROM VALUES(1, 2) GROUP BY 2, col2, 3;}}}
+   * {{{ SELECT col1 + 1, col1, col2 AS a FROM VALUES(1, 2) GROUP BY 2, col2, 3; }}}
    *
-   * It would replace `2` with the `col1` and `3` with `col2` so the final grouping expression
-   * list would be: [col1, col2, col2].
+   * It would replace `2` with the `col1` and `3` with `col2` so the final grouping expression list
+   * would be: [col1, col2, col2].
    */
   private def replaceOrdinalInGroupingExpressions(
       ordinal: Int,
@@ -70,14 +68,17 @@ class OrdinalResolver(expressionResolver: ExpressionResolver)
     if (ordinal > ordinalReplacementGroupingExpressions.expressions.length || ordinal < 1) {
       throw QueryCompilationErrors.groupByPositionRangeError(
         ordinal,
-        ordinalReplacementGroupingExpressions.expressions.size)
+        ordinalReplacementGroupingExpressions.expressions.size
+      )
     }
 
     if (ordinalReplacementGroupingExpressions.expressionIndexesWithAggregateFunctions.contains(
-        ordinal - 1)) {
+        ordinal - 1
+      )) {
       throw QueryCompilationErrors.groupByPositionRefersToAggregateFunctionError(
         ordinal,
-        ordinalReplacementGroupingExpressions.expressions(ordinal - 1))
+        ordinalReplacementGroupingExpressions.expressions(ordinal - 1)
+      )
     }
 
     if (ordinalReplacementGroupingExpressions.hasStar) {
@@ -115,7 +116,8 @@ class OrdinalResolver(expressionResolver: ExpressionResolver)
       throw QueryCompilationErrors.orderByPositionRangeError(
         ordinal,
         ordinalReplacementSortOrderExpressions.expressions.size,
-        ordinalReplacementSortOrderExpressions.unresolvedSort)
+        ordinalReplacementSortOrderExpressions.unresolvedSort
+      )
     }
     ordinalReplacementSortOrderExpressions.expressions(ordinal - 1).toAttribute
   }

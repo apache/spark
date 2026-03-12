@@ -24,7 +24,8 @@ import org.apache.spark.sql.connector.catalog.PartitionInternalRow
 import org.apache.spark.sql.types.IntegerType
 
 /**
- * Benchmark for [[InternalRowComparableWrapper]]. To run this benchmark:
+ * Benchmark for [[InternalRowComparableWrapper]].
+ * To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class> --jars <spark core test jar> <spark catalyst test jar>
@@ -44,8 +45,7 @@ object InternalRowComparableWrapperBenchmark extends BenchmarkBase {
       val bucketId = i % bucketNum
       PartitionInternalRow.apply(Array(day, bucketId));
     }
-    val benchmark =
-      new Benchmark("internal row comparable wrapper", partitionNum, output = output)
+    val benchmark = new Benchmark("internal row comparable wrapper", partitionNum, output = output)
 
     val comparableKeyWrapperFactory =
       InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(

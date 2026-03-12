@@ -26,12 +26,11 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 /**
  * An adaptor from a Hadoop [[RecordReader]] to an [[Iterator]] over the values returned.
  *
- * Note that this returns [[Object]]s instead of [[InternalRow]] because we rely on erasure to
- * pass column batches by pretending they are rows.
+ * Note that this returns [[Object]]s instead of [[InternalRow]] because we rely on erasure to pass
+ * column batches by pretending they are rows.
  */
-class RecordReaderIterator[T](private[this] var rowReader: RecordReader[_, T])
-    extends Iterator[T]
-    with Closeable {
+class RecordReaderIterator[T](
+    private[this] var rowReader: RecordReader[_, T]) extends Iterator[T] with Closeable {
   private[this] var havePair = false
   private[this] var finished = false
 

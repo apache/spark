@@ -23,9 +23,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class FakeCommandRunner extends ExternalCommandRunner {
 
-  override def executeCommand(
-      command: String,
-      options: CaseInsensitiveStringMap): Array[String] = {
+  override def executeCommand(command: String, options: CaseInsensitiveStringMap): Array[String] = {
     System.setProperty("command", command)
     options.keySet().iterator().asScala.toSeq.sorted.toArray
   }

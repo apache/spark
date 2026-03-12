@@ -28,29 +28,27 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 /**
  * A virtual rule to resolve [[UnresolvedAttribute]] in [[Aggregate]]. It's only used by the real
  * rule `ResolveReferences`. The column resolution order for [[Aggregate]] is:
- *   1. Resolves the columns to [[AttributeReference]] with the output of the child plan. This
- *      includes metadata columns as well.
- *   2. Resolves the columns to a literal function which is allowed to be invoked without braces,
- *      e.g. `SELECT col, current_date FROM t`.
- *   3. If aggregate expressions are all resolved, resolve GROUP BY alias and GROUP BY ALL. 3.1.
- *      If the grouping expressions contain an unresolved column whose name matches an alias in
- *      the SELECT list, resolves that unresolved column to the alias. This is to support SQL
- *      pattern like `SELECT a + b AS c, max(col) FROM t GROUP BY c`. 3.2. If the grouping
- *      expressions only have one single unresolved column named 'ALL', expanded it to include all
- *      non-aggregate columns in the SELECT list. This is to support SQL pattern like
+ * 1. Resolves the columns to [[AttributeReference]] with the output of the child plan. This
+ *    includes metadata columns as well.
+ * 2. Resolves the columns to a literal function which is allowed to be invoked without braces, e.g.
+ *    `SELECT col, current_date FROM t`.
+ * 3. If aggregate expressions are all resolved, resolve GROUP BY alias and GROUP BY ALL.
+ * 3.1. If the grouping expressions contain an unresolved column whose name matches an alias in the
+ *      SELECT list, resolves that unresolved column to the alias. This is to support SQL pattern
+ *      like `SELECT a + b AS c, max(col) FROM t GROUP BY c`.
+ * 3.2. If the grouping expressions only have one single unresolved column named 'ALL', expanded it
+ *      to include all non-aggregate columns in the SELECT list. This is to support SQL pattern like
  *      `SELECT col1, col2, agg_expr(...) FROM t GROUP BY ALL`.
- *   4. Resolves the columns in aggregate expressions to [[LateralColumnAliasReference]] if it
- *      references the alias defined previously in the SELECT list. The rule
- *      `ResolveLateralColumnAliasReference` will further resolve [[LateralColumnAliasReference]]
- *      and rewrite the plan. This is to support SQL pattern like
- *      `SELECT col1 + 1 AS x, x + 1 AS y, y + 1 AS z FROM t`.
- *   5. Resolves the columns to outer references with the outer plan if we are resolving subquery
- *      expressions.
+ * 4. Resolves the columns in aggregate expressions to [[LateralColumnAliasReference]] if
+ *    it references the alias defined previously in the SELECT list. The rule
+ *    `ResolveLateralColumnAliasReference` will further resolve [[LateralColumnAliasReference]] and
+ *    rewrite the plan. This is to support SQL pattern like
+ *    `SELECT col1 + 1 AS x, x + 1 AS y, y + 1 AS z FROM t`.
+ * 5. Resolves the columns to outer references with the outer plan if we are resolving subquery
+ *    expressions.
  */
-class ResolveReferencesInAggregate(val catalogManager: CatalogManager)
-    extends SQLConfHelper
-    with ColumnResolutionHelper
-    with AliasHelper {
+class ResolveReferencesInAggregate(val catalogManager: CatalogManager) extends SQLConfHelper
+  with ColumnResolutionHelper with AliasHelper {
 
   def apply(a: Aggregate): Aggregate = {
     val planForResolve = a.child match {
@@ -63,11 +61,10 @@ class ResolveReferencesInAggregate(val catalogManager: CatalogManager)
 
     val resolvedGroupExprsBasic = a.groupingExpressions
       .map(resolveExpressionByPlanChildren(_, planForResolve))
-    val resolvedAggExprsBasic =
-      a.aggregateExpressions.map(resolveExpressionByPlanChildren(_, planForResolve))
+    val resolvedAggExprsBasic = a.aggregateExpressions.map(
+      resolveExpressionByPlanChildren(_, planForResolve))
     val resolvedAggExprsWithLCA = resolveLateralColumnAlias(resolvedAggExprsBasic)
-    val resolvedAggExprsFinal = resolvedAggExprsWithLCA
-      .map(resolveColsLastResort)
+    val resolvedAggExprsFinal = resolvedAggExprsWithLCA.map(resolveColsLastResort)
       .map(_.asInstanceOf[NamedExpression])
     // `groupingExpressions` may rely on `aggregateExpressions`, due to features like GROUP BY alias
     // and GROUP BY ALL. We only do basic resolution for `groupingExpressions`, and will further
@@ -77,8 +74,8 @@ class ResolveReferencesInAggregate(val catalogManager: CatalogManager)
     val resolvedGroupExprs = if (resolvedAggExprsFinal.forall(_.resolved)) {
       val resolved = resolveGroupByAll(
         resolvedAggExprsFinal,
-        resolveGroupByAlias(resolvedAggExprsFinal, resolvedGroupExprsBasic)).map(
-        resolveColsLastResort)
+        resolveGroupByAlias(resolvedAggExprsFinal, resolvedGroupExprsBasic)
+      ).map(resolveColsLastResort)
       // TODO: currently we don't support LCA in `groupingExpressions` yet.
       if (resolved.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE))) {
         throw new AnalysisException(
@@ -141,9 +138,10 @@ class ResolveReferencesInAggregate(val catalogManager: CatalogManager)
   }
 
   /**
-   * Returns all the grouping expressions inferred from a GROUP BY ALL aggregate. The result is
-   * optional. If Spark fails to infer the grouping columns, it is None. Otherwise, it contains
-   * all the non-aggregate expressions from the project list of the input Aggregate.
+   * Returns all the grouping expressions inferred from a GROUP BY ALL aggregate.
+   * The result is optional. If Spark fails to infer the grouping columns, it is None.
+   * Otherwise, it contains all the non-aggregate expressions from the project list of the input
+   * Aggregate.
    */
   private def expandGroupByAll(selectList: Seq[NamedExpression]): Option[Seq[Expression]] = {
     val groupingExprs = selectList.filter(e => !AggregateExpression.containsAggregate(e))
@@ -171,8 +169,12 @@ class ResolveReferencesInAggregate(val catalogManager: CatalogManager)
 
   /**
    * Returns true if the expression includes an Attribute outside the aggregate expression part.
-   * For example: "i" -> true "i + 2" -> true "i + sum(j)" -> true "sum(j)" -> false "sum(j) / 2"
-   * -> false
+   * For example:
+   *  "i" -> true
+   *  "i + 2" -> true
+   *  "i + sum(j)" -> true
+   *  "sum(j)" -> false
+   *  "sum(j) / 2" -> false
    */
   private def containsAttribute(expr: Expression): Boolean = expr match {
     case _: AggregateExpression =>
@@ -185,13 +187,12 @@ class ResolveReferencesInAggregate(val catalogManager: CatalogManager)
   }
 
   /**
-   * A check to be used in [[CheckAnalysis]] to see if we have any unresolved group by at the end
-   * of analysis, so we can tell users that we fail to infer the grouping columns.
+   * A check to be used in [[CheckAnalysis]] to see if we have any unresolved group by at the
+   * end of analysis, so we can tell users that we fail to infer the grouping columns.
    */
   def checkUnresolvedGroupByAll(operator: LogicalPlan): Unit = operator match {
-    case a: Aggregate
-        if a.aggregateExpressions.forall(_.resolved) &&
-          isGroupByAll(a.groupingExpressions) =>
+    case a: Aggregate if a.aggregateExpressions.forall(_.resolved) &&
+        isGroupByAll(a.groupingExpressions) =>
       if (expandGroupByAll(a.aggregateExpressions).isEmpty) {
         operator.failAnalysis(
           errorClass = "UNRESOLVED_ALL_IN_GROUP_BY",

@@ -29,38 +29,33 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
 private[sql] object Catalogs {
-
   /**
-   * Load and configure a catalog by name. <p> This loads, instantiates, and initializes the
-   * catalog plugin for each call; it does not cache or reuse instances.
+   * Load and configure a catalog by name.
+   * <p>
+   * This loads, instantiates, and initializes the catalog plugin for each call; it does not cache
+   * or reuse instances.
    *
-   * @param name
-   *   a String catalog name
-   * @param conf
-   *   a SQLConf
-   * @return
-   *   an initialized CatalogPlugin
-   * @throws CatalogNotFoundException
-   *   if the plugin class cannot be found
-   * @throws org.apache.spark.SparkException
-   *   if the plugin class cannot be instantiated
+   * @param name a String catalog name
+   * @param conf a SQLConf
+   * @return an initialized CatalogPlugin
+   * @throws CatalogNotFoundException if the plugin class cannot be found
+   * @throws org.apache.spark.SparkException if the plugin class cannot be instantiated
    */
   @throws[CatalogNotFoundException]
   @throws[SparkException]
   def load(name: String, conf: SQLConf): CatalogPlugin = {
-    val pluginClassName =
-      try {
-        val _pluginClassName = conf.getConfString(s"spark.sql.catalog.$name")
-        // SPARK-39079 do configuration check first, otherwise some path-based table like
-        // `org.apache.spark.sql.json`.`/path/json_file` may fail on analyze phase
-        if (name.contains(".")) {
-          throw QueryExecutionErrors.invalidCatalogNameError(name)
-        }
-        _pluginClassName
-      } catch {
-        case _: NoSuchElementException =>
-          throw QueryExecutionErrors.catalogNotFoundError(name)
+    val pluginClassName = try {
+      val _pluginClassName = conf.getConfString(s"spark.sql.catalog.$name")
+      // SPARK-39079 do configuration check first, otherwise some path-based table like
+      // `org.apache.spark.sql.json`.`/path/json_file` may fail on analyze phase
+      if (name.contains(".")) {
+        throw QueryExecutionErrors.invalidCatalogNameError(name)
       }
+      _pluginClassName
+    } catch {
+      case _: NoSuchElementException =>
+        throw QueryExecutionErrors.catalogNotFoundError(name)
+    }
     val loader = Utils.getContextOrSparkClassLoader
     try {
       val pluginClass = loader.loadClass(pluginClassName)
@@ -73,53 +68,41 @@ private[sql] object Catalogs {
     } catch {
       case e: ClassNotFoundException =>
         throw QueryExecutionErrors.catalogPluginClassNotFoundForCatalogError(
-          name,
-          pluginClassName,
-          e)
+          name, pluginClassName, e)
       case e: NoSuchMethodException =>
         throw QueryExecutionErrors.catalogFailToFindPublicNoArgConstructorError(
-          name,
-          pluginClassName,
-          e)
+          name, pluginClassName, e)
       case e: IllegalAccessException =>
         throw QueryExecutionErrors.catalogFailToCallPublicNoArgConstructorError(
-          name,
-          pluginClassName,
-          e)
+          name, pluginClassName, e)
       case e: InstantiationException =>
         throw QueryExecutionErrors.cannotInstantiateAbstractCatalogPluginClassError(
-          name,
-          pluginClassName,
-          e)
+          name, pluginClassName, e)
       case e: InvocationTargetException =>
         throw QueryExecutionErrors.failedToInstantiateConstructorForCatalogError(
-          name,
-          pluginClassName,
-          e)
+          name, pluginClassName, e)
     }
   }
 
   /**
    * Extracts a named catalog's configuration from a SQLConf.
    *
-   * @param name
-   *   a catalog name
-   * @param conf
-   *   a SQLConf
-   * @return
-   *   a case insensitive string map of options starting with spark.sql.catalog.(name).
+   * @param name a catalog name
+   * @param conf a SQLConf
+   * @return a case insensitive string map of options starting with spark.sql.catalog.(name).
    */
   private def catalogOptions(name: String, conf: SQLConf) = {
     val prefix = Pattern.compile("^spark\\.sql\\.catalog\\." + name + "\\.(.+)")
     val options = new util.HashMap[String, String]
     val reader = new ConfigReader(options)
-    conf.getAllConfs.foreach { case (key, value) =>
-      val matcher = prefix.matcher(key)
-      if (matcher.matches && matcher.groupCount > 0) {
-        // pass config entries through default ConfigReader mechanics,
-        // substituting prefixes from bindings: ${env:XYZ} -> sys.env.get("XYZ")
-        options.put(matcher.group(1), reader.substitute(value))
-      }
+    conf.getAllConfs.foreach {
+      case (key, value) =>
+        val matcher = prefix.matcher(key)
+        if (matcher.matches && matcher.groupCount > 0) {
+          // pass config entries through default ConfigReader mechanics,
+          // substituting prefixes from bindings: ${env:XYZ} -> sys.env.get("XYZ")
+          options.put(matcher.group(1), reader.substitute(value))
+        }
     }
     new CaseInsensitiveStringMap(options)
   }

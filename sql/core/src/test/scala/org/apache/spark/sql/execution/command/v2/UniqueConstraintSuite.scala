@@ -28,7 +28,8 @@ class UniqueConstraintSuite extends QueryTest with CommandSuiteBase with DDLComm
     ("NOT ENFORCED NORELY", "NOT ENFORCED NORELY"),
     ("NORELY NOT ENFORCED", "NOT ENFORCED NORELY"),
     ("NORELY", "NOT ENFORCED NORELY"),
-    ("RELY", "NOT ENFORCED RELY"))
+    ("RELY", "NOT ENFORCED RELY")
+  )
 
   test("Add unique constraint") {
     validConstraintCharacteristics.foreach { case (characteristic, expectedDDL) =>
@@ -105,9 +106,9 @@ class UniqueConstraintSuite extends QueryTest with CommandSuiteBase with DDLComm
           exception = error,
           condition = "CONSTRAINT_ALREADY_EXISTS",
           sqlState = "42710",
-          parameters = Map(
-            "constraintName" -> "uk1",
-            "oldConstraint" -> "CONSTRAINT uk1 UNIQUE (id) NOT ENFORCED NORELY"))
+          parameters = Map("constraintName" -> "uk1",
+            "oldConstraint" -> "CONSTRAINT uk1 UNIQUE (id) NOT ENFORCED NORELY")
+        )
       }
     }
   }
@@ -122,9 +123,8 @@ class UniqueConstraintSuite extends QueryTest with CommandSuiteBase with DDLComm
       assert(table.constraints.length == 1)
       val constraint = table.constraints.head
       assert(constraint.name() == "uk1")
-      assert(
-        constraint.toDDL ==
-          "CONSTRAINT uk1 UNIQUE (id1, id2) NOT ENFORCED NORELY")
+      assert(constraint.toDDL ==
+        "CONSTRAINT uk1 UNIQUE (id1, id2) NOT ENFORCED NORELY")
     }
   }
 }

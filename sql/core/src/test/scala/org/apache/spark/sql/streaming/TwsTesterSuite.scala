@@ -88,18 +88,20 @@ class TwsTesterSuite extends SparkFunSuite {
         ("user1", "hello", 1L),
         ("user1", "hello", 2L),
         ("user1", "world", 1L),
-        ("user1", "world", 2L)).sorted)
+        ("user1", "world", 2L)
+      ).sorted
+    )
 
     val ans2 = tester.test("user2", List(("", "hello"), ("", "spark")))
     assert(ans2.sorted == List(("user2", "hello", 1L), ("user2", "spark", 1L)).sorted)
 
     // Check state using peekMapState
     assert(
-      tester
-        .peekMapState[String, Long]("frequencies", "user1") == Map("hello" -> 2L, "world" -> 2L))
+      tester.peekMapState[String, Long]("frequencies", "user1") == Map("hello" -> 2L, "world" -> 2L)
+    )
     assert(
-      tester
-        .peekMapState[String, Long]("frequencies", "user2") == Map("hello" -> 1L, "spark" -> 1L))
+      tester.peekMapState[String, Long]("frequencies", "user2") == Map("hello" -> 1L, "spark" -> 1L)
+    )
     assert(tester.peekMapState[String, Long]("frequencies", "user3") == Map())
     assert(tester.peekMapState[String, Long]("frequencies", "user3").isEmpty)
 
@@ -110,7 +112,9 @@ class TwsTesterSuite extends SparkFunSuite {
       tester.peekMapState[String, Long]("frequencies", "user1") == Map(
         "hello" -> 3L,
         "world" -> 2L,
-        "test" -> 1L))
+        "test" -> 1L
+      )
+    )
   }
 
   test("TwsTester should allow direct access to MapState") {
@@ -131,7 +135,9 @@ class TwsTesterSuite extends SparkFunSuite {
       tester.peekMapState[String, Long]("frequencies", "user1") == Map(
         "hello" -> 6L,
         "world" -> 3L,
-        "goodbye" -> 1L))
+        "goodbye" -> 1L
+      )
+    )
     assert(tester.peekMapState[String, Long]("frequencies", "user2") == Map("spark" -> 11L))
     assert(tester.peekMapState[String, Long]("frequencies", "user3") == Map("new" -> 1L))
     assert(tester.peekMapState[String, Long]("frequencies", "user4") == Map())
@@ -188,7 +194,8 @@ class TwsTesterSuite extends SparkFunSuite {
       ("key2", "b"),
       ("key1", "c"),
       ("key1", "c"),
-      ("key3", "q"))
+      ("key3", "q")
+    )
     val ans: List[(String, Long)] = testRowByRow(input)
     assert(
       ans == List(
@@ -198,7 +205,9 @@ class TwsTesterSuite extends SparkFunSuite {
         ("key2", 2L),
         ("key1", 3L),
         ("key1", 4L),
-        ("key3", 1L)))
+        ("key3", 1L)
+      )
+    )
   }
 
   test("TwsTester should exercise all state methods") {
@@ -226,7 +235,8 @@ class TwsTesterSuite extends SparkFunSuite {
         "map-keys", // x,z
         "map-clear", // clear map
         "map-exists" // false
-      ))
+      )
+    )
 
     assert(
       results == List(
@@ -249,7 +259,9 @@ class TwsTesterSuite extends SparkFunSuite {
         ("k", "map-remove:done"),
         ("k", "map-keys:x,z"),
         ("k", "map-clear:done"),
-        ("k", "map-exists:false")))
+        ("k", "map-exists:false")
+      )
+    )
   }
 
   test("TwsTester: value-get before value-set") {
@@ -272,7 +284,9 @@ class TwsTesterSuite extends SparkFunSuite {
           "list-put",
           "list-get",
           "list-clear",
-          "list-get"))
+          "list-get"
+        )
+      )
     assert(
       results == List(
         ("k", "list-get:"),
@@ -283,7 +297,9 @@ class TwsTesterSuite extends SparkFunSuite {
         ("k", "list-put:done"),
         ("k", "list-get:put"),
         ("k", "list-clear:done"),
-        ("k", "list-get:")))
+        ("k", "list-get:")
+      )
+    )
   }
 
   test("TwsTester should delete value state") {
@@ -312,15 +328,18 @@ class TwsTesterSuite extends SparkFunSuite {
     mapTester.updateMapState("frequencies", "user2", Map("spark" -> 10L))
     assert(
       mapTester
-        .peekMapState[String, Long]("frequencies", "user1") == Map("hello" -> 5L, "world" -> 3L))
+        .peekMapState[String, Long]("frequencies", "user1") == Map("hello" -> 5L, "world" -> 3L)
+    )
     mapTester.deleteState("frequencies", "user1")
     assert(mapTester.peekMapState[String, Long]("frequencies", "user1").isEmpty)
     assert(mapTester.peekMapState[String, Long]("frequencies", "user2") == Map("spark" -> 10L))
   }
 
   test("TwsTester should support ProcessingTime timers") {
-    val tester =
-      new TwsTester(new SessionTimeoutProcessor(), timeMode = TimeMode.ProcessingTime())
+    val tester = new TwsTester(
+      new SessionTimeoutProcessor(),
+      timeMode = TimeMode.ProcessingTime()
+    )
 
     // Process input for key1 - should register a timer at t=10000
     val result1 = tester.test("key1", List("hello"))
@@ -351,7 +370,8 @@ class TwsTesterSuite extends SparkFunSuite {
     val tester = new TwsTester(
       new EventTimeSessionProcessor(),
       timeMode = TimeMode.EventTime(),
-      eventTimeExtractor = Some((row: (Long, String)) => row._1))
+      eventTimeExtractor = Some((row: (Long, String)) => row._1)
+    )
 
     // Process event at t=10000 for key1 - registers timer at t=15000
     // Note: watermark starts at 0 and must be advanced manually
@@ -386,7 +406,8 @@ class TwsTesterSuite extends SparkFunSuite {
     val tester = new TwsTester(
       new EventTimeCountProcessor(),
       timeMode = TimeMode.EventTime(),
-      eventTimeExtractor = Some((row: (Long, String)) => row._1))
+      eventTimeExtractor = Some((row: (Long, String)) => row._1)
+    )
 
     // Process some events before setting watermark (watermark starts at 0)
     val result1 = tester.test("key1", List((5000L, "event1"), (10000L, "event2")))
@@ -400,7 +421,8 @@ class TwsTesterSuite extends SparkFunSuite {
     // Events at 16000 and 20000 are on-time (> watermark 15000), should be processed
     val result2 = tester.test(
       "key1",
-      List((10000L, "late1"), (14000L, "late2"), (16000L, "ontime1"), (20000L, "ontime2")))
+      List((10000L, "late1"), (14000L, "late2"), (16000L, "ontime1"), (20000L, "ontime2"))
+    )
     // Only 2 new events should be counted (the on-time ones), total = 2 + 2 = 4
     assert(result2 == List(("key1", 4L)))
 
@@ -414,7 +436,8 @@ class TwsTesterSuite extends SparkFunSuite {
     val tester = new TwsTester(
       new EventTimeSessionProcessor(),
       timeMode = TimeMode.EventTime(),
-      eventTimeExtractor = Some((row: (Long, String)) => row._1))
+      eventTimeExtractor = Some((row: (Long, String)) => row._1)
+    )
 
     // Set watermark to 20 seconds
     tester.setWatermark(20000)
@@ -436,15 +459,23 @@ class TwsTesterSuite extends SparkFunSuite {
       List(
         UserEvent("purchase", 100.0, 1000L),
         UserEvent("refund", -20.0, 2000L),
-        UserEvent("purchase", 50.0, 3000L)))
+        UserEvent("purchase", 50.0, 3000L)
+      )
+    )
     assert(result1 == List(UserSummary("user1", UserProfile(130.0, 3L, 3000L))))
 
     // Process events for user2
-    val result2 = tester.test("user2", List(UserEvent("purchase", 200.0, 5000L)))
+    val result2 = tester.test(
+      "user2",
+      List(UserEvent("purchase", 200.0, 5000L))
+    )
     assert(result2 == List(UserSummary("user2", UserProfile(200.0, 1L, 5000L))))
 
     // Process more events for user1 - state should accumulate
-    val result3 = tester.test("user1", List(UserEvent("purchase", 70.0, 4000L)))
+    val result3 = tester.test(
+      "user1",
+      List(UserEvent("purchase", 70.0, 4000L))
+    )
     assert(result3 == List(UserSummary("user1", UserProfile(200.0, 4L, 4000L))))
 
     // Verify state using peekValueState with complex case class
@@ -462,11 +493,11 @@ class TwsTesterSuite extends SparkFunSuite {
 }
 
 /**
- * Integration test suite that compares TwsTester results with real streaming execution. Thread
- * auditing is disabled because this suite runs actual streaming queries with RocksDB and shuffle
- * operations, which spawn daemon threads (e.g., Netty boss/worker threads, file client threads,
- * ForkJoinPool workers, and cleaner threads) that shut down asynchronously after
- * SparkContext.stop().
+ * Integration test suite that compares TwsTester results with real streaming execution.
+ * Thread auditing is disabled because this suite runs actual streaming queries with RocksDB
+ * and shuffle operations, which spawn daemon threads (e.g., Netty boss/worker threads,
+ * file client threads, ForkJoinPool workers, and cleaner threads) that shut down
+ * asynchronously after SparkContext.stop().
  */
 class TwsTesterFuzzTestSuite extends StreamTest {
   import testImplicits._
@@ -493,23 +524,27 @@ class TwsTesterFuzzTestSuite extends StreamTest {
       result: Dataset[O]): Unit = {
     withSQLConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
-      SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
+      SQLConf.SHUFFLE_PARTITIONS.key -> "5"
+    ) {
       val expectedResults: List[List[O]] = batches
         .map(batch => batch.groupBy(_._1).flatMap(p => tester.test(p._1, p._2.map(_._2))).toList)
         .toList
       assert(batches.size == expectedResults.size)
 
       val actions: Seq[StreamAction] = (batches zip expectedResults).flatMap {
-        case (batch, expected) =>
-          Seq(AddData(inputStream, batch: _*), CheckNewAnswer(expected.head, expected.tail: _*))
-      } :+ StopStream
+          case (batch, expected) =>
+            Seq(
+              AddData(inputStream, batch: _*),
+              CheckNewAnswer(expected.head, expected.tail: _*)
+            )
+        } :+ StopStream
       testStream(result, OutputMode.Append())(actions: _*)
     }
   }
 
   /**
-   * Asserts that {@code tester} processes given {@code batches} in the same way as Spark
-   * streaming query with {@code transformWithState} would.
+   * Asserts that {@code tester} processes given {@code batches} in the same way as Spark streaming
+   * query with {@code transformWithState} would.
    */
   private def checkTwsTester[
       K: org.apache.spark.sql.Encoder,
@@ -519,7 +554,8 @@ class TwsTesterFuzzTestSuite extends StreamTest {
       batches: List[List[(K, I)]]): Unit = {
     implicit val tupleEncoder = org.apache.spark.sql.Encoders.tuple(
       implicitly[org.apache.spark.sql.Encoder[K]],
-      implicitly[org.apache.spark.sql.Encoder[I]])
+      implicitly[org.apache.spark.sql.Encoder[I]]
+    )
     val inputStream = MemoryStream[(K, I)]
     val result = inputStream
       .toDS()
@@ -551,7 +587,8 @@ class TwsTesterFuzzTestSuite extends StreamTest {
     val input = List.fill(1000) {
       (
         s"key${random.nextInt(10)}",
-        (random.alphanumeric.take(5).mkString, random.nextDouble() * 100))
+        (random.alphanumeric.take(5).mkString, random.nextDouble() * 100)
+      )
     }
     val processor = new TopKProcessor(5)
     checkTwsTester(processor, split(input, 2))
@@ -583,7 +620,8 @@ class TwsTesterFuzzTestSuite extends StreamTest {
       "map-values",
       "map-iterator",
       "map-remove",
-      "map-clear")
+      "map-clear"
+    )
     val input = List.fill(500) {
       (s"key${random.nextInt(5)}", commands(random.nextInt(commands.length)))
     }

@@ -35,34 +35,24 @@ import org.apache.spark.ui.{CspNonce, GraphUIData, JsCollector, UIUtils => Spark
 import org.apache.spark.util.ArrayImplicits._
 
 private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
-    extends WebUIPage("statistics")
-    with Logging {
+  extends WebUIPage("statistics") with Logging {
 
   // State store provider implementation mustn't do any heavyweight initialiation in constructor
   // but in its init method.
-  private val supportedCustomMetrics = StateStoreProvider
-    .create(parent.parent.conf.get(STATE_STORE_PROVIDER_CLASS))
-    .supportedCustomMetrics
+  private val supportedCustomMetrics = StateStoreProvider.create(
+    parent.parent.conf.get(STATE_STORE_PROVIDER_CLASS)).supportedCustomMetrics
   logDebug(s"Supported custom metrics: $supportedCustomMetrics")
 
   private val enabledCustomMetrics =
-    parent.parent.conf
-      .get(ENABLED_STREAMING_UI_CUSTOM_METRIC_LIST)
-      .map(_.toLowerCase(Locale.ROOT))
+    parent.parent.conf.get(ENABLED_STREAMING_UI_CUSTOM_METRIC_LIST).map(_.toLowerCase(Locale.ROOT))
   logDebug(s"Enabled custom metrics: $enabledCustomMetrics")
 
   def generateLoadResources(request: HttpServletRequest): Seq[Node] = {
     // scalastyle:off
     <script src={SparkUIUtils.prependBaseUri(request, "/static/d3.min.js")}></script>
-        <link rel="stylesheet" href={
-      SparkUIUtils.prependBaseUri(request, "/static/streaming-page.css")
-    } type="text/css"/>
-      <script type="module" src={
-      SparkUIUtils.prependBaseUri(request, "/static/streaming-page.js")
-    }></script>
-      <script type="module" src={
-      SparkUIUtils.prependBaseUri(request, "/static/structured-streaming-page.js")
-    }></script>
+        <link rel="stylesheet" href={SparkUIUtils.prependBaseUri(request, "/static/streaming-page.css")} type="text/css"/>
+      <script type="module" src={SparkUIUtils.prependBaseUri(request, "/static/streaming-page.js")}></script>
+      <script type="module" src={SparkUIUtils.prependBaseUri(request, "/static/structured-streaming-page.js")}></script>
     // scalastyle:on
   }
 
@@ -70,12 +60,9 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
     val parameterId = request.getParameter("id")
     require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
-    val query = parent.store.allQueryUIData
-      .find { uiData =>
-        uiData.summary.runId.equals(parameterId)
-      }
-      .getOrElse(
-        throw new IllegalArgumentException(s"Failed to find streaming query $parameterId"))
+    val query = parent.store.allQueryUIData.find { uiData =>
+      uiData.summary.runId.equals(parameterId)
+    }.getOrElse(throw new IllegalArgumentException(s"Failed to find streaming query $parameterId"))
 
     val resources = generateLoadResources(request)
     val basicInfo = generateBasicInfo(query)
@@ -87,47 +74,39 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
   }
 
   def generateTimeMap(times: Seq[Long]): Seq[Node] = {
-    val js = "var timeFormat = {};\n" + times
-      .map { time =>
-        val formattedTime = SparkUIUtils.formatBatchTime(time, 1, showYYYYMMSS = false)
-        s"timeFormat[$time] = '$formattedTime';"
-      }
-      .mkString("\n")
+    val js = "var timeFormat = {};\n" + times.map { time =>
+      val formattedTime = SparkUIUtils.formatBatchTime(time, 1, showYYYYMMSS = false)
+      s"timeFormat[$time] = '$formattedTime';"
+    }.mkString("\n")
 
     <script nonce={CspNonce.get}>{Unparsed(js)}</script>
   }
 
   def generateTimeTipStrings(values: Array[(Long, Long)]): Seq[Node] = {
-    val js = "var timeTipStrings = {};\n" + values
-      .map { case (batchId, time) =>
-        val formattedTime = SparkUIUtils.formatBatchTime(time, 1, showYYYYMMSS = false)
-        s"timeTipStrings[$time] = 'batch $batchId ($formattedTime)';"
-      }
-      .mkString("\n")
+    val js = "var timeTipStrings = {};\n" + values.map { case (batchId, time) =>
+      val formattedTime = SparkUIUtils.formatBatchTime(time, 1, showYYYYMMSS = false)
+      s"timeTipStrings[$time] = 'batch $batchId ($formattedTime)';"
+    }.mkString("\n")
 
     <script nonce={CspNonce.get}>{Unparsed(js)}</script>
   }
 
   def generateFormattedTimeTipStrings(values: Array[(Long, Long)]): Seq[Node] = {
-    val js = "var formattedTimeTipStrings = {};\n" + values
-      .map { case (batchId, time) =>
-        val formattedTime = SparkUIUtils.formatBatchTime(time, 1, showYYYYMMSS = false)
-        s"""formattedTimeTipStrings["$formattedTime"] = 'batch $batchId ($formattedTime)';"""
-      }
-      .mkString("\n")
+    val js = "var formattedTimeTipStrings = {};\n" + values.map { case (batchId, time) =>
+      val formattedTime = SparkUIUtils.formatBatchTime(time, 1, showYYYYMMSS = false)
+      s"""formattedTimeTipStrings["$formattedTime"] = 'batch $batchId ($formattedTime)';"""
+    }.mkString("\n")
 
     <script nonce={CspNonce.get}>{Unparsed(js)}</script>
   }
 
   def generateTimeToValues(values: Array[(Long, ju.Map[String, JLong])]): Seq[Node] = {
     val durationDataPadding = SparkUIUtils.durationDataPadding(values)
-    val js = "var formattedTimeToValues = {};\n" + durationDataPadding
-      .map { case (x, y) =>
-        val s = y.toSeq.sortBy(_._1).map(e => s""""${e._2}"""").mkString("[", ",", "]")
-        val formattedTime = SparkUIUtils.formatBatchTime(x, 1, showYYYYMMSS = false)
-        s"""formattedTimeToValues["$formattedTime"] = $s;"""
-      }
-      .mkString("\n")
+    val js = "var formattedTimeToValues = {};\n" + durationDataPadding.map { case (x, y) =>
+      val s = y.toSeq.sortBy(_._1).map(e => s""""${e._2}"""").mkString("[", ",", "]")
+      val formattedTime = SparkUIUtils.formatBatchTime(x, 1, showYYYYMMSS = false)
+      s"""formattedTimeToValues["$formattedTime"] = $s;"""
+    }.mkString("\n")
 
     <script nonce={CspNonce.get}>{Unparsed(js)}</script>
   }
@@ -137,14 +116,12 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
       val durationMs = System.currentTimeMillis() - uiData.summary.startTimestamp
       SparkUIUtils.formatDurationVerbose(durationMs)
     } else {
-      withNoProgress(
-        uiData, {
-          val end = uiData.lastProgress.timestamp
-          val start = uiData.recentProgress.head.timestamp
-          SparkUIUtils.formatDurationVerbose(
-            parseProgressTimestamp(end) - parseProgressTimestamp(start))
-        },
-        "-")
+      withNoProgress(uiData, {
+        val end = uiData.lastProgress.timestamp
+        val start = uiData.recentProgress.head.timestamp
+        SparkUIUtils.formatDurationVerbose(
+          parseProgressTimestamp(end) - parseProgressTimestamp(start))
+      }, "-")
     }
 
     val name = UIUtils.getQueryName(uiData)
@@ -203,19 +180,11 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         <tr>
           <td style="vertical-align: middle;">
             <div style="width: 160px;">
-              <div><strong>Global Watermark Gap {
-          SparkUIUtils.tooltip(
-            "The gap between batch timestamp and global watermark for the batch.",
-            "right")
-        }</strong></div>
+              <div><strong>Global Watermark Gap {SparkUIUtils.tooltip("The gap between batch timestamp and global watermark for the batch.", "right")}</strong></div>
             </div>
           </td>
-          <td class="watermark-gap-timeline">{
-          graphUIDataForWatermark.generateTimelineHtml(jsCollector)
-        }</td>
-          <td class="watermark-gap-histogram">{
-          graphUIDataForWatermark.generateHistogramHtml(jsCollector)
-        }</td>
+          <td class="watermark-gap-timeline">{graphUIDataForWatermark.generateTimelineHtml(jsCollector)}</td>
+          <td class="watermark-gap-histogram">{graphUIDataForWatermark.generateHistogramHtml(jsCollector)}</td>
         </tr>
         // scalastyle:on
       } else {
@@ -234,33 +203,25 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
     // This is made sure on caller side but put it here to be defensive
     require(query.lastProgress != null)
     if (query.lastProgress.stateOperators.nonEmpty) {
-      val numRowsTotalData = query.recentProgress.map(p =>
-        (parseProgressTimestamp(p.timestamp), p.stateOperators.map(_.numRowsTotal).sum.toDouble))
+      val numRowsTotalData = query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
+        p.stateOperators.map(_.numRowsTotal).sum.toDouble))
       val maxNumRowsTotal = numRowsTotalData.maxBy(_._2)._2
 
-      val numRowsUpdatedData = query.recentProgress.map(p =>
-        (
-          parseProgressTimestamp(p.timestamp),
-          p.stateOperators.map(_.numRowsUpdated).sum.toDouble))
+      val numRowsUpdatedData = query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
+        p.stateOperators.map(_.numRowsUpdated).sum.toDouble))
       val maxNumRowsUpdated = numRowsUpdatedData.maxBy(_._2)._2
 
-      val numRowsRemovedData = query.recentProgress.map(p =>
-        (
-          parseProgressTimestamp(p.timestamp),
-          p.stateOperators.map(_.numRowsRemoved).sum.toDouble))
+      val numRowsRemovedData = query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
+        p.stateOperators.map(_.numRowsRemoved).sum.toDouble))
       val maxNumRowsRemoved = numRowsRemovedData.maxBy(_._2)._2
 
-      val memoryUsedBytesData = query.recentProgress.map(p =>
-        (
-          parseProgressTimestamp(p.timestamp),
-          p.stateOperators.map(_.memoryUsedBytes).sum.toDouble))
+      val memoryUsedBytesData = query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
+        p.stateOperators.map(_.memoryUsedBytes).sum.toDouble))
       val maxMemoryUsedBytes = memoryUsedBytesData.maxBy(_._2)._2
 
       val numRowsDroppedByWatermarkData = query.recentProgress
-        .map(p =>
-          (
-            parseProgressTimestamp(p.timestamp),
-            p.stateOperators.map(_.numRowsDroppedByWatermark).sum.toDouble))
+        .map(p => (parseProgressTimestamp(p.timestamp),
+          p.stateOperators.map(_.numRowsDroppedByWatermark).sum.toDouble))
       val maxNumRowsDroppedByWatermark = numRowsDroppedByWatermarkData.maxBy(_._2)._2
 
       val graphUIDataForNumberTotalRows =
@@ -328,83 +289,49 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         <tr>
           <td style="vertical-align: middle;">
             <div style="width: 160px;">
-              <div><strong>Aggregated Number Of Total State Rows {
-          SparkUIUtils.tooltip("Aggregated number of total state rows.", "right")
-        }</strong></div>
+              <div><strong>Aggregated Number Of Total State Rows {SparkUIUtils.tooltip("Aggregated number of total state rows.", "right")}</strong></div>
             </div>
           </td>
-          <td class={"aggregated-num-total-state-rows-timeline"}>{
-          graphUIDataForNumberTotalRows.generateTimelineHtml(jsCollector)
-        }</td>
-          <td class={"aggregated-num-total-state-rows-histogram"}>{
-          graphUIDataForNumberTotalRows.generateHistogramHtml(jsCollector)
-        }</td>
+          <td class={"aggregated-num-total-state-rows-timeline"}>{graphUIDataForNumberTotalRows.generateTimelineHtml(jsCollector)}</td>
+          <td class={"aggregated-num-total-state-rows-histogram"}>{graphUIDataForNumberTotalRows.generateHistogramHtml(jsCollector)}</td>
         </tr>
         <tr>
           <td style="vertical-align: middle;">
             <div style="width: 160px;">
-              <div><strong>Aggregated Number Of Updated State Rows {
-          SparkUIUtils.tooltip("Aggregated number of updated state rows.", "right")
-        }</strong></div>
+              <div><strong>Aggregated Number Of Updated State Rows {SparkUIUtils.tooltip("Aggregated number of updated state rows.", "right")}</strong></div>
             </div>
           </td>
-          <td class={"aggregated-num-updated-state-rows-timeline"}>{
-          graphUIDataForNumberUpdatedRows.generateTimelineHtml(jsCollector)
-        }</td>
-          <td class={"aggregated-num-updated-state-rows-histogram"}>{
-          graphUIDataForNumberUpdatedRows.generateHistogramHtml(jsCollector)
-        }</td>
+          <td class={"aggregated-num-updated-state-rows-timeline"}>{graphUIDataForNumberUpdatedRows.generateTimelineHtml(jsCollector)}</td>
+          <td class={"aggregated-num-updated-state-rows-histogram"}>{graphUIDataForNumberUpdatedRows.generateHistogramHtml(jsCollector)}</td>
         </tr>
         <tr>
           <td style="vertical-align: middle;">
             <div style="width: 160px;">
-              <div><strong>Aggregated Number Of Removed State Rows{
-          SparkUIUtils.tooltip(
-            "Aggregated number of state rows removed from the state. Normally it means the number of rows evicted from the state because watermark has passed, except in flatMapGroupsWithState, where users can manually remove the state.",
-            "right")
-        }</strong></div>
+              <div><strong>Aggregated Number Of Removed State Rows{SparkUIUtils.tooltip("Aggregated number of state rows removed from the state. Normally it means the number of rows evicted from the state because watermark has passed, except in flatMapGroupsWithState, where users can manually remove the state.", "right")}</strong></div>
             </div>
           </td>
-          <td class={"aggregated-num-removed-state-rows-timeline"}>{
-          graphUIDataForNumberRemovedRows.generateTimelineHtml(jsCollector)
-        }</td>
-          <td class={"aggregated-num-removed-state-rows-histogram"}>{
-          graphUIDataForNumberRemovedRows.generateHistogramHtml(jsCollector)
-        }</td>
+          <td class={"aggregated-num-removed-state-rows-timeline"}>{graphUIDataForNumberRemovedRows.generateTimelineHtml(jsCollector)}</td>
+          <td class={"aggregated-num-removed-state-rows-histogram"}>{graphUIDataForNumberRemovedRows.generateHistogramHtml(jsCollector)}</td>
         </tr>
         <tr>
           <td style="vertical-align: middle;">
             <div style="width: 160px;">
-              <div><strong>Aggregated State Memory Used In Bytes {
-          SparkUIUtils.tooltip("Aggregated state memory used in bytes.", "right")
-        }</strong></div>
+              <div><strong>Aggregated State Memory Used In Bytes {SparkUIUtils.tooltip("Aggregated state memory used in bytes.", "right")}</strong></div>
             </div>
           </td>
-          <td class={"aggregated-state-memory-used-bytes-timeline"}>{
-          graphUIDataForMemoryUsedBytes.generateTimelineHtml(jsCollector)
-        }</td>
-          <td class={"aggregated-state-memory-used-bytes-histogram"}>{
-          graphUIDataForMemoryUsedBytes.generateHistogramHtml(jsCollector)
-        }</td>
+          <td class={"aggregated-state-memory-used-bytes-timeline"}>{graphUIDataForMemoryUsedBytes.generateTimelineHtml(jsCollector)}</td>
+          <td class={"aggregated-state-memory-used-bytes-histogram"}>{graphUIDataForMemoryUsedBytes.generateHistogramHtml(jsCollector)}</td>
         </tr>
         <tr>
           <td style="vertical-align: middle;">
             <div style="width: 160px;">
-              <div><strong>Aggregated Number Of Late Rows Dropped By Watermark {
-          SparkUIUtils.tooltip(
-            "Accumulates all late input rows being dropped in stateful operators by watermark. This only represents the late rows ever reached to stateful operators, not rows from the source. A row could be filtered out at an earlier stage.",
-            "right")
-        }</strong></div>
+              <div><strong>Aggregated Number Of Late Rows Dropped By Watermark {SparkUIUtils.tooltip("Accumulates all late input rows being dropped in stateful operators by watermark. This only represents the late rows ever reached to stateful operators, not rows from the source. A row could be filtered out at an earlier stage.", "right")}</strong></div>
             </div>
           </td>
-          <td class={"aggregated-num-rows-dropped-by-watermark-timeline"}>{
-          graphUIDataForNumRowsDroppedByWatermark.generateTimelineHtml(jsCollector)
-        }</td>
-          <td class={"aggregated-num-rows-dropped-by-watermark-histogram"}>{
-          graphUIDataForNumRowsDroppedByWatermark.generateHistogramHtml(jsCollector)
-        }</td>
+          <td class={"aggregated-num-rows-dropped-by-watermark-timeline"}>{graphUIDataForNumRowsDroppedByWatermark.generateTimelineHtml(jsCollector)}</td>
+          <td class={"aggregated-num-rows-dropped-by-watermark-histogram"}>{graphUIDataForNumRowsDroppedByWatermark.generateHistogramHtml(jsCollector)}</td>
         </tr>
-      // scalastyle:on
+        // scalastyle:on
 
       if (enabledCustomMetrics.nonEmpty) {
         result ++= generateAggregatedCustomMetrics(query, minBatchTime, maxBatchTime, jsCollector)
@@ -424,15 +351,10 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
 
     // This is made sure on caller side but put it here to be defensive
     require(query.lastProgress.stateOperators.nonEmpty)
-    query.lastProgress.stateOperators.head.customMetrics
-      .keySet()
-      .asScala
-      .filter(m => enabledCustomMetrics.contains(m.toLowerCase(Locale.ROOT)))
-      .map { metricName =>
-        val data = query.recentProgress.map(p =>
-          (
-            parseProgressTimestamp(p.timestamp),
-            p.stateOperators.map(_.customMetrics.get(metricName).toDouble).sum))
+    query.lastProgress.stateOperators.head.customMetrics.keySet().asScala
+      .filter(m => enabledCustomMetrics.contains(m.toLowerCase(Locale.ROOT))).map { metricName =>
+        val data = query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
+          p.stateOperators.map(_.customMetrics.get(metricName).toDouble).sum))
         val max = data.maxBy(_._2)._2
         val metric = supportedCustomMetrics.find(_.name.equalsIgnoreCase(metricName)).get
 
@@ -453,27 +375,20 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
           <tr>
             <td style="vertical-align: middle;">
               <div style="width: 240px;">
-                <div><strong>Aggregated Custom Metric {s"$metricName"} {
-            SparkUIUtils.tooltip(metric.desc, "right")
-          }</strong></div>
+                <div><strong>Aggregated Custom Metric {s"$metricName"} {SparkUIUtils.tooltip(metric.desc, "right")}</strong></div>
               </div>
             </td>
-            <td class={s"aggregated-$metricName-timeline"}>{
-            graphUIData.generateTimelineHtml(jsCollector)
-          }</td>
-            <td class={s"aggregated-$metricName-histogram"}>{
-            graphUIData.generateHistogramHtml(jsCollector)
-          }</td>
+            <td class={s"aggregated-$metricName-timeline"}>{graphUIData.generateTimelineHtml(jsCollector)}</td>
+            <td class={s"aggregated-$metricName-histogram"}>{graphUIData.generateHistogramHtml(jsCollector)}</td>
           </tr>
-        // scalastyle:on
+          // scalastyle:on
       }
 
     result
   }
 
   def generateStatTable(query: StreamingQueryUIData, request: HttpServletRequest): Seq[Node] = {
-    val batchToTimestamps = withNoProgress(
-      query,
+    val batchToTimestamps = withNoProgress(query,
       query.recentProgress.map(p => (p.batchId, parseProgressTimestamp(p.timestamp))),
       Array.empty[(Long, Long)])
     val batchTimes = batchToTimestamps.map(_._2)
@@ -490,30 +405,21 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
     val minProcessRate = 0L
     val maxRows = withNoProgress(query, query.recentProgress.map(_.numInputRows).max, 0L)
     val minRows = 0L
-    val maxBatchDuration =
-      withNoProgress(query, query.recentProgress.map(_.batchDuration).max, 0L)
+    val maxBatchDuration = withNoProgress(query, query.recentProgress.map(_.batchDuration).max, 0L)
     val minBatchDuration = 0L
 
-    val inputRateData = withNoProgress(
-      query,
-      query.recentProgress.map(p =>
-        (parseProgressTimestamp(p.timestamp), withNumberInvalid { p.inputRowsPerSecond })),
-      Array.empty[(Long, Double)])
-    val processRateData = withNoProgress(
-      query,
-      query.recentProgress.map(p =>
-        (parseProgressTimestamp(p.timestamp), withNumberInvalid { p.processedRowsPerSecond })),
-      Array.empty[(Long, Double)])
-    val inputRowsData = withNoProgress(
-      query,
-      query.recentProgress.map(p =>
-        (parseProgressTimestamp(p.timestamp), withNumberInvalid { p.numInputRows.toDouble })),
-      Array.empty[(Long, Double)])
-    val batchDurations = withNoProgress(
-      query,
-      query.recentProgress.map(p =>
-        (parseProgressTimestamp(p.timestamp), withNumberInvalid { p.batchDuration.toDouble })),
-      Array.empty[(Long, Double)])
+    val inputRateData = withNoProgress(query,
+      query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
+        withNumberInvalid { p.inputRowsPerSecond })), Array.empty[(Long, Double)])
+    val processRateData = withNoProgress(query,
+      query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
+        withNumberInvalid { p.processedRowsPerSecond })), Array.empty[(Long, Double)])
+    val inputRowsData = withNoProgress(query,
+      query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
+        withNumberInvalid { p.numInputRows.toDouble })), Array.empty[(Long, Double)])
+    val batchDurations = withNoProgress(query,
+      query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
+        withNumberInvalid { p.batchDuration.toDouble })), Array.empty[(Long, Double)])
     val operationDurationData = withNoProgress(
       query,
       query.recentProgress.map { p =>
@@ -574,7 +480,15 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
     graphUIDataForBatchDuration.generateDataJs(jsCollector)
 
     val graphUIDataForDuration =
-      new GraphUIData("duration-area-stack", "", Seq.empty[(Long, Double)], 0L, 0L, 0L, 0L, "ms")
+      new GraphUIData(
+        "duration-area-stack",
+        "",
+        Seq.empty[(Long, Double)],
+        0L,
+        0L,
+        0L,
+        0L,
+        "ms")
 
     val table = if (query.lastProgress != null) {
       // scalastyle:off
@@ -590,76 +504,46 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
           <tr>
             <td style="vertical-align: middle;">
               <div style="width: 160px;">
-                <div><strong>Input Rate {
-        SparkUIUtils.tooltip("The aggregate (across all sources) rate of data arriving.", "right")
-      }</strong></div>
+                <div><strong>Input Rate {SparkUIUtils.tooltip("The aggregate (across all sources) rate of data arriving.", "right")}</strong></div>
               </div>
             </td>
             <td class="timeline">{graphUIDataForInputRate.generateTimelineHtml(jsCollector)}</td>
-            <td class="histogram">{
-        graphUIDataForInputRate.generateHistogramHtml(jsCollector)
-      }</td>
+            <td class="histogram">{graphUIDataForInputRate.generateHistogramHtml(jsCollector)}</td>
           </tr>
           <tr>
             <td style="vertical-align: middle;">
               <div style="width: 160px;">
-                <div><strong>Process Rate {
-        SparkUIUtils.tooltip(
-          "The aggregate (across all sources) rate at which Spark is processing data.",
-          "right")
-      }</strong></div>
+                <div><strong>Process Rate {SparkUIUtils.tooltip("The aggregate (across all sources) rate at which Spark is processing data.", "right")}</strong></div>
               </div>
             </td>
-            <td class="timeline">{
-        graphUIDataForProcessRate.generateTimelineHtml(jsCollector)
-      }</td>
-            <td class="histogram">{
-        graphUIDataForProcessRate.generateHistogramHtml(jsCollector)
-      }</td>
+            <td class="timeline">{graphUIDataForProcessRate.generateTimelineHtml(jsCollector)}</td>
+            <td class="histogram">{graphUIDataForProcessRate.generateHistogramHtml(jsCollector)}</td>
           </tr>
           <tr>
             <td style="vertical-align: middle;">
               <div style="width: 160px;">
-                <div><strong>Input Rows {
-        SparkUIUtils.tooltip(
-          "The aggregate (across all sources) number of records processed in a trigger.",
-          "right")
-      }</strong></div>
+                <div><strong>Input Rows {SparkUIUtils.tooltip("The aggregate (across all sources) number of records processed in a trigger.", "right")}</strong></div>
               </div>
             </td>
             <td class="timeline">{graphUIDataForInputRows.generateTimelineHtml(jsCollector)}</td>
-            <td class="histogram">{
-        graphUIDataForInputRows.generateHistogramHtml(jsCollector)
-      }</td>
+            <td class="histogram">{graphUIDataForInputRows.generateHistogramHtml(jsCollector)}</td>
           </tr>
           <tr>
             <td style="vertical-align: middle;">
               <div style="width: 160px;">
-                <div><strong>Batch Duration {
-        SparkUIUtils.tooltip("The process duration of each batch.", "right")
-      }</strong></div>
+                <div><strong>Batch Duration {SparkUIUtils.tooltip("The process duration of each batch.", "right")}</strong></div>
               </div>
             </td>
-            <td class="timeline">{
-        graphUIDataForBatchDuration.generateTimelineHtml(jsCollector)
-      }</td>
-            <td class="histogram">{
-        graphUIDataForBatchDuration.generateHistogramHtml(jsCollector)
-      }</td>
+            <td class="timeline">{graphUIDataForBatchDuration.generateTimelineHtml(jsCollector)}</td>
+            <td class="histogram">{graphUIDataForBatchDuration.generateHistogramHtml(jsCollector)}</td>
           </tr>
           <tr>
             <td style="vertical-align: middle;">
               <div style="width: auto;">
-                <div><strong>Operation Duration {
-        SparkUIUtils.tooltip(
-          "The amount of time taken to perform various operations in milliseconds.",
-          "right")
-      }</strong></div>
+                <div><strong>Operation Duration {SparkUIUtils.tooltip("The amount of time taken to perform various operations in milliseconds.", "right")}</strong></div>
               </div>
             </td>
-            <td class="duration-area-stack" colspan="2">{
-        graphUIDataForDuration.generateAreaStackHtmlWithData(jsCollector, operationDurationData)
-      }</td>
+            <td class="duration-area-stack" colspan="2">{graphUIDataForDuration.generateAreaStackHtmlWithData(jsCollector, operationDurationData)}</td>
           </tr>
           {generateWatermark(query, minBatchTime, maxBatchTime, jsCollector)}
           {generateAggregatedStateOperators(query, minBatchTime, maxBatchTime, jsCollector)}

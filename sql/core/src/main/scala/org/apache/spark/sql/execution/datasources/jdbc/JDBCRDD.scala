@@ -77,16 +77,16 @@ object JDBCRDD extends Logging {
       // distinguish between the case where the table does not exist and other SQL syntax errors.
       // This order is important because when a table does not exist, the exception raised can
       // also match the criteria for isSyntaxErrorBestEffort.
-      case e: SQLException
-          if ident.isDefined &&
-            dialect.isObjectNotFoundException(e) =>
+      case e: SQLException if ident.isDefined &&
+        dialect.isObjectNotFoundException(e) =>
         throw QueryCompilationErrors.noSuchTableError(catalogName.get, ident.get)
       case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
         throw new SparkException(
           errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",
           messageParameters = Map(
             "jdbcQuery" -> fullQuery,
-            "externalEngineError" -> e.getMessage.replaceAll("\\.+$", "")),
+            "externalEngineError" -> e.getMessage.replaceAll("\\.+$", "")
+          ),
           cause = e)
     }
   }
@@ -98,28 +98,19 @@ object JDBCRDD extends Logging {
   }
 
   def getQueryOutputSchema(
-      query: String,
-      options: JDBCOptions,
-      dialect: JdbcDialect,
-      conn: Connection): StructType = {
+      query: String, options: JDBCOptions, dialect: JdbcDialect, conn: Connection): StructType = {
     logInfo(log"Generated JDBC query to get scan output schema: ${MDC(SQL_TEXT, query)}")
     Using.resource(conn.prepareStatement(query)) { statement =>
       statement.setQueryTimeout(options.queryTimeout)
       Using.resource(statement.executeQuery()) { rs =>
-        JdbcUtils.getSchema(
-          conn,
-          rs,
-          dialect,
-          alwaysNullable = true,
+        JdbcUtils.getSchema(conn, rs, dialect, alwaysNullable = true,
           isTimestampNTZ = options.preferTimestampNTZ)
       }
     }
   }
 
   def getQueryOutputSchema(
-      query: String,
-      options: JDBCOptions,
-      dialect: JdbcDialect): StructType = {
+      query: String, options: JDBCOptions, dialect: JdbcDialect): StructType = {
     JdbcUtils.withConnection(options) {
       getQueryOutputSchema(query, options, dialect, _)
     }
@@ -203,9 +194,9 @@ object JDBCRDD extends Logging {
 }
 
 /**
- * An RDD representing a query is related to a table in a database accessed via JDBC. Both the
- * driver code and the workers must be able to access the database; the driver needs to fetch the
- * schema while the workers need to fetch the data.
+ * An RDD representing a query is related to a table in a database accessed via JDBC.
+ * Both the driver code and the workers must be able to access the database; the driver
+ * needs to fetch the schema while the workers need to fetch the data.
  */
 class JDBCRDD(
     sc: SparkContext,
@@ -223,21 +214,20 @@ class JDBCRDD(
     sortOrders: Array[String],
     offset: Int,
     additionalMetrics: Map[String, SQLMetric])
-    extends RDD[InternalRow](sc, Nil)
-    with DataSourceMetricsMixin
-    with ExternalEngineDatasourceRDD {
+  extends RDD[InternalRow](sc, Nil) with DataSourceMetricsMixin with ExternalEngineDatasourceRDD {
 
   /**
    * Execution time of the query issued to JDBC connection
    */
-  val queryExecutionTimeMetric: SQLMetric =
-    SQLMetrics.createNanoTimingMetric(sparkContext, name = "JDBC query execution time")
+  val queryExecutionTimeMetric: SQLMetric = SQLMetrics.createNanoTimingMetric(
+    sparkContext,
+    name = "JDBC query execution time")
 
   /**
    * Time needed to fetch the data and transform it into Spark's InternalRow format.
    *
-   * Usually this is spent in network transfer time, but it can be spent in transformation time as
-   * well if we are transforming some more complex datatype such as structs.
+   * Usually this is spent in network transfer time, but it can be spent in transformation time
+   * as well if we are transforming some more complex datatype such as structs.
    */
   val fetchAndTransformToInternalRowsMetric: SQLMetric = SQLMetrics.createNanoTimingMetric(
     sparkContext,
@@ -326,7 +316,7 @@ class JDBCRDD(
       closed = true
     }
 
-    context.addTaskCompletionListener[Unit] { context => close() }
+    context.addTaskCompletionListener[Unit]{ context => close() }
 
     val inputMetrics = context.taskMetrics().inputMetrics
     val part = thePart.asInstanceOf[JDBCPartition]
@@ -351,7 +341,8 @@ class JDBCRDD(
 
     val sqlText = generateJdbcQuery(Some(part))
     logInfo(log"Generated JDBC query to fetch data: ${MDC(SQL_TEXT, sqlText)}")
-    stmt = conn.prepareStatement(sqlText, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
+    stmt = conn.prepareStatement(sqlText,
+        ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     stmt.setFetchSize(options.fetchSize)
     stmt.setQueryTimeout(options.queryTimeout)
 
@@ -364,7 +355,8 @@ class JDBCRDD(
             errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_QUERY_EXECUTION",
             messageParameters = Map(
               "jdbcQuery" -> sqlText,
-              "externalEngineError" -> e.getMessage.replaceAll("\\.+$", "")),
+              "externalEngineError" -> e.getMessage.replaceAll("\\.+$", "")
+            ),
             cause = e)
       }
     }
@@ -378,13 +370,13 @@ class JDBCRDD(
         Some(fetchAndTransformToInternalRowsMetric))
 
     CompletionIterator[InternalRow, Iterator[InternalRow]](
-      new InterruptibleIterator(context, rowsIterator),
-      close())
+      new InterruptibleIterator(context, rowsIterator), close())
   }
 
   override def getMetrics: Seq[(String, SQLMetric)] = {
     Seq(
       "fetchAndTransformToInternalRowsNs" -> fetchAndTransformToInternalRowsMetric,
-      "queryExecutionTime" -> queryExecutionTimeMetric) ++ additionalMetrics
+      "queryExecutionTime" -> queryExecutionTimeMetric
+    ) ++ additionalMetrics
   }
 }

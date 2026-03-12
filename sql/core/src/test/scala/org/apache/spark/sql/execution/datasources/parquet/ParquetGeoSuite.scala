@@ -25,7 +25,9 @@ import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions.{st_asbinary, st_geogfromwkb, st_geomfromwkb}
 import org.apache.spark.sql.test.SharedSparkSession
 
-class ParquetGeoSuite extends ParquetCompatibilityTest with SharedSparkSession {
+class ParquetGeoSuite
+    extends ParquetCompatibilityTest
+    with SharedSparkSession {
 
   import testImplicits._
 
@@ -104,7 +106,8 @@ class ParquetGeoSuite extends ParquetCompatibilityTest with SharedSparkSession {
       multiPointWkb,
       multiLineStringWkb,
       multiPolygonWkb,
-      geometryCollectionWkb)
+      geometryCollectionWkb
+    )
 
     // Repeat the values to ensure that we have a large enough dataset to test
     // the dictionary encoding.

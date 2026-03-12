@@ -34,9 +34,7 @@ class RatePerMicroBatchStream(
     startTimestamp: Long,
     advanceMsPerBatch: Int,
     options: CaseInsensitiveStringMap)
-    extends SupportsTriggerAvailableNow
-    with MicroBatchStream
-    with Logging {
+  extends SupportsTriggerAvailableNow with MicroBatchStream with Logging {
 
   override def initialOffset(): Offset = RatePerMicroBatchStreamOffset(0L, startTimestamp)
 
@@ -51,10 +49,8 @@ class RatePerMicroBatchStream(
   private def extractOffsetAndTimestamp(offset: Offset): (Long, Long) = {
     offset match {
       case o: RatePerMicroBatchStreamOffset => (o.offset, o.timestamp)
-      case _ =>
-        throw new IllegalStateException(
-          "The type of Offset should be " +
-            "RatePerMicroBatchStreamOffset")
+      case _ => throw new IllegalStateException("The type of Offset should be " +
+        "RatePerMicroBatchStreamOffset")
     }
   }
 
@@ -73,8 +69,8 @@ class RatePerMicroBatchStream(
       val numRows = rowsPerBatch
 
       val endOffsetLong = Math.min(startOffsetLong + numRows, Long.MaxValue)
-      val endOffset =
-        RatePerMicroBatchStreamOffset(endOffsetLong, timestampAtStartOffset + advanceMsPerBatch)
+      val endOffset = RatePerMicroBatchStreamOffset(endOffsetLong,
+        timestampAtStartOffset + advanceMsPerBatch)
 
       endOffset
     }
@@ -120,21 +116,15 @@ class RatePerMicroBatchStream(
           "endTimestamp" -> endTimestamp.toString))
     }
 
-    logDebug(
-      s"startOffset: $startOffset, startTimestamp: $startTimestamp, " +
-        s"endOffset: $endOffset, endTimestamp: $endTimestamp")
+    logDebug(s"startOffset: $startOffset, startTimestamp: $startTimestamp, " +
+      s"endOffset: $endOffset, endTimestamp: $endTimestamp")
 
     if (startOffset == endOffset) {
       Array.empty
     } else {
       (0 until numPartitions).map { p =>
-        RatePerMicroBatchStreamInputPartition(
-          p,
-          numPartitions,
-          startOffset,
-          startTimestamp,
-          endOffset,
-          endTimestamp)
+        RatePerMicroBatchStreamInputPartition(p, numPartitions, startOffset,
+          startTimestamp, endOffset, endTimestamp)
       }.toArray
     }
   }
@@ -171,18 +161,13 @@ case class RatePerMicroBatchStreamInputPartition(
     startOffset: Long,
     startTimestamp: Long,
     endOffset: Long,
-    endTimestamp: Long)
-    extends InputPartition
+    endTimestamp: Long) extends InputPartition
 
 object RatePerMicroBatchStreamReaderFactory extends PartitionReaderFactory {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val p = partition.asInstanceOf[RatePerMicroBatchStreamInputPartition]
-    new RatePerMicroBatchStreamPartitionReader(
-      p.partitionId,
-      p.numPartitions,
-      p.startOffset,
-      p.startTimestamp,
-      p.endOffset)
+    new RatePerMicroBatchStreamPartitionReader(p.partitionId, p.numPartitions,
+      p.startOffset, p.startTimestamp, p.endOffset)
   }
 }
 
@@ -191,8 +176,7 @@ class RatePerMicroBatchStreamPartitionReader(
     numPartitions: Int,
     startOffset: Long,
     startTimestamp: Long,
-    endOffset: Long)
-    extends PartitionReader[InternalRow] {
+    endOffset: Long) extends PartitionReader[InternalRow] {
   private var count: Long = 0
 
   override def next(): Boolean = {

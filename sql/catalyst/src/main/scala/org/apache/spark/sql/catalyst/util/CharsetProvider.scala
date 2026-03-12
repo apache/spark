@@ -14,14 +14,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.catalyst.util
-import java.nio.charset.{Charset, CharsetDecoder, CharsetEncoder, CodingErrorAction, IllegalCharsetNameException, UnsupportedCharsetException}
-import java.util.Locale
+ package org.apache.spark.sql.catalyst.util
+ import java.nio.charset.{Charset, CharsetDecoder, CharsetEncoder, CodingErrorAction, IllegalCharsetNameException, UnsupportedCharsetException}
+ import java.util.Locale
 
-import scala.collection.SortedSet
+ import scala.collection.SortedSet
 
-import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.SQLConf
+ import org.apache.spark.sql.errors.QueryExecutionErrors
+ import org.apache.spark.sql.internal.SQLConf
 
 private[sql] object CharsetProvider {
 
@@ -37,8 +37,9 @@ private[sql] object CharsetProvider {
       try {
         Charset.forName(lowercasedCharset)
       } catch {
-        case _: IllegalCharsetNameException | _: UnsupportedCharsetException |
-            _: IllegalArgumentException =>
+        case _: IllegalCharsetNameException |
+             _: UnsupportedCharsetException |
+             _: IllegalArgumentException =>
           throw QueryExecutionErrors.invalidCharsetError(caller, charset)
       }
     } else {
@@ -46,8 +47,7 @@ private[sql] object CharsetProvider {
     }
   }
 
-  def newEncoder(
-      charset: String,
+  def newEncoder(charset: String,
       legacyCharsets: Boolean,
       legacyErrorAction: Boolean,
       caller: String = "encode"): CharsetEncoder = {
@@ -63,8 +63,7 @@ private[sql] object CharsetProvider {
       .onUnmappableCharacter(codingErrorAction)
   }
 
-  def newDecoder(
-      charset: String,
+  def newDecoder(charset: String,
       legacyCharsets: Boolean = SQLConf.get.legacyJavaCharsets,
       legacyErrorAction: Boolean = SQLConf.get.legacyCodingErrorAction,
       caller: String = "decode"): CharsetDecoder = {

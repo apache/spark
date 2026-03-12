@@ -20,8 +20,9 @@ package org.apache.spark.sql.execution.benchmark
 import org.apache.spark.benchmark.Benchmark
 
 /**
- * Benchmark for measure writing and reading char/varchar values with implicit length check and
- * padding. To run this benchmark:
+ * Benchmark for measure writing and reading char/varchar values with implicit length check
+ * and padding.
+ * To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class>
@@ -36,8 +37,7 @@ object CharVarcharBenchmark extends SqlBasedBenchmark {
   import spark.implicits._
 
   private def withTable(tableNames: String*)(f: => Unit): Unit = {
-    try f
-    finally {
+    try f finally {
       tableNames.foreach { name =>
         spark.sql(s"DROP TABLE IF EXISTS $name")
       }
@@ -60,17 +60,13 @@ object CharVarcharBenchmark extends SqlBasedBenchmark {
         benchmark.addCase(s"write $typ with length $length", 3) { _ =>
           withTable(tblName) {
             createTable(tblName, colType, path)
-            spark
-              .range(card)
-              .map { _ =>
-                if (hasSpaces) {
-                  "st" + " ".repeat(length)
-                } else {
-                  "st"
-                }
+            spark.range(card).map { _ =>
+              if (hasSpaces) {
+                "st" + " ".repeat(length)
+              } else {
+                "st"
               }
-              .write
-              .insertInto(tblName)
+            }.write.insertInto(tblName)
           }
         }
       }

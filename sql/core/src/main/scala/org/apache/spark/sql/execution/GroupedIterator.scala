@@ -37,10 +37,10 @@ object GroupedIterator {
 }
 
 /**
- * Iterates over a presorted set of rows, chunking it up by the grouping expression. Each call to
+ * Iterates over a presorted set of rows, chunking it up by the grouping expression.  Each call to
  * next will return a pair containing the current group and an iterator that will return all the
- * elements of that group. Iterators for each group are lazily constructed by extracting rows from
- * the input iterator. As such, full groups are never materialized by this class.
+ * elements of that group.  Iterators for each group are lazily constructed by extracting rows
+ * from the input iterator.  As such, full groups are never materialized by this class.
  *
  * Example input:
  * {{{
@@ -58,20 +58,18 @@ object GroupedIterator {
  * Note, the class does not handle the case of an empty input for simplicity of implementation.
  * Use the factory to construct a new instance.
  *
- * @param input
- *   An iterator of rows. This iterator must be ordered by the groupingExpressions or it is
- *   possible for the same group to appear more than once.
- * @param groupingExpressions
- *   The set of expressions used to do grouping. The result of evaluating these expressions will
- *   be returned as the first part of each call to `next()`.
- * @param inputSchema
- *   The schema of the rows in the `input` iterator.
+ * @param input An iterator of rows.  This iterator must be ordered by the groupingExpressions or
+ *              it is possible for the same group to appear more than once.
+ * @param groupingExpressions The set of expressions used to do grouping.  The result of evaluating
+ *                            these expressions will be returned as the first part of each call
+ *                            to `next()`.
+ * @param inputSchema The schema of the rows in the `input` iterator.
  */
-class GroupedIterator private (
+class GroupedIterator private(
     input: BufferedIterator[InternalRow],
     groupingExpressions: Seq[Expression],
     inputSchema: Seq[Attribute])
-    extends Iterator[(InternalRow, Iterator[InternalRow])] {
+  extends Iterator[(InternalRow, Iterator[InternalRow])] {
 
   /** Compares two input rows and returns 0 if they are in the same group. */
   val sortOrder = groupingExpressions.map(SortOrder(_, Ascending))

@@ -84,7 +84,8 @@ class VectorAggSuite extends SparkFunSuite {
     assert(
       java.lang.Float.isNaN(expected) && java.lang.Float.isNaN(actual) ||
         math.abs(actual - expected) <= tolerance,
-      s"Expected $expected but got $actual (tolerance: $tolerance)")
+      s"Expected $expected but got $actual (tolerance: $tolerance)"
+    )
   }
 
   // Asserts that two float arrays are approximately equal element-wise.
@@ -92,8 +93,7 @@ class VectorAggSuite extends SparkFunSuite {
       actual: Array[Float],
       expected: Array[Float],
       tolerance: Float = 1e-5f): Unit = {
-    assert(
-      actual.length == expected.length,
+    assert(actual.length == expected.length,
       s"Array lengths differ: ${actual.length} vs ${expected.length}")
     actual.zip(expected).zipWithIndex.foreach { case ((a, e), i) =>
       assertFloatEquals(a, e, tolerance)
@@ -442,10 +442,10 @@ class VectorAggSuite extends SparkFunSuite {
 
   test("VectorSum - large vectors (16 elements)") {
     val (agg, buffer, _) = createVectorSum()
-    val vec1 = Array(1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f, 11.0f, 12.0f,
-      13.0f, 14.0f, 15.0f, 16.0f)
-    val vec2 = Array(16.0f, 15.0f, 14.0f, 13.0f, 12.0f, 11.0f, 10.0f, 9.0f, 8.0f, 7.0f, 6.0f,
-      5.0f, 4.0f, 3.0f, 2.0f, 1.0f)
+    val vec1 = Array(1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f,
+                     9.0f, 10.0f, 11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f)
+    val vec2 = Array(16.0f, 15.0f, 14.0f, 13.0f, 12.0f, 11.0f, 10.0f, 9.0f,
+                     8.0f, 7.0f, 6.0f, 5.0f, 4.0f, 3.0f, 2.0f, 1.0f)
     agg.update(buffer, createInputRow(vec1))
     agg.update(buffer, createInputRow(vec2))
     val result = evalAsFloatArray(agg, buffer)
@@ -455,10 +455,10 @@ class VectorAggSuite extends SparkFunSuite {
 
   test("VectorAvg - large vectors (16 elements)") {
     val (agg, buffer, _) = createVectorAvg()
-    val vec1 = Array(1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f, 11.0f, 12.0f,
-      13.0f, 14.0f, 15.0f, 16.0f)
-    val vec2 = Array(16.0f, 15.0f, 14.0f, 13.0f, 12.0f, 11.0f, 10.0f, 9.0f, 8.0f, 7.0f, 6.0f,
-      5.0f, 4.0f, 3.0f, 2.0f, 1.0f)
+    val vec1 = Array(1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f,
+                     9.0f, 10.0f, 11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f)
+    val vec2 = Array(16.0f, 15.0f, 14.0f, 13.0f, 12.0f, 11.0f, 10.0f, 9.0f,
+                     8.0f, 7.0f, 6.0f, 5.0f, 4.0f, 3.0f, 2.0f, 1.0f)
     agg.update(buffer, createInputRow(vec1))
     agg.update(buffer, createInputRow(vec2))
     val result = evalAsFloatArray(agg, buffer)
@@ -468,10 +468,10 @@ class VectorAggSuite extends SparkFunSuite {
 
   test("VectorSum - large vector with null element is skipped") {
     val (agg, buffer, _) = createVectorSum()
-    val vec1 = Array[java.lang.Float](1.0f, 2.0f, 3.0f, 4.0f, 5.0f, null, 7.0f, 8.0f, 9.0f, 10.0f,
-      11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f)
-    val vec2 = Array(16.0f, 15.0f, 14.0f, 13.0f, 12.0f, 11.0f, 10.0f, 9.0f, 8.0f, 7.0f, 6.0f,
-      5.0f, 4.0f, 3.0f, 2.0f, 1.0f)
+    val vec1 = Array[java.lang.Float](1.0f, 2.0f, 3.0f, 4.0f, 5.0f, null, 7.0f, 8.0f,
+                     9.0f, 10.0f, 11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f)
+    val vec2 = Array(16.0f, 15.0f, 14.0f, 13.0f, 12.0f, 11.0f, 10.0f, 9.0f,
+                     8.0f, 7.0f, 6.0f, 5.0f, 4.0f, 3.0f, 2.0f, 1.0f)
     agg.update(buffer, createInputRowWithNullElement(vec1))
     agg.update(buffer, createInputRow(vec2))
     val result = evalAsFloatArray(agg, buffer)

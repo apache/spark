@@ -32,23 +32,27 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkExceptionInExpression[RuntimeException](
       RaiseError(Literal("error message")),
       EmptyRow,
-      "error message")
+      "error message"
+    )
 
     checkExceptionInExpression[RuntimeException](
       RaiseError(Literal.create(null, StringType)),
       EmptyRow,
-      "[USER_RAISED_EXCEPTION] null")
+      "[USER_RAISED_EXCEPTION] null"
+    )
 
     // Expects a string
-    assert(
-      RaiseError(Literal(5)).checkInputDataTypes() ==
-        DataTypeMismatch(
-          errorSubClass = "UNEXPECTED_INPUT_TYPE",
-          messageParameters = Map(
-            "paramIndex" -> ordinalNumber(1),
-            "requiredType" -> "\"MAP<STRING, STRING>\"",
-            "inputSql" -> "\"map(errorMessage, 5)\"",
-            "inputType" -> "\"MAP<STRING, INT>\"")))
+    assert(RaiseError(Literal(5)).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(1),
+          "requiredType" -> "\"MAP<STRING, STRING>\"",
+          "inputSql" -> "\"map(errorMessage, 5)\"",
+          "inputType" -> "\"MAP<STRING, INT>\""
+        )
+      )
+    )
   }
 
   test("uuid") {
@@ -56,51 +60,44 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val r = new Random()
     val seed1 = Some(r.nextLong())
     assert(evaluateWithoutCodegen(Uuid(seed1)) === evaluateWithoutCodegen(Uuid(seed1)))
-    assert(
-      evaluateWithMutableProjection(Uuid(seed1)) ===
-        evaluateWithMutableProjection(Uuid(seed1)))
-    assert(
-      evaluateWithUnsafeProjection(Uuid(seed1)) ===
-        evaluateWithUnsafeProjection(Uuid(seed1)))
+    assert(evaluateWithMutableProjection(Uuid(seed1)) ===
+      evaluateWithMutableProjection(Uuid(seed1)))
+    assert(evaluateWithUnsafeProjection(Uuid(seed1)) ===
+      evaluateWithUnsafeProjection(Uuid(seed1)))
 
     val seed2 = Some(r.nextLong())
     assert(evaluateWithoutCodegen(Uuid(seed1)) !== evaluateWithoutCodegen(Uuid(seed2)))
-    assert(
-      evaluateWithMutableProjection(Uuid(seed1)) !==
-        evaluateWithMutableProjection(Uuid(seed2)))
-    assert(
-      evaluateWithUnsafeProjection(Uuid(seed1)) !==
-        evaluateWithUnsafeProjection(Uuid(seed2)))
+    assert(evaluateWithMutableProjection(Uuid(seed1)) !==
+      evaluateWithMutableProjection(Uuid(seed2)))
+    assert(evaluateWithUnsafeProjection(Uuid(seed1)) !==
+      evaluateWithUnsafeProjection(Uuid(seed2)))
 
     val seed3 = Literal.create(r.nextInt())
     assert(evaluateWithoutCodegen(new Uuid(seed3)) === evaluateWithoutCodegen(new Uuid(seed3)))
-    assert(
-      evaluateWithMutableProjection(new Uuid(seed3)) ===
-        evaluateWithMutableProjection(new Uuid(seed3)))
-    assert(
-      evaluateWithUnsafeProjection(new Uuid(seed3)) ===
-        evaluateWithUnsafeProjection(new Uuid(seed3)))
+    assert(evaluateWithMutableProjection(new Uuid(seed3)) ===
+      evaluateWithMutableProjection(new Uuid(seed3)))
+    assert(evaluateWithUnsafeProjection(new Uuid(seed3)) ===
+      evaluateWithUnsafeProjection(new Uuid(seed3)))
   }
 
   test("PrintToStderr") {
     val inputExpr = Literal(1)
     val systemErr = System.err
 
-    val (outputEval, outputCodegen) =
-      try {
-        val errorStream = new java.io.ByteArrayOutputStream()
-        System.setErr(new PrintStream(errorStream))
-        // check without codegen
-        checkEvaluationWithoutCodegen(PrintToStderr(inputExpr), 1)
-        val outputEval = errorStream.toString
-        errorStream.reset()
-        // check with codegen
-        checkEvaluationWithMutableProjection(PrintToStderr(inputExpr), 1)
-        val outputCodegen = errorStream.toString
-        (outputEval, outputCodegen)
-      } finally {
-        System.setErr(systemErr)
-      }
+    val (outputEval, outputCodegen) = try {
+      val errorStream = new java.io.ByteArrayOutputStream()
+      System.setErr(new PrintStream(errorStream))
+      // check without codegen
+      checkEvaluationWithoutCodegen(PrintToStderr(inputExpr), 1)
+      val outputEval = errorStream.toString
+      errorStream.reset()
+      // check with codegen
+      checkEvaluationWithMutableProjection(PrintToStderr(inputExpr), 1)
+      val outputCodegen = errorStream.toString
+      (outputEval, outputCodegen)
+    } finally {
+      System.setErr(systemErr)
+    }
 
     assert(outputCodegen.contains(s"Result of $inputExpr is 1"))
     assert(outputEval.contains(s"Result of $inputExpr is 1"))

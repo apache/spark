@@ -28,9 +28,8 @@ import org.apache.spark.sql.execution.command
  *   - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.DropNamespaceSuite`
  *   - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.DropNamespaceSuite`
  */
-trait DropNamespaceSuiteBase
-    extends command.DropNamespaceSuiteBase
-    with command.TestsV1AndV2Commands {
+trait DropNamespaceSuiteBase extends command.DropNamespaceSuiteBase
+  with command.TestsV1AndV2Commands {
   override protected def builtinTopNamespaces: Seq[String] = Seq("default")
 
   override protected def namespaceAlias: String = "database"
@@ -41,7 +40,8 @@ trait DropNamespaceSuiteBase
         sql(s"DROP NAMESPACE default")
       },
       condition = "UNSUPPORTED_FEATURE.DROP_DATABASE",
-      parameters = Map("database" -> s"`$catalog`.`default`"))
+      parameters = Map("database" -> s"`$catalog`.`default`")
+    )
   }
 }
 

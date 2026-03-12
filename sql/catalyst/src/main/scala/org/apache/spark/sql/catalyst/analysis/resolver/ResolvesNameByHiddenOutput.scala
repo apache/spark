@@ -69,8 +69,8 @@ import org.apache.spark.sql.internal.SQLConf
  * Because of that, we need to place key#1 in the project list, after original project list
  * expressions, but before metadata columns (to remain compatible with fixed-point). In order to
  * preserve initial output of [[Filter]], we place a [[Project]] node on top of this [[Filter]],
- * whose project list is the original output of the [[Project]] __below__ [[Filter]] (in this case -
- * key#3 and metadata columns key#1 and key#2).
+ * whose project list is the original output of the [[Project]] __below__ [[Filter]] (in this
+ * case - key#3 and metadata columns key#1 and key#2).
  *
  * Therefore, the plan becomes:
  *
@@ -89,7 +89,7 @@ import org.apache.spark.sql.internal.SQLConf
  * Query below exhibits similar behavior when [[Sort]] operator resolves an attribute using hidden
  * output:
  *
- * {{{SELECT col1 FROM VALUES (1, 2) ORDER BY col2;}}}
+ * {{{ SELECT col1 FROM VALUES (1, 2) ORDER BY col2; }}}
  *
  * Unresolved plan would be:
  *
@@ -122,8 +122,10 @@ import org.apache.spark.sql.internal.SQLConf
  * In this example `sum(col1)` should be added to child's output and a [[Project]] node should be
  * added on top of the [[Sort]] node to preserve the original output of the [[Aggregate]] node:
  *
- * Project [col1] +- Sort [sum(col1)#... ASC NULLS FIRST], true +- Aggregate [col1], [col1,
- * sum(col1) AS sum(col1)#...] +- LocalRelation [col1]
+ * Project [col1]
+ *   +- Sort [sum(col1)#... ASC NULLS FIRST], true
+ *     +- Aggregate [col1], [col1, sum(col1) AS sum(col1)#...]
+ *       +- LocalRelation [col1]
  *
  * In case of Dataframe programs we can have multiple [[Sort]] operators nested inside each other.
  * For example:
@@ -146,7 +148,8 @@ import org.apache.spark.sql.internal.SQLConf
  *
  * As it can be seen, `col2` ([[Sort]] order expression) needs to be resolved using the hidden
  * output. Because of that it must be added to all the [[Project]]s and [[Aggregate]]s below the
- * [[Sort]] operator. Resolved plan would be:
+ * [[Sort]] operator.
+ * Resolved plan would be:
  *
  * {{{
  * Project [col1]
@@ -166,9 +169,10 @@ trait ResolvesNameByHiddenOutput extends SQLConfHelper {
   /**
    * Insert the missing expressions in the output list of the operator. Recursively call
    * `expandOperatorsOutputList` to expand the output lists of [[Project]]s and [[Aggregate]]s
-   * below the current one. In order to stay compatible with fixed-point, missing expressions are
-   * inserted after the original output list, but before any qualified access only columns that
-   * have been added as part of resolution from hidden output.
+   * below the current one.
+   * In order to stay compatible with fixed-point, missing expressions are inserted after the
+   * original output list, but before any qualified access only columns that have been added as
+   * part of resolution from hidden output.
    *
    * Only [[AttributeReference]]s are propagated recursively in `expandOperatorsOutputList`.
    * [[Alias]]es are meant to be inserted in the topmost operator. For example, [[SortResolver]]
@@ -202,15 +206,18 @@ trait ResolvesNameByHiddenOutput extends SQLConfHelper {
             expandOperatorsOutputList(
               operator = project,
               operatorOutput = project.projectList,
-              missingExpressions = missingExpressions)
+              missingExpressions = missingExpressions
+            )
           case aggregate: Aggregate =>
             expandOperatorsOutputList(
               operator = aggregate,
               operatorOutput = aggregate.aggregateExpressions,
-              missingExpressions = missingExpressions)
+              missingExpressions = missingExpressions
+            )
           case other =>
             other.withNewChildren(
-              Seq(insertMissingExpressions(expandableOperator.child, missingExpressions)))
+              Seq(insertMissingExpressions(expandableOperator.child, missingExpressions))
+            )
         }
       case other => other
     }
@@ -223,7 +230,7 @@ trait ResolvesNameByHiddenOutput extends SQLConfHelper {
     val duplicateMissingExpressions = new HashSet[ExprId]
     missingExpressions.collect {
       case expression: NamedExpression
-          if !duplicateMissingExpressions.contains(expression.exprId) =>
+        if !duplicateMissingExpressions.contains(expression.exprId) =>
         duplicateMissingExpressions.add(expression.exprId)
         expression
     }
@@ -235,7 +242,8 @@ trait ResolvesNameByHiddenOutput extends SQLConfHelper {
       missingExpressions: Seq[NamedExpression]): LogicalPlan = {
     val filteredMissingExpressions = filterMissingExpressions(
       operatorOutput = operatorOutput,
-      missingExpressions = missingExpressions)
+      missingExpressions = missingExpressions
+    )
 
     if (filteredMissingExpressions.nonEmpty) {
       val (metadataCols, nonMetadataCols) =
@@ -248,7 +256,8 @@ trait ResolvesNameByHiddenOutput extends SQLConfHelper {
         case project: Project =>
           val expandedChild = insertMissingExpressions(
             operator = operator.child,
-            missingExpressions = filteredMissingExpressions)
+            missingExpressions = filteredMissingExpressions
+          )
           val newProjectList =
             nonMetadataCols ++ filteredMissingExpressions.map(_.toAttribute) ++ metadataCols
 
@@ -293,9 +302,9 @@ trait ResolvesNameByHiddenOutput extends SQLConfHelper {
    * If [[missingExpressions]] is not empty, output of an operator has been changed by
    * [[insertMissingExpressions]]. Therefore, we need to restore the original output, by placing a
    * [[Project]] on top of an original node, with original's node output. Additionally, we append
-   * all qualified access only columns from hidden output that were inserted as missing
-   * attributes, because they may be needed in upper operators (if not, they will be pruned away
-   * in [[PruneMetadataColumns]]). Other hidden attributes are thrown away, because we cannot
+   * all qualified access only columns from hidden output that were inserted as missing attributes,
+   * because they may be needed in upper operators (if not, they will be pruned away in
+   * [[PruneMetadataColumns]]). Other hidden attributes are thrown away, because we cannot
    * reference them from the new [[Project]] (they are not outputted from below).
    *
    * If [[SQLConf.SINGLE_PASS_RESOLVER_PREVENT_USING_ALIASES_FROM_NON_DIRECT_CHILDREN]] is set to
@@ -304,23 +313,28 @@ trait ResolvesNameByHiddenOutput extends SQLConfHelper {
    * expressions using semantically equal aliased expressions from non-direct children. For
    * example, in the following query:
    *
-   * {{{SELECT col1 AS a FROM VALUES(1,2) GROUP BY col1, col2 HAVING col2 > 1 ORDER BY col1;}}}
+   * {{{ SELECT col1 AS a FROM VALUES(1,2) GROUP BY col1, col2 HAVING col2 > 1 ORDER BY col1; }}}
    *
    * With flag set to false, analyzed plan will be:
    *
-   * Sort [a#3 ASC NULLS FIRST], true +- Project [a#3] +- Filter (col2#2 > 1) +- Aggregate
-   * [col1#1, col2#2], [col1#1 AS a#3, col2#2, col1#1] +- LocalRelation [col1#1, col2#2]
+   * Sort [a#3 ASC NULLS FIRST], true
+   * +- Project [a#3]
+   *    +- Filter (col2#2 > 1)
+   *       +- Aggregate [col1#1, col2#2], [col1#1 AS a#3, col2#2, col1#1]
+   *          +- LocalRelation [col1#1, col2#2]
    *
    * Instead of using missing attribute `col1#1` we can use its alias `a#3` in the [[Sort]] and
-   * avoid adding an extra projection. This is because all of [[Sort]], [[Project]], [[Filter]]
-   * and [[Aggregate]] belong to the same [[NameScope]] since [[Project]] was artificially
-   * inserted.
+   * avoid adding an extra projection. This is because all of [[Sort]], [[Project]], [[Filter]] and
+   * [[Aggregate]] belong to the same [[NameScope]] since [[Project]] was artificially inserted.
    *
    * However, fixed-point can't handle this case properly and produces the following plan:
    *
-   * Project [a#3] +- Sort [col1#1 ASC NULLS FIRST], true +- Project [a#3, col1#1] +- Filter
-   * (col2#2 > 1) +- Aggregate [col1#1, col2#2], [col1#1 AS a#3, col2#2, col1#1] +- LocalRelation
-   * [col1#1, col2#2]
+   * Project [a#3]
+   * +- Sort [col1#1 ASC NULLS FIRST], true
+   *    +- Project [a#3, col1#1]
+   *       +- Filter (col2#2 > 1)
+   *          +- Aggregate [col1#1, col2#2], [col1#1 AS a#3, col2#2, col1#1]
+   *             +- LocalRelation [col1#1, col2#2]
    *
    * Therefore, we need to match this behavior of fixed-point in single-pass in order to avoid
    * logical plan mismatches.
@@ -339,20 +353,25 @@ trait ResolvesNameByHiddenOutput extends SQLConfHelper {
 
       val hiddenOutputToPreserve = scopes.current.hiddenOutput.filter { hiddenAttribute =>
         hiddenAttribute.qualifiedAccessOnly && missingExpressionIds.contains(
-          hiddenAttribute.exprId)
+          hiddenAttribute.exprId
+        )
       }
 
-      val project =
-        Project(projectList = scopes.current.output ++ hiddenOutputToPreserve, child = operator)
+      val project = Project(
+        projectList = scopes.current.output ++ hiddenOutputToPreserve,
+        child = operator
+      )
 
       if (conf.getConf(
-          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_PREVENT_USING_ALIASES_FROM_NON_DIRECT_CHILDREN)) {
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_PREVENT_USING_ALIASES_FROM_NON_DIRECT_CHILDREN
+        )) {
         scopes.overwriteCurrent(
           output = Some(scopes.current.output),
           hiddenOutput = Some(scopes.current.hiddenOutput),
           availableAliases = Some(scopes.current.availableAliases),
           aggregateListAliases = Seq.empty,
-          baseAggregate = None)
+          baseAggregate = None
+        )
       }
 
       project

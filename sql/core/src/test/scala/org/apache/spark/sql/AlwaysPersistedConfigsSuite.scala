@@ -23,7 +23,12 @@ import org.scalatest.Tag
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.SQLScalarFunction
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, SQLFunction}
+import org.apache.spark.sql.catalyst.catalog.{
+  CatalogStorageFormat,
+  CatalogTable,
+  CatalogTableType,
+  SQLFunction
+}
 import org.apache.spark.sql.catalyst.expressions.Alias
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project, View}
 import org.apache.spark.sql.internal.SQLConf
@@ -31,13 +36,13 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
 /**
- * This suite tests if configs which values should always be stored are stored when creating a
- * view or a UDF.
+ * This suite tests if configs which values should always be stored are stored when creating a view
+ * or a UDF.
  */
 class AlwaysPersistedConfigsSuite extends QueryTest with SharedSparkSession {
 
-  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)(implicit
-      pos: Position): Unit = {
+  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)(
+    implicit pos: Position): Unit = {
     if (!sys.env.get("SPARK_ANSI_SQL_MODE").contains("false")) {
       super.test(testName, testTags: _*)(testFun)
     }
@@ -95,7 +100,8 @@ class AlwaysPersistedConfigsSuite extends QueryTest with SharedSparkSession {
     withView(testViewName) {
       testView(
         confName = "view.sqlConfig.spark.sql.session.timeZone",
-        expectedValue = "America/Los_Angeles")
+        expectedValue = "America/Los_Angeles"
+      )
     }
   }
 
@@ -104,7 +110,8 @@ class AlwaysPersistedConfigsSuite extends QueryTest with SharedSparkSession {
       withSQLConf("spark.sql.session.timeZone" -> "America/New_York") {
         testView(
           confName = "view.sqlConfig.spark.sql.session.timeZone",
-          expectedValue = "America/New_York")
+          expectedValue = "America/New_York"
+        )
       }
     }
 
@@ -112,7 +119,8 @@ class AlwaysPersistedConfigsSuite extends QueryTest with SharedSparkSession {
       withSQLConf("spark.sql.session.timeZone" -> "America/Los_Angeles") {
         testView(
           confName = "view.sqlConfig.spark.sql.session.timeZone",
-          expectedValue = "America/Los_Angeles")
+          expectedValue = "America/Los_Angeles"
+        )
       }
     }
   }
@@ -121,17 +129,18 @@ class AlwaysPersistedConfigsSuite extends QueryTest with SharedSparkSession {
     withUserDefinedFunction(testFunctionName -> false) {
       testFunction(
         confName = "sqlConfig.spark.sql.session.timeZone",
-        expectedValue = "America/Los_Angeles")
+        expectedValue = "America/Los_Angeles"
+      )
     }
   }
 
-  test(
-    "Explicitly set session local timezone value is respected over default one for functions") {
+  test("Explicitly set session local timezone value is respected over default one for functions") {
     withUserDefinedFunction(testFunctionName -> false) {
       withSQLConf("spark.sql.session.timeZone" -> "America/New_York") {
         testFunction(
           confName = "sqlConfig.spark.sql.session.timeZone",
-          expectedValue = "America/New_York")
+          expectedValue = "America/New_York"
+        )
       }
     }
 
@@ -139,7 +148,8 @@ class AlwaysPersistedConfigsSuite extends QueryTest with SharedSparkSession {
       withSQLConf("spark.sql.session.timeZone" -> "America/Los_Angeles") {
         testFunction(
           confName = "sqlConfig.spark.sql.session.timeZone",
-          expectedValue = "America/Los_Angeles")
+          expectedValue = "America/Los_Angeles"
+        )
       }
     }
   }
@@ -150,7 +160,8 @@ class AlwaysPersistedConfigsSuite extends QueryTest with SharedSparkSession {
       tableType = CatalogTableType.VIEW,
       storage = CatalogStorageFormat(None, None, None, None, None, false, Map.empty),
       schema = new StructType(),
-      properties = Map.empty[String, String])
+      properties = Map.empty[String, String]
+    )
     val view = View(desc = catalogTable, isTempView = false, child = OneRowRelation())
 
     val sqlConf = View.effectiveSQLConf(view.desc.viewSQLConfigs, view.isTempView)
@@ -163,7 +174,9 @@ class AlwaysPersistedConfigsSuite extends QueryTest with SharedSparkSession {
 
     val viewMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier(testViewName))
 
-    assert(viewMetadata.properties(confName) == expectedValue)
+    assert(
+      viewMetadata.properties(confName) == expectedValue
+    )
   }
 
   private def testFunction(confName: String, expectedValue: String): Unit = {
@@ -186,6 +199,7 @@ class AlwaysPersistedConfigsSuite extends QueryTest with SharedSparkSession {
         .asInstanceOf[SQLFunction]
         .properties
         .get(confName)
-        .get == expectedValue)
+        .get == expectedValue
+    )
   }
 }

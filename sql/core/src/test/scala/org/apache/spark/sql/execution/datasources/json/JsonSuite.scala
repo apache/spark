@@ -59,10 +59,10 @@ class TestFileFilter extends PathFilter {
 }
 
 abstract class JsonSuite
-    extends QueryTest
-    with SharedSparkSession
-    with TestJsonData
-    with CommonFileDataSourceSuite {
+  extends QueryTest
+  with SharedSparkSession
+  with TestJsonData
+  with CommonFileDataSourceSuite {
 
   import testImplicits._
 
@@ -73,11 +73,9 @@ abstract class JsonSuite
 
   test("Type promotion") {
     def checkTypePromotion(expected: Any, actual: Any): Unit = {
-      assert(
-        expected.getClass == actual.getClass,
+      assert(expected.getClass == actual.getClass,
         s"Failed to promote ${actual.getClass} to ${expected.getClass}.")
-      assert(
-        expected == actual,
+      assert(expected == actual,
         s"Promoted value ${actual}(${actual.getClass}) does not equal the expected value " +
           s"${expected}(${expected.getClass}).")
     }
@@ -109,65 +107,56 @@ abstract class JsonSuite
     checkTypePromotion(intNumber.toLong, enforceCorrectType(intNumber, LongType))
     checkTypePromotion(intNumber.toDouble, enforceCorrectType(intNumber, DoubleType))
     checkTypePromotion(
-      Decimal(intNumber),
-      enforceCorrectType(intNumber, DecimalType.SYSTEM_DEFAULT))
+      Decimal(intNumber), enforceCorrectType(intNumber, DecimalType.SYSTEM_DEFAULT))
 
     val longNumber: Long = 9223372036854775807L
     checkTypePromotion(longNumber, enforceCorrectType(longNumber, LongType))
     checkTypePromotion(longNumber.toDouble, enforceCorrectType(longNumber, DoubleType))
     checkTypePromotion(
-      Decimal(longNumber),
-      enforceCorrectType(longNumber, DecimalType.SYSTEM_DEFAULT))
+      Decimal(longNumber), enforceCorrectType(longNumber, DecimalType.SYSTEM_DEFAULT))
 
     val doubleNumber: Double = 1.7976931348623157d
     checkTypePromotion(doubleNumber.toDouble, enforceCorrectType(doubleNumber, DoubleType))
 
-    checkTypePromotion(
-      DateTimeUtils.fromJavaTimestamp(new Timestamp(intNumber * 1000L)),
-      enforceCorrectType(intNumber, TimestampType))
-    checkTypePromotion(
-      DateTimeUtils.fromJavaTimestamp(new Timestamp(intNumber.toLong * 1000L)),
-      enforceCorrectType(intNumber.toLong, TimestampType))
+    checkTypePromotion(DateTimeUtils.fromJavaTimestamp(new Timestamp(intNumber * 1000L)),
+        enforceCorrectType(intNumber, TimestampType))
+    checkTypePromotion(DateTimeUtils.fromJavaTimestamp(new Timestamp(intNumber.toLong * 1000L)),
+        enforceCorrectType(intNumber.toLong, TimestampType))
     val strTime = "2014-09-30 12:34:56"
     checkTypePromotion(
       expected = DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf(strTime)),
-      enforceCorrectType(strTime, TimestampType, Map("timestampFormat" -> "yyyy-MM-dd HH:mm:ss")))
+      enforceCorrectType(strTime, TimestampType,
+        Map("timestampFormat" -> "yyyy-MM-dd HH:mm:ss")))
 
     val strDate = "2014-10-15"
     checkTypePromotion(
-      DateTimeUtils.fromJavaDate(Date.valueOf(strDate)),
-      enforceCorrectType(strDate, DateType))
+      DateTimeUtils.fromJavaDate(Date.valueOf(strDate)), enforceCorrectType(strDate, DateType))
 
     val ISO8601Time1 = "1970-01-01T01:00:01.0Z"
-    checkTypePromotion(
-      DateTimeUtils.fromJavaTimestamp(new Timestamp(3601000)),
-      enforceCorrectType(
-        ISO8601Time1,
-        TimestampType,
-        Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss.SX")))
+    checkTypePromotion(DateTimeUtils.fromJavaTimestamp(new Timestamp(3601000)),
+        enforceCorrectType(
+          ISO8601Time1,
+          TimestampType,
+          Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss.SX")))
     val ISO8601Time2 = "1970-01-01T02:00:01-01:00"
-    checkTypePromotion(
-      DateTimeUtils.fromJavaTimestamp(new Timestamp(10801000)),
-      enforceCorrectType(
-        ISO8601Time2,
-        TimestampType,
-        Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ssXXX")))
+    checkTypePromotion(DateTimeUtils.fromJavaTimestamp(new Timestamp(10801000)),
+        enforceCorrectType(
+          ISO8601Time2,
+          TimestampType,
+          Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ssXXX")))
 
     val ISO8601Date = "1970-01-01"
-    checkTypePromotion(
-      DateTimeUtils.microsToDays(32400000000L, ZoneId.systemDefault),
+    checkTypePromotion(DateTimeUtils.microsToDays(32400000000L, ZoneId.systemDefault),
       enforceCorrectType(ISO8601Date, DateType))
   }
 
   test("Get compatible type") {
     def checkDataType(t1: DataType, t2: DataType, expected: DataType): Unit = {
       var actual = JsonInferSchema.compatibleType(t1, t2)
-      assert(
-        actual == expected,
+      assert(actual == expected,
         s"Expected $expected as the most general data type for $t1 and $t2, found $actual")
       actual = JsonInferSchema.compatibleType(t2, t1)
-      assert(
-        actual == expected,
+      assert(actual == expected,
         s"Expected $expected as the most general data type for $t1 and $t2, found $actual")
     }
 
@@ -217,9 +206,7 @@ abstract class JsonSuite
     checkDataType(DoubleType, StructType(Nil), StringType)
 
     // DecimalType
-    checkDataType(
-      DecimalType.SYSTEM_DEFAULT,
-      DecimalType.SYSTEM_DEFAULT,
+    checkDataType(DecimalType.SYSTEM_DEFAULT, DecimalType.SYSTEM_DEFAULT,
       DecimalType.SYSTEM_DEFAULT)
     checkDataType(DecimalType.SYSTEM_DEFAULT, StringType, StringType)
     checkDataType(DecimalType.SYSTEM_DEFAULT, ArrayType(IntegerType), StringType)
@@ -236,29 +223,17 @@ abstract class JsonSuite
     checkDataType(ArrayType(IntegerType), ArrayType(StringType), ArrayType(StringType))
     checkDataType(ArrayType(IntegerType), StructType(Nil), StringType)
     checkDataType(
-      ArrayType(IntegerType, true),
-      ArrayType(IntegerType),
-      ArrayType(IntegerType, true))
+      ArrayType(IntegerType, true), ArrayType(IntegerType), ArrayType(IntegerType, true))
     checkDataType(
-      ArrayType(IntegerType, true),
-      ArrayType(IntegerType, false),
-      ArrayType(IntegerType, true))
+      ArrayType(IntegerType, true), ArrayType(IntegerType, false), ArrayType(IntegerType, true))
     checkDataType(
-      ArrayType(IntegerType, true),
-      ArrayType(IntegerType, true),
-      ArrayType(IntegerType, true))
+      ArrayType(IntegerType, true), ArrayType(IntegerType, true), ArrayType(IntegerType, true))
     checkDataType(
-      ArrayType(IntegerType, false),
-      ArrayType(IntegerType),
-      ArrayType(IntegerType, true))
+      ArrayType(IntegerType, false), ArrayType(IntegerType), ArrayType(IntegerType, true))
     checkDataType(
-      ArrayType(IntegerType, false),
-      ArrayType(IntegerType, false),
-      ArrayType(IntegerType, false))
+      ArrayType(IntegerType, false), ArrayType(IntegerType, false), ArrayType(IntegerType, false))
     checkDataType(
-      ArrayType(IntegerType, false),
-      ArrayType(IntegerType, true),
-      ArrayType(IntegerType, true))
+      ArrayType(IntegerType, false), ArrayType(IntegerType, true), ArrayType(IntegerType, true))
 
     // StructType
     checkDataType(StructType(Nil), StructType(Nil), StructType(Nil))
@@ -273,19 +248,22 @@ abstract class JsonSuite
     checkDataType(
       StructType(
         StructField("f1", IntegerType, true) ::
-          StructField("f2", IntegerType, true) :: Nil),
+        StructField("f2", IntegerType, true) :: Nil),
       StructType(StructField("f1", LongType, true) :: Nil),
       StructType(
         StructField("f1", LongType, true) ::
-          StructField("f2", IntegerType, true) :: Nil))
+        StructField("f2", IntegerType, true) :: Nil))
     checkDataType(
-      StructType(StructField("f1", IntegerType, true) :: Nil),
-      StructType(StructField("f2", IntegerType, true) :: Nil),
+      StructType(
+        StructField("f1", IntegerType, true) :: Nil),
+      StructType(
+        StructField("f2", IntegerType, true) :: Nil),
       StructType(
         StructField("f1", IntegerType, true) ::
-          StructField("f2", IntegerType, true) :: Nil))
+        StructField("f2", IntegerType, true) :: Nil))
     checkDataType(
-      StructType(StructField("f1", IntegerType, true) :: Nil),
+      StructType(
+        StructField("f1", IntegerType, true) :: Nil),
       DecimalType.SYSTEM_DEFAULT,
       StringType)
   }
@@ -294,20 +272,20 @@ abstract class JsonSuite
     withTempView("jsonTable") {
       val jsonDF = spark.read.json(jsonNullStruct)
       val expectedSchema = StructType(
-        StructField(
-          "headers",
-          StructType(StructField("Charset", StringType, true) ::
-            StructField("Host", StringType, true) :: Nil),
-          true) ::
+        StructField("headers", StructType(
+          StructField("Charset", StringType, true) ::
+            StructField("Host", StringType, true) :: Nil)
+          , true) ::
           StructField("ip", StringType, true) ::
-          StructField("nullstr", StringType, true) :: Nil)
+          StructField("nullstr", StringType, true):: Nil)
 
       assert(expectedSchema === jsonDF.schema)
       jsonDF.createOrReplaceTempView("jsonTable")
 
       checkAnswer(
         sql("select nullstr, headers.Host from jsonTable"),
-        Seq(Row("", "1.abc.com"), Row("", null), Row("", null), Row(null, null)))
+        Seq(Row("", "1.abc.com"), Row("", null), Row("", null), Row(null, null))
+      )
     }
   }
 
@@ -317,12 +295,12 @@ abstract class JsonSuite
 
       val expectedSchema = StructType(
         StructField("bigInteger", DecimalType(20, 0), true) ::
-          StructField("boolean", BooleanType, true) ::
-          StructField("double", DoubleType, true) ::
-          StructField("integer", LongType, true) ::
-          StructField("long", LongType, true) ::
-          StructField("null", StringType, true) ::
-          StructField("string", StringType, true) :: Nil)
+        StructField("boolean", BooleanType, true) ::
+        StructField("double", DoubleType, true) ::
+        StructField("integer", LongType, true) ::
+        StructField("long", LongType, true) ::
+        StructField("null", StringType, true) ::
+        StructField("string", StringType, true) :: Nil)
 
       assert(expectedSchema === jsonDF.schema)
 
@@ -330,14 +308,14 @@ abstract class JsonSuite
 
       checkAnswer(
         sql("select * from jsonTable"),
-        Row(
-          new java.math.BigDecimal("92233720368547758070"),
+        Row(new java.math.BigDecimal("92233720368547758070"),
           true,
           1.7976931348623157,
           10,
           21474836470L,
           null,
-          "this is a simple string."))
+          "this is a simple string.")
+      )
     }
   }
 
@@ -347,32 +325,25 @@ abstract class JsonSuite
 
       val expectedSchema = StructType(
         StructField("arrayOfArray1", ArrayType(ArrayType(StringType, true), true), true) ::
-          StructField("arrayOfArray2", ArrayType(ArrayType(DoubleType, true), true), true) ::
-          StructField("arrayOfBigInteger", ArrayType(DecimalType(21, 0), true), true) ::
-          StructField("arrayOfBoolean", ArrayType(BooleanType, true), true) ::
-          StructField("arrayOfDouble", ArrayType(DoubleType, true), true) ::
-          StructField("arrayOfInteger", ArrayType(LongType, true), true) ::
-          StructField("arrayOfLong", ArrayType(LongType, true), true) ::
-          StructField("arrayOfNull", ArrayType(StringType, true), true) ::
-          StructField("arrayOfString", ArrayType(StringType, true), true) ::
-          StructField(
-            "arrayOfStruct",
-            ArrayType(
-              StructType(StructField("field1", BooleanType, true) ::
-                StructField("field2", StringType, true) ::
-                StructField("field3", StringType, true) :: Nil),
-              true),
-            true) ::
-          StructField(
-            "struct",
-            StructType(StructField("field1", BooleanType, true) ::
-              StructField("field2", DecimalType(20, 0), true) :: Nil),
-            true) ::
-          StructField(
-            "structWithArrayFields",
-            StructType(StructField("field1", ArrayType(LongType, true), true) ::
-              StructField("field2", ArrayType(StringType, true), true) :: Nil),
-            true) :: Nil)
+        StructField("arrayOfArray2", ArrayType(ArrayType(DoubleType, true), true), true) ::
+        StructField("arrayOfBigInteger", ArrayType(DecimalType(21, 0), true), true) ::
+        StructField("arrayOfBoolean", ArrayType(BooleanType, true), true) ::
+        StructField("arrayOfDouble", ArrayType(DoubleType, true), true) ::
+        StructField("arrayOfInteger", ArrayType(LongType, true), true) ::
+        StructField("arrayOfLong", ArrayType(LongType, true), true) ::
+        StructField("arrayOfNull", ArrayType(StringType, true), true) ::
+        StructField("arrayOfString", ArrayType(StringType, true), true) ::
+        StructField("arrayOfStruct", ArrayType(
+          StructType(
+            StructField("field1", BooleanType, true) ::
+            StructField("field2", StringType, true) ::
+            StructField("field3", StringType, true) :: Nil), true), true) ::
+        StructField("struct", StructType(
+          StructField("field1", BooleanType, true) ::
+          StructField("field2", DecimalType(20, 0), true) :: Nil), true) ::
+        StructField("structWithArrayFields", StructType(
+          StructField("field1", ArrayType(LongType, true), true) ::
+          StructField("field2", ArrayType(StringType, true), true) :: Nil), true) :: Nil)
 
       assert(expectedSchema === jsonDF.schema)
 
@@ -381,42 +352,51 @@ abstract class JsonSuite
       // Access elements of a primitive array.
       checkAnswer(
         sql("select arrayOfString[0], arrayOfString[1], arrayOfString[2] from jsonTable"),
-        Row("str1", "str2", null))
+        Row("str1", "str2", null)
+      )
 
       // Access an array of null values.
-      checkAnswer(sql("select arrayOfNull from jsonTable"), Row(Seq(null, null, null, null)))
+      checkAnswer(
+        sql("select arrayOfNull from jsonTable"),
+        Row(Seq(null, null, null, null))
+      )
 
       // Access elements of a BigInteger array (we use DecimalType internally).
       checkAnswer(
-        sql(
-          "select arrayOfBigInteger[0], arrayOfBigInteger[1], arrayOfBigInteger[2] from " +
-            "jsonTable"),
-        Row(
-          new java.math.BigDecimal("922337203685477580700"),
-          new java.math.BigDecimal("-922337203685477580800"),
-          null))
+        sql("select arrayOfBigInteger[0], arrayOfBigInteger[1], arrayOfBigInteger[2] from " +
+          "jsonTable"),
+        Row(new java.math.BigDecimal("922337203685477580700"),
+          new java.math.BigDecimal("-922337203685477580800"), null)
+      )
 
       // Access elements of an array of arrays.
       checkAnswer(
         sql("select arrayOfArray1[0], arrayOfArray1[1] from jsonTable"),
-        Row(Seq("1", "2", "3"), Seq("str1", "str2")))
+        Row(Seq("1", "2", "3"), Seq("str1", "str2"))
+      )
 
       // Access elements of an array of arrays.
       checkAnswer(
         sql("select arrayOfArray2[0], arrayOfArray2[1] from jsonTable"),
-        Row(Seq(1.0, 2.0, 3.0), Seq(1.1, 2.1, 3.1)))
+        Row(Seq(1.0, 2.0, 3.0), Seq(1.1, 2.1, 3.1))
+      )
 
       // Access elements of an array inside a filed with the type of ArrayType(ArrayType).
       checkAnswer(
         sql("select arrayOfArray1[1][1], arrayOfArray2[1][1] from jsonTable"),
-        Row("str2", 2.1))
+        Row("str2", 2.1)
+      )
 
       // Access elements of an array of structs.
       checkAnswer(
-        sql(
-          "select arrayOfStruct[0], arrayOfStruct[1], arrayOfStruct[2], arrayOfStruct[3] " +
-            "from jsonTable"),
-        Row(Row(true, "str1", null), Row(false, null, null), Row(null, null, null), null))
+        sql("select arrayOfStruct[0], arrayOfStruct[1], arrayOfStruct[2], arrayOfStruct[3] " +
+          "from jsonTable"),
+        Row(
+          Row(true, "str1", null),
+          Row(false, null, null),
+          Row(null, null, null),
+          null)
+      )
 
       // Access a struct and fields inside of it.
       checkAnswer(
@@ -424,19 +404,21 @@ abstract class JsonSuite
         Row(
           Row(true, new java.math.BigDecimal("92233720368547758070")),
           true,
-          new java.math.BigDecimal("92233720368547758070")) :: Nil)
+          new java.math.BigDecimal("92233720368547758070")) :: Nil
+      )
 
       // Access an array field of a struct.
       checkAnswer(
         sql("select structWithArrayFields.field1, structWithArrayFields.field2 from jsonTable"),
-        Row(Seq(4, 5, 6), Seq("str1", "str2")))
+        Row(Seq(4, 5, 6), Seq("str1", "str2"))
+      )
 
       // Access elements of an array field of a struct.
       checkAnswer(
-        sql(
-          "select structWithArrayFields.field1[1], structWithArrayFields.field2[3] from " +
-            "jsonTable"),
-        Row(5, null))
+        sql("select structWithArrayFields.field1[1], structWithArrayFields.field2[3] from " +
+          "jsonTable"),
+        Row(5, null)
+      )
     }
   }
 
@@ -447,12 +429,14 @@ abstract class JsonSuite
 
       checkAnswer(
         sql("select arrayOfStruct[0].field1, arrayOfStruct[0].field2 from jsonTable"),
-        Row(true, "str1"))
+        Row(true, "str1")
+      )
 
       // Getting all values of a specific field from an array of structs.
       checkAnswer(
         sql("select arrayOfStruct.field1, arrayOfStruct.field2 from jsonTable"),
-        Row(Seq(true, false, null), Seq("str1", null, null)))
+        Row(Seq(true, false, null), Seq("str1", null, null))
+      )
     }
   }
 
@@ -462,11 +446,11 @@ abstract class JsonSuite
 
       val expectedSchema = StructType(
         StructField("num_bool", StringType, true) ::
-          StructField("num_num_1", LongType, true) ::
-          StructField("num_num_2", DoubleType, true) ::
-          StructField("num_num_3", DoubleType, true) ::
-          StructField("num_str", StringType, true) ::
-          StructField("str_bool", StringType, true) :: Nil)
+        StructField("num_num_1", LongType, true) ::
+        StructField("num_num_2", DoubleType, true) ::
+        StructField("num_num_3", DoubleType, true) ::
+        StructField("num_str", StringType, true) ::
+        StructField("str_bool", StringType, true) :: Nil)
 
       assert(expectedSchema === jsonDF.schema)
 
@@ -477,49 +461,60 @@ abstract class JsonSuite
         Row("true", 11L, null, 1.1, "13.1", "str1") ::
           Row("12", null, 21474836470.9, null, null, "true") ::
           Row("false", 21474836470L, 92233720368547758070d, 100, "str1", "false") ::
-          Row(null, 21474836570L, 1.1, 21474836470L, "92233720368547758070", null) :: Nil)
+          Row(null, 21474836570L, 1.1, 21474836470L, "92233720368547758070", null) :: Nil
+      )
 
       // Widening to LongType
       checkAnswer(
         sql("select num_num_1 - 100 from jsonTable where num_num_1 > 11"),
-        Row(21474836370L) :: Row(21474836470L) :: Nil)
+        Row(21474836370L) :: Row(21474836470L) :: Nil
+      )
 
       checkAnswer(
         sql("select num_num_1 - 100 from jsonTable where num_num_1 > 10"),
-        Row(-89) :: Row(21474836370L) :: Row(21474836470L) :: Nil)
+        Row(-89) :: Row(21474836370L) :: Row(21474836470L) :: Nil
+      )
 
       // Widening to DecimalType
       checkAnswer(
         sql("select num_num_2 + 1.3 from jsonTable where num_num_2 > 1.1"),
         Row(21474836472.2) ::
-          Row(92233720368547758071.3) :: Nil)
+          Row(92233720368547758071.3) :: Nil
+      )
 
       // Widening to Double
       checkAnswer(
         sql("select num_num_3 + 1.2 from jsonTable where num_num_3 > 1.1"),
-        Row(101.2) :: Row(21474836471.2) :: Nil)
+        Row(101.2) :: Row(21474836471.2) :: Nil
+      )
 
       // The following tests are about type coercion instead of JSON data source.
       // Here we simply forcus on the behavior of non-Ansi.
       if (!SQLConf.get.ansiEnabled) {
         // Number and Boolean conflict: resolve the type as number in this query.
-        checkAnswer(sql("select num_bool - 10 from jsonTable where num_bool > 11"), Row(2))
+        checkAnswer(
+          sql("select num_bool - 10 from jsonTable where num_bool > 11"),
+          Row(2)
+        )
 
         // Number and String conflict: resolve the type as number in this query.
         checkAnswer(
           sql("select num_str + 1.2 from jsonTable where num_str > 14d"),
-          Row(92233720368547758071.2))
+          Row(92233720368547758071.2)
+        )
 
         // Number and String conflict: resolve the type as number in this query.
         checkAnswer(
           sql("select num_str + 1.2 from jsonTable where num_str >= 92233720368547758060"),
-          Row(new java.math.BigDecimal("92233720368547758071.2").doubleValue))
+          Row(new java.math.BigDecimal("92233720368547758071.2").doubleValue)
+        )
       }
 
       // String and Boolean conflict: resolve the type as string.
       checkAnswer(
         sql("select * from jsonTable where str_bool = 'str1'"),
-        Row("true", 11L, null, 1.1, "13.1", "str1"))
+        Row("true", 11L, null, 1.1, "13.1", "str1")
+      )
     }
   }
 
@@ -527,10 +522,12 @@ abstract class JsonSuite
     withTempView("jsonTable") {
       val jsonDF = spark.read.json(complexFieldValueTypeConflict)
 
-      val expectedSchema = StructType(StructField("array", ArrayType(LongType, true), true) ::
+      val expectedSchema = StructType(
+        StructField("array", ArrayType(LongType, true), true) ::
         StructField("num_struct", StringType, true) ::
         StructField("str_array", StringType, true) ::
-        StructField("struct", StructType(StructField("field", StringType, true) :: Nil), true) ::
+        StructField("struct", StructType(
+          StructField("field", StringType, true) :: Nil), true) ::
         StructField("struct_array", StringType, true) :: Nil)
 
       assert(expectedSchema === jsonDF.schema)
@@ -542,7 +539,8 @@ abstract class JsonSuite
         Row(Seq(), "11", "[1,2,3]", Row(null), "[]") ::
           Row(null, """{"field":false}""", null, null, "{}") ::
           Row(Seq(4, 5, 6), null, "str", Row(null), "[7,8,9]") ::
-          Row(Seq(7), "{}", """["str1","str2",33]""", Row("str"), """{"field":true}""") :: Nil)
+          Row(Seq(7), "{}", """["str1","str2",33]""", Row("str"), """{"field":true}""") :: Nil
+      )
     }
   }
 
@@ -552,11 +550,9 @@ abstract class JsonSuite
 
       val expectedSchema = StructType(
         StructField("array1", ArrayType(StringType, true), true) ::
-          StructField(
-            "array2",
-            ArrayType(StructType(StructField("field", LongType, true) :: Nil), true),
-            true) ::
-          StructField("array3", ArrayType(StringType, true), true) :: Nil)
+        StructField("array2", ArrayType(StructType(
+          StructField("field", LongType, true) :: Nil), true), true) ::
+        StructField("array3", ArrayType(StringType, true), true) :: Nil)
 
       assert(expectedSchema === jsonDF.schema)
 
@@ -564,15 +560,17 @@ abstract class JsonSuite
 
       checkAnswer(
         sql("select * from jsonTable"),
-        Row(
-          Seq("1", "1.1", "true", null, "[]", "{}", "[2,3,4]", """{"field":"str"}"""),
-          Seq(Row(214748364700L), Row(1)),
-          null) ::
-          Row(null, null, Seq("""{"field":"str"}""", """{"field":1}""")) ::
-          Row(null, null, Seq("1", "2", "3")) :: Nil)
+        Row(Seq("1", "1.1", "true", null, "[]", "{}", "[2,3,4]",
+          """{"field":"str"}"""), Seq(Row(214748364700L), Row(1)), null) ::
+        Row(null, null, Seq("""{"field":"str"}""", """{"field":1}""")) ::
+        Row(null, null, Seq("1", "2", "3")) :: Nil
+      )
 
       // Treat an element as a number.
-      checkAnswer(sql("select array1[0] + 1 from jsonTable where array1 is not null"), Row(2))
+      checkAnswer(
+        sql("select array1[0] + 1 from jsonTable where array1 is not null"),
+        Row(2)
+      )
     }
   }
 
@@ -582,10 +580,11 @@ abstract class JsonSuite
 
       val expectedSchema = StructType(
         StructField("a", BooleanType, true) ::
-          StructField("b", LongType, true) ::
-          StructField("c", ArrayType(LongType, true), true) ::
-          StructField("d", StructType(StructField("field", BooleanType, true) :: Nil), true) ::
-          StructField("e", StringType, true) :: Nil)
+        StructField("b", LongType, true) ::
+        StructField("c", ArrayType(LongType, true), true) ::
+        StructField("d", StructType(
+          StructField("field", BooleanType, true) :: Nil), true) ::
+        StructField("e", StringType, true) :: Nil)
 
       assert(expectedSchema === jsonDF.schema)
 
@@ -603,12 +602,12 @@ abstract class JsonSuite
 
       val expectedSchema = StructType(
         StructField("bigInteger", DecimalType(20, 0), true) ::
-          StructField("boolean", BooleanType, true) ::
-          StructField("double", DoubleType, true) ::
-          StructField("integer", LongType, true) ::
-          StructField("long", LongType, true) ::
-          StructField("null", StringType, true) ::
-          StructField("string", StringType, true) :: Nil)
+        StructField("boolean", BooleanType, true) ::
+        StructField("double", DoubleType, true) ::
+        StructField("integer", LongType, true) ::
+        StructField("long", LongType, true) ::
+        StructField("null", StringType, true) ::
+        StructField("string", StringType, true) :: Nil)
 
       assert(expectedSchema === jsonDF.schema)
 
@@ -616,19 +615,18 @@ abstract class JsonSuite
 
       checkAnswer(
         sql("select * from jsonTable"),
-        Row(
-          new java.math.BigDecimal("92233720368547758070"),
-          true,
-          1.7976931348623157,
-          10,
-          21474836470L,
-          null,
-          "this is a simple string."))
+        Row(new java.math.BigDecimal("92233720368547758070"),
+        true,
+        1.7976931348623157,
+        10,
+        21474836470L,
+        null,
+        "this is a simple string.")
+      )
     }
   }
 
-  test(
-    "Loading a JSON dataset primitivesAsString returns schema with primitive types as strings") {
+  test("Loading a JSON dataset primitivesAsString returns schema with primitive types as strings") {
     withTempView("jsonTable") {
       val dir = Utils.createTempDir()
       dir.delete()
@@ -638,12 +636,12 @@ abstract class JsonSuite
 
       val expectedSchema = StructType(
         StructField("bigInteger", StringType, true) ::
-          StructField("boolean", StringType, true) ::
-          StructField("double", StringType, true) ::
-          StructField("integer", StringType, true) ::
-          StructField("long", StringType, true) ::
-          StructField("null", StringType, true) ::
-          StructField("string", StringType, true) :: Nil)
+        StructField("boolean", StringType, true) ::
+        StructField("double", StringType, true) ::
+        StructField("integer", StringType, true) ::
+        StructField("long", StringType, true) ::
+        StructField("null", StringType, true) ::
+        StructField("string", StringType, true) :: Nil)
 
       assert(expectedSchema === jsonDF.schema)
 
@@ -651,14 +649,14 @@ abstract class JsonSuite
 
       checkAnswer(
         sql("select * from jsonTable"),
-        Row(
-          "92233720368547758070",
-          "true",
-          "1.7976931348623157",
-          "10",
-          "21474836470",
-          null,
-          "this is a simple string."))
+        Row("92233720368547758070",
+        "true",
+        "1.7976931348623157",
+        "10",
+        "21474836470",
+        null,
+        "this is a simple string.")
+      )
     }
   }
 
@@ -668,32 +666,25 @@ abstract class JsonSuite
 
       val expectedSchema = StructType(
         StructField("arrayOfArray1", ArrayType(ArrayType(StringType, true), true), true) ::
-          StructField("arrayOfArray2", ArrayType(ArrayType(StringType, true), true), true) ::
-          StructField("arrayOfBigInteger", ArrayType(StringType, true), true) ::
-          StructField("arrayOfBoolean", ArrayType(StringType, true), true) ::
-          StructField("arrayOfDouble", ArrayType(StringType, true), true) ::
-          StructField("arrayOfInteger", ArrayType(StringType, true), true) ::
-          StructField("arrayOfLong", ArrayType(StringType, true), true) ::
-          StructField("arrayOfNull", ArrayType(StringType, true), true) ::
-          StructField("arrayOfString", ArrayType(StringType, true), true) ::
-          StructField(
-            "arrayOfStruct",
-            ArrayType(
-              StructType(StructField("field1", StringType, true) ::
-                StructField("field2", StringType, true) ::
-                StructField("field3", StringType, true) :: Nil),
-              true),
-            true) ::
-          StructField(
-            "struct",
-            StructType(StructField("field1", StringType, true) ::
-              StructField("field2", StringType, true) :: Nil),
-            true) ::
-          StructField(
-            "structWithArrayFields",
-            StructType(StructField("field1", ArrayType(StringType, true), true) ::
-              StructField("field2", ArrayType(StringType, true), true) :: Nil),
-            true) :: Nil)
+        StructField("arrayOfArray2", ArrayType(ArrayType(StringType, true), true), true) ::
+        StructField("arrayOfBigInteger", ArrayType(StringType, true), true) ::
+        StructField("arrayOfBoolean", ArrayType(StringType, true), true) ::
+        StructField("arrayOfDouble", ArrayType(StringType, true), true) ::
+        StructField("arrayOfInteger", ArrayType(StringType, true), true) ::
+        StructField("arrayOfLong", ArrayType(StringType, true), true) ::
+        StructField("arrayOfNull", ArrayType(StringType, true), true) ::
+        StructField("arrayOfString", ArrayType(StringType, true), true) ::
+        StructField("arrayOfStruct", ArrayType(
+          StructType(
+            StructField("field1", StringType, true) ::
+            StructField("field2", StringType, true) ::
+            StructField("field3", StringType, true) :: Nil), true), true) ::
+        StructField("struct", StructType(
+          StructField("field1", StringType, true) ::
+          StructField("field2", StringType, true) :: Nil), true) ::
+        StructField("structWithArrayFields", StructType(
+          StructField("field1", ArrayType(StringType, true), true) ::
+          StructField("field2", ArrayType(StringType, true), true) :: Nil), true) :: Nil)
 
       assert(expectedSchema === jsonDF.schema)
 
@@ -702,56 +693,72 @@ abstract class JsonSuite
       // Access elements of a primitive array.
       checkAnswer(
         sql("select arrayOfString[0], arrayOfString[1], arrayOfString[2] from jsonTable"),
-        Row("str1", "str2", null))
+        Row("str1", "str2", null)
+      )
 
       // Access an array of null values.
-      checkAnswer(sql("select arrayOfNull from jsonTable"), Row(Seq(null, null, null, null)))
+      checkAnswer(
+        sql("select arrayOfNull from jsonTable"),
+        Row(Seq(null, null, null, null))
+      )
 
       // Access elements of a BigInteger array (we use DecimalType internally).
       checkAnswer(
-        sql(
-          "select arrayOfBigInteger[0], arrayOfBigInteger[1], arrayOfBigInteger[2] from " +
-            "jsonTable"),
-        Row("922337203685477580700", "-922337203685477580800", null))
+        sql("select arrayOfBigInteger[0], arrayOfBigInteger[1], arrayOfBigInteger[2] from " +
+          "jsonTable"),
+        Row("922337203685477580700", "-922337203685477580800", null)
+      )
 
       // Access elements of an array of arrays.
       checkAnswer(
         sql("select arrayOfArray1[0], arrayOfArray1[1] from jsonTable"),
-        Row(Seq("1", "2", "3"), Seq("str1", "str2")))
+        Row(Seq("1", "2", "3"), Seq("str1", "str2"))
+      )
 
       // Access elements of an array of arrays.
       checkAnswer(
         sql("select arrayOfArray2[0], arrayOfArray2[1] from jsonTable"),
-        Row(Seq("1", "2", "3"), Seq("1.1", "2.1", "3.1")))
+        Row(Seq("1", "2", "3"), Seq("1.1", "2.1", "3.1"))
+      )
 
       // Access elements of an array inside a filed with the type of ArrayType(ArrayType).
       checkAnswer(
         sql("select arrayOfArray1[1][1], arrayOfArray2[1][1] from jsonTable"),
-        Row("str2", "2.1"))
+        Row("str2", "2.1")
+      )
 
       // Access elements of an array of structs.
       checkAnswer(
-        sql(
-          "select arrayOfStruct[0], arrayOfStruct[1], arrayOfStruct[2], arrayOfStruct[3] " +
-            "from jsonTable"),
-        Row(Row("true", "str1", null), Row("false", null, null), Row(null, null, null), null))
+        sql("select arrayOfStruct[0], arrayOfStruct[1], arrayOfStruct[2], arrayOfStruct[3] " +
+          "from jsonTable"),
+        Row(
+          Row("true", "str1", null),
+          Row("false", null, null),
+          Row(null, null, null),
+          null)
+      )
 
       // Access a struct and fields inside of it.
       checkAnswer(
         sql("select struct, struct.field1, struct.field2 from jsonTable"),
-        Row(Row("true", "92233720368547758070"), "true", "92233720368547758070") :: Nil)
+        Row(
+          Row("true", "92233720368547758070"),
+          "true",
+          "92233720368547758070") :: Nil
+      )
 
       // Access an array field of a struct.
       checkAnswer(
         sql("select structWithArrayFields.field1, structWithArrayFields.field2 from jsonTable"),
-        Row(Seq("4", "5", "6"), Seq("str1", "str2")))
+        Row(Seq("4", "5", "6"), Seq("str1", "str2"))
+      )
 
       // Access elements of an array field of a struct.
       checkAnswer(
-        sql(
-          "select structWithArrayFields.field1[1], structWithArrayFields.field2[3] from " +
-            "jsonTable"),
-        Row("5", null))
+        sql("select structWithArrayFields.field1[1], structWithArrayFields.field2[3] from " +
+          "jsonTable"),
+        Row("5", null)
+      )
     }
   }
 
@@ -774,21 +781,21 @@ abstract class JsonSuite
 
       checkAnswer(
         sql("select * from jsonTable"),
-        Row(
-          BigDecimal("92233720368547758070"),
+        Row(BigDecimal("92233720368547758070"),
           true,
           BigDecimal("1.7976931348623157"),
           10,
           21474836470L,
           null,
-          "this is a simple string."))
+          "this is a simple string.")
+      )
     }
   }
 
-  test(
-    "Find compatible types even if inferred DecimalType is not capable of other IntegralType") {
-    val mixedIntegerAndDoubleRecords =
-      Seq("""{"a": 3, "b": 1.1}""", s"""{"a": 3.1, "b": 0.${"0".repeat(38)}1}""").toDS()
+  test("Find compatible types even if inferred DecimalType is not capable of other IntegralType") {
+    val mixedIntegerAndDoubleRecords = Seq(
+      """{"a": 3, "b": 1.1}""",
+      s"""{"a": 3.1, "b": 0.${"0".repeat(38)}1}""").toDS()
     val jsonDF = spark.read
       .option("prefersDecimal", "true")
       .json(mixedIntegerAndDoubleRecords)
@@ -797,13 +804,14 @@ abstract class JsonSuite
     // they will be doubles as `1.0E-39D` does not fit.
     val expectedSchema = StructType(
       StructField("a", DecimalType(21, 1), true) ::
-        StructField("b", DoubleType, true) :: Nil)
+      StructField("b", DoubleType, true) :: Nil)
 
     assert(expectedSchema === jsonDF.schema)
     checkAnswer(
       jsonDF,
-      Row(BigDecimal("3"), 1.1d) ::
-        Row(BigDecimal("3.1"), 1.0e-39d) :: Nil)
+      Row(BigDecimal("3"), 1.1D) ::
+      Row(BigDecimal("3.1"), 1.0E-39D) :: Nil
+    )
   }
 
   test("Infer big integers correctly even when it does not fit in decimal") {
@@ -814,10 +822,10 @@ abstract class JsonSuite
     // it will be a decimal as `92233720368547758070`.
     val expectedSchema = StructType(
       StructField("a", DoubleType, true) ::
-        StructField("b", DecimalType(20, 0), true) :: Nil)
+      StructField("b", DecimalType(20, 0), true) :: Nil)
 
     assert(expectedSchema === jsonDF.schema)
-    checkAnswer(jsonDF, Row(1.0e38d, BigDecimal("92233720368547758070")))
+    checkAnswer(jsonDF, Row(1.0E38D, BigDecimal("92233720368547758070")))
   }
 
   test("Infer floating-point values correctly even when it does not fit in decimal") {
@@ -829,10 +837,10 @@ abstract class JsonSuite
     // it will be a decimal as `0.01` by having a precision equal to the scale.
     val expectedSchema = StructType(
       StructField("a", DoubleType, true) ::
-        StructField("b", DecimalType(2, 2), true) :: Nil)
+      StructField("b", DecimalType(2, 2), true):: Nil)
 
     assert(expectedSchema === jsonDF.schema)
-    checkAnswer(jsonDF, Row(1.0e-39d, BigDecimal("0.01")))
+    checkAnswer(jsonDF, Row(1.0E-39D, BigDecimal("0.01")))
 
     val mergedJsonDF = spark.read
       .option("prefersDecimal", "true")
@@ -840,13 +848,14 @@ abstract class JsonSuite
 
     val expectedMergedSchema = StructType(
       StructField("a", DoubleType, true) ::
-        StructField("b", DecimalType(22, 2), true) :: Nil)
+      StructField("b", DecimalType(22, 2), true):: Nil)
 
     assert(expectedMergedSchema === mergedJsonDF.schema)
     checkAnswer(
       mergedJsonDF,
-      Row(1.0e-39d, BigDecimal("0.01")) ::
-        Row(1.0e38d, BigDecimal("92233720368547758070")) :: Nil)
+      Row(1.0E-39D, BigDecimal("0.01")) ::
+      Row(1.0E38D, BigDecimal("92233720368547758070")) :: Nil
+    )
   }
 
   test("Loading a JSON dataset from a text file with SQL") {
@@ -855,7 +864,8 @@ abstract class JsonSuite
     val path = dir.toURI.toString
     primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).write.text(path)
 
-    sql(s"""
+    sql(
+      s"""
         |CREATE TEMPORARY VIEW jsonTableSQL
         |USING org.apache.spark.sql.json
         |OPTIONS (
@@ -865,14 +875,14 @@ abstract class JsonSuite
 
     checkAnswer(
       sql("select * from jsonTableSQL"),
-      Row(
-        new java.math.BigDecimal("92233720368547758070"),
+      Row(new java.math.BigDecimal("92233720368547758070"),
         true,
         1.7976931348623157,
         10,
         21474836470L,
         null,
-        "this is a simple string."))
+        "this is a simple string.")
+    )
   }
 
   test("Applying schemas") {
@@ -884,12 +894,12 @@ abstract class JsonSuite
 
       val schema = StructType(
         StructField("bigInteger", DecimalType.SYSTEM_DEFAULT, true) ::
-          StructField("boolean", BooleanType, true) ::
-          StructField("double", DoubleType, true) ::
-          StructField("integer", IntegerType, true) ::
-          StructField("long", LongType, true) ::
-          StructField("null", StringType, true) ::
-          StructField("string", StringType, true) :: Nil)
+        StructField("boolean", BooleanType, true) ::
+        StructField("double", DoubleType, true) ::
+        StructField("integer", IntegerType, true) ::
+        StructField("long", LongType, true) ::
+        StructField("null", StringType, true) ::
+        StructField("string", StringType, true) :: Nil)
 
       val jsonDF1 = spark.read.schema(schema).json(path)
 
@@ -899,14 +909,14 @@ abstract class JsonSuite
 
       checkAnswer(
         sql("select * from jsonTable1"),
-        Row(
-          new java.math.BigDecimal("92233720368547758070"),
-          true,
-          1.7976931348623157,
-          10,
-          21474836470L,
-          null,
-          "this is a simple string."))
+        Row(new java.math.BigDecimal("92233720368547758070"),
+        true,
+        1.7976931348623157,
+        10,
+        21474836470L,
+        null,
+        "this is a simple string.")
+      )
 
       val jsonDF2 = spark.read.schema(schema).json(primitiveFieldAndType)
 
@@ -916,21 +926,21 @@ abstract class JsonSuite
 
       checkAnswer(
         sql("select * from jsonTable2"),
-        Row(
-          new java.math.BigDecimal("92233720368547758070"),
-          true,
-          1.7976931348623157,
-          10,
-          21474836470L,
-          null,
-          "this is a simple string."))
+        Row(new java.math.BigDecimal("92233720368547758070"),
+        true,
+        1.7976931348623157,
+        10,
+        21474836470L,
+        null,
+        "this is a simple string.")
+      )
     }
   }
 
   test("Applying schemas with MapType") {
     withTempView("jsonWithSimpleMap", "jsonWithComplexMap") {
-      val schemaWithSimpleMap =
-        StructType(StructField("map", MapType(StringType, IntegerType, true), false) :: Nil)
+      val schemaWithSimpleMap = StructType(
+        StructField("map", MapType(StringType, IntegerType, true), false) :: Nil)
       val jsonWithSimpleMap = spark.read.schema(schemaWithSimpleMap).json(mapType1)
 
       jsonWithSimpleMap.createOrReplaceTempView("jsonWithSimpleMap")
@@ -938,26 +948,28 @@ abstract class JsonSuite
       checkAnswer(
         sql("select `map` from jsonWithSimpleMap"),
         Row(Map("a" -> 1)) ::
-          Row(Map("b" -> 2)) ::
-          Row(Map("c" -> 3)) ::
-          Row(Map("c" -> 1, "d" -> 4)) ::
-          Row(Map("e" -> null)) :: Nil)
+        Row(Map("b" -> 2)) ::
+        Row(Map("c" -> 3)) ::
+        Row(Map("c" -> 1, "d" -> 4)) ::
+        Row(Map("e" -> null)) :: Nil
+      )
 
       withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
         checkAnswer(
           sql("select `map`['c'] from jsonWithSimpleMap"),
           Row(null) ::
-            Row(null) ::
-            Row(3) ::
-            Row(1) ::
-            Row(null) :: Nil)
+          Row(null) ::
+          Row(3) ::
+          Row(1) ::
+          Row(null) :: Nil
+        )
       }
 
       val innerStruct = StructType(
         StructField("field1", ArrayType(IntegerType, true), true) ::
-          StructField("field2", IntegerType, true) :: Nil)
-      val schemaWithComplexMap =
-        StructType(StructField("map", MapType(StringType, innerStruct, true), false) :: Nil)
+        StructField("field2", IntegerType, true) :: Nil)
+      val schemaWithComplexMap = StructType(
+        StructField("map", MapType(StringType, innerStruct, true), false) :: Nil)
 
       val jsonWithComplexMap = spark.read.schema(schemaWithComplexMap).json(mapType2)
 
@@ -966,21 +978,23 @@ abstract class JsonSuite
       checkAnswer(
         sql("select `map` from jsonWithComplexMap"),
         Row(Map("a" -> Row(Seq(1, 2, 3, null), null))) ::
-          Row(Map("b" -> Row(null, 2))) ::
-          Row(Map("c" -> Row(Seq(), 4))) ::
-          Row(Map("c" -> Row(null, 3), "d" -> Row(Seq(null), null))) ::
-          Row(Map("e" -> null)) ::
-          Row(Map("f" -> Row(null, null))) :: Nil)
+        Row(Map("b" -> Row(null, 2))) ::
+        Row(Map("c" -> Row(Seq(), 4))) ::
+        Row(Map("c" -> Row(null, 3), "d" -> Row(Seq(null), null))) ::
+        Row(Map("e" -> null)) ::
+        Row(Map("f" -> Row(null, null))) :: Nil
+      )
 
       withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
         checkAnswer(
           sql("select `map`['a'].field1, `map`['c'].field2 from jsonWithComplexMap"),
           Row(Seq(1, 2, 3, null), null) ::
-            Row(null, null) ::
-            Row(null, 4) ::
-            Row(null, 3) ::
-            Row(null, null) ::
-            Row(null, null) :: Nil)
+          Row(null, null) ::
+          Row(null, 4) ::
+          Row(null, 3) ::
+          Row(null, null) ::
+          Row(null, null) :: Nil
+        )
       }
     }
   }
@@ -992,14 +1006,17 @@ abstract class JsonSuite
 
       checkAnswer(
         sql("select arrayOfStruct[0].field1, arrayOfStruct[0].field2 from jsonTable"),
-        Row(true, "str1"))
+        Row(true, "str1")
+      )
       checkAnswer(
-        sql("""
+        sql(
+          """
             |select complexArrayOfStruct[0].field1[1].inner2[0],
             |complexArrayOfStruct[1].field2[0][1]
             |from jsonTable
           """.stripMargin),
-        Row("str2", 6))
+        Row("str2", 6)
+      )
     }
   }
 
@@ -1009,18 +1026,22 @@ abstract class JsonSuite
       jsonDF.createOrReplaceTempView("jsonTable")
 
       checkAnswer(
-        sql("""
+        sql(
+          """
             |select arrayOfArray1[0][0][0], arrayOfArray1[1][0][1], arrayOfArray1[1][1][0]
             |from jsonTable
           """.stripMargin),
-        Row(5, 7, 8))
+        Row(5, 7, 8)
+      )
       checkAnswer(
-        sql("""
+        sql(
+          """
             |select arrayOfArray2[0][0][0].inner1, arrayOfArray2[1][0],
             |arrayOfArray2[1][1][1].inner2[0], arrayOfArray2[2][0][0].inner3[0][0].inner4
             |from jsonTable
           """.stripMargin),
-        Row("str1", Nil, "str4", 2))
+        Row("str1", Nil, "str4", 2)
+      )
     }
   }
 
@@ -1030,14 +1051,16 @@ abstract class JsonSuite
       jsonDF.createOrReplaceTempView("jsonTable")
 
       checkAnswer(
-        sql("""
+        sql(
+          """
             |select a, b, c
             |from jsonTable
           """.stripMargin),
         Row("str_a_1", null, null) ::
           Row("str_a_2", null, null) ::
           Row(null, "str_b_3", null) ::
-          Row("str_a_4", "str_b_4", "str_c_4") :: Nil)
+          Row("str_a_4", "str_b_4", "str_c_4") :: Nil
+      )
     }
   }
 
@@ -1050,7 +1073,10 @@ abstract class JsonSuite
           .json(corruptRecords)
       },
       condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
-      parameters = Map("badRecord" -> "_corrupt_record", "failFastMode" -> "FAILFAST"))
+      parameters = Map(
+        "badRecord" -> "_corrupt_record",
+        "failFastMode" -> "FAILFAST")
+    )
 
     checkError(
       exception = intercept[SparkException] {
@@ -1061,7 +1087,10 @@ abstract class JsonSuite
           .collect()
       },
       condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
-      parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST"))
+      parameters = Map(
+        "badRecord" -> "[null]",
+        "failFastMode" -> "FAILFAST")
+    )
   }
 
   test("Corrupt records: DROPMALFORMED mode") {
@@ -1069,19 +1098,25 @@ abstract class JsonSuite
       StructField("a", StringType, true) ::
         StructField("b", StringType, true) ::
         StructField("c", StringType, true) :: Nil)
-    val schemaTwo = StructType(StructField("a", StringType, true) :: Nil)
+    val schemaTwo = StructType(
+      StructField("a", StringType, true) :: Nil)
     // `DROPMALFORMED` mode should skip corrupt records
     val jsonDFOne = spark.read
       .option("mode", "DROPMALFORMED")
       .json(corruptRecords)
-    checkAnswer(jsonDFOne, Row("str_a_4", "str_b_4", "str_c_4") :: Nil)
+    checkAnswer(
+      jsonDFOne,
+      Row("str_a_4", "str_b_4", "str_c_4") :: Nil
+    )
     assert(jsonDFOne.schema === schemaOne)
 
     val jsonDFTwo = spark.read
       .option("mode", "DROPMALFORMED")
       .schema(schemaTwo)
       .json(corruptRecords)
-    checkAnswer(jsonDFTwo, Row("str_a_4") :: Nil)
+    checkAnswer(
+      jsonDFTwo,
+      Row("str_a_4") :: Nil)
     assert(jsonDFTwo.schema === schemaTwo)
   }
 
@@ -1091,7 +1126,9 @@ abstract class JsonSuite
     val jsonDF = spark.read
       .option("mode", "DROPMALFORMED")
       .json(additionalCorruptRecords)
-    checkAnswer(jsonDF, Row("test"))
+    checkAnswer(
+      jsonDF,
+      Row("test"))
     assert(jsonDF.schema === schema)
   }
 
@@ -1111,7 +1148,8 @@ abstract class JsonSuite
         Row(null, null, null),
         Row(null, null, null),
         Row("str_a_4", "str_b_4", "str_c_4"),
-        Row(null, null, null)))
+        Row(null, null, null))
+    )
   }
 
   test("Corrupt records: PERMISSIVE mode, with designated column for malformed records") {
@@ -1133,18 +1171,21 @@ abstract class JsonSuite
           Row(null, null, null, """{"a":1, b:2}""") ::
           Row(null, null, null, """{"a":{, b:3}""") ::
           Row("str_a_4", "str_b_4", "str_c_4", null) ::
-          Row(null, null, null, "]") :: Nil)
+          Row(null, null, null, "]") :: Nil
+      )
 
       checkAnswer(
         jsonDF.filter($"_unparsed".isNull).select($"a", $"b", $"c"),
-        Row("str_a_4", "str_b_4", "str_c_4"))
+        Row("str_a_4", "str_b_4", "str_c_4")
+      )
 
       checkAnswer(
         jsonDF.filter($"_unparsed".isNotNull).select($"_unparsed"),
         Row("{") ::
           Row("""{"a":1, b:2}""") ::
           Row("""{"a":{, b:3}""") ::
-          Row("]") :: Nil)
+          Row("]") :: Nil
+      )
     }
   }
 
@@ -1165,7 +1206,8 @@ abstract class JsonSuite
         Row(null, null, null, """{"a":1, b:2}""") ::
         Row(null, null, null, """{"a":{, b:3}""") ::
         Row("str_a_4", "str_b_4", "str_c_4", null) ::
-        Row(null, null, null, "]") :: Nil)
+        Row(null, null, null, "]") :: Nil
+    )
   }
 
   test("SPARK-4068: nulls in arrays") {
@@ -1174,38 +1216,30 @@ abstract class JsonSuite
       jsonDF.createOrReplaceTempView("jsonTable")
 
       val schema = StructType(
-        StructField(
-          "field1",
-          ArrayType(ArrayType(ArrayType(ArrayType(StringType, true), true), true), true),
-          true) ::
-          StructField(
-            "field2",
-            ArrayType(
-              ArrayType(StructType(StructField("Test", LongType, true) :: Nil), true),
-              true),
-            true) ::
-          StructField(
-            "field3",
-            ArrayType(
-              ArrayType(StructType(StructField("Test", StringType, true) :: Nil), true),
-              true),
-            true) ::
-          StructField(
-            "field4",
-            ArrayType(ArrayType(ArrayType(LongType, true), true), true),
-            true) :: Nil)
+        StructField("field1",
+          ArrayType(ArrayType(ArrayType(ArrayType(StringType, true), true), true), true), true) ::
+        StructField("field2",
+          ArrayType(ArrayType(
+            StructType(StructField("Test", LongType, true) :: Nil), true), true), true) ::
+        StructField("field3",
+          ArrayType(ArrayType(
+            StructType(StructField("Test", StringType, true) :: Nil), true), true), true) ::
+        StructField("field4",
+          ArrayType(ArrayType(ArrayType(LongType, true), true), true), true) :: Nil)
 
       assert(schema === jsonDF.schema)
 
       checkAnswer(
-        sql("""
+        sql(
+          """
             |SELECT field1, field2, field3, field4
             |FROM jsonTable
           """.stripMargin),
         Row(Seq(Seq(null), Seq(Seq(Seq("Test")))), null, null, null) ::
           Row(null, Seq(null, Seq(Row(1))), null, null) ::
           Row(null, null, Seq(Seq(null), Seq(Row("2"))), null) ::
-          Row(null, null, null, Seq(Seq(null, Seq(1, 2, 3)))) :: Nil)
+          Row(null, null, null, Seq(Seq(null, Seq(1, 2, 3)))) :: Nil
+      )
     }
   }
 
@@ -1213,18 +1247,16 @@ abstract class JsonSuite
     withTempView("applySchema1", "applySchema2", "primitiveTable", "complexTable") {
       val schema1 = StructType(
         StructField("f1", IntegerType, false) ::
-          StructField("f2", StringType, false) ::
-          StructField("f3", BooleanType, false) ::
-          StructField("f4", ArrayType(StringType), nullable = true) ::
-          StructField("f5", IntegerType, true) :: Nil)
+        StructField("f2", StringType, false) ::
+        StructField("f3", BooleanType, false) ::
+        StructField("f4", ArrayType(StringType), nullable = true) ::
+        StructField("f5", IntegerType, true) :: Nil)
 
       val rowRDD1 = unparsedStrings.map { r =>
         val values = r.split(",").map(_.trim)
-        val v5 =
-          try values(3).toInt
-          catch {
-            case _: NumberFormatException => null
-          }
+        val v5 = try values(3).toInt catch {
+          case _: NumberFormatException => null
+        }
         Row(values(0).toInt, values(1), values(2).toBoolean, r.split(",").toList, v5)
       }
 
@@ -1233,27 +1265,21 @@ abstract class JsonSuite
       val df2 = df1.toDF()
       val result = df2.toJSON.collect()
       // scalastyle:off
-      assert(result(
-        0) === "{\"f1\":1,\"f2\":\"A1\",\"f3\":true,\"f4\":[\"1\",\" A1\",\" true\",\" null\"]}")
-      assert(result(
-        3) === "{\"f1\":4,\"f2\":\"D4\",\"f3\":true,\"f4\":[\"4\",\" D4\",\" true\",\" 2147483644\"],\"f5\":2147483644}")
+      assert(result(0) === "{\"f1\":1,\"f2\":\"A1\",\"f3\":true,\"f4\":[\"1\",\" A1\",\" true\",\" null\"]}")
+      assert(result(3) === "{\"f1\":4,\"f2\":\"D4\",\"f3\":true,\"f4\":[\"4\",\" D4\",\" true\",\" 2147483644\"],\"f5\":2147483644}")
       // scalastyle:on
 
       val schema2 = StructType(
-        StructField(
-          "f1",
-          StructType(StructField("f11", IntegerType, false) ::
-            StructField("f12", BooleanType, false) :: Nil),
-          false) ::
-          StructField("f2", MapType(StringType, IntegerType, true), false) :: Nil)
+        StructField("f1", StructType(
+          StructField("f11", IntegerType, false) ::
+          StructField("f12", BooleanType, false) :: Nil), false) ::
+        StructField("f2", MapType(StringType, IntegerType, true), false) :: Nil)
 
       val rowRDD2 = unparsedStrings.map { r =>
         val values = r.split(",").map(_.trim)
-        val v4 =
-          try values(3).toInt
-          catch {
-            case _: NumberFormatException => null
-          }
+        val v4 = try values(3).toInt catch {
+          case _: NumberFormatException => null
+        }
         Row(Row(values(0).toInt, values(2).toBoolean), Map(values(1) -> v4))
       }
 
@@ -1269,14 +1295,14 @@ abstract class JsonSuite
       val primTable = spark.read.json(jsonDF.toJSON)
       primTable.createOrReplaceTempView("primitiveTable")
       checkAnswer(
-        sql("select * from primitiveTable"),
-        Row(
-          new java.math.BigDecimal("92233720368547758070"),
+          sql("select * from primitiveTable"),
+        Row(new java.math.BigDecimal("92233720368547758070"),
           true,
           1.7976931348623157,
           10,
           21474836470L,
-          "this is a simple string."))
+          "this is a simple string.")
+      )
 
       val complexJsonDF = spark.read.json(complexFieldAndType1)
       val compTable = spark.read.json(complexJsonDF.toJSON)
@@ -1284,35 +1310,40 @@ abstract class JsonSuite
       // Access elements of a primitive array.
       checkAnswer(
         sql("select arrayOfString[0], arrayOfString[1], arrayOfString[2] from complexTable"),
-        Row("str1", "str2", null))
+        Row("str1", "str2", null)
+      )
 
       // Access an array of null values.
-      checkAnswer(sql("select arrayOfNull from complexTable"), Row(Seq(null, null, null, null)))
+      checkAnswer(
+        sql("select arrayOfNull from complexTable"),
+        Row(Seq(null, null, null, null))
+      )
 
       // Access elements of a BigInteger array (we use DecimalType internally).
       checkAnswer(
-        sql(
-          "select arrayOfBigInteger[0], arrayOfBigInteger[1], arrayOfBigInteger[2] " +
-            " from complexTable"),
-        Row(
-          new java.math.BigDecimal("922337203685477580700"),
-          new java.math.BigDecimal("-922337203685477580800"),
-          null))
+        sql("select arrayOfBigInteger[0], arrayOfBigInteger[1], arrayOfBigInteger[2] " +
+          " from complexTable"),
+        Row(new java.math.BigDecimal("922337203685477580700"),
+          new java.math.BigDecimal("-922337203685477580800"), null)
+      )
 
       // Access elements of an array of arrays.
       checkAnswer(
         sql("select arrayOfArray1[0], arrayOfArray1[1] from complexTable"),
-        Row(Seq("1", "2", "3"), Seq("str1", "str2")))
+        Row(Seq("1", "2", "3"), Seq("str1", "str2"))
+      )
 
       // Access elements of an array of arrays.
       checkAnswer(
         sql("select arrayOfArray2[0], arrayOfArray2[1] from complexTable"),
-        Row(Seq(1.0, 2.0, 3.0), Seq(1.1, 2.1, 3.1)))
+        Row(Seq(1.0, 2.0, 3.0), Seq(1.1, 2.1, 3.1))
+      )
 
       // Access elements of an array inside a filed with the type of ArrayType(ArrayType).
       checkAnswer(
         sql("select arrayOfArray1[1][1], arrayOfArray2[1][1] from complexTable"),
-        Row("str2", 2.1))
+        Row("str2", 2.1)
+      )
 
       // Access a struct and fields inside of it.
       checkAnswer(
@@ -1320,20 +1351,21 @@ abstract class JsonSuite
         Row(
           Row(true, new java.math.BigDecimal("92233720368547758070")),
           true,
-          new java.math.BigDecimal("92233720368547758070")) :: Nil)
+          new java.math.BigDecimal("92233720368547758070")) :: Nil
+      )
 
       // Access an array field of a struct.
       checkAnswer(
-        sql(
-          "select structWithArrayFields.field1, structWithArrayFields.field2 from complexTable"),
-        Row(Seq(4, 5, 6), Seq("str1", "str2")))
+        sql("select structWithArrayFields.field1, structWithArrayFields.field2 from complexTable"),
+        Row(Seq(4, 5, 6), Seq("str1", "str2"))
+      )
 
       // Access elements of an array field of a struct.
       checkAnswer(
-        sql(
-          "select structWithArrayFields.field1[1], structWithArrayFields.field2[3] " +
-            "from complexTable"),
-        Row(5, null))
+        sql("select structWithArrayFields.field1[1], structWithArrayFields.field2[3] " +
+          "from complexTable"),
+        Row(5, null)
+      )
     }
   }
 
@@ -1349,10 +1381,8 @@ abstract class JsonSuite
   test("JSONRelation equality test") {
     withTempPath(dir => {
       val path = dir.getCanonicalFile.toURI.toString
-      sparkContext
-        .parallelize(1 to 100)
-        .map(i => s"""{"a": 1, "b": "str$i"}""")
-        .saveAsTextFile(path)
+      sparkContext.parallelize(1 to 100)
+        .map(i => s"""{"a": 1, "b": "str$i"}""").saveAsTextFile(path)
 
       val d1 = DataSource(
         spark,
@@ -1376,15 +1406,17 @@ abstract class JsonSuite
   test("SPARK-6245 JsonInferSchema.infer on empty RDD") {
     // This is really a test that it doesn't throw an exception
     val options = new JSONOptions(Map.empty[String, String], "UTC")
-    val emptySchema = new JsonInferSchema(options).infer(empty.rdd, CreateJacksonParser.string)
+    val emptySchema = new JsonInferSchema(options).infer(
+      empty.rdd,
+      CreateJacksonParser.string)
     assert(StructType(Seq()) === emptySchema)
   }
 
   test("SPARK-7565 MapType in JsonRDD") {
     withSQLConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key -> "_unparsed") {
       withTempDir { dir =>
-        val schemaWithSimpleMap =
-          StructType(StructField("map", MapType(StringType, IntegerType, true), false) :: Nil)
+        val schemaWithSimpleMap = StructType(
+          StructField("map", MapType(StringType, IntegerType, true), false) :: Nil)
         val df = spark.read.schema(schemaWithSimpleMap).json(mapType1)
 
         val path = dir.getAbsolutePath
@@ -1401,8 +1433,9 @@ abstract class JsonSuite
 
   test("SPARK-8093 Erase empty structs") {
     val options = new JSONOptions(Map.empty[String, String], "UTC")
-    val emptySchema =
-      new JsonInferSchema(options).infer(emptyRecords.rdd, CreateJacksonParser.string)
+    val emptySchema = new JsonInferSchema(options).infer(
+      emptyRecords.rdd,
+      CreateJacksonParser.string)
     assert(StructType(Seq()) === emptySchema)
   }
 
@@ -1431,13 +1464,12 @@ abstract class JsonSuite
           "abd")
 
         spark.read.json(root.getAbsolutePath).createOrReplaceTempView("test_myjson_with_part")
-        checkAnswer(
-          sql("SELECT count(a) FROM test_myjson_with_part where d1 = 1 and col1='abc'"),
-          Row(4))
-        checkAnswer(
-          sql("SELECT count(a) FROM test_myjson_with_part where d1 = 1 and col1='abd'"),
-          Row(5))
-        checkAnswer(sql("SELECT count(a) FROM test_myjson_with_part where d1 = 1"), Row(9))
+        checkAnswer(sql(
+          "SELECT count(a) FROM test_myjson_with_part where d1 = 1 and col1='abc'"), Row(4))
+        checkAnswer(sql(
+          "SELECT count(a) FROM test_myjson_with_part where d1 = 1 and col1='abd'"), Row(5))
+        checkAnswer(sql(
+          "SELECT count(a) FROM test_myjson_with_part where d1 = 1"), Row(9))
       }
     })
   }
@@ -1461,23 +1493,11 @@ abstract class JsonSuite
 
     val dataTypes =
       Seq(
-        StringType,
-        BinaryType,
-        NullType,
-        BooleanType,
-        ByteType,
-        ShortType,
-        IntegerType,
-        LongType,
-        FloatType,
-        DoubleType,
-        DecimalType(25, 5),
-        DecimalType(6, 5),
-        DateType,
-        TimestampType,
-        ArrayType(IntegerType),
-        MapType(StringType, LongType),
-        struct,
+        StringType, BinaryType, NullType, BooleanType,
+        ByteType, ShortType, IntegerType, LongType,
+        FloatType, DoubleType, DecimalType(25, 5), DecimalType(6, 5),
+        DateType, TimestampType,
+        ArrayType(IntegerType), MapType(StringType, LongType), struct,
         new MyDenseVectorUDT())
     val fields = dataTypes.zipWithIndex.map { case (dataType, index) =>
       StructField(s"col$index", dataType, nullable = true)
@@ -1510,11 +1530,11 @@ abstract class JsonSuite
     // scalastyle:off
     val existingJSONData =
       """{"col0":"Spark 1.2.2","col1":"YSBzdHJpbmcgaW4gYmluYXJ5","col3":true,"col4":1,"col5":2,"col6":3,"col7":9223372036854775807,"col8":0.25,"col9":0.75,"col10":1234.23456,"col11":1.23456,"col12":"2015-01-01","col13":"2015-01-01 23:50:59.123","col14":[2,3,4],"col15":{"a string":2000},"col16":{"f1":4.75,"f2":[false,true]},"col17":[0.25,2.25,4.25]}""" ::
-        """{"col0":"Spark 1.3.1","col1":"YSBzdHJpbmcgaW4gYmluYXJ5","col3":true,"col4":1,"col5":2,"col6":3,"col7":9223372036854775807,"col8":0.25,"col9":0.75,"col10":1234.23456,"col11":1.23456,"col12":"2015-01-01","col13":"2015-01-01 23:50:59.123","col14":[2,3,4],"col15":{"a string":2000},"col16":{"f1":4.75,"f2":[false,true]},"col17":[0.25,2.25,4.25]}""" ::
-        """{"col0":"Spark 1.3.1","col1":"YSBzdHJpbmcgaW4gYmluYXJ5","col3":true,"col4":1,"col5":2,"col6":3,"col7":9223372036854775807,"col8":0.25,"col9":0.75,"col10":1234.23456,"col11":1.23456,"col12":"2015-01-01","col13":"2015-01-01 23:50:59.123","col14":[2,3,4],"col15":{"a string":2000},"col16":{"f1":4.75,"f2":[false,true]},"col17":[0.25,2.25,4.25]}""" ::
-        """{"col0":"Spark 1.4.1","col1":"YSBzdHJpbmcgaW4gYmluYXJ5","col3":true,"col4":1,"col5":2,"col6":3,"col7":9223372036854775807,"col8":0.25,"col9":0.75,"col10":1234.23456,"col11":1.23456,"col12":"2015-01-01","col13":"2015-01-01 23:50:59.123","col14":[2,3,4],"col15":{"a string":2000},"col16":{"f1":4.75,"f2":[false,true]},"col17":[0.25,2.25,4.25]}""" ::
-        """{"col0":"Spark 1.4.1","col1":"YSBzdHJpbmcgaW4gYmluYXJ5","col3":true,"col4":1,"col5":2,"col6":3,"col7":9223372036854775807,"col8":0.25,"col9":0.75,"col10":1234.23456,"col11":1.23456,"col12":"2015-01-01","col13":"2015-01-01 23:50:59.123","col14":[2,3,4],"col15":{"a string":2000},"col16":{"f1":4.75,"f2":[false,true]},"col17":[0.25,2.25,4.25]}""" ::
-        """{"col0":"Spark 1.5.0","col1":"YSBzdHJpbmcgaW4gYmluYXJ5","col3":true,"col4":1,"col5":2,"col6":3,"col7":9223372036854775807,"col8":0.25,"col9":0.75,"col10":1234.23456,"col11":1.23456,"col12":"2015-01-01","col13":"2015-01-01 23:50:59.123","col14":[2,3,4],"col15":{"a string":2000},"col16":{"f1":4.75,"f2":[false,true]},"col17":[0.25,2.25,4.25]}""" :: Nil
+      """{"col0":"Spark 1.3.1","col1":"YSBzdHJpbmcgaW4gYmluYXJ5","col3":true,"col4":1,"col5":2,"col6":3,"col7":9223372036854775807,"col8":0.25,"col9":0.75,"col10":1234.23456,"col11":1.23456,"col12":"2015-01-01","col13":"2015-01-01 23:50:59.123","col14":[2,3,4],"col15":{"a string":2000},"col16":{"f1":4.75,"f2":[false,true]},"col17":[0.25,2.25,4.25]}""" ::
+      """{"col0":"Spark 1.3.1","col1":"YSBzdHJpbmcgaW4gYmluYXJ5","col3":true,"col4":1,"col5":2,"col6":3,"col7":9223372036854775807,"col8":0.25,"col9":0.75,"col10":1234.23456,"col11":1.23456,"col12":"2015-01-01","col13":"2015-01-01 23:50:59.123","col14":[2,3,4],"col15":{"a string":2000},"col16":{"f1":4.75,"f2":[false,true]},"col17":[0.25,2.25,4.25]}""" ::
+      """{"col0":"Spark 1.4.1","col1":"YSBzdHJpbmcgaW4gYmluYXJ5","col3":true,"col4":1,"col5":2,"col6":3,"col7":9223372036854775807,"col8":0.25,"col9":0.75,"col10":1234.23456,"col11":1.23456,"col12":"2015-01-01","col13":"2015-01-01 23:50:59.123","col14":[2,3,4],"col15":{"a string":2000},"col16":{"f1":4.75,"f2":[false,true]},"col17":[0.25,2.25,4.25]}""" ::
+      """{"col0":"Spark 1.4.1","col1":"YSBzdHJpbmcgaW4gYmluYXJ5","col3":true,"col4":1,"col5":2,"col6":3,"col7":9223372036854775807,"col8":0.25,"col9":0.75,"col10":1234.23456,"col11":1.23456,"col12":"2015-01-01","col13":"2015-01-01 23:50:59.123","col14":[2,3,4],"col15":{"a string":2000},"col16":{"f1":4.75,"f2":[false,true]},"col17":[0.25,2.25,4.25]}""" ::
+      """{"col0":"Spark 1.5.0","col1":"YSBzdHJpbmcgaW4gYmluYXJ5","col3":true,"col4":1,"col5":2,"col6":3,"col7":9223372036854775807,"col8":0.25,"col9":0.75,"col10":1234.23456,"col11":1.23456,"col12":"2015-01-01","col13":"2015-01-01 23:50:59.123","col14":[2,3,4],"col15":{"a string":2000},"col16":{"f1":4.75,"f2":[false,true]},"col17":[0.25,2.25,4.25]}""" :: Nil
     // scalastyle:on
 
     // Generate data for the current version.
@@ -1548,7 +1568,8 @@ abstract class JsonSuite
       }
       checkAnswer(
         spark.read.format("json").schema(schema).load(path.getCanonicalPath),
-        expectedResult)
+        expectedResult
+      )
     }
   }
 
@@ -1563,7 +1584,8 @@ abstract class JsonSuite
 
       val extraOptions = Map(
         "mapred.input.pathFilter.class" -> classOf[TestFileFilter].getName,
-        "mapreduce.input.pathFilter.class" -> classOf[TestFileFilter].getName)
+        "mapreduce.input.pathFilter.class" -> classOf[TestFileFilter].getName
+      )
       assert(spark.read.options(extraOptions).json(path).count() === 2)
 
       withClue("SPARK-32621: 'path' option can cause issues while inferring schema") {
@@ -1572,12 +1594,7 @@ abstract class JsonSuite
         // inferring partitions because the original path in the "path" option will list the
         // partition directory that has been removed.
         assert(
-          spark.read
-            .options(extraOptions)
-            .format("json")
-            .option("path", path)
-            .load()
-            .count() === 2)
+          spark.read.options(extraOptions).format("json").option("path", path).load().count() === 2)
       }
     }
   }
@@ -1602,7 +1619,8 @@ abstract class JsonSuite
 
           // In HiveContext, backticks should be used to access columns starting with a underscore.
           checkAnswer(
-            sql("""
+            sql(
+              """
                 |SELECT dummy, _unparsed
                 |FROM jsonTable
               """.stripMargin),
@@ -1610,7 +1628,8 @@ abstract class JsonSuite
               Row(null, """[1,2,3]""") ::
               Row(null, """":"test", "a":1}""") ::
               Row(null, """42""") ::
-              Row(null, """     ","ian":"test"}""") :: Nil)
+              Row(null, """     ","ian":"test"}""") :: Nil
+          )
         }
       }
     }
@@ -1624,7 +1643,10 @@ abstract class JsonSuite
       arrayAndStructRecords.map(record => record.replaceAll("\n", " ")).write.text(path)
 
       val schema =
-        StructType(StructField("a", StructType(StructField("b", StringType) :: Nil)) :: Nil)
+        StructType(
+          StructField("a", StructType(
+            StructField("b", StringType) :: Nil
+          )) :: Nil)
       val jsonDF = spark.read.schema(schema).json(path)
       assert(jsonDF.count() == 2)
     }
@@ -1639,9 +1661,7 @@ abstract class JsonSuite
 
       val jsonDF = spark.read.json(path)
       val jsonDir = new File(dir, "json").getCanonicalPath
-      jsonDF
-        .coalesce(1)
-        .write
+      jsonDF.coalesce(1).write
         .format("json")
         .option("compression", "gZiP")
         .save(jsonDir)
@@ -1666,7 +1686,8 @@ abstract class JsonSuite
       "mapreduce.output.fileoutputformat.compress.type" -> CompressionType.BLOCK.toString,
       "mapreduce.output.fileoutputformat.compress.codec" -> classOf[GzipCodec].getName,
       "mapreduce.map.output.compress" -> "true",
-      "mapreduce.map.output.compress.codec" -> classOf[GzipCodec].getName)
+      "mapreduce.map.output.compress.codec" -> classOf[GzipCodec].getName
+    )
     withTempDir { dir =>
       val dir = Utils.createTempDir()
       dir.delete()
@@ -1676,9 +1697,7 @@ abstract class JsonSuite
 
       val jsonDF = spark.read.json(path)
       val jsonDir = new File(dir, "json").getCanonicalPath
-      jsonDF
-        .coalesce(1)
-        .write
+      jsonDF.coalesce(1).write
         .format("json")
         .option("compression", HadoopCompressionCodec.NONE.lowerCaseName())
         .options(extraOptions)
@@ -1708,18 +1727,17 @@ abstract class JsonSuite
 
       checkAnswer(
         sql("select ts from jsonTable"),
-        Row(java.sql.Timestamp.valueOf("2016-01-02 03:04:05")))
+        Row(java.sql.Timestamp.valueOf("2016-01-02 03:04:05"))
+      )
     }
   }
 
   test("wide nested json table") {
-    val nested = (1 to 100)
-      .map { i =>
-        s"""
+    val nested = (1 to 100).map { i =>
+      s"""
          |"c$i": $i
        """.stripMargin
-      }
-      .mkString(", ")
+    }.mkString(", ")
     val json = s"""
        |{"a": [{$nested}], "b": [{$nested}]}
      """.stripMargin
@@ -1748,8 +1766,10 @@ abstract class JsonSuite
       val stringDatesWithFormat = spark.read
         .schema(stringSchema)
         .json(datesWithFormatPath)
-      val expectedStringDatesWithFormat =
-        Seq(Row("2015/08/26"), Row("2014/10/27"), Row("2016/01/28"))
+      val expectedStringDatesWithFormat = Seq(
+        Row("2015/08/26"),
+        Row("2014/10/27"),
+        Row("2016/01/28"))
 
       checkAnswer(stringDatesWithFormat, expectedStringDatesWithFormat)
     }
@@ -1807,8 +1827,10 @@ abstract class JsonSuite
       val stringTimestampsWithFormat = spark.read
         .schema(stringSchema)
         .json(timestampsWithFormatPath)
-      val expectedStringDatesWithFormat =
-        Seq(Row("2015/08/26 18:00"), Row("2014/10/27 18:30"), Row("2016/01/28 20:00"))
+      val expectedStringDatesWithFormat = Seq(
+        Row("2015/08/26 18:00"),
+        Row("2014/10/27 18:30"),
+        Row("2016/01/28 20:00"))
 
       checkAnswer(stringTimestampsWithFormat, expectedStringDatesWithFormat)
     }
@@ -1834,8 +1856,10 @@ abstract class JsonSuite
       val stringTimestampsWithFormat = spark.read
         .schema(stringSchema)
         .json(timestampsWithFormatPath)
-      val expectedStringDatesWithFormat =
-        Seq(Row("2015/08/27 01:00"), Row("2014/10/28 01:30"), Row("2016/01/29 04:00"))
+      val expectedStringDatesWithFormat = Seq(
+        Row("2015/08/27 01:00"),
+        Row("2014/10/28 01:30"),
+        Row("2016/01/29 04:00"))
 
       checkAnswer(stringTimestampsWithFormat, expectedStringDatesWithFormat)
 
@@ -1854,7 +1878,7 @@ abstract class JsonSuite
 
     val schema = StructType(
       StructField("a", DecimalType(21, 1), true) ::
-        StructField("b", DecimalType(7, 6), true) :: Nil)
+      StructField("b", DecimalType(7, 6), true) :: Nil)
 
     val df1 = spark.read.option("prefersDecimal", "true").json(records)
     assert(df1.schema == schema)
@@ -1875,9 +1899,7 @@ abstract class JsonSuite
 
       val jsonDF = spark.read.option("multiLine", true).json(path)
       val jsonDir = new File(dir, "json").getCanonicalPath
-      jsonDF
-        .coalesce(1)
-        .write
+      jsonDF.coalesce(1).write
         .option("compression", "gZiP")
         .json(jsonDir)
 
@@ -1954,8 +1976,8 @@ abstract class JsonSuite
       }
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
         assert(spark.read.json(inputFile.toURI.toString).collect().isEmpty)
-        assert(
-          spark.read.option("multiLine", true).json(inputFile.toURI.toString).collect().isEmpty)
+        assert(spark.read.option("multiLine", true).json(inputFile.toURI.toString).collect()
+          .isEmpty)
       }
     })
     withTempPath { dir =>
@@ -1971,7 +1993,8 @@ abstract class JsonSuite
             df.collect()
           },
           condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
-          parameters = Map("path" -> s".*$dir.*"))
+          parameters = Map("path" -> s".*$dir.*")
+        )
       }
 
       sampledTestData.write.json(jsonPath.toString)
@@ -1998,10 +2021,9 @@ abstract class JsonSuite
 
       val jsonDF = spark.read.option("multiLine", true).option("mode", "PERMISSIVE").json(path)
       assert(jsonDF.count() === corruptRecordCount)
-      assert(
-        jsonDF.schema === new StructType()
-          .add("_corrupt_record", StringType)
-          .add("dummy", StringType))
+      assert(jsonDF.schema === new StructType()
+        .add("_corrupt_record", StringType)
+        .add("dummy", StringType))
       val counts = jsonDF
         .join(
           additionalCorruptRecords.toDF("value"),
@@ -2074,7 +2096,10 @@ abstract class JsonSuite
       checkError(
         exception = ex.getCause.asInstanceOf[SparkException],
         condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
-        parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST"))
+        parameters = Map(
+          "badRecord" -> "[null]",
+          "failFastMode" -> "FAILFAST")
+      )
     }
   }
 
@@ -2095,8 +2120,9 @@ abstract class JsonSuite
           .json(corruptRecords)
       },
       condition = "INVALID_CORRUPT_RECORD_TYPE",
-      parameters =
-        Map("columnName" -> toSQLId(columnNameOfCorruptRecord), "actualType" -> "\"INT\""))
+      parameters = Map(
+        "columnName" -> toSQLId(columnNameOfCorruptRecord), "actualType" -> "\"INT\"")
+    )
 
     // We use `PERMISSIVE` mode by default if invalid string is given.
     withTempPath { dir =>
@@ -2112,8 +2138,9 @@ abstract class JsonSuite
             .collect()
         },
         condition = "INVALID_CORRUPT_RECORD_TYPE",
-        parameters =
-          Map("columnName" -> toSQLId(columnNameOfCorruptRecord), "actualType" -> "\"INT\""))
+        parameters = Map(
+          "columnName" -> toSQLId(columnNameOfCorruptRecord), "actualType" -> "\"INT\"")
+      )
     }
   }
 
@@ -2140,16 +2167,15 @@ abstract class JsonSuite
         val ds = spark.read
           .schema(StructType(Seq(StructField("a", dt))))
           .json(Seq(jsonFieldValue._1).toDS())
-          .select($"a".cast(DoubleType))
-          .as[Double]
+          .select($"a".cast(DoubleType)).as[Double]
         assert(check(ds.first()))
       }
     }
 
     // negative cases
     Seq(FloatType, DoubleType).foreach { dt =>
-      val lowerCasedJsonFieldValues =
-        jsonFieldValues.map(j => (j._1.toLowerCase(Locale.ROOT), j._2.toLowerCase(Locale.ROOT)))
+      val lowerCasedJsonFieldValues = jsonFieldValues.map(j =>
+        (j._1.toLowerCase(Locale.ROOT), j._2.toLowerCase(Locale.ROOT)))
       // The special floats are case-sensitive so these cases below throw exceptions.
       lowerCasedJsonFieldValues.foreach { lowerCasedJsonFieldValue =>
         checkError(
@@ -2167,14 +2193,14 @@ abstract class JsonSuite
             "fieldValue" -> lowerCasedJsonFieldValue._2,
             "fieldName" -> "`a`",
             "targetType" -> dt.toString,
-            "inputType" -> "StringType"))
+            "inputType" -> "StringType")
+        )
       }
     }
   }
 
-  test(
-    "SPARK-21610: Corrupt records are not handled properly when creating a dataframe " +
-      "from a file") {
+  test("SPARK-21610: Corrupt records are not handled properly when creating a dataframe " +
+    "from a file") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
       val data =
@@ -2189,7 +2215,8 @@ abstract class JsonSuite
           spark.read.schema(schema).json(path).select("_corrupt_record").collect()
         },
         condition = "UNSUPPORTED_FEATURE.QUERY_ONLY_CORRUPT_RECORD_COLUMN",
-        parameters = Map.empty)
+        parameters = Map.empty
+      )
 
       // workaround
       val df = spark.read.schema(schema).json(path).cache()
@@ -2197,7 +2224,8 @@ abstract class JsonSuite
       assert(df.filter($"_corrupt_record".isNull).count() == 2)
       checkAnswer(
         df.select("_corrupt_record"),
-        Row(null) :: Row(null) :: Row("{\"field\": \"3\"}") :: Nil)
+        Row(null) :: Row(null) :: Row("{\"field\": \"3\"}") :: Nil
+      )
     }
   }
 
@@ -2226,14 +2254,9 @@ abstract class JsonSuite
 
       // Write
       withTempPath { path =>
-        Seq("a", "b", "c")
-          .toDF("value")
-          .coalesce(1)
-          .write
-          .option("lineSep", lineSep)
-          .json(path.getAbsolutePath)
-        val partFile =
-          TestUtils.recursiveList(path).filter(f => f.getName.startsWith("part-")).head
+        Seq("a", "b", "c").toDF("value").coalesce(1)
+          .write.option("lineSep", lineSep).json(path.getAbsolutePath)
+        val partFile = TestUtils.recursiveList(path).filter(f => f.getName.startsWith("part-")).head
         val readBack = new String(Files.readAllBytes(partFile.toPath), StandardCharsets.UTF_8)
         assert(
           readBack === s"""{"value":"a"}$lineSep{"value":"b"}$lineSep{"value":"c"}$lineSep""")
@@ -2250,7 +2273,7 @@ abstract class JsonSuite
   }
 
   // scalastyle:off nonascii
-  Seq("|", "^", "::", "!!!@3", 0x1e.toChar.toString, "아").foreach { lineSep =>
+  Seq("|", "^", "::", "!!!@3", 0x1E.toChar.toString, "아").foreach { lineSep =>
     testLineSeparator(lineSep)
   }
   // scalastyle:on nonascii
@@ -2275,7 +2298,8 @@ abstract class JsonSuite
     // reliable sampling of the input file.
     withSQLConf(
       SQLConf.FILES_MAX_PARTITION_BYTES.key -> (128 * 1024 * 1024).toString,
-      SQLConf.FILES_OPEN_COST_IN_BYTES.key -> (4 * 1024 * 1024).toString)(withTempPath { path =>
+      SQLConf.FILES_OPEN_COST_IN_BYTES.key -> (4 * 1024 * 1024).toString
+    )(withTempPath { path =>
       val ds = sampledTestData.coalesce(1)
       ds.write.text(path.getAbsolutePath)
       val readback1 = spark.read.option("samplingRatio", 0.1).json(path.getCanonicalPath)
@@ -2286,10 +2310,8 @@ abstract class JsonSuite
         // This results in reading more data than necessary and causes different schema to be
         // inferred when sampling ratio is involved.
         val readback2 = spark.read
-          .option("samplingRatio", 0.1)
-          .option("path", path.getCanonicalPath)
-          .format("json")
-          .load()
+          .option("samplingRatio", 0.1).option("path", path.getCanonicalPath)
+          .format("json").load()
         assert(readback2.schema == new StructType().add("f1", LongType))
       }
     })
@@ -2322,8 +2344,7 @@ abstract class JsonSuite
   test("SPARK-23723: json in UTF-16 with BOM") {
     val fileName = "test-data/utf16WithBOM.json"
     val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
-    val jsonDF = spark.read
-      .schema(schema)
+    val jsonDF = spark.read.schema(schema)
       .option("multiline", "true")
       .option("encoding", "UTF-16")
       .json(testFile(fileName))
@@ -2334,8 +2355,7 @@ abstract class JsonSuite
   test("SPARK-23723: multi-line json in UTF-32BE with BOM") {
     val fileName = "test-data/utf32BEWithBOM.json"
     val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
-    val jsonDF = spark.read
-      .schema(schema)
+    val jsonDF = spark.read.schema(schema)
       .option("multiline", "true")
       .json(testFile(fileName))
 
@@ -2345,8 +2365,7 @@ abstract class JsonSuite
   test("SPARK-23723: Use user's encoding in reading of multi-line json in UTF-16LE") {
     val fileName = "test-data/utf16LE.json"
     val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
-    val jsonDF = spark.read
-      .schema(schema)
+    val jsonDF = spark.read.schema(schema)
       .option("multiline", "true")
       .options(Map("encoding" -> "UTF-16LE"))
       .json(testFile(fileName))
@@ -2368,14 +2387,14 @@ abstract class JsonSuite
         "charset" -> invalidCharset,
         "functionName" -> toSQLId("JSONOptionsInRead"),
         "parameter" -> toSQLId("charset"),
-        "charsets" -> CharsetProvider.VALID_CHARSETS.mkString(", ")))
+        "charsets" -> CharsetProvider.VALID_CHARSETS.mkString(", "))
+    )
   }
 
   test("SPARK-23723: checking that the encoding option is case agnostic") {
     val fileName = "test-data/utf16LE.json"
     val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
-    val jsonDF = spark.read
-      .schema(schema)
+    val jsonDF = spark.read.schema(schema)
       .option("multiline", "true")
       .options(Map("encoding" -> "uTf-16lE"))
       .json(testFile(fileName))
@@ -2388,8 +2407,7 @@ abstract class JsonSuite
     val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
     val inputFile = testFile(fileName)
     val exception = intercept[SparkException] {
-      spark.read
-        .schema(schema)
+      spark.read.schema(schema)
         .option("mode", "FAILFAST")
         .option("multiline", "true")
         .options(Map("encoding" -> "UTF-16BE"))
@@ -2403,23 +2421,19 @@ abstract class JsonSuite
     checkError(
       exception = exception.getCause.asInstanceOf[SparkException],
       condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
-      parameters = Map("badRecord" -> "[empty row]", "failFastMode" -> "FAILFAST"))
+      parameters = Map("badRecord" -> "[empty row]", "failFastMode" -> "FAILFAST")
+    )
   }
 
-  def checkEncoding(
-      expectedEncoding: String,
-      pathToJsonFiles: String,
+  def checkEncoding(expectedEncoding: String, pathToJsonFiles: String,
       expectedContent: String): Unit = {
     val jsonFiles = new File(pathToJsonFiles)
       .listFiles()
       .filter(_.isFile)
       .filter(_.getName.endsWith("json"))
-    val actualContent = jsonFiles
-      .map { file =>
-        new String(Files.readAllBytes(file.toPath), expectedEncoding)
-      }
-      .mkString
-      .trim
+    val actualContent = jsonFiles.map { file =>
+      new String(Files.readAllBytes(file.toPath), expectedEncoding)
+    }.mkString.trim
 
     assert(actualContent == expectedContent)
   }
@@ -2469,7 +2483,8 @@ abstract class JsonSuite
         "charset" -> encoding,
         "functionName" -> toSQLId("JSONOptions"),
         "parameter" -> toSQLId("charset"),
-        "charsets" -> CharsetProvider.VALID_CHARSETS.mkString(", ")))
+        "charsets" -> CharsetProvider.VALID_CHARSETS.mkString(", "))
+    )
   }
 
   test("SPARK-23723: read back json in UTF-16LE") {
@@ -2478,7 +2493,8 @@ abstract class JsonSuite
       val ds = spark.createDataset(Seq(("a", 1), ("b", 2), ("c", 3))).repartition(2)
       ds.write.options(options).json(path.getCanonicalPath)
 
-      val readBack = spark.read
+      val readBack = spark
+        .read
         .options(options)
         .json(path.getCanonicalPath)
 
@@ -2537,7 +2553,7 @@ abstract class JsonSuite
     (1, "^", "UTF-16BE", true),
     (2, "::", "ISO-8859-1", true),
     (3, "!!!@3", "UTF-32LE", false),
-    (4, 0x1e.toChar.toString, "UTF-8", true),
+    (4, 0x1E.toChar.toString, "UTF-8", true),
     (5, "아", "UTF-32BE", false),
     (6, "куку", "CP1251", true),
     (7, "sep", "utf-8", false),
@@ -2546,8 +2562,9 @@ abstract class JsonSuite
     (10, "\u000d\u000a", "UTF-32BE", false),
     (11, "\u000a\u000d", "UTF-8", true),
     (12, "===", "US-ASCII", false),
-    (13, "$^+", "utf-32le", true)).foreach { case (testNum, sep, encoding, inferSchema) =>
-    checkReadJson(sep, encoding, inferSchema, testNum)
+    (13, "$^+", "utf-32le", true)
+  ).foreach {
+    case (testNum, sep, encoding, inferSchema) => checkReadJson(sep, encoding, inferSchema, testNum)
   }
   // scalastyle:on nonascii
 
@@ -2560,9 +2577,8 @@ abstract class JsonSuite
         .count()
     }
 
-    assert(
-      exception.getMessage.contains(
-        s"""The lineSep option must be specified for the $encoding encoding"""))
+    assert(exception.getMessage.contains(
+      s"""The lineSep option must be specified for the $encoding encoding"""))
   }
 
   private val badJson = "\u0000\u0000\u0000A\u0001AAA"
@@ -2573,13 +2589,11 @@ abstract class JsonSuite
       Seq(badJson + """{"a":1}""").toDS().write.text(path)
       val expected = s"""${badJson}{"a":1}\n"""
       val schema = new StructType().add("a", IntegerType).add("_corrupt_record", StringType)
-      val df = spark.read
-        .format("json")
+      val df = spark.read.format("json")
         .option("mode", "PERMISSIVE")
         .option("multiLine", true)
         .option("encoding", "UTF-8")
-        .schema(schema)
-        .load(path)
+        .schema(schema).load(path)
       checkAnswer(df, Row(null, expected))
     }
   }
@@ -2589,23 +2603,18 @@ abstract class JsonSuite
       val path = tempDir.getAbsolutePath
       Seq(badJson, """{"a":1}""").toDS().write.text(path)
       val schema = new StructType().add("a", IntegerType).add("_corrupt_record", StringType)
-      val df = spark.read
-        .format("json")
+      val df = spark.read.format("json")
         .option("mode", "PERMISSIVE")
         .option("multiLine", false)
         .option("encoding", "UTF-8")
-        .schema(schema)
-        .load(path)
+        .schema(schema).load(path)
       checkAnswer(df, Seq(Row(1, null), Row(null, badJson)))
     }
   }
 
   test("SPARK-23094: permissively parse a dataset contains JSON with leading nulls") {
     checkAnswer(
-      spark.read
-        .option("mode", "PERMISSIVE")
-        .option("encoding", "UTF-8")
-        .json(Seq(badJson).toDS()),
+      spark.read.option("mode", "PERMISSIVE").option("encoding", "UTF-8").json(Seq(badJson).toDS()),
       Row(badJson))
     checkAnswer(
       // encoding auto detection should also be possible with json schema infer
@@ -2620,8 +2629,7 @@ abstract class JsonSuite
       val record = """{"a":1}"""
       Seq(record, badJson + record).toDS().write.text(path)
       val expected = s"""${badJson}{"a":1}"""
-      val df = spark.read
-        .format("json")
+      val df = spark.read.format("json")
         .option("mode", "PERMISSIVE")
         .load(path)
       checkAnswer(df, Seq(Row(null, 1), Row(expected, null)))
@@ -2630,16 +2638,14 @@ abstract class JsonSuite
 
   test("SPARK-31716: inferring should handle malformed input") {
     val schema = new StructType().add("a", IntegerType)
-    val dfWithSchema = spark.read
-      .format("json")
+    val dfWithSchema = spark.read.format("json")
       .option("mode", "DROPMALFORMED")
       .option("encoding", "utf-8")
       .schema(schema)
       .load(testFile("test-data/malformed_utf8.json"))
     checkAnswer(dfWithSchema, Seq(Row(1), Row(1)))
 
-    val df = spark.read
-      .format("json")
+    val df = spark.read.format("json")
       .option("mode", "DROPMALFORMED")
       .option("encoding", "utf-8")
       .load(testFile("test-data/malformed_utf8.json"))
@@ -2648,7 +2654,7 @@ abstract class JsonSuite
   }
 
   test("SPARK-23772 ignore column of all null values or empty array during schema inference") {
-    withTempPath { tempDir =>
+     withTempPath { tempDir =>
       val path = tempDir.getAbsolutePath
 
       // primitive types
@@ -2656,16 +2662,12 @@ abstract class JsonSuite
         """{"a":null, "b":1, "c":3.0}""",
         """{"a":null, "b":null, "c":"string"}""",
         """{"a":null, "b":null, "c":null}""")
-        .toDS()
-        .write
-        .text(path)
-      var df = spark.read
-        .format("json")
+        .toDS().write.text(path)
+      var df = spark.read.format("json")
         .option("dropFieldIfAllNull", true)
         .load(path)
       var expectedSchema = new StructType()
-        .add("b", LongType)
-        .add("c", StringType)
+        .add("b", LongType).add("c", StringType)
       assert(df.schema === expectedSchema)
       checkAnswer(df, Row(1, "3.0") :: Row(null, "string") :: Row(null, null) :: Nil)
 
@@ -2674,38 +2676,27 @@ abstract class JsonSuite
         """{"a":[2, 1], "b":[null, null], "c":null, "d":[[], [null]], "e":[[], null, [[]]]}""",
         """{"a":[null], "b":[null], "c":[], "d":[null, []], "e":null}""",
         """{"a":null, "b":null, "c":[], "d":null, "e":[null, [], null]}""")
-        .toDS()
-        .write
-        .mode("overwrite")
-        .text(path)
-      df = spark.read
-        .format("json")
+        .toDS().write.mode("overwrite").text(path)
+      df = spark.read.format("json")
         .option("dropFieldIfAllNull", true)
         .load(path)
       expectedSchema = new StructType()
         .add("a", ArrayType(LongType))
       assert(df.schema === expectedSchema)
-      checkAnswer(df, Row(Array(2, 1)) :: Row(Array(null)) :: Row(null) :: Nil)
+      checkAnswer(df, Row(Array(2, 1)) :: Row(Array(null)) ::  Row(null) :: Nil)
 
       // structs
       Seq(
         """{"a":{"a1": 1, "a2":"string"}, "b":{}}""",
         """{"a":{"a1": 2, "a2":null}, "b":{"b1":[null]}}""",
         """{"a":null, "b":null}""")
-        .toDS()
-        .write
-        .mode("overwrite")
-        .text(path)
-      df = spark.read
-        .format("json")
+        .toDS().write.mode("overwrite").text(path)
+      df = spark.read.format("json")
         .option("dropFieldIfAllNull", true)
         .load(path)
       expectedSchema = new StructType()
-        .add(
-          "a",
-          StructType(
-            StructField("a1", LongType) :: StructField("a2", StringType)
-              :: Nil))
+        .add("a", StructType(StructField("a1", LongType) :: StructField("a2", StringType)
+          :: Nil))
       assert(df.schema === expectedSchema)
       checkAnswer(df, Row(Row(1, "string")) :: Row(Row(2, null)) :: Row(null) :: Nil)
     }
@@ -2739,7 +2730,8 @@ abstract class JsonSuite
         Seq(validRec, "?"),
         Seq("}", validRec),
         Seq(validRec, """{"a": [1, 2, 3]}"""),
-        Seq("""{"a": {"a": "b"}}""", validRec))
+        Seq("""{"a": {"a": "b"}}""", validRec)
+      )
       inputs.foreach { input =>
         countForMalformedJSON(expected, input)
       }
@@ -2761,11 +2753,10 @@ abstract class JsonSuite
     }
   }
 
+
   private def failedOnEmptyString(dataType: DataType): Unit = {
-    val df = spark.read
-      .schema(s"a ${dataType.catalogString}")
-      .option("mode", "FAILFAST")
-      .json(Seq("""{"a":""}""").toDS())
+    val df = spark.read.schema(s"a ${dataType.catalogString}")
+      .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS())
     val e = intercept[SparkException] { df.collect() }
     checkError(
       exception = e,
@@ -2774,14 +2765,13 @@ abstract class JsonSuite
     checkError(
       exception = e.getCause.asInstanceOf[SparkRuntimeException],
       condition = "EMPTY_JSON_FIELD_VALUE",
-      parameters = Map("dataType" -> toSQLType(dataType)))
+      parameters = Map("dataType" -> toSQLType(dataType))
+    )
   }
 
   private def emptyString(dataType: DataType, expected: Any): Unit = {
-    val df = spark.read
-      .schema(s"a ${dataType.catalogString}")
-      .option("mode", "FAILFAST")
-      .json(Seq("""{"a":""}""").toDS())
+    val df = spark.read.schema(s"a ${dataType.catalogString}")
+      .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS())
     checkAnswer(df, Row(expected) :: Nil)
   }
 
@@ -2806,10 +2796,8 @@ abstract class JsonSuite
 
   test("SPARK-25040: allowing empty strings when legacy config is enabled") {
     def emptyStringAsNull(dataType: DataType): Unit = {
-      val df = spark.read
-        .schema(s"a ${dataType.catalogString}")
-        .option("mode", "FAILFAST")
-        .json(Seq("""{"a":""}""").toDS())
+      val df = spark.read.schema(s"a ${dataType.catalogString}")
+        .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS())
       checkAnswer(df, Row(null) :: Nil)
     }
 
@@ -2838,14 +2826,15 @@ abstract class JsonSuite
 
   test("return partial result for bad records") {
     val schema = "a double, b array<int>, c string, _corrupt_record string"
-    val badRecords =
-      Seq("""{"a":"-","b":[0, 1, 2],"c":"abc"}""", """{"a":0.1,"b":{},"c":"def"}""").toDS()
+    val badRecords = Seq(
+      """{"a":"-","b":[0, 1, 2],"c":"abc"}""",
+      """{"a":0.1,"b":{},"c":"def"}""").toDS()
     val df = spark.read.schema(schema).json(badRecords)
 
     checkAnswer(
       df,
       Row(null, Array(0, 1, 2), "abc", """{"a":"-","b":[0, 1, 2],"c":"abc"}""") ::
-        Row(0.1, null, "def", """{"a":0.1,"b":{},"c":"def"}""") :: Nil)
+      Row(0.1, null, "def", """{"a":0.1,"b":{},"c":"def"}""") :: Nil)
   }
 
   test("inferring timestamp type") {
@@ -2853,24 +2842,19 @@ abstract class JsonSuite
       spark.read.option("inferTimestamp", true).json(jsons.toDS()).schema
     }
 
-    assert(
-      schemaOf(
-        """{"a":"2018-12-17T10:11:12.123-01:00"}""",
-        """{"a":"2018-12-16T22:23:24.123-02:00"}""") === fromDDL("a timestamp"))
+    assert(schemaOf(
+      """{"a":"2018-12-17T10:11:12.123-01:00"}""",
+      """{"a":"2018-12-16T22:23:24.123-02:00"}""") === fromDDL("a timestamp"))
 
-    assert(
-      schemaOf("""{"a":"2018-12-17T10:11:12.123-01:00"}""", """{"a":1}""")
-        === fromDDL("a string"))
-    assert(
-      schemaOf("""{"a":"2018-12-17T10:11:12.123-01:00"}""", """{"a":"123"}""")
-        === fromDDL("a string"))
+    assert(schemaOf("""{"a":"2018-12-17T10:11:12.123-01:00"}""", """{"a":1}""")
+      === fromDDL("a string"))
+    assert(schemaOf("""{"a":"2018-12-17T10:11:12.123-01:00"}""", """{"a":"123"}""")
+      === fromDDL("a string"))
 
-    assert(
-      schemaOf("""{"a":"2018-12-17T10:11:12.123-01:00"}""", """{"a":null}""")
-        === fromDDL("a timestamp"))
-    assert(
-      schemaOf("""{"a":null}""", """{"a":"2018-12-17T10:11:12.123-01:00"}""")
-        === fromDDL("a timestamp"))
+    assert(schemaOf("""{"a":"2018-12-17T10:11:12.123-01:00"}""", """{"a":null}""")
+      === fromDDL("a timestamp"))
+    assert(schemaOf("""{"a":null}""", """{"a":"2018-12-17T10:11:12.123-01:00"}""")
+      === fromDDL("a timestamp"))
   }
 
   test("roundtrip for timestamp type inferring") {
@@ -2901,9 +2885,13 @@ abstract class JsonSuite
   }
 
   test("SPARK-30960, SPARK-31641: parse date/timestamp string with legacy format") {
-    val ds = Seq(s"{'t': '2020-1-12 3:23:34.12', 'd': '2020-1-12 T'}").toDS()
+    val ds = Seq(
+      s"{'t': '2020-1-12 3:23:34.12', 'd': '2020-1-12 T'}"
+    ).toDS()
     val json = spark.read.schema("t timestamp, d date").json(ds)
-    checkAnswer(json, Row(Timestamp.valueOf("2020-1-12 3:23:34.12"), Date.valueOf("2020-1-12")))
+    checkAnswer(json, Row(
+      Timestamp.valueOf("2020-1-12 3:23:34.12"),
+      Date.valueOf("2020-1-12")))
   }
 
   test("exception mode for parsing date/timestamp string") {
@@ -3017,7 +3005,8 @@ abstract class JsonSuite
               spark.sql("""
                 select timestamp_ltz'2020-12-12 12:12:12' as col0 union all
                 select timestamp_ltz'2020-12-12 12:12:12' as col0
-                """))
+                """)
+            )
           }
         }
       }
@@ -3030,11 +3019,10 @@ abstract class JsonSuite
         """{"col0":"2020-12-12T12:12:12.000"}""",
         """{"col0":"2020-12-12T17:12:12.000Z"}""",
         """{"col0":"2020-12-12T17:12:12.000+05:00"}""",
-        """{"col0":"2020-12-12T12:12:12.000"}""")
-        .toDF("data")
+        """{"col0":"2020-12-12T12:12:12.000"}"""
+      ).toDF("data")
         .coalesce(1)
-        .write
-        .text(path.getAbsolutePath)
+        .write.text(path.getAbsolutePath)
 
       for (policy <- Seq("exception", "corrected", "legacy")) {
         withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> policy) {
@@ -3065,11 +3053,10 @@ abstract class JsonSuite
         """{"col0": "2020-12-12T12:12:12.000"}""",
         """{"col0": "2020-12-12T12:12:12.000Z"}""",
         """{"col0": "2020-12-12T12:12:12.000+05:00"}""",
-        """{"col0": "2020-12-12T12:12:12.000"}""")
-        .toDF("data")
+        """{"col0": "2020-12-12T12:12:12.000"}"""
+      ).toDF("data")
         .coalesce(1)
-        .write
-        .text(path.getAbsolutePath)
+        .write.text(path.getAbsolutePath)
 
       for (timestampNTZFormat <- Seq(None, Some("yyyy-MM-dd'T'HH:mm:ss[.SSS]"))) {
         val reader = spark.read.schema("col0 TIMESTAMP_NTZ")
@@ -3086,14 +3073,18 @@ abstract class JsonSuite
             Row(LocalDateTime.of(2020, 12, 12, 12, 12, 12)),
             Row(null),
             Row(null),
-            Row(LocalDateTime.of(2020, 12, 12, 12, 12, 12))))
+            Row(LocalDateTime.of(2020, 12, 12, 12, 12, 12))
+          )
+        )
       }
     }
   }
 
   test("SPARK-37360: Fail to write TIMESTAMP_NTZ if timestampNTZFormat contains zone offset") {
-    val patterns =
-      Seq("yyyy-MM-dd HH:mm:ss XXX", "yyyy-MM-dd HH:mm:ss Z", "yyyy-MM-dd HH:mm:ss z")
+    val patterns = Seq(
+      "yyyy-MM-dd HH:mm:ss XXX",
+      "yyyy-MM-dd HH:mm:ss Z",
+      "yyyy-MM-dd HH:mm:ss z")
 
     val exp = spark.sql("select timestamp_ntz'2020-12-12 12:12:12' as col0")
     for (pattern <- patterns) {
@@ -3109,8 +3100,8 @@ abstract class JsonSuite
         val msg = err.getCause.getMessage
         assert(
           msg.contains("Unsupported field: OffsetSeconds") ||
-            msg.contains("Unable to extract value") ||
-            msg.contains("Unable to extract ZoneId"))
+          msg.contains("Unable to extract value") ||
+          msg.contains("Unable to extract ZoneId"))
       }
     }
   }
@@ -3122,11 +3113,9 @@ abstract class JsonSuite
         """{"c0": "abc", "c1": {"c2": 1, "c3": "2019-11-14 20:35:30"}}""",
         s"""{"c0": "def", "c1": {"c2": 2, "c3": "$t"}}""",
         s"""{"c0": "defa", "c1": {"c2": 3, "c3": "$t"}}""",
-        s"""{"c0": "define", "c1": {"c2": 2, "c3": "$t"}}""")
-        .toDF("data")
+        s"""{"c0": "define", "c1": {"c2": 2, "c3": "$t"}}""").toDF("data")
         .repartition(1)
-        .write
-        .text(path.getAbsolutePath)
+        .write.text(path.getAbsolutePath)
       Seq(true, false).foreach { filterPushdown =>
         withSQLConf(SQLConf.JSON_FILTER_PUSHDOWN_ENABLED.key -> filterPushdown.toString) {
           Seq("PERMISSIVE", "DROPMALFORMED", "FAILFAST").foreach { mode =>
@@ -3156,11 +3145,9 @@ abstract class JsonSuite
           """{"i": 1, "t": "2020-01-28 01:00:00"}""",
           """{"t": "2020-01-28 02:00:00"}""",
           """{"i": "abc", "t": "2020-01-28 03:00:00"}""",
-          """{"i": 2, "t": "2020-01-28 04:00:00", "d": 3.14}""")
-          .toDF("data")
+          """{"i": 2, "t": "2020-01-28 04:00:00", "d": 3.14}""").toDF("data")
           .repartition(1)
-          .write
-          .text(path.getAbsolutePath)
+          .write.text(path.getAbsolutePath)
         val schema = "i INTEGER, t TIMESTAMP"
         val readback = spark.read
           .schema(schema)
@@ -3200,13 +3187,11 @@ abstract class JsonSuite
     Seq(true, false).foreach { filterPushdown =>
       withSQLConf(SQLConf.JSON_FILTER_PUSHDOWN_ENABLED.key -> filterPushdown.toString) {
         withTempPath { path =>
-          Seq("""{"aaa": 0, "BBB": 1}""", """{"AAA": 2, "bbb": 3}""")
-            .toDF()
-            .write
-            .text(path.getCanonicalPath)
+          Seq(
+            """{"aaa": 0, "BBB": 1}""",
+            """{"AAA": 2, "bbb": 3}""").toDF().write.text(path.getCanonicalPath)
           withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-            val readback = spark.read
-              .schema("aaa integer, BBB integer")
+            val readback = spark.read.schema("aaa integer, BBB integer")
               .json(path.getCanonicalPath)
             checkAnswer(readback, Seq(Row(null, null), Row(0, 1)))
             checkAnswer(readback.filter($"AAA" === 0 && $"bbb" === 1), Seq(Row(0, 1)))
@@ -3220,8 +3205,7 @@ abstract class JsonSuite
               parameters = Map("columnName" -> "`aaa`"))
           }
           withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-            val readback = spark.read
-              .schema("aaa integer, BBB integer")
+            val readback = spark.read.schema("aaa integer, BBB integer")
               .json(path.getCanonicalPath)
             checkAnswer(readback, Seq(Row(null, null), Row(0, 1)))
             checkError(
@@ -3234,7 +3218,9 @@ abstract class JsonSuite
                 ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern))
             // Schema inferring
             val readback2 = spark.read.json(path.getCanonicalPath)
-            checkAnswer(readback2.filter($"AAA" === 2).select($"AAA", $"bbb"), Seq(Row(2, 3)))
+            checkAnswer(
+              readback2.filter($"AAA" === 2).select($"AAA", $"bbb"),
+              Seq(Row(2, 3)))
             checkAnswer(readback2.filter($"aaa" === 2).select($"AAA", $"bbb"), Seq())
           }
         }
@@ -3242,9 +3228,8 @@ abstract class JsonSuite
     }
   }
 
-  test(
-    "SPARK-32810: JSON data source should be able to read files with " +
-      "escaped glob metacharacter in the paths") {
+  test("SPARK-32810: JSON data source should be able to read files with " +
+    "escaped glob metacharacter in the paths") {
     withTempDir { dir =>
       val basePath = dir.getCanonicalPath
       // test JSON writer / reader without specifying schema
@@ -3264,17 +3249,10 @@ abstract class JsonSuite
       val df = seq.toDF()
 
       val basePath1 = paths(0).getCanonicalPath
-      df.write
-        .option("writeNonAsciiCharacterAsCodePoint", "true")
-        .option("pretty", "false")
-        .json(basePath1)
-      val actualText1 = spark.read
-        .option("wholetext", "true")
-        .text(basePath1)
-        .sort("value")
-        .map(_.getString(0))
-        .collect()
-        .mkString
+      df.write.option("writeNonAsciiCharacterAsCodePoint", "true")
+        .option("pretty", "false").json(basePath1)
+      val actualText1 = spark.read.option("wholetext", "true").text(basePath1)
+        .sort("value").map(_.getString(0)).collect().mkString
       val expectedText1 =
         s"""{"value":"\\n"}
            |{"value":"\\u3042"}
@@ -3282,12 +3260,8 @@ abstract class JsonSuite
            |""".stripMargin
       assert(actualText1 === expectedText1)
 
-      val actualJson1 = spark.read
-        .json(basePath1)
-        .sort("value")
-        .map(_.getString(0))
-        .collect()
-        .mkString
+      val actualJson1 = spark.read.json(basePath1)
+        .sort("value").map(_.getString(0)).collect().mkString
       val expectedJson1 = "\na\u3042"
       assert(actualJson1 === expectedJson1)
 
@@ -3296,17 +3270,10 @@ abstract class JsonSuite
       // one JSON record per file. So LEAF_NODE_DEFAULT_PARALLELISM is set here.
       withSQLConf(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key -> s"${seq.length}") {
         val basePath2 = paths(1).getCanonicalPath
-        df.write
-          .option("writeNonAsciiCharacterAsCodePoint", "true")
-          .option("pretty", "true")
-          .json(basePath2)
-        val actualText2 = spark.read
-          .option("wholetext", "true")
-          .text(basePath2)
-          .sort("value")
-          .map(_.getString(0))
-          .collect()
-          .mkString
+        df.write.option("writeNonAsciiCharacterAsCodePoint", "true")
+          .option("pretty", "true").json(basePath2)
+        val actualText2 = spark.read.option("wholetext", "true").text(basePath2)
+          .sort("value").map(_.getString(0)).collect().mkString
         val expectedText2 =
           s"""{
              |  "value" : "\\n"
@@ -3320,13 +3287,8 @@ abstract class JsonSuite
              |""".stripMargin
         assert(actualText2 === expectedText2)
 
-        val actualJson2 = spark.read
-          .option("multiLine", "true")
-          .json(basePath2)
-          .sort("value")
-          .map(_.getString(0))
-          .collect()
-          .mkString
+        val actualJson2 = spark.read.option("multiLine", "true").json(basePath2)
+          .sort("value").map(_.getString(0)).collect().mkString
         val expectedJson2 = "\na\u3042"
         assert(actualJson2 === expectedJson2)
       }
@@ -3352,12 +3314,8 @@ abstract class JsonSuite
              |  "value" : "c"
              |}
              |""".stripMargin
-        val actualText = spark.read
-          .option("wholetext", "true")
-          .text(basePath)
-          .map(_.getString(0))
-          .collect()
-          .mkString
+        val actualText = spark.read.option("wholetext", "true")
+          .text(basePath).map(_.getString(0)).collect().mkString
         assert(actualText === expectedText)
       }
     }
@@ -3369,16 +3327,15 @@ abstract class JsonSuite
     // JSON filed is null.
     val nullValueInput = """{"c1": 1, "c2": null}"""
 
-    val schema = StructType(
-      Seq(
-        StructField("c1", IntegerType, nullable = false),
-        StructField("c2", IntegerType, nullable = false)))
+    val schema = StructType(Seq(
+      StructField("c1", IntegerType, nullable = false),
+      StructField("c2", IntegerType, nullable = false)))
     val expected = schema.asNullable
 
     Seq(missingFieldInput, nullValueInput).foreach { jsonString =>
       Seq("DROPMALFORMED", "FAILFAST", "PERMISSIVE").foreach { mode =>
-        val json =
-          spark.createDataset(spark.sparkContext.parallelize(jsonString :: Nil))(Encoders.STRING)
+        val json = spark.createDataset(
+          spark.sparkContext.parallelize(jsonString :: Nil))(Encoders.STRING)
         val df = spark.read
           .option("mode", mode)
           .schema(schema)
@@ -3390,11 +3347,11 @@ abstract class JsonSuite
 
     withSQLConf(SQLConf.LEGACY_RESPECT_NULLABILITY_IN_TEXT_DATASET_CONVERSION.key -> "true") {
       checkAnswer(
-        spark.read
-          .schema(StructType(StructField("f1", LongType, nullable = false) ::
-            StructField("f2", LongType, nullable = false) :: Nil))
-          .option("mode", "DROPMALFORMED")
-          .json(Seq("""{"f1": 1}""").toDS()),
+        spark.read.schema(
+          StructType(
+            StructField("f1", LongType, nullable = false) ::
+            StructField("f2", LongType, nullable = false) :: Nil)
+        ).option("mode", "DROPMALFORMED").json(Seq("""{"f1": 1}""").toDS()),
         // It is for testing legacy configuration. This is technically a bug as
         // `0` has to be `null` but the schema is non-nullable.
         Row(1, 0))
@@ -3403,41 +3360,35 @@ abstract class JsonSuite
 
   test("SPARK-36379: proceed parsing with root nulls in permissive mode") {
     val exception = intercept[SparkException] {
-      spark.read
-        .option("mode", "failfast")
-        .schema("a string")
-        .json(Seq("""[{"a": "str"}, null]""").toDS())
-        .collect()
+      spark.read.option("mode", "failfast")
+        .schema("a string").json(Seq("""[{"a": "str"}, null]""").toDS()).collect()
     }
 
     checkError(
       exception = exception,
       condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
-      parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST"))
+      parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST")
+    )
 
     checkError(
       exception = Utils.getRootCause(exception).asInstanceOf[SparkRuntimeException],
       condition = "INVALID_JSON_ROOT_FIELD",
-      parameters = Map.empty)
+      parameters = Map.empty
+    )
 
     // Permissive modes should proceed parsing malformed records (null).
     // Here, since an array fails to parse in the middle, we will return one row.
     checkAnswer(
-      spark.read
-        .option("mode", "permissive")
+      spark.read.option("mode", "permissive")
         .json(Seq("""[{"a": "str"}, null, {"a": "str"}]""").toDS()),
       Row(null) :: Nil)
   }
 
-  test(
-    "SPARK-44079: fix incorrect result when parse array as struct " +
-      "using PERMISSIVE mode with corrupt record") {
+  test("SPARK-44079: fix incorrect result when parse array as struct " +
+    "using PERMISSIVE mode with corrupt record") {
     val data = """[{"a": "incorrect", "b": "correct"}, {"a": "incorrect", "b": "correct"}]"""
-    val schema = new StructType(
-      Array(
-        StructField("a", IntegerType),
-        StructField("b", StringType),
-        StructField("_corrupt_record", StringType)))
+    val schema = new StructType(Array(StructField("a", IntegerType),
+      StructField("b", StringType), StructField("_corrupt_record", StringType)))
 
     val result = spark.read
       .option("mode", "PERMISSIVE")
@@ -3458,32 +3409,20 @@ abstract class JsonSuite
           """{"d":"2021-01","ts_ltz":"2021-01 ","ts_ntz":"2021-01"}""",
           """{"d":" 2021-2-1","ts_ltz":"2021-3-02","ts_ntz": "2021-10-1"}""",
           """{"d":"2021-8-18 00:00:00","ts_ltz":"2021-8-18 21:44:30Z"""" +
-            ""","ts_ntz":"2021-8-18T21:44:30.123"}""")
-          .toDF()
-          .repartition(1)
-          .write
-          .text(path.getCanonicalPath)
-        val readback = spark.read
-          .schema("d date, ts_ltz timestamp_ltz, ts_ntz timestamp_ntz")
+          ""","ts_ntz":"2021-8-18T21:44:30.123"}"""
+        ).toDF().repartition(1).write.text(path.getCanonicalPath)
+        val readback = spark.read.schema("d date, ts_ltz timestamp_ltz, ts_ntz timestamp_ntz")
           .json(path.getCanonicalPath)
         checkAnswer(
           readback,
           Seq(
-            Row(
-              LocalDate.of(2021, 1, 1),
-              Instant.parse("2021-01-01T00:00:00Z"),
+            Row(LocalDate.of(2021, 1, 1), Instant.parse("2021-01-01T00:00:00Z"),
               LocalDateTime.of(2021, 1, 1, 0, 0, 0)),
-            Row(
-              LocalDate.of(2021, 1, 1),
-              Instant.parse("2021-01-01T00:00:00Z"),
+            Row(LocalDate.of(2021, 1, 1), Instant.parse("2021-01-01T00:00:00Z"),
               LocalDateTime.of(2021, 1, 1, 0, 0, 0)),
-            Row(
-              LocalDate.of(2021, 2, 1),
-              Instant.parse("2021-03-02T00:00:00Z"),
+            Row(LocalDate.of(2021, 2, 1), Instant.parse("2021-03-02T00:00:00Z"),
               LocalDateTime.of(2021, 10, 1, 0, 0, 0)),
-            Row(
-              LocalDate.of(2021, 8, 18),
-              Instant.parse("2021-08-18T21:44:30Z"),
+            Row(LocalDate.of(2021, 8, 18), Instant.parse("2021-08-18T21:44:30Z"),
               LocalDateTime.of(2021, 8, 18, 21, 44, 30, 123000000))))
       }
     }
@@ -3492,19 +3431,19 @@ abstract class JsonSuite
   test("SPARK-36830: Support reading and writing ANSI intervals") {
     Seq(
       YearMonthIntervalType() -> ((i: Int) => Period.of(i, i, 0)),
-      DayTimeIntervalType() -> ((i: Int) => Duration.ofDays(i).plusSeconds(i))).foreach {
-      case (it, f) =>
-        val data = (1 to 10).map(i => Row(i, f(i)))
-        val schema =
-          StructType(Array(StructField("d", IntegerType, false), StructField("i", it, false)))
-        withTempPath { file =>
-          val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
-          df.write.json(file.getCanonicalPath)
-          val df2 = spark.read.json(file.getCanonicalPath)
-          checkAnswer(df2, df.select($"d".cast(LongType), $"i".cast(StringType)).collect().toSeq)
-          val df3 = spark.read.schema(schema).json(file.getCanonicalPath)
-          checkAnswer(df3, df.collect().toSeq)
-        }
+      DayTimeIntervalType() -> ((i: Int) => Duration.ofDays(i).plusSeconds(i))
+    ).foreach { case (it, f) =>
+      val data = (1 to 10).map(i => Row(i, f(i)))
+      val schema = StructType(Array(StructField("d", IntegerType, false),
+        StructField("i", it, false)))
+      withTempPath { file =>
+        val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+        df.write.json(file.getCanonicalPath)
+        val df2 = spark.read.json(file.getCanonicalPath)
+        checkAnswer(df2, df.select($"d".cast(LongType), $"i".cast(StringType)).collect().toSeq)
+        val df3 = spark.read.schema(schema).json(file.getCanonicalPath)
+        checkAnswer(df3, df.collect().toSeq)
+      }
     }
   }
 
@@ -3512,11 +3451,9 @@ abstract class JsonSuite
     withTempPath { path =>
       Seq(
         """{"date": "2020011", "ts": "2020011"}""",
-        """{"date": "20201203", "ts": "20201203"}""")
-        .toDF()
+        """{"date": "20201203", "ts": "20201203"}""").toDF()
         .repartition(1)
-        .write
-        .text(path.getAbsolutePath)
+        .write.text(path.getAbsolutePath)
       val schema = new StructType()
         .add("date", DateType)
         .add("ts", TimestampType)
@@ -3536,13 +3473,17 @@ abstract class JsonSuite
         "legacy",
         Seq(
           Row(Date.valueOf("2020-01-01"), Timestamp.valueOf("2020-01-01 00:00:00")),
-          Row(Date.valueOf("2020-12-03"), Timestamp.valueOf("2020-12-03 00:00:00"))))
+          Row(Date.valueOf("2020-12-03"), Timestamp.valueOf("2020-12-03 00:00:00"))
+        )
+      )
 
       check(
         "corrected",
         Seq(
           Row(null, null),
-          Row(Date.valueOf("2020-12-03"), Timestamp.valueOf("2020-12-03 00:00:00"))))
+          Row(Date.valueOf("2020-12-03"), Timestamp.valueOf("2020-12-03 00:00:00"))
+        )
+      )
 
       intercept[SparkUpgradeException] {
         check("exception", Nil)
@@ -3552,11 +3493,9 @@ abstract class JsonSuite
 
   test("SPARK-39731: Handle date and timestamp parsing fallback") {
     withTempPath { path =>
-      Seq("""{"date": "2020-01-01", "ts": "2020-01-01"}""")
-        .toDF()
+      Seq("""{"date": "2020-01-01", "ts": "2020-01-01"}""").toDF()
         .repartition(1)
-        .write
-        .text(path.getAbsolutePath)
+        .write.text(path.getAbsolutePath)
       val schema = new StructType()
         .add("date", DateType)
         .add("ts", TimestampType)
@@ -3570,24 +3509,26 @@ abstract class JsonSuite
 
       checkAnswer(
         output(enableFallback = true),
-        Seq(Row(Date.valueOf("2020-01-01"), Timestamp.valueOf("2020-01-01 00:00:00"))))
+        Seq(Row(Date.valueOf("2020-01-01"), Timestamp.valueOf("2020-01-01 00:00:00")))
+      )
 
-      checkAnswer(output(enableFallback = false), Seq(Row(null, null)))
+      checkAnswer(
+        output(enableFallback = false),
+        Seq(Row(null, null))
+      )
     }
   }
 
   test("SPARK-40215: enable parsing fallback for JSON in CORRECTED mode with a SQL config") {
     withTempPath { path =>
-      Seq("""{"date": "2020-01-01", "ts": "2020-01-01"}""")
-        .toDF()
+      Seq("""{"date": "2020-01-01", "ts": "2020-01-01"}""").toDF()
         .repartition(1)
-        .write
-        .text(path.getAbsolutePath)
+        .write.text(path.getAbsolutePath)
 
       for (fallbackEnabled <- Seq(true, false)) {
         withSQLConf(
-          SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "CORRECTED",
-          SQLConf.LEGACY_JSON_ENABLE_DATE_TIME_PARSING_FALLBACK.key -> s"$fallbackEnabled") {
+            SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "CORRECTED",
+            SQLConf.LEGACY_JSON_ENABLE_DATE_TIME_PARSING_FALLBACK.key -> s"$fallbackEnabled") {
           val df = spark.read
             .schema("date date, ts timestamp")
             .option("dateFormat", "invalid")
@@ -3597,9 +3538,13 @@ abstract class JsonSuite
           if (fallbackEnabled) {
             checkAnswer(
               df,
-              Seq(Row(Date.valueOf("2020-01-01"), Timestamp.valueOf("2020-01-01 00:00:00"))))
+              Seq(Row(Date.valueOf("2020-01-01"), Timestamp.valueOf("2020-01-01 00:00:00")))
+            )
           } else {
-            checkAnswer(df, Seq(Row(null, null)))
+            checkAnswer(
+              df,
+              Seq(Row(null, null))
+            )
           }
         }
       }
@@ -3614,21 +3559,15 @@ abstract class JsonSuite
     for (policy <- Seq("exception", "corrected")) {
       withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> policy) {
         withTempPath { path =>
-          Seq("""{"col": "2020-01-01"}""")
-            .toDF()
+          Seq("""{"col": "2020-01-01"}""").toDF()
             .repartition(1)
-            .write
-            .text(path.getAbsolutePath)
+            .write.text(path.getAbsolutePath)
 
-          var df = spark.read
-            .schema("col date")
-            .option("dateFormat", "yyyy/MM/dd")
+          var df = spark.read.schema("col date").option("dateFormat", "yyyy/MM/dd")
             .json(path.getAbsolutePath)
           checkAnswer(df, Seq(Row(null)))
 
-          df = spark.read
-            .schema("col timestamp")
-            .option("timestampFormat", "yyyy/MM/dd HH:mm:ss")
+          df = spark.read.schema("col timestamp").option("timestampFormat", "yyyy/MM/dd HH:mm:ss")
             .json(path.getAbsolutePath)
 
           checkAnswer(df, Seq(Row(null)))
@@ -3641,11 +3580,11 @@ abstract class JsonSuite
     // In this example, the first record has "a.y" as boolean but it needs to be an object.
     // We should parse "a" as null but continue parsing "b" correctly as it is valid.
     withTempPath { path =>
-      Seq("""{"a": {"x": 1, "y": true}, "b": {"x": 1}}""", """{"a": {"x": 2}, "b": {"x": 2}}"""")
-        .toDF()
+      Seq(
+        """{"a": {"x": 1, "y": true}, "b": {"x": 1}}""",
+        """{"a": {"x": 2}, "b": {"x": 2}}"""").toDF()
         .repartition(1)
-        .write
-        .text(path.getAbsolutePath)
+        .write.text(path.getAbsolutePath)
 
       for (enablePartialResults <- Seq(true, false)) {
         withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> s"$enablePartialResults") {
@@ -3654,9 +3593,15 @@ abstract class JsonSuite
             .json(path.getAbsolutePath)
 
           if (enablePartialResults) {
-            checkAnswer(df, Seq(Row(Row(1, null), Row(1)), Row(Row(2, null), Row(2))))
+            checkAnswer(
+              df,
+              Seq(Row(Row(1, null), Row(1)), Row(Row(2, null), Row(2)))
+            )
           } else {
-            checkAnswer(df, Seq(Row(null, null), Row(Row(2, null), Row(2))))
+            checkAnswer(
+              df,
+              Seq(Row(null, null), Row(Row(2, null), Row(2)))
+            )
           }
         }
       }
@@ -3667,11 +3612,9 @@ abstract class JsonSuite
     withTempPath { path =>
       Seq(
         """{"a1": "AAA", "a2": [{"f1": "", "f2": ""}], "a3": "id1", "a4": "XXX"}""",
-        """{"a1": "BBB", "a2": [{"f1": 12, "f2": ""}], "a3": "id2", "a4": "YYY"}""")
-        .toDF()
+        """{"a1": "BBB", "a2": [{"f1": 12, "f2": ""}], "a3": "id2", "a4": "YYY"}""").toDF()
         .repartition(1)
-        .write
-        .text(path.getAbsolutePath)
+        .write.text(path.getAbsolutePath)
 
       withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
         val df = spark.read.json(path.getAbsolutePath)
@@ -3679,14 +3622,20 @@ abstract class JsonSuite
           df,
           Seq(
             Row("AAA", Seq(Row(null, "")), "id1", "XXX"),
-            Row("BBB", Seq(Row(12, "")), "id2", "YYY")))
+            Row("BBB", Seq(Row(12, "")), "id2", "YYY")
+          )
+        )
       }
 
       withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
         val df = spark.read.json(path.getAbsolutePath)
         checkAnswer(
           df,
-          Seq(Row("AAA", null, null, null), Row("BBB", Seq(Row(12, "")), "id2", "YYY")))
+          Seq(
+            Row("AAA", null, null, null),
+            Row("BBB", Seq(Row(12, "")), "id2", "YYY")
+          )
+        )
       }
     }
   }
@@ -3695,11 +3644,9 @@ abstract class JsonSuite
     withTempPath { path =>
       Seq(
         """{"a1": "AAA", "a2": {"f1": "", "f2": ""}, "a3": "id1"}""",
-        """{"a1": "BBB", "a2": {"f1": 12, "f2": ""}, "a3": "id2"}""")
-        .toDF()
+        """{"a1": "BBB", "a2": {"f1": 12, "f2": ""}, "a3": "id2"}""").toDF()
         .repartition(1)
-        .write
-        .text(path.getAbsolutePath)
+        .write.text(path.getAbsolutePath)
 
       val schema = "a1 string, a2 map<string, int>, a3 string"
 
@@ -3707,12 +3654,24 @@ abstract class JsonSuite
         val df = spark.read.schema(schema).json(path.getAbsolutePath)
         // Although the keys match the string type and some values match the integer type, because
         // some of the values do not match the type, we mark the entire map as null.
-        checkAnswer(df, Seq(Row("AAA", null, "id1"), Row("BBB", null, "id2")))
+        checkAnswer(
+          df,
+          Seq(
+            Row("AAA", null, "id1"),
+            Row("BBB", null, "id2")
+          )
+        )
       }
 
       withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
         val df = spark.read.schema(schema).json(path.getAbsolutePath)
-        checkAnswer(df, Seq(Row("AAA", null, null), Row("BBB", null, null)))
+        checkAnswer(
+          df,
+          Seq(
+            Row("AAA", null, null),
+            Row("BBB", null, null)
+          )
+        )
       }
     }
   }
@@ -3721,11 +3680,9 @@ abstract class JsonSuite
     withTempPath { path =>
       Seq(
         """{"a1": "AAA", "a2": {"key": {"f1": "", "f2": ""}}, "a3": "id1"}""",
-        """{"a1": "BBB", "a2": {"key": {"f1": 12, "f2": ""}}, "a3": "id2"}""")
-        .toDF()
+        """{"a1": "BBB", "a2": {"key": {"f1": 12, "f2": ""}}, "a3": "id2"}""").toDF()
         .repartition(1)
-        .write
-        .text(path.getAbsolutePath)
+        .write.text(path.getAbsolutePath)
 
       val schema = "a1 string, a2 map<string, struct<f1: int, f2: string>>, a3 string"
 
@@ -3735,12 +3692,20 @@ abstract class JsonSuite
           df,
           Seq(
             Row("AAA", Map("key" -> Row(null, "")), "id1"),
-            Row("BBB", Map("key" -> Row(12, "")), "id2")))
+            Row("BBB", Map("key" -> Row(12, "")), "id2")
+          )
+        )
       }
 
       withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
         val df = spark.read.schema(schema).json(path.getAbsolutePath)
-        checkAnswer(df, Seq(Row("AAA", null, null), Row("BBB", Map("key" -> Row(12, "")), "id2")))
+        checkAnswer(
+          df,
+          Seq(
+            Row("AAA", null, null),
+            Row("BBB", Map("key" -> Row(12, "")), "id2")
+          )
+        )
       }
     }
   }
@@ -3749,22 +3714,30 @@ abstract class JsonSuite
     withTempPath { path =>
       Seq(
         """{"a1": "AAA", "a2": {"f1": [""]}, "a3": "id1", "a4": "XXX"}""",
-        """{"a1": "BBB", "a2": {"f1": [12]}, "a3": "id2", "a4": "YYY"}""")
-        .toDF()
+        """{"a1": "BBB", "a2": {"f1": [12]}, "a3": "id2", "a4": "YYY"}""").toDF()
         .repartition(1)
-        .write
-        .text(path.getAbsolutePath)
+        .write.text(path.getAbsolutePath)
 
       withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
         val df = spark.read.json(path.getAbsolutePath)
         checkAnswer(
           df,
-          Seq(Row("AAA", Row(null), "id1", "XXX"), Row("BBB", Row(Seq(12)), "id2", "YYY")))
+          Seq(
+            Row("AAA", Row(null), "id1", "XXX"),
+            Row("BBB", Row(Seq(12)), "id2", "YYY")
+          )
+        )
       }
 
       withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
         val df = spark.read.json(path.getAbsolutePath)
-        checkAnswer(df, Seq(Row("AAA", null, null, null), Row("BBB", Row(Seq(12)), "id2", "YYY")))
+        checkAnswer(
+          df,
+          Seq(
+            Row("AAA", null, null, null),
+            Row("BBB", Row(Seq(12)), "id2", "YYY")
+          )
+        )
       }
     }
   }
@@ -3773,22 +3746,32 @@ abstract class JsonSuite
     withTempPath { path =>
       Seq(
         """{"a1": "AAA", "a2": [[12, ""], [""]], "a3": "id1", "a4": "XXX"}""",
-        """{"a1": "BBB", "a2": [[12, 34], [""]], "a3": "id2", "a4": "YYY"}""")
-        .toDF()
+        """{"a1": "BBB", "a2": [[12, 34], [""]], "a3": "id2", "a4": "YYY"}""").toDF()
         .repartition(1)
-        .write
-        .text(path.getAbsolutePath)
+        .write.text(path.getAbsolutePath)
 
       // We cannot parse `array<array<int>>` type because one of the inner arrays contains a
       // mismatched type.
       withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
         val df = spark.read.json(path.getAbsolutePath)
-        checkAnswer(df, Seq(Row("AAA", null, "id1", "XXX"), Row("BBB", null, "id2", "YYY")))
+        checkAnswer(
+          df,
+          Seq(
+            Row("AAA", null, "id1", "XXX"),
+            Row("BBB", null, "id2", "YYY")
+          )
+        )
       }
 
       withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
         val df = spark.read.json(path.getAbsolutePath)
-        checkAnswer(df, Seq(Row("AAA", null, "id1", "XXX"), Row("BBB", null, "id2", "YYY")))
+        checkAnswer(
+          df,
+          Seq(
+            Row("AAA", null, "id1", "XXX"),
+            Row("BBB", null, "id2", "YYY")
+          )
+        )
       }
     }
   }
@@ -3800,12 +3783,9 @@ abstract class JsonSuite
       Seq(
         (0, Seq(LocalTime.of(0, 0, 0), LocalTime.of(14, 30, 45), LocalTime.of(23, 59, 59))),
         (3, Seq(LocalTime.of(14, 30, 45, 123000000), LocalTime.of(23, 59, 59, 999000000))),
-        (
-          6,
-          Seq(
-            LocalTime.of(0, 0, 0),
-            LocalTime.of(14, 30, 45, 123456000),
-            LocalTime.of(23, 59, 59, 999999000)))).foreach { case (precision, timeData) =>
+        (6, Seq(LocalTime.of(0, 0, 0), LocalTime.of(14, 30, 45, 123456000),
+          LocalTime.of(23, 59, 59, 999999000)))
+      ).foreach { case (precision, timeData) =>
         val schema = new StructType().add("time", TimeType(precision))
         val df = timeData.toDF("time").select($"time".cast(TimeType(precision)))
         val outputPath = s"${dir.getCanonicalPath}/time_p$precision.json"
@@ -3819,19 +3799,14 @@ abstract class JsonSuite
 
       // Test custom format with precision 6
       val schema = new StructType().add("time", TimeType(6))
-      val customTime = Seq(LocalTime.of(14, 30, 45, 123456000))
-        .toDF("time")
+      val customTime = Seq(LocalTime.of(14, 30, 45, 123456000)).toDF("time")
         .select($"time".cast(TimeType(6)))
       val customPath = s"${dir.getCanonicalPath}/time_custom.json"
 
-      customTime.write
-        .mode("overwrite")
-        .option("timeFormat", "HH-mm-ss.SSSSSS")
-        .json(customPath)
-      val readCustom = spark.read
-        .schema(schema)
-        .option("timeFormat", "HH-mm-ss.SSSSSS")
-        .json(customPath)
+      customTime.write.mode("overwrite")
+        .option("timeFormat", "HH-mm-ss.SSSSSS").json(customPath)
+      val readCustom = spark.read.schema(schema)
+        .option("timeFormat", "HH-mm-ss.SSSSSS").json(customPath)
 
       checkAnswer(readCustom, customTime)
     }
@@ -3881,15 +3856,12 @@ abstract class JsonSuite
     withTempPath { path =>
       // This test is to prove that the `JsonInferSchema` does not use `RDD#toLocalIterator` which
       // triggers one Spark job per RDD partition.
-      Seq(1 -> "a", 2 -> "b")
-        .toDF("i", "p")
+      Seq(1 -> "a", 2 -> "b").toDF("i", "p")
         // The data set has 2 partitions, so Spark will write at least 2 json files.
         // Use a non-splittable compression (gzip), to make sure the json scan RDD has at least 2
         // partitions.
-        .write
-        .partitionBy("p")
-        .option("compression", GZIP.lowerCaseName())
-        .json(path.getCanonicalPath)
+        .write.partitionBy("p")
+        .option("compression", GZIP.lowerCaseName()).json(path.getCanonicalPath)
 
       val numJobs = new AtomicLong(0)
       sparkContext.addSparkListener(new SparkListener {
@@ -3908,41 +3880,40 @@ abstract class JsonSuite
   test("SPARK-35320: Reading JSON with key type different to String in a map should fail") {
     Seq(
       (MapType(IntegerType, StringType), """{"1": "test"}"""),
-      (
-        StructType(Seq(StructField("test", MapType(IntegerType, StringType)))),
+      (StructType(Seq(StructField("test", MapType(IntegerType, StringType)))),
         """"test": {"1": "test"}"""),
       (ArrayType(MapType(IntegerType, StringType)), """[{"1": "test"}]"""),
-      (MapType(StringType, MapType(IntegerType, StringType)), """{"key": {"1" : "test"}}"""))
-      .foreach { case (schema, jsonData) =>
-        withTempDir { dir =>
-          val colName = "col"
-          val jsonDataSchema = StructType(Seq(StructField(colName, schema)))
+      (MapType(StringType, MapType(IntegerType, StringType)), """{"key": {"1" : "test"}}""")
+    ).foreach { case (schema, jsonData) =>
+      withTempDir { dir =>
+        val colName = "col"
+        val jsonDataSchema = StructType(Seq(StructField(colName, schema)))
 
-          checkError(
-            exception = intercept[AnalysisException](
-              spark.read.schema(jsonDataSchema).json(Seq(jsonData).toDS()).collect()),
-            condition = "INVALID_JSON_SCHEMA_MAP_TYPE",
-            parameters = Map("jsonSchema" -> toSQLType(jsonDataSchema)))
+        checkError(
+          exception = intercept[AnalysisException](
+            spark.read.schema(jsonDataSchema).json(Seq(jsonData).toDS()).collect()
+          ),
+          condition = "INVALID_JSON_SCHEMA_MAP_TYPE",
+          parameters = Map("jsonSchema" -> toSQLType(jsonDataSchema)))
 
-          val jsonDir = new File(dir, "json").getCanonicalPath
-          Seq(jsonData).toDF(colName).write.json(jsonDir)
-          val jsonDirSchema = StructType(Seq(StructField(colName, schema)))
-          checkError(
-            exception = intercept[AnalysisException](
-              spark.read.schema(jsonDirSchema).json(jsonDir).collect()),
-            condition = "INVALID_JSON_SCHEMA_MAP_TYPE",
-            parameters = Map("jsonSchema" -> toSQLType(jsonDirSchema)))
-        }
+        val jsonDir = new File(dir, "json").getCanonicalPath
+        Seq(jsonData).toDF(colName).write.json(jsonDir)
+        val jsonDirSchema = StructType(Seq(StructField(colName, schema)))
+        checkError(
+          exception = intercept[AnalysisException](
+            spark.read.schema(jsonDirSchema).json(jsonDir).collect()
+          ),
+          condition = "INVALID_JSON_SCHEMA_MAP_TYPE",
+          parameters = Map("jsonSchema" -> toSQLType(jsonDirSchema)))
       }
+    }
   }
 
   test("SPARK-47704: Handle partial parsing of array<map>") {
     withTempPath { path =>
-      Seq("""{"a":[{"key":{"b":0}}]}""")
-        .toDF()
+      Seq("""{"a":[{"key":{"b":0}}]}""").toDF()
         .repartition(1)
-        .write
-        .text(path.getAbsolutePath)
+        .write.text(path.getAbsolutePath)
 
       for (enablePartialResults <- Seq(true, false)) {
         withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> s"$enablePartialResults") {
@@ -3962,11 +3933,9 @@ abstract class JsonSuite
 
   test("SPARK-47704: Handle partial parsing of map<string, array>") {
     withTempPath { path =>
-      Seq("""{"a":{"key":[{"b":0}]}}""")
-        .toDF()
+      Seq("""{"a":{"key":[{"b":0}]}}""").toDF()
         .repartition(1)
-        .write
-        .text(path.getAbsolutePath)
+        .write.text(path.getAbsolutePath)
 
       for (enablePartialResults <- Seq(true, false)) {
         withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> s"$enablePartialResults") {
@@ -3991,8 +3960,7 @@ abstract class JsonSuite
           expectedInexactData: Seq[String],
           expectedExactData: Seq[String],
           multiLine: Boolean = false): Unit = {
-        Seq(jsonString)
-          .toDF()
+        Seq(jsonString).toDF()
           .repartition(1)
           .write
           .mode("overwrite")
@@ -4021,21 +3989,25 @@ abstract class JsonSuite
       extractData(
         """{"data": {"white":    "space"}}""",
         expectedInexactData = Seq("""{"white":"space"}"""),
-        expectedExactData = Seq("""{"white":    "space"}"""))
+        expectedExactData = Seq("""{"white":    "space"}""")
+      )
       extractData(
         """{"data": ["white",    "space"]}""",
         expectedInexactData = Seq("""["white","space"]"""),
-        expectedExactData = Seq("""["white",    "space"]"""))
+        expectedExactData = Seq("""["white",    "space"]""")
+      )
       val granularFloat = "-999.99999999999999999999999999999999995"
       extractData(
         s"""{"data": {"v": ${granularFloat}}}""",
         expectedInexactData = Seq("""{"v":-1000.0}"""),
-        expectedExactData = Seq(s"""{"v": ${granularFloat}}"""))
+        expectedExactData = Seq(s"""{"v": ${granularFloat}}""")
+      )
       extractData(
         s"""{"data": {"white":\n"space"}}""",
         expectedInexactData = Seq("""{"white":"space"}"""),
         expectedExactData = Seq(s"""{"white":\n"space"}"""),
-        multiLine = true)
+        multiLine = true
+      )
     }
   }
 
@@ -4043,79 +4015,75 @@ abstract class JsonSuite
     val numString = "123.456"
     val bd = BigDecimal(numString)
     val ds1 = sql(s"select ${numString}bd as a, ${numString}bd as b").as[DecimalData]
-    checkDataset(ds1, DecimalData(bd, bd))
+    checkDataset(
+      ds1,
+      DecimalData(bd, bd)
+    )
     val ds2 = ds1.toJSON
-    checkDataset(ds2, "{\"a\":123.456000000000000000,\"b\":123.456000000000000000}")
+    checkDataset(
+      ds2,
+      "{\"a\":123.456000000000000000,\"b\":123.456000000000000000}"
+    )
   }
 
   test("SPARK-48965: Dataset#toJSON should use correct schema #2: misaligned columns") {
     val ds1 = sql("select 'Hey there' as value, 90000001 as key").as[TestData]
-    checkDataset(ds1, TestData(90000001, "Hey there"))
+    checkDataset(
+      ds1,
+      TestData(90000001, "Hey there")
+    )
     val ds2 = ds1.toJSON
-    checkDataset(ds2, "{\"key\":90000001,\"value\":\"Hey there\"}")
+    checkDataset(
+      ds2,
+      "{\"key\":90000001,\"value\":\"Hey there\"}"
+    )
   }
 
   test("json with variant") {
-    val content = Seq("true", """{"a": [], "b": null}""", """{"a": 1}""", "bad json", "[1, 2, 3]")
-      .mkString("\n")
-      .getBytes(StandardCharsets.UTF_8)
+    val content = Seq(
+      "true",
+      """{"a": [], "b": null}""",
+      """{"a": 1}""",
+      "bad json",
+      "[1, 2, 3]"
+    ).mkString("\n").getBytes(StandardCharsets.UTF_8)
 
     withTempDir { dir =>
       val file = new File(dir, "file.json")
       Files.write(file.toPath, content)
 
       checkAnswer(
-        spark.read
-          .format("json")
-          .option("singleVariantColumn", "var")
+        spark.read.format("json").option("singleVariantColumn", "var")
           .load(file.getAbsolutePath)
           .selectExpr("to_json(var)"),
-        Seq(
-          Row("true"),
-          Row("""{"a":[],"b":null}"""),
-          Row("""{"a":1}"""),
-          Row(null),
-          Row("[1,2,3]")))
+        Seq(Row("true"), Row("""{"a":[],"b":null}"""), Row("""{"a":1}"""), Row(null),
+          Row("[1,2,3]"))
+      )
 
       checkAnswer(
-        spark.read
-          .format("json")
-          .option("singleVariantColumn", "var")
+        spark.read.format("json").option("singleVariantColumn", "var")
           .schema("var variant, _corrupt_record string")
           .load(file.getAbsolutePath)
           .selectExpr("to_json(var)", "_corrupt_record"),
-        Seq(
-          Row("true", null),
-          Row("""{"a":[],"b":null}""", null),
-          Row("""{"a":1}""", null),
-          Row(null, "bad json"),
-          Row("[1,2,3]", null)))
+        Seq(Row("true", null), Row("""{"a":[],"b":null}""", null), Row("""{"a":1}""", null),
+          Row(null, "bad json"), Row("[1,2,3]", null))
+      )
 
       checkAnswer(
-        spark.read
-          .format("json")
-          .schema("a variant, b variant")
-          .load(file.getAbsolutePath)
-          .selectExpr("to_json(a)", "to_json(b)"),
-        Seq(Row(null, null), Row("[]", "null"), Row("1", null), Row(null, null), Row(null, null)))
+        spark.read.format("json").schema("a variant, b variant")
+          .load(file.getAbsolutePath).selectExpr("to_json(a)", "to_json(b)"),
+        Seq(Row(null, null), Row("[]", "null"), Row("1", null), Row(null, null), Row(null, null))
+      )
 
       checkAnswer(
-        spark.read
-          .format("json")
-          .schema("a variant, b variant, _corrupt_record string")
-          .load(file.getAbsolutePath)
-          .selectExpr("to_json(a)", "to_json(b)", "_corrupt_record"),
-        Seq(
-          Row(null, null, "true"),
-          Row("[]", "null", null),
-          Row("1", null, null),
-          Row(null, null, "bad json"),
-          Row(null, null, "[1, 2, 3]")))
+        spark.read.format("json").schema("a variant, b variant, _corrupt_record string")
+          .load(file.getAbsolutePath).selectExpr("to_json(a)", "to_json(b)", "_corrupt_record"),
+        Seq(Row(null, null, "true"), Row("[]", "null", null), Row("1", null, null),
+          Row(null, null, "bad json"), Row(null, null, "[1, 2, 3]"))
+      )
 
       withTempDir { streamDir =>
-        val stream = spark.readStream
-          .format("json")
-          .option("singleVariantColumn", "var")
+        val stream = spark.readStream.format("json").option("singleVariantColumn", "var")
           .load(dir.getCanonicalPath)
           .selectExpr("to_json(var)")
           .writeStream
@@ -4125,12 +4093,9 @@ abstract class JsonSuite
         stream.processAllAvailable()
         checkAnswer(
           spark.read.format("parquet").load(streamDir.getCanonicalPath + "/output"),
-          Seq(
-            Row("true"),
-            Row("""{"a":[],"b":null}"""),
-            Row("""{"a":1}"""),
-            Row(null),
-            Row("[1,2,3]")))
+          Seq(Row("true"), Row("""{"a":[],"b":null}"""), Row("""{"a":1}"""), Row(null),
+            Row("[1,2,3]"))
+        )
       }
     }
 
@@ -4139,57 +4104,42 @@ abstract class JsonSuite
       Utils.createDirectory(new File(dir, "a=1/b=2/"))
       Files.write(new File(dir, "a=1/b=2/file.json").toPath, content)
       checkAnswer(
-        spark.read
-          .format("json")
-          .option("singleVariantColumn", "var")
-          .load(dir.getAbsolutePath)
-          .selectExpr("a", "b", "to_json(var)"),
-        Seq(
-          Row(1, 2, "true"),
-          Row(1, 2, """{"a":[],"b":null}"""),
-          Row(1, 2, """{"a":1}"""),
-          Row(1, 2, null),
-          Row(1, 2, "[1,2,3]")))
+        spark.read.format("json").option("singleVariantColumn", "var")
+          .load(dir.getAbsolutePath).selectExpr("a", "b", "to_json(var)"),
+        Seq(Row(1, 2, "true"), Row(1, 2, """{"a":[],"b":null}"""), Row(1, 2, """{"a":1}"""),
+          Row(1, 2, null), Row(1, 2, "[1,2,3]"))
+      )
     }
   }
 
   test("from_json with variant") {
-    val df =
-      Seq("true", """{"a": [], "b": null}""", """{"a": 1}""", "bad json", "[1, 2, 3]").toDF(
-        "value")
+    val df = Seq(
+      "true",
+      """{"a": [], "b": null}""",
+      """{"a": 1}""",
+      "bad json",
+      "[1, 2, 3]"
+    ).toDF("value")
     checkAnswer(
-      df.selectExpr(
-        "cast(from_json(value, 'var variant', " +
-          "map('singleVariantColumn', 'var')) as string)"),
-      Seq(
-        Row("{true}"),
-        Row("""{{"a":[],"b":null}}"""),
-        Row("""{{"a":1}}"""),
-        Row("{null}"),
-        Row("{[1,2,3]}")))
+      df.selectExpr("cast(from_json(value, 'var variant', " +
+        "map('singleVariantColumn', 'var')) as string)"),
+      Seq(Row("{true}"), Row("""{{"a":[],"b":null}}"""), Row("""{{"a":1}}"""), Row("{null}"),
+        Row("{[1,2,3]}"))
+    )
     checkAnswer(
-      df.selectExpr(
-        "cast(from_json(value, 'var variant, _corrupt_record string', " +
-          "map('singleVariantColumn', 'var')) as string)"),
-      Seq(
-        Row("{true, null}"),
-        Row("""{{"a":[],"b":null}, null}"""),
-        Row("""{{"a":1}, null}"""),
-        Row("{null, bad json}"),
-        Row("{[1,2,3], null}")))
+      df.selectExpr("cast(from_json(value, 'var variant, _corrupt_record string', " +
+        "map('singleVariantColumn', 'var')) as string)"),
+      Seq(Row("{true, null}"), Row("""{{"a":[],"b":null}, null}"""), Row("""{{"a":1}, null}"""),
+        Row("{null, bad json}"), Row("{[1,2,3], null}"))
+    )
   }
 
-  private def createTestFiles(
-      dir: File,
-      fileFormatWriter: Boolean,
-      multiline: Boolean): Seq[Row] = {
+  private def createTestFiles(dir: File, fileFormatWriter: Boolean,
+    multiline: Boolean): Seq[Row] = {
     val numRecord = 100
-    val codecExtensionMap = HadoopCompressionCodec
-      .values()
-      .map(c =>
-        (
-          c.lowerCaseName(),
-          Option(c.getCompressionCodec).map(_.getDefaultExtension).getOrElse(""))) ++
+    val codecExtensionMap = HadoopCompressionCodec.values()
+      .map(c => (c.lowerCaseName(),
+        Option(c.getCompressionCodec).map(_.getDefaultExtension).getOrElse(""))) ++
       Seq(("zstd", ".zst"), ("zstd", ".zstd"), ("gzip", ".gzip"))
 
     val codecFactory = new CompressionCodecFactory(spark.sessionState.newHadoopConf())
@@ -4202,8 +4152,7 @@ abstract class JsonSuite
       if (fileFormatWriter && !multiline && !codec.equals("zstd")) {
         // Json writer cannot write root-level json arrays.
         val df = records.toDF("id", "value")
-        df.coalesce(1)
-          .write
+        df.coalesce(1).write
           .option("compression", codec)
           .json(file.getCanonicalPath)
 
@@ -4217,8 +4166,9 @@ abstract class JsonSuite
           }
         }
       } else {
-        val lines = records.map { case (id, value) =>
-          s"""{"id": ${id}, "value": "$value"}"""
+        val lines = records.map {
+          case (id, value) =>
+            s"""{"id": ${id}, "value": "$value"}"""
         }
         val data = if (multiline) {
           lines.mkString("[\n", ",\n", "\n]")
@@ -4241,22 +4191,29 @@ abstract class JsonSuite
       }
     }
 
-    val expectedOutput = codecExtensionMap.flatMap { case (codec, ext) =>
-      val data = (1 to numRecord).map(i => Row(i, s"value_${codec}$ext"))
-      data
+    val expectedOutput = codecExtensionMap.flatMap {
+      case (codec, ext) =>
+        val data = (1 to numRecord).map(i => Row(i, s"value_${codec}$ext"))
+        data
     }.toSeq
     assert(expectedOutput.length == codecExtensionMap.length * numRecord)
     expectedOutput
   }
 
   test("Test all supported codec and extension including zst, zstd and gzip") {
-    for (multiLine <- Seq(true, false);
-      fileFormatWriter <- Seq(true, false)) {
+    for (
+      multiLine <- Seq(true, false);
+      fileFormatWriter <- Seq(true, false)
+    ) {
       logInfo(
         s"Testing with multiLine=$multiLine, " +
-          s"fileFormatWriter=$fileFormatWriter")
+          s"fileFormatWriter=$fileFormatWriter"
+      )
       withTempDir { dir =>
-        val options = Map("multiLine" -> multiLine.toString, "recursiveFileLookup" -> "true")
+        val options = Map(
+          "multiLine" -> multiLine.toString,
+          "recursiveFileLookup" -> "true"
+        )
 
         val expectedOutput = createTestFiles(dir, fileFormatWriter, multiLine)
         val df = spark.read.options(options).json(dir.getCanonicalPath)
@@ -4268,13 +4225,15 @@ abstract class JsonSuite
 
 class JsonV1Suite extends JsonSuite {
   override protected def sparkConf: SparkConf =
-    super.sparkConf
+    super
+      .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "json")
 }
 
 class JsonV2Suite extends JsonSuite {
   override protected def sparkConf: SparkConf =
-    super.sparkConf
+    super
+      .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
 
   test("get pushed filters") {
@@ -4313,7 +4272,8 @@ class JsonLegacyTimeParserSuite extends JsonSuite {
     Seq("Write timestamps correctly in ISO8601 format by default")
 
   override protected def sparkConf: SparkConf =
-    super.sparkConf
+    super
+      .sparkConf
       .set(SQLConf.LEGACY_TIME_PARSER_POLICY.key, "legacy")
 }
 

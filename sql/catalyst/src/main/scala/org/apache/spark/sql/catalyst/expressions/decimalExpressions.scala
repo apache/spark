@@ -28,8 +28,9 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
- * Return the unscaled Long value of a Decimal, assuming it fits in a Long. Note: this expression
- * is internal and created only by the optimizer, we don't need to do type check for it.
+ * Return the unscaled Long value of a Decimal, assuming it fits in a Long.
+ * Note: this expression is internal and created only by the optimizer,
+ * we don't need to do type check for it.
  */
 case class UnscaledValue(child: Expression) extends UnaryExpression {
   override def nullIntolerant: Boolean = true
@@ -48,11 +49,15 @@ case class UnscaledValue(child: Expression) extends UnaryExpression {
 }
 
 /**
- * Create a Decimal from an unscaled Long value. Note: this expression is internal and created
- * only by the optimizer, we don't need to do type check for it.
+ * Create a Decimal from an unscaled Long value.
+ * Note: this expression is internal and created only by the optimizer,
+ * we don't need to do type check for it.
  */
-case class MakeDecimal(child: Expression, precision: Int, scale: Int, nullOnOverflow: Boolean)
-    extends UnaryExpression {
+case class MakeDecimal(
+    child: Expression,
+    precision: Int,
+    scale: Int,
+    nullOnOverflow: Boolean) extends UnaryExpression {
   override def nullIntolerant: Boolean = true
 
   def this(child: Expression, precision: Int, scale: Int) = {
@@ -74,25 +79,22 @@ case class MakeDecimal(child: Expression, precision: Int, scale: Int, nullOnOver
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(
-      ctx,
-      ev,
-      eval => {
-        val setMethod = if (nullOnOverflow) {
-          "setOrNull"
-        } else {
-          "set"
-        }
-        val setNull = if (nullable) {
-          s"${ev.isNull} = ${ev.value} == null;"
-        } else {
-          ""
-        }
-        s"""
+    nullSafeCodeGen(ctx, ev, eval => {
+      val setMethod = if (nullOnOverflow) {
+        "setOrNull"
+      } else {
+        "set"
+      }
+      val setNull = if (nullable) {
+        s"${ev.isNull} = ${ev.value} == null;"
+      } else {
+        ""
+      }
+      s"""
          |${ev.value} = (new Decimal()).$setMethod($eval, $precision, $scale);
          |$setNull
          |""".stripMargin
-      })
+    })
   }
 
   override protected def withNewChildInternal(newChild: Expression): MakeDecimal =
@@ -110,36 +112,32 @@ object MakeDecimal {
  * or not. If not, if `nullOnOverflow` is `true`, it returns `null`; otherwise an
  * `ArithmeticException` is thrown.
  */
-case class CheckOverflow(child: Expression, dataType: DecimalType, nullOnOverflow: Boolean)
-    extends UnaryExpression
-    with SupportQueryContext {
+case class CheckOverflow(
+    child: Expression,
+    dataType: DecimalType,
+    nullOnOverflow: Boolean) extends UnaryExpression with SupportQueryContext {
 
   override def nullable: Boolean = true
 
   override def nullSafeEval(input: Any): Any =
-    input
-      .asInstanceOf[Decimal]
-      .toPrecision(
-        dataType.precision,
-        dataType.scale,
-        Decimal.ROUND_HALF_UP,
-        nullOnOverflow,
-        getContextOrNull())
+    input.asInstanceOf[Decimal].toPrecision(
+      dataType.precision,
+      dataType.scale,
+      Decimal.ROUND_HALF_UP,
+      nullOnOverflow,
+      getContextOrNull())
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val errorContextCode = getContextOrNullCode(ctx, !nullOnOverflow)
-    nullSafeCodeGen(
-      ctx,
-      ev,
-      eval => {
-        // scalastyle:off line.size.limit
-        s"""
+    nullSafeCodeGen(ctx, ev, eval => {
+      // scalastyle:off line.size.limit
+      s"""
          |${ev.value} = $eval.toPrecision(
          |  ${dataType.precision}, ${dataType.scale}, Decimal.ROUND_HALF_UP(), $nullOnOverflow, $errorContextCode);
          |${ev.isNull} = ${ev.value} == null;
        """.stripMargin
-        // scalastyle:on line.size.limit
-      })
+      // scalastyle:on line.size.limit
+    })
   }
 
   override def toString: String = s"CheckOverflow($child, $dataType)"
@@ -161,9 +159,7 @@ case class CheckOverflowInSum(
     child: Expression,
     dataType: DecimalType,
     nullOnOverflow: Boolean,
-    context: QueryContext)
-    extends UnaryExpression
-    with SupportQueryContext {
+    context: QueryContext) extends UnaryExpression with SupportQueryContext {
 
   override def nullable: Boolean = true
 
@@ -175,14 +171,12 @@ case class CheckOverflowInSum(
         throw QueryExecutionErrors.overflowInSumOfDecimalError(context, suggestedFunc = "try_sum")
       }
     } else {
-      value
-        .asInstanceOf[Decimal]
-        .toPrecision(
-          dataType.precision,
-          dataType.scale,
-          Decimal.ROUND_HALF_UP,
-          nullOnOverflow,
-          context)
+      value.asInstanceOf[Decimal].toPrecision(
+        dataType.precision,
+        dataType.scale,
+        Decimal.ROUND_HALF_UP,
+        nullOnOverflow,
+        context)
     }
   }
 
@@ -227,14 +221,13 @@ case class CheckOverflowInSum(
  *
  * Nota that, this expression does not check overflow which is different with `Add`. When
  * aggregating values, Spark writes the aggregation buffer values to `UnsafeRow` via
- * `UnsafeRowWriter`, which already checks decimal overflow, so we don't need to do it again in
- * the add expression used by Sum/Avg.
+ * `UnsafeRowWriter`, which already checks decimal overflow, so we don't need to do it again in the
+ * add expression used by Sum/Avg.
  */
 case class DecimalAddNoOverflowCheck(
     left: Expression,
     right: Expression,
-    override val dataType: DataType)
-    extends BinaryOperator {
+    override val dataType: DataType) extends BinaryOperator {
   require(dataType.isInstanceOf[DecimalType])
 
   override def inputType: AbstractDataType = DecimalType
@@ -250,8 +243,7 @@ case class DecimalAddNoOverflowCheck(
     defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$decimalMethod($eval2)")
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): DecimalAddNoOverflowCheck =
+      newLeft: Expression, newRight: Expression): DecimalAddNoOverflowCheck =
     copy(left = newLeft, right = newRight)
 }
 
@@ -259,8 +251,8 @@ case class DecimalAddNoOverflowCheck(
  * A divide expression for decimal values which is only used internally by Avg.
  *
  * It will fail when nullOnOverflow is false follows:
- *   - left (sum in avg) is null due to over the max precision 38, the right (count in avg) should
- *     never be null
+ *   - left (sum in avg) is null due to over the max precision 38,
+ *     the right (count in avg) should never be null
  *   - the result of divide is overflow
  */
 case class DecimalDivideWithOverflowCheck(
@@ -269,9 +261,7 @@ case class DecimalDivideWithOverflowCheck(
     override val dataType: DecimalType,
     context: QueryContext,
     nullOnOverflow: Boolean)
-    extends BinaryExpression
-    with ExpectsInputTypes
-    with SupportQueryContext {
+  extends BinaryExpression with ExpectsInputTypes with SupportQueryContext {
   override def nullable: Boolean = nullOnOverflow
   override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, DecimalType)
   override def initQueryContext(): Option[QueryContext] = Option(context)
@@ -280,24 +270,17 @@ case class DecimalDivideWithOverflowCheck(
   override def eval(input: InternalRow): Any = {
     val value1 = left.eval(input)
     if (value1 == null) {
-      if (nullOnOverflow) {
+      if (nullOnOverflow)  {
         null
       } else {
-        throw QueryExecutionErrors.overflowInSumOfDecimalError(
-          getContextOrNull(),
+        throw QueryExecutionErrors.overflowInSumOfDecimalError(getContextOrNull(),
           suggestedFunc = "try_avg")
       }
     } else {
       val value2 = right.eval(input)
-      PhysicalDecimalType(dataType.precision, dataType.scale).fractional
-        .asInstanceOf[Fractional[Any]]
-        .div(value1, value2)
-        .asInstanceOf[Decimal]
-        .toPrecision(
-          dataType.precision,
-          dataType.scale,
-          Decimal.ROUND_HALF_UP,
-          nullOnOverflow,
+      PhysicalDecimalType(dataType.precision, dataType.scale)
+        .fractional.asInstanceOf[Fractional[Any]].div(value1, value2).asInstanceOf[Decimal]
+        .toPrecision(dataType.precision, dataType.scale, Decimal.ROUND_HALF_UP, nullOnOverflow,
           getContextOrNull())
     }
   }
@@ -319,8 +302,7 @@ case class DecimalDivideWithOverflowCheck(
          |${eval1.code}
          |${eval2.code}
          |boolean ${ev.isNull} = ${eval1.isNull};
-         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(
-             dataType)};
+         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
          |if (${eval1.isNull}) {
          |  $nullHandling
          |} else {
@@ -334,8 +316,7 @@ case class DecimalDivideWithOverflowCheck(
   }
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): Expression = {
+      newLeft: Expression, newRight: Expression): Expression = {
     copy(left = newLeft, right = newRight)
   }
 }

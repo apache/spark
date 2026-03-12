@@ -26,8 +26,7 @@ class DebugEvaluatorFactory(
     tupleCount: LongAccumulator,
     numColumns: Int,
     columnAccumulator: Array[SetAccumulator[String]],
-    output: Seq[Attribute])
-    extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
+    output: Seq[Attribute]) extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
   override def createEvaluator(): PartitionEvaluator[InternalRow, InternalRow] = {
     new DebugEvaluator()
   }

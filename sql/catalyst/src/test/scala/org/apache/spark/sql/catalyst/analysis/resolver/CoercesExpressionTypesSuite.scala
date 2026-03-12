@@ -46,7 +46,9 @@ class CoercesExpressionTypesSuite extends SparkFunSuite with SQLConfHelper {
           ansiMode = true,
           lcaEnabled = true,
           groupByAliases = true,
-          sessionLocalTimeZone = conf.sessionLocalTimeZone))
+          sessionLocalTimeZone = conf.sessionLocalTimeZone
+        )
+      )
       .asInstanceOf[Add]
     // left child remains the same
     assert(resolvedExpression.left == doubleChild)
@@ -70,7 +72,9 @@ class CoercesExpressionTypesSuite extends SparkFunSuite with SQLConfHelper {
           ansiMode = true,
           lcaEnabled = true,
           groupByAliases = true,
-          sessionLocalTimeZone = conf.sessionLocalTimeZone))
+          sessionLocalTimeZone = conf.sessionLocalTimeZone
+        )
+      )
       .asInstanceOf[Add]
     assert(resolvedExpression.left == doubleChild)
     // Cast that isn't a product of type coercion resolution won't be re-instantiated with timezone

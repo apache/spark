@@ -31,27 +31,27 @@ class RandomUUIDGeneratorSuite extends SparkFunSuite {
     }
   }
 
-  test("UUID from RandomUUIDGenerator should be deterministic") {
-    val r1 = new Random(100)
-    val generator1 = RandomUUIDGenerator(r1.nextLong())
-    val r2 = new Random(100)
-    val generator2 = RandomUUIDGenerator(r2.nextLong())
-    val r3 = new Random(101)
-    val generator3 = RandomUUIDGenerator(r3.nextLong())
+ test("UUID from RandomUUIDGenerator should be deterministic") {
+   val r1 = new Random(100)
+   val generator1 = RandomUUIDGenerator(r1.nextLong())
+   val r2 = new Random(100)
+   val generator2 = RandomUUIDGenerator(r2.nextLong())
+   val r3 = new Random(101)
+   val generator3 = RandomUUIDGenerator(r3.nextLong())
 
-    for (_ <- 0 to 100) {
+   for (_ <- 0 to 100) {
       val uuid1 = generator1.getNextUUID()
       val uuid2 = generator2.getNextUUID()
       val uuid3 = generator3.getNextUUID()
       assert(uuid1 == uuid2)
       assert(uuid1 != uuid3)
-    }
-  }
+   }
+ }
 
-  test("Get UTF8String UUID") {
-    val generator = RandomUUIDGenerator(new Random().nextLong())
-    val utf8StringUUID = generator.getNextUUIDUTF8String()
-    val uuid = java.util.UUID.fromString(utf8StringUUID.toString)
-    assert(uuid.version() == 4 && uuid.variant() == 2 && utf8StringUUID.toString == uuid.toString)
-  }
+ test("Get UTF8String UUID") {
+   val generator = RandomUUIDGenerator(new Random().nextLong())
+   val utf8StringUUID = generator.getNextUUIDUTF8String()
+   val uuid = java.util.UUID.fromString(utf8StringUUID.toString)
+   assert(uuid.version() == 4 && uuid.variant() == 2 && utf8StringUUID.toString == uuid.toString)
+ }
 }

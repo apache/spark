@@ -25,8 +25,7 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 class FilterEvaluatorFactory(
     condition: Expression,
     childOutput: Seq[Attribute],
-    numOutputRows: SQLMetric)
-    extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
+    numOutputRows: SQLMetric) extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
 
   override def createEvaluator(): PartitionEvaluator[InternalRow, InternalRow] = {
     new FilterPartitionEvaluator

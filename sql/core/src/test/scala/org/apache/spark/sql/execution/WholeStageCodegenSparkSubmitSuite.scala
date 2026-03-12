@@ -34,10 +34,9 @@ import org.apache.spark.util.ResetSystemProperties
 
 // Due to the need to set driver's extraJavaOptions, this test needs to use actual SparkSubmit.
 @ExtendedSQLTest
-class WholeStageCodegenSparkSubmitSuite
-    extends SparkSubmitTestUtils
-    with Matchers
-    with ResetSystemProperties {
+class WholeStageCodegenSparkSubmitSuite extends SparkSubmitTestUtils
+  with Matchers
+  with ResetSystemProperties {
 
   test("Generated code on driver should not embed platform-specific constant") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
@@ -45,16 +44,11 @@ class WholeStageCodegenSparkSubmitSuite
     // HotSpot JVM specific: Set up a local cluster with the driver/executor using mismatched
     // settings of UseCompressedClassPointers JVM option.
     val argsForSparkSubmit = Seq(
-      "--class",
-      WholeStageCodegenSparkSubmitSuite.getClass.getName.stripSuffix("$"),
-      "--master",
-      "local-cluster[1,1,1024]",
-      "--driver-memory",
-      "1g",
-      "--conf",
-      "spark.ui.enabled=false",
-      "--conf",
-      "spark.master.rest.enabled=false",
+      "--class", WholeStageCodegenSparkSubmitSuite.getClass.getName.stripSuffix("$"),
+      "--master", "local-cluster[1,1,1024]",
+      "--driver-memory", "1g",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
       // SPARK-37008: The results of `Platform.BYTE_ARRAY_OFFSET` using different Java versions
       // and different args as follows table:
       // +------------------------------+--------+---------+
@@ -66,12 +60,9 @@ class WholeStageCodegenSparkSubmitSuite
       // |-XX:+UseCompressedClassPointers|  16   |   16    |
       // +-------------------------------+-------+---------+
       // So SPARK-37008 replace `UseCompressedOops` with `UseCompressedClassPointers`.
-      "--conf",
-      "spark.driver.extraJavaOptions=-XX:-UseCompressedClassPointers",
-      "--conf",
-      "spark.executor.extraJavaOptions=-XX:+UseCompressedClassPointers",
-      "--conf",
-      "spark.sql.adaptive.enabled=false",
+      "--conf", "spark.driver.extraJavaOptions=-XX:-UseCompressedClassPointers",
+      "--conf", "spark.executor.extraJavaOptions=-XX:+UseCompressedClassPointers",
+      "--conf", "spark.sql.adaptive.enabled=false",
       unusedJar.toString)
     runSparkSubmit(argsForSparkSubmit, timeout = 3.minutes)
   }
@@ -82,8 +73,7 @@ object WholeStageCodegenSparkSubmitSuite extends Assertions with Logging {
   def main(args: Array[String]): Unit = {
     TestUtils.configTestLog4j2("INFO")
 
-    val spark = SparkSession
-      .builder()
+    val spark = SparkSession.builder()
       .config(SQLConf.SHUFFLE_PARTITIONS.key, "2")
       .getOrCreate()
 
@@ -94,11 +84,8 @@ object WholeStageCodegenSparkSubmitSuite extends Assertions with Logging {
         spark.sparkContext.range(0, 1).map(_ => Platform.BYTE_ARRAY_OFFSET).collect().head
       assert(driverArrayHeaderSize > executorArrayHeaderSize)
 
-      val df = spark
-        .range(71773)
-        .select((col("id") % lit(10)).cast(IntegerType) as "v")
-        .groupBy(array(col("v")))
-        .agg(count(col("*")))
+      val df = spark.range(71773).select((col("id") % lit(10)).cast(IntegerType) as "v")
+        .groupBy(array(col("v"))).agg(count(col("*")))
       val plan = df.queryExecution.executedPlan
       assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]))
 

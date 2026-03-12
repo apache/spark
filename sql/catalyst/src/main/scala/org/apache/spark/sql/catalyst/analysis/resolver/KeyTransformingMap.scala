@@ -23,8 +23,8 @@ import java.util.function.Function
 
 /**
  * The [[KeyTransformingMap]] is a partial implementation of [[mutable.Map]] that transforms input
- * keys with a custom [[mapKey]] method. It preserves the order of insertion by using the
- * [[LinkedHashMap]] as an underlying map.
+ * keys with a custom [[mapKey]] method.
+ * It preserves the order of insertion by using the [[LinkedHashMap]] as an underlying map.
  */
 private abstract class KeyTransformingMap[K, V] {
   private val impl = new LinkedHashMap[K, V]

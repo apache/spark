@@ -34,9 +34,9 @@ import org.apache.spark.util.Utils
  * An interface for those aggregate physical operators that support codegen.
  */
 trait AggregateCodegenSupport
-    extends BaseAggregateExec
-    with BlockingOperatorWithCodegen
-    with GeneratePredicateHelper {
+  extends BaseAggregateExec
+  with BlockingOperatorWithCodegen
+  with GeneratePredicateHelper {
 
   /**
    * All the modes of aggregate expressions.
@@ -81,11 +81,10 @@ trait AggregateCodegenSupport
   }
 
   override def supportCodegen: Boolean = {
-    val isMutableAggBuffer =
-      aggregateBufferAttributes.forall(a => UnsafeRow.isMutable(a.dataType))
+    val isMutableAggBuffer = aggregateBufferAttributes.forall(a => UnsafeRow.isMutable(a.dataType))
     // ImperativeAggregate are not supported right now
     isMutableAggBuffer &&
-    !aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[ImperativeAggregate])
+      !aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[ImperativeAggregate])
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
@@ -103,8 +102,7 @@ trait AggregateCodegenSupport
     ctx.INPUT_ROW = null
 
     // generate variables for aggregation buffer
-    val functions =
-      aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
+    val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
     val initExpr = functions.map(f => f.initialValues)
     bufVars = initExpr.map { exprs =>
       exprs.map { e =>
@@ -130,15 +128,14 @@ trait AggregateCodegenSupport
     val (resultVars, genResult) = if (modes.contains(Final) || modes.contains(Complete)) {
       // evaluate aggregate results
       ctx.currentVars = flatBufVars
-      val aggResults =
-        bindReferences(functions.map(_.evaluateExpression), aggregateBufferAttributes)
-          .map(_.genCode(ctx))
+      val aggResults = bindReferences(
+        functions.map(_.evaluateExpression),
+        aggregateBufferAttributes).map(_.genCode(ctx))
       val evaluateAggResults = evaluateVariables(aggResults)
       // evaluate result expressions
       ctx.currentVars = aggResults
       val resultVars = bindReferences(resultExpressions, aggregateAttributes).map(_.genCode(ctx))
-      (
-        resultVars,
+      (resultVars,
         s"""
            |$evaluateAggResults
            |${evaluateVariables(resultVars)}
@@ -153,8 +150,7 @@ trait AggregateCodegenSupport
     }
 
     val doAgg = ctx.freshName("doAggregateWithoutKey")
-    val doAggFuncName = ctx.addNewFunction(
-      doAgg,
+    val doAggFuncName = ctx.addNewFunction(doAgg,
       s"""
          |private void $doAgg() throws java.io.IOException {
          |  // initialize aggregation buffer
@@ -197,8 +193,7 @@ trait AggregateCodegenSupport
    */
   private def doConsumeWithoutKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     // only have DeclarativeAggregate
-    val functions =
-      aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
+    val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
     val inputAttrs = functions.flatMap(_.aggBufferAttributes) ++ inputAttributes
     // To individually generate code for each aggregate function, an element in `updateExprs` holds
     // all the expressions for the buffer of an aggregation function.
@@ -243,13 +238,7 @@ trait AggregateCodegenSupport
     }
 
     val codeToEvalAggFuncs = generateEvalCodeForAggFuncs(
-      ctx,
-      input,
-      inputAttrs,
-      boundUpdateExprs,
-      aggNames,
-      aggCodeBlocks,
-      subExprs)
+      ctx, input, inputAttrs, boundUpdateExprs, aggNames, aggCodeBlocks, subExprs)
     s"""
        |// do aggregate
        |// common sub-expressions
@@ -270,47 +259,39 @@ trait AggregateCodegenSupport
       aggNames: Seq[String],
       aggCodeBlocks: Seq[Block],
       subExprs: SubExprCodes): String = {
-    val aggCodes =
-      if (conf.codegenSplitAggregateFunc &&
-        aggCodeBlocks.map(_.length).sum > conf.methodSplitThreshold) {
-        val maybeSplitCodes = splitAggregateExpressions(
-          ctx,
-          aggNames,
-          boundUpdateExprs,
-          aggCodeBlocks,
-          subExprs.states)
+    val aggCodes = if (conf.codegenSplitAggregateFunc &&
+      aggCodeBlocks.map(_.length).sum > conf.methodSplitThreshold) {
+      val maybeSplitCodes = splitAggregateExpressions(
+        ctx, aggNames, boundUpdateExprs, aggCodeBlocks, subExprs.states)
 
-        maybeSplitCodes.getOrElse(aggCodeBlocks.map(_.code))
-      } else {
-        aggCodeBlocks.map(_.code)
-      }
+      maybeSplitCodes.getOrElse(aggCodeBlocks.map(_.code))
+    } else {
+      aggCodeBlocks.map(_.code)
+    }
 
-    aggCodes
-      .zip(aggregateExpressions.map(ae => (ae.mode, ae.filter)))
-      .map {
-        case (aggCode, (Partial | Complete, Some(condition))) =>
-          // Note: wrap in "do { } while (false);", so the generated checks can jump out
-          // with "continue;"
-          s"""
+    aggCodes.zip(aggregateExpressions.map(ae => (ae.mode, ae.filter))).map {
+      case (aggCode, (Partial | Complete, Some(condition))) =>
+        // Note: wrap in "do { } while (false);", so the generated checks can jump out
+        // with "continue;"
+        s"""
            |do {
            |  ${generatePredicateCode(ctx, condition, inputAttrs, input)}
            |  $aggCode
            |} while (false);
          """.stripMargin
-        case (aggCode, _) =>
-          aggCode
-      }
-      .mkString("\n")
+      case (aggCode, _) =>
+        aggCode
+    }.mkString("\n")
   }
 
   /**
-   * Splits aggregate code into small functions because the most of JVM implementations can not
-   * compile too long functions. Returns None if we are not able to split the given code.
+   * Splits aggregate code into small functions because the most of JVM implementations
+   * can not compile too long functions. Returns None if we are not able to split the given code.
    *
    * Note: The difference from `CodeGenerator.splitExpressions` is that we define an individual
    * function for each aggregation function (e.g., SUM and AVG). For example, in a query
-   * `SELECT SUM(a), AVG(a) FROM VALUES(1) t(a)`, we define two functions for `SUM(a)` and
-   * `AVG(a)`.
+   * `SELECT SUM(a), AVG(a) FROM VALUES(1) t(a)`, we define two functions
+   * for `SUM(a)` and `AVG(a)`.
    */
   private def splitAggregateExpressions(
       ctx: CodegenContext,
@@ -327,10 +308,8 @@ trait AggregateCodegenSupport
       None
     } else {
       val inputVars = aggBufferUpdatingExprs.map { aggExprsForOneFunc =>
-        val inputVarsForOneFunc = aggExprsForOneFunc
-          .map(CodeGenerator.getLocalInputVariableValues(ctx, _, subExprs)._1)
-          .reduce(_ ++ _)
-          .toSeq
+        val inputVarsForOneFunc = aggExprsForOneFunc.map(
+          CodeGenerator.getLocalInputVariableValues(ctx, _, subExprs)._1).reduce(_ ++ _).toSeq
         val paramLength = CodeGenerator.calculateParamLengthFromExprValues(inputVarsForOneFunc)
 
         // Checks if a parameter length for the `aggExprsForOneFunc` does not go over the JVM limit
@@ -347,13 +326,10 @@ trait AggregateCodegenSupport
       if (inputVars.forall(_.isDefined)) {
         val splitCodes = inputVars.flatten.zipWithIndex.map { case (args, i) =>
           val doAggFunc = ctx.freshName(s"doAggregate_${aggNames(i)}")
-          val argList = args
-            .map { v =>
-              s"${CodeGenerator.typeName(v.javaType)} ${v.variableName}"
-            }
-            .mkString(", ")
-          val doAggFuncName = ctx.addNewFunction(
-            doAggFunc,
+          val argList = args.map { v =>
+            s"${CodeGenerator.typeName(v.javaType)} ${v.variableName}"
+          }.mkString(", ")
+          val doAggFuncName = ctx.addNewFunction(doAggFunc,
             s"""
                |private void $doAggFunc($argList) throws java.io.IOException {
                |  ${aggCodeBlocks(i)}

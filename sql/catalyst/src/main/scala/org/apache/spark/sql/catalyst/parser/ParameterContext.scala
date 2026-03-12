@@ -20,35 +20,33 @@ package org.apache.spark.sql.catalyst.parser
 import org.apache.spark.sql.catalyst.expressions.Expression
 
 /**
- * Context for passing parameter values to the SQL parser. This allows parameter substitution to
- * happen during the parsing phase rather than during analysis.
+ * Context for passing parameter values to the SQL parser.
+ * This allows parameter substitution to happen during the parsing phase
+ * rather than during analysis.
  */
 sealed trait ParameterContext
 
 /**
  * Context for named parameters (e.g., :paramName).
  *
- * @param params
- *   Map of parameter names to their expression values
+ * @param params Map of parameter names to their expression values
  */
 case class NamedParameterContext(params: Map[String, Expression]) extends ParameterContext
 
 /**
  * Context for positional parameters (e.g., ?).
  *
- * @param params
- *   Sequence of expression values in order
+ * @param params Sequence of expression values in order
  */
 case class PositionalParameterContext(params: Seq[Expression]) extends ParameterContext
 
 /**
- * Context that supports both named and positional parameters. This is used by EXECUTE IMMEDIATE
- * where the parameter type is determined by the inner query.
+ * Context that supports both named and positional parameters.
+ * This is used by EXECUTE IMMEDIATE where the parameter type is determined by the inner query.
  *
- * @param args
- *   Expression values from USING clause (already evaluated and resolved to Literals)
- * @param paramNames
- *   Parameter names from USING clause (empty strings for positional)
+ * @param args Expression values from USING clause (already evaluated and resolved to Literals)
+ * @param paramNames Parameter names from USING clause (empty strings for positional)
  */
-case class HybridParameterContext(args: Seq[Expression], paramNames: Seq[String])
-    extends ParameterContext
+case class HybridParameterContext(
+    args: Seq[Expression],
+    paramNames: Seq[String]) extends ParameterContext

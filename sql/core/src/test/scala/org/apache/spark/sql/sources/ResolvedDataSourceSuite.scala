@@ -30,15 +30,16 @@ class ResolvedDataSourceSuite extends SharedSparkSession {
     DataSource(
       sparkSession = spark,
       className = name,
-      options = Map(DateTimeUtils.TIMEZONE_OPTION -> ZoneId.systemDefault().getId)).providingClass
+      options = Map(DateTimeUtils.TIMEZONE_OPTION -> ZoneId.systemDefault().getId)
+    ).providingClass
 
   test("jdbc") {
     assert(
       getProvidingClass("jdbc") ===
-        classOf[org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider])
+      classOf[org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider])
     assert(
       getProvidingClass("org.apache.spark.sql.execution.datasources.jdbc") ===
-        classOf[org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider])
+      classOf[org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider])
     assert(
       getProvidingClass("org.apache.spark.sql.jdbc") ===
         classOf[org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider])
@@ -47,7 +48,7 @@ class ResolvedDataSourceSuite extends SharedSparkSession {
   test("json") {
     assert(
       getProvidingClass("json") ===
-        classOf[org.apache.spark.sql.execution.datasources.json.JsonFileFormat])
+      classOf[org.apache.spark.sql.execution.datasources.json.JsonFileFormat])
     assert(
       getProvidingClass("org.apache.spark.sql.execution.datasources.json") ===
         classOf[org.apache.spark.sql.execution.datasources.json.JsonFileFormat])
@@ -59,7 +60,7 @@ class ResolvedDataSourceSuite extends SharedSparkSession {
   test("parquet") {
     assert(
       getProvidingClass("parquet") ===
-        classOf[org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat])
+      classOf[org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat])
     assert(
       getProvidingClass("org.apache.spark.sql.execution.datasources.parquet") ===
         classOf[org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat])
@@ -84,7 +85,8 @@ class ResolvedDataSourceSuite extends SharedSparkSession {
           getProvidingClass(provider)
         },
         condition = "_LEGACY_ERROR_TEMP_1139",
-        parameters = Map("provider" -> provider))
+        parameters = Map("provider" -> provider)
+      )
     }
   }
 
@@ -94,7 +96,8 @@ class ResolvedDataSourceSuite extends SharedSparkSession {
         getProvidingClass("kafka")
       },
       condition = "_LEGACY_ERROR_TEMP_1140",
-      parameters = Map("provider" -> "kafka"))
+      parameters = Map("provider" -> "kafka")
+    )
   }
 
   test("error message for unknown data sources") {
@@ -104,6 +107,7 @@ class ResolvedDataSourceSuite extends SharedSparkSession {
     checkError(
       exception = error,
       condition = "DATA_SOURCE_NOT_FOUND",
-      parameters = Map("provider" -> "asfdwefasdfasdf"))
+      parameters = Map("provider" -> "asfdwefasdfasdf")
+    )
   }
 }

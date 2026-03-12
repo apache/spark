@@ -39,8 +39,8 @@ private[sql] object UnspecifiedDistributionImpl extends UnspecifiedDistribution 
   override def toString: String = "UnspecifiedDistribution"
 }
 
-private[sql] final case class ClusteredDistributionImpl(clusteringExprs: Seq[Expression])
-    extends ClusteredDistribution {
+private[sql] final case class ClusteredDistributionImpl(
+    clusteringExprs: Seq[Expression]) extends ClusteredDistribution {
 
   override def clustering: Array[Expression] = clusteringExprs.toArray
 
@@ -49,8 +49,8 @@ private[sql] final case class ClusteredDistributionImpl(clusteringExprs: Seq[Exp
   }
 }
 
-private[sql] final case class OrderedDistributionImpl(orderingExprs: Seq[SortOrder])
-    extends OrderedDistribution {
+private[sql] final case class OrderedDistributionImpl(
+    orderingExprs: Seq[SortOrder]) extends OrderedDistribution {
 
   override def ordering: Array[SortOrder] = orderingExprs.toArray
 

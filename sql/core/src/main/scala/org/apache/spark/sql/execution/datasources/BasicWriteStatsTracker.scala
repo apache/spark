@@ -34,16 +34,18 @@ import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.util.SerializableConfiguration
 
+
 /**
- * Simple metrics collected during an instance of [[FileFormatDataWriter]]. These were first
- * introduced in https://github.com/apache/spark/pull/18159 (SPARK-20703).
+ * Simple metrics collected during an instance of [[FileFormatDataWriter]].
+ * These were first introduced in https://github.com/apache/spark/pull/18159 (SPARK-20703).
  */
 case class BasicWriteTaskStats(
     partitions: Seq[InternalRow],
     numFiles: Int,
     numBytes: Long,
     numRows: Long)
-    extends WriteTaskStats
+  extends WriteTaskStats
+
 
 /**
  * Simple [[WriteTaskStatsTracker]] implementation that produces [[BasicWriteTaskStats]].
@@ -51,8 +53,7 @@ case class BasicWriteTaskStats(
 class BasicWriteTaskStatsTracker(
     hadoopConf: Configuration,
     taskCommitTimeMetric: Option[SQLMetric] = None)
-    extends WriteTaskStatsTracker
-    with Logging {
+  extends WriteTaskStatsTracker with Logging {
 
   private[this] val partitions: mutable.ArrayBuffer[InternalRow] = mutable.ArrayBuffer.empty
   private[this] var numFiles: Int = 0
@@ -64,10 +65,8 @@ class BasicWriteTaskStatsTracker(
 
   /**
    * Get the size of the file expected to have been written by a worker.
-   * @param filePath
-   *   path to the file
-   * @return
-   *   the file size or None if the file was not found.
+   * @param filePath path to the file
+   * @return the file size or None if the file was not found.
    */
   private def getFileSize(filePath: String): Option[Long] = {
     val path = new Path(filePath)
@@ -76,15 +75,16 @@ class BasicWriteTaskStatsTracker(
   }
 
   /**
-   * Get the size of the file expected to have been written by a worker. This supports the XAttr
-   * in HADOOP-17414 when the "magic committer" adds a custom HTTP header to the a zero byte
-   * marker. If the output file as returned by getFileStatus > 0 then the length if returned. For
-   * zero-byte files, the (optional) Hadoop FS API getXAttr() is invoked. If a parseable,
-   * non-negative length can be retrieved, this is returned instead of the length.
-   * @return
-   *   the file size or None if the file was not found.
+   * Get the size of the file expected to have been written by a worker.
+   * This supports the XAttr in HADOOP-17414 when the "magic committer" adds
+   * a custom HTTP header to the a zero byte marker.
+   * If the output file as returned by getFileStatus > 0 then the length if
+   * returned. For zero-byte files, the (optional) Hadoop FS API getXAttr() is
+   * invoked. If a parseable, non-negative length can be retrieved, this
+   * is returned instead of the length.
+   * @return the file size or None if the file was not found.
    */
-  private[datasources] def getFileSize(fs: FileSystem, path: Path): Option[Long] = {
+  private [datasources] def getFileSize(fs: FileSystem, path: Path): Option[Long] = {
     // the normal file status probe.
     try {
       val len = fs.getFileStatus(path).getLen
@@ -120,10 +120,9 @@ class BasicWriteTaskStatsTracker(
     } catch {
       case e: NumberFormatException =>
         // warn but don't dump the whole stack
-        logInfo(
-          log"Failed to parse " +
-            log"${MDC(LogKeys.FILE_LENGTH_XATTR, BasicWriteJobStatsTracker.FILE_LENGTH_XATTR)}:" +
-            log"${MDC(LogKeys.ERROR, e)}; bytes written may be under-reported");
+        logInfo(log"Failed to parse " +
+          log"${MDC(LogKeys.FILE_LENGTH_XATTR, BasicWriteJobStatsTracker.FILE_LENGTH_XATTR)}:" +
+          log"${MDC(LogKeys.ERROR, e)}; bytes written may be under-reported");
       case e: UnsupportedOperationException =>
         // this is not unusual; ignore
         logDebug(s"XAttr not supported on path $path", e);
@@ -133,6 +132,7 @@ class BasicWriteTaskStatsTracker(
     }
     Some(len)
   }
+
 
   override def newPartition(partitionValues: InternalRow): Unit = {
     partitions.append(partitionValues)
@@ -167,28 +167,31 @@ class BasicWriteTaskStatsTracker(
     }
 
     if (numSubmittedFiles != numFiles) {
-      logWarning(
-        log"Expected ${MDC(EXPECTED_NUM_FILES, numSubmittedFiles)} files, but only saw " +
-          log"${MDC(ACTUAL_NUM_FILES, numFiles)}. This could be due to the output format not " +
-          log"writing empty files, or files being not immediately visible in the filesystem.")
+      logWarning(log"Expected ${MDC(EXPECTED_NUM_FILES, numSubmittedFiles)} files, but only saw " +
+        log"${MDC(ACTUAL_NUM_FILES, numFiles)}. This could be due to the output format not " +
+        log"writing empty files, or files being not immediately visible in the filesystem.")
     }
     taskCommitTimeMetric.foreach(_ += taskCommitTime)
     BasicWriteTaskStats(partitions.toSeq, numFiles, numBytes, numRows)
   }
 }
 
+
 /**
- * Simple [[WriteJobStatsTracker]] implementation that's serializable, capable of instantiating
- * [[BasicWriteTaskStatsTracker]] on executors and processing the [[BasicWriteTaskStats]] they
- * produce by aggregating the metrics and posting them as DriverMetricUpdates.
+ * Simple [[WriteJobStatsTracker]] implementation that's serializable, capable of
+ * instantiating [[BasicWriteTaskStatsTracker]] on executors and processing the
+ * [[BasicWriteTaskStats]] they produce by aggregating the metrics and posting them
+ * as DriverMetricUpdates.
  */
 class BasicWriteJobStatsTracker(
     serializableHadoopConf: SerializableConfiguration,
     @transient val driverSideMetrics: Map[String, SQLMetric],
     taskCommitTimeMetric: SQLMetric)
-    extends WriteJobStatsTracker {
+  extends WriteJobStatsTracker {
 
-  def this(serializableHadoopConf: SerializableConfiguration, metrics: Map[String, SQLMetric]) = {
+  def this(
+      serializableHadoopConf: SerializableConfiguration,
+      metrics: Map[String, SQLMetric]) = {
     this(serializableHadoopConf, metrics - TASK_COMMIT_TIME, metrics(TASK_COMMIT_TIME))
   }
 
@@ -230,7 +233,6 @@ object BasicWriteJobStatsTracker {
   private val NUM_PARTS_KEY = "numParts"
   val TASK_COMMIT_TIME = "taskCommitTime"
   val JOB_COMMIT_TIME = "jobCommitTime"
-
   /** XAttr key of the data length header added in HADOOP-17414. */
   val FILE_LENGTH_XATTR = "header.x-hadoop-s3a-magic-data-length"
 
@@ -242,6 +244,7 @@ object BasicWriteJobStatsTracker {
       NUM_OUTPUT_ROWS_KEY -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
       NUM_PARTS_KEY -> SQLMetrics.createMetric(sparkContext, "number of dynamic part"),
       TASK_COMMIT_TIME -> SQLMetrics.createTimingMetric(sparkContext, "task commit time"),
-      JOB_COMMIT_TIME -> SQLMetrics.createTimingMetric(sparkContext, "job commit time"))
+      JOB_COMMIT_TIME -> SQLMetrics.createTimingMetric(sparkContext, "job commit time")
+    )
   }
 }

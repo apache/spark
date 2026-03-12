@@ -32,13 +32,22 @@ class PlanRewriter(
   private val planRewriter = new RuleExecutor[LogicalPlan] {
     override def batches: Seq[Batch] =
       Seq(
-        Batch("Plan Rewriting", Once, planRewriteRules: _*),
-        Batch("Extended Rewriting", Once, extendedRewriteRules: _*))
+        Batch(
+          "Plan Rewriting",
+          Once,
+          planRewriteRules: _*
+        ),
+        Batch(
+          "Extended Rewriting",
+          Once,
+          extendedRewriteRules: _*
+        )
+      )
   }
 
   /**
-   * Rewrites the plan by first recursing into all subqueries and applying post-resolution rules
-   * on them and then applying post-resolution rules on the entire plan.
+   * Rewrites the plan by first recursing into all subqueries and applying post-resolution rules on
+   * them and then applying post-resolution rules on the entire plan.
    */
   def rewriteWithSubqueries(plan: LogicalPlan): LogicalPlan = {
     AnalysisHelper.allowInvokingTransformsInAnalyzer {

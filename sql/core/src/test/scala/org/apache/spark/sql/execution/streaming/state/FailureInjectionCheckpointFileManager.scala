@@ -29,16 +29,14 @@ import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileMana
 import org.apache.spark.sql.execution.streaming.checkpointing.FileSystemBasedCheckpointFileManager
 
 /**
- * A wrapper file output stream that will throw exception in close() and put the underlying stream
- * to FailureInjectionFileSystem.delayedStreams
- * @param stream
- *   stream to be wrapped
+ * A wrapper file output stream that will throw exception in close() and put the underlying
+ * stream to FailureInjectionFileSystem.delayedStreams
+ * @param stream stream to be wrapped
  */
 class DelayCloseFSDataOutputStreamWrapper(
     stream: CancellableFSDataOutputStream,
     injectionState: FailureInjectionState)
-    extends CancellableFSDataOutputStream(stream.getWrappedStream)
-    with Logging {
+  extends CancellableFSDataOutputStream(stream.getWrappedStream) with Logging {
   val originalStream: CancellableFSDataOutputStream = stream
 
   var closed: Boolean = false
@@ -56,27 +54,24 @@ class DelayCloseFSDataOutputStreamWrapper(
 }
 
 /**
- * A wrapper checkpoint file manager that might inject failures in some function calls. Used in
- * unit tests to simulate failure scenarios. This can be put into
- * SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS to provide failure injection behavior.
+ * A wrapper checkpoint file manager that might inject failures in some function calls.
+ * Used in unit tests to simulate failure scenarios.
+ * This can be put into SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS to provide failure
+ * injection behavior.
  * Requirement: when this file manager is created, `path` should already be registered using
  * FailureInjectionFileSystem.registerTempPath(path)
  *
- * @param path
- *   The path to the checkpoint directory, passing to the parent class
- * @param hadoopConf
- *   hadoop conf that will be passed to the parent class
+ * @param path The path to the checkpoint directory, passing to the parent class
+ * @param hadoopConf  hadoop conf that will be passed to the parent class
  */
 class FailureInjectionCheckpointFileManager(path: Path, hadoopConf: Configuration)
-    extends FileSystemBasedCheckpointFileManager(path, hadoopConf)
-    with Logging {
+  extends FileSystemBasedCheckpointFileManager(path, hadoopConf) with Logging {
 
   // Injection state for the path
   private val injectionState = FailureInjectionFileSystem.getInjectionState(path.toString)
 
-  override def createAtomic(
-      path: Path,
-      overwriteIfPossible: Boolean): CancellableFSDataOutputStream = {
+  override def createAtomic(path: Path,
+                            overwriteIfPossible: Boolean): CancellableFSDataOutputStream = {
     injectionState.failureCreateAtomicRegex.foreach { pattern =>
       if (path.toString.matches(pattern)) {
         throw new IOException("Fake File System Create Atomic Failure")
@@ -97,10 +92,7 @@ class FailureInjectionCheckpointFileManager(path: Path, hadoopConf: Configuratio
     }
   }
 
-  override def renameTempFile(
-      srcPath: Path,
-      dstPath: Path,
-      overwriteIfPossible: Boolean): Unit = {
+  override def renameTempFile(srcPath: Path, dstPath: Path, overwriteIfPossible: Boolean): Unit = {
     if (injectionState.allowOverwriteInRename || !fs.exists(dstPath)) {
       super.renameTempFile(srcPath, dstPath, overwriteIfPossible)
     } else {
@@ -121,8 +113,9 @@ class FailureInjectionCheckpointFileManager(path: Path, hadoopConf: Configuratio
 }
 
 /**
- * A class that contains the failure injection state for a path. Variables in this class cannot be
- * updated concurrently by two threads, but can have multiple readers
+ * A class that contains the failure injection state for a path.
+ * Variables in this class cannot be updated concurrently by two threads, but can have multiple
+ * readers
  */
 class FailureInjectionState {
   // File names matching this regex will cause the copyFromLocalFile to fail
@@ -148,10 +141,10 @@ class FailureInjectionState {
 }
 
 /**
- * Contains a list of variables for failure ingestion conditions. These are singleton instances
- * accessed by all instances of FailureInjectionCheckpointFileManager and
- * FailureInjectionFileSystem. This allows a unit test to have a global control of failure and
- * access to the delayed streams.
+ * Contains a list of variables for failure ingestion conditions.
+ * These are singleton instances accessed by all instances of FailureInjectionCheckpointFileManager
+ * and FailureInjectionFileSystem. This allows a unit test to have a global control of failure
+ * and access to the delayed streams.
  */
 object FailureInjectionFileSystem {
   // A map from a temp path to its failure injection state.
@@ -159,10 +152,8 @@ object FailureInjectionFileSystem {
 
   /**
    * Create a new FailureInjectionState for a temp path and add it to the map.
-   * @param path
-   *   the temp path
-   * @return
-   *   the newly created failure injection state
+   * @param path  the temp path
+   * @return  the newly created failure injection state
    */
   def registerTempPath(path: String): FailureInjectionState = synchronized {
     // Throw exception if the path already exists in the map
@@ -173,8 +164,7 @@ object FailureInjectionFileSystem {
 
   /**
    * Clean up a temp path and its failure injection state
-   * @param path
-   *   the temp path to be cle
+   * @param path the temp path to be cle
    */
   def removePathFromTempToInjectionState(path: String): Unit = synchronized {
     // if we can find the injection state of the path, cancel all the delayed streams
@@ -186,10 +176,9 @@ object FailureInjectionFileSystem {
 
   /**
    * find injection state based on temp dir as prefix
-   * @param path
-   *   a path with temp dir as prefix
-   * @return
-   *   the injection state if the path is in the map. Exception if there is no match for prefix
+   * @param path a path with temp dir as prefix
+   * @return the injection state if the path is in the map. Exception if there is no match for
+   *         prefix
    */
   def getInjectionState(path: String): FailureInjectionState = synchronized {
     // remove "file://" prefix from path
@@ -202,10 +191,9 @@ object FailureInjectionFileSystem {
 }
 
 /**
- * A wrapper FileSystem that inject some failures. This class can used to replace the FileSystem
- * in RocksDBFileManager.
- * @param innerFs
- *   the FileSystem to be wrapped
+ * A wrapper FileSystem that inject some failures. This class can used to replace the
+ * FileSystem in RocksDBFileManager.
+ * @param innerFs  the FileSystem to be wrapped
  */
 class FailureInjectionFileSystem(innerFs: FileSystem) extends FileSystem {
 
@@ -257,8 +245,8 @@ class FailureInjectionFileSystem(innerFs: FileSystem) extends FileSystem {
 }
 
 /**
- * A wrapper RocksDB State Store Provider that replaces FileSystem used in RocksDBFileManager to
- * FailureInjectionFileSystem.
+ * A wrapper RocksDB State Store Provider that replaces FileSystem used in RocksDBFileManager
+ * to FailureInjectionFileSystem.
  */
 class FailureInjectionRocksDBStateStoreProvider extends RocksDBStateStoreProvider {
   override def createRocksDB(
@@ -287,11 +275,10 @@ class FailureInjectionRocksDBStateStoreProvider extends RocksDBStateStoreProvide
 }
 
 object FailureInjectionRocksDBStateStoreProvider {
-
   /**
-   * RocksDBFieManager is created by RocksDB class where it creates a default FileSystem. We make
-   * RocksDB create a RocksDBFileManager that uses a different FileSystem here.
-   */
+   * RocksDBFieManager is created by RocksDB class where it creates a default FileSystem.
+   * We make RocksDB create a RocksDBFileManager that uses a different FileSystem here.
+   * */
   def createRocksDBWithFaultInjection(
       dfsRootDir: String,
       conf: RocksDBConf,
@@ -313,7 +300,8 @@ object FailureInjectionRocksDBStateStoreProvider {
       enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
       partitionId = partitionId,
       eventForwarder = eventForwarder,
-      uniqueId) {
+      uniqueId
+    ) {
       override def createFileManager(
           dfsRootDir: String,
           localTempDir: File,

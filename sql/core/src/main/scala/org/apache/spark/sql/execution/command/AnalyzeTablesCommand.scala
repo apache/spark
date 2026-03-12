@@ -26,8 +26,9 @@ import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 /**
  * Analyzes all tables in the given database to generate statistics.
  */
-case class AnalyzeTablesCommand(databaseName: Option[String], noScan: Boolean)
-    extends LeafRunnableCommand {
+case class AnalyzeTablesCommand(
+    databaseName: Option[String],
+    noScan: Boolean) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -37,10 +38,8 @@ case class AnalyzeTablesCommand(databaseName: Option[String], noScan: Boolean)
         CommandUtils.analyzeTable(sparkSession, tbl, noScan)
       } catch {
         case NonFatal(e) =>
-          logWarning(
-            log"Failed to analyze table ${MDC(TABLE_NAME, tbl.table)} in the " +
-              log"database ${MDC(DATABASE_NAME, db)} because of ${MDC(ERROR, e.toString)}",
-            e)
+          logWarning(log"Failed to analyze table ${MDC(TABLE_NAME, tbl.table)} in the " +
+            log"database ${MDC(DATABASE_NAME, db)} because of ${MDC(ERROR, e.toString)}", e)
       }
     }
     Seq.empty[Row]

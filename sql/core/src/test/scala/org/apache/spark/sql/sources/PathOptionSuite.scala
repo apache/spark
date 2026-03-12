@@ -47,7 +47,7 @@ class TestOptionsSource extends SchemaRelationProvider with CreatableRelationPro
 }
 
 class TestOptionsRelation(val options: Map[String, String])(@transient val session: SparkSession)
-    extends BaseRelation {
+  extends BaseRelation {
 
   override def sqlContext: SQLContext = session.sqlContext
 
@@ -67,7 +67,8 @@ class PathOptionSuite extends DataSourceTest with SharedSparkSession {
 
   test("path option always exist") {
     withTable("src") {
-      sql(s"""
+      sql(
+        s"""
            |CREATE TABLE src(i int)
            |USING ${classOf[TestOptionsSource].getCanonicalName}
            |OPTIONS (PATH '/tmp/path')
@@ -85,7 +86,8 @@ class PathOptionSuite extends DataSourceTest with SharedSparkSession {
   test("path option also exist for write path") {
     withTable("src") {
       withTempPath { p =>
-        sql(s"""
+        sql(
+          s"""
             |CREATE TABLE src
             |USING ${classOf[TestOptionsSource].getCanonicalName}
             |OPTIONS (PATH '${p.toURI}')
@@ -93,33 +95,34 @@ class PathOptionSuite extends DataSourceTest with SharedSparkSession {
           """.stripMargin)
         assert(
           spark.table("src").schema.head.metadata.getString("path") ==
-            p.toURI.toString)
+          p.toURI.toString)
       }
     }
 
     // should exist even path option is not specified when creating table
     withTable("src") {
-      sql(s"""
+      sql(
+        s"""
            |CREATE TABLE src
            |USING ${classOf[TestOptionsSource].getCanonicalName}
            |AS SELECT 1
           """.stripMargin)
       assert(
         makeQualifiedPath(spark.table("src").schema.head.metadata.getString("path")) ==
-          defaultTablePath("src"))
+        defaultTablePath("src"))
     }
   }
 
   test("path option always represent the value of table location") {
     withTable("src") {
-      sql(s"""
+      sql(
+        s"""
            |CREATE TABLE src(i int)
            |USING ${classOf[TestOptionsSource].getCanonicalName}
            |OPTIONS (PATH '/tmp/path')""".stripMargin)
       sql("ALTER TABLE src SET LOCATION '/tmp/path2'")
-      assert(
-        getPathOption("src") ==
-          Some(CatalogUtils.URIToString(makeQualifiedPath("/tmp/path2"))))
+      assert(getPathOption("src") ==
+        Some(CatalogUtils.URIToString(makeQualifiedPath("/tmp/path2"))))
     }
 
     withTable("src", "src2") {
@@ -130,14 +133,9 @@ class PathOptionSuite extends DataSourceTest with SharedSparkSession {
   }
 
   private def getPathOption(tableName: String): Option[String] = {
-    spark
-      .table(tableName)
-      .queryExecution
-      .analyzed
-      .collect { case LogicalRelationWithTable(r: TestOptionsRelation, _) =>
-        r.pathOption
-      }
-      .head
+    spark.table(tableName).queryExecution.analyzed.collect {
+      case LogicalRelationWithTable(r: TestOptionsRelation, _) => r.pathOption
+    }.head
   }
 
   private def defaultTablePath(tableName: String): URI = {

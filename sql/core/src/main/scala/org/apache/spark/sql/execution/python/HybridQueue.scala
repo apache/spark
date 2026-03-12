@@ -41,14 +41,14 @@ trait Queue[T] {
 }
 
 /**
- * A generic base class for hybrid queues that can store data either in memory or on disk. This
- * class contains common logic for queue management, spilling, and memory management.
+ * A generic base class for hybrid queues that can store data either in memory or on disk.
+ * This class contains common logic for queue management, spilling, and memory management.
  */
 abstract class HybridQueue[T, Q <: Queue[T]](
     memManager: TaskMemoryManager,
     tempDir: File,
     serMgr: SerializerManager)
-    extends MemoryConsumer(memManager, memManager.getTungstenMemoryMode) {
+  extends MemoryConsumer(memManager, memManager.getTungstenMemoryMode) {
 
   // Each buffer should have at least one element.
   protected var queues = new java.util.LinkedList[Q]()
@@ -104,13 +104,12 @@ abstract class HybridQueue[T, Q <: Queue[T]](
 
   private def createNewQueue(required: Long): Q = {
     // Tests may attempt to force spills.
-    val page =
-      try {
-        allocatePage(required)
-      } catch {
-        case _: SparkOutOfMemoryError =>
-          null
-      }
+    val page = try {
+      allocatePage(required)
+    } catch {
+      case _: SparkOutOfMemoryError =>
+        null
+    }
     val buffer = if (page != null) {
       createInMemoryQueue(page)
     } else {

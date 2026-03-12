@@ -43,8 +43,7 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
     assert(catalogManager.currentCatalog.name() == CatalogManager.SESSION_CATALOG_NAME)
     assert(catalogManager.currentNamespace.sameElements(Array("default")))
 
-    withSQLConf(
-      "spark.sql.catalog.dummy" -> classOf[DummyCatalog].getName,
+    withSQLConf("spark.sql.catalog.dummy" -> classOf[DummyCatalog].getName,
       SQLConf.DEFAULT_CATALOG.key -> "dummy") {
       // The current catalog should be changed if the default catalog is set.
       assert(catalogManager.currentCatalog.name() == "dummy")
@@ -60,8 +59,7 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
       assert(catalogManager.currentCatalog.name() == "dummy")
       assert(catalogManager.currentNamespace.sameElements(Array("a", "b")))
 
-      withSQLConf(
-        "spark.sql.catalog.dummy2" -> classOf[DummyCatalog].getName,
+      withSQLConf("spark.sql.catalog.dummy2" -> classOf[DummyCatalog].getName,
         SQLConf.DEFAULT_CATALOG.key -> "dummy2") {
         // The current catalog shouldn't be changed if it's set before.
         assert(catalogManager.currentCatalog.name() == "dummy")
@@ -92,7 +90,8 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
   test("set current namespace") {
     val v1SessionCatalog = createSessionCatalog()
     v1SessionCatalog.createDatabase(
-      CatalogDatabase("test", "", v1SessionCatalog.getDefaultDBPath("test"), Map.empty),
+      CatalogDatabase(
+        "test", "", v1SessionCatalog.getDefaultDBPath("test"), Map.empty),
       ignoreIfExists = false)
     val catalogManager = new CatalogManager(FakeV2SessionCatalog, v1SessionCatalog)
 
@@ -116,8 +115,7 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
       // Check namespace existence if currentCatalog implements SupportsNamespaces.
       withSQLConf("spark.sql.catalog.testCatalog" -> classOf[InMemoryTableCatalog].getName) {
         catalogManager.setCurrentCatalog("testCatalog")
-        catalogManager.currentCatalog
-          .asInstanceOf[InMemoryTableCatalog]
+        catalogManager.currentCatalog.asInstanceOf[InMemoryTableCatalog]
           .createNamespace(Array("test3"), Map.empty[String, String].asJava)
         assert(v1SessionCatalog.getCurrentDatabase == "default")
         catalogManager.setCurrentNamespace(Array("test3"))

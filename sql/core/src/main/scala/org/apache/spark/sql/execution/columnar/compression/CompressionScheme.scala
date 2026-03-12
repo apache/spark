@@ -55,8 +55,8 @@ private[columnar] trait CompressionScheme {
   def encoder[T <: PhysicalDataType](columnType: NativeColumnType[T]): Encoder[T]
 
   def decoder[T <: PhysicalDataType](
-      buffer: ByteBuffer,
-      columnType: NativeColumnType[T]): Decoder[T]
+    buffer: ByteBuffer,
+    columnType: NativeColumnType[T]): Decoder[T]
 }
 
 private[columnar] trait WithCompressionSchemes {
@@ -74,8 +74,7 @@ private[columnar] object CompressionScheme {
   private val typeIdToScheme = all.map(scheme => scheme.typeId -> scheme).toMap
 
   def apply(typeId: Int): CompressionScheme = {
-    typeIdToScheme.getOrElse(
-      typeId,
+    typeIdToScheme.getOrElse(typeId,
       throw QueryExecutionErrors.unrecognizedCompressionSchemaTypeIDError(typeId))
   }
 

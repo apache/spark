@@ -27,27 +27,29 @@ import org.apache.spark.sql.types.StructType
  * A wrapper for V1 scalar functions that mirrors the V2 UnboundFunction pattern.
  *
  * V1Function has two responsibilities:
- *   1. Provide ExpressionInfo for DESCRIBE FUNCTION (accessed via `info`)
- *   2. Provide a function builder for invocation (accessed via `invoke()`)
+ * 1. Provide ExpressionInfo for DESCRIBE FUNCTION (accessed via `info`)
+ * 2. Provide a function builder for invocation (accessed via `invoke()`)
  *
  * The key design is two-phase lazy loading:
- *   - `info` is computed eagerly or from cache (no resource loading)
- *   - `functionBuilder` is computed lazily on first `invoke()` (triggers resource loading)
+ * - `info` is computed eagerly or from cache (no resource loading)
+ * - `functionBuilder` is computed lazily on first `invoke()` (triggers resource loading)
  *
  * This matches V1 behavior where DESCRIBE doesn't load resources but invocation does.
  */
-class V1Function private (val info: ExpressionInfo, builderFactory: () => FunctionBuilder)
-    extends UnboundFunction {
+class V1Function private (
+    val info: ExpressionInfo,
+    builderFactory: () => FunctionBuilder) extends UnboundFunction {
 
   /**
-   * Lazy function builder - only computed on first invoke(). For persistent functions, this
-   * triggers resource loading.
+   * Lazy function builder - only computed on first invoke().
+   * For persistent functions, this triggers resource loading.
    */
   private lazy val functionBuilder: FunctionBuilder = builderFactory()
 
   /**
-   * Invoke the function with the given arguments. This is the V1 equivalent of V2's bind()
-   * pattern. For persistent functions, first invocation triggers resource loading.
+   * Invoke the function with the given arguments.
+   * This is the V1 equivalent of V2's bind() pattern.
+   * For persistent functions, first invocation triggers resource loading.
    */
   def invoke(arguments: Seq[Expression]): Expression = functionBuilder(arguments)
 
@@ -63,14 +65,14 @@ class V1Function private (val info: ExpressionInfo, builderFactory: () => Functi
 }
 
 object V1Function {
-
   /** A placeholder builder for metadata-only V1Functions that throws on invocation. */
   private val metadataOnlyBuilder: FunctionBuilder = _ =>
-    throw SparkException.internalError("Metadata-only V1Function should not be invoked")
+    throw SparkException.internalError(
+      "Metadata-only V1Function should not be invoked")
 
   /**
-   * Create a V1Function with eager info and lazy builder. The builderFactory is called on first
-   * invoke().
+   * Create a V1Function with eager info and lazy builder.
+   * The builderFactory is called on first invoke().
    */
   def apply(info: ExpressionInfo, builderFactory: () => FunctionBuilder): V1Function = {
     new V1Function(info, builderFactory)
@@ -84,8 +86,8 @@ object V1Function {
   }
 
   /**
-   * Create a metadata-only V1Function (for DESCRIBE FUNCTION). If invoke() is called, it will
-   * throw an error.
+   * Create a metadata-only V1Function (for DESCRIBE FUNCTION).
+   * If invoke() is called, it will throw an error.
    */
   def metadataOnly(info: ExpressionInfo): V1Function = {
     new V1Function(info, () => metadataOnlyBuilder)

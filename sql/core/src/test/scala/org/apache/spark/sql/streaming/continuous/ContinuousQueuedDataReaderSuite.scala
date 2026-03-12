@@ -59,6 +59,7 @@ class ContinuousQueuedDataReaderSuite extends StreamTest with MockitoSugar {
     super.afterEach()
   }
 
+
   private val mockContext = mock[TaskContext]
   when(mockContext.getLocalProperty(ContinuousExecution.START_EPOCH_KEY))
     .thenReturn(startEpoch.toString)
@@ -66,8 +67,8 @@ class ContinuousQueuedDataReaderSuite extends StreamTest with MockitoSugar {
     .thenReturn(coordinatorId)
 
   /**
-   * Set up a ContinuousQueuedDataReader for testing. The blocking queue can be used to send rows
-   * to the wrapped data reader.
+   * Set up a ContinuousQueuedDataReader for testing. The blocking queue can be used to send
+   * rows to the wrapped data reader.
    */
   private def setup(): (BlockingQueue[UnsafeRow], ContinuousQueuedDataReader) = {
     val queue = new ArrayBlockingQueue[UnsafeRow](1024)
@@ -99,7 +100,7 @@ class ContinuousQueuedDataReaderSuite extends StreamTest with MockitoSugar {
   }
 
   private def unsafeRow(value: Int) = {
-    UnsafeProjection.create(Array(IntegerType: DataType))(
+    UnsafeProjection.create(Array(IntegerType : DataType))(
       new GenericInternalRow(Array(value: Any)))
   }
 

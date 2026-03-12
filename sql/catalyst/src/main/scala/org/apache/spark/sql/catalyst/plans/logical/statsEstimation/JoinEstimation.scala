@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Histogram, Join, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
 
+
 case class JoinEstimation(join: Join) extends Logging {
 
   private val leftStats = join.left.stats
@@ -49,8 +50,7 @@ case class JoinEstimation(join: Join) extends Logging {
   }
 
   /**
-   * Estimate output size and number of rows after a join operator, and update output column
-   * stats.
+   * Estimate output size and number of rows after a join operator, and update output column stats.
    */
   private def estimateInnerOuterJoin(): Option[Statistics] = join match {
     case _ if !rowCountsExist(join.left, join.right) =>
@@ -78,8 +78,7 @@ case class JoinEstimation(join: Join) extends Logging {
           rightRows.max(numInnerJoinedRows)
         case FullOuter =>
           // T(A FOJ B) = T(A LOJ B) + T(A ROJ B) - T(A IJ B)
-          leftRows.max(numInnerJoinedRows) + rightRows.max(
-            numInnerJoinedRows) - numInnerJoinedRows
+          leftRows.max(numInnerJoinedRows) + rightRows.max(numInnerJoinedRows) - numInnerJoinedRows
         case _ =>
           assert(joinType == Inner || joinType == Cross)
           // Don't change for inner or cross join
@@ -88,8 +87,8 @@ case class JoinEstimation(join: Join) extends Logging {
 
       // 3. Update statistics based on the output of join
       val inputAttrStats = leftStats.attributeStats ++ rightStats.attributeStats
-      val attributesWithStat =
-        join.output.filter(a => inputAttrStats.get(a).map(_.hasCountStats).getOrElse(false))
+      val attributesWithStat = join.output.filter(a =>
+        inputAttrStats.get(a).map(_.hasCountStats).getOrElse(false))
       val (fromLeft, fromRight) = attributesWithStat.partition(join.left.outputSet.contains(_))
 
       val outputStats: Seq[(Attribute, ColumnStat)] = if (outputRows == 0) {
@@ -141,47 +140,42 @@ case class JoinEstimation(join: Join) extends Logging {
       }
 
       val outputAttrStats = AttributeMap(outputStats)
-      Some(
-        Statistics(
-          sizeInBytes = getOutputSize(join.output, outputRows, outputAttrStats),
-          rowCount = Some(outputRows),
-          attributeStats = outputAttrStats))
+      Some(Statistics(
+        sizeInBytes = getOutputSize(join.output, outputRows, outputAttrStats),
+        rowCount = Some(outputRows),
+        attributeStats = outputAttrStats))
 
     case _ =>
       // When there is no equi-join condition, we do estimation like cartesian product.
       val inputAttrStats = leftStats.attributeStats ++ rightStats.attributeStats
       // Propagate the original column stats
       val outputRows = leftStats.rowCount.get * rightStats.rowCount.get
-      Some(
-        Statistics(
-          sizeInBytes = getOutputSize(join.output, outputRows, inputAttrStats),
-          rowCount = Some(outputRows),
-          attributeStats = inputAttrStats))
+      Some(Statistics(
+        sizeInBytes = getOutputSize(join.output, outputRows, inputAttrStats),
+        rowCount = Some(outputRows),
+        attributeStats = inputAttrStats))
   }
 
   // scalastyle:off
   /**
-   * The number of rows of A inner join B on A.k1 = B.k1 is estimated by this basic formula: T(A
-   * IJ B) = T(A) * T(B) / max(V(A.k1), V(B.k1)), where V is the number of distinct values (ndv)
-   * of that column. The underlying assumption for this formula is: each value of the smaller
-   * domain is included in the larger domain.
+   * The number of rows of A inner join B on A.k1 = B.k1 is estimated by this basic formula:
+   * T(A IJ B) = T(A) * T(B) / max(V(A.k1), V(B.k1)),
+   * where V is the number of distinct values (ndv) of that column. The underlying assumption for
+   * this formula is: each value of the smaller domain is included in the larger domain.
    *
    * Generally, inner join with multiple join keys can be estimated based on the above formula:
-   * T(A IJ B) = T(A) * T(B) / (max(V(A.k1), V(B.k1)) * max(V(A.k2), V(B.k2)) * ... * max(V(A.kn),
-   * V(B.kn))) However, the denominator can become very large and excessively reduce the result,
-   * so we use a conservative strategy to take only the largest max(V(A.ki), V(B.ki)) as the
-   * denominator.
+   * T(A IJ B) = T(A) * T(B) / (max(V(A.k1), V(B.k1)) * max(V(A.k2), V(B.k2)) * ... * max(V(A.kn), V(B.kn)))
+   * However, the denominator can become very large and excessively reduce the result, so we use a
+   * conservative strategy to take only the largest max(V(A.ki), V(B.ki)) as the denominator.
    *
    * That is, join estimation is based on the most selective join keys. We follow this strategy
    * when different types of column statistics are available. E.g., if card1 is the cardinality
    * estimated by ndv of join key A.k1 and B.k1, card2 is the cardinality estimated by histograms
    * of join key A.k2 and B.k2, then the result cardinality would be min(card1, card2).
    *
-   * @param keyPairs
-   *   pairs of join keys
+   * @param keyPairs pairs of join keys
    *
-   * @return
-   *   join cardinality, and column stats for join keys after the join
+   * @return join cardinality, and column stats for join keys after the join
    */
   // scalastyle:on
   private def computeCardinalityAndStats(
@@ -217,7 +211,7 @@ case class JoinEstimation(join: Join) extends Logging {
           // truncated by the updated max/min. In this way, only pointers of the histograms are
           // propagated and thus reduce memory consumption.
           (leftKey -> joinStat.copy(histogram = leftKeyStat.histogram)) +=
-          (rightKey -> joinStat.copy(histogram = rightKeyStat.histogram))
+            (rightKey -> joinStat.copy(histogram = rightKeyStat.histogram))
         // Return cardinality estimated from the most selective join keys.
         if (card < joinCard) joinCard = card
       } else {
@@ -342,8 +336,7 @@ case class JoinEstimation(join: Join) extends Logging {
       // Note: join keys from EqualNullSafe also fall into this case (Coalesce), consider to
       // support it in the future by using `nullCount` in column stats.
       case (lk: AttributeReference, rk: AttributeReference)
-          if columnStatsWithCountsExist((leftStats, lk), (rightStats, rk)) =>
-        (lk, rk)
+        if columnStatsWithCountsExist((leftStats, lk), (rightStats, rk)) => (lk, rk)
     }
   }
 
@@ -355,11 +348,10 @@ case class JoinEstimation(join: Join) extends Logging {
       val leftStats = join.left.stats
       // Propagate the original column stats for cartesian product
       val outputRows = leftStats.rowCount.get
-      Some(
-        Statistics(
-          sizeInBytes = getOutputSize(join.output, outputRows, leftStats.attributeStats),
-          rowCount = Some(outputRows),
-          attributeStats = leftStats.attributeStats))
+      Some(Statistics(
+        sizeInBytes = getOutputSize(join.output, outputRows, leftStats.attributeStats),
+        rowCount = Some(outputRows),
+        attributeStats = leftStats.attributeStats))
     } else {
       None
     }

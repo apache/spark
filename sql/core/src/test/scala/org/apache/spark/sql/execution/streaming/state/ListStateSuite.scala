@@ -29,8 +29,8 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
 import org.apache.spark.sql.streaming.{ListState, TimeMode, TTLConfig, ValueState}
 
 /**
- * Class that adds unit tests for ListState types used in arbitrary stateful operators such as
- * transformWithState
+ * Class that adds unit tests for ListState types used in arbitrary stateful
+ * operators such as transformWithState
  */
 class ListStateSuite extends StateVariableSuiteBase {
   import testImplicits._
@@ -41,10 +41,11 @@ class ListStateSuite extends StateVariableSuiteBase {
   private def testMapStateWithNullUserKey()(runListOps: ListState[Long] => Unit): Unit = {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
-      val handle =
-        new StatefulProcessorHandleImpl(store, UUID.randomUUID(), stringEncoder, TimeMode.None())
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        stringEncoder, TimeMode.None())
 
-      val listState: ListState[Long] = handle.getListState[Long]("listState", TTLConfig.NONE)
+      val listState: ListState[Long] = handle.getListState[Long]("listState",
+        TTLConfig.NONE)
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       val e = intercept[SparkIllegalArgumentException] {
@@ -55,7 +56,8 @@ class ListStateSuite extends StateVariableSuiteBase {
         exception = e,
         condition = "ILLEGAL_STATE_STORE_VALUE.NULL_VALUE",
         sqlState = Some("42601"),
-        parameters = Map("stateName" -> "listState"))
+        parameters = Map("stateName" -> "listState")
+      )
     }
   }
 
@@ -73,10 +75,11 @@ class ListStateSuite extends StateVariableSuiteBase {
   test("List state operations for single instance") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
-      val handle =
-        new StatefulProcessorHandleImpl(store, UUID.randomUUID(), stringEncoder, TimeMode.None())
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        stringEncoder, TimeMode.None())
 
-      val testState: ListState[Long] = handle.getListState[Long]("testState", TTLConfig.NONE)
+      val testState: ListState[Long] = handle.getListState[Long]("testState",
+        TTLConfig.NONE)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
 
       // simple put and get test
@@ -102,15 +105,15 @@ class ListStateSuite extends StateVariableSuiteBase {
   test("list state - value ordering - long type") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
-      val handle =
-        new StatefulProcessorHandleImpl(store, UUID.randomUUID(), stringEncoder, TimeMode.None())
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        stringEncoder, TimeMode.None())
 
-      val testState: ListState[Long] =
-        handle.getListState[Long]("testState", Encoders.scalaLong, TTLConfig.NONE)
+      val testState: ListState[Long] = handle.getListState[Long]("testState", Encoders.scalaLong,
+        TTLConfig.NONE)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
 
-      var testSeq = Seq(931L, 8000L, 452300L, 4200L, -1L, 90L, 1L, 2L, 8L, -230L, -14569L, -92L,
-        -7434253L, 35L, 6L, 9L, -323L, 5L)
+      var testSeq = Seq(931L, 8000L, 452300L, 4200L, -1L, 90L, 1L, 2L, 8L,
+        -230L, -14569L, -92L, -7434253L, 35L, 6L, 9L, -323L, 5L)
       testState.put(testSeq.toArray)
       assert(testState.get().toSeq === testSeq)
       testState.appendValue(100L)
@@ -131,8 +134,8 @@ class ListStateSuite extends StateVariableSuiteBase {
       testSeq = Seq(3451L, 24L, -14342429L)
       assert(testState.get().toSeq === testSeq)
 
-      appendSeq = Seq(931L, 8000L, 452300L, 4200L, -1L, 90L, 1L, 2L, 8L, -230L, -14569L, -92L,
-        -7434253L, 35L, 6L, 9L, -323L, 5L)
+      appendSeq = Seq(931L, 8000L, 452300L, 4200L, -1L, 90L, 1L, 2L, 8L,
+        -230L, -14569L, -92L, -7434253L, 35L, 6L, 9L, -323L, 5L)
       testState.appendList(appendSeq.toArray)
       testSeq = testSeq ++ appendSeq
       assert(testState.get().toSeq === testSeq)
@@ -148,11 +151,11 @@ class ListStateSuite extends StateVariableSuiteBase {
   test("list state - value ordering - string type") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
-      val handle =
-        new StatefulProcessorHandleImpl(store, UUID.randomUUID(), stringEncoder, TimeMode.None())
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        stringEncoder, TimeMode.None())
 
-      val testState: ListState[String] =
-        handle.getListState[String]("testState", Encoders.STRING, TTLConfig.NONE)
+      val testState: ListState[String] = handle.getListState[String]("testState",
+        Encoders.STRING, TTLConfig.NONE)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
 
       var testSeq = Seq("test", "actual", "state", "value", "ordering", "string", "", "type")
@@ -173,22 +176,12 @@ class ListStateSuite extends StateVariableSuiteBase {
       testState.appendValue(" validate space in front")
       testState.appendValue("validate space in back ")
       testState.appendValue(" validate space in both ")
-      testSeq =
-        Seq(" validate space in front", "validate space in back ", " validate space in both ")
+      testSeq = Seq(" validate space in front", "validate space in back ",
+        " validate space in both ")
       assert(testState.get().toSeq === testSeq)
 
-      appendSeq = Seq(
-        "test",
-        "actual",
-        "state",
-        "value",
-        "ordering",
-        "string",
-        "",
-        "type",
-        "hello",
-        "world",
-        "verification")
+      appendSeq = Seq("test", "actual", "state", "value", "ordering", "string", "", "type",
+        "hello", "world", "verification")
       testState.appendList(appendSeq.toArray)
       testSeq = testSeq ++ appendSeq
       assert(testState.get().toSeq === testSeq)
@@ -204,37 +197,28 @@ class ListStateSuite extends StateVariableSuiteBase {
   test("list state - value ordering - case class type") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
-      val handle =
-        new StatefulProcessorHandleImpl(store, UUID.randomUUID(), stringEncoder, TimeMode.None())
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        stringEncoder, TimeMode.None())
 
-      val testState: ListState[TestClass] =
-        handle.getListState[TestClass]("testState", Encoders.product[TestClass], TTLConfig.NONE)
+      val testState: ListState[TestClass] = handle.getListState[TestClass]("testState",
+        Encoders.product[TestClass], TTLConfig.NONE)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
 
-      var testSeq = Seq(
-        TestClass(931L, "test"),
-        TestClass(8000L, "verification"),
-        TestClass(452300L, "state"),
-        TestClass(4200L, "actual"),
-        TestClass(-1L, "value"),
-        TestClass(90L, "ordering"),
-        TestClass(1L, "string"))
+      var testSeq = Seq(TestClass(931L, "test"), TestClass(8000L, "verification"),
+        TestClass(452300L, "state"), TestClass(4200L, "actual"), TestClass(-1L, "value"),
+        TestClass(90L, "ordering"), TestClass(1L, "string"))
       testState.put(testSeq.toArray)
       assert(testState.get().toSeq === testSeq)
       testState.appendValue(TestClass(2L, "type"))
       testState.appendValue(TestClass(-323L, "hello"))
       testState.appendValue(TestClass(48972L, " verify with space"))
-      testSeq = testSeq ++ Seq(
-        TestClass(2L, "type"),
-        TestClass(-323L, "hello"),
+      testSeq = testSeq ++ Seq(TestClass(2L, "type"), TestClass(-323L, "hello"),
         TestClass(48972L, " verify with space"))
 
       assert(testState.get().toSeq === testSeq)
 
-      var appendSeq = Seq(
-        TestClass(-1L, "space at end "),
-        TestClass(2942450L, " space before and after "),
-        TestClass(7L, "sample_string"))
+      var appendSeq = Seq(TestClass(-1L, "space at end "),
+        TestClass(2942450L, " space before and after "), TestClass(7L, "sample_string"))
       testState.appendList(appendSeq.toArray)
       testSeq = testSeq ++ appendSeq
       assert(testState.get().toSeq === testSeq)
@@ -243,20 +227,13 @@ class ListStateSuite extends StateVariableSuiteBase {
       testState.appendValue(TestClass(3451L, "values"))
       testState.appendValue(TestClass(24L, "ordering"))
       testState.appendValue(TestClass(-14342429L, "state"))
-      testSeq = Seq(
-        TestClass(3451L, "values"),
-        TestClass(24L, "ordering"),
+      testSeq = Seq(TestClass(3451L, "values"), TestClass(24L, "ordering"),
         TestClass(-14342429L, "state"))
       assert(testState.get().toSeq === testSeq)
 
-      appendSeq = Seq(
-        TestClass(931L, "test"),
-        TestClass(8000L, "verification"),
-        TestClass(452300L, "state"),
-        TestClass(4200L, "actual"),
-        TestClass(-1L, "value"),
-        TestClass(90L, "ordering"),
-        TestClass(1L, "string"))
+      appendSeq = Seq(TestClass(931L, "test"), TestClass(8000L, "verification"),
+        TestClass(452300L, "state"), TestClass(4200L, "actual"), TestClass(-1L, "value"),
+        TestClass(90L, "ordering"), TestClass(1L, "string"))
       testState.appendList(appendSeq.toArray)
       testSeq = testSeq ++ appendSeq
       assert(testState.get().toSeq === testSeq)
@@ -271,11 +248,13 @@ class ListStateSuite extends StateVariableSuiteBase {
   test("List state operations for multiple instance") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
-      val handle =
-        new StatefulProcessorHandleImpl(store, UUID.randomUUID(), stringEncoder, TimeMode.None())
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        stringEncoder, TimeMode.None())
 
-      val testState1: ListState[Long] = handle.getListState[Long]("testState1", TTLConfig.NONE)
-      val testState2: ListState[Long] = handle.getListState[Long]("testState2", TTLConfig.NONE)
+      val testState1: ListState[Long] = handle.getListState[Long]("testState1",
+        TTLConfig.NONE)
+      val testState2: ListState[Long] = handle.getListState[Long]("testState2",
+        TTLConfig.NONE)
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
 
@@ -309,12 +288,15 @@ class ListStateSuite extends StateVariableSuiteBase {
   test("List state operations with list, value, another list instances") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
-      val handle =
-        new StatefulProcessorHandleImpl(store, UUID.randomUUID(), stringEncoder, TimeMode.None())
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        stringEncoder, TimeMode.None())
 
-      val listState1: ListState[Long] = handle.getListState[Long]("listState1", TTLConfig.NONE)
-      val listState2: ListState[Long] = handle.getListState[Long]("listState2", TTLConfig.NONE)
-      val valueState: ValueState[Long] = handle.getValueState[Long]("valueState", TTLConfig.NONE)
+      val listState1: ListState[Long] = handle.getListState[Long]("listState1",
+        TTLConfig.NONE)
+      val listState2: ListState[Long] = handle.getListState[Long]("listState2",
+        TTLConfig.NONE)
+      val valueState: ValueState[Long] = handle.getValueState[Long](
+        "valueState", TTLConfig.NONE)
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       // simple put and get test
@@ -338,17 +320,13 @@ class ListStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val timestampMs = 10
-      val handle = new StatefulProcessorHandleImpl(
-        store,
-        UUID.randomUUID(),
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         stringEncoder,
-        TimeMode.ProcessingTime(),
-        batchTimestampMs = Some(timestampMs))
+        TimeMode.ProcessingTime(), batchTimestampMs = Some(timestampMs))
 
       val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
-      val testState: ListStateImplWithTTL[String] = handle
-        .getListState[String]("testState", Encoders.STRING, ttlConfig)
-        .asInstanceOf[ListStateImplWithTTL[String]]
+      val testState: ListStateImplWithTTL[String] = handle.getListState[String]("testState",
+        Encoders.STRING, ttlConfig).asInstanceOf[ListStateImplWithTTL[String]]
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.put(Array("v1", "v2", "v3"))
       assert(testState.get().toSeq === Seq("v1", "v2", "v3"))
@@ -362,16 +340,12 @@ class ListStateSuite extends StateVariableSuiteBase {
       assert(ttlStateValue.isDefined)
 
       // increment batchProcessingTime, or watermark and ensure expired value is not returned
-      val nextBatchHandle = new StatefulProcessorHandleImpl(
-        store,
-        UUID.randomUUID(),
+      val nextBatchHandle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         stringEncoder,
-        TimeMode.ProcessingTime(),
-        batchTimestampMs = Some(ttlExpirationMs))
+        TimeMode.ProcessingTime(), batchTimestampMs = Some(ttlExpirationMs))
 
       val nextBatchTestState: ListStateImplWithTTL[String] =
-        nextBatchHandle
-          .getListState[String]("testState", Encoders.STRING, ttlConfig)
+        nextBatchHandle.getListState[String]("testState", Encoders.STRING, ttlConfig)
           .asInstanceOf[ListStateImplWithTTL[String]]
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
@@ -401,12 +375,9 @@ class ListStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val batchTimestampMs = 10
-      val handle = new StatefulProcessorHandleImpl(
-        store,
-        UUID.randomUUID(),
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         stringEncoder,
-        TimeMode.ProcessingTime(),
-        batchTimestampMs = Some(batchTimestampMs))
+        TimeMode.ProcessingTime(), batchTimestampMs = Some(batchTimestampMs))
 
       Seq(null, Duration.ofMinutes(-1)).foreach { ttlDuration =>
         val ttlConfig = TTLConfig(ttlDuration)
@@ -417,8 +388,12 @@ class ListStateSuite extends StateVariableSuiteBase {
         checkError(
           ex,
           condition = "STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE",
-          parameters = Map("operationType" -> "update", "stateName" -> "testState"),
-          matchPVals = true)
+          parameters = Map(
+            "operationType" -> "update",
+            "stateName" -> "testState"
+          ),
+          matchPVals = true
+        )
       }
     }
   }
@@ -427,26 +402,20 @@ class ListStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val timestampMs = 10
-      val handle = new StatefulProcessorHandleImpl(
-        store,
-        UUID.randomUUID(),
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         encoderFor(Encoders.bean(classOf[POJOTestClass])).asInstanceOf[ExpressionEncoder[Any]],
-        TimeMode.ProcessingTime(),
-        batchTimestampMs = Some(timestampMs))
+        TimeMode.ProcessingTime(), batchTimestampMs = Some(timestampMs))
 
       val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
       val testState: ListStateImplWithTTL[TestClass] =
-        handle
-          .getListState[TestClass]("testState", Encoders.product[TestClass], ttlConfig)
-          .asInstanceOf[ListStateImplWithTTL[TestClass]]
+        handle.getListState[TestClass]("testState",
+        Encoders.product[TestClass], ttlConfig).asInstanceOf[ListStateImplWithTTL[TestClass]]
       ImplicitGroupingKeyTracker.setImplicitKey(new POJOTestClass("gk1", 1))
       testState.put(Array(TestClass(1L, "v1"), TestClass(2L, "v2"), TestClass(3L, "v3")))
-      assert(
-        testState.get().toSeq ===
-          Seq(TestClass(1L, "v1"), TestClass(2L, "v2"), TestClass(3L, "v3")))
-      assert(
-        testState.getWithoutEnforcingTTL().toSeq ===
-          Seq(TestClass(1L, "v1"), TestClass(2L, "v2"), TestClass(3L, "v3")))
+      assert(testState.get().toSeq ===
+        Seq(TestClass(1L, "v1"), TestClass(2L, "v2"), TestClass(3L, "v3")))
+      assert(testState.getWithoutEnforcingTTL().toSeq ===
+        Seq(TestClass(1L, "v1"), TestClass(2L, "v2"), TestClass(3L, "v3")))
 
       val ttlExpirationMs = timestampMs + 60000
       val ttlValues = testState.getTTLValues()
@@ -478,7 +447,8 @@ class ListStateSuite extends StateVariableSuiteBase {
       stateVariableInfo = TransformWithStateVariableUtils.getListState("testState", ttlEnabled),
       ttlEnabled = ttlEnabled,
       expectedNumColFamilies = if (ttlEnabled) 4 else 2,
-      groupingKeyToExpectedCount = Map("key1" -> 1, "key2" -> 1))
+      groupingKeyToExpectedCount = Map("key1" -> 1, "key2" -> 1)
+    )
   }
 }
 

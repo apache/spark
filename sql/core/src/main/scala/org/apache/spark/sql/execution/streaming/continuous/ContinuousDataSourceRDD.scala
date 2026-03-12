@@ -27,9 +27,10 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.NextIterator
 
-class ContinuousDataSourceRDDPartition(val index: Int, val inputPartition: InputPartition)
-    extends Partition
-    with Serializable {
+class ContinuousDataSourceRDDPartition(
+    val index: Int,
+    val inputPartition: InputPartition)
+  extends Partition with Serializable {
 
   // This is semantically a lazy val - it's initialized once the first time a call to
   // ContinuousDataSourceRDD.compute() needs to access it, so it can be shared across
@@ -41,13 +42,11 @@ class ContinuousDataSourceRDDPartition(val index: Int, val inputPartition: Input
 }
 
 /**
- * The bottom-most RDD of a continuous processing read task. Wraps a
- * [[ContinuousQueuedDataReader]] to read from the remote source, and polls that queue for
- * incoming rows.
+ * The bottom-most RDD of a continuous processing read task. Wraps a [[ContinuousQueuedDataReader]]
+ * to read from the remote source, and polls that queue for incoming rows.
  *
  * Note that continuous processing calls compute() multiple times, and the same
- * [[ContinuousQueuedDataReader]] instance will/must be shared between each call for the same
- * split.
+ * [[ContinuousQueuedDataReader]] instance will/must be shared between each call for the same split.
  */
 class ContinuousDataSourceRDD(
     sc: SparkContext,
@@ -57,11 +56,11 @@ class ContinuousDataSourceRDD(
     schema: StructType,
     partitionReaderFactory: ContinuousPartitionReaderFactory,
     customMetrics: Map[String, SQLMetric])
-    extends RDD[InternalRow](sc, Nil) {
+  extends RDD[InternalRow](sc, Nil) {
 
   override protected def getPartitions: Array[Partition] = {
-    inputPartitions.zipWithIndex.map { case (inputPartition, index) =>
-      new ContinuousDataSourceRDDPartition(index, inputPartition)
+    inputPartitions.zipWithIndex.map {
+      case (inputPartition, index) => new ContinuousDataSourceRDDPartition(index, inputPartition)
     }.toArray
   }
 
@@ -71,8 +70,8 @@ class ContinuousDataSourceRDD(
   }
 
   /**
-   * Initialize the shared reader for this partition if needed, then read rows from it until it
-   * returns null to signal the end of the epoch.
+   * Initialize the shared reader for this partition if needed, then read rows from it until
+   * it returns null to signal the end of the epoch.
    */
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
     // If attempt number isn't 0, this is a task retry, which we don't support.
@@ -83,14 +82,10 @@ class ContinuousDataSourceRDD(
     val readerForPartition = {
       val partition = castPartition(split)
       if (partition.queueReader == null) {
-        val partitionReader = partitionReaderFactory.createReader(partition.inputPartition)
+        val partitionReader = partitionReaderFactory.createReader(
+          partition.inputPartition)
         partition.queueReader = new ContinuousQueuedDataReader(
-          partition.index,
-          partitionReader,
-          schema,
-          context,
-          dataQueueSize,
-          epochPollIntervalMs)
+          partition.index, partitionReader, schema, context, dataQueueSize, epochPollIntervalMs)
       }
 
       partition.queueReader
@@ -103,8 +98,7 @@ class ContinuousDataSourceRDD(
       override def getNext(): InternalRow = {
         if (numRow % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
           CustomMetrics.updateMetrics(
-            partitionReader.currentMetricsValues.toImmutableArraySeq,
-            customMetrics)
+            partitionReader.currentMetricsValues.toImmutableArraySeq, customMetrics)
         }
         numRow += 1
         readerForPartition.next() match {

@@ -36,8 +36,8 @@ trait AsyncLogPurge extends Logging {
 
   protected val sparkSession: SparkSession
 
-  private val asyncPurgeExecutorService =
-    ThreadUtils.newDaemonSingleThreadExecutor("async-log-purge")
+  private val asyncPurgeExecutorService
+    = ThreadUtils.newDaemonSingleThreadExecutor("async-log-purge")
 
   private val purgeRunning = new AtomicBoolean(false)
 
@@ -95,7 +95,7 @@ trait AsyncLogPurge extends Logging {
   // used for testing
   private[sql] def arePendingAsyncPurge: Boolean = {
     purgeRunning.get() ||
-    asyncPurgeExecutorService.getQueue.size() > 0 ||
-    asyncPurgeExecutorService.getActiveCount > 0
+      asyncPurgeExecutorService.getQueue.size() > 0 ||
+      asyncPurgeExecutorService.getActiveCount > 0
   }
 }

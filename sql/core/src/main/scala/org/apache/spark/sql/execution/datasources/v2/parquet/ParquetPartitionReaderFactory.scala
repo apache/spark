@@ -49,22 +49,14 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
 /**
  * A factory used to create Parquet readers.
  *
- * @param sqlConf
- *   SQL configuration.
- * @param broadcastedConf
- *   Broadcast serializable Hadoop Configuration.
- * @param dataSchema
- *   Schema of Parquet files.
- * @param readDataSchema
- *   Required schema of Parquet files.
- * @param partitionSchema
- *   Schema of partitions.
- * @param filters
- *   Filters to be pushed down in the batch scan.
- * @param aggregation
- *   Aggregation to be pushed down in the batch scan.
- * @param options
- *   The options of Parquet datasource that are set for the read.
+ * @param sqlConf SQL configuration.
+ * @param broadcastedConf Broadcast serializable Hadoop Configuration.
+ * @param dataSchema Schema of Parquet files.
+ * @param readDataSchema Required schema of Parquet files.
+ * @param partitionSchema Schema of partitions.
+ * @param filters Filters to be pushed down in the batch scan.
+ * @param aggregation Aggregation to be pushed down in the batch scan.
+ * @param options The options of Parquet datasource that are set for the read.
  */
 case class ParquetPartitionReaderFactory(
     sqlConf: SQLConf,
@@ -74,9 +66,7 @@ case class ParquetPartitionReaderFactory(
     partitionSchema: StructType,
     filters: Array[Filter],
     aggregation: Option[Aggregation],
-    options: ParquetOptions)
-    extends FilePartitionReaderFactory
-    with Logging {
+    options: ParquetOptions) extends FilePartitionReaderFactory with Logging {
   private val isCaseSensitive = sqlConf.caseSensitiveAnalysis
   private val resultSchema = StructType(partitionSchema.fields ++ readDataSchema.fields)
   private val enableOffHeapColumnVector = sqlConf.offHeapColumnVectorEnabled
@@ -116,7 +106,8 @@ case class ParquetPartitionReaderFactory(
     }
   }
 
-  private def getDatetimeRebaseSpec(footerFileMetaData: FileMetaData): RebaseSpec = {
+  private def getDatetimeRebaseSpec(
+      footerFileMetaData: FileMetaData): RebaseSpec = {
     DataSourceUtils.datetimeRebaseSpec(
       footerFileMetaData.getKeyValueMetaData.get,
       datetimeRebaseModeInRead)
@@ -149,14 +140,9 @@ case class ParquetPartitionReaderFactory(
           assert(openedFooter.inputStreamOpt.isEmpty)
 
           if (openedFooter.footer != null && openedFooter.footer.getBlocks.size > 0) {
-            ParquetUtils.createAggInternalRowFromFooter(
-              openedFooter.footer,
-              file.urlEncodedPath,
-              dataSchema,
-              partitionSchema,
-              aggregation.get,
-              readDataSchema,
-              file.partitionValues,
+            ParquetUtils.createAggInternalRowFromFooter(openedFooter.footer,
+              file.urlEncodedPath, dataSchema, partitionSchema, aggregation.get,
+              readDataSchema, file.partitionValues,
               getDatetimeRebaseSpec(openedFooter.footer.getFileMetaData))
           } else {
             null
@@ -175,11 +161,8 @@ case class ParquetPartitionReaderFactory(
       }
     }
 
-    new PartitionReaderWithPartitionValues(
-      fileReader,
-      readDataSchema,
-      partitionSchema,
-      file.partitionValues)
+    new PartitionReaderWithPartitionValues(fileReader, readDataSchema,
+      partitionSchema, file.partitionValues)
   }
 
   override def buildColumnarReader(file: PartitionedFile): PartitionReader[ColumnarBatch] = {
@@ -203,19 +186,12 @@ case class ParquetPartitionReaderFactory(
           assert(openedFooter.inputStreamOpt.isEmpty)
 
           if (openedFooter.footer != null && openedFooter.footer.getBlocks.size > 0) {
-            val row = ParquetUtils.createAggInternalRowFromFooter(
-              openedFooter.footer,
-              file.urlEncodedPath,
-              dataSchema,
-              partitionSchema,
-              aggregation.get,
-              readDataSchema,
-              file.partitionValues,
+            val row = ParquetUtils.createAggInternalRowFromFooter(openedFooter.footer,
+              file.urlEncodedPath, dataSchema, partitionSchema, aggregation.get,
+              readDataSchema, file.partitionValues,
               getDatetimeRebaseSpec(openedFooter.footer.getFileMetaData))
             AggregatePushDownUtils.convertAggregatesRowToBatch(
-              row,
-              readDataSchema,
-              enableOffHeapColumnVector && Option(TaskContext.get()).isDefined)
+              row, readDataSchema, enableOffHeapColumnVector && Option(TaskContext.get()).isDefined)
           } else {
             null
           }
@@ -239,9 +215,8 @@ case class ParquetPartitionReaderFactory(
   private def buildReaderBase[T](
       file: PartitionedFile,
       buildReaderFunc: (
-          InternalRow,
-          Option[FilterPredicate],
-          Option[ZoneId],
+        InternalRow,
+          Option[FilterPredicate], Option[ZoneId],
           RebaseSpec,
           RebaseSpec) => RecordReader[Void, T]): RecordReader[Void, T] = {
     val conf = broadcastedConf.value.value
@@ -314,15 +289,13 @@ case class ParquetPartitionReaderFactory(
             pushed,
             convertTz,
             datetimeRebaseSpec,
-            int96RebaseSpec)) { reader =>
+            int96RebaseSpec)
+        ) { reader =>
           reader match {
             case vectorizedReader: VectorizedParquetRecordReader =>
               vectorizedReader.initialize(
-                split,
-                hadoopAttemptContext,
-                Some(openedFooter.inputFile),
-                Some(openedFooter.inputStream),
-                Some(openedFooter.footer))
+                split, hadoopAttemptContext, Some(openedFooter.inputFile),
+                Some(openedFooter.inputStream), Some(openedFooter.footer))
               // We don't need to take care of the close of inputStream after calling `initialize`
               // because the ownership of inputStream has been transferred to the vectorizedReader
               shouldCloseInputStream = false
@@ -363,8 +336,8 @@ case class ParquetPartitionReaderFactory(
     } else {
       new ParquetRecordReader[InternalRow](readSupport)
     }
-    val readerWithRowIndexes =
-      ParquetRowIndexUtil.addRowIndexToRecordReaderIfNeeded(reader, readDataSchema)
+    val readerWithRowIndexes = ParquetRowIndexUtil.addRowIndexToRecordReaderIfNeeded(
+      reader, readDataSchema)
     val iter = new RecordReaderIterator(readerWithRowIndexes)
     // SPARK-23457 Register a task completion listener before `initialization`.
     parquetReaderCallback.advanceFile(iter)

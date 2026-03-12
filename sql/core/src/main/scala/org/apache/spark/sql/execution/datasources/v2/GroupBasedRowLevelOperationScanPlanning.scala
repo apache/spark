@@ -32,8 +32,8 @@ import org.apache.spark.sql.sources.Filter
 /**
  * A rule that builds scans for group-based row-level operations.
  *
- * Note this rule must be run before [[V2ScanRelationPushDown]] as scans for group-based row-level
- * operations must be planned in a special way.
+ * Note this rule must be run before [[V2ScanRelationPushDown]] as scans for group-based
+ * row-level operations must be planned in a special way.
  */
 object GroupBasedRowLevelOperationScanPlanning extends Rule[LogicalPlan] with PredicateHelper {
 
@@ -57,30 +57,27 @@ object GroupBasedRowLevelOperationScanPlanning extends Rule[LogicalPlan] with Pr
           .mkString(", ")
       } else {
         pushedFilters
-          .getOrElse(
-            throw new NoSuchElementException("The right node doesn't have pushedFilters"))
+          .getOrElse(throw new NoSuchElementException("The right node doesn't have pushedFilters"))
           .mkString(", ")
       }
 
       val (scan, output) = PushDownUtils.pruneColumns(scanBuilder, relation, relation.output, Nil)
 
       // scalastyle:off line.size.limit
-      logInfo(log"""
+      logInfo(
+        log"""
             |Pushing operators to ${MDC(LogKeys.RELATION_NAME, relation.name)}
             |Pushed filters: ${MDC(LogKeys.PUSHED_FILTERS, pushedFiltersStr)}
-            |Filters evaluated on data source side: ${MDC(
-                    LogKeys.EVALUATED_FILTERS,
-                    evaluatedFilters.mkString(", "))}
-            |Filters evaluated on Spark side: ${MDC(
-                    LogKeys.POST_SCAN_FILTERS,
-                    postScanFilters.mkString(", "))}
+            |Filters evaluated on data source side: ${MDC(LogKeys.EVALUATED_FILTERS, evaluatedFilters.mkString(", "))}
+            |Filters evaluated on Spark side: ${MDC(LogKeys.POST_SCAN_FILTERS, postScanFilters.mkString(", "))}
             |Output: ${MDC(LogKeys.RELATION_OUTPUT, output.mkString(", "))}
            """.stripMargin)
       // scalastyle:on line.size.limit
 
       rd transformDown {
         // simplify the join condition in MERGE operations by discarding already evaluated filters
-        case j @ Join(PhysicalOperation(_, _, r: DataSourceV2Relation), _, _, Some(cond), _)
+        case j @ Join(
+            PhysicalOperation(_, _, r: DataSourceV2Relation), _, _, Some(cond), _)
             if rd.operation.command == MERGE && evaluatedFilters.nonEmpty && r.table.eq(table) =>
           j.copy(condition = Some(optimizeMergeJoinCondition(cond, evaluatedFilters)))
 
@@ -101,7 +98,7 @@ object GroupBasedRowLevelOperationScanPlanning extends Rule[LogicalPlan] with Pr
       cond: Expression,
       tableAttrs: Seq[AttributeReference],
       scanBuilder: ScanBuilder)
-      : (Either[Seq[Filter], Seq[V2Filter]], Seq[Expression], Seq[Expression]) = {
+  : (Either[Seq[Filter], Seq[V2Filter]], Seq[Expression], Seq[Expression]) = {
 
     val (filtersWithSubquery, filtersWithoutSubquery) = findTableFilters(cond, tableAttrs)
 

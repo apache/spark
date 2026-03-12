@@ -23,14 +23,18 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * This base suite contains unified tests for the `SHOW COLUMNS ...` command that check V1 and V2
- * table catalogs. The tests that cannot run for all supported catalogs are located in more
- * specific test suites:
+ * This base suite contains unified tests for the `SHOW COLUMNS ...` command that
+ * check V1 and V2 table catalogs. The tests that cannot run for all supported catalogs are
+ * located in more specific test suites:
  *
- *   - V2 table catalog tests: `org.apache.spark.sql.execution.command.v2.ShowColumnsSuite`
- *   - V1 table catalog tests: `org.apache.spark.sql.execution.command.v1.ShowColumnsSuiteBase`
- *     - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.ShowColumnsSuite`
- *     - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.ShowColumnsSuite`
+ *   - V2 table catalog tests:
+ *     `org.apache.spark.sql.execution.command.v2.ShowColumnsSuite`
+ *   - V1 table catalog tests:
+ *     `org.apache.spark.sql.execution.command.v1.ShowColumnsSuiteBase`
+ *     - V1 In-Memory catalog:
+ *       `org.apache.spark.sql.execution.command.v1.ShowColumnsSuite`
+ *     - V1 Hive External catalog:
+ *       `org.apache.spark.sql.hive.execution.command.ShowColumnsSuite`
  */
 trait ShowColumnsSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "SHOW COLUMNS ..."
@@ -55,7 +59,8 @@ trait ShowColumnsSuiteBase extends QueryTest with DDLCommandTestUtils {
         },
         condition = "TABLE_OR_VIEW_NOT_FOUND",
         parameters = Map("relationName" -> "`ns1`.`tbl`"),
-        context = ExpectedContext(fragment = "tbl", start = 16, stop = 18))
+        context = ExpectedContext(fragment = "tbl", start = 16, stop = 18)
+      )
     }
   }
 
@@ -71,7 +76,11 @@ trait ShowColumnsSuiteBase extends QueryTest with DDLCommandTestUtils {
           sql(sqlText1)
         },
         condition = "SHOW_COLUMNS_WITH_CONFLICT_NAMESPACE",
-        parameters = Map("namespaceA" -> s"`ns1`", "namespaceB" -> s"`ns`"))
+        parameters = Map(
+          "namespaceA" -> s"`ns1`",
+          "namespaceB" -> s"`ns`"
+        )
+      )
       // When case sensitivity is true, the user supplied namespace name in table identifier
       // should match the supplied namespace name in case-sensitive way.
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
@@ -80,8 +89,11 @@ trait ShowColumnsSuiteBase extends QueryTest with DDLCommandTestUtils {
             sql(sqlText2)
           },
           condition = "SHOW_COLUMNS_WITH_CONFLICT_NAMESPACE",
-          parameters =
-            Map("namespaceA" -> s"`${"ns".toUpperCase(Locale.ROOT)}`", "namespaceB" -> "`ns`"))
+          parameters = Map(
+            "namespaceA" -> s"`${"ns".toUpperCase(Locale.ROOT)}`",
+            "namespaceB" -> "`ns`"
+          )
+        )
       }
     }
   }

@@ -28,18 +28,15 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 /**
- * A rule to coalesce the shuffle partitions based on the map output statistics, which can avoid
- * many small reduce tasks that hurt performance.
+ * A rule to coalesce the shuffle partitions based on the map output statistics, which can
+ * avoid many small reduce tasks that hurt performance.
  */
 case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleReadRule {
 
   override def conf: SQLConf = session.sessionState.conf
 
   override val supportedShuffleOrigins: Seq[ShuffleOrigin] =
-    Seq(
-      ENSURE_REQUIREMENTS,
-      REPARTITION_BY_COL,
-      REBALANCE_PARTITIONS_BY_NONE,
+    Seq(ENSURE_REQUIREMENTS, REPARTITION_BY_COL, REBALANCE_PARTITIONS_BY_NONE,
       REBALANCE_PARTITIONS_BY_COL)
 
   override def isSupported(shuffle: ShuffleExchangeLike): Boolean = {
@@ -95,32 +92,31 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
 
     val specsMap = mutable.HashMap.empty[Int, Seq[ShufflePartitionSpec]]
     // Coalesce partitions for each coalesce group independently.
-    coalesceGroups.zip(minNumPartitionsByGroup).foreach {
-      case (coalesceGroup, minNumPartitions) =>
-        val advisoryTargetSize = advisoryPartitionSize(coalesceGroup)
-        val minPartitionSize = if (Utils.isTesting) {
-          // In the tests, we usually set the target size to a very small value that is even smaller
-          // than the default value of the min partition size. Here we also adjust the min partition
-          // size to be not larger than 20% of the target size, so that the tests don't need to set
-          // both configs all the time to check the coalescing behavior.
-          conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE).min(advisoryTargetSize / 5)
-        } else {
-          conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE)
-        }
+    coalesceGroups.zip(minNumPartitionsByGroup).foreach { case (coalesceGroup, minNumPartitions) =>
+      val advisoryTargetSize = advisoryPartitionSize(coalesceGroup)
+      val minPartitionSize = if (Utils.isTesting) {
+        // In the tests, we usually set the target size to a very small value that is even smaller
+        // than the default value of the min partition size. Here we also adjust the min partition
+        // size to be not larger than 20% of the target size, so that the tests don't need to set
+        // both configs all the time to check the coalescing behavior.
+        conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE).min(advisoryTargetSize / 5)
+      } else {
+        conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE)
+      }
 
-        val newPartitionSpecs = ShufflePartitionsUtil.coalescePartitions(
-          coalesceGroup.shuffleStages.map(_.shuffleStage.mapStats),
-          coalesceGroup.shuffleStages.map(_.partitionSpecs),
-          advisoryTargetSize = advisoryTargetSize,
-          minNumPartitions = minNumPartitions,
-          minPartitionSize = minPartitionSize,
-          coalesceGroup.shuffleStages.map(_.shuffleStage.id))
+      val newPartitionSpecs = ShufflePartitionsUtil.coalescePartitions(
+        coalesceGroup.shuffleStages.map(_.shuffleStage.mapStats),
+        coalesceGroup.shuffleStages.map(_.partitionSpecs),
+        advisoryTargetSize = advisoryTargetSize,
+        minNumPartitions = minNumPartitions,
+        minPartitionSize = minPartitionSize,
+        coalesceGroup.shuffleStages.map(_.shuffleStage.id))
 
-        if (newPartitionSpecs.nonEmpty) {
-          coalesceGroup.shuffleStages.zip(newPartitionSpecs).map { case (stageInfo, partSpecs) =>
-            specsMap.put(stageInfo.shuffleStage.id, partSpecs)
-          }
+      if (newPartitionSpecs.nonEmpty) {
+        coalesceGroup.shuffleStages.zip(newPartitionSpecs).map { case (stageInfo, partSpecs) =>
+          specsMap.put(stageInfo.shuffleStage.id, partSpecs)
         }
+      }
     }
 
     if (specsMap.nonEmpty) {
@@ -149,8 +145,9 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
   /**
    * Gather all coalesce-able groups such that the shuffle stages in each child of a
    * Union/CartesianProduct/BroadcastHashJoin/BroadcastNestedLoopJoin operator are in their
-   * independent groups if: 1) all leaf nodes of this child are exchange stages; and 2) all these
-   * shuffle stages support coalescing.
+   * independent groups if:
+   * 1) all leaf nodes of this child are exchange stages; and
+   * 2) all these shuffle stages support coalescing.
    */
   private def collectCoalesceGroups(
       plan: SparkPlan,
@@ -202,18 +199,14 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
   }
 
   private def updateShuffleReads(
-      plan: SparkPlan,
-      specsMap: Map[Int, Seq[ShufflePartitionSpec]]): SparkPlan = plan match {
+      plan: SparkPlan, specsMap: Map[Int, Seq[ShufflePartitionSpec]]): SparkPlan = plan match {
     // Even for shuffle exchange whose input RDD has 0 partition, we should still update its
     // `partitionStartIndices`, so that all the leaf shuffles in a stage have the same
     // number of output partitions.
     case ShuffleStageInfo(stage, _) =>
-      specsMap
-        .get(stage.id)
-        .map { specs =>
-          AQEShuffleReadExec(stage, specs)
-        }
-        .getOrElse(plan)
+      specsMap.get(stage.id).map { specs =>
+        AQEShuffleReadExec(stage, specs)
+      }.getOrElse(plan)
     case other => other.mapChildren(updateShuffleReads(_, specsMap))
   }
 }
@@ -223,15 +216,16 @@ private class ShuffleStageInfo(
     val partitionSpecs: Option[Seq[ShufflePartitionSpec]])
 
 private object ShuffleStageInfo {
-  def unapply(
-      plan: SparkPlan): Option[(ShuffleQueryStageExec, Option[Seq[ShufflePartitionSpec]])] =
-    plan match {
-      case stage: ShuffleQueryStageExec =>
-        Some((stage, None))
-      case AQEShuffleReadExec(s: ShuffleQueryStageExec, partitionSpecs) =>
-        Some((s, Some(partitionSpecs)))
-      case _ => None
-    }
+  def unapply(plan: SparkPlan)
+  : Option[(ShuffleQueryStageExec, Option[Seq[ShufflePartitionSpec]])] = plan match {
+    case stage: ShuffleQueryStageExec =>
+      Some((stage, None))
+    case AQEShuffleReadExec(s: ShuffleQueryStageExec, partitionSpecs) =>
+      Some((s, Some(partitionSpecs)))
+    case _ => None
+  }
 }
 
-private case class CoalesceGroup(shuffleStages: Seq[ShuffleStageInfo], hasExplodingJoin: Boolean)
+private case class CoalesceGroup(
+  shuffleStages: Seq[ShuffleStageInfo],
+  hasExplodingJoin: Boolean)

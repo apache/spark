@@ -31,30 +31,23 @@ class PythonScan(
     shortName: String,
     outputSchema: StructType,
     options: CaseInsensitiveStringMap,
-    supportedFilters: Array[Filter])
-    extends Scan
-    with SupportsMetadata {
+    supportedFilters: Array[Filter]
+) extends Scan with SupportsMetadata {
   override def toBatch: Batch = new PythonBatch(ds, shortName, outputSchema, options)
 
   override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
     val runner = PythonMicroBatchStream.createPythonStreamingSourceRunner(
-      ds,
-      shortName,
-      outputSchema,
-      options)
+      ds, shortName, outputSchema, options)
     runner.init()
 
     val supportedFeatures = runner.checkSupportedFeatures()
 
     if (supportedFeatures.triggerAvailableNow) {
       new PythonMicroBatchStreamWithTriggerAvailableNow(
-        ds,
-        shortName,
-        outputSchema,
-        options,
-        runner)
+        ds, shortName, outputSchema, options, runner)
     } else if (supportedFeatures.admissionControl) {
-      new PythonMicroBatchStreamWithAdmissionControl(ds, shortName, outputSchema, options, runner)
+      new PythonMicroBatchStreamWithAdmissionControl(
+        ds, shortName, outputSchema, options, runner)
     } else {
       new PythonMicroBatchStream(ds, shortName, outputSchema, options, runner)
     }
@@ -73,7 +66,8 @@ class PythonScan(
   override def getMetaData(): Map[String, String] = {
     Map(
       "PushedFilters" -> supportedFilters.mkString("[", ", ", "]"),
-      "ReadSchema" -> outputSchema.simpleString)
+      "ReadSchema" -> outputSchema.simpleString
+    )
   }
 }
 
@@ -81,8 +75,7 @@ class PythonBatch(
     ds: PythonDataSourceV2,
     shortName: String,
     outputSchema: StructType,
-    options: CaseInsensitiveStringMap)
-    extends Batch {
+    options: CaseInsensitiveStringMap) extends Batch {
   private val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
   private val sessionUUID = {
     SparkSession.getActiveSession.collect {
@@ -101,10 +94,6 @@ class PythonBatch(
   override def createReaderFactory(): PartitionReaderFactory = {
     val readerFunc = infoInPython.func
     new PythonPartitionReaderFactory(
-      ds.source,
-      readerFunc,
-      outputSchema,
-      jobArtifactUUID,
-      sessionUUID)
+      ds.source, readerFunc, outputSchema, jobArtifactUUID, sessionUUID)
   }
 }

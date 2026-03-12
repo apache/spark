@@ -54,10 +54,7 @@ class MemoryStateStore extends StateStore() {
   override def put(key: UnsafeRow, newValue: UnsafeRow, colFamilyName: String): Unit =
     map.put(key.copy(), newValue.copy())
 
-  override def putList(
-      key: UnsafeRow,
-      newValues: Array[UnsafeRow],
-      colFamilyName: String): Unit = {
+  override def putList(key: UnsafeRow, newValues: Array[UnsafeRow], colFamilyName: String): Unit = {
     throw new UnsupportedOperationException("Doesn't support put multiple values put")
   }
 
@@ -68,6 +65,7 @@ class MemoryStateStore extends StateStore() {
   override def abort(): Unit = {}
 
   override def release(): Unit = {}
+
 
   override def id: StateStoreId = null
 
@@ -87,10 +85,7 @@ class MemoryStateStore extends StateStore() {
     throw new UnsupportedOperationException("Doesn't support multiple values per key")
   }
 
-  override def mergeList(
-      key: UnsafeRow,
-      values: Array[UnsafeRow],
-      colFamilyName: String): Unit = {
+  override def mergeList(key: UnsafeRow, values: Array[UnsafeRow], colFamilyName: String): Unit = {
     throw new UnsupportedOperationException("Doesn't support multiple values merge")
   }
 
@@ -99,8 +94,7 @@ class MemoryStateStore extends StateStore() {
   }
 
   override def prefixScanWithMultiValues(
-      prefixKey: UnsafeRow,
-      colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+      prefixKey: UnsafeRow, colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
     throw new UnsupportedOperationException("Doesn't support prefix scan with multiple values!")
   }
 

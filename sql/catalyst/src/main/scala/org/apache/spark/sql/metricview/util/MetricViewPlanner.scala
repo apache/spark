@@ -35,7 +35,13 @@ object MetricViewPlanner {
       yaml: String,
       sqlParser: ParserInterface): MetricViewPlaceholder = {
     val (metricView, dataModelPlan) = parseYAML(yaml, sqlParser)
-    MetricViewPlaceholder(metadata, metricView, Seq.empty, dataModelPlan, isCreate = true)
+    MetricViewPlaceholder(
+      metadata,
+      metricView,
+      Seq.empty,
+      dataModelPlan,
+      isCreate = true
+    )
   }
 
   def planRead(
@@ -48,31 +54,30 @@ object MetricViewPlanner {
       metadata,
       metricView,
       DataTypeUtils.toAttributes(expectedSchema),
-      dataModelPlan)
+      dataModelPlan
+    )
   }
 
-  private def parseYAML(yaml: String, sqlParser: ParserInterface): (MetricView, LogicalPlan) = {
-    val metricView =
-      try {
-        MetricViewFactory.fromYAML(yaml)
-      } catch {
-        case e: MetricViewValidationException =>
-          throw QueryCompilationErrors.invalidLiteralForWindowDurationError()
-        case e: MetricViewYAMLParsingException =>
-          throw QueryCompilationErrors.invalidLiteralForWindowDurationError()
-      }
+  private def parseYAML(
+      yaml: String,
+      sqlParser: ParserInterface): (MetricView, LogicalPlan) = {
+    val metricView = try {
+      MetricViewFactory.fromYAML(yaml)
+    } catch {
+      case e: MetricViewValidationException =>
+        throw QueryCompilationErrors.invalidLiteralForWindowDurationError()
+      case e: MetricViewYAMLParsingException =>
+        throw QueryCompilationErrors.invalidLiteralForWindowDurationError()
+    }
     val source = metricView.from match {
-      case asset: AssetSource =>
-        UnresolvedRelation(sqlParser.parseMultipartIdentifier(asset.name))
+      case asset: AssetSource => UnresolvedRelation(sqlParser.parseMultipartIdentifier(asset.name))
       case sqlSource: SQLSource => sqlParser.parsePlan(sqlSource.sql)
       case _ => throw SparkException.internalError("Either SQLSource or AssetSource")
     }
     // Compute filter here because all necessary information is available.
-    val parsedPlan = metricView.where
-      .map { cond =>
-        Filter(sqlParser.parseExpression(cond), source)
-      }
-      .getOrElse(source)
+    val parsedPlan = metricView.where.map { cond =>
+      Filter(sqlParser.parseExpression(cond), source)
+    }.getOrElse(source)
     (metricView, parsedPlan)
   }
 }

@@ -42,13 +42,8 @@ object StreamStreamJoinStateHelper {
       side: JoinSide,
       oldSchemaFilePaths: List[Path],
       excludeAuxColumns: Boolean = true): StructType = {
-    val (keySchema, valueSchema) = readKeyValueSchema(
-      session,
-      stateCheckpointLocation,
-      operatorId,
-      side,
-      oldSchemaFilePaths,
-      excludeAuxColumns)
+    val (keySchema, valueSchema) = readKeyValueSchema(session, stateCheckpointLocation,
+      operatorId, side, oldSchemaFilePaths, excludeAuxColumns)
 
     new StructType()
       .add("key", keySchema)
@@ -57,19 +52,16 @@ object StreamStreamJoinStateHelper {
 
   // Returns whether the checkpoint uses stateFormatVersion 3 which uses VCF for the join.
   def usesVirtualColumnFamilies(
-      hadoopConf: Configuration,
-      stateCheckpointLocation: String,
-      operatorId: Int): Boolean = {
+    hadoopConf: Configuration,
+    stateCheckpointLocation: String,
+    operatorId: Int): Boolean = {
     // If the schema exists for operatorId/partitionId/left-keyToNumValues, it is not
     // stateFormatVersion 3.
     val partitionId = StateStore.PARTITION_ID_TO_CHECK_SCHEMA
-    val storeId = new StateStoreId(
-      stateCheckpointLocation,
-      operatorId,
-      partitionId,
-      SymmetricHashJoinStateManager.allStateStoreNames(LeftSide).toList.head)
-    val schemaFilePath =
-      StateSchemaCompatibilityChecker.schemaFile(storeId.storeCheckpointLocation())
+    val storeId = new StateStoreId(stateCheckpointLocation, operatorId,
+      partitionId, SymmetricHashJoinStateManager.allStateStoreNames(LeftSide).toList.head)
+    val schemaFilePath = StateSchemaCompatibilityChecker.schemaFile(
+      storeId.storeCheckpointLocation())
     val fm = CheckpointFileManager.create(schemaFilePath, hadoopConf)
     !fm.exists(schemaFilePath)
   }
@@ -88,62 +80,44 @@ object StreamStreamJoinStateHelper {
     val storeNames = SymmetricHashJoinStateManager.allStateStoreNames(side).toList
 
     val (keySchema, valueSchema) =
-      if (!usesVirtualColumnFamilies(newHadoopConf, stateCheckpointLocation, operatorId)) {
-        val storeIdForKeyToNumValues =
-          new StateStoreId(stateCheckpointLocation, operatorId, partitionId, storeNames(0))
-        val providerIdForKeyToNumValues =
-          new StateStoreProviderId(storeIdForKeyToNumValues, UUID.randomUUID())
+      if (!usesVirtualColumnFamilies(
+        newHadoopConf, stateCheckpointLocation, operatorId)) {
+        val storeIdForKeyToNumValues = new StateStoreId(stateCheckpointLocation, operatorId,
+          partitionId, storeNames(0))
+        val providerIdForKeyToNumValues = new StateStoreProviderId(storeIdForKeyToNumValues,
+          UUID.randomUUID())
 
-        val storeIdForKeyWithIndexToValue =
-          new StateStoreId(stateCheckpointLocation, operatorId, partitionId, storeNames(1))
-        val providerIdForKeyWithIndexToValue =
-          new StateStoreProviderId(storeIdForKeyWithIndexToValue, UUID.randomUUID())
+        val storeIdForKeyWithIndexToValue = new StateStoreId(stateCheckpointLocation,
+          operatorId, partitionId, storeNames(1))
+        val providerIdForKeyWithIndexToValue = new StateStoreProviderId(
+          storeIdForKeyWithIndexToValue, UUID.randomUUID())
 
         // read the key schema from the keyToNumValues store for the join keys
         val manager = new StateSchemaCompatibilityChecker(
-          providerIdForKeyToNumValues,
-          newHadoopConf,
-          oldSchemaFilePaths,
+          providerIdForKeyToNumValues, newHadoopConf, oldSchemaFilePaths,
           createSchemaDir = false)
         val kSchema = manager.readSchemaFile().head.keySchema
 
         // read the value schema from the keyWithIndexToValue store for the values
-        val manager2 = new StateSchemaCompatibilityChecker(
-          providerIdForKeyWithIndexToValue,
-          newHadoopConf,
-          oldSchemaFilePaths,
-          createSchemaDir = false)
+        val manager2 = new StateSchemaCompatibilityChecker(providerIdForKeyWithIndexToValue,
+          newHadoopConf, oldSchemaFilePaths, createSchemaDir = false)
         val vSchema = manager2.readSchemaFile().head.valueSchema
 
         (kSchema, vSchema)
       } else {
-        val storeId = new StateStoreId(
-          stateCheckpointLocation,
-          operatorId,
-          partitionId,
-          StateStoreId.DEFAULT_STORE_NAME)
+        val storeId = new StateStoreId(stateCheckpointLocation, operatorId,
+          partitionId, StateStoreId.DEFAULT_STORE_NAME)
         val providerId = new StateStoreProviderId(storeId, UUID.randomUUID())
 
         val manager = new StateSchemaCompatibilityChecker(
-          providerId,
-          newHadoopConf,
-          oldSchemaFilePaths,
-          createSchemaDir = false)
-        val kSchema = manager
-          .readSchemaFile()
-          .find { schema =>
-            schema.colFamilyName == storeNames(0)
-          }
-          .map(_.keySchema)
-          .get
+          providerId, newHadoopConf, oldSchemaFilePaths, createSchemaDir = false)
+        val kSchema = manager.readSchemaFile().find { schema =>
+          schema.colFamilyName == storeNames(0)
+        }.map(_.keySchema).get
 
-        val vSchema = manager
-          .readSchemaFile()
-          .find { schema =>
-            schema.colFamilyName == storeNames(1)
-          }
-          .map(_.valueSchema)
-          .get
+        val vSchema = manager.readSchemaFile().find { schema =>
+          schema.colFamilyName == storeNames(1)
+        }.map(_.valueSchema).get
 
         (kSchema, vSchema)
       }

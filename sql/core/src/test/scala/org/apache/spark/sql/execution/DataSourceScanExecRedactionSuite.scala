@@ -39,8 +39,8 @@ abstract class DataSourceScanRedactionTest extends QueryTest with SharedSparkSes
 
   final protected def isIncluded(queryExecution: QueryExecution, msg: String): Boolean = {
     queryExecution.toString.contains(msg) ||
-    queryExecution.simpleString.contains(msg) ||
-    queryExecution.stringWithStats.contains(msg)
+      queryExecution.simpleString.contains(msg) ||
+      queryExecution.stringWithStats.contains(msg)
   }
 
   protected def getRootPath(df: DataFrame): Path
@@ -55,8 +55,7 @@ abstract class DataSourceScanRedactionTest extends QueryTest with SharedSparkSes
       assert(rootPath.toString.contains(dir.toURI.getPath.stripSuffix("/")))
 
       assert(!df.queryExecution.sparkPlan.treeString(verbose = true).contains(rootPath.getName))
-      assert(
-        !df.queryExecution.executedPlan.treeString(verbose = true).contains(rootPath.getName))
+      assert(!df.queryExecution.executedPlan.treeString(verbose = true).contains(rootPath.getName))
       assert(!df.queryExecution.toString.contains(rootPath.getName))
       assert(!df.queryExecution.simpleString.contains(rootPath.getName))
 
@@ -77,14 +76,8 @@ class DataSourceScanExecRedactionSuite extends DataSourceScanRedactionTest {
     .set(SQLConf.USE_V1_SOURCE_LIST.key, "orc")
 
   override protected def getRootPath(df: DataFrame): Path =
-    df.queryExecution.sparkPlan
-      .find(_.isInstanceOf[FileSourceScanExec])
-      .get
-      .asInstanceOf[FileSourceScanExec]
-      .relation
-      .location
-      .rootPaths
-      .head
+    df.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
+      .asInstanceOf[FileSourceScanExec].relation.location.rootPaths.head
 
   test("explain is redacted using SQLConf") {
     withTempDir { dir =>
@@ -134,8 +127,7 @@ class DataSourceScanExecRedactionSuite extends DataSourceScanRedactionTest {
       dataDir.mkdir()
 
       val partitionCol = "partitionCol"
-      spark
-        .range(10)
+      spark.range(10)
         .select("id", "id")
         .toDF("value", partitionCol)
         .write
@@ -143,8 +135,8 @@ class DataSourceScanExecRedactionSuite extends DataSourceScanRedactionTest {
         .orc(dataDir.getCanonicalPath)
       val paths = (0 to 9).map(i => new File(dataDir, s"$partitionCol=$i").getCanonicalPath)
       val plan = spark.read.orc(paths: _*).queryExecution.executedPlan
-      val location = plan collectFirst { case f: FileSourceScanExec =>
-        f.metadata("Location")
+      val location = plan collectFirst {
+        case f: FileSourceScanExec => f.metadata("Location")
       }
       assert(location.isDefined)
       // The location metadata should at least contain one path
@@ -158,10 +150,8 @@ class DataSourceScanExecRedactionSuite extends DataSourceScanRedactionTest {
       assert(location.get.indexOf(']') > -1)
 
       // extract paths in location metadata (removing classname, brackets, separators)
-      val pathsInLocation = location.get
-        .substring(location.get.indexOf('[') + 1, location.get.indexOf(']'))
-        .split(", ")
-        .toSeq
+      val pathsInLocation = location.get.substring(
+        location.get.indexOf('[') + 1, location.get.indexOf(']')).split(", ").toSeq
 
       // the only one path should be available
       assert(pathsInLocation.size == 2)
@@ -180,15 +170,8 @@ class DataSourceV2ScanExecRedactionSuite extends DataSourceScanRedactionTest {
     .set(SQLConf.USE_V1_SOURCE_LIST.key, "")
 
   override protected def getRootPath(df: DataFrame): Path =
-    df.queryExecution.sparkPlan
-      .find(_.isInstanceOf[BatchScanExec])
-      .get
-      .asInstanceOf[BatchScanExec]
-      .scan
-      .asInstanceOf[OrcScan]
-      .fileIndex
-      .rootPaths
-      .head
+    df.queryExecution.sparkPlan.find(_.isInstanceOf[BatchScanExec]).get
+      .asInstanceOf[BatchScanExec].scan.asInstanceOf[OrcScan].fileIndex.rootPaths.head
 
   test("explain is redacted using SQLConf") {
     withTempDir { dir =>
@@ -202,8 +185,7 @@ class DataSourceV2ScanExecRedactionSuite extends DataSourceScanRedactionTest {
       assert(isIncluded(df.queryExecution, s"BatchScan orc"))
       assert(!isIncluded(df.queryExecution, "file:/"))
 
-      withSQLConf(
-        SQLConf.SQL_STRING_REDACTION_PATTERN.key -> s"(?i)BatchScan orc file:$basePath") {
+      withSQLConf(SQLConf.SQL_STRING_REDACTION_PATTERN.key -> s"(?i)BatchScan orc file:$basePath") {
         // Respect SQLConf and replace FileScan
         assert(isIncluded(df.queryExecution, replacement))
 

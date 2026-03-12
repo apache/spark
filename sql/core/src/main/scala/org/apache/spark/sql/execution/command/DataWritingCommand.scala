@@ -37,11 +37,10 @@ import org.apache.spark.util.SerializableConfiguration
  * A special `Command` which writes data out and updates metrics.
  */
 trait DataWritingCommand extends UnaryCommand with CTEInChildren {
-
   /**
-   * The input query plan that produces the data to be written. IMPORTANT: the input query plan
-   * MUST be analyzed, so that we can carry its output columns to
-   * [[org.apache.spark.sql.execution.datasources.FileFormatWriter]].
+   * The input query plan that produces the data to be written.
+   * IMPORTANT: the input query plan MUST be analyzed, so that we can carry its output columns
+   *            to [[org.apache.spark.sql.execution.datasources.FileFormatWriter]].
    */
   def query: LogicalPlan
 
@@ -65,16 +64,16 @@ trait DataWritingCommand extends UnaryCommand with CTEInChildren {
 }
 
 object DataWritingCommand {
-
   /**
-   * Returns output attributes with provided names. The length of provided names should be the
-   * same of the length of [[LogicalPlan.output]].
+   * Returns output attributes with provided names.
+   * The length of provided names should be the same of the length of [[LogicalPlan.output]].
    */
-  def logicalPlanOutputWithNames(query: LogicalPlan, names: Seq[String]): Seq[Attribute] = {
+  def logicalPlanOutputWithNames(
+      query: LogicalPlan,
+      names: Seq[String]): Seq[Attribute] = {
     // Save the output attributes to a variable to avoid duplicated function calls.
     val outputAttributes = query.output
-    assert(
-      outputAttributes.length == names.length,
+    assert(outputAttributes.length == names.length,
       "The length of provided names doesn't match the length of output attributes.")
     outputAttributes.zip(names).map { case (attr, outputName) =>
       attr.withName(outputName)
@@ -82,49 +81,41 @@ object DataWritingCommand {
   }
 
   /**
-   * When execute CTAS operators, Spark will use [[InsertIntoHadoopFsRelationCommand]] or
-   * [[InsertIntoHiveTable]] command to write data, they both inherit metrics from
-   * [[DataWritingCommand]], but after running [[InsertIntoHadoopFsRelationCommand]] or
-   * [[InsertIntoHiveTable]], we only update metrics in these two command through
-   * [[BasicWriteJobStatsTracker]], we also need to propogate metrics to the command that actually
-   * calls [[InsertIntoHadoopFsRelationCommand]] or [[InsertIntoHiveTable]].
+   * When execute CTAS operators, Spark will use [[InsertIntoHadoopFsRelationCommand]]
+   * or [[InsertIntoHiveTable]] command to write data, they both inherit metrics from
+   * [[DataWritingCommand]], but after running [[InsertIntoHadoopFsRelationCommand]]
+   * or [[InsertIntoHiveTable]], we only update metrics in these two command through
+   * [[BasicWriteJobStatsTracker]], we also need to propogate metrics to the command
+   * that actually calls [[InsertIntoHadoopFsRelationCommand]] or [[InsertIntoHiveTable]].
    *
-   * @param sparkContext
-   *   Current SparkContext.
-   * @param command
-   *   Command to execute writing data.
-   * @param metrics
-   *   Metrics of real DataWritingCommand.
+   * @param sparkContext Current SparkContext.
+   * @param command Command to execute writing data.
+   * @param metrics Metrics of real DataWritingCommand.
    */
   def propogateMetrics(
       sparkContext: SparkContext,
       command: DataWritingCommand,
       metrics: Map[String, SQLMetric]): Unit = {
     command.metrics.foreach { case (key, metric) => metrics(key).set(metric.value) }
-    SQLMetrics.postDriverMetricUpdates(
-      sparkContext,
+    SQLMetrics.postDriverMetricUpdates(sparkContext,
       sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY),
       metrics.values.toSeq)
   }
-
   /**
-   * When execute CTAS operators, and the location is not empty, throw [[AnalysisException]]. For
-   * CTAS, the SaveMode is always [[ErrorIfExists]]
+   * When execute CTAS operators, and the location is not empty, throw [[AnalysisException]].
+   * For CTAS, the SaveMode is always [[ErrorIfExists]]
    *
-   * @param tablePath
-   *   Table location.
-   * @param saveMode
-   *   Save mode of the table.
-   * @param hadoopConf
-   *   Configuration.
+   * @param tablePath Table location.
+   * @param saveMode  Save mode of the table.
+   * @param hadoopConf Configuration.
    */
   def assertEmptyRootPath(tablePath: URI, saveMode: SaveMode, hadoopConf: Configuration): Unit = {
     if (saveMode == SaveMode.ErrorIfExists && !SQLConf.get.allowNonEmptyLocationInCTAS) {
       val filePath = new org.apache.hadoop.fs.Path(tablePath)
       val fs = filePath.getFileSystem(hadoopConf)
       if (fs.exists(filePath) &&
-        fs.getFileStatus(filePath).isDirectory &&
-        fs.listStatus(filePath).length != 0) {
+          fs.getFileStatus(filePath).isDirectory &&
+          fs.listStatus(filePath).length != 0) {
         throw QueryCompilationErrors.createTableAsSelectWithNonEmptyDirectoryError(
           tablePath.toString)
       }

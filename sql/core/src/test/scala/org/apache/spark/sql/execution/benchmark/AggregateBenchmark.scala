@@ -33,7 +33,8 @@ import org.apache.spark.unsafe.hash.Murmur3_x86_32
 import org.apache.spark.unsafe.map.BytesToBytesMap
 
 /**
- * Benchmark to measure performance for aggregate primitives. To run this benchmark:
+ * Benchmark to measure performance for aggregate primitives.
+ * To run this benchmark:
  * {{{
  *   1. without sbt: bin/spark-submit --class <this class>
  *      --jars <spark core test jar>,<spark catalyst test jar> <spark sql test jar>
@@ -113,9 +114,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
       val N = 20 << 22
 
       val benchmark = new Benchmark("Aggregate w keys", N, output = output)
-      spark
-        .range(N)
-        .selectExpr("id", "floor(rand() * 10000) as k")
+      spark.range(N).selectExpr("id", "floor(rand() * 10000) as k")
         .createOrReplaceTempView("test")
 
       def f(): Unit = spark.sql("select k, k, sum(id) from test group by k, k").noop()
@@ -161,12 +160,8 @@ object AggregateBenchmark extends SqlBasedBenchmark {
 
       val benchmark = new Benchmark("Aggregate w string key", N, output = output)
 
-      def f(): Unit = spark
-        .range(N)
-        .selectExpr("id", "cast(id & 1023 as string) as k")
-        .groupBy("k")
-        .count()
-        .noop()
+      def f(): Unit = spark.range(N).selectExpr("id", "cast(id & 1023 as string) as k")
+        .groupBy("k").count().noop()
 
       benchmark.addCase("codegen = F", numIters = 2) { _ =>
         withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
@@ -209,12 +204,8 @@ object AggregateBenchmark extends SqlBasedBenchmark {
 
       val benchmark = new Benchmark("Aggregate w decimal key", N, output = output)
 
-      def f(): Unit = spark
-        .range(N)
-        .selectExpr("id", "cast(id & 65535 as decimal) as k")
-        .groupBy("k")
-        .count()
-        .noop()
+      def f(): Unit = spark.range(N).selectExpr("id", "cast(id & 65535 as decimal) as k")
+        .groupBy("k").count().noop()
 
       benchmark.addCase("codegen = F") { _ =>
         withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
@@ -257,8 +248,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
 
       val benchmark = new Benchmark("Aggregate w multiple keys", N, output = output)
 
-      def f(): Unit = spark
-        .range(N)
+      def f(): Unit = spark.range(N)
         .selectExpr(
           "id",
           "(id & 1023) as k1",
@@ -312,8 +302,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
 
       val benchmark = new Benchmark("max function bytecode size", N, output = output)
 
-      def f(): Unit = spark
-        .range(N)
+      def f(): Unit = spark.range(N)
         .selectExpr(
           "id",
           "(id & 1023) as k1",
@@ -366,16 +355,13 @@ object AggregateBenchmark extends SqlBasedBenchmark {
       benchmark.run()
     }
 
+
     runBenchmark("cube") {
       val N = 5 << 20
 
       codegenBenchmark("cube", N) {
-        spark
-          .range(N)
-          .selectExpr("id", "id % 1000 as k1", "id & 256 as k2")
-          .cube("k1", "k2")
-          .sum("id")
-          .noop()
+        spark.range(N).selectExpr("id", "id % 1000 as k1", "id & 256 as k2")
+          .cube("k1", "k2").sum("id").noop()
       }
     }
 
@@ -393,10 +379,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         while (i < N) {
           key.setInt(0, i % 1000)
           val h = Murmur3_x86_32.hashUnsafeWords(
-            key.getBaseObject,
-            key.getBaseOffset,
-            key.getSizeInBytes,
-            42)
+            key.getBaseObject, key.getBaseOffset, key.getSizeInBytes, 42)
           s += h
           i += 1
         }
@@ -568,8 +551,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         benchmark.addCase(s"BytesToBytesMap ($heap Heap)") { _ =>
           val taskMemoryManager = new TaskMemoryManager(
             new UnifiedMemoryManager(
-              new SparkConf()
-                .set(MEMORY_OFFHEAP_ENABLED.key, s"${heap == "off"}")
+              new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, s"${heap == "off"}")
                 .set(MEMORY_OFFHEAP_SIZE.key, "102400000"),
               Long.MaxValue,
               Long.MaxValue / 2,
@@ -586,19 +568,11 @@ object AggregateBenchmark extends SqlBasedBenchmark {
           val numKeys = 65536
           while (i < numKeys) {
             key.setInt(0, i % 65536)
-            val loc = map.lookup(
-              key.getBaseObject,
-              key.getBaseOffset,
-              key.getSizeInBytes,
+            val loc = map.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
               Murmur3_x86_32.hashLong(i % 65536, 42))
             if (!loc.isDefined) {
-              loc.append(
-                key.getBaseObject,
-                key.getBaseOffset,
-                key.getSizeInBytes,
-                value.getBaseObject,
-                value.getBaseOffset,
-                value.getSizeInBytes)
+              loc.append(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
+                value.getBaseObject, value.getBaseOffset, value.getSizeInBytes)
             }
             i += 1
           }
@@ -606,10 +580,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
           var s = 0
           while (i < N) {
             key.setInt(0, i % 100000)
-            val loc = map.lookup(
-              key.getBaseObject,
-              key.getBaseOffset,
-              key.getSizeInBytes,
+            val loc = map.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
               Murmur3_x86_32.hashLong(i % 100000, 42))
             if (loc.isDefined) {
               s += 1

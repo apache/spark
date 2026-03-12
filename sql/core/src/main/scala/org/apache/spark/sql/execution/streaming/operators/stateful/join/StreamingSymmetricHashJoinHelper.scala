@@ -30,6 +30,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOper
 import org.apache.spark.sql.execution.streaming.operators.stateful.WatermarkSupport.watermarkExpression
 import org.apache.spark.sql.execution.streaming.state.{StateStoreCheckpointInfo, StateStoreCoordinatorRef, StateStoreProviderId}
 
+
 /**
  * Helper object for [[StreamingSymmetricHashJoinExec]]. See that object for more details.
  */
@@ -44,22 +45,20 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     def desc: String
     override def toString: String = s"$desc: $expr"
   }
-
   /** Predicate for watermark on state keys */
   case class JoinStateKeyWatermarkPredicate(expr: Expression, stateWatermark: Long)
-      extends JoinStateWatermarkPredicate {
+    extends JoinStateWatermarkPredicate {
     def desc: String = "key predicate"
   }
-
   /** Predicate for watermark on state values */
   case class JoinStateValueWatermarkPredicate(expr: Expression, stateWatermark: Long)
-      extends JoinStateWatermarkPredicate {
+    extends JoinStateWatermarkPredicate {
     def desc: String = "value predicate"
   }
 
   case class JoinStateWatermarkPredicates(
-      left: Option[JoinStateWatermarkPredicate] = None,
-      right: Option[JoinStateWatermarkPredicate] = None) {
+    left: Option[JoinStateWatermarkPredicate] = None,
+    right: Option[JoinStateWatermarkPredicate] = None) {
     override def toString(): String = {
       s"state cleanup [ left ${left.map(_.toString).getOrElse("= null")}, " +
         s"right ${right.map(_.toString).getOrElse("= null")} ]"
@@ -67,21 +66,17 @@ object StreamingSymmetricHashJoinHelper extends Logging {
   }
 
   /**
-   * Wrapper around various useful splits of the join condition. left AND right AND joined is
-   * equivalent to full.
+   * Wrapper around various useful splits of the join condition.
+   * left AND right AND joined is equivalent to full.
    *
-   * Note that left and right do not necessarily contain *all* conjuncts which satisfy their
-   * condition.
+   * Note that left and right do not necessarily contain *all* conjuncts which satisfy
+   * their condition.
    *
-   * @param leftSideOnly
-   *   Deterministic conjuncts which reference only the left side of the join.
-   * @param rightSideOnly
-   *   Deterministic conjuncts which reference only the right side of the join.
-   * @param bothSides
-   *   Conjuncts which are nondeterministic, occur after a nondeterministic conjunct, or reference
-   *   both left and right sides of the join.
-   * @param full
-   *   The full join condition.
+   * @param leftSideOnly Deterministic conjuncts which reference only the left side of the join.
+   * @param rightSideOnly Deterministic conjuncts which reference only the right side of the join.
+   * @param bothSides Conjuncts which are nondeterministic, occur after a nondeterministic conjunct,
+   *                  or reference both left and right sides of the join.
+   * @param full The full join condition.
    */
   case class JoinConditionSplitPredicates(
       leftSideOnly: Option[Expression],
@@ -97,10 +92,8 @@ object StreamingSymmetricHashJoinHelper extends Logging {
   }
 
   object JoinConditionSplitPredicates extends PredicateHelper {
-    def apply(
-        condition: Option[Expression],
-        left: SparkPlan,
-        right: SparkPlan): JoinConditionSplitPredicates = {
+    def apply(condition: Option[Expression], left: SparkPlan, right: SparkPlan):
+        JoinConditionSplitPredicates = {
       // Split the condition into 3 parts:
       // * Conjuncts that can be evaluated on only the left input.
       // * Conjuncts that can be evaluated on only the right input.
@@ -129,7 +122,8 @@ object StreamingSymmetricHashJoinHelper extends Logging {
             leftConjuncts.reduceOption(And),
             rightConjuncts.reduceOption(And),
             (nonLeftConjuncts.intersect(nonRightConjuncts) ++ nonDeterministicConjuncts)
-              .reduceOption(And))
+              .reduceOption(And)
+          )
         }
       }
 
@@ -150,15 +144,13 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     // assumes there is only one event time column per each side (left / right) and it is not very
     // clear to reason about the correctness if there are multiple event time columns. Disallow to
     // be conservative.
-    WatermarkSupport.findEventTimeColumn(
-      leftAttributes,
+    WatermarkSupport.findEventTimeColumn(leftAttributes,
       allowMultipleEventTimeColumns = allowMultipleEventTimeColumns)
-    WatermarkSupport.findEventTimeColumn(
-      rightAttributes,
+    WatermarkSupport.findEventTimeColumn(rightAttributes,
       allowMultipleEventTimeColumns = allowMultipleEventTimeColumns)
 
-    val joinKeyOrdinalForWatermark: Option[Int] =
-      findJoinKeyOrdinalForWatermark(leftKeys, rightKeys)
+    val joinKeyOrdinalForWatermark: Option[Int] = findJoinKeyOrdinalForWatermark(
+      leftKeys, rightKeys)
 
     def getOneSideStateWatermark(
         oneSideInputAttributes: Seq[Attribute],
@@ -199,15 +191,13 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     // assumes there is only one event time column per each side (left / right) and it is not very
     // clear to reason about the correctness if there are multiple event time columns. Disallow to
     // be conservative.
-    WatermarkSupport.findEventTimeColumn(
-      leftAttributes,
+    WatermarkSupport.findEventTimeColumn(leftAttributes,
       allowMultipleEventTimeColumns = useFirstEventTimeColumn)
-    WatermarkSupport.findEventTimeColumn(
-      rightAttributes,
+    WatermarkSupport.findEventTimeColumn(rightAttributes,
       allowMultipleEventTimeColumns = useFirstEventTimeColumn)
 
-    val joinKeyOrdinalForWatermark: Option[Int] =
-      findJoinKeyOrdinalForWatermark(leftKeys, rightKeys)
+    val joinKeyOrdinalForWatermark: Option[Int] = findJoinKeyOrdinalForWatermark(
+      leftKeys, rightKeys)
 
     def getOneSideStateWatermarkPredicate(
         oneSideInputAttributes: Seq[Attribute],
@@ -233,8 +223,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
           attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
           condition,
           eventTimeWatermarkForEviction)
-        val inputAttributeWithWatermark =
-          oneSideInputAttributes.find(_.metadata.contains(delayKey))
+        val inputAttributeWithWatermark = oneSideInputAttributes.find(_.metadata.contains(delayKey))
         val expr = watermarkExpression(inputAttributeWithWatermark, stateValueWatermark)
         expr.map { e =>
           // watermarkExpression only provides the expression when eventTimeWatermarkForEviction
@@ -305,9 +294,8 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     override def compute(s: Partition, context: TaskContext): Iterator[V] = {
       val partitions = s.asInstanceOf[ZippedPartitionsPartition].partitions
       if (partitions(0).index != partitions(1).index) {
-        throw new IllegalStateException(
-          s"Partition ID should be same in both side: " +
-            s"left ${partitions(0).index} , right ${partitions(1).index}")
+        throw new IllegalStateException(s"Partition ID should be same in both side: " +
+          s"left ${partitions(0).index} , right ${partitions(1).index}")
       }
 
       val partitionId = partitions(0).index
@@ -323,7 +311,6 @@ object StreamingSymmetricHashJoinHelper extends Logging {
   }
 
   implicit class StateStoreAwareZipPartitionsHelper[T: ClassTag](dataRDD: RDD[T]) {
-
     /**
      * Function used by `StreamingSymmetricHashJoinExec` to zip together the partitions of two
      * child RDDs for joining the data in corresponding partitions, while ensuring the tasks'
@@ -334,16 +321,10 @@ object StreamingSymmetricHashJoinHelper extends Logging {
         dataRDD2: RDD[U],
         stateInfo: StatefulOperatorStateInfo,
         storeNames: Seq[String],
-        storeCoordinator: StateStoreCoordinatorRef)(
-        f: (Int, Iterator[T], Iterator[U]) => Iterator[V]): RDD[V] = {
+        storeCoordinator: StateStoreCoordinatorRef
+      )(f: (Int, Iterator[T], Iterator[U]) => Iterator[V]): RDD[V] = {
       new StateStoreAwareZipPartitionsRDD(
-        dataRDD.sparkContext,
-        f,
-        dataRDD,
-        dataRDD2,
-        stateInfo,
-        storeNames,
-        Some(storeCoordinator))
+        dataRDD.sparkContext, f, dataRDD, dataRDD2, stateInfo, storeNames, Some(storeCoordinator))
     }
   }
 
@@ -360,7 +341,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       keyWithIndexToValue: Option[String])
 
   case class JoinStateStoreCheckpointId(
-      left: JoinerStateStoreCheckpointId,
-      right: JoinerStateStoreCheckpointId)
+       left: JoinerStateStoreCheckpointId,
+       right: JoinerStateStoreCheckpointId)
 
 }

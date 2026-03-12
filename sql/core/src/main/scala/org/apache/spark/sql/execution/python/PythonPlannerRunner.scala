@@ -59,8 +59,7 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
     val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
     val idleTimeoutSeconds: Long = SQLConf.get.pythonUDFWorkerIdleTimeoutSeconds
     val killOnIdleTimeout: Boolean = SQLConf.get.pythonUDFWorkerKillOnIdleTimeout
-    val tracebackDumpIntervalSeconds: Long =
-      SQLConf.get.pythonUDFWorkerTracebackDumpIntervalSeconds
+    val tracebackDumpIntervalSeconds: Long = SQLConf.get.pythonUDFWorkerTracebackDumpIntervalSeconds
     val killWorkerOnFlushFailure: Boolean = SQLConf.get.pythonUDFDaemonKillWorkerOnFlushFailure
     val hideTraceback: Boolean = SQLConf.get.pysparkHideTraceback
     val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
@@ -113,8 +112,7 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
     envVars.put("SPARK_PYTHON_RUNTIME", "PYTHON_WORKER")
 
     EvaluatePython.registerPicklers()
-    val pickler = new Pickler(
-      /* useMemo = */ true,
+    val pickler = new Pickler(/* useMemo = */ true,
       /* valueCompare = */ false)
 
     val (worker: PythonWorker, handle: Option[ProcessHandle]) =
@@ -135,16 +133,11 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
       dataOut.writeInt(SpecialLengths.END_OF_STREAM)
       dataOut.flush()
 
-      val dataIn = new DataInputStream(
-        new BufferedInputStream(
-          new WorkerInputStream(
-            worker,
-            bufferStream.toByteBuffer,
-            handle,
-            faultHandlerEnabled,
-            idleTimeoutSeconds,
-            killOnIdleTimeout),
-          bufferSize))
+      val dataIn = new DataInputStream(new BufferedInputStream(
+        new WorkerInputStream(
+          worker, bufferStream.toByteBuffer, handle,
+          faultHandlerEnabled, idleTimeoutSeconds, killOnIdleTimeout),
+        bufferSize))
 
       val res = receiveFromPython(dataIn)
 
@@ -166,8 +159,7 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
           s"Python worker exited unexpectedly (crashed). " +
             "Consider setting 'spark.sql.execution.pyspark.udf.faulthandler.enabled' or" +
             s"'${PYTHON_WORKER_FAULTHANLDER_ENABLED.key}' configuration to 'true' for " +
-            "the better Python traceback.",
-          e)
+            "the better Python traceback.", e)
 
       case e: IOException =>
         val base = "Python worker exited unexpectedly (crashed)"
@@ -190,9 +182,10 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
   /**
    * A wrapper of the non-blocking IO to write to/read from the worker.
    *
-   * Since we use non-blocking IO to communicate with workers; see SPARK-44705, a wrapper is
-   * needed to do IO with the worker. This is a port and simplified version of
-   * `PythonRunner.ReaderInputStream`, and only supports to write all at once and then read all.
+   * Since we use non-blocking IO to communicate with workers; see SPARK-44705,
+   * a wrapper is needed to do IO with the worker.
+   * This is a port and simplified version of `PythonRunner.ReaderInputStream`,
+   * and only supports to write all at once and then read all.
    */
   private class WorkerInputStream(
       worker: PythonWorker,
@@ -200,8 +193,7 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
       handle: Option[ProcessHandle],
       faultHandlerEnabled: Boolean,
       idleTimeoutSeconds: Long,
-      killOnIdleTimeout: Boolean)
-      extends InputStream {
+      killOnIdleTimeout: Boolean) extends InputStream {
 
     private[this] val temp = new Array[Byte](1)
 
@@ -232,19 +224,19 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
           if (pythonWorkerKilled) {
             logWarning(
               log"Waiting for Python planner worker process to terminate after idle timeout: " +
-                pythonWorkerStatusMessageWithContext(handle, worker, buffer.hasRemaining))
+              pythonWorkerStatusMessageWithContext(handle, worker, buffer.hasRemaining))
           } else {
             logWarning(
               log"Idle timeout reached for Python planner worker (timeout: " +
-                log"${MDC(LogKeys.PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} seconds). " +
-                log"No data received from the worker process: " +
-                pythonWorkerStatusMessageWithContext(handle, worker, buffer.hasRemaining))
+              log"${MDC(LogKeys.PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} seconds). " +
+              log"No data received from the worker process: " +
+              pythonWorkerStatusMessageWithContext(handle, worker, buffer.hasRemaining))
             if (killOnIdleTimeout) {
               handle.foreach { handle =>
                 if (handle.isAlive) {
                   logWarning(
                     log"Terminating Python planner worker process due to idle timeout (timeout: " +
-                      log"${MDC(LogKeys.PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} seconds)")
+                    log"${MDC(LogKeys.PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} seconds)")
                   pythonWorkerKilled = handle.destroy()
                 }
               }

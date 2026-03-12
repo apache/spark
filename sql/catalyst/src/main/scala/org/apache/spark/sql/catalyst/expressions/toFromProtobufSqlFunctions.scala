@@ -28,8 +28,8 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 /**
- * Converts a binary column of Protobuf format into its corresponding catalyst value. The Protobuf
- * definition is provided through Protobuf <i>descriptor file</i>.
+ * Converts a binary column of Protobuf format into its corresponding catalyst value.
+ * The Protobuf definition is provided through Protobuf <i>descriptor file</i>.
  *
  * @param data
  *   The Catalyst binary input column.
@@ -59,29 +59,29 @@ import org.apache.spark.util.Utils
     set via the corresponding option.
   """,
   group = "protobuf_funcs",
-  since = "4.0.0")
+  since = "4.0.0"
+)
 // scalastyle:on line.size.limit
 case class FromProtobuf(
     data: Expression,
     messageName: Expression,
     descFilePath: Expression,
-    options: Expression)
-    extends QuaternaryExpression
-    with RuntimeReplaceable {
+    options: Expression) extends QuaternaryExpression with RuntimeReplaceable {
 
   def this(data: Expression, messageName: Expression, descFilePathOrOptions: Expression) = {
     this(
       data,
       messageName,
       descFilePathOrOptions match {
-        case lit: Literal if lit.dataType == StringType || lit.dataType == BinaryType =>
-          descFilePathOrOptions
+        case lit: Literal
+          if lit.dataType == StringType || lit.dataType == BinaryType => descFilePathOrOptions
         case _ => Literal(null)
       },
       descFilePathOrOptions.dataType match {
         case _: MapType => descFilePathOrOptions
         case _ => Literal(null)
-      })
+      }
+    )
   }
 
   def this(data: Expression, messageName: Expression) = {
@@ -105,32 +105,32 @@ case class FromProtobuf(
     val messageNameCheck = messageName.dataType match {
       case _: StringType if messageName.foldable => None
       case _ =>
-        Some(
-          TypeCheckResult.TypeCheckFailure(
-            "The second argument of the FROM_PROTOBUF SQL function must be a constant string " +
-              "representing the Protobuf message name"))
+        Some(TypeCheckResult.TypeCheckFailure(
+          "The second argument of the FROM_PROTOBUF SQL function must be a constant string " +
+            "representing the Protobuf message name"))
     }
     val descFilePathCheck = descFilePath.dataType match {
       case _: StringType | BinaryType | NullType if descFilePath.foldable => None
       case _ =>
-        Some(
-          TypeCheckResult.TypeCheckFailure(
-            "The third argument of the FROM_PROTOBUF SQL function must be a constant string " +
-              "or binary data representing the Protobuf descriptor file path"))
+        Some(TypeCheckResult.TypeCheckFailure(
+          "The third argument of the FROM_PROTOBUF SQL function must be a constant string " +
+            "or binary data representing the Protobuf descriptor file path"))
     }
     val optionsCheck = options.dataType match {
-      case MapType(StringType, StringType, _) | MapType(NullType, NullType, _) | _: NullType
-          if options.foldable =>
-        None
+      case MapType(StringType, StringType, _) |
+           MapType(NullType, NullType, _) |
+           _: NullType if options.foldable => None
       case _ =>
-        Some(
-          TypeCheckResult.TypeCheckFailure(
-            "The fourth argument of the FROM_PROTOBUF SQL function must be a constant map of " +
-              "strings to strings containing the options to use for converting the value from " +
-              "Protobuf format"))
+        Some(TypeCheckResult.TypeCheckFailure(
+          "The fourth argument of the FROM_PROTOBUF SQL function must be a constant map of " +
+            "strings to strings containing the options to use for converting the value from " +
+            "Protobuf format"))
     }
     messageNameCheck.getOrElse(
-      descFilePathCheck.getOrElse(optionsCheck.getOrElse(TypeCheckResult.TypeCheckSuccess)))
+      descFilePathCheck.getOrElse(
+        optionsCheck.getOrElse(TypeCheckResult.TypeCheckSuccess)
+      )
+    )
   }
 
   override lazy val replacement: Expression = {
@@ -154,17 +154,14 @@ case class FromProtobuf(
         keys.zip(values).toMap
       case _ => Map.empty
     }
-    val constructor =
-      try {
-        Utils
-          .classForName("org.apache.spark.sql.protobuf.ProtobufDataToCatalyst")
-          .getConstructors()
-          .head
-      } catch {
-        case _: java.lang.ClassNotFoundException =>
-          throw QueryCompilationErrors.protobufNotLoadedSqlFunctionsUnusable(functionName =
-            "FROM_PROTOBUF")
-      }
+    val constructor = try {
+      Utils.classForName(
+        "org.apache.spark.sql.protobuf.ProtobufDataToCatalyst").getConstructors().head
+    } catch {
+      case _: java.lang.ClassNotFoundException =>
+        throw QueryCompilationErrors.protobufNotLoadedSqlFunctionsUnusable(
+          functionName = "FROM_PROTOBUF")
+    }
     val expr = constructor.newInstance(data, messageNameValue, descFilePathValue, optionsValue)
     expr.asInstanceOf[Expression]
   }
@@ -174,8 +171,8 @@ case class FromProtobuf(
 }
 
 /**
- * Converts a Catalyst binary input value into its corresponding Protobuf format result. This is a
- * thin wrapper over the [[CatalystDataToProtobuf]] class to create a SQL function.
+ * Converts a Catalyst binary input value into its corresponding Protobuf format result.
+ * This is a thin wrapper over the [[CatalystDataToProtobuf]] class to create a SQL function.
  *
  * @param data
  *   The Catalyst binary input column.
@@ -199,29 +196,29 @@ case class FromProtobuf(
        [true]
   """,
   group = "protobuf_funcs",
-  since = "4.0.0")
+  since = "4.0.0"
+)
 // scalastyle:on line.size.limit
 case class ToProtobuf(
     data: Expression,
     messageName: Expression,
     descFilePath: Expression,
-    options: Expression)
-    extends QuaternaryExpression
-    with RuntimeReplaceable {
+    options: Expression) extends QuaternaryExpression with RuntimeReplaceable {
 
   def this(data: Expression, messageName: Expression, descFilePathOrOptions: Expression) = {
     this(
       data,
       messageName,
       descFilePathOrOptions match {
-        case lit: Literal if lit.dataType == StringType || lit.dataType == BinaryType =>
-          descFilePathOrOptions
+        case lit: Literal
+          if lit.dataType == StringType || lit.dataType == BinaryType => descFilePathOrOptions
         case _ => Literal(null)
       },
       descFilePathOrOptions.dataType match {
         case _: MapType => descFilePathOrOptions
         case _ => Literal(null)
-      })
+      }
+    )
   }
 
   def this(data: Expression, messageName: Expression) = {
@@ -248,40 +245,43 @@ case class ToProtobuf(
         Some(
           TypeCheckResult.DataTypeMismatch(
             errorSubClass = "NON_STRUCT_TYPE",
-            messageParameters =
-              Map("inputName" -> "data", "inputType" -> toSQLType(first.dataType))))
+            messageParameters = Map(
+              "inputName" -> "data",
+              "inputType" -> toSQLType(first.dataType)))
+        )
     }
 
     val messageNameCheck = messageName.dataType match {
       case _: StringType if messageName.foldable => None
       case _ =>
-        Some(
-          TypeCheckResult.TypeCheckFailure(
-            "The second argument of the TO_PROTOBUF SQL function must be a constant string " +
-              "representing the Protobuf message name"))
+        Some(TypeCheckResult.TypeCheckFailure(
+          "The second argument of the TO_PROTOBUF SQL function must be a constant string " +
+            "representing the Protobuf message name"))
     }
     val descFilePathCheck = descFilePath.dataType match {
       case _: StringType | BinaryType | NullType if descFilePath.foldable => None
       case _ =>
-        Some(
-          TypeCheckResult.TypeCheckFailure(
-            "The third argument of the TO_PROTOBUF SQL function must be a constant string " +
-              "or binary data representing the Protobuf descriptor file path"))
+        Some(TypeCheckResult.TypeCheckFailure(
+          "The third argument of the TO_PROTOBUF SQL function must be a constant string " +
+            "or binary data representing the Protobuf descriptor file path"))
     }
     val optionsCheck = options.dataType match {
-      case MapType(StringType, StringType, _) | MapType(NullType, NullType, _) | _: NullType
-          if options.foldable =>
-        None
+      case MapType(StringType, StringType, _) |
+           MapType(NullType, NullType, _) |
+           _: NullType if options.foldable => None
       case _ =>
-        Some(
-          TypeCheckResult.TypeCheckFailure(
-            "The fourth argument of the TO_PROTOBUF SQL function must be a constant map of " +
-              "strings to strings containing the options to use for converting the value to " +
-              "Protobuf format"))
+        Some(TypeCheckResult.TypeCheckFailure(
+          "The fourth argument of the TO_PROTOBUF SQL function must be a constant map of " +
+            "strings to strings containing the options to use for converting the value to " +
+            "Protobuf format"))
     }
     colTypeCheck.getOrElse(
       messageNameCheck.getOrElse(
-        descFilePathCheck.getOrElse(optionsCheck.getOrElse(TypeCheckResult.TypeCheckSuccess))))
+        descFilePathCheck.getOrElse(
+         optionsCheck.getOrElse(TypeCheckResult.TypeCheckSuccess)
+        )
+      )
+    )
   }
 
   override lazy val replacement: Expression = {
@@ -303,17 +303,14 @@ case class ToProtobuf(
         keys.zip(values).toMap
       case _ => Map.empty
     }
-    val constructor =
-      try {
-        Utils
-          .classForName("org.apache.spark.sql.protobuf.CatalystDataToProtobuf")
-          .getConstructors()
-          .head
-      } catch {
-        case _: java.lang.ClassNotFoundException =>
-          throw QueryCompilationErrors.protobufNotLoadedSqlFunctionsUnusable(functionName =
-            "TO_PROTOBUF")
-      }
+    val constructor = try {
+      Utils.classForName(
+        "org.apache.spark.sql.protobuf.CatalystDataToProtobuf").getConstructors().head
+    } catch {
+      case _: java.lang.ClassNotFoundException =>
+        throw QueryCompilationErrors.protobufNotLoadedSqlFunctionsUnusable(
+          functionName = "TO_PROTOBUF")
+    }
     val expr = constructor.newInstance(data, messageNameValue, descFilePathValue, optionsValue)
     expr.asInstanceOf[Expression]
   }

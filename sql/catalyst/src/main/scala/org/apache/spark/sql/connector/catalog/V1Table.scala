@@ -80,12 +80,11 @@ private[sql] object V1Table {
     val external = v1Table.tableType == CatalogTableType.EXTERNAL
     val managed = v1Table.tableType == CatalogTableType.MANAGED
     val tableTypeProperties: Option[(String, String)] = getV2TableType(v1Table)
-      .map(tableType => TableCatalog.PROP_TABLE_TYPE -> tableType)
+        .map(tableType => TableCatalog.PROP_TABLE_TYPE -> tableType)
 
     v1Table.properties ++
       v1Table.storage.properties.map { case (key, value) =>
-        TableCatalog.OPTION_PREFIX + key -> value
-      } ++
+        TableCatalog.OPTION_PREFIX + key -> value } ++
       v1Table.provider.map(TableCatalog.PROP_PROVIDER -> _) ++
       v1Table.comment.map(TableCatalog.PROP_COMMENT -> _) ++
       v1Table.collation.map(TableCatalog.PROP_COLLATION -> _) ++
@@ -99,8 +98,8 @@ private[sql] object V1Table {
   }
 
   /**
-   * Returns v2 table type that should be part of v2 table properties. If there is no mapping
-   * between v1 table type and v2 table type, then None is returned.
+   * Returns v2 table type that should be part of v2 table properties.
+   * If there is no mapping between v1 table type and v2 table type, then None is returned.
    */
   private def getV2TableType(v1Table: CatalogTable): Option[String] = {
     v1Table.tableType match {

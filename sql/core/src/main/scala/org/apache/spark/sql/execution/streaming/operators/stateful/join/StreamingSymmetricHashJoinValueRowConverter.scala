@@ -25,15 +25,14 @@ import org.apache.spark.sql.types.BooleanType
  * Converter between the value row stored in state store and the (actual value, match) pair.
  */
 trait StreamingSymmetricHashJoinValueRowConverter {
-
   /** Defines the schema of the value row (the value side of K-V in state store). */
   def valueAttributes: Seq[Attribute]
 
   /**
    * Convert the value row to (actual value, match) pair.
    *
-   * NOTE: implementations should ensure the result row is NOT reused during execution, so that
-   * caller can safely read the value in any time.
+   * NOTE: implementations should ensure the result row is NOT reused during execution, so
+   * that caller can safely read the value in any time.
    */
   def convertValue(value: UnsafeRow): ValueAndMatchPair
 
@@ -41,9 +40,9 @@ trait StreamingSymmetricHashJoinValueRowConverter {
    * Build the value row from (actual value, match) pair. This is expected to be called just
    * before storing to the state store.
    *
-   * NOTE: depending on the implementation, the result row "may" be reused during execution (to
-   * avoid initialization of object), so the caller should ensure that the logic doesn't get
-   * affected by such behavior. Call copy() against the result row if needed.
+   * NOTE: depending on the implementation, the result row "may" be reused during execution
+   * (to avoid initialization of object), so the caller should ensure that the logic doesn't
+   * get affected by such behavior. Call copy() against the result row if needed.
    */
   def convertToValueRow(value: UnsafeRow, matched: Boolean): UnsafeRow
 }
@@ -54,8 +53,8 @@ trait StreamingSymmetricHashJoinValueRowConverter {
  * and this is only for backward compatibility. There is known correctness issue for outer join
  * with this converter - see SPARK-26154 for more details.
  */
-class StreamingSymmetricHashJoinValueRowConverterFormatV1(inputValueAttributes: Seq[Attribute])
-    extends StreamingSymmetricHashJoinValueRowConverter {
+class StreamingSymmetricHashJoinValueRowConverterFormatV1(
+    inputValueAttributes: Seq[Attribute]) extends StreamingSymmetricHashJoinValueRowConverter {
   override val valueAttributes: Seq[Attribute] = inputValueAttributes
 
   override def convertValue(value: UnsafeRow): ValueAndMatchPair =
@@ -69,24 +68,24 @@ class StreamingSymmetricHashJoinValueRowConverterFormatV1(inputValueAttributes: 
  * in state store. This is the default implementation for state format version 2 and above, which
  * fixes the correctness issue for outer join in V1 implementation.
  */
-class StreamingSymmetricHashJoinValueRowConverterFormatV2(inputValueAttributes: Seq[Attribute])
-    extends StreamingSymmetricHashJoinValueRowConverter {
+class StreamingSymmetricHashJoinValueRowConverterFormatV2(
+    inputValueAttributes: Seq[Attribute]) extends StreamingSymmetricHashJoinValueRowConverter {
   private val valueWithMatchedExprs = inputValueAttributes :+ Literal(true)
   private val indexOrdinalInValueWithMatchedRow = inputValueAttributes.size
 
-  private val valueWithMatchedRowGenerator =
-    UnsafeProjection.create(valueWithMatchedExprs, inputValueAttributes)
+  private val valueWithMatchedRowGenerator = UnsafeProjection.create(valueWithMatchedExprs,
+    inputValueAttributes)
 
   override val valueAttributes: Seq[Attribute] = inputValueAttributes :+
     AttributeReference("matched", BooleanType)()
 
   // Projection to generate key row from (value + matched) row
-  private val valueRowGenerator = UnsafeProjection.create(inputValueAttributes, valueAttributes)
+  private val valueRowGenerator = UnsafeProjection.create(
+    inputValueAttributes, valueAttributes)
 
   override def convertValue(value: UnsafeRow): ValueAndMatchPair = {
     if (value != null) {
-      ValueAndMatchPair(
-        valueRowGenerator(value).copy(),
+      ValueAndMatchPair(valueRowGenerator(value).copy(),
         value.getBoolean(indexOrdinalInValueWithMatchedRow))
     } else {
       null
@@ -112,10 +111,8 @@ object StreamingSymmetricHashJoinValueRowConverter {
       case 1 => new StreamingSymmetricHashJoinValueRowConverterFormatV1(inputValueAttributes)
       case 2 | 3 | 4 =>
         new StreamingSymmetricHashJoinValueRowConverterFormatV2(inputValueAttributes)
-      case _ =>
-        throw new IllegalArgumentException(
-          "Incorrect state format version! " +
-            s"version $stateFormatVersion")
+      case _ => throw new IllegalArgumentException ("Incorrect state format version! " +
+        s"version $stateFormatVersion")
     }
   }
 }

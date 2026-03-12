@@ -34,24 +34,20 @@ import org.apache.spark.util.ArrayImplicits._
  * points.
  *
  * Behavior:
- *   - null values are ignored
- *   - returns `Double.NaN` when the column contains `Double.NaN` values
+ *  - null values are ignored
+ *  - returns `Double.NaN` when the column contains `Double.NaN` values
  *
  * References:
- *   - Xiangrui Meng. "Simpler Online Updates for Arbitrary-Order Central Moments." 2015.
- *     http://arxiv.org/abs/1510.04923
+ *  - Xiangrui Meng.  "Simpler Online Updates for Arbitrary-Order Central Moments."
+ *      2015. http://arxiv.org/abs/1510.04923
  *
- * @see
- *   <a href="https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance"> Algorithms for
- *   calculating variance (Wikipedia)</a>
+ * @see <a href="https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance">
+ * Algorithms for calculating variance (Wikipedia)</a>
  *
- * @param child
- *   to compute central moments of.
+ * @param child to compute central moments of.
  */
 abstract class CentralMomentAgg(child: Expression, nullOnDivideByZero: Boolean)
-    extends DeclarativeAggregate
-    with ImplicitCastInputTypes
-    with UnaryLike[Expression] {
+  extends DeclarativeAggregate with ImplicitCastInputTypes with UnaryLike[Expression] {
 
   /**
    * The central moment order to be computed.
@@ -137,21 +133,20 @@ abstract class CentralMomentAgg(child: Expression, nullOnDivideByZero: Boolean)
       Literal(0.0)
     }
 
-    trimHigherOrder(
-      Seq(
-        If(child.isNull, n, newN),
-        If(child.isNull, avg, newAvg),
-        If(child.isNull, m2, newM2),
-        If(child.isNull, m3, newM3),
-        If(child.isNull, m4, newM4)))
+    trimHigherOrder(Seq(
+      If(child.isNull, n, newN),
+      If(child.isNull, avg, newAvg),
+      If(child.isNull, m2, newM2),
+      If(child.isNull, m3, newM3),
+      If(child.isNull, m4, newM4)
+    ))
   }
 }
 
 // Compute the population standard deviation of a column
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage =
-    "_FUNC_(expr) - Returns the population standard deviation calculated from values of a group.",
+  usage = "_FUNC_(expr) - Returns the population standard deviation calculated from values of a group.",
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (1), (2), (3) AS tab(col);
@@ -163,7 +158,7 @@ abstract class CentralMomentAgg(child: Expression, nullOnDivideByZero: Boolean)
 case class StddevPop(
     child: Expression,
     nullOnDivideByZero: Boolean = !SQLConf.get.legacyStatisticalAggregate)
-    extends CentralMomentAgg(child, nullOnDivideByZero) {
+  extends CentralMomentAgg(child, nullOnDivideByZero) {
 
   def this(child: Expression) = this(child, !SQLConf.get.legacyStatisticalAggregate)
 
@@ -182,8 +177,7 @@ case class StddevPop(
 // Compute the sample standard deviation of a column
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage =
-    "_FUNC_(expr) - Returns the sample standard deviation calculated from values of a group.",
+  usage = "_FUNC_(expr) - Returns the sample standard deviation calculated from values of a group.",
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (1), (2), (3) AS tab(col);
@@ -195,16 +189,14 @@ case class StddevPop(
 case class StddevSamp(
     child: Expression,
     nullOnDivideByZero: Boolean = !SQLConf.get.legacyStatisticalAggregate)
-    extends CentralMomentAgg(child, nullOnDivideByZero) {
+  extends CentralMomentAgg(child, nullOnDivideByZero) {
 
   def this(child: Expression) = this(child, !SQLConf.get.legacyStatisticalAggregate)
 
   override protected def momentOrder = 2
 
   override val evaluateExpression: Expression = {
-    If(
-      n === 0.0,
-      Literal.create(null, DoubleType),
+    If(n === 0.0, Literal.create(null, DoubleType),
       If(n === 1.0, divideByZeroEvalResult, sqrt(m2 / (n - 1.0))))
   }
 
@@ -228,7 +220,7 @@ case class StddevSamp(
 case class VariancePop(
     child: Expression,
     nullOnDivideByZero: Boolean = !SQLConf.get.legacyStatisticalAggregate)
-    extends CentralMomentAgg(child, nullOnDivideByZero) {
+  extends CentralMomentAgg(child, nullOnDivideByZero) {
 
   def this(child: Expression) = this(child, !SQLConf.get.legacyStatisticalAggregate)
 
@@ -257,16 +249,14 @@ case class VariancePop(
 case class VarianceSamp(
     child: Expression,
     nullOnDivideByZero: Boolean = !SQLConf.get.legacyStatisticalAggregate)
-    extends CentralMomentAgg(child, nullOnDivideByZero) {
+  extends CentralMomentAgg(child, nullOnDivideByZero) {
 
   def this(child: Expression) = this(child, !SQLConf.get.legacyStatisticalAggregate)
 
   override protected def momentOrder = 2
 
   override val evaluateExpression: Expression = {
-    If(
-      n === 0.0,
-      Literal.create(null, DoubleType),
+    If(n === 0.0, Literal.create(null, DoubleType),
       If(n === 1.0, divideByZeroEvalResult, m2 / (n - 1.0)))
   }
 
@@ -277,7 +267,7 @@ case class VarianceSamp(
 }
 
 case class RegrReplacement(child: Expression)
-    extends CentralMomentAgg(child, !SQLConf.get.legacyStatisticalAggregate) {
+  extends CentralMomentAgg(child, !SQLConf.get.legacyStatisticalAggregate) {
 
   override protected def momentOrder = 2
 
@@ -303,7 +293,7 @@ case class RegrReplacement(child: Expression)
 case class Skewness(
     child: Expression,
     nullOnDivideByZero: Boolean = !SQLConf.get.legacyStatisticalAggregate)
-    extends CentralMomentAgg(child, nullOnDivideByZero) {
+  extends CentralMomentAgg(child, nullOnDivideByZero) {
 
   def this(child: Expression) = this(child, !SQLConf.get.legacyStatisticalAggregate)
 
@@ -312,9 +302,7 @@ case class Skewness(
   override protected def momentOrder = 3
 
   override val evaluateExpression: Expression = {
-    If(
-      n === 0.0,
-      Literal.create(null, DoubleType),
+    If(n === 0.0, Literal.create(null, DoubleType),
       If(m2 === 0.0, divideByZeroEvalResult, sqrt(n) * m3 / sqrt(m2 * m2 * m2)))
   }
 
@@ -336,16 +324,14 @@ case class Skewness(
 case class Kurtosis(
     child: Expression,
     nullOnDivideByZero: Boolean = !SQLConf.get.legacyStatisticalAggregate)
-    extends CentralMomentAgg(child, nullOnDivideByZero) {
+  extends CentralMomentAgg(child, nullOnDivideByZero) {
 
   def this(child: Expression) = this(child, !SQLConf.get.legacyStatisticalAggregate)
 
   override protected def momentOrder = 4
 
   override val evaluateExpression: Expression = {
-    If(
-      n === 0.0,
-      Literal.create(null, DoubleType),
+    If(n === 0.0, Literal.create(null, DoubleType),
       If(m2 === 0.0, divideByZeroEvalResult, n * m4 / (m2 * m2) - 3.0))
   }
 
@@ -356,10 +342,14 @@ case class Kurtosis(
 }
 
 /**
- * Standard deviation in Pandas' fashion. This expression is dedicated only for Pandas API on
- * Spark. Refer to pandas.core.nanops.nanstd.
+ * Standard deviation in Pandas' fashion.
+ * This expression is dedicated only for Pandas API on Spark.
+ * Refer to pandas.core.nanops.nanstd.
  */
-case class PandasStddev(child: Expression, ddof: Int) extends CentralMomentAgg(child, true) {
+case class PandasStddev(
+    child: Expression,
+    ddof: Int)
+  extends CentralMomentAgg(child, true) {
 
   def this(child: Expression, ddof: Expression) =
     this(child, PandasAggregate.expressionToDDOF(ddof, "pandas_stddev"))
@@ -367,9 +357,7 @@ case class PandasStddev(child: Expression, ddof: Int) extends CentralMomentAgg(c
   override protected def momentOrder = 2
 
   override val evaluateExpression: Expression = {
-    If(
-      n === 0.0,
-      Literal.create(null, DoubleType),
+    If(n === 0.0, Literal.create(null, DoubleType),
       If(n === ddof.toDouble, divideByZeroEvalResult, sqrt(m2 / (n - ddof.toDouble))))
   }
 
@@ -380,10 +368,13 @@ case class PandasStddev(child: Expression, ddof: Int) extends CentralMomentAgg(c
 }
 
 /**
- * Variance in Pandas' fashion. This expression is dedicated only for Pandas API on Spark. Refer
- * to pandas.core.nanops.nanvar.
+ * Variance in Pandas' fashion. This expression is dedicated only for Pandas API on Spark.
+ * Refer to pandas.core.nanops.nanvar.
  */
-case class PandasVariance(child: Expression, ddof: Int) extends CentralMomentAgg(child, true) {
+case class PandasVariance(
+    child: Expression,
+    ddof: Int)
+  extends CentralMomentAgg(child, true) {
 
   def this(child: Expression, ddof: Expression) =
     this(child, PandasAggregate.expressionToDDOF(ddof, "pandas_variance"))
@@ -391,9 +382,7 @@ case class PandasVariance(child: Expression, ddof: Int) extends CentralMomentAgg
   override protected def momentOrder = 2
 
   override val evaluateExpression: Expression = {
-    If(
-      n === 0.0,
-      Literal.create(null, DoubleType),
+    If(n === 0.0, Literal.create(null, DoubleType),
       If(n === ddof.toDouble, divideByZeroEvalResult, m2 / (n - ddof.toDouble)))
   }
 
@@ -404,10 +393,11 @@ case class PandasVariance(child: Expression, ddof: Int) extends CentralMomentAgg
 }
 
 /**
- * Skewness in Pandas' fashion. This expression is dedicated only for Pandas API on Spark. Refer
- * to pandas.core.nanops.nanskew.
+ * Skewness in Pandas' fashion. This expression is dedicated only for Pandas API on Spark.
+ * Refer to pandas.core.nanops.nanskew.
  */
-case class PandasSkewness(child: Expression) extends CentralMomentAgg(child, true) {
+case class PandasSkewness(child: Expression)
+  extends CentralMomentAgg(child, true) {
 
   override def prettyName: String = "pandas_skewness"
 
@@ -423,13 +413,8 @@ case class PandasSkewness(child: Expression) extends CentralMomentAgg(child, tru
     val _m2 = If(abs(m2) < 1e-14, Literal(0.0), m2)
     val _m3 = If(abs(m3) < 1e-14, Literal(0.0), m3)
 
-    If(
-      n < 3.0,
-      Literal.create(null, DoubleType),
-      If(
-        _m2 === 0.0,
-        Literal(0.0),
-        sqrt(n - 1.0) * (n / (n - 2.0)) * _m3 / sqrt(_m2 * _m2 * _m2)))
+    If(n < 3.0, Literal.create(null, DoubleType),
+      If(_m2 === 0.0, Literal(0.0), sqrt(n - 1.0) * (n / (n - 2.0)) * _m3 / sqrt(_m2 * _m2 * _m2)))
   }
 
   override protected def withNewChildInternal(newChild: Expression): PandasSkewness =
@@ -437,10 +422,11 @@ case class PandasSkewness(child: Expression) extends CentralMomentAgg(child, tru
 }
 
 /**
- * Kurtosis in Pandas' fashion. This expression is dedicated only for Pandas API on Spark. Refer
- * to pandas.core.nanops.nankurt.
+ * Kurtosis in Pandas' fashion. This expression is dedicated only for Pandas API on Spark.
+ * Refer to pandas.core.nanops.nankurt.
  */
-case class PandasKurtosis(child: Expression) extends CentralMomentAgg(child, true) {
+case class PandasKurtosis(child: Expression)
+  extends CentralMomentAgg(child, true) {
 
   override protected def momentOrder = 4
 
@@ -458,9 +444,7 @@ case class PandasKurtosis(child: Expression) extends CentralMomentAgg(child, tru
     val _numerator = If(abs(numerator) < 1e-14, Literal(0.0), numerator)
     val _denominator = If(abs(denominator) < 1e-14, Literal(0.0), denominator)
 
-    If(
-      n < 4.0,
-      Literal.create(null, DoubleType),
+    If(n < 4.0, Literal.create(null, DoubleType),
       If(_denominator === 0.0, Literal(0.0), _numerator / _denominator - adj))
   }
 

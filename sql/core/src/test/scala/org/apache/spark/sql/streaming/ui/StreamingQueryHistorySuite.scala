@@ -43,10 +43,8 @@ class StreamingQueryHistorySuite extends SharedSparkSession with BeforeAndAfter 
       val store = new StreamingQueryStatusStore(appUi.ui.store.store)
       val tab = new StreamingQueryTab(store, appUi.ui)
       val request = mock(classOf[HttpServletRequest])
-      var html = new StreamingQueryPage(tab)
-        .render(request)
-        .toString()
-        .toLowerCase(Locale.ROOT)
+      var html = new StreamingQueryPage(tab).render(request)
+        .toString().toLowerCase(Locale.ROOT)
       // 81.39: Avg Input /sec
       assert(html.contains("81.39"))
       // 157.05: Avg Process /sec
@@ -55,10 +53,8 @@ class StreamingQueryHistorySuite extends SharedSparkSession with BeforeAndAfter 
       val id = "8d268dc2-bc9c-4be8-97a9-b135d2943028"
       val runId = "e225d92f-2545-48f8-87a2-9c0309580f8a"
       when(request.getParameter("id")).thenReturn(runId)
-      html = new StreamingQueryStatisticsPage(tab)
-        .render(request)
-        .toString()
-        .toLowerCase(Locale.ROOT)
+      html = new StreamingQueryStatisticsPage(tab).render(request)
+        .toString().toLowerCase(Locale.ROOT)
       assert(html.contains("<strong>8</strong> completed batches"))
       assert(html.contains(id))
       assert(html.contains(runId))

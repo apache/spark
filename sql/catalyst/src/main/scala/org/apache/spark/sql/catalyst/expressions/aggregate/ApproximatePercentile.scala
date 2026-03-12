@@ -37,21 +37,20 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * The ApproximatePercentile function returns the approximate percentile(s) of a column at the
- * given percentage(s). A percentile is a watermark value below which a given percentage of the
- * column values fall. For example, the percentile of column `col` at percentage 50% is the median
- * of column `col`.
+ * The ApproximatePercentile function returns the approximate percentile(s) of a column at the given
+ * percentage(s). A percentile is a watermark value below which a given percentage of the column
+ * values fall. For example, the percentile of column `col` at percentage 50% is the median of
+ * column `col`.
  *
  * This function supports partial aggregation.
  *
- * @param child
- *   child expression that can produce column value with `child.eval(inputRow)`
- * @param percentageExpression
- *   Expression that represents a single percentage value or an array of percentage values. Each
- *   percentage value must be between 0.0 and 1.0.
- * @param accuracyExpression
- *   Integer literal expression of approximation accuracy. Higher value yields better accuracy,
- *   the default value is DEFAULT_PERCENTILE_ACCURACY.
+ * @param child child expression that can produce column value with `child.eval(inputRow)`
+ * @param percentageExpression Expression that represents a single percentage value or
+ *                             an array of percentage values. Each percentage value must be between
+ *                             0.0 and 1.0.
+ * @param accuracyExpression Integer literal expression of approximation accuracy. Higher value
+ *                           yields better accuracy, the default value is
+ *                           DEFAULT_PERCENTILE_ACCURACY.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -87,14 +86,10 @@ case class ApproximatePercentile(
     accuracyExpression: Expression,
     override val mutableAggBufferOffset: Int,
     override val inputAggBufferOffset: Int)
-    extends TypedImperativeAggregate[PercentileDigest]
-    with ImplicitCastInputTypes
-    with TernaryLike[Expression] {
+  extends TypedImperativeAggregate[PercentileDigest] with ImplicitCastInputTypes
+  with TernaryLike[Expression] {
 
-  def this(
-      child: Expression,
-      percentageExpression: Expression,
-      accuracyExpression: Expression) = {
+  def this(child: Expression, percentageExpression: Expression, accuracyExpression: Expression) = {
     this(child, percentageExpression, accuracyExpression, 0, 0)
   }
 
@@ -109,16 +104,9 @@ case class ApproximatePercentile(
   override def inputTypes: Seq[AbstractDataType] = {
     // Support NumericType, DateType, TimestampType and TimestampNTZType since their internal types
     // are all numeric, and can be easily cast to double for processing.
-    Seq(
-      TypeCollection(
-        NumericType,
-        DateType,
-        TimestampType,
-        TimestampNTZType,
-        YearMonthIntervalType,
-        DayTimeIntervalType),
-      TypeCollection(DoubleType, ArrayType(DoubleType, containsNull = false)),
-      IntegralType)
+    Seq(TypeCollection(NumericType, DateType, TimestampType, TimestampNTZType,
+      YearMonthIntervalType, DayTimeIntervalType),
+      TypeCollection(DoubleType, ArrayType(DoubleType, containsNull = false)), IntegralType)
   }
 
   // Mark as lazy so that percentageExpression is not evaluated during tree transformation.
@@ -140,14 +128,18 @@ case class ApproximatePercentile(
         messageParameters = Map(
           "inputName" -> toSQLId("percentage"),
           "inputType" -> toSQLType(percentageExpression.dataType),
-          "inputExpr" -> toSQLExpr(percentageExpression)))
+          "inputExpr" -> toSQLExpr(percentageExpression)
+        )
+      )
     } else if (!accuracyExpression.foldable) {
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
           "inputName" -> toSQLId("accuracy"),
           "inputType" -> toSQLType(accuracyExpression.dataType),
-          "inputExpr" -> toSQLExpr(accuracyExpression)))
+          "inputExpr" -> toSQLExpr(accuracyExpression)
+        )
+      )
     } else if (accuracyNum == null) {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_NULL",
@@ -158,25 +150,29 @@ case class ApproximatePercentile(
         messageParameters = Map(
           "exprName" -> "accuracy",
           "valueRange" -> s"(0, ${Int.MaxValue}]",
-          "currentValue" -> toSQLValue(accuracy, LongType)))
+          "currentValue" -> toSQLValue(accuracy, LongType)
+        )
+      )
     } else if (percentages == null) {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_NULL",
         messageParameters = Map("exprName" -> "percentage"))
-    } else if (percentages.exists(percentage => percentage < 0.0d || percentage > 1.0d)) {
+    } else if (percentages.exists(percentage => percentage < 0.0D || percentage > 1.0D)) {
       DataTypeMismatch(
         errorSubClass = "VALUE_OUT_OF_RANGE",
         messageParameters = Map(
           "exprName" -> "percentage",
           "valueRange" -> "[0.0, 1.0]",
-          "currentValue" -> percentages.map(toSQLValue(_, DoubleType)).mkString(",")))
+          "currentValue" -> percentages.map(toSQLValue(_, DoubleType)).mkString(",")
+        )
+      )
     } else {
       TypeCheckSuccess
     }
   }
 
   override def createAggregationBuffer(): PercentileDigest = {
-    val relativeError = 1.0d / accuracy
+    val relativeError = 1.0D / accuracy
     new PercentileDigest(relativeError)
   }
 
@@ -190,8 +186,7 @@ case class ApproximatePercentile(
         case TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
           value.asInstanceOf[Long].toDouble
         case n: NumericType =>
-          PhysicalNumericType
-            .numeric(n)
+          PhysicalNumericType.numeric(n)
             .toDouble(value.asInstanceOf[PhysicalNumericType#InternalType])
         case other: DataType =>
           throw SparkException.internalError(s"Unexpected data type $other")
@@ -262,9 +257,7 @@ case class ApproximatePercentile(
   }
 
   override protected def withNewChildrenInternal(
-      newFirst: Expression,
-      newSecond: Expression,
-      newThird: Expression): ApproximatePercentile =
+      newFirst: Expression, newSecond: Expression, newThird: Expression): ApproximatePercentile =
     copy(child = newFirst, percentageExpression = newSecond, accuracyExpression = newThird)
 }
 
@@ -275,11 +268,10 @@ object ApproximatePercentile {
   val DEFAULT_PERCENTILE_ACCURACY: Int = 10000
 
   /**
-   * PercentileDigest is a probabilistic data structure used for approximating percentiles with
-   * limited memory. PercentileDigest is backed by [[QuantileSummaries]].
+   * PercentileDigest is a probabilistic data structure used for approximating percentiles
+   * with limited memory. PercentileDigest is backed by [[QuantileSummaries]].
    *
-   * @param summaries
-   *   underlying probabilistic data structure [[QuantileSummaries]].
+   * @param summaries underlying probabilistic data structure [[QuantileSummaries]].
    */
   class PercentileDigest(private var summaries: QuantileSummaries) {
 
@@ -307,10 +299,10 @@ object ApproximatePercentile {
     }
 
     /**
-     * Returns the approximate percentiles of all observation values at the given percentages. A
-     * percentile is a watermark value below which a given percentage of observation values fall.
-     * For example, the following code returns the 25th, median, and 75th percentiles of all
-     * observation values:
+     * Returns the approximate percentiles of all observation values at the given percentages.
+     * A percentile is a watermark value below which a given percentage of observation values fall.
+     * For example, the following code returns the 25th, median, and 75th percentiles of
+     * all observation values:
      *
      * {{{
      *   val Array(p25, median, p75) = percentileDigest.getPercentiles(Array(0.25, 0.5, 0.75))
@@ -340,10 +332,10 @@ object ApproximatePercentile {
     private final def length(summaries: QuantileSummaries): Int = {
       // summaries.compressThreshold, summary.relativeError, summary.count
       Ints.BYTES + Doubles.BYTES + Longs.BYTES +
-        // length of summary.sampled
-        Ints.BYTES +
-        // summary.sampled, Array[Stat(value: Double, g: Long, delta: Long)]
-        summaries.sampled.length * (Doubles.BYTES + Longs.BYTES + Longs.BYTES)
+      // length of summary.sampled
+      Ints.BYTES +
+      // summary.sampled, Array[Stat(value: Double, g: Long, delta: Long)]
+      summaries.sampled.length * (Doubles.BYTES + Longs.BYTES + Longs.BYTES)
     }
 
     final def serialize(obj: PercentileDigest): Array[Byte] = {

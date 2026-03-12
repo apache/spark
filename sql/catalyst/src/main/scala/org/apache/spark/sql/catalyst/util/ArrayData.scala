@@ -38,31 +38,26 @@ object ArrayData {
     case other => new GenericArrayData(other)
   }
 
+
   /**
    * Allocate [[UnsafeArrayData]] or [[GenericArrayData]] based on given parameters.
    *
-   * @param elementSize
-   *   a size of an element in bytes. If less than zero, the type of an element is non-primitive
-   *   type
-   * @param numElements
-   *   the number of elements the array should contain
-   * @param additionalErrorMessage
-   *   string to include in the error message
+   * @param elementSize a size of an element in bytes. If less than zero, the type of an element is
+   *                    non-primitive type
+   * @param numElements the number of elements the array should contain
+   * @param additionalErrorMessage string to include in the error message
    */
   def allocateArrayData(
       elementSize: Int,
       numElements: Long,
       additionalErrorMessage: String): ArrayData = {
-    if (elementSize >= 0 && !UnsafeArrayData.shouldUseGenericArrayData(
-        elementSize,
-        numElements)) {
+    if (elementSize >= 0 && !UnsafeArrayData.shouldUseGenericArrayData(elementSize, numElements)) {
       UnsafeArrayData.createFreshArray(numElements.toInt, elementSize)
     } else if (numElements <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toLong) {
       new GenericArrayData(new Array[Any](numElements.toInt))
     } else {
       throw QueryExecutionErrors.cannotCreateArrayWithElementsExceedLimitError(
-        numElements,
-        additionalErrorMessage)
+        numElements, additionalErrorMessage)
     }
   }
 }

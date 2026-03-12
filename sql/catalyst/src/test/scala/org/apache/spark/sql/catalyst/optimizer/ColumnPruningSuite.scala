@@ -33,9 +33,7 @@ import org.apache.spark.sql.types.{StringType, StructType}
 class ColumnPruningSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch(
-      "Column pruning",
-      FixedPoint(100),
+    val batches = Batch("Column pruning", FixedPoint(100),
       PushPredicateThroughNonJoin,
       ColumnPruning,
       RemoveNoopOperators,
@@ -75,11 +73,9 @@ class ColumnPruningSuite extends PlanTest {
 
     val correctAnswer =
       input
-        .generate(
-          Explode($"b"),
-          unrequiredChildIndex = input.output.zipWithIndex.map(_._2),
+        .generate(Explode($"b"), unrequiredChildIndex = input.output.zipWithIndex.map(_._2),
           outputNames = "explode" :: Nil)
-        .select(($"explode" + 1).as("result"))
+         .select(($"explode" + 1).as("result"))
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -99,8 +95,7 @@ class ColumnPruningSuite extends PlanTest {
     val correctAnswer =
       input
         .select($"a", $"c1", $"c2")
-        .generate(
-          Explode(CreateArray(Seq($"c1", $"c2"))),
+        .generate(Explode(CreateArray(Seq($"c1", $"c2"))),
           unrequiredChildIndex = Seq(2),
           outputNames = "explode" :: Nil)
         .analyze
@@ -116,9 +111,8 @@ class ColumnPruningSuite extends PlanTest {
         unrequiredChildIndex: Seq[Int],
         generatorOutputNames: Seq[String]): Unit = {
       withSQLConf(SQLConf.NESTED_PRUNING_ON_EXPRESSIONS.key -> "true") {
-        val structType = StructType.fromDDL(
-          "d double, e array<string>, f double, g double, " +
-            "h array<struct<h1: int, h2: double>>")
+        val structType = StructType.fromDDL("d double, e array<string>, f double, g double, " +
+          "h array<struct<h1: int, h2: double>>")
         val input = LocalRelation($"a".int, $"b".int, $"c".struct(structType))
         val generatorOutputs = generatorOutputNames.map(UnresolvedAttribute(_))
 
@@ -142,8 +136,7 @@ class ColumnPruningSuite extends PlanTest {
         val correctAnswer =
           input
             .select(selectedFields: _*)
-            .generate(
-              replacedGenerator(aliases),
+            .generate(replacedGenerator(aliases),
               unrequiredChildIndex = unrequiredChildIndex,
               outputNames = generatorOutputNames)
             .select(finalSelectedExprs: _*)
@@ -158,29 +151,31 @@ class ColumnPruningSuite extends PlanTest {
       aliases => Explode($"${aliases(1)}".as("c.e")),
       aliases => Seq($"c".getField("d").as(aliases(0)), $"c".getField("e").as(aliases(1))),
       Seq(2),
-      Seq("explode"))
-    runTest(
-      Stack(2 :: $"c".getField("f") :: $"c".getField("g") :: Nil),
+      Seq("explode")
+    )
+    runTest(Stack(2 :: $"c".getField("f") :: $"c".getField("g") :: Nil),
       aliases => Stack(2 :: $"${aliases(1)}".as("c.f") :: $"${aliases(2)}".as("c.g") :: Nil),
-      aliases =>
-        Seq(
-          $"c".getField("d").as(aliases(0)),
-          $"c".getField("f").as(aliases(1)),
-          $"c".getField("g").as(aliases(2))),
+      aliases => Seq(
+        $"c".getField("d").as(aliases(0)),
+        $"c".getField("f").as(aliases(1)),
+        $"c".getField("g").as(aliases(2))),
       Seq(2, 3),
-      Seq("stack"))
+      Seq("stack")
+    )
     runTest(
       PosExplode($"c".getField("e")),
       aliases => PosExplode($"${aliases(1)}".as("c.e")),
       aliases => Seq($"c".getField("d").as(aliases(0)), $"c".getField("e").as(aliases(1))),
       Seq(2),
-      Seq("pos", "explode"))
+      Seq("pos", "explode")
+    )
     runTest(
       Inline($"c".getField("h")),
       aliases => Inline($"${aliases(1)}".as("c.h")),
       aliases => Seq($"c".getField("d").as(aliases(0)), $"c".getField("h").as(aliases(1))),
       Seq(2),
-      Seq("h1", "h2"))
+      Seq("h1", "h2")
+    )
   }
 
   test("Column pruning for Project on Sort") {
@@ -213,9 +208,12 @@ class ColumnPruningSuite extends PlanTest {
         Seq($"aa", $"gid"),
         Seq(sum($"c").as("sum")),
         Expand(
-          Seq(Seq($"c", Literal.create(null, StringType), 1), Seq($"c", $"a", 2)),
+          Seq(
+            Seq($"c", Literal.create(null, StringType), 1),
+            Seq($"c", $"a", 2)),
           Seq($"c", $"aa".int, $"gid".int),
-          Project(Seq($"a", $"c"), input))).analyze
+          Project(Seq($"a", $"c"),
+            input))).analyze
 
     comparePlans(optimized, expected)
   }
@@ -279,8 +277,7 @@ class ColumnPruningSuite extends PlanTest {
     val correctAnswer =
       testRelation
         .select($"a")
-        .groupBy($"a")($"a")
-        .analyze
+        .groupBy($"a")($"a").analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -297,8 +294,7 @@ class ColumnPruningSuite extends PlanTest {
     val correctAnswer =
       testRelation
         .select($"a")
-        .groupBy($"a")($"a" as "c")
-        .analyze
+        .groupBy($"a")($"a" as "c").analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -316,8 +312,7 @@ class ColumnPruningSuite extends PlanTest {
     val correctAnswer =
       testRelation
         .select($"a")
-        .limit(2)
-        .analyze
+        .limit(2).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -336,8 +331,7 @@ class ColumnPruningSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       x.select($"a")
-        .sortBy(SortOrder($"a", Ascending))
-        .analyze
+        .sortBy(SortOrder($"a", Ascending)).analyze
 
     comparePlans(optimized, correctAnswer)
 
@@ -352,8 +346,7 @@ class ColumnPruningSuite extends PlanTest {
     val correctAnswer1 =
       x.select($"a", $"b")
         .sortBy(SortOrder($"a", Ascending))
-        .select($"b")
-        .analyze
+        .select($"b").analyze
 
     comparePlans(optimized1, correctAnswer1)
   }
@@ -363,10 +356,9 @@ class ColumnPruningSuite extends PlanTest {
     val winSpec = windowSpec($"a" :: Nil, $"d".asc :: Nil, UnspecifiedFrame)
     val winExpr = windowExpr(count($"d"), winSpec)
 
-    val originalQuery =
-      input.groupBy($"a", $"c", $"d")($"a", $"c", $"d", winExpr.as("window")).select($"a", $"c")
-    val correctAnswer =
-      input.select($"a", $"c", $"d").groupBy($"a", $"c", $"d")($"a", $"c").analyze
+    val originalQuery = input.groupBy($"a", $"c", $"d")($"a", $"c", $"d",
+      winExpr.as("window")).select($"a", $"c")
+    val correctAnswer = input.select($"a", $"c", $"d").groupBy($"a", $"c", $"d")($"a", $"c").analyze
     val optimized = Optimize.execute(originalQuery.analyze)
 
     comparePlans(optimized, correctAnswer)
@@ -378,17 +370,12 @@ class ColumnPruningSuite extends PlanTest {
     val winExpr = windowExpr(count($"b"), winSpec)
 
     val originalQuery =
-      input
-        .select($"a", $"b", $"c", $"d", winExpr.as("window"))
-        .where($"window" > 1)
-        .select($"a", $"c")
+      input.select($"a", $"b", $"c", $"d", winExpr.as("window"))
+        .where($"window" > 1).select($"a", $"c")
     val correctAnswer =
-      input
-        .select($"a", $"b", $"c")
+      input.select($"a", $"b", $"c")
         .window(winExpr.as("window") :: Nil, $"a" :: Nil, $"b".asc :: Nil)
-        .where($"window" > 1)
-        .select($"a", $"c")
-        .analyze
+        .where($"window" > 1).select($"a", $"c").analyze
     val optimized = Optimize.execute(originalQuery.analyze)
 
     comparePlans(optimized, correctAnswer)
@@ -399,8 +386,8 @@ class ColumnPruningSuite extends PlanTest {
     val winSpec = windowSpec($"a" :: Nil, $"b".asc :: Nil, UnspecifiedFrame)
     val winExpr = windowExpr(count($"b"), winSpec)
 
-    val originalQuery =
-      input.select($"a", $"b", $"c", $"d", winExpr.as("window")).select($"a", $"c")
+    val originalQuery = input.select($"a", $"b", $"c", $"d",
+      winExpr.as("window")).select($"a", $"c")
     val correctAnswer = input.select($"a", $"c").analyze
     val optimized = Optimize.execute(originalQuery.analyze)
 
@@ -411,8 +398,8 @@ class ColumnPruningSuite extends PlanTest {
     val input1 = LocalRelation($"a".int, $"b".string, $"c".double)
     val input2 = LocalRelation($"c".int, $"d".string, $"e".double)
     val query = Project($"b" :: Nil, Union(input1 :: input2 :: Nil)).analyze
-    val expected =
-      Union(Project($"b" :: Nil, input1) :: Project($"d" :: Nil, input2) :: Nil).analyze
+    val expected = Union(Project($"b" :: Nil, input1) :: Project($"d" :: Nil, input2) :: Nil)
+      .analyze
     comparePlans(Optimize.execute(query), expected)
   }
 
@@ -420,14 +407,10 @@ class ColumnPruningSuite extends PlanTest {
     val input = LocalRelation($"key".int, $"value".string)
 
     val query =
-      Project(
-        Seq($"x.key", $"y.key"),
+      Project(Seq($"x.key", $"y.key"),
         Join(
           SubqueryAlias("x", input),
-          SubqueryAlias("y", input),
-          Inner,
-          None,
-          JoinHint.NONE)).analyze
+          SubqueryAlias("y", input), Inner, None, JoinHint.NONE)).analyze
 
     val optimized = Optimize.execute(query)
 
@@ -435,14 +418,12 @@ class ColumnPruningSuite extends PlanTest {
       Join(
         Project(Seq($"x.key"), SubqueryAlias("x", input)),
         Project(Seq($"y.key"), SubqueryAlias("y", input)),
-        Inner,
-        None,
-        JoinHint.NONE).analyze
+        Inner, None, JoinHint.NONE).analyze
 
     comparePlans(optimized, expected)
   }
 
-  implicit private def productEncoder[T <: Product: TypeTag]: ExpressionEncoder[T] =
+  implicit private def productEncoder[T <: Product : TypeTag]: ExpressionEncoder[T] =
     ExpressionEncoder[T]()
   private val func = identity[Iterator[OtherTuple]] _
 
@@ -486,15 +467,17 @@ class ColumnPruningSuite extends PlanTest {
 
   test("SPARK-39445: Remove the window if windowExpressions is empty in column pruning") {
     object CustomOptimize extends RuleExecutor[LogicalPlan] {
-      val batches = Batch("Column pruning", FixedPoint(10), ColumnPruning, CollapseProject) :: Nil
+      val batches = Batch("Column pruning", FixedPoint(10),
+        ColumnPruning,
+        CollapseProject) :: Nil
     }
 
     val relation = LocalRelation($"a".int, $"b".string, $"c".double, $"d".int)
     val winSpec = windowSpec($"a" :: Nil, $"b".asc :: Nil, UnspecifiedFrame)
     val winExpr = windowExpr(count($"b"), winSpec)
 
-    val originalQuery =
-      relation.select($"a", $"b", $"c", $"d", winExpr.as("window")).select($"a", $"c")
+    val originalQuery = relation.select($"a", $"b", $"c", $"d",
+      winExpr.as("window")).select($"a", $"c")
     val correctAnswer = relation.select($"a", $"c")
 
     comparePlans(CustomOptimize.execute(originalQuery.analyze), correctAnswer.analyze)

@@ -26,8 +26,7 @@ import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
 
 class SqlScriptingLocalVariableManager(context: SqlScriptingExecutionContext)
-    extends VariableManager
-    with DataTypeErrorsBase {
+  extends VariableManager with DataTypeErrorsBase {
 
   override def getVariableNameForError(variableName: String): String =
     toSQLId(Seq(context.currentScope.label, variableName))
@@ -42,7 +41,8 @@ class SqlScriptingLocalVariableManager(context: SqlScriptingExecutionContext)
     if (context.currentScope.variables.contains(name)) {
       throw new AnalysisException(
         errorClass = "VARIABLE_ALREADY_EXISTS",
-        messageParameters = Map("variableName" -> getVariableNameForError(name)))
+        messageParameters = Map(
+          "variableName" -> getVariableNameForError(name)))
     }
     context.currentScope.variables.put(name, varDef)
   }
@@ -65,20 +65,24 @@ class SqlScriptingLocalVariableManager(context: SqlScriptingExecutionContext)
 
   private def findScopeOfVariable(nameParts: Seq[String]): Option[SqlScriptingExecutionScope] = {
     // TODO: Update logic and comments once stored procedures are introduced.
-    def isScopeOfVar(nameParts: Seq[String], scope: SqlScriptingExecutionScope): Boolean =
-      nameParts match {
-        case Seq(name) => scope.variables.contains(name)
-        // Qualified case.
-        case Seq(label, _) => scope.label == label
-        case _ =>
-          throw SparkException.internalError("ScriptingVariableManager expects 1 or 2 nameParts.")
-      }
+    def isScopeOfVar(
+        nameParts: Seq[String],
+        scope: SqlScriptingExecutionScope
+    ): Boolean = nameParts match {
+      case Seq(name) => scope.variables.contains(name)
+      // Qualified case.
+      case Seq(label, _) => scope.label == label
+      case _ =>
+        throw SparkException.internalError("ScriptingVariableManager expects 1 or 2 nameParts.")
+    }
 
     // Use the shared searchAcrossFrames helper to maintain consistent logic with cursors
     context.searchAcrossFrames(
-      searchInCurrentFrame =
-        frame => frame.scopes.findLast(scope => isScopeOfVar(nameParts, scope)),
-      searchInScopes = scopes => scopes.findLast(scope => isScopeOfVar(nameParts, scope)))
+      searchInCurrentFrame = frame =>
+        frame.scopes.findLast(scope => isScopeOfVar(nameParts, scope)),
+      searchInScopes = scopes =>
+        scopes.findLast(scope => isScopeOfVar(nameParts, scope))
+    )
   }
 
   override def qualify(name: String): ResolvedIdentifier =
@@ -86,7 +90,8 @@ class SqlScriptingLocalVariableManager(context: SqlScriptingExecutionContext)
 
   override def remove(nameParts: Seq[String]): Boolean = {
     throw SparkException.internalError(
-      "ScriptingVariableManager.remove should never be called as local variables cannot be dropped.")
+      "ScriptingVariableManager.remove should never be called as local variables cannot be dropped."
+    )
   }
 
   override def clear(): Unit = context.frames.clear()

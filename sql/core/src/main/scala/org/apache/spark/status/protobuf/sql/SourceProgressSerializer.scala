@@ -58,6 +58,7 @@ private[protobuf] object SourceProgressSerializer {
       numInputRows = source.getNumInputRows,
       inputRowsPerSecond = source.getInputRowsPerSecond,
       processedRowsPerSecond = source.getProcessedRowsPerSecond,
-      metrics = new JHashMap(source.getMetricsMap))
+      metrics = new JHashMap(source.getMetricsMap)
+    )
   }
 }

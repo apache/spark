@@ -34,21 +34,18 @@ import org.apache.spark.util.collection.Utils
  * The operator takes limited number of elements from its child operator.
  */
 trait LimitExec extends UnaryExecNode {
-
   /** Number of element should be taken from child operator */
   def limit: Int
 }
 
 /**
- * Take the first `limit` elements, collect them to a single partition and then to drop the first
- * `offset` elements.
+ * Take the first `limit` elements, collect them to a single partition and then to drop the
+ * first `offset` elements.
  *
- * This operator will be used when a logical `Limit` and/or `Offset` operation is the final
- * operator in an logical plan, which happens when the user is collecting results back to the
- * driver.
+ * This operator will be used when a logical `Limit` and/or `Offset` operation is the final operator
+ * in an logical plan, which happens when the user is collecting results back to the driver.
  */
-case class CollectLimitExec(limit: Int = -1, child: SparkPlan, offset: Int = 0)
-    extends LimitExec {
+case class CollectLimitExec(limit: Int = -1, child: SparkPlan, offset: Int = 0) extends LimitExec {
   assert(limit >= 0 || (limit == -1 && offset > 0))
 
   override def output: Seq[Attribute] = child.output
@@ -105,12 +102,10 @@ case class CollectLimitExec(limit: Int = -1, child: SparkPlan, offset: Int = 0)
   }
 
   override def stringArgs: Iterator[Any] = {
-    super.stringArgs.zipWithIndex
-      .filter {
-        case (0, 2) => false
-        case _ => true
-      }
-      .map(_._1)
+    super.stringArgs.zipWithIndex.filter {
+      case (0, 2) => false
+      case _ => true
+    }.map(_._1)
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
@@ -120,8 +115,8 @@ case class CollectLimitExec(limit: Int = -1, child: SparkPlan, offset: Int = 0)
 /**
  * Take the last `limit` elements and collect them to a single partition.
  *
- * This operator will be used when a logical `Tail` operation is the final operator in an logical
- * plan, which happens when the user is collecting results back to the driver.
+ * This operator will be used when a logical `Tail` operation is the final operator in an
+ * logical plan, which happens when the user is collecting results back to the driver.
  */
 case class CollectTailExec(limit: Int, child: SparkPlan) extends LimitExec {
   assert(limit >= 0)
@@ -191,8 +186,8 @@ object BaseLimitExec {
 }
 
 /**
- * Helper trait which defines methods that are shared by both [[LocalLimitExec]] and
- * [[GlobalLimitExec]].
+ * Helper trait which defines methods that are shared by both
+ * [[LocalLimitExec]] and [[GlobalLimitExec]].
  */
 trait BaseLimitExec extends LimitExec with CodegenSupport {
   override def output: Seq[Attribute] = child.output
@@ -229,11 +224,7 @@ trait BaseLimitExec extends LimitExec with CodegenSupport {
     // Note: create counter variable here instead of `doConsume()` to avoid compilation error,
     // because upstream operators might not call `doConsume()` here
     // (e.g. `HashJoin.codegenInner()`).
-    ctx.addMutableState(
-      CodeGenerator.JAVA_INT,
-      countTerm,
-      forceInline = true,
-      useFreshName = false)
+    ctx.addMutableState(CodeGenerator.JAVA_INT, countTerm, forceInline = true, useFreshName = false)
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
@@ -260,7 +251,7 @@ case class LocalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
  * output partition.
  */
 case class GlobalLimitExec(limit: Int = -1, child: SparkPlan, offset: Int = 0)
-    extends BaseLimitExec {
+  extends BaseLimitExec {
   assert(limit >= 0 || (limit == -1 && offset > 0))
 
   override def requiredChildDistribution: List[Distribution] = AllTuples :: Nil
@@ -279,8 +270,7 @@ case class GlobalLimitExec(limit: Int = -1, child: SparkPlan, offset: Int = 0)
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     if (offset > 0) {
-      val skipTerm =
-        ctx.addMutableState(CodeGenerator.JAVA_INT, "rowsSkipped", forceInline = true)
+      val skipTerm = ctx.addMutableState(CodeGenerator.JAVA_INT, "rowsSkipped", forceInline = true)
       if (limit > 0) {
         // In codegen, we skip the first `offset` rows, then take the first `limit - offset` rows.
         val finalLimit = limit - offset
@@ -313,8 +303,8 @@ case class GlobalLimitExec(limit: Int = -1, child: SparkPlan, offset: Int = 0)
 /**
  * Take the first `limit` elements as defined by the sortOrder, then drop the first `offset`
  * elements, and do projection if needed. This is logically equivalent to having a Limit and/or
- * Offset operator after a [[SortExec]] operator, or having a [[ProjectExec]] operator between
- * them. This could have been named TopK, but Spark's top operator does the opposite in ordering
+ * Offset operator after a [[SortExec]] operator, or having a [[ProjectExec]] operator between them.
+ * This could have been named TopK, but Spark's top operator does the opposite in ordering
  * so we name it TakeOrdered to avoid confusion.
  */
 case class TakeOrderedAndProjectExec(
@@ -322,8 +312,7 @@ case class TakeOrderedAndProjectExec(
     sortOrder: Seq[SortOrder],
     projectList: Seq[NamedExpression],
     child: SparkPlan,
-    offset: Int = 0)
-    extends OrderPreservingUnaryExecNode {
+    offset: Int = 0) extends OrderPreservingUnaryExecNode {
 
   override def output: Seq[Attribute] = {
     projectList.map(_.toAttribute)
@@ -411,12 +400,10 @@ case class TakeOrderedAndProjectExec(
   }
 
   override def stringArgs: Iterator[Any] = {
-    super.stringArgs.zipWithIndex
-      .filter {
-        case (0, 4) => false
-        case _ => true
-      }
-      .map(_._1)
+    super.stringArgs.zipWithIndex.filter {
+      case (0, 4) => false
+      case _ => true
+    }.map(_._1)
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =

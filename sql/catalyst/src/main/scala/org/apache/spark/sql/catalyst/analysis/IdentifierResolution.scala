@@ -27,20 +27,21 @@ object IdentifierResolution extends AliasHelper with EvalHelper {
       case e if !e.foldable =>
         expr.failAnalysis(
           errorClass = "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
-          messageParameters = Map("name" -> "IDENTIFIER", "expr" -> expr.sql))
+          messageParameters = Map("name" -> "IDENTIFIER", "expr" -> expr.sql)
+        )
       case e if e.dataType != StringType =>
         expr.failAnalysis(
           errorClass = "NOT_A_CONSTANT_STRING.WRONG_TYPE",
-          messageParameters = Map(
-            "name" -> "IDENTIFIER",
-            "expr" -> expr.sql,
-            "dataType" -> e.dataType.catalogString))
+          messageParameters =
+            Map("name" -> "IDENTIFIER", "expr" -> expr.sql, "dataType" -> e.dataType.catalogString)
+        )
       case e =>
         e.eval() match {
           case null =>
             expr.failAnalysis(
               errorClass = "NOT_A_CONSTANT_STRING.NULL",
-              messageParameters = Map("name" -> "IDENTIFIER", "expr" -> expr.sql))
+              messageParameters = Map("name" -> "IDENTIFIER", "expr" -> expr.sql)
+            )
           case other =>
             // Parse the identifier string to name parts.
             CatalystSqlParser.parseMultipartIdentifier(other.toString)

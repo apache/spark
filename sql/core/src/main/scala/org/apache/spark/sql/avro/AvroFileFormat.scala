@@ -39,12 +39,11 @@ import org.apache.spark.sql.sources.{DataSourceRegister, Filter}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
 
-private[sql] class AvroFileFormat
-    extends FileFormat
-    with DataSourceRegister
-    with SessionStateHelper
-    with Logging
-    with Serializable {
+private[sql] class AvroFileFormat extends FileFormat
+  with DataSourceRegister
+  with SessionStateHelper
+  with Logging
+  with Serializable {
 
   AvroFileFormat.registerCustomAvroTypes()
 
@@ -184,13 +183,11 @@ private[avro] object AvroFileFormat {
    */
   def registerCustomAvroTypes(): Unit = {
     // Register the customized decimal type backed by long.
-    LogicalTypes.register(
-      CustomDecimal.TYPE_NAME,
-      new LogicalTypes.LogicalTypeFactory {
-        override def fromSchema(schema: Schema): LogicalType = {
-          new CustomDecimal(schema)
-        }
-      })
+    LogicalTypes.register(CustomDecimal.TYPE_NAME, new LogicalTypes.LogicalTypeFactory {
+      override def fromSchema(schema: Schema): LogicalType = {
+        new CustomDecimal(schema)
+      }
+    })
   }
 
   registerCustomAvroTypes()

@@ -48,8 +48,7 @@ class HDFSMetadataLogSuite extends SharedSparkSession {
 
   test("HDFSMetadataLog: basic") {
     withTempDir { temp =>
-      val dir =
-        new File(temp, "dir") // use non-existent directory to test whether log make the dir
+      val dir = new File(temp, "dir") // use non-existent directory to test whether log make the dir
       val metadataLog = new HDFSMetadataLog[String](spark, dir.getAbsolutePath)
       assert(metadataLog.add(0, "batch0"))
       assert(metadataLog.getLatest() === Some(0 -> "batch0"))
@@ -78,7 +77,8 @@ class HDFSMetadataLogSuite extends SharedSparkSession {
 
   Seq(
     classOf[FileSystemBasedCheckpointFileManager],
-    classOf[FileContextBasedCheckpointFileManager]).map(_.getCanonicalName).foreach { cls =>
+    classOf[FileContextBasedCheckpointFileManager]
+  ).map(_.getCanonicalName).foreach { cls =>
     test(s"HDFSMetadataLog: purge - explicit file manager - $cls") {
       withSQLConf(SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key -> cls) {
         testPurge()
@@ -121,8 +121,7 @@ class HDFSMetadataLogSuite extends SharedSparkSession {
       val metadataLog = new HDFSMetadataLog[String](spark, dir.getAbsolutePath)
       def assertLogFileMalformed(func: => Int): Unit = {
         val e = intercept[IllegalStateException] { func }
-        assert(
-          e.getMessage.contains(s"Log file was malformed: failed to read correct log version"))
+        assert(e.getMessage.contains(s"Log file was malformed: failed to read correct log version"))
       }
       assertLogFileMalformed { metadataLog.validateVersion("", 100) }
       assertLogFileMalformed { metadataLog.validateVersion("xyz", 100) }
@@ -137,9 +136,9 @@ class HDFSMetadataLogSuite extends SharedSparkSession {
       val e = intercept[IllegalStateException] { metadataLog.validateVersion("v200", 100) }
       Seq(
         "maximum supported log version is v100, but encountered v200",
-        "produced by a newer version of Spark and cannot be read by this version").foreach {
-        message =>
-          assert(e.getMessage.contains(message))
+        "produced by a newer version of Spark and cannot be read by this version"
+      ).foreach { message =>
+        assert(e.getMessage.contains(message))
       }
     }
   }

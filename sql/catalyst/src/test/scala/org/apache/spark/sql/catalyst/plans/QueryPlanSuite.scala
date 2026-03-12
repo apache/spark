@@ -38,8 +38,8 @@ class QueryPlanSuite extends SparkFunSuite {
     val query = DslLogicalPlan(table("table")).select(column)
     CurrentOrigin.reset()
 
-    val mappedQuery = query mapExpressions { case _: Expression =>
-      Literal(1)
+    val mappedQuery = query mapExpressions {
+      case _: Expression => Literal(1)
     }
 
     val mappedOrigin = mappedQuery.expressions.apply(0).origin
@@ -54,18 +54,31 @@ class QueryPlanSuite extends SparkFunSuite {
           Project(
             Seq(a),
             Filter(
-              ListQuery(
-                Project(
-                  Seq(a),
-                  Filter(
-                    ListQuery(Project(Seq(a), UnresolvedRelation(TableIdentifier("t", None)))),
-                    UnresolvedRelation(TableIdentifier("t", None))))),
-              UnresolvedRelation(TableIdentifier("t", None)))),
+              ListQuery(Project(
+                Seq(a),
+                Filter(
+                  ListQuery(Project(
+                    Seq(a),
+                    UnresolvedRelation(TableIdentifier("t", None))
+                  )),
+                  UnresolvedRelation(TableIdentifier("t", None))
+                )
+              )),
+              UnresolvedRelation(TableIdentifier("t", None))
+            )
+          ),
           Project(
             Seq(a),
             Filter(
-              ListQuery(Project(Seq(a), UnresolvedRelation(TableIdentifier("t", None)))),
-              UnresolvedRelation(TableIdentifier("t", None))))))
+              ListQuery(Project(
+                Seq(a),
+                UnresolvedRelation(TableIdentifier("t", None))
+              )),
+              UnresolvedRelation(TableIdentifier("t", None))
+            )
+          )
+        )
+      )
 
     val countRelationsInPlan = plan.collect({ case _: UnresolvedRelation => 1 }).sum
     val countRelationsInPlanAndSubqueries =
@@ -97,15 +110,25 @@ class QueryPlanSuite extends SparkFunSuite {
     val deterministicPlan = Project(
       Seq(a),
       Filter(
-        ListQuery(Project(Seq(a), UnresolvedRelation(TableIdentifier("t", None)))),
-        UnresolvedRelation(TableIdentifier("t", None))))
+        ListQuery(Project(
+          Seq(a),
+          UnresolvedRelation(TableIdentifier("t", None))
+        )),
+        UnresolvedRelation(TableIdentifier("t", None))
+      )
+    )
     assert(deterministicPlan.deterministic)
 
     val nonDeterministicPlan = Project(
       Seq(aRand),
       Filter(
-        ListQuery(Project(Seq(a), UnresolvedRelation(TableIdentifier("t", None)))),
-        UnresolvedRelation(TableIdentifier("t", None))))
+        ListQuery(Project(
+          Seq(a),
+          UnresolvedRelation(TableIdentifier("t", None))
+        )),
+        UnresolvedRelation(TableIdentifier("t", None))
+      )
+    )
     assert(!nonDeterministicPlan.deterministic)
   }
 
@@ -126,19 +149,13 @@ class QueryPlanSuite extends SparkFunSuite {
     // Test a Left Outer Join plan in which right-hand-side input attributes are not nullable.
     // Those attributes should be nullable after join even with a `transformUpWithNewOutput`
     // started below the Left Outer join.
-    val t1 = LocalRelation(
-      $"a".int.withNullability(false),
-      $"b".int.withNullability(false),
-      $"c".int.withNullability(false))
-    val t2 = LocalRelation(
-      $"c".int.withNullability(false),
-      $"d".int.withNullability(false),
-      $"e".int.withNullability(false))
-    val plan = t1
-      .select($"a", $"b")
+    val t1 = LocalRelation($"a".int.withNullability(false),
+      $"b".int.withNullability(false), $"c".int.withNullability(false))
+    val t2 = LocalRelation($"c".int.withNullability(false),
+      $"d".int.withNullability(false), $"e".int.withNullability(false))
+    val plan = t1.select($"a", $"b")
       .join(t2.select($"c", $"d"), LeftOuter, Some($"a" === $"c"))
-      .select($"a" + $"d")
-      .analyze
+      .select($"a" + $"d").analyze
     // The output Attribute of `plan` is nullable even though `d` is not nullable before the join.
     assert(plan.output(0).nullable)
     // The test rule with `transformUpWithNewOutput` should not change the nullability.
@@ -151,8 +168,13 @@ class QueryPlanSuite extends SparkFunSuite {
     val plan = Project(
       Seq(a),
       Filter(
-        ListQuery(Project(Seq(a), UnresolvedRelation(TableIdentifier("t", None)))),
-        UnresolvedRelation(TableIdentifier("t", None))))
+        ListQuery(Project(
+          Seq(a),
+          UnresolvedRelation(TableIdentifier("t", None))
+        )),
+        UnresolvedRelation(TableIdentifier("t", None))
+      )
+    )
 
     val visited = ArrayBuffer[LogicalPlan]()
     plan.foreachWithSubqueriesAndPruning(_.containsPattern(TreePattern.FILTER)) { p =>

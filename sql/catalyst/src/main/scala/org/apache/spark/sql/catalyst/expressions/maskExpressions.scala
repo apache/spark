@@ -80,16 +80,16 @@ import org.apache.spark.unsafe.types.UTF8String
 object MaskExpressionBuilder extends ExpressionBuilder {
   override def functionSignature: Option[FunctionSignature] = {
     val strArg = InputParameter("str")
-    val upperCharArg =
-      InputParameter("upperChar", Some(Literal.create(Mask.MASKED_UPPERCASE, StringType)))
-    val lowerCharArg =
-      InputParameter("lowerChar", Some(Literal.create(Mask.MASKED_LOWERCASE, StringType)))
-    val digitCharArg =
-      InputParameter("digitChar", Some(Literal.create(Mask.MASKED_DIGIT, StringType)))
-    val otherCharArg =
-      InputParameter("otherChar", Some(Literal.create(Mask.MASKED_IGNORE, StringType)))
-    val functionSignature: FunctionSignature = FunctionSignature(
-      Seq(strArg, upperCharArg, lowerCharArg, digitCharArg, otherCharArg))
+    val upperCharArg = InputParameter("upperChar",
+      Some(Literal.create(Mask.MASKED_UPPERCASE, StringType)))
+    val lowerCharArg = InputParameter("lowerChar",
+      Some(Literal.create(Mask.MASKED_LOWERCASE, StringType)))
+    val digitCharArg = InputParameter("digitChar",
+      Some(Literal.create(Mask.MASKED_DIGIT, StringType)))
+    val otherCharArg = InputParameter("otherChar",
+      Some(Literal.create(Mask.MASKED_IGNORE, StringType)))
+    val functionSignature: FunctionSignature = FunctionSignature(Seq(
+      strArg, upperCharArg, lowerCharArg, digitCharArg, otherCharArg))
     Some(functionSignature)
   }
 
@@ -138,11 +138,7 @@ case class Mask(
       upperChar: Expression,
       lowerChar: Expression,
       digitChar: Expression) =
-    this(
-      input,
-      upperChar,
-      lowerChar,
-      digitChar,
+    this(input, upperChar, lowerChar, digitChar,
       Literal.create(Mask.MASKED_IGNORE, input.dataType))
 
   override def checkInputDataTypes(): TypeCheckResult = {

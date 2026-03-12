@@ -29,28 +29,30 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Used to write log files that represent batch commit points in structured streaming. A commit
- * log file will be written immediately after the successful completion of a batch, and before
- * processing the next batch. Here is an execution summary:
- *   - trigger batch 1
- *   - obtain batch 1 offsets and write to offset log
- *   - process batch 1
- *   - write batch 1 to completion log
- *   - trigger batch 2
- *   - obtain batch 2 offsets and write to offset log
- *   - process batch 2
- *   - write batch 2 to completion log ....
+ * Used to write log files that represent batch commit points in structured streaming.
+ * A commit log file will be written immediately after the successful completion of a
+ * batch, and before processing the next batch. Here is an execution summary:
+ * - trigger batch 1
+ * - obtain batch 1 offsets and write to offset log
+ * - process batch 1
+ * - write batch 1 to completion log
+ * - trigger batch 2
+ * - obtain batch 2 offsets and write to offset log
+ * - process batch 2
+ * - write batch 2 to completion log
+ * ....
  *
- * The current format of the batch completion log is: line 1: version line 2: metadata (optional
- * json string)
+ * The current format of the batch completion log is:
+ * line 1: version
+ * line 2: metadata (optional json string)
  */
 class CommitLog(sparkSession: SparkSession, path: String)
-    extends HDFSMetadataLog[CommitMetadata](sparkSession, path) {
+  extends HDFSMetadataLog[CommitMetadata](sparkSession, path) {
 
   import CommitLog._
 
-  private val VERSION: Int =
-    sparkSession.conf.get(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key).toInt
+  private val VERSION: Int = sparkSession.conf.get(
+    SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key).toInt
 
   override protected[sql] def deserialize(in: InputStream): CommitMetadata = {
     // called inside a try-finally where the underlying stream is closed in the caller

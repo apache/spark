@@ -28,13 +28,15 @@ import org.apache.spark.sql.types.StructType
 /**
  * The base class for CreateUserDefinedFunctionCommand
  */
-abstract class CreateUserDefinedFunctionCommand extends LeafRunnableCommand with CapturesConfig
+abstract class CreateUserDefinedFunctionCommand
+  extends LeafRunnableCommand with CapturesConfig
+
 
 object CreateUserDefinedFunctionCommand {
 
   /**
-   * This factory methods serves as a central place to verify required inputs and returns the
-   * CREATE command for the parsed user defined function.
+   * This factory methods serves as a central place to verify required inputs and
+   * returns the CREATE command for the parsed user defined function.
    */
   // scalastyle:off argcount
   def apply(
@@ -51,7 +53,8 @@ object CreateUserDefinedFunctionCommand {
       isTableFunc: Boolean,
       isTemp: Boolean,
       ignoreIfExists: Boolean,
-      replace: Boolean): CreateUserDefinedFunctionCommand = {
+      replace: Boolean
+  ): CreateUserDefinedFunctionCommand = {
     // scalastyle:on argcount
 
     assert(language != null)
@@ -79,13 +82,14 @@ object CreateUserDefinedFunctionCommand {
   }
 
   /**
-   * Check whether the function parameters contain duplicated column names. It takes the function
-   * input parameter struct as input and verifies that there is no duplicates in the parameter
-   * column names. If any duplicates are found, it throws an exception with helpful information
-   * for users to fix the wrong function parameters.
+   * Check whether the function parameters contain duplicated column names.
+   * It takes the function input parameter struct as input and verifies that there is no duplicates
+   * in the parameter column names.
+   * If any duplicates are found, it throws an exception with helpful information for users to
+   * fix the wrong function parameters.
    *
-   * Perform this check while registering the function to fail early. This check does not need to
-   * run the function itself.
+   * Perform this check while registering the function to fail early.
+   * This check does not need to run the function itself.
    */
   def checkParameterNameDuplication(
       param: StructType,
@@ -129,10 +133,10 @@ object CreateUserDefinedFunctionCommand {
   }
 
   /**
-   * Check whether the function parameters contain non trailing defaults. For languages that
-   * support default values for input parameters, this check ensures once a default value is given
-   * to a parameter, all subsequent parameters must also have a default value. It throws error if
-   * otherwise.
+   * Check whether the function parameters contain non trailing defaults.
+   * For languages that support default values for input parameters,
+   * this check ensures once a default value is given to a parameter,
+   * all subsequent parameters must also have a default value. It throws error if otherwise.
    *
    * Perform this check on function input parameters while registering the function to fail early.
    * This check does not need to run the function itself.
@@ -158,8 +162,8 @@ object CreateUserDefinedFunctionCommand {
    * Check whether the function input or return columns (for TABLE Return type) have NOT NULL
    * specified. Throw exception if NOT NULL is found.
    *
-   * Perform this check on function input and return parameters while registering the function to
-   * fail early. This check does not need to run the function itself.
+   * Perform this check on function input and return parameters while registering the function
+   * to fail early. This check does not need to run the function itself.
    */
   def checkParameterNotNull(param: StructType, input: String): Unit = {
     param.fields.foreach { field =>

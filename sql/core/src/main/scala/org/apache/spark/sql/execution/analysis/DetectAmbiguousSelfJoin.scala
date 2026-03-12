@@ -33,11 +33,12 @@ import org.apache.spark.sql.types.MetadataBuilder
  * results.
  *
  * Dataset column reference is simply an [[AttributeReference]] that is returned by `Dataset#col`.
- * Most of time we don't need to do anything special, as [[AttributeReference]] can point to the
- * column precisely. However, in case of self-join, the analyzer generates [[AttributeReference]]
- * with new expr IDs for the right side plan of the join. If the Dataset column reference points
- * to a column in the right side plan of a self-join, users will get unexpected result because the
- * column reference can't match the newly generated [[AttributeReference]].
+ * Most of time we don't need to do anything special, as [[AttributeReference]] can point to
+ * the column precisely. However, in case of self-join, the analyzer generates
+ * [[AttributeReference]] with new expr IDs for the right side plan of the join. If the Dataset
+ * column reference points to a column in the right side plan of a self-join, users will get
+ * unexpected result because the column reference can't match the newly generated
+ * [[AttributeReference]].
  *
  * Note that, this rule removes all the Dataset id related metadata from `AttributeReference`, so
  * that they don't exist after analyzer.
@@ -98,7 +99,7 @@ object DetectAmbiguousSelfJoin extends Rule[LogicalPlan] {
               if (ref.colPos < 0 || ref.colPos >= p.output.length) {
                 throw SparkException.internalError(
                   "Hit an invalid Dataset column reference: " +
-                    s"$ref. Please open a JIRA ticket to report it.")
+                  s"$ref. Please open a JIRA ticket to report it.")
               } else {
                 // When self-join happens, the analyzer asks the right side plan to generate
                 // attributes with new exprIds. If a plan of a Dataset outputs an attribute which
@@ -126,11 +127,9 @@ object DetectAmbiguousSelfJoin extends Rule[LogicalPlan] {
 
       val ambiguousAttrs: Seq[AttributeReference] = plan match {
         case Join(
-              LogicalPlanWithDatasetId(_, leftId),
-              LogicalPlanWithDatasetId(_, rightId),
-              _,
-              condition,
-              _) =>
+            LogicalPlanWithDatasetId(_, leftId),
+            LogicalPlanWithDatasetId(_, rightId),
+            _, condition, _) =>
           // If we are dealing with root join node, we need to take care of SPARK-6231:
           //  1. We can de-ambiguous `df("col") === df("col")` in the join condition.
           //  2. There is no ambiguity in direct self join like
@@ -154,10 +153,9 @@ object DetectAmbiguousSelfJoin extends Rule[LogicalPlan] {
           }
           condition.toSeq.flatMap(getAmbiguousAttrs)
 
-        case _ =>
-          ambiguousColRefs.toSeq.map { ref =>
-            colRefAttrs.find(attr => toColumnReference(attr) == ref).get
-          }
+        case _ => ambiguousColRefs.toSeq.map { ref =>
+          colRefAttrs.find(attr => toColumnReference(attr) == ref).get
+        }
       }
 
       if (ambiguousAttrs.nonEmpty) {

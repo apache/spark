@@ -24,13 +24,13 @@ import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-case class JsonScanBuilder(
+case class JsonScanBuilder (
     sparkSession: SparkSession,
     fileIndex: PartitioningAwareFileIndex,
     schema: StructType,
     dataSchema: StructType,
     options: CaseInsensitiveStringMap)
-    extends FileScanBuilder(sparkSession, fileIndex, dataSchema) {
+  extends FileScanBuilder(sparkSession, fileIndex, dataSchema) {
   override def build(): JsonScan = {
     JsonScan(
       sparkSession,

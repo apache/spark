@@ -22,10 +22,7 @@ import org.apache.spark.sql.execution.streaming.Offset
 import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, SerializedOffset}
 
 trait OffsetSuite extends SparkFunSuite {
-
-  /**
-   * Creates test to check all the comparisons of offsets given a `one` that is less than `two`.
-   */
+  /** Creates test to check all the comparisons of offsets given a `one` that is less than `two`. */
   def compare(one: Offset, two: Offset): Unit = {
     test(s"comparison $one <=> $two") {
       assert(one == one)
@@ -42,5 +39,8 @@ class LongOffsetSuite extends OffsetSuite {
   val three = LongOffset(3)
   compare(one, two)
 
-  compare(LongOffset(SerializedOffset(one.json)), LongOffset(SerializedOffset(three.json)))
+  compare(LongOffset(SerializedOffset(one.json)),
+          LongOffset(SerializedOffset(three.json)))
 }
+
+

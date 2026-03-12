@@ -25,20 +25,16 @@ trait TreePatternBits {
   protected def treePatternBits: BitSet
 
   /**
-   * @param t,
-   *   the tree pattern enum to be tested.
-   * @return
-   *   true if the bit for `t` is set; false otherwise.
+   * @param t, the tree pattern enum to be tested.
+   * @return true if the bit for `t` is set; false otherwise.
    */
   @inline final def containsPattern(t: TreePattern): Boolean = {
     treePatternBits.get(t.id)
   }
 
   /**
-   * @param patterns,
-   *   a sequence of tree pattern enums to be tested.
-   * @return
-   *   true if every bit for `patterns` is set; false otherwise.
+   * @param patterns, a sequence of tree pattern enums to be tested.
+   * @return true if every bit for `patterns` is set; false otherwise.
    */
   final def containsAllPatterns(patterns: TreePattern*): Boolean = {
     val iterator = patterns.iterator
@@ -51,10 +47,8 @@ trait TreePatternBits {
   }
 
   /**
-   * @param patterns,
-   *   a sequence of tree pattern enums to be tested.
-   * @return
-   *   true if at least one bit for `patterns` is set; false otherwise.
+   * @param patterns, a sequence of tree pattern enums to be tested.
+   * @return true if at least one bit for `patterns` is set; false otherwise.
    */
   final def containsAnyPattern(patterns: TreePattern*): Boolean = {
     val iterator = patterns.iterator
@@ -80,3 +74,4 @@ object TreePatternBits {
     bits
   }
 }
+

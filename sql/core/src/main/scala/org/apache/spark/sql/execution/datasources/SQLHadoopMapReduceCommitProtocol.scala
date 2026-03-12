@@ -27,16 +27,15 @@ import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * A variant of [[HadoopMapReduceCommitProtocol]] that allows specifying the actual Hadoop output
- * committer using an option specified in SQLConf.
+ * A variant of [[HadoopMapReduceCommitProtocol]] that allows specifying the actual
+ * Hadoop output committer using an option specified in SQLConf.
  */
 class SQLHadoopMapReduceCommitProtocol(
     jobId: String,
     path: String,
     dynamicPartitionOverwrite: Boolean = false)
-    extends HadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite)
-    with Serializable
-    with Logging {
+  extends HadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite)
+    with Serializable with Logging {
 
   override protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     var committer = super.setupCommitter(context)
@@ -46,9 +45,8 @@ class SQLHadoopMapReduceCommitProtocol(
       configuration.getClass(SQLConf.OUTPUT_COMMITTER_CLASS.key, null, classOf[OutputCommitter])
 
     if (clazz != null) {
-      logInfo(
-        log"Using user defined output committer class " +
-          log"${MDC(CLASS_NAME, clazz.getCanonicalName)}")
+      logInfo(log"Using user defined output committer class " +
+        log"${MDC(CLASS_NAME, clazz.getCanonicalName)}")
 
       // Every output format based on org.apache.hadoop.mapreduce.lib.output.OutputFormat
       // has an associated output committer. To override this output committer,
@@ -68,9 +66,8 @@ class SQLHadoopMapReduceCommitProtocol(
         committer = ctor.newInstance()
       }
     }
-    logInfo(
-      log"Using output committer class " +
-        log"${MDC(CLASS_NAME, committer.getClass.getCanonicalName)}")
+    logInfo(log"Using output committer class " +
+      log"${MDC(CLASS_NAME, committer.getClass.getCanonicalName)}")
     committer
   }
 }

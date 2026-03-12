@@ -21,6 +21,7 @@ import org.apache.spark.sql.{AnalysisException, SQLContext}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
+
 // please note that the META-INF/services had to be modified for the test directory for this to work
 class DDLSourceLoadSuite extends DataSourceTest with SharedSparkSession {
 
@@ -33,13 +34,14 @@ class DDLSourceLoadSuite extends DataSourceTest with SharedSparkSession {
       parameters = Map(
         "provider" -> "Fluet da Bomb",
         "sourceNames" -> ("org.apache.spark.sql.sources.FakeSourceOne, " +
-          "org.apache.spark.sql.sources.FakeSourceTwo")))
+          "org.apache.spark.sql.sources.FakeSourceTwo")
+      )
+    )
   }
 
   test("data sources with the same name - internal data source/external data source") {
-    assert(
-      spark.read.format("datasource").load().schema ==
-        StructType(Seq(StructField("longType", LongType, nullable = false))))
+    assert(spark.read.format("datasource").load().schema ==
+      StructType(Seq(StructField("longType", LongType, nullable = false))))
   }
 
   test("data sources with the same name - external data sources") {
@@ -51,23 +53,22 @@ class DDLSourceLoadSuite extends DataSourceTest with SharedSparkSession {
       parameters = Map(
         "provider" -> "Fake external source",
         "sourceNames" -> ("org.apache.fakesource.FakeExternalSourceOne, " +
-          "org.apache.fakesource.FakeExternalSourceTwo")))
+          "org.apache.fakesource.FakeExternalSourceTwo")
+      )
+    )
   }
 
   test("load data source from format alias") {
-    assert(
-      spark.read.format("gathering quorum").load().schema ==
-        StructType(Seq(StructField("stringType", StringType, nullable = false))))
+    assert(spark.read.format("gathering quorum").load().schema ==
+      StructType(Seq(StructField("stringType", StringType, nullable = false))))
   }
 
   test("specify full classname with duplicate formats") {
-    assert(
-      spark.read
-        .format("org.apache.spark.sql.sources.FakeSourceOne")
-        .load()
-        .schema == StructType(Seq(StructField("stringType", StringType, nullable = false))))
+    assert(spark.read.format("org.apache.spark.sql.sources.FakeSourceOne")
+      .load().schema == StructType(Seq(StructField("stringType", StringType, nullable = false))))
   }
 }
+
 
 class FakeSourceOne extends RelationProvider with DataSourceRegister {
 

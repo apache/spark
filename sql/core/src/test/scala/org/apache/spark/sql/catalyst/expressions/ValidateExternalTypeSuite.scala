@@ -26,19 +26,19 @@ class ValidateExternalTypeSuite extends QueryTest with SharedSparkSession {
   test("SPARK-49044 ValidateExternalType should be user visible") {
     checkError(
       exception = intercept[SparkRuntimeException] {
-        spark
-          .createDataFrame(
-            spark.sparkContext.parallelize(Seq(Row("".toCharArray.map(_.toByte)))),
-            new StructType().add("f3", StringType))
-          .show()
+        spark.createDataFrame(spark.sparkContext.parallelize(Seq(
+          Row(
+            "".toCharArray.map(_.toByte)
+          )
+        )), new StructType().add("f3", StringType)).show()
       }.getCause.asInstanceOf[SparkRuntimeException],
       condition = "INVALID_EXTERNAL_TYPE",
       parameters = Map(
         ("externalType", "[B"),
         ("type", "\"STRING\""),
-        (
-          "expr",
-          "\"getexternalrowfield(assertnotnull(" +
-            "input[0, org.apache.spark.sql.Row, true]), 0, f3)\"")))
+        ("expr", "\"getexternalrowfield(assertnotnull(" +
+          "input[0, org.apache.spark.sql.Row, true]), 0, f3)\"")
+      )
+    )
   }
 }

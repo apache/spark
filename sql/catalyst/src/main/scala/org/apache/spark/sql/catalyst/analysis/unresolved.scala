@@ -39,10 +39,10 @@ import org.apache.spark.util.ArrayImplicits._
  * resolved.
  */
 class UnresolvedException(function: String)
-    extends SparkException(
-      errorClass = "INTERNAL_ERROR",
-      messageParameters = Map("message" -> s"Invalid call to $function on unresolved object"),
-      cause = null)
+  extends SparkException(
+    errorClass = "INTERNAL_ERROR",
+    messageParameters = Map("message" -> s"Invalid call to $function on unresolved object"),
+    cause = null)
 
 /** Parent trait for unresolved node types */
 trait UnresolvedNode extends LogicalPlan {
@@ -64,7 +64,7 @@ case class PlanWithUnresolvedIdentifier(
     identifierExpr: Expression,
     children: Seq[LogicalPlan],
     planBuilder: (Seq[String], Seq[LogicalPlan]) => LogicalPlan)
-    extends UnresolvedNode {
+  extends UnresolvedNode {
 
   def this(identifierExpr: Expression, planBuilder: Seq[String] => LogicalPlan) = {
     this(identifierExpr, Nil, (ident, _) => planBuilder(ident))
@@ -89,8 +89,7 @@ case class ExpressionWithUnresolvedIdentifier(
     identifierExpr: Expression,
     otherExprs: Seq[Expression],
     exprBuilder: (Seq[String], Seq[Expression]) => Expression)
-    extends Expression
-    with Unevaluable {
+  extends Expression with Unevaluable {
 
   def this(identifierExpr: Expression, exprBuilder: Seq[String] => Expression) = {
     this(identifierExpr, Nil, (ident, _) => exprBuilder(ident))
@@ -111,17 +110,14 @@ case class ExpressionWithUnresolvedIdentifier(
 /**
  * Holds the name of a relation that has yet to be looked up in a catalog.
  *
- * @param multipartIdentifier
- *   table name, the location of files or Kafka topic name, etc.
- * @param options
- *   options to scan this relation.
+ * @param multipartIdentifier table name, the location of files or Kafka topic name, etc.
+ * @param options options to scan this relation.
  */
 case class UnresolvedRelation(
     multipartIdentifier: Seq[String],
     options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty(),
     override val isStreaming: Boolean = false)
-    extends UnresolvedLeafNode
-    with NamedRelation {
+  extends UnresolvedLeafNode with NamedRelation {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   /** Returns a `.` separated name for this relation. */
@@ -171,16 +167,16 @@ object UnresolvedRelation {
 }
 
 /**
- * An inline table that has not been resolved yet. Once resolved, it is turned by the analyzer
- * into a [[org.apache.spark.sql.catalyst.plans.logical.LocalRelation]].
+ * An inline table that has not been resolved yet. Once resolved, it is turned by the analyzer into
+ * a [[org.apache.spark.sql.catalyst.plans.logical.LocalRelation]].
  *
- * @param names
- *   list of column names
- * @param rows
- *   expressions for the data
+ * @param names list of column names
+ * @param rows expressions for the data
  */
-case class UnresolvedInlineTable(names: Seq[String], rows: Seq[Seq[Expression]])
-    extends UnresolvedLeafNode {
+case class UnresolvedInlineTable(
+    names: Seq[String],
+    rows: Seq[Seq[Expression]])
+  extends UnresolvedLeafNode {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(INLINE_TABLE_EVAL)
 
@@ -188,18 +184,17 @@ case class UnresolvedInlineTable(names: Seq[String], rows: Seq[Seq[Expression]])
 }
 
 /**
- * An resolved inline table that holds all the expressions that were checked for the right shape
- * and common data types. This is a preparation step for
- * [[org.apache.spark.sql.catalyst.optimizer.EvalInlineTables]] which will produce a
- * [[org.apache.spark.sql.catalyst.plans.logical.LocalRelation]] for this inline table.
+ * An resolved inline table that holds all the expressions that were checked for
+ * the right shape and common data types.
+ * This is a preparation step for [[org.apache.spark.sql.catalyst.optimizer.EvalInlineTables]] which
+ * will produce a [[org.apache.spark.sql.catalyst.plans.logical.LocalRelation]]
+ * for this inline table.
  *
- * @param output
- *   list of column attributes
- * @param rows
- *   expressions for the data rows
+ * @param output list of column attributes
+ * @param rows expressions for the data rows
  */
 case class ResolvedInlineTable(rows: Seq[Seq[Expression]], output: Seq[Attribute])
-    extends LeafNode {
+  extends LeafNode {
   final override val nodePatterns: Seq[TreePattern] = Seq(INLINE_TABLE_EVAL)
 }
 
@@ -209,16 +204,14 @@ case class ResolvedInlineTable(rows: Seq[Seq[Expression]], output: Seq[Attribute
  *   select id from range(10);
  * }}}
  *
- * @param name
- *   user-specified name of this table-value function
- * @param functionArgs
- *   list of function arguments
+ * @param name user-specified name of this table-value function
+ * @param functionArgs list of function arguments
  */
 case class UnresolvedTableValuedFunction(
     name: Seq[String],
     functionArgs: Seq[Expression],
     override val isStreaming: Boolean = false)
-    extends UnresolvedLeafNode {
+  extends UnresolvedLeafNode {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_TABLE_VALUED_FUNCTION)
 }
@@ -226,7 +219,9 @@ case class UnresolvedTableValuedFunction(
 object UnresolvedTableValuedFunction {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
-  def apply(name: String, functionArgs: Seq[Expression]): UnresolvedTableValuedFunction = {
+  def apply(
+      name: String,
+      functionArgs: Seq[Expression]): UnresolvedTableValuedFunction = {
     UnresolvedTableValuedFunction(Seq(name), functionArgs)
   }
 
@@ -244,16 +239,15 @@ object UnresolvedTableValuedFunction {
  *   select t.a from range(10) t(a);
  * }}}
  *
- * @param name
- *   user-specified name of the table-valued function
- * @param child
- *   logical plan of the table-valued function
- * @param outputNames
- *   alias names of function output columns. The analyzer adds [[Project]] to rename the output
- *   columns.
+ * @param name user-specified name of the table-valued function
+ * @param child logical plan of the table-valued function
+ * @param outputNames alias names of function output columns. The analyzer adds [[Project]]
+ *                    to rename the output columns.
  */
-case class UnresolvedTVFAliases(name: Seq[String], child: LogicalPlan, outputNames: Seq[String])
-    extends UnresolvedUnaryNode {
+case class UnresolvedTVFAliases(
+    name: Seq[String],
+    child: LogicalPlan,
+    outputNames: Seq[String]) extends UnresolvedUnaryNode {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_TVF_ALIASES)
 
@@ -264,7 +258,10 @@ case class UnresolvedTVFAliases(name: Seq[String], child: LogicalPlan, outputNam
 object UnresolvedTVFAliases {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
-  def apply(name: String, child: LogicalPlan, outputNames: Seq[String]): UnresolvedTVFAliases = {
+  def apply(
+      name: String,
+      child: LogicalPlan,
+      outputNames: Seq[String]): UnresolvedTVFAliases = {
     UnresolvedTVFAliases(Seq(name), child, outputNames)
   }
 
@@ -293,8 +290,7 @@ case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Un
   override def newInstance(): UnresolvedAttribute = this
   override def withNullability(newNullability: Boolean): UnresolvedAttribute = this
   override def withQualifier(newQualifier: Seq[String]): UnresolvedAttribute = this
-  override def withName(newName: String): UnresolvedAttribute =
-    UnresolvedAttribute.quoted(newName)
+  override def withName(newName: String): UnresolvedAttribute = UnresolvedAttribute.quoted(newName)
   override def withMetadata(newMetadata: Metadata): Attribute = this
   override def withExprId(newExprId: ExprId): UnresolvedAttribute = this
   override def withDataType(newType: DataType): Attribute = this
@@ -314,7 +310,6 @@ case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Un
 }
 
 object UnresolvedAttribute extends AttributeNameParser {
-
   /**
    * Creates an [[UnresolvedAttribute]], parsing segments separated by dots ('.').
    */
@@ -322,27 +317,27 @@ object UnresolvedAttribute extends AttributeNameParser {
     new UnresolvedAttribute(CatalystSqlParser.parseMultipartIdentifier(name))
 
   /**
-   * Creates an [[UnresolvedAttribute]], from a single quoted string (for example using backticks
-   * in HiveQL. Since the string is consider quoted, no processing is done on the name.
+   * Creates an [[UnresolvedAttribute]], from a single quoted string (for example using backticks in
+   * HiveQL.  Since the string is consider quoted, no processing is done on the name.
    */
   def quoted(name: String): UnresolvedAttribute = new UnresolvedAttribute(Seq(name))
 
   /**
-   * Creates an [[UnresolvedAttribute]] from a string in an embedded language. In this case we
-   * treat it as a quoted identifier, except for '.', which must be further quoted using backticks
-   * if it is part of a column name.
+   * Creates an [[UnresolvedAttribute]] from a string in an embedded language.  In this case
+   * we treat it as a quoted identifier, except for '.', which must be further quoted using
+   * backticks if it is part of a column name.
    */
   def quotedString(name: String): UnresolvedAttribute =
     new UnresolvedAttribute(parseAttributeName(name))
 }
 
 /**
- * Represents an unresolved generator, which will be created by the parser for the
- * [[org.apache.spark.sql.catalyst.plans.logical.Generate]] operator. The analyzer will resolve
- * this generator.
+ * Represents an unresolved generator, which will be created by the parser for
+ * the [[org.apache.spark.sql.catalyst.plans.logical.Generate]] operator.
+ * The analyzer will resolve this generator.
  */
 case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expression])
-    extends Generator {
+  extends Generator {
 
   override def elementSchema: StructType = throw new UnresolvedException("elementTypes")
   override def dataType: DataType = throw new UnresolvedException("dataType")
@@ -363,7 +358,7 @@ case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expressio
     throw QueryExecutionErrors.cannotTerminateGeneratorError(this)
 
   override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[Expression]): UnresolvedGenerator = copy(children = newChildren)
+    newChildren: IndexedSeq[Expression]): UnresolvedGenerator = copy(children = newChildren)
 }
 
 /**
@@ -379,8 +374,7 @@ case class UnresolvedFunction(
     ignoreNulls: Option[Boolean] = None,
     orderingWithinGroup: Seq[SortOrder] = Seq.empty,
     isInternal: Boolean = false)
-    extends Expression
-    with Unevaluable {
+  extends Expression with Unevaluable {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   override def children: Seq[Expression] = arguments ++ filter.toSeq ++ orderingWithinGroup
@@ -437,18 +431,13 @@ object UnresolvedFunction {
 /**
  * Encapsulates the arguments needed for [[Star.expandStar]].
  *
- * @param childOperatorOutput
- *   The output attributes of the child operator
- * @param childOperatorMetadataOutput
- *   The metadata output attributes of the child operator
- * @param resolve
- *   A function to resolve the given name parts to an attribute
- * @param suggestedAttributes
- *   A list of attributes that are suggested for expansion
- * @param resolver
- *   The resolver used to match the name parts
- * @param cleanupNestedAliasesDuringStructExpansion
- *   Whether to cleanup nested aliases during struct expansion
+ * @param childOperatorOutput The output attributes of the child operator
+ * @param childOperatorMetadataOutput The metadata output attributes of the child operator
+ * @param resolve A function to resolve the given name parts to an attribute
+ * @param suggestedAttributes A list of attributes that are suggested for expansion
+ * @param resolver The resolver used to match the name parts
+ * @param cleanupNestedAliasesDuringStructExpansion Whether to cleanup nested aliases during
+ *                                                  struct expansion
  */
 case class ExpandStarParameters(
     childOperatorOutput: Seq[Attribute],
@@ -456,11 +445,12 @@ case class ExpandStarParameters(
     resolve: (Seq[String], Resolver) => Option[NamedExpression],
     suggestedAttributes: Seq[Attribute],
     resolver: Resolver,
-    cleanupNestedAliasesDuringStructExpansion: Boolean = false)
+    cleanupNestedAliasesDuringStructExpansion: Boolean = false
+)
 
 /**
- * Represents all of the input attributes to a given relational operator, for example in "SELECT *
- * FROM ...". A [[Star]] gets automatically expanded during analysis.
+ * Represents all of the input attributes to a given relational operator, for example in
+ * "SELECT * FROM ...". A [[Star]] gets automatically expanded during analysis.
  */
 trait Star extends NamedExpression {
 
@@ -474,16 +464,16 @@ trait Star extends NamedExpression {
   override lazy val resolved = false
 
   /**
+   *
    * Expand the * as either:
-   *   1. all the columns in the output of the input logical plan
-   *   2. struct expansion - returning the fields of the target struct as top-level columns e.g.
-   *      SELECT x.* => fields of struct x
+   *  1. all the columns in the output of the input logical plan
+   *  2. struct expansion - returning the fields of the target struct as top-level columns
+   *     e.g. SELECT x.* => fields of struct x
    *
-   * It uses output and metadata output attributes of the child for the expansion, and it supports
-   * both recursive and non-recursive data types.
+   * It uses output and metadata output attributes of the child
+   * for the expansion, and it supports both recursive and non-recursive data types.
    *
-   * @param parameters
-   *   The arguments needed for star expansion
+   * @param parameters The arguments needed for star expansion
    */
   def expandStar(parameters: ExpandStarParameters): Seq[NamedExpression]
 
@@ -497,28 +487,31 @@ trait Star extends NamedExpression {
         childOperatorMetadataOutput = input.metadataOutput,
         resolve = input.resolve,
         suggestedAttributes = input.inputSet.toSeq,
-        resolver = resolver))
+        resolver = resolver
+      )
+    )
   }
 }
 
 /**
- * Represents all of the input attributes to a given relational operator, for example in "SELECT *
- * FROM ...". "SELECT * FROM ..." or "SELECT * EXCEPT(...) FROM ..."
+ * Represents all of the input attributes to a given relational operator, for example in
+ * "SELECT * FROM ...".
+ * "SELECT * FROM ..." or "SELECT * EXCEPT(...) FROM ..."
  *
- * This is also used to expand structs. For example: "SELECT record.* from (SELECT struct(a,b,c)
- * as record ...)
+ * This is also used to expand structs. For example:
+ * "SELECT record.* from (SELECT struct(a,b,c) as record ...)
  *
- * This trait provides the shared behavior among the classes for SELECT * ([[UnresolvedStar]]) and
- * SELECT * EXCEPT ([[UnresolvedStarExceptOrReplace]]), etc. [[UnresolvedStar]] is just a case
- * class of this, while [[UnresolvedStarExceptOrReplace]] or other classes add some additional
- * logic to the expand method.
+ * This trait provides the shared behavior among the classes for SELECT * ([[UnresolvedStar]])
+ * and SELECT * EXCEPT ([[UnresolvedStarExceptOrReplace]]), etc. [[UnresolvedStar]] is just a case
+ * class of this, while [[UnresolvedStarExceptOrReplace]] or other classes add some additional logic
+ * to the expand method.
  */
 trait UnresolvedStarBase extends Star with Unevaluable {
 
   /**
-   * An optional name that should be the target of the expansion. If omitted all targets' columns
-   * are produced. This can either be a table name or struct name. This is a list of identifiers
-   * that is the path of the expansion.
+   * An optional name that should be the target of the expansion. If omitted all
+   * targets' columns are produced. This can either be a table name or struct name. This
+   * is a list of identifiers that is the path of the expansion.
    */
   def target: Option[Seq[String]]
 
@@ -528,10 +521,10 @@ trait UnresolvedStarBase extends Star with Unevaluable {
    * For example, the following should all return true:
    *   - `SELECT ns1.ns2.t.* FROM ns1.ns2.t` where nameParts is Seq("ns1", "ns2", "t") and
    *     qualifier is Seq("ns1", "ns2", "t").
-   *   - `SELECT ns2.t.* FROM ns1.ns2.t` where nameParts is Seq("ns2", "t") and qualifier is
-   *     Seq("ns1", "ns2", "t").
-   *   - `SELECT t.* FROM ns1.ns2.t` where nameParts is Seq("t") and qualifier is Seq("ns1",
-   *     "ns2", "t").
+   *   - `SELECT ns2.t.* FROM ns1.ns2.t` where nameParts is Seq("ns2", "t") and
+   *     qualifier is Seq("ns1", "ns2", "t").
+   *   - `SELECT t.* FROM ns1.ns2.t` where nameParts is Seq("t") and
+   *     qualifier is Seq("ns1", "ns2", "t").
    */
   protected def matchedQualifier(
       attribute: Attribute,
@@ -546,8 +539,7 @@ trait UnresolvedStarBase extends Star with Unevaluable {
   }
 
   def isQualifiedByTable(childOperatorOutput: Seq[Attribute], resolver: Resolver): Boolean = {
-    target.exists(nameParts =>
-      childOperatorOutput.exists(matchedQualifier(_, nameParts, resolver)))
+    target.exists(nameParts => childOperatorOutput.exists(matchedQualifier(_, nameParts, resolver)))
   }
 
   override def expandStar(parameters: ExpandStarParameters): Seq[NamedExpression] = {
@@ -585,11 +577,11 @@ trait UnresolvedStarBase extends Star with Unevaluable {
       }
       // This target resolved to an attribute in child. It must be a struct. Expand it.
       normalizedAttribute.dataType match {
-        case s: StructType =>
-          s.zipWithIndex.map { case (f, i) =>
+        case s: StructType => s.zipWithIndex.map {
+          case (f, i) =>
             val extract = GetStructField(normalizedAttribute, i)
             Alias(extract, f.name)()
-          }
+        }
 
         case _ =>
           throw QueryCompilationErrors.starExpandDataTypeNotSupportedError(target.get)
@@ -598,8 +590,7 @@ trait UnresolvedStarBase extends Star with Unevaluable {
       val from = parameters.suggestedAttributes.map(_.name).map(toSQLId).mkString(", ")
       val targetString = target.get.mkString(".")
       throw QueryCompilationErrors.cannotResolveStarExpandGivenInputColumnsError(
-        targetString,
-        from)
+        targetString, from)
     }
   }
 
@@ -607,36 +598,32 @@ trait UnresolvedStarBase extends Star with Unevaluable {
 }
 
 /**
- * Represents some of the input attributes to a given relational operator, for example in "SELECT
- * * EXCEPT(a) FROM ...".
+ * Represents some of the input attributes to a given relational operator, for example in
+ * "SELECT * EXCEPT(a) FROM ...".
  *
- * @param target
- *   an optional name that should be the target of the expansion. If omitted all targets' columns
- *   are produced. This can only be a table name. This is a list of identifiers that is the path
- *   of the expansion.
+ * @param target an optional name that should be the target of the expansion. If omitted all
+ *              targets' columns are produced. This can only be a table name. This
+ *              is a list of identifiers that is the path of the expansion.
  *
- * @param excepts
- *   a list of names that should be excluded from the expansion.
+ * @param excepts a list of names that should be excluded from the expansion.
  *
- * @param replacements
- *   an optional list of expressions that should be used to replace the expressions removed by
- *   EXCEPT. If present, the length of this list must be the same as the length of the EXCEPT
- *   list. This supports replacing expressions instead of excluding them from the original SELECT
- *   list.
+ * @param replacements an optional list of expressions that should be used to replace the
+ *                     expressions removed by EXCEPT. If present, the length of this list must
+ *                     be the same as the length of the EXCEPT list. This supports replacing
+ *                     expressions instead of excluding them from the original SELECT list.
  */
 case class UnresolvedStarExceptOrReplace(
     target: Option[Seq[String]],
     excepts: Seq[Seq[String]],
     replacements: Option[Seq[NamedExpression]])
-    extends LeafExpression
-    with UnresolvedStarBase {
+  extends LeafExpression with UnresolvedStarBase {
 
   /**
    * We expand the * EXCEPT by the following three steps:
-   *   1. use the original .expandStar() to get top-level column list or struct expansion
-   *   2. resolve excepts (with respect to the Seq[NamedExpression] returned from (1))
-   *   3. filter the expanded columns with the resolved except list. recursively apply filtering
-   *      in case of nested columns in the except list (in order to rewrite structs)
+   * 1. use the original .expandStar() to get top-level column list or struct expansion
+   * 2. resolve excepts (with respect to the Seq[NamedExpression] returned from (1))
+   * 3. filter the expanded columns with the resolved except list. recursively apply filtering in
+   *    case of nested columns in the except list (in order to rewrite structs)
    */
   override def expandStar(parameters: ExpandStarParameters): Seq[NamedExpression] = {
     // Use the expandStar method to get a seq of NamedExpressions corresponding to
@@ -652,7 +639,8 @@ case class UnresolvedStarExceptOrReplace(
         .getOrElse {
           val orderedCandidates = StringUtils.orderSuggestedIdentifiersBySimilarity(
             UnresolvedAttribute(exceptParts).name,
-            expandedCols.map(a => a.qualifier :+ a.name))
+            expandedCols.map(a => a.qualifier :+ a.name)
+          )
           // if target is defined and expandedCols does not include any Attributes,
           // it must be struct expansion;
           // give message suggesting to use unqualified names of nested fields.
@@ -664,17 +652,14 @@ case class UnresolvedStarExceptOrReplace(
     // Convert each resolved except into a pair of (col: Attribute, nestedColumn) representing the
     // top level column in expandedCols that we must 'filter' based on nestedColumn.
     @scala.annotation.tailrec
-    def getRootColumn(
-        expr: Expression,
-        nestedColumn: Seq[String] = Nil): (NamedExpression, Seq[String]) = expr match {
+    def getRootColumn(expr: Expression, nestedColumn: Seq[String] = Nil)
+      : (NamedExpression, Seq[String]) = expr match {
       case GetStructField(fieldExpr, _, Some(fieldName)) =>
         getRootColumn(fieldExpr, fieldName +: nestedColumn)
       case e: NamedExpression => e -> nestedColumn
-      case other: ExtractValue =>
-        throw new AnalysisException(
-          errorClass = "EXCEPT_NESTED_COLUMN_INVALID_TYPE",
-          messageParameters =
-            Map("columnName" -> other.sql, "dataType" -> other.dataType.toString))
+      case other: ExtractValue => throw new AnalysisException(
+        errorClass = "EXCEPT_NESTED_COLUMN_INVALID_TYPE",
+        messageParameters = Map("columnName" -> other.sql, "dataType" -> other.dataType.toString))
     }
     // An exceptPair represents the column in expandedCols along with the path of a nestedColumn
     // that should be except-ed. Consider two examples:
@@ -710,9 +695,8 @@ case class UnresolvedStarExceptOrReplace(
     //            except). NOTE: this case isn't explicitly listed in the `collect` below since we
     //            'collect' columns which match the cases above and omit ones that fall into this
     //            remaining case.
-    def filterColumns(
-        columns: Seq[NamedExpression],
-        excepts: Seq[(NamedExpression, Seq[String])]): Seq[NamedExpression] = {
+    def filterColumns(columns: Seq[NamedExpression], excepts: Seq[(NamedExpression, Seq[String])])
+      : Seq[NamedExpression] = {
       // group the except pairs by the column they refer to. NOTE: no groupMap until scala 2.13
       val groupedExcepts: AttributeMap[Seq[Seq[String]]] =
         AttributeMap(excepts.groupBy(_._1.toAttribute).transform((_, v) => v.map(_._2)))
@@ -720,8 +704,7 @@ case class UnresolvedStarExceptOrReplace(
       // with new expressions, we must have the same number of replacements as excepts. Keep an
       // index to track the current replacement.
       replacements.foreach { r =>
-        assert(
-          excepts.size == r.size,
+        assert(excepts.size == r.size,
           "The number of replacements must be the same as the number of excepts")
       }
       var replacementIndex = 0
@@ -743,21 +726,20 @@ case class UnresolvedStarExceptOrReplace(
           val newExcepts = nestedExcepts.map { nestedExcept =>
             // INVARIANT: we cannot have duplicate column names in nested columns, thus, this `head`
             // will find the one and only column corresponding to the correct extractedField.
-            extractedFields.collectFirst {
-              case col if parameters.resolver(col.name, nestedExcept.head) =>
-                col.toAttribute -> nestedExcept.tail
-            }.get
+          extractedFields.collectFirst {
+                case col if parameters.resolver(col.name, nestedExcept.head) =>
+                  col.toAttribute -> nestedExcept.tail
+              }.get
           }
-          Alias(
-            CreateStruct(filterColumns(extractedFields.toImmutableArraySeq, newExcepts)),
-            col.name)()
+          Alias(CreateStruct(
+            filterColumns(extractedFields.toImmutableArraySeq, newExcepts)), col.name)()
         // if there are multiple nestedExcepts but one is empty we must have overlapping except
         // columns. throw an error.
         case (_, Some(nestedExcepts)) if nestedExcepts.size > 1 =>
           throw new AnalysisException(
             errorClass = "EXCEPT_OVERLAPPING_COLUMNS",
-            messageParameters =
-              Map("columns" -> this.excepts.map(_.mkString(".")).mkString(", ")))
+            messageParameters = Map(
+              "columns" -> this.excepts.map(_.mkString(".")).mkString(", ")))
         // found a match and the 'replacements' list is populated - replace the column
         case (_, Some(_)) if replacements.nonEmpty =>
           replacementIndex += 1
@@ -773,20 +755,17 @@ case class UnresolvedStarExceptOrReplace(
  * Represents some of the input attributes to a given relational operator, for example in
  * `df.withColumn`.
  *
- * @param colNames
- *   a list of column names that should be replaced or produced.
+ * @param colNames a list of column names that should be replaced or produced.
  *
- * @param exprs
- *   the corresponding expressions for `colNames`.
+ * @param exprs the corresponding expressions for `colNames`.
  *
- * @param explicitMetadata
- *   an optional list of explicit metadata to associate with the columns.
+ * @param explicitMetadata an optional list of explicit metadata to associate with the columns.
  */
 case class UnresolvedStarWithColumns(
-    colNames: Seq[String],
-    exprs: Seq[Expression],
-    explicitMetadata: Option[Seq[Metadata]] = None)
-    extends UnresolvedStarBase {
+     colNames: Seq[String],
+     exprs: Seq[Expression],
+     explicitMetadata: Option[Seq[Metadata]] = None)
+  extends UnresolvedStarBase {
 
   override def target: Option[Seq[String]] = None
   override def children: Seq[Expression] = exprs
@@ -796,13 +775,11 @@ case class UnresolvedStarWithColumns(
     copy(exprs = newChildren)
 
   override def expandStar(parameters: ExpandStarParameters): Seq[NamedExpression] = {
-    assert(
-      colNames.size == exprs.size,
+    assert(colNames.size == exprs.size,
       s"The size of column names: ${colNames.size} isn't equal to " +
         s"the size of expressions: ${exprs.size}")
     explicitMetadata.foreach { m =>
-      assert(
-        colNames.size == m.size,
+      assert(colNames.size == m.size,
         s"The size of column names: ${colNames.size} isn't equal to " +
           s"the size of metadata elements: ${m.size}")
     }
@@ -825,13 +802,11 @@ case class UnresolvedStarWithColumns(
       }
     }
 
-    val newColumns = columnSeq
-      .filter { case ((colName, _), _) =>
-        !expandedCols.exists(f => parameters.resolver(f.name, colName))
-      }
-      .map { case ((colName, expr), m) =>
-        Alias(expr, colName)(explicitMetadata = m)
-      }
+    val newColumns = columnSeq.filter { case ((colName, _), _) =>
+      !expandedCols.exists(f => parameters.resolver(f.name, colName))
+    }.map {
+      case ((colName, expr), m) => Alias(expr, colName)(explicitMetadata = m)
+    }
 
     replacedAndExistingColumns ++ newColumns
   }
@@ -843,33 +818,34 @@ case class UnresolvedStarWithColumns(
  * Represents some of the input attributes to a given relational operator, for example in
  * `df.withColumnRenamed`.
  *
- * @param existingNames
- *   a list of column names that should be replaced. If the column does not exist, it is ignored.
+ * @param existingNames a list of column names that should be replaced.
+ *                      If the column does not exist, it is ignored.
  *
- * @param newNames
- *   a list of new column names that should be used to replace the existing columns.
+ * @param newNames a list of new column names that should be used to replace the existing columns.
  */
-case class UnresolvedStarWithColumnsRenames(existingNames: Seq[String], newNames: Seq[String])
-    extends LeafExpression
-    with UnresolvedStarBase {
+case class UnresolvedStarWithColumnsRenames(
+    existingNames: Seq[String],
+    newNames: Seq[String])
+  extends LeafExpression with UnresolvedStarBase {
 
   override def target: Option[Seq[String]] = None
 
   override def expandStar(parameters: ExpandStarParameters): Seq[NamedExpression] = {
-    assert(
-      existingNames.size == newNames.size,
+    assert(existingNames.size == newNames.size,
       s"The size of existing column names: ${existingNames.size} isn't equal to " +
         s"the size of new column names: ${newNames.size}")
 
     val expandedCols = super.expandStar(parameters)
 
-    existingNames.zip(newNames).foldLeft(expandedCols) { case (attrs, (existingName, newName)) =>
-      attrs.map(attr =>
-        if (parameters.resolver(attr.name, existingName)) {
-          Alias(attr, newName)()
-        } else {
-          attr
-        })
+    existingNames.zip(newNames).foldLeft(expandedCols) {
+      case (attrs, (existingName, newName)) =>
+        attrs.map(attr =>
+          if (parameters.resolver(attr.name, existingName)) {
+            Alias(attr, newName)()
+          } else {
+            attr
+          }
+        )
     }
   }
 
@@ -877,33 +853,28 @@ case class UnresolvedStarWithColumnsRenames(existingNames: Seq[String], newNames
 }
 
 /**
- * Represents all of the input attributes to a given relational operator, for example in "SELECT *
- * FROM ...".
+ * Represents all of the input attributes to a given relational operator, for example in
+ * "SELECT * FROM ...".
  *
- * This is also used to expand structs. For example: "SELECT record.* from (SELECT struct(a,b,c)
- * as record ...)
+ * This is also used to expand structs. For example:
+ * "SELECT record.* from (SELECT struct(a,b,c) as record ...)
  *
- * @param target
- *   an optional name that should be the target of the expansion. If omitted all targets' columns
- *   are produced. This can either be a table name or struct name. This is a list of identifiers
- *   that is the path of the expansion.
+ * @param target an optional name that should be the target of the expansion.  If omitted all
+ *              targets' columns are produced. This can either be a table name or struct name. This
+ *              is a list of identifiers that is the path of the expansion.
  */
 case class UnresolvedStar(target: Option[Seq[String]])
-    extends LeafExpression
-    with UnresolvedStarBase
+  extends LeafExpression with UnresolvedStarBase
 
 /**
- * Represents all of the input attributes to a given relational operator, for example in "SELECT
- * `(id)?+.+` FROM ...".
+ * Represents all of the input attributes to a given relational operator, for example in
+ * "SELECT `(id)?+.+` FROM ...".
  *
- * @param table
- *   an optional table that should be the target of the expansion. If omitted all tables' columns
- *   are produced.
+ * @param table an optional table that should be the target of the expansion.  If omitted all
+ *              tables' columns are produced.
  */
 case class UnresolvedRegex(regexPattern: String, table: Option[String], caseSensitive: Boolean)
-    extends LeafExpression
-    with Star
-    with Unevaluable {
+  extends LeafExpression with Star with Unevaluable {
   override def expandStar(parameters: ExpandStarParameters): Seq[NamedExpression] = {
     val pattern = if (caseSensitive) regexPattern else s"(?i)$regexPattern"
     table match {
@@ -911,11 +882,8 @@ case class UnresolvedRegex(regexPattern: String, table: Option[String], caseSens
       case None => parameters.childOperatorOutput.filter(_.name.matches(pattern))
       // If there is a table, pick out attributes that are part of this table that match expr
       case Some(t) =>
-        parameters.childOperatorOutput
-          .filter(a =>
-            a.qualifier.nonEmpty &&
-              parameters.resolver(a.qualifier.last, t))
-          .filter(_.name.matches(pattern))
+        parameters.childOperatorOutput.filter(a => a.qualifier.nonEmpty &&
+          parameters.resolver(a.qualifier.last, t)).filter(_.name.matches(pattern))
     }
   }
 
@@ -923,19 +891,17 @@ case class UnresolvedRegex(regexPattern: String, table: Option[String], caseSens
 }
 
 /**
- * Used to assign new names to Generator's output, such as hive udtf. For example the SQL
- * expression "stack(2, key, value, key, value) as (a, b)" could be represented as follows:
- * MultiAlias(stack_function, Seq(a, b))
+ * Used to assign new names to Generator's output, such as hive udtf.
+ * For example the SQL expression "stack(2, key, value, key, value) as (a, b)" could be represented
+ * as follows:
+ *  MultiAlias(stack_function, Seq(a, b))
  *
- * @param child
- *   the computation being performed
- * @param names
- *   the names to be associated with each output of computing [[child]].
+
+ * @param child the computation being performed
+ * @param names the names to be associated with each output of computing [[child]].
  */
 case class MultiAlias(child: Expression, names: Seq[String])
-    extends UnaryExpression
-    with NamedExpression
-    with Unevaluable {
+  extends UnaryExpression with NamedExpression with Unevaluable {
 
   override def name: String = throw new UnresolvedException("name")
 
@@ -962,29 +928,28 @@ case class MultiAlias(child: Expression, names: Seq[String])
 }
 
 /**
- * Represents all the resolved input attributes to a given relational operator. This is used in
- * the data frame DSL.
+ * Represents all the resolved input attributes to a given relational operator. This is used
+ * in the data frame DSL.
  *
- * @param expressions
- *   Expressions to expand.
+ * @param expressions Expressions to expand.
  */
 case class ResolvedStar(expressions: Seq[NamedExpression])
-    extends LeafExpression
-    with Star
-    with Unevaluable {
+  extends LeafExpression with Star with Unevaluable {
   override def newInstance(): NamedExpression = throw new UnresolvedException("newInstance")
   override def expandStar(parameters: ExpandStarParameters): Seq[NamedExpression] = expressions
   override def toString: String = expressions.mkString("ResolvedStar(", ", ", ")")
 }
 
 /**
- * Represents all input attributes to a given relational operator. This is used in Spark Connect
- * dataframe, for example: df1 = spark.createDataFrame([{"id": 1}]) df2 =
- * spark.createDataFrame([{"id": 1, "val": "v"}]) df1.join(df2, "id").select(df1["*"])
- * @param planId
- *   the plan id of target node.
+ * Represents all input attributes to a given relational operator.
+ * This is used in Spark Connect dataframe, for example:
+ *    df1 = spark.createDataFrame([{"id": 1}])
+ *    df2 = spark.createDataFrame([{"id": 1, "val": "v"}])
+ *    df1.join(df2, "id").select(df1["*"])
+ * @param planId the plan id of target node.
  */
-case class UnresolvedDataFrameStar(planId: Long) extends LeafExpression with Unevaluable {
+case class UnresolvedDataFrameStar(planId: Long)
+  extends LeafExpression with Unevaluable {
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override lazy val resolved = false
@@ -995,15 +960,13 @@ case class UnresolvedDataFrameStar(planId: Long) extends LeafExpression with Une
 /**
  * Extracts a value or values from an Expression
  *
- * @param child
- *   The expression to extract value from, can be Map, Array, Struct or array of Structs.
- * @param extraction
- *   The expression to describe the extraction, can be key of Map, index of Array, field name of
- *   Struct.
+ * @param child The expression to extract value from,
+ *              can be Map, Array, Struct or array of Structs.
+ * @param extraction The expression to describe the extraction,
+ *                   can be key of Map, index of Array, field name of Struct.
  */
 case class UnresolvedExtractValue(child: Expression, extraction: Expression)
-    extends BinaryExpression
-    with Unevaluable {
+  extends BinaryExpression with Unevaluable {
 
   override def left: Expression = child
   override def right: Expression = extraction
@@ -1016,25 +979,23 @@ case class UnresolvedExtractValue(child: Expression, extraction: Expression)
   override def sql: String = s"${child.sql}[${extraction.sql}]"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): UnresolvedExtractValue = {
-    copy(child = newLeft, extraction = newRight)
+    newLeft: Expression, newRight: Expression): UnresolvedExtractValue = {
+      copy(child = newLeft, extraction = newRight)
   }
 }
 
 /**
  * Holds the expression that has yet to be aliased.
  *
- * @param child
- *   The computation that is needs to be resolved during analysis.
- * @param aliasFunc
- *   The function if specified to be called to generate an alias to associate with the result of
- *   computing [[child]]
+ * @param child The computation that is needs to be resolved during analysis.
+ * @param aliasFunc The function if specified to be called to generate an alias to associate
+ *                  with the result of computing [[child]]
+ *
  */
-case class UnresolvedAlias(child: Expression, aliasFunc: Option[Expression => String] = None)
-    extends UnaryExpression
-    with NamedExpression
-    with Unevaluable {
+case class UnresolvedAlias(
+    child: Expression,
+    aliasFunc: Option[Expression => String] = None)
+  extends UnaryExpression with NamedExpression with Unevaluable {
 
   override def toAttribute: Attribute = throw new UnresolvedException("toAttribute")
   override def qualifier: Seq[String] = throw new UnresolvedException("qualifier")
@@ -1061,36 +1022,32 @@ case class UnresolvedAlias(child: Expression, aliasFunc: Option[Expression => St
  *   SELECT col1, col2 FROM testData AS t(col1, col2);
  * }}}
  *
- * @param outputColumnNames
- *   the [[LogicalPlan]] on which this subquery column aliases apply.
- * @param child
- *   the logical plan of this subquery.
+ * @param outputColumnNames the [[LogicalPlan]] on which this subquery column aliases apply.
+ * @param child the logical plan of this subquery.
  */
-case class UnresolvedSubqueryColumnAliases(outputColumnNames: Seq[String], child: LogicalPlan)
-    extends UnresolvedUnaryNode {
+case class UnresolvedSubqueryColumnAliases(
+    outputColumnNames: Seq[String],
+    child: LogicalPlan)
+  extends UnresolvedUnaryNode {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_SUBQUERY_COLUMN_ALIAS)
 
   override protected def withNewChildInternal(
-      newChild: LogicalPlan): UnresolvedSubqueryColumnAliases = copy(child = newChild)
+    newChild: LogicalPlan): UnresolvedSubqueryColumnAliases = copy(child = newChild)
 }
 
 /**
  * Holds the deserializer expression and the attributes that are available during the resolution
- * for it. Deserializer expression is a special kind of expression that is not always resolved by
+ * for it.  Deserializer expression is a special kind of expression that is not always resolved by
  * children output, but by given attributes, e.g. the `keyDeserializer` in `MapGroups` should be
  * resolved by `groupingAttributes` instead of children output.
  *
- * @param deserializer
- *   The unresolved deserializer expression
- * @param inputAttributes
- *   The input attributes used to resolve deserializer expression, can be empty if we want to
- *   resolve deserializer by children output.
+ * @param deserializer The unresolved deserializer expression
+ * @param inputAttributes The input attributes used to resolve deserializer expression, can be empty
+ *                        if we want to resolve deserializer by children output.
  */
 case class UnresolvedDeserializer(deserializer: Expression, inputAttributes: Seq[Attribute] = Nil)
-    extends UnaryExpression
-    with Unevaluable
-    with NonSQLExpression {
+  extends UnaryExpression with Unevaluable with NonSQLExpression {
   // The input attributes used to resolve deserializer expression must be all resolved.
   require(inputAttributes.forall(_.resolved), "Input attributes must all be resolved.")
 
@@ -1104,10 +1061,8 @@ case class UnresolvedDeserializer(deserializer: Expression, inputAttributes: Seq
     copy(deserializer = newChild)
 }
 
-case class GetColumnByOrdinal(ordinal: Int, dataType: DataType)
-    extends LeafExpression
-    with Unevaluable
-    with NonSQLExpression {
+case class GetColumnByOrdinal(ordinal: Int, dataType: DataType) extends LeafExpression
+  with Unevaluable with NonSQLExpression {
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
 }
@@ -1120,9 +1075,7 @@ case class GetViewColumnByNameAndOrdinal(
     // viewDDL is used to help user fix incompatible schema issue for permanent views
     // it will be None for temp views.
     viewDDL: Option[String])
-    extends LeafExpression
-    with Unevaluable
-    with NonSQLExpression {
+  extends LeafExpression with Unevaluable with NonSQLExpression {
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
@@ -1137,13 +1090,10 @@ case class GetViewColumnByNameAndOrdinal(
  *   select a from table order by 1
  *   select a   from table group by 1
  * }}}
- * @param ordinal
- *   ordinal starts from 1, instead of 0
+ * @param ordinal ordinal starts from 1, instead of 0
  */
 case class UnresolvedOrdinal(ordinal: Int)
-    extends LeafExpression
-    with Unevaluable
-    with NonSQLExpression {
+    extends LeafExpression with Unevaluable with NonSQLExpression {
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
@@ -1155,21 +1105,18 @@ case class UnresolvedOrdinal(ordinal: Int)
  * ("|> AGGREGATE").
  *
  * In this context, the ordinal refers to the one-based position of the column in the input
- * relation. Note that this behavior is different from GROUP BY ordinals in regular SQL, wherein
- * the ordinal refers to the one-based position of the column in the SELECT clause.
+ * relation. Note that this behavior is different from GROUP BY ordinals in regular SQL, wherein the
+ * ordinal refers to the one-based position of the column in the SELECT clause.
  *
  * For example:
  * {{{
  *   values ('abc', 'def') tab(x, y)
  *   |> aggregate sum(x) group by 2
  * }}}
- * @param ordinal
- *   ordinal starts from 1, instead of 0
+ * @param ordinal ordinal starts from 1, instead of 0
  */
 case class UnresolvedPipeAggregateOrdinal(ordinal: Int)
-    extends LeafExpression
-    with Unevaluable
-    with NonSQLExpression {
+  extends LeafExpression with Unevaluable with NonSQLExpression {
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
@@ -1179,8 +1126,10 @@ case class UnresolvedPipeAggregateOrdinal(ordinal: Int)
  * Represents unresolved having clause, the child for it can be Aggregate, GroupingSets, Rollup
  * and Cube. It is turned by the analyzer into a Filter.
  */
-case class UnresolvedHaving(havingCondition: Expression, child: LogicalPlan)
-    extends UnresolvedUnaryNode {
+case class UnresolvedHaving(
+    havingCondition: Expression,
+    child: LogicalPlan)
+  extends UnresolvedUnaryNode {
   override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedHaving =
     copy(child = newChild)
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_HAVING)
@@ -1204,9 +1153,8 @@ case object UnresolvedSeed extends LeafExpression with Unevaluable {
 case class TempResolvedColumn(
     child: Expression,
     nameParts: Seq[String],
-    hasTried: Boolean = false)
-    extends UnaryExpression
-    with Unevaluable {
+    hasTried: Boolean = false) extends UnaryExpression
+  with Unevaluable {
   // If it has been tried to be resolved but failed, mark it as unresolved so that other rules can
   // try to resolve it again.
   override lazy val resolved = child.resolved && !hasTried
@@ -1223,8 +1171,8 @@ case class TempResolvedColumn(
 }
 
 /**
- * A place holder expression used in inverse distribution functions, will be replaced after
- * analyze.
+ * A place holder expression used in inverse distribution functions,
+ * will be replaced after analyze.
  */
 case object UnresolvedWithinGroup extends LeafExpression with Unevaluable {
   override def nullable: Boolean = throw new UnresolvedException("nullable")
@@ -1232,8 +1180,10 @@ case object UnresolvedWithinGroup extends LeafExpression with Unevaluable {
   override lazy val resolved = false
 }
 
-case class UnresolvedTranspose(indices: Seq[Expression], child: LogicalPlan)
-    extends UnresolvedUnaryNode {
+case class UnresolvedTranspose(
+    indices: Seq[Expression],
+    child: LogicalPlan
+) extends UnresolvedUnaryNode {
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_TRANSPOSE)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedTranspose =
@@ -1269,19 +1219,15 @@ trait UnresolvedPlanId extends LeafExpression with Unevaluable {
 /**
  * Logical plan representing execute immediate query.
  *
- * @param sqlStmtStr
- *   the query expression (first child)
- * @param args
- *   parameters from USING clause (subsequent children)
- * @param targetVariables
- *   variables to store the result of the query
+ * @param sqlStmtStr the query expression (first child)
+ * @param args parameters from USING clause (subsequent children)
+ * @param targetVariables variables to store the result of the query
  */
 case class UnresolvedExecuteImmediate(
     sqlStmtStr: Expression,
     args: Seq[Expression],
     targetVariables: Seq[Expression])
-    extends UnresolvedLeafNode
-    with SupportsSubquery {
+  extends UnresolvedLeafNode with SupportsSubquery {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(EXECUTE_IMMEDIATE)
 }
@@ -1290,7 +1236,7 @@ case class UnresolvedEventTimeWatermark(
     eventTimeColExpr: NamedExpression,
     delay: CalendarInterval,
     child: LogicalPlan)
-    extends UnresolvedUnaryNode {
+  extends UnresolvedUnaryNode {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_EVENT_TIME_WATERMARK)
 

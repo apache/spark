@@ -27,11 +27,11 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
 class JDBCV2JoinPushdownSuite
-    extends QueryTest
-    with SharedSparkSession
-    with ExplainSuiteHelper
-    with DataSourcePushdownTestUtils
-    with JDBCV2JoinPushdownIntegrationSuiteBase {
+  extends QueryTest
+  with SharedSparkSession
+  with ExplainSuiteHelper
+  with DataSourcePushdownTestUtils
+  with JDBCV2JoinPushdownIntegrationSuiteBase {
   val tempDir = Utils.createTempDir()
   override val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
 

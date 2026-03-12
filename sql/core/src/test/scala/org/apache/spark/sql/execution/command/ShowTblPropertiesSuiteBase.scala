@@ -22,8 +22,8 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{StringType, StructType}
 
 /**
- * This base suite contains unified tests for the `SHOW TBLPROPERTIES` command that check V1 and
- * V2 table catalogs. The tests that cannot run for all supported catalogs are located in more
+ * This base suite contains unified tests for the `SHOW TBLPROPERTIES` command that check V1 and V2
+ * table catalogs. The tests that cannot run for all supported catalogs are located in more
  * specific test suites:
  *
  *   - V2 table catalog tests: `org.apache.spark.sql.execution.command.v2.ShowTblPropertiesSuite`
@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.{StringType, StructType}
  *     `org.apache.spark.sql.execution.command.v1.ShowTblPropertiesSuiteBase`
  *     - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.ShowTblPropertiesSuite`
  *     - V1 Hive External catalog:
- *       `org.apache.spark.sql.hive.execution.command.ShowTblPropertiesSuite`
+*        `org.apache.spark.sql.hive.execution.command.ShowTblPropertiesSuite`
  */
 trait ShowTblPropertiesSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "SHOW TBLPROPERTIES"
@@ -40,17 +40,18 @@ trait ShowTblPropertiesSuiteBase extends QueryTest with DDLCommandTestUtils {
     withNamespaceAndTable("ns1", "tbl") { tbl =>
       val user = "andrew"
       val status = "new"
-      spark.sql(
-        s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
-          s"TBLPROPERTIES ('user'='$user', 'status'='$status', 'password' = 'password')")
+      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
+        s"TBLPROPERTIES ('user'='$user', 'status'='$status', 'password' = 'password')")
       val properties = sql(s"SHOW TBLPROPERTIES $tbl")
         .filter("key != 'transient_lastDdlTime'")
         .filter("key != 'option.serialization.format'")
       val schema = new StructType()
         .add("key", StringType, nullable = false)
         .add("value", StringType, nullable = false)
-      val expected =
-        Seq(Row("password", "*********(redacted)"), Row("status", status), Row("user", user))
+      val expected = Seq(
+        Row("password", "*********(redacted)"),
+        Row("status", status),
+        Row("user", user))
 
       assert(properties.schema === schema)
       checkAnswer(properties, expected)
@@ -61,9 +62,8 @@ trait ShowTblPropertiesSuiteBase extends QueryTest with DDLCommandTestUtils {
     withNamespaceAndTable("ns1", "tbl") { tbl =>
       val user = "andrew"
       val status = "new"
-      spark.sql(
-        s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
-          s"TBLPROPERTIES ('user'='$user', 'status'='$status')")
+      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
+        s"TBLPROPERTIES ('user'='$user', 'status'='$status')")
 
       val properties = sql(s"SHOW TBLPROPERTIES $tbl ('status')")
       val expected = Seq(Row("status", status))
@@ -75,18 +75,15 @@ trait ShowTblPropertiesSuiteBase extends QueryTest with DDLCommandTestUtils {
     val e = intercept[AnalysisException] {
       sql("SHOW TBLPROPERTIES BADTABLE")
     }
-    checkErrorTableNotFound(
-      e,
-      "`BADTABLE`",
+    checkErrorTableNotFound(e, "`BADTABLE`",
       ExpectedContext("BADTABLE", 19, 18 + "BADTABLE".length))
   }
 
   test("SHOW TBLPROPERTIES(KEY) KEY NOT FOUND") {
     withNamespaceAndTable("ns1", "tbl") { tbl =>
       val nonExistingKey = "nonExistingKey"
-      spark.sql(
-        s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
-          s"TBLPROPERTIES ('user'='andrew', 'status'='new')")
+      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
+        s"TBLPROPERTIES ('user'='andrew', 'status'='new')")
 
       val res = sql(s"SHOW TBLPROPERTIES $tbl ('$nonExistingKey')").collect()
       assert(res.length == 1)
@@ -99,9 +96,8 @@ trait ShowTblPropertiesSuiteBase extends QueryTest with DDLCommandTestUtils {
     Seq(true, false).foreach { keepLegacySchema =>
       withSQLConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> keepLegacySchema.toString) {
         withNamespaceAndTable("ns1", "tbl") { tbl =>
-          spark.sql(
-            s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
-              "TBLPROPERTIES ('user'='spark', 'status'='new')")
+          spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
+            "TBLPROPERTIES ('user'='spark', 'status'='new')")
 
           val properties = sql(s"SHOW TBLPROPERTIES $tbl ('status')")
           val schema = properties.schema.fieldNames.toSeq

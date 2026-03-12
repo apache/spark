@@ -25,9 +25,9 @@ import org.apache.spark.sql.streaming
 
 /** @inheritdoc */
 @Evolving
-private[spark] class StreamingCheckpointManager(sparkSession: SparkSession, sqlConf: SQLConf)
-    extends streaming.StreamingCheckpointManager
-    with Logging {
+private[spark] class StreamingCheckpointManager(
+    sparkSession: SparkSession,
+    sqlConf: SQLConf) extends streaming.StreamingCheckpointManager with Logging {
 
   /** @inheritdoc */
   override private[spark] def repartition(
@@ -50,7 +50,8 @@ private[spark] class StreamingCheckpointManager(sparkSession: SparkSession, sqlC
       sparkSession,
       checkpointLocation,
       numPartitions,
-      enforceExactlyOnceSink)
+      enforceExactlyOnceSink
+    )
     runner.run()
   }
 }

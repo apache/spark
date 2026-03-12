@@ -54,9 +54,13 @@ class ExtraStrategiesSuite extends QueryTest with SharedSparkSession {
       spark.experimental.extraStrategies = TestStrategy :: Nil
 
       val df = sparkContext.parallelize(Seq(("so slow", 1))).toDF("a", "b")
-      checkAnswer(df.select("a"), Row("so fast"))
+      checkAnswer(
+        df.select("a"),
+        Row("so fast"))
 
-      checkAnswer(df.select("a", "b"), Row("so slow", 1))
+      checkAnswer(
+        df.select("a", "b"),
+        Row("so slow", 1))
     } finally {
       spark.experimental.extraStrategies = Nil
     }

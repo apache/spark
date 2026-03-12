@@ -30,18 +30,17 @@ class JoinOptimizationSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("Subqueries", Once, EliminateSubqueryAliases) ::
-        Batch(
-          "Filter Pushdown",
-          FixedPoint(100),
-          CombineFilters,
-          PushPredicateThroughNonJoin,
-          BooleanSimplification,
-          ReorderJoin,
-          PushPredicateThroughJoin,
-          ColumnPruning,
-          RemoveNoopOperators,
-          CollapseProject) :: Nil
+      Batch("Subqueries", Once,
+        EliminateSubqueryAliases) ::
+      Batch("Filter Pushdown", FixedPoint(100),
+        CombineFilters,
+        PushPredicateThroughNonJoin,
+        BooleanSimplification,
+        ReorderJoin,
+        PushPredicateThroughJoin,
+        ColumnPruning,
+        RemoveNoopOperators,
+        CollapseProject) :: Nil
 
   }
 
@@ -53,11 +52,10 @@ class JoinOptimizationSuite extends PlanTest {
     val y = testRelation1.subquery("y")
     val z = testRelation.subquery("z")
 
-    def testExtract(
-        plan: LogicalPlan,
+    def testExtract(plan: LogicalPlan,
         expected: Option[(Seq[LogicalPlan], Seq[Expression])]): Unit = {
-      val expectedNoCross = expected map { seq_pair =>
-        {
+      val expectedNoCross = expected map {
+        seq_pair => {
           val plans = seq_pair._1
           val noCartesian = plans map { plan => (plan, Inner) }
           (noCartesian, seq_pair._2)
@@ -66,42 +64,34 @@ class JoinOptimizationSuite extends PlanTest {
       testExtractCheckCross(plan, expectedNoCross)
     }
 
-    def testExtractCheckCross(
-        plan: LogicalPlan,
+    def testExtractCheckCross(plan: LogicalPlan,
         expected: Option[(Seq[(LogicalPlan, InnerLike)], Seq[Expression])]): Unit = {
-      assert(ExtractFiltersAndInnerJoins.unapply(plan) === expected.map(e => (e._1, e._2)))
+      assert(
+        ExtractFiltersAndInnerJoins.unapply(plan) === expected.map(e => (e._1, e._2)))
     }
 
     testExtract(x, None)
     testExtract(x.where("x.b".attr === 1), None)
     testExtract(x.join(y), Some((Seq(x, y), Seq())))
-    testExtract(
-      x.join(y, condition = Some("x.b".attr === "y.d".attr)),
+    testExtract(x.join(y, condition = Some("x.b".attr === "y.d".attr)),
       Some((Seq(x, y), Seq("x.b".attr === "y.d".attr))))
-    testExtract(
-      x.join(y).where("x.b".attr === "y.d".attr),
+    testExtract(x.join(y).where("x.b".attr === "y.d".attr),
       Some((Seq(x, y), Seq("x.b".attr === "y.d".attr))))
     testExtract(x.join(y).join(z), Some((Seq(x, y, z), Seq())))
-    testExtract(
-      x.join(y).where("x.b".attr === "y.d".attr).join(z),
+    testExtract(x.join(y).where("x.b".attr === "y.d".attr).join(z),
       Some((Seq(x, y, z), Seq("x.b".attr === "y.d".attr))))
     testExtract(x.join(y).join(x.join(z)), Some((Seq(x, y, x.join(z)), Seq())))
-    testExtract(
-      x.join(y).join(x.join(z)).where("x.b".attr === "y.d".attr),
+    testExtract(x.join(y).join(x.join(z)).where("x.b".attr === "y.d".attr),
       Some((Seq(x, y, x.join(z)), Seq("x.b".attr === "y.d".attr))))
 
     testExtractCheckCross(x.join(y, Cross), Some((Seq((x, Cross), (y, Cross)), Seq())))
-    testExtractCheckCross(
-      x.join(y, Cross).join(z, Cross),
+    testExtractCheckCross(x.join(y, Cross).join(z, Cross),
       Some((Seq((x, Cross), (y, Cross), (z, Cross)), Seq())))
-    testExtractCheckCross(
-      x.join(y, Cross, Some("x.b".attr === "y.d".attr)).join(z, Cross),
+    testExtractCheckCross(x.join(y, Cross, Some("x.b".attr === "y.d".attr)).join(z, Cross),
       Some((Seq((x, Cross), (y, Cross), (z, Cross)), Seq("x.b".attr === "y.d".attr))))
-    testExtractCheckCross(
-      x.join(y, Inner, Some("x.b".attr === "y.d".attr)).join(z, Cross),
+    testExtractCheckCross(x.join(y, Inner, Some("x.b".attr === "y.d".attr)).join(z, Cross),
       Some((Seq((x, Inner), (y, Inner), (z, Cross)), Seq("x.b".attr === "y.d".attr))))
-    testExtractCheckCross(
-      x.join(y, Cross, Some("x.b".attr === "y.d".attr)).join(z, Inner),
+    testExtractCheckCross(x.join(y, Cross, Some("x.b".attr === "y.d".attr)).join(z, Inner),
       Some((Seq((x, Cross), (y, Cross), (z, Inner)), Seq("x.b".attr === "y.d".attr))))
   }
 
@@ -115,19 +105,21 @@ class JoinOptimizationSuite extends PlanTest {
         x.join(y).join(z).where(("x.b".attr === "z.b".attr) && ("y.d".attr === "z.a".attr)),
         x.join(z, condition = Some("x.b".attr === "z.b".attr))
           .join(y, condition = Some("y.d".attr === "z.a".attr))
-          .select(Seq("x.a", "x.b", "x.c", "y.d", "z.a", "z.b", "z.c").map(_.attr): _*)),
+          .select(Seq("x.a", "x.b", "x.c", "y.d", "z.a", "z.b", "z.c").map(_.attr): _*)
+      ),
       (
-        x.join(y, Cross)
-          .join(z, Cross)
+        x.join(y, Cross).join(z, Cross)
           .where(("x.b".attr === "z.b".attr) && ("y.d".attr === "z.a".attr)),
         x.join(z, Cross, Some("x.b".attr === "z.b".attr))
           .join(y, Cross, Some("y.d".attr === "z.a".attr))
-          .select(Seq("x.a", "x.b", "x.c", "y.d", "z.a", "z.b", "z.c").map(_.attr): _*)),
+          .select(Seq("x.a", "x.b", "x.c", "y.d", "z.a", "z.b", "z.c").map(_.attr): _*)
+      ),
       (
         x.join(y, Inner).join(z, Cross).where("x.b".attr === "z.a".attr),
-        x.join(z, Cross, Some("x.b".attr === "z.a".attr))
-          .join(y, Inner)
-          .select(Seq("x.a", "x.b", "x.c", "y.d", "z.a", "z.b", "z.c").map(_.attr): _*)))
+        x.join(z, Cross, Some("x.b".attr === "z.a".attr)).join(y, Inner)
+          .select(Seq("x.a", "x.b", "x.c", "y.d", "z.a", "z.b", "z.c").map(_.attr): _*)
+      )
+    )
 
     queryAnswers foreach { queryAnswerPair =>
       val optimized = Optimize.execute(queryAnswerPair._1.analyze)

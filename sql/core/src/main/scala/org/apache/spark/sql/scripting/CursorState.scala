@@ -21,13 +21,15 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 
 /**
- * Sealed trait representing the lifecycle state of a cursor. State transitions: Declared ->
- * Opened -> Fetching -> Closed
+ * Sealed trait representing the lifecycle state of a cursor.
+ * State transitions:
+ *   Declared -> Opened -> Fetching -> Closed
  */
 sealed trait CursorState
 
 /**
- * Cursor has been declared but not yet opened. This is the initial state after DECLARE CURSOR.
+ * Cursor has been declared but not yet opened.
+ * This is the initial state after DECLARE CURSOR.
  * The query is not parsed or analyzed until OPEN time.
  */
 case object CursorDeclared extends CursorState
@@ -35,27 +37,27 @@ case object CursorDeclared extends CursorState
 /**
  * Cursor has been opened and result iterator has been created.
  *
- * CRITICAL: The iterator is created at OPEN time (not first FETCH) to ensure snapshot semantics.
- * When executeToIterator() is called, Spark performs file discovery and captures Delta snapshots.
- * This is the ONLY way to lock in the data snapshot at OPEN time.
+ * CRITICAL: The iterator is created at OPEN time (not first FETCH) to ensure snapshot
+ * semantics. When executeToIterator() is called, Spark performs file discovery and
+ * captures Delta snapshots. This is the ONLY way to lock in the data snapshot at OPEN time.
  *
- * The iterator is lazy/incremental - it doesn't materialize all results, but it does lock in
- * which files/versions will be read.
+ * The iterator is lazy/incremental - it doesn't materialize all results, but it does
+ * lock in which files/versions will be read.
  *
- * @param resultIterator
- *   Iterator created at OPEN time (snapshot captured)
- * @param outputSchema
- *   The output attributes (needed for type checking in FETCH)
+ * @param resultIterator Iterator created at OPEN time (snapshot captured)
+ * @param outputSchema The output attributes (needed for type checking in FETCH)
  */
-case class CursorOpened(resultIterator: Iterator[InternalRow], outputSchema: Seq[Attribute])
-    extends CursorState
+case class CursorOpened(
+    resultIterator: Iterator[InternalRow],
+    outputSchema: Seq[Attribute]) extends CursorState
 
 /**
- * Cursor is being fetched from - same as CursorOpened but marks that fetching has begun. We keep
- * this separate state for consistency and potential future use.
+ * Cursor is being fetched from - same as CursorOpened but marks that fetching has begun.
+ * We keep this separate state for consistency and potential future use.
  */
-case class CursorFetching(resultIterator: Iterator[InternalRow], outputSchema: Seq[Attribute])
-    extends CursorState
+case class CursorFetching(
+    resultIterator: Iterator[InternalRow],
+    outputSchema: Seq[Attribute]) extends CursorState
 
 /**
  * Cursor has been closed and resources released.

@@ -32,38 +32,43 @@ import org.apache.spark.sql.internal.SQLConf
  * correlated conditions on Map's members.
  *
  * Without this rule, when a subquery is correlated on a condition like
- * `outer_map[1] = inner_map[1]`, DecorrelateInnerQuery generates a join on the map itself, which
- * is unsupported for some types like map and inefficient for other types like structs.
+ * `outer_map[1] = inner_map[1]`, DecorrelateInnerQuery generates a join on the map itself,
+ * which is unsupported for some types like map and inefficient for other types like structs.
  *
  * This rule rewrites the query to project `outer_map[1]` as a new attribute in the outer plan,
- * and use that attribute in the correlation condition instead. This allows DecorrelateInnerQuery
- * to write the join on the extracted value instead of the entire map or other object.
+ * and use that attribute in the correlation condition instead. This allows
+ * DecorrelateInnerQuery to write the join on the extracted value instead of the entire map or
+ * other object.
  *
- * Example: Here, we have outer table x and inner table y in a scalar subquery, correlated on
- * xm[1] = ym[1] where xm and ym are map columns.
+ * Example: Here, we have outer table x and inner table y in a scalar subquery, correlated
+ * on xm[1] = ym[1] where xm and ym are map columns.
  *
  * The plan before the rewrite is:
  *
- * Filter (scalar-subquery#50 [xm#11] > cast(2 as bigint)) +- Aggregate [sum(y2#14) AS
- * sum(y2)#52L] +- Filter (outer(xm#11)[1] = ym#13[1]) +- Relation
- * spark_catalog.default.y[ym#13,y2#14] parquet +- Relation spark_catalog.default.x[xm#11,x2#12]
- * parquet
+ * Filter (scalar-subquery#50 [xm#11] > cast(2 as bigint))
+ *  +- Aggregate [sum(y2#14) AS sum(y2)#52L]
+ *     +- Filter (outer(xm#11)[1] = ym#13[1])
+ *        +- Relation spark_catalog.default.y[ym#13,y2#14] parquet
+ *  +- Relation spark_catalog.default.x[xm#11,x2#12] parquet
  *
- * The plan after the rewrite adds a projection for xm[1] to the outer plan, and replaces the
- * outer reference inside the subquery with that:
+ * The plan after the rewrite adds a projection for xm[1] to the outer plan, and replaces the outer
+ * reference inside the subquery with that:
  *
- * Project [xm#11, x2#12] +- Filter (scalar-subquery#50 [xm[1]#55] > cast(2 as bigint)) : +-
- * Aggregate [sum(y2#14) AS sum(y2)#52L] : +- Filter (outer(xm[1]#55) = ym#13[1]) : +- Relation
- * spark_catalog.default.y[ym#13,y2#14] parquet +- Project [xm#11, x2#12, xm#11[1] AS xm[1]#55] +-
- * Relation spark_catalog.default.x[xm#11,x2#12] parquet
+ * Project [xm#11, x2#12]
+ * +- Filter (scalar-subquery#50 [xm[1]#55] > cast(2 as bigint))
+ *    :  +- Aggregate [sum(y2#14) AS sum(y2)#52L]
+ *    :     +- Filter (outer(xm[1]#55) = ym#13[1])
+ *    :        +- Relation spark_catalog.default.y[ym#13,y2#14] parquet
+ *    +- Project [xm#11, x2#12, xm#11[1] AS xm[1]#55]
+ *       +- Relation spark_catalog.default.x[xm#11,x2#12] parquet
  *
- * This is implemented as a separate rule from DecorrelateInnerQuery because it's much simpler and
- * safer, and also benefits us when the same nested data expression is used multiple times. In
- * particular:
- *   - In DecorrelateInnerQuery, outer references is an AttributeSet, so it can't store general
- *     expressions. In principle we could change this but it would add substantial complexity.
- *   - DecorrelateInnerQuery only manipulates the inner query, not the outer plan, whereas this
- *     rewrite needs to add projections to the outer plan
+ * This is implemented as a separate rule from DecorrelateInnerQuery because it's much simpler
+ * and safer, and also benefits us when the same nested data expression is used multiple times.
+ * In particular:
+ * - In DecorrelateInnerQuery, outer references is an AttributeSet, so it can't store general
+ *   expressions. In principle we could change this but it would add substantial complexity.
+ * - DecorrelateInnerQuery only manipulates the inner query, not the outer plan, whereas
+ *   this rewrite needs to add projections to the outer plan
  */
 object PullOutNestedDataOuterRefExpressions extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
@@ -122,10 +127,10 @@ object PullOutNestedDataOuterRefExpressions extends Rule[LogicalPlan] {
         // with multiple children e.g. joins as long as each expression only references only one
         // child.
         val newProjectExprs: Iterable[NamedExpression] = newExprMap.values
-        Project(
-          plan.output,
-          newPlan.withNewChildren(
-            Seq(Project(newPlan.child.output ++ newProjectExprs, newPlan.child))))
+        Project(plan.output,
+          newPlan.withNewChildren(Seq(
+            Project(newPlan.child.output ++ newProjectExprs, newPlan.child)
+          )))
       }
   }
 }

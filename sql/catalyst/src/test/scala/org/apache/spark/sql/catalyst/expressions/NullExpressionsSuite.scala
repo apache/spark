@@ -35,7 +35,7 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testFunc(1.toShort, ShortType)
     testFunc(1, IntegerType)
     testFunc(1L, LongType)
-    testFunc(1.0f, FloatType)
+    testFunc(1.0F, FloatType)
     testFunc(1.0, DoubleType)
     testFunc(Decimal(1.5), DecimalType(2, 1))
     testFunc(new java.sql.Date(10), DateType)
@@ -78,8 +78,8 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(NaNvl(Literal.create(null, DoubleType), Literal(Double.NaN)), null)
     checkEvaluation(NaNvl(Literal(Double.NaN), Literal(5.0)), 5.0)
     checkEvaluation(NaNvl(Literal(Double.NaN), Literal.create(null, DoubleType)), null)
-    assert(
-      NaNvl(Literal(Double.NaN), Literal(Double.NaN)).eval(EmptyRow).asInstanceOf[Double].isNaN)
+    assert(NaNvl(Literal(Double.NaN), Literal(Double.NaN)).
+      eval(EmptyRow).asInstanceOf[Double].isNaN)
   }
 
   test("coalesce") {
@@ -93,11 +93,10 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(Coalesce(Seq(nullLit, nullLit, lit)), value)
     }
 
-    val coalesce = Coalesce(
-      Seq(
-        Literal.create(null, ArrayType(IntegerType, containsNull = false)),
-        Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false)),
-        Literal.create(Seq(1, 2, 3, null), ArrayType(IntegerType, containsNull = true))))
+    val coalesce = Coalesce(Seq(
+      Literal.create(null, ArrayType(IntegerType, containsNull = false)),
+      Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false)),
+      Literal.create(Seq(1, 2, 3, null), ArrayType(IntegerType, containsNull = true))))
     assert(coalesce.dataType === ArrayType(IntegerType, containsNull = true))
     checkEvaluation(coalesce, Seq(1, 2, 3))
   }
@@ -145,22 +144,19 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("AtLeastNNonNulls") {
-    val mix = Seq(
-      Literal("x"),
+    val mix = Seq(Literal("x"),
       Literal.create(null, StringType),
       Literal.create(null, DoubleType),
       Literal(Double.NaN),
       Literal(5f))
 
-    val nanOnly = Seq(
-      Literal("x"),
+    val nanOnly = Seq(Literal("x"),
       Literal(10.0),
       Literal(Float.NaN),
       Literal(math.log(-2)),
       Literal(Double.MaxValue))
 
-    val nullOnly = Seq(
-      Literal("x"),
+    val nullOnly = Seq(Literal("x"),
       Literal.create(null, DoubleType),
       Literal.create(null, DecimalType.USER_DEFAULT),
       Literal(Float.MaxValue),
@@ -175,8 +171,8 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-34857: AtLeastNNonNulls toString") {
-    val e =
-      AtLeastNNonNulls(2, Seq(Literal(42), Literal("test"), Literal.create(null, DoubleType)))
+    val e = AtLeastNNonNulls(2,
+      Seq(Literal(42), Literal("test"), Literal.create(null, DoubleType)))
     assert(e.toString == "atleastnnonnulls(2, 42, test, null)")
   }
 
