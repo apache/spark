@@ -399,6 +399,8 @@ function updateDetailsPanel(nodeId, nodeDetails) {
   var bodyEl = document.getElementById("plan-viz-details-body");
   if (!titleEl || !bodyEl) return;
 
+  showDetailsPanel();
+
   selectedNodeId = nodeId;
   cachedNodeDetails = nodeDetails;
 
@@ -658,3 +660,21 @@ document.addEventListener("DOMContentLoaded", function () {
     renderPlanViz();
   }
 });
+
+// Panel show/hide
+$(function() {
+  $("#plan-viz-panel-close").on("click", function() {
+    $("#plan-viz-details-col").addClass("d-none");
+    $("#plan-viz-graph-col").removeClass("col-8").addClass("col-12");
+  });
+});
+
+function showDetailsPanel() {
+  var col = document.getElementById("plan-viz-details-col");
+  var graphCol = document.getElementById("plan-viz-graph-col");
+  if (col && graphCol) {
+    col.classList.remove("d-none");
+    graphCol.classList.remove("col-12");
+    graphCol.classList.add("col-8");
+  }
+}
