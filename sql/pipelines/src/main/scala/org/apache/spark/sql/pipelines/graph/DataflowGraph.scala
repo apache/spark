@@ -40,7 +40,8 @@ case class DataflowGraph(
   with GraphValidations {
 
   /** Map of [[Output]]s by their identifiers */
-  lazy val output: Map[TableIdentifier, Output] = mapUnique(sinks ++ tables ++ directories, "output")(_.identifier)
+  lazy val output: Map[TableIdentifier, Output] =
+    mapUnique(sinks ++ tables ++ directories, "output")(_.identifier)
 
   /**
    * [[Flow]]s in this graph that need to get planned and potentially executed when

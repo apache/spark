@@ -273,8 +273,7 @@ case class SinkImpl(
 /**
  * A directory output representing a non-catalog managed file path in a [[DataflowGraph]].
  *
-  * Directories are used for exporting data to external storage locations
- * (S3, HDFS, local filesystem)
+ * Directories are used for exporting data to external storage locations (S3, HDFS, local filesystem)
  * without registering the output in the catalog. This is useful for:
  * - Exporting processed data to external systems
  * - Creating data exports in specific formats (CSV, JSON, etc.)
