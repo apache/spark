@@ -178,6 +178,15 @@ abstract class TypeCoercionBase {
 
       case (_: TimestampNTZType, _: DateType) | (_: DateType, _: TimestampNTZType) =>
         TimestampNTZType
+
+      case (_: TimeType, _: TimestampType) | (_: TimestampType, _: TimeType) =>
+        TimestampType
+
+      case (_: TimeType, _: TimestampNTZType) | (_: TimestampNTZType, _: TimeType) =>
+        TimestampNTZType
+
+      case (_: TimeType, _: DateType) | (_: DateType, _: TimeType) =>
+        TimestampType
     }
 
   /**
@@ -922,13 +931,20 @@ object TypeCoercion extends TypeCoercionBase {
       => if (conf.castDatetimeToString) Some(StringType) else Some(TimestampType)
     case (TimestampType, StringType)
       => if (conf.castDatetimeToString) Some(StringType) else Some(TimestampType)
+    case (StringType, TimeType)
+      => if (conf.castDatetimeToString) Some(StringType) else Some(TimeType)
+    case (TimeType, StringType)
+      => if (conf.castDatetimeToString) Some(StringType) else Some(TimeType)
     case (StringType, NullType) => Some(StringType)
     case (NullType, StringType) => Some(StringType)
 
     // Cast to TimestampType when we compare DateType with TimestampType
     // i.e. TimeStamp('2017-03-01 00:00:00') eq Date('2017-03-01') = true
-    case (TimestampType, DateType) => Some(TimestampType)
-    case (DateType, TimestampType) => Some(TimestampType)
+    case (TimestampType, DateType) | (DateType, TimestampType) => Some(TimestampType)
+
+    case (TimeType, DateType) | (DateType, TimeType) => Some(TimestampType)
+    case (TimeType, TimestampType) | (TimestampType, TimeType) => Some(TimestampType)
+    case (TimeType, TimestampNTZType) | (TimestampNTZType, TimeType) => Some(TimestampNTZType)
 
     // There is no proper decimal type we can pick,
     // using double type is the best we can do.
