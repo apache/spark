@@ -1887,7 +1887,7 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayPosition(aa1, aae), 0L)
   }
 
-  Seq((Int.MaxValue, "Linear"), (0, "Hash Lookup")).foreach { case (threshold, name) =>
+  Seq((Int.MaxValue, "Linear Lookup"), (0, "Hash Lookup")).foreach { case (threshold, name) =>
     test(s"elementAt - $name") {
       withSQLConf(SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> threshold.toString) {
         val a0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))

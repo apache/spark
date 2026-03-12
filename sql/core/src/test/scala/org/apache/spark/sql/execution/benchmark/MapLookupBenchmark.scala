@@ -80,37 +80,81 @@ object MapLookupBenchmark extends SqlBasedBenchmark {
     val expr = col("m").getItem(col("key"))
     val elementAtExpr = element_at(col("m"), col("key"))
 
-    benchmark.addCase("GetMapValue interpreted") { _ =>
+    benchmark.addCase("GetMapValue interpreted - Linear Lookup") { _ =>
       withSQLConf(
         SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
         SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN",
+        SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> Int.MaxValue.toString,
         SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ConvertToLocalRelation.ruleName) {
         lookupDf.select(expr).write.format("noop").mode("overwrite").save()
       }
     }
 
-    benchmark.addCase("GetMapValue codegen") { _ =>
+    benchmark.addCase("GetMapValue interpreted - Hash Lookup") { _ =>
+      withSQLConf(
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+        SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN",
+        SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> 0.toString,
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ConvertToLocalRelation.ruleName) {
+        lookupDf.select(expr).write.format("noop").mode("overwrite").save()
+      }
+    }
+
+    benchmark.addCase("GetMapValue codegen - Linear Lookup") { _ =>
       withSQLConf(
         SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
         SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY",
+        SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> Int.MaxValue.toString,
         SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ConvertToLocalRelation.ruleName) {
         lookupDf.select(expr).write.format("noop").mode("overwrite").save()
       }
     }
 
-    benchmark.addCase("ElementAt interpreted") { _ =>
+    benchmark.addCase("GetMapValue codegen - Hash Lookup") { _ =>
+      withSQLConf(
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+        SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY",
+        SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> 0.toString,
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ConvertToLocalRelation.ruleName) {
+        lookupDf.select(expr).write.format("noop").mode("overwrite").save()
+      }
+    }
+
+    benchmark.addCase("ElementAt interpreted - Linear Lookup") { _ =>
       withSQLConf(
         SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
         SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN",
+        SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> Int.MaxValue.toString,
         SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ConvertToLocalRelation.ruleName) {
         lookupDf.select(elementAtExpr).write.format("noop").mode("overwrite").save()
       }
     }
 
-    benchmark.addCase("ElementAt codegen") { _ =>
+    benchmark.addCase("ElementAt interpreted - Hash Lookup") { _ =>
+      withSQLConf(
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+        SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN",
+        SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> 0.toString,
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ConvertToLocalRelation.ruleName) {
+        lookupDf.select(elementAtExpr).write.format("noop").mode("overwrite").save()
+      }
+    }
+
+    benchmark.addCase("ElementAt codegen - Linear Lookup") { _ =>
       withSQLConf(
         SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
         SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY",
+        SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> Int.MaxValue.toString,
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ConvertToLocalRelation.ruleName) {
+        lookupDf.select(elementAtExpr).write.format("noop").mode("overwrite").save()
+      }
+    }
+
+    benchmark.addCase("ElementAt codegen - Hash Lookup") { _ =>
+      withSQLConf(
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+        SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY",
+        SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> 0.toString,
         SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ConvertToLocalRelation.ruleName) {
         lookupDf.select(elementAtExpr).write.format("noop").mode("overwrite").save()
       }
@@ -120,7 +164,7 @@ object MapLookupBenchmark extends SqlBasedBenchmark {
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    val sizes = Seq(10, 20, 30, 50, 100, 1000, 1000000)
+    val sizes = Seq(1, 10, 100, 1000, 10000, 10000, 1000000)
     for (size <- sizes) {
       run(size, 1.0, IntegerType)
       run(size, 0.5, IntegerType)

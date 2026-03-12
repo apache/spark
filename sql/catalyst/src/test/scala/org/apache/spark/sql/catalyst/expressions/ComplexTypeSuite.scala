@@ -129,7 +129,7 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(GetArrayItem(stArray4, Literal(1)).nullable)
   }
 
-  Seq((Int.MaxValue, "Linear"), (0, "Hash Lookup")).foreach { case (threshold, name) =>
+  Seq((Int.MaxValue, "Linear Lookup"), (0, "Hash Lookup")).foreach { case (threshold, name) =>
     test(s"GetMapValue - $name") {
       withSQLConf(SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> threshold.toString) {
         val typeM = MapType(StringType, StringType)
