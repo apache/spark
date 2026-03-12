@@ -37,7 +37,6 @@ from pyspark.sql.types import (
     DateType,
     DayTimeIntervalType,
     LongType,
-    NullType,
     NumericType,
     StringType,
     TimestampNTZType,
@@ -303,8 +302,6 @@ def _is_value_type_compatible(value: Any, spark_type: DataType) -> bool:
     import datetime
     import decimal
 
-    if value is None or isinstance(spark_type, NullType):
-        return True
     if isinstance(spark_type, NumericType):
         return isinstance(value, (int, float, bool, decimal.Decimal, np.number))
     if isinstance(spark_type, BooleanType):
