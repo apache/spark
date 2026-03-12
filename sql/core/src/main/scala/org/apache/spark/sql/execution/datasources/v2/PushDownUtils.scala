@@ -153,9 +153,7 @@ object PushDownUtils {
           }
         }
 
-        // Post-scan filters candidates: those the data source rejected in the first pass
-        // and need to be evaluated by Spark after the scan.
-        val returnedFirstPassFilters = r.pushPredicates(translatedFilters.toArray).map {
+        val rejectedFirstPassFilters = r.pushPredicates(translatedFilters.toArray).map {
           predicate =>
             DataSourceV2Strategy.rebuildExpressionFromFilter(predicate, translatedFilterToExpr)
         }
@@ -165,25 +163,18 @@ object PushDownUtils {
           // to PartitionPredicates (see SPARK-55596).
           // PartitionPredicates are pushed to the scan in a second pass.
           case (Some(structType), true) =>
-            // Find partition filters
-            val (rejectedPartitionFilters, rejectedDataFilters) =
+            val (remainingPartitionFilters, dataFilters) =
               DataSourceUtils.getPartitionFiltersAndDataFilters(
-                structType, returnedFirstPassFilters.toSeq)
-            val (untranslatablePartitionFilters, untranslatableDataFilters) =
-              DataSourceUtils.getPartitionFiltersAndDataFilters(
-                structType, untranslatableExprs.toSeq)
-
-            val remainingPartitionFilters =
-              rejectedPartitionFilters ++ untranslatablePartitionFilters
-            val (unsupportedPartitionFilters, rejectedPartitionPredicates) =
+                structType,
+                (rejectedFirstPassFilters ++ untranslatableExprs).toSeq)
+            val rejectedPartitionPredicates =
               pushdownPartitionPredicates(r, structType, remainingPartitionFilters)
 
             // Normally translated filters (postScanFilters) are simple filters that can be
             // evaluated faster, while the untranslated filters are complicated filters that take
             // more time to evaluate, so we want to evaluate the translatable filters first.
             val untranslatableSet = ExpressionSet(untranslatableExprs)
-            val allPostScanFilters = rejectedDataFilters ++ rejectedPartitionPredicates ++
-              untranslatableDataFilters ++ unsupportedPartitionFilters
+            val allPostScanFilters = dataFilters ++ rejectedPartitionPredicates
             val (untranslatableFilters, translatableFilters) =
               allPostScanFilters.partition(untranslatableSet.contains)
             translatableFilters ++ untranslatableFilters
@@ -191,7 +182,7 @@ object PushDownUtils {
             // Normally translated filters (postScanFilters) are simple filters that can be
             // evaluated faster, while the untranslated filters are complicated filters that take
             // more time to evaluate, so we want to evaluate the postScanFilters filters first.
-            (returnedFirstPassFilters ++ untranslatableExprs).toSeq
+            (rejectedFirstPassFilters ++ untranslatableExprs).toSeq
         }
 
         (Right(r.pushedPredicates.toSeq), finalPostScanFilters)
@@ -208,15 +199,16 @@ object PushDownUtils {
                                       remainingPartitionFilters: Seq[Expression]) = {
     val (pushablePartitionFilters, unsupportedPartitionFilters) =
       remainingPartitionFilters.partition(isPartitionPushableFilter)
+    val partitionSchema = toAttributes(structType)
     val partitionPredicatesForPush = pushablePartitionFilters
-      .map(expr => PartitionPredicateImpl(expr, structType))
+      .map(expr => PartitionPredicateImpl(expr, partitionSchema))
     val rejectedPartitionPredicates =
       r.pushPredicates(partitionPredicatesForPush.toArray).map { predicate =>
         V2ExpressionUtils.toCatalyst(predicate).getOrElse(
           throw SparkException.internalError(
             "PartitionPredicate has no catalyst expression"))
       }
-    (unsupportedPartitionFilters, rejectedPartitionPredicates)
+    unsupportedPartitionFilters ++ rejectedPartitionPredicates
   }
 
   /**
