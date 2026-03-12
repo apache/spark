@@ -294,15 +294,19 @@ class DirectoryWrite(
       updateContext.flowProgressEventLogger.recordRunning(flow = flow)
       val data = graph.reanalyzeFlow(flow).df
       Future {
-        val dataFrameWriter = data.write
+        // Extract partitionBy from options (it's not a writer option, it's a method)
+        val partitionByOpt = destination.options.get("partitionBy")
+        val writerOptions = destination.options - "partitionBy"
+
+        var dataFrameWriter = data.write
           .format(destination.format)
           .mode(destination.mode)
-          .options(destination.options)
+          .options(writerOptions)
 
-        // Handle partitioning if specified in options
-        destination.options.get("partitionBy").foreach { partitionCols =>
+        // Handle partitioning if specified
+        partitionByOpt.foreach { partitionCols =>
           val cols = partitionCols.split(",").map(_.trim)
-          dataFrameWriter.partitionBy(cols.toSeq: _*)
+          dataFrameWriter = dataFrameWriter.partitionBy(cols.toSeq: _*)
         }
 
         dataFrameWriter.save(destination.path)

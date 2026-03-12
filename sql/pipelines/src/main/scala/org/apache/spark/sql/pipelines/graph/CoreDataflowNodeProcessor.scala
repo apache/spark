@@ -104,6 +104,7 @@ class CoreDataflowNodeProcessor(rawGraph: DataflowGraph) {
             )
         }
       case sink: Sink => Seq(sink)
+      case directory: Directory => Seq(directory)
       case _ =>
         throw new IllegalArgumentException(s"Unsupported node type: ${node.getClass}")
     }

@@ -74,7 +74,7 @@ class GraphRegistrationContext(
   private def isEmpty: Boolean = {
     tables.isEmpty && views.collect { case v: PersistedView =>
       v
-    }.isEmpty && sinks.isEmpty
+    }.isEmpty && sinks.isEmpty && directories.isEmpty
   }
 
   def toDataflowGraph: DataflowGraph = {

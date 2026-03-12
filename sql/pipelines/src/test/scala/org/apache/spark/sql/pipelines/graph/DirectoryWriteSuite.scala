@@ -207,8 +207,7 @@ class DirectoryWriteSuite extends ExecutionTest with SharedSparkSession {
     assert(firstResult.filter("value = 'first'").count() == 2,
       "All rows should have value 'first'")
     // Second write with different data
-    spark.sql(s"DELETE FROM $sourceTable WHERE id > 0")
-    spark.sql(s"INSERT INTO $sourceTable VALUES (3, 'second'), (4, 'second'), (5, 'second')")
+    spark.sql(s"INSERT OVERWRITE TABLE $sourceTable VALUES (3, 'second'), (4, 'second'), (5, 'second')")
     val secondGraph = unresolvedDataflowGraphFromSql(
       sqlText = s"""
         |INSERT OVERWRITE DIRECTORY '$outputPath'

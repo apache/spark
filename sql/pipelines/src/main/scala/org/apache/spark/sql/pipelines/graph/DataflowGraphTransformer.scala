@@ -63,6 +63,8 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
   private var viewMap: Map[TableIdentifier, View] = computeViewMap()
   private var sinks: Seq[Sink] = graph.sinks
   private var sinkMap: Map[TableIdentifier, Sink] = computeSinkMap()
+  private var directories: Seq[Directory] = graph.directories
+  private var directoryMap: Map[TableIdentifier, Directory] = computeDirectoryMap()
 
   // Fail analysis nodes
   // Failed flows are flows that are failed to resolve or its inputs are not available or its
@@ -71,6 +73,7 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
   // We define a dataset is failed to resolve if it is a destination of a flow that is unresolved.
   private var failedTables: Seq[Table] = Seq.empty
   private var failedSinks: Seq[Sink] = Seq.empty
+  private var failedDirectories: Seq[Directory] = Seq.empty
 
   private val parallelism = 10
 
@@ -97,6 +100,10 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
 
   private def computeSinkMap(): Map[TableIdentifier, Sink] = synchronized {
     sinks.map(sink => sink.identifier -> sink).toMap
+  }
+
+  private def computeDirectoryMap(): Map[TableIdentifier, Directory] = synchronized {
+    directories.map(directory => directory.identifier -> directory).toMap
   }
 
   private def computeFlowsTo(): Map[TableIdentifier, Seq[Flow]] = synchronized {
@@ -128,6 +135,7 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
     val resolvedTables = new ConcurrentLinkedQueue[Table]()
     val resolvedViews = new ConcurrentLinkedQueue[View]()
     val resolvedSinks = new ConcurrentLinkedQueue[Sink]()
+    val resolvedDirectories = new ConcurrentLinkedQueue[Directory]()
     // Flow identifier to a list of transformed flows mapping to track resolved flows
     val resolvedFlowsMap = new ConcurrentHashMap[TableIdentifier, Seq[Flow]]()
     val resolvedFlowDestinationsMap = new ConcurrentHashMap[TableIdentifier, Boolean]()
@@ -258,6 +266,19 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
                         )
                         transformed.map(_.asInstanceOf[Sink]).asJava
                       }
+                    } else if (directoryMap.contains(flow.destinationIdentifier)) {
+                      resolvedDirectories.addAll {
+                        val transformed =
+                          transformer(
+                            directoryMap(flow.destinationIdentifier),
+                            flowsTo(flow.destinationIdentifier)
+                          )
+                        require(
+                          transformed.forall(_.isInstanceOf[Directory]),
+                          "transformer must return a Seq[Directory]"
+                        )
+                        transformed.map(_.asInstanceOf[Directory]).asJava
+                      }
                     } else {
                       throw new IllegalArgumentException(
                         s"Unsupported destination ${flow.destinationIdentifier.unquotedString}" +
@@ -301,6 +322,11 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
     failedSinks = sinks.filterNot { sink =>
       resolvedFlowDestinationsMap.getOrDefault(sink.identifier, false)
     }
+    // A directory is failed to analyze if:
+    // - It does not exist in the resolvedFlowDestinationsMap
+    failedDirectories = directories.filterNot { directory =>
+      resolvedFlowDestinationsMap.getOrDefault(directory.identifier, false)
+    }
 
     // We maintain the topological sort order of successful flows always
     val (resolvedFlowsWithResolvedDest, resolvedFlowsWithFailedDest) =
@@ -328,9 +354,11 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
     tables = resolvedTables.asScala.toSeq
     views = resolvedViews.asScala.toSeq
     sinks = resolvedSinks.asScala.toSeq
+    directories = resolvedDirectories.asScala.toSeq
     tableMap = computeTableMap()
     viewMap = computeViewMap()
     sinkMap = computeSinkMap()
+    directoryMap = computeDirectoryMap()
     this
   }
 
@@ -343,7 +371,8 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
       // in the combined sequence too.
       flows = flows ++ failedFlows,
       tables = tables ++ failedTables,
-      sinks = sinks ++ failedSinks
+      sinks = sinks ++ failedSinks,
+      directories = directories ++ failedDirectories
     )
   }
 
