@@ -1548,6 +1548,7 @@ class ArrowArrayToPandasConversion:
                 spark_type,
                 ser_name=ser_name,
                 timezone=timezone,
+                struct_in_pandas=struct_in_pandas,
                 ndarray_as_list=ndarray_as_list,
                 prefer_int_ext_dtype=prefer_int_ext_dtype,
                 df_for_struct=df_for_struct,
@@ -1734,6 +1735,7 @@ class ArrowArrayToPandasConversion:
         *,
         ser_name: Optional[str] = None,
         timezone: Optional[str] = None,
+        struct_in_pandas: Optional[str] = None,
         ndarray_as_list: bool = False,
         prefer_int_ext_dtype: bool = False,
         df_for_struct: bool = False,
@@ -1756,6 +1758,7 @@ class ArrowArrayToPandasConversion:
                         spark_type=field.dataType,
                         ser_name=field.name,
                         timezone=timezone,
+                        struct_in_pandas=struct_in_pandas,
                         ndarray_as_list=ndarray_as_list,
                         prefer_int_ext_dtype=prefer_int_ext_dtype,
                         df_for_struct=False,  # always False for child fields
