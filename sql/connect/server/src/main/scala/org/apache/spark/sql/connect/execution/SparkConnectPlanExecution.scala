@@ -226,6 +226,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
           largeVarTypes = largeVarTypes)
         try {
           while (batches.hasNext) {
+            if (Thread.currentThread().isInterrupted()) throw new InterruptedException()
             val batchBytes = batches.next()
             val count = batches.rowCountInLastBatch
             sendBatch(batchBytes, count, offset)
