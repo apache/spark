@@ -129,7 +129,8 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(GetArrayItem(stArray4, Literal(1)).nullable)
   }
 
-  test("GetMapValue") {
+  test("SPARK-55959: GetMapValue - hash lookup") {
+    def runLookupTests(): Unit = {
     val typeM = MapType(StringType, StringType)
     val map = Literal.create(Map("a" -> "b"), typeM)
     val nullMap = Literal.create(null, typeM)

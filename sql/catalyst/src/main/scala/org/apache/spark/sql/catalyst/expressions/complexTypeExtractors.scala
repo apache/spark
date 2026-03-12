@@ -445,12 +445,12 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
   @transient private var lastIndex: java.util.HashMap[Any, Int] = _
 
   /**
-   * The threshold is chosen empirically. If the map size is small, the cost of building hash map
-   * exceeds the cost of a linear scan.
-   * The value 20 is chosen empirically; break-even is around 15-25
-   * elements for primitive key types.
+   * The threshold to determine whether to use hash lookup for map lookup expressions.
+   * If the map size is small, the cost of building hash map exceeds the cost of a linear scan.
+   * This is configured by `spark.sql.mapLookupHashThreshold`.
    */
-  private val hashLookupThreshold = 20
+  @transient private lazy val hashLookupThreshold =
+    SQLConf.get.getConf(SQLConf.MAP_LOOKUP_HASH_THRESHOLD)
 
   private def getOrBuildIndex(map: MapData, keyType: DataType): java.util.HashMap[Any, Int] = {
     if (lastMap ne map) {
