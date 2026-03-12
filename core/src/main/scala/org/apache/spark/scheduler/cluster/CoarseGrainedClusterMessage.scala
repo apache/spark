@@ -123,6 +123,11 @@ private[spark] object CoarseGrainedClusterMessages {
   // indicating the executor starts to decommission.
   object ExecutorDecommissionSigReceived extends CoarseGrainedClusterMessage
 
+  // Driver notifies AM when an executor has registered with the driver. Used for executor launch
+  // timeout tracking: AM stops tracking the executor for timeout once it receives this message.
+  case class ExecutorRegistered(executorId: String, resourceProfileId: Int)
+    extends CoarseGrainedClusterMessage
+
   case class RemoveWorker(workerId: String, host: String, message: String)
     extends CoarseGrainedClusterMessage
 

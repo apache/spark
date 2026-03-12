@@ -848,6 +848,9 @@ private[spark] class ApplicationMaster(
           case None =>
             logWarning("Container allocator is not ready to find executor loss reasons yet.")
         }
+
+      case ExecutorRegistered(executorId, resourceProfileId) =>
+        Option(allocator).foreach(_.onExecutorRegistered(executorId, resourceProfileId))
     }
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {

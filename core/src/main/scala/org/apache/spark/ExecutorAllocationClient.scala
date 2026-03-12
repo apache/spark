@@ -38,6 +38,13 @@ private[spark] trait ExecutorAllocationClient {
   def isExecutorActive(id: String): Boolean
 
   /**
+   * Hook for subclasses to be notified when an executor has registered with the driver.
+   * YarnSchedulerBackend overrides this to send ExecutorRegisteredWithDriver to the AM for
+   * executor launch timeout tracking.
+   */
+  def onExecutorRegistered(executorId: String, resourceProfileId: Int): Unit
+
+  /**
    * Update the cluster manager on our scheduling needs. Three bits of information are included
    * to help it make decisions.
    *

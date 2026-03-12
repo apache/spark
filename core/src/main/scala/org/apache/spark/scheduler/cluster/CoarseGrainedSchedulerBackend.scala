@@ -318,6 +318,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
               decommissionExecutors(Array((executorId, v._1)), v._2, v._3)
               unknownExecutorsPendingDecommission.invalidate(executorId)
             })
+          CoarseGrainedSchedulerBackend.this.onExecutorRegistered(executorId, resourceProfileId)
           context.reply(true)
         }
 
@@ -753,6 +754,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       !executorsPendingLossReason.contains(id) &&
       !executorsPendingDecommission.contains(id)
   }
+
+  override def onExecutorRegistered(executorId: String, resourceProfileId: Int): Unit = {}
 
   /**
    * Get the max number of tasks that can be concurrent launched based on the ResourceProfile

@@ -96,8 +96,14 @@ private[yarn] class YarnAllocator(
   @GuardedBy("this")
   private val launchingExecutorContainerIds = collection.mutable.HashSet[ContainerId]()
 
+  // ResourceProfileId -> (executorId -> Option[(firstSeenMs, isRelaunching)])
+  // Tracks all running executors and their launch timeout state. Value: Some((firstSeenMs,
+  // isRelaunching)) = not yet confirmed by driver (firstSeenMs = launch time, isRelaunching =
+  // true if replacement already requested after timeout); None = confirmed by driver; entry
+  // removed when executor/container is lost.
   @GuardedBy("this")
-  private val runningExecutorsPerResourceProfileId = new HashMap[Int, mutable.Set[String]]()
+  private val runningExecutorsPerResourceProfileId =
+    new HashMap[Int, mutable.HashMap[String, Option[(Long, Boolean)]]]()
 
   @GuardedBy("this")
   private val numExecutorsStartingPerResourceProfileId = new HashMap[Int, AtomicInteger]
@@ -175,6 +181,8 @@ private[yarn] class YarnAllocator(
 
   private val memoryOverheadFactor = sparkConf.get(EXECUTOR_MEMORY_OVERHEAD_FACTOR)
 
+  private val maxDelayLaunchMillis = sparkConf.get(CONTAINER_LAUNCH_TIMEOUT)
+
   private val launcherPool = ThreadUtils.newDaemonCachedThreadPool(
     "ContainerLauncher", sparkConf.get(CONTAINER_LAUNCH_MAX_THREADS))
 
@@ -216,7 +224,8 @@ private[yarn] class YarnAllocator(
   private def initDefaultProfile(): Unit = synchronized {
     allocatedHostToContainersMapPerRPId(DEFAULT_RESOURCE_PROFILE_ID) =
       new HashMap[String, mutable.Set[ContainerId]]()
-    runningExecutorsPerResourceProfileId.put(DEFAULT_RESOURCE_PROFILE_ID, mutable.HashSet[String]())
+    runningExecutorsPerResourceProfileId.put(DEFAULT_RESOURCE_PROFILE_ID,
+      mutable.HashMap[String, Option[(Long, Boolean)]]())
     numExecutorsStartingPerResourceProfileId(DEFAULT_RESOURCE_PROFILE_ID) = new AtomicInteger(0)
     val initTargetExecNum = SchedulerBackendUtils.getInitialTargetExecutorNumber(sparkConf)
     targetNumExecutorsPerResourceProfileId(DEFAULT_RESOURCE_PROFILE_ID) = initTargetExecNum
@@ -280,8 +289,44 @@ private[yarn] class YarnAllocator(
       new HashMap[String, mutable.Set[ContainerId]]())
   }
 
-  private def getOrUpdateRunningExecutorForRPId(rpId: Int): mutable.Set[String] = synchronized {
-    runningExecutorsPerResourceProfileId.getOrElseUpdate(rpId, mutable.HashSet[String]())
+  private def getOrUpdateRunningExecutorForRPId(
+      rpId: Int): mutable.HashMap[String, Option[(Long, Boolean)]] = synchronized {
+    runningExecutorsPerResourceProfileId.getOrElseUpdate(rpId,
+      mutable.HashMap[String, Option[(Long, Boolean)]]())
+  }
+
+  /** Count executors in the given map that are marked for relaunch (isRelaunching = true). */
+  private def countRelaunching(map: mutable.HashMap[String, Option[(Long, Boolean)]]): Int = {
+    map.count { case (_, v) => v.exists { case (_, isRelaunching) => isRelaunching } }
+  }
+
+  def getNumExecutorsMissLaunched: Int = synchronized {
+    runningExecutorsPerResourceProfileId.values.map { m =>
+      m.count { case (_, v) => v.exists { case (_, isRelaunching) => !isRelaunching } }
+    }.sum
+  }
+
+  /**
+   * Updates launch timeout tracking: marks unconfirmed executors that exceed maxDelayLaunchMillis
+   * as needing relaunch. Returns the count of executors for which replacement has been requested.
+   */
+  private def updateAndGetRelaunchingCount(rpId: Int): Int = {
+    val running = getOrUpdateRunningExecutorForRPId(rpId)
+    val now = clock.getTimeMillis()
+    running.keys.toSeq.foreach { executorId =>
+      running(executorId).foreach { case (firstSeen, isRelaunching) =>
+        if (!isRelaunching && now - firstSeen > maxDelayLaunchMillis) {
+          val hostOpt = executorIdToContainer
+            .get(executorId)
+            .flatMap(c => allocatedContainerToHostMap.get(c.getId))
+          allocatorNodeHealthTracker.handleResourceAllocationFailure(hostOpt)
+          running(executorId) = Some((firstSeen, true))
+          logWarning(s"Requesting new resources since launching executor " +
+            s"$executorId takes more than $maxDelayLaunchMillis ms")
+        }
+      }
+    }
+    countRelaunching(running)
   }
 
   private def getOrUpdateNumExecutorsStartingForRPId(rpId: Int): AtomicInteger = synchronized {
@@ -428,6 +473,12 @@ private[yarn] class YarnAllocator(
     }
   }
 
+  private[yarn] def onExecutorRegistered(executorId: String, resourceProfileId: Int): Unit = {
+    synchronized {
+      getOrUpdateRunningExecutorForRPId(resourceProfileId).update(executorId, None)
+    }
+  }
+
   /**
    * Request resources such that, if YARN gives us all we ask for, we'll have a number of containers
    * equal to maxExecutors.
@@ -500,10 +551,12 @@ private[yarn] class YarnAllocator(
     val missingPerProfile = targetNumExecutorsPerResourceProfileId.map { case (rpId, targetNum) =>
       val starting = getOrUpdateNumExecutorsStartingForRPId(rpId).get
       val pending = pendingAllocatePerResourceProfileId.getOrElse(rpId, Seq.empty).size
+      val relaunching = updateAndGetRelaunchingCount(rpId)
       val running = getOrUpdateRunningExecutorForRPId(rpId).size
       logDebug(s"Updating resource requests for ResourceProfile id: $rpId, target: " +
-        s"$targetNum, pending: $pending, running: $running, executorsStarting: $starting")
-      (rpId, targetNum - pending - running - starting)
+        s"$targetNum, pending: $pending, running: $running, executorsStarting: $starting, " +
+        s"relaunchingExecutors: $relaunching")
+      (rpId, targetNum - pending - running - starting + relaunching)
     }.toMap
 
     missingPerProfile.foreach { case (rpId, missing) =>
@@ -776,7 +829,8 @@ private[yarn] class YarnAllocator(
       val containerCores = rp.getExecutorCores.getOrElse(defaultCores)
 
       val rpRunningExecs = getOrUpdateRunningExecutorForRPId(rpId).size
-      if (rpRunningExecs < getOrUpdateTargetNumExecutorsForRPId(rpId)) {
+      val relaunchingCount = countRelaunching(getOrUpdateRunningExecutorForRPId(rpId))
+      if (rpRunningExecs < getOrUpdateTargetNumExecutorsForRPId(rpId) + relaunchingCount) {
         getOrUpdateNumExecutorsStartingForRPId(rpId).incrementAndGet()
         launchingExecutorContainerIds.add(containerId)
         if (launchContainers) {
@@ -819,7 +873,8 @@ private[yarn] class YarnAllocator(
       } else {
         logInfo(log"Skip launching executorRunnable as running executors count: " +
           log"${MDC(LogKeys.COUNT, rpRunningExecs)} reached target executors count: " +
-          log"${MDC(LogKeys.NUM_EXECUTOR_TARGET, getOrUpdateTargetNumExecutorsForRPId(rpId))}.")
+          log"${MDC(LogKeys.NUM_EXECUTOR_TARGET, getOrUpdateTargetNumExecutorsForRPId(rpId))} " +
+          log"and relaunching count: ${MDC(LogKeys.COUNT, relaunchingCount)}.")
         internalReleaseContainer(container)
       }
     }
@@ -829,7 +884,7 @@ private[yarn] class YarnAllocator(
       container: Container): Unit = synchronized {
     val containerId = container.getId
     if (launchingExecutorContainerIds.contains(containerId)) {
-      getOrUpdateRunningExecutorForRPId(rpId).add(executorId)
+      getOrUpdateRunningExecutorForRPId(rpId)(executorId) = Some((clock.getTimeMillis(), false))
       executorIdToContainer(executorId) = container
       containerIdToExecutorIdAndResourceProfileId(containerId) = (executorId, rpId)
 

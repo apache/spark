@@ -904,4 +904,146 @@ class YarnAllocatorSuite extends SparkFunSuite
     handler.getNumExecutorsRunning should be(0)
     handler.getNumExecutorsStarting should be(0)
   }
+
+  test("SPARK-55974: should not mark executors for relaunch before timeout") {
+    val timeoutMs = 5000L
+    val (handler, _) = createAllocator(
+      maxExecutors = 2,
+      additionalConfigs = Map(CONTAINER_LAUNCH_TIMEOUT.key -> timeoutMs.toString))
+    handler.updateResourceRequests()
+    handler.getNumContainersPendingAllocate should be (2)
+
+    val container1 = createContainer("host1")
+    val container2 = createContainer("host2")
+
+    handler.handleAllocatedContainers(Array(container1, container2).toImmutableArraySeq)
+    handler.getNumExecutorsRunning should be (2)
+
+    // Executors becoming missing (not confirmed by driver)
+    handler.updateResourceRequests()
+
+    // Advance time but not enough to trigger timeout
+    clock.advance(timeoutMs - 1000L)
+    handler.updateResourceRequests()
+
+    handler.getNumExecutorsRunning should be (2)
+    handler.getNumContainersPendingAllocate should be (0)
+  }
+
+  test("SPARK-55974: should mark executors for relaunch after timeout") {
+    val timeoutMs = 5000L
+    val (handler, _) = createAllocator(
+      maxExecutors = 2,
+      additionalConfigs = Map(CONTAINER_LAUNCH_TIMEOUT.key -> timeoutMs.toString))
+    handler.updateResourceRequests()
+    handler.getNumContainersPendingAllocate should be (2)
+
+    val container1 = createContainer("host1")
+    val container2 = createContainer("host2")
+
+    handler.handleAllocatedContainers(Array(container1, container2).toImmutableArraySeq)
+    handler.getNumExecutorsRunning should be (2)
+
+    // Executors becoming missing (not confirmed by driver)
+    handler.updateResourceRequests()
+
+    // Advance time past timeout
+    clock.advance(timeoutMs + 1000L)
+    handler.updateResourceRequests()
+
+    // Should relaunch new containers
+    handler.getNumContainersPendingAllocate should be (2)
+    handler.getNumExecutorsRunning should be (2)
+  }
+
+  test("SPARK-55974: should handle mixed active and missing executors") {
+    val timeoutMs = 5000L
+    val (handler, _) = createAllocator(
+      maxExecutors = 3,
+      additionalConfigs = Map(CONTAINER_LAUNCH_TIMEOUT.key -> timeoutMs.toString))
+    handler.updateResourceRequests()
+    handler.getNumContainersPendingAllocate should be (3)
+
+    val container1 = createContainer("host1")
+    val container2 = createContainer("host2")
+    val container3 = createContainer("host3")
+
+    handler.handleAllocatedContainers(Array(container1, container2, container3).toImmutableArraySeq)
+    handler.getNumExecutorsRunning should be (3)
+
+    // Only 1 executor is active, 2 are missing
+    handler.onExecutorRegistered("1", defaultRPId)
+    handler.updateResourceRequests()
+
+    // Advance time past timeout
+    clock.advance(timeoutMs + 1000L)
+    handler.updateResourceRequests()
+
+    // Should relaunch 2 new containers
+    handler.getNumContainersPendingAllocate should be (2)
+    handler.getNumExecutorsRunning should be (3)
+  }
+
+  test("SPARK-55974: should reset tracking when executors become active again") {
+    val timeoutMs = 5000L
+    val (handler, _) = createAllocator(
+      maxExecutors = 2,
+      additionalConfigs = Map(CONTAINER_LAUNCH_TIMEOUT.key -> timeoutMs.toString))
+    handler.updateResourceRequests()
+    handler.getNumContainersPendingAllocate should be (2)
+
+    val container1 = createContainer("host1")
+    val container2 = createContainer("host2")
+
+    handler.handleAllocatedContainers(Array(container1, container2).toImmutableArraySeq)
+    handler.getNumExecutorsRunning should be (2)
+
+    handler.updateResourceRequests()
+    handler.getNumExecutorsMissLaunched should be (2)
+
+    clock.advance(timeoutMs - 1000L)
+    handler.updateResourceRequests()
+    handler.getNumExecutorsMissLaunched should be (2)
+
+    // Executors become active (confirmed by driver)
+    handler.onExecutorRegistered("1", defaultRPId)
+    handler.onExecutorRegistered("2", defaultRPId)
+    handler.updateResourceRequests()
+    handler.getNumExecutorsMissLaunched should be (0)
+
+    // Should not request new containers since executors are active again
+    handler.getNumContainersPendingAllocate should be (0)
+  }
+
+  test("SPARK-55974: executor launch timeout - should handle multiple timeout cycles") {
+    val timeoutMs = 3000L
+    val (handler, _) = createAllocator(
+      maxExecutors = 1,
+      additionalConfigs = Map(CONTAINER_LAUNCH_TIMEOUT.key -> timeoutMs.toString))
+    handler.updateResourceRequests()
+    handler.getNumContainersPendingAllocate should be (1)
+
+    val container = createContainer("host1")
+    handler.handleAllocatedContainers(Array(container).toImmutableArraySeq)
+    handler.getNumExecutorsRunning should be (1)
+
+    // First timeout cycle
+    handler.updateResourceRequests()
+    clock.advance(timeoutMs + 1000L)
+    handler.updateResourceRequests()
+    handler.getNumContainersPendingAllocate should be (1)
+
+    // Simulate new container allocated
+    val newContainer = createContainer("host2")
+    handler.handleAllocatedContainers(Array(newContainer).toImmutableArraySeq)
+    handler.getNumExecutorsRunning should be (2)
+
+    // Second timeout cycle
+    handler.updateResourceRequests()
+    clock.advance(timeoutMs + 1000L)
+    handler.updateResourceRequests()
+
+    // Should request another container
+    handler.getNumContainersPendingAllocate should be (1)
+  }
 }
