@@ -706,4 +706,44 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
     val result = spark.read.parquet(dir.getAbsolutePath)
     assert(result.count() == 100)
   }
+
+  testWithTempDir("special characters in field names - literal empty brackets") { dir =>
+    val df = spark.sql(
+      """
+        |select parse_json(
+        |  '{"[]": ' || id || ', "normal_field": "value"}'
+        |) as v
+        |from range(0, 100, 1, 1)
+      """.stripMargin)
+    df.write.mode("overwrite").parquet(dir.getAbsolutePath)
+
+    val schema = getFileSchema(dir)
+    val vSchema = schema("v").dataType.asInstanceOf[StructType]
+    val typedValue = vSchema("typed_value").dataType.asInstanceOf[StructType]
+    assert(typedValue.fieldNames.contains("[]"))
+    assert(typedValue.fieldNames.contains("normal_field"))
+
+    val result = spark.read.parquet(dir.getAbsolutePath)
+    assert(result.count() == 100)
+  }
+
+  testWithTempDir("special characters in field names - literal empty brackets with array") { dir =>
+    val df = spark.sql(
+      """
+        |select parse_json(
+        |  '{"[]": ' || id || ', "arr": [' || id || ', ' || (id + 1) || ']}'
+        |) as v
+        |from range(0, 100, 1, 1)
+      """.stripMargin)
+    df.write.mode("overwrite").parquet(dir.getAbsolutePath)
+
+    val schema = getFileSchema(dir)
+    val vSchema = schema("v").dataType.asInstanceOf[StructType]
+    val typedValue = vSchema("typed_value").dataType.asInstanceOf[StructType]
+    assert(typedValue.fieldNames.contains("[]"))
+    assert(typedValue.fieldNames.contains("arr"))
+
+    val result = spark.read.parquet(dir.getAbsolutePath)
+    assert(result.count() == 100)
+  }
 }
