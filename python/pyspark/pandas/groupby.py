@@ -1988,8 +1988,11 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             if include_groups:
                 raise ValueError("include_groups=True is no longer allowed.")
 
-        spec = inspect.getfullargspec(func)
-        return_sig = spec.annotations.get("return", None)
+        try:
+            spec = inspect.getfullargspec(func)
+            return_sig = spec.annotations.get("return", None)
+        except TypeError:
+            return_sig = None
         should_infer_schema = return_sig is None
         should_retain_index = should_infer_schema
 

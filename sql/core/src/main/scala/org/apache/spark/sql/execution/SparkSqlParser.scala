@@ -45,7 +45,7 @@ import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{DataType, StringType}
 import org.apache.spark.util.Utils.getUriBuilder
 
 /**
@@ -896,21 +896,42 @@ class SparkSqlAstBuilder extends AstBuilder {
         throw QueryParsingErrors.createFuncWithBothIfNotExistsAndReplaceError(ctx)
       }
 
-      // Reject invalid options
+      // Reject invalid options and validate parameter data types eagerly so that errors
+      // are reported with correct line numbers relative to the full SQL statement.
       for {
         parameters <- Option(ctx.parameters)
         colDefinition <- parameters.colDefinition().asScala
-        option <- colDefinition.colDefinitionOption().asScala
       } {
-        if (option.generationExpression() != null) {
-          throw QueryParsingErrors.createFuncWithGeneratedColumnsError(ctx.parameters)
-        }
-        if (option.columnConstraintDefinition() != null) {
-          throw QueryParsingErrors.createFuncWithConstraintError(ctx.parameters)
+        // Trigger data type validation now (while the original parse tree positions are
+        // available) so that any type errors (e.g. STRUCT without <>) report the correct
+        // line/position. The result is unused; this call is purely for its side effect of
+        // throwing a parse exception with accurate location information.
+        typedVisit[DataType](colDefinition.dataType())
+        for (option <- colDefinition.colDefinitionOption().asScala) {
+          if (option.generationExpression() != null) {
+            throw QueryParsingErrors.createFuncWithGeneratedColumnsError(ctx.parameters)
+          }
+          if (option.columnConstraintDefinition() != null) {
+            throw QueryParsingErrors.createFuncWithConstraintError(ctx.parameters)
+          }
         }
       }
 
       val inputParamText = Option(ctx.parameters).map(source)
+      // Validate return type eagerly for the same reason as parameter data types above:
+      // trigger type errors now so they report correct positions.
+      // Skip validation when the return type is TABLE (for table-valued functions):
+      // "RETURNS TABLE" or "RETURNS TABLE(...)" is not a real data type to validate.
+      Option(ctx.dataType).foreach { dt =>
+        if (!source(dt).equalsIgnoreCase("table")) {
+          typedVisit[DataType](dt)
+        }
+      }
+      Option(ctx.returnParams).foreach { params =>
+        params.colType().asScala.foreach { colType =>
+          typedVisit[DataType](colType.dataType())
+        }
+      }
       val returnTypeText: String =
         if (ctx.RETURNS != null &&
           (Option(ctx.dataType).nonEmpty || Option(ctx.returnParams).nonEmpty)) {

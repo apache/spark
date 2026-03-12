@@ -185,6 +185,11 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     conf.set(DRIVER_PORT, rpcEnv.address.port)
     conf.set(DRIVER_HOST_ADDRESS, rpcEnv.address.host)
 
+    val env = mock(classOf[SparkEnv])
+    when(env.conf).thenReturn(conf)
+    when(env.isShuffleManagerInitialized).thenReturn(true)
+    SparkEnv.set(env)
+
     // Mock SparkContext to reduce the memory usage of tests. It's fine since the only reason we
     // need to create a SparkContext is to initialize LiveListenerBus.
     sc = mock(classOf[SparkContext])
@@ -215,6 +220,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       rpcEnv = null
       master = null
       liveListenerBus = null
+      SparkEnv.set(null)
     } finally {
       super.afterEach()
     }
@@ -2030,6 +2036,33 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     assert(exception.getMessage.contains("unsupported shuffle resolver"))
   }
 
+  test("SPARK-54796: putBlockDataAsStream throws ShuffleManagerNotInitializedException " +
+    "on timeout") {
+    val bm = makeBlockManager(1000, "exec2", testConf = Some(conf),
+      shuffleManager = null)
+    val sortShuffleMgr = makeSortShuffleManager(Some(conf))
+    sortShuffleMgr.shuffleBlockResolver._blockManager = bm
+
+    // Create a shuffle block ID
+    val shuffleBlockId = ShuffleDataBlockId(0, 0, 0)
+
+    // Mock SparkEnv to simulate uninitialized ShuffleManager
+    val mockEnv = SparkEnv.get
+    when(mockEnv.isShuffleManagerInitialized).thenReturn(false)
+    when(mockEnv.waitForShuffleManagerInit(mc.anyLong())).thenReturn(false)
+
+    val exception = intercept[ShuffleManagerNotInitializedException] {
+      bm.putBlockDataAsStream(shuffleBlockId, StorageLevel.DISK_ONLY, ClassTag(classOf[String]))
+    }
+    assert(exception.getMessage.contains("ShuffleManager not initialized"))
+
+    // Retry initialization should succeed once ShuffleManager is initialized
+    when(mockEnv.isShuffleManagerInitialized).thenReturn(true)
+    when(mockEnv.waitForShuffleManagerInit(mc.anyLong())).thenReturn(true)
+    when(mockEnv.shuffleManager).thenReturn(sortShuffleMgr)
+    assert(bm.migratableResolver != null)
+  }
+
   test("test decommission block manager should not be part of peers") {
     val exec1 = "exec1"
     val exec2 = "exec2"
@@ -2127,10 +2160,6 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       mapOutputTracker.registerMapOutput(0, 1, MapStatus(bm1.blockManagerId, Array(blockSize), 1))
       assert(mapOutputTracker.shuffleStatuses(0).mapStatuses(0).location === bm1.blockManagerId)
       assert(mapOutputTracker.shuffleStatuses(0).mapStatuses(1).location === bm1.blockManagerId)
-
-      val env = mock(classOf[SparkEnv])
-      when(env.conf).thenReturn(conf)
-      SparkEnv.set(env)
 
       decomManager.refreshMigratableShuffleBlocks()
 

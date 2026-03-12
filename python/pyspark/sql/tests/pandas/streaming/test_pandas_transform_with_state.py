@@ -1382,9 +1382,7 @@ class TransformWithStateTestsMixin:
         with self.sql_conf(
             {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": False}
         ):
-            with self.assertRaisesRegex(
-                Exception, "Exception thrown when converting pandas.Series"
-            ):
+            with self.assertRaisesRegex(Exception, "Failed to convert the value"):
                 (
                     df.groupBy("id")
                     .transformWithStateInPandas(

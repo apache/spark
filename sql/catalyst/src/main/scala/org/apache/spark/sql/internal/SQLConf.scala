@@ -88,7 +88,7 @@ object SQLConf {
     sqlConfEntries.get(key)
   }
 
-  private[internal] def getConfigEntries(): util.Collection[ConfigEntry[_]] = {
+  private[sql] def getConfigEntries(): util.Collection[ConfigEntry[_]] = {
     sqlConfEntries.values()
   }
 
@@ -268,6 +268,17 @@ object SQLConf {
       .doc(
         "When true, union should only be resolved once there are no duplicate attributes in " +
         "each branch.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val EXPAND_TAG_PASSTHROUGH_DUPLICATES_ENABLED =
+    buildConf("spark.sql.analyzer.expandTagPassthroughDuplicates")
+      .internal()
+      .version("4.2.0")
+      .doc(
+        "When true, Expand tags pass-through child attributes that share a name with a " +
+        "grouping attribute using __is_duplicate metadata, so that name-based resolution " +
+        "against the Expand output does not produce AMBIGUOUS_REFERENCE errors.")
       .booleanConf
       .createWithDefault(true)
 
@@ -533,6 +544,7 @@ object SQLConf {
       s"plan after a rule or batch is applied. The value can be " +
       s"${VALID_LOG_LEVELS.mkString(", ")}.")
     .version("3.1.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .enumConf(classOf[Level])
     .createWithDefault(Level.TRACE)
 
@@ -566,6 +578,7 @@ object SQLConf {
       "the resolved expression tree in the single-pass bottom-up Resolver. The value can be " +
       s"${VALID_LOG_LEVELS.mkString(", ")}.")
     .version("4.0.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .enumConf(classOf[Level])
     .createWithDefault(Level.TRACE)
 
@@ -2247,6 +2260,7 @@ object SQLConf {
         "when the underlying table schema evolves. When disabled, view comments will be " +
         "overwritten with table comments on every schema sync.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 

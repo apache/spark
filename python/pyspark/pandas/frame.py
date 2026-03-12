@@ -32,6 +32,7 @@ from types import TracebackType
 from typing import (
     Any,
     Callable,
+    ClassVar,
     Dict,
     Generic,
     IO,
@@ -542,6 +543,9 @@ class DataFrame(Frame, Generic[T]):
     1  Bricks  2.0
     2    None  NaN
     """
+
+    # Keep pandas-on-Spark above pandas DataFrame for reflected ops.
+    __pandas_priority__: ClassVar[int] = pd.DataFrame.__pandas_priority__ + 500  # type: ignore[attr-defined]
 
     def __init__(  # type: ignore[no-untyped-def]
         self, data=None, index=None, columns=None, dtype=None, copy=False

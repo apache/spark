@@ -30,5 +30,5 @@ class SqlScriptingContextManagerImpl(context: SqlScriptingExecutionContext)
 
   override def getContext: SqlScriptingExecutionContextExtension = context
 
-  override def getVariableManager: VariableManager = variableManager
+  override def getVariableManager: Option[VariableManager] = Some(variableManager)
 }

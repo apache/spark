@@ -239,6 +239,9 @@ api = Module(
     source_file_regexes=[
         "sql/api/",
     ],
+    sbt_test_goals=[
+        "sql-api/test",
+    ],
 )
 
 catalyst = Module(
