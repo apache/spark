@@ -200,9 +200,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
       request.getPlan.getOpTypeCase match {
         case proto.Plan.OpTypeCase.ROOT | proto.Plan.OpTypeCase.COMMAND => // valid
         case other =>
-          throw InvalidInputErrors.invalidOneOfField(
-            other,
-            request.getPlan.getDescriptorForType)
+          throw InvalidInputErrors.invalidOneOfField(other, request.getPlan.getDescriptorForType)
       }
       executeHolder.start()
     } catch {
