@@ -16,7 +16,14 @@ Install the required tools:
 - [`buf`](https://buf.build/docs/cli/installation/) — protobuf code generator
 - Python 3.12+
 
-Install the required Python packages:
+Install the required Python packages. Check `dev/requirements.txt` for the latest
+pinned versions of `mypy`, `mypy-protobuf`, and `black`, then run:
+
+```bash
+pip install 'mypy==<version>' 'mypy-protobuf==<version>' 'black==<version>'
+```
+
+For example, based on the current `dev/requirements.txt`:
 
 ```bash
 pip install 'mypy==1.19.1' 'mypy-protobuf==3.3.0' 'black==23.12.1'
