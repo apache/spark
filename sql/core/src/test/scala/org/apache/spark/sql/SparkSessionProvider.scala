@@ -15,19 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.catalog
+package org.apache.spark.sql
 
 /**
- * Trait which provides an interface for SQL scripting context manager.
+ * A common trait for test suites that require a [[SparkSession]]. It abstracts over the
+ * different session types supported by Spark tests: Spark classic sessions, Hive sessions
+ * (backed by [[org.apache.spark.sql.hive.test.TestHiveContext]]), and Spark Connect sessions.
+ * Concrete implementations are responsible for managing the session lifecycle (creation,
+ * configuration, and teardown).
  */
-trait SqlScriptingContextManager {
-  /**
-   * Get execution context
-   */
-  def getContext: SqlScriptingExecutionContextExtension
-
-  /**
-   * Get the variable manager, if available.
-   */
-  def getVariableManager: Option[VariableManager]
+trait SparkSessionProvider {
+  protected def spark: SparkSession
 }
