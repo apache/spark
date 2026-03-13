@@ -63,7 +63,7 @@ private[sql] object SimpleSparkConnectService {
       }
       val deadline = System.currentTimeMillis() + 2 * 60 * 1000L
       while (ArrowUtils.rootAllocator.getAllocatedMemory != 0 &&
-             System.currentTimeMillis() < deadline) {
+        System.currentTimeMillis() < deadline) {
         Thread.sleep(100)
       }
       val leaked = ArrowUtils.rootAllocator.getAllocatedMemory
