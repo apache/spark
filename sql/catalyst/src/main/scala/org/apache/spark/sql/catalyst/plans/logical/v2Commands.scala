@@ -348,7 +348,7 @@ case class ReplaceData(
 
   override val isByName: Boolean = false
   override val withSchemaEvolution: Boolean = false
-  override val writePrivileges: Set[TableWritePrivilege] =
+  override def writePrivileges: Set[TableWritePrivilege] =
     throw SparkException.internalError("ReplaceData.writePrivileges should not be called.")
 
   override def stringArgs: Iterator[Any] = Iterator(table, query, write)
@@ -434,7 +434,7 @@ case class WriteDelta(
 
   override val isByName: Boolean = false
   override val withSchemaEvolution: Boolean = false
-  override val writePrivileges: Set[TableWritePrivilege] =
+  override def writePrivileges: Set[TableWritePrivilege] =
     throw SparkException.internalError("WriteDelta.writePrivileges should not be called.")
 
   override def stringArgs: Iterator[Any] = Iterator(table, query, write)
