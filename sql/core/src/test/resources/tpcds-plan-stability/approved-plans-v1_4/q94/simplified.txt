@@ -3,8 +3,8 @@ WholeStageCodegen (12)
     InputAdapter
       Exchange #1
         WholeStageCodegen (11)
-          HashAggregate [ws_order_number] [sum(UnscaledValue(ws_ext_ship_cost)),sum(UnscaledValue(ws_net_profit)),count(ws_order_number),sum,sum,count,sum,sum,count]
-            HashAggregate [ws_order_number] [sum(UnscaledValue(ws_ext_ship_cost)),sum(UnscaledValue(ws_net_profit)),sum,sum,sum,sum]
+          HashAggregate [sum,sum,ws_order_number] [sum(UnscaledValue(ws_ext_ship_cost)),sum(UnscaledValue(ws_net_profit)),count(ws_order_number),count,sum,sum,count]
+            HashAggregate [ws_order_number,sum,sum] [sum(UnscaledValue(ws_ext_ship_cost)),sum(UnscaledValue(ws_net_profit)),sum,sum]
               HashAggregate [ws_order_number,ws_ext_ship_cost,ws_net_profit] [sum(UnscaledValue(ws_ext_ship_cost)),sum(UnscaledValue(ws_net_profit)),sum,sum,sum,sum]
                 Project [ws_order_number,ws_ext_ship_cost,ws_net_profit]
                   BroadcastHashJoin [ws_web_site_sk,web_site_sk]
