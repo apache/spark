@@ -94,9 +94,10 @@ class SessionCatalog(
 
   /**
    * Database qualifier used to store temporary functions in the function registry.
-   * Temporary functions use composite keys to coexist with builtin functions of the same name:
-   * - Builtin functions (including extensions): FunctionIdentifier(name, None)
-   * - Temp functions: FunctionIdentifier(name, Some(CatalogManager.SESSION_NAMESPACE))
+   * Temporary functions use composite keys to coexist with builtin functions of the same name.
+   * Storage convention (see namespaceToIdentifier): builtins are stored as
+   * FunctionIdentifier(name, Some("builtin"), Some("system")); temp functions as
+   * FunctionIdentifier(name, Some("session"), Some("system")).
    */
   private val TEMP_FUNCTION_DB = CatalogManager.SESSION_NAMESPACE
 

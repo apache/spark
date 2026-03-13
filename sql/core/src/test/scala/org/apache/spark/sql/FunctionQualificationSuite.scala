@@ -1125,12 +1125,12 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
     withDatabase("builtin") {
       sql("CREATE DATABASE builtin")
       // builtin.abs does NOT exist in the persistent 'builtin' database.
-      // With default prioritizeSystemCatalog=true, builtin.abs resolves to system builtin.
+      // With default persistentCatalogFirst=false, builtin.abs resolves to system builtin.
       checkAnswer(sql("SELECT builtin.abs(-5)"), Row(5))
     }
   }
 
-  test("SECTION 16: Default PrioritizeSystemCatalog is true - system wins without config") {
+  test("SECTION 16: Default persistentCatalogFirst is false - system wins without config") {
     withDatabase("builtin") {
       sql("CREATE DATABASE builtin")
       sql("CREATE FUNCTION builtin.abs(x INT) RETURNS INT RETURN x * 100")
@@ -1140,8 +1140,8 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SECTION 16a: PrioritizeSystemCatalog=true (explicit) - system catalog wins") {
-    withSQLConf("spark.sql.legacy.prioritizeSystemCatalog" -> "true") {
+  test("SECTION 16a: persistentCatalogFirst=false (explicit) - system catalog wins") {
+    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "false") {
       withDatabase("builtin") {
         sql("CREATE DATABASE builtin")
         sql("CREATE FUNCTION builtin.abs(x INT) RETURNS INT RETURN x * 100")
@@ -1152,8 +1152,8 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SECTION 16b: PrioritizeSystemCatalog=false (explicit) - persistent catalog wins") {
-    withSQLConf("spark.sql.legacy.prioritizeSystemCatalog" -> "false") {
+  test("SECTION 16b: persistentCatalogFirst=true (legacy) - persistent catalog wins") {
+    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "true") {
       withDatabase("builtin") {
         sql("CREATE DATABASE builtin")
         sql("CREATE FUNCTION builtin.abs(x INT) RETURNS INT RETURN x * 100")
@@ -1164,8 +1164,8 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SECTION 16c: PrioritizeSystemCatalog=true - session namespace prioritization") {
-    withSQLConf("spark.sql.legacy.prioritizeSystemCatalog" -> "true") {
+  test("SECTION 16c: persistentCatalogFirst=false - session namespace prioritization") {
+    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "false") {
       withDatabase("session") {
         sql("CREATE DATABASE session")
         sql("CREATE FUNCTION session.test_func() RETURNS STRING RETURN 'persistent'")
@@ -1181,8 +1181,8 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SECTION 16d: PrioritizeSystemCatalog=false - persistent catalog wins") {
-    withSQLConf("spark.sql.legacy.prioritizeSystemCatalog" -> "false") {
+  test("SECTION 16d: persistentCatalogFirst=true - persistent catalog wins") {
+    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "true") {
       withDatabase("session") {
         sql("CREATE DATABASE session")
         sql("CREATE FUNCTION session.test_func() RETURNS STRING RETURN 'persistent'")
@@ -1192,8 +1192,8 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SECTION 16e: PrioritizeSystemCatalog=true - fallback when persistent doesn't exist") {
-    withSQLConf("spark.sql.legacy.prioritizeSystemCatalog" -> "true") {
+  test("SECTION 16e: persistentCatalogFirst=false - fallback when persistent doesn't exist") {
+    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "false") {
       withDatabase("builtin") {
         sql("CREATE DATABASE builtin")
         checkAnswer(sql("SELECT builtin.abs(-5)"), Row(5))
@@ -1202,8 +1202,8 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SECTION 16f: PrioritizeSystemCatalog=false - fallback when persistent doesn't exist") {
-    withSQLConf("spark.sql.legacy.prioritizeSystemCatalog" -> "false") {
+  test("SECTION 16f: persistentCatalogFirst=true - fallback when persistent doesn't exist") {
+    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "true") {
       withDatabase("builtin") {
         sql("CREATE DATABASE builtin")
         checkAnswer(sql("SELECT builtin.abs(-5)"), Row(5))
@@ -1212,8 +1212,8 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SECTION 16g: PrioritizeSystemCatalog=false - persistent wins over temp") {
-    withSQLConf("spark.sql.legacy.prioritizeSystemCatalog" -> "false") {
+  test("SECTION 16g: persistentCatalogFirst=true - persistent wins over temp") {
+    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "true") {
       withDatabase("session") {
         sql("CREATE DATABASE session")
         sql("CREATE FUNCTION session.test_func() RETURNS STRING RETURN 'persistent'")
@@ -1228,8 +1228,8 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SECTION 16h: PrioritizeSystemCatalog=true - table function resolves to system builtin") {
-    withSQLConf("spark.sql.legacy.prioritizeSystemCatalog" -> "true") {
+  test("SECTION 16h: persistentCatalogFirst=false - table function resolves to system builtin") {
+    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "false") {
       withDatabase("builtin") {
         sql("CREATE DATABASE builtin")
         // No persistent table function named range; builtin.range(3) resolves to system
@@ -1239,8 +1239,8 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SECTION 16i: PrioritizeSystemCatalog=false - persistent table function wins") {
-    withSQLConf("spark.sql.legacy.prioritizeSystemCatalog" -> "false") {
+  test("SECTION 16i: persistentCatalogFirst=true - persistent table function wins") {
+    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "true") {
       withDatabase("builtin") {
         sql("CREATE DATABASE builtin")
         sql("CREATE FUNCTION builtin.my_tvf() RETURNS TABLE(id INT) RETURN SELECT 1 AS id")
@@ -1258,7 +1258,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
     withSQLConf(
       "spark.sql.catalog.othercat" -> classOf[InMemoryTableCatalog].getName,
       SQLConf.DEFAULT_CATALOG.key -> "othercat",
-      "spark.sql.legacy.prioritizeSystemCatalog" -> "true") {
+      "spark.sql.legacy.persistentCatalogFirst" -> "false") {
       // Current catalog is othercat (no builtin namespace); builtin.abs resolves to system
       checkAnswer(sql("SELECT builtin.abs(-5)"), Row(5))
       checkAnswer(sql("SELECT system.builtin.abs(-5)"), Row(5))
