@@ -2327,7 +2327,7 @@ class SessionCatalog(
    * session. If not existed, return false.
    */
   def isRegisteredFunction(name: FunctionIdentifier): Boolean = {
-    // Check if it exists as temp (with TEMP_FUNCTION_DB db) or builtin (without db) or persistent
+    // Check if it exists as temp (with TEMP_FUNCTION_DB db) or builtin (3-part key) or persistent
     if (name.database.isEmpty) {
       val tempIdent = tempFunctionIdentifier(name.funcName)
       val builtinIdent = FunctionRegistry.builtinFunctionIdentifier(name.funcName)
