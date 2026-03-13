@@ -19,6 +19,8 @@ package org.apache.spark.sql.types
 
 import java.util.Locale
 
+import scala.io.Source
+
 import org.json4s.JsonAST.JString
 
 import org.apache.spark.SparkFunSuite
@@ -44,7 +46,8 @@ class GeometryTypeSuite extends SparkFunSuite {
   }
 
   test("GEOMETRY type with specified valid SRID") {
-    val srids: Seq[Int] = Seq(0, 3857, 4326)
+    // SRID 0 (Spark Cartesian), 3857 (Web Mercator), and OGC-overridden geographic SRIDs.
+    val srids: Seq[Int] = Seq(0, 3857, 4326, 4267, 4269)
     srids.foreach { srid =>
       val g = GeometryType(srid)
       assert(g.srid == srid)
@@ -121,6 +124,8 @@ class GeometryTypeSuite extends SparkFunSuite {
     assertStringRepresentation(GeometryType(0), "geometry(0)", "geometry(SRID:0)")
     assertStringRepresentation(GeometryType(3857), "geometry(3857)", "geometry(EPSG:3857)")
     assertStringRepresentation(GeometryType(4326), "geometry(4326)", "geometry(OGC:CRS84)")
+    assertStringRepresentation(GeometryType(4267), "geometry(4267)", "geometry(OGC:CRS27)")
+    assertStringRepresentation(GeometryType(4269), "geometry(4269)", "geometry(OGC:CRS83)")
   }
 
   // These tests verify the JSON parsing of different GEOMETRY types.
@@ -170,7 +175,11 @@ class GeometryTypeSuite extends SparkFunSuite {
       "GEOMETRY(ANY)",
       "GEOMETRY(0)",
       "GEOMETRY(3857)",
-      "GEOMETRY(4326)"
+      "GEOMETRY(4326)",
+      "GEOMETRY(4267)",
+      "GEOMETRY(4269)",
+      "GEOMETRY(2000)",
+      "GEOMETRY(102100)"
     )
     validGeometries.foreach { geom =>
       val dt = DataType.fromDDL(geom)
@@ -207,11 +216,41 @@ class GeometryTypeSuite extends SparkFunSuite {
       GeometryType(0),
       GeometryType(3857),
       GeometryType(4326),
+      GeometryType(4267),
+      GeometryType(4269),
+      GeometryType(2000),
+      GeometryType(102100),
       GeometryType("ANY")
     )
     geometryTypes.foreach { geometryType =>
       val pdt = PhysicalDataType(geometryType)
       assert(pdt.isInstanceOf[PhysicalGeometryType])
+    }
+  }
+
+  test("All expected Geometry srid/CRS") {
+    def loadResourceLines(name: String): Seq[String] = {
+      val url = Thread.currentThread().getContextClassLoader.getResource(name)
+      assert(url != null, s"Test resource not found: $name")
+      Source.fromURL(url, "UTF-8").getLines().filter(_.nonEmpty).toSeq
+    }
+
+    val dataLines = loadResourceLines("geo/expected_geometry_srs_crid_mapping.csv")
+    assert(dataLines.nonEmpty, "expected_geometry_srs_crid_mapping.csv must not be empty")
+
+    dataLines.foreach { line =>
+      val parts = line.split(",", 2)
+      assert(parts.length == 2, s"Line must be 'srid,crs': $line")
+      val srid = parts(0).trim.toInt
+      val expectedCrs = parts(1).trim
+
+      // Validate srid -> crs
+      val g = GeometryType(srid)
+      assert(g.crs == expectedCrs, s"SRID $srid -> CRS '$expectedCrs'")
+
+      // Validate crs -> srid
+      val g2 = GeometryType(expectedCrs)
+      assert(g2.srid == srid, s"CRS '$expectedCrs' -> SRID $srid")
     }
   }
 }
