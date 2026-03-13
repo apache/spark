@@ -242,7 +242,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     JoinStateWatermarkPredicates(leftStateWatermarkPredicate, rightStateWatermarkPredicate)
   }
 
-  private def findJoinKeyOrdinalForWatermark(
+  private[join] def findJoinKeyOrdinalForWatermark(
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression]): Option[Int] = {
     // Join keys of both sides generate rows of the same fields, that is, same sequence of data

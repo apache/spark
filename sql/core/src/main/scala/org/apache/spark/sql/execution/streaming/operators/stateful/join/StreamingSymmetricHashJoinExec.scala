@@ -363,17 +363,19 @@ case class StreamingSymmetricHashJoinExec(
     // Create left and right side hash joiners and store in the joiner manager.
     // Both sides should use the same store generator if we are re-using the same store instance.
     val joinStateManagerStoreGenerator = new JoinStateManagerStoreGenerator()
+    val joinKeyOrdinalForWatermark =
+      StreamingSymmetricHashJoinHelper.findJoinKeyOrdinalForWatermark(leftKeys, rightKeys)
     val joinerManager = OneSideHashJoinerManager(
       new OneSideHashJoiner(
         LeftSide, left.output, leftKeys, leftInputIter,
         condition.leftSideOnly, postJoinFilter, stateWatermarkPredicates.left, partitionId,
         checkpointIds.left.keyToNumValues, checkpointIds.left.keyWithIndexToValue,
-        skippedNullValueCount, joinStateManagerStoreGenerator),
+        skippedNullValueCount, joinStateManagerStoreGenerator, joinKeyOrdinalForWatermark),
       new OneSideHashJoiner(
         RightSide, right.output, rightKeys, rightInputIter,
         condition.rightSideOnly, postJoinFilter, stateWatermarkPredicates.right, partitionId,
         checkpointIds.right.keyToNumValues, checkpointIds.right.keyWithIndexToValue,
-        skippedNullValueCount, joinStateManagerStoreGenerator))
+        skippedNullValueCount, joinStateManagerStoreGenerator, joinKeyOrdinalForWatermark))
 
     //  Join one side input using the other side's buffered/state rows. Here is how it is done.
     //
@@ -621,7 +623,8 @@ case class StreamingSymmetricHashJoinExec(
       keyToNumValuesStateStoreCkptId: Option[String],
       keyWithIndexToValueStateStoreCkptId: Option[String],
       skippedNullValueCount: Option[SQLMetric],
-      joinStateManagerStoreGenerator: JoinStateManagerStoreGenerator) {
+      joinStateManagerStoreGenerator: JoinStateManagerStoreGenerator,
+      joinKeyOrdinalForWatermark: Option[Int]) {
 
     // Filter the joined rows based on the given condition.
     val preJoinFilter =
@@ -639,7 +642,8 @@ case class StreamingSymmetricHashJoinExec(
       keyWithIndexToValueStateStoreCkptId = keyWithIndexToValueStateStoreCkptId,
       stateFormatVersion = stateFormatVersion,
       skippedNullValueCount = skippedNullValueCount,
-      joinStoreGenerator = joinStateManagerStoreGenerator)
+      joinStoreGenerator = joinStateManagerStoreGenerator,
+      joinKeyOrdinalForWatermark = joinKeyOrdinalForWatermark)
 
     private[this] val keyGenerator = UnsafeProjection.create(joinKeys, inputAttributes)
 
