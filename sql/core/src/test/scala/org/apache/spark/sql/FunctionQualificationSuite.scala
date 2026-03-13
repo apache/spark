@@ -1070,6 +1070,8 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
 
       // 'system.builtin.abs' should still resolve to the true system builtin
       checkAnswer(sql("SELECT system.builtin.abs(-5)"), Row(5))
+      // Drop function before dropping DB so registry cache stays clean
+      sql("DROP FUNCTION IF EXISTS custom_builtin.abs")
     }
   }
 
@@ -1094,6 +1096,8 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
       } finally {
         sql("DROP TEMPORARY FUNCTION my_func")
       }
+      // Drop persistent function before dropping DB so registry cache stays clean
+      sql("DROP FUNCTION IF EXISTS custom_session.my_func")
     }
   }
 
@@ -1112,6 +1116,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
       sql("CREATE FUNCTION builtin.abs(x INT) RETURNS INT RETURN x * 100")
       checkAnswer(sql("SELECT builtin.abs(-5)"), Row(5))
       checkAnswer(sql("SELECT system.builtin.abs(-5)"), Row(5))
+      sql("DROP FUNCTION IF EXISTS builtin.abs")
     }
   }
 
@@ -1122,6 +1127,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
         sql("CREATE FUNCTION builtin.abs(x INT) RETURNS INT RETURN x * 100")
         checkAnswer(sql("SELECT builtin.abs(-5)"), Row(5))
         checkAnswer(sql("SELECT system.builtin.abs(-5)"), Row(5))
+        sql("DROP FUNCTION IF EXISTS builtin.abs")
       }
     }
   }
@@ -1133,6 +1139,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
         sql("CREATE FUNCTION builtin.abs(x INT) RETURNS INT RETURN x * 100")
         checkAnswer(sql("SELECT builtin.abs(5)"), Row(500))
         checkAnswer(sql("SELECT system.builtin.abs(-5)"), Row(5))
+        sql("DROP FUNCTION IF EXISTS builtin.abs")
       }
     }
   }
@@ -1149,6 +1156,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
         } finally {
           sql("DROP TEMPORARY FUNCTION test_func")
         }
+        sql("DROP FUNCTION IF EXISTS session.test_func")
       }
     }
   }
@@ -1160,6 +1168,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
         sql("CREATE FUNCTION session.test_func() RETURNS STRING RETURN 'persistent'")
         checkAnswer(sql("SELECT session.test_func()"), Row("persistent"))
         checkAnswer(sql("SELECT system.session.test_func()"), Row("persistent"))
+        sql("DROP FUNCTION IF EXISTS session.test_func")
       }
     }
   }
