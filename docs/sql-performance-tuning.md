@@ -130,6 +130,20 @@ Configuration of in-memory caching can be done via `spark.conf.set` or by runnin
     </td>
     <td>2.1.1</td>
   </tr>
+  <tr>
+    <td><code>spark.sql.sources.parallelPartitionDiscovery.traversalDepth</code></td>
+    <td>1</td>
+    <td>
+      Configures sequential directory pre-traversal on the driver before delegating to
+      parallel workers during partition discovery. A value of 1 (default) means no sequential
+      pre-traversal is performed. A value of N causes the driver to sequentially expand up to
+      N-1 directory levels before parallelizing. For deep directory hierarchies with
+      single-child roots (e.g., <code>root/subpath/{year}/{month}/</code>), increasing this
+      value (e.g., to 2 or 3) allows the driver to collect enough paths before parallelizing,
+      improving listing performance.
+    </td>
+    <td>4.2.0</td>
+  </tr>
 </table>
 
 ### Coalesce Hints

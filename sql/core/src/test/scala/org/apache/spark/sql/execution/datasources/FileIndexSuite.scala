@@ -680,6 +680,51 @@ class FileIndexSuite extends SharedSparkSession {
       assert(fileIndex2a != fileIndex2b)
     }
   }
+
+  test("SPARK-54923: traversalDepth config is wired through InMemoryFileIndex") {
+    withTempDir { dir =>
+      // Create a deep-narrow hierarchy: root/subpath/year=2023/{month=01,month=02}/files
+      val subpath = new File(dir, "subpath")
+      subpath.mkdir()
+      for (year <- Seq("year=2023")) {
+        val yearDir = new File(subpath, year)
+        yearDir.mkdir()
+        for (month <- Seq("month=01", "month=02")) {
+          val monthDir = new File(yearDir, month)
+          monthDir.mkdir()
+          stringToFile(new File(monthDir, "part-0.parquet"), "data")
+        }
+      }
+
+      val path = new Path(dir.getCanonicalPath)
+
+      def listWithDepth(depth: Int): Set[String] = withSQLConf(
+        SQLConf.PARALLEL_PARTITION_DISCOVERY_TRAVERSAL_DEPTH.key -> depth.toString
+      ) {
+        val idx = new InMemoryFileIndex(spark, Seq(path), Map.empty, None)
+        idx.listLeafFiles(idx.rootPaths).map(_.getPath.toString).toSet
+      }
+
+      val filesDepth1 = listWithDepth(1)
+      val filesDepth2 = listWithDepth(2)
+      val filesDepth3 = listWithDepth(3)
+
+      assert(filesDepth1.size === 2)
+      assert(filesDepth1 === filesDepth2)
+      assert(filesDepth1 === filesDepth3)
+    }
+  }
+
+  test("SPARK-54923: traversalDepth config rejects values less than 1") {
+    val e = intercept[IllegalArgumentException] {
+      withSQLConf(
+        SQLConf.PARALLEL_PARTITION_DISCOVERY_TRAVERSAL_DEPTH.key -> "0"
+      ) {
+        new InMemoryFileIndex(spark, Seq.empty, Map.empty, None)
+      }
+    }
+    assert(e.getMessage.contains("The traversal depth must be at least 1"))
+  }
 }
 
 object DeletionRaceFileSystem {
