@@ -57,6 +57,10 @@ private[spark] object HadoopFSUtils extends Logging {
    * @param parallelismMax The maximum parallelism for listing. If the number of input paths is
    *                       larger than this value, parallelism will be throttled to this value
    *                       to avoid generating too many tasks.
+   * @param traversalDepth Controls sequential directory pre-traversal on the driver before
+   *                       delegating to parallel workers. A value of 1 (default) means no
+   *                       sequential pre-traversal. A value of N causes the driver to
+   *                       sequentially expand up to N-1 directory levels before parallelizing.
    * @return for each input path, the set of discovered files for the path
    */
   def parallelListLeafFiles(
@@ -67,9 +71,28 @@ private[spark] object HadoopFSUtils extends Logging {
     ignoreMissingFiles: Boolean,
     ignoreLocality: Boolean,
     parallelismThreshold: Int,
-    parallelismMax: Int): Seq[(Path, Seq[FileStatus])] = {
-    parallelListLeafFilesInternal(sc, paths, hadoopConf, filter, isRootLevel = true,
-      ignoreMissingFiles, ignoreLocality, parallelismThreshold, parallelismMax)
+    parallelismMax: Int,
+    traversalDepth: Int = 1): Seq[(Path, Seq[FileStatus])] = {
+    if (traversalDepth > 1) {
+      val expandedPaths =
+        sequentiallyTraverseDirectories(paths, hadoopConf, traversalDepth)
+      // Expanded paths are intermediate directories discovered by sequential traversal,
+      // not user-supplied root paths, so isRootLevel must be false to preserve the
+      // semantics of SPARK-27676 (detect race conditions on non-root paths).
+      // We set tolerateDisappearance = true so that if a directory confirmed during
+      // sequential traversal vanishes before the parallel lister reaches it (e.g.,
+      // concurrent table overwrite or S3 eventual consistency), it is silently skipped
+      // rather than failing the entire query. This flag only applies to the top-level
+      // expanded paths and is NOT propagated to recursive subdirectory listing, keeping
+      // the existing error-detection behavior for deeper levels intact.
+      parallelListLeafFilesInternal(sc, expandedPaths, hadoopConf, filter,
+        isRootLevel = false, ignoreMissingFiles = ignoreMissingFiles,
+        ignoreLocality, parallelismThreshold, parallelismMax,
+        tolerateDisappearance = true)
+    } else {
+      parallelListLeafFilesInternal(sc, paths, hadoopConf, filter, isRootLevel = true,
+        ignoreMissingFiles, ignoreLocality, parallelismThreshold, parallelismMax)
+    }
   }
 
   /**
@@ -106,6 +129,52 @@ private[spark] object HadoopFSUtils extends Logging {
     }
   }
 
+  /**
+   * Sequentially traverses directory hierarchies on the driver up to the specified depth,
+   * collecting all subdirectories found at the target level. For paths that are not directories
+   * or reach a leaf before the target depth, the path itself is returned.
+   *
+   * This is useful for deep-narrow hierarchies (e.g., root/subpath/{year}/{month}/) where
+   * the top levels have very few children and parallelizing at level 1 creates too few tasks.
+   */
+  private def sequentiallyTraverseDirectories(
+      paths: Seq[Path],
+      hadoopConf: Configuration,
+      traversalDepth: Int): Seq[Path] = {
+    var currentPaths = paths
+    var currentDepth = 1
+    while (currentDepth < traversalDepth) {
+      val nextPaths = mutable.ArrayBuffer.empty[Path]
+      for (path <- currentPaths) {
+        try {
+          val fs = path.getFileSystem(hadoopConf)
+          val statuses = fs.listStatus(path)
+          val filtered = statuses.filterNot(s => shouldFilterOutPathName(s.getPath.getName))
+          val (dirs, files) = filtered.partition(_.isDirectory)
+          if (dirs.nonEmpty && files.isEmpty) {
+            // Pure directory level — safe to expand further
+            nextPaths ++= dirs.map(_.getPath)
+          } else {
+            // Leaf (no subdirs) or mixed (files + subdirs) — keep the current path
+            // so the parallel lister can discover all contents including sibling files
+            nextPaths += path
+          }
+        } catch {
+          case _: FileNotFoundException =>
+            logWarning(log"The directory ${MDC(PATH, path)} " +
+              log"was not found during sequential traversal. Skipping.")
+        }
+      }
+      currentPaths = nextPaths.toSeq
+      currentDepth += 1
+    }
+    logInfo(log"Sequential traversal expanded " +
+      log"${MDC(NUM_PATHS, paths.length)} input paths to " +
+      log"${MDC(COUNT, currentPaths.length)} paths at depth " +
+      log"${MDC(RECURSIVE_DEPTH, traversalDepth)}")
+    currentPaths
+  }
+
   private def parallelListLeafFilesInternal(
       sc: SparkContext,
       paths: Seq[Path],
@@ -115,7 +184,8 @@ private[spark] object HadoopFSUtils extends Logging {
       ignoreMissingFiles: Boolean,
       ignoreLocality: Boolean,
       parallelismThreshold: Int,
-      parallelismMax: Int): Seq[(Path, Seq[FileStatus])] = {
+      parallelismMax: Int,
+      tolerateDisappearance: Boolean = false): Seq[(Path, Seq[FileStatus])] = {
 
     // Short-circuits parallel listing when serial listing is likely to be faster.
     if (paths.size <= parallelismThreshold) {
@@ -129,7 +199,8 @@ private[spark] object HadoopFSUtils extends Logging {
           ignoreLocality = ignoreLocality,
           isRootPath = isRootLevel,
           parallelismThreshold = parallelismThreshold,
-          parallelismMax = parallelismMax)
+          parallelismMax = parallelismMax,
+          tolerateDisappearance = tolerateDisappearance)
         (path, leafFiles)
       }
     }
@@ -169,7 +240,8 @@ private[spark] object HadoopFSUtils extends Logging {
               ignoreLocality = ignoreLocality,
               isRootPath = isRootLevel,
               parallelismThreshold = Int.MaxValue,
-              parallelismMax = 0)
+              parallelismMax = 0,
+              tolerateDisappearance = tolerateDisappearance)
             (path, leafFiles)
           }
         }.collect().toImmutableArraySeq
@@ -196,7 +268,8 @@ private[spark] object HadoopFSUtils extends Logging {
       ignoreLocality: Boolean,
       isRootPath: Boolean,
       parallelismThreshold: Int,
-      parallelismMax: Int): Seq[FileStatus] = {
+      parallelismMax: Int,
+      tolerateDisappearance: Boolean = false): Seq[FileStatus] = {
 
     logTrace(s"Listing $path")
     val fs = path.getFileSystem(hadoopConf)
@@ -237,7 +310,13 @@ private[spark] object HadoopFSUtils extends Logging {
       // able to detect race conditions involving root paths being deleted during
       // InMemoryFileIndex construction. However, it's still a net improvement to detect and
       // fail-fast on the non-root cases. For more info see the SPARK-27676 review discussion.
-      case _: FileNotFoundException if isRootPath || ignoreMissingFiles =>
+      //
+      // tolerateDisappearance handles a third case: paths discovered by sequential directory
+      // traversal (SPARK-54923) that may vanish between traversal and parallel listing.
+      // Unlike isRootPath, this flag is not propagated to recursive subdirectory calls,
+      // so deeper-level race conditions are still detected.
+      case _: FileNotFoundException if isRootPath || ignoreMissingFiles
+          || tolerateDisappearance =>
         logWarning(log"The directory ${MDC(PATH, path)} " +
           log"was not found. Was it deleted very recently?")
         Array.empty[FileStatus]
