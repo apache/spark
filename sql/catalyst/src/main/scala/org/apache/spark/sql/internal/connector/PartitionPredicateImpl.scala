@@ -80,7 +80,7 @@ class PartitionPredicateImpl private (
     val partitionNames = partitionSchema.map(_.name)
     val ordinals = catalystExpr.references.flatMap { ref =>
       partitionNames.zipWithIndex.find(_._1 == ref.name).map(_._2)
-    }.toSet.toArray.sorted // De-duplicate repeated references and sort by ordinal
+    }.toArray.sorted // De-duplicate repeated references and sort by ordinal
     ordinals.map(ord =>
       PartitionColumnReferenceImpl(ord, Array(partitionSchema(ord).name)): NamedReference)
   }

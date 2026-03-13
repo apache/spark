@@ -220,7 +220,23 @@ class DataSourceV2EnhancedPartitionFilterSuite
     }
   }
 
-  test("referencedPartitionColumnOrdinals: one non-first partition column in second-pass") {
+  test("referenced partition column ordinals: partition predicate same column twice " +
+    "has de-duped ordinals") {
+    withTable(partFilterTableName) {
+      sql(s"CREATE TABLE $partFilterTableName (part_col string, data string) USING $v2Source " +
+        "PARTITIONED BY (part_col)")
+      sql(s"INSERT INTO $partFilterTableName VALUES ('a', 'x'), ('b', 'y'), ('bc', 'z')")
+
+      val df = sql(s"SELECT * FROM $partFilterTableName WHERE part_col LIKE 'b%' " +
+        "OR part_col = 'a'")
+      checkAnswer(df, Seq(Row("a", "x"), Row("b", "y"), Row("bc", "z")))
+      assertPushedPartitionPredicates(df, 1)
+      assertScanReturnsPartitionKeys(df, Set("a", "b", "bc"))
+      assertReferencedPartitionColumnOrdinals(df, Array(0), Array("part_col"))
+    }
+  }
+
+  test("referenced partition column ordinals: one non-first partition column in second-pass") {
     withTable(partFilterTableName) {
       sql(s"CREATE TABLE $partFilterTableName (p0 string, p1 string, p2 string, data string) " +
         s"USING $v2Source PARTITIONED BY (p0, p1, p2)")
@@ -238,7 +254,7 @@ class DataSourceV2EnhancedPartitionFilterSuite
     }
   }
 
-  test("referencedPartitionColumnOrdinals: two non-first partition columns in second-pass") {
+  test("eferenced partition column ordinals: two non-first partition columns in second-pass") {
     withTable(partFilterTableName) {
       sql(s"CREATE TABLE $partFilterTableName (p0 string, p1 string, p2 string, data string) " +
         s"USING $v2Source PARTITIONED BY (p0, p1, p2)")
@@ -381,7 +397,7 @@ class DataSourceV2EnhancedPartitionFilterSuite
       expectedPartitionColumnNames: Array[String]): Unit = {
     val predicates = getPushedPartitionPredicates(df)
     val names = expectedPartitionColumnNames
-    predicates.foreach { p =>
+  predicates.foreach { p =>
       val refs = p.references()
       val ordinals = refs.map(_.asInstanceOf[PartitionColumnReference].ordinal()).sorted
       assert(ordinals.sameElements(expectedOrdinals.sorted),
