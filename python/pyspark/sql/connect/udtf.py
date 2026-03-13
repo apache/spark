@@ -17,10 +17,6 @@
 """
 User-defined table function related classes and functions
 """
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
-
 import warnings
 from typing import List, Type, TYPE_CHECKING, Optional, Union, Any
 

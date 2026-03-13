@@ -162,7 +162,7 @@ class BasePythonDataSourceTestsMixin:
                 if partition_func is not None:
                     return partition_func()
                 else:
-                    raise NotImplementedError
+                    return [InputPartition(None)]
 
             def read(self, partition):
                 return read_func(self.schema, partition)
@@ -1040,7 +1040,7 @@ class BasePythonDataSourceTestsMixin:
                             {"class_name": "TestJsonReader", "func_name": "partitions"},
                         ),
                         (
-                            "TestJsonReader.read: None",
+                            "TestJsonReader.read: InputPartition(value=None)",
                             {"class_name": "TestJsonReader", "func_name": "read"},
                         ),
                     ]
@@ -1151,7 +1151,7 @@ class BasePythonDataSourceTestsMixin:
                             {"class_name": "TestJsonReader", "func_name": "partitions"},
                         ),
                         (
-                            "TestJsonReader.read: None",
+                            "TestJsonReader.read: InputPartition(value=None)",
                             {"class_name": "TestJsonReader", "func_name": "read"},
                         ),
                     ]

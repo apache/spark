@@ -941,7 +941,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
       .select($"key", $"window.end".cast("long"), $"leftValue", $"rightValue")
 
     val useVirtualColumnFamilies =
-      spark.sessionState.conf.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION) == 3
+      spark.sessionState.conf.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION) >= 3
     // Number of shuffle partitions being used is 3
     val numStateStoreInstances = if (useVirtualColumnFamilies) {
       // Only one state store is created per partition if we're using virtual column families

@@ -26,6 +26,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Random, Success, Try}
 
 import org.apache.spark.{SparkException, SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.internal.config.ConfigBindingPolicy
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.resolver.{
@@ -239,29 +240,23 @@ object AnalysisContext {
 }
 
 object Analyzer {
-  // List of configurations that should be passed on when resolving views and SQL UDF.
-  private val RETAINED_ANALYSIS_FLAGS = Seq(
-    "spark.sql.view.schemaEvolution.preserveUserComments",
-    // retainedHiveConfigs
-    // TODO: remove these Hive-related configs after the `RelationConversions` is moved to
-    // optimization phase.
-    "spark.sql.hive.convertMetastoreParquet",
-    "spark.sql.hive.convertMetastoreOrc",
-    "spark.sql.hive.convertInsertingPartitionedTable",
-    "spark.sql.hive.convertInsertingUnpartitionedTable",
-    "spark.sql.hive.convertMetastoreCtas",
-    // retainedLoggingConfigs
-    "spark.sql.planChangeLog.level",
-    "spark.sql.expressionTreeChangeLog.level"
-  )
-
+  // Configs with bindingPolicy SESSION or NOT_APPLICABLE are retained when resolving views and
+  // SQL UDFs, so that their values propagate from the active session rather than falling back to
+  // Spark defaults. Note: configs defined in lazily-loaded modules (e.g., sql/hive) will only
+  // be included if their holding Scala object has been initialized before this set is computed.
   def retainResolutionConfigsForAnalysis(
       newConf: SQLConf,
       existingConf: SQLConf,
       createSparkVersion: String = ""): Unit = {
+    val retainedConfigKeys = SQLConf.getConfigEntries().asScala
+      .filter(entry =>
+        entry.bindingPolicy.contains(ConfigBindingPolicy.SESSION) ||
+        entry.bindingPolicy.contains(ConfigBindingPolicy.NOT_APPLICABLE))
+      .map(_.key)
+      .toSet
+
     val retainedConfigs = existingConf.getAllConfs.filter { case (key, _) =>
-      // Also apply catalog configs
-      RETAINED_ANALYSIS_FLAGS.contains(key) || key.startsWith("spark.sql.catalog.")
+      retainedConfigKeys.contains(key) || key.startsWith("spark.sql.catalog.")
     }
 
     retainedConfigs.foreach { case (k, v) =>
@@ -1565,8 +1560,7 @@ class Analyzer(
                 UpdateAction(
                   resolvedUpdateCondition,
                   // The update value can access columns from both target and source tables.
-                  resolveAssignments(assignments, m, MergeResolvePolicy.BOTH,
-                    throws = throws),
+                  resolveAssignments(assignments, m, MergeResolvePolicy.BOTH, throws),
                   fromStar)
               case UpdateStarAction(updateCondition) =>
                 // Expand star to top level source columns.  If source has less columns than target,
@@ -1587,8 +1581,7 @@ class Analyzer(
                 UpdateAction(
                   updateCondition.map(resolveExpressionByPlanChildren(_, m)),
                   // For UPDATE *, the value must be from source table.
-                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE,
-                    throws = throws),
+                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE, throws),
                   fromStar = true)
               case o => o
             }
@@ -1600,8 +1593,7 @@ class Analyzer(
                   resolveExpressionByPlanOutput(_, m.sourceTable))
                 InsertAction(
                   resolvedInsertCondition,
-                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE,
-                    throws = throws))
+                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE, throws))
               case InsertStarAction(insertCondition) =>
                 // The insert action is used when not matched, so its condition and value can only
                 // access columns from the source table.
@@ -1624,8 +1616,7 @@ class Analyzer(
                 }
                 InsertAction(
                   resolvedInsertCondition,
-                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE,
-                    throws = throws))
+                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE, throws))
               case o => o
             }
             val newNotMatchedBySourceActions = m.notMatchedBySourceActions.map {
@@ -1639,8 +1630,7 @@ class Analyzer(
                 UpdateAction(
                   resolvedUpdateCondition,
                   // The update value can access columns from the target table only.
-                  resolveAssignments(assignments, m, MergeResolvePolicy.TARGET,
-                    throws = throws),
+                  resolveAssignments(assignments, m, MergeResolvePolicy.TARGET, throws),
                   fromStar)
               case o => o
             }

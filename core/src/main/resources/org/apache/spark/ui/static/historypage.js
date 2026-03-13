@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* global $, Mustache, jQuery, uiRoot */
+/* global $, jQuery, uiRoot */
 
 import {formatDuration, formatTimeMillis, stringAbbreviate} from "./utils.js";
 
@@ -173,17 +173,10 @@ $(document).ready(function() {
       $.fn.dataTable.defaults.paging = false;
     }
 
-    var data = {
-      "uiroot": uiRoot,
-      "applications": array,
-      "hasMultipleAttempts": hasMultipleAttempts,
-      "showCompletedColumns": !requestedIncomplete,
-    };
-
     $.get(uiRoot + "/static/historypage-template.html", function(template) {
       var sibling = historySummary.prev();
       historySummary.detach();
-      var apps = $(Mustache.render($(template).filter("#history-summary-template").html(),data));
+      var apps = $($(template).filter("#history-summary-template").html());
       var attemptIdColumnName = 'attemptId';
       var startedColumnName = 'started';
       var completedColumnName = 'completed';
