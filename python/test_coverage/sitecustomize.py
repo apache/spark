@@ -63,6 +63,11 @@ try:
                     return wrapper
 
                 frame.f_globals["worker"] = save_when_exit(frame.f_globals["worker"])
+                # Pretend that this module has the same name as the worker module.
+                # UDF logging checks where pyspark code firstly calls into user code, and if
+                # the module name is "sitecustomize", it will confuse UDF logging and make
+                # it believe this is user code, which will result in a wrong context.
+                globals()["__name__"] = frame.f_globals.get("__name__", globals()["__name__"])
 
         os.register_at_fork(after_in_child=patch_worker)
 

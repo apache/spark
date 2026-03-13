@@ -45,6 +45,8 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
   private final val DELTA_OPERATIONS_WITH_ROW_ID =
     Set(DELETE_OPERATION, UPDATE_OPERATION)
 
+  protected def groupFilterEnabled: Boolean = conf.runtimeRowLevelOperationGroupFilterEnabled
+
   protected def buildOperationTable(
       table: SupportsRowLevelOperations,
       command: Command,

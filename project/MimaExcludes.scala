@@ -43,11 +43,15 @@ object MimaExcludes {
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ui.ProxyRedirectHandler#ResponseWrapper.this"),
     // [SPARK-55228][SQL] Implement Dataset.zipWithIndex in Scala API
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.Dataset.zipWithIndex"),
-
+    // [SPARK-55793][CORE] Add multiple log directories support to SHS
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo.apply"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo.copy"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo$")
     // [SPARK-53501][PYTHON][CORE] Refactor Python worker factory API
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkEnv.createPythonWorker"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkEnv.destroyPythonWorker"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkEnv.releasePythonWorker")
+
   )
 
   // Exclude rules for 4.1.x from 4.0.0

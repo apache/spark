@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* global $, Mustache, uiRoot */
+/* global $, uiRoot */
 
 import {
   ConvertDurationString, createRESTEndPointForExecutorsPage, createTemplateURI, errorMessageCell,
@@ -28,7 +28,6 @@ export {setTaskThreadDumpEnabled};
 
 function setTooltip(selector, text) {
   $(selector).attr("data-bs-toggle", "tooltip")
-    .attr("data-bs-placement", "top")
     .attr("title", text);
 }
 
@@ -379,7 +378,7 @@ $(document).ready(function () {
   getStandAloneAppId(function (appId) {
     // rendering the UI page
     $.get(createTemplateURI(appId, "stagespage"), function(template) {
-      tasksSummary.append(Mustache.render($(template).filter("#stages-summary-template").html()));
+      tasksSummary.append($(template).filter("#stages-summary-template").html());
 
       $("#additionalMetrics").click(function(){
         $("#arrowtoggle1").toggleClass("arrow-open arrow-closed");
@@ -634,8 +633,8 @@ $(document).ready(function () {
           });
 
         // Prepare data for speculation metrics
-        $("#speculationSummaryTitle").hide();
-        $("#speculationSummary").hide();
+        $("#speculationSummaryTitle").addClass("d-none");
+        $("#speculationSummary").addClass("d-none");
         var speculationSummaryInfo = responseBody.speculationSummary;
         var speculationData;
         if(speculationSummaryInfo) {
@@ -648,8 +647,8 @@ $(document).ready(function () {
           ]];
           if (speculationSummaryInfo.numTasks > 0) {
             // Show speculationSummary if there is atleast one speculated task that ran
-            $("#speculationSummaryTitle").show();
-            $("#speculationSummary").show();
+            $("#speculationSummaryTitle").removeClass("d-none");
+            $("#speculationSummary").removeClass("d-none");
           }
         }
         var speculationMetricsTableConf = {
@@ -1127,10 +1126,10 @@ $(document).ready(function () {
 
         // hide or show the accumulate update table
         if (accumulatorTable.length == 0) {
-          $("#accumulator-update-table").hide();
+          $("#accumulator-update-table").addClass("d-none");
         } else {
           taskTableSelector.column(18).visible(true);
-          $("#accumulator-update-table").show();
+          $("#accumulator-update-table").removeClass("d-none");
         }
         // Showing relevant stage data depending on stage type for task table and executor
         // summary table

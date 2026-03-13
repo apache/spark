@@ -104,7 +104,10 @@ private[v1] class SqlResource extends BaseAppResource {
       completed,
       failed,
       nodes,
-      edges)
+      edges,
+      if (exec.queryId != null) exec.queryId.toString else null,
+      exec.errorMessage.orNull,
+      exec.rootExecutionId)
   }
 
   private def printableMetrics(allNodes: collection.Seq[SparkPlanGraphNode],

@@ -267,7 +267,7 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
     Serializer for PyArrow-native UDTFs that work directly with PyArrow RecordBatches and Arrays.
     """
 
-    def __init__(self, table_arg_offsets=None):
+    def __init__(self, *, table_arg_offsets=None):
         super().__init__()
         self.table_arg_offsets = table_arg_offsets if table_arg_offsets else []
 
@@ -360,7 +360,7 @@ class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
         If True, reorder serialized columns by schema name.
     """
 
-    def __init__(self, assign_cols_by_name):
+    def __init__(self, *, assign_cols_by_name):
         super().__init__()
         self._assign_cols_by_name = assign_cols_by_name
 
@@ -419,18 +419,22 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         How to represent struct in pandas ("dict", "row", etc.). Default is "dict".
     ndarray_as_list : bool, optional
         Whether to convert ndarray as list. Default is False.
+    prefer_int_ext_dtype : bool, optional
+        Whether to convert integers to Pandas ExtensionDType. Default is False.
     df_for_struct : bool, optional
         If True, convert struct columns to DataFrame instead of Series. Default is False.
     """
 
     def __init__(
         self,
+        *,
         timezone,
         safecheck,
         int_to_decimal_coercion_enabled: bool = False,
         prefers_large_types: bool = False,
         struct_in_pandas: str = "dict",
         ndarray_as_list: bool = False,
+        prefer_int_ext_dtype: bool = False,
         df_for_struct: bool = False,
         input_type: Optional["StructType"] = None,
         arrow_cast: bool = False,
@@ -442,6 +446,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         self._prefers_large_types = prefers_large_types
         self._struct_in_pandas = struct_in_pandas
         self._ndarray_as_list = ndarray_as_list
+        self._prefer_int_ext_dtype = prefer_int_ext_dtype
         self._df_for_struct = df_for_struct
         if input_type is not None:
             assert isinstance(input_type, StructType)
@@ -486,6 +491,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                 schema=self._input_type,
                 struct_in_pandas=self._struct_in_pandas,
                 ndarray_as_list=self._ndarray_as_list,
+                prefer_int_ext_dtype=self._prefer_int_ext_dtype,
                 df_for_struct=self._df_for_struct,
             ),
             super().load_stream(stream),
@@ -502,33 +508,36 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
 
     def __init__(
         self,
+        *,
         timezone,
         safecheck,
         assign_cols_by_name,
         df_for_struct: bool = False,
         struct_in_pandas: str = "dict",
         ndarray_as_list: bool = False,
+        prefer_int_ext_dtype: bool = False,
         arrow_cast: bool = False,
         input_type: Optional[StructType] = None,
         int_to_decimal_coercion_enabled: bool = False,
         prefers_large_types: bool = False,
         ignore_unexpected_complex_type_values: bool = False,
-        is_udtf: bool = False,
+        is_legacy: bool = False,
     ):
         super().__init__(
-            timezone,
-            safecheck,
-            int_to_decimal_coercion_enabled,
-            prefers_large_types,
-            struct_in_pandas,
-            ndarray_as_list,
-            df_for_struct,
-            input_type,
-            arrow_cast,
+            timezone=timezone,
+            safecheck=safecheck,
+            int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+            prefers_large_types=prefers_large_types,
+            struct_in_pandas=struct_in_pandas,
+            ndarray_as_list=ndarray_as_list,
+            prefer_int_ext_dtype=prefer_int_ext_dtype,
+            df_for_struct=df_for_struct,
+            input_type=input_type,
+            arrow_cast=arrow_cast,
         )
         self._assign_cols_by_name = assign_cols_by_name
         self._ignore_unexpected_complex_type_values = ignore_unexpected_complex_type_values
-        self._is_udtf = is_udtf
+        self._is_legacy = is_legacy
 
     def dump_stream(self, iterator, stream):
         """
@@ -567,7 +576,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
                 assign_cols_by_name=self._assign_cols_by_name,
                 int_to_decimal_coercion_enabled=self._int_to_decimal_coercion_enabled,
                 ignore_unexpected_complex_type_values=self._ignore_unexpected_complex_type_values,
-                is_udtf=self._is_udtf,
+                is_legacy=self._is_legacy,
             )
 
         batches = self._write_stream_start(
@@ -587,6 +596,7 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
 
     def __init__(
         self,
+        *,
         safecheck,
         arrow_cast,
     ):
@@ -648,6 +658,7 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
 
     def __init__(
         self,
+        *,
         safecheck: bool,
         input_type: StructType,
         int_to_decimal_coercion_enabled: bool,
@@ -742,7 +753,15 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
     Serializer used by Python worker to evaluate Arrow-optimized Python UDTFs.
     """
 
-    def __init__(self, timezone, safecheck, input_type, int_to_decimal_coercion_enabled):
+    def __init__(
+        self,
+        *,
+        timezone,
+        safecheck,
+        input_type,
+        prefer_int_ext_dtype,
+        int_to_decimal_coercion_enabled,
+    ):
         super().__init__(
             timezone=timezone,
             safecheck=safecheck,
@@ -760,6 +779,7 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
             # To ensure consistency across regular and arrow-optimized UDTFs, we further
             # convert these numpy.ndarrays into Python lists.
             ndarray_as_list=True,
+            prefer_int_ext_dtype=prefer_int_ext_dtype,
             # Enables explicit casting for mismatched return types of Arrow Python UDTFs.
             arrow_cast=True,
             input_type=input_type,
@@ -767,9 +787,9 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
             int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
             # UDTF-specific: ignore unexpected complex type values in converter
             ignore_unexpected_complex_type_values=True,
-            # UDTF-specific: enables broader Arrow exception handling and
-            # converts errors to UDTF_ARROW_TYPE_CAST_ERROR
-            is_udtf=True,
+            # Legacy UDTF pandas conversion: enables broader Arrow exception
+            # handling to allow more implicit type coercions
+            is_legacy=True,
         )
 
     def __repr__(self):
@@ -803,9 +823,11 @@ class ArrowStreamAggArrowUDFSerializer(ArrowStreamArrowUDFSerializer):
 class ArrowStreamAggPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
     def __init__(
         self,
+        *,
         timezone,
         safecheck,
         assign_cols_by_name,
+        prefer_int_ext_dtype,
         int_to_decimal_coercion_enabled,
     ):
         super().__init__(
@@ -815,6 +837,7 @@ class ArrowStreamAggPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
             df_for_struct=False,
             struct_in_pandas="dict",
             ndarray_as_list=False,
+            prefer_int_ext_dtype=prefer_int_ext_dtype,
             arrow_cast=True,
             input_type=None,
             int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
@@ -837,6 +860,7 @@ class ArrowStreamAggPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
                         schema=self._input_type,
                         struct_in_pandas=self._struct_in_pandas,
                         ndarray_as_list=self._ndarray_as_list,
+                        prefer_int_ext_dtype=self._prefer_int_ext_dtype,
                         df_for_struct=self._df_for_struct,
                     )
                 ),
@@ -855,9 +879,11 @@ class ArrowStreamAggPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
 class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
     def __init__(
         self,
+        *,
         timezone,
         safecheck,
         assign_cols_by_name,
+        prefer_int_ext_dtype,
         int_to_decimal_coercion_enabled,
     ):
         super().__init__(
@@ -867,6 +893,7 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
             df_for_struct=False,
             struct_in_pandas="dict",
             ndarray_as_list=False,
+            prefer_int_ext_dtype=prefer_int_ext_dtype,
             arrow_cast=True,
             input_type=None,
             int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
@@ -934,6 +961,7 @@ class CogroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
                     schema=from_arrow_schema(left_table.schema),
                     struct_in_pandas=self._struct_in_pandas,
                     ndarray_as_list=self._ndarray_as_list,
+                    prefer_int_ext_dtype=self._prefer_int_ext_dtype,
                     df_for_struct=self._df_for_struct,
                 ),
                 ArrowBatchTransformer.to_pandas(
@@ -942,6 +970,7 @@ class CogroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
                     schema=from_arrow_schema(right_table.schema),
                     struct_in_pandas=self._struct_in_pandas,
                     ndarray_as_list=self._ndarray_as_list,
+                    prefer_int_ext_dtype=self._prefer_int_ext_dtype,
                     df_for_struct=self._df_for_struct,
                 ),
             )
@@ -967,9 +996,11 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
 
     def __init__(
         self,
+        *,
         timezone,
         safecheck,
         assign_cols_by_name,
+        prefer_int_ext_dtype,
         state_object_schema,
         arrow_max_records_per_batch,
         prefers_large_var_types,
@@ -982,6 +1013,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             df_for_struct=False,
             struct_in_pandas="dict",
             ndarray_as_list=False,
+            prefer_int_ext_dtype=prefer_int_ext_dtype,
             arrow_cast=True,
             input_type=None,
             int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
@@ -1114,6 +1146,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                     schema=None,
                     struct_in_pandas=self._struct_in_pandas,
                     ndarray_as_list=self._ndarray_as_list,
+                    prefer_int_ext_dtype=self._prefer_int_ext_dtype,
                     df_for_struct=self._df_for_struct,
                 )[0]
 
@@ -1151,6 +1184,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                         schema=None,
                         struct_in_pandas=self._struct_in_pandas,
                         ndarray_as_list=self._ndarray_as_list,
+                        prefer_int_ext_dtype=self._prefer_int_ext_dtype,
                         df_for_struct=self._df_for_struct,
                     )
 
@@ -1362,9 +1396,11 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
 
     def __init__(
         self,
+        *,
         timezone,
         safecheck,
         assign_cols_by_name,
+        prefer_int_ext_dtype,
         arrow_max_records_per_batch,
         arrow_max_bytes_per_batch,
         int_to_decimal_coercion_enabled,
@@ -1376,6 +1412,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
             df_for_struct=False,
             struct_in_pandas="dict",
             ndarray_as_list=False,
+            prefer_int_ext_dtype=prefer_int_ext_dtype,
             arrow_cast=True,
             input_type=None,
             int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
@@ -1436,6 +1473,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
                         schema=self._input_type,
                         struct_in_pandas=self._struct_in_pandas,
                         ndarray_as_list=self._ndarray_as_list,
+                        prefer_int_ext_dtype=self._prefer_int_ext_dtype,
                         df_for_struct=self._df_for_struct,
                     )
                     for row in pd.concat(data_pandas, axis=1).itertuples(index=False):
@@ -1494,20 +1532,23 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
 
     def __init__(
         self,
+        *,
         timezone,
         safecheck,
         assign_cols_by_name,
+        prefer_int_ext_dtype,
         arrow_max_records_per_batch,
         arrow_max_bytes_per_batch,
         int_to_decimal_coercion_enabled,
     ):
         super().__init__(
-            timezone,
-            safecheck,
-            assign_cols_by_name,
-            arrow_max_records_per_batch,
-            arrow_max_bytes_per_batch,
-            int_to_decimal_coercion_enabled,
+            timezone=timezone,
+            safecheck=safecheck,
+            assign_cols_by_name=assign_cols_by_name,
+            prefer_int_ext_dtype=prefer_int_ext_dtype,
+            arrow_max_records_per_batch=arrow_max_records_per_batch,
+            arrow_max_bytes_per_batch=arrow_max_bytes_per_batch,
+            int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
         )
         self.init_key_offsets = None
 
@@ -1566,6 +1607,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                     schema=self._input_type,
                     struct_in_pandas=self._struct_in_pandas,
                     ndarray_as_list=self._ndarray_as_list,
+                    prefer_int_ext_dtype=self._prefer_int_ext_dtype,
                     df_for_struct=self._df_for_struct,
                 )
 
@@ -1646,7 +1688,7 @@ class TransformWithStateInPySparkRowSerializer(ArrowStreamUDFSerializer):
         Limit of the number of records that can be written to a single ArrowRecordBatch in memory.
     """
 
-    def __init__(self, arrow_max_records_per_batch):
+    def __init__(self, *, arrow_max_records_per_batch):
         super().__init__()
         self.arrow_max_records_per_batch = (
             arrow_max_records_per_batch if arrow_max_records_per_batch > 0 else 2**31 - 1
@@ -1745,8 +1787,8 @@ class TransformWithStateInPySparkRowInitStateSerializer(TransformWithStateInPySp
     Same as input parameters in TransformWithStateInPySparkRowSerializer.
     """
 
-    def __init__(self, arrow_max_records_per_batch):
-        super().__init__(arrow_max_records_per_batch)
+    def __init__(self, *, arrow_max_records_per_batch):
+        super().__init__(arrow_max_records_per_batch=arrow_max_records_per_batch)
         self.init_key_offsets = None
 
     def load_stream(self, stream):

@@ -227,6 +227,16 @@ private[spark] abstract class SparkUITab(parent: SparkUI, prefix: String)
   def appName: String = parent.appName
 
   def appSparkVersion: String = parent.appSparkVersion
+
+  def sparkUser: String = parent.getSparkUser
+
+  def appStartTime: Long = {
+    try {
+      parent.store.applicationInfo().attempts.head.startTime.getTime
+    } catch {
+      case _: Exception => System.currentTimeMillis()
+    }
+  }
 }
 
 private[spark] object SparkUI {

@@ -22,9 +22,6 @@ from pyspark.errors.exceptions.base import (
 )
 from pyspark.resource import ResourceProfile
 from pyspark.sql.connect.logging import logger
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
 
 from typing import (
     Any,
@@ -315,20 +312,22 @@ class DataFrame(ParentDataFrame):
         return table[0][0].as_py()
 
     def crossJoin(self, other: ParentDataFrame) -> ParentDataFrame:
-        self._check_same_session(other)
+        other = self._check_same_session(other)
         return DataFrame(
-            plan.Join(
-                left=self._plan, right=other._plan, on=None, how="cross"  # type: ignore[arg-type]
-            ),
+            plan.Join(left=self._plan, right=other._plan, on=None, how="cross"),
             session=self._session,
         )
 
-    def _check_same_session(self, other: ParentDataFrame) -> None:
-        if self._session.session_id != other._session.session_id:  # type: ignore[attr-defined]
+    def _check_same_session(self, other: ParentDataFrame) -> "DataFrame":
+        if (
+            not isinstance(other, DataFrame)
+            or self._session.session_id != other._session.session_id
+        ):
             raise SessionNotSameException(
                 errorClass="SESSION_NOT_SAME",
                 messageParameters={},
             )
+        return other
 
     def coalesce(self, numPartitions: int) -> ParentDataFrame:
         if not numPartitions > 0:
@@ -533,15 +532,7 @@ class DataFrame(ParentDataFrame):
         res._cached_schema = self._cached_schema
         return res
 
-    @overload
-    def drop(self, cols: "ColumnOrName") -> ParentDataFrame:
-        ...
-
-    @overload
-    def drop(self, *cols: str) -> ParentDataFrame:
-        ...
-
-    def drop(self, *cols: "ColumnOrName") -> ParentDataFrame:  # type: ignore[misc]
+    def drop(self, *cols: "ColumnOrName") -> ParentDataFrame:
         _cols = list(cols)
         if any(not isinstance(c, (str, Column)) for c in _cols):
             raise PySparkTypeError(
@@ -724,11 +715,11 @@ class DataFrame(ParentDataFrame):
         on: Optional[Union[str, List[str], Column, List[Column]]] = None,
         how: Optional[str] = None,
     ) -> ParentDataFrame:
-        self._check_same_session(other)
+        other = self._check_same_session(other)
         if how is not None and isinstance(how, str):
             how = how.lower().replace("_", "")
         return DataFrame(
-            plan.Join(left=self._plan, right=other._plan, on=on, how=how),  # type: ignore[arg-type]
+            plan.Join(left=self._plan, right=other._plan, on=on, how=how),
             session=self._session,
         )
 
@@ -738,13 +729,11 @@ class DataFrame(ParentDataFrame):
         on: Optional[Column] = None,
         how: Optional[str] = None,
     ) -> ParentDataFrame:
-        self._check_same_session(other)
+        other = self._check_same_session(other)
         if how is not None and isinstance(how, str):
             how = how.lower().replace("_", "")
         return DataFrame(
-            plan.LateralJoin(
-                left=self._plan, right=cast(plan.LogicalPlan, other._plan), on=on, how=how
-            ),
+            plan.LateralJoin(left=self._plan, right=other._plan, on=on, how=how),
             session=self._session,
         )
 
@@ -760,7 +749,7 @@ class DataFrame(ParentDataFrame):
         allowExactMatches: bool = True,
         direction: str = "backward",
     ) -> ParentDataFrame:
-        self._check_same_session(other)
+        other = self._check_same_session(other)
         if how is None:
             how = "inner"
         assert isinstance(how, str), "how should be a string"
@@ -777,7 +766,7 @@ class DataFrame(ParentDataFrame):
         return DataFrame(
             plan.AsOfJoin(
                 left=self._plan,
-                right=other._plan,  # type: ignore[arg-type]
+                right=other._plan,
                 left_as_of=_convert_col(self, leftAsOfColumn),
                 right_as_of=_convert_col(other, rightAsOfColumn),
                 on=on,
@@ -1159,15 +1148,13 @@ class DataFrame(ParentDataFrame):
         return None
 
     def union(self, other: ParentDataFrame) -> ParentDataFrame:
-        self._check_same_session(other)
+        other = self._check_same_session(other)
         return self.unionAll(other)
 
     def unionAll(self, other: ParentDataFrame) -> ParentDataFrame:
-        self._check_same_session(other)
+        other = self._check_same_session(other)
         res = DataFrame(
-            plan.SetOperation(
-                self._plan, other._plan, "union", is_all=True  # type: ignore[arg-type]
-            ),
+            plan.SetOperation(self._plan, other._plan, "union", is_all=True),
             session=self._session,
         )
         res._cached_schema = self._merge_cached_schema(other)
@@ -1176,11 +1163,11 @@ class DataFrame(ParentDataFrame):
     def unionByName(
         self, other: ParentDataFrame, allowMissingColumns: bool = False
     ) -> ParentDataFrame:
-        self._check_same_session(other)
+        other = self._check_same_session(other)
         res = DataFrame(
             plan.SetOperation(
                 self._plan,
-                other._plan,  # type: ignore[arg-type]
+                other._plan,
                 "union",
                 by_name=True,
                 allow_missing_columns=allowMissingColumns,
@@ -1191,22 +1178,18 @@ class DataFrame(ParentDataFrame):
         return res
 
     def subtract(self, other: ParentDataFrame) -> ParentDataFrame:
-        self._check_same_session(other)
+        other = self._check_same_session(other)
         res = DataFrame(
-            plan.SetOperation(
-                self._plan, other._plan, "except", is_all=False  # type: ignore[arg-type]
-            ),
+            plan.SetOperation(self._plan, other._plan, "except", is_all=False),
             session=self._session,
         )
         res._cached_schema = self._merge_cached_schema(other)
         return res
 
     def exceptAll(self, other: ParentDataFrame) -> ParentDataFrame:
-        self._check_same_session(other)
+        other = self._check_same_session(other)
         res = DataFrame(
-            plan.SetOperation(
-                self._plan, other._plan, "except", is_all=True  # type: ignore[arg-type]
-            ),
+            plan.SetOperation(self._plan, other._plan, "except", is_all=True),
             session=self._session,
         )
         res._cached_schema = self._merge_cached_schema(other)
@@ -1218,22 +1201,18 @@ class DataFrame(ParentDataFrame):
         )
 
     def intersect(self, other: ParentDataFrame) -> ParentDataFrame:
-        self._check_same_session(other)
+        other = self._check_same_session(other)
         res = DataFrame(
-            plan.SetOperation(
-                self._plan, other._plan, "intersect", is_all=False  # type: ignore[arg-type]
-            ),
+            plan.SetOperation(self._plan, other._plan, "intersect", is_all=False),
             session=self._session,
         )
         res._cached_schema = self._merge_cached_schema(other)
         return res
 
     def intersectAll(self, other: ParentDataFrame) -> ParentDataFrame:
-        self._check_same_session(other)
+        other = self._check_same_session(other)
         res = DataFrame(
-            plan.SetOperation(
-                self._plan, other._plan, "intersect", is_all=True  # type: ignore[arg-type]
-            ),
+            plan.SetOperation(self._plan, other._plan, "intersect", is_all=True),
             session=self._session,
         )
         res._cached_schema = self._merge_cached_schema(other)
@@ -2226,7 +2205,7 @@ class DataFrame(ParentDataFrame):
                 errorClass="NOT_DATAFRAME",
                 messageParameters={"arg_name": "other", "arg_type": type(other).__name__},
             )
-        self._check_same_session(other)
+        other = self._check_same_session(other)
         return self._session.client.same_semantics(
             plan=self._plan.to_proto(self._session.client),
             other=other._plan.to_proto(other._session.client),
@@ -2309,7 +2288,7 @@ class DataFrameNaFunctions(ParentDataFrameNaFunctions):
         value: Union["LiteralType", Dict[str, "LiteralType"]],
         subset: Optional[Union[str, Tuple[str, ...], List[str]]] = None,
     ) -> ParentDataFrame:
-        return self.df.fillna(value=value, subset=subset)  # type: ignore[arg-type]
+        return self.df.fillna(value=value, subset=subset)
 
     def drop(
         self,

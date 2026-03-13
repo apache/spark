@@ -1420,13 +1420,64 @@ object Expand {
       }
     }
 
+    val taggedChildOutput =
+      if (SQLConf.get.getConf(SQLConf.EXPAND_TAG_PASSTHROUGH_DUPLICATES_ENABLED)) {
+        tagPassthroughDuplicates(childOutput, groupByAliases)
+      } else {
+        childOutput
+      }
+
     val output = if (hasDuplicateGroupingSets) {
       val gpos = AttributeReference("_gen_grouping_pos", IntegerType, false)()
-      childOutput ++ groupByAttrs.map(_.newInstance()) :+ gid :+ gpos
+      taggedChildOutput ++ groupByAttrs.map(_.newInstance()) :+ gid :+ gpos
     } else {
-      childOutput ++ groupByAttrs.map(_.newInstance()) :+ gid
+      taggedChildOutput ++ groupByAttrs.map(_.newInstance()) :+ gid
     }
     Expand(projections, output, Project(childOutput ++ groupByAliases, child))
+  }
+
+  /**
+   * Tags child output attributes that will be duplicated in the Expand output with
+   * `__is_duplicate` metadata.
+   *
+   * When a `groupByAlias` wraps a simple attribute (e.g., `Alias(c1#0, "c1")`), the
+   * Expand output contains both the pass-through child attribute (`c1#0`) and a new
+   * grouping instance created via `newInstance()` (e.g., `c1#5`). Both share the same
+   * name, which causes `AMBIGUOUS_REFERENCE` errors during name-based resolution.
+   *
+   * By tagging the pass-through copy with `__is_duplicate`,
+   * `AttributeSeq.getCandidatesForResolution` filters it out when multiple candidates
+   * match by name, allowing the produced grouping attribute to be resolved instead.
+   * ExprId-based resolution (used for already-resolved expressions like aggregate
+   * functions) is unaffected by this metadata.
+   *
+   * Only child attributes whose ExprId matches a `groupByAlias` child that is a simple
+   * `Attribute` are tagged. Complex grouping expressions (e.g., `c1 + 1`) produce
+   * aliases with different names than any child column, so no name conflict arises.
+   */
+  private def tagPassthroughDuplicates(
+      childOutput: Seq[Attribute],
+      groupByAliases: Seq[Alias]): Seq[Attribute] = {
+    val duplicatedExprIds = new java.util.HashSet[ExprId](groupByAliases.size)
+    groupByAliases.foreach {
+      case Alias(attr: Attribute, _) => duplicatedExprIds.add(attr.exprId)
+      case _ =>
+    }
+
+    if (!duplicatedExprIds.isEmpty) {
+      childOutput.map { attr =>
+        if (duplicatedExprIds.contains(attr.exprId)) {
+          attr.withMetadata(new MetadataBuilder()
+            .withMetadata(attr.metadata)
+            .putNull("__is_duplicate")
+            .build())
+        } else {
+          attr
+        }
+      }
+    } else {
+      childOutput
+    }
   }
 }
 

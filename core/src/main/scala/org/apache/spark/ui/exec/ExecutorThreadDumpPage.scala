@@ -94,7 +94,7 @@ private[ui] class ExecutorThreadDumpPage(
         <div class="collapsible-table collapse show" id="thead-stack-trace-table">
           {
           // scalastyle:off
-          <div class="thead-stack-trace-table-button" style="display: flex; align-items: center;">
+          <div class="thead-stack-trace-table-button d-flex align-items-center">
             <a class="expandbutton" data-action="expandAllThreadStackTrace">Expand All</a>
             <a class="expandbutton d-none" data-action="collapseAllThreadStackTrace">Collapse All</a>
             <a class="downloadbutton" href={"data:text/plain;charset=utf-8," + threadDump.map(_.toString).mkString} download={"threaddump_" + executorId + ".txt"}>Download</a>
@@ -140,7 +140,7 @@ private[ui] class ExecutorThreadDumpPage(
          |""".stripMargin
     <div>
       <div>
-        <span id="executor-flamegraph-header" style="cursor: pointer;">
+        <span id="executor-flamegraph-header" class="cursor-pointer">
           <h4>
             <span id="executor-flamegraph-arrow" class="arrow-open"></span>
             <a>Flame Graph</a>

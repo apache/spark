@@ -88,7 +88,7 @@ object SQLConf {
     sqlConfEntries.get(key)
   }
 
-  private[internal] def getConfigEntries(): util.Collection[ConfigEntry[_]] = {
+  private[sql] def getConfigEntries(): util.Collection[ConfigEntry[_]] = {
     sqlConfEntries.values()
   }
 
@@ -268,6 +268,17 @@ object SQLConf {
       .doc(
         "When true, union should only be resolved once there are no duplicate attributes in " +
         "each branch.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val EXPAND_TAG_PASSTHROUGH_DUPLICATES_ENABLED =
+    buildConf("spark.sql.analyzer.expandTagPassthroughDuplicates")
+      .internal()
+      .version("4.2.0")
+      .doc(
+        "When true, Expand tags pass-through child attributes that share a name with a " +
+        "grouping attribute using __is_duplicate metadata, so that name-based resolution " +
+        "against the Expand output does not produce AMBIGUOUS_REFERENCE errors.")
       .booleanConf
       .createWithDefault(true)
 
@@ -533,6 +544,7 @@ object SQLConf {
       s"plan after a rule or batch is applied. The value can be " +
       s"${VALID_LOG_LEVELS.mkString(", ")}.")
     .version("3.1.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .enumConf(classOf[Level])
     .createWithDefault(Level.TRACE)
 
@@ -566,6 +578,7 @@ object SQLConf {
       "the resolved expression tree in the single-pass bottom-up Resolver. The value can be " +
       s"${VALID_LOG_LEVELS.mkString(", ")}.")
     .version("4.0.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .enumConf(classOf[Level])
     .createWithDefault(Level.TRACE)
 
@@ -2064,11 +2077,11 @@ object SQLConf {
   val V2_BUCKETING_PUSH_PART_VALUES_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.pushPartValues.enabled")
       .doc(s"Whether to pushdown common partition values when ${V2_BUCKETING_ENABLED.key} is " +
-        "enabled. When turned on, if both sides of a join are of KeyGroupedPartitioning and if " +
+        "enabled. When turned on, if both sides of a join are of KeyedPartitioning and if " +
         "they share compatible partition keys, even if they don't have the exact same partition " +
         "values, Spark will calculate a superset of partition values and pushdown that info to " +
-        "scan nodes, which will use empty partitions for the missing partition values on either " +
-        "side. This could help to eliminate unnecessary shuffles")
+        "group partition nodes, which will use empty partitions for the missing partition values " +
+        "on either side. This could help to eliminate unnecessary shuffles")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(true)
@@ -2076,7 +2089,7 @@ object SQLConf {
   val V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled")
       .doc("During a storage-partitioned join, whether to allow input partitions to be " +
-        "partially clustered, when both sides of the join are of KeyGroupedPartitioning. At " +
+        "partially clustered, when both sides of the join are of KeyedPartitioning. At " +
         "planning time, Spark will pick the side with less data size based on table " +
         "statistics, group and replicate them to match the other side. This is an optimization " +
         "on skew join and can help to reduce data skewness when certain partitions are assigned " +
@@ -2089,7 +2102,7 @@ object SQLConf {
   val V2_BUCKETING_SHUFFLE_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.shuffle.enabled")
       .doc("During a storage-partitioned join, whether to allow to shuffle only one side. " +
-        "When only one side is KeyGroupedPartitioning, if the conditions are met, spark will " +
+        "When only one side is KeyedPartitioning, if the conditions are met, spark will " +
         "only shuffle the other side. This optimization will reduce the amount of data that " +
         s"needs to be shuffle. This config requires ${V2_BUCKETING_ENABLED.key} to be enabled")
       .version("4.0.0")
@@ -2247,6 +2260,7 @@ object SQLConf {
         "when the underlying table schema evolves. When disabled, view comments will be " +
         "overwritten with table comments on every schema sync.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
@@ -4466,6 +4480,15 @@ object SQLConf {
         "Pandas.Series to Arrow array during serialization." +
         "Disabled by default, impacts performance.")
       .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val PYTHON_UDF_PANDAS_PREFER_INT_EXTENSION_DTYPE =
+    buildConf("spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype")
+      .doc("When true, convert integers to Pandas ExtensionDtype (e.g. pandas.Int64Dtype) " +
+        "for Pandas UDF execution. Otherwise, depends on the behavior of " +
+        "pyarrow.Array.to_pandas on each input arrow batch.")
+      .version("4.2.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -7885,6 +7908,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME)
 
   def arrowSafeTypeConversion: Boolean = getConf(SQLConf.PANDAS_ARROW_SAFE_TYPE_CONVERSION)
+
+  def preferIntExtDtype: Boolean = getConf(SQLConf.PYTHON_UDF_PANDAS_PREFER_INT_EXTENSION_DTYPE)
 
   def pysparkWorkerPythonExecutable: Option[String] =
     getConf(SQLConf.PYSPARK_WORKER_PYTHON_EXECUTABLE)

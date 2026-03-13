@@ -344,7 +344,7 @@ $(function () {
 
   $("span.expand-input-rate").click(function () {
     status = !status;
-    $("#inputs-table").toggle('collapsed');
+    $("#inputs-table").toggleClass("d-none");
     // Toggle the class of the arrow between open and closed
     $(this).find('.expand-input-rate-arrow').toggleClass('arrow-open').toggleClass('arrow-closed');
     if (window.localStorage) {
@@ -353,7 +353,7 @@ $(function () {
   });
 
   if (status) {
-    $("#inputs-table").toggle('collapsed');
+    $("#inputs-table").toggleClass("d-none");
     // Toggle the class of the arrow between open and closed
     $(this).find('.expand-input-rate-arrow').toggleClass('arrow-open').toggleClass('arrow-closed');
   }

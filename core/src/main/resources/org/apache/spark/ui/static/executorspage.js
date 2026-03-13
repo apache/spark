@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* global $, Mustache, sorttable */
+/* global $, sorttable */
 
 import {
   createRESTEndPointForExecutorsPage, createRESTEndPointForMiscellaneousProcess, createTemplateURI,
@@ -145,7 +145,7 @@ function initOffcanvasFlamegraph(fgData, fgChart, offcanvasEl) {
       $(header).off('click').on('click', function() {
         var arrow = $('#executor-flamegraph-arrow');
         arrow.toggleClass('arrow-open arrow-closed');
-        $(fgChart).toggle(arrow.hasClass('arrow-open'));
+        $(fgChart).toggleClass('d-none', !arrow.hasClass('arrow-open'));
       });
     }
   });
@@ -316,7 +316,7 @@ function totalDurationStyle(totalGCTime, totalDuration) {
 }
 
 function totalDurationColor(totalGCTime, totalDuration) {
-  return (totalGCTime > GCTimePercent * totalDuration) ? "white" : "black";
+  return (totalGCTime > GCTimePercent * totalDuration) ? "white" : "var(--bs-body-color)";
 }
 
 var sumOptionalColumns = [3, 4];
@@ -567,10 +567,9 @@ $(document).ready(function () {
         "allTotalExcluded": deadTotalExcluded
       };
 
-      var data = {executors: response, "execSummary": [activeSummary, deadSummary, totalSummary]};
       $.get(createTemplateURI(appId, "executorspage"), function (template) {
 
-        executorsSummary.append(Mustache.render($(template).filter("#executors-summary-template").html(), data));
+        executorsSummary.append($(template).filter("#executors-summary-template").html());
         var selector = "#active-executors-table";
         var conf = {
           "data": response,
@@ -765,7 +764,7 @@ $(document).ready(function () {
         execDataTable.column('heapHistogramCol:name').visible(getHeapHistogramEnabled());
     
         // This section should be visible once API gives the response.
-        $('.active-process-container').hide();
+        $('.active-process-container').addClass('d-none');
         var endPoint = createRESTEndPointForMiscellaneousProcess(appId);
         $.getJSON(endPoint, function( response, _ignored_status, _ignored_jqXHR ) {
           if (response.length) {
@@ -801,7 +800,7 @@ $(document).ready(function () {
               }
             };
             $("#active-process-table").DataTable(processSummaryConf);
-            $('.active-process-container').show()
+            $('.active-process-container').removeClass('d-none')
           }
         });
 

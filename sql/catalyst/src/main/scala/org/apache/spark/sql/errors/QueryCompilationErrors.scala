@@ -859,7 +859,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def windowFunctionNotAllowedError(clauseName: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1034",
+      errorClass = "WINDOW_FUNCTION_NOT_ALLOWED_IN_CLAUSE",
       messageParameters = Map("clauseName" -> clauseName))
   }
 
@@ -1768,14 +1768,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "schema" -> schema.toDDL,
         "actualSchema" -> actualSchema.toDDL))
-  }
-
-  def dataSchemaNotSpecifiedError(format: String, fileCatalog: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1134",
-      messageParameters = Map(
-        "format" -> format,
-        "fileCatalog" -> fileCatalog))
   }
 
   def invalidDataSourceError(className: String): Throwable = {
@@ -3522,13 +3514,28 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "change" -> change.toString, "tableName" -> toSQLId(sanitizedTableName)))
   }
 
-  def unsupportedTableChangesInAutoSchemaEvolutionError(
-      changes: Array[TableChange], tableName: Seq[String]): Throwable = {
-    val sanitizedTableName = tableName.map(_.replaceAll("\"", ""))
+  def unsupportedAutoSchemaEvolutionChangesError(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      remainingChanges: Seq[TableChange]): Throwable = {
     new AnalysisException(
-      errorClass = "UNSUPPORTED_TABLE_CHANGES_IN_AUTO_SCHEMA_EVOLUTION",
+      errorClass = "UNSUPPORTED_AUTO_SCHEMA_EVOLUTION_CHANGES.PARTIAL_EVOLUTION",
       messageParameters = Map(
-        "changes" -> changes.mkString(","), "tableName" -> toSQLId(sanitizedTableName)))
+        "tableName" -> toSQLId(ident.toQualifiedNameParts(catalog)),
+        "changes" -> remainingChanges.mkString("; ")))
+  }
+
+  def failedAutoSchemaEvolutionError(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      cause: Throwable): Throwable = {
+    val detail = Option(cause.getMessage).getOrElse("Unknown error")
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_AUTO_SCHEMA_EVOLUTION_CHANGES.FAILED_EVOLUTION",
+      messageParameters = Map(
+        "tableName" -> toSQLId(ident.toQualifiedNameParts(catalog)),
+        "detail" -> detail),
+      cause = Some(cause))
   }
 
   def pathOptionNotSetCorrectlyWhenReadingError(): Throwable = {
@@ -3559,10 +3566,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "createMode" -> toDSOption(createMode)))
   }
 
-  def partitionByDoesNotAllowedWhenUsingInsertIntoError(): Throwable = {
+  def partitionByDoesNotAllowedWhenUsingInsertIntoError(tableName: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1309",
-      messageParameters = Map.empty)
+      errorClass = "PARTITION_BY_NOT_ALLOWED_WITH_INSERT_INTO",
+      messageParameters = Map("tableName" -> tableName))
   }
 
   def cannotFindCatalogToHandleIdentifierError(quote: String): Throwable = {

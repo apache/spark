@@ -161,11 +161,12 @@ class UIUtilsSuite extends SparkFunSuite {
     val generated = listingTable(header, generateDataRowValue, data, tooltipHeaders = tooltip)
 
     val expected: Node =
-      <table class="table table-bordered table-sm table-striped sortable">
+      <div class="table-responsive">
+      <table class="table table-bordered table-hover table-sm table-striped sortable">
         <thead>
           <th width="" class="">{header(0)}</th>
           <th width="" class="">
-              <span data-bs-toggle="tooltip" data-bs-placement="top" title="tooltip">
+              <span data-bs-toggle="tooltip" title="tooltip">
                 {header(1)}
               </span>
           </th>
@@ -174,6 +175,7 @@ class UIUtilsSuite extends SparkFunSuite {
         {data.map(generateDataRowValue)}
       </tbody>
     </table>
+      </div>
 
     assert(trim(generated(0)) == trim(expected))
   }
@@ -187,7 +189,8 @@ class UIUtilsSuite extends SparkFunSuite {
     val generated = listingTable(header, generateDataRowValue, data)
 
     val expected =
-      <table class="table table-bordered table-sm table-striped sortable">
+      <div class="table-responsive">
+      <table class="table table-bordered table-hover table-sm table-striped sortable">
         <thead>
           <th width="" class="">{header(0)}</th>
           <th width="" class="">{header(1)}</th>
@@ -196,6 +199,7 @@ class UIUtilsSuite extends SparkFunSuite {
           {data.map(generateDataRowValue)}
         </tbody>
       </table>
+      </div>
 
     assert(trim(generated(0)) == trim(expected))
   }

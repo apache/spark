@@ -301,7 +301,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
           <td class="histogram">{graphUIDataForRecordRateOfAllStreams.generateHistogramHtml(jsCollector)}</td>
         </tr>
       {if (hasStream) {
-        <tr id="inputs-table" style="display: none;" >
+        <tr id="inputs-table" class="d-none" >
           <td colspan="3">
             {generateInputDStreamsTable(jsCollector, minBatchTime, maxBatchTime, minRecordRate.toDouble)}
           </td>
