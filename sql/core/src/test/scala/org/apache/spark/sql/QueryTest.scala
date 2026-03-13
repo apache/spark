@@ -409,9 +409,12 @@ object QueryTest extends Assertions {
     case (a: Row, b: Row) =>
       compare(a.toSeq, b.toSeq)
     // 0.0 == -0.0, turn float/double to bits before comparison, to distinguish 0.0 and -0.0.
+    // in some hardware NaN can be represented with different bits, so first check for it
     case (a: Double, b: Double) =>
+      a.isNaN && b.isNaN ||
       java.lang.Double.doubleToRawLongBits(a) == java.lang.Double.doubleToRawLongBits(b)
     case (a: Float, b: Float) =>
+      a.isNaN && b.isNaN ||
       java.lang.Float.floatToRawIntBits(a) == java.lang.Float.floatToRawIntBits(b)
     case (a, b) => a == b
   }
