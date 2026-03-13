@@ -297,6 +297,69 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     }
   }
 
+  test("drop database clears function registry cache (cache coherence)") {
+    val extCatalog = newEmptyCatalog()
+    extCatalog.createDatabase(newDb("default"), ignoreIfExists = true)
+    extCatalog.createDatabase(newDb("cache_coherence_db"), ignoreIfExists = false)
+    extCatalog.createFunction(
+      "cache_coherence_db", newFunc("cached_func", Some("cache_coherence_db")))
+    val registry = new SimpleFunctionRegistry()
+    val catalog = new SessionCatalog(extCatalog, registry)
+    try {
+      val ident = FunctionIdentifier("cached_func", Some("cache_coherence_db"))
+      val info = new ExpressionInfo(
+        "test.Example",
+        "cache_coherence_db",
+        "cached_func",
+        "usage",
+        "arguments",
+        "\n    Examples:\n",
+        "\n    \n  ",
+        "misc_funcs",
+        "1.0.0",
+        "",
+        "sql_udf")
+      val builder = (e: Seq[Expression]) => e.head
+      registry.registerFunction(ident, info, builder)
+      assert(registry.functionExists(ident))
+      catalog.dropDatabase("cache_coherence_db", ignoreIfNotExists = false, cascade = true)
+      assert(!registry.functionExists(ident))
+    } finally {
+      catalog.reset()
+    }
+  }
+
+  test("drop database clears table function registry cache (cache coherence)") {
+    val extCatalog = newEmptyCatalog()
+    extCatalog.createDatabase(newDb("default"), ignoreIfExists = true)
+    extCatalog.createDatabase(newDb("cache_coherence_db2"), ignoreIfExists = false)
+    val scalarRegistry = new SimpleFunctionRegistry()
+    val tableRegistry = new SimpleTableFunctionRegistry()
+    val catalog = new SessionCatalog(extCatalog, scalarRegistry, tableRegistry)
+    try {
+      val ident = FunctionIdentifier("cached_table_func", Some("cache_coherence_db2"))
+      val info = new ExpressionInfo(
+        "test.Example",
+        "cache_coherence_db2",
+        "cached_table_func",
+        "usage",
+        "arguments",
+        "\n    Examples:\n",
+        "\n    \n  ",
+        "table_funcs",
+        "1.0.0",
+        "",
+        "sql_udf")
+      val builder = (_: Seq[Expression]) => Range(1, 1, 1, 1)
+      tableRegistry.registerFunction(ident, info, builder)
+      assert(tableRegistry.functionExists(ident))
+      catalog.dropDatabase("cache_coherence_db2", ignoreIfNotExists = false, cascade = true)
+      assert(!tableRegistry.functionExists(ident))
+    } finally {
+      catalog.reset()
+    }
+  }
+
   test("alter database") {
     withBasicCatalog { catalog =>
       val db1 = catalog.getDatabaseMetadata("db1")
