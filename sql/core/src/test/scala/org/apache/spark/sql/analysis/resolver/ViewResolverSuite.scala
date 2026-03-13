@@ -19,9 +19,8 @@ package org.apache.spark.sql.analysis.resolver
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
-import org.apache.spark.sql.catalyst.analysis.{FunctionResolution, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.analysis.resolver.{
-  CatalogObjectGuard,
   MetadataResolver,
   Resolver,
   ResolverRunner
@@ -203,14 +202,7 @@ class ViewResolverSuite extends QueryTest with SharedSparkSession {
       .asInstanceOf[View]
 
     val resolverRunner = new ResolverRunner(
-      resolver = new Resolver(spark.sessionState.catalogManager),
-      catalogObjectGuard = new CatalogObjectGuard(
-        catalogManager = spark.sessionState.catalogManager,
-        relationResolution = spark.sessionState.analyzer.getRelationResolution,
-        functionResolution = new FunctionResolution(
-          spark.sessionState.catalogManager,
-          spark.sessionState.analyzer.getRelationResolution)
-      )
+      resolver = new Resolver(spark.sessionState.catalogManager)
     )
 
     val resolvedView = resolverRunner

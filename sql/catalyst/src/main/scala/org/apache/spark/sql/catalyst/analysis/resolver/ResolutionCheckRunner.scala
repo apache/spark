@@ -39,11 +39,11 @@ class ResolutionCheckRunner(resolutionChecks: Seq[LogicalPlan => Unit])
    */
   def runWithSubqueries(plan: LogicalPlan): Unit = {
     if (conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_RUN_EXTENDED_RESOLUTION_CHECKS)) {
-      recordProfile("runWithSubqueries") { // EDGE
+      recordProfile("runWithSubqueries") {
         AnalysisHelper.allowInvokingTransformsInAnalyzer {
           doRunWithSubqueries(plan)
         }
-      } // EDGE
+      }
     }
   }
 
@@ -61,9 +61,9 @@ class ResolutionCheckRunner(resolutionChecks: Seq[LogicalPlan => Unit])
 
   private def run(plan: LogicalPlan): Unit = {
     for (check <- resolutionChecks) {
-      recordProfile(check.getClass.getSimpleName) { // EDGE
+      recordProfile(check.getClass.getSimpleName) {
         check(plan)
-      } // EDGE
+      }
     }
   }
 }

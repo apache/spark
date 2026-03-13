@@ -47,7 +47,7 @@ trait ResolverMetricTracker {
     }
 
   /**
-   * Executes the body. In DBR this also records profiling and latency metrics.
+   * Executes the body. Can be overridden to record profiling and latency metrics.
    */
   protected def recordProfileAndLatency[R](methodName: String, metricKey: Any)(
       body: => R): R = {
@@ -55,7 +55,7 @@ trait ResolverMetricTracker {
   }
 
   /**
-   * Executes the body. In DBR this also records frame profiling.
+   * Executes the body. Can be overridden to record frame profiling.
    */
   protected def recordProfile[R](methodName: String)(body: => R): R = {
     body

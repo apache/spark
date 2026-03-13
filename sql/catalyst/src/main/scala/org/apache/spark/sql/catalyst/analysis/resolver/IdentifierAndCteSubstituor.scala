@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{
  * This is done so that [[IdentifierAndCteSubstitutor]] is fast and not invasive.
  */
 class IdentifierAndCteSubstitutor
-    extends ResolverMetricTracker // EDGE
+    extends ResolverMetricTracker
     {
   private var cteRegistry = new CteRegistry
 
@@ -56,11 +56,11 @@ class IdentifierAndCteSubstitutor
    * in isolation.
    */
   def substitutePlan(unresolvedPlan: LogicalPlan): LogicalPlan = {
-    recordProfile("substitutePlan") { // EDGE
+    recordProfile("substitutePlan") {
       cteRegistry = new CteRegistry
 
       substitute(unresolvedPlan)
-    } // EDGE
+    }
   }
 
   private def substitute(unresolvedPlan: LogicalPlan): LogicalPlan = {

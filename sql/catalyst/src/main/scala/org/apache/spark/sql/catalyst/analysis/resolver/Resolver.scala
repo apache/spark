@@ -87,7 +87,7 @@ class Resolver(
     extendedRewriteRules: Seq[Rule[LogicalPlan]] = Seq.empty,
     tracker: Option[QueryPlanningTracker] = None)
     extends LogicalPlanResolver
-    with ResolverMetricTracker // EDGE
+    with ResolverMetricTracker
     with DelegatesResolutionToExtensions {
   private val planLogger = new PlanLogger
   private val subqueryRegistry = new SubqueryRegistry
@@ -191,25 +191,16 @@ class Resolver(
    *    Rewriting is done in `lookupMetadataAndResolve` so rules are applied after the main
    *    resolution both on the main plan and on the views. This is important so we apply these
    *    rules using proper configs that were stored in the [[View]] during its creation. Otherwise,
-   *    we fail to resolve the following case properly:
-   *
-   *    {{{
-   *      SET spark.databricks.sql.expression.aiFunctions.repartition = 0;
-   *      CREATE VIEW testView AS SELECT ai_gen(col2) AS alias FROM t2;
-   *      SET spark.databricks.sql.expression.aiFunctions.repartition = 8;
-   *      SELECT * FROM testView;
-   *    }}}
-   *
-   *    This is because [[AIFunctionRepartition]] is one of the rewrite rules that's triggered in
-   *    this case, it depends on the `spark.databricks.sql.expression.aiFunctions.repartition`
-   *    config value and thus it transforms the plan incorrectly if we use the wrong config value.
+   *    rewrite rules that depend on config values may transform the plan incorrectly if we use
+   *    the wrong config value (i.e. the current session config instead of the one stored in the
+   *    view descriptor).
    *
    * This method is called for the top-level query and each unresolved [[View]].
    */
   def lookupMetadataAndResolve(
       unresolvedPlan: LogicalPlan,
       analyzerBridgeState: Option[AnalyzerBridgeState] = None): LogicalPlan = {
-    recordProfile("lookupMetadataAndResolve") { // EDGE
+    recordProfile("lookupMetadataAndResolve") {
       planLogger.logPlanResolutionEvent(unresolvedPlan, "IDENTIFIER and CTE substitution")
 
       val planAfterSubstitution = identifierAndCteSubstitutor.substitutePlan(unresolvedPlan)
@@ -235,14 +226,14 @@ class Resolver(
       planAfterSubstitution.setTagValue(ResolverTag.TOP_LEVEL_OPERATOR, ())
 
       val resolvedPlan =
-        recordProfile("resolve") { // EDGE
+        recordProfile("resolve") {
           resolve(planAfterSubstitution)
-        } // EDGE
+        }
 
-      recordProfile("rewrite") { // EDGE
+      recordProfile("rewrite") {
         planRewriter.rewriteWithSubqueries(resolvedPlan)
-      } // EDGE
-    } // EDGE
+      }
+    }
   }
 
   /**
@@ -663,9 +654,9 @@ class Resolver(
   }
 
   private def runExtensions(unresolvedOperator: LogicalPlan): Option[LogicalPlan] = {
-    recordProfile("runExtensions") { // EDGE
+    recordProfile("runExtensions") {
       super.tryDelegateResolutionToExtension(unresolvedOperator, this)
-    } // EDGE
+    }
   }
 
   /**

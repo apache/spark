@@ -36,7 +36,7 @@ class ViewResolver(
     catalogManager: CatalogManager,
     tracker: Option[QueryPlanningTracker] = None)
     extends TreeNodeResolver[View, View]
-    with ResolverMetricTracker // EDGE
+    with ResolverMetricTracker
     {
   private val cteRegistry = resolver.getCteRegistry
   private val sourceUnresolvedRelationStack = new ArrayDeque[UnresolvedRelation]

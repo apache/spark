@@ -227,27 +227,6 @@ class NameScope(
     }
 
   /**
-   * Tracking of generator output names for LCA detection. Could contain unaccessible generator
-   * names, eg if the generator has multiple aliases in dataframe program. For example, the
-   * following query will register both `first` and `second` as generator output names:
-   *
-   * {{{
-   *  spark
-        .range(1)
-        .select(
-          explode(array(lit(1), lit(2), lit(3)))
-            .as("first")
-            .as("second"),
-          $"first"
-        )
-        .collect()
-   * }}}
-   *
-   * This leads to excessive strictness in LCA detection, but for temporary solution it's okay.
-   */
-  val generatorOutputNames: IdentifierMap[Boolean] = new IdentifierMap[Boolean]
-
-  /**
    * All aliased aggregate expressions from an [[Aggregate]] that is currently being resolved.
    * Used in [[resolveMultipartName]] to resolve names in grouping expressions list referencing
    * aggregate expressions.
@@ -627,7 +606,6 @@ class NameScope(
             parameters.canReferenceAggregateExpressionAliases
           )
         )
-        .orElse(tryResolveMultipartNameAsGeneratorOutput(multipartName))
         .getOrElse(ResolvedMultipartName(candidates = Seq.empty, referencedAttribute = None))
 
     resolvedMultipartName.candidates match {
@@ -852,22 +830,6 @@ class NameScope(
       Some(ResolvedMultipartName(candidates = literalFunction, referencedAttribute = None))
     } else {
       None
-    }
-  }
-
-  /**
-   * Try resolve [[multipartName]] using generator output names and throw
-   * [[ExplicitlyUnsupportedResolverFeature]] if successful. This is a temporary solution untill
-   * proper LCA resolution for generator is implemented.
-   */
-  private def tryResolveMultipartNameAsGeneratorOutput(
-      multipartName: Seq[String]): Option[ResolvedMultipartName] = {
-    generatorOutputNames.get(multipartName.head) match {
-      case Some(_) =>
-        throw new ExplicitlyUnsupportedResolverFeature(
-          "Referencing generator output in other expressions"
-        )
-      case None => None
     }
   }
 

@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.AnalysisContext
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -30,7 +29,6 @@ import org.apache.spark.sql.internal.SQLConf
  */
 class ResolverRunner(
     resolver: Resolver,
-    catalogObjectGuard: CatalogObjectGuard,
     extendedResolutionChecks: Seq[LogicalPlan => Unit] = Seq.empty
 ) extends ResolverMetricTracker
     with SQLConfHelper {
@@ -51,60 +49,18 @@ class ResolverRunner(
     new ResolutionCheckRunner(extendedResolutionChecks ++ singlePassOnlyResolutionChecks)
 
   /**
-   * Main entry point into the single-pass resolution process that does not run
-   * [[CatalogObjectGuard]] and which always returns a [[LogicalPlan]] as a result for convenience.
+   * Main entry point into the single-pass resolution process. This method handles all the steps
+   * of single-pass resolution, as described in [[runResolution]].
    */
   def resolve(
       plan: LogicalPlan,
       analyzerBridgeState: Option[AnalyzerBridgeState],
       tracker: QueryPlanningTracker
   ): LogicalPlan = {
-    resolve(
-      plan = plan,
-      checkCatalogObjects = false,
-      analyzerBridgeState = analyzerBridgeState,
-      tracker = tracker
-    ) match {
-      case ResolverRunnerResultResolvedPlan(resolvedPlan) =>
-        resolvedPlan
-      case _ =>
-        throw SparkException.internalError(
-          "ResolverRunner.resolve(..., checkCatalogObjects = false, ...) should return a " +
-          "resolved plan."
-        )
-    }
-  }
-
-  /**
-   * Main entry point into the single-pass resolution process. This method handles all the steps
-   * of single-pass resolution, as described in [[runResolution]].
-   *
-   * If `checkCatalogObjects` is set to `true`, it will first check if the plan can be processed
-   * by the single-pass Analyzer using the [[CatalogObjectGuard]]. This check is holistic and
-   * handles nested dependencies like tables and views. This is only possible given that the UC
-   * metadata for referenced objects is available from the top-level call to UC.
-   */
-  def resolve(
-      plan: LogicalPlan,
-      checkCatalogObjects: Boolean,
-      analyzerBridgeState: Option[AnalyzerBridgeState],
-      tracker: QueryPlanningTracker
-  ): ResolverRunnerResult = {
     recordTopLevelMetrics(tracker) {
       recordProfileAndLatency("resolve", "SINGLE_PASS_ANALYZER_TOTAL_LATENCY") {
         AnalysisContext.withNewAnalysisContext {
-          if (checkCatalogObjects) {
-            catalogObjectGuard(plan) match {
-              case CatalogObjectGuardResultPlanSupported() =>
-                runResolution(plan, analyzerBridgeState)
-              case CatalogObjectGuardResultPlanNotSupported(reason) =>
-                ResolverRunnerResultPlanNotSupported(reason)
-              case CatalogObjectGuardResultUnrecoverableException(exception) =>
-                ResolverRunnerResultUnrecoverableException(exception)
-            }
-          } else {
-            runResolution(plan, analyzerBridgeState)
-          }
+          runResolution(plan, analyzerBridgeState)
         }
       }
     }
@@ -122,7 +78,7 @@ class ResolverRunner(
    */
   private def runResolution(
       plan: LogicalPlan,
-      analyzerBridgeState: Option[AnalyzerBridgeState] = None): ResolverRunnerResult = {
+      analyzerBridgeState: Option[AnalyzerBridgeState] = None): LogicalPlan = {
     val resolvedPlan = resolver.lookupMetadataAndResolve(plan, analyzerBridgeState)
 
     runValidator(resolvedPlan)
@@ -133,7 +89,7 @@ class ResolverRunner(
 
     resolvedPlan.setAnalyzed()
 
-    ResolverRunnerResultResolvedPlan(resolvedPlan)
+    resolvedPlan
   }
 
   private def runValidator(plan: LogicalPlan): Unit = {

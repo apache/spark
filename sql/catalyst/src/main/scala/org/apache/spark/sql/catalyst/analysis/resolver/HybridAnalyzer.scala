@@ -20,9 +20,8 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 import java.util.Random
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.LOGICAL_PLAN
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, Analyzer, FunctionResolution}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, Analyzer}
 import org.apache.spark.sql.catalyst.plans.NormalizePlan
 import org.apache.spark.sql.catalyst.plans.logical.{AnalysisHelper, LogicalPlan}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -55,7 +54,6 @@ import org.apache.spark.sql.internal.SQLConf
 class HybridAnalyzer(
     legacyAnalyzer: Analyzer,
     resolverGuard: ResolverGuard,
-    catalogObjectGuard: CatalogObjectGuard,
     resolver: Resolver,
     tracker: QueryPlanningTracker,
     extendedResolutionChecks: Seq[LogicalPlan => Unit] = Seq.empty)
@@ -190,10 +188,9 @@ class HybridAnalyzer(
    * falls back to the fixed-point [[Analyzer]] if the plan is not supported or the single-pass
    * resolution fails.
    *
-   * The plan is validated holistically by the [[ResolverGuard]] and by the [[CatalogObjectGuard]]
-   * to avoid running the single-pass analyzer on unsupported plans. Running the single-pass
-   * analyzer on unsupported plans would result in extra table metadata lookups, extra CPU/RAM
-   * overhead, and potentially unexpected behavior.
+   * The plan is validated by the [[ResolverGuard]] to avoid running the single-pass analyzer on
+   * unsupported plans. Running the single-pass analyzer on unsupported plans would result in extra
+   * table metadata lookups, extra CPU/RAM overhead, and potentially unexpected behavior.
    *
    * Some exceptions thrown from the single-pass Analyzer are considered unrecoverable - for
    * example, exceptions thrown from the metadata resolver. These will be just
@@ -209,21 +206,9 @@ class HybridAnalyzer(
     }
 
     singlePassResult match {
-      case Some(ResolverRunnerResultResolvedPlan(resolvedPlan)) =>
+      case Some(resolvedPlan) =>
         logInfo(log"single-pass analyzer successfully resolved the query plan")
-
         resolvedPlan
-
-      case Some(ResolverRunnerResultUnrecoverableException(ex)) =>
-        throw ex
-
-      case Some(ResolverRunnerResultPlanNotSupported(reason)) =>
-        logInfo(
-          log"single-pass analyzer is falling back to the fixed-point analyzer because " +
-          log"plan is not supported: ${MDC(LOGICAL_PLAN, reason)}"
-        )
-
-        resolveInFixedPoint(plan)
 
       case None =>
         resolveInFixedPoint(plan)
@@ -236,9 +221,9 @@ class HybridAnalyzer(
    *
    * See [[resolveInSinglePassTentatively]] for more details.
    */
-  private def tryRunSinglePassInTentativeMode(plan: LogicalPlan): Option[ResolverRunnerResult] = {
+  private def tryRunSinglePassInTentativeMode(plan: LogicalPlan): Option[LogicalPlan] = {
     try {
-      Some(resolveInSinglePassWithCatalogObjectsCheck(plan))
+      Some(resolveInSinglePass(plan))
     } catch {
       case ex: ExplicitlyUnsupportedResolverFeature =>
         logInfo(
@@ -267,35 +252,11 @@ class HybridAnalyzer(
   private def resolveInSinglePass(plan: LogicalPlan, inDualRun: Boolean = false): LogicalPlan = {
     val resolverRunner = new ResolverRunner(
       resolver = resolver,
-      catalogObjectGuard = catalogObjectGuard,
       extendedResolutionChecks = extendedResolutionChecks
     )
 
     resolverRunner.resolve(
       plan = plan,
-      analyzerBridgeState = AnalysisContext.get.getSinglePassResolverBridgeState,
-      tracker = tracker
-    )
-  }
-
-  /**
-   * This method is used to run the single-pass Analyzer which will return the resolved plan
-   * or throw an exception if the resolution fails. Both cases are handled in the caller method.
-   *
-   * This method is called when single-pass is resolved in fallback mode and thus always performs
-   * heavy resolution checks to stay compatible with the legacy result.
-   */
-  private def resolveInSinglePassWithCatalogObjectsCheck(
-      plan: LogicalPlan): ResolverRunnerResult = {
-    val resolverRunner = new ResolverRunner(
-      resolver = resolver,
-      catalogObjectGuard = catalogObjectGuard,
-      extendedResolutionChecks = extendedResolutionChecks
-    )
-
-    resolverRunner.resolve(
-      plan = plan,
-      checkCatalogObjects = false,
       analyzerBridgeState = AnalysisContext.get.getSinglePassResolverBridgeState,
       tracker = tracker
     )
@@ -406,15 +367,6 @@ object HybridAnalyzer {
       legacyAnalyzer = legacyAnalyzer,
       resolverGuard = new ResolverGuard(
         catalogManager = legacyAnalyzer.catalogManager,
-        tracker = Some(tracker)
-      ),
-      catalogObjectGuard = new CatalogObjectGuard(
-        catalogManager = legacyAnalyzer.catalogManager,
-        relationResolution = relationResolution,
-        functionResolution = new FunctionResolution(
-          legacyAnalyzer.catalogManager,
-          relationResolution
-        ),
         tracker = Some(tracker)
       ),
       resolver = new Resolver(

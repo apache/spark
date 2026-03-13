@@ -49,7 +49,6 @@ class SubqueryExpressionResolver(expressionResolver: ExpressionResolver, resolve
    * Resolve [[ScalarSubquery]]:
    *  - Resolve the subquery plan;
    *  - Get outer references;
-   *  - Wrap outer references with [[OuterScopeReference]] if needed;
    *  - Type coerce it;
    *  - Add it to the list of [[SubqueryExpression]]s in the context of current operator.
    */
@@ -64,14 +63,9 @@ class SubqueryExpressionResolver(expressionResolver: ExpressionResolver, resolve
       unresolvedScalarSubquery.plan
     )
 
-    val outerAttributes = wrapOuterScopeReferenceForResolvedOuterAttrs(
-      outerAttributesFromSourcePlan = unresolvedScalarSubquery.outerAttrs,
-      newOuterAttributes = resolvedSubqueryExpressionPlan.outerExpressions
-    )
-
     val resolvedScalarSubquery = unresolvedScalarSubquery.copy(
       plan = resolvedSubqueryExpressionPlan.plan,
-      outerAttrs = outerAttributes
+      outerAttrs = resolvedSubqueryExpressionPlan.outerExpressions
     )
 
     val coercedScalarSubquery = coerceExpressionTypes(
@@ -122,14 +116,9 @@ class SubqueryExpressionResolver(expressionResolver: ExpressionResolver, resolve
   def resolveListQuery(unresolvedListQuery: ListQuery): Expression = {
     val resolvedSubqueryExpressionPlan = resolveSubqueryExpressionPlan(unresolvedListQuery.plan)
 
-    val outerAttributes = wrapOuterScopeReferenceForResolvedOuterAttrs(
-      outerAttributesFromSourcePlan = unresolvedListQuery.outerAttrs,
-      newOuterAttributes = resolvedSubqueryExpressionPlan.outerExpressions
-    )
-
     unresolvedListQuery.copy(
       plan = resolvedSubqueryExpressionPlan.plan,
-      outerAttrs = outerAttributes,
+      outerAttrs = resolvedSubqueryExpressionPlan.outerExpressions,
       numCols = resolvedSubqueryExpressionPlan.output.size
     )
   }
@@ -138,21 +127,15 @@ class SubqueryExpressionResolver(expressionResolver: ExpressionResolver, resolve
    * Resolve [[Exists]] subquery:
    *  - Resolve the subquery plan;
    *  - Get outer references;
-   *  - Wrap outer references with [[OuterScopeReference]] if needed;
    *  - Type coerce it;
    *  - Add it to the list of [[SubqueryExpression]]s in the context of current operator.
    */
   def resolveExists(unresolvedExists: Exists): Expression = {
     val resolvedSubqueryExpressionPlan = resolveSubqueryExpressionPlan(unresolvedExists.plan)
 
-    val outerAttributes = wrapOuterScopeReferenceForResolvedOuterAttrs(
-      outerAttributesFromSourcePlan = unresolvedExists.outerAttrs,
-      newOuterAttributes = resolvedSubqueryExpressionPlan.outerExpressions
-    )
-
     val resolvedExists = unresolvedExists.copy(
       plan = resolvedSubqueryExpressionPlan.plan,
-      outerAttrs = outerAttributes
+      outerAttrs = resolvedSubqueryExpressionPlan.outerExpressions
     )
 
     val coercedExists = coerceExpressionTypes(
@@ -277,67 +260,4 @@ class SubqueryExpressionResolver(expressionResolver: ExpressionResolver, resolve
     SubExprUtils.getOuterReferences(resolvedPlan)
   }
 
-  /**
-   * When resolving already resolved correlated subquery expressions,
-   * we can't fully rely on the [[ResolvedSubqueryExpressionPlan.outerExpressions]].
-   * This is because it relies on the [[outerReferenceScopeLevel]] map built during
-   * resolving unresolved attributes. However, for already resolved expressions,
-   * there might be no [[outerReferenceScopeLevel]] built.
-   *
-   * We need to check whether there exists [[OuterScopeReference]] in the existing
-   * [[outerAttrs]] for the resolved subquery expression. We call
-   * [[expressionIdAssigner.mapOuterReference]] to get its current [[exprId]]. And
-   * if there are any attributes in the new outer expressions that have the same
-   * [[exprId]], we need to wrap it with [[OuterScopeReference]].
-   *
-   * For example:
-   * {{{
-   *   val df = spark.sql("""
-   *             SELECT col1, (
-   *               SELECT * FROM range1 WHERE EXISTS (
-   *                 SELECT * FROM range2 WHERE range2.id == range1.id
-   *               )
-   *               LIMIT 1
-   *             ) FROM VALUES (1)
-   *           """)
-   *           df.union(df)
-   * }}}
-   *
-   * [[df.analyzedPlan]] is:
-   * {{{
-   *   Project [id#1L]
-   *    +- Filter exists#5 [id#1L]
-   *    :  +- Project [col1#3]
-   *    :     +- Filter exists#4 [outerScope(id#1L)]
-   *    :        :  +- Project [id#0L]
-   *    :        :     +- Filter (id#0L = outer(id#1L))
-   *    :        :        +- SubqueryAlias spark_catalog.default.range2
-   *    :        :           +- Relation spark_catalog.default.range2[id#0L] parquet
-   *    :        +- LocalRelation [col1#3]
-   *    +- SubqueryAlias spark_catalog.default.range1
-   *       +- Relation spark_catalog.default.range1[id#1L] parquet
-   * }}}
-   *
-   * When [[df.union(df)]] is called, for the second child of the union operator,
-   * the duplicated expression IDs are remapped. So when calling [[resolveExists]]
-   * for [[exists#4]], we'll have:
-   * {{{
-   *   outerAttributesFromSourcePlan: unresolvedExist.outerAttrs => [outerScope(id#1L)]
-   *   newOuterAttributes: ResolvedSubqueryExpressionPlan.outerExpressions => [id#6L]
-   *
-   *   exists#4.plan:
-   *   +- Project [id#0L]
-   *   :        :     +- Filter (id#0L = outer(id#1L))
-   *   :        :        +- SubqueryAlias spark_catalog.default.range2
-   *   :        :           +- Relation spark_catalog.default.range2[id#0L] parquet
-   *
-   *   expressionIdAssigner.mapOuterReference(id#1L) => id#6L
-   * }}}
-   * So the final outerAttrs for [[exists#4]] is [OuterScopeReference(id#6L)].
-   */
-  private def wrapOuterScopeReferenceForResolvedOuterAttrs(
-      outerAttributesFromSourcePlan: Seq[Expression],
-      newOuterAttributes: Seq[Expression]): Seq[Expression] = {
-    newOuterAttributes
-  }
 }

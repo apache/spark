@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 class PlanRewriter(
     planRewriteRules: Seq[Rule[LogicalPlan]],
     extendedRewriteRules: Seq[Rule[LogicalPlan]])
-    extends ResolverMetricTracker // EDGE
+    extends ResolverMetricTracker
     {
   private val planRewriter = new RuleExecutor[LogicalPlan] {
     override def batches: Seq[Batch] =
@@ -52,11 +52,11 @@ class PlanRewriter(
    * them and then applying post-resolution rules on the entire plan.
    */
   def rewriteWithSubqueries(plan: LogicalPlan): LogicalPlan = {
-    recordProfile("rewriteWithSubqueries") { // EDGE
+    recordProfile("rewriteWithSubqueries") {
       AnalysisHelper.allowInvokingTransformsInAnalyzer {
         doRewriteWithSubqueries(plan)
       }
-    } // EDGE
+    }
   }
 
   private def doRewriteWithSubqueries(plan: LogicalPlan): LogicalPlan = {

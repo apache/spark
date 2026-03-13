@@ -865,38 +865,13 @@ class ExpressionIdAssigner {
   }
 
   /**
-   * If `spark.sql.optimizer.supportNestedCorrelatedSubqueries` is turned off,
-   * return current `mapping`, which will be treated as outer mapping in the new subquery scope.
-   *
-   * If the flag is turned on, merges two mappings of expression IDs: outerMapping and
-   * currentMapping. The merge rules are as follows:
-   *  1. If both mappings exist, return a new mapping that combines them. Entries in
-   *  currentMapping take priority over entries in outerMapping. This is because for
-   *  outerReferences in a subquery, we resolve them from the nearest enclosing subquery scope.
-   *  2. If only outerMapping exists, return a copy of outerMapping.
-   *  3. If only currentMapping exists, return a copy of currentMapping.
-   *  4. If neither mapping exists, return None.
+   * Return current `mapping`, which will be treated as outer mapping in the new subquery scope.
    */
   private def mergeCurrentAndOuterMappings(
       outerMapping: Option[ExpressionIdAssigner.Mapping],
       currentMapping: Option[ExpressionIdAssigner.Mapping]
   ): Option[ExpressionIdAssigner.Mapping] = {
-    if (false) {
-      (outerMapping, currentMapping) match {
-        case (Some(outerMap), Some(currentMap)) =>
-          val combinedMap = new ExpressionIdAssigner.Mapping(outerMap)
-          combinedMap.putAll(currentMap)
-          Some(combinedMap)
-        case (Some(outerMapping), None) =>
-          Some(new ExpressionIdAssigner.Mapping(outerMapping))
-        case (None, Some(currentMapping)) =>
-          Some(new ExpressionIdAssigner.Mapping(currentMapping))
-        case (None, None) =>
-          None
-      }
-    } else {
-      currentMapping.map(new ExpressionIdAssigner.Mapping(_))
-    }
+    currentMapping.map(new ExpressionIdAssigner.Mapping(_))
   }
 }
 

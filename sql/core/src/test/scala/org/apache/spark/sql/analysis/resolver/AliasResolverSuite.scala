@@ -19,9 +19,7 @@ package org.apache.spark.sql.analysis.resolver
 
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
-import org.apache.spark.sql.catalyst.analysis.FunctionResolution
 import org.apache.spark.sql.catalyst.analysis.resolver.{
-  CatalogObjectGuard,
   Resolver,
   ResolverRunner
 }
@@ -78,19 +76,10 @@ class AliasResolverSuite extends QueryTest with SharedSparkSession {
       catalogManager = spark.sessionState.catalogManager,
       extensions = spark.sessionState.analyzer.singlePassResolverExtensions
     )
-    val relationResolution = spark.sessionState.analyzer.getRelationResolution
     val resolverRunner = new ResolverRunner(
       resolver = new Resolver(
         catalogManager = spark.sessionState.catalogManager,
         extensions = spark.sessionState.analyzer.singlePassResolverExtensions
-      ),
-      catalogObjectGuard = new CatalogObjectGuard(
-        catalogManager = spark.sessionState.catalogManager,
-        relationResolution = relationResolution,
-        functionResolution = new FunctionResolution(
-          spark.sessionState.catalogManager,
-          relationResolution
-        )
       )
     )
 
