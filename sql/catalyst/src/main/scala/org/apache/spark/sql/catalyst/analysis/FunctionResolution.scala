@@ -75,7 +75,8 @@ class FunctionResolution(
 
   /**
    * Produces the ordered list of fully qualified candidate names for resolution.
-   * Every candidate is 3-part (catalog.database.function).
+   * Every candidate is 3-part (catalog.database.function), assuming search path
+   * entries are catalog.database (2-part).
    *
    * @param nameParts The function name parts.
    * @return A sequence of fully qualified 3-part names to attempt resolution with.
@@ -84,7 +85,7 @@ class FunctionResolution(
     def ensureThreePart(parts: Seq[String]): Seq[String] =
       if (parts.length == 3) parts
       else if (parts.length == 2) currentCatalogPath.head +: parts
-      else parts
+      else parts  // Safety fallback; valid paths yield 2 or 3 parts before this
 
     if (nameParts.size == 1) {
       val searchPath = SQLConf.get.resolutionSearchPath(currentCatalogPath)
@@ -93,7 +94,7 @@ class FunctionResolution(
       nameParts.size match {
         case 2 if FunctionResolution.sessionNamespaceKind(nameParts).isDefined =>
           // Partially qualified builtin/session: both candidates as 3-part (catalog.db.func)
-          val systemCandidate = Seq(CatalogManager.SYSTEM_CATALOG_NAME) ++ nameParts
+          val systemCandidate = CatalogManager.SYSTEM_CATALOG_NAME +: nameParts
           val persistentCandidate = currentCatalogPath.head +: nameParts
           if (SQLConf.get.prioritizeSystemCatalog) {
             Seq(systemCandidate, persistentCandidate)

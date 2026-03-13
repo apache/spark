@@ -1161,13 +1161,12 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SECTION 16d: PrioritizeSystemCatalog=false - session namespace fallback") {
+  test("SECTION 16d: PrioritizeSystemCatalog=false - persistent catalog wins") {
     withSQLConf("spark.sql.legacy.prioritizeSystemCatalog" -> "false") {
       withDatabase("session") {
         sql("CREATE DATABASE session")
         sql("CREATE FUNCTION session.test_func() RETURNS STRING RETURN 'persistent'")
         checkAnswer(sql("SELECT session.test_func()"), Row("persistent"))
-        checkAnswer(sql("SELECT system.session.test_func()"), Row("persistent"))
         sql("DROP FUNCTION IF EXISTS session.test_func")
       }
     }
@@ -1189,6 +1188,22 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
         sql("CREATE DATABASE builtin")
         checkAnswer(sql("SELECT builtin.abs(-5)"), Row(5))
         checkAnswer(sql("SELECT builtin.coalesce(1, 2)"), Row(1))
+      }
+    }
+  }
+
+  test("SECTION 16g: PrioritizeSystemCatalog=false - persistent wins over temp") {
+    withSQLConf("spark.sql.legacy.prioritizeSystemCatalog" -> "false") {
+      withDatabase("session") {
+        sql("CREATE DATABASE session")
+        sql("CREATE FUNCTION session.test_func() RETURNS STRING RETURN 'persistent'")
+        sql("CREATE TEMPORARY FUNCTION test_func() RETURNS STRING RETURN 'temp'")
+        try {
+          checkAnswer(sql("SELECT session.test_func()"), Row("persistent"))
+        } finally {
+          sql("DROP TEMPORARY FUNCTION test_func")
+        }
+        sql("DROP FUNCTION IF EXISTS session.test_func")
       }
     }
   }

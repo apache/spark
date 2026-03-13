@@ -2367,8 +2367,7 @@ object SQLConf {
       .version("4.2.0")
       .doc("When true, partially qualified function names like 'builtin.func' or 'session.func' " +
         "resolve to the system catalog (system.builtin.func or system.session.func) over " +
-        "persistent schemas with matching names. When false, persistent schemas take precedence. " +
-        "Default is true.")
+        "persistent schemas with matching names. When false, persistent schemas take precedence.")
       .booleanConf
       .createWithDefault(true)
 

@@ -17,10 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import java.util.Locale
-
 import org.apache.spark.sql.catalyst.{
-  FunctionIdentifier,
   SQLConfHelper,
   SqlScriptingContextManager
 }
@@ -374,7 +371,7 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
       // Unqualified: only allow if it's a known builtin (excluding unsupported ones)
       ResolverGuard.UNSUPPORTED_FUNCTION_NAMES.contains(functionName) ||
       !FunctionRegistry.functionSet.contains(
-        FunctionIdentifier(functionName.toLowerCase(Locale.ROOT))
+        FunctionRegistry.builtinFunctionIdentifier(functionName)
       )
     } else if (FunctionResolution.sessionNamespaceKind(nameParts)
         .contains(SessionCatalog.Builtin)) {

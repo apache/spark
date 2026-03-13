@@ -180,7 +180,7 @@ class SessionCatalog(
    * Maps a namespace template to an actual storage identifier for a specific function.
    *
    * Storage conventions:
-   * - Builtin functions: FunctionIdentifier(name, None, None)
+   * - Builtin functions: FunctionIdentifier(name, Some("builtin"), Some("system"))
    * - Temp functions: FunctionIdentifier(name, Some("session"), Some("system"))
    * - Other: FunctionIdentifier(name, namespace.database, namespace.catalog)
    */
@@ -189,7 +189,7 @@ class SessionCatalog(
       name: String): FunctionIdentifier = {
     namespace.database match {
       case Some(CatalogManager.BUILTIN_NAMESPACE) =>
-        FunctionIdentifier(format(name))
+        FunctionRegistry.builtinFunctionIdentifier(name)
 
       case _ =>
         namespace.copy(funcName = name)
@@ -2136,7 +2136,7 @@ class SessionCatalog(
     if (func.database.isEmpty && sessionFirst && !overrideIfExists) {
       val funcName = func.funcName
       // Check if function exists in builtin namespace (extensions are stored as builtins)
-      val builtinIdent = FunctionIdentifier(format(funcName))
+      val builtinIdent = FunctionRegistry.builtinFunctionIdentifier(funcName)
       if (functionRegistry.functionExists(builtinIdent) ||
           tableFunctionRegistry.functionExists(builtinIdent)) {
         throw QueryCompilationErrors.functionAlreadyExistsError(func)
@@ -2249,7 +2249,7 @@ class SessionCatalog(
       if ((conf.sessionFunctionResolutionOrder == "first") && !overrideIfExists) {
         val funcName = function.name.funcName
         // Check if function exists in builtin namespace (extensions are stored as builtins)
-        val builtinIdent = FunctionIdentifier(format(funcName))
+        val builtinIdent = FunctionRegistry.builtinFunctionIdentifier(funcName)
         if (functionRegistry.functionExists(builtinIdent) ||
             tableFunctionRegistry.functionExists(builtinIdent)) {
           throw QueryCompilationErrors.functionAlreadyExistsError(function.name)
@@ -2331,7 +2331,7 @@ class SessionCatalog(
     // Check if it exists as temp (with TEMP_FUNCTION_DB db) or builtin (without db) or persistent
     if (name.database.isEmpty) {
       val tempIdent = tempFunctionIdentifier(name.funcName)
-      val builtinIdent = FunctionIdentifier(format(name.funcName))
+      val builtinIdent = FunctionRegistry.builtinFunctionIdentifier(name.funcName)
 
       // Check if temp function exists
       val hasTemp = functionRegistry.functionExists(tempIdent) ||
@@ -2363,8 +2363,9 @@ class SessionCatalog(
    * Returns whether it is a built-in function.
    */
   def isBuiltinFunction(name: FunctionIdentifier): Boolean = {
-    FunctionRegistry.builtin.functionExists(name) ||
-      TableFunctionRegistry.builtin.functionExists(name)
+    val builtinIdent = FunctionRegistry.builtinFunctionIdentifier(name.funcName)
+    FunctionRegistry.builtin.functionExists(builtinIdent) ||
+      TableFunctionRegistry.builtin.functionExists(builtinIdent)
   }
 
   protected[sql] def failFunctionLookup(name: FunctionIdentifier): Nothing = {
@@ -2444,7 +2445,7 @@ class SessionCatalog(
       name: String): FunctionIdentifier =
     kind match {
       case SessionCatalog.Builtin =>
-        FunctionIdentifier(format(name))
+        FunctionRegistry.builtinFunctionIdentifier(name)
       case SessionCatalog.Temp =>
         tempFunctionIdentifier(name)
     }
@@ -2741,12 +2742,15 @@ class SessionCatalog(
 
   /**
    * List all built-in and temporary functions with the given pattern.
+   * Builtins are keyed as (funcName, builtin, system); temp as (funcName, session, system).
    */
   private def listBuiltinAndTempFunctions(pattern: String): Seq[FunctionIdentifier] = {
     val functions = (functionRegistry.listFunction() ++ tableFunctionRegistry.listFunction())
       .filter(f =>
         f.database.isEmpty ||
-        isTempFunctionIdentifier(f))
+        isTempFunctionIdentifier(f) ||
+        (f.database.contains(CatalogManager.BUILTIN_NAMESPACE) &&
+          f.catalog.contains(CatalogManager.SYSTEM_CATALOG_NAME)))
       .map(f => if (isTempFunctionIdentifier(f)) {
         FunctionIdentifier(f.funcName)
       } else {

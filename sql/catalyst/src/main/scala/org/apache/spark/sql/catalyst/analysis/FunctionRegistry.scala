@@ -210,10 +210,13 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
   protected val functionBuilders =
     new mutable.HashMap[FunctionIdentifier, (ExpressionInfo, FunctionBuilder)]
 
-  // Resolution of the function name is always case insensitive, but the database name
-  // depends on the caller
+  // Resolution of the function name is always case insensitive; database and catalog
+  // are preserved so system.session.foo and spark_catalog.session.foo do not collide.
   private def normalizeFuncName(name: FunctionIdentifier): FunctionIdentifier = {
-    FunctionIdentifier(name.funcName.toLowerCase(Locale.ROOT), name.database)
+    new FunctionIdentifier(
+      name.funcName.toLowerCase(Locale.ROOT),
+      name.database,
+      name.catalog)
   }
 
   override def registerFunction(
@@ -329,6 +332,13 @@ object EmptyFunctionRegistry
 object FunctionRegistry {
 
   type FunctionBuilder = Seq[Expression] => Expression
+
+  /** 3-part identifier for a builtin function: system.builtin.funcName */
+  private[catalyst] def builtinFunctionIdentifier(name: String): FunctionIdentifier =
+    new FunctionIdentifier(
+      name.toLowerCase(Locale.ROOT),
+      Some(CatalogManager.BUILTIN_NAMESPACE),
+      Some(CatalogManager.SYSTEM_CATALOG_NAME))
 
   val FUNC_ALIAS = TreeNodeTag[String]("functionAliasName")
 
@@ -990,7 +1000,7 @@ object FunctionRegistry {
     val fr = new SimpleFunctionRegistry
     expressions.foreach {
       case (name, (info, builder)) =>
-        fr.internalRegisterFunction(FunctionIdentifier(name), info, builder)
+        fr.internalRegisterFunction(builtinFunctionIdentifier(name), info, builder)
     }
     fr
   }
@@ -1288,7 +1298,7 @@ object TableFunctionRegistry {
     val fr = new SimpleTableFunctionRegistry
     logicalPlans.foreach {
       case (name, (info, builder)) =>
-        fr.internalRegisterFunction(FunctionIdentifier(name), info, builder)
+        fr.internalRegisterFunction(FunctionRegistry.builtinFunctionIdentifier(name), info, builder)
     }
     fr
   }

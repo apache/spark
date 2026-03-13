@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.util.Locale
+
 import scala.collection.mutable
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Unstable}
@@ -29,6 +31,7 @@ import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.classic.Strategy
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
 
 /**
@@ -365,14 +368,31 @@ class SparkSessionExtensions {
 
   private[sql] def registerFunctions(functionRegistry: FunctionRegistry) = {
     for ((name, expressionInfo, function) <- injectedFunctions) {
-      functionRegistry.registerFunction(name, expressionInfo, function)
+      // Extension functions with unqualified name are in the builtin namespace (3-part key)
+      val ident = if (name.database.isEmpty && name.catalog.isEmpty) {
+        new FunctionIdentifier(
+          name.funcName.toLowerCase(Locale.ROOT),
+          Some(CatalogManager.BUILTIN_NAMESPACE),
+          Some(CatalogManager.SYSTEM_CATALOG_NAME))
+      } else {
+        name
+      }
+      functionRegistry.registerFunction(ident, expressionInfo, function)
     }
     functionRegistry
   }
 
   private[sql] def registerTableFunctions(tableFunctionRegistry: TableFunctionRegistry) = {
     for ((name, expressionInfo, function) <- injectedTableFunctions) {
-      tableFunctionRegistry.registerFunction(name, expressionInfo, function)
+      val ident = if (name.database.isEmpty && name.catalog.isEmpty) {
+        new FunctionIdentifier(
+          name.funcName.toLowerCase(Locale.ROOT),
+          Some(CatalogManager.BUILTIN_NAMESPACE),
+          Some(CatalogManager.SYSTEM_CATALOG_NAME))
+      } else {
+        name
+      }
+      tableFunctionRegistry.registerFunction(ident, expressionInfo, function)
     }
     tableFunctionRegistry
   }
