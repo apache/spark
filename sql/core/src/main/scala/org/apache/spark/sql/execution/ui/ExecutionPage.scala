@@ -169,7 +169,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
       </div>
 
       <div id="plan-viz-content" class="row">
-        <div class="col-8">
+        <div id="plan-viz-graph-col" class="col-12">
           <div id="plan-viz-graph">
             <div>
               <input type="checkbox" id="stageId-and-taskId-checkbox"></input>
@@ -181,10 +181,14 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
             </div>
           </div>
         </div>
-        <div class="col-4">
+        <div id="plan-viz-details-col" class="col-4 d-none">
           <div id="plan-viz-details-panel" class="sticky-top" style="top: 4rem; z-index: 1;">
             <div class="card">
-              <div class="card-header fw-bold" id="plan-viz-details-title">Details</div>
+              <div class="card-header d-flex justify-content-between align-items-center">
+                <span class="fw-bold" id="plan-viz-details-title">Details</span>
+                <button id="plan-viz-panel-close" class="btn btn-sm btn-close"
+                        type="button" title="Close panel"></button>
+              </div>
               <div class="card-body" id="plan-viz-details-body">
                 <p class="text-muted mb-0">Click a node to view details</p>
               </div>

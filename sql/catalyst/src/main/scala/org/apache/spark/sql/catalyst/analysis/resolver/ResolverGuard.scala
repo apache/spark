@@ -519,7 +519,7 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
     catalogManager.tempVariableManager.isEmpty
 
   private def checkScriptingVariables() =
-    SqlScriptingContextManager.get().map(_.getVariableManager).forall(_.isEmpty)
+    SqlScriptingContextManager.get().flatMap(_.getVariableManager).forall(_.isEmpty)
 
   private def tryThrowUnsupportedSinglePassAnalyzerFeature(operator: LogicalPlan): Unit = {
     tryThrowUnsupportedSinglePassAnalyzerFeature(s"${operator.getClass} operator resolution")

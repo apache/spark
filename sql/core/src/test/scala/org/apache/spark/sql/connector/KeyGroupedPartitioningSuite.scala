@@ -439,12 +439,13 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     Seq(true, false).foreach { sortingEnabled =>
       withSQLConf(SQLConf.V2_BUCKETING_SORTING_ENABLED.key -> sortingEnabled.toString) {
 
-        def verifyShuffle(cmd: String, answer: Seq[Row]): Unit = {
+        def verifyShuffle(cmd: String, answer: Seq[Row], expectedGroupPartitions: Int): Unit = {
           val df = sql(cmd)
           if (sortingEnabled) {
             assert(collectAllShuffles(df.queryExecution.executedPlan).isEmpty,
               "should contain no shuffle when sorting by partition values")
-            assert(collectAllGroupPartitions(df.queryExecution.executedPlan).size == 1,
+            assert(collectAllGroupPartitions(df.queryExecution.executedPlan).size ==
+              expectedGroupPartitions,
               "should contain partition grouping when sorting by partition values")
           } else {
             assert(collectAllShuffles(df.queryExecution.executedPlan).size == 1,
@@ -457,30 +458,32 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
 
         verifyShuffle(
           s"SELECT price, id FROM testcat.ns.$items ORDER BY price ASC, id ASC",
+          // Default ordering of partitions matches requested ordering so we don't expect any
+          // shuffles or group partitions
           Seq(Row(null, 3), Row(10.0, 2), Row(15.5, null),
-            Row(15.5, 3), Row(40.0, 1), Row(41.0, 1)))
+            Row(15.5, 3), Row(40.0, 1), Row(41.0, 1)), 0)
 
         verifyShuffle(
           s"SELECT price, id FROM testcat.ns.$items " +
             s"ORDER BY price ASC NULLS LAST, id ASC NULLS LAST",
           Seq(Row(10.0, 2), Row(15.5, 3), Row(15.5, null),
-            Row(40.0, 1), Row(41.0, 1), Row(null, 3)))
+            Row(40.0, 1), Row(41.0, 1), Row(null, 3)), 1)
 
         verifyShuffle(
           s"SELECT price, id FROM testcat.ns.$items ORDER BY price DESC, id ASC",
           Seq(Row(41.0, 1), Row(40.0, 1), Row(15.5, null),
-            Row(15.5, 3), Row(10.0, 2), Row(null, 3)))
+            Row(15.5, 3), Row(10.0, 2), Row(null, 3)), 1)
 
         verifyShuffle(
           s"SELECT price, id FROM testcat.ns.$items ORDER BY price DESC, id DESC",
           Seq(Row(41.0, 1), Row(40.0, 1), Row(15.5, 3),
-            Row(15.5, null), Row(10.0, 2), Row(null, 3)))
+            Row(15.5, null), Row(10.0, 2), Row(null, 3)), 1)
 
         verifyShuffle(
           s"SELECT price, id FROM testcat.ns.$items " +
             s"ORDER BY price DESC NULLS FIRST, id DESC NULLS FIRST",
           Seq(Row(null, 3), Row(41.0, 1), Row(40.0, 1),
-            Row(15.5, null), Row(15.5, 3), Row(10.0, 2)));
+            Row(15.5, null), Row(15.5, 3), Row(10.0, 2)), 1);
       }
     }
   }
@@ -3142,7 +3145,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     }
   }
 
-  test("SPARK-55535: Empty group partitions due filtered partitions") {
+  test("SPARK-55535: Empty group partitions due to filtered partitions") {
     val items_partitions = Array(identity("id"))
     createTable(items, itemsColumns, items_partitions)
 
@@ -3165,6 +3168,52 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
       assert(groupPartitions.forall(_.outputPartitioning.numPartitions == 0),
         "group partitions should not have any (common) partitions")
+    }
+  }
+
+  test("SPARK-55535: Order by on partitions keys") {
+    withSQLConf(SQLConf.V2_BUCKETING_SORTING_ENABLED.key -> "true") {
+      val items_partitions = Array(identity("id"))
+      createTable(items, itemsColumns, items_partitions)
+
+      sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        "(2, 'aa', 10.0, cast('2021-01-01' as timestamp)), " +
+        "(3, 'aa', 20.0, cast('2022-01-01' as timestamp)), " +
+        "(1, 'aa', 40.0, cast('2022-01-01' as timestamp))")
+
+      val df = sql(s"SELECT id FROM testcat.ns.$items i ORDER BY id")
+
+      val expected = (1 to 3).map(Row(_))
+      checkAnswer(df, expected)
+
+      val reverseDf = sql(s"SELECT id FROM testcat.ns.$items i ORDER BY id DESC")
+
+      checkAnswer(reverseDf, expected.reverse)
+
+      sql(s"INSERT INTO testcat.ns.$items VALUES (2, 'aa', 30.0, cast('2021-01-01' as timestamp))")
+
+      val dfWithDuplicate = sql(s"SELECT id FROM testcat.ns.$items i ORDER BY id")
+
+      val expectedWithDuplicate = Seq(1, 2, 2, 3).map(Row(_))
+      checkAnswer(dfWithDuplicate, expectedWithDuplicate)
+
+      val reverseDfWithDuplicate = sql(s"SELECT id FROM testcat.ns.$items i ORDER BY id DESC")
+
+      checkAnswer(reverseDfWithDuplicate, expectedWithDuplicate.reverse)
+
+      Seq(
+        df -> Seq.empty,
+        reverseDf -> Seq(3),
+        dfWithDuplicate -> Seq.empty,
+        reverseDfWithDuplicate -> Seq(4)
+      ).foreach {
+        case (df, expectedPartitions) =>
+          val shuffles = collectAllShuffles(df.queryExecution.executedPlan)
+          assert(shuffles.isEmpty, "should not contain any shuffle")
+
+          val groupPartitions = collectAllGroupPartitions(df.queryExecution.executedPlan)
+          assert(groupPartitions.map(_.outputPartitioning.numPartitions) == expectedPartitions)
+      }
     }
   }
 }

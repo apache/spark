@@ -278,7 +278,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
       }
     } else {
       for (int i = 0; i < count; ++i, srcOffset += 4, dstOffset += 2) {
-        Platform.putShort(null, dstOffset, (short) Platform.getInt(src, srcOffset));
+        Platform.putShort(null, dstOffset, Platform.getShort(src, srcOffset));
       }
     }
   }

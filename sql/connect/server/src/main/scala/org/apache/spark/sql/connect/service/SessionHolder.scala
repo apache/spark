@@ -465,7 +465,9 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private[connect] def getDataFrameOrThrow(dfId: String): DataFrame = {
     Option(dataFrameCache.get(dfId))
       .getOrElse {
-        throw InvalidPlanInput(s"No DataFrame with id $dfId is found in the session $sessionId")
+        throw InvalidPlanInput(
+          "CONNECT_INVALID_PLAN.DATAFRAME_NOT_FOUND",
+          Map("dfId" -> dfId, "sessionId" -> sessionId))
       }
   }
 

@@ -258,7 +258,6 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri(request, "/static/jquery.cookies.2.2.0.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.blockUI.min.js")}></script>
     <script src={prependBaseUri(request, "/static/dataTables.bootstrap5.min.js")}></script>
-    <script src={prependBaseUri(request, "/static/jquery.mustache.js")}></script>
   }
 
   /** Returns a spark page with correctly formatted headers */
