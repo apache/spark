@@ -1156,9 +1156,8 @@ class InternalFrame:
         for col, field in zip(pdf.columns, fields):
             pdf[col] = DataTypeOps(field.dtype, field.spark_type).restore(pdf[col])
 
-        restored_index_columns = {
-            index_field: pdf[index_field].copy() for index_field in index_columns
-        }
+        if len(index_columns) == 1:
+            original_index_values = pdf[index_columns[0]].copy()
 
         append = False
         for index_field in index_columns:
@@ -1173,7 +1172,7 @@ class InternalFrame:
             internal_field = fields[0]
             if is_integer_dtype(internal_field.dtype) and internal_field.dtype != np.dtype("int64"):
                 pdf.index = pd.Index(
-                    restored_index_columns[index_columns[0]],
+                    original_index_values,
                     dtype=internal_field.dtype,
                     name=pdf.index.name,
                 )
