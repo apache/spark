@@ -908,7 +908,9 @@ final class ShuffleBlockFetcherIterator(
               // It is a host local block or a local shuffle chunk
               shuffleMetricsUpdate(blockId, buf, local = true)
             } else {
-              numBlocksInFlightPerAddress(address) -= 1
+              if (address != FallbackStorage.FALLBACK_BLOCK_MANAGER_ID) {
+                numBlocksInFlightPerAddress(address) -= 1
+              }
               shuffleMetricsUpdate(blockId, buf, local = false)
               bytesInFlight -= size
             }
@@ -1353,10 +1355,6 @@ final class ShuffleBlockFetcherIterator(
           }
         }
       }(fallbackStorageReadContext)
-
-      // TODO: needed?
-      numBlocksInFlightPerAddress(FallbackStorage.FALLBACK_BLOCK_MANAGER_ID) =
-        numBlocksInFlightPerAddress.getOrElse(FallbackStorage.FALLBACK_BLOCK_MANAGER_ID, 0) + 1
     }
 
     def isBlockFetchable[T <: Request](fetchReqQueue: Queue[T]): Boolean = {
