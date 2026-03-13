@@ -494,8 +494,11 @@ private[spark] object UIUtils extends Logging {
     val startRatio = if (total == 0) 0.0 else (boundedStarted.toDouble / total) * 100
     val startWidth = "width: %s%%".format(startRatio)
 
-    val killTaskReasonText = reasonToNumKilled.toSeq.sortBy(-_._2).map {
-        case (reason, count) => s" ($count killed: $reason)"
+    val totalKilled = reasonToNumKilled.values.sum
+    val killReasonTitle = reasonToNumKilled.toSeq.sortBy(-_._2).map {
+        case (reason, count) =>
+          val truncated = if (reason.length > 120) reason.take(120) + "..." else reason
+          s" ($count killed: $truncated)"
       }.mkString
     val progressTitle = s"$completed/$total" + {
       if (started > 0) s" ($started running)" else ""
@@ -503,13 +506,13 @@ private[spark] object UIUtils extends Logging {
       if (failed > 0) s" ($failed failed)" else ""
     } + {
       if (skipped > 0) s" ($skipped skipped)" else ""
-    } + killTaskReasonText
+    } + killReasonTitle
 
     val progressLabel = s"$completed/$total" +
       (if (failed == 0 && skipped == 0 && started > 0) s" ($started running)" else "") +
       (if (failed > 0) s" ($failed failed)" else "") +
       (if (skipped > 0) s" ($skipped skipped)" else "") +
-      killTaskReasonText
+      (if (totalKilled > 0) s" ($totalKilled killed)" else "")
 
     // scalastyle:off line.size.limit
     <div class="progress-stacked" title={progressTitle}>
