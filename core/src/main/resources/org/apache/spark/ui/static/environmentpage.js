@@ -15,9 +15,86 @@
  * limitations under the License.
  */
 
-/* global $ */
+/* global $, uiRoot */
 
-$(document).ready(function(){
+import { getStandAloneAppId, setDataTableDefaults } from "./utils.js";
+
+function createRESTEndPointForEnvironmentPage(appId) {
+  var words = document.baseURI.split("/");
+  var ind = words.indexOf("proxy");
+  var newBaseURI;
+  if (ind > 0) {
+    appId = words[ind + 1];
+    newBaseURI = words.slice(0, ind + 2).join("/");
+    return newBaseURI + "/api/v1/applications/" + appId + "/environment";
+  }
+  ind = words.indexOf("history");
+  if (ind > 0) {
+    appId = words[ind + 1];
+    var attemptId = words[ind + 2];
+    newBaseURI = words.slice(0, ind).join("/");
+    if (isNaN(attemptId)) {
+      return newBaseURI + "/api/v1/applications/" + appId + "/environment";
+    } else {
+      return newBaseURI + "/api/v1/applications/" + appId + "/" + attemptId + "/environment";
+    }
+  }
+  return uiRoot + "/api/v1/applications/" + appId + "/environment";
+}
+
+function updateBadge(tabId, count) {
+  var tab = document.getElementById(tabId);
+  if (tab) {
+    var existing = tab.querySelector(".badge");
+    if (existing) {
+      existing.textContent = count;
+    } else {
+      var badge = document.createElement("span");
+      badge.className = "badge bg-secondary ms-1";
+      badge.textContent = count;
+      tab.appendChild(badge);
+    }
+  }
+}
+
+function formatResourceProfile(rp) {
+  var lines = ["Executor Reqs:"];
+  var execRes = rp.executorResources || {};
+  Object.keys(execRes).sort().forEach(function (key) {
+    var r = execRes[key];
+    var s = "\t" + r.resourceName + ": [amount: " + r.amount;
+    if (r.discoveryScript) { s += ", discovery: " + r.discoveryScript; }
+    if (r.vendor) { s += ", vendor: " + r.vendor; }
+    s += "]";
+    lines.push(s);
+  });
+  lines.push("Task Reqs:");
+  var taskRes = rp.taskResources || {};
+  Object.keys(taskRes).sort().forEach(function (key) {
+    var r = taskRes[key];
+    lines.push("\t" + r.resourceName + ": [amount: " + r.amount + "]");
+  });
+  return lines.join("\n");
+}
+
+function initDataTable(paneId, tableId, data, columns, dtOpts) {
+  var pane = document.getElementById(paneId);
+  pane.innerHTML = '<table id="' + tableId +
+    '" class="table table-striped compact cell-border" style="width:100%"></table>';
+  var opts = $.extend({
+    data: data,
+    columns: columns,
+    order: [[0, "asc"]],
+    pageLength: 50,
+    deferRender: true,
+    language: { search: "Search:&#160;" }
+  }, dtOpts || {});
+  $("#" + tableId).DataTable(opts);
+}
+
+$(document).ready(function () {
+  setDataTableDefaults();
+
   // Tab state persistence
   var storedTab = localStorage.getItem("env-active-tab");
   if (storedTab) {
@@ -28,52 +105,106 @@ $(document).ready(function(){
   }
 
   document.querySelectorAll('#envTabs button[data-bs-toggle="pill"]')
-    .forEach(function(tabEl) {
-      tabEl.addEventListener("shown.bs.tab", function(event) {
+    .forEach(function (tabEl) {
+      tabEl.addEventListener("shown.bs.tab", function (event) {
         localStorage.setItem("env-active-tab", event.target.id);
+        // Adjust DataTable columns for newly visible tab
+        $(event.target.getAttribute("data-bs-target"))
+          .find(".dataTable").each(function () {
+            $(this).DataTable().columns.adjust();
+          });
       });
     });
 
-  // Column filter functionality
-  $('th').on('click', function(e) {
-    let inputBox = $(this).find('.env-table-filter-input');
-    if (inputBox.length === 0) {
-      $('<input class="env-table-filter-input form-control" type="text">')
-        .appendTo(this)
-        .focus();
-    } else {
-      inputBox.toggleClass('d-none');
-      inputBox.focus();
-    }
-    e.stopPropagation();
-  });
+  getStandAloneAppId(function (appId) {
+    var endPoint = createRESTEndPointForEnvironmentPage(appId);
+    $.getJSON(endPoint, function (response) {
+      // Runtime Information
+      var runtime = response.runtime || {};
+      var runtimeData = [
+        ["Java Version", runtime.javaVersion || ""],
+        ["Java Home", runtime.javaHome || ""],
+        ["Scala Version", runtime.scalaVersion || ""]
+      ];
+      initDataTable("runtime", "runtime-table", runtimeData, [
+        { title: "Name", width: "35%" },
+        { title: "Value", width: "65%" }
+      ], { paging: false, searching: false, info: false });
+      updateBadge("runtime-tab", runtimeData.length);
 
-  $(document).on('click', function() {
-    $('.env-table-filter-input').toggleClass('d-none', true);
-  });
+      // Spark Properties — highlight non-default values
+      var defaultsEl = document.getElementById("spark-config-defaults");
+      var configDefaults = {};
+      if (defaultsEl) {
+        try { configDefaults = JSON.parse(defaultsEl.textContent); } catch (e) { /* ignore */ }
+      }
 
-  $(document).on('input', '.env-table-filter-input', function() {
-    const table = $(this).closest('table');
-    const filters = table.find('.env-table-filter-input').map(function() {
-      const columnIdx = $(this).closest('th').index();
-      const searchString = $(this).val().toLowerCase();
-      return { columnIdx, searchString };
-    }).get();
+      var sparkProps = response.sparkProperties || [];
+      var sparkPropsWithDefaults = sparkProps.map(function (prop) {
+        var d = Object.prototype.hasOwnProperty.call(configDefaults, prop[0]) ? configDefaults[prop[0]] : "";
+        return [prop[0], prop[1], d];
+      });
 
-    table.find('tbody tr').each(function() {
-      let showRow = true;
-      for (const filter of filters) {
-        const cellText = $(this).find('td').eq(filter.columnIdx).text().toLowerCase();
-        if (filter.searchString && cellText.indexOf(filter.searchString) === -1) {
-          showRow = false;
-          break;
+      initDataTable("spark-props", "spark-props-table", sparkPropsWithDefaults, [
+        { title: "Name", width: "30%" },
+        { title: "Value", width: "35%" },
+        { title: "Default Value", width: "35%" }
+      ], {
+        createdRow: function (row, data) {
+          if (Object.prototype.hasOwnProperty.call(configDefaults, data[0]) && data[1] !== configDefaults[data[0]]) {
+            $(row).addClass("table-warning");
+          }
         }
-      }
-      if (showRow) {
-        $(this).removeClass('d-none');
-      } else {
-        $(this).addClass('d-none');
-      }
+      });
+
+      updateBadge("spark-props-tab", sparkProps.length);
+
+      // Resource Profiles
+      var profiles = response.resourceProfiles || [];
+      var rpData = profiles.map(function (rp) {
+        return [String(rp.id), formatResourceProfile(rp)];
+      });
+      initDataTable("resource-profiles", "resource-profiles-table", rpData, [
+        { title: "Resource Profile Id", width: "20%" },
+        {
+          title: "Resource Profile Contents",
+          width: "80%",
+          render: function (data) { return "<pre>" + data + "</pre>"; }
+        }
+      ], { paging: false, searching: false, info: false });
+      updateBadge("resource-profiles-tab", rpData.length);
+
+      // Hadoop Properties
+      var hadoopProps = response.hadoopProperties || [];
+      initDataTable("hadoop-props", "hadoop-props-table", hadoopProps, [
+        { title: "Name", width: "35%" },
+        { title: "Value", width: "65%" }
+      ]);
+      updateBadge("hadoop-props-tab", hadoopProps.length);
+
+      // System Properties
+      var systemProps = response.systemProperties || [];
+      initDataTable("system-props", "system-props-table", systemProps, [
+        { title: "Name", width: "35%" },
+        { title: "Value", width: "65%" }
+      ]);
+      updateBadge("system-props-tab", systemProps.length);
+
+      // Metrics Properties
+      var metricsProps = response.metricsProperties || [];
+      initDataTable("metrics-props", "metrics-props-table", metricsProps, [
+        { title: "Name", width: "35%" },
+        { title: "Value", width: "65%" }
+      ]);
+      updateBadge("metrics-props-tab", metricsProps.length);
+
+      // Classpath Entries
+      var classpathEntries = response.classpathEntries || [];
+      initDataTable("classpath", "classpath-table", classpathEntries, [
+        { title: "Resource", width: "35%" },
+        { title: "Source", width: "65%" }
+      ]);
+      updateBadge("classpath-tab", classpathEntries.length);
     });
   });
 });

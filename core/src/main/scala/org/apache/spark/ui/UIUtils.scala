@@ -35,6 +35,7 @@ import jakarta.ws.rs.core.{MediaType, MultivaluedMap, Response}
 import org.eclipse.jetty.server.Request
 import org.glassfish.jersey.internal.util.collection.MultivaluedStringMap
 
+import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.scope.RDDOperationGraph
 
@@ -257,7 +258,6 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri(request, "/static/jquery.cookies.2.2.0.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.blockUI.min.js")}></script>
     <script src={prependBaseUri(request, "/static/dataTables.bootstrap5.min.js")}></script>
-    <script src={prependBaseUri(request, "/static/jquery.mustache.js")}></script>
   }
 
   /** Returns a spark page with correctly formatted headers */
@@ -280,9 +280,13 @@ private[spark] object UIUtils extends Logging {
     }
     val helpButton: Seq[Node] = helpText.map(tooltip(_, "top")).getOrElse(Seq.empty)
 
-    <html>
+    <html data-bs-theme="light">
       <head>
         {commonHeaderNodes(request)}
+        <script nonce={CspNonce.get}>{Unparsed(
+          "document.documentElement.setAttribute('data-bs-theme'," +
+          "localStorage.getItem('spark-theme')||" +
+          "(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'))")}</script>
         <script nonce={CspNonce.get}>setAppBasePath('{activeTab.basePath}')</script>
         {if (showVisualization) vizHeaderNodes(request) else Seq.empty}
         {if (useDataTables) dataTablesHeaderNodes(request) else Seq.empty}
@@ -290,14 +294,13 @@ private[spark] object UIUtils extends Logging {
               href={prependBaseUri(request, "/static/spark-logo.svg")}></link>
         <title>{appName} - {title}</title>
       </head>
-      <body>
+      <body class="d-flex flex-column min-vh-100">
         <nav class="navbar navbar-expand-md navbar-light bg-light mb-4">
           <div class="navbar-header">
             <div class="navbar-brand">
               <a href={prependBaseUri(request, "/")}>
-                <img src={prependBaseUri(request, "/static/spark-logo.svg")}
+                <img class="spark-logo" src={prependBaseUri(request, "/static/spark-logo.svg")}
                      alt="Spark Logo" height="36" />
-                <span class="version">{activeTab.appSparkVersion}</span>
               </a>
             </div>
           </div>
@@ -312,9 +315,11 @@ private[spark] object UIUtils extends Logging {
               <strong title={appName} class="text-nowrap">{shortAppName}</strong>
               <span class="text-nowrap">application UI</span>
             </span>
+            <button id="theme-toggle" class="btn btn-sm btn-link text-decoration-none fs-5 ms-2 p-0"
+                    type="button" title="Toggle dark mode"></button>
           </div>
         </nav>
-        <div class="container-fluid">
+        <div class="container-fluid flex-fill">
           <div class="row">
             <div class="col-12">
               <h3 class="align-bottom text-nowrap overflow-hidden text-truncate">
@@ -329,6 +334,7 @@ private[spark] object UIUtils extends Logging {
             </div>
           </div>
         </div>
+        {sparkFooter(Some(activeTab))}
       </body>
     </html>
   }
@@ -339,25 +345,32 @@ private[spark] object UIUtils extends Logging {
       content: => Seq[Node],
       title: String,
       useDataTables: Boolean = false): Seq[Node] = {
-    <html>
+    <html data-bs-theme="light">
       <head>
         {commonHeaderNodes(request)}
+        <script nonce={CspNonce.get}>{Unparsed(
+          "document.documentElement.setAttribute('data-bs-theme'," +
+          "localStorage.getItem('spark-theme')||" +
+          "(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'))")}</script>
         {if (useDataTables) dataTablesHeaderNodes(request) else Seq.empty}
         <link rel="shortcut icon"
               href={prependBaseUri(request, "/static/spark-logo.svg")}></link>
         <title>{title}</title>
       </head>
-      <body>
-        <div class="container-fluid">
+      <body class="d-flex flex-column min-vh-100">
+        <div class="container-fluid flex-fill">
           <div class="row">
             <div class="col-12">
               <h3 class="align-middle d-inline-block">
                 <a class="text-decoration-none" href={prependBaseUri(request, "/")}>
-                  <img src={prependBaseUri(request, "/static/spark-logo.svg")}
+                  <img class="spark-logo" src={prependBaseUri(request, "/static/spark-logo.svg")}
                        alt="Spark Logo" height="36" />
                   <span class="version me-3">{org.apache.spark.SPARK_VERSION}</span>
                 </a>
                 {title}
+                <button id="theme-toggle"
+                        class="btn btn-sm btn-link text-decoration-none fs-5 ms-2 p-0 align-middle"
+                        type="button" title="Toggle dark mode"></button>
               </h3>
             </div>
           </div>
@@ -367,8 +380,30 @@ private[spark] object UIUtils extends Logging {
             </div>
           </div>
         </div>
+        {sparkFooter()}
       </body>
     </html>
+  }
+
+  private def sparkFooter(tab: Option[SparkUITab] = None): Seq[Node] = {
+    val user = tab.map(_.sparkUser).getOrElse(System.getProperty("user.name", ""))
+    val version = tab.map(_.appSparkVersion).getOrElse(org.apache.spark.SPARK_VERSION)
+    val startTimeOpt = tab.map(_.appStartTime).orElse(SparkContext.getActive.map(_.startTime))
+
+    // scalastyle:off
+    <footer class="footer mt-auto py-2 bg-body-tertiary border-top">
+      <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center small text-body-secondary">
+          <span>{version}</span>
+          {startTimeOpt.map { t =>
+            <span>Started: {formatDate(new Date(t))}</span>
+            <span id="footer-uptime" data-start-time={t.toString}></span>
+          }.getOrElse(Seq.empty)}
+          <span>{user}</span>
+        </div>
+      </div>
+    </footer>
+    // scalastyle:on
   }
 
   /** Returns an HTML table constructed by generating a row for each object in a sequence. */
@@ -435,12 +470,14 @@ private[spark] object UIUtils extends Logging {
         }
       }
     }
+    <div class="table-responsive">
     <table class={listingTableClass} id={id.map(Text.apply)}>
       <thead>{headerRow}</thead>
       <tbody>
         {data.map(r => generateDataRow(r))}
       </tbody>
     </table>
+    </div>
   }
 
   def makeProgressBar(

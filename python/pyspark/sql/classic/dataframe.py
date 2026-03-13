@@ -544,15 +544,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def coalesce(self, numPartitions: int) -> ParentDataFrame:
         return DataFrame(self._jdf.coalesce(numPartitions), self.sparkSession)
 
-    @overload
-    def repartition(self, numPartitions: int, *cols: "ColumnOrName") -> ParentDataFrame:
-        ...
-
-    @overload
-    def repartition(self, *cols: "ColumnOrName") -> ParentDataFrame:
-        ...
-
-    def repartition(  # type: ignore[misc]
+    def repartition(
         self, numPartitions: Union[int, "ColumnOrName"], *cols: "ColumnOrName"
     ) -> ParentDataFrame:
         if isinstance(numPartitions, int):
@@ -575,15 +567,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
                 },
             )
 
-    @overload
-    def repartitionByRange(self, numPartitions: int, *cols: "ColumnOrName") -> ParentDataFrame:
-        ...
-
-    @overload
-    def repartitionByRange(self, *cols: "ColumnOrName") -> ParentDataFrame:
-        ...
-
-    def repartitionByRange(  # type: ignore[misc]
+    def repartitionByRange(
         self, numPartitions: Union[int, "ColumnOrName"], *cols: "ColumnOrName"
     ) -> ParentDataFrame:
         if isinstance(numPartitions, int):
@@ -914,7 +898,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
 
     def sortWithinPartitions(
         self,
-        *cols: Union[int, str, Column, List[Union[int, str, Column]]],
+        *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"],
         **kwargs: Any,
     ) -> ParentDataFrame:
         _cols = self._preapare_cols_for_sort(F.col, cols, kwargs)
@@ -923,7 +907,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
 
     def sort(
         self,
-        *cols: Union[int, str, Column, List[Union[int, str, Column]]],
+        *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"],
         **kwargs: Any,
     ) -> ParentDataFrame:
         _cols = self._preapare_cols_for_sort(F.col, cols, kwargs)
@@ -944,22 +928,32 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         """Return a JVM Scala Map from a dict"""
         return to_scala_map(self.sparkSession._sc._jvm, jm)
 
-    def _jcols(self, *cols: "ColumnOrName") -> "JavaObject":
+    def _jcols(self, *cols: Union[Sequence["ColumnOrName"], "ColumnOrName"]) -> "JavaObject":
         """Return a JVM Seq of Columns from a list of Column or column names
 
         If `cols` has only one list in it, cols[0] will be used as the list.
         """
-        if len(cols) == 1 and isinstance(cols[0], list):
-            cols = cols[0]
+        if (
+            len(cols) == 1
+            and not isinstance(cols[0], (str, Column))
+            and isinstance(cols[0], Sequence)
+        ):
+            cols = tuple(cols[0])
         return self._jseq(cols, _to_java_column)
 
-    def _jcols_ordinal(self, *cols: "ColumnOrNameOrOrdinal") -> "JavaObject":
+    def _jcols_ordinal(
+        self, *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"]
+    ) -> "JavaObject":
         """Return a JVM Seq of Columns from a list of Column or column names or column ordinals.
 
         If `cols` has only one list in it, cols[0] will be used as the list.
         """
-        if len(cols) == 1 and isinstance(cols[0], list):
-            cols = cols[0]
+        if (
+            len(cols) == 1
+            and not isinstance(cols[0], (int, str, Column))
+            and isinstance(cols[0], Sequence)
+        ):
+            cols = tuple(cols[0])
 
         _cols = []
         for c in cols:
@@ -1048,10 +1042,10 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         ...
 
     @overload
-    def select(self, __cols: Union[List[Column], List[str]]) -> ParentDataFrame:
+    def select(self, __cols: Sequence["ColumnOrName"]) -> ParentDataFrame:
         ...
 
-    def select(self, *cols: "ColumnOrName") -> ParentDataFrame:  # type: ignore[misc]
+    def select(self, *cols: Union[Sequence["ColumnOrName"], "ColumnOrName"]) -> ParentDataFrame:
         jdf = self._jdf.select(self._jcols(*cols))
         return DataFrame(jdf, self.sparkSession)
 
@@ -1086,51 +1080,59 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         ...
 
     @overload
-    def groupBy(self, __cols: Union[List[Column], List[str], List[int]]) -> "GroupedData":
+    def groupBy(self, __cols: Sequence["ColumnOrNameOrOrdinal"]) -> "GroupedData":
         ...
 
-    def groupBy(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":  # type: ignore[misc]
+    def groupBy(
+        self, *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"]
+    ) -> "GroupedData":
         jgd = self._jdf.groupBy(self._jcols_ordinal(*cols))
         from pyspark.sql.group import GroupedData
 
         return GroupedData(jgd, self)
 
     @overload
-    def rollup(self, *cols: "ColumnOrName") -> "GroupedData":
+    def rollup(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
         ...
 
     @overload
-    def rollup(self, __cols: Union[List[Column], List[str]]) -> "GroupedData":
+    def rollup(self, __cols: Sequence["ColumnOrNameOrOrdinal"]) -> "GroupedData":
         ...
 
-    def rollup(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":  # type: ignore[misc]
+    def rollup(
+        self, *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"]
+    ) -> "GroupedData":
         jgd = self._jdf.rollup(self._jcols_ordinal(*cols))
         from pyspark.sql.group import GroupedData
 
         return GroupedData(jgd, self)
 
     @overload
-    def cube(self, *cols: "ColumnOrName") -> "GroupedData":
+    def cube(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
         ...
 
     @overload
-    def cube(self, __cols: Union[List[Column], List[str]]) -> "GroupedData":
+    def cube(self, __cols: Sequence["ColumnOrNameOrOrdinal"]) -> "GroupedData":
         ...
 
-    def cube(self, *cols: "ColumnOrName") -> "GroupedData":  # type: ignore[misc]
+    def cube(
+        self, *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"]
+    ) -> "GroupedData":
         jgd = self._jdf.cube(self._jcols_ordinal(*cols))
         from pyspark.sql.group import GroupedData
 
         return GroupedData(jgd, self)
 
     def groupingSets(
-        self, groupingSets: Sequence[Sequence["ColumnOrName"]], *cols: "ColumnOrName"
+        self,
+        groupingSets: Sequence[Sequence["ColumnOrNameOrOrdinal"]],
+        *cols: "ColumnOrNameOrOrdinal",
     ) -> "GroupedData":
         from pyspark.sql.group import GroupedData
 
-        jgrouping_sets = _to_seq(self._sc, [self._jcols(*inner) for inner in groupingSets])
+        jgrouping_sets = _to_seq(self._sc, [self._jcols_ordinal(*inner) for inner in groupingSets])
 
-        jgd = self._jdf.groupingSets(jgrouping_sets, self._jcols(*cols))
+        jgd = self._jdf.groupingSets(jgrouping_sets, self._jcols_ordinal(*cols))
         return GroupedData(jgd, self)
 
     def unpivot(
@@ -1292,18 +1294,6 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             thresh = len(subset) if how == "any" else 1
 
         return DataFrame(self._jdf.na().drop(thresh, self._jseq(subset)), self.sparkSession)
-
-    @overload
-    def fillna(
-        self,
-        value: "LiteralType",
-        subset: Optional[Union[str, Tuple[str, ...], List[str]]] = ...,
-    ) -> ParentDataFrame:
-        ...
-
-    @overload
-    def fillna(self, value: Dict[str, "LiteralType"]) -> ParentDataFrame:
-        ...
 
     def fillna(
         self,
@@ -1723,15 +1713,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         )
         return DataFrame(self._jdf.withMetadata(columnName, jmeta), self.sparkSession)
 
-    @overload
-    def drop(self, cols: "ColumnOrName") -> ParentDataFrame:
-        ...
-
-    @overload
-    def drop(self, *cols: str) -> ParentDataFrame:
-        ...
-
-    def drop(self, *cols: "ColumnOrName") -> ParentDataFrame:  # type: ignore[misc]
+    def drop(self, *cols: "ColumnOrName") -> ParentDataFrame:
         column_names: List[str] = []
         java_columns: List["JavaObject"] = []
 
@@ -1796,19 +1778,8 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     # make it "compatible" by adding aliases. Therefore, we stop adding such
     # aliases as of Spark 3.0. Two methods below remain just
     # for legacy users currently.
-    @overload
-    def groupby(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
-        ...
-
-    @overload
-    def groupby(self, __cols: Union[List[Column], List[str], List[int]]) -> "GroupedData":
-        ...
-
-    def groupby(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":  # type: ignore[misc]
-        return self.groupBy(*cols)
-
-    def drop_duplicates(self, subset: Optional[List[str]] = None) -> ParentDataFrame:
-        return self.dropDuplicates(subset)
+    groupby = groupBy
+    drop_duplicates = dropDuplicates
 
     def writeTo(self, table: str) -> "DataFrameWriterV2":
         return DataFrameWriterV2(self, table)
@@ -1914,7 +1885,7 @@ class DataFrameNaFunctions(ParentDataFrameNaFunctions):
         value: Union["LiteralType", Dict[str, "LiteralType"]],
         subset: Optional[List[str]] = None,
     ) -> ParentDataFrame:
-        return self.df.fillna(value=value, subset=subset)  # type: ignore[arg-type]
+        return self.df.fillna(value=value, subset=subset)
 
     @overload
     def replace(

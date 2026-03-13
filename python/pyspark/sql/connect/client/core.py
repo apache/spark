@@ -24,9 +24,6 @@ import atexit
 
 import pyspark
 from pyspark.sql.connect.proto.base_pb2 import FetchErrorDetailsResponse
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
 
 import concurrent.futures
 import logging

@@ -1113,7 +1113,7 @@ class QueryCompilationErrorsSuite
     )
   }
 
-  test("UNABLE_TO_INFER_SCHEMA_FOR_DATA_SOURCE: empty data source at path") {
+  test("UNABLE_TO_INFER_SCHEMA: empty data source at path") {
     withTempDir { dir =>
       // Create _spark_metadata with a valid empty log entry (version header only, no files)
       val metadataDir = new java.io.File(dir, "_spark_metadata")
@@ -1125,10 +1125,8 @@ class QueryCompilationErrorsSuite
         exception = intercept[AnalysisException] {
           spark.read.format("json").load(dir.getCanonicalPath).collect()
         },
-        condition = "UNABLE_TO_INFER_SCHEMA_FOR_DATA_SOURCE",
-        parameters = Map(
-          "format" -> "JSON",
-          "fileCatalog" -> "")
+        condition = "UNABLE_TO_INFER_SCHEMA",
+        parameters = Map("format" -> "JSON")
       )
     }
   }

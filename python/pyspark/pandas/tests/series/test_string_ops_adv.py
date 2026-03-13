@@ -19,6 +19,7 @@ import numpy as np
 import re
 
 from pyspark import pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
@@ -44,8 +45,10 @@ class SeriesStringOpsAdvMixin:
     def check_func(self, func, almost=False):
         self.check_func_on_series(func, self.pser, almost=almost)
 
-    def check_func_on_series(self, func, pser, almost=False):
-        self.assert_eq(func(ps.from_pandas(pser)), func(pser), almost=almost)
+    def check_func_on_series(self, func, pser, almost=False, ignore_null=False):
+        self.assert_eq(
+            func(ps.from_pandas(pser)), func(pser), almost=almost, ignore_null=ignore_null
+        )
 
     def test_string_decode(self):
         psser = ps.from_pandas(self.pser)
@@ -73,10 +76,16 @@ class SeriesStringOpsAdvMixin:
         self.check_func(lambda x: x.str.find("a", start=0, end=1))
 
     def test_string_findall(self):
-        self.check_func_on_series(lambda x: x.str.findall("es|as").apply(str), self.pser[:-1])
-        self.check_func_on_series(
-            lambda x: x.str.findall("wh.*", flags=re.IGNORECASE).apply(str), self.pser[:-1]
-        )
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.check_func_on_series(lambda x: x.str.findall("es|as").apply(str), self.pser[:-1])
+            self.check_func_on_series(
+                lambda x: x.str.findall("wh.*", flags=re.IGNORECASE).apply(str), self.pser[:-1]
+            )
+        else:
+            self.check_func_on_series(lambda x: x.str.findall("es|as"), self.pser, ignore_null=True)
+            self.check_func_on_series(
+                lambda x: x.str.findall("wh.*", flags=re.IGNORECASE), self.pser, ignore_null=True
+            )
 
     def test_string_index(self):
         pser = pd.Series(["tea", "eat"])
@@ -173,8 +182,12 @@ class SeriesStringOpsAdvMixin:
         self.check_func(lambda x: x.str.slice_replace(start=1, stop=3, repl="X"))
 
     def test_string_split(self):
-        self.check_func_on_series(lambda x: repr(x.str.split()), self.pser[:-1])
-        self.check_func_on_series(lambda x: repr(x.str.split(r"p*")), self.pser[:-1])
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.check_func_on_series(lambda x: repr(x.str.split()), self.pser[:-1])
+            self.check_func_on_series(lambda x: repr(x.str.split(r"p*")), self.pser[:-1])
+        else:
+            self.check_func_on_series(lambda x: x.str.split(), self.pser, ignore_null=True)
+            self.check_func_on_series(lambda x: x.str.split(r"p*"), self.pser, ignore_null=True)
         pser = pd.Series(["This is a sentence.", "This-is-a-long-word."])
         self.check_func_on_series(lambda x: repr(x.str.split(n=2)), pser)
         self.check_func_on_series(lambda x: repr(x.str.split(pat="-", n=2)), pser)
@@ -185,8 +198,12 @@ class SeriesStringOpsAdvMixin:
         self.check_func_on_series(lambda x: repr(x.str.split("-", n=1, expand=True)), pser)
 
     def test_string_rsplit(self):
-        self.check_func_on_series(lambda x: repr(x.str.rsplit()), self.pser[:-1])
-        self.check_func_on_series(lambda x: repr(x.str.rsplit(r"p*")), self.pser[:-1])
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.check_func_on_series(lambda x: repr(x.str.rsplit()), self.pser[:-1])
+            self.check_func_on_series(lambda x: repr(x.str.rsplit(r"p*")), self.pser[:-1])
+        else:
+            self.check_func_on_series(lambda x: x.str.rsplit(), self.pser, ignore_null=True)
+            self.check_func_on_series(lambda x: x.str.rsplit(r"p*"), self.pser, ignore_null=True)
         pser = pd.Series(["This is a sentence.", "This-is-a-long-word."])
         self.check_func_on_series(lambda x: repr(x.str.rsplit(n=2)), pser)
         self.check_func_on_series(lambda x: repr(x.str.rsplit(pat="-", n=2)), pser)

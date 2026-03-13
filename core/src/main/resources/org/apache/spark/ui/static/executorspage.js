@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* global $, Mustache, sorttable */
+/* global $, sorttable */
 
 import {
   createRESTEndPointForExecutorsPage, createRESTEndPointForMiscellaneousProcess, createTemplateURI,
@@ -316,7 +316,7 @@ function totalDurationStyle(totalGCTime, totalDuration) {
 }
 
 function totalDurationColor(totalGCTime, totalDuration) {
-  return (totalGCTime > GCTimePercent * totalDuration) ? "white" : "black";
+  return (totalGCTime > GCTimePercent * totalDuration) ? "white" : "var(--bs-body-color)";
 }
 
 var sumOptionalColumns = [3, 4];
@@ -567,10 +567,9 @@ $(document).ready(function () {
         "allTotalExcluded": deadTotalExcluded
       };
 
-      var data = {executors: response, "execSummary": [activeSummary, deadSummary, totalSummary]};
       $.get(createTemplateURI(appId, "executorspage"), function (template) {
 
-        executorsSummary.append(Mustache.render($(template).filter("#executors-summary-template").html(), data));
+        executorsSummary.append($(template).filter("#executors-summary-template").html());
         var selector = "#active-executors-table";
         var conf = {
           "data": response,
