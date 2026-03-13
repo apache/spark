@@ -30,7 +30,8 @@ class GeographyTypeSuite extends SparkFunSuite {
   // These tests verify the basic behavior of the GeographyType logical type.
 
   test("GEOGRAPHY type with specified invalid SRID") {
-    val srids: Seq[Int] = Seq(-4612, -4326, -2, -1, 1, 2, 3126, 4612)
+    // Negative, non-geographic (3126), or not in registry (999999).
+    val srids: Seq[Int] = Seq(-4612, -4326, -2, -1, 1, 2, 3126, 999999)
     srids.foreach { srid =>
       checkError(
         exception = intercept[SparkIllegalArgumentException] {
@@ -43,8 +44,25 @@ class GeographyTypeSuite extends SparkFunSuite {
     }
   }
 
+  test("GEOGRAPHY type rejects non-geographic SRIDs (isGeographic check)") {
+    // Geography only accepts SRIDs where isGeographic is true (e.g. WGS 84, NAD27, NAD83).
+    // SRID 0 (Cartesian) and 3857 (Web Mercator, projected) must be rejected.
+    val nonGeographicSrids: Seq[Int] = Seq(0, 3857)
+    nonGeographicSrids.foreach { srid =>
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          GeographyType(srid)
+        },
+        condition = "ST_INVALID_SRID_VALUE",
+        sqlState = "22023",
+        parameters = Map("srid" -> srid.toString)
+      )
+    }
+  }
+
   test("GEOGRAPHY type with specified valid SRID") {
-    val srids: Seq[Int] = Seq(4326)
+    // Valid geographic SRIDs: 4326 (OGC:CRS84), 4267 (OGC:CRS27), 4269 (OGC:CRS83).
+    val srids: Seq[Int] = Seq(4326, 4267, 4269)
     srids.foreach { srid =>
       val g = GeographyType(srid)
       assert(g.srid == srid)
@@ -57,14 +75,20 @@ class GeographyTypeSuite extends SparkFunSuite {
       assert(g.simpleString == s"geography($srid)")
       assert(g.sql == s"GEOGRAPHY($srid)")
       // GeographyType with mixed SRID cannot accept any other SRID value.
-      assert(g.acceptsGeographyType(GeographyType(4326)))
+      assert(g.acceptsGeographyType(GeographyType(srid)))
       assert(!g.acceptsGeographyType(GeographyType("ANY")))
     }
   }
 
   test("GEOGRAPHY type with specified valid CRS and algorithm") {
+    // OGC and EPSG CRS strings are both valid (overrides keep EPSG as alias).
     val typeInformation: Seq[(Int, String, EdgeInterpolationAlgorithm)] = Seq(
-      (4326, "OGC:CRS84", EdgeInterpolationAlgorithm.SPHERICAL)
+      (4326, "OGC:CRS84", EdgeInterpolationAlgorithm.SPHERICAL),
+      (4326, "EPSG:4326", EdgeInterpolationAlgorithm.SPHERICAL),
+      (4267, "OGC:CRS27", EdgeInterpolationAlgorithm.SPHERICAL),
+      (4267, "EPSG:4267", EdgeInterpolationAlgorithm.SPHERICAL),
+      (4269, "OGC:CRS83", EdgeInterpolationAlgorithm.SPHERICAL),
+      (4269, "EPSG:4269", EdgeInterpolationAlgorithm.SPHERICAL)
     )
     typeInformation.foreach { case (srid, crs, algorithm) =>
       val g = GeographyType(crs, algorithm)
@@ -81,7 +105,7 @@ class GeographyTypeSuite extends SparkFunSuite {
       assert(g.simpleString == s"geography($srid)")
       assert(g.sql == s"GEOGRAPHY($srid)")
       // GeographyType with mixed SRID cannot accept any other SRID value.
-      assert(g.acceptsGeographyType(GeographyType(4326)))
+      assert(g.acceptsGeographyType(GeographyType(srid)))
       assert(!g.acceptsGeographyType(GeographyType("ANY")))
     }
   }
@@ -133,6 +157,16 @@ class GeographyTypeSuite extends SparkFunSuite {
       GeographyType(4326),
       "geography(4326)",
       "geography(OGC:CRS84, SPHERICAL)"
+    )
+    assertStringRepresentation(
+      GeographyType(4267),
+      "geography(4267)",
+      "geography(OGC:CRS27, SPHERICAL)"
+    )
+    assertStringRepresentation(
+      GeographyType(4269),
+      "geography(4269)",
+      "geography(OGC:CRS83, SPHERICAL)"
     )
   }
 
@@ -186,7 +220,9 @@ class GeographyTypeSuite extends SparkFunSuite {
   test("GEOGRAPHY data type SQL parsing with valid SRID") {
     val validGeographies = Seq(
       "GEOGRAPHY(ANY)",
-      "GEOGRAPHY(4326)"
+      "GEOGRAPHY(4326)",
+      "GEOGRAPHY(4267)",
+      "GEOGRAPHY(4269)"
     )
     validGeographies.foreach { geog =>
       val dt = DataType.fromDDL(geog)
@@ -200,6 +236,8 @@ class GeographyTypeSuite extends SparkFunSuite {
       "GEOGRAPHY(-1)",
       "GEOGRAPHY(-4326)",
       "GEOGRAPHY(99999)",
+      "GEOGRAPHY(0)",
+      "GEOGRAPHY(3857)",
       "GEOGRAPHY(SRID)",
       "GEOGRAPHY(MIXED)"
     )

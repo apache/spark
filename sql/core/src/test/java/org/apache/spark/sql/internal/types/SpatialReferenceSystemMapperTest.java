@@ -22,9 +22,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-public class SpatialReferenceSystemMapperSuite {
-
-  // Tests for the SpatialReferenceSystemInformation class.
+public class SpatialReferenceSystemMapperTest {
 
   @Test
   void testSpatialReferenceSystemInformation() {
@@ -50,50 +48,63 @@ public class SpatialReferenceSystemMapperSuite {
 
   @Test
   public void getStringIdReturnsCorrectStringIdForValidSrid() {
-    // GEOMETRY.
+    // GEOMETRY: Spark-specific and OGC override entries.
     Assertions.assertEquals("SRID:0", CartesianSpatialReferenceSystemMapper.getStringId(0));
     Assertions.assertEquals("EPSG:3857", CartesianSpatialReferenceSystemMapper.getStringId(3857));
     Assertions.assertEquals("OGC:CRS84", CartesianSpatialReferenceSystemMapper.getStringId(4326));
+    Assertions.assertEquals("OGC:CRS27", CartesianSpatialReferenceSystemMapper.getStringId(4267));
+    Assertions.assertEquals("OGC:CRS83", CartesianSpatialReferenceSystemMapper.getStringId(4269));
+    // GEOMETRY: PROJ-sourced registry entries (no override).
+    Assertions.assertEquals("EPSG:32601", CartesianSpatialReferenceSystemMapper.getStringId(32601));
     // GEOGRAPHY.
     Assertions.assertEquals("OGC:CRS84", GeographicSpatialReferenceSystemMapper.getStringId(4326));
+    Assertions.assertEquals("OGC:CRS27", GeographicSpatialReferenceSystemMapper.getStringId(4267));
+    Assertions.assertEquals("OGC:CRS83", GeographicSpatialReferenceSystemMapper.getStringId(4269));
   }
 
   @Test
   public void getStringIdReturnsNullForInvalidSrid() {
-    // GEOMETRY.
+    // GEOMETRY: SRIDs not in the registry.
     Assertions.assertNull(CartesianSpatialReferenceSystemMapper.getStringId(-2));
     Assertions.assertNull(CartesianSpatialReferenceSystemMapper.getStringId(-1));
-    Assertions.assertNull(CartesianSpatialReferenceSystemMapper.getStringId(1));
-    Assertions.assertNull(CartesianSpatialReferenceSystemMapper.getStringId(2));
-    Assertions.assertNull(CartesianSpatialReferenceSystemMapper.getStringId(9999));
-    // GEOGRAPHY.
+    Assertions.assertNull(CartesianSpatialReferenceSystemMapper.getStringId(999999));
+    // GEOGRAPHY: non-geographic or invalid SRIDs.
     Assertions.assertNull(GeographicSpatialReferenceSystemMapper.getStringId(-2));
     Assertions.assertNull(GeographicSpatialReferenceSystemMapper.getStringId(-1));
     Assertions.assertNull(GeographicSpatialReferenceSystemMapper.getStringId(0));
-    Assertions.assertNull(GeographicSpatialReferenceSystemMapper.getStringId(1));
-    Assertions.assertNull(GeographicSpatialReferenceSystemMapper.getStringId(2));
     Assertions.assertNull(GeographicSpatialReferenceSystemMapper.getStringId(3857));
-    Assertions.assertNull(GeographicSpatialReferenceSystemMapper.getStringId(9999));
+    Assertions.assertNull(GeographicSpatialReferenceSystemMapper.getStringId(999999));
   }
 
   @Test
   public void getSridReturnsCorrectSridForValidStringId() {
-    // GEOMETRY.
+    // GEOMETRY: Spark-specific and OGC primary string IDs.
     Assertions.assertEquals(0, CartesianSpatialReferenceSystemMapper.getSrid("SRID:0"));
     Assertions.assertEquals(3857, CartesianSpatialReferenceSystemMapper.getSrid("EPSG:3857"));
     Assertions.assertEquals(4326, CartesianSpatialReferenceSystemMapper.getSrid("OGC:CRS84"));
+    Assertions.assertEquals(4267, CartesianSpatialReferenceSystemMapper.getSrid("OGC:CRS27"));
+    Assertions.assertEquals(4269, CartesianSpatialReferenceSystemMapper.getSrid("OGC:CRS83"));
+    // GEOMETRY: EPSG aliases for OGC-overridden SRIDs.
+    Assertions.assertEquals(4326, CartesianSpatialReferenceSystemMapper.getSrid("EPSG:4326"));
+    Assertions.assertEquals(4267, CartesianSpatialReferenceSystemMapper.getSrid("EPSG:4267"));
+    Assertions.assertEquals(4269, CartesianSpatialReferenceSystemMapper.getSrid("EPSG:4269"));
+    // GEOMETRY: PROJ-sourced registry.
+    Assertions.assertEquals(32601, CartesianSpatialReferenceSystemMapper.getSrid("EPSG:32601"));
     // GEOGRAPHY.
     Assertions.assertEquals(4326, GeographicSpatialReferenceSystemMapper.getSrid("OGC:CRS84"));
+    Assertions.assertEquals(4326, GeographicSpatialReferenceSystemMapper.getSrid("EPSG:4326"));
+    Assertions.assertEquals(4267, GeographicSpatialReferenceSystemMapper.getSrid("OGC:CRS27"));
+    Assertions.assertEquals(4269, GeographicSpatialReferenceSystemMapper.getSrid("EPSG:4269"));
   }
 
   @Test
   public void getSridReturnsNullForInvalidStringId() {
-    // GEOMETRY.
+    // GEOMETRY: String IDs not in the registry.
     Assertions.assertNull(CartesianSpatialReferenceSystemMapper.getSrid("INVALID:ID"));
-    Assertions.assertNull(CartesianSpatialReferenceSystemMapper.getSrid("EPSG:9999"));
-    // GEOGRAPHY.
+    Assertions.assertNull(CartesianSpatialReferenceSystemMapper.getSrid("EPSG:999999"));
+    // GEOGRAPHY: non-geographic or invalid string IDs.
     Assertions.assertNull(GeographicSpatialReferenceSystemMapper.getSrid("INVALID:ID"));
-    Assertions.assertNull(GeographicSpatialReferenceSystemMapper.getSrid("EPSG:9999"));
+    Assertions.assertNull(GeographicSpatialReferenceSystemMapper.getSrid("EPSG:999999"));
     Assertions.assertNull(GeographicSpatialReferenceSystemMapper.getSrid("SRID:0"));
     Assertions.assertNull(GeographicSpatialReferenceSystemMapper.getSrid("EPSG:3857"));
   }

@@ -129,6 +129,23 @@ class GeographyDataFrameSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("createDataFrame and round-trip with multiple geographic SRIDs (OGC overrides)") {
+    // E2E: GeographyType supports 4326 (OGC:CRS84), 4267 (OGC:CRS27), 4269 (OGC:CRS83).
+    val rows = Seq(
+      Row(Geography.fromWKB(point1, 4326)),
+      Row(Geography.fromWKB(point2, 4267)),
+      Row(Geography.fromWKB(point1, 4269)))
+    val schema4326 = StructType(Seq(StructField("g", GeographyType(4326), nullable = false)))
+    val schema4267 = StructType(Seq(StructField("g", GeographyType(4267), nullable = false)))
+    val schema4269 = StructType(Seq(StructField("g", GeographyType(4269), nullable = false)))
+    val df4326 = spark.createDataFrame(sparkContext.parallelize(Seq(rows(0))), schema4326)
+    val df4267 = spark.createDataFrame(sparkContext.parallelize(Seq(rows(1))), schema4267)
+    val df4269 = spark.createDataFrame(sparkContext.parallelize(Seq(rows(2))), schema4269)
+    checkAnswer(df4326, Seq(rows(0)))
+    checkAnswer(df4267, Seq(rows(1)))
+    checkAnswer(df4269, Seq(rows(2)))
+  }
+
   test("createDataFrame APIs with Geography.fromWKB") {
     // 1. Test createDataFrame with RDD of Geography objects
     val geography1 = Geography.fromWKB(point1, 4326)

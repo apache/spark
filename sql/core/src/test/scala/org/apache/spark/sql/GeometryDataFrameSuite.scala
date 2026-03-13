@@ -130,6 +130,30 @@ class GeometryDataFrameSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("createDataFrame and round-trip with Geometry SRIDs including overrides") {
+    // E2E: GeometryType supports 0, 3857, 4326, 4267, 4269 (OGC overrides).
+    val geom0 = Geometry.fromWKB(point1, 0)
+    val geom3857 = Geometry.fromWKB(point2, 3857)
+    val geom4326 = Geometry.fromWKB(point1, 4326)
+    val geom4269 = Geometry.fromWKB(point2, 4269)
+    val schema0 = StructType(Seq(StructField("g", GeometryType(0), nullable = false)))
+    val schema3857 = StructType(Seq(StructField("g", GeometryType(3857), nullable = false)))
+    val schema4326 = StructType(Seq(StructField("g", GeometryType(4326), nullable = false)))
+    val schema4269 = StructType(Seq(StructField("g", GeometryType(4269), nullable = false)))
+    checkAnswer(
+      spark.createDataFrame(sparkContext.parallelize(Seq(Row(geom0))), schema0),
+      Seq(Row(geom0)))
+    checkAnswer(
+      spark.createDataFrame(sparkContext.parallelize(Seq(Row(geom3857))), schema3857),
+      Seq(Row(geom3857)))
+    checkAnswer(
+      spark.createDataFrame(sparkContext.parallelize(Seq(Row(geom4326))), schema4326),
+      Seq(Row(geom4326)))
+    checkAnswer(
+      spark.createDataFrame(sparkContext.parallelize(Seq(Row(geom4269))), schema4269),
+      Seq(Row(geom4269)))
+  }
+
   test("createDataFrame APIs with Geometry.fromWKB") {
     // 1. Test createDataFrame with RDD of Geometry objects
     val geometry1 = Geometry.fromWKB(point1, 0)
