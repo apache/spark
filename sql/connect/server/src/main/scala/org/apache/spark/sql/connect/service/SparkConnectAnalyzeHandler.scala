@@ -244,7 +244,10 @@ private[connect] class SparkConnectAnalyzeHandler(
       // RequestDecompressionInterceptor.decompressAnalyzePlanRequest() to handle
       // this case. The interceptor has a default case that throws UnsupportedOperationException
       // for unhandled cases, which will fail tests and block CI if you forget to update it.
-      case other => throw InvalidPlanInput(s"Unknown Analyze Method $other!")
+      case other =>
+        throw InvalidPlanInput(
+          "CONNECT_INVALID_PLAN.UNKNOWN_ANALYZE_METHOD",
+          Map("other" -> other.toString))
     }
 
     builder

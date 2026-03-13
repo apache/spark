@@ -198,7 +198,7 @@ case class StreamingSymmetricHashJoinExec(
   private val allowMultipleStatefulOperators =
     conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)
 
-  private val useVirtualColumnFamilies = stateFormatVersion == 3
+  private val useVirtualColumnFamilies = stateFormatVersion >= 3
 
   // Determine the store names and metadata version based on format version
   private val (numStoresPerPartition, _stateStoreNames, _operatorStateMetadataVersion) =
@@ -292,8 +292,12 @@ case class StreamingSymmetricHashJoinExec(
       val info = getStateInfo
       val stateSchemaDir = stateSchemaDirPath()
 
+      // V4 uses VCF like V3, which requires schema version 3. The stateSchemaVersion
+      // parameter may carry the stateFormatVersion (e.g. 4) from IncrementalExecution,
+      // so we hardcode 3 here for the VCF path.
+      val effectiveSchemaVersion = 3
       validateAndWriteStateSchema(
-        hadoopConf, batchId, stateSchemaVersion, info, stateSchemaDir, session
+        hadoopConf, batchId, effectiveSchemaVersion, info, stateSchemaDir, session
       )
     } else {
       var result: Map[String, (StructType, StructType)] = Map.empty
@@ -437,7 +441,7 @@ case class StreamingSymmetricHashJoinExec(
           removedRowIter.filterNot { kv =>
             stateFormatVersion match {
               case 1 => matchesWithRightSideState(new UnsafeRowPair(kv.key, kv.value))
-              case 2 | 3 => kv.matched
+              case 2 | 3 | 4 => kv.matched
               case _ => throwBadStateFormatVersionException()
             }
           }.map(pair => joinedRow.withLeft(pair.value).withRight(nullRight))
@@ -463,7 +467,7 @@ case class StreamingSymmetricHashJoinExec(
           removedRowIter.filterNot { kv =>
             stateFormatVersion match {
               case 1 => matchesWithLeftSideState(new UnsafeRowPair(kv.key, kv.value))
-              case 2 | 3 => kv.matched
+              case 2 | 3 | 4 => kv.matched
               case _ => throwBadStateFormatVersionException()
             }
           }.map(pair => joinedRow.withLeft(nullLeft).withRight(pair.value))
@@ -479,7 +483,7 @@ case class StreamingSymmetricHashJoinExec(
       case FullOuter =>
         lazy val isKeyToValuePairMatched = (kv: KeyToValuePair) =>
           stateFormatVersion match {
-            case 2 | 3 => kv.matched
+            case 2 | 3 | 4 => kv.matched
             case _ => throwBadStateFormatVersionException()
           }
 
@@ -801,7 +805,7 @@ case class StreamingSymmetricHashJoinExec(
               s.evictByKeyCondition(stateKeyWatermarkPredicateFunc)
 
             case s: SupportsEvictByTimestamp =>
-              s.evictByTimestamp(stateWatermark)
+              s.evictByTimestamp(watermarkMsToStateTimestamp(stateWatermark))
           }
         case Some(JoinStateValueWatermarkPredicate(_, stateWatermark)) =>
           joinStateManager match {
@@ -809,7 +813,7 @@ case class StreamingSymmetricHashJoinExec(
               s.evictByValueCondition(stateValueWatermarkPredicateFunc)
 
             case s: SupportsEvictByTimestamp =>
-              s.evictByTimestamp(stateWatermark)
+              s.evictByTimestamp(watermarkMsToStateTimestamp(stateWatermark))
           }
         case _ => 0L
       }
@@ -833,7 +837,7 @@ case class StreamingSymmetricHashJoinExec(
               s.evictAndReturnByKeyCondition(stateKeyWatermarkPredicateFunc)
 
             case s: SupportsEvictByTimestamp =>
-              s.evictAndReturnByTimestamp(stateWatermark)
+              s.evictAndReturnByTimestamp(watermarkMsToStateTimestamp(stateWatermark))
           }
         case Some(JoinStateValueWatermarkPredicate(_, stateWatermark)) =>
           joinStateManager match {
@@ -841,11 +845,18 @@ case class StreamingSymmetricHashJoinExec(
               s.evictAndReturnByValueCondition(stateValueWatermarkPredicateFunc)
 
             case s: SupportsEvictByTimestamp =>
-              s.evictAndReturnByTimestamp(stateWatermark)
+              s.evictAndReturnByTimestamp(watermarkMsToStateTimestamp(stateWatermark))
           }
         case _ => Iterator.empty
       }
     }
+
+    /**
+     * V4 stores timestamps in microseconds (TimestampType) while the watermark
+     * is tracked in milliseconds. Convert ms to microseconds for eviction calls.
+     */
+    private def watermarkMsToStateTimestamp(watermarkMs: Long): Long =
+      watermarkMs * 1000
 
     /** Commit changes to the buffer state */
     def commitState(): Unit = {

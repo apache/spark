@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.{List, Locale}
 import java.util.concurrent.TimeUnit
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, ListBuffer, Set}
+import scala.collection.mutable
+import scala.collection.mutable.{ArrayBuffer, HashMap, ListBuffer}
 import scala.jdk.CollectionConverters._
 
 import org.antlr.v4.runtime.{ParserRuleContext, RuleContext, Token}
@@ -904,7 +905,7 @@ class AstBuilder extends DataTypeAstBuilder
               ctx = insertParams.relationCtx,
               ident = ident,
               optionsClause = insertParams.options,
-              writePrivileges = Seq(TableWritePrivilege.INSERT),
+              writePrivileges = Set(TableWritePrivilege.INSERT),
               isStreaming = false),
             partitionSpec = insertParams.partitionSpec,
             userSpecifiedCols = insertParams.userSpecifiedCols,
@@ -922,7 +923,7 @@ class AstBuilder extends DataTypeAstBuilder
               ctx = insertParams.relationCtx,
               ident = ident,
               optionsClause = insertParams.options,
-              writePrivileges = Seq(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE),
+              writePrivileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE),
               isStreaming = false),
             partitionSpec = insertParams.partitionSpec,
             userSpecifiedCols = insertParams.userSpecifiedCols,
@@ -936,7 +937,7 @@ class AstBuilder extends DataTypeAstBuilder
         val options = Option(ctx.optionsClause())
         withIdentClause(ctx.identifierReference, Seq(query), (ident, otherPlans) => {
           val table = createUnresolvedRelation(ctx.identifierReference, ident, options,
-            Seq(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE), isStreaming = false)
+            Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE), isStreaming = false)
           val deleteExpr = expression(ctx.whereClause().booleanExpression())
           val isByName = ctx.NAME() != null
           val schemaEvolutionWriteOption: Map[String, String] =
@@ -1051,7 +1052,7 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitDeleteFromTable(
       ctx: DeleteFromTableContext): LogicalPlan = withOrigin(ctx) {
     val table = createUnresolvedRelation(
-      ctx.identifierReference, writePrivileges = Seq(TableWritePrivilege.DELETE))
+      ctx.identifierReference, writePrivileges = Set(TableWritePrivilege.DELETE))
     val tableAlias = getTableAliasWithoutColumnAlias(ctx.tableAlias(), "DELETE")
     val aliasedTable = tableAlias.map(SubqueryAlias(_, table)).getOrElse(table)
     val predicate = if (ctx.whereClause() != null) {
@@ -1064,7 +1065,7 @@ class AstBuilder extends DataTypeAstBuilder
 
   override def visitUpdateTable(ctx: UpdateTableContext): LogicalPlan = withOrigin(ctx) {
     val table = createUnresolvedRelation(
-      ctx.identifierReference, writePrivileges = Seq(TableWritePrivilege.UPDATE))
+      ctx.identifierReference, writePrivileges = Set(TableWritePrivilege.UPDATE))
     val tableAlias = getTableAliasWithoutColumnAlias(ctx.tableAlias(), "UPDATE")
     val aliasedTable = tableAlias.map(SubqueryAlias(_, table)).getOrElse(table)
     val assignments = withAssignments(ctx.setClause().assignmentList())
@@ -2515,7 +2516,7 @@ class AstBuilder extends DataTypeAstBuilder
       ctx = ctx,
       ident = ident,
       optionsClause = Option(ctx.optionsClause),
-      writePrivileges = Seq.empty,
+      writePrivileges = Set.empty,
       isStreaming = true)
 
     val table = mayApplyAliasPlan(ctx.tableAlias, relation)
@@ -3856,7 +3857,7 @@ class AstBuilder extends DataTypeAstBuilder
   private def createUnresolvedRelation(
       ctx: IdentifierReferenceContext,
       optionsClause: Option[OptionsClauseContext] = None,
-      writePrivileges: Seq[TableWritePrivilege] = Nil): LogicalPlan = withOrigin(ctx) {
+      writePrivileges: Set[TableWritePrivilege] = Set.empty): LogicalPlan = withOrigin(ctx) {
     val options = resolveOptions(optionsClause)
     withIdentClause(ctx, parts => {
       val relation = new UnresolvedRelation(parts, options, isStreaming = false)
@@ -3871,7 +3872,7 @@ class AstBuilder extends DataTypeAstBuilder
       ctx: ParserRuleContext,
       ident: Seq[String],
       optionsClause: Option[OptionsClauseContext],
-      writePrivileges: Seq[TableWritePrivilege],
+      writePrivileges: Set[TableWritePrivilege],
       isStreaming: Boolean): UnresolvedRelation = withOrigin(ctx) {
     val options = resolveOptions(optionsClause)
     val relation = new UnresolvedRelation(ident, options, isStreaming)
@@ -3951,8 +3952,8 @@ class AstBuilder extends DataTypeAstBuilder
       ctx: ParserRuleContext,
       calendarInterval: CalendarInterval,
       units: Seq[String]): Literal = {
-    val yearMonthFields = Set.empty[Byte]
-    val dayTimeFields = Set.empty[Byte]
+    val yearMonthFields = mutable.Set.empty[Byte]
+    val dayTimeFields = mutable.Set.empty[Byte]
     for (unit <- units) {
       if (YearMonthIntervalType.stringToField.contains(unit)) {
         yearMonthFields += YearMonthIntervalType.stringToField(unit)
@@ -6102,7 +6103,7 @@ class AstBuilder extends DataTypeAstBuilder
             ctx.identifierReference,
             ident,
             None,
-            writePrivileges = Nil,
+            writePrivileges = Set.empty,
             isStreaming = false),
           ident, isLazy, options)
       }

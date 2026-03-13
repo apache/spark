@@ -45,16 +45,16 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  * @param expectedPartitionKeys Optional sequence of expected partition key values and their
  *                              split counts
  * @param reducers Optional reducers to apply to partition keys for grouping compatibility
- * @param applyPartialClustering Whether to apply partial clustering for skewed data
- * @param replicatePartitions Whether to replicate partitions across multiple keys
+ * @param distributePartitions When true, splits for a key are distributed across the expected
+ *                             partitions (padding with empty partitions). When false, all splits
+ *                             are replicated to every expected partition for that key.
  */
 case class GroupPartitionsExec(
     child: SparkPlan,
     @transient joinKeyPositions: Option[Seq[Int]] = None,
     @transient expectedPartitionKeys: Option[Seq[(InternalRowComparableWrapper, Int)]] = None,
     @transient reducers: Option[Seq[Option[Reducer[_, _]]]] = None,
-    @transient applyPartialClustering: Boolean = false,
-    @transient replicatePartitions: Boolean = false
+    @transient distributePartitions: Boolean = false
   ) extends UnaryExecNode {
 
   override def outputPartitioning: Partitioning = {
@@ -91,7 +91,7 @@ case class GroupPartitionsExec(
     val alignedPartitions = expectedPartitionKeys.get.flatMap { case (key, numSplits) =>
       if (numSplits > 1) isGrouped = false
       val splits = keyMap.getOrElse(key, Seq.empty)
-      if (applyPartialClustering && !replicatePartitions) {
+      if (distributePartitions) {
         // Distribute splits across expected partitions, padding with empty sequences
         val paddedSplits = splits.map(Seq(_)).padTo(numSplits, Seq.empty)
         paddedSplits.map((key, _))
