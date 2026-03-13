@@ -41,6 +41,11 @@ private[sql] object SimpleSparkConnectService {
   private val stopCommand = "q"
   private val ArrowLeakExitCode = 77
 
+  // Holds a synthetic Arrow buffer for ArrowLeakDetectionE2ETest. Stored as an object-level
+  // field (not a local variable) so the JVM cannot reclaim it before the shutdown hook checks
+  // getAllocatedMemory. Non-null only when SPARK_TEST_ARROW_LEAK is set.
+  @volatile private var testLeakBuf: AnyRef = null
+
   def main(args: Array[String]): Unit = {
     val conf = new SparkConf()
       .set("spark.plugins", "org.apache.spark.sql.connect.SparkConnectPlugin")
@@ -54,33 +59,23 @@ private[sql] object SimpleSparkConnectService {
     // immediately: execution threads stop accepting new work once the gRPC server shuts down but
     // may still be flushing their last Arrow batch, and we should not force-close them.
     // halt() is used instead of exit() because exit() deadlocks inside a shutdown hook.
+    //
+    // If testLeakBuf is set (ArrowLeakDetectionE2ETest only), the allocation is already present
+    // in the rootAllocator; skip the wait and check immediately.
     ShutdownHookManager.addShutdownHook(10) { () =>
-      // Synthetic leak for ArrowLeakDetectionE2ETest only. Must be injected here, not in the
-      // stop handler, so SparkContext shutdown cannot release it before the check below runs.
-      // Hold a strong reference through the polling loop: Arrow's AllocationManager registers a
-      // Cleaner on ArrowBuf, so a discarded (unreferenced) buffer can be reclaimed by GC during
-      // Thread.sleep(), decrementing getAllocatedMemory to 0 and defeating the synthetic leak.
-      val syntheticLeakBuf =
-        if (sys.env.contains("SPARK_TEST_ARROW_LEAK")) {
-          val leakyAllocator = ArrowUtils.rootAllocator.newChildAllocator("test-leak", 0, 1024)
-          leakyAllocator.buffer(64) // intentionally never closed — validates leak detection
-        } else null
-      try {
+      if (testLeakBuf == null) {
         val deadline = System.currentTimeMillis() + 2 * 60 * 1000L
         while (ArrowUtils.rootAllocator.getAllocatedMemory != 0 &&
           System.currentTimeMillis() < deadline) {
           Thread.sleep(100)
         }
-        val leaked = ArrowUtils.rootAllocator.getAllocatedMemory
-        if (leaked != 0) {
-          // scalastyle:off println
-          println(s"Arrow rootAllocator memory leak detected: $leaked bytes still allocated")
-          // scalastyle:on println
-          Runtime.getRuntime.halt(ArrowLeakExitCode)
-        }
-      } finally {
-        // Keep syntheticLeakBuf reachable through the check above.
-        java.lang.ref.Reference.reachabilityFence(syntheticLeakBuf)
+      }
+      val leaked = ArrowUtils.rootAllocator.getAllocatedMemory
+      if (leaked != 0) {
+        // scalastyle:off println
+        println(s"Arrow rootAllocator memory leak detected: $leaked bytes still allocated")
+        // scalastyle:on println
+        Runtime.getRuntime.halt(ArrowLeakExitCode)
       }
     }
 
@@ -96,6 +91,13 @@ private[sql] object SimpleSparkConnectService {
         // Wait for 1 min for the server to stop
         SparkConnectService.stop(Some(1), Some(TimeUnit.MINUTES))
         sparkSession.close()
+        // Synthetic leak for ArrowLeakDetectionE2ETest only. Injected here, after
+        // SparkContext has stopped, so that it is visible to the shutdown hook's
+        // getAllocatedMemory check. The object-level field keeps it reachable.
+        if (sys.env.contains("SPARK_TEST_ARROW_LEAK")) {
+          val leakyAllocator = ArrowUtils.rootAllocator.newChildAllocator("test-leak", 0, 1024)
+          testLeakBuf = leakyAllocator.buffer(64) // intentionally never closed
+        }
         exit(0) // triggers shutdown hooks; Arrow leak check runs in the hook registered above
       }
     }
