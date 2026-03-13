@@ -3146,6 +3146,7 @@ object SQLConf {
       .doc("When true, enables state format version 4 for stream-stream joins. " +
         "This config will be removed once V4 is complete.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefaultFunction(() => Utils.isTesting)
 
