@@ -112,14 +112,13 @@ class FunctionResolution(
       unresolvedFunc: UnresolvedFunction): Option[Expression] = {
     if (nameParts.length == 3 &&
         nameParts.head.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME)) {
-      // Try resolving as a session-namespace function (builtin or temp)
-      FunctionResolution.sessionNamespaceKind(nameParts).flatMap { kind =>
-        val funcName = nameParts.last
-        val expr = v1SessionCatalog.resolveScalarFunction(kind, funcName, unresolvedFunc.arguments)
+      v1SessionCatalog.identifierFromSystemNameParts(nameParts).flatMap { ident =>
+        val expr = v1SessionCatalog.resolveScalarFunctionByIdentifier(
+          ident, unresolvedFunc.arguments)
         if (expr.isEmpty) {
-          if (v1SessionCatalog.lookupFunctionInfo(
-              kind, funcName, tableFunction = true).isDefined) {
-            throw QueryCompilationErrors.notAScalarFunctionError(funcName, unresolvedFunc)
+          if (v1SessionCatalog.lookupFunctionInfoByIdentifier(
+              ident, tableFunction = true).isDefined) {
+            throw QueryCompilationErrors.notAScalarFunctionError(ident.funcName, unresolvedFunc)
           }
         }
         expr.map(e => validateFunction(e, unresolvedFunc.arguments.length, unresolvedFunc))
@@ -186,13 +185,12 @@ class FunctionResolution(
       arguments: Seq[Expression]): Option[LogicalPlan] = {
     if (nameParts.length == 3 &&
         nameParts.head.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME)) {
-      FunctionResolution.sessionNamespaceKind(nameParts).flatMap { kind =>
-        val funcName = nameParts.last
-        val resolvedPlan = v1SessionCatalog.resolveTableFunction(kind, funcName, arguments)
+      v1SessionCatalog.identifierFromSystemNameParts(nameParts).flatMap { ident =>
+        val resolvedPlan = v1SessionCatalog.resolveTableFunctionByIdentifier(ident, arguments)
         if (resolvedPlan.isDefined) return resolvedPlan
-        if (v1SessionCatalog.lookupFunctionInfo(
-            kind, funcName, tableFunction = false).isDefined) {
-          throw QueryCompilationErrors.notATableFunctionError(funcName)
+        if (v1SessionCatalog.lookupFunctionInfoByIdentifier(
+            ident, tableFunction = false).isDefined) {
+          throw QueryCompilationErrors.notATableFunctionError(ident.funcName)
         }
         None
       }
@@ -263,9 +261,9 @@ class FunctionResolution(
     if (nameParts.size == 1 && unresolvedFunc.exists(_.isInternal)) {
       FunctionRegistry.internal.lookupFunction(FunctionIdentifier(nameParts.head))
     } else {
-      FunctionResolution.sessionNamespaceKind(nameParts) match {
-        case Some(kind) =>
-          v1SessionCatalog.lookupFunctionInfo(kind, nameParts.last, tableFunction = false)
+      v1SessionCatalog.identifierFromSystemNameParts(nameParts) match {
+        case Some(ident) =>
+          v1SessionCatalog.lookupFunctionInfoByIdentifier(ident, tableFunction = false)
         case None =>
           if (nameParts.size == 1) {
             v1SessionCatalog.lookupBuiltinOrTempFunction(nameParts.head)
@@ -277,9 +275,9 @@ class FunctionResolution(
   }
 
   def lookupBuiltinOrTempTableFunction(nameParts: Seq[String]): Option[ExpressionInfo] = {
-    FunctionResolution.sessionNamespaceKind(nameParts) match {
-      case Some(kind) =>
-        v1SessionCatalog.lookupFunctionInfo(kind, nameParts.last, tableFunction = true)
+    v1SessionCatalog.identifierFromSystemNameParts(nameParts) match {
+      case Some(ident) =>
+        v1SessionCatalog.lookupFunctionInfoByIdentifier(ident, tableFunction = true)
       case None =>
         if (nameParts.length == 1) {
           v1SessionCatalog.lookupBuiltinOrTempTableFunction(nameParts.head)
