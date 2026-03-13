@@ -334,7 +334,7 @@ object FunctionRegistry {
   type FunctionBuilder = Seq[Expression] => Expression
 
   /** 3-part identifier for a builtin function: system.builtin.funcName */
-  private[catalyst] def builtinFunctionIdentifier(name: String): FunctionIdentifier =
+  private[sql] def builtinFunctionIdentifier(name: String): FunctionIdentifier =
     new FunctionIdentifier(
       name.toLowerCase(Locale.ROOT),
       Some(CatalogManager.BUILTIN_NAMESPACE),

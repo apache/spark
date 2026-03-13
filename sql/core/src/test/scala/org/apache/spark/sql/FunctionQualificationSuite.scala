@@ -21,6 +21,8 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo, Literal}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.Range
+import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.IntegerType
 
@@ -1223,6 +1225,43 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
         }
         sql("DROP FUNCTION IF EXISTS session.test_func")
       }
+    }
+  }
+
+  test("SECTION 16h: PrioritizeSystemCatalog=true - table function resolves to system builtin") {
+    withSQLConf("spark.sql.legacy.prioritizeSystemCatalog" -> "true") {
+      withDatabase("builtin") {
+        sql("CREATE DATABASE builtin")
+        // No persistent table function named range; builtin.range(3) resolves to system
+        checkAnswer(sql("SELECT * FROM builtin.range(3)"), Seq(Row(0), Row(1), Row(2)))
+        checkAnswer(sql("SELECT * FROM system.builtin.range(3)"), Seq(Row(0), Row(1), Row(2)))
+      }
+    }
+  }
+
+  test("SECTION 16i: PrioritizeSystemCatalog=false - persistent table function wins") {
+    withSQLConf("spark.sql.legacy.prioritizeSystemCatalog" -> "false") {
+      withDatabase("builtin") {
+        sql("CREATE DATABASE builtin")
+        sql("CREATE FUNCTION builtin.my_tvf() RETURNS TABLE(id INT) RETURN SELECT 1 AS id")
+        try {
+          checkAnswer(sql("SELECT * FROM builtin.my_tvf()"), Row(1))
+          checkAnswer(sql("SELECT * FROM system.builtin.range(2)"), Seq(Row(0), Row(1)))
+        } finally {
+          sql("DROP FUNCTION IF EXISTS builtin.my_tvf")
+        }
+      }
+    }
+  }
+
+  test("SECTION 16j: Non-default catalog - builtin still resolves to system when prioritized") {
+    withSQLConf(
+      "spark.sql.catalog.othercat" -> classOf[InMemoryTableCatalog].getName,
+      SQLConf.DEFAULT_CATALOG.key -> "othercat",
+      "spark.sql.legacy.prioritizeSystemCatalog" -> "true") {
+      // Current catalog is othercat (no builtin namespace); builtin.abs resolves to system
+      checkAnswer(sql("SELECT builtin.abs(-5)"), Row(5))
+      checkAnswer(sql("SELECT system.builtin.abs(-5)"), Row(5))
     }
   }
 }

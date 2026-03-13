@@ -193,21 +193,12 @@ case class ShowFunctionsCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // If pattern is not specified, we use '*', which is used to
     // match any sequence of characters (including no characters).
-    // For backward compatibility, system catalog functions (builtin/session) display as
-    // the simple function name only; persistent functions show full qualified name.
-    def displayName(f: FunctionIdentifier): String = {
-      if (f.catalog.exists(_.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME))) {
-        f.funcName
-      } else {
-        f.unquotedString
-      }
-    }
     val functionNames =
       sparkSession.sessionState.catalog
         .listFunctions(db, pattern.getOrElse("*"))
         .collect {
-          case (f, "USER") if showUserFunctions => displayName(f)
-          case (f, "SYSTEM") if showSystemFunctions => displayName(f)
+          case (f, "USER") if showUserFunctions => f.displayNameForShowFunctions
+          case (f, "SYSTEM") if showSystemFunctions => f.displayNameForShowFunctions
         }
     // Hard code "<>", "!=", "between", "case", and "||"
     // for now as there is no corresponding functions.

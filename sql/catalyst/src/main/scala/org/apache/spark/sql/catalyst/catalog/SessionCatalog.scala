@@ -2440,7 +2440,8 @@ class SessionCatalog(
    * Single entry point for resolution: 2-part (builtin.func, session.func) or
    * 3-part (system.builtin.func, system.session.func).
    */
-  def identifierFromSystemNameParts(nameParts: Seq[String]): Option[FunctionIdentifier] = {
+  private[sql] def identifierFromSystemNameParts(
+      nameParts: Seq[String]): Option[FunctionIdentifier] = {
     val threePart = nameParts.size match {
       case 2 if nameParts.head.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE) ||
                   nameParts.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) =>
@@ -2736,7 +2737,6 @@ class SessionCatalog(
   private def listBuiltinAndTempFunctions(pattern: String): Seq[FunctionIdentifier] = {
     val functions = (functionRegistry.listFunction() ++ tableFunctionRegistry.listFunction())
       .filter(f =>
-        f.database.isEmpty ||
         isTempFunctionIdentifier(f) ||
         (f.database.contains(CatalogManager.BUILTIN_NAMESPACE) &&
           f.catalog.contains(CatalogManager.SYSTEM_CATALOG_NAME)))
@@ -2745,10 +2745,7 @@ class SessionCatalog(
       } else {
         f
       })
-    val displayName = (f: FunctionIdentifier) =>
-      if (f.catalog.exists(_.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME))) f.funcName
-      else f.unquotedString
-    val namesToFilter = functions.map(displayName)
+    val namesToFilter = functions.map(_.displayNameForShowFunctions)
     val matchedNames = StringUtils.filterPattern(namesToFilter, pattern).toSet
     functions.zip(namesToFilter).filter { case (_, name) => matchedNames.contains(name) }.map(_._1)
   }
