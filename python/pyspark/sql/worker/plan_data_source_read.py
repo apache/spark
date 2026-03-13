@@ -238,7 +238,7 @@ def write_read_func_and_partitions(
 
     if not isinstance(reader, DataSourceStreamReader):
         # The partitioning of python batch source read is determined before query execution.
-        partitions = reader.partitions()  # type: ignore[call-arg]
+        partitions = reader.partitions()
         if not isinstance(partitions, list):
             raise PySparkRuntimeError(
                 errorClass="DATA_SOURCE_TYPE_MISMATCH",
