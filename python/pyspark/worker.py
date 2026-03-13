@@ -2821,10 +2821,13 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
         for i in range(num_udfs)
     ]
 
+    def require_single_udf(udf_kind: str) -> None:
+        assert num_udfs == 1, f"Expected exactly one {udf_kind} UDF, but got {num_udfs}."
+
     if eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
         import pyarrow as pa
 
-        assert num_udfs == 1, "One MAP_ARROW_ITER UDF expected here."
+        require_single_udf("MAP_ARROW_ITER")
         udf_func: Callable[[Iterator[pa.RecordBatch]], Iterator[pa.RecordBatch]] = udfs[0][0]
 
         def func(split_index: int, batches: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
@@ -2885,11 +2888,10 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
     is_map_pandas_iter = eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
 
     if is_scalar_iter or is_map_pandas_iter:
-        # TODO: Better error message for num_udfs != 1
         if is_scalar_iter:
-            assert num_udfs == 1, "One SCALAR_ITER UDF expected here."
+            require_single_udf("SCALAR_ITER")
         if is_map_pandas_iter:
-            assert num_udfs == 1, "One MAP_PANDAS_ITER UDF expected here."
+            require_single_udf("MAP_PANDAS_ITER")
 
         arg_offsets, udf = udfs[0]
 
