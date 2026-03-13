@@ -79,12 +79,10 @@ class PartitionPredicateImpl private (
   override def references(): Array[NamedReference] = {
     val partitionNames = partitionSchema.map(_.name)
     val ordinals = catalystExpr.references.flatMap { ref =>
-      val idx = partitionNames.indexWhere(_ == ref.name)
-      if (idx >= 0) Some(idx) else None
-    }
-    ordinals.toArray.sorted.distinct.map { ord =>
-      PartitionColumnReferenceImpl(ord, Array(partitionSchema(ord).name)): NamedReference
-    }
+      partitionNames.zipWithIndex.find(_._1 == ref.name).map(_._2)
+    }.toSet.toArray.sorted // De-duplicate repeated references and sort by ordinal
+    ordinals.map(ord =>
+      PartitionColumnReferenceImpl(ord, Array(partitionSchema(ord).name)): NamedReference)
   }
 
   override def equals(obj: Any): Boolean = obj match {

@@ -174,10 +174,7 @@ object PushDownUtils {
             // evaluated faster, while the untranslated filters are complicated filters that take
             // more time to evaluate, so we want to evaluate the translatable filters first.
             val untranslatableSet = ExpressionSet(untranslatableExprs)
-            val allPostScanFilters = dataFilters ++ rejectedPartitionPredicates
-            val (untranslatableFilters, translatableFilters) =
-              allPostScanFilters.partition(untranslatableSet.contains)
-            translatableFilters ++ untranslatableFilters
+            (dataFilters ++ rejectedPartitionPredicates).sortBy(untranslatableSet.contains)
           case _ =>
             // Normally translated filters (postScanFilters) are simple filters that can be
             // evaluated faster, while the untranslated filters are complicated filters that take
