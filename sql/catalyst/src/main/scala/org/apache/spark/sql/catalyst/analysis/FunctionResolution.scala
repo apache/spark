@@ -101,6 +101,21 @@ class FunctionResolution(
           } else {
             Seq(persistentCandidate, systemCandidate)
           }
+        case 2 if catalogManager.isCatalogRegistered(nameParts(0)) =>
+          // Partially qualified catalog.func: use catalog's default namespace, or empty for
+          // catalogs that register functions at catalog level (e.g. JDBC).
+          try {
+            val cat = catalogManager.catalog(nameParts(0))
+            val defaultNs = cat.defaultNamespace()
+            if (defaultNs != null && defaultNs.nonEmpty) {
+              Seq(Seq(nameParts(0), defaultNs(0), nameParts(1)))
+            } else {
+              // No default namespace: use 2-part so ident has empty namespace
+              Seq(nameParts)
+            }
+          } catch {
+            case _: CatalogNotFoundException => Seq(ensureThreePart(nameParts))
+          }
         case _ =>
           Seq(ensureThreePart(nameParts))
       }

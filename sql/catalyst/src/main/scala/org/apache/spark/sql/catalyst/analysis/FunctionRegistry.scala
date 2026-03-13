@@ -212,11 +212,24 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
 
   // Resolution of the function name is always case insensitive; database and catalog
   // are preserved so system.session.foo and spark_catalog.session.foo do not collide.
+  // Unqualified (1-part) lookups resolve to the builtin 3-part key so callers using
+  // FunctionIdentifier("time") find functions registered as system.builtin.time.
+  // 2-part session.func (database=session, no catalog) resolves to the temp 3-part key.
   private def normalizeFuncName(name: FunctionIdentifier): FunctionIdentifier = {
-    new FunctionIdentifier(
-      name.funcName.toLowerCase(Locale.ROOT),
-      name.database,
-      name.catalog)
+    if (name.database.isEmpty && name.catalog.isEmpty) {
+      FunctionRegistry.builtinFunctionIdentifier(name.funcName)
+    } else if (name.database.exists(_.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) &&
+        name.catalog.isEmpty) {
+      new FunctionIdentifier(
+        name.funcName.toLowerCase(Locale.ROOT),
+        Some(CatalogManager.SESSION_NAMESPACE),
+        Some(CatalogManager.SYSTEM_CATALOG_NAME))
+    } else {
+      new FunctionIdentifier(
+        name.funcName.toLowerCase(Locale.ROOT),
+        name.database,
+        name.catalog)
+    }
   }
 
   override def registerFunction(

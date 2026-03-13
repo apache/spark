@@ -2344,7 +2344,10 @@ class SessionCatalog(
 
       hasTemp || hasBuiltin
     } else {
-      functionRegistry.functionExists(name) || tableFunctionRegistry.functionExists(name)
+      // Persistent functions are registered with qualified ident (catalog set)
+      val qualifiedIdent = qualifyIdentifier(name)
+      functionRegistry.functionExists(qualifiedIdent) ||
+        tableFunctionRegistry.functionExists(qualifiedIdent)
     }
   }
 
