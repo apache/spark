@@ -2508,6 +2508,7 @@ object SQLConf {
       "the `[]` operator. Below this threshold, linear scan is used. For key types that do not " +
       "support hashing (e.g. arrays, structs), linear scan is always used regardless of map size.")
     .version("4.2.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .intConf
     .checkValue(_ >= 0, "The threshold must be non-negative.")
     .createWithDefault(1000)
