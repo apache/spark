@@ -38,7 +38,7 @@ import org.apache.spark.sql.types._
  * }}}
  */
 object MapLookupBenchmark extends SqlBasedBenchmark {
-  private val NUMBER_OF_ITER = 10
+  private val NUMBER_OF_ITER = 3
 
   override def getSparkSession: SparkSession = {
     SparkSession.builder()
@@ -86,7 +86,7 @@ object MapLookupBenchmark extends SqlBasedBenchmark {
         SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN",
         SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> Int.MaxValue.toString,
         SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ConvertToLocalRelation.ruleName) {
-        lookupDf.select(expr).write.format("noop").mode("overwrite").save()
+        lookupDf.select(expr).noop()
       }
     }
 
@@ -96,7 +96,7 @@ object MapLookupBenchmark extends SqlBasedBenchmark {
         SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN",
         SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> 0.toString,
         SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ConvertToLocalRelation.ruleName) {
-        lookupDf.select(expr).write.format("noop").mode("overwrite").save()
+        lookupDf.select(expr).noop()
       }
     }
 
@@ -106,7 +106,7 @@ object MapLookupBenchmark extends SqlBasedBenchmark {
         SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY",
         SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> Int.MaxValue.toString,
         SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ConvertToLocalRelation.ruleName) {
-        lookupDf.select(expr).write.format("noop").mode("overwrite").save()
+        lookupDf.select(expr).noop()
       }
     }
 
@@ -116,7 +116,7 @@ object MapLookupBenchmark extends SqlBasedBenchmark {
         SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY",
         SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> 0.toString,
         SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ConvertToLocalRelation.ruleName) {
-        lookupDf.select(expr).write.format("noop").mode("overwrite").save()
+        lookupDf.select(expr).noop()
       }
     }
 
@@ -126,7 +126,7 @@ object MapLookupBenchmark extends SqlBasedBenchmark {
         SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN",
         SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> Int.MaxValue.toString,
         SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ConvertToLocalRelation.ruleName) {
-        lookupDf.select(elementAtExpr).write.format("noop").mode("overwrite").save()
+        lookupDf.select(elementAtExpr).noop()
       }
     }
 
@@ -136,7 +136,7 @@ object MapLookupBenchmark extends SqlBasedBenchmark {
         SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN",
         SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> 0.toString,
         SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ConvertToLocalRelation.ruleName) {
-        lookupDf.select(elementAtExpr).write.format("noop").mode("overwrite").save()
+        lookupDf.select(elementAtExpr).noop()
       }
     }
 
@@ -146,7 +146,7 @@ object MapLookupBenchmark extends SqlBasedBenchmark {
         SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY",
         SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> Int.MaxValue.toString,
         SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ConvertToLocalRelation.ruleName) {
-        lookupDf.select(elementAtExpr).write.format("noop").mode("overwrite").save()
+        lookupDf.select(elementAtExpr).noop()
       }
     }
 
@@ -156,15 +156,16 @@ object MapLookupBenchmark extends SqlBasedBenchmark {
         SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY",
         SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> 0.toString,
         SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ConvertToLocalRelation.ruleName) {
-        lookupDf.select(elementAtExpr).write.format("noop").mode("overwrite").save()
+        lookupDf.select(elementAtExpr).noop()
       }
     }
 
     benchmark.run()
+    System.gc()
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    val sizes = Seq(1, 10, 100, 1000, 10000, 100000)
+    val sizes = Seq(1000000, 100000, 10000, 1000, 100, 10, 1)
     for (size <- sizes) {
       run(size, 1.0, IntegerType)
       run(size, 0.5, IntegerType)
