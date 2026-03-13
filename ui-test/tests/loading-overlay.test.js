@@ -1,10 +1,13 @@
-const fs = require("fs");
-const path = require("path");
+import { readFileSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 
-const staticDir = path.resolve("../core/src/main/resources/org/apache/spark/ui/static");
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const staticDir = join(__dirname, '../../core/src/main/resources/org/apache/spark/ui/static');
 
 function readStatic(filename) {
-  return fs.readFileSync(path.join(staticDir, filename), "utf-8");
+  return readFileSync(join(staticDir, filename), 'utf-8');
 }
 
 describe("loading overlay", () => {
