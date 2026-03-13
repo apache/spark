@@ -22,6 +22,7 @@ import java.lang.reflect.InvocationTargetException
 import java.util
 import java.util.Locale
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
@@ -80,14 +81,18 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
    * Due to classloader isolation issues, pattern matching won't work here so we need
    * to compare the canonical names of the exceptions, which we assume to be stable.
    */
-  private def isClientException(e: Throwable): Boolean = {
-    var temp: Class[_] = e.getClass
-    var found = false
-    while (temp != null && !found) {
-      found = clientExceptions.contains(temp.getCanonicalName)
-      temp = temp.getSuperclass
-    }
-    found
+  @tailrec
+  private def isClientException(e: Throwable): Boolean = e match {
+    case re: RuntimeException if re.getCause != null =>
+      isClientException(re.getCause)
+    case e =>
+      var temp: Class[_] = e.getClass
+      var found = false
+      while (temp != null && !found) {
+        found = clientExceptions.contains(temp.getCanonicalName)
+        temp = temp.getSuperclass
+      }
+      found
   }
 
   /**
