@@ -97,7 +97,7 @@ class InferVariantShreddingSchema(val schema: StructType) {
 
   // Node for tree-based field tracking
   private case class FieldNode(
-    var dataType: DataType,
+    var dataType: DataType,          // type summary of the field, not fully defined
     var rowCount: Int = 0,           // Count of distinct rows containing this field
     var lastSeenRow: Int = -1,       // Last row index that incremented rowCount
     var arrayElementCount: Long = 0, // Total occurrences across all array elements
@@ -383,15 +383,12 @@ class InferVariantShreddingSchema(val schema: StructType) {
           // Get or create child node (O(1) map access - no path string building!)
           val childNode = currentNode.getOrCreateChild(fieldName)
 
-          // Track distinct row count (deduplicate using lastSeenRow)
-          if (childNode.lastSeenRow != rowIdx) {
-            childNode.rowCount += 1
-            childNode.lastSeenRow = rowIdx
-          }
-
-          // Track occurrence count for array elements
+          // Track row-level presence only outside array context.
           if (inArrayContext) {
             childNode.arrayElementCount += 1
+          } else if (childNode.lastSeenRow != rowIdx) {
+            childNode.rowCount += 1
+            childNode.lastSeenRow = rowIdx
           }
 
           // Infer and merge type
