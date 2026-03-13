@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo, Literal}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.IntegerType
 
@@ -821,6 +823,22 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
     assert(desc.nonEmpty, "DESCRIBE FUNCTION should return results for extension functions")
   }
 
+  test("SECTION 12f: Extension - table function can be called unqualified") {
+    // Extension table function registered in TestExtensions (3-part key: system.builtin)
+    checkAnswer(
+      sql("SELECT * FROM test_ext_table_func()"),
+      Seq(Row(0L), Row(1L), Row(2L)))
+  }
+
+  test("SECTION 12g: Extension - table function with builtin qualification") {
+    checkAnswer(
+      sql("SELECT * FROM builtin.test_ext_table_func()"),
+      Seq(Row(0L), Row(1L), Row(2L)))
+    checkAnswer(
+      sql("SELECT * FROM system.builtin.test_ext_table_func()"),
+      Seq(Row(0L), Row(1L), Row(2L)))
+  }
+
   test("SECTION 13a: Legacy mode - CREATE TEMPORARY FUNCTION blocked when config is true") {
     withSQLConf("spark.sql.functionResolution.sessionOrder" -> "first") {
       // Try to create a SQL temp function that shadows a builtin
@@ -1215,10 +1233,10 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
  */
 class TestExtensions extends (SparkSessionExtensions => Unit) {
   override def apply(extensions: SparkSessionExtensions): Unit = {
-    // Register a mock extension function
+    // Register a mock extension scalar function
     // Use the full 11-parameter ExpressionInfo constructor
     extensions.injectFunction(
-      (org.apache.spark.sql.catalyst.FunctionIdentifier("test_ext_func"),
+      (FunctionIdentifier("test_ext_func"),
        new ExpressionInfo(
          "org.apache.spark.sql.FunctionQualificationSuite",  // className
          "",                                                  // db
@@ -1232,6 +1250,23 @@ class TestExtensions extends (SparkSessionExtensions => Unit) {
          "",                                                  // deprecated
          ""),                                                 // source (empty is allowed)
        (exprs: Seq[Expression]) => Literal(9999, IntegerType))
+    )
+    // Register a mock extension table function (returns 3 rows: 0, 1, 2)
+    extensions.injectTableFunction(
+      (FunctionIdentifier("test_ext_table_func"),
+       new ExpressionInfo(
+         "org.apache.spark.sql.FunctionQualificationSuite",
+         "",
+         "test_ext_table_func",
+         "Returns a 3-row table for testing",
+         "",
+         "",
+         "",
+         "table_funcs",
+         "4.2.0",
+         "",
+         ""),
+       (_: Seq[Expression]) => Range(0, 3, 1, None, Range.getOutputAttrs, isStreaming = false))
     )
   }
 }

@@ -23,7 +23,6 @@ import java.util.concurrent.{Callable, ExecutionException, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
-import scala.util.{Failure, Success, Try}
 
 import com.google.common.cache.{Cache, CacheBuilder}
 import com.google.common.util.concurrent.UncheckedExecutionException
@@ -2743,6 +2742,8 @@ class SessionCatalog(
   /**
    * List all built-in and temporary functions with the given pattern.
    * Builtins are keyed as (funcName, builtin, system); temp as (funcName, session, system).
+   * Pattern is matched against the display name (simple funcName for system catalog) for
+   * backward compatibility with SHOW FUNCTIONS LIKE 'abs'.
    */
   private def listBuiltinAndTempFunctions(pattern: String): Seq[FunctionIdentifier] = {
     val functions = (functionRegistry.listFunction() ++ tableFunctionRegistry.listFunction())
@@ -2756,15 +2757,12 @@ class SessionCatalog(
       } else {
         f
       })
-    StringUtils.filterPattern(functions.map(_.unquotedString), pattern).map { f =>
-      // In functionRegistry, function names are stored as an unquoted format.
-      Try(parser.parseFunctionIdentifier(f)) match {
-        case Success(e) => e
-        case Failure(_) =>
-          // The names of some built-in functions are not parsable by our parser, e.g., %
-          FunctionIdentifier(f)
-      }
-    }
+    val displayName = (f: FunctionIdentifier) =>
+      if (f.catalog.exists(_.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME))) f.funcName
+      else f.unquotedString
+    val namesToFilter = functions.map(displayName)
+    val matchedNames = StringUtils.filterPattern(namesToFilter, pattern).toSet
+    functions.zip(namesToFilter).filter { case (_, name) => matchedNames.contains(name) }.map(_._1)
   }
 
   /**
