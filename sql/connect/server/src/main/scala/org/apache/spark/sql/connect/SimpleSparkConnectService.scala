@@ -57,21 +57,30 @@ private[sql] object SimpleSparkConnectService {
     ShutdownHookManager.addShutdownHook(10) { () =>
       // Synthetic leak for ArrowLeakDetectionE2ETest only. Must be injected here, not in the
       // stop handler, so SparkContext shutdown cannot release it before the check below runs.
-      if (sys.env.contains("SPARK_TEST_ARROW_LEAK")) {
-        val leakyAllocator = ArrowUtils.rootAllocator.newChildAllocator("test-leak", 0, 1024)
-        leakyAllocator.buffer(64) // intentionally never released — validates leak detection
-      }
-      val deadline = System.currentTimeMillis() + 2 * 60 * 1000L
-      while (ArrowUtils.rootAllocator.getAllocatedMemory != 0 &&
-        System.currentTimeMillis() < deadline) {
-        Thread.sleep(100)
-      }
-      val leaked = ArrowUtils.rootAllocator.getAllocatedMemory
-      if (leaked != 0) {
-        // scalastyle:off println
-        println(s"Arrow rootAllocator memory leak detected: $leaked bytes still allocated")
-        // scalastyle:on println
-        Runtime.getRuntime.halt(ArrowLeakExitCode)
+      // Hold a strong reference through the polling loop: Arrow's AllocationManager registers a
+      // Cleaner on ArrowBuf, so a discarded (unreferenced) buffer can be reclaimed by GC during
+      // Thread.sleep(), decrementing getAllocatedMemory to 0 and defeating the synthetic leak.
+      val syntheticLeakBuf =
+        if (sys.env.contains("SPARK_TEST_ARROW_LEAK")) {
+          val leakyAllocator = ArrowUtils.rootAllocator.newChildAllocator("test-leak", 0, 1024)
+          leakyAllocator.buffer(64) // intentionally never closed — validates leak detection
+        } else null
+      try {
+        val deadline = System.currentTimeMillis() + 2 * 60 * 1000L
+        while (ArrowUtils.rootAllocator.getAllocatedMemory != 0 &&
+          System.currentTimeMillis() < deadline) {
+          Thread.sleep(100)
+        }
+        val leaked = ArrowUtils.rootAllocator.getAllocatedMemory
+        if (leaked != 0) {
+          // scalastyle:off println
+          println(s"Arrow rootAllocator memory leak detected: $leaked bytes still allocated")
+          // scalastyle:on println
+          Runtime.getRuntime.halt(ArrowLeakExitCode)
+        }
+      } finally {
+        // Keep syntheticLeakBuf reachable through the check above.
+        java.lang.ref.Reference.reachabilityFence(syntheticLeakBuf)
       }
     }
 
