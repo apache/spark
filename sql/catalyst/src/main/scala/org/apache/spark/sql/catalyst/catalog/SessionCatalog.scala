@@ -491,11 +491,6 @@ class SessionCatalog(
         invalidateCachedTable(QualifiedTableName(SESSION_CATALOG_NAME, dbName, t.table))
       }
     }
-    if (databaseExists(dbName)) {
-      // Clear cached functions in this database so cache stays coherent after drop
-      functionRegistry.dropFunctionsInDatabase(dbName)
-      tableFunctionRegistry.dropFunctionsInDatabase(dbName)
-    }
     externalCatalog.dropDatabase(dbName, ignoreIfNotExists, cascade)
   }
 
