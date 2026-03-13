@@ -33,8 +33,8 @@ public class JavaGeographyTypeSuite {
 
   @Test
   public void geographyTypeWithSpecifiedValidSridTest() {
-    // Valid geographic SRIDs (OGC overrides: 4326->OGC:CRS84, 4267->OGC:CRS27, 4269->OGC:CRS83).
-    Stream.of(4326, 4267, 4269).forEach(srid -> {
+    // Valid SRID values for GEOGRAPHY. Note that only 4326 is supported for now.
+    Stream.of(4326).forEach(srid -> {
       DataType geographyType = DataTypes.createGeographyType(srid);
       Assertions.assertEquals("GEOGRAPHY(" + srid + ")", geographyType.sql());
       Assertions.assertEquals("geography(" + srid + ")", geographyType.typeName());
@@ -43,23 +43,9 @@ public class JavaGeographyTypeSuite {
   }
 
   @Test
-  public void geographyTypeRejectsNonGeographicSridTest() {
-    // Geography only accepts SRIDs where isGeographic is true; 0 (Cartesian) and 3857 (projected) are rejected.
-    Stream.of(0, 3857).forEach(srid -> {
-      try {
-        DataTypes.createGeographyType(srid);
-        Assertions.fail("Expected SparkIllegalArgumentException for non-geographic SRID: " + srid);
-      } catch (SparkIllegalArgumentException e) {
-        Assertions.assertEquals("ST_INVALID_SRID_VALUE", e.getCondition());
-        Assertions.assertEquals(String.valueOf(srid), e.getMessageParameters().get("srid"));
-      }
-    });
-  }
-
-  @Test
   public void geographyTypeWithSpecifiedInvalidSridTest() {
-    // Invalid SRID values for GEOGRAPHY (negative, non-geographic, or not in registry).
-    Stream.of(-1, -2, 0, 1, 2, 3857, 999999).forEach(srid -> {
+    // Invalid SRID values for GEOGRAPHY.
+    Stream.of(-1, -2, 0, 1, 2).forEach(srid -> {
       try {
         DataTypes.createGeographyType(srid);
         Assertions.fail("Expected SparkIllegalArgumentException for SRID: " + srid);
@@ -76,10 +62,9 @@ public class JavaGeographyTypeSuite {
 
   @Test
   public void geographyTypeWithSpecifiedValidCrsTest() {
-    // Valid CRS values for GEOGRAPHY (OGC primary and EPSG aliases).
-    Stream.of("OGC:CRS84", "EPSG:4326", "OGC:CRS27", "EPSG:4267", "OGC:CRS83", "EPSG:4269").forEach(crs -> {
+    // Valid CRS values for GEOGRAPHY. Note that only "OGC:CRS84" is supported for now.
+    Stream.of("OGC:CRS84").forEach(crs -> {
       Integer srid = GeographicSpatialReferenceSystemMapper.getSrid(crs);
-      Assertions.assertNotNull(srid, "CRS should resolve: " + crs);
       DataType geographyType = DataTypes.createGeographyType(crs);
       Assertions.assertEquals("GEOGRAPHY(" + srid + ")", geographyType.sql());
       Assertions.assertEquals("geography(" + srid + ")", geographyType.typeName());

@@ -81,7 +81,7 @@ public class SpatialReferenceSystemCache {
   private void loadSrsRegistryCsv() {
     try (InputStream is = getClass().getResourceAsStream(SRS_REGISTRY_RESOURCE)) {
       if (is == null) {
-        throw new RuntimeException(
+        throw new IllegalStateException(
             "SRS registry resource not found: " + SRS_REGISTRY_RESOURCE);
       }
       try (BufferedReader reader =
@@ -104,16 +104,16 @@ public class SpatialReferenceSystemCache {
           stringIdToSrs.put(stringId, srsInfo);
         }
       }
+    } catch (IllegalStateException e) {
+      throw e;
     } catch (Exception e) {
-      throw new RuntimeException("Failed to load SRS registry from " + SRS_REGISTRY_RESOURCE, e);
+      throw new IllegalStateException(
+          "Failed to load SRS registry from " + SRS_REGISTRY_RESOURCE, e);
     }
   }
 
   /**
    * Add Spark-specific SRS entries and aliases that are not part of the PROJ EPSG database.
-   * - SRID 0: Spark convention for Cartesian, no defined SRS (primary string ID SRID:0).
-   * - SRID 4326, 4267, 4269: Override primary string ID to OGC:CRS84, OGC:CRS27, OGC:CRS83
-   *   respectively; original EPSG string IDs remain as aliases for compatibility.
    */
   private void addSparkSpecificEntries() {
     // SRID 0: Spark convention for Cartesian coordinate system with no defined SRS.

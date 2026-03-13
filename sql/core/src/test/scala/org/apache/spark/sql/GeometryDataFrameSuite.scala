@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import scala.collection.immutable.Seq
-
 import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -130,8 +128,26 @@ class GeometryDataFrameSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("createDataFrame and round-trip with Geometry SRIDs including overrides") {
-    // E2E: GeometryType supports 0, 3857, 4326, 4267, 4269 (OGC overrides).
+  test("createDataFrame and round-trip with Geometry SRIDs") {
+    val geom3857 = Geometry.fromWKB(point1, 3857)
+    val geom2000 = Geometry.fromWKB(point2, 2000)
+    val geom102100 = Geometry.fromWKB(point1, 102100)
+    val schema3857 = StructType(Seq(StructField("g", GeometryType(3857), nullable = false)))
+    val schema2000 = StructType(Seq(StructField("g", GeometryType(2000), nullable = false)))
+    val schema102100 = StructType(Seq(StructField("g", GeometryType(102100), nullable = false)))
+    checkAnswer(
+      spark.createDataFrame(sparkContext.parallelize(Seq(Row(geom3857))), schema3857),
+      Seq(Row(geom3857)))
+    checkAnswer(
+      spark.createDataFrame(sparkContext.parallelize(Seq(Row(geom2000))), schema2000),
+      Seq(Row(geom2000)))
+    checkAnswer(
+      spark.createDataFrame(sparkContext.parallelize(Seq(Row(geom102100))), schema102100),
+      Seq(Row(geom102100)))
+  }
+
+  test("createDataFrame and round-trip with Geometry SRIDs with overrides") {
+    // GeometryType supports 0, 3857, 4326, 4267, 4269 (OGC overrides).
     val geom0 = Geometry.fromWKB(point1, 0)
     val geom3857 = Geometry.fromWKB(point2, 3857)
     val geom4326 = Geometry.fromWKB(point1, 4326)

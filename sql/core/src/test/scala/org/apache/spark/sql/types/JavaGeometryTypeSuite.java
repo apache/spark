@@ -33,8 +33,8 @@ public class JavaGeometryTypeSuite {
 
   @Test
   public void geometryTypeWithSpecifiedValidSridTest() {
-    // Valid SRID values for GEOMETRY (0=Cartesian, 3857=Web Mercator, 4326/4267/4269=OGC overrides).
-    Stream.of(0, 3857, 4326, 4267, 4269).forEach(srid -> {
+    // Valid SRID values for GEOMETRY
+    Stream.of(0, 3857, 4326, 4267, 4269, 2000, 102100).forEach(srid -> {
       DataType geometryType = DataTypes.createGeometryType(srid);
       Assertions.assertEquals("GEOMETRY(" + srid + ")", geometryType.sql());
       Assertions.assertEquals("geometry(" + srid + ")", geometryType.typeName());
@@ -62,8 +62,10 @@ public class JavaGeometryTypeSuite {
 
   @Test
   public void geometryTypeWithSpecifiedValidCrsTest() {
-    // Valid CRS values for GEOMETRY (Spark, EPSG, and OGC overrides).
-    Stream.of("SRID:0", "EPSG:3857", "OGC:CRS84", "EPSG:4326", "OGC:CRS27", "EPSG:4267", "OGC:CRS83", "EPSG:4269")
+    // Valid CRS values for GEOMETRY (including Spark overrides)
+    Stream.of(
+        "SRID:0", "EPSG:3857", "OGC:CRS84", "EPSG:4326", "OGC:CRS27", "EPSG:4267", "OGC:CRS83", "EPSG:4269",
+        "EPSG:2000", "ESRI:102100")
         .forEach(crs -> {
       Integer srid = CartesianSpatialReferenceSystemMapper.getSrid(crs);
       DataType geometryType = DataTypes.createGeometryType(crs);

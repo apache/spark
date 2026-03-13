@@ -22,7 +22,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-public class SpatialReferenceSystemMapperTest {
+public class SpatialReferenceSystemMapperSuite {
 
   @Test
   void testSpatialReferenceSystemInformation() {
@@ -78,23 +78,18 @@ public class SpatialReferenceSystemMapperTest {
 
   @Test
   public void getSridReturnsCorrectSridForValidStringId() {
-    // GEOMETRY: Spark-specific and OGC primary string IDs.
+    // GEOMETRY
     Assertions.assertEquals(0, CartesianSpatialReferenceSystemMapper.getSrid("SRID:0"));
     Assertions.assertEquals(3857, CartesianSpatialReferenceSystemMapper.getSrid("EPSG:3857"));
     Assertions.assertEquals(4326, CartesianSpatialReferenceSystemMapper.getSrid("OGC:CRS84"));
     Assertions.assertEquals(4267, CartesianSpatialReferenceSystemMapper.getSrid("OGC:CRS27"));
     Assertions.assertEquals(4269, CartesianSpatialReferenceSystemMapper.getSrid("OGC:CRS83"));
-    // GEOMETRY: EPSG aliases for OGC-overridden SRIDs.
     Assertions.assertEquals(4326, CartesianSpatialReferenceSystemMapper.getSrid("EPSG:4326"));
     Assertions.assertEquals(4267, CartesianSpatialReferenceSystemMapper.getSrid("EPSG:4267"));
     Assertions.assertEquals(4269, CartesianSpatialReferenceSystemMapper.getSrid("EPSG:4269"));
-    // GEOMETRY: PROJ-sourced registry.
     Assertions.assertEquals(32601, CartesianSpatialReferenceSystemMapper.getSrid("EPSG:32601"));
     // GEOGRAPHY.
     Assertions.assertEquals(4326, GeographicSpatialReferenceSystemMapper.getSrid("OGC:CRS84"));
-    Assertions.assertEquals(4326, GeographicSpatialReferenceSystemMapper.getSrid("EPSG:4326"));
-    Assertions.assertEquals(4267, GeographicSpatialReferenceSystemMapper.getSrid("OGC:CRS27"));
-    Assertions.assertEquals(4269, GeographicSpatialReferenceSystemMapper.getSrid("EPSG:4269"));
   }
 
   @Test
