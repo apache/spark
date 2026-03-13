@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.internal
 
+import java.io.File
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
-import org.apache.spark.util.Utils
 
 
 /**
@@ -36,7 +36,7 @@ object StaticSQLConf {
     .doc("The default location for managed databases and tables.")
     .version("2.0.0")
     .stringConf
-    .createWithDefault(Utils.resolveURI("spark-warehouse").toString)
+    .createWithDefault(new File("spark-warehouse").getCanonicalFile.toString)
 
   val CATALOG_DEFAULT_DATABASE =
     buildStaticConf(s"spark.sql.catalog.$SESSION_CATALOG_NAME.defaultDatabase")
