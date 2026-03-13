@@ -29,7 +29,7 @@ import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 
@@ -107,6 +107,12 @@ class HadoopMapReduceCommitProtocol(
    */
   @transient protected lazy val stagingDir = getStagingDir(path, jobId)
 
+  /**
+   * The temporary directory used by FileOutputCommitter when dynamicPartitionOverwrite=false.
+   * Task outputs are written to path/_temporary before being committed to the final location.
+   */
+  @transient protected lazy val committerTempDir = new Path(path, "_temporary")
+
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     val format = context.getOutputFormatClass.getConstructor().newInstance()
     // If OutputFormat is Configurable, we should set conf to it.
@@ -179,13 +185,25 @@ class HadoopMapReduceCommitProtocol(
     committer = setupCommitter(taskAttemptContext)
     committer.setupJob(jobContext)
     try {
-      if (dynamicPartitionOverwrite) {
+      if (hasValidPath) {
         val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
-        // Register staging directory for deletion on JVM exit as a safety net.
-        // If the driver process exits unexpectedly (e.g., killed, OOM) during the commit process,
-        // the staging directory will be automatically cleaned up when the JVM shuts down.
-        // This prevents leaving orphaned temporary files in the file system.
+        // Register staging dir for deletion on JVM exit as a safety net (SPARK-54651).
+        // Staging dir is used when:
+        //   1) dynamicPartitionOverwrite=true (all output).
+        //   2) dynamicPartitionOverwrite=false with custom partition locations.
+        // If the driver exits unexpectedly during commit,
+        // JVM shutdown will clean up orphaned files.
         fs.deleteOnExit(stagingDir)
+
+        // When dynamicPartitionOverwrite=false, FileOutputCommitter uses path/_temporary for
+        // task outputs. Register it for deletion on JVM exit in case driver crashes before commit.
+        if (!dynamicPartitionOverwrite) {
+          committer match {
+            case _: FileOutputCommitter =>
+              fs.deleteOnExit(committerTempDir)
+            case _ =>
+          }
+        }
       }
     } catch {
       case e: IOException =>
@@ -242,10 +260,17 @@ class HadoopMapReduceCommitProtocol(
       }
 
       fs.delete(stagingDir, true)
-      // Cancel the delete-on-exit registration since we've already manually
-      // deleted the staging directory and delete() operation won't automatic
-      // cancle the delete-on-exit registration.
+      // Cancel delete-on-exit since we've manually deleted; delete() does not auto-cancel it.
       fs.cancelDeleteOnExit(stagingDir)
+
+      // Cancel delete-on-exit for FileOutputCommitter's _temporary; commitJob already cleaned it.
+      if (!dynamicPartitionOverwrite) {
+        committer match {
+          case _: FileOutputCommitter =>
+            fs.cancelDeleteOnExit(committerTempDir)
+          case _ =>
+        }
+      }
     }
   }
 
@@ -267,10 +292,24 @@ class HadoopMapReduceCommitProtocol(
       if (hasValidPath) {
         val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
         fs.delete(stagingDir, true)
-        // Cancel the delete-on-exit registration since we've already manually
-        // deleted the staging directory and delete() operation won't automatic
-        // cancle the delete-on-exit registration.
+        // Cancel delete-on-exit since we've manually deleted; delete() does not auto-cancel it.
         fs.cancelDeleteOnExit(stagingDir)
+
+        // Clean up FileOutputCommitter's _temporary; abortJob may have failed to clean it.
+        if (!dynamicPartitionOverwrite) {
+          committer match {
+            case _: FileOutputCommitter =>
+              try {
+                fs.delete(committerTempDir, true)
+              } catch {
+                case e: IOException =>
+                  logWarning(log"Exception while cleaning committer temp dir " +
+                    log"${MDC(LogKeys.PATH, committerTempDir)}", e)
+              }
+              fs.cancelDeleteOnExit(committerTempDir)
+            case _ =>
+          }
+        }
       }
     } catch {
       case e: IOException =>
