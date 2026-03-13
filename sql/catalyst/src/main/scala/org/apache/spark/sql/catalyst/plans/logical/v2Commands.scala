@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.{SparkIllegalArgumentException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, ResolvedProcedure, ResolveSchemaEvolution, TypeCheckResult, UnresolvedAttribute, UnresolvedException, UnresolvedProcedure, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
@@ -57,7 +57,7 @@ trait KeepAnalyzedQuery extends Command {
 /**
  * Trait that gathers schema evolution logic shared by V2 write commands and MERGE INTO.
  */
-trait V2WriteSchemaEvolution extends LogicalPlan {
+trait SupportsSchemaEvolution extends LogicalPlan {
   /** The target of the write operation. */
   def table: LogicalPlan
 
@@ -77,6 +77,9 @@ trait V2WriteSchemaEvolution extends LogicalPlan {
    */
   def pendingSchemaChanges: Seq[TableChange]
 
+  /** The write privileges required by this command. */
+  def writePrivileges: Set[TableWritePrivilege]
+
   /** Whether schema evolution is enabled for this command and supported by the table. */
   lazy val schemaEvolutionEnabled: Boolean = withSchemaEvolution && {
     table match {
@@ -93,7 +96,7 @@ trait V2WriteCommand
     extends UnaryCommand
     with KeepAnalyzedQuery
     with CTEInChildren
-    with V2WriteSchemaEvolution {
+    with SupportsSchemaEvolution {
   def table: NamedRelation
   def query: LogicalPlan
   def isByName: Boolean
@@ -152,6 +155,7 @@ case class AppendData(
     withSchemaEvolution: Boolean,
     write: Option[Write] = None,
     analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand {
+  override val writePrivileges: Set[TableWritePrivilege] = Set(TableWritePrivilege.INSERT)
   override def withNewQuery(newQuery: LogicalPlan): AppendData = copy(query = newQuery)
   override def withNewTable(newTable: NamedRelation): AppendData = copy(table = newTable)
   override def storeAnalyzedQuery(): Command = copy(analyzedQuery = Some(query))
@@ -170,8 +174,7 @@ object AppendData {
       df,
       writeOptions,
       isByName = true,
-      withSchemaEvolution = withSchemaEvolution
-    )
+      withSchemaEvolution)
   }
 
   def byPosition(
@@ -184,8 +187,7 @@ object AppendData {
       query,
       writeOptions,
       isByName = false,
-      withSchemaEvolution = withSchemaEvolution
-    )
+      withSchemaEvolution)
   }
 }
 
@@ -201,6 +203,8 @@ case class OverwriteByExpression(
     withSchemaEvolution: Boolean,
     write: Option[Write] = None,
     analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand {
+  override val writePrivileges: Set[TableWritePrivilege] =
+    Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
   override lazy val resolved: Boolean = {
     table.resolved && query.resolved && outputResolved && deleteExpr.resolved
   }
@@ -230,8 +234,7 @@ object OverwriteByExpression {
       df,
       writeOptions,
       isByName = true,
-      withSchemaEvolution = withSchemaEvolution
-    )
+      withSchemaEvolution)
   }
 
   def byPosition(
@@ -246,8 +249,7 @@ object OverwriteByExpression {
       query,
       writeOptions,
       isByName = false,
-      withSchemaEvolution = withSchemaEvolution
-    )
+      withSchemaEvolution)
   }
 }
 
@@ -261,6 +263,8 @@ case class OverwritePartitionsDynamic(
     isByName: Boolean,
     withSchemaEvolution: Boolean,
     write: Option[Write] = None) extends V2WriteCommand {
+  override val writePrivileges: Set[TableWritePrivilege] =
+    Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
   override def withNewQuery(newQuery: LogicalPlan): OverwritePartitionsDynamic = {
     copy(query = newQuery)
   }
@@ -286,8 +290,7 @@ object OverwritePartitionsDynamic {
       df,
       writeOptions,
       isByName = true,
-      withSchemaEvolution = withSchemaEvolution
-    )
+      withSchemaEvolution)
   }
 
   def byPosition(
@@ -300,8 +303,7 @@ object OverwritePartitionsDynamic {
       query,
       writeOptions,
       isByName = false,
-      withSchemaEvolution = withSchemaEvolution
-    )
+      withSchemaEvolution)
   }
 }
 
@@ -346,6 +348,9 @@ case class ReplaceData(
 
   override val isByName: Boolean = false
   override val withSchemaEvolution: Boolean = false
+  override val writePrivileges: Set[TableWritePrivilege] =
+    throw SparkException.internalError("ReplaceData.writePrivileges should not be called.")
+
   override def stringArgs: Iterator[Any] = Iterator(table, query, write)
 
   override lazy val references: AttributeSet = query.outputSet
@@ -429,6 +434,9 @@ case class WriteDelta(
 
   override val isByName: Boolean = false
   override val withSchemaEvolution: Boolean = false
+  override val writePrivileges: Set[TableWritePrivilege] =
+    throw SparkException.internalError("WriteDelta.writePrivileges should not be called.")
+
   override def stringArgs: Iterator[Any] = Iterator(table, query, write)
 
   override lazy val references: AttributeSet = query.outputSet
@@ -953,9 +961,12 @@ case class MergeIntoTable(
     notMatchedActions: Seq[MergeAction],
     notMatchedBySourceActions: Seq[MergeAction],
     withSchemaEvolution: Boolean)
-    extends BinaryCommand with V2WriteSchemaEvolution with SupportsSubquery {
+    extends BinaryCommand with SupportsSchemaEvolution with SupportsSubquery {
 
   override val table: LogicalPlan = EliminateSubqueryAliases(targetTable)
+
+  override val writePrivileges: Set[TableWritePrivilege] =
+    MergeIntoTable.getWritePrivileges(this).toSet
 
   lazy val aligned: Boolean = {
     val actions = matchedActions ++ notMatchedActions ++ notMatchedBySourceActions

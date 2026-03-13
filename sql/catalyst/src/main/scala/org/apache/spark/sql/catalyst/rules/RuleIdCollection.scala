@@ -95,7 +95,6 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.ResolveInlineTables" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveLambdaVariables" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveLateralColumnAliasReference" ::
-      "org.apache.spark.sql.catalyst.analysis.ResolveSchemaEvolution" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveOrderByAll" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveRowLevelCommandAssignments" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveCursors" ::

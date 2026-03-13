@@ -20,16 +20,14 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkException, SparkThrowable}
-import org.apache.spark.internal.Logging
+import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog, TableChange, TableWritePrivilege}
-import org.apache.spark.sql.connector.catalog.TableWritePrivilege.{DELETE, INSERT}
+import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog, TableChange}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2CatalogAndIdentifier}
 import org.apache.spark.sql.internal.SQLConf
@@ -41,18 +39,17 @@ import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, Str
  *
  * This rule will call the DSV2 Catalog to update the schema of the target table.
  */
-object ResolveSchemaEvolution extends Rule[LogicalPlan] with Logging {
+object ResolveSchemaEvolution extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
-    _.containsPattern(COMMAND), ruleId) {
+    _.containsPattern(COMMAND)) {
     // This rule should run only if all assignments are resolved, except those
     // that will be satisfied by schema evolution
-    case write: V2WriteSchemaEvolution if write.pendingSchemaChanges.nonEmpty =>
+    case write: SupportsSchemaEvolution if write.pendingSchemaChanges.nonEmpty =>
       write.table match {
         case relation @ ExtractV2CatalogAndIdentifier(catalog, ident) =>
           evolveSchema(catalog, ident, write.pendingSchemaChanges)
-          val writePrivileges = getWritePrivileges(write)
-          val newTable = catalog.loadTable(ident, writePrivileges.asJava)
+          val newTable = catalog.loadTable(ident, write.writePrivileges.asJava)
           val writeWithNewTarget = replaceWriteTarget(write, relation, newTable)
 
           val remainingChanges = writeWithNewTarget.pendingSchemaChanges
@@ -63,7 +60,7 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] with Logging {
 
           writeWithNewTarget
         case _ =>
-          write
+          throw QueryCompilationErrors.unsupportedAutoSchemaEvolutionError(write.table)
       }
   }
 
@@ -77,30 +74,14 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] with Logging {
       case e: IllegalArgumentException if !e.isInstanceOf[SparkThrowable] =>
         throw QueryExecutionErrors.unsupportedTableChangeError(e)
       case NonFatal(e) =>
-        throw QueryCompilationErrors.failedAutoSchemaEvolutionError(
-          catalog, ident, e)
+        throw QueryCompilationErrors.failedAutoSchemaEvolutionError(catalog, ident, e)
     }
   }
 
-  private def getWritePrivileges(write: V2WriteSchemaEvolution): Set[TableWritePrivilege] =
-    write match {
-      case m: MergeIntoTable =>
-        MergeIntoTable.getWritePrivileges(
-          m.matchedActions,
-          m.notMatchedActions,
-          m.notMatchedBySourceActions
-        ).toSet
-      case _: AppendData => Set(INSERT)
-      case _: OverwriteByExpression | _: OverwritePartitionsDynamic => Set(INSERT, DELETE)
-      case _ =>
-        throw SparkException.internalError(
-          s"Attempting schema evolution on a command that does not support it: $write")
-    }
-
   private def replaceWriteTarget(
-      write: V2WriteSchemaEvolution,
+      write: SupportsSchemaEvolution,
       relation: DataSourceV2Relation,
-      newTable: Table): V2WriteSchemaEvolution = {
+      newTable: Table): SupportsSchemaEvolution = {
     val oldOutput = write.table.output
     val newOutput = DataTypeUtils.toAttributes(newTable.columns)
     val newRelation = relation.copy(table = newTable, output = newOutput)
@@ -140,8 +121,7 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] with Logging {
       originalTarget,
       originalSource,
       fieldPath = Nil,
-      isByName = isByName
-    )
+      isByName)
 
   private def computeSchemaChanges(
       current: DataType,
@@ -167,27 +147,24 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] with Logging {
           originalTarget,
           originalSource,
           fieldPath :+ "element",
-          isByName
-        )
+          isByName)
 
       case (MapType(currentKeyType, currentElementType, _),
-      MapType(updateKeyType, updateElementType, _)) =>
+            MapType(updateKeyType, updateElementType, _)) =>
         val keyChanges = computeSchemaChanges(
           currentKeyType,
           updateKeyType,
           originalTarget,
           originalSource,
           fieldPath :+ "key",
-          isByName
-        )
+          isByName)
         val valueChanges = computeSchemaChanges(
           currentElementType,
           updateElementType,
           originalTarget,
           originalSource,
           fieldPath :+ "value",
-          isByName
-        )
+          isByName)
         keyChanges ++ valueChanges
 
       case (currentType: AtomicType, newType: AtomicType) if currentType != newType =>
@@ -227,8 +204,7 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] with Logging {
           originalTarget,
           originalSource,
           fieldPath :+ f.name,
-          isByName = true
-        )
+          isByName = true)
       }
 
     // Collect newly added fields
@@ -257,8 +233,7 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] with Logging {
         originalTarget,
         originalSource,
         fieldPath :+ currentField.name,
-        isByName = false
-      )
+        isByName = false)
     }
 
     // Extra source fields beyond the target's field count are new additions.

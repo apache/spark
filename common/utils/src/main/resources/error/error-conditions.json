@@ -6792,6 +6792,11 @@
           "The catalog returned the error: <detail>"
         ]
       },
+      "TABLE_NOT_SUPPORTED" : {
+        "message" : [
+          "The write target does not support automatic schema evolution."
+        ]
+      },
       "PARTIAL_EVOLUTION" : {
         "message" : [
           "The catalog did not support or only partially applied the following changes: <changes>."
