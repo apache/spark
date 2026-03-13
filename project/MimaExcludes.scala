@@ -46,7 +46,7 @@ object MimaExcludes {
     // [SPARK-55793][CORE] Add multiple log directories support to SHS
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo.apply"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo.copy"),
-    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo$")
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo$"),
     // [SPARK-53501][PYTHON][CORE] Refactor Python worker factory API
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkEnv.createPythonWorker"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkEnv.destroyPythonWorker"),
