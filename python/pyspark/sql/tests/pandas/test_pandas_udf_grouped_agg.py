@@ -42,7 +42,6 @@ from pyspark.testing.utils import (
     pyarrow_requirement_message,
 )
 
-
 if have_pandas:
     import pandas as pd
     from pandas.testing import assert_frame_equal

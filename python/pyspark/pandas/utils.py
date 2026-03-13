@@ -56,7 +56,6 @@ from pyspark.pandas._typing import (
 )
 from pyspark.pandas.typedef.typehints import as_spark_type
 
-
 if TYPE_CHECKING:
     from pyspark.pandas.indexes.base import Index
     from pyspark.pandas.base import IndexOpsMixin
@@ -816,13 +815,11 @@ def validate_mode(mode: str) -> str:
 
 
 @overload
-def verify_temp_column_name(df: PySparkDataFrame, column_name_or_label: str) -> str:
-    ...
+def verify_temp_column_name(df: PySparkDataFrame, column_name_or_label: str) -> str: ...
 
 
 @overload
-def verify_temp_column_name(df: "DataFrame", column_name_or_label: Name) -> Label:
-    ...
+def verify_temp_column_name(df: "DataFrame", column_name_or_label: Name) -> Label: ...
 
 
 def verify_temp_column_name(
@@ -1143,7 +1140,7 @@ def is_ansi_mode_enabled(spark: SparkSession) -> bool:
             from pyspark.pandas.config import _key_format, _options_dict
 
             client = cast(ConnectSession, spark).client
-            (ansi_mode_support, ansi_enabled) = client.get_config_with_defaults(
+            ansi_mode_support, ansi_enabled = client.get_config_with_defaults(
                 (
                     _key_format("compute.ansi_mode_support"),
                     json.dumps(_options_dict["compute.ansi_mode_support"].default),
@@ -1186,7 +1183,7 @@ def _test() -> None:
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.utils tests").getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.utils,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

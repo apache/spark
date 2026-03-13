@@ -32,7 +32,7 @@ class DaemonTests(unittest.TestCase):
         sock = socket(family, SOCK_STREAM)
         sock.connect((host, port))
         # send a split index of -1 to shutdown the worker
-        sock.send(b"\xFF\xFF\xFF\xFF")
+        sock.send(b"\xff\xff\xff\xff")
         sock.close()
         return True
 

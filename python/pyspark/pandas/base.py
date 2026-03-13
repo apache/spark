@@ -18,6 +18,7 @@
 """
 Base and utility classes for pandas-on-Spark objects.
 """
+
 import warnings
 from abc import ABCMeta, abstractmethod
 from functools import wraps, partial
@@ -118,9 +119,11 @@ def align_diff_index_ops(
                     column_op(func)(
                         this_index_ops.to_series().reset_index(drop=True),
                         *[
-                            arg.to_series().reset_index(drop=True)
-                            if isinstance(arg, Index)
-                            else arg
+                            (
+                                arg.to_series().reset_index(drop=True)
+                                if isinstance(arg, Index)
+                                else arg
+                            )
                             for arg in args
                         ],
                     ).sort_index(),
@@ -1748,7 +1751,7 @@ def _test() -> None:
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.base tests").getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.base,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

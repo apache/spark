@@ -28,7 +28,6 @@ from pyspark.ml.param import Param, Params
 from pyspark.ml.common import inherit_doc
 from pyspark.sql.dataframe import DataFrame
 
-
 if TYPE_CHECKING:
     from pyspark.ml._typing import ParamMap
 

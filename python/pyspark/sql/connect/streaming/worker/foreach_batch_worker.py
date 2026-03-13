@@ -19,6 +19,7 @@
 A worker for streaming foreachBatch in Spark Connect.
 Usually this is ran on the driver side of the Spark Connect Server.
 """
+
 import os
 
 from pyspark.worker_util import get_sock_file_to_executor

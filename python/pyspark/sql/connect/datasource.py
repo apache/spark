@@ -18,7 +18,6 @@ from typing import Type, TYPE_CHECKING
 
 from pyspark.sql.datasource import DataSourceRegistration as PySparkDataSourceRegistration
 
-
 if TYPE_CHECKING:
     from pyspark.sql.datasource import DataSource
     from pyspark.sql.connect.session import SparkSession
