@@ -78,8 +78,8 @@ trait TestWithV4StateFormat extends AlsoTestWithVirtualColumnFamilyJoins {
 
 @SlowSQLTest
 class StreamingInnerJoinV4Suite
-    extends StreamingInnerJoinSuite
-    with TestWithV4StateFormat {
+  extends StreamingInnerJoinSuite
+  with TestWithV4StateFormat {
 
   import testImplicits._
 
@@ -214,15 +214,15 @@ class StreamingInnerJoinV4Suite
 
 @SlowSQLTest
 class StreamingOuterJoinV4Suite
-    extends StreamingOuterJoinSuite
-    with TestWithV4StateFormat
+  extends StreamingOuterJoinSuite
+  with TestWithV4StateFormat
 
 @SlowSQLTest
 class StreamingFullOuterJoinV4Suite
-    extends StreamingFullOuterJoinSuite
-    with TestWithV4StateFormat
+  extends StreamingFullOuterJoinSuite
+  with TestWithV4StateFormat
 
 @SlowSQLTest
 class StreamingLeftSemiJoinV4Suite
-    extends StreamingLeftSemiJoinSuite
+  extends StreamingLeftSemiJoinSuite
     with TestWithV4StateFormat
