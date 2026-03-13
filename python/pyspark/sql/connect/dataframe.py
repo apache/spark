@@ -28,6 +28,7 @@ from typing import (
     Dict,
     Iterator,
     List,
+    NoReturn,
     Optional,
     Tuple,
     Union,
@@ -75,10 +76,12 @@ from pyspark.sql.connect.group import GroupedData
 from pyspark.sql.connect.merge import MergeIntoWriter
 from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
+from pyspark.sql.connect.column import Column as ConnectColumn
 from pyspark.sql.column import Column
 from pyspark.sql.connect.expressions import (
     ColumnReference,
     DirectShufflePartitionID,
+    SortOrder,
     SubqueryExpression,
     UnresolvedRegex,
     UnresolvedStar,
@@ -210,6 +213,60 @@ class DataFrame(ParentDataFrame):
         else:
             return None
 
+    def _to_cols(
+        self,
+        *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"],
+        arg_name: str = "cols",
+        allow_ordinal: bool = False,
+        allow_sequence: bool = True,
+        sort: bool = False,
+    ) -> List[Column]:
+        def _raise() -> NoReturn:
+            if allow_ordinal:
+                raise PySparkTypeError(
+                    errorClass="NOT_COLUMN_OR_INT_OR_STR",
+                    messageParameters={"arg_name": arg_name, "arg_type": type(c).__name__},
+                )
+            else:
+                raise PySparkTypeError(
+                    errorClass="NOT_COLUMN_OR_STR",
+                    messageParameters={"arg_name": arg_name, "arg_type": type(c).__name__},
+                )
+
+        if (
+            len(cols) == 1
+            and not isinstance(cols[0], (int, str, Column))
+            and isinstance(cols[0], Sequence)
+        ):
+            if allow_sequence:
+                cols = tuple(cols[0])
+            else:
+                _raise()
+
+        _cols: List[Column] = []
+        for c in cols:
+            if isinstance(c, Column):
+                col = c
+            elif isinstance(c, str):
+                col = F.col(c)
+            elif isinstance(c, int) and not isinstance(c, bool):
+                if allow_ordinal:
+                    if c < 1:
+                        raise PySparkIndexError(
+                            errorClass="INDEX_NOT_POSITIVE", messageParameters={"index": str(c)}
+                        )
+                    col = self[c - 1]
+                else:
+                    _raise()
+            else:
+                _raise()
+
+            if sort:
+                if not isinstance(col._expr, SortOrder):
+                    col = col.asc()
+            _cols.append(col)
+        return _cols
+
     @property
     def write(self) -> "DataFrameWriter":
         def cb(qe: "ExecutionInfo") -> None:
@@ -226,19 +283,12 @@ class DataFrame(ParentDataFrame):
         ...
 
     @overload
-    def select(self, __cols: Union[List[Column], List[str]]) -> ParentDataFrame:
+    def select(self, __cols: Union[Sequence["ColumnOrName"], "ColumnOrName"]) -> ParentDataFrame:
         ...
 
-    def select(self, *cols: "ColumnOrName") -> ParentDataFrame:  # type: ignore[misc]
-        if len(cols) == 1 and isinstance(cols[0], list):
-            cols = cols[0]
-        if any(not isinstance(c, (str, Column)) for c in cols):
-            raise PySparkTypeError(
-                errorClass="NOT_LIST_OF_COLUMN_OR_STR",
-                messageParameters={"arg_name": "columns"},
-            )
+    def select(self, *cols: Union[Sequence["ColumnOrName"], "ColumnOrName"]) -> ParentDataFrame:
         return DataFrame(
-            plan.Project(self._plan, [F._to_col(c) for c in cols]),
+            plan.Project(self._plan, self._to_cols(*cols)),
             session=self._session,
         )
 
@@ -284,8 +334,6 @@ class DataFrame(ParentDataFrame):
         return self._col(colName, is_metadata_column=True)
 
     def colRegex(self, colName: str) -> Column:
-        from pyspark.sql.connect.column import Column as ConnectColumn
-
         if not isinstance(colName, str):
             raise PySparkTypeError(
                 errorClass="NOT_STR",
@@ -342,15 +390,7 @@ class DataFrame(ParentDataFrame):
         res._cached_schema = self._cached_schema
         return res
 
-    @overload
-    def repartition(self, numPartitions: int, *cols: "ColumnOrName") -> ParentDataFrame:
-        ...
-
-    @overload
-    def repartition(self, *cols: "ColumnOrName") -> ParentDataFrame:
-        ...
-
-    def repartition(  # type: ignore[misc]
+    def repartition(
         self, numPartitions: Union[int, "ColumnOrName"], *cols: "ColumnOrName"
     ) -> ParentDataFrame:
         if isinstance(numPartitions, int):
@@ -369,15 +409,13 @@ class DataFrame(ParentDataFrame):
                 )
             else:
                 res = DataFrame(
-                    plan.RepartitionByExpression(
-                        self._plan, numPartitions, [F._to_col(c) for c in cols]
-                    ),
+                    plan.RepartitionByExpression(self._plan, numPartitions, self._to_cols(cols)),
                     self.sparkSession,
                 )
         elif isinstance(numPartitions, (str, Column)):
             cols = (numPartitions,) + cols
             res = DataFrame(
-                plan.RepartitionByExpression(self._plan, None, [F._to_col(c) for c in cols]),
+                plan.RepartitionByExpression(self._plan, None, self._to_cols(cols)),
                 self.sparkSession,
             )
         else:
@@ -392,15 +430,7 @@ class DataFrame(ParentDataFrame):
         res._cached_schema = self._cached_schema
         return res
 
-    @overload
-    def repartitionByRange(self, numPartitions: int, *cols: "ColumnOrName") -> ParentDataFrame:
-        ...
-
-    @overload
-    def repartitionByRange(self, *cols: "ColumnOrName") -> ParentDataFrame:
-        ...
-
-    def repartitionByRange(  # type: ignore[misc]
+    def repartitionByRange(
         self, numPartitions: Union[int, "ColumnOrName"], *cols: "ColumnOrName"
     ) -> ParentDataFrame:
         if isinstance(numPartitions, int):
@@ -420,14 +450,14 @@ class DataFrame(ParentDataFrame):
             else:
                 res = DataFrame(
                     plan.RepartitionByExpression(
-                        self._plan, numPartitions, [F._sort_col(c) for c in cols]
+                        self._plan, numPartitions, self._to_cols(cols, sort=True)
                     ),
                     self.sparkSession,
                 )
         elif isinstance(numPartitions, (str, Column)):
             res = DataFrame(
                 plan.RepartitionByExpression(
-                    self._plan, None, [F._sort_col(c) for c in [numPartitions] + list(cols)]
+                    self._plan, None, self._to_cols((numPartitions,) + cols, sort=True)
                 ),
                 self.sparkSession,
             )
@@ -445,8 +475,6 @@ class DataFrame(ParentDataFrame):
     def repartitionById(
         self, numPartitions: int, partitionIdCol: "ColumnOrName"
     ) -> ParentDataFrame:
-        from pyspark.sql.connect.column import Column as ConnectColumn
-
         if not isinstance(numPartitions, int) or isinstance(numPartitions, bool):
             raise PySparkTypeError(
                 errorClass="NOT_INT",
@@ -533,6 +561,8 @@ class DataFrame(ParentDataFrame):
         return res
 
     def drop(self, *cols: "ColumnOrName") -> ParentDataFrame:
+        # We can't convert names to columns here because drop has different behavior
+        # for names and columns.
         _cols = list(cols)
         if any(not isinstance(c, (str, Column)) for c in _cols):
             raise PySparkTypeError(
@@ -560,136 +590,67 @@ class DataFrame(ParentDataFrame):
     def first(self) -> Optional[Row]:
         return self.head()
 
-    @overload  # type: ignore[no-overload-impl]
-    def groupby(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
+    @overload
+    def groupBy(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
         ...
 
     @overload
-    def groupby(self, __cols: Union[List[Column], List[str], List[int]]) -> "GroupedData":
+    def groupBy(self, __cols: Sequence["ColumnOrNameOrOrdinal"]) -> "GroupedData":
         ...
 
-    def groupBy(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
-        if len(cols) == 1 and isinstance(cols[0], list):
-            cols = cols[0]
-
-        _cols: List[Column] = []
-        for c in cols:
-            if isinstance(c, Column):
-                _cols.append(c)
-            elif isinstance(c, str):
-                _cols.append(F.col(c))
-            elif isinstance(c, int) and not isinstance(c, bool):
-                if c < 1:
-                    raise PySparkIndexError(
-                        errorClass="INDEX_NOT_POSITIVE", messageParameters={"index": str(c)}
-                    )
-                # ordinal is 1-based
-                _cols.append(self[c - 1])
-            else:
-                raise PySparkTypeError(
-                    errorClass="NOT_COLUMN_OR_STR",
-                    messageParameters={"arg_name": "cols", "arg_type": type(c).__name__},
-                )
-
-        return GroupedData(df=self, group_type="groupby", grouping_cols=_cols)
+    def groupBy(
+        self, *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"]
+    ) -> "GroupedData":
+        return GroupedData(
+            df=self, group_type="groupby", grouping_cols=self._to_cols(*cols, allow_ordinal=True)
+        )
 
     groupby = groupBy  # type: ignore[assignment]
 
     @overload
-    def rollup(self, *cols: "ColumnOrName") -> "GroupedData":
+    def rollup(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
         ...
 
     @overload
-    def rollup(self, __cols: Union[List[Column], List[str]]) -> "GroupedData":
+    def rollup(self, __cols: Sequence["ColumnOrNameOrOrdinal"]) -> "GroupedData":
         ...
 
-    def rollup(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":  # type: ignore[misc]
-        _cols: List[Column] = []
-        for c in cols:
-            if isinstance(c, Column):
-                _cols.append(c)
-            elif isinstance(c, str):
-                _cols.append(F.col(c))
-            elif isinstance(c, int) and not isinstance(c, bool):
-                if c < 1:
-                    raise PySparkIndexError(
-                        errorClass="INDEX_NOT_POSITIVE", messageParameters={"index": str(c)}
-                    )
-                # ordinal is 1-based
-                _cols.append(self[c - 1])
-            else:
-                raise PySparkTypeError(
-                    errorClass="NOT_COLUMN_OR_STR",
-                    messageParameters={"arg_name": "cols", "arg_type": type(c).__name__},
-                )
-
-        return GroupedData(df=self, group_type="rollup", grouping_cols=_cols)
+    def rollup(
+        self, *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"]
+    ) -> "GroupedData":
+        return GroupedData(
+            df=self, group_type="rollup", grouping_cols=self._to_cols(*cols, allow_ordinal=True)
+        )
 
     @overload
     def cube(self, *cols: "ColumnOrName") -> "GroupedData":
         ...
 
     @overload
-    def cube(self, __cols: Union[List[Column], List[str]]) -> "GroupedData":
+    def cube(self, __cols: Sequence["ColumnOrNameOrOrdinal"]) -> "GroupedData":
         ...
 
-    def cube(self, *cols: "ColumnOrName") -> "GroupedData":  # type: ignore[misc]
-        _cols: List[Column] = []
-        for c in cols:
-            if isinstance(c, Column):
-                _cols.append(c)
-            elif isinstance(c, str):
-                _cols.append(F.col(c))
-            elif isinstance(c, int) and not isinstance(c, bool):
-                if c < 1:
-                    raise PySparkIndexError(
-                        errorClass="INDEX_NOT_POSITIVE", messageParameters={"index": str(c)}
-                    )
-                # ordinal is 1-based
-                _cols.append(self[c - 1])
-            else:
-                raise PySparkTypeError(
-                    errorClass="NOT_COLUMN_OR_STR",
-                    messageParameters={"arg_name": "cols", "arg_type": type(c).__name__},
-                )
-
-        return GroupedData(df=self, group_type="cube", grouping_cols=_cols)
+    def cube(
+        self, *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"]
+    ) -> "GroupedData":
+        return GroupedData(
+            df=self, group_type="cube", grouping_cols=self._to_cols(*cols, allow_ordinal=True)
+        )
 
     def groupingSets(
-        self, groupingSets: Sequence[Sequence["ColumnOrName"]], *cols: "ColumnOrName"
+        self,
+        groupingSets: Sequence[Sequence["ColumnOrNameOrOrdinal"]],
+        *cols: "ColumnOrNameOrOrdinal",
     ) -> "GroupedData":
         gsets: List[List[Column]] = []
         for grouping_set in groupingSets:
-            gset: List[Column] = []
-            for c in grouping_set:
-                if isinstance(c, Column):
-                    gset.append(c)
-                elif isinstance(c, str):
-                    gset.append(F.col(c))
-                else:
-                    raise PySparkTypeError(
-                        errorClass="NOT_COLUMN_OR_STR",
-                        messageParameters={
-                            "arg_name": "groupingSets",
-                            "arg_type": type(c).__name__,
-                        },
-                    )
-            gsets.append(gset)
-
-        gcols: List[Column] = []
-        for c in cols:
-            if isinstance(c, Column):
-                gcols.append(c)
-            elif isinstance(c, str):
-                gcols.append(F.col(c))
-            else:
-                raise PySparkTypeError(
-                    errorClass="NOT_COLUMN_OR_STR",
-                    messageParameters={"arg_name": "cols", "arg_type": type(c).__name__},
-                )
+            gsets.append(self._to_cols(grouping_set, arg_name="groupingSets", allow_ordinal=True))
 
         return GroupedData(
-            df=self, group_type="grouping_sets", grouping_cols=gcols, grouping_sets=gsets
+            df=self,
+            group_type="grouping_sets",
+            grouping_cols=self._to_cols(cols, allow_ordinal=True),
+            grouping_sets=gsets,
         )
 
     @overload
@@ -788,7 +749,7 @@ class DataFrame(ParentDataFrame):
 
     def sort(
         self,
-        *cols: Union[int, str, Column, List[Union[int, str, Column]]],
+        *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"],
         **kwargs: Any,
     ) -> ParentDataFrame:
         _cols = self._preapare_cols_for_sort(F.col, cols, kwargs)
@@ -807,7 +768,7 @@ class DataFrame(ParentDataFrame):
 
     def sortWithinPartitions(
         self,
-        *cols: Union[int, str, Column, List[Union[int, str, Column]]],
+        *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"],
         **kwargs: Any,
     ) -> ParentDataFrame:
         _cols = self._preapare_cols_for_sort(F.col, cols, kwargs)
@@ -1748,8 +1709,6 @@ class DataFrame(ParentDataFrame):
     def __getitem__(
         self, item: Union[int, str, Column, List, Tuple]
     ) -> Union[Column, ParentDataFrame]:
-        from pyspark.sql.connect.column import Column as ConnectColumn
-
         if isinstance(item, str):
             if item == "*":
                 return ConnectColumn(
@@ -1791,8 +1750,6 @@ class DataFrame(ParentDataFrame):
             )
 
     def _col(self, name: str, is_metadata_column: bool = False) -> Column:
-        from pyspark.sql.connect.column import Column as ConnectColumn
-
         return ConnectColumn(
             ColumnReference(
                 unparsed_identifier=name,
@@ -1863,13 +1820,9 @@ class DataFrame(ParentDataFrame):
         return ConnectTableArg(SubqueryExpression(self._plan, subquery_type="table_arg"))
 
     def scalar(self) -> Column:
-        from pyspark.sql.connect.column import Column as ConnectColumn
-
         return ConnectColumn(SubqueryExpression(self._plan, subquery_type="scalar"))
 
     def exists(self) -> Column:
-        from pyspark.sql.connect.column import Column as ConnectColumn
-
         return ConnectColumn(SubqueryExpression(self._plan, subquery_type="exists"))
 
     @property
