@@ -234,10 +234,6 @@ class SymmetricHashJoinStateManagerV4(
     joinKeys.zipWithIndex.collectFirst {
       case (ne: NamedExpression, index)
         if ne.metadata.contains(EventTimeWatermark.delayKey) => index
-    }.orElse {
-      keyAttributes.zipWithIndex.collectFirst {
-        case (attr, index) if attr.dataType.isInstanceOf[StructType] => index
-      }
     }
   }
 
@@ -318,8 +314,7 @@ class SymmetricHashJoinStateManagerV4(
   private val tsWithKey = new TsWithKeyTypeStore
 
   override def append(key: UnsafeRow, value: UnsafeRow, matched: Boolean): Unit = {
-    val eventTime = extractEventTimeFnFromKey(key)
-      .getOrElse(extractEventTimeFn(value))
+    val eventTime = extractEventTimeFn(value)
     // We always do blind merge for appending new value.
     keyWithTsToValues.append(key, eventTime, value, matched)
     tsWithKey.add(eventTime, key)
