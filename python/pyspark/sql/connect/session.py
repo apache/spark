@@ -15,9 +15,6 @@
 # limitations under the License.
 #
 import uuid
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
 
 import json
 import threading
@@ -46,10 +43,7 @@ from typing import (
 import numpy as np
 import pandas as pd
 import pyarrow as pa
-from pandas.api.types import (  # type: ignore[attr-defined]
-    is_datetime64_dtype,
-    is_timedelta64_dtype,
-)
+from pandas.api.types import is_datetime64_dtype, is_timedelta64_dtype
 import urllib
 
 from pyspark.sql.connect.dataframe import DataFrame
@@ -72,10 +66,9 @@ from pyspark.sql.connect.profiler import ProfilerCollector
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.streaming.readwriter import DataStreamReader
 from pyspark.sql.connect.streaming.query import StreamingQueryManager
-from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
+from pyspark.sql.pandas.conversion import create_arrow_batch_from_pandas
 from pyspark.sql.pandas.types import (
     to_arrow_schema,
-    to_arrow_type,
     _deduplicate_field_names,
     from_arrow_schema,
     from_arrow_type,
@@ -98,6 +91,7 @@ from pyspark.sql.types import (
 )
 from pyspark.sql.utils import to_str
 from pyspark.errors import (
+    AnalysisException,
     PySparkAttributeError,
     PySparkNotImplementedError,
     PySparkRuntimeError,
@@ -536,6 +530,7 @@ class SparkSession:
             "spark.sql.timestampType",
             "spark.sql.session.timeZone",
             "spark.sql.session.localRelationCacheThreshold",
+            "spark.sql.session.localRelationSizeLimit",
             "spark.sql.session.localRelationChunkSizeRows",
             "spark.sql.session.localRelationChunkSizeBytes",
             "spark.sql.session.localRelationBatchOfChunksSizeBytes",
@@ -547,10 +542,8 @@ class SparkSession:
             "spark.sql.execution.arrow.useLargeVarTypes",
         )
         timezone = configs["spark.sql.session.timeZone"]
-        prefer_timestamp = configs["spark.sql.timestampType"]
-        prefers_large_types: bool = (
-            cast(str, configs["spark.sql.execution.arrow.useLargeVarTypes"]).lower() == "true"
-        )
+        prefer_timestamp_ntz = configs["spark.sql.timestampType"] == "TIMESTAMP_NTZ"
+        prefers_large_types = configs["spark.sql.execution.arrow.useLargeVarTypes"] == "true"
 
         _table: Optional[pa.Table] = None
 
@@ -582,9 +575,12 @@ class SparkSession:
                                     messageParameters={},
                                 )
                             arrow_type = field_type.field(0).type
-                            spark_type = MapType(StringType(), from_arrow_type(arrow_type))
+                            spark_type = MapType(
+                                StringType(),
+                                from_arrow_type(arrow_type, prefer_timestamp_ntz),
+                            )
                         else:
-                            spark_type = from_arrow_type(field_type)
+                            spark_type = from_arrow_type(field_type, prefer_timestamp_ntz)
                         struct.add(field.name, spark_type, nullable=field.nullable)
                     schema = struct
             elif isinstance(schema, (list, tuple)) and cast(int, _num_cols) < len(data.columns):
@@ -595,14 +591,14 @@ class SparkSession:
             # Determine arrow types to coerce data when creating batches
             arrow_schema: Optional[pa.Schema] = None
             spark_types: List[Optional[DataType]]
-            arrow_types: List[Optional[pa.DataType]]
             if isinstance(schema, StructType):
                 deduped_schema = cast(StructType, _deduplicate_field_names(schema))
                 spark_types = [field.dataType for field in deduped_schema.fields]
                 arrow_schema = to_arrow_schema(
-                    deduped_schema, prefers_large_types=prefers_large_types
+                    deduped_schema,
+                    timezone="UTC",
+                    prefers_large_types=prefers_large_types,
                 )
-                arrow_types = [field.type for field in arrow_schema]
                 _cols = [str(x) if not isinstance(x, str) else x for x in schema.fieldNames()]
             elif isinstance(schema, DataType):
                 raise PySparkTypeError(
@@ -619,33 +615,32 @@ class SparkSession:
                     else None
                     for t in data.dtypes
                 ]
-                arrow_types = [
-                    to_arrow_type(dt, prefers_large_types=prefers_large_types)
-                    if dt is not None
-                    else None
-                    for dt in spark_types
-                ]
 
             safecheck = configs["spark.sql.execution.pandas.convertToArrowArraySafely"]
 
-            ser = ArrowStreamPandasSerializer(cast(str, timezone), safecheck == "true", False)
-
-            _table = pa.Table.from_batches(
-                [
-                    ser._create_batch(
-                        [
-                            (c, at, st)
-                            for (_, c), at, st in zip(data.items(), arrow_types, spark_types)
-                        ]
-                    )
-                ]
-            )
+            # Handle the 0-column case separately to preserve row count.
+            # pa.RecordBatch.from_pandas preserves num_rows via pandas index metadata.
+            if len(data.columns) == 0:
+                _table = pa.Table.from_batches([pa.RecordBatch.from_pandas(data)])
+            else:
+                _table = pa.Table.from_batches(
+                    [
+                        create_arrow_batch_from_pandas(
+                            [(c, st) for (_, c), st in zip(data.items(), spark_types)],
+                            timezone=cast(str, timezone),
+                            safecheck=safecheck == "true",
+                            prefers_large_types=prefers_large_types,
+                        )
+                    ]
+                )
 
             if isinstance(schema, StructType):
                 assert arrow_schema is not None
-                _table = _table.rename_columns(
-                    cast(StructType, _deduplicate_field_names(schema)).names
-                ).cast(arrow_schema)
+                # Skip cast for 0-column tables as it loses row count
+                if len(schema.fields) > 0:
+                    _table = _table.rename_columns(
+                        cast(StructType, _deduplicate_field_names(schema)).names
+                    ).cast(arrow_schema)
 
         elif isinstance(data, pa.Table):
             # If no schema supplied by user then get the names of columns only
@@ -657,9 +652,7 @@ class SparkSession:
                 _num_cols = len(_cols)
 
             if not isinstance(schema, StructType):
-                schema = from_arrow_schema(
-                    data.schema, prefer_timestamp_ntz=prefer_timestamp == "TIMESTAMP_NTZ"
-                )
+                schema = from_arrow_schema(data.schema, prefer_timestamp_ntz=prefer_timestamp_ntz)
 
             _table = (
                 _check_arrow_table_timestamps_localize(data, schema, True, timezone)
@@ -667,6 +660,7 @@ class SparkSession:
                     to_arrow_schema(
                         schema,
                         error_on_duplicated_field_names_in_struct=True,
+                        timezone="UTC",
                         prefers_large_types=prefers_large_types,
                     )
                 )
@@ -768,6 +762,9 @@ class SparkSession:
         cache_threshold = int(
             configs["spark.sql.session.localRelationCacheThreshold"]  # type: ignore[arg-type]
         )
+        local_relation_size_limit = int(
+            configs["spark.sql.session.localRelationSizeLimit"]  # type: ignore[arg-type]
+        )
         max_chunk_size_rows = int(
             configs["spark.sql.session.localRelationChunkSizeRows"]  # type: ignore[arg-type]
         )
@@ -775,12 +772,13 @@ class SparkSession:
             configs["spark.sql.session.localRelationChunkSizeBytes"]  # type: ignore[arg-type]
         )
         max_batch_of_chunks_size_bytes = int(
-            configs["spark.sql.session.localRelationBatchOfChunksSizeBytes"]  # type: ignore[arg-type] # noqa: E501
+            configs["spark.sql.session.localRelationBatchOfChunksSizeBytes"]  # type: ignore[arg-type]
         )
         plan: LogicalPlan = local_relation
         if cache_threshold <= _table.nbytes:
             plan = self._cache_local_relation(
                 local_relation,
+                local_relation_size_limit,
                 max_chunk_size_rows,
                 max_chunk_size_bytes,
                 max_batch_of_chunks_size_bytes,
@@ -943,12 +941,12 @@ class SparkSession:
                 try:
                     self.client.release_session()
                 except Exception as e:
-                    logger.warn(f"session.stop(): Session could not be released. Error: ${e}")
+                    logger.warning(f"session.stop(): Session could not be released. Error: ${e}")
 
             try:
                 self.client.close()
             except Exception as e:
-                logger.warn(f"session.stop(): Client could not be closed. Error: ${e}")
+                logger.warning(f"session.stop(): Client could not be closed. Error: ${e}")
 
             if self is SparkSession._default_session:
                 SparkSession._default_session = None
@@ -964,7 +962,7 @@ class SparkSession:
                     try:
                         PySparkSession._activeSession.stop()
                     except Exception as e:
-                        logger.warn(
+                        logger.warning(
                             "session.stop(): Local Spark Connect Server could not be stopped. "
                             f"Error: ${e}"
                         )
@@ -1060,6 +1058,7 @@ class SparkSession:
     def _cache_local_relation(
         self,
         local_relation: LocalRelation,
+        local_relation_size_limit: int,
         max_chunk_size_rows: int,
         max_chunk_size_bytes: int,
         max_batch_of_chunks_size_bytes: int,
@@ -1086,10 +1085,12 @@ class SparkSession:
         hashes = []
         current_batch = []
         current_batch_size = 0
+        total_size = 0
         if has_schema:
             schema_chunk = local_relation._serialize_schema()
             current_batch.append(schema_chunk)
             current_batch_size += len(schema_chunk)
+            total_size += len(schema_chunk)
 
         data_chunks: Iterator[bytes] = local_relation._serialize_table_chunks(
             max_chunk_size_rows, min(max_chunk_size_bytes, max_batch_of_chunks_size_bytes)
@@ -1097,6 +1098,17 @@ class SparkSession:
 
         for chunk in data_chunks:
             chunk_size = len(chunk)
+            total_size += chunk_size
+
+            # Check if total size exceeds the limit
+            if total_size > local_relation_size_limit:
+                raise AnalysisException(
+                    errorClass="LOCAL_RELATION_SIZE_LIMIT_EXCEEDED",
+                    messageParameters={
+                        "actualSize": str(total_size),
+                        "sizeLimit": str(local_relation_size_limit),
+                    },
+                )
 
             # Check if adding this chunk would exceed batch size
             if (

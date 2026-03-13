@@ -1,0 +1,95 @@
+================================================================================================
+Recursive CTE with only LocalRelation
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+First 10 integers:                                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------
+First 10 integers using VALUES                                     60             71          10          0.0     6037065.9       1.0X
+First 10 integers using SELECT                                     67             76           8          0.0     6689686.4       0.9X
+First 10 integers using SELECT and LIMIT                           56             64           7          0.0     5647866.5       1.1X
+First 10 integers referencing external table in anchor             93             98           5          0.0     9312423.2       0.6X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+First 20 integers:                                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------
+First 20 integers using VALUES                                     61             68           6          0.0     3037865.3       1.0X
+First 20 integers using SELECT                                     54             55           1          0.0     2707510.7       1.1X
+First 20 integers using SELECT and LIMIT                           51             61           9          0.0     2546229.6       1.2X
+First 20 integers referencing external table in anchor             94            107          17          0.0     4704921.9       0.6X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+First 30 integers:                                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------
+First 30 integers using VALUES                                     63             72           9          0.0     2100321.8       1.0X
+First 30 integers using SELECT                                     63             64           1          0.0     2108302.1       1.0X
+First 30 integers using SELECT and LIMIT                           79             82           5          0.0     2644929.5       0.8X
+First 30 integers referencing external table in anchor             98            110          11          0.0     3255049.5       0.6X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+First 40 integers:                                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------
+First 40 integers using VALUES                                     72             77           5          0.0     1790911.2       1.0X
+First 40 integers using SELECT                                     72             76           4          0.0     1790603.6       1.0X
+First 40 integers using SELECT and LIMIT                           65             66           2          0.0     1614415.6       1.1X
+First 40 integers referencing external table in anchor            107            116          12          0.0     2673178.0       0.7X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+First 50 integers:                                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------
+First 50 integers using VALUES                                     77             84           7          0.0     1539337.1       1.0X
+First 50 integers using SELECT                                     76             79           2          0.0     1529592.8       1.0X
+First 50 integers using SELECT and LIMIT                           70             77           8          0.0     1395833.4       1.1X
+First 50 integers referencing external table in anchor            108            110           2          0.0     2167671.1       0.7X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+First 60 integers:                                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------
+First 60 integers using VALUES                                     89             96           6          0.0     1482998.3       1.0X
+First 60 integers using SELECT                                     85             88           3          0.0     1411086.4       1.1X
+First 60 integers using SELECT and LIMIT                           79             87           6          0.0     1324087.5       1.1X
+First 60 integers referencing external table in anchor            124            140          21          0.0     2070073.7       0.7X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+First 70 integers:                                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------
+First 70 integers using VALUES                                     96            104           7          0.0     1376836.7       1.0X
+First 70 integers using SELECT                                     97            105           7          0.0     1381674.5       1.0X
+First 70 integers using SELECT and LIMIT                           92             97           6          0.0     1314452.1       1.0X
+First 70 integers referencing external table in anchor            130            132           3          0.0     1850514.3       0.7X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+First 80 integers:                                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------
+First 80 integers using VALUES                                    108            114           5          0.0     1354567.3       1.0X
+First 80 integers using SELECT                                    112            116           4          0.0     1396524.4       1.0X
+First 80 integers using SELECT and LIMIT                          101            107           5          0.0     1265300.3       1.1X
+First 80 integers referencing external table in anchor            144            152           7          0.0     1801582.3       0.8X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+First 90 integers:                                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------
+First 90 integers using VALUES                                    119            125           5          0.0     1320259.5       1.0X
+First 90 integers using SELECT                                    120            130          10          0.0     1331984.5       1.0X
+First 90 integers using SELECT and LIMIT                          109            115           5          0.0     1215655.3       1.1X
+First 90 integers referencing external table in anchor            162            167           8          0.0     1798717.1       0.7X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+First 100 integers:                                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------------------
+First 100 integers using VALUES                                    131            139           9          0.0     1305114.2       1.0X
+First 100 integers using SELECT                                    129            136           8          0.0     1286431.8       1.0X
+First 100 integers using SELECT and LIMIT                          119            121           5          0.0     1186046.1       1.1X
+First 100 integers referencing external table in anchor            168            180          14          0.0     1684846.6       0.8X
+
+

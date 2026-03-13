@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
+import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{CodegenSupport, ExplainUtils, RowIterator}
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -41,6 +42,9 @@ private[joins] case class HashedRelationInfo(
     isEmpty: Boolean)
 
 trait HashJoin extends JoinCodegenSupport {
+  assert(leftKeys.forall(key => UnsafeRowUtils.isBinaryStable(key.dataType)))
+  assert(rightKeys.forall(key => UnsafeRowUtils.isBinaryStable(key.dataType)))
+
   def buildSide: BuildSide
 
   override def simpleStringWithNodeId(): String = {
@@ -723,6 +727,18 @@ trait HashJoin extends JoinCodegenSupport {
 }
 
 object HashJoin extends CastSupport with SQLConfHelper {
+
+  /**
+   * Normalize join keys by injecting `CollationKey` when the keys are collated.
+   */
+  def normalizeJoinKeys(
+      leftKeys: Seq[Expression],
+      rightKeys: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
+    (
+      leftKeys.map(CollationKey.injectCollationKey),
+      rightKeys.map(CollationKey.injectCollationKey)
+    )
+  }
 
   private def canRewriteAsLongType(keys: Seq[Expression]): Boolean = {
     // TODO: support BooleanType, DateType and TimestampType

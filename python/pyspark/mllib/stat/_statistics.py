@@ -189,7 +189,8 @@ class Statistics:
 
         if not y:
             return cast(
-                JavaObject, callMLlibFunc("corr", x.map(_convert_to_vector), method)
+                JavaObject,
+                callMLlibFunc("corr", cast(RDD[Vector], x).map(_convert_to_vector), method),
             ).toArray()
         else:
             return cast(

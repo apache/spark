@@ -31,6 +31,7 @@ import sbt.Classpaths.publishOrSkip
 import sbt.Keys._
 import sbt.librarymanagement.{ VersionNumber, SemanticSelector }
 import com.etsy.sbt.checkstyle.CheckstylePlugin.autoImport._
+import com.github.sbt.junit.jupiter.sbt.JupiterPlugin.autoImport._
 import com.here.bom.Bom
 import com.simplytyped.Antlr4Plugin._
 import sbtpomreader.{PomBuild, SbtPomKeys}
@@ -91,7 +92,7 @@ object BuildCommons {
 
   // Google Protobuf version used for generating the protobuf.
   // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
-  val protoVersion = "4.33.0"
+  val protoVersion = "4.33.5"
 }
 
 object SparkBuild extends PomBuild {
@@ -304,7 +305,6 @@ object SparkBuild extends PomBuild {
       // Google Mirror of Maven Central, placed first so that it's used instead of flaky Maven Central.
       // See https://storage-download.googleapis.com/maven-central/index.html for more info.
       "gcs-maven-central-mirror" at "https://maven-central.storage-download.googleapis.com/maven2/",
-      "jitpack" at "https://jitpack.io",
       DefaultMavenRepository,
       Resolver.mavenLocal,
       Resolver.file("ivyLocal", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns)
@@ -367,6 +367,8 @@ object SparkBuild extends PomBuild {
         "org.apache.spark.kafka010",
         "org.apache.spark.network",
         "org.apache.spark.sql.avro",
+        "org.apache.spark.sql.metricview",
+        "org.apache.spark.sql.pipelines",
         "org.apache.spark.sql.scripting",
         "org.apache.spark.types.variant",
         "org.apache.spark.ui.flamegraph",
@@ -646,8 +648,10 @@ object Core {
         "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
       )
     },
+    // Use Maven's output directory so sbt and Maven can share generated sources.
+    // Core uses protoc-jar-maven-plugin which outputs to target/generated-sources.
     (Compile / PB.targets) := Seq(
-      PB.gens.java -> (Compile / sourceManaged).value
+      PB.gens.java -> target.value / "generated-sources"
     )
   ) ++ {
     val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
@@ -732,19 +736,20 @@ object SparkConnectCommon {
   ) ++ {
     val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
     val connectPluginExecPath = sys.props.get("connect.plugin.executable.path")
+    // Use Maven's output directory so sbt and Maven can share generated sources
     if (sparkProtocExecPath.isDefined && connectPluginExecPath.isDefined) {
       Seq(
         (Compile / PB.targets) := Seq(
-          PB.gens.java -> (Compile / sourceManaged).value,
-          PB.gens.plugin(name = "grpc-java", path = connectPluginExecPath.get) -> (Compile / sourceManaged).value
+          PB.gens.java -> target.value / "generated-sources" / "protobuf" / "java",
+          PB.gens.plugin(name = "grpc-java", path = connectPluginExecPath.get) -> target.value / "generated-sources" / "protobuf" / "grpc-java"
         ),
         PB.protocExecutable := file(sparkProtocExecPath.get)
       )
     } else {
       Seq(
         (Compile / PB.targets) := Seq(
-          PB.gens.java -> (Compile / sourceManaged).value,
-          PB.gens.plugin("grpc-java") -> (Compile / sourceManaged).value
+          PB.gens.java -> target.value / "generated-sources" / "protobuf" / "java",
+          PB.gens.plugin("grpc-java") -> target.value / "generated-sources" / "protobuf" / "grpc-java"
         )
       )
     }
@@ -1181,7 +1186,7 @@ object KubernetesIntegrationTests {
  * Overrides to work around sbt's dependency resolution being different from Maven's.
  */
 object DependencyOverrides {
-  lazy val jacksonVersion = sys.props.get("fasterxml.jackson.version").getOrElse("2.20.1")
+  lazy val jacksonVersion = sys.props.get("fasterxml.jackson.version").getOrElse("2.21.1")
   lazy val jacksonDeps = Bom.dependencies("com.fasterxml.jackson" % "jackson-bom" % jacksonVersion)
   lazy val settings = jacksonDeps ++ Seq(
     dependencyOverrides ++= {
@@ -1197,7 +1202,8 @@ object DependencyOverrides {
         "com.google.guava" % "guava" % guavaVersion,
         "jline" % "jline" % jlineVersion,
         "org.apache.avro" % "avro" % avroVersion,
-        "org.slf4j" % "slf4j-api" % slf4jVersion
+        "org.slf4j" % "slf4j-api" % slf4jVersion,
+        "org.scala-lang" % "scalap" % scalaVersion.value
       ) ++ jacksonDeps.key.value
     }
   )
@@ -1212,6 +1218,7 @@ object ExcludedDependencies {
     libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") },
     excludeDependencies ++= Seq(
       ExclusionRule(organization = "ch.qos.logback"),
+      ExclusionRule("org.lz4", "lz4-java"),
       ExclusionRule("org.slf4j", "slf4j-simple"),
       ExclusionRule("javax.servlet", "javax.servlet-api"))
   )
@@ -1222,12 +1229,29 @@ object ExcludedDependencies {
  * client dependencies.
  */
 object ExcludeShims {
+  import bloop.integrations.sbt.BloopKeys
+
   val shimmedProjects = Set("spark-sql-api", "spark-connect-common", "spark-connect-client-jdbc", "spark-connect-client-jvm")
   val classPathFilter = TaskKey[Classpath => Classpath]("filter for classpath")
+
+  // Filter for bloopInternalClasspath which is Seq[(File, File)]
+  type BloopClasspath = Seq[(java.io.File, java.io.File)]
+  val bloopClasspathFilter = TaskKey[BloopClasspath => BloopClasspath]("filter for bloop classpath")
+
   lazy val settings = Seq(
     classPathFilter := {
       if (!shimmedProjects(moduleName.value)) {
         cp => cp.filterNot(_.data.name.contains("spark-connect-shims"))
+      } else {
+        identity _
+      }
+    },
+    bloopClasspathFilter := {
+      if (!shimmedProjects(moduleName.value)) {
+        // Note: bloop output directories use "connect-shims" (without "spark-" prefix)
+        cp => cp.filterNot { case (f1, f2) =>
+          f1.getPath.contains("connect-shims") || f2.getPath.contains("connect-shims")
+        }
       } else {
         identity _
       }
@@ -1244,6 +1268,13 @@ object ExcludeShims {
       classPathFilter.value((Test / internalDependencyClasspath).value),
     Test / internalDependencyAsJars :=
       classPathFilter.value((Test / internalDependencyAsJars).value),
+    // Filter bloop's internal classpath for correct IDE integration
+    Compile / BloopKeys.bloopInternalClasspath :=
+      bloopClasspathFilter.value((Compile / BloopKeys.bloopInternalClasspath).value),
+    Runtime / BloopKeys.bloopInternalClasspath :=
+      bloopClasspathFilter.value((Runtime / BloopKeys.bloopInternalClasspath).value),
+    Test / BloopKeys.bloopInternalClasspath :=
+      bloopClasspathFilter.value((Test / BloopKeys.bloopInternalClasspath).value),
   )
 }
 
@@ -1283,7 +1314,9 @@ object SqlApi {
     (Antlr4 / antlr4PackageName) := Some("org.apache.spark.sql.catalyst.parser"),
     (Antlr4 / antlr4GenListener) := true,
     (Antlr4 / antlr4GenVisitor) := true,
-    (Antlr4 / antlr4TreatWarningsAsErrors) := true
+    (Antlr4 / antlr4TreatWarningsAsErrors) := true,
+    // Use Maven's output directory so sbt and Maven can share generated sources
+    (Antlr4 / javaSource) := target.value / "generated-sources" / "antlr4"
   )
 }
 
@@ -1300,8 +1333,10 @@ object SQL {
         "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
       )
     },
+    // Use Maven's output directory so sbt and Maven can share generated sources.
+    // sql/core uses protoc-jar-maven-plugin which outputs to target/generated-sources.
     (Compile / PB.targets) := Seq(
-      PB.gens.java -> (Compile / sourceManaged).value
+      PB.gens.java -> target.value / "generated-sources"
     )
   ) ++ {
     val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
@@ -1531,6 +1566,8 @@ object Unidoc {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/classic/")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/execution")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/internal")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/metricview")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/pipelines")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/scripting")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/ml")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive")))
@@ -1839,6 +1876,7 @@ object TestSettings {
         "-Dio.netty.tryReflectionSetAccessible=true",
         "-Dio.netty.allocator.type=pooled",
         "-Dio.netty.handler.ssl.defaultEndpointVerificationAlgorithm=NONE",
+        "-Dio.netty.noUnsafe=false",
         "--enable-native-access=ALL-UNNAMED").mkString(" ")
       s"-Xmx$heapSize -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:ReservedCodeCacheSize=128m -Dfile.encoding=UTF-8 $extraTestJavaArgs"
         .split(" ").toSeq
@@ -1870,25 +1908,25 @@ object TestSettings {
       sys.props.get("test.default.exclude.tags").map(tags => tags.split(",").toSeq)
         .map(tags => tags.filter(!_.trim.isEmpty)).getOrElse(defaultExcludedTags)
         .flatMap(tag => Seq("-l", tag)): _*),
-    (Test / testOptions) += Tests.Argument(TestFrameworks.JUnit,
+    (Test / testOptions) += Tests.Argument(jupiterTestFramework,
       sys.props.get("test.exclude.tags").map { tags =>
-        Seq("--exclude-categories=" + tags)
+        Seq("--exclude-tag=" + tags)
       }.getOrElse(Nil): _*),
     // Include tags defined in a system property
     (Test / testOptions) += Tests.Argument(TestFrameworks.ScalaTest,
       sys.props.get("test.include.tags").map { tags =>
         tags.split(",").flatMap { tag => Seq("-n", tag) }.toSeq
       }.getOrElse(Nil): _*),
-    (Test / testOptions) += Tests.Argument(TestFrameworks.JUnit,
+    (Test / testOptions) += Tests.Argument(jupiterTestFramework,
       sys.props.get("test.include.tags").map { tags =>
-        Seq("--include-categories=" + tags)
+        Seq("--include-tags=" + tags)
       }.getOrElse(Nil): _*),
     // Show full stack trace and duration in test cases.
     (Test / testOptions) += Tests.Argument("-oDF"),
     // Slowpoke notifications: receive notifications every 5 minute of tests that have been running
     // longer than two minutes.
     (Test / testOptions) += Tests.Argument(TestFrameworks.ScalaTest, "-W", "120", "300"),
-    (Test / testOptions) += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
+    (Test / testOptions) += Tests.Argument(jupiterTestFramework, "-v", "-a"),
     // Enable Junit testing.
     libraryDependencies += "com.github.sbt.junit" % "jupiter-interface" % "0.17.0" % "test",
     // `parallelExecutionInTest` controls whether test suites belonging to the same SBT project

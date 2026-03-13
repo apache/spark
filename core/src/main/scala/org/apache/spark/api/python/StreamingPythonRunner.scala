@@ -73,6 +73,7 @@ private[spark] class StreamingPythonRunner(
     if (!connectUrl.isEmpty) {
       envVars.put("SPARK_CONNECT_LOCAL_URL", connectUrl)
     }
+    envVars.put("SPARK_PYTHON_RUNTIME", "PYTHON_WORKER")
 
     val workerFactory =
       new PythonWorkerFactory(pythonExec, workerModule, envVars.asScala.toMap, false)

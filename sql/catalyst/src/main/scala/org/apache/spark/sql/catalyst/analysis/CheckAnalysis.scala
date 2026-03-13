@@ -254,7 +254,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     // not found first, instead of errors in the input query of the insert command, by doing a
     // top-down traversal.
     plan.foreach {
-      case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _, _) =>
+      case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _, _, _) =>
         u.tableNotFound(u.multipartIdentifier)
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.
@@ -303,10 +303,12 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
         u.tableNotFound(u.multipartIdentifier)
 
       case u: UnresolvedFunctionName =>
-        val catalogPath = (currentCatalog.name +: catalogManager.currentNamespace).mkString(".")
+        val catalogPath = currentCatalog.name +: catalogManager.currentNamespace
+        val searchPath = SQLConf.get.resolutionSearchPath(catalogPath.toSeq)
+          .map(_.quoted)
         throw QueryCompilationErrors.unresolvedRoutineError(
           u.multipartIdentifier,
-          Seq("system.builtin", "system.session", catalogPath),
+          searchPath,
           u.origin)
 
       case u: UnresolvedHint =>
@@ -314,6 +316,10 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           msg = s"Hint not found: ${toSQLId(u.name)}",
           context = u.origin.getQueryContext,
           summary = u.origin.context.summary)
+
+      case r: V2TableReference =>
+        throw SparkException.internalError(
+          s"V2TableReference should be resolved during analysis: ${r.name}")
 
       case u: UnresolvedInlineTable if unresolvedInlineTableContainsScalarSubquery(u) =>
         throw QueryCompilationErrors.inlineTableContainsScalarSubquery(u)
@@ -445,9 +451,8 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               messageParameters = Map("funcName" -> toSQLExpr(w)))
 
           case agg @ AggregateExpression(listAgg: ListAgg, _, _, _, _)
-            if agg.isDistinct && listAgg.needSaveOrderValue =>
-            throw QueryCompilationErrors.functionAndOrderExpressionMismatchError(
-              listAgg.prettyName, listAgg.child, listAgg.orderExpressions)
+            if agg.isDistinct && listAgg.hasDistinctOrderAmbiguity =>
+              listAgg.throwDistinctOrderError()
 
           case w: WindowExpression =>
             WindowResolution.validateResolvedWindowExpression(w)
@@ -712,6 +717,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             }
 
             create.tableSchema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
+            TypeUtils.failUnsupportedDataType(create.tableSchema, SQLConf.get)
             SchemaUtils.checkIndeterminateCollationInSchema(create.tableSchema)
 
           case write: V2WriteCommand if write.resolved =>
@@ -897,7 +903,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 "invalidExprSqls" -> invalidExprSqls.mkString(", ")))
 
           case j @ LateralJoin(_, right, _, _)
-              if j.getTagValue(LateralJoin.BY_TABLE_ARGUMENT).isEmpty =>
+              if !j.containsTag(LateralJoin.BY_TABLE_ARGUMENT) =>
             right.plan.foreach {
               case Generate(pyudtf: PythonUDTF, _, _, _, _, _)
                   if pyudtf.evalType == PythonEvalType.SQL_ARROW_UDTF =>
@@ -1070,9 +1076,9 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
               // We don't need to handle nested types here which shall fail before.
               def canAlterColumnType(from: DataType, to: DataType): Boolean = (from, to) match {
-                case (CharType(l1), CharType(l2)) => l1 == l2
-                case (CharType(l1), VarcharType(l2)) => l1 <= l2
-                case (VarcharType(l1), VarcharType(l2)) => l1 <= l2
+                case (c1: CharType, c2: CharType) => c1.length == c2.length
+                case (c: CharType, v: VarcharType) => c.length <= v.length
+                case (v1: VarcharType, v2: VarcharType) => v1.length <= v2.length
                 case _ => Cast.canUpCast(from, to)
               }
               if (!canAlterColumnType(field.dataType, newDataType)) {

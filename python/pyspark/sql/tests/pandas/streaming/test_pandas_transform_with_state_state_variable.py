@@ -36,8 +36,8 @@ from pyspark.sql.types import (
     IntegerType,
 )
 from pyspark.testing import assertDataFrameEqual
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
@@ -177,6 +177,7 @@ class TransformWithStateStateVariableTestsMixin:
         self.assertEqual(q.name, "this_query")
         self.assertTrue(q.isActive)
         q.processAllAvailable()
+        q.stop()
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
@@ -291,6 +292,7 @@ class TransformWithStateStateVariableTestsMixin:
         self.assertEqual(q.name, "this_query")
         self.assertTrue(q.isActive)
         q.processAllAvailable()
+        q.stop()
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
@@ -514,6 +516,7 @@ class TransformWithStateStateVariableTestsMixin:
         self.assertEqual(q.name, "this_query")
         self.assertTrue(q.isActive)
         q.processAllAvailable()
+        q.stop()
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
@@ -1007,12 +1010,8 @@ class TransformWithStateInPandasStateVariableTests(
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state import *  # noqa: F401
+    from pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state import *  # noqa: F403
 
-    try:
-        import xmlrunner
+    from pyspark.testing import main
 
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

@@ -1249,7 +1249,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       case InsertIntoStatement(
         _, _, _,
         UnresolvedInlineTable(_, Seq(Seq(UnresolvedAttribute(Seq("DEFAULT"))))),
-        _, _, _) =>
+        _, _, _, _) =>
 
       case _ => fail("Expect UpdateTable, but got:\n" + parsed1.treeString)
     }
@@ -1257,7 +1257,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       case InsertIntoStatement(
         _, _, _,
         Project(Seq(UnresolvedAttribute(Seq("DEFAULT"))), _),
-        _, _, _) =>
+        _, _, _, _) =>
 
       case _ => fail("Expect UpdateTable, but got:\n" + parsed1.treeString)
     }
@@ -1322,6 +1322,79 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         case _ =>
           fail("Expected OverwriteByExpression, but got:\n" + dynamicOverwriteParsed.treeString)
       }
+    }
+  }
+
+  for {
+    withSchemaEvolution <- Seq(true, false)
+    isByName <- Seq(true, false)
+  } {
+    val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION " else ""
+    val byNameClause = if (isByName) "BY NAME " else ""
+    val testMsg = s"withSchemaEvolution=$withSchemaEvolution, isByName=$isByName"
+
+    test(s"INSERT INTO: mergeSchema write option with WITH SCHEMA EVOLUTION - $testMsg") {
+      val table = "testcat.tab"
+      val insertSQLStmt = s"INSERT ${schemaEvolutionClause}INTO $table ${byNameClause}"
+
+      val writeOptions = parseAndResolve(s"$insertSQLStmt SELECT * FROM v2Table") match {
+        case appendData: AppendData =>
+          appendData.writeOptions
+        case other =>
+          fail(s"Expected AppendData, but got: ${other.getClass.getSimpleName}")
+      }
+      assert(writeOptions.get("mergeSchema") ===
+        (if (withSchemaEvolution) Some("true") else None))
+    }
+
+    test(s"INSERT OVERWRITE (static): mergeSchema write option with WITH SCHEMA EVOLUTION - " +
+        testMsg) {
+      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.STATIC.toString) {
+        val table = "testcat.tab"
+        val insertSQLStmt = s"INSERT ${schemaEvolutionClause}OVERWRITE $table ${byNameClause}"
+
+        val writeOptions = parseAndResolve(s"$insertSQLStmt SELECT * FROM v2Table") match {
+          case overwriteByExpression: OverwriteByExpression =>
+            overwriteByExpression.writeOptions
+          case other =>
+            fail(s"Expected OverwriteByExpression, but got: ${other.getClass.getSimpleName}")
+        }
+        assert(writeOptions.get("mergeSchema") ===
+          (if (withSchemaEvolution) Some("true") else None))
+      }
+    }
+
+    test(s"INSERT OVERWRITE (dynamic): mergeSchema write option with WITH SCHEMA EVOLUTION - " +
+        testMsg) {
+      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key ->
+        PartitionOverwriteMode.DYNAMIC.toString) {
+        val table = "testcat.tab"
+        val insertSQLStmt = s"INSERT ${schemaEvolutionClause}OVERWRITE $table ${byNameClause}"
+
+        val writeOptions = parseAndResolve(s"$insertSQLStmt SELECT * FROM v2Table") match {
+          case overwritePartitionsDynamic: OverwritePartitionsDynamic =>
+            overwritePartitionsDynamic.writeOptions
+          case other =>
+            fail(s"Expected OverwritePartitionsDynamic, but got: ${other.getClass.getSimpleName}")
+        }
+        assert(writeOptions.get("mergeSchema") ===
+          (if (withSchemaEvolution) Some("true") else None))
+      }
+    }
+
+    test(s"REPLACE WHERE: mergeSchema write option with WITH SCHEMA EVOLUTION - $testMsg") {
+      val table = "testcat.tab"
+      val insertSQLStmt =
+        s"INSERT ${schemaEvolutionClause}INTO $table ${byNameClause}REPLACE WHERE i = 1"
+
+      val writeOptions = parseAndResolve(s"$insertSQLStmt SELECT * FROM v2Table") match {
+        case overwriteByExpression: OverwriteByExpression =>
+          overwriteByExpression.writeOptions
+        case other =>
+          fail(s"Expected OverwriteByExpression, but got: ${other.getClass.getSimpleName}")
+      }
+      assert(writeOptions.get("mergeSchema") ===
+        (if (withSchemaEvolution) Some("true") else None))
     }
   }
 
@@ -2966,6 +3039,36 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       sql2,
       Map("message" -> "Schema may not be specified in a Create Table As Select (CTAS) statement"),
       ExpectedContext(fragment = sql2, start = 0, stop = 61))
+  }
+
+  test("CTAS statement with constraints") {
+    Seq(
+      "CONSTRAINT pk PRIMARY KEY (id)",
+      "CONSTRAINT uk UNIQUE (id)",
+      "CONSTRAINT ck CHECK (id > 0)"
+    ).foreach { constraintDef =>
+      val sql = s"CREATE TABLE ctas1 ($constraintDef) AS SELECT 1 AS id"
+      assertUnsupported(
+        sql,
+        Map("message" ->
+          "Constraints may not be specified in a Create Table As Select (CTAS) statement"),
+        ExpectedContext(fragment = sql, start = 0, stop = sql.length - 1))
+    }
+  }
+
+  test("RTAS statement with constraints") {
+    Seq(
+      "CONSTRAINT pk PRIMARY KEY (id)",
+      "CONSTRAINT uk UNIQUE (id)",
+      "CONSTRAINT ck CHECK (id > 0)"
+    ).foreach { constraintDef =>
+      val sql = s"REPLACE TABLE rtas1 ($constraintDef) AS SELECT 1 AS id"
+      assertUnsupported(
+        sql,
+        Map("message" ->
+          "Constraints may not be specified in a Replace Table As Select (RTAS) statement"),
+        ExpectedContext(fragment = sql, start = 0, stop = sql.length - 1))
+    }
   }
 
   test("create table - basic") {

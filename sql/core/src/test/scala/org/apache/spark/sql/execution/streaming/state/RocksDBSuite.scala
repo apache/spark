@@ -35,7 +35,7 @@ import org.scalactic.source.Position
 import org.scalatest.PrivateMethodTester
 import org.scalatest.Tag
 
-import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, SparkIllegalArgumentException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.InternalRow
@@ -276,7 +276,7 @@ trait AlsoTestWithRocksDBFeatures
     Seq(true, false).foreach { enableStateStoreCheckpointIds =>
       val newTestName = s"$testName - with enableStateStoreCheckpointIds = " +
         s"$enableStateStoreCheckpointIds"
-      test(newTestName, testTags: _*) { enableStateStoreCheckpointIds =>
+      test(newTestName, testTags: _*) {
         testBody(enableStateStoreCheckpointIds)
       }
     }
@@ -582,6 +582,130 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
       assert(decodedValue.getString(0) === "hello")
       assert(decodedValue.getInt(1) === 42)
       assert(decodedValue.getBoolean(2) === true)
+    }
+  }
+
+  test("verify PrefixKeyScanStateEncoder full encode/decode cycle with multi-key session window") {
+    // Simulate session window state with multiple grouping keys
+    // Key schema: [userId, deviceId, sessionStartTime] - mimics session window with 2 grouping keys
+    val keySchema = StructType(Seq(
+      StructField("userId", IntegerType),
+      StructField("deviceId", StringType),
+      StructField("sessionStartTime", LongType)
+    ))
+    val valueSchema = StructType(Seq(
+      StructField("count", LongType)
+    ))
+
+    // Session window uses first N columns as prefix (the grouping keys)
+    val numColsPrefixKey = 2
+    val prefixKeySpec = PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey)
+    val dataEncoder = new UnsafeRowDataEncoder(prefixKeySpec, valueSchema)
+    val keyEncoder = new PrefixKeyScanStateEncoder(
+      dataEncoder, keySchema, numColsPrefixKey, useColumnFamilies = false)
+
+    // Create a full key row
+    val keyProj = UnsafeProjection.create(keySchema)
+    val fullKey = keyProj.apply(InternalRow(123, UTF8String.fromString("device1"), 1000000L))
+
+    // Encode the full key (this is what happens when putting to state store)
+    val encodedKey = keyEncoder.encodeKey(fullKey)
+
+    // Decode the key (this is what happens during prefix scan)
+    val decodedKey = keyEncoder.decodeKey(encodedKey)
+
+    // Verify the decoded key matches the original
+    assert(decodedKey.numFields === 3,
+      s"Expected 3 fields in decoded key, but got ${decodedKey.numFields}")
+    assert(decodedKey.getInt(0) === 123, "userId not preserved")
+    assert(decodedKey.getString(1) === "device1", "deviceId not preserved")
+    assert(decodedKey.getLong(2) === 1000000L, "sessionStartTime not preserved")
+  }
+
+  test("verify decodeRemainingKey correctly decodes with fix") {
+    // This test verifies the fix prevents garbage data reads
+    val keySchema = StructType(Seq(
+      StructField("k1", IntegerType),
+      StructField("k2", StringType),
+      StructField("k3", LongType)
+    ))
+    val valueSchema = StructType(Seq(
+      StructField("v1", IntegerType)
+    ))
+
+    val prefixKeySpec = PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey = 2)
+    val encoder = new UnsafeRowDataEncoder(prefixKeySpec, valueSchema)
+
+    // Create and encode a remaining key with just the last column (k3)
+    val remainingKeySchema = StructType(Seq(StructField("k3", LongType)))
+    val remainingKeyProj = UnsafeProjection.create(remainingKeySchema)
+    val remainingKeyRow = remainingKeyProj.apply(InternalRow(999999L))
+    val encodedRemainingKey = encoder.encodeRemainingKey(remainingKeyRow)
+
+    // Decode the remaining key
+    val decodedRemainingKey = encoder.decodeRemainingKey(encodedRemainingKey)
+
+    // With the FIX: numFields should be keySchema.length - numColsPrefixKey = 3 - 2 = 1
+    assert(decodedRemainingKey.numFields === 1,
+      s"Expected 1 field but got ${decodedRemainingKey.numFields}")
+
+    // Field 0 should read correctly
+    assert(decodedRemainingKey.getLong(0) === 999999L,
+      "Field 0 value incorrect")
+
+    // Trying to read field 1 should throw exception (doesn't exist)
+    intercept[AssertionError] {
+      decodedRemainingKey.getLong(1)
+    }
+  }
+
+  test("verify AvroStateEncoder decodeRemainingKey with PrefixKeyScanStateEncoder") {
+    // This test verifies that AvroStateEncoder correctly decodes remaining keys
+    // AvroStateEncoder uses remainingKeySchema = keySchema.drop(numColsPrefixKey)
+    // which is the correct calculation (unlike the bug in UnsafeRowDataEncoder)
+    val keySchema = StructType(Seq(
+      StructField("k1", IntegerType),
+      StructField("k2", StringType),
+      StructField("k3", LongType)
+    ))
+    val valueSchema = StructType(Seq(
+      StructField("v1", IntegerType)
+    ))
+
+    // Create test state schema provider
+    val testProvider = new TestStateSchemaProvider()
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      valueSchema,
+      keySchemaId = 0,
+      valueSchemaId = 0
+    )
+
+    val prefixKeySpec = PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey = 2)
+    val encoder = new AvroStateEncoder(prefixKeySpec, valueSchema, Some(testProvider),
+      StateStore.DEFAULT_COL_FAMILY_NAME)
+
+    // Create and encode a remaining key with just the last column (k3)
+    val remainingKeySchema = StructType(Seq(StructField("k3", LongType)))
+    val remainingKeyProj = UnsafeProjection.create(remainingKeySchema)
+    val remainingKeyRow = remainingKeyProj.apply(InternalRow(999999L))
+    val encodedRemainingKey = encoder.encodeRemainingKey(remainingKeyRow)
+
+    // Decode the remaining key
+    val decodedRemainingKey = encoder.decodeRemainingKey(encodedRemainingKey)
+
+    // Should have 1 field (keySchema.length - numColsPrefixKey = 3 - 2 = 1)
+    assert(decodedRemainingKey.numFields === 1,
+      s"Expected 1 field but got ${decodedRemainingKey.numFields}")
+
+    // Field 0 should read correctly
+    assert(decodedRemainingKey.getLong(0) === 999999L,
+      "Field 0 value incorrect")
+
+    // Trying to read field 1 should throw exception (doesn't exist)
+    intercept[AssertionError] {
+      decodedRemainingKey.getLong(1)
     }
   }
 }
@@ -1320,6 +1444,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         // Create a test column family
         val testCfName = "test_cf"
         db.createColFamilyIfAbsent(testCfName, isInternal = false)
+        assert(db.allColumnFamilyNames == Set(StateStore.DEFAULT_COL_FAMILY_NAME, testCfName))
 
         // Write initial data
         db.load(0)
@@ -1377,7 +1502,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         // Verify merge operation worked
         db.load(0)
         db.load(5)
-        assert(toStr(db.get("merge_key", StateStore.DEFAULT_COL_FAMILY_NAME)) === "base,appended")
+        // SPARK-55131: new merge operation concatenates the strings without any separator
+        assert(toStr(db.get("merge_key", StateStore.DEFAULT_COL_FAMILY_NAME)) === "baseappended")
       }
     }
   }
@@ -2053,14 +2179,29 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
-  test("RocksDB: ensure merge operation correctness") {
+  private def testMergeWithOperatorVersions(testName: String)(testFn: Int => Unit): Unit = {
+    RocksDBConf.MERGE_OPERATOR_VALID_VERSIONS.foreach { version =>
+      test(testName + s" - merge operator version $version") {
+        withSQLConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key -> version.toString) {
+          testFn(version)
+        }
+      }
+    }
+  }
+
+  private def expectedResultForMerge(inputs: Seq[String], mergeOperatorVersion: Int): String = {
+    mergeOperatorVersion match {
+      case 1 => inputs.mkString(",")
+      case 2 => inputs.mkString("")
+    }
+  }
+
+  testMergeWithOperatorVersions("put then merge") { version =>
     withTempDir { dir =>
-      val remoteDir = Utils.createTempDir().toString
       // minDeltasForSnapshot being 5 ensures that only changelog files are created
       // for the 3 commits below
       val conf = dbConf.copy(minDeltasForSnapshot = 5, compactOnCommit = false)
-      new File(remoteDir).delete() // to make sure that the directory gets created
-      withDB(remoteDir, conf = conf, useColumnFamilies = true) { db =>
+      withDB(dir.getCanonicalPath, conf = conf, useColumnFamilies = true) { db =>
         db.load(0)
         db.put("a", "1")
         db.merge("a", "2")
@@ -2075,12 +2216,14 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.commit()
 
         db.load(1)
-        assert(new String(db.get("a")) === "1,2")
-        assert(db.iterator().map(toStr).toSet === Set(("a", "1,2")))
+        val expectedValue = expectedResultForMerge(Seq("1", "2"), version)
+        assert(new String(db.get("a")) === expectedValue)
+        assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue)))
 
         db.load(2)
-        assert(new String(db.get("a")) === "1,2,3")
-        assert(db.iterator().map(toStr).toSet === Set(("a", "1,2,3")))
+        val expectedValue2 = expectedResultForMerge(Seq("1", "2", "3"), version)
+        assert(new String(db.get("a")) === expectedValue2)
+        assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue2)))
 
         db.load(3)
         assert(db.get("a") === null)
@@ -2089,17 +2232,59 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
-  test("RocksDB: ensure putList / mergeList operation correctness") {
+  test("blind merge without put against non-existence key with operator version 2") {
+    withSQLConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key -> "2") {
+      withTempDir { dir =>
+        // minDeltasForSnapshot being 5 ensures that only changelog files are created
+        // for the 3 commits below
+        val conf = dbConf.copy(minDeltasForSnapshot = 5, compactOnCommit = false)
+        withDB(dir.getCanonicalPath, conf = conf, useColumnFamilies = true) { db =>
+          db.load(0)
+          // We don't put "a" first here, we call merge against non-existence key
+          // Note that this is only safe with merge operator version 2 - in version 1, reader side
+          // can't distinguish the case where the first byte starts with the size of element, or
+          // delimiter. Merge operator version 2 concatenates the values directly without delimiter
+          // so that the reader side does not need to distinguish the two cases.
+          db.merge("a", "1")
+          db.merge("a", "2")
+          db.commit()
+
+          db.load(1)
+          db.remove("a")
+          db.commit()
+
+          db.load(2)
+          db.merge("a", "3")
+          db.merge("a", "4")
+          db.commit()
+
+          db.load(1)
+          val expectedValue = "12"
+          assert(new String(db.get("a")) === expectedValue)
+          assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue)))
+
+          db.load(2)
+          assert(db.get("a") === null)
+          assert(db.iterator().isEmpty)
+
+          db.load(3)
+          val expectedValue2 = "34"
+          assert(new String(db.get("a")) === expectedValue2)
+          assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue2)))
+        }
+      }
+    }
+  }
+
+  testMergeWithOperatorVersions("putList then mergeList") { version =>
     withTempDir { dir =>
-      val remoteDir = Utils.createTempDir().toString
       // minDeltasForSnapshot being 5 ensures that only changelog files are created
       // for the 3 commits below
       val conf = dbConf.copy(minDeltasForSnapshot = 5, compactOnCommit = false)
-      new File(remoteDir).delete() // to make sure that the directory gets created
-      withDB(remoteDir, conf = conf, useColumnFamilies = true) { db =>
+      withDB(dir.getCanonicalPath, conf = conf, useColumnFamilies = true) { db =>
         db.load(0)
-        db.put("a", "1".getBytes)
-        db.mergeList("a", Seq("2", "3", "4").map(_.getBytes).toList)
+        db.putList("a", Seq("1", "2").map(_.getBytes).toList)
+        db.mergeList("a", Seq("3", "4").map(_.getBytes).toList)
         db.commit()
 
         db.load(1)
@@ -2119,26 +2304,83 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.commit()
 
         db.load(1)
-        assert(new String(db.get("a")) === "1,2,3,4")
-        assert(db.iterator().map(toStr).toSet === Set(("a", "1,2,3,4")))
+        val expectedValue = expectedResultForMerge(Seq("1", "2", "3", "4"), version)
+        assert(new String(db.get("a")) === expectedValue)
+        assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue)))
 
         db.load(2)
-        assert(new String(db.get("a")) === "1,2,3,4,5,6")
-        assert(db.iterator().map(toStr).toSet === Set(("a", "1,2,3,4,5,6")))
+        val expectedValue2 = expectedResultForMerge(Seq("1", "2", "3", "4", "5", "6"), version)
+        assert(new String(db.get("a")) === expectedValue2)
+        assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue2)))
 
         db.load(3)
         assert(db.get("a") === null)
         assert(db.iterator().isEmpty)
 
         db.load(4)
-        assert(new String(db.get("a")) === "7,8,9")
-        assert(db.iterator().map(toStr).toSet === Set(("a", "7,8,9")))
+        val expectedValue3 = expectedResultForMerge(Seq("7", "8", "9"), version)
+        assert(new String(db.get("a")) === expectedValue3)
+        assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue3)))
 
         db.load(5)
-        assert(new String(db.get("a")) === "10,11")
-        assert(db.iterator().map(toStr).toSet === Set(("a", "10,11")))
+        val expectedValue4 = expectedResultForMerge(Seq("10", "11"), version)
+        assert(new String(db.get("a")) === expectedValue4)
+        assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue4)))
       }
     }
+  }
+
+  test("blind mergeList without putList against non-existence key with operator version 2") {
+    withSQLConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key -> "2") {
+      withTempDir { dir =>
+        // minDeltasForSnapshot being 5 ensures that only changelog files are created
+        // for the 3 commits below
+        val conf = dbConf.copy(minDeltasForSnapshot = 5, compactOnCommit = false)
+        withDB(dir.getCanonicalPath, conf = conf, useColumnFamilies = true) { db =>
+          db.load(0)
+          // We don't putList ("a", "b") first here, we call mergeList against non-existence key
+          // Note that this is only safe with merge operator version 2, the same reason we
+          // described in the prior test.
+          db.mergeList("a", Seq("1", "2").map(_.getBytes).toList)
+          db.mergeList("a", Seq("3", "4").map(_.getBytes).toList)
+          db.commit()
+
+          db.load(1)
+          db.remove("a")
+          db.commit()
+
+          db.load(2)
+          db.mergeList("a", Seq("5").map(_.getBytes).toList)
+          db.mergeList("a", Seq("6", "7", "8").map(_.getBytes).toList)
+          db.commit()
+
+          db.load(1)
+          val expectedValue = "1234"
+          assert(new String(db.get("a")) === expectedValue)
+          assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue)))
+
+          db.load(2)
+          assert(db.get("a") === null)
+          assert(db.iterator().isEmpty)
+
+          db.load(3)
+          val expectedValue2 = "5678"
+          assert(new String(db.get("a")) === expectedValue2)
+          assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue2)))
+        }
+      }
+    }
+  }
+
+  test("merge operator version validation") {
+    // Validation happens at SQLConf level
+    val ex = intercept[SparkIllegalArgumentException] {
+      withSQLConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key -> "99") {
+        // This should fail before we get here
+      }
+    }
+    assert(ex.getMessage.contains("Must be 1 or 2"))
+    assert(ex.getMessage.contains("99"))
   }
 
   testWithStateStoreCheckpointIdsAndColumnFamilies("RocksDBFileManager: delete orphan files",
@@ -3161,7 +3403,10 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         // upload snapshot 4.zip
         db.doMaintenance()
       }
-      withDB(remoteDir, version = 4, conf = conf) { db =>
+      withDB(remoteDir, version = 4, conf = conf,
+          enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
+          versionToUniqueId = versionToUniqueId) { db =>
+        db.close()
       }
     })
   }
@@ -3190,7 +3435,10 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       db.doMaintenance()
     }
 
-    withDB(remoteDir, version = 4, conf = conf) { db =>
+    withDB(remoteDir, version = 4, conf = conf,
+        enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
+        versionToUniqueId = versionToUniqueId) { db =>
+      db.close()
     }
   }
 
@@ -3734,6 +3982,70 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
+  testWithChangelogCheckpointingEnabled(
+    "SPARK-55892: Stale reused files in snapshot are replaced during maintenance upload") {
+    // This test verifies that when a snapshot is uploaded after a delay, files that were
+    // reused from old versions (which are now eligible for deletion by another executor's
+    // maintenance) are replaced with new files to be uploaded.
+    //
+    // Scenario:
+    // db1 loads v0 and commits v1. Generates 1.changelog and 1.zip (but not uploaded to DFS)
+    // db2 loads v1 but since no snapshot, it uses 1.changelog and generates snapshot 2.zip
+    // db 1 maintenance uploads snapshot 1.zip to DFS
+    // db 3 loads v2 using 1.zip + 2.changelog and generates 3.zip but not uploaded to DFS
+    // db2 maintenance uploads 2.zip, and deletes files < 2.zip, because minVersionsToRetain = 1
+    // db 3 uploads 3.zip to DFS <-- (with new fix, shouldn't include reused files from 1.zip)
+    // db 4 loads v3 using 3.zip, should be successful (previously cause FileNotFoundException)
+
+    val conf = dbConf.copy(
+      minVersionsToRetain = 1,
+      minDeltasForSnapshot = 0, // Force snapshot on every commit
+      minVersionsToDelete = 0, // Allow immediate deletion of old versions
+      compactOnCommit = false
+    )
+
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      withDB(remoteDir = remoteDir, conf = conf) { db1 =>
+        db1.load(0)
+        db1.put("key1", "value1")
+        db1.commit() // produce 1.changelog and 1.zip but not uploaded to DFS
+
+        withDB(remoteDir = remoteDir, conf = conf) { db2 =>
+          db2.load(1)
+          db2.put("key2", "value2")
+          db2.commit() // produce 2.changelog and 2.zip but not uploaded to DFS
+
+          db1.doMaintenance() // db1 now uploads 1.zip to DFS
+
+          withDB(remoteDir = remoteDir, conf = conf) { db3 =>
+            db3.load(2) // load using 1.zip from db1
+            db3.put("key3", "value3")
+            db3.commit() // produce 3.changelog and 3.zip but not uploaded to DFS
+
+            // db2 maintenance uploads 2.zip, and deletes files < 2.zip,
+            // so 1.zip and its associated SSTs are deleted
+            db2.doMaintenance()
+
+            // db3 now uploads 3.zip to DFS. Before the fix, it will reuse the SST files
+            // from 1.zip, since 3.zip was created using 1.zip, leading to FileNotFoundException.
+            // With the fix, during this maintenance, we check the reused files and
+            // avoid reusing files that are eligible for deletion.
+            db3.doMaintenance()
+          }
+        }
+      }
+
+      // db4 load(3) should be successful, and no FileNotFoundException
+      withDB(remoteDir = remoteDir, conf = conf) { db4 =>
+        db4.load(3) // load using 3.zip from db3
+        assert(toStr(db4.get("key1")) == "value1") // record created in 1.zip
+        db4.put("key4", "value4")
+        db4.commit()
+      }
+    }
+  }
+
   test("RocksDB task completion listener correctly releases for failed task") {
     // This test verifies that a thread that locks the DB and then fails
     // can rely on the completion listener to release the lock.
@@ -3861,6 +4173,158 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
+  // Test ensuring a race condition on no-overwrite filesystems (e.g., ABFS)
+  // does not occur:
+  // 1. Query run 1 uploads snapshot X.zip pointing to SST file Y.SST
+  // 2. Query run 1 is cancelled before the commit log is written
+  // 3. Query run 2 retries the batch, uploads Z.SST, tries to re-upload X.zip
+  //    pointing to Z.SST. The zip overwrite silently fails on no-overwrite FS,
+  //    but versionToRocksDBFiles maps version X -> Z.SST (stale)
+  // 4. Maintenance/cleanup uses the stale in-memory mapping, sees Y.SST as
+  //    untracked, and deletes it
+  // 5. A subsequent query run tries to load X.zip from cloud, which still
+  //    references Y.SST -> FileNotFoundException
+  testWithChangelogCheckpointingEnabled("no-overwrite FS maintenance " +
+    "does not delete SST files still referenced by zip in DFS") {
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      val fmClass = "org.apache.spark.sql.execution.streaming.state." +
+        "NoOverwriteFileSystemBasedCheckpointFileManager"
+      val noOverwriteConf = new Configuration()
+      noOverwriteConf.set(STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key, fmClass)
+      noOverwriteConf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
+
+      // Snapshots at versions 10, 20, 30. With minVersionsToRetain = 2,
+      // minVersionToRetain = 20, so version 10 is deleted and cleanup runs.
+      // The fix fetches cloud metadata for the min retained version (20),
+      // protecting run 1's SSTs referenced by the on-disk 20.zip.
+      val conf = dbConf.copy(
+        compactOnCommit = false,
+        minVersionsToRetain = 2,
+        minVersionsToDelete = 0,
+        minDeltasForSnapshot = 10)
+
+      // Phase 1: versions 1-19 (snapshot at 10, rest changelog-only).
+      val localDir0 = Utils.createTempDir()
+      val db0 = new RocksDB(
+        remoteDir, conf = conf, localRootDir = localDir0,
+        hadoopConf = noOverwriteConf,
+        loggingId = s"[Thread-${Thread.currentThread.getId}]")
+      try {
+        db0.load(0)
+        db0.put("setup_key", "setup_value")
+        db0.commit() // version 1
+        db0.doMaintenance()
+        for (v <- 2 to 19) {
+          db0.load(v - 1)
+          db0.put(s"setup_key_v$v", s"setup_value_v$v")
+          db0.commit() // snapshot at v=10, changelog-only otherwise
+          db0.doMaintenance()
+        }
+      } finally {
+        db0.close()
+      }
+
+      val sstDir = new File(remoteDir, "SSTs")
+      val setupSstFiles = if (sstDir.exists()) {
+        sstDir.listFiles().filter(_.getName.endsWith(".sst")).map(_.getName).toSet
+      } else {
+        Set.empty[String]
+      }
+
+      // Phase 2: Run 1 commits version 20, creating 20.zip with run 1's SSTs.
+      val localDir1 = Utils.createTempDir()
+      val db1 = new RocksDB(
+        remoteDir, conf = conf, localRootDir = localDir1,
+        hadoopConf = noOverwriteConf,
+        loggingId = s"[Thread-${Thread.currentThread.getId}]")
+      try {
+        db1.load(19)
+        db1.put("key", "value_from_run1")
+        db1.commit() // version 20 -- snapshot queued
+        db1.doMaintenance() // uploads 20.zip + run 1's SST files
+      } finally {
+        db1.close()
+      }
+
+      // Verify 20.zip was created
+      val zipFilesAfterRun1 = new File(remoteDir).listFiles()
+        .filter(_.getName.endsWith(".zip"))
+      assert(zipFilesAfterRun1.exists(_.getName.startsWith("20")),
+        s"Expected 20.zip after query run 1, found: " +
+          s"${zipFilesAfterRun1.map(_.getName).mkString(", ")}")
+
+      // Identify query run 1's SST files
+      val sstFilesAfterRun1 = sstDir.listFiles()
+        .filter(_.getName.endsWith(".sst")).map(_.getName).toSet
+      val run1SstFiles = sstFilesAfterRun1 -- setupSstFiles
+      assert(run1SstFiles.nonEmpty,
+        "Expected new SST files from query run 1")
+
+      // Phase 3: Run 2 (retry) commits version 20 again. 20.zip is not overwritten,
+      // but the in-memory cache now maps version 20 to run 2's SSTs.
+      val localDir2 = Utils.createTempDir()
+      val db2 = new RocksDB(
+        remoteDir,
+        conf = conf,
+        localRootDir = localDir2,
+        hadoopConf = noOverwriteConf,
+        loggingId = s"[Thread-${Thread.currentThread.getId}]")
+      try {
+        db2.load(19)
+        db2.put("key", "value_from_run2")
+        db2.commit() // version 20 -- run 2's SSTs created, snapshot queued
+        db2.doMaintenance() // run 2's SSTs uploaded, 20.zip silently not overwritten
+
+        val sstFilesAfterRun2 = sstDir.listFiles()
+          .filter(_.getName.endsWith(".sst")).map(_.getName).toSet
+        val run2SstFiles = sstFilesAfterRun2 -- sstFilesAfterRun1
+        assert(run2SstFiles.nonEmpty,
+          "Expected new SST files from query run 2")
+
+        // Phase 4: versions 21-30. Snapshot at 30 triggers cleanup
+        // (minVersionToRetain = 20, deletes 10.zip).
+        for (v <- 21 to 30) {
+          db2.load(v - 1)
+          db2.put(s"key_v$v", s"value_v$v")
+          db2.commit()
+          db2.doMaintenance()
+        }
+
+        // Run 1's SSTs survive cleanup: the fix fetches cloud metadata for
+        // version 20, protecting files referenced by the on-disk 20.zip.
+        val sstFilesAfterCleanup = sstDir.listFiles()
+          .filter(_.getName.endsWith(".sst")).map(_.getName).toSet
+        run1SstFiles.foreach { name =>
+          assert(sstFilesAfterCleanup.contains(name),
+            s"Expected run 1 SST file $name to still exist (protected by cloud " +
+              s"metadata fetch), but it was deleted.")
+        }
+
+        // Phase 5: Fresh instance loads version 29 from 20.zip + changelogs.
+        // Succeeds because run 1's SSTs (referenced by 20.zip) were preserved.
+        val localDir3 = Utils.createTempDir()
+        val db3 = new RocksDB(
+          remoteDir,
+          conf = conf,
+          localRootDir = localDir3,
+          hadoopConf = noOverwriteConf,
+          loggingId = s"[Thread-${Thread.currentThread.getId}]")
+        try {
+          db3.load(29)
+          val value = new String(db3.get("key"), "UTF-8")
+          assert(value == "value_from_run1",
+            s"Expected stale value 'value_from_run1' from 20.zip (run 1's SSTs), " +
+              s"but got '$value'")
+        } finally {
+          db3.close()
+        }
+      } finally {
+        db2.close()
+      }
+    }
+  }
+
   testWithChangelogCheckpointingEnabled("SPARK-52553 - v1 changelog with invalid version number" +
     " does not cause NumberFormatException") {
     withTempDir { dir =>
@@ -3942,6 +4406,70 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }}
   }
 
+  testWithStateStoreCheckpointIds(
+    "SPARK-54420: load with createEmpty creates empty store") { enableCkptId =>
+      val remoteDir = Utils.createTempDir().toString
+      new File(remoteDir).delete()
+      var lastVersion = 0L
+      var lastCheckpointInfo: Option[StateStoreCheckpointInfo] = None
+
+      withDB(remoteDir, enableStateStoreCheckpointIds = enableCkptId) { db =>
+        // loading batch 0 with loadEmpty = true
+        db.load(0, None, loadEmpty = true)
+        assert(iterator(db).isEmpty)
+        db.put("a", "1")
+        val (version1, checkpointInfoV1) = db.commit()
+        assert(toStr(db.get("a")) === "1")
+
+        // check we can load store normally even the previous one loadEmpty = true
+        db.load(version1, checkpointInfoV1.stateStoreCkptId)
+        db.put("b", "2")
+        val (version2, _) = db.commit()
+        assert(version2 === version1 + 1)
+        assert(toStr(db.get("b")) === "2")
+        assert(toStr(db.get("a")) === "1")
+
+        // load an empty store
+        db.load(version2, loadEmpty = true)
+        db.put("c", "3")
+        val (version3, _) = db.commit()
+        assert(db.get("b") === null)
+        assert(db.get("a") === null)
+        assert(toStr(db.get("c")) === "3")
+        assert(version3 === version2 + 1)
+
+        // load 2 empty store in a row
+        db.load(version3, loadEmpty = true)
+        db.put("d", "4")
+
+        val (version4, checkpointV4) = db.commit()
+        assert(db.get("c") === null)
+        assert(toStr(db.get("d")) === "4")
+        lastVersion = version4
+        lastCheckpointInfo = Option(checkpointV4)
+        assert(lastVersion === version3 + 1)
+      }
+
+      withDB(remoteDir, enableStateStoreCheckpointIds = enableCkptId) { db =>
+        db.load(lastVersion, lastCheckpointInfo.map(_.stateStoreCkptId).orNull)
+        db.put("e", "5")
+        db.commit()
+        assert(db.iterator().map(toStr).toSet === Set(("d", "4"), ("e", "5")))
+      }
+
+      if (enableCkptId) {
+        withDB(remoteDir, enableStateStoreCheckpointIds = enableCkptId) { db =>
+          val ex = intercept[IllegalArgumentException] {
+            db.load(
+              lastVersion,
+              lastCheckpointInfo.map(_.stateStoreCkptId).orNull,
+              loadEmpty = true)
+          }
+          assert(ex.getMessage.contains("stateStoreCkptId should be empty when loadEmpty is true"))
+        }
+      }
+  }
+
   test("SPARK-44639: Use Java tmp dir instead of configured local dirs on Yarn") {
     val conf = new Configuration()
     conf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
@@ -3981,13 +4509,18 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     override def load(
         version: Long,
         ckptId: Option[String] = None,
-        readOnly: Boolean = false): RocksDB = {
+        readOnly: Boolean = false,
+        loadEmpty: Boolean = false): RocksDB = {
       // When a ckptId is defined, it means the test is explicitly using v2 semantic
       // When it is not, it is possible that implicitly uses it.
       // So still do a versionToUniqueId.get
       ckptId match {
-        case Some(_) => super.load(version, ckptId, readOnly)
-        case None => super.load(version, versionToUniqueId.get(version), readOnly)
+        case Some(_) => super.load(version, ckptId, readOnly, loadEmpty)
+        case None => super.load(
+          version,
+          if (!loadEmpty) versionToUniqueId.get(version) else None,
+          readOnly,
+          loadEmpty)
       }
     }
 

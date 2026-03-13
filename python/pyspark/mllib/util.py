@@ -145,11 +145,7 @@ class MLUtils:
         if numFeatures <= 0:
             parsed.cache()
             numFeatures = parsed.map(lambda x: -1 if x[1].size == 0 else x[1][-1]).reduce(max) + 1
-        return parsed.map(
-            lambda x: LabeledPoint(
-                x[0], Vectors.sparse(numFeatures, x[1], x[2])  # type: ignore[arg-type]
-            )
-        )
+        return parsed.map(lambda x: LabeledPoint(x[0], Vectors.sparse(numFeatures, x[1], x[2])))
 
     @staticmethod
     def saveAsLibSVMFile(data: RDD["LabeledPoint"], dir: str) -> None:

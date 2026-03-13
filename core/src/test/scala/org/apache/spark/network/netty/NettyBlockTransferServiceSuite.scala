@@ -25,7 +25,6 @@ import scala.util.Random
 
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, when}
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
@@ -38,7 +37,6 @@ import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
 
 class NettyBlockTransferServiceSuite
   extends SparkFunSuite
-  with BeforeAndAfterEach
   with Matchers {
 
   private var service0: NettyBlockTransferService = _

@@ -144,15 +144,15 @@ case class InsertIntoHiveTable(
 
     if (partition.nonEmpty) {
       if (numDynamicPartitions > 0) {
+        val numWrittenParts = writtenParts.size
+        val maxDynamicPartitionsKey = HiveConf.ConfVars.DYNAMICPARTITIONMAXPARTS.varname
+        val maxDynamicPartitions = hadoopConf.getInt(maxDynamicPartitionsKey,
+          HiveConf.ConfVars.DYNAMICPARTITIONMAXPARTS.defaultIntVal)
+        if (numWrittenParts > maxDynamicPartitions) {
+          throw QueryExecutionErrors.writePartitionExceedConfigSizeWhenDynamicPartitionError(
+            numWrittenParts, maxDynamicPartitions, maxDynamicPartitionsKey)
+        }
         if (overwrite && table.tableType == CatalogTableType.EXTERNAL) {
-          val numWrittenParts = writtenParts.size
-          val maxDynamicPartitionsKey = HiveConf.ConfVars.DYNAMICPARTITIONMAXPARTS.varname
-          val maxDynamicPartitions = hadoopConf.getInt(maxDynamicPartitionsKey,
-            HiveConf.ConfVars.DYNAMICPARTITIONMAXPARTS.defaultIntVal)
-          if (numWrittenParts > maxDynamicPartitions) {
-            throw QueryExecutionErrors.writePartitionExceedConfigSizeWhenDynamicPartitionError(
-              numWrittenParts, maxDynamicPartitions, maxDynamicPartitionsKey)
-          }
           // SPARK-29295: When insert overwrite to a Hive external table partition, if the
           // partition does not exist, Hive will not check if the external partition directory
           // exists or not before copying files. So if users drop the partition, and then do

@@ -29,12 +29,20 @@ from pyspark.errors import (
     SparkUpgradeException,
     PySparkTypeError,
 )
-from pyspark.testing.utils import assertDataFrameEqual, assertSchemaEqual, _context_diff, have_numpy
+from pyspark.testing.utils import (
+    assertDataFrameEqual,
+    assertSchemaEqual,
+    _context_diff,
+    have_numpy,
+    have_pandas,
+    have_pyarrow,
+)
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.sql import Row
 import pyspark.sql.functions as F
 from pyspark.sql.functions import to_date, unix_timestamp, from_unixtime
 from pyspark.sql.types import (
+    DecimalType,
     StringType,
     ArrayType,
     LongType,
@@ -46,7 +54,6 @@ from pyspark.sql.types import (
     IntegerType,
     BooleanType,
 )
-from pyspark.testing.sqlutils import have_pandas, have_pyarrow
 
 
 class UtilsTestsMixin:
@@ -1544,8 +1551,6 @@ class UtilsTestsMixin:
         )
 
     def test_list_row_unequal_schema(self):
-        from pyspark.sql import Row
-
         df1 = self.spark.createDataFrame(
             data=[
                 (1, 3000),
@@ -1765,8 +1770,6 @@ class UtilsTestsMixin:
     def test_assert_schema_equal_with_decimal_types(self):
         """Test assertSchemaEqual with decimal types of different precision and scale
         (SPARK-51062)."""
-        from pyspark.sql.types import StructType, StructField, DecimalType
-
         # Same precision and scale - should pass
         s1 = StructType(
             [
@@ -1800,13 +1803,6 @@ class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.sql.tests.test_utils import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

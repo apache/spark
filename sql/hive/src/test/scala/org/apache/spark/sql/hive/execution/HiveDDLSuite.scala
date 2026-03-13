@@ -29,7 +29,6 @@ import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
 import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{spy, times, verify}
-import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
@@ -59,7 +58,7 @@ import org.apache.spark.util.Utils
 
 @SlowHiveTest
 class HiveDDLSuite
-  extends DDLSuite with SQLTestUtils with TestHiveSingleton with BeforeAndAfterEach {
+  extends DDLSuite with SQLTestUtils with TestHiveSingleton {
   import testImplicits._
   val hiveFormats = Seq("PARQUET", "ORC", "TEXTFILE", "SEQUENCEFILE", "RCFILE", "AVRO")
 
@@ -85,6 +84,7 @@ class HiveDDLSuite
           locationUri = Some(catalog.defaultTablePath(name)),
           inputFormat = serde.get.inputFormat,
           outputFormat = serde.get.outputFormat,
+          serdeName = None,
           serde = serde.get.serde,
           compressed = false,
           properties = Map.empty)
@@ -93,6 +93,7 @@ class HiveDDLSuite
           locationUri = Some(catalog.defaultTablePath(name)),
           inputFormat = Some("org.apache.hadoop.mapred.SequenceFileInputFormat"),
           outputFormat = Some("org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat"),
+          serdeName = None,
           serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"),
           compressed = false,
           properties = Map("serialization.format" -> "1"))
@@ -1155,17 +1156,16 @@ class HiveDDLSuite
       spark.range(10).write.saveAsTable("tab1")
       withView("view1") {
         sql("CREATE VIEW view1 AS SELECT * FROM tab1")
-        assertAnalysisErrorCondition(
-          sqlText = "DROP TABLE view1",
-          condition = "WRONG_COMMAND_FOR_OBJECT_TYPE",
-          parameters = Map(
-            "alternative" -> "DROP VIEW",
-            "operation" -> "DROP TABLE",
-            "foundType" -> "VIEW",
-            "requiredType" -> "EXTERNAL or MANAGED",
-            "objectName" -> "spark_catalog.default.view1"
-          )
-        )
+        // Dropping a VIEW using DROP TABLE is allowed.
+        sql("DROP TABLE view1")
+        // Verify that the VIEW has been dropped.
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"SELECT * FROM view1")
+          },
+          condition = "TABLE_OR_VIEW_NOT_FOUND",
+          parameters = Map("relationName" -> s"`view1`"),
+          ExpectedContext("view1", 14, 18))
       }
     }
   }
@@ -2655,7 +2655,7 @@ class HiveDDLSuite
           |SELECT word, number from t1
         """.stripMargin)
 
-      val inputData = MemoryStream[Int]
+      val inputData = MemoryStream[Int](spark)
       val joined = inputData.toDS().toDF()
         .join(spark.table("smallTable"), $"value" === $"number")
 

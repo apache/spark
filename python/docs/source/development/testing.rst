@@ -36,13 +36,6 @@ After that, the PySpark test cases can be run via using ``python/run-tests``. Fo
 
     python/run-tests --python-executable=python3
 
-You can run individual tests by using ``--testnames`` option. For example,
-
-.. code-block:: bash
-
-    python/run-tests --testnames pyspark.sql.tests.test_dataframe
-    python/run-tests --testnames pyspark.sql.tests.test_dataframe.DataFrameTests.test_range
-
 Note that you may set ``OBJC_DISABLE_INITIALIZE_FORK_SAFETY`` environment variable to ``YES`` if you are running tests on Mac OS.
 
 Please see the guidance on how to |building_spark|_,
@@ -59,6 +52,13 @@ You can run a specific test via using ``python/run-tests``, for example, as belo
     python/run-tests --testnames pyspark.sql.tests.test_arrow
 
 Please refer to `Testing PySpark <https://spark.apache.org/developer-tools.html>`_ for more details.
+
+``breakpoint()`` Support in PySpark Tests
+-----------------------------------------
+
+To debug a certain test, you can add ``breakpoint()`` in the test code, and run the test with
+``python/run-tests`` as usual. The script will stop at the ``breakpoint()`` line and open an
+interactive ``pdb`` debugging session. 
 
 
 Running Tests using GitHub Actions

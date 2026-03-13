@@ -441,7 +441,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         newVersion.copyTagsFrom(oldVersion)
         Seq((oldVersion, newVersion))
 
-      case oldVersion @ AttachDistributedSequence(sequenceAttr, _)
+      case oldVersion @ AttachDistributedSequence(sequenceAttr, _, _)
         if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
         val newVersion = oldVersion.copy(sequenceAttr = sequenceAttr.newInstance())
         newVersion.copyTagsFrom(oldVersion)

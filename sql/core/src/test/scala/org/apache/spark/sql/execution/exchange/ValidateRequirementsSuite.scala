@@ -18,13 +18,13 @@
 package org.apache.spark.sql.execution.exchange
 
 import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder}
-import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
+import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, SinglePartition}
 import org.apache.spark.sql.execution.SortExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.test.SharedSparkSession
 
-class ValidateRequirementsSuite extends PlanTest with SharedSparkSession {
+class ValidateRequirementsSuite extends SharedSparkSession {
 
   import testImplicits._
 

@@ -527,7 +527,7 @@ class GroupedAggArrowUDFTestsMixin:
 
         df = self.spark.range(0, 100)
 
-        with self.tempView("table"), self.temp_func("max_udf"):
+        with self.temp_view("table"), self.temp_func("max_udf"):
             df.createTempView("table")
             self.spark.udf.register("max_udf", max_udf)
 
@@ -556,7 +556,7 @@ class GroupedAggArrowUDFTestsMixin:
         df = self.data
         weighted_mean = self.arrow_agg_weighted_mean_udf
 
-        with self.tempView("v"), self.temp_func("weighted_mean"):
+        with self.temp_view("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -585,7 +585,7 @@ class GroupedAggArrowUDFTestsMixin:
         df = self.data
         weighted_mean = self.arrow_agg_weighted_mean_udf
 
-        with self.tempView("v"), self.temp_func("weighted_mean"):
+        with self.temp_view("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -625,7 +625,7 @@ class GroupedAggArrowUDFTestsMixin:
 
             return np.average(kwargs["v"], weights=kwargs["w"])
 
-        with self.tempView("v"), self.temp_func("weighted_mean"):
+        with self.temp_view("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -670,7 +670,7 @@ class GroupedAggArrowUDFTestsMixin:
         def biased_sum(v, w=None):
             return pa.compute.sum(v).as_py() + (pa.compute.sum(w).as_py() if w is not None else 100)
 
-        with self.tempView("v"), self.temp_func("biased_sum"):
+        with self.temp_view("v"), self.temp_func("biased_sum"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("biased_sum", biased_sum)
 
@@ -1232,7 +1232,7 @@ class GroupedAggArrowUDFTestsMixin:
             [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v")
         )
 
-        with self.tempView("test_table"), self.temp_func("arrow_mean_iter"):
+        with self.temp_view("test_table"), self.temp_func("arrow_mean_iter"):
             df.createOrReplaceTempView("test_table")
             self.spark.udf.register("arrow_mean_iter", arrow_mean_iter)
 
@@ -1266,7 +1266,7 @@ class GroupedAggArrowUDFTestsMixin:
             ("id", "v", "w"),
         )
 
-        with self.tempView("test_table"), self.temp_func("arrow_weighted_mean_iter"):
+        with self.temp_view("test_table"), self.temp_func("arrow_weighted_mean_iter"):
             df.createOrReplaceTempView("test_table")
             self.spark.udf.register("arrow_weighted_mean_iter", arrow_weighted_mean_iter)
 
@@ -1290,12 +1290,6 @@ class GroupedAggArrowUDFTests(GroupedAggArrowUDFTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.arrow.test_arrow_udf_grouped_agg import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

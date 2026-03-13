@@ -78,6 +78,8 @@ private[scheduler] case class JobTagCancelled(
 
 private[scheduler] case object AllJobsCancelled extends DAGSchedulerEvent
 
+private[scheduler] case class CleanupQueryJobs(executionId: Long) extends DAGSchedulerEvent
+
 private[scheduler]
 case class BeginEvent(task: Task[_], taskInfo: TaskInfo) extends DAGSchedulerEvent
 

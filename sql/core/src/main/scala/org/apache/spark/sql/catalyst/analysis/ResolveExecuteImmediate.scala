@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.SqlScriptingContextManager
-import org.apache.spark.sql.catalyst.expressions.{Alias, EmptyRow, Expression, Literal,
-  VariableReference}
+import org.apache.spark.sql.catalyst.catalog.{SqlScriptingContextManager => SqlScriptingContextManagerTrait}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Command, CompoundBody, LogicalPlan, SetVariable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.EXECUTE_IMMEDIATE
 import org.apache.spark.sql.classic.{SparkSession => ClassicSparkSession}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.command.v2.ParameterBindingUtils
 import org.apache.spark.sql.types.StringType
 
 /**
@@ -96,17 +97,18 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
       stopIndex = Some(sqlString.length - 1)
     )
 
-    // Execute the query recursively with isolated local variable context and EXECUTE IMMEDIATE
-    // origin. The isolation must cover parsing, analysis, and execution phases.
-    // CurrentOrigin.withOrigin ensures expressions created during parsing get the proper context
-    val result = withIsolatedLocalVariableContext {
+    // Execute the query with local variables hidden and EXECUTE IMMEDIATE origin set.
+    // Both must cover parsing, analysis, and execution phases.
+    // CurrentOrigin.withOrigin ensures expressions created during parsing get the proper context.
+    val result = withHiddenLocalVariables {
       CurrentOrigin.withOrigin(executeImmediateOrigin) {
+        // Use shared parameterized query execution logic (same as OPEN CURSOR)
         val df = if (args.isEmpty) {
           // No parameters - execute directly
           sparkSession.sql(sqlString)
         } else {
-          // For parameterized queries, build parameter arrays
-          val (paramValues, paramNames) = buildUnifiedParameters(args)
+          // For parameterized queries, use shared parameter binding utility
+          val (paramValues, paramNames) = ParameterBindingUtils.buildUnifiedParameters(args)
 
           sparkSession.asInstanceOf[ClassicSparkSession]
             .sql(sqlString, paramValues, paramNames)
@@ -120,9 +122,9 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
           throw QueryCompilationErrors.sqlScriptInExecuteImmediate(sqlString)
         }
 
-        // Force analysis to happen within the isolated context to ensure local variables
-        // are not accessible. This is critical because DataFrames are lazy and analysis
-        // would otherwise happen outside the isolation context.
+        // Force analysis to happen while local variables are hidden. This is critical  because
+        // DataFrames are lazy and analysis would otherwise happen after withHiddenLocalVariables
+        // has restored the original context.
         df.queryExecution.analyzed
         df
       }
@@ -143,6 +145,17 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
   }
 
   private def extractQueryString(queryExpr: Expression): String = {
+    // Reject scalar subqueries and other non-evaluable expressions (same rule as USING clause).
+    // Unwrap Alias so that EXECUTE IMMEDIATE sql_string (variable) is allowed.
+    def checkAllowed(expr: Expression): Unit = expr match {
+      case _: VariableReference => // allowed
+      case Alias(child, _) => checkAllowed(child)
+      case foldable if foldable.foldable => // allowed (literals, constants)
+      case other =>
+        throw QueryCompilationErrors.unsupportedParameterExpression(other)
+    }
+    checkAllowed(queryExpr)
+
     // Ensure the expression resolves to string type
     if (!queryExpr.dataType.sameType(StringType)) {
       throw QueryCompilationErrors.invalidExecuteImmediateExpressionType(queryExpr.dataType)
@@ -173,57 +186,32 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
   }
 
   /**
-   * Builds parameter arrays for the sql() API.
+   * Temporarily hides the local variable context while executing the `EXECUTE IMMEDIATE` command.
+   * This is expected behavior, as local variables cannot be resolved within the body of this
+   * command. This does not apply to session variables. The rest of the SQL scripting context is
+   * preserved.
+   *
+   * {{{
+   *   DECLARE VARIABLE v1 = 1; -- Session variable.
+   *   BEGIN
+   *     DECLARE v2 = 2; -- Local variable.
+   *     EXECUTE IMMEDIATE 'SELECT v1'; -- Should work.
+   *     EXECUTE IMMEDIATE 'SELECT v2'; -- Should fail.
+   *     EXECUTE IMMEDIATE 'SELECT ?' USING v2; -- Should work.
+   *   END
+   * }}}
    */
-  private def buildUnifiedParameters(args: Seq[Expression]): (Array[Any], Array[String]) = {
-    val values = scala.collection.mutable.ListBuffer[Any]()
-    val names = scala.collection.mutable.ListBuffer[String]()
-
-    args.foreach {
-      case alias: Alias =>
-        val paramValue = evaluateParameterExpression(alias.child)
-        values += paramValue
-        names += alias.name
-      case expr =>
-        // Positional parameter: just a value
-        val paramValue = evaluateParameterExpression(expr)
-        values += paramValue
-        names += "" // unnamed expression
+  private def withHiddenLocalVariables[A](f: => A): A = {
+    val newContextManager = SqlScriptingContextManager.get() match {
+      case Some(contextManager) =>
+        // SqlScriptingContextManagerTrait is catalog.SqlScriptingContextManager, renamed on import
+        // to distinguish from the object of the same name in org.apache.spark.sql.catalyst.
+        new SqlScriptingContextManagerTrait {
+          override def getContext = contextManager.getContext
+          override def getVariableManager = None
+        }
+      case None => null
     }
-
-    (values.toArray, names.toArray)
-  }
-
-  /**
-   * Evaluates a parameter expression. Validation for unsupported constructs like subqueries
-   * is already done during analysis in ResolveExecuteImmediate.validateExpressions().
-   */
-  private def evaluateParameterExpression(expr: Expression): Any = {
-    expr match {
-      case varRef: VariableReference =>
-        // Variable references should be evaluated to their values and wrapped in Literal
-        // to preserve type information
-        Literal.create(varRef.eval(EmptyRow), varRef.dataType)
-      case foldable if foldable.foldable =>
-        // For foldable expressions, we need to preserve type information by returning
-        // the Literal object itself, not just its raw value. This ensures that
-        // DATE '2023-12-25' remains a DateType literal, not just an Int.
-        Literal.create(foldable.eval(EmptyRow), foldable.dataType)
-      case other =>
-        // Expression is not foldable - not supported for parameters
-        throw QueryCompilationErrors.unsupportedParameterExpression(other)
-    }
-  }
-
-  /**
-   * Temporarily isolates the SQL scripting context during EXECUTE IMMEDIATE execution.
-   * This makes withinSqlScript() return false, ensuring that statements within EXECUTE IMMEDIATE
-   * are not affected by the outer SQL script context (e.g., local variables, script-specific
-   * errors).
-   */
-  private def withIsolatedLocalVariableContext[A](f: => A): A = {
-    // Completely clear the SQL scripting context to make withinSqlScript() return false
-    val handle = SqlScriptingContextManager.create(null)
-    handle.runWith(f)
+    SqlScriptingContextManager.create(newContextManager).runWith(f)
   }
 }

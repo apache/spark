@@ -37,8 +37,8 @@ jobs:
       hadoop: hadoop3
       envs: >-
         {
-          "PYSPARK_IMAGE_TO_TEST": "python-311",
-          "PYTHON_TO_TEST": "python3.11",
+          "PYSPARK_IMAGE_TO_TEST": "python-312",
+          "PYTHON_TO_TEST": "python3.12",
           "LIVE_UI_LOCAL_STORE_DIR": "/tmp/kvStore",
         }
       jobs: >-

@@ -217,7 +217,11 @@ case class CTERelationRef(
     // attributes `a` have the same id, but `Project('a, CTERelationRef(a#2, a#3))` can't be
     // resolved.
     val oldAttrToNewAttr = AttributeMap(output.zip(output.map(_.newInstance())))
-    copy(output = output.map(attr => oldAttrToNewAttr(attr)))
+    if (conf.getConf(SQLConf.LEGACY_CTE_DUPLICATE_ATTRIBUTE_NAMES)) {
+      copy(output = output.map(attr => oldAttrToNewAttr(attr)))
+    } else {
+      copy(output = output.map(attr => attr.withExprId(oldAttrToNewAttr(attr).exprId)))
+    }
   }
 
   def withNewStats(statsOpt: Option[Statistics]): CTERelationRef = copy(statsOpt = statsOpt)

@@ -38,11 +38,12 @@ from pyspark.sql.session import _monkey_patch_RDD, SparkSession
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.streaming import DataStreamReader
-from pyspark.sql.udf import UDFRegistration  # noqa: F401
+from pyspark.sql.udf import UDFRegistration
 from pyspark.sql.udtf import UDTFRegistration
 from pyspark.errors.exceptions.captured import install_exception_handler
 from pyspark.sql.types import AtomicType, DataType, StructType
 from pyspark.sql.streaming import StreamingQueryManager
+from pyspark.sql.streaming.query import StreamingCheckpointManager
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
@@ -471,7 +472,7 @@ class SQLContext:
         >>> sqlContext.createDataFrame(rdd, "boolean").collect() # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
             ...
-        Py4JJavaError: ...
+        pyspark.errors.exceptions.captured.PythonException: ...
         """
         return self.sparkSession.createDataFrame(  # type: ignore[call-overload]
             data, schema, samplingRatio, verifySchema
@@ -698,6 +699,18 @@ class SQLContext:
         from pyspark.sql.streaming import StreamingQueryManager
 
         return StreamingQueryManager(self._ssql_ctx.streams())
+
+    @property
+    def _streamingCheckpointManager(self) -> StreamingCheckpointManager:
+        """Returns a :class:`StreamingCheckpointManager` to manage streaming checkpoints.
+
+        .. versionadded:: 4.2.0
+
+        Notes
+        -----
+        This API is evolving.
+        """
+        return StreamingCheckpointManager(self._ssql_ctx.streamingCheckpointManager())
 
 
 class HiveContext(SQLContext):

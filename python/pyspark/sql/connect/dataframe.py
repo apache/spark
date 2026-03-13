@@ -22,9 +22,6 @@ from pyspark.errors.exceptions.base import (
 )
 from pyspark.resource import ResourceProfile
 from pyspark.sql.connect.logging import logger
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
 
 from typing import (
     Any,
@@ -315,20 +312,22 @@ class DataFrame(ParentDataFrame):
         return table[0][0].as_py()
 
     def crossJoin(self, other: ParentDataFrame) -> ParentDataFrame:
-        self._check_same_session(other)
+        other = self._check_same_session(other)
         return DataFrame(
-            plan.Join(
-                left=self._plan, right=other._plan, on=None, how="cross"  # type: ignore[arg-type]
-            ),
+            plan.Join(left=self._plan, right=other._plan, on=None, how="cross"),
             session=self._session,
         )
 
-    def _check_same_session(self, other: ParentDataFrame) -> None:
-        if self._session.session_id != other._session.session_id:  # type: ignore[attr-defined]
+    def _check_same_session(self, other: ParentDataFrame) -> "DataFrame":
+        if (
+            not isinstance(other, DataFrame)
+            or self._session.session_id != other._session.session_id
+        ):
             raise SessionNotSameException(
                 errorClass="SESSION_NOT_SAME",
                 messageParameters={},
             )
+        return other
 
     def coalesce(self, numPartitions: int) -> ParentDataFrame:
         if not numPartitions > 0:
@@ -533,15 +532,7 @@ class DataFrame(ParentDataFrame):
         res._cached_schema = self._cached_schema
         return res
 
-    @overload
-    def drop(self, cols: "ColumnOrName") -> ParentDataFrame:
-        ...
-
-    @overload
-    def drop(self, *cols: str) -> ParentDataFrame:
-        ...
-
-    def drop(self, *cols: "ColumnOrName") -> ParentDataFrame:  # type: ignore[misc]
+    def drop(self, *cols: "ColumnOrName") -> ParentDataFrame:
         _cols = list(cols)
         if any(not isinstance(c, (str, Column)) for c in _cols):
             raise PySparkTypeError(
@@ -724,11 +715,11 @@ class DataFrame(ParentDataFrame):
         on: Optional[Union[str, List[str], Column, List[Column]]] = None,
         how: Optional[str] = None,
     ) -> ParentDataFrame:
-        self._check_same_session(other)
+        other = self._check_same_session(other)
         if how is not None and isinstance(how, str):
             how = how.lower().replace("_", "")
         return DataFrame(
-            plan.Join(left=self._plan, right=other._plan, on=on, how=how),  # type: ignore[arg-type]
+            plan.Join(left=self._plan, right=other._plan, on=on, how=how),
             session=self._session,
         )
 
@@ -738,13 +729,11 @@ class DataFrame(ParentDataFrame):
         on: Optional[Column] = None,
         how: Optional[str] = None,
     ) -> ParentDataFrame:
-        self._check_same_session(other)
+        other = self._check_same_session(other)
         if how is not None and isinstance(how, str):
             how = how.lower().replace("_", "")
         return DataFrame(
-            plan.LateralJoin(
-                left=self._plan, right=cast(plan.LogicalPlan, other._plan), on=on, how=how
-            ),
+            plan.LateralJoin(left=self._plan, right=other._plan, on=on, how=how),
             session=self._session,
         )
 
@@ -760,7 +749,7 @@ class DataFrame(ParentDataFrame):
         allowExactMatches: bool = True,
         direction: str = "backward",
     ) -> ParentDataFrame:
-        self._check_same_session(other)
+        other = self._check_same_session(other)
         if how is None:
             how = "inner"
         assert isinstance(how, str), "how should be a string"
@@ -777,7 +766,7 @@ class DataFrame(ParentDataFrame):
         return DataFrame(
             plan.AsOfJoin(
                 left=self._plan,
-                right=other._plan,  # type: ignore[arg-type]
+                right=other._plan,
                 left_as_of=_convert_col(self, leftAsOfColumn),
                 right_as_of=_convert_col(other, rightAsOfColumn),
                 on=on,
@@ -1159,15 +1148,13 @@ class DataFrame(ParentDataFrame):
         return None
 
     def union(self, other: ParentDataFrame) -> ParentDataFrame:
-        self._check_same_session(other)
+        other = self._check_same_session(other)
         return self.unionAll(other)
 
     def unionAll(self, other: ParentDataFrame) -> ParentDataFrame:
-        self._check_same_session(other)
+        other = self._check_same_session(other)
         res = DataFrame(
-            plan.SetOperation(
-                self._plan, other._plan, "union", is_all=True  # type: ignore[arg-type]
-            ),
+            plan.SetOperation(self._plan, other._plan, "union", is_all=True),
             session=self._session,
         )
         res._cached_schema = self._merge_cached_schema(other)
@@ -1176,11 +1163,11 @@ class DataFrame(ParentDataFrame):
     def unionByName(
         self, other: ParentDataFrame, allowMissingColumns: bool = False
     ) -> ParentDataFrame:
-        self._check_same_session(other)
+        other = self._check_same_session(other)
         res = DataFrame(
             plan.SetOperation(
                 self._plan,
-                other._plan,  # type: ignore[arg-type]
+                other._plan,
                 "union",
                 by_name=True,
                 allow_missing_columns=allowMissingColumns,
@@ -1191,44 +1178,41 @@ class DataFrame(ParentDataFrame):
         return res
 
     def subtract(self, other: ParentDataFrame) -> ParentDataFrame:
-        self._check_same_session(other)
+        other = self._check_same_session(other)
         res = DataFrame(
-            plan.SetOperation(
-                self._plan, other._plan, "except", is_all=False  # type: ignore[arg-type]
-            ),
+            plan.SetOperation(self._plan, other._plan, "except", is_all=False),
             session=self._session,
         )
         res._cached_schema = self._merge_cached_schema(other)
         return res
 
     def exceptAll(self, other: ParentDataFrame) -> ParentDataFrame:
-        self._check_same_session(other)
+        other = self._check_same_session(other)
         res = DataFrame(
-            plan.SetOperation(
-                self._plan, other._plan, "except", is_all=True  # type: ignore[arg-type]
-            ),
+            plan.SetOperation(self._plan, other._plan, "except", is_all=True),
             session=self._session,
         )
         res._cached_schema = self._merge_cached_schema(other)
         return res
 
+    def zipWithIndex(self, indexColName: str = "index") -> ParentDataFrame:
+        return self.select(
+            F.col("*"), F._invoke_function("distributed_sequence_id").alias(indexColName)
+        )
+
     def intersect(self, other: ParentDataFrame) -> ParentDataFrame:
-        self._check_same_session(other)
+        other = self._check_same_session(other)
         res = DataFrame(
-            plan.SetOperation(
-                self._plan, other._plan, "intersect", is_all=False  # type: ignore[arg-type]
-            ),
+            plan.SetOperation(self._plan, other._plan, "intersect", is_all=False),
             session=self._session,
         )
         res._cached_schema = self._merge_cached_schema(other)
         return res
 
     def intersectAll(self, other: ParentDataFrame) -> ParentDataFrame:
-        self._check_same_session(other)
+        other = self._check_same_session(other)
         res = DataFrame(
-            plan.SetOperation(
-                self._plan, other._plan, "intersect", is_all=True  # type: ignore[arg-type]
-            ),
+            plan.SetOperation(self._plan, other._plan, "intersect", is_all=True),
             session=self._session,
         )
         res._cached_schema = self._merge_cached_schema(other)
@@ -1731,15 +1715,25 @@ class DataFrame(ParentDataFrame):
         return self.columns
 
     def __getattr__(self, name: str) -> "Column":
-        if name in ["_jseq", "_jdf", "_jmap", "_jcols", "rdd", "toJSON"]:
+        if name in ["_jseq", "_jdf", "_jmap", "_jcols", "rdd"]:
             raise PySparkAttributeError(
                 errorClass="JVM_ATTRIBUTE_NOT_SUPPORTED", messageParameters={"attr_name": name}
             )
 
-        if name not in self.columns:
-            raise PySparkAttributeError(
-                errorClass="ATTRIBUTE_NOT_SUPPORTED", messageParameters={"attr_name": name}
-            )
+        # Only eagerly validate the column name when:
+        # 1, PYSPARK_VALIDATE_COLUMN_NAME_LEGACY is set 1; or
+        # 2, the name starts with '__', because it is likely a python internal method and
+        # an AttributeError might be expected to check whether the attribute exists.
+        # For example:
+        # pickle/cloudpickle need to check whether method '__setstate__' is defined or not,
+        # and it internally invokes __getattr__("__setstate__").
+        # Returning a dataframe column self._col("__setstate__") in this case will break
+        # the serialization of connect dataframe and features built atop it (e.g. FEB).
+        if os.environ.get("PYSPARK_VALIDATE_COLUMN_NAME_LEGACY") == "1" or name.startswith("__"):
+            if name not in self.columns:
+                raise PySparkAttributeError(
+                    errorClass="ATTRIBUTE_NOT_SUPPORTED", messageParameters={"attr_name": name}
+                )
 
         return self._col(name)
 
@@ -1840,13 +1834,20 @@ class DataFrame(ParentDataFrame):
         return (table, schema)
 
     def toArrow(self) -> "pa.Table":
-        schema = to_arrow_schema(self.schema, error_on_duplicated_field_names_in_struct=True)
+        schema = to_arrow_schema(
+            self.schema,
+            error_on_duplicated_field_names_in_struct=True,
+            timezone="UTC",
+        )
         table, _ = self._to_table()
         return table.cast(schema)
 
     def toPandas(self) -> "PandasDataFrameLike":
+        return self._to_pandas()
+
+    def _to_pandas(self, **kwargs: Any) -> "PandasDataFrameLike":
         query = self._plan.to_proto(self._session.client)
-        pdf, ei = self._session.client.to_pandas(query, self._plan.observations)
+        pdf, ei = self._session.client.to_pandas(query, self._plan.observations, **kwargs)
         self._execution_info = ei
         return pdf
 
@@ -1884,7 +1885,7 @@ class DataFrame(ParentDataFrame):
             try:
                 self._cached_schema_serialized = CPickleSerializer().dumps(self._schema)
             except Exception as e:
-                logger.warn(f"DataFrame schema pickle dumps failed with exception: {e}.")
+                logger.warning(f"DataFrame schema pickle dumps failed with exception: {e}.")
                 self._cached_schema_serialized = None
         return self._cached_schema
 
@@ -1896,7 +1897,7 @@ class DataFrame(ParentDataFrame):
             try:
                 return CPickleSerializer().loads(self._cached_schema_serialized)
             except Exception as e:
-                logger.warn(f"DataFrame schema pickle loads failed with exception: {e}.")
+                logger.warning(f"DataFrame schema pickle loads failed with exception: {e}.")
         # In case of pickle ser/de failure, fallback to deepcopy approach.
         return copy.deepcopy(_schema)
 
@@ -2068,6 +2069,7 @@ class DataFrame(ParentDataFrame):
 
     def toLocalIterator(self, prefetchPartitions: bool = False) -> Iterator[Row]:
         query = self._plan.to_proto(self._session.client)
+        binary_as_bytes = self._get_binary_as_bytes()
 
         schema: Optional[StructType] = None
         for schema_or_table in self._session.client.to_table_as_iterator(
@@ -2082,7 +2084,7 @@ class DataFrame(ParentDataFrame):
                 if schema is None:
                     schema = from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
                 yield from ArrowTableToRowsConversion.convert(
-                    table, schema, binary_as_bytes=self._get_binary_as_bytes()
+                    table, schema, binary_as_bytes=binary_as_bytes
                 )
 
     def pandas_api(
@@ -2203,7 +2205,7 @@ class DataFrame(ParentDataFrame):
                 errorClass="NOT_DATAFRAME",
                 messageParameters={"arg_name": "other", "arg_type": type(other).__name__},
             )
-        self._check_same_session(other)
+        other = self._check_same_session(other)
         return self._session.client.same_semantics(
             plan=self._plan.to_proto(self._session.client),
             other=other._plan.to_proto(other._session.client),
@@ -2254,13 +2256,10 @@ class DataFrame(ParentDataFrame):
         assert isinstance(checkpointed._plan, plan.CachedRemoteRelation)
         return checkpointed
 
-    if not is_remote_only():
+    def toJSON(self) -> ParentDataFrame:
+        return self.select(F.to_json(F.struct(F.col("*"))).alias("value"))
 
-        def toJSON(self, use_unicode: bool = True) -> "RDD[str]":
-            raise PySparkNotImplementedError(
-                errorClass="NOT_IMPLEMENTED",
-                messageParameters={"feature": "toJSON()"},
-            )
+    if not is_remote_only():
 
         @property
         def rdd(self) -> "RDD[Row]":
@@ -2289,7 +2288,7 @@ class DataFrameNaFunctions(ParentDataFrameNaFunctions):
         value: Union["LiteralType", Dict[str, "LiteralType"]],
         subset: Optional[Union[str, Tuple[str, ...], List[str]]] = None,
     ) -> ParentDataFrame:
-        return self.df.fillna(value=value, subset=subset)  # type: ignore[arg-type]
+        return self.df.fillna(value=value, subset=subset)
 
     def drop(
         self,
@@ -2373,7 +2372,7 @@ def _test() -> None:
         import pyarrow as pa
         from pyspark.loose_version import LooseVersion
 
-        if LooseVersion(pa.__version__) < LooseVersion("17.0.0"):
+        if LooseVersion(pa.__version__) < LooseVersion("21.0.0"):
             del pyspark.sql.dataframe.DataFrame.mapInArrow.__doc__
 
     globs["spark"] = (

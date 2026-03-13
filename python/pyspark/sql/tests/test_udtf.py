@@ -48,6 +48,7 @@ from pyspark.sql.functions import (
     AnalyzeResult,
     OrderingColumn,
     PartitioningColumn,
+    SelectedColumn,
     SkipRestOfInputTableException,
 )
 from pyspark.sql.types import (
@@ -67,12 +68,12 @@ from pyspark.sql.types import (
 from pyspark.logger import PySparkLogger
 from pyspark.testing import assertDataFrameEqual, assertSchemaEqual
 from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
-from pyspark.testing.sqlutils import (
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
-    ReusedSQLTestCase,
 )
 from pyspark.util import is_remote_only
 
@@ -1399,7 +1400,7 @@ class BaseUDTFTestsMixin:
         func = self.udtf_for_table_argument()
         self.spark.udtf.register("test_udtf", func)
 
-        with self.tempView("v"):
+        with self.temp_view("v"):
             self.spark.sql("CREATE OR REPLACE TEMPORARY VIEW v as SELECT id FROM range(0, 8)")
             assertDataFrameEqual(
                 self.spark.sql("SELECT * FROM test_udtf(TABLE (v))"),
@@ -1415,7 +1416,7 @@ class BaseUDTFTestsMixin:
         func = udtf(TestUDTF, returnType="a: int")
         self.spark.udtf.register("test_udtf", func)
 
-        with self.tempView("v"):
+        with self.temp_view("v"):
             self.spark.sql("CREATE OR REPLACE TEMPORARY VIEW v as SELECT id FROM range(0, 8)")
             assertDataFrameEqual(
                 self.spark.sql("SELECT * FROM test_udtf(5, TABLE (v))"),
@@ -1847,6 +1848,25 @@ class BaseUDTFTestsMixin:
         ):
             self.spark.sql("SELECT * FROM test_udtf(1, 'x')").collect()
 
+    def test_udtf_with_analyze_table_select(self):
+        @udtf
+        class TestUDTF:
+            @staticmethod
+            def analyze(*args, **kwargs) -> AnalyzeResult:
+                return AnalyzeResult(
+                    StructType().add("id", IntegerType()), select=[SelectedColumn("id")]
+                )
+
+            def eval(self, row: Row):
+                assert "value" not in row
+                yield row["id"],
+
+        df = self.spark.createDataFrame([(1, "a"), (2, "b"), (3, "c")], ["id", "value"])
+        assertDataFrameEqual(
+            TestUDTF(df.asTable()).collect(),
+            [Row(id=1), Row(id=2), Row(id=3)],
+        )
+
     def test_udtf_with_both_return_type_and_analyze(self):
         class TestUDTF:
             @staticmethod
@@ -1905,24 +1925,74 @@ class BaseUDTFTestsMixin:
             messageParameters={"name": "TestUDTF"},
         )
 
-    def test_udtf_with_analyze_returning_non_struct(self):
-        class TestUDTF:
-            @staticmethod
-            def analyze():
-                return StringType()
+    def test_udtf_with_scalar_analyze_returning_wrong_result(self):
+        # (wrong_type, error_message_regex)
+        invalid_results = [
+            (StringType(), r".*AnalyzeResult.*StringType.*"),
+            (AnalyzeResult(StringType()), r".*AnalyzeResult.*schema.*"),
+            (
+                AnalyzeResult(StructType().add("a", StringType()), withSinglePartition=True),
+                r".*withSinglePartition.*",
+            ),
+            (
+                AnalyzeResult(
+                    StructType().add("a", StringType()), partitionBy=[PartitioningColumn("a")]
+                ),
+                r".*partitionBy.*",
+            ),
+        ]
 
-            def eval(self):
-                yield "hello", "world"
+        for wrong_type, error_message_regex in invalid_results:
+            with self.subTest(wrong_type=wrong_type):
 
-        func = udtf(TestUDTF)
+                class TestUDTF:
+                    @staticmethod
+                    def analyze() -> AnalyzeResult:
+                        return wrong_type
 
-        with self.assertRaisesRegex(
-            AnalysisException,
-            "'analyze' method expects a result of type pyspark.sql.udtf.AnalyzeResult, "
-            "but instead this method returned a value of type: "
-            "<class 'pyspark.sql.types.StringType'>",
-        ):
-            func().collect()
+                    def eval(self):
+                        yield "hello", "world"
+
+                func = udtf(TestUDTF)
+
+                with self.assertRaisesRegex(AnalysisException, error_message_regex):
+                    func().collect()
+
+    def test_udtf_with_table_analyze_returning_wrong_result(self):
+        invalid_results = [
+            (
+                AnalyzeResult(
+                    StructType().add("a", StringType()), partitionBy=[OrderingColumn("a")]
+                ),
+                r".*partitionBy.*",
+            ),
+            (
+                AnalyzeResult(
+                    StructType().add("a", StringType()), orderBy=[PartitioningColumn("a")]
+                ),
+                r".*orderBy.*",
+            ),
+            (
+                AnalyzeResult(StructType().add("a", StringType()), select=SelectedColumn("a")),
+                r".*select.*",
+            ),
+        ]
+
+        for wrong_type, error_message_regex in invalid_results:
+            with self.subTest(wrong_type=wrong_type):
+
+                class TestUDTF:
+                    @staticmethod
+                    def analyze(**kwargs) -> AnalyzeResult:
+                        return wrong_type
+
+                    def eval(self, **kwargs):
+                        yield tuple(value for _, value in sorted(kwargs.items()))
+
+                func = udtf(TestUDTF)
+
+                with self.assertRaisesRegex(AnalysisException, error_message_regex):
+                    func(a=self.spark.range(3).asTable(), b=lit("x")).collect()
 
     def test_udtf_with_analyze_raising_an_exception(self):
         class TestUDTF:
@@ -2829,6 +2899,29 @@ class BaseUDTFTestsMixin:
                     + [Row(partition_col=42, count=3, total=3, last=None)],
                 )
 
+    def test_udtf_with_analyze_order_by_override_nulls_first(self):
+        for override_nulls_first in [True, False]:
+
+            @udtf
+            class TestUDTF:
+                @staticmethod
+                def analyze(*args, **kwargs) -> AnalyzeResult:
+                    return AnalyzeResult(
+                        StructType().add("id", IntegerType()),
+                        withSinglePartition=True,
+                        orderBy=[OrderingColumn("id", overrideNullsFirst=override_nulls_first)],
+                    )
+
+                def eval(self, row: Row):
+                    yield row["id"],
+
+            df = self.spark.createDataFrame([(1,), (None,)], ["id"])
+            assertDataFrameEqual(
+                TestUDTF(df.asTable()).collect(),
+                [Row(id=None), Row(id=1)] if override_nulls_first else [Row(id=1), Row(id=None)],
+                checkRowOrder=True,
+            )
+
     def test_udtf_with_prepare_string_from_analyze(self):
         @dataclass
         class AnalyzeResultWithBuffer(AnalyzeResult):
@@ -3401,7 +3494,7 @@ class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
             def eval(self):
                 yield 1,
 
-        err = "UDTF_ARROW_TYPE_CAST_ERROR"
+        err = "Exception thrown when converting pandas.Series"
 
         for ret_type, expected in [
             ("x: boolean", [Row(x=True)]),
@@ -3428,7 +3521,7 @@ class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
             def eval(self):
                 yield "1",
 
-        err = "UDTF_ARROW_TYPE_CAST_ERROR"
+        err = "Exception thrown when converting pandas.Series"
 
         for ret_type, expected in [
             ("x: boolean", [Row(x=True)]),
@@ -3457,7 +3550,7 @@ class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
             def eval(self):
                 yield "hello",
 
-        err = "UDTF_ARROW_TYPE_CAST_ERROR"
+        err = "Exception thrown when converting pandas.Series"
 
         for ret_type, expected in [
             ("x: boolean", err),
@@ -3486,7 +3579,7 @@ class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
             def eval(self):
                 yield [0, 1.1, 2],
 
-        err = "UDTF_ARROW_TYPE_CAST_ERROR"
+        err = "Exception thrown when converting pandas.Series"
 
         for ret_type, expected in [
             ("x: boolean", err),
@@ -3519,7 +3612,7 @@ class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
             def eval(self):
                 yield {"a": 0, "b": 1.1, "c": 2},
 
-        err = "UDTF_ARROW_TYPE_CAST_ERROR"
+        err = "Exception thrown when converting pandas.Series"
 
         for ret_type, expected in [
             ("x: boolean", err),
@@ -3551,7 +3644,7 @@ class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
             def eval(self):
                 yield {"a": 0, "b": 1.1, "c": 2},
 
-        err = "UDTF_ARROW_TYPE_CAST_ERROR"
+        err = "Exception thrown when converting pandas.Series"
 
         for ret_type, expected in [
             ("x: boolean", err),
@@ -3582,7 +3675,7 @@ class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
             def eval(self):
                 yield Row(a=0, b=1.1, c=2),
 
-        err = "UDTF_ARROW_TYPE_CAST_ERROR"
+        err = "Exception thrown when converting pandas.Series"
 
         for ret_type, expected in [
             ("x: boolean", err),
@@ -3619,7 +3712,9 @@ class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
             "x: array<int>",
         ]:
             with self.subTest(ret_type=ret_type):
-                with self.assertRaisesRegex(PythonException, "UDTF_ARROW_TYPE_CAST_ERROR"):
+                with self.assertRaisesRegex(
+                    PythonException, "Exception thrown when converting pandas.Series"
+                ):
                     udtf(TestUDTF, returnType=ret_type)().collect()
 
 
@@ -3652,7 +3747,7 @@ class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
             def eval(self):
                 yield 1,
 
-        err = "UDTF_ARROW_TYPE_CONVERSION_ERROR"
+        err = "UDTF_ARROW_DATA_CONVERSION_ERROR"
 
         for ret_type, expected in [
             ("x: boolean", err),
@@ -3679,7 +3774,7 @@ class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
             def eval(self):
                 yield "1",
 
-        err = "UDTF_ARROW_TYPE_CONVERSION_ERROR"
+        err = "UDTF_ARROW_DATA_CONVERSION_ERROR"
 
         for ret_type, expected in [
             ("x: boolean", err),
@@ -3708,7 +3803,7 @@ class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
             def eval(self):
                 yield "hello",
 
-        err = "UDTF_ARROW_TYPE_CONVERSION_ERROR"
+        err = "UDTF_ARROW_DATA_CONVERSION_ERROR"
         for ret_type, expected in [
             ("x: boolean", err),
             ("x: tinyint", err),
@@ -3736,7 +3831,7 @@ class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
             def eval(self):
                 yield [0, 1.1, 2],
 
-        err = "UDTF_ARROW_TYPE_CONVERSION_ERROR"
+        err = "UDTF_ARROW_DATA_CONVERSION_ERROR"
         for ret_type, expected in [
             ("x: boolean", err),
             ("x: tinyint", err),
@@ -3768,7 +3863,7 @@ class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
             def eval(self):
                 yield {"a": 0, "b": 1.1, "c": 2},
 
-        err = "UDTF_ARROW_TYPE_CONVERSION_ERROR"
+        err = "UDTF_ARROW_DATA_CONVERSION_ERROR"
         for ret_type, expected in [
             ("x: boolean", err),
             ("x: tinyint", err),
@@ -3799,7 +3894,7 @@ class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
             def eval(self):
                 yield {"a": 0, "b": 1.1, "c": 2},
 
-        err = "UDTF_ARROW_TYPE_CONVERSION_ERROR"
+        err = "UDTF_ARROW_DATA_CONVERSION_ERROR"
         for ret_type, expected in [
             ("x: boolean", err),
             ("x: tinyint", err),
@@ -3829,7 +3924,7 @@ class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
             def eval(self):
                 yield Row(a=0, b=1.1, c=2),
 
-        err = "UDTF_ARROW_TYPE_CONVERSION_ERROR"
+        err = "UDTF_ARROW_DATA_CONVERSION_ERROR"
         for ret_type, expected in [
             ("x: boolean", err),
             ("x: tinyint", err),
@@ -3865,7 +3960,7 @@ class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
             "x: array<int>",
         ]:
             with self.subTest(ret_type=ret_type):
-                with self.assertRaisesRegex(PythonException, "UDTF_ARROW_TYPE_CONVERSION_ERROR"):
+                with self.assertRaisesRegex(PythonException, "UDTF_ARROW_DATA_CONVERSION_ERROR"):
                     udtf(TestUDTF, returnType=ret_type)().collect()
 
     def test_decimal_round(self):
@@ -3901,12 +3996,6 @@ class UDTFArrowTests(UDTFArrowTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_udtf import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

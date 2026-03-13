@@ -84,7 +84,7 @@ class LabeledPoint:
     'label' and 'features' are accessible as class attributes.
     """
 
-    def __init__(self, label: float, features: Iterable[float]):
+    def __init__(self, label: float, features: "VectorLike"):
         self.label = float(label)
         self.features = _convert_to_vector(features)
 

@@ -458,7 +458,7 @@ class PySparkPlotAccessor:
         self, column: Optional[Union[str, List[str]]] = None, bins: int = 10, **kwargs: Any
     ) -> "Figure":
         """
-        Draw one histogram of the DataFrame’s columns.
+        Draw one histogram of the DataFrame's columns.
 
         A `histogram`_ is a representation of the distribution of data.
 

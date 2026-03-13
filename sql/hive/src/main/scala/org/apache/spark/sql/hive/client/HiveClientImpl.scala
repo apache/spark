@@ -28,6 +28,7 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -60,6 +61,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecutionException
@@ -555,6 +557,7 @@ private[hive] class HiveClientImpl(
         outputFormat = Option(h.getTTable.getSd.getOutputFormat).orElse {
           Option(h.getStorageHandler).map(_.getOutputFormatClass.getName)
         },
+        serdeName = Option(h.getTTable.getSd.getSerdeInfo.getName),
         serde = Option(h.getSerializationLib),
         compressed = h.getTTable.getSd.isCompressed,
         properties = Option(h.getTTable.getSd.getSerdeInfo.getParameters)
@@ -586,7 +589,23 @@ private[hive] class HiveClientImpl(
       tableName: String,
       ignoreIfNotExists: Boolean,
       purge: Boolean): Unit = withHiveState {
-    shim.dropTable(client, dbName, tableName, true, ignoreIfNotExists, purge)
+    try {
+      shim.dropTable(client, dbName, tableName, true, ignoreIfNotExists, purge)
+    } catch {
+      case NonFatal(e) =>
+        // Check if the error is due to missing database or table.
+        if (!databaseExists(dbName) || !tableExists(dbName, tableName)) {
+          if (ignoreIfNotExists) {
+            // Database or table doesn't exist and we're ignoring - treat as success
+            return
+          } else {
+            throw new NoSuchTableException(
+              Seq(CatalogManager.SESSION_CATALOG_NAME, dbName, tableName))
+          }
+        }
+        // Both database and table exist, so re-throw the original exception
+        throw e
+    }
   }
 
   override def alterTable(
@@ -1183,6 +1202,7 @@ private[hive] object HiveClientImpl extends Logging {
       hiveTable.getTTable.getSd.setLocation(loc)}
     table.storage.inputFormat.map(toInputFormat).foreach(hiveTable.setInputFormatClass)
     table.storage.outputFormat.map(toOutputFormat).foreach(hiveTable.setOutputFormatClass)
+    table.storage.serdeName.foreach(hiveTable.getSd.getSerdeInfo.setName)
     hiveTable.setSerializationLib(
       table.storage.serde.getOrElse("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
     table.storage.properties.foreach { case (k, v) => hiveTable.setSerdeParam(k, v) }
@@ -1233,6 +1253,7 @@ private[hive] object HiveClientImpl extends Logging {
     p.storage.locationUri.map(CatalogUtils.URIToString(_)).foreach(storageDesc.setLocation)
     p.storage.inputFormat.foreach(storageDesc.setInputFormat)
     p.storage.outputFormat.foreach(storageDesc.setOutputFormat)
+    p.storage.serdeName.foreach(serdeInfo.setName)
     p.storage.serde.foreach(serdeInfo.setSerializationLib)
     serdeInfo.setParameters(p.storage.properties.asJava)
     storageDesc.setSerdeInfo(serdeInfo)
@@ -1262,6 +1283,7 @@ private[hive] object HiveClientImpl extends Logging {
         locationUri = Option(CatalogUtils.stringToURI(apiPartition.getSd.getLocation)),
         inputFormat = Option(apiPartition.getSd.getInputFormat),
         outputFormat = Option(apiPartition.getSd.getOutputFormat),
+        serdeName = Option(apiPartition.getSd.getSerdeInfo.getName),
         serde = Option(apiPartition.getSd.getSerdeInfo.getSerializationLib),
         compressed = apiPartition.getSd.isCompressed,
         properties = Option(apiPartition.getSd.getSerdeInfo.getParameters)
@@ -1399,6 +1421,8 @@ private[hive] object HiveClientImpl extends Logging {
     if ("bonecp".equalsIgnoreCase(cpType)) {
       hiveConf.set("datanucleus.connectionPoolingType", "DBCP", SOURCE_SPARK)
     }
+    // SPARK-54853 handles this check on the Spark side
+    hiveConf.set("hive.exec.max.dynamic.partitions", Int.MaxValue.toString, SOURCE_SPARK)
     hiveConf
   }
 

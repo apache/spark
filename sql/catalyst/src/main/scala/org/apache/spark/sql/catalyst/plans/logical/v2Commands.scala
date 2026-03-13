@@ -61,8 +61,7 @@ trait KeepAnalyzedQuery extends Command {
 trait V2WriteCommand
     extends UnaryCommand
     with KeepAnalyzedQuery
-    with CTEInChildren
-    with IgnoreCachedData {
+    with CTEInChildren {
   def table: NamedRelation
   def query: LogicalPlan
   def isByName: Boolean
@@ -257,7 +256,7 @@ case class ReplaceData(
     write: Option[Write] = None) extends RowLevelWrite {
 
   override val isByName: Boolean = false
-  override val stringArgs: Iterator[Any] = Iterator(table, query, write)
+  override def stringArgs: Iterator[Any] = Iterator(table, query, write)
 
   override lazy val references: AttributeSet = query.outputSet
 
@@ -339,7 +338,7 @@ case class WriteDelta(
     write: Option[DeltaWrite] = None) extends RowLevelWrite {
 
   override val isByName: Boolean = false
-  override val stringArgs: Iterator[Any] = Iterator(table, query, write)
+  override def stringArgs: Iterator[Any] = Iterator(table, query, write)
 
   override lazy val references: AttributeSet = query.outputSet
 
@@ -894,66 +893,56 @@ case class MergeIntoTable(
     case _ => false
   }
 
-  lazy val needSchemaEvolution: Boolean =
-    evaluateSchemaEvolution && changesForSchemaEvolution.nonEmpty
-
-  lazy val evaluateSchemaEvolution: Boolean =
-    schemaEvolutionEnabled &&
-      canEvaluateSchemaEvolution
+  lazy val pendingSchemaChanges: Seq[TableChange] = {
+    if (schemaEvolutionEnabled && schemaEvolutionReady) {
+      val referencedSourceSchema = MergeIntoTable.sourceSchemaForSchemaEvolution(this)
+      MergeIntoTable.schemaChanges(targetTable.schema, referencedSourceSchema).toSeq
+    } else {
+      Seq.empty
+    }
+  }
 
   lazy val schemaEvolutionEnabled: Boolean = withSchemaEvolution && {
     EliminateSubqueryAliases(targetTable) match {
-      case r: DataSourceV2Relation if r.autoSchemaEvolution() => true
+      case r: DataSourceV2Relation if r.autoSchemaEvolution => true
       case _ => false
     }
   }
 
   // Guard that assignments are either resolved or candidates for evolution before
   // evaluating schema evolution. We need to use resolved assignment values to check
-  // candidates, see MergeIntoTable.sourceSchemaForSchemaEvolution for details.
-  lazy val canEvaluateSchemaEvolution: Boolean = {
-    if ((!targetTable.resolved) || (!sourceTable.resolved)) {
-      false
-    } else {
-      val actions = matchedActions ++ notMatchedActions
-      val hasStarActions = actions.exists {
-        case _: UpdateStarAction => true
-        case _: InsertStarAction => true
-        case _ => false
-      }
-      if (hasStarActions) {
-        // need to resolve star actions first
-        false
-      } else {
-        val assignments = actions.collect {
-          case a: UpdateAction => a.assignments
-          case a: InsertAction => a.assignments
-        }.flatten
-        val sourcePaths = DataTypeUtils.extractAllFieldPaths(sourceTable.schema)
-        assignments.forall { assignment =>
-          assignment.resolved ||
-            (assignment.value.resolved && sourcePaths.exists {
-              path => MergeIntoTable.isEqual(assignment, path)
-            })
-        }
-      }
+  // candidates, see MergeIntoTable.isSchemaEvolutionCandidate for details.
+  lazy val schemaEvolutionReady: Boolean = {
+    targetTable.resolved && sourceTable.resolved && actionsSchemaEvolutionReady
+  }
+
+  private def actionsSchemaEvolutionReady: Boolean = {
+    val actions = matchedActions ++ notMatchedActions
+    actions.forall {
+      case a: UpdateAction => MergeIntoTable.areSchemaEvolutionReady(a.assignments, sourceTable)
+      case a: InsertAction => MergeIntoTable.areSchemaEvolutionReady(a.assignments, sourceTable)
+      case _ => false
     }
   }
 
-  private lazy val sourceSchemaForEvolution: StructType =
-    MergeIntoTable.sourceSchemaForSchemaEvolution(this)
-
-  lazy val changesForSchemaEvolution: Array[TableChange] =
-    MergeIntoTable.schemaChanges(targetTable.schema, sourceSchemaForEvolution)
-
   override def left: LogicalPlan = targetTable
   override def right: LogicalPlan = sourceTable
+
   override protected def withNewChildrenInternal(
-      newLeft: LogicalPlan, newRight: LogicalPlan): MergeIntoTable =
+      newLeft: LogicalPlan,
+      newRight: LogicalPlan): MergeIntoTable = {
     copy(targetTable = newLeft, sourceTable = newRight)
+  }
 }
 
 object MergeIntoTable {
+
+  def getWritePrivileges(merge: MergeIntoTable): Seq[TableWritePrivilege] = {
+    getWritePrivileges(
+      merge.matchedActions,
+      merge.notMatchedActions,
+      merge.notMatchedBySourceActions)
+  }
 
   def getWritePrivileges(
       matchedActions: Iterable[MergeAction],
@@ -998,7 +987,7 @@ object MergeIntoTable {
         // Identify the newly added fields and append to the end
         val currentFieldMap = toFieldMap(currentFields)
         val adds = newFields.filterNot(f => currentFieldMap.contains(f.name))
-          .map(f => TableChange.addColumn(fieldPath ++ Set(f.name), f.dataType))
+          .map(f => TableChange.addColumn(fieldPath ++ Seq(f.name), f.dataType))
 
         updates ++ adds
 
@@ -1107,11 +1096,40 @@ object MergeIntoTable {
   // Example: UPDATE SET target.a = source.a
   private def isEqual(assignment: Assignment, sourceFieldPath: Seq[String]): Boolean = {
     // key must be a non-qualified field path that may be added to target schema via evolution
-    val assignmenKeyExpr = extractFieldPath(assignment.key, allowUnresolved = true)
+    val assignmentKeyExpr = extractFieldPath(assignment.key, allowUnresolved = true)
     // value should always be resolved (from source)
     val assignmentValueExpr = extractFieldPath(assignment.value, allowUnresolved = false)
-    assignmenKeyExpr == assignmentValueExpr &&
-      assignmenKeyExpr == sourceFieldPath
+    assignmentKeyExpr == assignmentValueExpr && assignmentKeyExpr == sourceFieldPath
+  }
+
+  private def areSchemaEvolutionReady(
+      assignments: Seq[Assignment],
+      source: LogicalPlan): Boolean = {
+    assignments.forall(assign => assign.resolved || isSchemaEvolutionCandidate(assign, source))
+  }
+
+  private def isSchemaEvolutionCandidate(assignment: Assignment, source: LogicalPlan): Boolean = {
+    assignment.value.resolved && isSameColumnAssignment(assignment, source)
+  }
+
+  // Helper method to check if an assignment key is equal to a source column
+  // and if the assignment value is that same source column.
+  //
+  // Top-level example: UPDATE SET target.a = source.a
+  //   key:   AttributeReference("a", ...) -> path Seq("a")
+  //   value: AttributeReference("a", ...) from source
+  //
+  // Nested example: UPDATE SET addr.city = source.addr.city
+  //   key:   GetStructField(GetStructField(AttributeReference("addr", ...), 0), 1)
+  //   value: GetStructField(GetStructField(AttributeReference("addr", ...), 0), 1) from source
+  //
+  // references contains only root attributes, so subsetOf(source.outputSet) works for both.
+  private def isSameColumnAssignment(assignment: Assignment, source: LogicalPlan): Boolean = {
+    // key must be a non-qualified field path that may be added to target schema via evolution
+    val keyPath = extractFieldPath(assignment.key, allowUnresolved = true)
+    // value should always be resolved (from source)
+    val valuePath = extractFieldPath(assignment.value, allowUnresolved = false)
+    keyPath == valuePath && assignment.value.references.subsetOf(source.outputSet)
   }
 }
 
@@ -1378,6 +1396,7 @@ case class CreateUserDefinedFunction(
     exprText: Option[String],
     queryText: Option[String],
     comment: Option[String],
+    collation: Option[String],
     isDeterministic: Option[Boolean],
     containsSQL: Option[Boolean],
     language: RoutineLanguage,
@@ -1673,7 +1692,7 @@ case class CreateView(
 }
 
 /**
- * Used to apply ApplyDefaultCollationToStringType to CreateViewCommand
+ * Used to apply ApplyDefaultCollation to CreateViewCommand
  */
 trait CreateTempView {
   val collation: Option[String]
@@ -1742,7 +1761,8 @@ case class CacheTableAsSelect(
     isLazy: Boolean,
     options: Map[String, String],
     isAnalyzed: Boolean = false,
-    referredTempFunctions: Seq[String] = Seq.empty) extends AnalysisOnlyCommand {
+    referredTempFunctions: Seq[String] = Seq.empty)
+  extends AnalysisOnlyCommand with CTEInChildren {
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): CacheTableAsSelect = {
     assert(!isAnalyzed)
@@ -1756,6 +1776,10 @@ case class CacheTableAsSelect(
       isAnalyzed = true,
       // Collect the referred temporary functions from AnalysisContext
       referredTempFunctions = ac.referredTempFunctionNames.toSeq)
+  }
+
+  override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
+    copy(plan = WithCTE(plan, cteDefs))
   }
 }
 
@@ -1921,6 +1945,53 @@ case class SetVariable(
   override protected def withNewChildInternal(newChild: LogicalPlan): SetVariable =
     copy(sourceQuery = newChild)
 }
+
+/**
+ * The logical plan of the DECLARE CURSOR statement.
+ *
+ * The queryText is stored to support both parameterized and non-parameterized cursors.
+ * The query is parsed and analyzed when the cursor is declared at execution time.
+ *
+ * @param cursorName Name of the cursor
+ * @param queryText The original SQL text of the query (preserves parameter markers)
+ * @param asensitive Whether the cursor is ASENSITIVE or INSENSITIVE
+ */
+case class DeclareCursor(
+    cursorName: String,
+    queryText: String,
+    asensitive: Boolean = true) extends LeafCommand
+
+/**
+ * The logical plan of the OPEN cursor command.
+ *
+ * @param cursor Cursor reference (UnresolvedCursor during parsing,
+ *               CursorReference after analysis)
+ * @param args Parameter expressions from USING clause
+ * @param paramNames Parameter names extracted from Alias at parse time
+ *                   (empty string for positional parameters)
+ */
+case class OpenCursor(
+    cursor: Expression,
+    args: Seq[Expression] = Seq.empty,
+    paramNames: Seq[String] = Seq.empty) extends LeafCommand
+
+/**
+ * The logical plan of the FETCH cursor command.
+ *
+ * @param cursor Cursor reference (UnresolvedCursor during parsing, CursorReference after analysis)
+ * @param targetVariables Target variables to fetch into
+ */
+case class FetchCursor(
+    cursor: Expression,
+    targetVariables: Seq[Expression]) extends LeafCommand
+
+/**
+ * The logical plan of the CLOSE cursor command.
+ *
+ * @param cursor Cursor reference (UnresolvedCursor during parsing, CursorReference after analysis)
+ */
+case class CloseCursor(cursor: Expression) extends LeafCommand
+
 
 /**
  * The logical plan of the CALL statement.

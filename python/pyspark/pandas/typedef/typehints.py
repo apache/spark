@@ -28,8 +28,10 @@ from typing import Any, Callable, Generic, List, Tuple, Union, Type, get_type_hi
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import CategoricalDtype, pandas_dtype  # type: ignore[attr-defined]
+from pandas.api.types import CategoricalDtype, pandas_dtype
 from pandas.api.extensions import ExtensionDtype
+
+from pyspark.loose_version import LooseVersion
 
 
 extension_dtypes: Tuple[type, ...]
@@ -148,8 +150,6 @@ def as_spark_type(
     - dictionaries of field_name -> type
     - Python3's typing system
     """
-    from pyspark.loose_version import LooseVersion
-
     # For NumPy typing, NumPy version should be 1.21+
     if LooseVersion(np.__version__) >= LooseVersion("1.21"):
         if (
@@ -204,11 +204,15 @@ def as_spark_type(
     elif tpe in (str, np.str_, "str", "U"):
         return types.StringType()
     # TimestampType or TimestampNTZType if timezone is not specified.
-    elif tpe in (datetime.datetime, np.datetime64, "datetime64[ns]", "M", pd.Timestamp):
+    elif tpe in (datetime.datetime, np.datetime64, "M", pd.Timestamp) or (
+        isinstance(tpe, np.dtype) and tpe.type is np.datetime64
+    ):
         return types.TimestampNTZType() if prefer_timestamp_ntz else types.TimestampType()
 
     # DayTimeIntervalType
-    elif tpe in (datetime.timedelta, np.timedelta64, "timedelta64[ns]"):
+    elif tpe in (datetime.timedelta, np.timedelta64) or (
+        isinstance(tpe, np.dtype) and tpe.type is np.timedelta64
+    ):
         return types.DayTimeIntervalType()
 
     # categorical types
@@ -279,6 +283,10 @@ def spark_type_to_pandas_dtype(
             elif isinstance(spark_type, types.DoubleType):
                 return Float64Dtype()
 
+    if LooseVersion(pd.__version__) >= "3.0.0":
+        if extension_object_dtypes_available and isinstance(spark_type, types.StringType):
+            return StringDtype(na_value=np.nan)
+
     if isinstance(
         spark_type,
         (
@@ -292,9 +300,15 @@ def spark_type_to_pandas_dtype(
     ):
         return np.dtype("object")
     elif isinstance(spark_type, types.DayTimeIntervalType):
-        return np.dtype("timedelta64[ns]")
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return np.dtype("timedelta64[ns]")
+        else:
+            return np.dtype("timedelta64[us]")
     elif isinstance(spark_type, (types.TimestampType, types.TimestampNTZType)):
-        return np.dtype("datetime64[ns]")
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return np.dtype("datetime64[ns]")
+        else:
+            return np.dtype("datetime64[us]")
     else:
         from pyspark.pandas.utils import default_session
 
@@ -304,7 +318,26 @@ def spark_type_to_pandas_dtype(
             .lower()
             == "true"
         )
-        return np.dtype(to_arrow_type(spark_type, prefers_large_var_types).to_pandas_dtype())
+        return np.dtype(
+            to_arrow_type(
+                spark_type, timezone="UTC", prefers_large_types=prefers_large_var_types
+            ).to_pandas_dtype()
+        )
+
+
+def is_str_dtype(tpe: Dtype) -> bool:
+    if LooseVersion(pd.__version__) < "3.0.0":
+        return False
+    if extension_object_dtypes_available:
+        return isinstance(tpe, StringDtype) and tpe.na_value is np.nan
+    return False
+
+
+def handle_dtype_as_extension_dtype(tpe: Dtype) -> bool:
+    if is_str_dtype(tpe):
+        return False
+    else:
+        return isinstance(tpe, extension_dtypes)
 
 
 def pandas_on_spark_type(tpe: Union[str, type, Dtype]) -> Tuple[Dtype, types.DataType]:
@@ -326,10 +359,19 @@ def pandas_on_spark_type(tpe: Union[str, type, Dtype]) -> Tuple[Dtype, types.Dat
 
     Examples
     --------
+    >>> from pyspark.loose_version import LooseVersion
+    >>> using_pandas_3 = LooseVersion(pd.__version__) >= "3.0.0"
+
     >>> pandas_on_spark_type(int)
     (dtype('int64'), LongType())
-    >>> pandas_on_spark_type(str)
-    (dtype('<U'), StringType())
+    >>> t = pandas_on_spark_type(str)
+    >>> if using_pandas_3:
+    ...     t[0] == pd.StringDtype(na_value=np.nan)
+    ... else:
+    ...     t[0] == np.str_
+    True
+    >>> t[1]
+    StringType()
     >>> pandas_on_spark_type(datetime.date)
     (dtype('O'), DateType())
     >>> pandas_on_spark_type(datetime.datetime)
@@ -342,7 +384,7 @@ def pandas_on_spark_type(tpe: Union[str, type, Dtype]) -> Tuple[Dtype, types.Dat
     try:
         dtype = pandas_dtype(tpe)
         spark_type = as_spark_type(dtype)
-    except TypeError:
+    except (TypeError, ValueError):
         spark_type = as_spark_type(tpe)
         dtype = spark_type_to_pandas_dtype(spark_type)
     return dtype, spark_type
@@ -384,6 +426,9 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     The returned type class indicates both dtypes (a pandas only dtype object
     or a numpy dtype object) and its corresponding Spark DataType.
 
+    >>> from pyspark.loose_version import LooseVersion
+    >>> using_pandas_3 = LooseVersion(pd.__version__) >= "3.0.0"
+
     >>> def func() -> int:
     ...    pass
     >>> inferred = infer_return_type(func)
@@ -403,8 +448,13 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     >>> def func() -> ps.DataFrame[float, str]:
     ...    pass
     >>> inferred = infer_return_type(func)
-    >>> inferred.dtypes
-    [dtype('float64'), dtype('<U')]
+    >>> inferred.dtypes[0]
+    dtype('float64')
+    >>> if using_pandas_3:
+    ...     inferred.dtypes[1] == pd.StringDtype(na_value=np.nan)
+    ... else:
+    ...     inferred.dtypes[1] == np.str_
+    True
     >>> inferred.spark_type
     StructType([StructField('c0', DoubleType(), True), StructField('c1', StringType(), True)])
 
@@ -435,8 +485,13 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     >>> def func() -> 'ps.DataFrame[float, str]':
     ...    pass
     >>> inferred = infer_return_type(func)
-    >>> inferred.dtypes
-    [dtype('float64'), dtype('<U')]
+    >>> inferred.dtypes[0]
+    dtype('float64')
+    >>> if using_pandas_3:
+    ...     inferred.dtypes[1] == pd.StringDtype(na_value=np.nan)
+    ... else:
+    ...     inferred.dtypes[1] == np.str_
+    True
     >>> inferred.spark_type
     StructType([StructField('c0', DoubleType(), True), StructField('c1', StringType(), True)])
 
@@ -576,7 +631,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
 
     if hasattr(tpe, "__origin__") and issubclass(tpe.__origin__, SeriesType):
         tpe = tpe.__args__[0]
-        if issubclass(tpe, NameTypeHolder):
+        if isinstance(tpe, type) and issubclass(tpe, NameTypeHolder):
             tpe = tpe.tpe
         dtype, spark_type = pandas_on_spark_type(tpe)
         return SeriesType(dtype, spark_type)
@@ -668,7 +723,10 @@ def create_type_for_series_type(param: Any) -> Type[SeriesType]:
         new_class = type(NameTypeHolder.short_name, (NameTypeHolder,), {})
         new_class.tpe = param  # type: ignore[assignment]
     else:
-        new_class = param.type if isinstance(param, np.dtype) else param
+        if LooseVersion(pd.__version__) < "3.0.0":
+            new_class = param.type if isinstance(param, np.dtype) else param
+        else:
+            new_class = param
 
     return SeriesType[new_class]  # type: ignore[valid-type]
 
@@ -828,11 +886,18 @@ def _new_type_holders(
                 holder_clazz.short_name, (holder_clazz,), {}
             )
             new_param.name = param.start
-            if isinstance(param.stop, ExtensionDtype):
-                new_param.tpe = param.stop  # type: ignore[assignment]
+            if LooseVersion(pd.__version__) < "3.0.0":
+                if isinstance(param.stop, ExtensionDtype):
+                    new_param.tpe = param.stop  # type: ignore[assignment]
+                else:
+                    # When the given argument is a numpy's dtype instance.
+                    new_param.tpe = (
+                        param.stop.type  # type: ignore[assignment]
+                        if isinstance(param.stop, np.dtype)
+                        else param.stop
+                    )
             else:
-                # When the given argument is a numpy's dtype instance.
-                new_param.tpe = param.stop.type if isinstance(param.stop, np.dtype) else param.stop
+                new_param.tpe = param.stop
             new_params.append(new_param)
         return tuple(new_params)
     elif is_unnamed_params:
@@ -842,10 +907,17 @@ def _new_type_holders(
             new_type: Type[Union[NameTypeHolder, IndexNameTypeHolder]] = type(
                 holder_clazz.short_name, (holder_clazz,), {}
             )
-            if isinstance(param, ExtensionDtype):
-                new_type.tpe = param  # type: ignore[assignment]
+            if LooseVersion(pd.__version__) < "3.0.0":
+                if isinstance(param, ExtensionDtype):
+                    new_type.tpe = param  # type: ignore[assignment]
+                else:
+                    new_type.tpe = (
+                        param.type  # type: ignore[assignment]
+                        if isinstance(param, np.dtype)
+                        else param
+                    )
             else:
-                new_type.tpe = param.type if isinstance(param, np.dtype) else param
+                new_type.tpe = param
             new_types.append(new_type)
         return tuple(new_types)
     else:

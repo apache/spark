@@ -21,6 +21,7 @@ import scala.jdk.CollectionConverters._
 import io.grpc.ManagedChannel
 
 import org.apache.spark.connect.proto._
+import org.apache.spark.sql.util.CloseableIterator
 
 private[connect] class CustomSparkConnectBlockingStub(
     channel: ManagedChannel,
@@ -140,6 +141,19 @@ private[connect] class CustomSparkConnectBlockingStub(
       retryHandler.retry {
         stubState.responseValidator.verifyResponse {
           stub.cloneSession(request)
+        }
+      }
+    }
+  }
+
+  def getStatus(request: GetStatusRequest): GetStatusResponse = {
+    grpcExceptionConverter.convert(
+      request.getSessionId,
+      request.getUserContext,
+      request.getClientType) {
+      retryHandler.retry {
+        stubState.responseValidator.verifyResponse {
+          stub.getStatus(request)
         }
       }
     }

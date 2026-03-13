@@ -676,6 +676,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     stInvalidSridValueError(srid.toString)
   }
 
+  def wkbParseError(msg: String, pos: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(errorClass = "WKB_PARSE_ERROR",
+      messageParameters = Map("parseError" -> msg, "pos" -> pos))
+  }
+
+  def wkbParseError(msg: String, pos: Long): SparkIllegalArgumentException = {
+    wkbParseError(msg, pos.toString)
+  }
+
   def withSuggestionIntervalArithmeticOverflowError(
       suggestedFunc: String,
       context: QueryContext): ArithmeticException = {
@@ -2261,6 +2270,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = f)
   }
 
+  def unfinishedRepartitionDetectedError(batchId: Long, lastCommittedBatchId: Long): Throwable = {
+    new SparkException(
+      errorClass = "STREAMING_UNFINISHED_REPARTITION_DETECTED",
+      messageParameters = Map(
+        "batchId" -> batchId.toString,
+        "lastCommittedBatchId" -> lastCommittedBatchId.toString),
+      cause = null)
+  }
+
   def cannotPurgeAsBreakInternalStateError(): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(errorClass = "_LEGACY_ERROR_TEMP_2260")
   }
@@ -2484,12 +2502,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       maxDynamicPartitions: Int,
       maxDynamicPartitionsKey: String): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2277",
+      errorClass = "DYNAMIC_PARTITION_WRITE_PARTITION_NUM_LIMIT_EXCEEDED",
       messageParameters = Map(
-        "numWrittenParts" -> numWrittenParts.toString(),
+        "numWrittenParts" -> numWrittenParts.toString,
         "maxDynamicPartitionsKey" -> maxDynamicPartitionsKey,
-        "maxDynamicPartitions" -> maxDynamicPartitions.toString(),
-        "numWrittenParts" -> numWrittenParts.toString()),
+        "maxDynamicPartitions" -> maxDynamicPartitions.toString),
       cause = null)
   }
 
@@ -2817,6 +2834,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def hllInvalidInputSketchBuffer(function: String): Throwable = {
     new SparkRuntimeException(
       errorClass = "HLL_INVALID_INPUT_SKETCH_BUFFER",
+      messageParameters = Map(
+        "function" -> toSQLId(function)))
+  }
+
+  def kllInvalidInputSketchBuffer(function: String, reason: String = ""): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "KLL_INVALID_INPUT_SKETCH_BUFFER",
       messageParameters = Map(
         "function" -> toSQLId(function)))
   }
@@ -3170,9 +3194,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("function" -> toSQLId(function)))
   }
 
-  def thetaInvalidLgNomEntries(function: String, min: Int, max: Int, value: Int): Throwable = {
+  def sketchInvalidLgNomEntries(function: String, min: Int, max: Int, value: Int): Throwable = {
     new SparkRuntimeException(
-      errorClass = "THETA_INVALID_LG_NOM_ENTRIES",
+      errorClass = "SKETCH_INVALID_LG_NOM_ENTRIES",
       messageParameters = Map(
         "function" -> toSQLId(function),
         "min" -> toSQLValue(min, IntegerType),
@@ -3186,28 +3210,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("function" -> toSQLId(function)))
   }
 
-  def kllSketchInvalidQuantileRangeError(function: String, quantile: Double): Throwable = {
+  def kllSketchInvalidQuantileRangeError(function: String): Throwable = {
     new SparkRuntimeException(
       errorClass = "KLL_SKETCH_INVALID_QUANTILE_RANGE",
       messageParameters = Map(
-        "functionName" -> toSQLId(function),
-        "quantile" -> toSQLValue(quantile, DoubleType)))
-  }
-
-  def kllSketchInvalidInputError(function: String, reason: String): Throwable = {
-    new SparkRuntimeException(
-      errorClass = "KLL_SKETCH_INVALID_INPUT",
-      messageParameters = Map(
-        "functionName" -> toSQLId(function),
-        "reason" -> reason))
-  }
-
-  def kllSketchIncompatibleMergeError(function: String, reason: String): Throwable = {
-    new SparkRuntimeException(
-      errorClass = "KLL_SKETCH_INCOMPATIBLE_MERGE",
-      messageParameters = Map(
-        "functionName" -> toSQLId(function),
-        "reason" -> reason))
+        "functionName" -> toSQLId(function)))
   }
 
   def kllSketchKMustBeConstantError(function: String): Throwable = {
@@ -3222,5 +3229,66 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "functionName" -> toSQLId(function),
         "k" -> toSQLValue(k, IntegerType)))
+  }
+
+  def vectorDimensionMismatchError(
+    function: String,
+    leftDim: Int,
+    rightDim: Int): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "VECTOR_DIMENSION_MISMATCH",
+      messageParameters = Map(
+        "functionName" -> toSQLId(function),
+        "leftDim" -> leftDim.toString,
+        "rightDim" -> rightDim.toString))
+  }
+
+  def invalidVectorNormDegreeError(
+    function: String,
+    degree: Float): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_VECTOR_NORM_DEGREE",
+      messageParameters = Map(
+        "functionName" -> toSQLId(function),
+        "degree" -> degree.toString))
+  }
+
+  def tupleInvalidInputSketchBuffer(function: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
+      messageParameters = Map("function" -> toSQLId(function)))
+  }
+
+  def tupleInvalidMode(function: String, mode: String, validModes: Seq[String]): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "TUPLE_INVALID_SKETCH_MODE",
+      messageParameters = Map(
+        "function" -> toSQLId(function),
+        "mode" -> mode,
+        "validModes" -> validModes.mkString(", ")))
+  }
+
+  def tupleInvalidInputSketchBufferFamily(
+      function: String,
+      expectedFamily: String,
+      actualFamily: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "TUPLE_INVALID_INPUT_SKETCH_BUFFER_FAMILY",
+      messageParameters = Map(
+        "function" -> toSQLId(function),
+        "expectedFamily" -> expectedFamily,
+        "actualFamily" -> actualFamily))
+  }
+
+  def thetaInvalidInputSketchBufferFamily(
+      function: String,
+      expectedFamily: String,
+      actualFamily: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "THETA_INVALID_INPUT_SKETCH_BUFFER_FAMILY",
+      messageParameters = Map(
+        "function" -> toSQLId(function),
+        "expectedFamily" -> expectedFamily,
+        "actualFamily" -> actualFamily))
   }
 }

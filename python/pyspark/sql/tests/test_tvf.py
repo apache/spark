@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 
 from pyspark.errors import PySparkValueError
 from pyspark.sql import functions as sf
@@ -53,7 +52,7 @@ class TVFTestsMixin:
         assertDataFrameEqual(actual=actual, expected=expected)
 
     def test_explode_with_lateral_join(self):
-        with self.tempView("t1", "t2"):
+        with self.temp_view("t1", "t2"):
             t1 = self.spark.sql("VALUES (0, 1), (1, 2) AS t1(c1, c2)")
             t1.createOrReplaceTempView("t1")
             t3 = self.spark.sql(
@@ -115,7 +114,7 @@ class TVFTestsMixin:
         assertDataFrameEqual(actual=actual, expected=expected)
 
     def test_explode_outer_with_lateral_join(self):
-        with self.tempView("t1", "t2"):
+        with self.temp_view("t1", "t2"):
             t1 = self.spark.sql("VALUES (0, 1), (1, 2) AS t1(c1, c2)")
             t1.createOrReplaceTempView("t1")
             t3 = self.spark.sql(
@@ -180,7 +179,7 @@ class TVFTestsMixin:
         assertDataFrameEqual(actual=actual, expected=expected)
 
     def test_inline_with_lateral_join(self):
-        with self.tempView("array_struct"):
+        with self.temp_view("array_struct"):
             array_struct = self.spark.sql(
                 """
                 VALUES
@@ -239,7 +238,7 @@ class TVFTestsMixin:
         assertDataFrameEqual(actual=actual, expected=expected)
 
     def test_inline_outer_with_lateral_join(self):
-        with self.tempView("array_struct"):
+        with self.temp_view("array_struct"):
             array_struct = self.spark.sql(
                 """
                 VALUES
@@ -282,7 +281,7 @@ class TVFTestsMixin:
         )
 
     def test_json_tuple_with_lateral_join(self):
-        with self.tempView("json_table"):
+        with self.temp_view("json_table"):
             json_table = self.spark.sql(
                 """
                 VALUES
@@ -369,7 +368,7 @@ class TVFTestsMixin:
         assertDataFrameEqual(actual=actual, expected=expected)
 
     def test_posexplode_with_lateral_join(self):
-        with self.tempView("t1", "t2"):
+        with self.temp_view("t1", "t2"):
             t1 = self.spark.sql("VALUES (0, 1), (1, 2) AS t1(c1, c2)")
             t1.createOrReplaceTempView("t1")
             t3 = self.spark.sql(
@@ -431,7 +430,7 @@ class TVFTestsMixin:
         assertDataFrameEqual(actual=actual, expected=expected)
 
     def test_posexplode_outer_with_lateral_join(self):
-        with self.tempView("t1", "t2"):
+        with self.temp_view("t1", "t2"):
             t1 = self.spark.sql("VALUES (0, 1), (1, 2) AS t1(c1, c2)")
             t1.createOrReplaceTempView("t1")
             t3 = self.spark.sql(
@@ -472,7 +471,7 @@ class TVFTestsMixin:
         assertDataFrameEqual(actual=actual, expected=expected)
 
     def test_stack_with_lateral_join(self):
-        with self.tempView("t1", "t3"):
+        with self.temp_view("t1", "t3"):
             t1 = self.spark.sql("VALUES (0, 1), (1, 2) AS t1(c1, c2)")
             t1.createOrReplaceTempView("t1")
             t3 = self.spark.sql(
@@ -562,7 +561,7 @@ class TVFTestsMixin:
         assertDataFrameEqual(actual=actual, expected=expected)
 
     def test_variant_explode_with_lateral_join(self):
-        with self.tempView("variant_table"):
+        with self.temp_view("variant_table"):
             variant_table = self.spark.sql(
                 """
                 SELECT id, parse_json(v) AS v FROM VALUES
@@ -621,7 +620,7 @@ class TVFTestsMixin:
         assertDataFrameEqual(actual=actual, expected=expected)
 
     def test_variant_explode_outer_with_lateral_join(self):
-        with self.tempView("variant_table"):
+        with self.temp_view("variant_table"):
             variant_table = self.spark.sql(
                 """
                 SELECT id, parse_json(v) AS v FROM VALUES
@@ -651,12 +650,6 @@ class TVFTests(TVFTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_tvf import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

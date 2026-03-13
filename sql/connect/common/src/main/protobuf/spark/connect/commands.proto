@@ -232,6 +232,7 @@ message WriteStreamOperationStart {
     bool available_now = 6;
     bool once = 7;
     string continuous_checkpoint_interval = 8;
+    string real_time_batch_duration = 100;
   }
 
   string output_mode = 9;

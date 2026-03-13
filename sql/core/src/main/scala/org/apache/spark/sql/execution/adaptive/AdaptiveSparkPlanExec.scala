@@ -718,7 +718,7 @@ case class AdaptiveSparkPlanExec(
   private def setLogicalLinkForNewQueryStage(stage: QueryStageExec, plan: SparkPlan): Unit = {
     val link = plan.getTagValue(TEMP_LOGICAL_PLAN_TAG).orElse(
       plan.logicalLink.orElse(plan.collectFirst {
-        case p if p.getTagValue(TEMP_LOGICAL_PLAN_TAG).isDefined =>
+        case p if p.containsTag(TEMP_LOGICAL_PLAN_TAG) =>
           p.getTagValue(TEMP_LOGICAL_PLAN_TAG).get
         case p if p.logicalLink.isDefined => p.logicalLink.get
       }))
@@ -835,7 +835,7 @@ case class AdaptiveSparkPlanExec(
    */
   private def cleanUpTempTags(plan: SparkPlan): Unit = {
     plan.foreach {
-      case plan: SparkPlan if plan.getTagValue(TEMP_LOGICAL_PLAN_TAG).isDefined =>
+      case plan: SparkPlan if plan.containsTag(TEMP_LOGICAL_PLAN_TAG) =>
         plan.unsetTagValue(TEMP_LOGICAL_PLAN_TAG)
       case _ =>
     }

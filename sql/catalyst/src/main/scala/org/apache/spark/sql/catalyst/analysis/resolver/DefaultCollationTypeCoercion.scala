@@ -92,7 +92,7 @@ object DefaultCollationTypeCoercion {
    * we should change all its occurrences to [[StringType]] with default collation.
    */
   private def shouldApplyCollationToCast(cast: Cast): Boolean = {
-    cast.getTagValue(Cast.USER_SPECIFIED_CAST).isDefined &&
+    cast.containsTag(Cast.USER_SPECIFIED_CAST) &&
     hasDefaultStringType(cast.dataType)
   }
 }

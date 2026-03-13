@@ -168,11 +168,20 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def stat(self) -> ParentDataFrameStatFunctions:
         return DataFrameStatFunctions(self)
 
-    def toJSON(self, use_unicode: bool = True) -> "RDD[str]":
+    def toJSON(self, use_unicode: bool = True) -> Union["RDD[str]", "DataFrame"]:
         from pyspark.core.rdd import RDD
 
-        rdd = self._jdf.toJSON()
-        return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
+        returnDataFrame = self.sparkSession._jconf.pysparkToJSONReturnDataFrame()
+        if returnDataFrame:
+            jdf = self._jdf.toJSON()
+            return DataFrame(jdf, self.sparkSession)
+        else:
+            warnings.warn(
+                "The return type of DataFrame.toJSON will be changed from RDD to DataFrame "
+                "in future releases."
+            )
+            rdd = self._jdf.toJSON()
+            return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
 
     def registerTempTable(self, name: str) -> None:
         warnings.warn("Deprecated in 2.0, use createOrReplaceTempView instead.", FutureWarning)
@@ -270,6 +279,9 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
 
     def exceptAll(self, other: ParentDataFrame) -> ParentDataFrame:
         return DataFrame(self._jdf.exceptAll(other._jdf), self.sparkSession)
+
+    def zipWithIndex(self, indexColName: str = "index") -> ParentDataFrame:
+        return DataFrame(self._jdf.zipWithIndex(indexColName), self.sparkSession)
 
     def isLocal(self) -> bool:
         return self._jdf.isLocal()
@@ -1281,18 +1293,6 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
 
         return DataFrame(self._jdf.na().drop(thresh, self._jseq(subset)), self.sparkSession)
 
-    @overload
-    def fillna(
-        self,
-        value: "LiteralType",
-        subset: Optional[Union[str, Tuple[str, ...], List[str]]] = ...,
-    ) -> ParentDataFrame:
-        ...
-
-    @overload
-    def fillna(self, value: Dict[str, "LiteralType"]) -> ParentDataFrame:
-        ...
-
     def fillna(
         self,
         value: Union["LiteralType", Dict[str, "LiteralType"]],
@@ -1711,15 +1711,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         )
         return DataFrame(self._jdf.withMetadata(columnName, jmeta), self.sparkSession)
 
-    @overload
-    def drop(self, cols: "ColumnOrName") -> ParentDataFrame:
-        ...
-
-    @overload
-    def drop(self, *cols: str) -> ParentDataFrame:
-        ...
-
-    def drop(self, *cols: "ColumnOrName") -> ParentDataFrame:  # type: ignore[misc]
+    def drop(self, *cols: "ColumnOrName") -> ParentDataFrame:
         column_names: List[str] = []
         java_columns: List["JavaObject"] = []
 
@@ -1841,7 +1833,10 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         return PandasConversionMixin.toArrow(self)
 
     def toPandas(self) -> "PandasDataFrameLike":
-        return PandasConversionMixin.toPandas(self)
+        return PandasConversionMixin._to_pandas(self)
+
+    def _to_pandas(self, **kwargs: Any) -> "PandasDataFrameLike":
+        return PandasConversionMixin._to_pandas(self, **kwargs)
 
     def transpose(self, indexColumn: Optional["ColumnOrName"] = None) -> ParentDataFrame:
         if indexColumn is not None:
@@ -1899,7 +1894,7 @@ class DataFrameNaFunctions(ParentDataFrameNaFunctions):
         value: Union["LiteralType", Dict[str, "LiteralType"]],
         subset: Optional[List[str]] = None,
     ) -> ParentDataFrame:
-        return self.df.fillna(value=value, subset=subset)  # type: ignore[arg-type]
+        return self.df.fillna(value=value, subset=subset)
 
     @overload
     def replace(
@@ -2008,7 +2003,7 @@ def _test() -> None:
         import pyarrow as pa
         from pyspark.loose_version import LooseVersion
 
-        if LooseVersion(pa.__version__) < LooseVersion("17.0.0"):
+        if LooseVersion(pa.__version__) < LooseVersion("21.0.0"):
             del pyspark.sql.dataframe.DataFrame.mapInArrow.__doc__
 
     spark = (

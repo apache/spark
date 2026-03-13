@@ -219,7 +219,7 @@ Create a fake data source writer that processes each partition of data, counts t
 Implement a Streaming Reader
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-This is a dummy streaming data reader that generate 2 rows in every microbatch. The streamReader instance has a integer offset that increase by 2 in every microbatch.
+This is a dummy streaming data reader that generates 2 rows in every microbatch. The streamReader instance has an integer offset that increases by 2 in every microbatch.
 
 .. code-block:: python
 
@@ -291,7 +291,7 @@ One of simpleStreamReader() and streamReader() must be implemented for a readabl
 
         ...
 
-This is the same dummy streaming reader that generate 2 rows every batch implemented with SimpleDataSourceStreamReader interface.
+This is the same dummy streaming reader that generates 2 rows every batch implemented with SimpleDataSourceStreamReader interface.
 
 .. code-block:: python
 
@@ -309,7 +309,13 @@ This is the same dummy streaming reader that generate 2 rows every batch impleme
         def read(self, start: dict) -> Tuple[Iterator[Tuple], dict]:
             """
             Takes start offset as an input, return an iterator of tuples and
-            the start offset of next read.
+            the end offset (start offset for the next read). The end offset must
+            advance past the start offset when returning data; otherwise Spark
+            raises a validation exception.
+            For example, returning 2 records from start_idx 0 means end should
+            be {"offset": 2} (i.e. start + 2).
+            When there is no data to read, you may return the same offset as end and
+            start, but you must provide an empty iterator.
             """
             start_idx = start["offset"]
             it = iter([(i,) for i in range(start_idx, start_idx + 2)])

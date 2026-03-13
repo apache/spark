@@ -86,9 +86,9 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
          |  'group': 'stages',
          |  'start': new Date(${submissionTime}),
          |  'end': new Date(${completionTime}),
-         |  'content': '<div class="job-timeline-content" data-toggle="tooltip"' +
-         |   'data-placement="top" data-html="true"' +
-         |   'data-title="${jsEscapedNameForTooltip} (Stage ${stageId}.${attemptId})<br>' +
+         |  'content': '<div class="job-timeline-content" data-bs-toggle="tooltip"' +
+         |   'data-bs-html="true"' +
+         |   'data-bs-title="${jsEscapedNameForTooltip} (Stage ${stageId}.${attemptId})<br>' +
          |   'Status: ${status.toUpperCase(Locale.ROOT)}<br>' +
          |   'Submitted: ${UIUtils.formatDate(submissionTime)}' +
          |   '${
@@ -116,10 +116,10 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
            |  'group': 'executors',
            |  'start': new Date(${e.addTime.getTime()}),
            |  'content': '<div class="executor-event-content"' +
-           |    'data-toggle="tooltip" data-placement="top"' +
-           |    'data-title="Executor ${e.id}<br>' +
+           |    'data-bs-toggle="tooltip"' +
+           |    'data-bs-title="Executor ${e.id}<br>' +
            |    'Added at ${UIUtils.formatDate(e.addTime)}"' +
-           |    'data-html="true">Executor ${e.id} added</div>'
+           |    'data-bs-html="true">Executor ${e.id} added</div>'
            |}
          """.stripMargin
       events += addedEvent
@@ -132,8 +132,8 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
              |  'group': 'executors',
              |  'start': new Date(${removeTime.getTime()}),
              |  'content': '<div class="executor-event-content"' +
-             |    'data-toggle="tooltip" data-placement="top"' +
-             |    'data-title="Executor ${e.id}<br>' +
+             |    'data-bs-toggle="tooltip"' +
+             |    'data-bs-title="Executor ${e.id}<br>' +
              |    'Removed at ${UIUtils.formatDate(removeTime)}' +
              |    '${
                       e.removeReason.map { reason =>
@@ -141,7 +141,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
                           reason.replace("\n", " "))}"""
                       }.getOrElse("")
                    }"' +
-             |    'data-html="true">Executor ${e.id} removed</div>'
+             |    'data-bs-html="true">Executor ${e.id} removed</div>'
              |}
            """.stripMargin
           events += removedEvent
@@ -179,9 +179,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
 
     <span class="expand-job-timeline">
       <span class="expand-job-timeline-arrow arrow-closed"></span>
-      <a data-toggle="tooltip" title={ToolTips.STAGE_TIMELINE} data-placement="top">
-        Event Timeline
-      </a>
+      {UIUtils.tooltipLink(<xml:group>Event Timeline</xml:group>, ToolTips.STAGE_TIMELINE)}
     </span> ++
     <div id="job-timeline" class="collapsed">
       {
@@ -215,7 +213,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
         </div>
       </div>
     </div> ++
-    <script type="text/javascript">
+    <script type="text/javascript" nonce={CspNonce.get}>
       {Unparsed(s"drawJobTimeline(${groupJsonArrayAsStr}, ${eventArrayAsStr}, " +
       s"${appStartTime}, ${UIUtils.getTimeZoneOffset()});")}
     </script>
@@ -458,69 +456,76 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
 
     if (shouldShowActiveStages) {
       content ++=
-        <span id="active" class="collapse-aggregated-activeStages collapse-table"
-            onClick="collapseTable('collapse-aggregated-activeStages','aggregated-activeStages')">
+        <span id="active" class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-activeStages"
+            aria-expanded="true" aria-controls="aggregated-activeStages"
+            data-collapse-name="collapse-aggregated-activeStages">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Active Stages ({activeStages.size})</a>
           </h4>
         </span> ++
-        <div class="aggregated-activeStages collapsible-table">
+        <div class="collapsible-table collapse show" id="aggregated-activeStages">
           {activeStagesTable.toNodeSeq}
         </div>
     }
     if (shouldShowPendingStages) {
       content ++=
-        <span id="pending" class="collapse-aggregated-pendingOrSkippedStages collapse-table"
-            onClick="collapseTable('collapse-aggregated-pendingOrSkippedStages',
-            'aggregated-pendingOrSkippedStages')">
+        <span id="pending" class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-pendingStages"
+            aria-expanded="true" aria-controls="aggregated-pendingStages"
+            data-collapse-name="collapse-aggregated-pendingOrSkippedStages">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Pending Stages ({pendingOrSkippedStages.size})</a>
           </h4>
         </span> ++
-        <div class="aggregated-pendingOrSkippedStages collapsible-table">
+        <div class="collapsible-table collapse show" id="aggregated-pendingStages">
           {pendingOrSkippedStagesTable.toNodeSeq}
         </div>
     }
     if (shouldShowCompletedStages) {
       content ++=
-        <span id="completed" class="collapse-aggregated-completedStages collapse-table"
-            onClick="collapseTable('collapse-aggregated-completedStages',
-            'aggregated-completedStages')">
+        <span id="completed" class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-completedStages"
+            aria-expanded="true" aria-controls="aggregated-completedStages"
+            data-collapse-name="collapse-aggregated-completedStages">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Completed Stages ({completedStages.size})</a>
           </h4>
         </span> ++
-        <div class="aggregated-completedStages collapsible-table">
+        <div class="collapsible-table collapse show" id="aggregated-completedStages">
           {completedStagesTable.toNodeSeq}
         </div>
     }
     if (shouldShowSkippedStages) {
       content ++=
-        <span id="skipped" class="collapse-aggregated-pendingOrSkippedStages collapse-table"
-            onClick="collapseTable('collapse-aggregated-pendingOrSkippedStages',
-            'aggregated-pendingOrSkippedStages')">
+        <span id="skipped" class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-skippedStages"
+            aria-expanded="true" aria-controls="aggregated-skippedStages"
+            data-collapse-name="collapse-aggregated-pendingOrSkippedStages">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Skipped Stages ({pendingOrSkippedStages.size})</a>
           </h4>
         </span> ++
-        <div class="aggregated-pendingOrSkippedStages collapsible-table">
+        <div class="collapsible-table collapse show" id="aggregated-skippedStages">
           {pendingOrSkippedStagesTable.toNodeSeq}
         </div>
     }
     if (shouldShowFailedStages) {
       content ++=
-        <span id ="failed" class="collapse-aggregated-failedStages collapse-table"
-            onClick="collapseTable('collapse-aggregated-failedStages','aggregated-failedStages')">
+        <span id ="failed" class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-failedStages"
+            aria-expanded="true" aria-controls="aggregated-failedStages"
+            data-collapse-name="collapse-aggregated-failedStages">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Failed Stages ({failedStages.size})</a>
           </h4>
         </span> ++
-        <div class="aggregated-failedStages collapsible-table">
+        <div class="collapsible-table collapse show" id="aggregated-failedStages">
           {failedStagesTable.toNodeSeq}
         </div>
     }

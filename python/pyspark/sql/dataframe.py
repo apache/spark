@@ -245,31 +245,35 @@ class DataFrame:
         """
         ...
 
-    if not is_remote_only():
+    @dispatch_df_method
+    def toJSON(self, use_unicode: bool = True) -> Union["RDD[str]", "DataFrame"]:
+        """Converts a :class:`DataFrame` into a :class:`RDD` of string or :class:`DataFrame`.
 
-        def toJSON(self, use_unicode: bool = True) -> "RDD[str]":
-            """Converts a :class:`DataFrame` into a :class:`RDD` of string.
+        Each row is turned into a JSON document as one element in the returned RDD
+        or DataFrame.
 
-            Each row is turned into a JSON document as one element in the returned RDD.
+        .. versionadded:: 1.3.0
 
-            .. versionadded:: 1.3.0
+        .. versionchanged:: 4.2.0
+            Supports Spark Connect.
 
-            Parameters
-            ----------
-            use_unicode : bool, optional, default True
-                Whether to convert to unicode or not.
+        Parameters
+        ----------
+        use_unicode : bool, optional, default True
+            Whether to convert to unicode or not. Note that this argument is disallowed
+            in Spark Connect mode.
 
-            Returns
-            -------
-            :class:`RDD`
+        Returns
+        -------
+        :class:`RDD` (in Classic mode) or :class:`DataFrame` (in connect mode)
 
-            Examples
-            --------
-            >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
-            >>> df.toJSON().first()
-            '{"age":2,"name":"Alice"}'
-            """
-            ...
+        Examples
+        --------
+        >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
+        >>> df.toJSON().first()  # doctest: +SKIP
+        '{"age":2,"name":"Alice"}'
+        """
+        ...
 
     @dispatch_df_method
     def registerTempTable(self, name: str) -> None:
@@ -779,6 +783,58 @@ class DataFrame:
         ...
 
     @dispatch_df_method
+    def zipWithIndex(self, indexColName: str = "index") -> "DataFrame":
+        """Returns a new :class:`DataFrame` by appending a column containing consecutive
+        0-based Long indices, similar to :meth:`RDD.zipWithIndex`.
+
+        The index column is appended as the last column of the resulting :class:`DataFrame`.
+
+        .. versionadded:: 4.2.0
+
+        Parameters
+        ----------
+        indexColName : str, default "index"
+            The name of the index column to append.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            A new DataFrame with an appended index column.
+
+        Notes
+        -----
+        If a column with `indexColName` already exists in the schema, the resulting
+        :class:`DataFrame` will have duplicate column names. Selecting the duplicate column
+        by name will throw `AMBIGUOUS_REFERENCE`, and writing the :class:`DataFrame` will
+        throw `COLUMN_ALREADY_EXISTS`.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame(
+        ...     [("a", 1), ("b", 2), ("c", 3)], ["letter", "number"])
+        >>> df.zipWithIndex().show()
+        +------+------+-----+
+        |letter|number|index|
+        +------+------+-----+
+        |     a|     1|    0|
+        |     b|     2|    1|
+        |     c|     3|    2|
+        +------+------+-----+
+
+        Custom index column name:
+
+        >>> df.zipWithIndex("row_id").show()
+        +------+------+------+
+        |letter|number|row_id|
+        +------+------+------+
+        |     a|     1|     0|
+        |     b|     2|     1|
+        |     c|     3|     2|
+        +------+------+------+
+        """
+        ...
+
+    @dispatch_df_method
     def isLocal(self) -> bool:
         """Returns ``True`` if the :func:`collect` and :func:`take` methods can be run locally
         (without any Spark executors).
@@ -852,7 +908,6 @@ class DataFrame:
 
         Notes
         -----
-        - Unlike `count()`, this method does not trigger any computation.
         - An empty DataFrame has no rows. It may have columns, but no data.
 
         Examples
@@ -1515,6 +1570,8 @@ class DataFrame:
         -----
         The default storage level has changed to `MEMORY_AND_DISK_DESER` to match Scala in 3.0.
 
+        Cached data is shared across all Spark sessions on the cluster.
+
         Returns
         -------
         :class:`DataFrame`
@@ -1550,6 +1607,8 @@ class DataFrame:
         Notes
         -----
         The default storage level has changed to `MEMORY_AND_DISK_DESER` to match Scala in 3.0.
+
+        Cached data is shared across all Spark sessions on the cluster.
 
         Parameters
         ----------
@@ -1620,6 +1679,9 @@ class DataFrame:
         Notes
         -----
         `blocking` default has changed to ``False`` to match Scala in 2.0.
+
+        Cached data is shared across all Spark sessions on the cluster, so unpersisting it
+        affects all sessions.
 
         Parameters
         ----------
@@ -3149,24 +3211,23 @@ class DataFrame:
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]
 
-        _cols: List[Column] = []
-        for c in cols:
+        def _get_col(c: Union[int, str, Column, List[int | str | Column]]) -> Column:
             if isinstance(c, int) and not isinstance(c, bool):
                 # ordinal is 1-based
                 if c > 0:
-                    _cols.append(self[c - 1])
+                    return self[c - 1]
                 # negative ordinal means sort by desc
                 elif c < 0:
-                    _cols.append(self[-c - 1].desc())
+                    return self[-c - 1].desc()
                 else:
                     raise PySparkIndexError(
                         errorClass="ZERO_INDEX",
                         messageParameters={},
                     )
             elif isinstance(c, Column):
-                _cols.append(c)
+                return c
             elif isinstance(c, str):
-                _cols.append(_to_col(c))
+                return _to_col(c)
             else:
                 raise PySparkTypeError(
                     errorClass="NOT_COLUMN_OR_INT_OR_STR",
@@ -3176,6 +3237,7 @@ class DataFrame:
                     },
                 )
 
+        _cols: List[Column] = [_get_col(c) for c in cols]
         ascending = kwargs.get("ascending", True)
         if isinstance(ascending, (bool, int)):
             if not ascending:
@@ -5069,18 +5131,6 @@ class DataFrame:
         """
         ...
 
-    @overload
-    def fillna(
-        self,
-        value: "LiteralType",
-        subset: Optional[Union[str, Tuple[str, ...], List[str]]] = ...,
-    ) -> "DataFrame":
-        ...
-
-    @overload
-    def fillna(self, value: Dict[str, "LiteralType"]) -> "DataFrame":
-        ...
-
     @dispatch_df_method
     def fillna(
         self,
@@ -5861,15 +5911,7 @@ class DataFrame:
         """
         ...
 
-    @overload
-    def drop(self, cols: "ColumnOrName") -> "DataFrame":
-        ...
-
-    @overload
-    def drop(self, *cols: str) -> "DataFrame":
-        ...
-
-    @dispatch_df_method  # type: ignore[misc]
+    @dispatch_df_method
     def drop(self, *cols: "ColumnOrName") -> "DataFrame":
         """
         Returns a new :class:`DataFrame` without specified columns.
@@ -6975,6 +7017,23 @@ class DataFrame:
         >>> df.plot(kind="line", x="category", y=["int_val", "float_val"])  # doctest: +SKIP
         """
         ...
+
+    def __arrow_c_stream__(self, requested_schema: Optional[object] = None) -> object:
+        """
+        Export to a C PyCapsule stream object.
+
+        Parameters
+        ----------
+        requested_schema : PyCapsule, optional
+            The schema to attempt to use for the output stream. This is a best effort request,
+
+        Returns
+        -------
+        A C PyCapsule stream object.
+        """
+        from pyspark.sql.interchange import SparkArrowCStreamer
+
+        return SparkArrowCStreamer(self).__arrow_c_stream__(requested_schema)
 
 
 class DataFrameNaFunctions:

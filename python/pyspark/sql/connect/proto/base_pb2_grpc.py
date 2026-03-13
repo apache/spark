@@ -96,6 +96,12 @@ class SparkConnectServiceStub(object):
             response_deserializer=spark_dot_connect_dot_base__pb2.CloneSessionResponse.FromString,
             _registered_method=True,
         )
+        self.GetStatus = channel.unary_unary(
+            "/spark.connect.SparkConnectService/GetStatus",
+            request_serializer=spark_dot_connect_dot_base__pb2.GetStatusRequest.SerializeToString,
+            response_deserializer=spark_dot_connect_dot_base__pb2.GetStatusResponse.FromString,
+            _registered_method=True,
+        )
 
 
 class SparkConnectServiceServicer(object):
@@ -192,6 +198,12 @@ class SparkConnectServiceServicer(object):
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
+    def GetStatus(self, request, context):
+        """Get status information of different types."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
 
 def add_SparkConnectServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -249,6 +261,11 @@ def add_SparkConnectServiceServicer_to_server(servicer, server):
             servicer.CloneSession,
             request_deserializer=spark_dot_connect_dot_base__pb2.CloneSessionRequest.FromString,
             response_serializer=spark_dot_connect_dot_base__pb2.CloneSessionResponse.SerializeToString,
+        ),
+        "GetStatus": grpc.unary_unary_rpc_method_handler(
+            servicer.GetStatus,
+            request_deserializer=spark_dot_connect_dot_base__pb2.GetStatusRequest.FromString,
+            response_serializer=spark_dot_connect_dot_base__pb2.GetStatusResponse.SerializeToString,
         ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -581,6 +598,36 @@ class SparkConnectService(object):
             "/spark.connect.SparkConnectService/CloneSession",
             spark_dot_connect_dot_base__pb2.CloneSessionRequest.SerializeToString,
             spark_dot_connect_dot_base__pb2.CloneSessionResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def GetStatus(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/spark.connect.SparkConnectService/GetStatus",
+            spark_dot_connect_dot_base__pb2.GetStatusRequest.SerializeToString,
+            spark_dot_connect_dot_base__pb2.GetStatusResponse.FromString,
             options,
             channel_credentials,
             insecure,

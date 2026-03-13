@@ -2696,10 +2696,15 @@ class AdaptiveQueryExecSuite
   test("SPARK-48037: Fix SortShuffleWriter lacks shuffle write related metrics " +
     "resulting in potentially inaccurate data") {
     withTable("t3") {
+      // It would take many extra memory to keep track the checksums for large number of shuffle
+      // partitions, which is 16777216 in this case. Instead of keep increasing the test memory in
+      // CI jobs, disable order independent shuffle checksum to avoid OOM during test.
       withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
         SQLConf.SHUFFLE_PARTITIONS.key -> (SortShuffleManager
-          .MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE + 1).toString) {
+          .MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE + 1).toString,
+        SQLConf.SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED.key -> "false",
+        SQLConf.SHUFFLE_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED.key -> "false") {
         sql("CREATE TABLE t3 USING PARQUET AS SELECT id FROM range(2)")
         val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
           """

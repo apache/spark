@@ -17,7 +17,6 @@
 
 import unittest
 import datetime
-from typing import cast
 
 from pyspark.sql.functions import udf, pandas_udf, PandasUDFType, assert_true, lit
 from pyspark.sql.types import (
@@ -30,8 +29,8 @@ from pyspark.sql.types import (
 )
 from pyspark.errors import ParseException, PythonException, PySparkTypeError
 from pyspark.util import PythonEvalType
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
@@ -41,7 +40,7 @@ from pyspark.testing.sqlutils import (
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class PandasUDFTestsMixin:
     def test_pandas_udf_basic(self):
@@ -323,9 +322,7 @@ class PandasUDFTestsMixin:
 
         # Since 0.11.0, PyArrow supports the feature to raise an error for unsafe cast.
         with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": True}):
-            with self.assertRaisesRegex(
-                Exception, "Exception thrown when converting pandas.Series"
-            ):
+            with self.assertRaisesRegex(Exception, "Failed to convert the value"):
                 df.select(["A"]).withColumn("udf", udf("A")).collect()
 
         # Disabling Arrow safe type check.
@@ -343,9 +340,7 @@ class PandasUDFTestsMixin:
 
         # When enabling safe type check, Arrow 0.11.0+ disallows overflow cast.
         with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": True}):
-            with self.assertRaisesRegex(
-                Exception, "Exception thrown when converting pandas.Series"
-            ):
+            with self.assertRaisesRegex(Exception, "Failed to convert the value"):
                 df.withColumn("udf", udf("id")).collect()
 
         # Disabling safe type check, let Arrow do the cast anyway.
@@ -376,7 +371,7 @@ class PandasUDFTestsMixin:
         ):
             self.assertRaisesRegex(
                 PythonException,
-                "Exception thrown when converting pandas.Series",
+                "Failed to convert the value",
                 df.withColumn("decimal_val", int_to_decimal_udf("id")).collect,
             )
 
@@ -391,7 +386,7 @@ class PandasUDFTestsMixin:
             # intToDecimalCoercionEnabled is not required for this case
             with self.sql_conf(
                 {
-                    "spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": intToDecimalCoercionEnabled  # noqa: E501
+                    "spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": intToDecimalCoercionEnabled
                 }
             ):
                 result = df.withColumn("decimal_val", high_precision_udf("id")).collect()
@@ -460,18 +455,31 @@ class PandasUDFTestsMixin:
         result = empty_df.select(add1("id"))
         self.assertEqual(result.collect(), [])
 
+    def test_pandas_udf_nullable_large_integers(self):
+        import pandas as pd
+
+        @pandas_udf("long")
+        def identity(s: pd.Series) -> pd.Series:
+            return s
+
+        query = """
+            SELECT * FROM VALUES
+            (9223372036854775707, 1), (NULL, 2)
+            AS tab(a, b)
+            """
+
+        with self.sql_conf({"spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype": True}):
+            df = self.spark.sql(query).repartition(1).sortWithinPartitions("b")
+            expected = df.select("a").collect()
+            results = df.select(identity("a").alias("a")).collect()
+            self.assertEqual(results, expected)
+
 
 class PandasUDFTests(PandasUDFTestsMixin, ReusedSQLTestCase):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.pandas.test_pandas_udf import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

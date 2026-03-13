@@ -22,11 +22,11 @@ import warnings
 from abc import ABCMeta, abstractmethod
 from functools import wraps, partial
 from itertools import chain
-from typing import Any, Callable, Optional, Sequence, Tuple, Union, cast, TYPE_CHECKING
+from typing import Any, Callable, ClassVar, Optional, Sequence, Tuple, Union, cast, TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_list_like, CategoricalDtype  # type: ignore[attr-defined]
+from pandas.api.types import is_list_like, CategoricalDtype
 
 from pyspark.sql import functions as F, Column, Window
 from pyspark.sql.types import LongType, BooleanType, NumericType
@@ -40,7 +40,7 @@ from pyspark.pandas.internal import (
     SPARK_DEFAULT_INDEX_NAME,
 )
 from pyspark.pandas.spark.accessors import SparkIndexOpsMethods
-from pyspark.pandas.typedef import extension_dtypes
+from pyspark.pandas.typedef.typehints import handle_dtype_as_extension_dtype
 from pyspark.pandas.utils import (
     ansi_mode_context,
     combine_frames,
@@ -228,7 +228,7 @@ def column_op(f: Callable[..., Column]) -> Callable[..., SeriesOrIndex]:
             field = InternalField.from_struct_field(
                 self._internal.spark_frame.select(scol).schema[0],
                 use_extension_dtypes=any(
-                    isinstance(col.dtype, extension_dtypes) for col in [self] + cols
+                    handle_dtype_as_extension_dtype(col.dtype) for col in [self] + cols
                 ),
             )
 
@@ -283,6 +283,9 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
     Assuming there are following attributes or properties and functions.
     """
+
+    # Keep pandas-on-Spark above pandas Series and Index for reflected ops.
+    __pandas_priority__: ClassVar[int] = pd.Series.__pandas_priority__ + 500  # type: ignore[attr-defined]
 
     @property
     @abstractmethod
@@ -1449,7 +1452,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         Parameters
         ----------
         dropna : bool, default True
-            Don’t include NaN in the count.
+            Don't include NaN in the count.
         approx: bool, default False
             If False, will use the exact algorithm and return the exact number of unique.
             If True, it uses the HyperLogLog approximate algorithm, which is significantly faster
@@ -1745,7 +1748,6 @@ def _test() -> None:
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.base tests").getOrCreate()
     )
-    spark.conf.set("spark.sql.execution.pandas.structHandlingMode", "row")
     (failure_count, test_count) = doctest.testmod(
         pyspark.pandas.base,
         globs=globs,

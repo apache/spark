@@ -431,7 +431,7 @@ class CollationSQLRegexpSuite
       },
       condition = "COLLATION_MISMATCH.EXPLICIT",
       parameters = Map(
-        "explicitTypes" -> """"STRING", "STRING COLLATE UTF8_LCASE""""
+        "explicitTypes" -> """"STRING COLLATE UTF8_BINARY", "STRING COLLATE UTF8_LCASE""""
       )
     )
     // Unsupported collations

@@ -25,7 +25,7 @@ import scala.concurrent.duration._
 
 import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{mock, spy, verify, when}
-import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
+import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
@@ -44,7 +44,6 @@ import org.apache.spark.util.{ManualClock, ThreadUtils}
  */
 class HeartbeatReceiverSuite
   extends SparkFunSuite
-  with BeforeAndAfterEach
   with PrivateMethodTester
   with LocalSparkContext {
 

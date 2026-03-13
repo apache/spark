@@ -52,6 +52,10 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
     spark.sessionState.catalogManager.catalog(name).asInstanceOf[TableCatalog]
   }
 
+  protected def sessionCatalog: InMemoryTableSessionCatalog = {
+    catalog(SESSION_CATALOG_NAME).asInstanceOf[InMemoryTableSessionCatalog]
+  }
+
   private implicit def stringToIdentifier(value: String): Identifier = {
     Identifier.of(Array.empty, value)
   }
@@ -65,7 +69,8 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
 
   override def afterEach(): Unit = {
     super.afterEach()
-    Try(catalog(SESSION_CATALOG_NAME).asInstanceOf[InMemoryTableSessionCatalog].clearTables())
+    Try(sessionCatalog.checkUsage())
+    Try(sessionCatalog.clearTables())
     catalog(catalogName).listTables(Array.empty).foreach(
       catalog(catalogName).dropTable(_))
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
@@ -146,7 +151,7 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
     val dfw = df.write.format(format).mode(SaveMode.Ignore).option("name", "t1")
     dfw.save()
 
-    val table = catalog(SESSION_CATALOG_NAME).loadTable(Identifier.of(Array("default"), "t1"))
+    val table = sessionCatalog.loadTable(Identifier.of(Array("default"), "t1"))
     assert(table.partitioning().isEmpty, "Partitioning should be empty")
     assert(table.columns() sameElements
       Array(Column.create("id", LongType)), "Schema did not match")

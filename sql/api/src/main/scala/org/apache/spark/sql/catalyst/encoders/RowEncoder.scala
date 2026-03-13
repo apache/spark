@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, B
 import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.ops.TypeApiOps
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -70,6 +71,13 @@ object RowEncoder extends DataTypeErrorsBase {
   }
 
   private[sql] def encoderForDataType(dataType: DataType, lenient: Boolean): AgnosticEncoder[_] =
+    TypeApiOps(dataType)
+      .map(_.getEncoder)
+      .getOrElse(encoderForDataTypeDefault(dataType, lenient))
+
+  private def encoderForDataTypeDefault(
+      dataType: DataType,
+      lenient: Boolean): AgnosticEncoder[_] =
     dataType match {
       case NullType => NullEncoder
       case BooleanType => BoxedBooleanEncoder
@@ -81,10 +89,10 @@ object RowEncoder extends DataTypeErrorsBase {
       case DoubleType => BoxedDoubleEncoder
       case dt: DecimalType => JavaDecimalEncoder(dt, lenientSerialization = true)
       case BinaryType => BinaryEncoder
-      case CharType(length) if SqlApiConf.get.preserveCharVarcharTypeInfo =>
-        CharEncoder(length)
-      case VarcharType(length) if SqlApiConf.get.preserveCharVarcharTypeInfo =>
-        VarcharEncoder(length)
+      case c: CharType if SqlApiConf.get.preserveCharVarcharTypeInfo =>
+        CharEncoder(c.length)
+      case v: VarcharType if SqlApiConf.get.preserveCharVarcharTypeInfo =>
+        VarcharEncoder(v.length)
       case s: StringType if StringHelper.isPlainString(s) => StringEncoder
       case TimestampType if SqlApiConf.get.datetimeJava8ApiEnabled => InstantEncoder(lenient)
       case TimestampType => TimestampEncoder(lenient)

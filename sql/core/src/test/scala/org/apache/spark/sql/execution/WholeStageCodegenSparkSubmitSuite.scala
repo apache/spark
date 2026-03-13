@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.scalatest.{Assertions, BeforeAndAfterEach}
+import org.scalatest.Assertions
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.time.SpanSugar._
 
@@ -36,7 +36,6 @@ import org.apache.spark.util.ResetSystemProperties
 @ExtendedSQLTest
 class WholeStageCodegenSparkSubmitSuite extends SparkSubmitTestUtils
   with Matchers
-  with BeforeAndAfterEach
   with ResetSystemProperties {
 
   test("Generated code on driver should not embed platform-specific constant") {

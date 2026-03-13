@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import unittest
 
 from pyspark.ml.tests.test_als import ALSTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
@@ -26,12 +25,6 @@ class ALSParityTests(ALSTestsMixin, ReusedConnectTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.connect.test_parity_als import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

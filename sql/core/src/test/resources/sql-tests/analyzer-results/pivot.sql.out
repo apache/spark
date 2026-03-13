@@ -791,3 +791,59 @@ Project [a#x, z#x, b#x, y#x, c#x, x#x, d#x, w#x, dotNET#xL, Java#xL]
                         +- Project [course#x, year#x, earnings#x]
                            +- SubqueryAlias courseSales
                               +- LocalRelation [course#x, year#x, earnings#x]
+
+-- !query
+SELECT pv.year, pv.net, pv.jv FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  sum(earnings)
+  FOR course IN ('dotNET' as net, 'Java' as jv)
+) AS pv
+-- !query analysis
+Project [year#x, net#xL, jv#xL]
++- SubqueryAlias pv
+   +- Project [year#x, __pivot_sum(__auto_generated_subquery_name.earnings) AS `sum(__auto_generated_subquery_name.earnings)`#x[0] AS net#xL, __pivot_sum(__auto_generated_subquery_name.earnings) AS `sum(__auto_generated_subquery_name.earnings)`#x[1] AS jv#xL]
+      +- Aggregate [year#x], [year#x, pivotfirst(course#x, sum(__auto_generated_subquery_name.earnings)#xL, dotNET, Java, 0, 0) AS __pivot_sum(__auto_generated_subquery_name.earnings) AS `sum(__auto_generated_subquery_name.earnings)`#x]
+         +- Aggregate [year#x, course#x], [year#x, course#x, sum(earnings#x) AS sum(__auto_generated_subquery_name.earnings)#xL]
+            +- SubqueryAlias __auto_generated_subquery_name
+               +- Project [year#x, course#x, earnings#x]
+                  +- SubqueryAlias coursesales
+                     +- View (`courseSales`, [course#x, year#x, earnings#x])
+                        +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+                           +- Project [course#x, year#x, earnings#x]
+                              +- SubqueryAlias courseSales
+                                 +- LocalRelation [course#x, year#x, earnings#x]
+
+
+-- !query
+SELECT pv.year, pv.dotNET, y.s FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  sum(earnings)
+  FOR course IN ('dotNET', 'Java')
+) pv
+JOIN years y ON pv.year = y.y
+-- !query analysis
+Project [year#x, dotNET#xL, s#x]
++- Join Inner, (year#x = y#x)
+   :- SubqueryAlias pv
+   :  +- Project [year#x, __pivot_sum(__auto_generated_subquery_name.earnings) AS `sum(__auto_generated_subquery_name.earnings)`#x[0] AS dotNET#xL, __pivot_sum(__auto_generated_subquery_name.earnings) AS `sum(__auto_generated_subquery_name.earnings)`#x[1] AS Java#xL]
+   :     +- Aggregate [year#x], [year#x, pivotfirst(course#x, sum(__auto_generated_subquery_name.earnings)#xL, dotNET, Java, 0, 0) AS __pivot_sum(__auto_generated_subquery_name.earnings) AS `sum(__auto_generated_subquery_name.earnings)`#x]
+   :        +- Aggregate [year#x, course#x], [year#x, course#x, sum(earnings#x) AS sum(__auto_generated_subquery_name.earnings)#xL]
+   :           +- SubqueryAlias __auto_generated_subquery_name
+   :              +- Project [year#x, course#x, earnings#x]
+   :                 +- SubqueryAlias coursesales
+   :                    +- View (`courseSales`, [course#x, year#x, earnings#x])
+   :                       +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+   :                          +- Project [course#x, year#x, earnings#x]
+   :                             +- SubqueryAlias courseSales
+   :                                +- LocalRelation [course#x, year#x, earnings#x]
+   +- SubqueryAlias y
+      +- SubqueryAlias years
+         +- View (`years`, [y#x, s#x])
+            +- Project [cast(y#x as int) AS y#x, cast(s#x as int) AS s#x]
+               +- Project [y#x, s#x]
+                  +- SubqueryAlias years
+                     +- LocalRelation [y#x, s#x]

@@ -33,14 +33,14 @@ from pyspark.sql.types import (
     StructType,
     VarcharType,
 )
-from pyspark.testing.sqlutils import (
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
+    assertDataFrameEqual,
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
-    ReusedSQLTestCase,
 )
-from pyspark.testing.utils import assertDataFrameEqual
 from pyspark.util import PythonEvalType
 
 
@@ -535,12 +535,6 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.arrow.test_arrow_python_udf import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

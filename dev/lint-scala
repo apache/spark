@@ -26,7 +26,6 @@ set -e
 set +e
 # For Spark Connect, we actively enforce scalafmt and check that the produced diff is empty.
 ERRORS=$(./build/mvn \
-    -Pscala-2.13 \
     scalafmt:format \
     -Dscalafmt.skip=false \
     -Dscalafmt.validateOnly=true \

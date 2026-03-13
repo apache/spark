@@ -22,8 +22,9 @@ import os
 
 from collections import OrderedDict
 from decimal import Decimal
-from typing import cast, Iterator, Tuple, Any
+from typing import Iterator, Tuple, Any
 
+from pyspark.loose_version import LooseVersion
 from pyspark.sql import Row, functions as sf
 from pyspark.sql.functions import udf, pandas_udf, PandasUDFType
 from pyspark.sql.types import (
@@ -45,14 +46,14 @@ from pyspark.sql.types import (
     YearMonthIntervalType,
 )
 from pyspark.errors import PythonException, PySparkTypeError, PySparkValueError
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
+    assertDataFrameEqual,
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import assertDataFrameEqual
 from pyspark.util import is_remote_only
 
 if have_pyarrow and have_pandas:
@@ -62,7 +63,7 @@ if have_pyarrow and have_pandas:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class ApplyInPandasTestsMixin:
     @property
@@ -212,8 +213,8 @@ class ApplyInPandasTestsMixin:
                     "eval_type": "SQL_BATCHED_UDF, SQL_ARROW_BATCHED_UDF, "
                     "SQL_SCALAR_PANDAS_UDF, SQL_SCALAR_ARROW_UDF, "
                     "SQL_SCALAR_PANDAS_ITER_UDF, SQL_SCALAR_ARROW_ITER_UDF, "
-                    "SQL_GROUPED_AGG_PANDAS_UDF, SQL_GROUPED_AGG_ARROW_UDF or "
-                    "SQL_GROUPED_AGG_ARROW_ITER_UDF"
+                    "SQL_GROUPED_AGG_PANDAS_UDF, SQL_GROUPED_AGG_ARROW_UDF, "
+                    "SQL_GROUPED_AGG_PANDAS_ITER_UDF or SQL_GROUPED_AGG_ARROW_ITER_UDF"
                 },
             )
 
@@ -304,7 +305,7 @@ class ApplyInPandasTestsMixin:
         with self.assertRaisesRegex(
             PythonException,
             "Column names of the returned pandas.DataFrame do not match specified schema. "
-            "Missing: mean. Unexpected: median, std.\n",
+            "Missing: mean. Unexpected: median, std.",
         ):
             self._test_apply_in_pandas(
                 lambda key, pdf: pd.DataFrame(
@@ -320,7 +321,7 @@ class ApplyInPandasTestsMixin:
         with self.assertRaisesRegex(
             PythonException,
             "Number of columns of the returned pandas.DataFrame doesn't match "
-            "specified schema. Expected: 2 Actual: 3\n",
+            "specified schema. Expected: 2 Actual: 3",
         ):
             self._test_apply_in_pandas(
                 lambda key, pdf: pd.DataFrame([key + (pdf.v.mean(), pdf.v.std())])
@@ -346,18 +347,19 @@ class ApplyInPandasTestsMixin:
             ):
                 # sometimes we see ValueErrors
                 with self.subTest(convert="string to double"):
+                    pandas_type_name = "object" if LooseVersion(pd.__version__) < "3.0.0" else "str"
                     expected = (
-                        r"ValueError: Exception thrown when converting pandas.Series \(object\) "
-                        r"with name 'mean' to Arrow Array \(double\)."
+                        rf"ValueError: Failed to convert the value of the column 'mean' "
+                        rf"with type '{pandas_type_name}' to Arrow type 'double'\."
                     )
                     if safely:
                         expected = expected + (
-                            " It can be caused by overflows or other "
-                            "unsafe conversions warned by Arrow. Arrow safe type check "
-                            "can be disabled by using SQL config "
+                            " It can be caused by overflows or other unsafe "
+                            "conversions warned by Arrow. Arrow safe type "
+                            "check can be disabled by using SQL config "
                             "`spark.sql.execution.pandas.convertToArrowArraySafely`."
                         )
-                    with self.assertRaisesRegex(PythonException, expected + "\n"):
+                    with self.assertRaisesRegex(PythonException, expected):
                         self._test_apply_in_pandas(
                             lambda key, pdf: pd.DataFrame([key + ("test_string",)]),
                             output_schema="id long, mean double",
@@ -367,8 +369,9 @@ class ApplyInPandasTestsMixin:
                 with self.subTest(convert="double to string"):
                     with self.assertRaisesRegex(
                         PythonException,
-                        r"TypeError: Exception thrown when converting pandas.Series \(float64\) "
-                        r"with name 'mean' to Arrow Array \(string\).\n",
+                        r"TypeError: Cannot convert the output value of the column 'mean' "
+                        r"with type 'float64' to the specified return type of the column: "
+                        r"'string'\. Please check if the data types match and try again\.",
                     ):
                         self._test_apply_in_pandas(
                             lambda key, pdf: pd.DataFrame([key + (pdf.v.mean(),)]),
@@ -395,9 +398,7 @@ class ApplyInPandasTestsMixin:
         with self.sql_conf(
             {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": False}
         ):
-            with self.assertRaisesRegex(
-                PythonException, "Exception thrown when converting pandas.Series"
-            ):
+            with self.assertRaisesRegex(PythonException, "Failed to convert the value"):
                 (
                     self.data.groupby("id")
                     .applyInPandas(
@@ -665,7 +666,7 @@ class ApplyInPandasTestsMixin:
             with self.assertRaisesRegex(
                 PythonException,
                 "Column names of the returned pandas.DataFrame do not match "
-                "specified schema. Missing: id. Unexpected: iid.\n",
+                "specified schema. Missing: id. Unexpected: iid.",
             ):
                 grouped_df.apply(column_name_typo).collect()
             with self.assertRaisesRegex(Exception, "[D|d]ecimal.*got.*date"):
@@ -1472,12 +1473,6 @@ class ApplyInPandasTests(ApplyInPandasTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.pandas.test_pandas_grouped_map import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

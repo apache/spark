@@ -397,7 +397,7 @@ def _escape_func_str(func_str: str) -> str:
     # TODO: Take into account that this function can create links incorrectly
     # We can create alias links or links to parent methods
     if func_str.endswith("_"):
-        return func_str[:-1] + "\_"  # noqa: W605
+        return func_str[:-1] + "\\_"
     else:
         return func_str
 

@@ -27,10 +27,6 @@ from pyspark.sql.types import Row
 from pyspark.testing.utils import (
     ReusedPySparkTestCase,
     PySparkErrorTestUtils,
-    have_pandas,
-    pandas_requirement_message,
-    have_pyarrow,
-    pyarrow_requirement_message,
 )
 from pyspark.find_spark_home import _find_spark_home
 
@@ -63,7 +59,7 @@ def search_jar(project_relative_path, sbt_jar_name_prefix, mvn_jar_name_prefix):
         return jars[0]
 
 
-test_not_compiled_message = None
+test_not_compiled_message = ""
 try:
     from pyspark.sql.utils import require_test_compiled
 
@@ -71,7 +67,7 @@ try:
 except Exception as e:
     test_not_compiled_message = str(e)
 
-test_compiled = test_not_compiled_message is None
+test_compiled = not test_not_compiled_message
 
 
 class SQLTestUtils:
@@ -134,7 +130,7 @@ class SQLTestUtils:
                 self.spark.sql("DROP TABLE IF EXISTS %s" % t)
 
     @contextmanager
-    def tempView(self, *views):
+    def temp_view(self, *views):
         """
         A convenient context manager to test with some specific views. This drops the given views
         if it exists.
@@ -209,6 +205,7 @@ class ReusedSQLTestCase(ReusedPySparkTestCase, SQLTestUtils, PySparkErrorTestUti
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
+
         cls._legacy_sc = cls.sc
         cls.spark = SparkSession(cls.sc)
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
@@ -218,9 +215,11 @@ class ReusedSQLTestCase(ReusedPySparkTestCase, SQLTestUtils, PySparkErrorTestUti
 
     @classmethod
     def tearDownClass(cls):
-        super().tearDownClass()
-        cls.spark.stop()
-        shutil.rmtree(cls.tempdir.name, ignore_errors=True)
+        try:
+            cls.spark.stop()
+            shutil.rmtree(cls.tempdir.name, ignore_errors=True)
+        finally:
+            super().tearDownClass()
 
     def tearDown(self):
         try:

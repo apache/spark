@@ -50,7 +50,7 @@ from pyspark.pandas.data_type_ops.base import DataTypeOps
 from pyspark.pandas.typedef import (
     Dtype,
     as_spark_type,
-    extension_dtypes,
+    handle_dtype_as_extension_dtype,
     infer_pd_series_spark_type,
     spark_type_to_pandas_dtype,
 )
@@ -162,7 +162,7 @@ class InternalField:
     @property
     def is_extension_dtype(self) -> bool:
         """Return whether the dtype for the field is an extension type or not."""
-        return isinstance(self.dtype, extension_dtypes)
+        return handle_dtype_as_extension_dtype(self.dtype)
 
     def normalize_spark_type(self) -> "InternalField":
         """Return a new InternalField object with normalized Spark data type."""
@@ -1064,7 +1064,7 @@ class InternalFrame:
     def to_pandas_frame(self) -> pd.DataFrame:
         """Return as pandas DataFrame."""
         sdf = self.to_internal_spark_frame
-        pdf = sdf.toPandas()
+        pdf = sdf._to_pandas(pandasStructHandlingMode="row")
         if len(pdf) == 0 and len(sdf.schema) > 0:
             pdf = pdf.astype(
                 {field.name: spark_type_to_pandas_dtype(field.dataType) for field in sdf.schema}
@@ -1562,7 +1562,7 @@ class InternalFrame:
         pdf = pdf.copy()
 
         data_columns = [name_like_string(col) for col in pdf.columns]
-        pdf.columns = data_columns
+        pdf.columns = pd.Index(data_columns)
 
         if retain_index:
             index_nlevels = pdf.index.nlevels

@@ -710,7 +710,7 @@ class MulticlassClassificationEvaluator(
 
     def isLargerBetter(self) -> bool:
         """Override this function to make it run on connect"""
-        return not self.getMetricName() in [
+        return self.getMetricName() not in [
             "weightedFalsePositiveRate",
             "falsePositiveRateByLabel",
             "logLoss",

@@ -22,7 +22,7 @@ import scala.xml.{Node, Unparsed}
 import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.status.api.v1.ApplicationInfo
-import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.ui.{CspNonce, UIUtils, WebUIPage}
 import org.apache.spark.ui.UIUtils.formatImportJavaScript
 
 private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
@@ -39,7 +39,23 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
     val summary =
       <div class="container-fluid">
         <ul class="list-unstyled">
-          {providerConfig.map { case (k, v) => <li><strong>{k}:</strong> {v}</li> }}
+          {providerConfig.map { case (k, v) =>
+            if (k == "Event log directory" && v.contains(",")) {
+              val dirs = v.split(",").map(_.trim)
+              <li>
+                <strong>{k}:</strong> {dirs.length} directories
+                <a class="ms-1" data-bs-toggle="collapse" href="#logDirList" role="button"
+                  aria-expanded="false" aria-controls="logDirList">
+                  (show)
+                </a>
+                <ul class="collapse mt-1" id="logDirList">
+                    {dirs.map(d => <li>{d}</li>)}
+                </ul>
+              </li>
+            } else {
+              <li><strong>{k}:</strong> {v}</li>
+            }
+          }}
         </ul>
         {
           if (eventLogsUnderProcessCount > 0) {
@@ -74,7 +90,8 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
               request, "/static/dataTables.rowsGroup.js")}></script> ++
             <script type="module" src={UIUtils.prependBaseUri(
               request, "/static/historypage.js")} ></script> ++
-            <script type="module">{Unparsed(js)}</script> ++ <div id="history-summary"></div>
+            <script type="module" nonce={CspNonce.get}>{Unparsed(js)}</script> ++
+              <div id="history-summary"></div>
           } else if (requestedIncomplete) {
             <h4>No incomplete applications found!</h4>
           } else if (eventLogsUnderProcessCount > 0) {

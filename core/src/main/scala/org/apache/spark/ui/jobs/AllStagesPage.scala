@@ -57,14 +57,16 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
       </div>
 
     val poolsDescription = if (parent.isFairScheduler) {
-        <span class="collapse-aggregated-poolTable collapse-table"
-            onClick="collapseTable('collapse-aggregated-poolTable','aggregated-poolTable')">
+        <span class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-poolTable"
+            aria-expanded="true" aria-controls="aggregated-poolTable"
+            data-collapse-name="collapse-aggregated-poolTable">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Fair Scheduler Pools ({pools.size})</a>
           </h4>
         </span> ++
-        <div class="aggregated-poolTable collapsible-table">
+        <div class="collapsible-table collapse show" id="aggregated-poolTable">
           {poolTable.toNodeSeq(request)}
         </div>
       } else {
@@ -145,15 +147,16 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
       size: Int): NodeSeq = {
     val classSuffix = s"${statusName(status).capitalize}Stages"
     <span id={statusName(status)}
-          class={s"collapse-aggregated-all$classSuffix collapse-table"}
-          onClick={s"collapseTable('collapse-aggregated-all$classSuffix'," +
-            s" 'aggregated-all$classSuffix')"}>
+          class="collapse-table" data-bs-toggle="collapse"
+          data-bs-target={s"#aggregated-all$classSuffix"}
+          aria-expanded="true" aria-controls={s"aggregated-all$classSuffix"}
+          data-collapse-name={s"collapse-aggregated-all$classSuffix"}>
       <h4>
         <span class="collapse-table-arrow arrow-open"></span>
         <a>{headerDescription(status)} Stages ({summaryContent(appSummary, status, size)})</a>
       </h4>
     </span> ++
-      <div class={s"aggregated-all$classSuffix collapsible-table"}>
+      <div class="collapsible-table collapse show" id={s"aggregated-all$classSuffix"}>
         {stagesTable.toNodeSeq}
       </div>
   }

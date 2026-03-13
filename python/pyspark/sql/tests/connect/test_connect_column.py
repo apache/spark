@@ -41,6 +41,7 @@ from pyspark.sql.types import (
     BooleanType,
 )
 from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.connectutils import should_test_connect, ReusedMixedTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
@@ -996,8 +997,7 @@ class SparkConnectColumnTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
         sdf = self.spark.createDataFrame(data)
         sdf1 = sdf.withColumn("a", sdf["a"].withField("b", SF.lit(3))).select("a.b")
 
-        self.assertEqual(cdf1.schema, sdf1.schema)
-        self.assertEqual(cdf1.collect(), sdf1.collect())
+        assertDataFrameEqual(cdf1, sdf1)
 
     def test_distributed_sequence_id(self):
         cdf = self.connect.range(10)
@@ -1073,14 +1073,6 @@ class SparkConnectColumnTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.sql.tests.connect.test_connect_column import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

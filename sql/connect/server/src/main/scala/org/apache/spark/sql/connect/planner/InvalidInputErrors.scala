@@ -30,8 +30,9 @@ import org.apache.spark.sql.types.DataType
 
 object InvalidInputErrors {
 
-  def noHandlerFoundForExtension(): InvalidPlanInput =
-    InvalidPlanInput("No handler found for extension")
+  def noHandlerFoundForExtension(extensionTypeUrl: String): InvalidPlanInput = {
+    InvalidPlanInput(s"No handler found for extension type: $extensionTypeUrl")
+  }
 
   def invalidSQLWithReferences(query: proto.WithRelations): InvalidPlanInput =
     InvalidPlanInput(s"$query is not a valid relation for SQL with references")
@@ -53,8 +54,10 @@ object InvalidInputErrors {
     InvalidPlanInput(
       "Deduplicate requires to either deduplicate on all columns or a subset of columns")
 
-  def invalidDeduplicateColumn(colName: String): InvalidPlanInput =
-    InvalidPlanInput(s"Invalid deduplicate column $colName")
+  def invalidDeduplicateColumn(colName: String, fieldNames: String): InvalidPlanInput =
+    InvalidPlanInput(
+      "UNRESOLVED_COLUMN_AMONG_FIELD_NAMES",
+      Map("colName" -> colName, "fieldNames" -> fieldNames))
 
   def functionEvalTypeNotSupported(evalType: Int): InvalidPlanInput =
     InvalidPlanInput(s"Function with EvalType: $evalType is not supported")
@@ -95,9 +98,6 @@ object InvalidInputErrors {
 
   def chunkedCachedLocalRelationWithoutData(): InvalidPlanInput =
     InvalidPlanInput("ChunkedCachedLocalRelation should contain data.")
-
-  def chunkedCachedLocalRelationChunksWithDifferentSchema(): InvalidPlanInput =
-    InvalidPlanInput("ChunkedCachedLocalRelation data chunks have different schema.")
 
   def schemaRequiredForLocalRelation(): InvalidPlanInput =
     InvalidPlanInput("Schema for LocalRelation is required when the input data is not provided.")

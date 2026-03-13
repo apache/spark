@@ -27,7 +27,7 @@ trait SqlScriptingContextManager {
   def getContext: SqlScriptingExecutionContextExtension
 
   /**
-   * Get variable manager
+   * Get the variable manager, if available.
    */
-  def getVariableManager: VariableManager
+  def getVariableManager: Option[VariableManager]
 }

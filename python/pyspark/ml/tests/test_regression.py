@@ -16,7 +16,6 @@
 #
 
 import tempfile
-import unittest
 
 import numpy as np
 
@@ -43,7 +42,6 @@ from pyspark.ml.regression import (
     GBTRegressor,
     GBTRegressionModel,
 )
-from pyspark.sql import is_remote
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -243,9 +241,6 @@ class RegressionTestsMixin:
             self.assertTrue(np.allclose(summary.r2adj, -0.6718362282878414, atol=1e-4))
 
         check_summary()
-        if is_remote():
-            self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
-            check_summary()
 
         summary2 = model.evaluate(df)
         self.assertTrue(isinstance(summary2, LinearRegressionSummary))
@@ -359,9 +354,6 @@ class RegressionTestsMixin:
             self.assertEqual(summary.residuals().count(), 4)
 
         check_summary()
-        if is_remote():
-            self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
-            check_summary()
 
         summary = model.summary
         summary2 = model.evaluate(df)
@@ -701,12 +693,6 @@ class RegressionTests(RegressionTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_regression import *  # noqa: F401,F403
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

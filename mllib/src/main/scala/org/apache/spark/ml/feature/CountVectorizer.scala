@@ -235,8 +235,11 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
 
     val fullVocabSize = wordCounts.count()
 
+    val ordering = Ordering.Tuple2(Ordering.Long, Ordering.String.reverse)
+      .on[(String, Long)] { case (word, count) => (count, word) }
+
     val vocab = wordCounts
-      .top(math.min(fullVocabSize, vocSize).toInt)(Ordering.by(_._2))
+      .top(math.min(fullVocabSize, vocSize).toInt)(ordering)
       .map(_._1)
 
     if (input.getStorageLevel != StorageLevel.NONE) {

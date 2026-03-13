@@ -24,6 +24,7 @@ from typing import (
     Any,
     Generic,
     List,
+    Literal,
     Optional,
 )
 
@@ -82,8 +83,8 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         psdf: DataFrame,
         resamplekey: Optional[Series],
         rule: str,
-        closed: Optional[str] = None,
-        label: Optional[str] = None,
+        closed: Optional[Literal["left", "right"]] = None,
+        label: Optional[Literal["left", "right"]] = None,
         agg_columns: List[Series] = [],
     ):
         self._psdf = psdf
@@ -96,6 +97,7 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         if not getattr(self._offset, "n") > 0:
             raise ValueError("rule offset must be positive")
 
+        self._closed: Literal["left", "right"]
         if closed is None:
             self._closed = "right" if self._offset.rule_code in ["A-DEC", "M", "ME"] else "left"
         elif closed in ["left", "right"]:
@@ -103,6 +105,7 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         else:
             raise ValueError("invalid closed: '{}'".format(closed))
 
+        self._label: Literal["left", "right"]
         if label is None:
             self._label = "right" if self._offset.rule_code in ["A-DEC", "M", "ME"] else "left"
         elif label in ["left", "right"]:
@@ -321,7 +324,7 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         #   ]
         #   index = pd.DatetimeIndex(dates)
         #   pdf = pd.DataFrame(np.array([1,2,3]), index=index, columns=['A'])
-        #   pdf.resample('3Y').max()
+        #   pdf.resample('3YE').max()
         #                 A
         #   2012-12-31  2.0
         #   2015-12-31  NaN
@@ -704,8 +707,8 @@ class DataFrameResampler(Resampler[DataFrame]):
         psdf: DataFrame,
         resamplekey: Optional[Series],
         rule: str,
-        closed: Optional[str] = None,
-        label: Optional[str] = None,
+        closed: Optional[Literal["left", "right"]] = None,
+        label: Optional[Literal["left", "right"]] = None,
         agg_columns: List[Series] = [],
     ):
         super().__init__(
@@ -735,8 +738,8 @@ class SeriesResampler(Resampler[Series]):
         psser: Series,
         resamplekey: Optional[Series],
         rule: str,
-        closed: Optional[str] = None,
-        label: Optional[str] = None,
+        closed: Optional[Literal["left", "right"]] = None,
+        label: Optional[Literal["left", "right"]] = None,
         agg_columns: List[Series] = [],
     ):
         super().__init__(
