@@ -614,26 +614,32 @@ class ExecutorPodsAllocator(
 
     implicit val ec: ExecutionContext = podCreationExecutionContext
 
-    val futures = podSpecs.flatMap { case (newExecutorId, podWithAttachedContainer, resources) =>
-      try {
-        Some(Future {
-          try {
-            val result =
+    var threadPoolShutdown = false
+    val futures = podSpecs.iterator.takeWhile(_ => !threadPoolShutdown).flatMap {
+      case (newExecutorId, podWithAttachedContainer, resources) =>
+        try {
+          Some(Future {
+            // createExecutorPodAndPVCs already logs the error and registers the failure
+            // before rethrowing. We catch here only to prevent a single pod failure
+            // from affecting other concurrent pods.
+            try {
               createExecutorPodAndPVCs(newExecutorId, podWithAttachedContainer, resources)
-            result.map(execId => (execId, resourceProfileId, clock.getTimeMillis()))
-          } catch {
-            case NonFatal(_) => None
-          }
-        })
-      } catch {
-        // If the thread pool has been shut down (e.g., stop() was called while
-        // onNewSnapshots is still running), skip remaining pods gracefully.
-        case _: java.util.concurrent.RejectedExecutionException =>
-          logWarning(log"Thread pool shut down, skipping pod creation for executor " +
-            log"${MDC(LogKeys.EXECUTOR_ID, newExecutorId)}.")
-          None
-      }
-    }
+                .map(execId => (execId, resourceProfileId, clock.getTimeMillis()))
+            } catch {
+              case NonFatal(_) => None
+            }
+          })
+        } catch {
+          // If the thread pool has been shut down (e.g., stop() was called while
+          // onNewSnapshots is still running), stop submitting remaining pods immediately.
+          case _: java.util.concurrent.RejectedExecutionException =>
+            logWarning(log"Thread pool shut down, skipping pod creation for executor " +
+              log"${MDC(LogKeys.EXECUTOR_ID, newExecutorId)}" +
+              log" and all remaining executors.")
+            threadPoolShutdown = true
+            None
+        }
+    }.toSeq
 
     val perPodTimeout = Duration(podCreationTimeout, TimeUnit.MILLISECONDS)
     val results = futures.flatMap { future =>
