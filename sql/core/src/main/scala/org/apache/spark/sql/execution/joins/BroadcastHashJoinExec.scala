@@ -260,7 +260,8 @@ object BroadcastHashJoinExec extends JoinSelectionHelper {
       condition: Option[Expression],
       left: SparkPlan,
       right: SparkPlan,
-      isNullAwareAntiJoin: Boolean = false): BroadcastHashJoinExec = {
+      isNullAwareAntiJoin: Boolean = false,
+      isSkewJoin: Boolean = false): BroadcastHashJoinExec = {
     val (normalizedLeftKeys, normalizedRightKeys) = HashJoin.normalizeJoinKeys(leftKeys, rightKeys)
 
     new BroadcastHashJoinExec(
@@ -271,6 +272,7 @@ object BroadcastHashJoinExec extends JoinSelectionHelper {
       condition,
       left,
       right,
-      isNullAwareAntiJoin)
+      isNullAwareAntiJoin,
+      isSkewJoin)
   }
 }
