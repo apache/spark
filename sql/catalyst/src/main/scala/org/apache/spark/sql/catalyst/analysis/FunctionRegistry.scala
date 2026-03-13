@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.variant._
 import org.apache.spark.sql.catalyst.expressions.xml._
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionBuilderBase, Generate, LogicalPlan, OneRowRelation, PythonWorkerLogs, Range}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -78,10 +79,13 @@ trait FunctionRegistryBase[T] {
   /* Create or replace a temporary function. */
   final def createOrReplaceTempFunction(
       name: String, builder: FunctionBuilder, source: String): Unit = {
-    registerFunction(
-      FunctionIdentifier(name),
-      builder,
-      source)
+    // Regular temporary functions are qualified with CatalogManager.SESSION_NAMESPACE
+    // to enable coexistence with builtin functions of the same name
+    val identifier = FunctionIdentifier(
+      name,
+      Some(CatalogManager.SESSION_NAMESPACE),
+      Some(CatalogManager.SYSTEM_CATALOG_NAME))
+    registerFunction(identifier, builder, source)
   }
 
   @throws[AnalysisException]("If function does not exist")

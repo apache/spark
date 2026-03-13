@@ -75,7 +75,7 @@ class BaseStreamingArrowWriterSuite extends SparkFunSuite {
       ()
     }
 
-    when(arrowWriter.sizeInBytes()).thenAnswer { _ => sizeCounter }
+    when(arrowWriter.sizeInBytes()).thenAnswer { _ => sizeCounter.toLong }
 
     // Set arrowMaxBytesPerBatch to 1
     transformWithStateInPySparkWriter = new BaseStreamingArrowWriter(

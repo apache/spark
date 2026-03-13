@@ -101,7 +101,7 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
       </button>
 
     val alert =
-      <div class="no-new-alert alert alert-info" style="display: none;">
+      <div class="no-new-alert alert alert-info d-none">
         End of Log
       </div>
 
@@ -114,7 +114,7 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
       <div>
         {linkToMaster}
         {range}
-        <div class="log-content" style="height:80vh; overflow:auto; padding:5px;">
+        <div class="log-content overflow-auto p-1" style="height:80vh;">
           <div>{moreButton}</div>
           <pre>{logText}</pre>
           {alert}

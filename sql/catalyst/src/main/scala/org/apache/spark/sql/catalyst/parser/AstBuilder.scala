@@ -1127,7 +1127,8 @@ class AstBuilder extends DataTypeAstBuilder
                 .asScala.map(attr => UnresolvedAttribute(visitMultipartIdentifier(attr)))
             val values = clause.notMatchedAction().expression().asScala.map(expression)
             if (columns.size != values.size) {
-              throw QueryParsingErrors.insertedValueNumberNotMatchFieldNumberError(clause)
+              throw QueryParsingErrors.insertedValueNumberNotMatchColumnNumberError(
+                columns.size, values.size, clause)
             }
             InsertAction(condition, columns.zip(values).map(kv => Assignment(kv._1, kv._2)).toSeq)
           }
@@ -2456,12 +2457,8 @@ class AstBuilder extends DataTypeAstBuilder
       funcCallCtx.funcName,
       Nil,
       (ident, _) => {
-        if (ident.length > 1) {
-          throw new ParseException(
-            errorClass = "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
-            messageParameters = Map("funcName" -> toSQLId(ident)),
-            ctx = funcCallCtx)
-        }
+        // Allow qualified table-valued function names (e.g., builtin.range, system.session.my_tvf)
+        // Removed artificial restriction on multi-part identifiers
         val funcName = funcCallCtx.funcName.getText
         val args = funcCallCtx.functionTableArgument.asScala.map { e =>
           Option(e.functionArgument).map(extractNamedArgument(_, funcName))

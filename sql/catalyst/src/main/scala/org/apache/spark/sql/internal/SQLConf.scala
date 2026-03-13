@@ -88,7 +88,7 @@ object SQLConf {
     sqlConfEntries.get(key)
   }
 
-  private[internal] def getConfigEntries(): util.Collection[ConfigEntry[_]] = {
+  private[sql] def getConfigEntries(): util.Collection[ConfigEntry[_]] = {
     sqlConfEntries.values()
   }
 
@@ -268,6 +268,17 @@ object SQLConf {
       .doc(
         "When true, union should only be resolved once there are no duplicate attributes in " +
         "each branch.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val EXPAND_TAG_PASSTHROUGH_DUPLICATES_ENABLED =
+    buildConf("spark.sql.analyzer.expandTagPassthroughDuplicates")
+      .internal()
+      .version("4.2.0")
+      .doc(
+        "When true, Expand tags pass-through child attributes that share a name with a " +
+        "grouping attribute using __is_duplicate metadata, so that name-based resolution " +
+        "against the Expand output does not produce AMBIGUOUS_REFERENCE errors.")
       .booleanConf
       .createWithDefault(true)
 
@@ -533,6 +544,7 @@ object SQLConf {
       s"plan after a rule or batch is applied. The value can be " +
       s"${VALID_LOG_LEVELS.mkString(", ")}.")
     .version("3.1.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .enumConf(classOf[Level])
     .createWithDefault(Level.TRACE)
 
@@ -566,6 +578,7 @@ object SQLConf {
       "the resolved expression tree in the single-pass bottom-up Resolver. The value can be " +
       s"${VALID_LOG_LEVELS.mkString(", ")}.")
     .version("4.0.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .enumConf(classOf[Level])
     .createWithDefault(Level.TRACE)
 
@@ -597,6 +610,16 @@ object SQLConf {
       .internal()
       .doc("When true, enables geospatial types (GEOGRAPHY/GEOMETRY) and ST functions.")
       .version("4.1.0")
+      .booleanConf
+      .createWithDefaultFunction(() => Utils.isTesting)
+
+  val TYPES_FRAMEWORK_ENABLED =
+    buildConf("spark.sql.types.framework.enabled")
+      .internal()
+      .doc("When true, use the Types Framework for supported types (currently TimeType). " +
+        "The framework centralizes type-specific operations in Ops classes instead of " +
+        "scattered pattern matching. When false, use legacy scattered implementation.")
+      .version("4.2.0")
       .booleanConf
       .createWithDefaultFunction(() => Utils.isTesting)
 
@@ -2054,11 +2077,11 @@ object SQLConf {
   val V2_BUCKETING_PUSH_PART_VALUES_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.pushPartValues.enabled")
       .doc(s"Whether to pushdown common partition values when ${V2_BUCKETING_ENABLED.key} is " +
-        "enabled. When turned on, if both sides of a join are of KeyGroupedPartitioning and if " +
+        "enabled. When turned on, if both sides of a join are of KeyedPartitioning and if " +
         "they share compatible partition keys, even if they don't have the exact same partition " +
         "values, Spark will calculate a superset of partition values and pushdown that info to " +
-        "scan nodes, which will use empty partitions for the missing partition values on either " +
-        "side. This could help to eliminate unnecessary shuffles")
+        "group partition nodes, which will use empty partitions for the missing partition values " +
+        "on either side. This could help to eliminate unnecessary shuffles")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(true)
@@ -2066,7 +2089,7 @@ object SQLConf {
   val V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled")
       .doc("During a storage-partitioned join, whether to allow input partitions to be " +
-        "partially clustered, when both sides of the join are of KeyGroupedPartitioning. At " +
+        "partially clustered, when both sides of the join are of KeyedPartitioning. At " +
         "planning time, Spark will pick the side with less data size based on table " +
         "statistics, group and replicate them to match the other side. This is an optimization " +
         "on skew join and can help to reduce data skewness when certain partitions are assigned " +
@@ -2079,7 +2102,7 @@ object SQLConf {
   val V2_BUCKETING_SHUFFLE_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.shuffle.enabled")
       .doc("During a storage-partitioned join, whether to allow to shuffle only one side. " +
-        "When only one side is KeyGroupedPartitioning, if the conditions are met, spark will " +
+        "When only one side is KeyedPartitioning, if the conditions are met, spark will " +
         "only shuffle the other side. This optimization will reduce the amount of data that " +
         s"needs to be shuffle. This config requires ${V2_BUCKETING_ENABLED.key} to be enabled")
       .version("4.0.0")
@@ -2237,6 +2260,7 @@ object SQLConf {
         "when the underlying table schema evolves. When disabled, view comments will be " +
         "overwritten with table comments on every schema sync.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
@@ -2326,6 +2350,19 @@ object SQLConf {
         "resolution of user-defined sql table valued functions, consistent with view resolution.")
       .booleanConf
       .createWithDefault(true)
+
+  val SESSION_FUNCTION_RESOLUTION_ORDER =
+    buildConf("spark.sql.functionResolution.sessionOrder")
+      .internal()
+      .version("4.2.0")
+      .doc("Order of the session (temporary) function namespace when resolving unqualified " +
+        "function names. Valid values: 'first', 'second', 'last'. " +
+        "'first': session -> builtin -> persistent (SQL temp creation blocked if " +
+        "conflicts with builtin). 'second': builtin -> session -> persistent (default). " +
+        "'last': builtin -> persistent (current schema) -> session.")
+      .stringConf
+      .checkValues(Set("first", "second", "last"))
+      .createWithDefault("second")
 
   // Whether to retain group by columns or not in GroupedData.agg.
   val DATAFRAME_RETAIN_GROUP_COLUMNS = buildConf("spark.sql.retainGroupColumns")
@@ -4446,6 +4483,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PYTHON_UDF_PANDAS_PREFER_INT_EXTENSION_DTYPE =
+    buildConf("spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype")
+      .doc("When true, convert integers to Pandas ExtensionDtype (e.g. pandas.Int64Dtype) " +
+        "for Pandas UDF execution. Otherwise, depends on the behavior of " +
+        "pyarrow.Array.to_pandas on each input arrow batch.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val PYTHON_TABLE_UDF_ARROW_ENABLED =
     buildConf("spark.sql.execution.pythonUDTF.arrow.enabled")
       .doc("Enable Arrow optimization for Python UDTFs.")
@@ -4753,6 +4799,16 @@ object SQLConf {
       .version("3.0.0")
       .enumConf(StoreAssignmentPolicy)
       .createWithDefault(StoreAssignmentPolicy.ANSI)
+
+  val FILE_SOURCE_INSERT_ENFORCE_NOT_NULL =
+    buildConf("spark.sql.fileSource.insert.enforceNotNull")
+      .doc("When true, Spark enforces NOT NULL constraints when inserting data into " +
+        "file-based data source tables (e.g., Parquet, ORC, JSON), consistent with the " +
+        "behavior for other data sources and V2 catalog tables. " +
+        "When false (default), null values are silently accepted into NOT NULL columns.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val ANSI_ENABLED = buildConf(SqlApiConfHelper.ANSI_ENABLED_KEY)
     .doc("When true, Spark SQL uses an ANSI compliant dialect instead of being Hive compliant. " +
@@ -7103,6 +7159,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def geospatialEnabled: Boolean = getConf(GEOSPATIAL_ENABLED)
 
+  def typesFrameworkEnabled: Boolean = getConf(TYPES_FRAMEWORK_ENABLED)
+
   def dataSourceV2JoinPushdown: Boolean = getConf(DATA_SOURCE_V2_JOIN_PUSHDOWN)
 
   def dynamicPartitionPruningEnabled: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_ENABLED)
@@ -7851,6 +7909,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def arrowSafeTypeConversion: Boolean = getConf(SQLConf.PANDAS_ARROW_SAFE_TYPE_CONVERSION)
 
+  def preferIntExtDtype: Boolean = getConf(SQLConf.PYTHON_UDF_PANDAS_PREFER_INT_EXTENSION_DTYPE)
+
   def pysparkWorkerPythonExecutable: Option[String] =
     getConf(SQLConf.PYSPARK_WORKER_PYTHON_EXECUTABLE)
 
@@ -8113,6 +8173,32 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyEvalCurrentTime: Boolean = getConf(SQLConf.LEGACY_EVAL_CURRENT_TIME)
 
   def legacyOutputSchema: Boolean = getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)
+
+  def sessionFunctionResolutionOrder: String =
+    getConf(SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER)
+
+  /**
+   * Returns the resolution search path for error messages and resolution order.
+   * This is the single source of truth for the search path used for functions, tables, and views.
+   * Uses [[sessionFunctionResolutionOrder]]: "first" (session first), "second" (session second),
+   * "last" (session last). When catalogPath is empty, returns only system namespaces.
+   */
+  def resolutionSearchPath(catalogPath: Seq[String]): Seq[Seq[String]] = {
+    val order = sessionFunctionResolutionOrder
+    val session = Seq("system", "session")
+    val builtin = Seq("system", "builtin")
+    order match {
+      case "first" =>
+        if (catalogPath.isEmpty) Seq(session, builtin)
+        else Seq(session, builtin, catalogPath)
+      case "last" =>
+        if (catalogPath.isEmpty) Seq(builtin, session)
+        else Seq(builtin, catalogPath, session)
+      case _ => // "second"
+        if (catalogPath.isEmpty) Seq(builtin, session)
+        else Seq(builtin, session, catalogPath)
+    }
+  }
 
   override def legacyParameterSubstitutionConstantsOnly: Boolean =
     getConf(SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY)

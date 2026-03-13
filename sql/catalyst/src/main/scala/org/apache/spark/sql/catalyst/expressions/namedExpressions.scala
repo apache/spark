@@ -544,12 +544,57 @@ object OuterReference {
    * single-pass implementation (first we extract the [[OuterReference]] and then assign the name -
    * in bottom-up manner).
    *
-   * In order to make single-pass and fixed-point implementations compatible use earlier computed
-   * name (if defined) for [[OuterReference]] (defined in
-   * `AggregateExpressionResolver.handleOuterAggregateExpression`).
+   * For example, for a query like:
+   * {{{
+   *  SELECT col1 AS alias
+   *  FROM values(1)
+   *  GROUP BY col1
+   *  HAVING (
+   *    SELECT col1 = 1
+   *  )
+   * }}}
+   *
+   * Fixed-point analyzer will output:
+   *
+   * Filter cast(scalar-subquery#x [alias#x] as boolean)
+   * :  +- Project [(outer(alias#x) = 1) AS (outer(col1) = 1)#x]
+   * :     +- OneRowRelation
+   * +- Aggregate [col1#x], [col1#x AS alias#x]
+   *    +- LocalRelation [col1#x]
+   *
+   * Notice that the expression in the subquery is `(outer(alias#x) = 1) AS (outer(col1) = 1)`.
+   * This is because the initial underlying expression is `outer(col1) = 1` which we alias, but
+   * we later update the actual outer reference to `outer(alias)`.
    */
   val SINGLE_PASS_SQL_STRING_OVERRIDE =
     TreeNodeTag[String]("single_pass_sql_string_override")
+
+  /**
+   * In fixed-point [[OuterReference]] is extracted in [[UpdateOuterReferences]] which is invoked
+   * after the alias assignment ([[ResolveAliases]]) which is opposite of how it is done in the
+   * single-pass implementation (first we extract the [[OuterReference]] and then assign the name -
+   * in bottom-up manner).
+   *
+   * For example, in a query like:
+   * {{{
+   *   SELECT t1a
+   *   FROM t1
+   *   WHERE t1a IN (
+   *                 SELECT t2a
+   *                 FROM t2
+   *                 WHERE EXISTS (SELECT min(t2a) FROM t3)
+   *                 )
+   * }}}
+   *
+   * In the subquery, the `min(t2c)` expression is going to be resolved to `outer(min(t2c))`. In
+   * fixed-point analyzer, the alias of this expression will be `min(outer(t2c))`, because alias
+   * resolution is triggered before [[UpdateOuterReference]]. However, in single-pass analyzer, we
+   * first resolve the expression to `outer(min(t2c))` and then assign an alias name. This causes
+   * inconsistencies between analyzer results. In order to mitigate this issue, we save the alias
+   * name before updating outer reference.
+   */
+  val SINGLE_PASS_OUTER_AGGREGATE_ALIAS_NAME_OVERRIDE =
+    TreeNodeTag[String]("single_pass_outer_aggregate_alias_name_override")
 }
 
 object VirtualColumn {

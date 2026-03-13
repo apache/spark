@@ -104,15 +104,16 @@ private[ui] class SparkConnectServerPage(parent: SparkConnectServerTab)
       None
     }
     val content =
-      <span id="sqlstat" class="collapse-aggregated-sqlstat collapse-table"
-            data-collapse-name="collapse-aggregated-sqlstat"
-            data-collapse-table="aggregated-sqlstat">
+      <span id="sqlstat" class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-sqlstat"
+            aria-expanded="true" aria-controls="aggregated-sqlstat"
+            data-collapse-name="collapse-aggregated-sqlstat">
         <h4>
           <span class="collapse-table-arrow arrow-open"></span>
           <a>Request Statistics ({numStatement})</a>
         </h4>
       </span> ++
-        <div class="aggregated-sqlstat collapsible-table">
+        <div class="collapsible-table collapse show" id="aggregated-sqlstat">
           {table.getOrElse("No statistics have been generated yet.")}
         </div>
     content
@@ -151,15 +152,16 @@ private[ui] class SparkConnectServerPage(parent: SparkConnectServerTab)
     }
 
     val content =
-      <span id="sessionstat" class="collapse-aggregated-sessionstat collapse-table"
-            data-collapse-name="collapse-aggregated-sessionstat"
-            data-collapse-table="aggregated-sessionstat">
+      <span id="sessionstat" class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-sessionstat"
+            aria-expanded="true" aria-controls="aggregated-sessionstat"
+            data-collapse-name="collapse-aggregated-sessionstat">
         <h4>
           <span class="collapse-table-arrow arrow-open"></span>
           <a>Session Statistics ({numSessions})</a>
         </h4>
       </span> ++
-        <div class="aggregated-sessionstat collapsible-table">
+        <div class="collapsible-table collapse show" id="aggregated-sessionstat">
           {table.getOrElse("No statistics have been generated yet.")}
         </div>
 

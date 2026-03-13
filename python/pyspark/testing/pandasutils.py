@@ -40,6 +40,14 @@ try:
 except ImportError:
     pass
 
+try:
+    from pyspark.sql.pandas.utils import require_minimum_numpy_version
+
+    require_minimum_numpy_version()
+    import numpy as np
+except ImportError:
+    pass
+
 from pyspark.loose_version import LooseVersion
 import pyspark.pandas as ps
 from pyspark.pandas.frame import DataFrame
@@ -134,6 +142,10 @@ def _assert_pandas_almost_equal(
     """
 
     def compare_vals_approx(val1, val2):
+        if isinstance(val1, np.ndarray):
+            return compare_vals_approx(list(val1), val2)
+        if isinstance(val2, np.ndarray):
+            return compare_vals_approx(val1, list(val2))
         # compare vals for approximate equality
         if isinstance(val1, (float, decimal.Decimal)) or isinstance(val2, (float, decimal.Decimal)):
             if abs(float(val1) - float(val2)) > (atol + rtol * abs(float(val2))):

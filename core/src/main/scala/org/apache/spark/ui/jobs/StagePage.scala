@@ -361,7 +361,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
                |'className': 'task task-assignment-timeline-object',
                |'group': '$executorId',
                |'content': '<div class="task-assignment-timeline-content"
-                 |data-bs-toggle="tooltip" data-bs-placement="top"
+                 |data-bs-toggle="tooltip"
                  |data-bs-html="true" data-bs-container="body"
                  |data-bs-title="${"Task " + index + " (attempt " + attempt + ")"}<br>
                  |Status: ${taskInfo.status}<br>
@@ -422,8 +422,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
           <form id={"form-event-timeline-page"}
                 method="get"
                 action=""
-                class="d-flex float-end justify-content-end align-items-center gap-1"
-                style="margin-bottom: 0px;">
+                class="d-flex float-end justify-content-end align-items-center gap-1 mb-0">
             <label>Tasks: {totalTasks}. {totalPages} Pages. Jump to</label>
             <input type="hidden" name="id" value={stageId.toString} />
             <input type="hidden" name="attempt" value={stageAttemptId.toString} />
@@ -441,7 +440,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
                    class="form-control form-control-sm" style="width: 60px;" />
             <label>items in a page.</label>
 
-            <button type="submit" class="btn btn-spark">Go</button>
+            <button type="submit" class="btn btn-outline-secondary">Go</button>
           </form>
         </div>
       </div>

@@ -28,7 +28,8 @@ import org.apache.spark.sql.catalyst.expressions.{
   Generator,
   GeneratorOuter,
   Literal,
-  NamedExpression
+  NamedExpression,
+  OuterReference
 }
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_ALIAS
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, AUTO_GENERATED_ALIAS}
@@ -50,6 +51,11 @@ object AliasResolution {
   def resolve(u: UnresolvedAlias): Expression = {
     val UnresolvedAlias(child, optGenAliasFunc) = u
     child match {
+      case outerReference: OuterReference =>
+        val aliasName = outerReference
+          .getTagValue(OuterReference.SINGLE_PASS_OUTER_AGGREGATE_ALIAS_NAME_OVERRIDE)
+          .getOrElse(toPrettySQL(outerReference.e))
+        Alias(outerReference, aliasName)()
       case ne: NamedExpression => ne
       case go @ GeneratorOuter(g: Generator) if g.resolved => MultiAlias(go, Nil)
       case e if !e.resolved => u
