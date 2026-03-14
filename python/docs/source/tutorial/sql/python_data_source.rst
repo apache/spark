@@ -338,6 +338,126 @@ This is the same dummy streaming reader that generates 2 rows every batch implem
             """
             pass
 
+Admission Control and Trigger.AvailableNow
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Streaming data sources can implement admission control to limit how much data is processed in each micro-batch. This is useful for:
+
+- Rate limiting data consumption to avoid overwhelming downstream systems
+- Controlling resource usage during streaming processing
+- Supporting ``Trigger.AvailableNow`` for deterministic batch processing
+
+**ReadLimit Classes**
+
+PySpark provides several ``ReadLimit`` classes to control data consumption:
+
++-------------------+------------------------------------------------------------------+
+| ReadLimit         | Description                                                      |
++===================+==================================================================+
+| ReadAllAvailable  | Read all available data (used with Trigger.Once/AvailableNow)    |
++-------------------+------------------------------------------------------------------+
+| ReadMaxRows       | Limit the maximum number of rows per micro-batch                 |
++-------------------+------------------------------------------------------------------+
+| ReadMinRows       | Require a minimum number of rows before processing               |
++-------------------+------------------------------------------------------------------+
+| ReadMaxFiles      | Limit the maximum number of files per micro-batch                |
++-------------------+------------------------------------------------------------------+
+| ReadMaxBytes      | Limit the maximum number of bytes per micro-batch                |
++-------------------+------------------------------------------------------------------+
+
+**Implementing Admission Control**
+
+To implement admission control, override the ``latestOffset()`` method with the signature that includes ``start`` and ``limit`` parameters:
+
+.. code-block:: python
+
+    from pyspark.sql.streaming.datasource import ReadAllAvailable, ReadLimit, ReadMaxRows
+
+    class AdmissionControlStreamReader(DataSourceStreamReader):
+
+        def latestOffset(self, start: dict, limit: ReadLimit) -> dict:
+            """
+            Compute the end offset respecting the given read limit.
+
+            Parameters
+            ----------
+            start : dict
+                The starting offset from the previous micro-batch
+            limit : ReadLimit
+                The maximum amount of data to include in this batch
+
+            Returns
+            -------
+            dict
+                The ending offset for this micro-batch
+            """
+            start_idx = start["offset"]
+
+            if isinstance(limit, ReadAllAvailable):
+                # Read all available data (e.g., Trigger.Once)
+                return {"offset": start_idx + self.available_data}
+            elif isinstance(limit, ReadMaxRows):
+                # Respect the row limit
+                return {"offset": start_idx + min(self.available_data, limit.max_rows)}
+            else:
+                # Default behavior
+                return {"offset": start_idx + 1}
+
+        def getDefaultReadLimit(self) -> ReadLimit:
+            """
+            Return the default read limit for this source.
+
+            This limit is used when the engine doesn't specify a limit.
+            """
+            return ReadMaxRows(100)  # Process at most 100 rows per batch
+
+        def reportLatestOffset(self) -> Optional[dict]:
+            """
+            Report the latest available offset for progress monitoring.
+
+            This is used by Spark for progress reporting and does not affect
+            actual data consumption.
+            """
+            return {"offset": self.total_available}
+
+**SupportsTriggerAvailableNow Mixin**
+
+For sources that support ``Trigger.AvailableNow``, implement the ``SupportsTriggerAvailableNow`` mixin. This trigger processes all currently available data and then stops, which is useful for:
+
+- One-time data processing jobs
+- Catching up on backlog before switching to continuous processing
+- Testing and development
+
+.. code-block:: python
+
+    from pyspark.sql.streaming.datasource import SupportsTriggerAvailableNow
+
+    class MyStreamReader(DataSourceStreamReader, SupportsTriggerAvailableNow):
+
+        def __init__(self):
+            self._target_offset = None
+
+        def prepareForTriggerAvailableNow(self) -> None:
+            """
+            Called at query start to capture the target offset.
+
+            The source must not return offsets beyond this target,
+            even if new data arrives during processing.
+            """
+            # Record the current latest offset as the target
+            self._target_offset = self.get_current_latest_offset()
+
+        def latestOffset(self, start: dict, limit: ReadLimit) -> dict:
+            max_available = self._target_offset or self.total_available
+            # ... respect both limit and target offset
+
+**Example Files**
+
+For complete working examples, see:
+
+- ``examples/src/main/python/sql/streaming/python_datasource_admission_control.py`` - Basic admission control with ReadMaxRows
+- ``examples/src/main/python/sql/streaming/structured_blockchain_admission_control.py`` - Advanced example with SupportsTriggerAvailableNow
+
 Implement a Streaming Writer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
