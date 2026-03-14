@@ -360,6 +360,34 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     }
   }
 
+  test("drop database preserves functions in other databases (cache coherence)") {
+    val extCatalog = newEmptyCatalog()
+    extCatalog.createDatabase(newDb("default"), ignoreIfExists = true)
+    extCatalog.createDatabase(newDb("drop_me"), ignoreIfExists = false)
+    extCatalog.createDatabase(newDb("keep_me"), ignoreIfExists = false)
+    extCatalog.createFunction("drop_me", newFunc("func_drop", Some("drop_me")))
+    extCatalog.createFunction("keep_me", newFunc("func_keep", Some("keep_me")))
+    val registry = new SimpleFunctionRegistry()
+    val catalog = new SessionCatalog(extCatalog, registry)
+    try {
+      val dropIdent = FunctionIdentifier("func_drop", Some("drop_me"))
+      val keepIdent = FunctionIdentifier("func_keep", Some("keep_me"))
+      val builder = (e: Seq[Expression]) => e.head
+      val makeInfo = (db: String, name: String) => new ExpressionInfo(
+        "test.Example", db, name, "usage", "arguments",
+        "\n    Examples:\n", "\n    \n  ", "misc_funcs", "1.0.0", "", "sql_udf")
+      registry.registerFunction(dropIdent, makeInfo("drop_me", "func_drop"), builder)
+      registry.registerFunction(keepIdent, makeInfo("keep_me", "func_keep"), builder)
+      assert(registry.functionExists(dropIdent))
+      assert(registry.functionExists(keepIdent))
+      catalog.dropDatabase("drop_me", ignoreIfNotExists = false, cascade = true)
+      assert(!registry.functionExists(dropIdent))
+      assert(registry.functionExists(keepIdent))
+    } finally {
+      catalog.reset()
+    }
+  }
+
   test("alter database") {
     withBasicCatalog { catalog =>
       val db1 = catalog.getDatabaseMetadata("db1")

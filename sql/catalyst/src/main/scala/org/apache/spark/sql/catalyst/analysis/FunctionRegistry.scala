@@ -109,10 +109,11 @@ trait FunctionRegistryBase[T] {
   def dropFunction(name: FunctionIdentifier): Boolean
 
   /**
-   * Remove all cached function entries in the given database.
-   * Keeps the cache coherent when a database is dropped.
+   * Remove all cached function entries matching the given namespace.
+   * The namespace is a FunctionIdentifier with empty funcName used as a filter:
+   * matches on database (case-insensitive) and, when specified, catalog.
    */
-  def dropFunctionsInDatabase(db: String): Unit
+  def dropFunctionsInDatabase(namespace: FunctionIdentifier): Unit
 
   /** Checks if a function with a given name exists. */
   def functionExists(name: FunctionIdentifier): Boolean = lookupFunction(name).isDefined
@@ -269,8 +270,11 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
     functionBuilders.remove(normalizeFuncName(name)).isDefined
   }
 
-  override def dropFunctionsInDatabase(db: String): Unit = synchronized {
-    val toRemove = listFunction().filter(_.database.exists(_.equalsIgnoreCase(db)))
+  override def dropFunctionsInDatabase(namespace: FunctionIdentifier): Unit = synchronized {
+    val toRemove = listFunction().filter { f =>
+      f.database.exists(d => namespace.database.exists(_.equalsIgnoreCase(d))) &&
+        (namespace.catalog.isEmpty || f.catalog == namespace.catalog)
+    }
     toRemove.foreach(n => functionBuilders.remove(n))
   }
 
@@ -306,7 +310,7 @@ trait EmptyFunctionRegistryBase[T] extends FunctionRegistryBase[T] {
     throw SparkUnsupportedOperationException()
   }
 
-  override def dropFunctionsInDatabase(db: String): Unit = {}
+  override def dropFunctionsInDatabase(namespace: FunctionIdentifier): Unit = {}
 
   override def clear(): Unit = {
     throw SparkUnsupportedOperationException()
