@@ -27,8 +27,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{END_INDEX, START_INDEX, STATE_STORE_ID}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, JoinedRow, Literal, NamedExpression, SafeProjection, SpecificInternalRow, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, JoinedRow, Literal, SafeProjection, SpecificInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOpStateStoreCheckpointInfo, WatermarkSupport}
@@ -189,7 +188,8 @@ class SymmetricHashJoinStateManagerV4(
     skippedNullValueCount: Option[SQLMetric] = None,
     useStateStoreCoordinator: Boolean = true,
     snapshotOptions: Option[SnapshotOptions] = None,
-    joinStoreGenerator: JoinStateManagerStoreGenerator)
+    joinStoreGenerator: JoinStateManagerStoreGenerator,
+    joinKeyOrdinalForWatermark: Option[Int] = None)
   extends SymmetricHashJoinStateManager with SupportsEvictByTimestamp with Logging {
 
   // TODO: [SPARK-55729] Once the new state manager is integrated to stream-stream join operator,
@@ -230,15 +230,8 @@ class SymmetricHashJoinStateManagerV4(
     }
   }
 
-  private val eventTimeColIdxOptInKey: Option[Int] = {
-    joinKeys.zipWithIndex.collectFirst {
-      case (ne: NamedExpression, index)
-        if ne.metadata.contains(EventTimeWatermark.delayKey) => index
-    }
-  }
-
   private val extractEventTimeFnFromKey: UnsafeRow => Option[Long] = { row =>
-    eventTimeColIdxOptInKey.map { idx =>
+    joinKeyOrdinalForWatermark.map { idx =>
       val attr = keyAttributes(idx)
       if (attr.dataType.isInstanceOf[StructType]) {
         // NOTE: We assume this is window struct, as same as WatermarkSupport.watermarkExpression
@@ -314,7 +307,7 @@ class SymmetricHashJoinStateManagerV4(
   private val tsWithKey = new TsWithKeyTypeStore
 
   override def append(key: UnsafeRow, value: UnsafeRow, matched: Boolean): Unit = {
-    val eventTime = extractEventTimeFn(value)
+    val eventTime = extractEventTimeFnFromKey(key).getOrElse(extractEventTimeFn(value))
     // We always do blind merge for appending new value.
     keyWithTsToValues.append(key, eventTime, value, matched)
     tsWithKey.add(eventTime, key)
@@ -1745,7 +1738,8 @@ object SymmetricHashJoinStateManager {
       skippedNullValueCount: Option[SQLMetric] = None,
       useStateStoreCoordinator: Boolean = true,
       snapshotOptions: Option[SnapshotOptions] = None,
-      joinStoreGenerator: JoinStateManagerStoreGenerator): SymmetricHashJoinStateManager = {
+      joinStoreGenerator: JoinStateManagerStoreGenerator,
+      joinKeyOrdinalForWatermark: Option[Int] = None): SymmetricHashJoinStateManager = {
     if (stateFormatVersion == 4) {
       require(SQLConf.get.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_V4_ENABLED),
         "State format version 4 is under development.")
@@ -1753,7 +1747,7 @@ object SymmetricHashJoinStateManager {
         joinSide, inputValueAttributes, joinKeys, stateInfo, storeConf, hadoopConf,
         partitionId, keyToNumValuesStateStoreCkptId, keyWithIndexToValueStateStoreCkptId,
         stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotOptions,
-        joinStoreGenerator
+        joinStoreGenerator, joinKeyOrdinalForWatermark
       )
     } else if (stateFormatVersion == 3) {
       new SymmetricHashJoinStateManagerV2(
