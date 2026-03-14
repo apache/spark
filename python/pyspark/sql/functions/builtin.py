@@ -13068,7 +13068,7 @@ def timestamp_diff(unit: str, start: "ColumnOrName", end: "ColumnOrName") -> Col
 @_try_remote_functions
 def timestamp_add(unit: str, quantity: "ColumnOrName", ts: "ColumnOrName") -> Column:
     """
-    Adds the specified number of units to the given timestamp.
+    Adds the specified number of units to the given timestamp
 
     .. versionadded:: 4.0.0
 
