@@ -20,7 +20,7 @@ import java.sql.Timestamp
 import java.util.Collections
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Literal, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.physical
@@ -38,7 +38,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.types._
 
-class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
+class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with ExplainSuiteHelper {
   private val functions = Seq(
     UnboundYearsFunction,
     UnboundDaysFunction,
@@ -3214,6 +3214,32 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
           val groupPartitions = collectAllGroupPartitions(df.queryExecution.executedPlan)
           assert(groupPartitions.map(_.outputPartitioning.numPartitions) == expectedPartitions)
       }
+    }
+  }
+
+  test("SPARK-55992: GroupPartitions textual representatin in plans") {
+    val items_partitions = Array(bucket(4, "id"), years("arrive_time"))
+    createTable(items, itemsColumns, items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES (1, 'aa', 10.0, cast('2021-01-01' as timestamp))")
+
+    val purchases_partitions = Array(bucket(6, "item_id"), years("time"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES (2, 10.0, cast('2021-01-01' as timestamp))")
+
+    withSQLConf(
+      SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+      SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+      SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      val df = sql(
+        s"""
+           |SELECT *
+           |FROM testcat.ns.$items i
+           |JOIN testcat.ns.$purchases p ON p.item_id = i.id
+           |""".stripMargin)
+      checkKeywordsExistsInExplain(df, keywords = "GroupPartitions JoinKeyPositions: [0] " +
+        "ExpectedPartitionKeys: 2 Reducers: 1 DistributePartitions: false")
     }
   }
 }

@@ -191,6 +191,16 @@ case class GroupPartitionsExec(
       super.outputOrdering
     }
   }
+
+  override def simpleString(maxFields: Int): String = {
+    val joinKeyPositionsString =
+      joinKeyPositions.map(p => s" JoinKeyPositions: ${p.mkString("[", ",", "]")}").getOrElse("")
+    val expectedPartitionKeysString =
+      expectedPartitionKeys.map(ks => s" ExpectedPartitionKeys: ${ks.size}").getOrElse("")
+    val reducersString = reducers.map(r => s" Reducers: ${r.count(_.isDefined)}").getOrElse("")
+    s"$nodeName$joinKeyPositionsString$expectedPartitionKeysString$reducersString " +
+      s"DistributePartitions: $distributePartitions"
+  }
 }
 
 /**
