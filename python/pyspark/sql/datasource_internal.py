@@ -162,9 +162,7 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         it = chain(*entries)
         return it
 
-    def read(
-        self, partition: SimpleInputPartition
-    ) -> Iterator[Tuple]:
+    def read(self, partition: SimpleInputPartition) -> Iterator[Tuple]:
         return self.simple_reader.readBetweenOffsets(partition.start, partition.end)
 
 
