@@ -46,9 +46,7 @@ def plot_pandas_on_spark(data: Union["ps.DataFrame", "ps.Series"], kind: str, **
         return plot_kde(data, **kwargs)
 
     # Other plots.
-    return plotly.plot(
-        PandasOnSparkPlotAccessor.pandas_plot_data_map[kind](data), kind, **kwargs
-    )
+    return plotly.plot(PandasOnSparkPlotAccessor.pandas_plot_data_map[kind](data), kind, **kwargs)
 
 
 def plot_pie(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
@@ -58,7 +56,7 @@ def plot_pie(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
 
     data = PandasOnSparkPlotAccessor.pandas_plot_data_map["pie"](data)
     subplots = kwargs.pop("subplots", False)
-    layout = kwargs.pop("layout", None)
+    col_wrap = kwargs.pop("col_wrap", None)
 
     if isinstance(data, pd.Series):
         pdf = data.to_frame()
@@ -66,16 +64,10 @@ def plot_pie(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
     elif isinstance(data, pd.DataFrame):
         if subplots:
             cols = list(data.columns)
-            if layout is not None:
-                nrows, ncols = layout
-                if nrows * ncols < len(cols):
-                    raise ValueError(
-                        "The provided 'layout' is too small for all columns: "
-                        f"{nrows} rows * {ncols} columns < {len(cols)} columns."
-                    )
-            else:
-                ncols = min(len(cols), 3)  # default max 3 per row
-                nrows = math.ceil(len(cols) / ncols)
+            if col_wrap is not None and col_wrap < 1:
+                raise ValueError("col_wrap must be a positive integer, got %d." % col_wrap)
+            ncols = col_wrap if col_wrap is not None else min(len(cols), 3)
+            nrows = math.ceil(len(cols) / ncols)
             fig = make_subplots(
                 rows=nrows,
                 cols=ncols,
@@ -138,9 +130,7 @@ def plot_histogram(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
                 name=name_like_string(series.name),
                 text=text_bins,
                 hovertemplate=(
-                    "variable="
-                    + name_like_string(series.name)
-                    + "<br>value=%{text}<br>count=%{y}"
+                    "variable=" + name_like_string(series.name) + "<br>value=%{text}<br>count=%{y}"
                 ),
             )
         )
@@ -281,9 +271,7 @@ def plot_kde(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
                     "index": ind,
                 }
             )
-            for label, kde_result in zip(
-                psdf._internal.column_labels, list(kde_results)
-            )
+            for label, kde_result in zip(psdf._internal.column_labels, list(kde_results))
         ]
     )
 
