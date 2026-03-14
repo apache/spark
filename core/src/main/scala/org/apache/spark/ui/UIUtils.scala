@@ -256,7 +256,6 @@ private[spark] object UIUtils extends Logging {
           href={prependBaseUri(request, "/static/webui-dataTables.css")} type="text/css"/>
     <script src={prependBaseUri(request, "/static/jquery.dataTables.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.cookies.2.2.0.min.js")}></script>
-    <script src={prependBaseUri(request, "/static/jquery.blockUI.min.js")}></script>
     <script src={prependBaseUri(request, "/static/dataTables.bootstrap5.min.js")}></script>
   }
 
@@ -295,6 +294,16 @@ private[spark] object UIUtils extends Logging {
         <title>{appName} - {title}</title>
       </head>
       <body class="d-flex flex-column min-vh-100">
+        <div id="loading-overlay"
+             class={"position-fixed top-0 start-0 w-100 h-100" +
+               " d-flex justify-content-center align-items-center d-none"}>
+          <div class="text-center">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <h3 class="mt-2">Loading...</h3>
+          </div>
+        </div>
         <nav class="navbar navbar-expand-md navbar-light bg-light mb-4">
           <div class="navbar-header">
             <div class="navbar-brand">
@@ -358,6 +367,16 @@ private[spark] object UIUtils extends Logging {
         <title>{title}</title>
       </head>
       <body class="d-flex flex-column min-vh-100">
+        <div id="loading-overlay"
+             class={"position-fixed top-0 start-0 w-100 h-100" +
+               " d-flex justify-content-center align-items-center d-none"}>
+          <div class="text-center">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <h3 class="mt-2">Loading...</h3>
+          </div>
+        </div>
         <div class="container-fluid flex-fill">
           <div class="row">
             <div class="col-12">
