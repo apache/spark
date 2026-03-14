@@ -173,6 +173,35 @@ class CreateTableLikeSuite extends DatasourceV2SQLBase {
     }
   }
 
+  test("v2 catalog target: non-existent provider is stored as property without validation") {
+    // Pure V2 catalogs (e.g. InMemoryCatalog) do not validate the provider — they store it
+    // as a plain property and let the catalog implementation decide what to do with it.
+    // This is consistent with how CreateTableExec works for CREATE TABLE targeting V2 catalogs.
+    withTable("testcat.src", "testcat.dst") {
+      sql("CREATE TABLE testcat.src (id bigint) USING foo")
+      sql("CREATE TABLE testcat.dst LIKE testcat.src")
+
+      val dst = testCatalog.loadTable(Identifier.of(Array(), "dst"))
+      assert(dst.properties.get("provider") === "foo",
+        "Provider should be copied from source as-is without validation")
+    }
+  }
+
+  test("session catalog target: non-existent provider from source is rejected") {
+    // V2SessionCatalog bridges to the V1 DataSource world and calls
+    // DataSource.lookupDataSource(provider) when creating the target table.
+    // A non-existent provider therefore causes a DATA_SOURCE_NOT_FOUND error,
+    // unlike pure V2 catalogs which accept any provider string.
+    withTable("testcat.src") {
+      sql("CREATE TABLE testcat.src (id bigint) USING foo")
+      val ex = intercept[Exception] {
+        sql("CREATE TABLE dst LIKE testcat.src")
+      }
+      assert(ex.getMessage.contains("foo"),
+        "Error should mention the unresolvable provider")
+    }
+  }
+
   // -------------------------------------------------------------------------
   // Column type fidelity
   // -------------------------------------------------------------------------
