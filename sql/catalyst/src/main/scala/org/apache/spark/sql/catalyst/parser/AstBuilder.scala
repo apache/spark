@@ -940,21 +940,17 @@ class AstBuilder extends DataTypeAstBuilder
             Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE), isStreaming = false)
           val deleteExpr = expression(ctx.whereClause().booleanExpression())
           val isByName = ctx.NAME() != null
-          val schemaEvolutionWriteOption: Map[String, String] =
-            if (ctx.EVOLUTION() != null) Map("mergeSchema" -> "true") else Map.empty
           if (isByName) {
             OverwriteByExpression.byName(
               table,
               df = otherPlans.head,
               deleteExpr,
-              writeOptions = schemaEvolutionWriteOption,
               withSchemaEvolution = ctx.EVOLUTION() != null)
           } else {
             OverwriteByExpression.byPosition(
               table,
               query = otherPlans.head,
               deleteExpr,
-              writeOptions = schemaEvolutionWriteOption,
               withSchemaEvolution = ctx.EVOLUTION() != null)
           }
         })
