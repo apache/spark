@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, InMemoryCatalog}
-import org.apache.spark.sql.types.{IntegerType, LongType, StringType}
+import org.apache.spark.sql.types.{CharType, IntegerType, LongType, StringType, VarcharType}
 
 class CreateTableLikeSuite extends DatasourceV2SQLBase {
 
@@ -202,6 +202,19 @@ class CreateTableLikeSuite extends DatasourceV2SQLBase {
     }
   }
 
+  test("source provider is copied to v2 target when no USING override") {
+    // When no USING clause is given, CreateTableLikeExec copies the provider from the
+    // source table into PROP_PROVIDER of the target's TableInfo properties.
+    withTable("src", "testcat.dst") {
+      sql("CREATE TABLE src (id bigint) USING parquet")
+      sql("CREATE TABLE testcat.dst LIKE src")
+
+      val dst = testCatalog.loadTable(Identifier.of(Array(), "dst"))
+      assert(dst.properties.get("provider") === "parquet",
+        "Source provider should be copied to the V2 target when no USING clause is specified")
+    }
+  }
+
   // -------------------------------------------------------------------------
   // Column type fidelity
   // -------------------------------------------------------------------------
@@ -221,6 +234,20 @@ class CreateTableLikeSuite extends DatasourceV2SQLBase {
       assert(schema("id").dataType === LongType)
       assert(schema("name").dataType === StringType)
       assert(schema("score").dataType === IntegerType)
+    }
+  }
+
+  test("CHAR and VARCHAR types are preserved from v1 source to v2 target") {
+    // CreateTableLikeExec calls CharVarcharUtils.getRawSchema on V1Table sources so that
+    // CHAR(n)/VARCHAR(n) declarations survive the copy instead of being collapsed to StringType.
+    withTable("src", "testcat.dst") {
+      sql("CREATE TABLE src (id bigint, name CHAR(10), tag VARCHAR(20)) USING parquet")
+      sql("CREATE TABLE testcat.dst LIKE src")
+
+      val dst = testCatalog.loadTable(Identifier.of(Array(), "dst"))
+      val schema = CatalogV2Util.v2ColumnsToStructType(dst.columns())
+      assert(schema("name").dataType === CharType(10))
+      assert(schema("tag").dataType === VarcharType(20))
     }
   }
 
