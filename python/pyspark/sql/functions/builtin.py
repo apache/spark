@@ -21298,7 +21298,8 @@ def to_json(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) ->
         See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_
         for the version you use.
         Additionally the function supports the `pretty` option which enables
-        pretty JSON generation.
+        pretty JSON generation, and the ``sortKeys`` option, which sorts
+        map keys lexicographically in the generated JSON.
 
         .. # noqa
 

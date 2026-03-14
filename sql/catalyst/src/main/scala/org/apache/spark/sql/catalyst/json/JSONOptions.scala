@@ -100,6 +100,9 @@ class JSONOptions(
   val ignoreNullFields = parameters.get(IGNORE_NULL_FIELDS).map(_.toBoolean)
     .getOrElse(SQLConf.get.jsonGeneratorIgnoreNullFields)
 
+  // Whether to sort keys when generating JSON for map values.
+  val sortKeys = parameters.get(SORT_KEYS).map(_.toBoolean).getOrElse(false)
+
   // If this is true, when writing NULL values to columns of JSON tables with explicit DEFAULT
   // values, never skip writing the NULL values to storage, overriding 'ignoreNullFields' above.
   // This can be useful to enforce that inserted NULL values are present in storage to differentiate
@@ -309,6 +312,7 @@ object JSONOptions extends DataSourceOptions {
   val WRITE_NON_ASCII_CHARACTER_AS_CODEPOINT = newOption("writeNonAsciiCharacterAsCodePoint")
   val SINGLE_VARIANT_COLUMN = newOption(DataSourceOptions.SINGLE_VARIANT_COLUMN)
   val USE_UNSAFE_ROW = newOption("useUnsafeRow")
+  val SORT_KEYS = newOption("sortKeys")
   // Options with alternative
   val ENCODING = "encoding"
   val CHARSET = "charset"

@@ -276,15 +276,39 @@ class JacksonGenerator(
       map: MapData, mapType: MapType, fieldWriter: ValueWriter): Unit = {
     val keyArray = map.keyArray()
     val valueArray = map.valueArray()
-    var i = 0
-    while (i < map.numElements()) {
-      gen.writeFieldName(keyArray.get(i, mapType.keyType).toString)
-      if (!valueArray.isNullAt(i)) {
-        fieldWriter.apply(valueArray, i)
-      } else {
-        gen.writeNull()
+    val numElements = map.numElements()
+    if (!options.sortKeys) {
+      var i = 0
+      while (i < numElements) {
+        gen.writeFieldName(keyArray.get(i, mapType.keyType).toString)
+        if (!valueArray.isNullAt(i)) {
+          fieldWriter.apply(valueArray, i)
+        } else {
+          gen.writeNull()
+        }
+        i += 1
       }
-      i += 1
+    } else {
+      val indices = (0 until numElements).toArray
+      java.util.Arrays.sort(indices, new java.util.Comparator[Int] {
+        override def compare(a: Int, b: Int): Int = {
+          val ka = keyArray.get(a, mapType.keyType).toString
+          val kb = keyArray.get(b, mapType.keyType).toString
+          ka.compareTo(kb)
+        }
+      })
+
+      var j = 0
+      while (j < numElements) {
+        val i = indices(j)
+        gen.writeFieldName(keyArray.get(i, mapType.keyType).toString)
+        if (!valueArray.isNullAt(i)) {
+          fieldWriter.apply(valueArray, i)
+        } else {
+          gen.writeNull()
+        }
+        j += 1
+      }
     }
   }
 
