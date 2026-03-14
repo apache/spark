@@ -1194,7 +1194,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                         state,
                     )
 
-        _batches = super().load_stream(stream)
+        _batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
 
         data_state_generator = gen_data_and_state(_batches)
 
@@ -1729,7 +1729,7 @@ class TransformWithStateInPySparkRowSerializer(ArrowStreamUDFSerializer):
                     row = DataRow(*(batch.column(i)[row_idx].as_py() for i in range(num_cols)))
                     yield row_key, row
 
-        _batches = super().load_stream(stream)
+        _batches = super(ArrowStreamUDFSerializer, self).load_stream(stream)
         data_batches = generate_data_batches(_batches)
 
         for k, g in groupby(data_batches, key=lambda x: x[0]):
@@ -1863,7 +1863,7 @@ class TransformWithStateInPySparkRowInitStateSerializer(TransformWithStateInPySp
                     for key, init_state_row in init_result:
                         yield (key, None, init_state_row)
 
-        _batches = super().load_stream(stream)
+        _batches = super(ArrowStreamUDFSerializer, self).load_stream(stream)
         data_batches = generate_data_batches(_batches)
 
         for k, g in groupby(data_batches, key=lambda x: x[0]):

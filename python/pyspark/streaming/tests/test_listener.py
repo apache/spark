@@ -23,7 +23,7 @@ class StreamingListenerTests(PySparkStreamingTestCase):
 
     class BatchInfoCollector(StreamingListener):
         def __init__(self):
-            super().__init__()
+            super(StreamingListener, self).__init__()
             self.batchInfosCompleted = []
             self.batchInfosStarted = []
             self.batchInfosSubmitted = []

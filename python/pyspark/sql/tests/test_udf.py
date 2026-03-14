@@ -1707,7 +1707,7 @@ class BaseUDFTestsMixin(object):
 class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        super().setUpClass()
+        super(BaseUDFTestsMixin, cls).setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "false")
 
     # We cannot check whether the batch size is effective or not. We just run the query with
