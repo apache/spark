@@ -706,6 +706,26 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     )
   }
 
+  test("to_json with sortKeys - map and nested struct") {
+    val nestedSchema = StructType(Seq(
+      StructField("x", IntegerType),
+      StructField("y", IntegerType)))
+    val schema = MapType(StringType, nestedSchema)
+
+    val mapData = ArrayBasedMapData(Map(
+      UTF8String.fromString("b") -> InternalRow(2, 20),
+      UTF8String.fromString("a") -> InternalRow(1, 10)))
+
+    val input = Literal(mapData, schema)
+
+    // Default behavior should preserve underlying map order (implementation-defined),
+    // so we only assert the sorted behavior here.
+    checkEvaluation(
+      StructsToJson(Map("sortKeys" -> "true"), input),
+      """{"a":{"x":1,"y":10},"b":{"x":2,"y":20}}"""
+    )
+  }
+
   test("to_json - array with maps") {
     val inputSchema = ArrayType(MapType(StringType, IntegerType))
     val input = new GenericArrayData(

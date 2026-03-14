@@ -461,6 +461,22 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       Row("""{}""") :: Nil)
   }
 
+  test("to_json with option (sortKeys) - map and nested struct") {
+    val df = Seq(
+      (Map("b" -> 1, "a" -> 2), Map("b" -> (1, 2), "a" -> (3, 4)))
+    ).toDF("m", "nested")
+
+    val options = Map("sortKeys" -> "true")
+
+    checkAnswer(
+      df.select(to_json($"m", options)),
+      Row("""{"a":2,"b":1}""") :: Nil)
+
+    checkAnswer(
+      df.select(to_json($"nested", options)),
+      Row("""{"a":{"_1":3,"_2":4},"b":{"_1":1,"_2":2}}""") :: Nil)
+  }
+
   test("to_json - interval support") {
     val baseDf = Seq(Tuple1(Tuple1("-3 month 7 hours"))).toDF("a")
     val df = baseDf.select(struct($"a._1".cast(CalendarIntervalType).as("a")).as("c"))
@@ -857,6 +873,17 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
           from_json($"root", schema_of_json(lit(json))),
           Map("pretty" -> "true"))),
       Seq(Row(expected)))
+  }
+
+  test("to_json with sortKeys and pretty") {
+    val df = Seq(Map("b" -> 1, "a" -> 2)).toDF("m")
+
+    val prettySorted = df.select(
+      to_json($"m", Map("pretty" -> "true", "sortKeys" -> "true"))).as[String].head()
+
+    assert(prettySorted.contains("\"a\" : 2"))
+    assert(prettySorted.contains("\"b\" : 1"))
+    assert(prettySorted.indexOf("\"a\"") < prettySorted.indexOf("\"b\""))
   }
 
   test("from_json invalid json - check modes") {
