@@ -196,6 +196,39 @@ class CreateTableLikeSuite extends DatasourceV2SQLBase {
   }
 
   // -------------------------------------------------------------------------
+  // V2 source, session catalog (V1) target
+  // -------------------------------------------------------------------------
+
+  test("v2 source, v1 target: session catalog target with v2 catalog source") {
+    // Source is a pure V2 table in testcat (InMemoryTable, not a V1Table).
+    // Target is the session catalog. ResolvedV1TableOrViewIdentifier does not match
+    // the V2 source, so ResolveSessionCatalog falls through and CreateTableLikeExec
+    // is used (targeting V2SessionCatalog which backs the session catalog).
+    // The source must use a real provider (parquet) so that V2SessionCatalog can
+    // validate it when creating the target table.
+    withTable("testcat.src", "dst") {
+      sql("CREATE TABLE testcat.src (id bigint, data string) USING parquet")
+      sql("CREATE TABLE dst LIKE testcat.src")
+
+      assert(spark.catalog.tableExists("dst"))
+      val schema = spark.table("dst").schema
+      assert(schema.fieldNames === Array("id", "data"))
+    }
+  }
+
+  test("v2 source, v1 target: schema and partitioning are copied") {
+    withTable("testcat.src", "dst") {
+      sql("CREATE TABLE testcat.src (id bigint, data string) USING parquet " +
+        "PARTITIONED BY (data)")
+      sql("CREATE TABLE dst LIKE testcat.src")
+
+      assert(spark.catalog.tableExists("dst"))
+      val schema = spark.table("dst").schema
+      assert(schema.fieldNames === Array("id", "data"))
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // V1 fallback regression
   // -------------------------------------------------------------------------
 
