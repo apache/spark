@@ -212,17 +212,150 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
     "%s/jobs/job/?id=%s".format(UIUtils.prependBaseUri(request, parent.basePath), jobId)
 
   private def physicalPlanDescription(physicalPlanDescription: String): Seq[Node] = {
+    val (initialPlan, finalPlan) = extractInitialAndFinalPlans(physicalPlanDescription)
+    val hasDiff = initialPlan.nonEmpty && finalPlan.nonEmpty
+
+    // scalastyle:off line.size.limit
     <div>
-      <span data-action="clickPhysicalPlanDetails">
+      <span class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#physical-plan-details"
+            aria-expanded="false" aria-controls="physical-plan-details"
+            data-collapse-name="collapse-plan-details">
         <h4>
-          <span id="physical-plan-details-arrow" class="arrow-closed"></span>
+          <span class="collapse-table-arrow arrow-closed"></span>
           <a>Plan Details</a>
         </h4>
       </span>
+      <div class="collapsible-table collapse" id="physical-plan-details">
+        {if (hasDiff) {
+          <div>
+            <div class="btn-group btn-group-sm mb-2" role="group">
+              <input type="radio" class="btn-check" name="plan-diff-mode" id="plan-diff-unified"
+                     data-bs-toggle="tab" data-bs-target="#plan-unified-tab" autocomplete="off" checked="checked"/>
+              <label class="btn btn-outline-secondary" htmlFor="plan-diff-unified">Unified</label>
+              <input type="radio" class="btn-check" name="plan-diff-mode" id="plan-diff-split"
+                     data-bs-toggle="tab" data-bs-target="#plan-split-tab" autocomplete="off"/>
+              <label class="btn btn-outline-secondary" htmlFor="plan-diff-split">Split</label>
+            </div>
+            <div class="tab-content">
+              <div class="tab-pane fade show active" id="plan-unified-tab" role="tabpanel">
+                {unifiedDiff(initialPlan, finalPlan)}
+              </div>
+              <div class="tab-pane fade" id="plan-split-tab" role="tabpanel">
+                <div class="row">
+                  <div class="col-6">
+                    <h6 class="fw-bold text-muted">Initial Plan</h6>
+                    <pre class="border rounded p-2 plan-diff-pre">{initialPlan}</pre>
+                  </div>
+                  <div class="col-6">
+                    <h6 class="fw-bold text-muted">Final Plan</h6>
+                    <pre class="border rounded p-2 plan-diff-pre">{finalPlan}</pre>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        } else {
+          <pre>{physicalPlanDescription}</pre>
+        }}
+      </div>
     </div>
-    <div id="physical-plan-details" style="display: none;">
-      <pre>{physicalPlanDescription}</pre>
+    // scalastyle:on line.size.limit
+  }
+
+  /** Generate a unified diff view with colored +/- lines. */
+  private def unifiedDiff(initial: String, final_ : String): Seq[Node] = {
+    val initLines = initial.split("\n")
+    val finalLines = final_.split("\n")
+
+    // Simple LCS-based diff
+    val lcs = longestCommonSubsequence(initLines, finalLines)
+    val diffLines = new scala.collection.mutable.ArrayBuffer[(String, String)]() // (type, text)
+    var i = 0
+    var j = 0
+    var k = 0
+    while (k < lcs.length) {
+      while (i < initLines.length && initLines(i) != lcs(k)) {
+        diffLines += (("-", initLines(i)))
+        i += 1
+      }
+      while (j < finalLines.length && finalLines(j) != lcs(k)) {
+        diffLines += (("+", finalLines(j)))
+        j += 1
+      }
+      diffLines += ((" ", lcs(k)))
+      i += 1; j += 1; k += 1
+    }
+    while (i < initLines.length) { diffLines += (("-", initLines(i))); i += 1 }
+    while (j < finalLines.length) { diffLines += (("+", finalLines(j))); j += 1 }
+
+    val lines = diffLines.map { case (typ, text) =>
+      val cssClass = typ match {
+        case "-" => "diff-removed"
+        case "+" => "diff-added"
+        case _ => ""
+      }
+      val prefix = typ match { case " " => " "; case other => other }
+      <div class={s"diff-line $cssClass"}><code>{s"$prefix $text"}</code></div>
+    }
+
+    // scalastyle:off line.size.limit
+    <div class="border rounded p-2 plan-diff-pre" style="max-height: 600px; overflow: auto;">
+      <style>{".diff-removed {{ background-color: rgba(var(--bs-danger-rgb), 0.15); }} .diff-added {{ background-color: rgba(var(--bs-success-rgb), 0.15); }} .diff-line code {{ font-size: 0.8rem; white-space: pre; }} .plan-diff-pre {{ font-size: 0.8rem; max-height: 600px; overflow: auto; }}"}</style>
+      {lines}
     </div>
+    // scalastyle:on line.size.limit
+  }
+
+  /** Compute LCS of two string arrays. */
+  private def longestCommonSubsequence(a: Array[String], b: Array[String]): Array[String] = {
+    val m = a.length
+    val n = b.length
+    val dp = Array.ofDim[Int](m + 1, n + 1)
+    for (i <- 1 to m; j <- 1 to n) {
+      dp(i)(j) = if (a(i - 1) == b(j - 1)) dp(i - 1)(j - 1) + 1
+                 else math.max(dp(i - 1)(j), dp(i)(j - 1))
+    }
+    // Backtrack
+    val result = new scala.collection.mutable.ArrayBuffer[String]()
+    var (i, j) = (m, n)
+    while (i > 0 && j > 0) {
+      if (a(i - 1) == b(j - 1)) { result += a(i - 1); i -= 1; j -= 1 }
+      else if (dp(i - 1)(j) > dp(i)(j - 1)) i -= 1
+      else j -= 1
+    }
+    result.reverse.toArray
+  }
+
+  /**
+   * Extract Initial Plan and Final Plan tree sections from the physicalPlanDescription.
+   * Returns (initialPlan, finalPlan). If the plan doesn't contain AQE sections, returns
+   * empty strings.
+   */
+  private def extractInitialAndFinalPlans(
+      description: String): (String, String) = {
+    val lines = description.split("\n")
+    var initialLines = Seq.empty[String]
+    var finalLines = Seq.empty[String]
+    var section = "" // "", "final", "initial"
+
+    for (line <- lines) {
+      val trimmed = line.trim
+      if (trimmed.contains("== Final Plan ==")) {
+        section = "final"
+      } else if (trimmed.contains("== Initial Plan ==")) {
+        section = "initial"
+      } else if (section.nonEmpty && trimmed.startsWith("(") && trimmed.contains(")") &&
+          !trimmed.startsWith("(+") && !trimmed.startsWith("(-")) {
+        // Node details section (e.g., "(1) Range [codegen id : 1]") — stop collecting
+        section = ""
+      } else if (section == "final") {
+        finalLines :+= line
+      } else if (section == "initial") {
+        initialLines :+= line
+      }
+    }
+    (initialLines.mkString("\n").trim, finalLines.mkString("\n").trim)
   }
 
   private def modifiedConfigs(modifiedConfigs: Map[String, String]): Seq[Node] = {
