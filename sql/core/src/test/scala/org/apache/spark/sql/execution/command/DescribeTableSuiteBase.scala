@@ -45,8 +45,9 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       val e = intercept[AnalysisException] {
         sql(s"DESCRIBE TABLE ${tbl}_non_existence")
       }
-      checkErrorTableNotFound(e, parsed,
-        ExpectedContext(s"${tbl}_non_existence", 15, 14 + s"${tbl}_non_existence".length))
+      checkErrorTableNotFoundWithSearchPath(e, parsed,
+        ExpectedContext(s"${tbl}_non_existence", 15, 14 + s"${tbl}_non_existence".length),
+        defaultSearchPathForTests)
     }
   }
 

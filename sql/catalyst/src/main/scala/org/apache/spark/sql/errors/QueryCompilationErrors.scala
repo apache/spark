@@ -945,6 +945,25 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       origin = context)
   }
 
+  def tableOrViewNotFoundWithSearchPath(
+      name: Seq[String],
+      searchPath: Seq[String],
+      origin: Origin): Throwable = {
+    // Payload is data only: path list or empty string. Template adds "Search path: " label.
+    val searchPathValue = if (searchPath.isEmpty) {
+      ""
+    } else {
+      searchPath.mkString("[", ", ", "]")
+    }
+    new AnalysisException(
+      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      messageParameters = Map(
+        "relationName" -> toSQLId(name),
+        "searchPath" -> searchPathValue
+      ),
+      origin = origin)
+  }
+
   def notAScalarFunctionError(
       functionName: String,
       u: TreeNode[_]): Throwable = {
@@ -1537,6 +1556,38 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new CannotReplaceMissingTableException(tableIdentifier, cause)
   }
 
+  def cannotReplaceMissingTableError(
+      tableIdentifier: Identifier,
+      searchPath: Seq[String]): Throwable = {
+    new CannotReplaceMissingTableException(tableIdentifier, None, searchPath)
+  }
+
+  def cannotReplaceMissingTableError(
+      tableIdentifier: Identifier,
+      searchPath: Seq[String],
+      cause: Option[Throwable]): Throwable = {
+    new CannotReplaceMissingTableException(tableIdentifier, cause, searchPath)
+  }
+
+  def cannotReplaceMissingTableError(
+      catalogName: String,
+      tableIdentifier: Identifier): Throwable = {
+    new CannotReplaceMissingTableException(
+      tableIdentifier,
+      None,
+      catalogName +: tableIdentifier.namespace().toSeq)
+  }
+
+  def cannotReplaceMissingTableError(
+      catalogName: String,
+      tableIdentifier: Identifier,
+      cause: Option[Throwable]): Throwable = {
+    new CannotReplaceMissingTableException(
+      tableIdentifier,
+      cause,
+      catalogName +: tableIdentifier.namespace().toSeq)
+  }
+
   def streamingSourcesDoNotSupportCommonExecutionModeError(
       microBatchSources: Seq[String],
       continuousSources: Seq[String]): Throwable = {
@@ -1548,11 +1599,22 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def noSuchTableError(catalogName: String, ident: Identifier): NoSuchTableException = {
-    new NoSuchTableException(catalogName +: ident.asMultipartIdentifier)
+    noSuchTableError(
+      catalogName +: ident.asMultipartIdentifier,
+      catalogName +: ident.namespace().toSeq).asInstanceOf[NoSuchTableException]
   }
 
   def noSuchTableError(nameParts: Seq[String]): Throwable = {
     new NoSuchTableException(nameParts)
+  }
+
+  def noSuchTableError(nameParts: Seq[String], searchPath: Seq[String]): Throwable = {
+    val formattedPath =
+      if (searchPath.isEmpty) "" else "[" + searchPath.map(toSQLId).mkString(".") + "]"
+    new NoSuchTableException(
+      "TABLE_OR_VIEW_NOT_FOUND",
+      Map("relationName" -> toSQLId(nameParts), "searchPath" -> formattedPath),
+      None)
   }
 
   def noSuchNamespaceError(namespace: Array[String]): Throwable = {

@@ -453,22 +453,70 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  private def assertRelationNotFound(query: String, relation: String, context: ExpectedContext):
-  Unit = {
+  private def assertRelationNotFound(
+      query: String,
+      relation: String,
+      context: ExpectedContext): Unit =
+    assertRelationNotFound(query, relation, context, useSearchPath = true)
+
+  private def assertRelationNotFound(
+      query: String,
+      relation: String,
+      context: ExpectedContext,
+      useSearchPath: Boolean): Unit = {
     val e = intercept[AnalysisException] {
       sql(query)
     }
-    checkErrorTableNotFound(e, relation, context)
+    if (useSearchPath) {
+      checkError(
+        exception = e,
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map(
+          "relationName" -> relation,
+          "searchPath" -> defaultSearchPathForTests),
+        queryContext = Array(context))
+    } else {
+      checkErrorTableNotFound(e, relation, context)
+    }
+  }
+
+  private def assertRelationNotFound(
+      query: String,
+      relation: String,
+      context: ExpectedContext,
+      useSearchPath: Boolean,
+      expectedSearchPath: String): Unit = {
+    val e = intercept[AnalysisException] {
+      sql(query)
+    }
+    if (useSearchPath) {
+      checkError(
+        exception = e,
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map(
+          "relationName" -> relation,
+          "searchPath" -> expectedSearchPath),
+        queryContext = Array(context))
+    } else {
+      checkErrorTableNotFound(e, relation, context)
+    }
   }
 
 
   test("error handling: fail if the temp view name contains the database prefix") {
     // Fully qualified table name like "database.table" is not allowed for temporary view
+    val sqlText = "CREATE OR REPLACE TEMPORARY VIEW default.myabcdview AS SELECT * FROM jt"
     val e = intercept[ParseException] {
-      sql("CREATE OR REPLACE TEMPORARY VIEW default.myabcdview AS SELECT * FROM jt")
+      sql(sqlText)
     }
-    assert(e.message.contains(
-      "CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names"))
+    checkError(
+      exception = e,
+      condition = "INVALID_TEMP_OBJ_QUALIFIER",
+      parameters = Map(
+        "objectType" -> "VIEW",
+        "objectName" -> "`myabcdview`",
+        "qualifier" -> "`default`"),
+      context = ExpectedContext(sqlText, 0, sqlText.length - 1))
   }
 
   test("error handling: disallow IF NOT EXISTS for CREATE TEMPORARY VIEW") {
@@ -485,7 +533,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     assertAnalysisErrorCondition(
       "CREATE OR REPLACE TEMPORARY VIEW myabcdview AS SELECT * FROM db_not_exist234.jt",
       "TABLE_OR_VIEW_NOT_FOUND",
-      Map("relationName" -> "`db_not_exist234`.`jt`"),
+      Map("relationName" -> "`db_not_exist234`.`jt`", "searchPath" -> defaultSearchPathForTests),
       ExpectedContext("db_not_exist234.jt", 61, 60 + "db_not_exist234.jt".length))
 
     // A table that does not exist
@@ -671,15 +719,21 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
   }
 
   test("should not allow ALTER VIEW AS when the view does not exist") {
+    // DDL path (no builtin) is used when resolving view name for ALTER VIEW
+    val ddlSearchPath = "[`system`.`session`, `spark_catalog`.`default`]"
     assertRelationNotFound(
       "ALTER VIEW testView AS SELECT 1, 2",
       "`testView`",
-      ExpectedContext("testView", 11, 10 + "testView".length))
+      ExpectedContext("testView", 11, 10 + "testView".length),
+      useSearchPath = true,
+      expectedSearchPath = ddlSearchPath)
 
     assertRelationNotFound(
       "ALTER VIEW default.testView AS SELECT 1, 2",
       "`default`.`testView`",
-      ExpectedContext("default.testView", 11, 10 + "default.testView".length))
+      ExpectedContext("default.testView", 11, 10 + "default.testView".length),
+      useSearchPath = true,
+      expectedSearchPath = ddlSearchPath)
   }
 
   test("ALTER VIEW AS should try to alter temp view first if view name has no database part") {

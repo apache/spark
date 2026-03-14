@@ -1646,14 +1646,16 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     var e = intercept[AnalysisException] {
       sql("select * from in_valid_table")
     }
-    checkErrorTableNotFound(e, "`in_valid_table`",
-      ExpectedContext("in_valid_table", 14, 13 + "in_valid_table".length))
+    checkErrorTableNotFoundWithSearchPath(e, "`in_valid_table`",
+      ExpectedContext("in_valid_table", 14, 13 + "in_valid_table".length),
+      defaultSearchPathForTests)
 
     e = intercept[AnalysisException] {
       sql("select * from no_db.no_table").show()
     }
-    checkErrorTableNotFound(e, "`no_db`.`no_table`",
-      ExpectedContext("no_db.no_table", 14, 13 + "no_db.no_table".length))
+    checkErrorTableNotFoundWithSearchPath(e, "`no_db`.`no_table`",
+      ExpectedContext("no_db.no_table", 14, 13 + "no_db.no_table".length),
+      defaultSearchPathForTests)
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -1674,10 +1676,11 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     e = intercept[AnalysisException] {
       sql(s"select id from `org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`")
     }
-    checkErrorTableNotFound(e,
+    checkErrorTableNotFoundWithSearchPath(e,
       "`org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`",
-    ExpectedContext("`org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`", 15,
-      14 + "`org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`".length))
+      ExpectedContext("`org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`", 15,
+        14 + "`org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`".length),
+      defaultSearchPathForTests)
 
     e = intercept[AnalysisException] {
       sql(s"select id from `Jdbc`.`file_path`")

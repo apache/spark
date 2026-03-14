@@ -64,8 +64,9 @@ class AlterTableSetSerdeSuite extends v1.AlterTableSetSerdeSuiteBase with Comman
       val e = intercept[AnalysisException] {
         sql("ALTER TABLE does_not_exist SET SERDEPROPERTIES ('x' = 'y')")
       }
-      checkErrorTableNotFound(e, "`does_not_exist`",
-        ExpectedContext("does_not_exist", 12, 11 + "does_not_exist".length))
+      checkErrorTableNotFoundWithSearchPath(e, "`does_not_exist`",
+        ExpectedContext("does_not_exist", 12, 11 + "does_not_exist".length),
+        "[`system`.`session`, `spark_catalog`.`ns`]")
     }
   }
 
@@ -112,8 +113,9 @@ class AlterTableSetSerdeSuite extends v1.AlterTableSetSerdeSuiteBase with Comman
       val e = intercept[AnalysisException] {
         sql("ALTER TABLE does_not_exist PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')")
       }
-      checkErrorTableNotFound(e, "`does_not_exist`",
-        ExpectedContext("does_not_exist", 12, 11 + "does_not_exist".length))
+      checkErrorTableNotFoundWithSearchPath(e, "`does_not_exist`",
+        ExpectedContext("does_not_exist", 12, 11 + "does_not_exist".length),
+        "[`system`.`session`, `spark_catalog`.`ns`]")
     }
   }
 }

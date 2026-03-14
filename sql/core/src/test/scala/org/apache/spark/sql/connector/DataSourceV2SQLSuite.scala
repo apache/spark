@@ -752,7 +752,9 @@ class DataSourceV2SQLSuiteV1Filter
             s"AS SELECT id, data FROM source")
         },
         condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`replaced`"))
+        parameters = Map(
+          "relationName" -> "`replaced`",
+          "searchPath" -> s"[`$catalog`]"))
     }
   }
 
@@ -767,7 +769,9 @@ class DataSourceV2SQLSuiteV1Filter
           s" AS SELECT id, data FROM source")
       },
       condition = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relationName" -> "`replaced`"))
+      parameters = Map(
+        "relationName" -> "`replaced`",
+        "searchPath" -> "[`testcat_atomic`]"))
   }
 
   test("CreateTableAsSelect: use v2 plan and session catalog when provider is v2") {
@@ -2294,14 +2298,14 @@ class DataSourceV2SQLSuiteV1Filter
          """.stripMargin)
 
       // UPDATE non-existing table
-      checkError(
+      checkErrorTableNotFoundWithSearchPath(
         exception = analysisException("UPDATE dummy SET name='abc'"),
-        condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`dummy`"),
-        context = ExpectedContext(
+        "`dummy`",
+        ExpectedContext(
           fragment = "dummy",
           start = 7,
-          stop = 11))
+          stop = 11),
+        defaultSearchPathForTests)
 
       // UPDATE non-existing column
       checkError(
@@ -2370,7 +2374,9 @@ class DataSourceV2SQLSuiteV1Filter
              |THEN INSERT *
            """.stripMargin),
         condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`testcat`.`ns1`.`ns2`.`dummy`"),
+        parameters = Map(
+          "relationName" -> "`testcat`.`ns1`.`ns2`.`dummy`",
+          "searchPath" -> defaultSearchPathForTests),
         context = ExpectedContext(
           fragment = "testcat.ns1.ns2.dummy",
           start = 12,
@@ -2390,7 +2396,9 @@ class DataSourceV2SQLSuiteV1Filter
              |THEN INSERT *
            """.stripMargin),
         condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`testcat`.`ns1`.`ns2`.`dummy`"),
+        parameters = Map(
+          "relationName" -> "`testcat`.`ns1`.`ns2`.`dummy`",
+          "searchPath" -> defaultSearchPathForTests),
         context = ExpectedContext(
           fragment = "testcat.ns1.ns2.dummy",
           start = 51,
@@ -2460,8 +2468,9 @@ class DataSourceV2SQLSuiteV1Filter
 
   test("AlterTable: renaming views are not supported") {
     val e = analysisException(s"ALTER VIEW testcat.ns.tbl RENAME TO ns.view")
-    checkErrorTableNotFound(e, "`testcat`.`ns`.`tbl`",
-      ExpectedContext("testcat.ns.tbl", 11, 10 + "testcat.ns.tbl".length))
+    checkErrorTableNotFoundWithSearchPath(e, "`testcat`.`ns`.`tbl`",
+      ExpectedContext("testcat.ns.tbl", 11, 10 + "testcat.ns.tbl".length),
+      "[`system`.`session`, `spark_catalog`.`default`]")
   }
 
   test("ANALYZE TABLE") {
@@ -2516,8 +2525,9 @@ class DataSourceV2SQLSuiteV1Filter
 
     // Test a scenario where a table does not exist.
     val e = analysisException(s"UNCACHE TABLE $t")
-    checkErrorTableNotFound(e, "`testcat`.`ns1`.`ns2`.`tbl`",
-      ExpectedContext(t, 14, 13 + t.length))
+    checkErrorTableNotFoundWithSearchPath(e, "`testcat`.`ns1`.`ns2`.`tbl`",
+      ExpectedContext(t, 14, 13 + t.length),
+      defaultSearchPathForTests)
 
     // If "IF EXISTS" is set, UNCACHE TABLE will not throw an exception.
     sql(s"UNCACHE TABLE IF EXISTS $t")
@@ -2785,11 +2795,11 @@ class DataSourceV2SQLSuiteV1Filter
       checkTableComment("t", "NULL")
     }
     val sql1 = "COMMENT ON TABLE abc IS NULL"
-    checkError(
+    checkErrorTableNotFoundWithSearchPath(
       exception = analysisException(sql1),
-      condition = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relationName" -> "`abc`"),
-      context = ExpectedContext(fragment = "abc", start = 17, stop = 19))
+      "`abc`",
+      ExpectedContext(fragment = "abc", start = 17, stop = 19),
+      "[`system`.`session`, `spark_catalog`.`default`]")
 
     // V2 non-session catalog is used.
     withTable("testcat.ns1.ns2.t") {
@@ -2829,7 +2839,9 @@ class DataSourceV2SQLSuiteV1Filter
     checkError(
       exception = analysisException(sql2),
       condition = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relationName" -> "`testcat`.`abc`"),
+      parameters = Map(
+        "relationName" -> "`testcat`.`abc`",
+        "searchPath" -> "[`system`.`session`, `spark_catalog`.`default`]"),
       context = ExpectedContext(fragment = "testcat.abc", start = 17, stop = 27))
 
     val globalTempDB = spark.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE.key)
@@ -3429,18 +3441,18 @@ class DataSourceV2SQLSuiteV1Filter
       val res11 = sql("SELECT * FROM t TIMESTAMP AS OF (SELECT MIN(ts) FROM t)").collect()
       assert(res11 === Array(Row(5), Row(6)))
 
-      checkError(
+      checkErrorTableNotFoundWithSearchPath(
         exception = intercept[AnalysisException] {
           // `current_date()` is a valid expression for time travel timestamp, but the test uses
           // a fake time travel implementation that only supports two hardcoded timestamp values.
           sql("SELECT * FROM t TIMESTAMP AS OF current_date()").collect()
         },
-        condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`t`"),
-        context = ExpectedContext(
+        "`t`",
+        ExpectedContext(
           fragment = "t",
           start = 14,
-          stop = 14))
+          stop = 14),
+        "[`system`.`builtin`, `system`.`session`, `testcat`]")
 
       checkError(
         exception = analysisException("SELECT * FROM t TIMESTAMP AS OF INTERVAL 1 DAY"),
@@ -3513,33 +3525,33 @@ class DataSourceV2SQLSuiteV1Filter
         sqlState = None,
         parameters = Map("relationId" -> "`x`"))
 
-      checkError(
+      checkErrorTableNotFoundWithSearchPath(
         exception = analysisException("SELECT * FROM non_exist VERSION AS OF 1"),
-        condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`non_exist`"),
-        context = ExpectedContext(
+        "`non_exist`",
+        ExpectedContext(
           fragment = "non_exist",
           start = 14,
-          stop = 22))
+          stop = 22),
+        "[`system`.`builtin`, `system`.`session`, `testcat`]")
 
       val subquery1 = "SELECT 1 FROM non_exist"
-      checkError(
+      checkErrorTableNotFoundWithSearchPath(
         exception = analysisException(s"SELECT * FROM t TIMESTAMP AS OF ($subquery1)"),
-        condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`non_exist`"),
+        "`non_exist`",
         ExpectedContext(
           fragment = "non_exist",
           start = 47,
-          stop = 55))
+          stop = 55),
+        "[`system`.`builtin`, `system`.`session`, `testcat`]")
       // Nested subquery should also report error correctly.
-      checkError(
+      checkErrorTableNotFoundWithSearchPath(
         exception = analysisException(s"SELECT * FROM t TIMESTAMP AS OF (SELECT ($subquery1))"),
-        condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`non_exist`"),
+        "`non_exist`",
         ExpectedContext(
           fragment = "non_exist",
           start = 55,
-          stop = 63))
+          stop = 63),
+        "[`system`.`builtin`, `system`.`session`, `testcat`]")
 
       val subquery2 = "SELECT col"
       checkError(

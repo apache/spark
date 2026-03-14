@@ -19,13 +19,17 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.HashSet
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.SparkException
+import org.apache.spark.SparkThrowableHelper
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{
   withPosition,
   AnalysisErrorAt,
   FunctionResolution,
   MultiInstanceRelation,
+  NoSuchTableException,
   RelationCache,
   RelationResolution,
   ResolvedInlineTable,
@@ -46,6 +50,8 @@ import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.EvaluateUnresolvedInlineTable
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.QueryErrorsBase
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * The Resolver implements a single-pass bottom-up analysis algorithm in the Catalyst.
@@ -77,7 +83,8 @@ class Resolver(
     metadataResolverExtensions: Seq[ResolverExtension] = Seq.empty,
     externalRelationResolution: Option[RelationResolution] = None)
     extends LogicalPlanResolver
-    with DelegatesResolutionToExtensions {
+    with DelegatesResolutionToExtensions
+    with QueryErrorsBase {
   private val planLogger = new PlanLogger
   private val scopes = new NameScopeStack(planLogger)
   private val cteRegistry = new CteRegistry
@@ -506,22 +513,49 @@ class Resolver(
    */
   private def resolveRelation(unresolvedRelation: UnresolvedRelation): LogicalPlan = {
     viewResolver.withSourceUnresolvedRelation(unresolvedRelation) {
-      val maybeResolvedRelation =
-        relationMetadataProvider.getRelationWithResolvedMetadata(unresolvedRelation)
+      try {
+        val maybeResolvedRelation =
+          relationMetadataProvider.getRelationWithResolvedMetadata(unresolvedRelation)
 
-      val resolvedRelation = maybeResolvedRelation match {
-        case Some(relationsWithResolvedMetadata) =>
-          planLogger.logPlanResolutionEvent(
-            relationsWithResolvedMetadata,
-            "Relation metadata retrieved"
-          )
+        val resolvedRelation = maybeResolvedRelation match {
+          case Some(relationsWithResolvedMetadata) =>
+            planLogger.logPlanResolutionEvent(
+              relationsWithResolvedMetadata,
+              "Relation metadata retrieved"
+            )
 
-          relationsWithResolvedMetadata
-        case None =>
-          unresolvedRelation.tableNotFound(unresolvedRelation.multipartIdentifier)
+            relationsWithResolvedMetadata
+          case None =>
+            val multipartId = unresolvedRelation.multipartIdentifier
+            val catalogPath = (catalogManager.currentCatalog.name() +:
+              catalogManager.currentNamespace).toSeq
+            val searchPath = SQLConf.get.resolutionSearchPath(catalogPath).map(toSQLId)
+            unresolvedRelation.tableNotFound(multipartId, searchPath)
+        }
+
+        resolve(resolvedRelation)
+      } catch {
+        case e: NoSuchTableException
+            if e.getCondition == "TABLE_OR_VIEW_NOT_FOUND" &&
+              Option(e.getMessageParameters.get("searchPath")).contains("") =>
+          // NoSuchTableException from some code paths does not set searchPath; replace with
+          // the current resolution search path so the user sees the path that was used.
+          val catalogPath = (catalogManager.currentCatalog.name() +:
+            catalogManager.currentNamespace).toSeq
+          val searchPathSeq = SQLConf.get.resolutionSearchPath(catalogPath)
+          val formattedPath = searchPathSeq.map(toSQLId).mkString("[", ", ", "]")
+          val updatedParams =
+            e.getMessageParameters.asScala.toMap.updated("searchPath", formattedPath)
+          val newEx = new AnalysisException(
+            SparkThrowableHelper.getMessage("TABLE_OR_VIEW_NOT_FOUND", updatedParams.asJava),
+            line = None,
+            startPosition = None,
+            cause = None,
+            errorClass = Some("TABLE_OR_VIEW_NOT_FOUND"),
+            messageParameters = updatedParams,
+            context = e.getQueryContext)
+          throw Option(e.origin).fold(newEx)(newEx.withPosition)
       }
-
-      resolve(resolvedRelation)
     }
   }
 

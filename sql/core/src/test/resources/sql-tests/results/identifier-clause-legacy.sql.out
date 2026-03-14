@@ -1183,10 +1183,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
-  "sqlState" : "428EK",
+  "errorClass" : "INVALID_TEMP_OBJ_QUALIFIER",
+  "sqlState" : "42602",
   "messageParameters" : {
-    "actualName" : "`default`.`v`"
+    "objectName" : "`v`",
+    "objectType" : "VIEW",
+    "qualifier" : "`default`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1548,7 +1550,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`v`"
+    "relationName" : "`v`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1610,7 +1613,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`tab`"
+    "relationName" : "`tab`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1648,7 +1652,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`tab`"
+    "relationName" : "`tab`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1686,7 +1691,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`tab`"
+    "relationName" : "`tab`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1740,7 +1746,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`tab_renamed`"
+    "relationName" : "`tab_renamed`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2447,7 +2454,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`test_view`"
+    "relationName" : "`test_view`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`identifier_clause_test_schema`]"
   },
   "queryContext" : [ {
     "objectType" : "EXECUTE IMMEDIATE",
@@ -2469,7 +2477,8 @@ org.apache.spark.sql.catalyst.analysis.NoSuchTableException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`spark_catalog`.`identifier_clause_test_schema`.`test_view`"
+    "relationName" : "`spark_catalog`.`identifier_clause_test_schema`.`test_view`",
+    "searchPath" : "[`spark_catalog`.`identifier_clause_test_schema`]"
   }
 }
 

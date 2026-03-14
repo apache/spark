@@ -1129,11 +1129,19 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
 
   test("SPARK-46145: listTables does not throw exception when the table or view is not found") {
     val impl = spark.catalog.asInstanceOf[Catalog]
-    for ((isTemp, dbName) <- Seq((true, ""), (false, "non_existing_db"))) {
-      val row = new GenericInternalRow(
-        Array(UTF8String.fromString(dbName), UTF8String.fromString("non_existing_table"), isTemp))
-      impl.resolveTable(row, CatalogManager.SESSION_CATALOG_NAME)
+    // When dbName is empty, resolveTable now throws TABLE_OR_VIEW_NOT_FOUND
+    // for a non-existing table (unqualified lookup uses search path).
+    val rowTemp = new GenericInternalRow(
+      Array(UTF8String.fromString(""), UTF8String.fromString("non_existing_table"), true))
+    val e = intercept[AnalysisException] {
+      impl.resolveTable(rowTemp, CatalogManager.SESSION_CATALOG_NAME)
     }
+    assert(e.getCondition === "TABLE_OR_VIEW_NOT_FOUND")
+    // When dbName is a non-existing database, resolveTable does not throw (qualified lookup).
+    val rowNonExistingDb = new GenericInternalRow(
+      Array(UTF8String.fromString("non_existing_db"), UTF8String.fromString("non_existing_table"),
+        false))
+    impl.resolveTable(rowNonExistingDb, CatalogManager.SESSION_CATALOG_NAME)
   }
 
   test("SPARK-55957: listTables returns partial results when a table has DATA_SOURCE_NOT_FOUND") {
