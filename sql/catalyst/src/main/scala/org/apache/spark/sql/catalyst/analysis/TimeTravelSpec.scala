@@ -36,6 +36,42 @@ case class AsOfVersion(version: String) extends TimeTravelSpec {
 }
 
 object TimeTravelSpec {
+
+  /**
+   * Evaluate a resolved timestamp expression to microseconds since epoch.
+   * Shared by time travel and CDC timestamp resolution.
+   */
+  def resolveTimestampExpression(ts: Expression, sessionLocalTimeZone: String): Long = {
+    assert(ts.resolved && ts.references.isEmpty)
+    if (!Cast.canAnsiCast(ts.dataType, TimestampType)) {
+      throw QueryCompilationErrors.invalidTimestampExprForTimeTravel(
+        "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.INPUT", ts)
+    }
+    val tsToEval = {
+      val fakeProject = Project(Seq(Alias(ts, "ts")()), OneRowRelation())
+      ComputeCurrentTime(ReplaceExpressions(fakeProject)).asInstanceOf[Project]
+        .expressions.head.asInstanceOf[Alias].child
+    }
+    tsToEval.foreach {
+      case _: Unevaluable =>
+        throw QueryCompilationErrors.invalidTimestampExprForTimeTravel(
+          "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.UNEVALUABLE", ts)
+      case e if !e.deterministic =>
+        throw QueryCompilationErrors.invalidTimestampExprForTimeTravel(
+          "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.NON_DETERMINISTIC", ts)
+      case _ =>
+    }
+    val tz = Some(sessionLocalTimeZone)
+    // Set `ansiEnabled` to false, so that it can return null for invalid input and we can provide
+    // better error message.
+    val value = Cast(tsToEval, TimestampType, tz, ansiEnabled = false).eval()
+    if (value == null) {
+      throw QueryCompilationErrors.invalidTimestampExprForTimeTravel(
+        "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.INPUT", ts)
+    }
+    value.asInstanceOf[Long]
+  }
+
   def create(
       timestamp: Option[Expression],
       version: Option[String],
@@ -44,34 +80,8 @@ object TimeTravelSpec {
       throw QueryCompilationErrors.invalidTimeTravelSpecError()
     } else if (timestamp.nonEmpty) {
       val ts = timestamp.get
-      assert(ts.resolved && ts.references.isEmpty && !SubqueryExpression.hasSubquery(ts))
-      if (!Cast.canAnsiCast(ts.dataType, TimestampType)) {
-        throw QueryCompilationErrors.invalidTimestampExprForTimeTravel(
-          "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.INPUT", ts)
-      }
-      val tsToEval = {
-        val fakeProject = Project(Seq(Alias(ts, "ts")()), OneRowRelation())
-        ComputeCurrentTime(ReplaceExpressions(fakeProject)).asInstanceOf[Project]
-          .expressions.head.asInstanceOf[Alias].child
-      }
-      tsToEval.foreach {
-        case _: Unevaluable =>
-          throw QueryCompilationErrors.invalidTimestampExprForTimeTravel(
-            "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.UNEVALUABLE", ts)
-        case e if !e.deterministic =>
-          throw QueryCompilationErrors.invalidTimestampExprForTimeTravel(
-            "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.NON_DETERMINISTIC", ts)
-        case _ =>
-      }
-      val tz = Some(sessionLocalTimeZone)
-      // Set `ansiEnabled` to false, so that it can return null for invalid input and we can provide
-      // better error message.
-      val value = Cast(tsToEval, TimestampType, tz, ansiEnabled = false).eval()
-      if (value == null) {
-        throw QueryCompilationErrors.invalidTimestampExprForTimeTravel(
-          "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.INPUT", ts)
-      }
-      Some(AsOfTimestamp(value.asInstanceOf[Long]))
+      assert(!SubqueryExpression.hasSubquery(ts))
+      Some(AsOfTimestamp(resolveTimestampExpression(ts, sessionLocalTimeZone)))
     } else if (version.nonEmpty) {
       Some(AsOfVersion(version.get))
     } else {
