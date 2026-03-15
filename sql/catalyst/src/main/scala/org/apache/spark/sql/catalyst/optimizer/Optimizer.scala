@@ -2648,9 +2648,12 @@ object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
           attr
         } else {
           // Keep track of the generated aliases to avoid generating multiple aliases
-          // for the same attribute (in case the attribute is duplicated)
+          // for the same attribute (in case the attribute is duplicated).
+          // SPARK-54724: Preserve the original exprId so that parent plans (e.g.,
+          // RewriteExceptAll) that reference these attributes by exprId continue to
+          // resolve correctly after the Deduplicate is replaced with an Aggregate.
           generatedAliasesMap.getOrElseUpdate(attr,
-            Alias(new First(attr).toAggregateExpression(), attr.name)())
+            Alias(new First(attr).toAggregateExpression(), attr.name)(exprId = attr.exprId))
         }
       }
       // SPARK-22951: Physical aggregate operators distinguishes global aggregation and grouping
