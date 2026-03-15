@@ -29,11 +29,15 @@ import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg,
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate => V2Predicate}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * The builder to generate V2 expressions from catalyst expressions.
  */
-class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends Logging  {
+class V2ExpressionBuilder(
+    e: Expression,
+    isPredicate: Boolean = false,
+    extraCapabilities: Set[String] = Set.empty) extends Logging  {
 
   def build(): Option[V2Expression] = generateExpression(e, isPredicate)
 
@@ -333,6 +337,87 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
         case _ =>
           None
       }
+    // Extended builtin predicates - only translated when declared via
+    // SupportsPushDownPredicateCapabilities.supportedPredicateNames().
+    // ORDERING: More specific patterns (ILIKE, MAP_CONTAINS_KEY) must come before
+    // their generic counterparts (LIKE, ARRAY_CONTAINS) to match first.
+
+    // RuntimeReplaceable: ILike(col, col2) survives as Like(Lower(col), Lower(col2))
+    // when the pattern is non-literal (LikeSimplification only handles literal patterns).
+    // Must be before generic LIKE case.
+    case Like(Lower(left), Lower(right), escapeChar)
+        if extraCapabilities.contains("ILIKE") =>
+      val l = generateExpression(left)
+      val r = generateExpression(right)
+      if (l.isDefined && r.isDefined) {
+        // Pass escape char as 3rd arg so the data source can apply correct escaping
+        Some(new V2Predicate("ILIKE", Array[V2Expression](l.get, r.get,
+          new LiteralValue(UTF8String.fromString(escapeChar.toString), StringType))))
+      } else {
+        None
+      }
+    // LIKE with escape character passed as 3rd argument so the data source
+    // can apply the correct escaping semantics.
+    case l: Like if extraCapabilities.contains("LIKE") =>
+      val left = generateExpression(l.left)
+      val right = generateExpression(l.right)
+      if (left.isDefined && right.isDefined) {
+        Some(new V2Predicate("LIKE", Array[V2Expression](left.get, right.get,
+          new LiteralValue(UTF8String.fromString(l.escapeChar.toString), StringType))))
+      } else {
+        None
+      }
+    case r: RLike if extraCapabilities.contains("RLIKE") =>
+      val left = generateExpression(r.left)
+      val right = generateExpression(r.right)
+      if (left.isDefined && right.isDefined) {
+        Some(new V2Predicate("RLIKE", Array[V2Expression](left.get, right.get)))
+      } else {
+        None
+      }
+    case i: IsNaN if extraCapabilities.contains("IS_NAN") =>
+      generateExpression(i.child).map { v =>
+        new V2Predicate("IS_NAN", Array[V2Expression](v))
+      }
+    // RuntimeReplaceable: MapContainsKey(map, key) survives as ArrayContains(MapKeys(map), key).
+    // Must be before generic ARRAY_CONTAINS case.
+    case ArrayContains(MapKeys(map), key) if extraCapabilities.contains("MAP_CONTAINS_KEY") =>
+      val m = generateExpression(map)
+      val k = generateExpression(key)
+      if (m.isDefined && k.isDefined) {
+        Some(new V2Predicate("MAP_CONTAINS_KEY", Array[V2Expression](m.get, k.get)))
+      } else {
+        None
+      }
+    case a: ArrayContains if extraCapabilities.contains("ARRAY_CONTAINS") =>
+      val left = generateExpression(a.left)
+      val right = generateExpression(a.right)
+      if (left.isDefined && right.isDefined) {
+        Some(new V2Predicate("ARRAY_CONTAINS",
+          Array[V2Expression](left.get, right.get)))
+      } else {
+        None
+      }
+    case a: ArraysOverlap if extraCapabilities.contains("ARRAYS_OVERLAP") =>
+      val left = generateExpression(a.left)
+      val right = generateExpression(a.right)
+      if (left.isDefined && right.isDefined) {
+        Some(new V2Predicate("ARRAYS_OVERLAP",
+          Array[V2Expression](left.get, right.get)))
+      } else {
+        None
+      }
+    // Multi-pattern LIKE variants: filter out null patterns that can appear in
+    // Catalyst's internal representation but cannot be serialized as LiteralValue.
+    // If all patterns are null, return None to fall back to Spark-side evaluation.
+    case la: LikeAll if extraCapabilities.contains("LIKE_ALL") =>
+      translateMultiPatternLike(la.child, la.patterns, "LIKE_ALL")
+    case nla: NotLikeAll if extraCapabilities.contains("NOT_LIKE_ALL") =>
+      translateMultiPatternLike(nla.child, nla.patterns, "NOT_LIKE_ALL")
+    case la: LikeAny if extraCapabilities.contains("LIKE_ANY") =>
+      translateMultiPatternLike(la.child, la.patterns, "LIKE_ANY")
+    case nla: NotLikeAny if extraCapabilities.contains("NOT_LIKE_ANY") =>
+      translateMultiPatternLike(nla.child, nla.patterns, "NOT_LIKE_ANY")
     // TODO supports other expressions
     case ApplyFunctionExpression(function, children) =>
       val childrenExpressions = children.flatMap(generateExpression(_))
@@ -363,7 +448,32 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       } else {
         None
       }
+    // Layer 2 custom predicates: translate to V2 Predicate using the descriptor's
+    // dot-qualified canonical name (e.g. "COM.MYCO.MY_SEARCH") so the data source
+    // can identify it in pushPredicates().
+    case cpe: CustomPredicateExpression =>
+      val childExprs = cpe.arguments.flatMap(generateExpression(_))
+      if (childExprs.length == cpe.arguments.length) {
+        Some(new V2Predicate(
+          cpe.descriptor.canonicalName(), childExprs.toArray[V2Expression]))
+      } else {
+        None
+      }
     case _ => None
+  }
+
+  private def translateMultiPatternLike(
+      child: Expression,
+      patterns: Seq[UTF8String],
+      predName: String): Option[V2Expression] = {
+    generateExpression(child).flatMap { v =>
+      val nonNull = patterns.filter(_ != null)
+      if (nonNull.isEmpty) None else {
+        val lits = nonNull.map(p =>
+          LiteralValue(p, StringType)).toArray[V2Expression]
+        Some(new V2Predicate(predName, (v +: lits).toArray))
+      }
+    }
   }
 
   private def generateAggregateFunc(
