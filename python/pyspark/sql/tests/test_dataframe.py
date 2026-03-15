@@ -412,10 +412,12 @@ class DataFrameTestsMixin:
         self.assertEqual(df.drop("city.name").columns, ["id", "first.name", "state"])
         self.assertEqual(df.drop("first.name", "city.name").columns, ["id", "state"])
         self.assertEqual(
-            df.drop("first.name", "city.name", "unknown.unknown").columns, ["id", "state"]
+            df.drop("first.name", "city.name", "unknown.unknown").columns,
+            ["id", "state"],
         )
         self.assertEqual(
-            df.drop("unknown.unknown").columns, ["id", "first.name", "city.name", "state"]
+            df.drop("unknown.unknown").columns,
+            ["id", "first.name", "city.name", "state"],
         )
 
     def test_with_column_with_existing_name(self):
@@ -450,7 +452,8 @@ class DataFrameTestsMixin:
             .collect()
         )
         self.assertEqual(
-            [(r.key_alias, r.value_alias) for r in kvs], [(i, str(i)) for i in range(100)]
+            [(r.key_alias, r.value_alias) for r in kvs],
+            [(i, str(i)) for i in range(100)],
         )
 
         # Type check
@@ -505,6 +508,40 @@ class DataFrameTestsMixin:
                 output = buf.getvalue()
                 self.assertGreaterEqual(output.count("REBALANCE_PARTITIONS_BY_NONE"), 1)
                 self.assertGreaterEqual(output.count("REBALANCE_PARTITIONS_BY_COL"), 3)
+
+    def test_optimize_partitions(self):
+        # Setup: Create a small DataFrame with an intentionally inefficient number of partitions
+        # range(10000) is very small data (~80KB), but we force 50 partitions.
+        initial_partitions = 50
+        df = self.spark.range(10000).repartition(initial_partitions)
+
+        self.assertEqual(df.rdd.getNumPartitions(), initial_partitions)
+
+        # 1. Test Default Execution (Downscaling)
+        # Since data is small and default target is 128MB, this should coalesce to 1 partition.
+        result_default = df.optimizePartitions()
+
+        # Assertions
+        self.assertEqual(
+            result_default.rdd.getNumPartitions(),
+            1,
+            "Expected tiny dataset to coalesce to 1 partition",
+        )
+        self.assertEqual(result_default.count(), 10000, "Data count mismatch after optimization")
+
+        result_custom = df.optimizePartitions(targetMB=1)
+        self.assertEqual(result_custom.rdd.getNumPartitions(), 1)
+
+        # We expect optimizePartitions to throw PySparkValueError when targetMB is <= 0
+        with self.assertRaisesRegex(
+            PySparkValueError, "Value for `targetMB` must be positive, got '-1'"
+        ):
+            df.optimizePartitions(targetMB=-1)
+
+        with self.assertRaisesRegex(
+            PySparkValueError, "Value for `targetMB` must be positive, got '0'"
+        ):
+            df.optimizePartitions(targetMB=0)
 
     # add tests for SPARK-23647 (test more types for hint)
     def test_extended_hint_types(self):
@@ -960,7 +997,10 @@ class DataFrameTestsMixin:
 
     def test_to(self):
         schema = StructType(
-            [StructField("i", StringType(), True), StructField("j", IntegerType(), True)]
+            [
+                StructField("i", StringType(), True),
+                StructField("j", IntegerType(), True),
+            ]
         )
         df = self.spark.createDataFrame([("a", 1)], schema)
 
@@ -982,13 +1022,17 @@ class DataFrameTestsMixin:
         # incompatible field nullability
         schema4 = StructType([StructField("j", LongType(), False)])
         self.assertRaisesRegex(
-            AnalysisException, "NULLABLE_COLUMN_OR_FIELD", lambda: df.to(schema4).count()
+            AnalysisException,
+            "NULLABLE_COLUMN_OR_FIELD",
+            lambda: df.to(schema4).count(),
         )
 
         # field cannot upcast
         schema5 = StructType([StructField("i", LongType())])
         self.assertRaisesRegex(
-            AnalysisException, "INVALID_COLUMN_OR_FIELD_DATA_TYPE", lambda: df.to(schema5).count()
+            AnalysisException,
+            "INVALID_COLUMN_OR_FIELD_DATA_TYPE",
+            lambda: df.to(schema5).count(),
         )
 
     def test_colregex(self):
@@ -1071,7 +1115,10 @@ class DataFrameTestsMixin:
         # default index column
         transposed_df = df.transpose()
         expected_schema = StructType(
-            [StructField("key", StringType(), False), StructField("x", StringType(), True)]
+            [
+                StructField("key", StringType(), False),
+                StructField("x", StringType(), True),
+            ]
         )
         expected_data = [Row(key="b", x="y"), Row(key="c", x="z")]
         expected_df = self.spark.createDataFrame(expected_data, schema=expected_schema)
@@ -1080,7 +1127,10 @@ class DataFrameTestsMixin:
         # specified index column
         transposed_df = df.transpose("c")
         expected_schema = StructType(
-            [StructField("key", StringType(), False), StructField("z", StringType(), True)]
+            [
+                StructField("key", StringType(), False),
+                StructField("z", StringType(), True),
+            ]
         )
         expected_data = [Row(key="a", z="x"), Row(key="b", z="y")]
         expected_df = self.spark.createDataFrame(expected_data, schema=expected_schema)
@@ -1093,7 +1143,10 @@ class DataFrameTestsMixin:
             self.check_error(
                 exception=pe.exception,
                 errorClass="TRANSPOSE_EXCEED_ROW_LIMIT",
-                messageParameters={"maxValues": "0", "config": "spark.sql.transposeMaxValues"},
+                messageParameters={
+                    "maxValues": "0",
+                    "config": "spark.sql.transposeMaxValues",
+                },
             )
 
         # enforce ascending order based on index column values for transposed columns

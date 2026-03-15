@@ -38,6 +38,10 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_to_json(self):
         pass
 
+    @unittest.skip("optimizePartitions is not implemented in Spark Connect")
+    def test_optimize_partitions(self):
+        super().test_optimize_partitions()
+
 
 if __name__ == "__main__":
     from pyspark.testing import main
