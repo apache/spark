@@ -62,6 +62,24 @@ case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
               s"unmatched child schema for GetArrayStructFields: ${projSchema.toString}"
             )
         }
+      case a: GetNestedArrayStructFields =>
+        getProjection(a.child).map(p => (p, p.dataType)).map {
+          case (projection, projArrayType: ArrayType) =>
+            // Find the innermost struct in both original and projected types
+            val originalStruct = findInnermostStruct(a.child.dataType)
+            val projStruct = findInnermostStruct(projArrayType)
+            val selectedField = originalStruct(a.ordinal)
+            val prunedField = projStruct(selectedField.name)
+            GetNestedArrayStructFields(projection,
+              prunedField.copy(name = a.field.name),
+              projStruct.fieldIndex(selectedField.name),
+              projStruct.size,
+              a.containsNull)
+          case (_, projSchema) =>
+            throw new IllegalStateException(
+              s"unmatched child schema for GetNestedArrayStructFields: ${projSchema.toString}"
+            )
+        }
       case MapKeys(child) =>
         getProjection(child).map { projection => MapKeys(projection) }
       case MapValues(child) =>
@@ -79,7 +97,40 @@ case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
         }
       case ElementAt(left, right, defaultValueOutOfBound, failOnError) if right.foldable =>
         getProjection(left).map(p => ElementAt(p, right, defaultValueOutOfBound, failOnError))
+      case az: ArraysZip =>
+        // Project each child expression and rebuild ArraysZip with projected children
+        val projectedChildren = az.children.map(getProjection)
+        if (projectedChildren.forall(_.isDefined)) {
+          Some(az.copy(children = projectedChildren.map(_.get)))
+        } else {
+          None
+        }
+      case naz: NestedArraysZip =>
+        // Project each child expression and rebuild NestedArraysZip with projected children
+        val projectedChildren = naz.children.map(getProjection)
+        if (projectedChildren.forall(_.isDefined)) {
+          Some(naz.copy(children = projectedChildren.map(_.get)))
+        } else {
+          None
+        }
+      case a: Alias =>
+        // Project the child and wrap it back in an Alias with the same metadata
+        getProjection(a.child).map { projectedChild =>
+          a.copy(child = projectedChild)(
+            a.exprId, a.qualifier, a.explicitMetadata, a.nonInheritableMetadataKeys)
+        }
       case _ =>
         None
     }
+
+  /**
+   * Finds the innermost StructType within a nested array type.
+   * For example, `array<array<struct<a, b>>>` returns `struct<a, b>`.
+   */
+  @scala.annotation.tailrec
+  private def findInnermostStruct(dt: DataType): StructType = dt match {
+    case ArrayType(elementType: ArrayType, _) => findInnermostStruct(elementType)
+    case ArrayType(st: StructType, _) => st
+    case _ => throw new IllegalStateException(s"Expected nested array of struct, got: $dt")
+  }
 }
