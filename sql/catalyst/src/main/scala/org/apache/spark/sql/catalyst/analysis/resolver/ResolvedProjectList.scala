@@ -24,9 +24,13 @@ import org.apache.spark.sql.catalyst.plans.logical.Aggregate
  * Structure used to return results of the resolved project list.
  *  - expressions: The resolved expressions. It is resolved using the
  *                 `resolveExpressionTreeInOperator`.
- *  - hasAggregateExpressions: True if the resolved project list contains any aggregate
- *                             expressions.
+ *  - hasAggregateExpressionsOutsideWindow: True if the resolved project list contains any aggregate
+ *                                          expressions which are not window functions.
  *  - hasLateralColumnAlias: True if the resolved project list contains any lateral column aliases.
+ *  - hasWindowExpressions: True if the resolved project list contains any window expressions.
+ *  - hasGeneratorExpressions: True if the resolved project list contains any generator expressions.
+ *  - hasCorrelatedScalarSubqueryExpressions: True if the resolved project list contains any
+ *                                            correlated scalar subqueries.
  *  - aggregateListAliases: List of aliases in aggregate list if there are aggregate expressions in
  *                          the [[Project]].
  *  - baseAggregate: Base [[Aggregate]] node constructed by [[LateralColumnAliasResolver]] while
@@ -34,7 +38,10 @@ import org.apache.spark.sql.catalyst.plans.logical.Aggregate
  */
 case class ResolvedProjectList(
     expressions: Seq[NamedExpression],
-    hasAggregateExpressions: Boolean,
+    hasAggregateExpressionsOutsideWindow: Boolean,
     hasLateralColumnAlias: Boolean,
+    hasWindowExpressions: Boolean,
+    hasGeneratorExpressions: Boolean,
+    hasCorrelatedScalarSubqueryExpressions: Boolean,
     aggregateListAliases: Seq[Alias],
     baseAggregate: Option[Aggregate] = None)
