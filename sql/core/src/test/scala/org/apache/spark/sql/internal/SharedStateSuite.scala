@@ -68,4 +68,12 @@ class SharedStateSuite extends SharedSparkSession {
     SQLConf.get.setConfString("spark.sql.catalog.spark_catalog.defaultDatabase",
       SessionCatalog.DEFAULT_DATABASE)
   }
+
+  test("SPARK-55353: SQLAppStatusListener should be created when UI is enabled") {
+    // Default behavior: SQLAppStatusListener should be created when UI is enabled
+    val statusStore = spark.sharedState.statusStore
+    assert(statusStore != null)
+    assert(statusStore.listener.isDefined,
+      "SQLAppStatusListener should be created when spark.ui.enabled=true")
+  }
 }
