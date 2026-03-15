@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import scala.collection.immutable.Seq
-
 import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -128,6 +126,48 @@ class GeometryDataFrameSuite extends QueryTest with SharedSparkSession {
       condition = "ST_INVALID_SRID_VALUE",
       parameters = Map("srid" -> "1")
     )
+  }
+
+  test("createDataFrame and round-trip with Geometry SRIDs") {
+    val geom3857 = Geometry.fromWKB(point1, 3857)
+    val geom2000 = Geometry.fromWKB(point2, 2000)
+    val geom102100 = Geometry.fromWKB(point1, 102100)
+    val schema3857 = StructType(Seq(StructField("g", GeometryType(3857), nullable = false)))
+    val schema2000 = StructType(Seq(StructField("g", GeometryType(2000), nullable = false)))
+    val schema102100 = StructType(Seq(StructField("g", GeometryType(102100), nullable = false)))
+    checkAnswer(
+      spark.createDataFrame(sparkContext.parallelize(Seq(Row(geom3857))), schema3857),
+      Seq(Row(geom3857)))
+    checkAnswer(
+      spark.createDataFrame(sparkContext.parallelize(Seq(Row(geom2000))), schema2000),
+      Seq(Row(geom2000)))
+    checkAnswer(
+      spark.createDataFrame(sparkContext.parallelize(Seq(Row(geom102100))), schema102100),
+      Seq(Row(geom102100)))
+  }
+
+  test("createDataFrame and round-trip with Geometry SRIDs with overrides") {
+    // GeometryType supports 0, 3857, 4326, 4267, 4269 (OGC overrides).
+    val geom0 = Geometry.fromWKB(point1, 0)
+    val geom3857 = Geometry.fromWKB(point2, 3857)
+    val geom4326 = Geometry.fromWKB(point1, 4326)
+    val geom4269 = Geometry.fromWKB(point2, 4269)
+    val schema0 = StructType(Seq(StructField("g", GeometryType(0), nullable = false)))
+    val schema3857 = StructType(Seq(StructField("g", GeometryType(3857), nullable = false)))
+    val schema4326 = StructType(Seq(StructField("g", GeometryType(4326), nullable = false)))
+    val schema4269 = StructType(Seq(StructField("g", GeometryType(4269), nullable = false)))
+    checkAnswer(
+      spark.createDataFrame(sparkContext.parallelize(Seq(Row(geom0))), schema0),
+      Seq(Row(geom0)))
+    checkAnswer(
+      spark.createDataFrame(sparkContext.parallelize(Seq(Row(geom3857))), schema3857),
+      Seq(Row(geom3857)))
+    checkAnswer(
+      spark.createDataFrame(sparkContext.parallelize(Seq(Row(geom4326))), schema4326),
+      Seq(Row(geom4326)))
+    checkAnswer(
+      spark.createDataFrame(sparkContext.parallelize(Seq(Row(geom4269))), schema4269),
+      Seq(Row(geom4269)))
   }
 
   test("createDataFrame APIs with Geometry.fromWKB") {
