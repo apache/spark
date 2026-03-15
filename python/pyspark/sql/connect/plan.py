@@ -2844,7 +2844,7 @@ class CommonInlineUserDefinedDataSource(LogicalPlan):
 
 class CachedRelation(LogicalPlan):
     def __init__(self, plan: proto.Relation) -> None:
-        super(CachedRelation, self).__init__(None)
+        super().__init__(None)
         self._plan = plan
         # Update the plan ID based on the incremented counter.
         self._plan.common.plan_id = self._plan_id
