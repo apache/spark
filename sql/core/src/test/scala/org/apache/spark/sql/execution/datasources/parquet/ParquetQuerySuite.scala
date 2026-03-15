@@ -381,6 +381,74 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
+  test("SPARK-55857: Enabling/disabling ignoreMissingFiles") {
+    def testIgnoreMissingFiles(options: Map[String, String]): Unit = {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        val fs = FileSystem.get(spark.sessionState.newHadoopConf())
+        val path1 = new Path(basePath, "first")
+        val path2 = new Path(basePath, "second")
+        spark.range(1).toDF("a").write.parquet(path1.toString)
+        spark.range(1, 2).toDF("a").write.parquet(path2.toString)
+        // Create DataFrame before deleting to capture file references in the query plan,
+        // then delete to simulate a race condition between listing and reading.
+        val df = spark.read.options(options).parquet(path1.toString, path2.toString)
+        fs.listStatus(path1)
+          .filter(f => f.isFile && !f.getPath.getName.startsWith("_"))
+          .foreach(f => fs.delete(f.getPath, false))
+        checkAnswer(df, Seq(Row(1)))
+      }
+    }
+
+    def testIgnoreMissingFilesWithoutSchemaInfer(options: Map[String, String]): Unit = {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        val fs = FileSystem.get(spark.sessionState.newHadoopConf())
+        val path1 = new Path(basePath, "first")
+        val path2 = new Path(basePath, "second")
+        spark.range(1).toDF("a").write.parquet(path1.toString)
+        spark.range(1, 2).toDF("a").write.parquet(path2.toString)
+        val df = spark.read.schema("a long").options(options)
+          .parquet(path1.toString, path2.toString)
+        fs.listStatus(path1)
+          .filter(f => f.isFile && !f.getPath.getName.startsWith("_"))
+          .foreach(f => fs.delete(f.getPath, false))
+        checkAnswer(df, Seq(Row(1)))
+      }
+    }
+
+    // Test ignoreMissingFiles = true
+    Seq("SQLConf", "FormatOption").foreach { by =>
+      val (sqlConf, options) = by match {
+        case "SQLConf" => ("true", Map.empty[String, String])
+        // Explicitly set SQLConf to false but still should ignore missing files
+        case "FormatOption" => ("false", Map("ignoreMissingFiles" -> "true"))
+      }
+      withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> sqlConf) {
+        testIgnoreMissingFiles(options)
+        testIgnoreMissingFilesWithoutSchemaInfer(options)
+      }
+    }
+
+    // Test ignoreMissingFiles = false
+    Seq("SQLConf", "FormatOption").foreach { by =>
+      val (sqlConf, options) = by match {
+        case "SQLConf" => ("false", Map.empty[String, String])
+        // Explicitly set SQLConf to true but still should not ignore missing files
+        case "FormatOption" => ("true", Map("ignoreMissingFiles" -> "false"))
+      }
+      withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> sqlConf) {
+        checkErrorMatchPVals(
+          exception = intercept[SparkException] {
+            testIgnoreMissingFiles(options)
+          },
+          condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
+          parameters = Map("path" -> ".*")
+        )
+      }
+    }
+  }
+
   /**
    * this is part of test 'Enabling/disabling ignoreCorruptFiles' but run in a loop
    * to increase the chance of failure
