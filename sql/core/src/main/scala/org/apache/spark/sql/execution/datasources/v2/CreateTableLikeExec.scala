@@ -90,6 +90,20 @@ case class CreateTableLikeExec(
         locationProp
 
       try {
+        // Constraints from the source table are intentionally NOT copied for several reasons:
+        //   1. Matches V1 behavior: CreateTableLikeCommand never copied constraints.
+        //   2. ForeignKey constraints carry a refTable Identifier bound to the source catalog;
+        //      copying them to a different catalog creates dangling cross-catalog references.
+        //   3. Constraint names must be unique within a namespace; blindly copying them risks
+        //      collisions with existing constraints in the target namespace.
+        //   4. Validation status (VALID/INVALID/UNVALIDATED) is tied to the source table's
+        //      existing data and is meaningless on a newly created empty target table.
+        //   5. NOT NULL is already captured in Column.nullable() and copied via withColumns.
+        //   6. Consistent with PostgreSQL semantics: CREATE TABLE LIKE does not include
+        //      constraints by default; users must explicitly opt in via INCLUDING CONSTRAINTS.
+        //   If constraint copying is desired, use ALTER TABLE ADD CONSTRAINT after creation.
+        //   If we wanted to support them in the future, the right approach would be to add an
+        //   INCLUDING CONSTRAINTS clause (as PostgreSQL does) rather than copying blindly.
         val tableInfo = new TableInfo.Builder()
           .withColumns(columns)
           .withPartitions(partitioning)
