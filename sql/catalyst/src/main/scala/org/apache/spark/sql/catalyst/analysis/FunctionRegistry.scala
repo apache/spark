@@ -210,10 +210,26 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
   protected val functionBuilders =
     new mutable.HashMap[FunctionIdentifier, (ExpressionInfo, FunctionBuilder)]
 
-  // Resolution of the function name is always case insensitive, but the database name
-  // depends on the caller
+  // Resolution of the function name is always case insensitive; database and catalog
+  // are preserved so system.session.foo and spark_catalog.session.foo do not collide.
+  // Unqualified (1-part) lookups resolve to the builtin 3-part key so callers using
+  // FunctionIdentifier("time") find functions registered as system.builtin.time.
+  // 2-part session.func (database=session, no catalog) resolves to the temp 3-part key.
   private def normalizeFuncName(name: FunctionIdentifier): FunctionIdentifier = {
-    FunctionIdentifier(name.funcName.toLowerCase(Locale.ROOT), name.database)
+    if (name.database.isEmpty && name.catalog.isEmpty) {
+      FunctionRegistry.builtinFunctionIdentifier(name.funcName)
+    } else if (name.database.exists(_.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) &&
+        name.catalog.isEmpty) {
+      new FunctionIdentifier(
+        name.funcName.toLowerCase(Locale.ROOT),
+        Some(CatalogManager.SESSION_NAMESPACE),
+        Some(CatalogManager.SYSTEM_CATALOG_NAME))
+    } else {
+      new FunctionIdentifier(
+        name.funcName.toLowerCase(Locale.ROOT),
+        name.database,
+        name.catalog)
+    }
   }
 
   override def registerFunction(
@@ -329,6 +345,13 @@ object EmptyFunctionRegistry
 object FunctionRegistry {
 
   type FunctionBuilder = Seq[Expression] => Expression
+
+  /** 3-part identifier for a builtin function: system.builtin.funcName */
+  private[sql] def builtinFunctionIdentifier(name: String): FunctionIdentifier =
+    new FunctionIdentifier(
+      name.toLowerCase(Locale.ROOT),
+      Some(CatalogManager.BUILTIN_NAMESPACE),
+      Some(CatalogManager.SYSTEM_CATALOG_NAME))
 
   val FUNC_ALIAS = TreeNodeTag[String]("functionAliasName")
 
@@ -990,7 +1013,7 @@ object FunctionRegistry {
     val fr = new SimpleFunctionRegistry
     expressions.foreach {
       case (name, (info, builder)) =>
-        fr.internalRegisterFunction(FunctionIdentifier(name), info, builder)
+        fr.internalRegisterFunction(builtinFunctionIdentifier(name), info, builder)
     }
     fr
   }
@@ -1288,7 +1311,7 @@ object TableFunctionRegistry {
     val fr = new SimpleTableFunctionRegistry
     logicalPlans.foreach {
       case (name, (info, builder)) =>
-        fr.internalRegisterFunction(FunctionIdentifier(name), info, builder)
+        fr.internalRegisterFunction(FunctionRegistry.builtinFunctionIdentifier(name), info, builder)
     }
     fr
   }

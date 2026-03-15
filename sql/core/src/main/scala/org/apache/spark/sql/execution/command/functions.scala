@@ -197,8 +197,8 @@ case class ShowFunctionsCommand(
       sparkSession.sessionState.catalog
         .listFunctions(db, pattern.getOrElse("*"))
         .collect {
-          case (f, "USER") if showUserFunctions => f.unquotedString
-          case (f, "SYSTEM") if showSystemFunctions => f.unquotedString
+          case (f, "USER") if showUserFunctions => f.displayNameForShowFunctions
+          case (f, "SYSTEM") if showSystemFunctions => f.displayNameForShowFunctions
         }
     // Hard code "<>", "!=", "between", "case", and "||"
     // for now as there is no corresponding functions.

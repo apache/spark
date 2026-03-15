@@ -75,21 +75,49 @@ class FunctionResolution(
 
   /**
    * Produces the ordered list of fully qualified candidate names for resolution.
+   * Every candidate is 3-part (catalog.database.function), assuming search path
+   * entries are catalog.database (2-part).
    *
    * @param nameParts The function name parts.
-   * @return A sequence of fully qualified function names to attempt resolution with.
+   * @return A sequence of fully qualified 3-part names to attempt resolution with.
    */
   private def resolutionCandidates(nameParts: Seq[String]): Seq[Seq[String]] = {
+    def ensureThreePart(parts: Seq[String]): Seq[String] =
+      if (parts.length == 3) parts
+      else if (parts.length == 2) currentCatalogPath.head +: parts
+      else parts  // Safety fallback; valid paths yield 2 or 3 parts before this
+
     if (nameParts.size == 1) {
       val searchPath = SQLConf.get.resolutionSearchPath(currentCatalogPath)
-      searchPath.map(_ ++ nameParts)
+      searchPath.map(_ ++ nameParts).map(ensureThreePart)
     } else {
       nameParts.size match {
         case 2 if FunctionResolution.sessionNamespaceKind(nameParts).isDefined =>
-          // Partially qualified builtin/session: try persistent first so user schema wins
-          Seq(nameParts, Seq(CatalogManager.SYSTEM_CATALOG_NAME) ++ nameParts)
+          // Partially qualified builtin/session: both candidates as 3-part (catalog.db.func)
+          val systemCandidate = CatalogManager.SYSTEM_CATALOG_NAME +: nameParts
+          val persistentCandidate = currentCatalogPath.head +: nameParts
+          if (SQLConf.get.prioritizeSystemCatalog) {
+            Seq(systemCandidate, persistentCandidate)
+          } else {
+            Seq(persistentCandidate, systemCandidate)
+          }
+        case 2 if catalogManager.isCatalogRegistered(nameParts(0)) =>
+          // Partially qualified catalog.func: use catalog's default namespace, or empty for
+          // catalogs that register functions at catalog level (e.g. JDBC).
+          try {
+            val cat = catalogManager.catalog(nameParts(0))
+            val defaultNs = cat.defaultNamespace()
+            if (defaultNs != null && defaultNs.nonEmpty) {
+              Seq(Seq(nameParts(0), defaultNs(0), nameParts(1)))
+            } else {
+              // No default namespace: use 2-part so ident has empty namespace
+              Seq(nameParts)
+            }
+          } catch {
+            case _: CatalogNotFoundException => Seq(ensureThreePart(nameParts))
+          }
         case _ =>
-          Seq(nameParts)
+          Seq(ensureThreePart(nameParts))
       }
     }
   }
@@ -99,14 +127,13 @@ class FunctionResolution(
       unresolvedFunc: UnresolvedFunction): Option[Expression] = {
     if (nameParts.length == 3 &&
         nameParts.head.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME)) {
-      // Try resolving as a session-namespace function (builtin or temp)
-      FunctionResolution.sessionNamespaceKind(nameParts).flatMap { kind =>
-        val funcName = nameParts.last
-        val expr = v1SessionCatalog.resolveScalarFunction(kind, funcName, unresolvedFunc.arguments)
+      v1SessionCatalog.identifierFromSystemNameParts(nameParts).flatMap { ident =>
+        val expr = v1SessionCatalog.resolveScalarFunctionByIdentifier(
+          ident, unresolvedFunc.arguments)
         if (expr.isEmpty) {
-          if (v1SessionCatalog.lookupFunctionInfo(
-              kind, funcName, tableFunction = true).isDefined) {
-            throw QueryCompilationErrors.notAScalarFunctionError(funcName, unresolvedFunc)
+          if (v1SessionCatalog.lookupFunctionInfoByIdentifier(
+              ident, tableFunction = true).isDefined) {
+            throw QueryCompilationErrors.notAScalarFunctionError(ident.funcName, unresolvedFunc)
           }
         }
         expr.map(e => validateFunction(e, unresolvedFunc.arguments.length, unresolvedFunc))
@@ -173,13 +200,12 @@ class FunctionResolution(
       arguments: Seq[Expression]): Option[LogicalPlan] = {
     if (nameParts.length == 3 &&
         nameParts.head.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME)) {
-      FunctionResolution.sessionNamespaceKind(nameParts).flatMap { kind =>
-        val funcName = nameParts.last
-        val resolvedPlan = v1SessionCatalog.resolveTableFunction(kind, funcName, arguments)
+      v1SessionCatalog.identifierFromSystemNameParts(nameParts).flatMap { ident =>
+        val resolvedPlan = v1SessionCatalog.resolveTableFunctionByIdentifier(ident, arguments)
         if (resolvedPlan.isDefined) return resolvedPlan
-        if (v1SessionCatalog.lookupFunctionInfo(
-            kind, funcName, tableFunction = false).isDefined) {
-          throw QueryCompilationErrors.notATableFunctionError(funcName)
+        if (v1SessionCatalog.lookupFunctionInfoByIdentifier(
+            ident, tableFunction = false).isDefined) {
+          throw QueryCompilationErrors.notATableFunctionError(ident.funcName)
         }
         None
       }
@@ -250,9 +276,9 @@ class FunctionResolution(
     if (nameParts.size == 1 && unresolvedFunc.exists(_.isInternal)) {
       FunctionRegistry.internal.lookupFunction(FunctionIdentifier(nameParts.head))
     } else {
-      FunctionResolution.sessionNamespaceKind(nameParts) match {
-        case Some(kind) =>
-          v1SessionCatalog.lookupFunctionInfo(kind, nameParts.last, tableFunction = false)
+      v1SessionCatalog.identifierFromSystemNameParts(nameParts) match {
+        case Some(ident) =>
+          v1SessionCatalog.lookupFunctionInfoByIdentifier(ident, tableFunction = false)
         case None =>
           if (nameParts.size == 1) {
             v1SessionCatalog.lookupBuiltinOrTempFunction(nameParts.head)
@@ -264,9 +290,9 @@ class FunctionResolution(
   }
 
   def lookupBuiltinOrTempTableFunction(nameParts: Seq[String]): Option[ExpressionInfo] = {
-    FunctionResolution.sessionNamespaceKind(nameParts) match {
-      case Some(kind) =>
-        v1SessionCatalog.lookupFunctionInfo(kind, nameParts.last, tableFunction = true)
+    v1SessionCatalog.identifierFromSystemNameParts(nameParts) match {
+      case Some(ident) =>
+        v1SessionCatalog.lookupFunctionInfoByIdentifier(ident, tableFunction = true)
       case None =>
         if (nameParts.length == 1) {
           v1SessionCatalog.lookupBuiltinOrTempTableFunction(nameParts.head)

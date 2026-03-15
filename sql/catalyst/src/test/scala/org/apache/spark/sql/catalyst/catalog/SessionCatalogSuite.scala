@@ -1655,7 +1655,8 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       assert(!catalog.isTemporaryFunction(FunctionIdentifier("func1")))
 
       // Returns false when the function is built-in or hive
-      assert(FunctionRegistry.builtin.functionExists(FunctionIdentifier("sum")))
+      assert(FunctionRegistry.builtin.functionExists(
+        FunctionRegistry.builtinFunctionIdentifier("sum")))
       assert(!catalog.isTemporaryFunction(FunctionIdentifier("sum")))
       assert(!catalog.isTemporaryFunction(FunctionIdentifier("histogram_numeric")))
     }

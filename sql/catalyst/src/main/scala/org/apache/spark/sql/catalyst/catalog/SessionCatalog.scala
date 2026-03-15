@@ -23,7 +23,6 @@ import java.util.concurrent.{Callable, ExecutionException, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
-import scala.util.{Failure, Success, Try}
 
 import com.google.common.cache.{Cache, CacheBuilder}
 import com.google.common.util.concurrent.UncheckedExecutionException
@@ -95,9 +94,10 @@ class SessionCatalog(
 
   /**
    * Database qualifier used to store temporary functions in the function registry.
-   * Temporary functions use composite keys to coexist with builtin functions of the same name:
-   * - Builtin functions (including extensions): FunctionIdentifier(name, None)
-   * - Temp functions: FunctionIdentifier(name, Some(CatalogManager.SESSION_NAMESPACE))
+   * Temporary functions use composite keys to coexist with builtin functions of the same name.
+   * Storage convention (see namespaceToIdentifier): builtins are stored as
+   * FunctionIdentifier(name, Some("builtin"), Some("system")); temp functions as
+   * FunctionIdentifier(name, Some("session"), Some("system")).
    */
   private val TEMP_FUNCTION_DB = CatalogManager.SESSION_NAMESPACE
 
@@ -180,7 +180,7 @@ class SessionCatalog(
    * Maps a namespace template to an actual storage identifier for a specific function.
    *
    * Storage conventions:
-   * - Builtin functions: FunctionIdentifier(name, None, None)
+   * - Builtin functions: FunctionIdentifier(name, Some("builtin"), Some("system"))
    * - Temp functions: FunctionIdentifier(name, Some("session"), Some("system"))
    * - Other: FunctionIdentifier(name, namespace.database, namespace.catalog)
    */
@@ -189,7 +189,7 @@ class SessionCatalog(
       name: String): FunctionIdentifier = {
     namespace.database match {
       case Some(CatalogManager.BUILTIN_NAMESPACE) =>
-        FunctionIdentifier(format(name))
+        FunctionRegistry.builtinFunctionIdentifier(name)
 
       case _ =>
         namespace.copy(funcName = name)
@@ -2136,7 +2136,7 @@ class SessionCatalog(
     if (func.database.isEmpty && sessionFirst && !overrideIfExists) {
       val funcName = func.funcName
       // Check if function exists in builtin namespace (extensions are stored as builtins)
-      val builtinIdent = FunctionIdentifier(format(funcName))
+      val builtinIdent = FunctionRegistry.builtinFunctionIdentifier(funcName)
       if (functionRegistry.functionExists(builtinIdent) ||
           tableFunctionRegistry.functionExists(builtinIdent)) {
         throw QueryCompilationErrors.functionAlreadyExistsError(func)
@@ -2249,7 +2249,7 @@ class SessionCatalog(
       if ((conf.sessionFunctionResolutionOrder == "first") && !overrideIfExists) {
         val funcName = function.name.funcName
         // Check if function exists in builtin namespace (extensions are stored as builtins)
-        val builtinIdent = FunctionIdentifier(format(funcName))
+        val builtinIdent = FunctionRegistry.builtinFunctionIdentifier(funcName)
         if (functionRegistry.functionExists(builtinIdent) ||
             tableFunctionRegistry.functionExists(builtinIdent)) {
           throw QueryCompilationErrors.functionAlreadyExistsError(function.name)
@@ -2328,10 +2328,10 @@ class SessionCatalog(
    * session. If not existed, return false.
    */
   def isRegisteredFunction(name: FunctionIdentifier): Boolean = {
-    // Check if it exists as temp (with TEMP_FUNCTION_DB db) or builtin (without db) or persistent
+    // Check if it exists as temp (with TEMP_FUNCTION_DB db) or builtin (3-part key) or persistent
     if (name.database.isEmpty) {
       val tempIdent = tempFunctionIdentifier(name.funcName)
-      val builtinIdent = FunctionIdentifier(format(name.funcName))
+      val builtinIdent = FunctionRegistry.builtinFunctionIdentifier(name.funcName)
 
       // Check if temp function exists
       val hasTemp = functionRegistry.functionExists(tempIdent) ||
@@ -2345,7 +2345,10 @@ class SessionCatalog(
 
       hasTemp || hasBuiltin
     } else {
-      functionRegistry.functionExists(name) || tableFunctionRegistry.functionExists(name)
+      // Persistent functions are registered with qualified ident (catalog set)
+      val qualifiedIdent = qualifyIdentifier(name)
+      functionRegistry.functionExists(qualifiedIdent) ||
+        tableFunctionRegistry.functionExists(qualifiedIdent)
     }
   }
 
@@ -2363,8 +2366,9 @@ class SessionCatalog(
    * Returns whether it is a built-in function.
    */
   def isBuiltinFunction(name: FunctionIdentifier): Boolean = {
-    FunctionRegistry.builtin.functionExists(name) ||
-      TableFunctionRegistry.builtin.functionExists(name)
+    val builtinIdent = FunctionRegistry.builtinFunctionIdentifier(name.funcName)
+    FunctionRegistry.builtin.functionExists(builtinIdent) ||
+      TableFunctionRegistry.builtin.functionExists(builtinIdent)
   }
 
   protected[sql] def failFunctionLookup(name: FunctionIdentifier): Nothing = {
@@ -2436,91 +2440,80 @@ class SessionCatalog(
   }
 
   /**
-   * Builds the FunctionIdentifier for a given session function kind and name.
-   * Used by the kind-based lookup/resolve API.
+   * Converts 2- or 3-part name parts (system catalog) to a FunctionIdentifier.
+   * Single entry point for resolution: 2-part (builtin.func, session.func) or
+   * 3-part (system.builtin.func, system.session.func).
    */
-  private def functionIdentifier(
-      kind: SessionCatalog.SessionFunctionKind,
-      name: String): FunctionIdentifier =
-    kind match {
-      case SessionCatalog.Builtin =>
-        FunctionIdentifier(format(name))
-      case SessionCatalog.Temp =>
-        tempFunctionIdentifier(name)
-    }
-
-  /**
-   * Kind-based lookup: one entry point for all
-   * (builtin/temp) x (scalar/table).
-   * Callers that have already determined the kind (e.g. FunctionResolution) use this
-   * instead of separate lookup* methods.
-   */
-  def lookupFunctionInfo(
-      kind: SessionCatalog.SessionFunctionKind,
-      name: String,
-      tableFunction: Boolean): Option[ExpressionInfo] = {
-    val identifier = functionIdentifier(kind, name)
-    val registry = if (tableFunction) tableFunctionRegistry else functionRegistry
-    kind match {
-      case SessionCatalog.Temp =>
-        synchronized {
-          handleViewContext(name, registry.lookupFunction(identifier))
-        }
+  private[sql] def identifierFromSystemNameParts(
+      nameParts: Seq[String]): Option[FunctionIdentifier] = {
+    val threePart = nameParts.size match {
+      case 2 if nameParts.head.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE) ||
+                  nameParts.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) =>
+        Some(CatalogManager.SYSTEM_CATALOG_NAME +: nameParts)
+      case 3 if nameParts.head.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) =>
+        Some(nameParts)
       case _ =>
-        registry.lookupFunction(identifier)
+        None
+    }
+    threePart.flatMap { p =>
+      if (p(1).equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)) {
+        Some(FunctionRegistry.builtinFunctionIdentifier(p(2)))
+      } else if (p(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
+        Some(tempFunctionIdentifier(p(2)))
+      } else {
+        None
+      }
     }
   }
 
   /**
-   * Kind-based resolve for scalar functions.
+   * Look up function metadata by identifier (system catalog). Applies view context for temp.
    */
-  def resolveScalarFunction(
-      kind: SessionCatalog.SessionFunctionKind,
-      name: String,
+  def lookupFunctionInfoByIdentifier(
+      ident: FunctionIdentifier,
+      tableFunction: Boolean): Option[ExpressionInfo] = {
+    val registry = if (tableFunction) tableFunctionRegistry else functionRegistry
+    val result = registry.lookupFunction(ident)
+    if (isTempFunctionIdentifier(ident)) {
+      synchronized { handleViewContext(ident.funcName, result) }
+    } else {
+      result
+    }
+  }
+
+  /**
+   * Resolve scalar function by identifier (system catalog). Applies view context for temp.
+   */
+  def resolveScalarFunctionByIdentifier(
+      ident: FunctionIdentifier,
       arguments: Seq[Expression]): Option[Expression] = {
-    val identifier = functionIdentifier(kind, name)
-    kind match {
-      case SessionCatalog.Builtin =>
-        if (functionRegistry.functionExists(identifier)) {
-          Option(functionRegistry.lookupFunction(identifier, arguments))
-        } else {
-          None
-        }
-      case SessionCatalog.Temp =>
-        synchronized {
-          if (functionRegistry.functionExists(identifier)) {
-            handleViewContext(name, Option(functionRegistry.lookupFunction(identifier, arguments)))
-          } else {
-            None
-          }
-        }
+    if (!functionRegistry.functionExists(ident)) {
+      None
+    } else if (isTempFunctionIdentifier(ident)) {
+      synchronized {
+        handleViewContext(ident.funcName, Option(functionRegistry.lookupFunction(ident, arguments)))
+      }
+    } else {
+      Some(functionRegistry.lookupFunction(ident, arguments))
     }
   }
 
   /**
-   * Kind-based resolve for table functions.
+   * Resolve table function by identifier (system catalog). Applies view context for temp.
    */
-  def resolveTableFunction(
-      kind: SessionCatalog.SessionFunctionKind,
-      name: String,
+  def resolveTableFunctionByIdentifier(
+      ident: FunctionIdentifier,
       arguments: Seq[Expression]): Option[LogicalPlan] = {
-    val identifier = functionIdentifier(kind, name)
-    kind match {
-      case SessionCatalog.Builtin =>
-        if (tableFunctionRegistry.functionExists(identifier)) {
-          Option(tableFunctionRegistry.lookupFunction(identifier, arguments))
-        } else {
-          None
-        }
-      case SessionCatalog.Temp =>
-        synchronized {
-          if (tableFunctionRegistry.functionExists(identifier)) {
-            handleViewContext(
-              name, Option(tableFunctionRegistry.lookupFunction(identifier, arguments)))
-          } else {
-            None
-          }
-        }
+    if (!tableFunctionRegistry.functionExists(ident)) {
+      None
+    } else if (isTempFunctionIdentifier(ident)) {
+      synchronized {
+        handleViewContext(
+          ident.funcName,
+          Option(tableFunctionRegistry.lookupFunction(ident, arguments)))
+      }
+    } else {
+      Some(tableFunctionRegistry.lookupFunction(ident, arguments))
     }
   }
 
@@ -2741,26 +2734,24 @@ class SessionCatalog(
 
   /**
    * List all built-in and temporary functions with the given pattern.
+   * Builtins are keyed as (funcName, builtin, system); temp as (funcName, session, system).
+   * Pattern is matched against the display name (simple funcName for system catalog) for
+   * backward compatibility with SHOW FUNCTIONS LIKE 'abs'.
    */
   private def listBuiltinAndTempFunctions(pattern: String): Seq[FunctionIdentifier] = {
     val functions = (functionRegistry.listFunction() ++ tableFunctionRegistry.listFunction())
       .filter(f =>
-        f.database.isEmpty ||
-        isTempFunctionIdentifier(f))
+        isTempFunctionIdentifier(f) ||
+        (f.database.contains(CatalogManager.BUILTIN_NAMESPACE) &&
+          f.catalog.contains(CatalogManager.SYSTEM_CATALOG_NAME)))
       .map(f => if (isTempFunctionIdentifier(f)) {
         FunctionIdentifier(f.funcName)
       } else {
         f
       })
-    StringUtils.filterPattern(functions.map(_.unquotedString), pattern).map { f =>
-      // In functionRegistry, function names are stored as an unquoted format.
-      Try(parser.parseFunctionIdentifier(f)) match {
-        case Success(e) => e
-        case Failure(_) =>
-          // The names of some built-in functions are not parsable by our parser, e.g., %
-          FunctionIdentifier(f)
-      }
-    }
+    val namesToFilter = functions.map(_.displayNameForShowFunctions)
+    val matchedNames = StringUtils.filterPattern(namesToFilter, pattern).toSet
+    functions.zip(namesToFilter).filter { case (_, name) => matchedNames.contains(name) }.map(_._1)
   }
 
   /**

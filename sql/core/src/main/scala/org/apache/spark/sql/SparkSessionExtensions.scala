@@ -365,14 +365,25 @@ class SparkSessionExtensions {
 
   private[sql] def registerFunctions(functionRegistry: FunctionRegistry) = {
     for ((name, expressionInfo, function) <- injectedFunctions) {
-      functionRegistry.registerFunction(name, expressionInfo, function)
+      // Extension functions with unqualified name are in the builtin namespace (3-part key)
+      val ident = if (name.database.isEmpty && name.catalog.isEmpty) {
+        FunctionRegistry.builtinFunctionIdentifier(name.funcName)
+      } else {
+        name
+      }
+      functionRegistry.registerFunction(ident, expressionInfo, function)
     }
     functionRegistry
   }
 
   private[sql] def registerTableFunctions(tableFunctionRegistry: TableFunctionRegistry) = {
     for ((name, expressionInfo, function) <- injectedTableFunctions) {
-      tableFunctionRegistry.registerFunction(name, expressionInfo, function)
+      val ident = if (name.database.isEmpty && name.catalog.isEmpty) {
+        FunctionRegistry.builtinFunctionIdentifier(name.funcName)
+      } else {
+        name
+      }
+      tableFunctionRegistry.registerFunction(ident, expressionInfo, function)
     }
     tableFunctionRegistry
   }
