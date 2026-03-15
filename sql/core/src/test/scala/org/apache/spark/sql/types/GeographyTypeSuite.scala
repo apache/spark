@@ -30,7 +30,7 @@ class GeographyTypeSuite extends SparkFunSuite {
   // These tests verify the basic behavior of the GeographyType logical type.
 
   test("GEOGRAPHY type with specified invalid SRID") {
-    val srids: Seq[Int] = Seq(-4612, -4326, -2, -1, 1, 2, 3126, 4612)
+    val srids: Seq[Int] = Seq(-4612, -4326, -2, -1, 1, 2, 3, 999)
     srids.foreach { srid =>
       checkError(
         exception = intercept[SparkIllegalArgumentException] {
