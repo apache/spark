@@ -133,10 +133,35 @@ class InMemoryFileIndex(
     val filter = FileInputFormat.getInputPathFilter(new JobConf(hadoopConf, this.getClass))
     val discovered = InMemoryFileIndex.bulkListLeafFiles(
       pathsToFetch.toSeq, hadoopConf, filter, sparkSession, parameters)
-    discovered.foreach { case (path, leafFiles) =>
-      HiveCatalogMetrics.incrementFilesDiscovered(leafFiles.size)
-      fileStatusCache.putLeafFiles(path, leafFiles.toArray)
-      output ++= leafFiles
+    val traversalDepth =
+      sparkSession.sessionState.conf.parallelPartitionDiscoveryTraversalDepth
+    if (traversalDepth > 1 && pathsToFetch.nonEmpty) {
+      // When traversalDepth > 1, bulkListLeafFiles returns results keyed by expanded
+      // intermediate paths rather than the original root paths in pathsToFetch.
+      // Re-group all discovered files under their original root path so that the
+      // FileStatusCache (keyed by root path) can be hit on subsequent lookups.
+      val allDiscoveredFiles = discovered.flatMap(_._2)
+      for (rootPath <- pathsToFetch) {
+        val qualifiedRoot = try {
+          rootPath.getFileSystem(hadoopConf).makeQualified(rootPath).toString
+        } catch {
+          case _: Exception => rootPath.toString
+        }
+        val prefix = if (qualifiedRoot.endsWith("/")) qualifiedRoot else qualifiedRoot + "/"
+        val filesForRoot = allDiscoveredFiles.filter { f =>
+          val fp = f.getPath.toString
+          fp.startsWith(prefix) || fp == qualifiedRoot
+        }
+        HiveCatalogMetrics.incrementFilesDiscovered(filesForRoot.size)
+        fileStatusCache.putLeafFiles(rootPath, filesForRoot.toArray)
+      }
+      output ++= allDiscoveredFiles
+    } else {
+      discovered.foreach { case (path, leafFiles) =>
+        HiveCatalogMetrics.incrementFilesDiscovered(leafFiles.size)
+        fileStatusCache.putLeafFiles(path, leafFiles.toArray)
+        output ++= leafFiles
+      }
     }
     logInfo(log"It took ${MDC(ELAPSED_TIME, (System.nanoTime() - startTime) / (1000 * 1000))} ms" +
       log" to list leaf files for ${MDC(COUNT, paths.length)} paths.")
@@ -176,7 +201,8 @@ object InMemoryFileIndex extends Logging {
         ignoreMissingFiles = ignoreMissingFiles,
         ignoreLocality = sparkSession.sessionState.conf.ignoreDataLocality,
         parallelismThreshold = sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold,
-        parallelismMax = sparkSession.sessionState.conf.parallelPartitionDiscoveryParallelism)
+        parallelismMax = sparkSession.sessionState.conf.parallelPartitionDiscoveryParallelism,
+        traversalDepth = sparkSession.sessionState.conf.parallelPartitionDiscoveryTraversalDepth)
     }
   }
 
