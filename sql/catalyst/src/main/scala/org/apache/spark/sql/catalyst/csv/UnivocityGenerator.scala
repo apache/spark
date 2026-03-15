@@ -55,6 +55,12 @@ class UnivocityGenerator(
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = false,
     forTimestampNTZ = true)
+  private val timeFormatter = TimestampFormatter(
+    options.timeFormatInWrite,
+    options.zoneId,
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = false)
   private val dateFormatter = DateFormatter(
     options.dateFormatInWrite,
     options.locale,
@@ -74,6 +80,10 @@ class UnivocityGenerator(
     case TimestampNTZType =>
       (row: InternalRow, ordinal: Int) =>
         timestampNTZFormatter.format(DateTimeUtils.microsToLocalDateTime(row.getLong(ordinal)))
+
+    case TimeType =>
+      (row: InternalRow, ordinal: Int) =>
+        timeFormatter.format(row.getLong(ordinal))
 
     case YearMonthIntervalType(start, end) =>
       (row: InternalRow, ordinal: Int) =>

@@ -77,6 +77,12 @@ class JacksonParser(
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
+  private lazy val timeFormatter = TimestampFormatter(
+    options.timeFormatInRead,
+    options.zoneId,
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true)
 
   // Flags to signal if we need to fall back to the backward compatible behavior of parsing
   // dates and timestamps.
@@ -304,6 +310,17 @@ class JacksonParser(
       (parser: JsonParser) => parseJsonToken[java.lang.Long](parser, dataType) {
         case VALUE_STRING if parser.getTextLength >= 1 =>
           timestampNTZFormatter.parseWithoutTimeZone(parser.getText, false)
+      }
+
+    case TimeType =>
+      (parser: JsonParser) => parseJsonToken[java.lang.Long](parser, dataType) {
+        case VALUE_STRING if parser.getTextLength >= 1 =>
+          try {
+            timeFormatter.parse(parser.getText)
+          } catch {
+            case NonFatal(e) =>
+              TimeUtils.stringToTime(UTF8String.fromString(parser.getText)).getOrElse(throw e)
+          }
       }
 
     case DateType =>
