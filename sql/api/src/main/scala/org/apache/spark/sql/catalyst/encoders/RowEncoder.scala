@@ -21,7 +21,7 @@ import scala.collection.mutable
 import scala.reflect.classTag
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, CalendarIntervalEncoder, DateEncoder, DayTimeIntervalEncoder, EncoderField, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, LocalDateTimeEncoder, MapEncoder, NullEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, TimestampEncoder, UDTEncoder, YearMonthIntervalEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, CalendarIntervalEncoder, DateEncoder, DayTimeIntervalEncoder, EncoderField, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, LocalDateTimeEncoder, MapEncoder, NullEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, TimeEncoder, TimestampEncoder, UDTEncoder, YearMonthIntervalEncoder}
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types._
@@ -86,7 +86,7 @@ object RowEncoder {
     case TimestampNTZType => LocalDateTimeEncoder
     case DateType if SqlApiConf.get.datetimeJava8ApiEnabled => LocalDateEncoder(lenient)
     case DateType => DateEncoder(lenient)
-    case TimeType => BoxedLongEncoder
+    case TimeType => TimeEncoder
     case CalendarIntervalType => CalendarIntervalEncoder
     case _: DayTimeIntervalType => DayTimeIntervalEncoder
     case _: YearMonthIntervalType => YearMonthIntervalEncoder

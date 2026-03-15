@@ -31,15 +31,14 @@ class TimeTypeSuite extends QueryTest with SharedSparkSession {
     val df = sql("SELECT TIME '10:30:00' as event_time")
     val result = df.collect()
     assert(result.length === 1)
-    // Internal representation is Long (microseconds)
-    assert(result(0).getLong(0) === 37800000000L) // 10:30:00 in microseconds
+    assert(result(0).get(0) === java.time.LocalTime.of(10, 30, 0))
   }
 
   test("TIME literal - with microseconds") {
     val df = sql("SELECT TIME '14:25:30.123456' as event_time")
     val result = df.collect()
     assert(result.length === 1)
-    assert(result(0).getLong(0) === 51930123456L) // 14:25:30.123456 in microseconds
+    assert(result(0).get(0) === java.time.LocalTime.of(14, 25, 30, 123456000))
   }
 
   test("Multiple TIME literals") {
@@ -54,11 +53,11 @@ class TimeTypeSuite extends QueryTest with SharedSparkSession {
     val result = df.orderBy("id").collect()
     assert(result.length === 3)
     assert(result(0).getInt(0) === 1)
-    assert(result(0).getLong(1) === 0L) // Midnight
+    assert(result(0).get(1) === java.time.LocalTime.MIDNIGHT)
     assert(result(1).getInt(0) === 2)
-    assert(result(1).getLong(1) === 37845000000L) // 10:30:45
+    assert(result(1).get(1) === java.time.LocalTime.of(10, 30, 45))
     assert(result(2).getInt(0) === 3)
-    assert(result(2).getLong(1) === 86399999999L) // End of day
+    assert(result(2).get(1) === java.time.LocalTime.of(23, 59, 59, 999999000))
   }
 
   // TODO: Fix display format - Row.get().toString() returns raw Long value
@@ -74,7 +73,7 @@ class TimeTypeSuite extends QueryTest with SharedSparkSession {
     val df = sql("SELECT CAST('10:30:45' AS TIME) as time_val")
     val result = df.collect()
     assert(result.length === 1)
-    assert(result(0).getLong(0) === 37845000000L)
+    assert(result(0).get(0) === java.time.LocalTime.of(10, 30, 45))
   }
 
   test("CAST TIME to STRING") {
@@ -89,7 +88,7 @@ class TimeTypeSuite extends QueryTest with SharedSparkSession {
     val result = df.collect()
     assert(result.length === 1)
     // Should extract time portion only
-    assert(result(0).getLong(0) === 37845000000L)
+    assert(result(0).get(0) === java.time.LocalTime.of(10, 30, 45))
   }
 
   test("CAST TIME to TIMESTAMP") {
@@ -106,7 +105,7 @@ class TimeTypeSuite extends QueryTest with SharedSparkSession {
     val result = df.collect()
     assert(result.length === 1)
     // Date cast to TIME should give midnight
-    assert(result(0).getLong(0) === 0L)
+    assert(result(0).get(0) === java.time.LocalTime.MIDNIGHT)
   }
 
   test("CAST TIME to DATE") {
@@ -123,7 +122,7 @@ class TimeTypeSuite extends QueryTest with SharedSparkSession {
     val df = sql("SELECT CAST(37845 AS TIME) as time_val")
     val result = df.collect()
     assert(result.length === 1)
-    assert(result(0).getLong(0) === 37845000000L) // 10:30:45
+    assert(result(0).get(0) === java.time.LocalTime.of(10, 30, 45))
   }
 
   test("CAST TIME to INTEGER") {
@@ -138,7 +137,7 @@ class TimeTypeSuite extends QueryTest with SharedSparkSession {
     val df = sql("SELECT CAST(37845000000 AS TIME) as time_val")
     val result = df.collect()
     assert(result.length === 1)
-    assert(result(0).getLong(0) === 37845000000L)
+    assert(result(0).get(0) === java.time.LocalTime.of(10, 30, 45))
   }
 
   test("CAST TIME to LONG") {
@@ -195,9 +194,9 @@ class TimeTypeSuite extends QueryTest with SharedSparkSession {
 
     val result = df.collect()
     assert(result.length === 2)
-    assert(result(0).getLong(0) === 36000000000L) // 10:00:00
+    assert(result(0).get(0) === java.time.LocalTime.of(10, 0, 0)) // 10:00:00
     assert(result(0).getLong(1) === 3) // 1 + 2
-    assert(result(1).getLong(0) === 50400000000L) // 14:00:00
+    assert(result(1).get(0) === java.time.LocalTime.of(14, 0, 0)) // 14:00:00
     assert(result(1).getLong(1) === 3)
   }
 
@@ -235,12 +234,12 @@ class TimeTypeSuite extends QueryTest with SharedSparkSession {
     // Midnight
     var df = sql("SELECT TIME '00:00:00' as event_time")
     var result = df.collect()
-    assert(result(0).getLong(0) === 0L)
+    assert(result(0).get(0) === java.time.LocalTime.MIDNIGHT)
 
     // End of day
     df = sql("SELECT TIME '23:59:59.999999' as event_time")
     result = df.collect()
-    assert(result(0).getLong(0) === 86399999999L)
+    assert(result(0).get(0) === java.time.LocalTime.of(23, 59, 59, 999999000))
   }
 
   test("Invalid TIME literal - should fail") {
@@ -287,8 +286,8 @@ class TimeTypeSuite extends QueryTest with SharedSparkSession {
 
     val result = df.collect()
     assert(result.length === 2)
-    assert(result(0).getLong(1) === 37800000000L)
-    assert(result(1).getLong(1) === 50400000000L)
+    assert(result(0).get(1) === java.time.LocalTime.of(10, 30, 0))
+    assert(result(1).get(1) === java.time.LocalTime.of(14, 0, 0))
   }
 
   test("CREATE TABLE with TIME column") {
@@ -321,7 +320,7 @@ class TimeTypeSuite extends QueryTest with SharedSparkSession {
       val result = spark.table("time_table").collect()
       assert(result.length === 1)
       assert(result(0).getInt(0) === 1)
-      assert(result(0).getLong(1) === 37800000000L)
+      assert(result(0).get(1) === java.time.LocalTime.of(10, 30, 0))
     }
   }
 
@@ -344,11 +343,11 @@ class TimeTypeSuite extends QueryTest with SharedSparkSession {
       val result = spark.table("time_table").orderBy("id").collect()
       assert(result.length === 3)
       assert(result(0).getInt(0) === 1)
-      assert(result(0).getLong(1) === 28800000000L) // 08:00:00
+      assert(result(0).get(1) === java.time.LocalTime.of(8, 0, 0)) // 08:00:00
       assert(result(1).getInt(0) === 2)
-      assert(result(1).getLong(1) === 45045000000L) // 12:30:45
+      assert(result(1).get(1) === java.time.LocalTime.of(12, 30, 45)) // 12:30:45
       assert(result(2).getInt(0) === 3)
-      assert(result(2).getLong(1) === 67530123456L) // 18:45:30.123456
+      assert(result(2).get(1) === java.time.LocalTime.of(18, 45, 30, 123456000))
     }
   }
 
@@ -366,7 +365,7 @@ class TimeTypeSuite extends QueryTest with SharedSparkSession {
       val result = sql("SELECT * FROM time_table WHERE event_time > TIME '12:00:00'").collect()
       assert(result.length === 1)
       assert(result(0).getInt(0) === 2)
-      assert(result(0).getLong(1) === 50400000000L) // 14:00:00
+      assert(result(0).get(1) === java.time.LocalTime.of(14, 0, 0)) // 14:00:00
     }
   }
 

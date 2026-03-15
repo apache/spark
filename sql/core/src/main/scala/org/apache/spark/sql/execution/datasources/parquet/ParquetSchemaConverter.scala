@@ -242,6 +242,7 @@ class ParquetToSparkSchemaConverter(
             }
           case t: TimestampLogicalTypeAnnotation if t.getUnit == TimeUnit.MILLIS =>
             typeNotImplemented()
+          case _: TimeLogicalTypeAnnotation => TimeType
           case _ => illegalType()
         }
 
@@ -261,6 +262,7 @@ class ParquetToSparkSchemaConverter(
               case 64 => DecimalType(20, 0)
               case _ => illegalType()
             }
+          case _: TimeLogicalTypeAnnotation => TimeType
           case timestamp: TimestampLogicalTypeAnnotation
             if timestamp.getUnit == TimeUnit.MICROS || timestamp.getUnit == TimeUnit.MILLIS =>
             if (timestamp.isAdjustedToUTC || !inferTimestampNTZ) {

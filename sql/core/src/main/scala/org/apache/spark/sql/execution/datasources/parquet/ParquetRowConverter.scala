@@ -439,8 +439,16 @@ private[parquet] class ParquetRowConverter(
         }
 
       case TimeType =>
-        // TIME is stored as INT64 with TIME logical type in microseconds
-        new ParquetPrimitiveConverter(updater)
+        // TIME is stored as INT64 (micros) or INT32 (millis) with TIME logical type
+        if (parquetType.asPrimitiveType().getPrimitiveTypeName == INT32) {
+          new ParquetPrimitiveConverter(updater) {
+            override def addInt(value: Int): Unit = {
+              updater.setLong(DateTimeUtils.millisToMicros(value.toLong))
+            }
+          }
+        } else {
+          new ParquetPrimitiveConverter(updater)
+        }
 
       case DateType =>
         new ParquetPrimitiveConverter(updater) {

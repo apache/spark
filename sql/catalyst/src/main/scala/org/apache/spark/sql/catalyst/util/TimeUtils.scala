@@ -101,6 +101,14 @@ object TimeUtils {
     UTF8String.fromString(result)
   }
 
+  def timeToStringInternal(micros: Long): String = {
+    timeToString(micros).toString
+  }
+
+  def stringToTimeInternal(s: UTF8String): Long = {
+    stringToTime(s).getOrElse(throw new IllegalArgumentException(s"Cannot parse '$s' as TIME"))
+  }
+
   /**
    * Converts TIME (microseconds since midnight) to string for SQL CAST.
    * Omits microseconds if they are zero.

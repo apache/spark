@@ -210,6 +210,7 @@ object AgnosticEncoders {
   // Nullable leaf encoders
   case object NullEncoder extends LeafEncoder[java.lang.Void](NullType)
   case object StringEncoder extends LeafEncoder[String](StringType)
+  case object TimeEncoder extends LeafEncoder[java.time.LocalTime](TimeType)
   case object BinaryEncoder extends LeafEncoder[Array[Byte]](BinaryType)
   case object ScalaBigIntEncoder extends LeafEncoder[BigInt](DecimalType.BigIntDecimal)
   case object JavaBigIntEncoder extends LeafEncoder[JBigInt](DecimalType.BigIntDecimal)

@@ -20,11 +20,11 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.{expressions => exprs}
 import org.apache.spark.sql.catalyst.analysis.{GetColumnByOrdinal, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, AgnosticEncoders}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BoxedLeafEncoder, DateEncoder, DayTimeIntervalEncoder, InstantEncoder, IterableEncoder, JavaBeanEncoder, JavaBigIntEncoder, JavaDecimalEncoder, JavaEnumEncoder, LocalDateEncoder, LocalDateTimeEncoder, MapEncoder, OptionEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, ProductEncoder, ScalaBigIntEncoder, ScalaDecimalEncoder, ScalaEnumEncoder, StringEncoder, TimestampEncoder, UDTEncoder, YearMonthIntervalEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BoxedLeafEncoder, DateEncoder, DayTimeIntervalEncoder, InstantEncoder, IterableEncoder, JavaBeanEncoder, JavaBigIntEncoder, JavaDecimalEncoder, JavaEnumEncoder, LocalDateEncoder, LocalDateTimeEncoder, MapEncoder, OptionEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, ProductEncoder, ScalaBigIntEncoder, ScalaDecimalEncoder, ScalaEnumEncoder, StringEncoder, TimeEncoder, TimestampEncoder, UDTEncoder, YearMonthIntervalEncoder}
 import org.apache.spark.sql.catalyst.encoders.EncoderUtils.{externalDataTypeFor, isNativeEncoder}
 import org.apache.spark.sql.catalyst.expressions.{Expression, GetStructField, IsNull, MapKeys, MapValues, UpCast}
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, CreateExternalRow, InitializeJavaBean, Invoke, NewInstance, StaticInvoke, UnresolvedCatalystToExternalMap, UnresolvedMapObjects, WrapOption}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, IntervalUtils, TimeUtils}
 import org.apache.spark.sql.types._
 
 object DeserializerBuildHelper {
@@ -83,6 +83,15 @@ object DeserializerBuildHelper {
   def createDeserializerForString(path: Expression, returnNullable: Boolean): Expression = {
     Invoke(path, "toString", ObjectType(classOf[java.lang.String]),
       returnNullable = returnNullable)
+  }
+
+  def createDeserializerForTime(path: Expression): Expression = {
+    StaticInvoke(
+      TimeUtils.getClass,
+      ObjectType(classOf[java.time.LocalTime]),
+      "microsToLocalTime",
+      path :: Nil,
+      returnNullable = false)
   }
 
   def createDeserializerForSqlDate(path: Expression): Expression = {
@@ -260,7 +269,9 @@ object DeserializerBuildHelper {
         returnNullable = false)
     case StringEncoder =>
       createDeserializerForString(path, returnNullable = false)
-    case _: ScalaDecimalEncoder =>
+    case TimeEncoder =>
+      createDeserializerForTime(path)
+    case ScalaDecimalEncoder(dt) =>
       createDeserializerForScalaBigDecimal(path, returnNullable = false)
     case _: JavaDecimalEncoder =>
       createDeserializerForJavaBigDecimal(path, returnNullable = false)
