@@ -18,9 +18,6 @@
 # mypy: disable-error-code="operator"
 
 from pyspark.resource import ResourceProfile
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
 
 from typing import (
     Any,

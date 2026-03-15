@@ -937,7 +937,7 @@ case class MergeIntoTable(
 
 object MergeIntoTable {
 
-  def getWritePrivileges(merge: MergeIntoTable): Seq[TableWritePrivilege] = {
+  def getWritePrivileges(merge: MergeIntoTable): Set[TableWritePrivilege] = {
     getWritePrivileges(
       merge.matchedActions,
       merge.notMatchedActions,
@@ -947,7 +947,7 @@ object MergeIntoTable {
   def getWritePrivileges(
       matchedActions: Iterable[MergeAction],
       notMatchedActions: Iterable[MergeAction],
-      notMatchedBySourceActions: Iterable[MergeAction]): Seq[TableWritePrivilege] = {
+      notMatchedBySourceActions: Iterable[MergeAction]): Set[TableWritePrivilege] = {
     (matchedActions ++ notMatchedActions ++ notMatchedBySourceActions)
       .collect {
         case _: DeleteAction => TableWritePrivilege.DELETE
@@ -955,7 +955,6 @@ object MergeIntoTable {
         case _: InsertAction | _: InsertStarAction => TableWritePrivilege.INSERT
       }
       .toSet
-      .toSeq
   }
 
   def schemaChanges(

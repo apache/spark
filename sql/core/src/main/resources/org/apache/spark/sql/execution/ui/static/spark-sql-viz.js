@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* global $, d3, dagreD3, graphlibDot */
+/* global $, d3, dagreD3, graphlibDot, uiRoot, appBasePath */
 
 var PlanVizConstants = {
   svgMarginX: 16,
@@ -385,10 +385,19 @@ function buildStatTable(total, min, med, maxVal,
   h += "<td>" + min + "</td><td>" + med +
     "</td><td>" + maxVal + "</td>";
   if (showStageTask) {
-    h += "<td>" + stageId + "</td><td>" + taskId + "</td>";
+    h += "<td>" + stageLink(stageId) + "</td><td>" + taskId + "</td>";
   }
   h += "</tr></tbody></table>";
   return h;
+}
+
+function stageLink(stageId) {
+  if (!stageId) return "";
+  var parts = stageId.split(".");
+  var id = parts[0];
+  var attempt = parts.length > 1 ? parts[1] : "0";
+  var url = uiRoot + appBasePath + "/stages/stage/?id=" + id + "&attempt=" + attempt;
+  return '<a href="' + url + '">' + stageId + '</a>';
 }
 
 /*
@@ -398,6 +407,8 @@ function updateDetailsPanel(nodeId, nodeDetails) {
   var titleEl = document.getElementById("plan-viz-details-title");
   var bodyEl = document.getElementById("plan-viz-details-body");
   if (!titleEl || !bodyEl) return;
+
+  showDetailsPanel();
 
   selectedNodeId = nodeId;
   cachedNodeDetails = nodeDetails;
@@ -658,3 +669,21 @@ document.addEventListener("DOMContentLoaded", function () {
     renderPlanViz();
   }
 });
+
+// Panel show/hide
+$(function() {
+  $("#plan-viz-panel-close").on("click", function() {
+    $("#plan-viz-details-col").addClass("d-none");
+    $("#plan-viz-graph-col").removeClass("col-8").addClass("col-12");
+  });
+});
+
+function showDetailsPanel() {
+  var col = document.getElementById("plan-viz-details-col");
+  var graphCol = document.getElementById("plan-viz-graph-col");
+  if (col && graphCol) {
+    col.classList.remove("d-none");
+    graphCol.classList.remove("col-12");
+    graphCol.classList.add("col-8");
+  }
+}

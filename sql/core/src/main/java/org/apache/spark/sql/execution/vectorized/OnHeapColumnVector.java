@@ -273,7 +273,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
       }
     } else {
       for (int i = 0; i < count; ++i, srcOffset += 4) {
-        shortData[rowId + i] = (short) Platform.getInt(src, srcOffset);
+        shortData[rowId + i] = Platform.getShort(src, srcOffset);
       }
     }
   }

@@ -272,13 +272,24 @@ private[spark] case class ConfigBuilder(key: String) {
   private[config] var _version = ""
   private[config] var _onCreate: Option[ConfigEntry[_] => Unit] = None
   private[config] var _alternatives = List.empty[String]
-  private[config] var _bindingPolicy: Option[ConfigBindingPolicy.ConfigBindingPolicy] = None
+  private[config] var _bindingPolicy: Option[ConfigBindingPolicy.Value] = None
 
   /**
-   * Sets the binding policy for this config (SESSION or PERSISTED).
-   * Used by SQL configs to indicate whether the config is session-scoped or can be persisted.
+   * Sets the binding policy for how this config value behaves within SQL views, UDFs, or
+   * procedures.
+   *
+   * - [[ConfigBindingPolicy.SESSION]]: The config value propagates from the active session
+   *   to views/UDFs/procedures. This is important for queries that should have uniform behavior
+   *   across the entire query.
+   *
+   * - [[ConfigBindingPolicy.PERSISTED]]: The view/UDF/procedure will use the value saved on
+   *   view/UDF/procedure creation if it exists, or Spark default value for that config if it
+   *   doesn't.
+   *
+   * - [[ConfigBindingPolicy.NOT_APPLICABLE]]: The config does not interact with view/UDF/procedure
+   *   resolution. If accessed at runtime, it behaves the same as [[ConfigBindingPolicy.SESSION]].
    */
-  def withBindingPolicy(policy: ConfigBindingPolicy.ConfigBindingPolicy): ConfigBuilder = {
+  def withBindingPolicy(policy: ConfigBindingPolicy.Value): ConfigBuilder = {
     _bindingPolicy = Some(policy)
     this
   }
@@ -364,7 +375,7 @@ private[spark] case class ConfigBuilder(key: String) {
 
   def fallbackConf[T](fallback: ConfigEntry[T]): ConfigEntry[T] = {
     val entry = new FallbackConfigEntry(key, _prependedKey, _prependSeparator, _alternatives, _doc,
-      _public, _version, fallback, _bindingPolicy)
+      _public, _version, _bindingPolicy, fallback)
     _onCreate.foreach(_(entry))
     entry
   }
@@ -379,16 +390,4 @@ private[spark] case class ConfigBuilder(key: String) {
       throw new IllegalArgumentException(s"$key type must be string if prepend used")
     }
   }
-}
-
-/**
- * Binding policy for SQL configuration entries.
- * Determines whether a config is bound to the session or persisted storage.
- */
-private[spark] object ConfigBindingPolicy extends Enumeration {
-  type ConfigBindingPolicy = Value
-  /** Config is bound to the current session only. */
-  val SESSION: Value = Value("SESSION")
-  /** Config can be persisted (e.g. in catalog or table properties). */
-  val PERSISTED: Value = Value("PERSISTED")
 }

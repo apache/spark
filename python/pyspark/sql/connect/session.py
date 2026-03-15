@@ -15,9 +15,6 @@
 # limitations under the License.
 #
 import uuid
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
 
 import json
 import threading

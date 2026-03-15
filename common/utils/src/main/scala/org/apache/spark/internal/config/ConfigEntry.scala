@@ -82,7 +82,7 @@ private[spark] abstract class ConfigEntry[T] (
     val doc: String,
     val isPublic: Boolean,
     val version: String,
-    val bindingPolicy: Option[ConfigBindingPolicy.ConfigBindingPolicy] = None) {
+    val bindingPolicy: Option[ConfigBindingPolicy.Value] = None) {
 
   import ConfigEntry._
 
@@ -108,7 +108,7 @@ private[spark] abstract class ConfigEntry[T] (
 
   override def toString: String = {
     s"ConfigEntry(key=$key, defaultValue=$defaultValueString, doc=$doc, " +
-      s"public=$isPublic, version=$version)"
+      s"public=$isPublic, version=$version, bindingPolicy=$bindingPolicy)"
   }
 }
 
@@ -123,7 +123,7 @@ private class ConfigEntryWithDefault[T] (
     doc: String,
     isPublic: Boolean,
     version: String,
-    bindingPolicy: Option[ConfigBindingPolicy.ConfigBindingPolicy])
+    bindingPolicy: Option[ConfigBindingPolicy.Value] = None)
   extends ConfigEntry(
     key,
     prependedKey,
@@ -157,7 +157,7 @@ private class ConfigEntryWithDefaultFunction[T] (
     doc: String,
     isPublic: Boolean,
     version: String,
-    bindingPolicy: Option[ConfigBindingPolicy.ConfigBindingPolicy])
+    bindingPolicy: Option[ConfigBindingPolicy.Value] = None)
   extends ConfigEntry(
     key,
     prependedKey,
@@ -191,7 +191,7 @@ private class ConfigEntryWithDefaultString[T] (
     doc: String,
     isPublic: Boolean,
     version: String,
-    bindingPolicy: Option[ConfigBindingPolicy.ConfigBindingPolicy])
+    bindingPolicy: Option[ConfigBindingPolicy.Value] = None)
   extends ConfigEntry(
     key,
     prependedKey,
@@ -229,7 +229,7 @@ private[spark] class OptionalConfigEntry[T](
     doc: String,
     isPublic: Boolean,
     version: String,
-    bindingPolicy: Option[ConfigBindingPolicy.ConfigBindingPolicy])
+    bindingPolicy: Option[ConfigBindingPolicy.Value] = None)
   extends ConfigEntry[Option[T]](
     key,
     prependedKey,
@@ -261,8 +261,8 @@ private[spark] class FallbackConfigEntry[T] (
     doc: String,
     isPublic: Boolean,
     version: String,
-    val fallback: ConfigEntry[T],
-    bindingPolicy: Option[ConfigBindingPolicy.ConfigBindingPolicy])
+    bindingPolicy: Option[ConfigBindingPolicy.Value] = None,
+    val fallback: ConfigEntry[T])
   extends ConfigEntry[T](
     key,
     prependedKey,
@@ -296,5 +296,7 @@ private[spark] object ConfigEntry {
   }
 
   def findEntry(key: String): ConfigEntry[_] = knownConfigs.get(key)
+
+  def listAllEntries(): java.util.Collection[ConfigEntry[_]] = knownConfigs.values()
 
 }
