@@ -987,13 +987,13 @@ class ArrowTableToRowsConversion:
 
     @overload
     @staticmethod
-    def _create_converter(dataType: DataType) -> Callable:
+    def _create_converter(dataType: DataType, *, binary_as_bytes: bool = True) -> Callable:
         pass
 
     @overload
     @staticmethod
     def _create_converter(
-        dataType: DataType, *, none_on_identity: bool = True, binary_as_bytes: bool = True
+        dataType: DataType, *, none_on_identity: bool, binary_as_bytes: bool = True
     ) -> Optional[Callable]:
         pass
 

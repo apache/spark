@@ -180,11 +180,9 @@ def write_read_func_and_partitions(
     max_arrow_batch_size: int,
     binary_as_bytes: bool,
 ) -> None:
-    is_streaming = isinstance(reader, DataSourceStreamReader)
-
     # Create input converter.
     converter = ArrowTableToRowsConversion._create_converter(
-        BinaryType(), none_on_identity=False, binary_as_bytes=binary_as_bytes
+        BinaryType(), binary_as_bytes=binary_as_bytes
     )
 
     # Create output converter.
@@ -201,7 +199,7 @@ def write_read_func_and_partitions(
                 f"but found {batch.num_columns} columns and {batch.num_rows} rows."
             )
             columns = [column.to_pylist() for column in batch.columns]
-            partition_bytes = converter(columns[0][0])  # type: ignore[misc]
+            partition_bytes = converter(columns[0][0])
 
         assert (
             partition_bytes is not None
@@ -238,9 +236,9 @@ def write_read_func_and_partitions(
     command = (data_source_read_func, return_type)
     pickleSer._write_with_length(command, outfile)
 
-    if not is_streaming:
+    if not isinstance(reader, DataSourceStreamReader):
         # The partitioning of python batch source read is determined before query execution.
-        partitions = reader.partitions()  # type: ignore[call-arg]
+        partitions = reader.partitions()
         if not isinstance(partitions, list):
             raise PySparkRuntimeError(
                 errorClass="DATA_SOURCE_TYPE_MISMATCH",
