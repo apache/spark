@@ -27,7 +27,7 @@ import org.apache.commons.codec.digest.DigestUtils
 import org.apache.commons.codec.digest.MessageDigestAlgorithms
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -811,19 +811,32 @@ case class CollationAwareMurmur3Hash(children: Seq[Expression], seed: Int)
     CollationAwareMurmur3Hash = copy(children = newChildren)
 }
 
+// scalastyle:off line.size.limit
 /**
  * A xxHash64 64-bit hash expression.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2, ...) - Returns a 64-bit hash value of the arguments. " +
-    "Hash seed is 42.",
+  usage = "_FUNC_(expr1, expr2, ..., seed) - Returns a 64-bit hash value of the arguments. " +
+    "An optional seed can be provided as the last argument using named parameter syntax (default: 42).",
+  arguments = """
+    Arguments:
+      * expr1, expr2, ... - the values to hash. Supported types include: BOOLEAN, BYTE, SHORT, INTEGER,
+        LONG, FLOAT, DOUBLE, DECIMAL, STRING, BINARY, DATE, TIMESTAMP, INTERVAL, ARRAY, MAP, STRUCT.
+      * seed - an optional LONG seed value for the hash function (default: 42). Must be specified
+        using named parameter syntax: seed => value.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Spark', array(123), 2);
        5602566077635097486
+      > SELECT _FUNC_('Spark', seed => 0);
+       -4294468057691064905
+      > SELECT _FUNC_('Spark');
+       -4294468057691064905
   """,
   since = "3.0.0",
   group = "hash_funcs")
+// scalastyle:on line.size.limit
 case class XxHash64(children: Seq[Expression], seed: Long) extends HashExpression[Long] {
   def this(arguments: Seq[Expression]) = this(arguments, 42L)
 
@@ -850,6 +863,107 @@ object XxHash64Function extends InterpretedHashFunction {
 
   override protected def hashUnsafeBytes(base: AnyRef, offset: Long, len: Int, seed: Long): Long = {
     XXH64.hashUnsafeBytes(base, offset, len, seed)
+  }
+}
+
+/**
+ * Internal expression for xxhash64 with seed as the first argument.
+ * This is used by the Scala/Python APIs to support the seed parameter.
+ *
+ * Example usage from Scala API: xxhash64(seed, col1, col2, ...)
+ */
+case class XxHash64WithSeed(arguments: Seq[Expression]) extends RuntimeReplaceable {
+  override lazy val replacement: Expression = {
+    if (arguments.isEmpty) {
+      throw QueryCompilationErrors.wrongNumArgsError(
+        "xxhash64_with_seed", Seq(">= 1"), arguments.length)
+    }
+    val seedExpr = arguments.head
+    val children = arguments.tail
+    val seed = seedExpr match {
+      case Literal(value: Long, LongType) => value
+      case Literal(value: Int, IntegerType) => value.toLong
+      case Literal(value: Short, ShortType) => value.toLong
+      case Literal(value: Byte, ByteType) => value.toLong
+      case expr if expr.foldable =>
+        expr.eval() match {
+          case value: Long => value
+          case value: Int => value.toLong
+          case value: Short => value.toLong
+          case value: Byte => value.toLong
+          case null =>
+            throw QueryCompilationErrors.unexpectedNullError("seed", seedExpr)
+          case _ =>
+            throw QueryCompilationErrors.unexpectedInputDataTypeError(
+              "xxhash64_with_seed", 0, LongType, seedExpr)
+        }
+      case _ =>
+        throw QueryCompilationErrors.nonFoldableArgumentError(
+          "xxhash64_with_seed", "seed", LongType)
+    }
+    XxHash64(children, seed)
+  }
+
+  override def prettyName: String = "xxhash64"
+
+  override def children: Seq[Expression] = arguments
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): XxHash64WithSeed = copy(arguments = newChildren)
+}
+
+/**
+ * Expression builder for xxhash64 that supports an optional seed parameter via named arguments.
+ *
+ * Usage:
+ *   xxhash64(expr1, expr2, ...)           -- uses default seed of 42
+ *   xxhash64(expr1, expr2, seed => 100)   -- uses seed of 100
+ */
+object XxHash64ExpressionBuilder extends ExpressionBuilder {
+  private val DEFAULT_SEED = 42L
+
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    // Separate named arguments from positional arguments
+    val (positionalArgs, namedArgs) = expressions.partition {
+      case _: NamedArgumentExpression => false
+      case _ => true
+    }
+
+    // Extract seed from named arguments if provided
+    val seed = namedArgs.collectFirst {
+      case NamedArgumentExpression(key, value) if key.equalsIgnoreCase("seed") => value
+    }
+
+    // Check for unrecognized named arguments
+    namedArgs.foreach {
+      case NamedArgumentExpression(key, _) if !key.equalsIgnoreCase("seed") =>
+        throw QueryCompilationErrors.unrecognizedParameterName(funcName, key, Seq("seed"))
+      case _ =>
+    }
+
+    // Validate and extract the seed value
+    val seedValue = seed match {
+      case Some(Literal(value: Long, LongType)) => value
+      case Some(Literal(value: Int, IntegerType)) => value.toLong
+      case Some(Literal(value: Short, ShortType)) => value.toLong
+      case Some(Literal(value: Byte, ByteType)) => value.toLong
+      case Some(expr) if !expr.foldable =>
+        throw QueryCompilationErrors.nonFoldableArgumentError(funcName, "seed", LongType)
+      case Some(expr) =>
+        // Try to evaluate foldable expression
+        expr.eval() match {
+          case value: Long => value
+          case value: Int => value.toLong
+          case value: Short => value.toLong
+          case value: Byte => value.toLong
+          case _ =>
+            throw QueryCompilationErrors.unexpectedInputDataTypeError(
+              funcName, expressions.size - 1, LongType, expr)
+        }
+      case None => DEFAULT_SEED
+    }
+
+    XxHash64(positionalArgs, seedValue)
   }
 }
 
