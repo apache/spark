@@ -22,6 +22,8 @@ import java.io.Writer
 import com.fasterxml.jackson.core._
 import com.fasterxml.jackson.core.util.DefaultPrettyPrinter
 
+import scala.util.Sorting
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util._
@@ -276,15 +278,42 @@ class JacksonGenerator(
       map: MapData, mapType: MapType, fieldWriter: ValueWriter): Unit = {
     val keyArray = map.keyArray()
     val valueArray = map.valueArray()
-    var i = 0
-    while (i < map.numElements()) {
-      gen.writeFieldName(keyArray.get(i, mapType.keyType).toString)
-      if (!valueArray.isNullAt(i)) {
-        fieldWriter.apply(valueArray, i)
-      } else {
-        gen.writeNull()
+    val numElements = map.numElements()
+
+    if (!options.sortKeys) {
+      var i = 0
+      while (i < numElements) {
+        gen.writeFieldName(keyArray.get(i, mapType.keyType).toString)
+        if (!valueArray.isNullAt(i)) {
+          fieldWriter.apply(valueArray, i)
+        } else {
+          gen.writeNull()
+        }
+        i += 1
       }
-      i += 1
+    } else {
+      val keyType = mapType.keyType
+      val indices = Array.tabulate(numElements)(identity)
+      val ordering = new Ordering[Int] {
+        override def compare(x: Int, y: Int): Int = {
+          val sx = keyArray.get(x, keyType).toString
+          val sy = keyArray.get(y, keyType).toString
+          sx.compareTo(sy)
+        }
+      }
+      Sorting.quickSort(indices)(ordering)
+
+      var pos = 0
+      while (pos < numElements) {
+        val i = indices(pos)
+        gen.writeFieldName(keyArray.get(i, keyType).toString)
+        if (!valueArray.isNullAt(i)) {
+          fieldWriter.apply(valueArray, i)
+        } else {
+          gen.writeNull()
+        }
+        pos += 1
+      }
     }
   }
 
