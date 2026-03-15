@@ -200,6 +200,27 @@ public interface TableCatalog extends CatalogPlugin {
   }
 
   /**
+   * Load a {@link Changelog} for the given table, representing the row-level changes within the
+   * range specified by {@code changelogInfo}.
+   * <p>
+   * This method is only called when the catalog declares
+   * {@link TableCatalogCapability#SUPPORT_CHANGELOG} in its {@link #capabilities()} set.
+   *
+   * @param ident a table identifier
+   * @param changelogInfo the CDC query parameters (range, deduplication mode, etc.)
+   * @return a Changelog instance for the requested table and range
+   * @throws NoSuchTableException If the table doesn't exist
+   * @throws UnsupportedOperationException If the catalog does not support CDC
+   *
+   * @since 4.2.0
+   */
+  default Changelog loadChangelog(Identifier ident, ChangelogInfo changelogInfo)
+      throws NoSuchTableException {
+    throw new UnsupportedOperationException(
+        name() + " does not support Change Data Capture (CDC)");
+  }
+
+  /**
    * Invalidate cached table metadata for an {@link Identifier identifier}.
    * <p>
    * If the table is already loaded or cached, drop cached data. If the table does not exist or is

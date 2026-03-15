@@ -118,6 +118,20 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession)
     }
   }
 
+  /** @inheritdoc */
+  def changes(tableName: String): DataFrame = {
+    require(tableName != null, "The table name can't be null")
+    assertNoSpecifiedSchema("changes")
+    sparkSession.newDataFrame { builder =>
+      val changesBuilder = builder.getReadChangesBuilder
+        .setUnparsedIdentifier(tableName)
+        .setIsStreaming(true)
+      sourceBuilder.getOptionsMap.forEach { (k, v) =>
+        changesBuilder.putOptions(k, v)
+      }
+    }
+  }
+
   override protected def assertNoSpecifiedSchema(operation: String): Unit = {
     if (sourceBuilder.hasSchema) {
       throw DataTypeErrors.userSpecifiedSchemaUnsupportedError(operation)

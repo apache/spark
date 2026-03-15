@@ -3083,6 +3083,34 @@
     ],
     "sqlState" : "22P03"
   },
+  "INVALID_CDC_OPTION" : {
+    "message" : [
+      "Invalid Change Data Capture (CDC) option."
+    ],
+    "sqlState" : "42K03",
+    "subClass" : {
+      "CONFLICTING_RANGE_TYPES" : {
+        "message" : [
+          "Cannot specify both version and timestamp ranges for CDC queries. Use either startingVersion/endingVersion or startingTimestamp/endingTimestamp."
+        ]
+      },
+      "INVALID_DEDUPLICATION_MODE" : {
+        "message" : [
+          "Invalid deduplicationMode: '<mode>'. Expected one of: none, dropCarryovers, netChanges."
+        ]
+      },
+      "MISSING_STARTING_TIMESTAMP" : {
+        "message" : [
+          "startingTimestamp is required when endingTimestamp is specified for CDC queries."
+        ]
+      },
+      "MISSING_STARTING_VERSION" : {
+        "message" : [
+          "startingVersion is required when endingVersion is specified for CDC queries."
+        ]
+      }
+    }
+  },
   "INVALID_CLONE_SESSION_REQUEST" : {
     "message" : [
       "Invalid session clone request."
@@ -7212,6 +7240,11 @@
         "message" : [
           "Access to the SparkContext."
         ]
+      },
+      "TABLE_CDC" : {
+        "message" : [
+          "Change Data Capture (CDC) via DataFrameReader.changes() / DataStreamReader.changes()."
+        ]
       }
     },
     "sqlState" : "0A000"
@@ -7359,6 +7392,16 @@
       "CATALOG_OPERATION" : {
         "message" : [
           "Catalog <catalogName> does not support <operation>."
+        ]
+      },
+      "CHANGE_DATA_CAPTURE" : {
+        "message" : [
+          "Catalog <catalogName> does not support Change Data Capture (CDC). The catalog must declare the SUPPORT_CHANGELOG capability."
+        ]
+      },
+      "CHANGE_DATA_CAPTURE_ON_RELATION" : {
+        "message" : [
+          "Change Data Capture (CDC) on the relation: <relationId>."
         ]
       },
       "CLAUSE_WITH_PIPE_OPERATORS" : {
