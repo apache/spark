@@ -32,6 +32,9 @@ object SparkConnectTestUtils {
         sessionId = UUID.randomUUID().toString,
         session = session)
     SparkConnectService.sessionManager.putSessionForTesting(ret)
+    if (session != null) {
+      ret.initializeSession()
+    }
     ret
   }
 
