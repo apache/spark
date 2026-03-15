@@ -29,12 +29,13 @@ import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, QUERY_ID, RUN_ID}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.catalyst.plans.logical.SequentialStreamingUnion
 import org.apache.spark.sql.catalyst.streaming.{WriteToStream, WriteToStreamStatement}
 import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table, TableCatalog}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
-import org.apache.spark.sql.execution.streaming.runtime.{AsyncProgressTrackingMicroBatchExecution, MicroBatchExecution, StreamingQueryListenerBus, StreamingQueryWrapper}
+import org.apache.spark.sql.execution.streaming.runtime.{AsyncProgressTrackingMicroBatchExecution, MicroBatchExecution, SequentialUnionExecution, StreamingQueryListenerBus, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.STREAMING_QUERY_LISTENERS
@@ -222,6 +223,12 @@ class StreamingQueryManager private[sql] (
       sparkSession.sessionState.executePlan(dataStreamWritePlan).analyzed
         .asInstanceOf[WriteToStream]
 
+    // Detect if the query contains a SequentialStreamingUnion
+    val hasSequentialUnion = analyzedStreamWritePlan.inputQuery.exists {
+      case _: SequentialStreamingUnion => true
+      case _ => false
+    }
+
     (sink, trigger) match {
       case (_: SupportsWrite, trigger: ContinuousTrigger) =>
         new StreamingQueryWrapper(new ContinuousExecution(
@@ -231,7 +238,15 @@ class StreamingQueryManager private[sql] (
           extraOptions,
           analyzedStreamWritePlan))
       case _ =>
-        val microBatchExecution = if (useAsyncProgressTracking(extraOptions)) {
+        val microBatchExecution = if (hasSequentialUnion) {
+          // Use SequentialUnionExecution for queries with sequential union
+          new SequentialUnionExecution(
+            sparkSession,
+            trigger,
+            triggerClock,
+            extraOptions,
+            analyzedStreamWritePlan)
+        } else if (useAsyncProgressTracking(extraOptions)) {
           if (trigger.isInstanceOf[RealTimeTrigger]) {
             throw new SparkIllegalArgumentException(
               errorClass = "STREAMING_REAL_TIME_MODE.ASYNC_PROGRESS_TRACKING_NOT_SUPPORTED"
