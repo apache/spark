@@ -1349,7 +1349,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def paramExceedOneCharError(paramName: String): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2145",
+      errorClass = "OPTION_VALUE_EXCEEDS_ONE_CHARACTER",
       messageParameters = Map(
         "paramName" -> paramName))
   }
