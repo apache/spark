@@ -65,6 +65,7 @@ from pyspark.sql.types import (
 )
 
 if TYPE_CHECKING:
+    import numpy as np
     import pyarrow as pa
     import pandas as pd
 
@@ -1661,6 +1662,35 @@ class ArrowArrayToPandasConversion:
         )
         return converter(ser)
 
+    @staticmethod
+    def _ndarray_to_list(v: "np.ndarray") -> list:
+        """Recursively convert numpy ndarrays to Python lists."""
+        import numpy as np
+
+        return [
+            ArrowArrayToPandasConversion._ndarray_to_list(x) if isinstance(x, np.ndarray) else x
+            for x in v
+        ]
+
+    @staticmethod
+    def _contains_conversion_type(data_type: DataType) -> bool:
+        """
+        Check if data type tree contains types that require post-processing conversion.
+
+        Returns True if the type contains UserDefinedType, VariantType, GeographyType,
+        GeometryType, MapType, or StructType at any nesting level.
+        MapType and StructType require conversion because PyArrow's to_pandas() produces
+        maps as lists of tuples (not dicts) and structs as dicts (not Rows).
+        """
+        if isinstance(
+            data_type,
+            (UserDefinedType, VariantType, GeographyType, GeometryType, MapType, StructType),
+        ):
+            return True
+        elif isinstance(data_type, ArrayType):
+            return ArrowArrayToPandasConversion._contains_conversion_type(data_type.elementType)
+        return False
+
     @classmethod
     def _prefer_convert_numpy(
         cls,
@@ -1688,8 +1718,14 @@ class ArrowArrayToPandasConversion:
         )
         if df_for_struct and isinstance(spark_type, StructType):
             return all(isinstance(f.dataType, supported_types) for f in spark_type.fields)
+        elif isinstance(spark_type, supported_types):
+            return True
+        elif isinstance(spark_type, ArrayType):
+            return not cls._contains_conversion_type(spark_type)
+        # elif isinstance(spark_type, (MapType, StructType)):
+        #     TODO: Support MapType, StructType
         else:
-            return isinstance(spark_type, supported_types)
+            return False
 
     @classmethod
     def convert_numpy(
@@ -1808,15 +1844,14 @@ class ArrowArrayToPandasConversion:
             series = series.map(
                 lambda v: Geometry.fromWKB(v["wkb"], v["srid"]) if v is not None else None
             )
-        # elif isinstance(
-        #     spark_type,
-        #     (
-        #         ArrayType,
-        #         MapType,
-        #         StructType,
-        #     ),
-        # ):
-        # TODO(SPARK-55324): Support complex types
+        elif isinstance(spark_type, ArrayType):
+            if ndarray_as_list:
+                series = arr.to_pandas(integer_object_nulls=True)
+                series = series.map(lambda x: cls._ndarray_to_list(x) if x is not None else None)
+            else:
+                series = arr.to_pandas()
+        # elif isinstance(spark_type, (MapType, StructType)):
+        #     TODO: Support MapType, StructType
         else:  # pragma: no cover
             assert False, f"Need converter for {spark_type} but failed to find one."
 

@@ -44,6 +44,7 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
+    TimestampNTZType,
     TimestampType,
     UserDefinedType,
     VariantType,
@@ -737,6 +738,86 @@ class ArrowArrayToPandasConversionTests(unittest.TestCase):
             pa.array([], type=geometry_type), GeometryType(0)
         )
         self.assertEqual(len(result), 0)
+
+    def test_array_convert_numpy(self):
+        import pyarrow as pa
+        import numpy as np
+
+        arr = pa.array([[1, 2, 3], [4, 5]], type=pa.list_(pa.int64()))
+        result = ArrowArrayToPandasConversion.convert_numpy(arr, ArrayType(IntegerType()))
+        self.assertIsInstance(result.iloc[0], np.ndarray)
+        self.assertEqual(list(result.iloc[0]), [1, 2, 3])
+        self.assertEqual(list(result.iloc[1]), [4, 5])
+
+        # empty inner arrays
+        arr = pa.array([[], [1, 2], []], type=pa.list_(pa.int64()))
+        result = ArrowArrayToPandasConversion.convert_numpy(arr, ArrayType(IntegerType()))
+        self.assertEqual(len(result.iloc[0]), 0)
+        self.assertEqual(list(result.iloc[1]), [1, 2])
+
+        # nulls: inner nulls become NaN (float64) to preserve numeric ndarray dtype
+        arr = pa.array([[1, None, 3], None, [4, 5]], type=pa.list_(pa.int64()))
+        result = ArrowArrayToPandasConversion.convert_numpy(arr, ArrayType(IntegerType()))
+        self.assertTrue(np.isnan(result.iloc[0][1]))
+        self.assertIsNone(result.iloc[1])
+
+        # nested arrays
+        arr = pa.array([[[1, 2], [3]], [[4, 5]]], type=pa.list_(pa.list_(pa.int64())))
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            arr, ArrayType(ArrayType(IntegerType()))
+        )
+        self.assertIsInstance(result.iloc[0], np.ndarray)
+        self.assertEqual(list(result.iloc[0][0]), [1, 2])
+        self.assertEqual(list(result.iloc[0][1]), [3])
+
+    def test_array_with_timestamps(self):
+        import pyarrow as pa
+        import numpy as np
+
+        # tz-aware timestamps: preprocess_time strips tz and coerces to ns
+        ts1 = datetime.datetime(2024, 1, 1, 12, 0, tzinfo=ZoneInfo("UTC"))
+        ts2 = datetime.datetime(2024, 6, 15, 8, 30, tzinfo=ZoneInfo("UTC"))
+        arr = pa.array([[ts1, ts2]], type=pa.list_(pa.timestamp("us", tz="UTC")))
+        result = ArrowArrayToPandasConversion.convert_numpy(arr, ArrayType(TimestampType()))
+        self.assertIsInstance(result.iloc[0], np.ndarray)
+        self.assertEqual(result.iloc[0][0], np.datetime64("2024-01-01T12:00:00", "ns"))
+        self.assertEqual(result.iloc[0][1], np.datetime64("2024-06-15T08:30:00", "ns"))
+
+        # tz-naive timestamps
+        arr = pa.array(
+            [[datetime.datetime(2024, 1, 1), datetime.datetime(2024, 6, 15)]],
+            type=pa.list_(pa.timestamp("us")),
+        )
+        result = ArrowArrayToPandasConversion.convert_numpy(arr, ArrayType(TimestampNTZType()))
+        self.assertEqual(result.iloc[0][0], np.datetime64("2024-01-01T00:00:00", "ns"))
+
+    def test_array_ndarray_as_list(self):
+        import pyarrow as pa
+
+        arr = pa.array([[1, 2, 3], [4, 5]], type=pa.list_(pa.int64()))
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            arr, ArrayType(IntegerType()), ndarray_as_list=True
+        )
+        self.assertIsInstance(result.iloc[0], list)
+        self.assertEqual(result.iloc[0], [1, 2, 3])
+
+        # nulls preserved as None (not NaN)
+        arr = pa.array([[1, None, 3], None], type=pa.list_(pa.int64()))
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            arr, ArrayType(IntegerType()), ndarray_as_list=True
+        )
+        self.assertIsInstance(result.iloc[0], list)
+        self.assertIsNone(result.iloc[0][1])
+        self.assertIsNone(result.iloc[1])
+
+        # nested arrays recursively converted to lists
+        arr = pa.array([[[1, 2], [3]]], type=pa.list_(pa.list_(pa.int64())))
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            arr, ArrayType(ArrayType(IntegerType())), ndarray_as_list=True
+        )
+        self.assertIsInstance(result.iloc[0], list)
+        self.assertIsInstance(result.iloc[0][0], list)
+        self.assertEqual(result.iloc[0][0], [1, 2])
 
 
 if __name__ == "__main__":
