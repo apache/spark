@@ -214,13 +214,13 @@ abstract class Optimizer(catalogManager: CatalogManager)
       OptimizeSubqueries,
       OptimizeOneRowRelationSubquery),
     Batch("Replace Operators", fixedPoint,
+      ReplaceDeduplicateWithAggregate,
       RewriteExceptAll,
       RewriteIntersectAll,
       ReplaceIntersectWithSemiJoin,
       ReplaceExceptWithFilter,
       ReplaceExceptWithAntiJoin,
-      ReplaceDistinctWithAggregate,
-      ReplaceDeduplicateWithAggregate),
+      ReplaceDistinctWithAggregate),
     Batch("Aggregate", fixedPoint,
       RemoveLiteralFromGroupExpressions,
       RemoveRepetitionFromGroupExpressions),
@@ -2648,12 +2648,9 @@ object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
           attr
         } else {
           // Keep track of the generated aliases to avoid generating multiple aliases
-          // for the same attribute (in case the attribute is duplicated).
-          // SPARK-54724: Preserve the original exprId so that parent plans (e.g.,
-          // RewriteExceptAll) that reference these attributes by exprId continue to
-          // resolve correctly after the Deduplicate is replaced with an Aggregate.
+          // for the same attribute (in case the attribute is duplicated)
           generatedAliasesMap.getOrElseUpdate(attr,
-            Alias(new First(attr).toAggregateExpression(), attr.name)(exprId = attr.exprId))
+            Alias(new First(attr).toAggregateExpression(), attr.name)())
         }
       }
       // SPARK-22951: Physical aggregate operators distinguishes global aggregation and grouping

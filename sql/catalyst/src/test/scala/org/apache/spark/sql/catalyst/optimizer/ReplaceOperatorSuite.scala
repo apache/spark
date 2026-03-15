@@ -297,18 +297,29 @@ class ReplaceOperatorSuite extends PlanTest {
     comparePlans(result, correctAnswer)
   }
 
-  test("SPARK-54724: ReplaceDeduplicateWithAggregate preserves exprIds for non-key columns") {
+  test("SPARK-54724: Deduplicate with subset keys followed by exceptAll") {
+    // Verify that ReplaceDeduplicateWithAggregate runs before RewriteExceptAll
+    // so that the Except plan uses consistent exprIds from the Aggregate output.
+    object OptimizeWithExceptAll extends RuleExecutor[LogicalPlan] {
+      val batches =
+        Batch("Replace Operators", FixedPoint(100),
+          ReplaceDeduplicateWithAggregate,
+          RewriteExceptAll) :: Nil
+    }
+
     val a = $"a".int
     val b = $"b".int
-    val child = LocalRelation(Seq(a, b))
+    val left = LocalRelation(Seq(a, b))
+    val right = LocalRelation(Seq(a, b))
 
-    val dedup = Deduplicate(keys = Seq(a), child = child)
+    val dedup = Deduplicate(keys = Seq(a), child = left)
+    val except = Except(dedup, right, isAll = true)
+    val plan = except.analyze
 
-    // Verify that output exprIds are preserved after replacement
-    val optimized = Optimize.execute(dedup.analyze)
-    val originalOutputIds = dedup.analyze.output.map(_.exprId)
-    val optimizedOutputIds = optimized.output.map(_.exprId)
-    assert(originalOutputIds === optimizedOutputIds,
-      "ReplaceDeduplicateWithAggregate should preserve expression IDs")
+    // Should not throw an error due to mismatched exprIds
+    val optimized = OptimizeWithExceptAll.execute(plan)
+    // Verify the Deduplicate and Except have both been replaced
+    assert(!optimized.exists(_.isInstanceOf[Deduplicate]))
+    assert(!optimized.exists(_.isInstanceOf[Except]))
   }
 }
