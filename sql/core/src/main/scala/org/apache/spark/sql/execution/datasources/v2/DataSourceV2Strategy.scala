@@ -24,8 +24,8 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.EXPR
-import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
-import org.apache.spark.sql.catalyst.catalog.CatalogUtils
+import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedPersistentView, ResolvedTable, ResolvedTempView}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogUtils}
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning, Expression, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, GeneratedColumn, IdentityColumn, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder}
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TruncatableTable}
+import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TruncatableTable, V1Table}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
@@ -239,6 +239,33 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           CreateTableAsSelectExec(catalog.asTableCatalog, ident, parts, query,
             qualifyLocInTableSpec(tableSpec), options, ifNotExists) :: Nil
       }
+
+    // CREATE TABLE ... LIKE ... for a v2 catalog target.
+    // Source is an already-resolved Table object; no extra catalog round-trip is needed.
+    case CreateTableLike(
+        ResolvedIdentifier(catalog, ident),
+        ResolvedTable(_, _, table, _),
+        fileFormat: CatalogStorageFormat, provider, properties, ifNotExists) =>
+      CreateTableLikeExec(
+        catalog.asTableCatalog, ident, table, fileFormat, provider, properties, ifNotExists) :: Nil
+
+    // Source is a persistent or temporary view; wrap its CatalogTable in V1Table so the
+    // exec can extract schema and provider uniformly.
+    case CreateTableLike(
+        ResolvedIdentifier(catalog, ident),
+        ResolvedPersistentView(_, _, meta),
+        fileFormat: CatalogStorageFormat, provider, properties, ifNotExists) =>
+      CreateTableLikeExec(
+        catalog.asTableCatalog, ident, V1Table(meta),
+        fileFormat, provider, properties, ifNotExists) :: Nil
+
+    case CreateTableLike(
+        ResolvedIdentifier(catalog, ident),
+        ResolvedTempView(_, meta),
+        fileFormat: CatalogStorageFormat, provider, properties, ifNotExists) =>
+      CreateTableLikeExec(
+        catalog.asTableCatalog, ident, V1Table(meta),
+        fileFormat, provider, properties, ifNotExists) :: Nil
 
     case RefreshTable(r: ResolvedTable) =>
       RefreshTableExec(r.catalog, r.identifier, recacheTable(r, includeTimeTravel = true)) :: Nil

@@ -21,7 +21,7 @@ import org.apache.spark.{SparkIllegalArgumentException, SparkUnsupportedOperatio
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, ResolvedProcedure, TypeCheckResult, UnresolvedAttribute, UnresolvedException, UnresolvedProcedure, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.catalog.{FunctionResource, RoutineLanguage}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, FunctionResource, RoutineLanguage}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
@@ -512,6 +512,35 @@ case class CreateTable(
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
   }
+}
+
+/**
+ * Create a new table with the same schema/partitioning as an existing table or view,
+ * for use with a v2 catalog.
+ *
+ * @param name        Target table identifier. Starts as UnresolvedIdentifier, resolved to
+ *                    ResolvedIdentifier by ResolveCatalogs.
+ * @param source      Source table or view. Starts as UnresolvedTableOrView, resolved to
+ *                    ResolvedTable / ResolvedPersistentView / ResolvedTempView by ResolveRelations.
+ * @param fileFormat  User-specified STORED AS / ROW FORMAT (Hive-style). Empty if not specified.
+ * @param provider    User-specified USING provider. None if not specified.
+ * @param properties  User-specified TBLPROPERTIES.
+ * @param ifNotExists IF NOT EXISTS flag.
+ */
+case class CreateTableLike(
+    name: LogicalPlan,
+    source: LogicalPlan,
+    fileFormat: CatalogStorageFormat,
+    provider: Option[String],
+    properties: Map[String, String],
+    ifNotExists: Boolean) extends BinaryCommand {
+
+  override def left: LogicalPlan = name
+  override def right: LogicalPlan = source
+
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): CreateTableLike =
+    copy(name = newLeft, source = newRight)
 }
 
 /**
