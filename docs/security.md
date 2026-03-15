@@ -700,6 +700,12 @@ replaced with one of the above namespaces.
     </td>
     <td>rpc</td>
   </tr>
+  <tr>
+    <td><code>${ns}.disableHttpPort</code></td>
+    <td>false</td>
+    <td>When true, Jetty will not bind to the HTTP port.</td>
+    <td>ui,standalone,historyServer</td>
+  </tr>
 </table>
 
 Spark also supports retrieving `${ns}.keyPassword`, `${ns}.keyStorePassword` and `${ns}.trustStorePassword` from
