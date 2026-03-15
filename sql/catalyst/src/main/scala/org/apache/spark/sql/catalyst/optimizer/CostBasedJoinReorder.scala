@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, Expression, ExpressionSet, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, EqualTo, Expression, ExpressionSet, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans.{Inner, InnerLike, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -288,7 +288,8 @@ object JoinReorderDP extends PredicateHelper with Logging {
 
     val onePlan = oneJoinPlan.plan
     val otherPlan = otherJoinPlan.plan
-    val joinConds = conditions
+    val newConditions = inferMissingJoinConditions(conditions, onePlan, otherPlan)
+    val joinConds = newConditions
       .filterNot(l => canEvaluate(l, onePlan))
       .filterNot(r => canEvaluate(r, otherPlan))
       .filter(e => e.references.subsetOf(onePlan.outputSet ++ otherPlan.outputSet))
@@ -306,7 +307,7 @@ object JoinReorderDP extends PredicateHelper with Logging {
     }
     val newJoin = Join(left, right, Inner, joinConds.reduceOption(And), JoinHint.NONE)
     val collectedJoinConds = joinConds ++ oneJoinPlan.joinConds ++ otherJoinPlan.joinConds
-    val remainingConds = conditions -- collectedJoinConds
+    val remainingConds = newConditions -- collectedJoinConds
     val neededAttr = AttributeSet(remainingConds.flatMap(_.references)) ++ topOutput
     val neededFromNewJoin = newJoin.output.filter(neededAttr.contains)
     val newPlan =
@@ -322,6 +323,69 @@ object JoinReorderDP extends PredicateHelper with Logging {
     val newPlanCost = oneJoinPlan.planCost + oneJoinPlan.rootCost(conf) +
       otherJoinPlan.planCost + otherJoinPlan.rootCost(conf)
     Some(JoinPlan(itemIds, newPlan, collectedJoinConds, newPlanCost))
+  }
+
+
+  /**
+   * Infers missing join conditions from existing equality conditions.
+   *
+   * This method identifies join conditions that are logically required but missing
+   * from the current condition set. It uses transitive relationships between
+   * attributes to discover additional equality conditions that should be present
+   * for correct join execution.
+   *
+   * For example, given existing conditions [A.x = B.x, A.x = C.x] when joining
+   * B and C, this method infers the missing condition [B.x = C.x].
+   *
+   * @param conditions Existing join conditions, primarily equality predicates
+   * @param leftPlan Left side logical plan in the join
+   * @param rightPlan Right side logical plan in the join
+   * @return Enhanced condition set including missing join conditions
+   */
+  private def inferMissingJoinConditions(
+      conditions: ExpressionSet,
+      leftPlan: LogicalPlan,
+      rightPlan: LogicalPlan): ExpressionSet = {
+    // Build Union-Find structure for equivalence management
+    val equivalenceMap = mutable.Map[Expression, Expression]()
+
+    // Find the representative of the equivalence set containing the given expression.
+    def find(expr: Expression): Expression = {
+      equivalenceMap.getOrElseUpdate(expr, expr) match {
+        case rep if rep.semanticEquals(expr) => expr
+        case rep =>
+          val root = find(rep)
+          equivalenceMap(expr) = root
+          root
+      }
+    }
+
+    // Merge two equivalence sets by linking their representatives.
+    def union(expr1: Expression, expr2: Expression): Unit = {
+      val rep1 = find(expr1)
+      val rep2 = find(expr2)
+      if (rep1 != rep2) {
+        equivalenceMap(rep1) = rep2
+      }
+    }
+
+    conditions.foreach {
+      case EqualTo(l: Expression, r: Expression) => union(l, r)
+      case _ =>
+    }
+
+    val attrSet = AttributeSet(equivalenceMap.keys)
+    val inferredConditions = mutable.Set[Expression]()
+    for {
+      leftAttr <- attrSet.intersect(leftPlan.outputSet)
+      rightAttr <- attrSet.intersect(rightPlan.outputSet)
+      leftRoot = find(leftAttr)
+      rightRoot = find(rightAttr)
+      if leftRoot == rightRoot && !conditions.contains(EqualTo(leftAttr, rightAttr))} {
+      inferredConditions.add(EqualTo(leftAttr, rightAttr))
+    }
+
+    conditions ++ inferredConditions
   }
 
   /** Map[set of item ids, join plan for these items] */
