@@ -380,3 +380,15 @@ private[spark] case class ConfigBuilder(key: String) {
     }
   }
 }
+
+/**
+ * Binding policy for SQL configuration entries.
+ * Determines whether a config is bound to the session or persisted storage.
+ */
+private[spark] object ConfigBindingPolicy extends Enumeration {
+  type ConfigBindingPolicy = Value
+  /** Config is bound to the current session only. */
+  val SESSION: Value = Value("SESSION")
+  /** Config can be persisted (e.g. in catalog or table properties). */
+  val PERSISTED: Value = Value("PERSISTED")
+}
