@@ -163,6 +163,7 @@ object TreePattern extends Enumeration  {
   val PIVOT: Value = Value
   val PROJECT: Value = Value
   val PYTHON_DATA_SOURCE: Value = Value
+  val RELATION_CHANGES: Value = Value
   val RELATION_TIME_TRAVEL: Value = Value
   val REPARTITION_OPERATION: Value = Value
   val REBALANCE_PARTITIONS: Value = Value
