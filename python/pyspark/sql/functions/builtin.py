@@ -39,7 +39,7 @@ from typing import (
     ValuesView,
 )
 
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors import PySparkException, PySparkTypeError, PySparkValueError
 from pyspark.errors.utils import _with_origin
 from pyspark.sql.column import Column
 from pyspark.sql.types import (
@@ -107,7 +107,8 @@ def _invoke_function(name: str, *args: Any) -> Column:
     """
     from pyspark import SparkContext
 
-    assert SparkContext._active_spark_context is not None
+    if SparkContext._active_spark_context is None:
+        raise PySparkException("No active Spark context.")
     jf = _get_jvm_function(name, SparkContext._active_spark_context)
     return Column(jf(*args))
 
