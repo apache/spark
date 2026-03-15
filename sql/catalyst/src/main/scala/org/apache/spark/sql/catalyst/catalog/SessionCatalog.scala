@@ -2488,7 +2488,20 @@ class SessionCatalog(
       ident: FunctionIdentifier,
       arguments: Seq[Expression]): Option[Expression] = {
     if (!functionRegistry.functionExists(ident)) {
-      None
+      // Internal functions (e.g. distributed_sequence_id, unwrap_udt) are not in the session
+      // registry; resolve them from FunctionRegistry.internal when looked up via system.builtin.
+      val isBuiltinIdent = ident.database.contains(CatalogManager.BUILTIN_NAMESPACE) &&
+        ident.catalog.contains(CatalogManager.SYSTEM_CATALOG_NAME)
+      if (isBuiltinIdent) {
+        try {
+          Some(FunctionRegistry.internal.lookupFunction(
+            FunctionIdentifier(ident.funcName), arguments))
+        } catch {
+          case _: NoSuchFunctionException => None
+        }
+      } else {
+        None
+      }
     } else if (isTempFunctionIdentifier(ident)) {
       synchronized {
         handleViewContext(ident.funcName, Option(functionRegistry.lookupFunction(ident, arguments)))

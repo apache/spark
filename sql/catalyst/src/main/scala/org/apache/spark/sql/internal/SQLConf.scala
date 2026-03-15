@@ -35,7 +35,7 @@ import org.slf4j.event.Level
 
 import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkContext, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.{ConfigBindingPolicy, _}
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network.util.ByteUnit
@@ -5628,6 +5628,16 @@ object SQLConf {
       "legacy behavior which may produce incorrect results because Spark may evaluate a CTE " +
       "relation more than once, even if it's nondeterministic.")
     .version("4.0.0")
+    .booleanConf
+    .createWithDefault(false)
+
+  val PERSISTENT_CATALOG_FIRST = buildConf("spark.sql.legacy.persistentCatalogFirst")
+    .internal()
+    .doc("When false (default), unqualified names like builtin.func or session.func resolve " +
+      "to the system catalog (system.builtin, system.session). When true (legacy), a " +
+      "persistent database named builtin or session wins over the system namespaces.")
+    .version("4.0.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .booleanConf
     .createWithDefault(false)
 
