@@ -16,6 +16,7 @@
  */
 package org.apache.spark.util
 
+import java.nio.charset.{CodingErrorAction, StandardCharsets}
 import java.util.HexFormat
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -58,6 +59,28 @@ private[spark] trait SparkStringUtils {
 
   def abbreviate(str: String, len: Int): String = abbreviate(str, "...", len)
 
+  def abbreviateByBytes(str: String, abbrevMarker: String, maxBytes: Int): String = {
+    if (str == null || abbrevMarker == null) {
+      null
+    } else {
+      val buf = StandardCharsets.UTF_8.encode(str)
+      if (buf.limit() <= maxBytes) {
+        str
+      } else {
+        // Truncate at the byte budget, then decode with IGNORE so any incomplete
+        // trailing UTF-8 sequence is silently dropped.
+        buf.limit(math.min(maxBytes - abbrevMarker.length, buf.limit()))
+        val decoder = StandardCharsets.UTF_8.newDecoder()
+          .onMalformedInput(CodingErrorAction.IGNORE)
+          .onUnmappableCharacter(CodingErrorAction.IGNORE)
+        decoder.decode(buf).toString + abbrevMarker
+      }
+    }
+  }
+
+  def abbreviateByBytes(str: String, maxBytes: Int): String =
+    abbreviateByBytes(str, "...", maxBytes)
+
   def sideBySide(left: String, right: String): Seq[String] = {
     sideBySide(left.split("\n").toImmutableArraySeq, right.split("\n").toImmutableArraySeq)
   }
@@ -86,6 +109,8 @@ private[spark] trait SparkStringUtils {
 
   def rightPad(str: String, width: Int): String =
     if (str == null || str.length >= width) str else String.format(s"%-${width}s", str)
+
+  def sizeInBytes(str: String): Int = StandardCharsets.UTF_8.encode(str).limit()
 
   def rightPad(str: String, width: Int, s: String): String =
     if (str == null || str.length >= width) {
