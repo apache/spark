@@ -3405,9 +3405,7 @@ class FunctionsTestsMixin:
             [({"outerB": {"y": 2, "x": 1}, "outerA": {"d": 4, "c": 3}},)],
             ["m"],
         )
-        res_nested = nested.select(
-            F.to_json("m", {"sortKeys": "true"}).alias("j")
-        ).collect()
+        res_nested = nested.select(F.to_json("m", {"sortKeys": "true"}).alias("j")).collect()
         self.assertEqual(
             """{"outerA":{"c":3,"d":4},"outerB":{"x":1,"y":2}}""",
             res_nested[0]["j"],
