@@ -451,12 +451,32 @@ For sources that support ``Trigger.AvailableNow``, implement the ``SupportsTrigg
             max_available = self._target_offset or self.total_available
             # ... respect both limit and target offset
 
-**Example Files**
+**Complete Working Examples**
 
-For complete working examples, see:
+Two comprehensive examples demonstrate admission control interacting with different triggers:
 
-- ``examples/src/main/python/sql/streaming/python_datasource_admission_control.py`` - Basic admission control with ReadMaxRows
-- ``examples/src/main/python/sql/streaming/structured_blockchain_admission_control.py`` - Advanced example with SupportsTriggerAvailableNow
+**1. Basic Admission Control** (``python_datasource_admission_control.py``)
+
+This example runs TWO queries to show the behavioral difference:
+
+- **Default Trigger**: Each micro-batch processes only 2 rows (limited by ``getDefaultReadLimit()``)
+- **Trigger.AvailableNow**: Processes ALL 10 available rows in one go, then stops automatically
+
+Key demonstration: ``latestOffset(start, limit)`` receives ``ReadMaxRows(2)`` with default trigger, but ``ReadAllAvailable`` with ``Trigger.AvailableNow``.
+
+**2. Advanced with SupportsTriggerAvailableNow** (``structured_blockchain_admission_control.py``)
+
+This example demonstrates the ``SupportsTriggerAvailableNow`` mixin with blockchain blocks:
+
+- **Default Trigger**: Continuously processes 2 blocks per micro-batch
+- **Trigger.AvailableNow**:
+
+  - Calls ``prepareForTriggerAvailableNow()`` at query start to capture target offset (block 20)
+  - Processes all blocks up to block 20, then stops
+  - Ignores blocks beyond 20, even though the chain has 100 blocks total
+  - Demonstrates deterministic catch-up processing
+
+Both examples show actual streaming queries running with both trigger types, making it clear how admission control behaves differently in each scenario.
 
 Implement a Streaming Writer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~

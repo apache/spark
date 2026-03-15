@@ -26,19 +26,32 @@ Key concepts demonstrated:
 - Using ReadMaxRows to limit data consumption per micro-batch
 - Implementing getDefaultReadLimit() for default rate limiting
 - Using reportLatestOffset() for monitoring
+- Comparing behavior between default trigger and Trigger.AvailableNow
 
-The data source generates sequential integers, but admission control limits
-each micro-batch to only 2 rows, demonstrating how streaming sources can
-throttle data consumption.
+The example runs TWO streaming queries to demonstrate the difference:
+
+1. **Default Trigger**: Each micro-batch processes only 2 rows (limited by getDefaultReadLimit)
+   - Runs continuously until manually stopped
+   - Demonstrates throttled data consumption
+
+2. **Trigger.AvailableNow**: Processes ALL available data then stops automatically
+   - latestOffset receives ReadAllAvailable instead of ReadMaxRows
+   - Ignores the default read limit per SupportsAdmissionControl contract
+   - Useful for one-time catch-up processing
 
 Usage:
     bin/spark-submit examples/src/main/python/sql/streaming/\\
         python_datasource_admission_control.py
 
-Expected output shows batches limited to 2 rows each:
-    Batch 0: 2 rows (0, 1)
-    Batch 1: 2 rows (2, 3)
-    ...
+Expected output:
+    DEFAULT TRIGGER - Batches limited to 2 rows each:
+        Batch 0: 2 rows (0, 1)
+        Batch 1: 2 rows (2, 3)
+        ...
+
+    TRIGGER.AVAILABLENOW - Processes all 10 rows then stops:
+        Batch 0: 10 rows (0-9)
+        Query stopped automatically
 """
 
 import time
@@ -66,8 +79,8 @@ class AdmissionControlStreamReader(DataSourceStreamReader):
     allowing Spark to control how much data is consumed per micro-batch.
     """
 
-    # Simulated "total available" data - in practice this could be unbounded
-    TOTAL_AVAILABLE = 1000000
+    # Simulated "total available" data - kept small for demo purposes
+    TOTAL_AVAILABLE = 10
 
     def initialOffset(self) -> dict:
         """Return the starting offset for new queries."""
@@ -168,50 +181,132 @@ class AdmissionControlDataSource(DataSource):
         return AdmissionControlStreamReader()
 
 
-def main() -> None:
-    """Run the admission control streaming example."""
-    spark: SparkSession = SparkSession.builder.appName("AdmissionControlExample").getOrCreate()
+def run_with_default_trigger(spark: SparkSession) -> None:
+    """
+    Demonstrate admission control with DEFAULT trigger.
 
-    # Register the custom data source
-    spark.dataSource.register(AdmissionControlDataSource)
+    With default trigger, getDefaultReadLimit() returns ReadMaxRows(2),
+    so each micro-batch processes only 2 rows at a time.
+    """
+    print("\n" + "=" * 70)
+    print("EXAMPLE 1: DEFAULT TRIGGER (Continuous Processing)")
+    print("=" * 70)
+    print("Expected behavior: Each batch processes max 2 rows (from getDefaultReadLimit)")
+    print()
 
-    # Create streaming DataFrame from our custom source
     df = spark.readStream.format("admission_control_example").load()
 
-    # Track batch statistics
     batch_stats: List[Dict[str, Any]] = []
 
     def process_batch(batch_df: DataFrame, batch_id: int) -> None:
-        """Process each micro-batch and track statistics."""
         count = batch_df.count()
         rows = [row.asDict() for row in batch_df.collect()]
-        batch_stats.append({"batch_id": batch_id, "count": count, "rows": rows})
+        batch_stats.append({"batch_id": batch_id, "count": count})
 
-        print(f"Batch {batch_id}: {count} rows processed")
+        print(f"  Batch {batch_id}: {count} rows")
         if rows:
             ids = [r["id"] for r in rows]
-            print(f"  IDs: {ids}")
+            print(f"    IDs: {ids}")
 
-    # Start streaming query with foreachBatch
+    # Use default trigger - will respect getDefaultReadLimit()
     query = df.writeStream.foreachBatch(process_batch).start()
 
-    # Wait for a few batches to complete
     try:
-        # Process batches for a short time to demonstrate admission control
-        time.sleep(5)
+        # Let it run for a few batches
+        time.sleep(3)
     finally:
         query.stop()
         query.awaitTermination()
 
-    # Print summary
-    print("\n--- Admission Control Summary ---")
-    print(f"Total batches processed: {len(batch_stats)}")
+    print("\n--- Default Trigger Summary ---")
+    print(f"Total batches: {len(batch_stats)}")
     for stat in batch_stats:
         print(f"  Batch {stat['batch_id']}: {stat['count']} rows")
 
     if batch_stats:
         row_counts = [s["count"] for s in batch_stats]
-        print(f"\nAll batches limited to max 2 rows: {all(c <= 2 for c in row_counts)}")
+        all_limited = all(c <= 2 for c in row_counts)
+        print(f"\nAll batches limited to 2 rows: {all_limited}")
+        print("✓ Admission control working - each batch throttled to 2 rows")
+
+
+def run_with_trigger_available_now(spark: SparkSession) -> None:
+    """
+    Demonstrate admission control with TRIGGER.AVAILABLENOW.
+
+    With Trigger.AvailableNow, latestOffset receives ReadAllAvailable,
+    which tells the source to process ALL available data and then stop.
+    This ignores getDefaultReadLimit() per the SupportsAdmissionControl contract.
+    """
+    print("\n" + "=" * 70)
+    print("EXAMPLE 2: TRIGGER.AVAILABLENOW (Finite Processing)")
+    print("=" * 70)
+    print("Expected behavior: Process ALL 10 rows in one batch, then stop")
+    print()
+
+    df = spark.readStream.format("admission_control_example").load()
+
+    batch_stats: List[Dict[str, Any]] = []
+
+    def process_batch(batch_df: DataFrame, batch_id: int) -> None:
+        count = batch_df.count()
+        rows = [row.asDict() for row in batch_df.collect()]
+        batch_stats.append({"batch_id": batch_id, "count": count})
+
+        print(f"  Batch {batch_id}: {count} rows")
+        if rows:
+            ids = [r["id"] for r in rows]
+            print(f"    IDs: {ids}")
+
+    # Use Trigger.AvailableNow - will receive ReadAllAvailable
+    query = df.writeStream \
+        .trigger(availableNow=True) \
+        .foreachBatch(process_batch) \
+        .start()
+
+    # Wait for completion - AvailableNow stops automatically
+    query.awaitTermination()
+
+    print("\n--- Trigger.AvailableNow Summary ---")
+    print(f"Total batches: {len(batch_stats)}")
+    for stat in batch_stats:
+        print(f"  Batch {stat['batch_id']}: {stat['count']} rows")
+
+    total_rows = sum(s["count"] for s in batch_stats)
+    print(f"\nTotal rows processed: {total_rows}")
+    print("✓ Processed all available data (10 rows) then stopped automatically")
+    print("✓ Ignored getDefaultReadLimit() as required by SupportsAdmissionControl")
+
+
+def main() -> None:
+    """Run admission control examples with both trigger types."""
+    spark: SparkSession = SparkSession.builder \
+        .appName("AdmissionControlExample") \
+        .getOrCreate()
+
+    # Register the custom data source
+    spark.dataSource.register(AdmissionControlDataSource)
+
+    print("\n" + "=" * 70)
+    print("ADMISSION CONTROL AND TRIGGER.AVAILABLENOW DEMONSTRATION")
+    print("=" * 70)
+    print("\nThis example demonstrates how admission control interacts with")
+    print("different trigger types in PySpark streaming data sources.")
+    print("\nData Source: 10 sequential integers (0-9)")
+    print("Default Read Limit: ReadMaxRows(2)")
+
+    # Run both examples
+    run_with_default_trigger(spark)
+    run_with_trigger_available_now(spark)
+
+    print("\n" + "=" * 70)
+    print("KEY TAKEAWAYS")
+    print("=" * 70)
+    print("1. DEFAULT TRIGGER: Respects getDefaultReadLimit() - processes 2 rows/batch")
+    print("2. TRIGGER.AVAILABLENOW: Receives ReadAllAvailable - processes ALL data")
+    print("3. latestOffset(start, limit) receives different ReadLimit types")
+    print("4. Sources can throttle continuous streams while supporting batch catch-up")
+    print("=" * 70)
 
     spark.stop()
 

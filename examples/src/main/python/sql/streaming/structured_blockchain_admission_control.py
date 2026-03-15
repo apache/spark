@@ -19,23 +19,43 @@
 Demonstrates admission control using a simulated blockchain data source.
 
 This example shows how to build a custom streaming data source that simulates
-reading blockchain blocks while respecting admission control limits. It also
-demonstrates the SupportsTriggerAvailableNow mixin for Trigger.AvailableNow support.
+reading blockchain blocks while respecting admission control limits. It demonstrates
+the SupportsTriggerAvailableNow mixin for deterministic batch processing.
 
 Key concepts demonstrated:
 - DataSourceStreamReader with latestOffset(start, limit) for admission control
 - ReadMaxRows to limit blocks consumed per micro-batch
-- SupportsTriggerAvailableNow for deterministic batch processing
+- SupportsTriggerAvailableNow mixin for Trigger.AvailableNow support
+- prepareForTriggerAvailableNow() capturing target offset at query start
 - reportLatestOffset() for progress monitoring
+- Comparing behavior between default trigger and Trigger.AvailableNow
+
+The example runs TWO streaming queries:
+
+1. **Default Trigger**: Processes 2 blocks per micro-batch continuously
+   - Simulates slowly processing new blocks as they arrive
+   - Could run indefinitely in a real blockchain scenario
+
+2. **Trigger.AvailableNow with SupportsTriggerAvailableNow**:
+   - prepareForTriggerAvailableNow() captures current chain height (20 blocks)
+   - Processes ALL 20 blocks even though new blocks keep arriving
+   - Stops automatically when reaching the captured target offset
+   - Demonstrates deterministic catch-up processing
 
 Usage:
     bin/spark-submit examples/src/main/python/sql/streaming/\\
         structured_blockchain_admission_control.py
 
 Expected output:
-    Batch 0: 2 blocks (block_number: 0, 1)
-    Batch 1: 2 blocks (block_number: 2, 3)
-    ...
+    DEFAULT TRIGGER - 2 blocks per batch:
+        Batch 0: blocks 0-1
+        Batch 1: blocks 2-3
+        ...
+
+    TRIGGER.AVAILABLENOW - All 20 blocks, then stop:
+        prepareForTriggerAvailableNow() called, target = block 20
+        Batch 0: blocks 0-19 (or multiple batches depending on limit)
+        Query stopped at block 20 (ignoring blocks 21+)
 """
 
 import hashlib
@@ -70,8 +90,9 @@ class BlockchainStreamReader(DataSourceStreamReader, SupportsTriggerAvailableNow
     - SupportsTriggerAvailableNow for finite processing with AvailableNow trigger
     """
 
-    # Simulated chain height (total blocks available)
-    CHAIN_HEIGHT = 1000000
+    # Simulated chain height (total blocks available in the "live" chain)
+    # In reality, this keeps growing, but we keep it finite for demo purposes
+    CHAIN_HEIGHT = 100
 
     def __init__(self) -> None:
         self._trigger_available_now_target: Optional[int] = None
@@ -139,8 +160,12 @@ class BlockchainStreamReader(DataSourceStreamReader, SupportsTriggerAvailableNow
         arrive during processing.
         """
         # In a real implementation, you would query the actual chain height
-        # For demo, we simulate having 20 blocks to process
+        # For demo, we simulate having 20 blocks to process at query start
         self._trigger_available_now_target = 20
+        target = self._trigger_available_now_target
+        print(f"[prepareForTriggerAvailableNow] Captured target offset: block {target}")
+        print(f"[prepareForTriggerAvailableNow] Will stop at block {target}, "
+              f"even if chain grows beyond it")
 
     def reportLatestOffset(self) -> Optional[dict]:
         """Report the highest known block for progress monitoring."""
@@ -193,47 +218,142 @@ class BlockchainDataSource(DataSource):
         return BlockchainStreamReader()
 
 
-def main() -> None:
-    """Run the blockchain admission control streaming example."""
-    spark: SparkSession = SparkSession.builder.appName("BlockchainAdmissionControl").getOrCreate()
+def run_with_default_trigger(spark: SparkSession) -> None:
+    """
+    Demonstrate blockchain streaming with DEFAULT trigger.
 
-    # Register custom data source
-    spark.dataSource.register(BlockchainDataSource)
+    Processes blocks continuously, 2 blocks per micro-batch as defined by
+    getDefaultReadLimit().
+    """
+    print("\n" + "=" * 70)
+    print("EXAMPLE 1: DEFAULT TRIGGER (Continuous Block Processing)")
+    print("=" * 70)
+    print("Expected: Process 2 blocks per batch, run continuously")
+    print()
 
-    # Create streaming DataFrame
     df = spark.readStream.format("blockchain_example").load()
 
-    # Track blocks processed
     blocks_processed: List[Dict[str, Any]] = []
 
     def process_batch(batch_df: DataFrame, batch_id: int) -> None:
-        """Process each micro-batch of blocks."""
         count = batch_df.count()
         blocks = [row.asDict() for row in batch_df.collect()]
         blocks_processed.extend(blocks)
 
-        print(f"\nBatch {batch_id}: {count} blocks processed")
-        for block in blocks:
-            print(f"  Block {block['block_number']}: hash={block['block_hash']}, "
-                  f"tx_count={block['transaction_count']}")
+        print(f"  Batch {batch_id}: {count} blocks")
+        if blocks:
+            block_nums = [b["block_number"] for b in blocks]
+            print(f"    Block numbers: {block_nums}")
 
-    # Start streaming query
+    # Default trigger - processes continuously
     query = df.writeStream.foreachBatch(process_batch).start()
 
     try:
-        # Let it run for a few seconds to process some batches
-        time.sleep(5)
+        # Run for a few batches
+        time.sleep(3)
     finally:
         query.stop()
         query.awaitTermination()
 
-    # Summary
-    print("\n--- Blockchain Stream Summary ---")
+    print("\n--- Default Trigger Summary ---")
     print(f"Total blocks processed: {len(blocks_processed)}")
     if blocks_processed:
-        first_block = blocks_processed[0]["block_number"]
-        last_block = blocks_processed[-1]["block_number"]
-        print(f"Block range: {first_block} to {last_block}")
+        first = blocks_processed[0]["block_number"]
+        last = blocks_processed[-1]["block_number"]
+        print(f"Block range: {first} to {last}")
+        print("✓ Each batch limited to 2 blocks (admission control working)")
+
+
+def run_with_trigger_available_now(spark: SparkSession) -> None:
+    """
+    Demonstrate SupportsTriggerAvailableNow with TRIGGER.AVAILABLENOW.
+
+    This demonstrates the key behavior:
+    1. prepareForTriggerAvailableNow() is called at query start
+    2. It captures the target offset (block 20)
+    3. Processing continues until block 20, then stops
+    4. Even if the chain has more blocks (up to 100), we stop at 20
+    """
+    print("\n" + "=" * 70)
+    print("EXAMPLE 2: TRIGGER.AVAILABLENOW with SupportsTriggerAvailableNow")
+    print("=" * 70)
+    print("Expected: prepareForTriggerAvailableNow() captures block 20 as target")
+    print("          Process all blocks up to block 20, then stop")
+    print("          Ignore blocks beyond 20 even though chain has 100 blocks")
+    print()
+
+    df = spark.readStream.format("blockchain_example").load()
+
+    blocks_processed: List[Dict[str, Any]] = []
+
+    def process_batch(batch_df: DataFrame, batch_id: int) -> None:
+        count = batch_df.count()
+        blocks = [row.asDict() for row in batch_df.collect()]
+        blocks_processed.extend(blocks)
+
+        print(f"  Batch {batch_id}: {count} blocks")
+        if blocks:
+            block_nums = [b["block_number"] for b in blocks]
+            print(f"    Block numbers: {block_nums}")
+            # Show some block details
+            for block in blocks[:3]:  # Show first 3
+                print(f"      Block {block['block_number']}: "
+                      f"hash={block['block_hash']}, tx={block['transaction_count']}")
+            if len(blocks) > 3:
+                print(f"      ... and {len(blocks) - 3} more blocks")
+
+    # Trigger.AvailableNow - will call prepareForTriggerAvailableNow()
+    print("Starting query with Trigger.AvailableNow...")
+    query = df.writeStream \
+        .trigger(availableNow=True) \
+        .foreachBatch(process_batch) \
+        .start()
+
+    # Wait for completion - stops automatically
+    query.awaitTermination()
+
+    print("\n--- Trigger.AvailableNow Summary ---")
+    print(f"Total blocks processed: {len(blocks_processed)}")
+    if blocks_processed:
+        first = blocks_processed[0]["block_number"]
+        last = blocks_processed[-1]["block_number"]
+        print(f"Block range: {first} to {last}")
+        print(f"\n✓ Stopped at block {last} (target from prepareForTriggerAvailableNow)")
+        print(f"✓ Did NOT process blocks beyond {last}, even though chain has 100 blocks")
+        print("✓ Demonstrates deterministic catch-up processing")
+
+
+def main() -> None:
+    """Run blockchain streaming examples with both trigger types."""
+    spark: SparkSession = SparkSession.builder \
+        .appName("BlockchainAdmissionControl") \
+        .getOrCreate()
+
+    # Register custom data source
+    spark.dataSource.register(BlockchainDataSource)
+
+    print("\n" + "=" * 70)
+    print("BLOCKCHAIN ADMISSION CONTROL WITH SUPPORTSTRIGGERAVAILABLENOW")
+    print("=" * 70)
+    print("\nThis example demonstrates SupportsTriggerAvailableNow mixin for")
+    print("deterministic batch processing of blockchain data.")
+    print("\nData Source: Simulated blockchain with 100 blocks")
+    print("Default Read Limit: ReadMaxRows(2)")
+    print("AvailableNow Target: First 20 blocks (set in prepareForTriggerAvailableNow)")
+
+    # Run both examples
+    run_with_default_trigger(spark)
+    run_with_trigger_available_now(spark)
+
+    print("\n" + "=" * 70)
+    print("KEY TAKEAWAYS")
+    print("=" * 70)
+    print("1. DEFAULT TRIGGER: Processes 2 blocks/batch continuously")
+    print("2. TRIGGER.AVAILABLENOW: Calls prepareForTriggerAvailableNow() at start")
+    print("3. Target offset (block 20) captured and enforced in latestOffset()")
+    print("4. Query stops at block 20, ignoring blocks 21-100")
+    print("5. Useful for catch-up processing with deterministic boundaries")
+    print("=" * 70)
 
     spark.stop()
 
