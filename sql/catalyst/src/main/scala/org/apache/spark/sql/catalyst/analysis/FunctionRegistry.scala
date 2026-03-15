@@ -550,6 +550,8 @@ object FunctionRegistry {
     expressionBuilder("tuple_sketch_agg_integer", TupleSketchAggIntegerExpressionBuilder),
     expressionBuilder("tuple_union_agg_double", TupleUnionAggDoubleExpressionBuilder),
     expressionBuilder("tuple_union_agg_integer", TupleUnionAggIntegerExpressionBuilder),
+    expressionBuilder("items_sketch_agg", ItemsSketchAggExpressionBuilder),
+    expressionBuilder("items_sketch_merge_agg", ItemsSketchMergeAggExpressionBuilder),
 
     // vector functions
     expression[VectorCosineSimilarity]("vector_cosine_similarity"),
@@ -866,6 +868,10 @@ object FunctionRegistry {
     expression[KllSketchGetRankBigint]("kll_sketch_get_rank_bigint"),
     expression[KllSketchGetRankFloat]("kll_sketch_get_rank_float"),
     expression[KllSketchGetRankDouble]("kll_sketch_get_rank_double"),
+    expression[ItemsSketchGetFrequentItems]("items_sketch_get_frequent_items"),
+    expression[ItemsSketchGetEstimate]("items_sketch_get_estimate"),
+    expression[ItemsSketchMerge]("items_sketch_merge"),
+    expression[ItemsSketchToString]("items_sketch_to_string"),
 
     // grouping sets
     expression[Grouping]("grouping"),

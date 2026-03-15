@@ -24,7 +24,7 @@ Spark's SQL and DataFrame APIs provide a collection of sketch-based approximate 
 Sketches are compact data structures that summarize large datasets, supporting distributed aggregation through serialization and merging. This makes them ideal for use cases including (so far):
 - **Approximate count distinct** (HLL, Theta, and Tuple sketches)
 - **Approximate quantile estimation** (KLL sketches)
-- **Approximate frequent items** (Top-K sketches)
+- **Approximate frequent items** (Items sketches and Top-K sketches)
 - **Set operations** on distinct counts (Theta and Tuple sketches)
 - **Distinct counting with aggregated summaries** (Tuple sketches)
 
@@ -68,6 +68,13 @@ Sketches are compact data structures that summarize large datasets, supporting d
   * [approx_top_k_accumulate](#approx_top_k_accumulate)
   * [approx_top_k_combine](#approx_top_k_combine)
   * [approx_top_k_estimate](#approx_top_k_estimate)
+* [Items Sketch (Frequent Items) Functions](#items-sketch-frequent-items-functions)
+  * [items_sketch_agg](#items_sketch_agg)
+  * [items_sketch_merge_agg](#items_sketch_merge_agg)
+  * [items_sketch_get_frequent_items](#items_sketch_get_frequent_items)
+  * [items_sketch_get_estimate](#items_sketch_get_estimate)
+  * [items_sketch_merge](#items_sketch_merge)
+  * [items_sketch_to_string](#items_sketch_to_string)
 * [Best Practices](#best-practices)
   * [Choosing Between HLL and Theta Sketches](#choosing-between-hll-and-theta-sketches)
   * [Accuracy vs. Memory Trade-offs](#accuracy-vs-memory-trade-offs)
@@ -78,6 +85,7 @@ Sketches are compact data structures that summarize large datasets, supporting d
   * [Example: Set Operations with Theta Sketches](#example-set-operations-with-theta-sketches)
   * [Example: Finding Trending Items with Top-K Sketches](#example-finding-trending-items-with-top-k-sketches)
   * [Example: Distinct Users with Aggregated Metrics Using Tuple Sketches](#example-distinct-users-with-aggregated-metrics-using-tuple-sketches)
+  * [Example: Finding Top Visitors with Items Sketches](#example-finding-top-visitors-with-items-sketches)
 
 ---
 
@@ -1244,6 +1252,201 @@ FROM VALUES 'a', 'b', 'c', 'c', 'c', 'c', 'd', 'd' tab(expr);
 
 ---
 
+## Items Sketch (Frequent Items) Functions
+
+Items sketches estimate the frequency of individual items in a data stream, identifying the most frequent (heavy hitter) items with bounded memory. Unlike the Approximate Top-K functions which use a STRUCT-based state, Items Sketch functions use a BINARY representation that supports a wider range of input types and integrates with the same serialize/merge/query pattern as other DataSketches functions.
+
+Supported input types: BOOLEAN, BYTE, SHORT, INT, LONG, FLOAT, DOUBLE, DATE, TIMESTAMP, TIMESTAMP_NTZ, STRING, and DECIMAL.
+
+See the [Apache DataSketches Frequent Items documentation](https://datasketches.apache.org/docs/Frequency/FrequentItemsOverview.html) for more information.
+
+### items_sketch_agg
+
+Creates an ItemsSketch from input values, tracking approximate frequency of each item.
+
+**Syntax:**
+```sql
+items_sketch_agg(expr [, maxMapSize])
+```
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `expr` | See supported types above | The expression whose item frequencies will be tracked |
+| `maxMapSize` | INT (optional) | Controls sketch accuracy. Must be a power of 2. Range: 8-67108864. Default: 4096. Larger values use more memory but provide more accurate frequency estimates. |
+
+Returns a BINARY containing the ItemsSketch with embedded type information.
+
+**Examples:**
+```sql
+-- Basic usage: create a sketch and get frequent items
+SELECT items_sketch_get_frequent_items(items_sketch_agg(col), 'NO_FALSE_POSITIVES')
+FROM VALUES ('a'), ('a'), ('a'), ('b'), ('c') tab(col);
+-- Result: [{"item":"a","estimate":3,"lowerBound":3,"upperBound":3}]
+
+-- With custom maxMapSize for higher accuracy
+SELECT items_sketch_get_frequent_items(items_sketch_agg(col, 8192), 'NO_FALSE_NEGATIVES')
+FROM VALUES ('x'), ('x'), ('y'), ('y'), ('y'), ('z') tab(col);
+-- Result: [{"item":"y","estimate":3,...},{"item":"x","estimate":2,...},{"item":"z","estimate":1,...}]
+```
+
+**Notes:**
+- NULL values are ignored during aggregation.
+- The sketch can be stored as BINARY and later merged with `items_sketch_merge` or `items_sketch_merge_agg`.
+- The output binary embeds the data type so downstream functions can deserialize without explicit type information.
+
+---
+
+### items_sketch_merge_agg
+
+Aggregates multiple ItemsSketch binary representations into a single merged sketch.
+
+**Syntax:**
+```sql
+items_sketch_merge_agg(sketch [, maxMapSize])
+```
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `sketch` | BINARY | An ItemsSketch in binary format (produced by `items_sketch_agg`) |
+| `maxMapSize` | INT (optional) | Controls accuracy of the merged sketch. Must be a power of 2. Range: 8-67108864. Default: 4096. |
+
+Returns a BINARY containing the merged ItemsSketch.
+
+**Examples:**
+```sql
+-- Merge sketches from different partitions
+SELECT items_sketch_get_frequent_items(items_sketch_merge_agg(sketch), 'NO_FALSE_POSITIVES')
+FROM (
+  SELECT items_sketch_agg(col) as sketch
+  FROM VALUES ('a'), ('a'), ('a') tab(col)
+  UNION ALL
+  SELECT items_sketch_agg(col) as sketch
+  FROM VALUES ('a'), ('b') tab(col)
+);
+-- Result: [{"item":"a","estimate":4,"lowerBound":4,"upperBound":4}]
+```
+
+**Notes:**
+- All input sketches must have been created from the same data type.
+- The data type is extracted from the first non-null input sketch.
+
+---
+
+### items_sketch_get_frequent_items
+
+Returns the frequent items from an ItemsSketch as an array of structs.
+
+**Syntax:**
+```sql
+items_sketch_get_frequent_items(sketch, errorType)
+```
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `sketch` | BINARY | An ItemsSketch in binary format |
+| `errorType` | STRING | `'NO_FALSE_POSITIVES'` or `'NO_FALSE_NEGATIVES'` |
+
+Returns an ARRAY&lt;STRUCT&lt;item: STRING, estimate: BIGINT, lowerBound: BIGINT, upperBound: BIGINT&gt;&gt;.
+
+**Error type semantics:**
+- `NO_FALSE_POSITIVES`: Every returned item is guaranteed to be a true frequent item, but some frequent items may be missing.
+- `NO_FALSE_NEGATIVES`: Every true frequent item is guaranteed to be returned, but some non-frequent items may be included.
+
+**Examples:**
+```sql
+SELECT items_sketch_get_frequent_items(items_sketch_agg(col), 'NO_FALSE_POSITIVES')
+FROM VALUES ('a'), ('a'), ('a'), ('b'), ('c') tab(col);
+-- Result: [{"item":"a","estimate":3,"lowerBound":3,"upperBound":3}]
+```
+
+**Notes:**
+- Items are returned as strings regardless of the original data type.
+- Numeric items are converted to their string representation.
+
+---
+
+### items_sketch_get_estimate
+
+Returns the estimated frequency of a specific item from an ItemsSketch.
+
+**Syntax:**
+```sql
+items_sketch_get_estimate(sketch, item)
+```
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `sketch` | BINARY | An ItemsSketch in binary format |
+| `item` | STRING | The item to look up (matched as a string) |
+
+Returns a BIGINT representing the estimated frequency of the item.
+
+**Examples:**
+```sql
+SELECT items_sketch_get_estimate(items_sketch_agg(col), 'a')
+FROM VALUES ('a'), ('a'), ('a'), ('b'), ('c') tab(col);
+-- Result: 3
+```
+
+**Notes:**
+- The item is always provided as a string and converted internally to the sketch's native type for lookup.
+- Returns 0 if the item is not found in the sketch.
+
+---
+
+### items_sketch_merge
+
+Merges two ItemsSketch binary representations into one (scalar function).
+
+**Syntax:**
+```sql
+items_sketch_merge(first, second)
+```
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `first` | BINARY | First ItemsSketch |
+| `second` | BINARY | Second ItemsSketch |
+
+Returns a BINARY containing the merged ItemsSketch.
+
+**Examples:**
+```sql
+SELECT items_sketch_get_frequent_items(
+  items_sketch_merge(
+    items_sketch_agg(col1),
+    items_sketch_agg(col2)),
+  'NO_FALSE_POSITIVES')
+FROM VALUES ('a', 'b'), ('a', 'b'), ('a', 'c') tab(col1, col2);
+-- Result: [{"item":"a","estimate":3,...},{"item":"b","estimate":2,...}]
+```
+
+---
+
+### items_sketch_to_string
+
+Returns a human-readable string summary of an ItemsSketch.
+
+**Syntax:**
+```sql
+items_sketch_to_string(sketch)
+```
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `sketch` | BINARY | An ItemsSketch in binary format |
+
+Returns a STRING containing a human-readable summary of the sketch.
+
+**Examples:**
+```sql
+SELECT length(items_sketch_to_string(items_sketch_agg(col))) > 0
+FROM VALUES ('a'), ('b') tab(col);
+-- Result: true
+```
+
+---
+
 ## Best Practices
 
 ### Choosing Between HLL, Theta, and Tuple Sketches
@@ -1256,6 +1459,8 @@ FROM VALUES 'a', 'b', 'c', 'c', 'c', 'c', 'd', 'd' tab(expr);
 | Very high cardinality with moderate accuracy | HLL with higher lgConfigK |
 | Need to compute overlaps between datasets | Theta or Tuple |
 | Counting distinct users with total spend | Tuple (key=user_id, summary=spend) |
+| Approximate frequency / heavy hitters (typed BINARY) | Items Sketch |
+| Approximate top-K (STRUCT-based state) | Top-K |
 
 ### Accuracy vs. Memory Trade-offs
 
@@ -1266,6 +1471,7 @@ FROM VALUES 'a', 'b', 'c', 'c', 'c', 'c', 'd', 'd' tab(expr);
 | Tuple | lgNomEntries | Higher accuracy, more memory (16 * 2^lgNomEntries bytes for double, 12 * 2^lgNomEntries bytes for integer) |
 | KLL | k | Higher accuracy, more memory |
 | Top-K | maxItemsTracked | Better heavy-hitter detection, more memory |
+| Items Sketch | maxMapSize | More accurate frequency estimates, more memory (must be power of 2) |
 
 ### Storing and Reusing Sketches
 
@@ -1579,4 +1785,93 @@ SELECT
       (SELECT visitor_sketch FROM anonymous_visitor_logs WHERE visit_date = DATE'2024-01-01')
     )
   ) as logged_in_only_revenue;
+```
+
+### Example: Finding Top Visitors with Items Sketches
+
+Items sketches are useful for identifying the most frequent items across time windows and dimension hierarchies. A key property is that the daily top frequent item may differ from the weekly top, because a visitor who is consistently moderate every day can accumulate a higher total than one who spikes on a single day.
+
+```sql
+-- Create a table to store daily visitor frequency sketches per product category
+CREATE TABLE daily_visitor_sketches (
+  visit_date DATE,
+  category STRING,
+  visitor_sketch BINARY
+) USING PARQUET;
+
+-- Process each day's visits and store per-category sketches
+INSERT INTO daily_visitor_sketches
+SELECT
+  visit_date,
+  category,
+  items_sketch_agg(visitor_id) as visitor_sketch
+FROM daily_visits
+GROUP BY visit_date, category;
+
+-- Query: Get the top visitors for a specific day and category
+SELECT items_sketch_get_frequent_items(visitor_sketch, 'NO_FALSE_NEGATIVES') as top_visitors
+FROM daily_visitor_sketches
+WHERE visit_date = DATE'2024-01-15' AND category = 'Electronics';
+
+-- Query: Get the estimated visit count for a specific visitor on a given day
+SELECT items_sketch_get_estimate(visitor_sketch, 'visitor_42') as estimated_visits
+FROM daily_visitor_sketches
+WHERE visit_date = DATE'2024-01-15' AND category = 'Electronics';
+
+-- Query: Find weekly top visitors by merging daily sketches
+-- A visitor who is consistently moderate every day may rank higher over the
+-- full week than one who spikes on a single day.
+SELECT
+  category,
+  items_sketch_get_frequent_items(
+    items_sketch_merge_agg(visitor_sketch),
+    'NO_FALSE_NEGATIVES'
+  ) as weekly_top_visitors
+FROM daily_visitor_sketches
+WHERE visit_date BETWEEN DATE'2024-01-13' AND DATE'2024-01-19'
+GROUP BY category;
+
+-- Query: Compare daily vs weekly top visitors to find divergences
+-- Step 1: daily top visitor per category per day
+WITH daily_top AS (
+  SELECT
+    visit_date,
+    category,
+    items_sketch_get_frequent_items(visitor_sketch, 'NO_FALSE_NEGATIVES') as freq
+  FROM daily_visitor_sketches
+  WHERE visit_date BETWEEN DATE'2024-01-13' AND DATE'2024-01-19'
+),
+-- Step 2: weekly top visitor per category
+weekly_top AS (
+  SELECT
+    category,
+    items_sketch_get_frequent_items(
+      items_sketch_merge_agg(visitor_sketch),
+      'NO_FALSE_NEGATIVES'
+    ) as freq
+  FROM daily_visitor_sketches
+  WHERE visit_date BETWEEN DATE'2024-01-13' AND DATE'2024-01-19'
+  GROUP BY category
+)
+SELECT
+  w.category,
+  w.freq[0].item as weekly_top_visitor,
+  w.freq[0].estimate as weekly_estimate
+FROM weekly_top w;
+
+-- Query: Merge two individual sketches (scalar function)
+SELECT items_sketch_get_frequent_items(
+  items_sketch_merge(
+    (SELECT visitor_sketch FROM daily_visitor_sketches
+     WHERE visit_date = DATE'2024-01-15' AND category = 'Electronics'),
+    (SELECT visitor_sketch FROM daily_visitor_sketches
+     WHERE visit_date = DATE'2024-01-16' AND category = 'Electronics')
+  ),
+  'NO_FALSE_NEGATIVES'
+) as weekend_top_visitors;
+
+-- Query: Get a human-readable summary of a sketch
+SELECT items_sketch_to_string(visitor_sketch)
+FROM daily_visitor_sketches
+WHERE visit_date = DATE'2024-01-15' AND category = 'Electronics';
 ```

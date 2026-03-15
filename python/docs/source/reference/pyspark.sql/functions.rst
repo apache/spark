@@ -507,6 +507,8 @@ Aggregate Functions
     tuple_sketch_agg_integer
     tuple_union_agg_double
     tuple_union_agg_integer
+    items_sketch_agg
+    items_sketch_merge_agg
     try_avg
     try_sum
     var_pop
@@ -664,6 +666,10 @@ Datasketch Functions
 
     hll_sketch_estimate
     hll_union
+    items_sketch_get_estimate
+    items_sketch_get_frequent_items
+    items_sketch_merge
+    items_sketch_to_string
     kll_sketch_get_n_bigint
     kll_sketch_get_n_double
     kll_sketch_get_n_float

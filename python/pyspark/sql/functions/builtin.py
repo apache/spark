@@ -27231,6 +27231,102 @@ def tuple_intersection_agg_integer(
 
 
 @_try_remote_functions
+def items_sketch_agg(
+    col: "ColumnOrName",
+    maxMapSize: Optional[Union[int, Column]] = None,
+) -> Column:
+    """
+    Aggregate function: returns the binary representation of the Datasketches ItemsSketch
+    tracking approximate frequency of items. The optional maxMapSize parameter controls
+    the accuracy of the sketch (must be a power of 2, default 4096, range 8-67108864).
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The column containing values to track
+    maxMapSize : :class:`~pyspark.sql.Column` or int, optional
+        The maximum map size controlling sketch accuracy (must be a power of 2,
+        default 4096, range 8-67108864)
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the ItemsSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.items_sketch_merge_agg`
+    :meth:`pyspark.sql.functions.items_sketch_get_frequent_items`
+    :meth:`pyspark.sql.functions.items_sketch_get_estimate`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("a",), ("a",), ("a",), ("b",), ("c",)], ["col"])
+    >>> result = df.agg(sf.items_sketch_get_frequent_items(sf.items_sketch_agg("col"), sf.lit("NO_FALSE_POSITIVES")))
+    >>> result.count()
+    1
+    """
+    fn = "items_sketch_agg"
+    if maxMapSize is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(maxMapSize))
+
+
+@_try_remote_functions
+def items_sketch_merge_agg(
+    col: "ColumnOrName",
+    maxMapSize: Optional[Union[int, Column]] = None,
+) -> Column:
+    """
+    Aggregate function: merges ItemsSketch binary representations produced by
+    ``items_sketch_agg`` into a single ItemsSketch. The optional maxMapSize parameter
+    controls the accuracy of the merged sketch (must be a power of 2, default 4096,
+    range 8-67108864).
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The column containing binary ItemsSketch representations
+    maxMapSize : :class:`~pyspark.sql.Column` or int, optional
+        The maximum map size controlling merged sketch accuracy (must be a power of 2,
+        default 4096, range 8-67108864)
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the merged ItemsSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.items_sketch_agg`
+    :meth:`pyspark.sql.functions.items_sketch_get_frequent_items`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df1 = spark.createDataFrame([("a",), ("a",), ("a",)], ["col"])
+    >>> df1 = df1.agg(sf.items_sketch_agg("col").alias("sketch"))
+    >>> df2 = spark.createDataFrame([("a",), ("b",)], ["col"])
+    >>> df2 = df2.agg(sf.items_sketch_agg("col").alias("sketch"))
+    >>> df3 = df1.union(df2)
+    >>> result = df3.agg(sf.items_sketch_merge_agg("sketch").alias("merged"))
+    >>> result.count()
+    1
+    """
+    fn = "items_sketch_merge_agg"
+    if maxMapSize is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(maxMapSize))
+
+
+@_try_remote_functions
 def kll_sketch_agg_bigint(
     col: "ColumnOrName",
     k: Optional[Union[int, Column]] = None,
@@ -28716,6 +28812,145 @@ def tuple_difference_integer(col1: "ColumnOrName", col2: "ColumnOrName") -> Colu
     +-------------------------------------------------------------------------+
     """
     return _invoke_function_over_columns("tuple_difference_integer", col1, col2)
+
+
+@_try_remote_functions
+def items_sketch_get_frequent_items(col: "ColumnOrName", errorType: "ColumnOrName") -> Column:
+    """
+    Returns the frequent items from an ItemsSketch binary representation as an array
+    of structs containing the item, estimated frequency, lower bound, and upper bound.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The column containing the binary ItemsSketch representation
+    errorType : :class:`~pyspark.sql.Column` or str
+        The error type: 'NO_FALSE_POSITIVES' or 'NO_FALSE_NEGATIVES'
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        An array of structs with fields: item (string), estimate (long),
+        lowerBound (long), upperBound (long).
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.items_sketch_agg`
+    :meth:`pyspark.sql.functions.items_sketch_get_estimate`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("a",), ("a",), ("a",), ("b",), ("c",)], ["col"])
+    >>> result = df.agg(sf.items_sketch_get_frequent_items(sf.items_sketch_agg("col"), sf.lit("NO_FALSE_POSITIVES")).alias("freq"))
+    >>> result.select(sf.size("freq") > 0).first()[0]
+    True
+    """
+    return _invoke_function_over_columns("items_sketch_get_frequent_items", col, errorType)
+
+
+@_try_remote_functions
+def items_sketch_get_estimate(col: "ColumnOrName", item: "ColumnOrName") -> Column:
+    """
+    Returns the estimated frequency of a specific item from an ItemsSketch binary
+    representation. The item is matched as a string.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The column containing the binary ItemsSketch representation
+    item : :class:`~pyspark.sql.Column` or str
+        The item to look up
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The estimated frequency of the item as a long.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.items_sketch_agg`
+    :meth:`pyspark.sql.functions.items_sketch_get_frequent_items`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("a",), ("a",), ("a",), ("b",), ("c",)], ["col"])
+    >>> df.agg(sf.items_sketch_get_estimate(sf.items_sketch_agg("col"), sf.lit("a"))).first()[0]
+    3
+    """
+    return _invoke_function_over_columns("items_sketch_get_estimate", col, item)
+
+
+@_try_remote_functions
+def items_sketch_merge(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    """
+    Merges two ItemsSketch binary representations into one.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or column name
+        The first ItemsSketch binary column
+    col2 : :class:`~pyspark.sql.Column` or column name
+        The second ItemsSketch binary column
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the merged ItemsSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.items_sketch_agg`
+    :meth:`pyspark.sql.functions.items_sketch_merge_agg`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("a", "b"), ("a", "b"), ("a", "c")], ["col1", "col2"])
+    >>> result = df.agg(sf.items_sketch_agg("col1").alias("s1"), sf.items_sketch_agg("col2").alias("s2"))
+    >>> merged = result.select(sf.items_sketch_get_estimate(sf.items_sketch_merge("s1", "s2"), sf.lit("a")))
+    >>> merged.first()[0]
+    3
+    """
+    return _invoke_function_over_columns("items_sketch_merge", col1, col2)
+
+
+@_try_remote_functions
+def items_sketch_to_string(col: "ColumnOrName") -> Column:
+    """
+    Returns a human-readable string summary of an ItemsSketch.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The column containing the binary ItemsSketch representation
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A string summary of the ItemsSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.items_sketch_agg`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("a",), ("b",)], ["col"])
+    >>> df.agg(sf.length(sf.items_sketch_to_string(sf.items_sketch_agg("col"))) > 0).first()[0]
+    True
+    """
+    return _invoke_function_over_columns("items_sketch_to_string", col)
 
 
 @_try_remote_functions
