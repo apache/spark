@@ -269,6 +269,16 @@ package object config extends Logging {
       .intConf
       .createWithDefault(25)
 
+  private[spark] val CONTAINER_LAUNCH_TIMEOUT =
+    ConfigBuilder("spark.yarn.containerLaunchTimeout")
+      .doc("Maximum time to wait for an executor to successfully launch before considering " +
+        "it stunk and requesting a replacement. This timeout helps detect stuck " +
+        "executor launches in YARN mode. If an executor takes longer than this timeout to " +
+        "launch, it will be marked for relaunch and the host may be marked as unhealthy.")
+      .version("3.2.0-sdi-136")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("10min")
+
   private[spark] val MAX_REPORTER_THREAD_FAILURES =
     ConfigBuilder("spark.yarn.scheduler.reporterThread.maxFailures")
       .version("1.2.0")

@@ -170,6 +170,10 @@ private[spark] abstract class YarnSchedulerBackend(
     yarnSchedulerEndpointRef.ask[Boolean](KillExecutors(executorIds))
   }
 
+  override def onExecutorRegistered(executorId: String, resourceProfileId: Int): Unit = {
+    amEndpoint.foreach(_.send(ExecutorRegisteredOnDriver(executorId, resourceProfileId)))
+  }
+
   override def sufficientResourcesRegistered(): Boolean = {
     totalRegisteredExecutors.get() >= totalExpectedExecutors * minRegisteredRatio
   }
