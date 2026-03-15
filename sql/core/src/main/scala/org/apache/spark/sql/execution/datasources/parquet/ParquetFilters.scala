@@ -37,10 +37,14 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 import org.apache.parquet.schema.Type.Repetition
 
+import org.apache.spark.sql.catalyst.expressions.variant.ObjectExtraction
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulianDays, rebaseGregorianToJulianMicros, RebaseSpec}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
+import org.apache.spark.sql.execution.datasources.VariantMetadata
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources
+import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
@@ -55,12 +59,17 @@ class ParquetFilters(
     pushDownStringPredicate: Boolean,
     pushDownInFilterThreshold: Int,
     caseSensitive: Boolean,
-    datetimeRebaseSpec: RebaseSpec) {
+    datetimeRebaseSpec: RebaseSpec,
+    variantExtractionSchema: Option[StructType] = None) {
   // A map which contains parquet field name and data type, if predicate push down applies.
   //
   // Each key in `nameToParquetField` represents a column; `dots` are used as separators for
   // nested columns. If any part of the names contains `dots`, it is quoted to avoid confusion.
   // See `org.apache.spark.sql.connector.catalog.quote` for implementation details.
+  //
+  // If `variantExtractionSchema` is provided, extra entries are added for variant struct fields
+  // produced by PushVariantIntoScan: logical paths like "v.`0`" are mapped to the corresponding
+  // physical typed_value primitive to enable row-group skipping on shredded columns.
   private val nameToParquetField : Map[String, ParquetPrimitiveField] = {
     def getNormalizedLogicalType(p: PrimitiveType): LogicalTypeAnnotation = {
       // SPARK-40280: Signed 64 bits on an INT64 and signed 32 bits on an INT32 are optional, but
@@ -98,18 +107,99 @@ class ParquetFilters(
       }
     }
 
+    // For a shredded variant physical group and a sequence of object-extraction keys from a
+    // VariantMetadata path, return the leaf typed_value primitive as a ParquetPrimitiveField.
+    // The shredding layout is regular: the physical path is always
+    //   physPrefix / variantCol / typed_value / k0 / typed_value / ... / kN / typed_value
+    // schema.containsPath / schema.getType navigate this path in one shot.
+    // Returns None if any segment is absent or the leaf is not a non-REPEATED primitive.
+    def resolveShreddedPrimitive(
+        variantGroup: GroupType,
+        keys: Array[String],
+        physPrefix: Array[String]): Option[ParquetPrimitiveField] = {
+      if (keys.isEmpty) return None
+      val TYPED = "typed_value"
+      val physPath = physPrefix ++ Array(variantGroup.getName, TYPED) ++
+        keys.flatMap(k => Array(k, TYPED))
+      if (!schema.containsPath(physPath)) return None
+      schema.getType(physPath: _*) match {
+        case p: PrimitiveType if p.getRepetition != Repetition.REPEATED =>
+          Some(ParquetPrimitiveField(physPath,
+            ParquetSchemaType(
+              getNormalizedLogicalType(p), p.getPrimitiveTypeName, p.getTypeLength)))
+        case _ => None
+      }
+    }
+
+    // Loop through variant fields alongside the physical Parquet group, collecting extra
+    // name -> ParquetPrimitiveField entries for variant struct fields so that pushed
+    // filters like GreaterThan("v.0", 1000L) can be mapped to the physical shredded column.
+    def variantStructEntries(
+        variantFields: Seq[StructField],
+        physGroup: GroupType,
+        parentNames: Array[String]): Seq[(String, ParquetPrimitiveField)] = {
+      variantFields.flatMap { field =>
+        val physFieldOpt = physGroup.getFields.asScala.collectFirst {
+          case g: GroupType if
+            (if (caseSensitive) g.getName == field.name
+             else g.getName.equalsIgnoreCase(field.name)) => g
+        }
+        physFieldOpt match {
+          case None => Nil
+          case Some(physChild) =>
+            field.dataType match {
+              // Variant struct: each child is a requested variant extraction with VariantMetadata.
+              case s: StructType if VariantMetadata.isVariantStruct(s) =>
+                s.fields.flatMap { extraction =>
+                  if (!extraction.metadata.contains(VariantMetadata.METADATA_KEY)) Nil
+                  else {
+                    val meta = VariantMetadata.fromMetadata(extraction.metadata)
+                    val segments = try { meta.parsedPath() } catch { case _: Exception => null }
+                    if (segments == null) Nil
+                    else {
+                      // Only scalar object-extraction paths are eligible for statistics pushdown.
+                      val keys = segments.collect { case o: ObjectExtraction => o.key }
+                      if (keys.length != segments.length) Nil
+                      else resolveShreddedPrimitive(physChild, keys, parentNames) match {
+                        case None => Nil
+                        case Some(primField) =>
+                          val logPath = (parentNames :+ field.name :+ extraction.name)
+                            .toImmutableArraySeq.quoted
+                          Seq(logPath -> primField)
+                      }
+                    }
+                  }
+                }
+              // Ordinary struct: recurse into nested fields.
+              case s: StructType if !VariantMetadata.isVariantStruct(s) =>
+                variantStructEntries(s.fields.toSeq, physChild, parentNames :+ field.name)
+              case _ => Nil
+            }
+        }
+      }
+    }
+
     val primitiveFields = getPrimitiveFields(schema.getFields.asScala.toSeq).map { field =>
-      import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
       (field.fieldNames.toImmutableArraySeq.quoted, field)
     }
+
+    val extraFields = variantExtractionSchema match {
+      case Some(variantSchema) =>
+        val entries = variantStructEntries(
+          variantSchema.fields.toSeq, schema.asGroupType(), Array.empty)
+        entries
+      case None => Nil
+    }
+
+    val allFields = primitiveFields ++ extraFields
     if (caseSensitive) {
-      primitiveFields.toMap
+      allFields.toMap
     } else {
       // Don't consider ambiguity here, i.e. more than one field is matched in case insensitive
       // mode, just skip pushdown for these fields, they will trigger Exception when reading,
       // See: SPARK-25132.
       val dedupPrimitiveFields =
-      primitiveFields
+      allFields
         .groupBy(_._1.toLowerCase(Locale.ROOT))
         .filter(_._2.size == 1)
         .transform((_, v) => v.head._2)
