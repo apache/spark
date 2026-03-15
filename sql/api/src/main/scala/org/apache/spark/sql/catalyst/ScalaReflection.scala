@@ -317,6 +317,7 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, localTypeOf[CalendarInterval]) => CalendarIntervalEncoder
       case t if isSubtype(t, localTypeOf[java.time.Duration]) => DayTimeIntervalEncoder
       case t if isSubtype(t, localTypeOf[java.time.Period]) => YearMonthIntervalEncoder
+      case t if isSubtype(t, localTypeOf[java.time.LocalTime]) => TimeEncoder
       case t if isSubtype(t, localTypeOf[java.sql.Date]) => STRICT_DATE_ENCODER
       case t if isSubtype(t, localTypeOf[java.time.LocalDate]) => STRICT_LOCAL_DATE_ENCODER
       case t if isSubtype(t, localTypeOf[java.sql.Timestamp]) => STRICT_TIMESTAMP_ENCODER

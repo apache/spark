@@ -22,7 +22,7 @@ import java.io.Writer
 import com.univocity.parsers.csv.CsvWriter
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, IntervalStringStyles, IntervalUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, IntervalStringStyles, IntervalUtils, TimeFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -55,11 +55,9 @@ class UnivocityGenerator(
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = false,
     forTimestampNTZ = true)
-  private val timeFormatter = TimestampFormatter(
-    options.timeFormatInWrite,
-    options.zoneId,
+  private val timeFormatter = TimeFormatter(
+    Some(options.timeFormatInWrite),
     options.locale,
-    legacyFormat = FAST_DATE_FORMAT,
     isParsing = false)
   private val dateFormatter = DateFormatter(
     options.dateFormatInWrite,

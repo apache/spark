@@ -186,7 +186,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
         (c, evPrim) => code"$evPrim = UTF8String.fromString($df.format($c));"
       case TimeType =>
         val tu = TimeUtils.getClass.getName.stripSuffix("$")
-        (c, evPrim) => code"$evPrim = $tu.timeToString($c);"
+        (c, evPrim) => code"$evPrim = $tu.timeToStringForCast($c);"
       case TimestampType =>
         val tf = JavaCode.global(
           ctx.addReferenceObj("timestampFormatter", timestampFormatter),

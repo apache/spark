@@ -112,11 +112,9 @@ class UnivocityParser(
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
-  private lazy val timeFormatter = TimestampFormatter(
+  private lazy val timeFormatter = TimeFormatter(
     options.timeFormatInRead,
-    options.zoneId,
     options.locale,
-    legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
 
   private val csvFilters = if (SQLConf.get.csvFilterPushDown) {

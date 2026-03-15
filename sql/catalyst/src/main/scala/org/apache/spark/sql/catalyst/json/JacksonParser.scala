@@ -77,11 +77,9 @@ class JacksonParser(
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
-  private lazy val timeFormatter = TimestampFormatter(
+  private lazy val timeFormatter = TimeFormatter(
     options.timeFormatInRead,
-    options.zoneId,
     options.locale,
-    legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
 
   // Flags to signal if we need to fall back to the backward compatible behavior of parsing
