@@ -104,12 +104,16 @@ def convert_observation_errors(
 
     return _convert_exception(
         classes=list(root_error.error_type_hierarchy),
-        sql_state=root_error.spark_throwable.sql_state
-        if root_error.spark_throwable.HasField("sql_state")
-        else None,
-        error_class=root_error.spark_throwable.error_class
-        if root_error.spark_throwable.HasField("error_class")
-        else None,
+        sql_state=(
+            root_error.spark_throwable.sql_state
+            if root_error.spark_throwable.HasField("sql_state")
+            else None
+        ),
+        error_class=(
+            root_error.spark_throwable.error_class
+            if root_error.spark_throwable.HasField("error_class")
+            else None
+        ),
         reason=None,
         root_error_idx=root_error_idx,
         errors=errors,
@@ -150,9 +154,11 @@ def _convert_exception(
                 error_class = root_error.spark_throwable.error_class
             message_parameters = dict(root_error.spark_throwable.message_parameters)
             contexts = [
-                SQLQueryContext(c)
-                if c.context_type == pb2.FetchErrorDetailsResponse.QueryContext.SQL
-                else DataFrameQueryContext(c)
+                (
+                    SQLQueryContext(c)
+                    if c.context_type == pb2.FetchErrorDetailsResponse.QueryContext.SQL
+                    else DataFrameQueryContext(c)
+                )
                 for c in root_error.spark_throwable.query_contexts
             ]
             # Extract breaking change info if present

@@ -47,7 +47,7 @@ __all__ = ["Column"]
 
 
 def _create_column_from_literal(
-    literal: Union["LiteralType", "DecimalLiteral", "DateTimeLiteral", "ParentColumn"]
+    literal: Union["LiteralType", "DecimalLiteral", "DateTimeLiteral", "ParentColumn"],
 ) -> "JavaObject":
     from py4j.java_gateway import JVMView
 
@@ -76,8 +76,7 @@ def _to_java_column(col: "ColumnOrName") -> "JavaObject":
 
 
 @overload
-def _to_seq(sc: "SparkContext", cols: Iterable["JavaObject"]) -> "JavaObject":
-    ...
+def _to_seq(sc: "SparkContext", cols: Iterable["JavaObject"]) -> "JavaObject": ...
 
 
 @overload
@@ -85,8 +84,7 @@ def _to_seq(
     sc: "SparkContext",
     cols: Iterable["ColumnOrName"],
     converter: Optional[Callable[["ColumnOrName"], "JavaObject"]],
-) -> "JavaObject":
-    ...
+) -> "JavaObject": ...
 
 
 def _to_seq(
@@ -644,7 +642,7 @@ def _test() -> None:
     )
     globs["spark"] = spark
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.column,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,

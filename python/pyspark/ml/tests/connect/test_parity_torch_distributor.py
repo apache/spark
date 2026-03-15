@@ -64,7 +64,7 @@ if not is_remote_only() and should_test_connect:
     ):
         @classmethod
         def setUpClass(cls):
-            (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()
+            cls.gpu_discovery_script_file_name, cls.mnist_dir_path = set_up_test_dirs()
             builder = SparkSession.builder.appName(cls.__name__)
             for k, v in get_local_mode_conf().items():
                 builder = builder.config(k, v)
@@ -97,7 +97,7 @@ if not is_remote_only() and should_test_connect:
     ):
         @classmethod
         def setUpClass(cls):
-            (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()
+            cls.gpu_discovery_script_file_name, cls.mnist_dir_path = set_up_test_dirs()
             builder = SparkSession.builder.appName(cls.__name__)
             for k, v in get_local_mode_conf().items():
                 builder = builder.config(k, v)
@@ -131,7 +131,7 @@ if not is_remote_only() and should_test_connect:
     ):
         @classmethod
         def setUpClass(cls):
-            (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()
+            cls.gpu_discovery_script_file_name, cls.mnist_dir_path = set_up_test_dirs()
             builder = SparkSession.builder.appName(cls.__name__)
             for k, v in get_distributed_mode_conf().items():
                 builder = builder.config(k, v)

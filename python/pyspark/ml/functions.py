@@ -217,9 +217,11 @@ def _validate_and_transform_multiple_inputs(
     if input_shapes:
         if len(input_shapes) == num_input_cols:
             multi_inputs = [
-                np.vstack(v).reshape([-1] + input_shapes[i])  # type: ignore
-                if input_shapes[i]
-                else v
+                (
+                    np.vstack(v).reshape([-1] + input_shapes[i])  # type: ignore
+                    if input_shapes[i]
+                    else v
+                )
                 for i, v in enumerate(multi_inputs)
             ]
             if not all([len(x) == len(batch) for x in multi_inputs]):
@@ -858,7 +860,7 @@ def _test() -> None:
     globs["sc"] = sc
     globs["spark"] = spark
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.ml.functions,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

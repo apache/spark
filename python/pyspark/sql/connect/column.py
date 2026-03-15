@@ -52,7 +52,6 @@ from pyspark.sql.connect.expressions import (
 )
 from pyspark.errors.utils import with_origin_to_class
 
-
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
         LiteralType,
@@ -612,7 +611,7 @@ def _test() -> None:
         .getOrCreate()
     )
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.column,
         globs=globs,
         optionflags=doctest.ELLIPSIS

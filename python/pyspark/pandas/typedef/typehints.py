@@ -18,6 +18,7 @@
 """
 Utilities to deal with types. This is mostly focused on python3.
 """
+
 import datetime
 import decimal
 import sys
@@ -32,7 +33,6 @@ from pandas.api.types import CategoricalDtype, pandas_dtype
 from pandas.api.extensions import ExtensionDtype
 
 from pyspark.loose_version import LooseVersion
-
 
 extension_dtypes: Tuple[type, ...]
 try:
@@ -659,9 +659,11 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
                     InternalField(
                         dtype=index_dtype,
                         struct_field=types.StructField(
-                            name=index_name
-                            if index_name is not None
-                            else SPARK_INDEX_NAME_FORMAT(level),
+                            name=(
+                                index_name
+                                if index_name is not None
+                                else SPARK_INDEX_NAME_FORMAT(level)
+                            ),
                             dataType=index_spark_type,
                         ),
                     )
@@ -672,9 +674,11 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
 
         data_dtypes, data_spark_types = zip(
             *(
-                pandas_on_spark_type(p.tpe)
-                if isclass(p) and issubclass(p, NameTypeHolder)
-                else pandas_on_spark_type(p)
+                (
+                    pandas_on_spark_type(p.tpe)
+                    if isclass(p) and issubclass(p, NameTypeHolder)
+                    else pandas_on_spark_type(p)
+                )
                 for p in data_parameters
             )
         )
@@ -945,7 +949,7 @@ def _test() -> None:
     import pyspark.pandas.typedef.typehints
 
     globs = pyspark.pandas.typedef.typehints.__dict__.copy()
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.typedef.typehints,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
