@@ -91,7 +91,10 @@ case class CreateTableLikeExec(
 
       try {
         // Constraints from the source table are intentionally NOT copied for several reasons:
-        //   1. Matches V1 behavior: CreateTableLikeCommand never copied constraints.
+        //   1. V1 tables (CatalogTable) have no constraint objects — CHECK, PRIMARY KEY,
+        //      UNIQUE and FOREIGN KEY are V2-only concepts (introduced in Spark 4.1.0).
+        //      CreateTableLikeCommand had nothing to copy, so not copying here preserves
+        //      behavioral parity with the V1 path.
         //   2. ForeignKey constraints carry a refTable Identifier bound to the source catalog;
         //      copying them to a different catalog creates dangling cross-catalog references.
         //   3. Constraint names must be unique within a namespace; blindly copying them risks
