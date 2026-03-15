@@ -316,7 +316,22 @@ class UnivocityParser(
 
   private def parseLine(line: String): Array[String] = {
     try {
-      tokenizer.parseLine(line)
+      val tokens = tokenizer.parseLine(line)
+      // SPARK-46959: When escape is set to "" (mapped to '\u0000'), univocity's parser
+      // correctly parses mid-line empty quoted fields ("") as empty strings, but misparses
+      // the last column's "" as a literal '"' character. This happens because there is no
+      // delimiter after the last field to signal field boundary, and univocity interprets
+      // the second '"' as content rather than a closing quote. We fix this by replacing
+      // a single quote-char token in the last position with the configured emptyValue.
+      if (tokens != null && tokens.length > 0 && options.escape == '\u0000') {
+        val lastIdx = tokens.length - 1
+        val lastToken = tokens(lastIdx)
+        if (lastToken != null && lastToken.length == 1 &&
+            lastToken.charAt(0) == options.quote) {
+          tokens(lastIdx) = options.emptyValueInRead
+        }
+      }
+      tokens
     }
     catch {
       case e: TextParsingException if e.getCause.isInstanceOf[ArrayIndexOutOfBoundsException] =>
