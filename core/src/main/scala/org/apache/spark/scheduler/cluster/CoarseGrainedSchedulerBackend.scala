@@ -180,7 +180,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
                   r.release(addressAmount)
                 }
               }
-              makeOffers(executorId)
+              if (scheduler.checkBarrierTasks()) {
+                // If there is a barrier stage pending, we should make a global resource offer
+                // because otherwise we may miss the chance to service it.
+                makeOffers()
+              } else {
+                // If no barrier jobs, offer only the newly freed executor
+                makeOffers(executorId)
+              }
             case None =>
               // Ignoring the update since we don't know about the executor.
               logWarning(log"Ignored task status update (${MDC(TASK_ID, taskId)} " +
