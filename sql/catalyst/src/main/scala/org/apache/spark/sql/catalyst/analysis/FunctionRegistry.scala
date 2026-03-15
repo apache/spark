@@ -907,7 +907,7 @@ object FunctionRegistry {
     expression[ShiftLeft]("<<", true, Some("4.0.0")),
     expression[ShiftRight](">>", true, Some("4.0.0")),
     expression[ShiftRightUnsigned](">>>", true, Some("4.0.0")),
-    expression[BitwiseCount]("bit_count"),
+    expressionBuilder("bit_count", BitCountExpressionBuilder),
     expression[BitAndAgg]("bit_and"),
     expression[BitOrAgg]("bit_or"),
     expression[BitXorAgg]("bit_xor"),

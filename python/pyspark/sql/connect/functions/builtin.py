@@ -300,8 +300,13 @@ def bitwise_not(col: "ColumnOrName") -> Column:
 bitwise_not.__doc__ = pysparkfuncs.bitwise_not.__doc__
 
 
-def bit_count(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("bit_count", col)
+def bit_count(col: "ColumnOrName", bits: Optional[Union[Column, int]] = None) -> Column:
+    if bits is None:
+        return _invoke_function_over_columns("bit_count", col)
+    else:
+        bits = _enum_to_value(bits)
+        bits = lit(bits) if isinstance(bits, int) else bits
+        return _invoke_function_over_columns("bit_count", col, bits)
 
 
 bit_count.__doc__ = pysparkfuncs.bit_count.__doc__

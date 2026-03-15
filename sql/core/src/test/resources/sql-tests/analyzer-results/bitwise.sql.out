@@ -174,6 +174,166 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+select bit_count(9, 64)
+-- !query analysis
+Project [bit_count(9, 64) AS bit_count(9, 64)#x]
++- OneRowRelation
+
+
+-- !query
+select bit_count(9, 8)
+-- !query analysis
+Project [bit_count(9, 8) AS bit_count(9, 8)#x]
++- OneRowRelation
+
+
+-- !query
+select bit_count(-7, 64)
+-- !query analysis
+Project [bit_count(-7, 64) AS bit_count(-7, 64)#x]
++- OneRowRelation
+
+
+-- !query
+select bit_count(-7, 8)
+-- !query analysis
+Project [bit_count(-7, 8) AS bit_count(-7, 8)#x]
++- OneRowRelation
+
+
+-- !query
+select bit_count(0, 8)
+-- !query analysis
+Project [bit_count(0, 8) AS bit_count(0, 8)#x]
++- OneRowRelation
+
+
+-- !query
+select bit_count(-1, 8)
+-- !query analysis
+Project [bit_count(-1, 8) AS bit_count(-1, 8)#x]
++- OneRowRelation
+
+
+-- !query
+select bit_count(-1, 64)
+-- !query analysis
+Project [bit_count(-1, 64) AS bit_count(-1, 64)#x]
++- OneRowRelation
+
+
+-- !query
+select bit_count(9, 0)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.BITS_RANGE",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`bit_count`",
+    "invalidValue" : "0",
+    "parameter" : "`bits`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 22,
+    "fragment" : "bit_count(9, 0)"
+  } ]
+}
+
+
+-- !query
+select bit_count(9, 65)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.BITS_RANGE",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`bit_count`",
+    "invalidValue" : "65",
+    "parameter" : "`bits`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 23,
+    "fragment" : "bit_count(9, 65)"
+  } ]
+}
+
+
+-- !query
+select bit_count(9, null)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NON_FOLDABLE_ARGUMENT",
+  "sqlState" : "42K08",
+  "messageParameters" : {
+    "funcName" : "`bit_count`",
+    "paramName" : "`bits`",
+    "paramType" : "\"INT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "bit_count(9, null)"
+  } ]
+}
+
+
+-- !query
+select bit_count(9, 'a')
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NON_FOLDABLE_ARGUMENT",
+  "sqlState" : "42K08",
+  "messageParameters" : {
+    "funcName" : "`bit_count`",
+    "paramName" : "`bits`",
+    "paramType" : "\"INT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "bit_count(9, 'a')"
+  } ]
+}
+
+
+-- !query
+select bit_count(9, 8, 3)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "3",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "[1, 2]",
+    "functionName" : "`bit_count`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "bit_count(9, 8, 3)"
+  } ]
+}
+
+
+-- !query
 CREATE OR REPLACE TEMPORARY VIEW bitwise_test AS SELECT * FROM VALUES
   (1, 1, 1, 1L),
   (2, 3, 4, null),

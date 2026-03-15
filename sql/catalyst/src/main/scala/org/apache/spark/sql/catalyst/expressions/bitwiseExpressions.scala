@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry}
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types._
 
 /**
@@ -214,38 +214,118 @@ case class BitwiseNot(child: Expression)
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the number of bits that are set in the argument expr as an" +
-    " unsigned 64-bit integer, or NULL if the argument is NULL.",
+  usage = "_FUNC_(expr[, bits]) - Returns the number of bits that are set in the argument expr." +
+    " If bits is specified, treats expr as a bits-bit signed integer in 2's complement." +
+    " If bits is not specified, uses the natural bit width of the input type.",
   examples = """
     Examples:
       > SELECT _FUNC_(0);
        0
+      > SELECT _FUNC_(9, 64);
+       2
+      > SELECT _FUNC_(-7, 8);
+       6
+      > SELECT _FUNC_(-7, 64);
+       62
   """,
   since = "3.0.0",
   group = "bitwise_funcs")
-case class BitwiseCount(child: Expression)
+object BitCountExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    expressions.length match {
+      case 1 => BitwiseCount(expressions.head)
+      case 2 =>
+        val bitsExpr = expressions(1)
+        if (!bitsExpr.foldable || bitsExpr.dataType != IntegerType) {
+          throw QueryCompilationErrors.nonFoldableArgumentError(funcName, "bits", IntegerType)
+        }
+        val bitsVal = bitsExpr.eval()
+        if (bitsVal == null) {
+          throw QueryCompilationErrors.nonFoldableArgumentError(funcName, "bits", IntegerType)
+        }
+        val bits = bitsVal.asInstanceOf[Int]
+        if (bits < 1 || bits > 64) {
+          throw QueryCompilationErrors.bitsRangeError(funcName, bits)
+        }
+        BitwiseCount(expressions.head, bits)
+      case n =>
+        throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1, 2), n)
+    }
+  }
+}
+
+case class BitwiseCount(child: Expression, bits: Int = 0)
   extends UnaryExpression with ExpectsInputTypes {
+  require(bits == 0 || (bits >= 1 && bits <= 64),
+    s"bits must be 0 (natural width) or in [1, 64], got $bits")
   override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(IntegralType, BooleanType))
 
   override def dataType: DataType = IntegerType
 
-  override def toString: String = s"bit_count($child)"
+  override def toString: String =
+    if (bits > 0) s"bit_count($child, $bits)" else s"bit_count($child)"
 
   override def prettyName: String = "bit_count"
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = child.dataType match {
-    case BooleanType => defineCodeGen(ctx, ev, c => s"($c) ? 1 : 0")
-    case _ => defineCodeGen(ctx, ev, c => s"java.lang.Long.bitCount($c)")
+  override def sql: String =
+    if (bits > 0) s"${prettyName}(${child.sql}, $bits)" else s"${prettyName}(${child.sql})"
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    if (bits > 0) {
+      // Explicit bit width: cast to long, apply mask, use Long.bitCount
+      val maskStr = if (bits == 64) "-1L" else s"((1L << $bits) - 1)"
+      child.dataType match {
+        case BooleanType => defineCodeGen(ctx, ev,
+          c => s"(int) java.lang.Long.bitCount(($c ? 1L : 0L) & $maskStr)")
+        case ByteType | ShortType | IntegerType => defineCodeGen(ctx, ev,
+          c => s"(int) java.lang.Long.bitCount(((long) $c) & $maskStr)")
+        case LongType => defineCodeGen(ctx, ev,
+          c => s"(int) java.lang.Long.bitCount($c & $maskStr)")
+      }
+    } else {
+      // Natural bit width: use type-specific bitCount
+      child.dataType match {
+        case BooleanType => defineCodeGen(ctx, ev, c => s"($c) ? 1 : 0")
+        case ByteType => defineCodeGen(ctx, ev, c =>
+          s"java.lang.Integer.bitCount(java.lang.Byte.toUnsignedInt($c))")
+        case ShortType => defineCodeGen(ctx, ev, c =>
+          s"java.lang.Integer.bitCount(java.lang.Short.toUnsignedInt($c))")
+        case IntegerType =>
+          defineCodeGen(ctx, ev, c => s"java.lang.Integer.bitCount($c)")
+        case LongType =>
+          defineCodeGen(ctx, ev, c => s"java.lang.Long.bitCount($c)")
+      }
+    }
   }
 
-  protected override def nullSafeEval(input: Any): Any = child.dataType match {
-    case BooleanType => if (input.asInstanceOf[Boolean]) 1 else 0
-    case ByteType => java.lang.Long.bitCount(input.asInstanceOf[Byte])
-    case ShortType => java.lang.Long.bitCount(input.asInstanceOf[Short])
-    case IntegerType => java.lang.Long.bitCount(input.asInstanceOf[Int])
-    case LongType => java.lang.Long.bitCount(input.asInstanceOf[Long])
+  protected override def nullSafeEval(input: Any): Any = {
+    if (bits > 0) {
+      // Explicit bit width: cast to long, apply mask, use Long.bitCount
+      val mask = if (bits == 64) -1L else (1L << bits) - 1
+      val longVal = child.dataType match {
+        case BooleanType => if (input.asInstanceOf[Boolean]) 1L else 0L
+        case ByteType => input.asInstanceOf[Byte].toLong
+        case ShortType => input.asInstanceOf[Short].toLong
+        case IntegerType => input.asInstanceOf[Int].toLong
+        case LongType => input.asInstanceOf[Long]
+      }
+      java.lang.Long.bitCount(longVal & mask).toInt
+    } else {
+      // Natural bit width: use type-specific bitCount
+      child.dataType match {
+        case BooleanType => if (input.asInstanceOf[Boolean]) 1 else 0
+        case ByteType => java.lang.Integer.bitCount(
+          java.lang.Byte.toUnsignedInt(input.asInstanceOf[Byte]))
+        case ShortType => java.lang.Integer.bitCount(
+          java.lang.Short.toUnsignedInt(input.asInstanceOf[Short]))
+        case IntegerType =>
+          java.lang.Integer.bitCount(input.asInstanceOf[Int])
+        case LongType =>
+          java.lang.Long.bitCount(input.asInstanceOf[Long])
+      }
+    }
   }
 
   override protected def withNewChildInternal(newChild: Expression): BitwiseCount =
