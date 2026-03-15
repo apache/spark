@@ -22,8 +22,6 @@ import java.io.Writer
 import com.fasterxml.jackson.core._
 import com.fasterxml.jackson.core.util.DefaultPrettyPrinter
 
-import scala.util.Sorting
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util._
@@ -294,18 +292,11 @@ class JacksonGenerator(
     } else {
       val keyType = mapType.keyType
       val indices = Array.tabulate(numElements)(identity)
-      val ordering = new Ordering[Int] {
-        override def compare(x: Int, y: Int): Int = {
-          val sx = keyArray.get(x, keyType).toString
-          val sy = keyArray.get(y, keyType).toString
-          sx.compareTo(sy)
-        }
-      }
-      Sorting.quickSort(indices)(ordering)
+      val sortedIndices = indices.sortBy(i => keyArray.get(i, keyType).toString)
 
       var pos = 0
       while (pos < numElements) {
-        val i = indices(pos)
+        val i = sortedIndices(pos)
         gen.writeFieldName(keyArray.get(i, keyType).toString)
         if (!valueArray.isNullAt(i)) {
           fieldWriter.apply(valueArray, i)
