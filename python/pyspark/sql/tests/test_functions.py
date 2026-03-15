@@ -3396,6 +3396,21 @@ class FunctionsTestsMixin:
         self.assertEqual("""{"a":1}""", actual["var"])
         self.assertEqual("""{"b":[{"c":"str2"}]}""", actual["var_lit"])
 
+    def test_to_json_sort_keys_option(self):
+        df = self.spark.createDataFrame([({"b": 1, "a": 2},)], ["m"])
+        res = df.select(F.to_json("m", {"sortKeys": "true"}).alias("j")).collect()
+        self.assertEqual("""{"a":2,"b":1}""", res[0]["j"])
+
+        nested = self.spark.createDataFrame(
+            [({"outerB": {"y": 2, "x": 1}, "outerA": {"d": 4, "c": 3}},)],
+            ["m"],
+        )
+        res_nested = nested.select(F.to_json("m", {"sortKeys": "true"}).alias("j")).collect()
+        self.assertEqual(
+            """{"outerA":{"c":3,"d":4},"outerB":{"x":1,"y":2}}""",
+            res_nested[0]["j"],
+        )
+
     def test_variant_expressions(self):
         df = self.spark.createDataFrame(
             [Row(json="""{ "a" : 1 }""", path="$.a"), Row(json="""{ "b" : 2 }""", path="$.b")]

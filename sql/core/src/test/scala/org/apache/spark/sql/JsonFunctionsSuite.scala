@@ -423,6 +423,22 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       Row("""{"a":1}""") :: Nil)
   }
 
+  test("to_json with option (sortKeys)") {
+    val df = Seq(Map("b" -> 1, "a" -> 2)).toDF("a")
+    val options = Map("sortKeys" -> "true")
+
+    checkAnswer(
+      df.select(to_json($"a", options)),
+      Row("""{"a":2,"b":1}""") :: Nil)
+
+    val nested = Seq(Map("outerB" -> Map("y" -> 2, "x" -> 1),
+      "outerA" -> Map("d" -> 4, "c" -> 3))).toDF("m")
+
+    checkAnswer(
+      nested.select(to_json($"m", options)),
+      Row("""{"outerA":{"c":3,"d":4},"outerB":{"x":1,"y":2}}""") :: Nil)
+  }
+
   test("to_json with option (timestampFormat)") {
     val df = Seq(Tuple1(Tuple1(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0")))).toDF("a")
     val options = Map("timestampFormat" -> "dd/MM/yyyy HH:mm")
