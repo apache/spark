@@ -69,6 +69,7 @@ The followings are best practices of naming configs for some common cases:
  * @param isPublic if this configuration is public to the user. If it's `false`, this
  *                 configuration is only used internally and we should not expose it to users.
  * @param version the spark version when the configuration was released.
+ * @param bindingPolicy optional policy for SQL configs: SESSION or PERSISTED.
  * @tparam T the value type
  */
 private[spark] abstract class ConfigEntry[T] (
@@ -80,7 +81,8 @@ private[spark] abstract class ConfigEntry[T] (
     val stringConverter: T => String,
     val doc: String,
     val isPublic: Boolean,
-    val version: String) {
+    val version: String,
+    val bindingPolicy: Option[ConfigBindingPolicy.ConfigBindingPolicy] = None) {
 
   import ConfigEntry._
 
@@ -120,7 +122,8 @@ private class ConfigEntryWithDefault[T] (
     stringConverter: T => String,
     doc: String,
     isPublic: Boolean,
-    version: String)
+    version: String,
+    bindingPolicy: Option[ConfigBindingPolicy.ConfigBindingPolicy])
   extends ConfigEntry(
     key,
     prependedKey,
@@ -130,7 +133,8 @@ private class ConfigEntryWithDefault[T] (
     stringConverter,
     doc,
     isPublic,
-    version
+    version,
+    bindingPolicy
   ) {
 
   override def defaultValue: Option[T] = Some(_defaultValue)
@@ -152,7 +156,8 @@ private class ConfigEntryWithDefaultFunction[T] (
     stringConverter: T => String,
     doc: String,
     isPublic: Boolean,
-    version: String)
+    version: String,
+    bindingPolicy: Option[ConfigBindingPolicy.ConfigBindingPolicy])
   extends ConfigEntry(
     key,
     prependedKey,
@@ -162,7 +167,8 @@ private class ConfigEntryWithDefaultFunction[T] (
     stringConverter,
     doc,
     isPublic,
-    version
+    version,
+    bindingPolicy
   ) {
 
   override def defaultValue: Option[T] = Some(_defaultFunction())
@@ -184,7 +190,8 @@ private class ConfigEntryWithDefaultString[T] (
     stringConverter: T => String,
     doc: String,
     isPublic: Boolean,
-    version: String)
+    version: String,
+    bindingPolicy: Option[ConfigBindingPolicy.ConfigBindingPolicy])
   extends ConfigEntry(
     key,
     prependedKey,
@@ -194,7 +201,8 @@ private class ConfigEntryWithDefaultString[T] (
     stringConverter,
     doc,
     isPublic,
-    version
+    version,
+    bindingPolicy
   ) {
 
   override def defaultValue: Option[T] = Some(valueConverter(_defaultValue))
@@ -220,7 +228,8 @@ private[spark] class OptionalConfigEntry[T](
     val rawStringConverter: T => String,
     doc: String,
     isPublic: Boolean,
-    version: String)
+    version: String,
+    bindingPolicy: Option[ConfigBindingPolicy.ConfigBindingPolicy])
   extends ConfigEntry[Option[T]](
     key,
     prependedKey,
@@ -230,7 +239,8 @@ private[spark] class OptionalConfigEntry[T](
     v => v.map(rawStringConverter).orNull,
     doc,
     isPublic,
-    version
+    version,
+    bindingPolicy
   ) {
 
   override def defaultValueString: String = ConfigEntry.UNDEFINED
@@ -251,7 +261,8 @@ private[spark] class FallbackConfigEntry[T] (
     doc: String,
     isPublic: Boolean,
     version: String,
-    val fallback: ConfigEntry[T])
+    val fallback: ConfigEntry[T],
+    bindingPolicy: Option[ConfigBindingPolicy.ConfigBindingPolicy])
   extends ConfigEntry[T](
     key,
     prependedKey,
@@ -261,7 +272,8 @@ private[spark] class FallbackConfigEntry[T] (
     fallback.stringConverter,
     doc,
     isPublic,
-    version
+    version,
+    bindingPolicy
   ) {
 
   override def defaultValueString: String = s"<value of ${fallback.key}>"

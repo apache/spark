@@ -2223,11 +2223,16 @@ class SessionCatalog(
       val hasTemp = functionRegistry.functionExists(tempIdent) ||
                      tableFunctionRegistry.functionExists(tempIdent)
 
-      // Check if builtin exists - but ONLY if it's actually a builtin, not a cached persistent
+      // Check if builtin exists - but ONLY if it's actually a builtin, not a cached persistent.
+      // Session registry stores builtins with 3-part keys (system.builtin.func).
+      val builtinIdent3 = FunctionIdentifier(format(name.funcName),
+        Some(CatalogManager.BUILTIN_NAMESPACE), Some(CatalogManager.SYSTEM_CATALOG_NAME))
       val hasBuiltin = (FunctionRegistry.functionSet.contains(builtinIdent) ||
                         TableFunctionRegistry.functionSet.contains(builtinIdent)) &&
                        (functionRegistry.functionExists(builtinIdent) ||
-                        tableFunctionRegistry.functionExists(builtinIdent))
+                        functionRegistry.functionExists(builtinIdent3) ||
+                        tableFunctionRegistry.functionExists(builtinIdent) ||
+                        tableFunctionRegistry.functionExists(builtinIdent3))
 
       hasTemp || hasBuiltin
     } else {
@@ -2367,7 +2372,15 @@ class SessionCatalog(
         if (functionRegistry.functionExists(identifier)) {
           Option(functionRegistry.lookupFunction(identifier, arguments))
         } else {
-          None
+          // Internal functions (e.g. distributed_sequence_id, unwrap_udt) are not in the
+          // session registry; resolve them from FunctionRegistry.internal when looked up
+          // via system.builtin on the search path.
+          try {
+            Some(FunctionRegistry.internal.lookupFunction(
+              FunctionIdentifier(name), arguments))
+          } catch {
+            case _: NoSuchFunctionException => None
+          }
         }
       case SessionCatalog.Temp =>
         synchronized {
@@ -2462,7 +2475,7 @@ class SessionCatalog(
         val funcMetadata = fetchCatalogFunction(qualifiedIdent)
         if (funcMetadata.isUserDefinedFunction) {
           UserDefinedFunction.fromCatalogFunction(funcMetadata, parser).toExpressionInfo
-          } else {
+        } else {
           makeExprInfoForHiveFunction(funcMetadata)
         }
       }
@@ -2649,6 +2662,8 @@ class SessionCatalog(
     functions.map {
       case f if FunctionRegistry.functionSet.contains(f) => (f, "SYSTEM")
       case f if TableFunctionRegistry.functionSet.contains(f) => (f, "SYSTEM")
+      case f if f.database.contains(CatalogManager.BUILTIN_NAMESPACE) &&
+          f.catalog.contains(CatalogManager.SYSTEM_CATALOG_NAME) => (f, "SYSTEM")
       case f if f.database.isDefined => (qualifyIdentifier(f), "USER")
       case f => (f, "USER")
     }.distinct
@@ -2692,21 +2707,26 @@ class SessionCatalog(
     functionRegistry.clear()
     tableFunctionRegistry.clear()
     tableRelationCache.invalidateAll()
-    // restore built-in functions
+    // restore built-in functions with 3-part keys (system.builtin.func) per storage convention
+    val builtinIdent = (name: String) =>
+      FunctionIdentifier(name, Some(CatalogManager.BUILTIN_NAMESPACE),
+        Some(CatalogManager.SYSTEM_CATALOG_NAME))
     FunctionRegistry.builtin.listFunction().foreach { f =>
       val expressionInfo = FunctionRegistry.builtin.lookupFunction(f)
       val functionBuilder = FunctionRegistry.builtin.lookupFunctionBuilder(f)
       require(expressionInfo.isDefined, s"built-in function '$f' is missing expression info")
       require(functionBuilder.isDefined, s"built-in function '$f' is missing function builder")
-      functionRegistry.registerFunction(f, expressionInfo.get, functionBuilder.get)
+      functionRegistry.registerFunction(builtinIdent(f.funcName), expressionInfo.get,
+        functionBuilder.get)
     }
-    // restore built-in table functions
+    // restore built-in table functions with 3-part keys (system.builtin.func)
     TableFunctionRegistry.builtin.listFunction().foreach { f =>
       val expressionInfo = TableFunctionRegistry.builtin.lookupFunction(f)
       val functionBuilder = TableFunctionRegistry.builtin.lookupFunctionBuilder(f)
       require(expressionInfo.isDefined, s"built-in function '$f' is missing expression info")
       require(functionBuilder.isDefined, s"built-in function '$f' is missing function builder")
-      tableFunctionRegistry.registerFunction(f, expressionInfo.get, functionBuilder.get)
+      tableFunctionRegistry.registerFunction(builtinIdent(f.funcName), expressionInfo.get,
+        functionBuilder.get)
     }
   }
 
