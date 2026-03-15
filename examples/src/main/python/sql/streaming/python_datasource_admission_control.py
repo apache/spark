@@ -42,11 +42,12 @@ Expected output shows batches limited to 2 rows each:
 """
 
 import time
-from typing import Iterator, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple
 
-from pyspark.sql import SparkSession
+from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.datasource import DataSource, DataSourceStreamReader, InputPartition
 from pyspark.sql.streaming.datasource import ReadAllAvailable, ReadLimit, ReadMaxRows
+from pyspark.sql.types import StructType
 
 
 class RangePartition(InputPartition):
@@ -163,13 +164,13 @@ class AdmissionControlDataSource(DataSource):
     def schema(self) -> str:
         return "id INT, value STRING"
 
-    def streamReader(self, schema) -> DataSourceStreamReader:
+    def streamReader(self, schema: StructType) -> DataSourceStreamReader:
         return AdmissionControlStreamReader()
 
 
-def main():
+def main() -> None:
     """Run the admission control streaming example."""
-    spark = SparkSession.builder.appName("AdmissionControlExample").getOrCreate()
+    spark: SparkSession = SparkSession.builder.appName("AdmissionControlExample").getOrCreate()
 
     # Register the custom data source
     spark.dataSource.register(AdmissionControlDataSource)
@@ -178,9 +179,9 @@ def main():
     df = spark.readStream.format("admission_control_example").load()
 
     # Track batch statistics
-    batch_stats = []
+    batch_stats: List[Dict[str, Any]] = []
 
-    def process_batch(batch_df, batch_id):
+    def process_batch(batch_df: DataFrame, batch_id: int) -> None:
         """Process each micro-batch and track statistics."""
         count = batch_df.count()
         rows = [row.asDict() for row in batch_df.collect()]

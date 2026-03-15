@@ -40,9 +40,9 @@ Expected output:
 
 import hashlib
 import time
-from typing import Iterator, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple
 
-from pyspark.sql import SparkSession
+from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.datasource import DataSource, DataSourceStreamReader, InputPartition
 from pyspark.sql.streaming.datasource import (
     ReadAllAvailable,
@@ -50,6 +50,7 @@ from pyspark.sql.streaming.datasource import (
     ReadMaxRows,
     SupportsTriggerAvailableNow,
 )
+from pyspark.sql.types import StructType
 
 
 class BlockPartition(InputPartition):
@@ -72,8 +73,8 @@ class BlockchainStreamReader(DataSourceStreamReader, SupportsTriggerAvailableNow
     # Simulated chain height (total blocks available)
     CHAIN_HEIGHT = 1000000
 
-    def __init__(self):
-        self._trigger_available_now_target = None
+    def __init__(self) -> None:
+        self._trigger_available_now_target: Optional[int] = None
 
     def initialOffset(self) -> dict:
         """Return the starting block number for new queries."""
@@ -188,13 +189,13 @@ class BlockchainDataSource(DataSource):
     def schema(self) -> str:
         return "block_number INT, block_hash STRING, timestamp LONG, transaction_count INT"
 
-    def streamReader(self, schema) -> DataSourceStreamReader:
+    def streamReader(self, schema: StructType) -> DataSourceStreamReader:
         return BlockchainStreamReader()
 
 
-def main():
+def main() -> None:
     """Run the blockchain admission control streaming example."""
-    spark = SparkSession.builder.appName("BlockchainAdmissionControl").getOrCreate()
+    spark: SparkSession = SparkSession.builder.appName("BlockchainAdmissionControl").getOrCreate()
 
     # Register custom data source
     spark.dataSource.register(BlockchainDataSource)
@@ -203,9 +204,9 @@ def main():
     df = spark.readStream.format("blockchain_example").load()
 
     # Track blocks processed
-    blocks_processed = []
+    blocks_processed: List[Dict[str, Any]] = []
 
-    def process_batch(batch_df, batch_id):
+    def process_batch(batch_df: DataFrame, batch_id: int) -> None:
         """Process each micro-batch of blocks."""
         count = batch_df.count()
         blocks = [row.asDict() for row in batch_df.collect()]
