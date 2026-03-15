@@ -21,12 +21,13 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.variant.VariantGet
 import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
-import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, UserDefinedScalarFunc}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, LongType, StringType, StructField, StructType, VariantType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class DataSourceV2StrategySuite extends SharedSparkSession {
@@ -816,6 +817,57 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       v2Expr = new GeneralScalarExpression("*", Array(
         LiteralValue(1.0, DoubleType),
         FieldReference("cdouble"))))
+  }
+
+  test("VariantGet serializes to UserDefinedScalarFunc") {
+    val ref = AttributeReference("v", VariantType)()
+    val path = Literal.create("$.city", StringType)
+    val expr = VariantGet(ref, path, StringType, failOnError = true)
+    val gt = GreaterThan(expr, Literal.create("NYC", StringType))
+    val result = new V2ExpressionBuilder(gt, isPredicate = true).build()
+    result match {
+      case Some(v2pred: Predicate) if v2pred.name() == ">" =>
+        v2pred.children()(0) match {
+          case udf: UserDefinedScalarFunc =>
+            assert(udf.name() == "variant_get")
+            assert(udf.children().length == 3)
+          case _ => fail("expected UserDefinedScalarFunc")
+        }
+      case _ => fail("expected predicate with name '>'")
+    }
+  }
+
+  test("VariantGet predicate is translated by translateFilterV2") {
+    val ref = AttributeReference("v", VariantType)()
+    val path = Literal.create("$.city", StringType)
+    val expr = VariantGet(ref, path, StringType, failOnError = true)
+    val gt = GreaterThan(expr, Literal.create("NYC", StringType))
+    val result = DataSourceV2Strategy.translateFilterV2(gt)
+    assert(result.isDefined)
+    result.get.children()(0) match {
+      case udf: UserDefinedScalarFunc =>
+        assert(udf.name() == "variant_get")
+        assert(udf.children().length == 3)
+      case _ => fail("expected UserDefinedScalarFunc in translated predicate")
+    }
+  }
+
+  test("try_variant_get serializes to UserDefinedScalarFunc with try_variant_get name") {
+    val ref = AttributeReference("v", VariantType)()
+    val path = Literal.create("$.city", StringType)
+    val expr = VariantGet(ref, path, StringType, failOnError = false)
+    val gt = GreaterThan(expr, Literal.create("NYC", StringType))
+    val result = new V2ExpressionBuilder(gt, isPredicate = true).build()
+    result match {
+      case Some(v2pred: Predicate) if v2pred.name() == ">" =>
+        v2pred.children()(0) match {
+          case udf: UserDefinedScalarFunc =>
+            assert(udf.name() == "try_variant_get")
+            assert(udf.children().length == 3)
+          case _ => fail("expected UserDefinedScalarFunc")
+        }
+      case _ => fail("expected predicate with name '>'")
+    }
   }
 
   test("Current Like functions are not supported") {
