@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, TYPE_CHECK
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import CategoricalDtype  # noqa: F401
+from pandas.api.types import CategoricalDtype, is_integer_dtype  # noqa: F401
 
 from pyspark._globals import _NoValue, _NoValueType
 from pyspark.sql import (
@@ -1109,7 +1109,7 @@ class InternalFrame:
         data_columns: List[str],
         column_labels: List[Label],
         column_label_names: List[Label],
-        fields: List[InternalField] = None,
+        fields: List[InternalField],
     ) -> pd.DataFrame:
         """
         Restore pandas DataFrame indices using the metadata.
@@ -1156,12 +1156,26 @@ class InternalFrame:
         for col, field in zip(pdf.columns, fields):
             pdf[col] = DataTypeOps(field.dtype, field.spark_type).restore(pdf[col])
 
+        if len(index_columns) == 1:
+            original_index_values = pdf[index_columns[0]].copy()
+
         append = False
         for index_field in index_columns:
             drop = index_field not in data_columns
             pdf = pdf.set_index(index_field, drop=drop, append=append)
             append = True
         pdf = pdf[data_columns]
+
+        # pandas can optimize sequential integer values into RangeIndex here, which drops the
+        # original narrower dtype such as int8 or int32 carried in the index metadata.
+        if len(index_columns) == 1 and isinstance(pdf.index, pd.RangeIndex):
+            internal_field = fields[0]
+            if is_integer_dtype(internal_field.dtype) and internal_field.dtype != np.dtype("int64"):
+                pdf.index = pd.Index(
+                    original_index_values,
+                    dtype=internal_field.dtype,
+                    name=pdf.index.name,
+                )
 
         pdf.index.names = [
             name if name is None or len(name) > 1 else name[0] for name in index_names
