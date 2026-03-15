@@ -1655,6 +1655,7 @@ class DataSourceV2SQLSuiteV1Filter
 
   test("SPARK-41290: Generated column expression must be valid generation expression") {
     val tblName = "my_tab"
+
     def checkUnsupportedGenerationExpression(
         expr: String,
         expectedReason: String,
@@ -1674,10 +1675,31 @@ class DataSourceV2SQLSuiteV1Filter
       }
     }
 
+    def checkUnresolvedRoutineException(
+        expr: String,
+        routineName: String): Unit = {
+      val tableDef =
+        s"CREATE TABLE testcat.$tblName(a INT, b INT GENERATED ALWAYS AS ($expr)) USING foo"
+      // Calculate the position of the expression in the SQL string
+      val prefix = s"CREATE TABLE testcat.$tblName(a INT, b INT GENERATED ALWAYS AS ("
+      val start = prefix.length
+      val stop = start + expr.length - 1
+      withTable(s"testcat.$tblName") {
+        checkError(
+          exception = analysisException(tableDef),
+          condition = "UNRESOLVED_ROUTINE",
+          parameters = Map(
+            "routineName" -> routineName,
+            "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
+          context = ExpectedContext(fragment = expr, start = start, stop = stop)
+        )
+      }
+    }
+
     // Expression cannot be resolved since it doesn't exist
-    checkUnsupportedGenerationExpression(
+    checkUnresolvedRoutineException(
       "not_a_function(a)",
-      "failed to resolve `not_a_function` to a built-in function"
+      "`not_a_function`"
     )
 
     // Expression cannot be resolved since it's not a built-in function
@@ -1703,12 +1725,15 @@ class DataSourceV2SQLSuiteV1Filter
     // Doesn't intercept when case-sensitive
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       withTable(s"testcat.$tblName") {
+        val sql = s"CREATE TABLE testcat.$tblName(a INT, " +
+          "b INT GENERATED ALWAYS AS (B + 1)) USING foo"
+        // "B" appears at position 62 in the SQL string
+        val bPosition = sql.indexOf("(B + 1)") + 1
         checkError(
-          exception = analysisException(s"CREATE TABLE testcat.$tblName(a INT, " +
-              "b INT GENERATED ALWAYS AS (B + 1)) USING foo"),
+          exception = analysisException(sql),
           condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-          parameters = Map("objectName" -> "`B`", "proposal" -> "`a`"),
-          context = ExpectedContext(fragment = "B", start = 0, stop = 0)
+          parameters = Map("objectName" -> "`B`", "proposal" -> "`a`, `b`"),
+          context = ExpectedContext(fragment = "B", start = bPosition, stop = bPosition)
         )
       }
     }
@@ -1760,12 +1785,14 @@ class DataSourceV2SQLSuiteV1Filter
 
     // Generated column can't reference non-existent column
     withTable(s"testcat.$tblName") {
+      val sql = s"CREATE TABLE testcat.$tblName(a INT, " +
+        "b INT GENERATED ALWAYS AS (c + 1)) USING foo"
+      val cPosition = sql.indexOf("(c + 1)") + 1
       checkError(
-        exception = analysisException(s"CREATE TABLE testcat.$tblName(a INT, b INT GENERATED " +
-          s"ALWAYS AS (c + 1)) USING foo"),
+        exception = analysisException(sql),
         condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-        parameters = Map("objectName" -> "`c`", "proposal" -> "`a`"),
-        context = ExpectedContext(fragment = "c", start = 0, stop = 0)
+        parameters = Map("objectName" -> "`c`", "proposal" -> "`a`, `b`"),
+        context = ExpectedContext(fragment = "c", start = cPosition, stop = cPosition)
       )
     }
 
@@ -1809,6 +1836,74 @@ class DataSourceV2SQLSuiteV1Filter
     }
     checkUnsupportedGenerationExpression(
       "(select min(x) from faketable)", // refers to a non-existent table
+      "subquery expressions are not allowed for generated columns"
+    )
+  }
+
+  test("SPARK-41290: REPLACE TABLE - Generated column expression must be valid") {
+    val tblName = "my_tab"
+
+    def checkUnsupportedGenerationExpression(
+        expr: String,
+        expectedReason: String,
+        genColType: String = "INT",
+        customTableDef: Option[String] = None): Unit = {
+      val tableDef =
+        s"REPLACE TABLE testcat.$tblName(a INT, b $genColType " +
+          s"GENERATED ALWAYS AS ($expr)) USING foo"
+      withTable(s"testcat.$tblName") {
+        // Create an initial table first so REPLACE TABLE can work
+        sql(s"CREATE TABLE testcat.$tblName(dummy INT) USING foo")
+        checkError(
+          exception = analysisException(customTableDef.getOrElse(tableDef)),
+          condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+          parameters = Map(
+            "fieldName" -> "b",
+            "expressionStr" -> expr,
+            "reason" -> expectedReason)
+        )
+      }
+    }
+
+    // Expression cannot be resolved since it's not a built-in function
+    spark.udf.register("timesTwo", (x: Int) => x * 2)
+    checkUnsupportedGenerationExpression(
+      "timesTwo(a)",
+      "failed to resolve `timesTwo` to a built-in function"
+    )
+
+    // Generated column can't reference itself
+    checkUnsupportedGenerationExpression(
+      "b + 1",
+      "generation expression cannot reference itself"
+    )
+
+    // Generated column can't reference other generated columns
+    checkUnsupportedGenerationExpression(
+      "c + 1",
+      "generation expression cannot reference another generated column",
+      customTableDef = Some(
+        s"REPLACE TABLE testcat.$tblName(a INT, " +
+          "b INT GENERATED ALWAYS AS (c + 1), c INT GENERATED ALWAYS AS (a + 1)) USING foo"
+      )
+    )
+
+    // Expression must be deterministic
+    checkUnsupportedGenerationExpression(
+      "rand()",
+      "generation expression is not deterministic"
+    )
+
+    // Data type is incompatible
+    checkUnsupportedGenerationExpression(
+      "a + 1",
+      "generation expression data type int is incompatible with column data type boolean",
+      "BOOLEAN"
+    )
+
+    // No subquery expressions
+    checkUnsupportedGenerationExpression(
+      "(SELECT 1)",
       "subquery expressions are not allowed for generated columns"
     )
   }

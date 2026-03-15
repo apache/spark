@@ -19,18 +19,20 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{AnalysisAwareExpression, Expression, Literal, UnaryExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.{AnalysisAwareExpression, AttributeReference, Cast, Expression, Literal, UnaryExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
-import org.apache.spark.sql.catalyst.trees.TreePattern.{ANALYSIS_AWARE_EXPRESSION, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{ANALYSIS_AWARE_EXPRESSION, PLAN_EXPRESSION, TreePattern}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, GeneratedColumn, IdentityColumn, V2ExpressionBuilder}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.validateDefaultValueExpr
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.{CURRENT_DEFAULT_COLUMN_METADATA_KEY, EXISTS_DEFAULT_COLUMN_METADATA_KEY}
-import org.apache.spark.sql.connector.catalog.{Column => V2Column, ColumnDefaultValue, DefaultValue, IdentityColumnSpec}
+import org.apache.spark.sql.connector.catalog.{Column => V2Column, ColumnDefaultValue, DefaultValue, GenerationExpression, IdentityColumnSpec}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
-import org.apache.spark.sql.connector.expressions.LiteralValue
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, LiteralValue}
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.ColumnImpl
 import org.apache.spark.sql.types.{DataType, Metadata, MetadataBuilder, StructField}
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * User-specified column definition for CREATE/REPLACE TABLE commands. This is an expression so that
@@ -46,18 +48,31 @@ case class ColumnDefinition(
     nullable: Boolean = true,
     comment: Option[String] = None,
     defaultValue: Option[DefaultValueExpression] = None,
-    generationExpression: Option[String] = None,
+    generationExpression: Option[GeneratedColumnExpression] = None,
     identityColumnSpec: Option[IdentityColumnSpec] = None,
     metadata: Metadata = Metadata.empty) extends Expression with Unevaluable {
   assert(
     generationExpression.isEmpty || identityColumnSpec.isEmpty,
     "A ColumnDefinition cannot contain both a generation expression and an identity column spec.")
 
-  override def children: Seq[Expression] = defaultValue.toSeq
+  override def children: Seq[Expression] = defaultValue.toSeq ++ generationExpression.toSeq
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): Expression = {
-    copy(defaultValue = newChildren.headOption.map(_.asInstanceOf[DefaultValueExpression]))
+    val hasDefault = defaultValue.isDefined
+    val hasGenExpr = generationExpression.isDefined
+    val newDefault = if (hasDefault) {
+      Some(newChildren.head.asInstanceOf[DefaultValueExpression])
+    } else {
+      None
+    }
+    val newGenExpr = if (hasGenExpr) {
+      val idx = if (hasDefault) 1 else 0
+      Some(newChildren(idx).asInstanceOf[GeneratedColumnExpression])
+    } else {
+      None
+    }
+    copy(defaultValue = newDefault, generationExpression = newGenExpr)
   }
 
   def toV2Column(statement: String): V2Column = {
@@ -67,7 +82,7 @@ case class ColumnDefinition(
       nullable,
       comment.orNull,
       defaultValue.map(_.toV2(statement, name)).orNull,
-      generationExpression.orNull,
+      generationExpression.map(_.toV2).orNull,
       identityColumnSpec.orNull,
       if (metadata == Metadata.empty) null else metadata.json)
   }
@@ -86,8 +101,9 @@ case class ColumnDefinition(
       }
       metadataBuilder.putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, existsSQL)
     }
-    generationExpression.foreach { generationExpr =>
-      metadataBuilder.putString(GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY, generationExpr)
+    generationExpression.foreach { genExpr =>
+      metadataBuilder.putString(GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY,
+        genExpr.originalSQL)
     }
     encodeIdentityColumnSpec(metadataBuilder)
     StructField(name, dataType, nullable, metadataBuilder.build())
@@ -146,7 +162,9 @@ object ColumnDefinition {
     } else {
       None
     }
-    val generationExpr = GeneratedColumn.getGenerationExpression(col)
+    val generationExpr = GeneratedColumn.getGenerationExpression(col).map { sql =>
+      GeneratedColumnExpression(parser.parseExpression(sql), sql)
+    }
     val identityColumnSpec = if (col.metadata.contains(IdentityColumn.IDENTITY_INFO_START)) {
       Some(new IdentityColumnSpec(
         col.metadata.getLong(IdentityColumn.IDENTITY_INFO_START),
@@ -217,7 +235,7 @@ object ColumnDefinition {
         messageParameters = Map(
           "colName" -> col.name,
           "defaultValue" -> col.defaultValue.get.originalSQL,
-          "genExpr" -> col.generationExpression.get
+          "genExpr" -> col.generationExpression.get.originalSQL
         )
       )
     }
@@ -271,5 +289,92 @@ case class DefaultValueExpression(
       new DefaultValue(originalSQL, currentDefault.orNull)
     case _ =>
       throw QueryCompilationErrors.defaultValueNotConstantError(statement, colName, originalSQL)
+  }
+}
+
+/**
+ * A wrapper expression to hold the generation expression and its original SQL text.
+ * The child expression is resolved by the normal analyzer rules through the expression tree.
+ */
+case class GeneratedColumnExpression(
+    child: Expression,
+    originalSQL: String)
+  extends UnaryExpression with Unevaluable {
+
+  override def dataType: DataType = child.dataType
+
+  override def stringArgs: Iterator[Any] = Iterator(child, originalSQL)
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
+
+  /**
+   * Validate the generation expression and throw an AnalysisException if invalid.
+   * Validations include:
+   * - The expression cannot reference itself
+   * - The expression cannot reference other generated columns
+   * - The expression must be deterministic
+   * - The expression data type can be safely up-cast to the destination column data type
+   * - No subquery expressions
+   * - No non-UTF8 binary collation
+   */
+  def validate(
+      fieldName: String,
+      targetDataType: DataType,
+      allColumns: Seq[ColumnDefinition]): Unit = {
+    def unsupportedExpressionError(reason: String): AnalysisException = {
+      new AnalysisException(
+        errorClass = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+        messageParameters = Map(
+          "fieldName" -> fieldName,
+          "expressionStr" -> originalSQL,
+          "reason" -> reason))
+    }
+
+    // Don't allow subquery expressions
+    if (child.containsPattern(PLAN_EXPRESSION)) {
+      throw unsupportedExpressionError("subquery expressions are not allowed for generated columns")
+    }
+
+    // Use the resolver to respect case sensitivity settings
+    val resolver = SQLConf.get.resolver
+
+    // Check for self-reference - the expression cannot reference itself
+    val referencedColumns = child.collect {
+      case a: AttributeReference => a.name
+    }
+    if (referencedColumns.exists(resolver(_, fieldName))) {
+      throw unsupportedExpressionError("generation expression cannot reference itself")
+    }
+
+    // Check for references to other generated columns
+    val generatedColumnNames = allColumns
+      .filter(col => col.generationExpression.isDefined && !resolver(col.name, fieldName))
+      .map(_.name)
+    if (referencedColumns.exists(ref => generatedColumnNames.exists(resolver(ref, _)))) {
+      throw unsupportedExpressionError(
+        "generation expression cannot reference another generated column")
+    }
+
+    if (!child.deterministic) {
+      throw unsupportedExpressionError("generation expression is not deterministic")
+    }
+
+    if (!Cast.canUpCast(child.dataType, targetDataType)) {
+      throw unsupportedExpressionError(
+        s"generation expression data type ${child.dataType.simpleString} " +
+          s"is incompatible with column data type ${targetDataType.simpleString}")
+    }
+
+    if (child.exists(e => SchemaUtils.hasNonUTF8BinaryCollation(e.dataType))) {
+      throw unsupportedExpressionError(
+        "generation expression cannot contain non utf8 binary collated string type")
+    }
+  }
+
+  // Convert the generation expression to V2 GenerationExpression
+  def toV2: GenerationExpression = {
+    val v2Expr: V2Expression = new V2ExpressionBuilder(child).build().orNull
+    new GenerationExpression(originalSQL, v2Expr)
   }
 }

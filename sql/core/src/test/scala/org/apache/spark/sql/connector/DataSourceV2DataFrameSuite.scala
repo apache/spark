@@ -27,13 +27,13 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
-import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, DefaultValue, Identifier, InMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableInfo}
+import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, DefaultValue, GenerationExpression, Identifier, InMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableInfo}
 import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColumnDefaultValue}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableWritePrivilege
 import org.apache.spark.sql.connector.catalog.TruncatableTable
-import org.apache.spark.sql.connector.expressions.{ApplyTransform, GeneralScalarExpression, LiteralValue, Transform}
+import org.apache.spark.sql.connector.expressions.{ApplyTransform, Extract, FieldReference, GeneralScalarExpression, LiteralValue, Transform}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue}
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
@@ -54,6 +54,7 @@ class DataSourceV2DataFrameSuite
     .set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
     .set("spark.sql.catalog.testcat.copyOnLoad", "true")
     .set("spark.sql.catalog.testcat2", classOf[InMemoryTableCatalog].getName)
+    .set(SQLConf.TIME_TYPE_ENABLED.key, "true")
 
   after {
     spark.sessionState.catalogManager.reset()
@@ -1148,6 +1149,286 @@ class DataSourceV2DataFrameSuite
       case _ => left.getSql == right.getSql &&
         left.getExpression == right.getExpression &&
         (!compareValue || left.getValue == right.getValue)
+    }
+  }
+
+  private def checkGenerationExpressions(
+      columns: Array[Column],
+      expectedGenerationExprs: Array[GenerationExpression]): Unit = {
+    assert(columns.length == expectedGenerationExprs.length)
+
+    columns.zip(expectedGenerationExprs).foreach {
+      case (column, expectedGenExpr) =>
+        assert(
+          compareGenerationExpression(column.columnGenerationExpression(), expectedGenExpr),
+          s"Generation expression mismatch for column '${column.toString}': " +
+            s"expected $expectedGenExpr but found ${column.columnGenerationExpression}")
+    }
+  }
+
+  private def compareGenerationExpression(
+      left: GenerationExpression,
+      right: GenerationExpression): Boolean = {
+    (left, right) match {
+      case (null, null) => true
+      case (null, _) | (_, null) => false
+      case _ => left.getSql == right.getSql && left.getExpression == right.getExpression
+    }
+  }
+
+  test("create/replace table with generated columns should have V2 Expression") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""CREATE TABLE $tableName (
+             |  a INT,
+             |  b INT GENERATED ALWAYS AS (a + 1),
+             |  c INT GENERATED ALWAYS AS (a * 2)
+             |) USING foo""".stripMargin)
+      }
+
+      checkGenerationExpressions(
+        createExec.columns,
+        Array(
+          null, // a has no generation expression
+          new GenerationExpression(
+            "a + 1",
+            new GeneralScalarExpression(
+              "+",
+              Array(FieldReference("a"), LiteralValue(1, IntegerType)))),
+          new GenerationExpression(
+            "a * 2",
+            new GeneralScalarExpression(
+              "*",
+              Array(FieldReference("a"), LiteralValue(2, IntegerType))))))
+
+      val replaceExec = executeAndKeepPhysicalPlan[ReplaceTableExec] {
+        sql(
+          s"""REPLACE TABLE $tableName (
+             |  x INT,
+             |  y INT GENERATED ALWAYS AS (x - 10)
+             |) USING foo""".stripMargin)
+      }
+
+      checkGenerationExpressions(
+        replaceExec.columns,
+        Array(
+          null, // x has no generation expression
+          new GenerationExpression(
+            "x - 10",
+            new GeneralScalarExpression(
+              "-",
+              Array(FieldReference("x"), LiteralValue(10, IntegerType))))))
+    }
+  }
+
+  test("create table with generated columns using functions should have V2 Expression") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""CREATE TABLE $tableName (
+             |  a INT,
+             |  b INT,
+             |  c INT GENERATED ALWAYS AS (a + b)
+             |) USING foo""".stripMargin)
+      }
+
+      checkGenerationExpressions(
+        createExec.columns,
+        Array(
+          null, // a has no generation expression
+          null, // b has no generation expression
+          new GenerationExpression(
+            "a + b",
+            new GeneralScalarExpression(
+              "+",
+              Array(FieldReference("a"), FieldReference("b"))))))
+    }
+  }
+
+  test("generated column with CONCAT referencing multiple columns should have FieldReference") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""CREATE TABLE $tableName (
+             |  first_name STRING,
+             |  last_name STRING,
+             |  full_name STRING GENERATED ALWAYS AS (CONCAT(first_name, ' ', last_name))
+             |) USING foo""".stripMargin)
+      }
+
+      checkGenerationExpressions(
+        createExec.columns,
+        Array(
+          null, // first_name has no generation expression
+          null, // last_name has no generation expression
+          new GenerationExpression(
+            "CONCAT(first_name, ' ', last_name)",
+            new GeneralScalarExpression(
+              "CONCAT",
+              Array(
+                FieldReference("first_name"),
+                LiteralValue(UTF8String.fromString(" "), StringType),
+                FieldReference("last_name"))))))
+    }
+  }
+
+  test("generated column with UPPER referencing another column should have FieldReference") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""CREATE TABLE $tableName (
+             |  name STRING,
+             |  upper_name STRING GENERATED ALWAYS AS (UPPER(name))
+             |) USING foo""".stripMargin)
+      }
+
+      checkGenerationExpressions(
+        createExec.columns,
+        Array(
+          null, // name has no generation expression
+          new GenerationExpression(
+            "UPPER(name)",
+            new GeneralScalarExpression(
+              "UPPER",
+              Array(FieldReference("name"))))))
+    }
+  }
+
+  test("generated column with YEAR extraction should have FieldReference") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""CREATE TABLE $tableName (
+             |  event_date DATE,
+             |  event_year INT GENERATED ALWAYS AS (YEAR(event_date))
+             |) USING foo""".stripMargin)
+      }
+
+      // Verify structure directly since Extract class doesn't implement equals()
+      assert(createExec.columns.length == 2)
+      assert(createExec.columns(0).columnGenerationExpression() == null)
+
+      val genExpr = createExec.columns(1).columnGenerationExpression()
+      assert(genExpr != null)
+      assert(genExpr.getSql == "YEAR(event_date)")
+
+      val v2Expr = genExpr.getExpression
+      assert(v2Expr.isInstanceOf[Extract], s"Expected Extract but got ${v2Expr.getClass}")
+
+      val extractExpr = v2Expr.asInstanceOf[Extract]
+      assert(extractExpr.field() == "YEAR")
+
+      val sourceExpr = extractExpr.source()
+      assert(sourceExpr.isInstanceOf[FieldReference],
+        s"Expected FieldReference but got ${sourceExpr.getClass}")
+
+      val fieldRef = sourceExpr.asInstanceOf[FieldReference]
+      assert(fieldRef.fieldNames.toSeq == Seq("event_date"),
+        s"Expected field 'event_date' but got ${fieldRef.fieldNames.mkString(".")}")
+    }
+  }
+
+  test("generated column with nested expression referencing multiple columns") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      // Expression: (a + b) * c should produce nested GeneralScalarExpression with FieldReferences
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""CREATE TABLE $tableName (
+             |  a INT,
+             |  b INT,
+             |  c INT,
+             |  result INT GENERATED ALWAYS AS ((a + b) * c)
+             |) USING foo""".stripMargin)
+      }
+
+      checkGenerationExpressions(
+        createExec.columns,
+        Array(
+          null, // a has no generation expression
+          null, // b has no generation expression
+          null, // c has no generation expression
+          new GenerationExpression(
+            "(a + b) * c",
+            new GeneralScalarExpression(
+              "*",
+              Array(
+                new GeneralScalarExpression(
+                  "+",
+                  Array(FieldReference("a"), FieldReference("b"))),
+                FieldReference("c"))))))
+    }
+  }
+
+  test("generated column with COALESCE referencing multiple columns") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""CREATE TABLE $tableName (
+             |  primary_value INT,
+             |  fallback_value INT,
+             |  effective_value INT GENERATED ALWAYS AS (COALESCE(primary_value, fallback_value, 0))
+             |) USING foo""".stripMargin)
+      }
+
+      checkGenerationExpressions(
+        createExec.columns,
+        Array(
+          null, // primary_value has no generation expression
+          null, // fallback_value has no generation expression
+          new GenerationExpression(
+            "COALESCE(primary_value, fallback_value, 0)",
+            new GeneralScalarExpression(
+              "COALESCE",
+              Array(
+                FieldReference("primary_value"),
+                FieldReference("fallback_value"),
+                LiteralValue(0, IntegerType))))))
+    }
+  }
+
+  test("generation expression with special column name should fail") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      // When the column name matches a special SQL keyword like CURRENT_DATE,
+      // the generation expression CURRENT_DATE is resolved as a reference to itself
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            s"""CREATE TABLE $tableName (
+               |  current_date DATE GENERATED ALWAYS AS (CURRENT_DATE)
+               |) USING foo""".stripMargin)
+        },
+        condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+        parameters = Map(
+          "fieldName" -> "current_date",
+          "expressionStr" -> "CURRENT_DATE",
+          "reason" -> "generation expression cannot reference itself"))
+    }
+  }
+
+  test("generation expression with current_time and different column name should work") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      // When the column name is different, CURRENT_TIME is resolved as the function
+      // and folded to a literal by the optimizer, so it should succeed
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""CREATE TABLE $tableName (
+             |  c1 TIME GENERATED ALWAYS AS (CURRENT_TIME)
+             |) USING foo""".stripMargin)
+      }
+
+      assert(createExec.columns.length == 1)
+      assert(createExec.columns(0).columnGenerationExpression() != null)
+      assert(createExec.columns(0).columnGenerationExpression().getSql == "CURRENT_TIME")
     }
   }
 
