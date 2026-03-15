@@ -91,12 +91,20 @@ private[spark] object ArrowFileReadWrite {
     val rdd = df.toArrowBatchRdd(maxRecordsPerBatch, "UTC", true, false)
     val arrowSchema = ArrowUtils.toArrowSchema(df.schema, "UTC", true, false)
     val writer = new SparkArrowFileWriter(arrowSchema, path)
-    writer.write(rdd.toLocalIterator)
+    try {
+      writer.write(rdd.toLocalIterator)
+    } finally {
+      writer.close()
+    }
   }
 
   def load(spark: SparkSession, path: Path): DataFrame = {
     val reader = new SparkArrowFileReader(path)
-    val schema = ArrowUtils.fromArrowSchema(reader.schema)
-    ArrowConverters.toDataFrame(reader.read(), schema, spark, "UTC", true, false)
+    try {
+      val schema = ArrowUtils.fromArrowSchema(reader.schema)
+      ArrowConverters.toDataFrame(reader.read(), schema, spark, "UTC", true, false)
+    } finally {
+      reader.close()
+    }
   }
 }
