@@ -5380,14 +5380,14 @@
       ""
     ],
     "subClass" : {
-      "WITHOUT_SUGGESTION" : {
+      "DEFAULT" : {
         "message" : [
-          "The <roundedValue> rounded half up from <originalValue> cannot be represented as Decimal(<precision>, <scale>)."
+          "<value> cannot be represented as Decimal(<precision>, <scale>)."
         ]
       },
-      "WITH_SUGGESTION" : {
+      "WITH_ROUND_ATTEMPT" : {
         "message" : [
-          "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to \"false\" to bypass this error, and return NULL instead."
+          "The <roundedValue> rounded half up from <originalValue> cannot be represented as Decimal(<precision>, <scale>)."
         ]
       }
     },
