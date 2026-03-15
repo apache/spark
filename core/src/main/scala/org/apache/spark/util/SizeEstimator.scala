@@ -28,8 +28,7 @@ import com.google.common.collect.MapMaker
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.Tests.TEST_USE_COMPRESSED_OOPS_KEY
-import org.apache.spark.util.Utils
+import org.apache.spark.internal.config.Tests.{TEST_USE_COMPACT_OBJECT_HEADERS_KEY, TEST_USE_COMPRESSED_OOPS_KEY}
 import org.apache.spark.util.collection.OpenHashSet
 
 /**
@@ -97,6 +96,12 @@ object SizeEstimator extends Logging {
   // Size of an object reference
   // Based on https://wikis.oracle.com/display/HotSpotInternals/CompressedOops
   private var isCompressedOops = false
+
+  // Whether Compact Object Headers (JEP 450/519) are enabled.
+  // With Compact Object Headers, the object header is 8 bytes on 64-bit JVMs.
+  // See details at https://openjdk.org/jeps/450
+  private var isCompactObjectHeaders = false
+
   private var pointerSize = 4
 
   // Minimum size of a java.lang.Object
@@ -104,15 +109,18 @@ object SizeEstimator extends Logging {
 
   initialize()
 
-  // Sets object size, pointer size based on architecture and CompressedOops settings
-  // from the JVM.
+  // Sets object size, pointer size based on architecture, CompressedOops
+  // and CompactObjectHeaders settings from the JVM.
   private def initialize(): Unit = {
     val arch = Utils.osArch
     is64bit = arch.contains("64") || arch.contains("s390x")
+    isCompactObjectHeaders = is64bit && getIsCompactObjectHeaders
     isCompressedOops = getIsCompressedOops
 
     objectSize = if (!is64bit) 8 else {
-      if (!isCompressedOops) {
+      if (isCompactObjectHeaders) {
+        8
+      } else if (!isCompressedOops) {
         16
       } else {
         12
@@ -121,6 +129,20 @@ object SizeEstimator extends Logging {
     pointerSize = if (is64bit && !isCompressedOops) 8 else 4
     classInfos.clear()
     classInfos.put(classOf[Object], new ClassInfo(objectSize, Nil))
+  }
+
+  private def getIsCompactObjectHeaders: Boolean = {
+    // This is only used by tests to override the detection of Compact Object Headers.
+    if (System.getProperty(TEST_USE_COMPACT_OBJECT_HEADERS_KEY) != null) {
+      return System.getProperty(TEST_USE_COMPACT_OBJECT_HEADERS_KEY).toBoolean
+    }
+
+    // Compact Object Headers is introduced in JEP 450/519, JDK 24/25.
+    if (Runtime.version().feature() < 24) {
+      return false
+    }
+
+    getHotSpotVMOption("UseCompactObjectHeaders").exists(_.contains("true"))
   }
 
   private def getIsCompressedOops: Boolean = {
@@ -136,28 +158,38 @@ object SizeEstimator extends Logging {
       return System.getProperty("java.vm.info").contains("Compressed Ref")
     }
 
-    try {
-      val hotSpotMBeanName = "com.sun.management:type=HotSpotDiagnostic"
-      val server = ManagementFactory.getPlatformMBeanServer()
-
-      // NOTE: This should throw an exception in non-Sun JVMs
-      // scalastyle:off classforname
-      val hotSpotMBeanClass = Class.forName("com.sun.management.HotSpotDiagnosticMXBean")
-      val getVMMethod = hotSpotMBeanClass.getDeclaredMethod("getVMOption",
-          Class.forName("java.lang.String"))
-      // scalastyle:on classforname
-
-      val bean = ManagementFactory.newPlatformMXBeanProxy(server,
-        hotSpotMBeanName, hotSpotMBeanClass)
-      // TODO: We could use reflection on the VMOption returned ?
-      getVMMethod.invoke(bean, "UseCompressedOops").toString.contains("true")
-    } catch {
-      case _: Exception =>
+    getHotSpotVMOption("UseCompressedOops") match {
+      case Some(value) => value.contains("true")
+      case None =>
         // Guess whether they've enabled UseCompressedOops based on whether maxMemory < 32 GB
         val guess = Runtime.getRuntime.maxMemory < (32L*1024*1024*1024)
         logWarning(log"Failed to check whether UseCompressedOops is set; " +
           log"assuming " + (if (guess) log"yes" else log"not"))
         guess
+    }
+  }
+
+  /**
+   * Retrieves the string representation of a HotSpot VM option via the HotSpotDiagnosticMXBean.
+   * Returns [[Some]] with the option's string value on success, or [[None]] if the option cannot
+   * be read (e.g. on non-HotSpot JVMs or when the option does not exist).
+   */
+  private def getHotSpotVMOption(option: String): Option[String] = {
+    try {
+      val hotSpotMBeanName = "com.sun.management:type=HotSpotDiagnostic"
+      val server = ManagementFactory.getPlatformMBeanServer
+
+      // NOTE: This should throw an exception in non-Sun JVMs
+      // scalastyle:off classforname
+      val hotSpotMBeanClass = Class.forName("com.sun.management.HotSpotDiagnosticMXBean")
+      val getVMMethod = hotSpotMBeanClass.getDeclaredMethod("getVMOption", classOf[String])
+      // scalastyle:on classforname
+
+      val bean = ManagementFactory.newPlatformMXBeanProxy(server,
+        hotSpotMBeanName, hotSpotMBeanClass)
+      Some(getVMMethod.invoke(bean, option).toString)
+    } catch {
+      case _: Exception => None
     }
   }
 
