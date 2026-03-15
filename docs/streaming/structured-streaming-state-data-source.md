@@ -277,7 +277,7 @@ The output schema will also be different from the normal output.
 <tr>
   <td>change_type</td>
   <td>string</td>
-  <td>There are two possible values: 'update' and 'delete'. Update represents either inserting a non-existing key-value pair or updating an existing key with new value. The 'value' field will be null for delete records.</td>
+  <td>There are two possible values: 'update' and 'delete'. Update represents either inserting a non-existing key-value pair or updating an existing key with new value. The 'value' field will be null for delete records. Note that range deletion operations (deleteRange) are not supported in the change feed and will throw an UnsupportedOperationException if encountered.</td>
 </tr>
 <tr>
   <td>key</td>
