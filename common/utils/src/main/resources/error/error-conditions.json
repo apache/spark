@@ -7773,6 +7773,18 @@
     },
     "sqlState" : "42809"
   },
+  "UNSUPPORTED_INSERT_REPLACE_ON" : {
+    "message" : [
+      "INSERT INTO ... REPLACE ON is not supported for this table format."
+    ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_INSERT_REPLACE_USING" : {
+    "message" : [
+      "INSERT INTO ... REPLACE USING is not supported for this table format."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_INSERT_WITH_SCHEMA_EVOLUTION" : {
     "message" : [
       "INSERT WITH SCHEMA EVOLUTION ... is unsupported for this table format."

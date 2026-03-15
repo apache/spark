@@ -1249,7 +1249,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       case InsertIntoStatement(
         _, _, _,
         UnresolvedInlineTable(_, Seq(Seq(UnresolvedAttribute(Seq("DEFAULT"))))),
-        _, _, _, _) =>
+        _, _, _, _, _) =>
 
       case _ => fail("Expect UpdateTable, but got:\n" + parsed1.treeString)
     }
@@ -1257,9 +1257,9 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       case InsertIntoStatement(
         _, _, _,
         Project(Seq(UnresolvedAttribute(Seq("DEFAULT"))), _),
-        _, _, _, _) =>
+        _, _, _, _, _) =>
 
-      case _ => fail("Expect UpdateTable, but got:\n" + parsed1.treeString)
+      case _ => fail("Expect UpdateTable, but got:\n" + parsed2.treeString)
     }
   }
 
@@ -1396,6 +1396,28 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       assert(writeOptions.get("mergeSchema") ===
         (if (withSchemaEvolution) Some("true") else None))
     }
+  }
+
+  test("INSERT INTO REPLACE ON is unsupported for V2 tables") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        parseAndResolve(
+          "INSERT INTO testcat.tab AS t REPLACE ON t.i = 1 " +
+            "SELECT * FROM v2Table")
+      },
+      condition = "UNSUPPORTED_INSERT_REPLACE_ON"
+    )
+  }
+
+  test("INSERT INTO REPLACE USING is unsupported for V2 tables") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        parseAndResolve(
+          "INSERT INTO testcat.tab AS t REPLACE USING (i) " +
+            "SELECT * FROM v2Table")
+      },
+      condition = "UNSUPPORTED_INSERT_REPLACE_USING"
+    )
   }
 
   test("alter table: alter column") {
