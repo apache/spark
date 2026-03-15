@@ -766,6 +766,28 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     testDataTransformingEnc(enc, data)
   }
 
+  test("SPARK-55589: TransformingEncoder from Option to nullable and back") {
+    type Nested = Option[Option[Int]]
+    type Inner = Tuple1[Option[Int]]
+    val data: Seq[Nested] = Seq(None, Some(None), Some(Some(1)))
+    val codec = new Codec[Nested, Inner] with Serializable {
+      override def encode(in: Nested): Inner = in match {
+        case Some(v) => Tuple1(v)
+        case None => null
+      }
+      override def decode(out: Inner): Nested = Option.when(out != null)(out._1)
+    }
+    val inner = ProductEncoder[Inner](
+      classTag,
+      Seq(EncoderField("_1", OptionEncoder(PrimitiveIntEncoder), nullable = true, Metadata.empty)),
+      None
+    )
+    val enc = TransformingEncoder[Nested, Tuple1[Option[Int]]](
+      classTag, inner, () => codec, nullable = true
+    )
+    testDataTransformingEnc(enc, data)
+  }
+
   test("SPARK-52601 TransformingEncoder from primitive to timestamp") {
     val enc: AgnosticEncoder[Long] =
       TransformingEncoder[Long, java.sql.Timestamp](
