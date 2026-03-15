@@ -787,9 +787,9 @@ def _check_series_convert_timestamps_localize(
         return s.dt.tz_convert(to_tz).dt.tz_localize(None)
     elif is_datetime64_dtype(s.dtype) and from_tz != to_tz:
         # `s.dt.tz_localize('tzlocal()')` doesn't work properly when including NaT.
-        return cast(Any, s).apply(
-            lambda ts: (
-                ts.tz_localize(from_tz, ambiguous=False).tz_convert(to_tz).tz_localize(None)
+        return s.apply(
+            lambda ts: (  # type: ignore[arg-type]
+                ts.tz_localize(from_tz, ambiguous=False).tz_convert(to_tz).tz_localize(None)  # type: ignore[return-value]
                 if ts is not pd.NaT
                 else pd.NaT
             )
