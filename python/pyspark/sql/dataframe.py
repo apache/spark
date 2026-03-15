@@ -5655,7 +5655,7 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def withColumns(self, *colsMap: Dict[str, Column]) -> "DataFrame":
+    def withColumns(self, *colsMap: Dict[str, "ColumnOrName"]) -> "DataFrame":
         """
         Returns a new :class:`DataFrame` by adding multiple columns or replacing the
         existing columns that have the same names.
@@ -5672,7 +5672,8 @@ class DataFrame:
         Parameters
         ----------
         colsMap : dict
-            a dict of column name and :class:`Column`. Currently, only a single map is supported.
+            a dict of column name and :class:`Column` or str. Currently, only a single map is
+            supported.
 
         Returns
         -------
@@ -5689,11 +5690,19 @@ class DataFrame:
         |  2|Alice|   4|   5|
         |  5|  Bob|   7|   8|
         +---+-----+----+----+
+
+        >>> df.withColumns({'age_copy': 'age', 'name_copy': 'name'}).show()
+        +---+-----+--------+---------+
+        |age| name|age_copy|name_copy|
+        +---+-----+--------+---------+
+        |  2|Alice|       2|    Alice|
+        |  5|  Bob|       5|      Bob|
+        +---+-----+--------+---------+
         """
         ...
 
     @dispatch_df_method
-    def withColumn(self, colName: str, col: Column) -> "DataFrame":
+    def withColumn(self, colName: str, col: "ColumnOrName") -> "DataFrame":
         """
         Returns a new :class:`DataFrame` by adding a column or replacing the
         existing column that has the same name.
@@ -5710,8 +5719,8 @@ class DataFrame:
         ----------
         colName : str
             string, name of the new column.
-        col : :class:`Column`
-            a :class:`Column` expression for the new column.
+        col : :class:`Column` or str
+            a :class:`Column` expression for the new column, or a column name as a string.
 
         Returns
         -------
@@ -5735,6 +5744,14 @@ class DataFrame:
         |  2|Alice|   4|
         |  5|  Bob|   7|
         +---+-----+----+
+
+        >>> df.withColumn('age_copy', 'age').show()
+        +---+-----+--------+
+        |age| name|age_copy|
+        +---+-----+--------+
+        |  2|Alice|       2|
+        |  5|  Bob|       5|
+        +---+-----+--------+
         """
         ...
 
