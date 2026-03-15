@@ -1727,33 +1727,42 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   test("query JDBC option - negative tests") {
     val query = "SELECT * FROM  test.people WHERE theid = 1"
     // load path
-    val e1 = intercept[RuntimeException] {
-      val df = spark.read.format("jdbc")
-        .option("Url", urlWithUserAndPass)
-        .option("query", query)
-        .option("dbtable", "test.people")
-        .load()
-    }.getMessage
-    assert(e1.contains("Both 'dbtable' and 'query' can not be specified at the same time."))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        spark.read.format("jdbc")
+          .option("Url", urlWithUserAndPass)
+          .option("query", query)
+          .option("dbtable", "test.people")
+          .load()
+      },
+      condition = "JDBC_TABLE_AND_QUERY_BOTH_SPECIFIED",
+      parameters = Map("jdbcTableName" -> "dbtable", "jdbcQueryString" -> "query")
+    )
 
     // jdbc api path
     val properties = new Properties()
     properties.setProperty(JDBCOptions.JDBC_QUERY_STRING, query)
-    val e2 = intercept[RuntimeException] {
-      spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", properties).collect()
-    }.getMessage
-    assert(e2.contains("Both 'dbtable' and 'query' can not be specified at the same time."))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", properties).collect()
+      },
+      condition = "JDBC_TABLE_AND_QUERY_BOTH_SPECIFIED",
+      parameters = Map("jdbcTableName" -> "dbtable", "jdbcQueryString" -> "query")
+    )
 
-    val e3 = intercept[RuntimeException] {
-      sql(
-        s"""
-         |CREATE OR REPLACE TEMPORARY VIEW queryOption
-         |USING org.apache.spark.sql.jdbc
-         |OPTIONS (url '$url', query '$query', dbtable 'TEST.PEOPLE',
-         |         user 'testUser', password 'testPass')
-       """.stripMargin.replaceAll("\n", " "))
-      }.getMessage
-    assert(e3.contains("Both 'dbtable' and 'query' can not be specified at the same time."))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        sql(
+          s"""
+           |CREATE OR REPLACE TEMPORARY VIEW queryOption
+           |USING org.apache.spark.sql.jdbc
+           |OPTIONS (url '$url', query '$query', dbtable 'TEST.PEOPLE',
+           |         user 'testUser', password 'testPass')
+         """.stripMargin.replaceAll("\n", " "))
+      },
+      condition = "JDBC_TABLE_AND_QUERY_BOTH_SPECIFIED",
+      parameters = Map("jdbcTableName" -> "dbtable", "jdbcQueryString" -> "query")
+    )
 
     val e4 = intercept[RuntimeException] {
       val df = spark.read.format("jdbc")
