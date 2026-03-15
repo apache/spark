@@ -162,10 +162,8 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         it = chain(*entries)
         return it
 
-    def read(
-        self, input_partition: SimpleInputPartition  # type: ignore[override]
-    ) -> Iterator[Tuple]:
-        return self.simple_reader.readBetweenOffsets(input_partition.start, input_partition.end)
+    def read(self, partition: SimpleInputPartition) -> Iterator[Tuple]:
+        return self.simple_reader.readBetweenOffsets(partition.start, partition.end)
 
 
 class ReadLimitRegistry:
