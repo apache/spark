@@ -152,4 +152,13 @@ private[spark] object Deploy {
     .stringConf
     .checkValue(!_.format("20231101000000", 0).exists(_.isWhitespace), "Whitespace is not allowed.")
     .createWithDefault("app-%s-%04d")
+
+  val CAP_EXECUTOR_CORES_ENABLED = ConfigBuilder("spark.deploy.master.capExecutorCoresEnabled")
+    .doc("When enabled, the Master automatically caps spark.executor.cores to the maximum " +
+      "total cores of any alive worker when the app would otherwise hang with no executors " +
+      "launched, and logs a warning to inform the user of the adjustment.")
+    .version("4.2.0")
+    .internal()
+    .booleanConf
+    .createWithDefault(false)
 }
