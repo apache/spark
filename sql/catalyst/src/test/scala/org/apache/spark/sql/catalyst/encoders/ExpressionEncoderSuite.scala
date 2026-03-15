@@ -31,7 +31,7 @@ import org.apache.spark.sql.{Encoder, Encoders, Row}
 import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, OptionalData, PrimitiveData, ScalaReflection, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, EncoderField, IterableEncoder, MapEncoder, OptionEncoder, PrimitiveIntEncoder, ProductEncoder, TimestampEncoder, TransformingEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, EncoderField, IterableEncoder, MapEncoder, OptionEncoder, PrimitiveIntEncoder, ProductEncoder, RowEncoder => AgnosticRowEncoder, TimestampEncoder, TransformingEncoder}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, NaNvl}
 import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
@@ -829,6 +829,15 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
 
     testDataTransformingEnc(enc, data)
   }
+
+  test("SPARK-55742: Transforming encoder inside row encoder") {
+    val enc = AgnosticRowEncoder(Seq(
+      EncoderField("time", longEncForTimestamp, nullable = false, Metadata.empty)
+    ))
+    val data = Seq(Row(V(0L)), Row(V(1L)))
+    testDataTransformingEnc(enc, data)
+  }
+
   // Scala / Java big decimals ----------------------------------------------------------
 
   encodeDecodeTest(BigDecimal("9".repeat(20) + "." + "9".repeat(18)),
