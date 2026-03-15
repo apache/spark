@@ -1075,3 +1075,54 @@ Project [c1#x, c2#x, scalar-subquery#x [c1#x] AS scalarsubquery(c1)#xL]
    +- View (`t1`, [c1#x, c2#x])
       +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
          +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT id, (SELECT * FROM VALUES(t.id)) AS scalar
+FROM (VALUES (1), (2), (3)) AS t(id)
+ORDER BY id
+-- !query analysis
+Sort [id#x ASC NULLS FIRST], true
++- Project [id#x, scalar-subquery#x [id#x] AS scalar#x]
+   :  +- Project [col1#x]
+   :     +- ResolvedInlineTable [[outer(id#x)]], [col1#x]
+   +- SubqueryAlias t
+      +- Project [col1#x AS id#x]
+         +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT id, (SELECT * FROM VALUES(t.id * 2)) AS doubled
+FROM (VALUES (1), (2), (3)) AS t(id)
+ORDER BY id
+-- !query analysis
+Sort [id#x ASC NULLS FIRST], true
++- Project [id#x, scalar-subquery#x [id#x] AS doubled#x]
+   :  +- Project [col1#x]
+   :     +- ResolvedInlineTable [[(outer(id#x) * 2)]], [col1#x]
+   +- SubqueryAlias t
+      +- Project [col1#x AS id#x]
+         +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT a, b, (SELECT col1 FROM VALUES(t.a + t.b) AS v(col1)) AS sum_val
+FROM (VALUES (1, 2), (3, 4)) AS t(a, b)
+ORDER BY a
+-- !query analysis
+Sort [a#x ASC NULLS FIRST], true
++- Project [a#x, b#x, scalar-subquery#x [a#x && b#x] AS sum_val#x]
+   :  +- Project [col1#x]
+   :     +- SubqueryAlias v
+   :        +- ResolvedInlineTable [[(outer(a#x) + outer(b#x))]], [col1#x]
+   +- SubqueryAlias t
+      +- Project [col1#x AS a#x, col2#x AS b#x]
+         +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT id, (SELECT count(*) FROM VALUES(t.id, rand())) AS cnt
+FROM (VALUES (1), (2)) AS t(id)
+ORDER BY id
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
