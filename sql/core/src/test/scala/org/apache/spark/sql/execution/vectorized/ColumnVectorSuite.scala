@@ -988,6 +988,12 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
     assert(testVector.dataType() === StructType(Seq(StructField("year", IntegerType))))
   }
 
+  testVectors("user defined type in array of struct type",
+    10, ArrayType(StructType(Seq(StructField("year", yearUDT))))) { testVector =>
+    assert(testVector.dataType() ===
+      ArrayType(StructType(Seq(StructField("year", IntegerType)))))
+  }
+
   testVectors("SPARK-53434: ColumnarRow.get() should handle null", 1, structType) { testVector =>
     val c1 = testVector.getChild(0)
     val c2 = testVector.getChild(1)
