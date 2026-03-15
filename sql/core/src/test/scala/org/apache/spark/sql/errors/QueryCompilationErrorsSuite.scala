@@ -232,6 +232,17 @@ class QueryCompilationErrorsSuite
     }
   }
 
+  test("SPARK-38743: MISSING_STATIC_PARTITION_COLUMN") {
+    val e = intercept[AnalysisException] {
+      throw QueryCompilationErrors.missingStaticPartitionColumn("p")
+    }
+    checkError(
+      exception = e,
+      condition = "MISSING_STATIC_PARTITION_COLUMN",
+      parameters = Map("staticName" -> "`p`"),
+      sqlState = Some("42703"))
+  }
+
   test("UNTYPED_SCALA_UDF: use untyped Scala UDF should fail by default") {
     checkError(
       exception = intercept[AnalysisException](udf((x: Int) => x, IntegerType)),
