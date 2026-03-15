@@ -9708,7 +9708,8 @@ object functions {
    *   options and the json data source. See <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option"> Data
    *   Source Option</a> in the version you use. Additionally the function supports the `pretty`
-   *   option which enables pretty JSON generation.
+   *   option which enables pretty JSON generation and the `sortKeys` option which sorts
+   *   object keys alphabetically.
    *
    * @group json_funcs
    * @since 2.1.0
@@ -9730,7 +9731,8 @@ object functions {
    *   options and the json data source. See <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option"> Data
    *   Source Option</a> in the version you use. Additionally the function supports the `pretty`
-   *   option which enables pretty JSON generation.
+   *   option which enables pretty JSON generation and the `sortKeys` option which sorts
+   *   object keys alphabetically.
    *
    * @group json_funcs
    * @since 2.1.0

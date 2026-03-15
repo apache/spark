@@ -1587,4 +1587,31 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       .collect().head.getString(0)
     assert(inferredSchema.contains("STRING"))
   }
+
+  test("to_json with sortKeys option") {
+    val df = Seq(Tuple1(Tuple2(2, 1))).toDF("a")
+      .selectExpr("named_struct('b', a._1, 'a', a._2) as s")
+    checkAnswer(
+      df.select(to_json($"s", Map("sortKeys" -> "true"))),
+      Row("""{"a":1,"b":2}"""))
+    checkAnswer(
+      df.select(to_json($"s")),
+      Row("""{"b":2,"a":1}"""))
+  }
+
+  test("to_json with sortKeys option on nested struct") {
+    val df = spark.sql(
+      "SELECT named_struct('z', named_struct('b', 2, 'a', 1), 'a', 0) as s")
+    checkAnswer(
+      df.select(to_json($"s", Map("sortKeys" -> "true"))),
+      Row("""{"a":0,"z":{"a":1,"b":2}}"""))
+  }
+
+  test("to_json with sortKeys and pretty options combined") {
+    val df = Seq(Tuple1(Tuple2(2, 1))).toDF("a")
+      .selectExpr("named_struct('b', a._1, 'a', a._2) as s")
+    checkAnswer(
+      df.select(to_json($"s", Map("sortKeys" -> "true", "pretty" -> "true"))),
+      Row("{\n  \"a\" : 1,\n  \"b\" : 2\n}"))
+  }
 }
