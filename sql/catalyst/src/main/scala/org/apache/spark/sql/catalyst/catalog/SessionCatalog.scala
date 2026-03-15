@@ -2498,6 +2498,7 @@ class SessionCatalog(
             FunctionIdentifier(ident.funcName), arguments))
         } catch {
           case _: NoSuchFunctionException => None
+          case e: AnalysisException if e.getCondition == "UNRESOLVED_ROUTINE" => None
         }
       } else {
         None

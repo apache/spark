@@ -2368,6 +2368,7 @@ object SQLConf {
       .doc("When true (legacy), partially qualified function names like 'builtin.func' or " +
         "'session.func' resolve to the persistent catalog first. When false (default), the " +
         "system catalog is prioritized (system.builtin.func or system.session.func).")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
@@ -5628,16 +5629,6 @@ object SQLConf {
       "legacy behavior which may produce incorrect results because Spark may evaluate a CTE " +
       "relation more than once, even if it's nondeterministic.")
     .version("4.0.0")
-    .booleanConf
-    .createWithDefault(false)
-
-  val PERSISTENT_CATALOG_FIRST = buildConf("spark.sql.legacy.persistentCatalogFirst")
-    .internal()
-    .doc("When false (default), unqualified names like builtin.func or session.func resolve " +
-      "to the system catalog (system.builtin, system.session). When true (legacy), a " +
-      "persistent database named builtin or session wins over the system namespaces.")
-    .version("4.0.0")
-    .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .booleanConf
     .createWithDefault(false)
 
