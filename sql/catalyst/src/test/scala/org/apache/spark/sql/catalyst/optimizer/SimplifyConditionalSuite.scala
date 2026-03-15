@@ -32,7 +32,7 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("SimplifyConditionals", FixedPoint(50),
-      BooleanSimplification, ConstantFolding, SimplifyConditionals) :: Nil
+      SimplifyConditionals, BooleanSimplification, ConstantFolding) :: Nil
   }
 
   private val relation = LocalRelation($"a".int, $"b".int, $"c".boolean)
