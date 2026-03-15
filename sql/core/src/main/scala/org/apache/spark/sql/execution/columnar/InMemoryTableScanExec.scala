@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.columnar
 
+import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -167,11 +168,23 @@ case class InMemoryTableScanExec(
         if (enableAccumulatorsForTest && iter.hasNext) {
           readPartitions.add(1)
         }
+        val inputMetrics = TaskContext.get().taskMetrics().inputMetrics
+        var rowCount = 0L
+        // RDD.getOrCompute increments inputMetrics.recordsRead by 1 per CachedBatch on
+        // cache hit, counting batches instead of rows. Register a completion listener that
+        // corrects the final count to the actual number of rows once all batches in this
+        // partition have been consumed. The math works for both cache-hit and cache-miss:
+        // - cache hit:  getOrCompute added numBatches; we add (rowCount - numBatches)
+        // - cache miss: source scan already added rowCount; we add (rowCount - rowCount) = 0
+        TaskContext.get().addTaskCompletionListener[Unit] { _ =>
+          inputMetrics.incRecordsRead(rowCount - inputMetrics.recordsRead)
+        }
         iter.map { batch =>
           if (enableAccumulatorsForTest) {
             readBatches.add(1)
           }
           numOutputRows += batch.numRows
+          rowCount += batch.numRows
           batch
         }
       }

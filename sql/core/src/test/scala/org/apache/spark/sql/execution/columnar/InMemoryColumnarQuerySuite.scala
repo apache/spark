@@ -22,6 +22,7 @@ import java.sql.{Date, Timestamp}
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, In}
@@ -619,5 +620,30 @@ class InMemoryColumnarQuerySuite extends QueryTest
     cachedRDDBuilder.clearCache()
 
     assert(exceptionCnt.get == 0)
+  }
+
+  test("SPARK-55523: inputMetrics.recordsRead should count rows not CachedBatches") {
+    val numRows = 1000
+    val df = spark.range(numRows).toDF()
+    df.cache()
+    df.count() // materialize the cache
+
+    var totalRecordsRead = 0L
+    val listener = new SparkListener {
+      override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
+        totalRecordsRead += taskEnd.taskMetrics.inputMetrics.recordsRead
+      }
+    }
+    sparkContext.addSparkListener(listener)
+    try {
+      df.count() // read from cache
+      sparkContext.listenerBus.waitUntilEmpty(5000)
+    } finally {
+      sparkContext.removeSparkListener(listener)
+      df.unpersist()
+    }
+
+    assert(totalRecordsRead == numRows,
+      s"Expected inputMetrics.recordsRead=$numRows (actual rows), but got $totalRecordsRead")
   }
 }
