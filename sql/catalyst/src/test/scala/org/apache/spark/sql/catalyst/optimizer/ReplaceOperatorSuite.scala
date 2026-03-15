@@ -296,4 +296,19 @@ class ReplaceOperatorSuite extends PlanTest {
     ).analyze
     comparePlans(result, correctAnswer)
   }
+
+  test("SPARK-54724: ReplaceDeduplicateWithAggregate preserves exprIds for non-key columns") {
+    val a = $"a".int
+    val b = $"b".int
+    val child = LocalRelation(Seq(a, b))
+
+    val dedup = Deduplicate(keys = Seq(a), child = child)
+
+    // Verify that output exprIds are preserved after replacement
+    val optimized = Optimize.execute(dedup.analyze)
+    val originalOutputIds = dedup.analyze.output.map(_.exprId)
+    val optimizedOutputIds = optimized.output.map(_.exprId)
+    assert(originalOutputIds === optimizedOutputIds,
+      "ReplaceDeduplicateWithAggregate should preserve expression IDs")
+  }
 }
