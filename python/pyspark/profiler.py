@@ -190,7 +190,7 @@ if has_memory_profiler:
                 toplevel_code = code
                 filename = code.co_filename
                 if sub_lines is None or start_line is None:
-                    (sub_lines, start_line) = inspect.getsourcelines(code)
+                    sub_lines, start_line = inspect.getsourcelines(code)
                 linenos = range(start_line, start_line + len(sub_lines))
                 self._toplevel.append((filename, code, linenos))
                 self[code] = {}
@@ -541,6 +541,6 @@ class MemoryProfiler(Profiler):
 if __name__ == "__main__":
     import doctest
 
-    (failure_count, test_count) = doctest.testmod()
+    failure_count, test_count = doctest.testmod()
     if failure_count:
         sys.exit(-1)

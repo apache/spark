@@ -18,6 +18,7 @@
 """
 A wrapper for GroupedData to behave like pandas GroupBy.
 """
+
 from abc import ABCMeta, abstractmethod
 import inspect
 from collections import defaultdict, namedtuple
@@ -4731,7 +4732,7 @@ def _test() -> None:
         .appName("pyspark.pandas.groupby tests")
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.groupby,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

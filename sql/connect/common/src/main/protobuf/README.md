@@ -51,7 +51,7 @@ pip install 'mypy==<version>' 'mypy-protobuf==<version>' 'black==<version>'
 For example, based on the current `dev/requirements.txt`:
 
 ```bash
-pip install 'mypy==1.19.1' 'mypy-protobuf==3.3.0' 'black==23.12.1'
+pip install 'mypy==1.19.1' 'mypy-protobuf==3.3.0' 'black==26.3.1'
 ```
 
 ### Generate

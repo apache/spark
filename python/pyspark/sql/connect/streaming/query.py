@@ -178,7 +178,7 @@ class StreamingQuery:
         cmd.query_id.run_id = self._run_id
         exec_cmd = pb2.Command()
         exec_cmd.streaming_query_command.CopyFrom(cmd)
-        (_, properties, _) = self._session.client.execute_command(exec_cmd)
+        _, properties, _ = self._session.client.execute_command(exec_cmd)
         return cast(pb2.StreamingQueryCommandResult, properties["streaming_query_command_result"])
 
 
@@ -257,7 +257,7 @@ class StreamingQueryManager:
     ) -> pb2.StreamingQueryManagerCommandResult:
         exec_cmd = pb2.Command()
         exec_cmd.streaming_query_manager_command.CopyFrom(cmd)
-        (_, properties, _) = self._session.client.execute_command(exec_cmd)
+        _, properties, _ = self._session.client.execute_command(exec_cmd)
         return cast(
             pb2.StreamingQueryManagerCommandResult,
             properties["streaming_query_manager_command_result"],
@@ -445,7 +445,7 @@ def _test() -> None:
         .getOrCreate()
     )
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.connect.streaming.query,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,

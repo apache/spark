@@ -164,7 +164,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
   }
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
-    val table = loadTable(ident).asInstanceOf[InMemoryTable]
+    val table = loadTable(ident).asInstanceOf[InMemoryBaseTable]
     val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
     val schema = CatalogV2Util.applySchemaChanges(
       table.schema,
@@ -181,14 +181,24 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 
     table.increaseVersion()
     val currentVersion = table.version()
-    val newTable = new InMemoryTable(
-      name = table.name,
-      columns = CatalogV2Util.structTypeToV2Columns(schema),
-      partitioning = finalPartitioning,
-      properties = properties,
-      constraints = constraints,
-      id = table.id)
-      .alterTableWithData(table.data, schema)
+    val newTable = table match {
+      case _: InMemoryTable =>
+        new InMemoryTable(
+          name = table.name,
+          columns = CatalogV2Util.structTypeToV2Columns(schema),
+          partitioning = finalPartitioning,
+          properties = properties,
+          constraints = constraints,
+          id = table.id)
+          .alterTableWithData(table.data, schema)
+      case _: InMemoryTableWithV2Filter =>
+        new InMemoryTableWithV2Filter(
+          name = table.name,
+          columns = CatalogV2Util.structTypeToV2Columns(schema),
+          partitioning = finalPartitioning,
+          properties = properties)
+          .alterTableWithData(table.data, schema)
+    }
     newTable.setVersion(currentVersion)
     changes.foreach {
       case a: TableChange.AddConstraint =>

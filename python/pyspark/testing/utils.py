@@ -43,7 +43,6 @@ from pyspark.sql import Row
 from pyspark.sql.types import StructType, StructField, VariantVal
 from pyspark.sql.functions import col, when
 
-
 __all__ = ["assertDataFrameEqual", "assertSchemaEqual"]
 
 
@@ -1162,7 +1161,7 @@ def _test() -> None:
     globs = pyspark.testing.utils.__dict__.copy()
     spark = SparkSession.builder.master("local[4]").appName("testing.utils tests").getOrCreate()
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.testing.utils,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

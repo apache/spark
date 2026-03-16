@@ -7126,6 +7126,11 @@
         "message" : [
           "The catalog did not support or only partially applied the following changes: <changes>."
         ]
+      },
+      "TABLE_NOT_SUPPORTED" : {
+        "message" : [
+          "The write target does not support automatic schema evolution."
+        ]
       }
     },
     "sqlState" : "42000"

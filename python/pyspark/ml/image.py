@@ -237,7 +237,7 @@ def _test() -> None:
     spark = SparkSession.builder.master("local[2]").appName("ml.image tests").getOrCreate()
     globs["spark"] = spark
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.ml.image, globs=globs, optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE
     )
     spark.stop()

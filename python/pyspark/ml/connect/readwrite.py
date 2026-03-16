@@ -255,7 +255,7 @@ class RemoteMLReader(MLReader[RL]):
                     operator=pb2.MlOperator(name=java_qualified_class_name, type=ml_type), path=path
                 )
             )
-            (_, properties, _) = session.client.execute_command(command)
+            _, properties, _ = session.client.execute_command(command)
             result = deserialize(properties)
 
             # Get the python type
@@ -353,7 +353,7 @@ class RemoteMLReader(MLReader[RL]):
                     path=path,
                 )
             )
-            (_, properties, _) = session.client.execute_command(command)
+            _, properties, _ = session.client.execute_command(command)
             result = deserialize(properties)
 
             instance = PowerIterationClustering()

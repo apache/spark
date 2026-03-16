@@ -1433,12 +1433,12 @@ class BaseUDFTestsMixin(object):
             self.assertEqual(result_type, StringType("fr"))
 
     def test_udf_with_char_varchar_return_type(self):
-        (char_type, char_value) = ("char(10)", "a")
-        (varchar_type, varchar_value) = ("varchar(8)", "a")
-        (array_with_char_type, array_with_char_type_value) = ("array<char(5)>", ["a", "b"])
-        (array_with_varchar_type, array_with_varchar_value) = ("array<varchar(12)>", ["a", "b"])
-        (map_type, map_value) = (f"map<{char_type}, {varchar_type}>", {"a": "b"})
-        (struct_type, struct_value) = (
+        char_type, char_value = ("char(10)", "a")
+        varchar_type, varchar_value = ("varchar(8)", "a")
+        array_with_char_type, array_with_char_type_value = ("array<char(5)>", ["a", "b"])
+        array_with_varchar_type, array_with_varchar_value = ("array<varchar(12)>", ["a", "b"])
+        map_type, map_value = (f"map<{char_type}, {varchar_type}>", {"a": "b"})
+        struct_type, struct_value = (
             f"struct<f1: {char_type}, f2: {varchar_type}>",
             {"f1": "a", "f2": "b"},
         )

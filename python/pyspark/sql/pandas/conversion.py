@@ -575,14 +575,12 @@ class SparkConversionMixin:
     @overload
     def createDataFrame(
         self, data: "PandasDataFrameLike", samplingRatio: Optional[float] = ...
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     @overload
     def createDataFrame(
         self, data: "pa.Table", samplingRatio: Optional[float] = ...
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     @overload
     def createDataFrame(
@@ -590,8 +588,7 @@ class SparkConversionMixin:
         data: "PandasDataFrameLike",
         schema: Union[StructType, str],
         verifySchema: bool = ...,
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     @overload
     def createDataFrame(
@@ -599,8 +596,7 @@ class SparkConversionMixin:
         data: "pa.Table",
         schema: Union[StructType, str],
         verifySchema: bool = ...,
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     def createDataFrame(  # type: ignore[misc]
         self,
@@ -993,9 +989,11 @@ class SparkConversionMixin:
         else:
             # Any timestamps must be coerced to be compatible with Spark
             spark_types = [
-                TimestampType()
-                if is_datetime64_dtype(t) or isinstance(t, pd.DatetimeTZDtype)
-                else None
+                (
+                    TimestampType()
+                    if is_datetime64_dtype(t) or isinstance(t, pd.DatetimeTZDtype)
+                    else None
+                )
                 for t in pdf.dtypes
             ]
 
@@ -1131,7 +1129,7 @@ def _test() -> None:
         SparkSession.builder.master("local[4]").appName("sql.pandas.conversion tests").getOrCreate()
     )
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.pandas.conversion,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,

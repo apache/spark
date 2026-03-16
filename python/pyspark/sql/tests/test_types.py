@@ -2301,7 +2301,7 @@ class TypesTestsMixin:
         ]
         json_str = "{%s}" % ",".join(['"%s": %s' % (t[0], t[1]) for t in expected_values])
 
-        df = self.spark.createDataFrame([({"json": json_str})])
+        df = self.spark.createDataFrame([{"json": json_str}])
         row = df.select(
             F.parse_json(df.json).alias("v"),
             F.array([F.parse_json(F.lit('{"a": 1}'))]).alias("a"),
@@ -2500,7 +2500,7 @@ class TypesTestsMixin:
             ("short_str", '"abc"', "abc"),
         ]
         json_str = "{%s}" % ",".join(['"%s": %s' % (t[0], t[1]) for t in expected_values])
-        df = self.spark.createDataFrame([({"json": json_str})])
+        df = self.spark.createDataFrame([{"json": json_str}])
         df_variant = df.select(F.parse_json(df.json).alias("v"))
         pandas = df_variant.toPandas()
         test_record = json.loads(pandas["v"].iloc[0].toJson())
@@ -2809,11 +2809,9 @@ class TypesTestsMixin:
     def test_geospatial_result_encoding(self):
         point_wkb = "010100000000000000000031400000000000001c40"
         point_bytes = bytes.fromhex(point_wkb)
-        df = self.spark.sql(
-            f"""
+        df = self.spark.sql(f"""
             SELECT ST_GeomFromWKB(X'{point_wkb}') AS geom,
-            ST_GeogFromWKB(X'{point_wkb}') AS geog"""
-        )
+            ST_GeogFromWKB(X'{point_wkb}') AS geog""")
         GeospatialRow = Row("geom", "geog")
         self.assertEqual(
             df.collect(),

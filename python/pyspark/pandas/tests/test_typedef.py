@@ -102,9 +102,11 @@ class TypeHintTestsMixin:
             inferred.dtypes,
             [
                 np.float64,
-                np.str_
-                if LooseVersion(pd.__version__) < LooseVersion("3.0.0")
-                else pd.StringDtype(na_value=np.nan),
+                (
+                    np.str_
+                    if LooseVersion(pd.__version__) < LooseVersion("3.0.0")
+                    else pd.StringDtype(na_value=np.nan)
+                ),
             ],
         )
         self.assertEqual(inferred.spark_type, expected)
@@ -133,9 +135,11 @@ class TypeHintTestsMixin:
             inferred.dtypes,
             [
                 np.float64,
-                np.str_
-                if LooseVersion(pd.__version__) < LooseVersion("3.0.0")
-                else pd.StringDtype(na_value=np.nan),
+                (
+                    np.str_
+                    if LooseVersion(pd.__version__) < LooseVersion("3.0.0")
+                    else pd.StringDtype(na_value=np.nan)
+                ),
             ],
         )
         self.assertEqual(inferred.spark_type, expected)
@@ -192,9 +196,11 @@ class TypeHintTestsMixin:
             inferred.dtypes,
             [
                 np.float64,
-                np.str_
-                if LooseVersion(pd.__version__) < LooseVersion("3.0.0")
-                else pd.StringDtype(na_value=np.nan),
+                (
+                    np.str_
+                    if LooseVersion(pd.__version__) < LooseVersion("3.0.0")
+                    else pd.StringDtype(na_value=np.nan)
+                ),
             ],
         )
         self.assertEqual(inferred.spark_type, expected)
@@ -352,9 +358,11 @@ class TypeHintTestsMixin:
             # string
             np.str_: (np.str_, StringType()),
             str: (
-                np.str_
-                if LooseVersion(pd.__version__) < LooseVersion("3.0.0")
-                else pd.StringDtype(na_value=np.nan),
+                (
+                    np.str_
+                    if LooseVersion(pd.__version__) < LooseVersion("3.0.0")
+                    else pd.StringDtype(na_value=np.nan)
+                ),
                 StringType(),
             ),
             # bool
@@ -362,9 +370,11 @@ class TypeHintTestsMixin:
             # datetime
             np.datetime64: (np.datetime64, TimestampType()),
             datetime.datetime: (
-                np.dtype("datetime64[ns]")
-                if LooseVersion(pd.__version__) < LooseVersion("3.0.0")
-                else np.dtype("datetime64[us]"),
+                (
+                    np.dtype("datetime64[ns]")
+                    if LooseVersion(pd.__version__) < LooseVersion("3.0.0")
+                    else np.dtype("datetime64[us]")
+                ),
                 TimestampType(),
             ),
             # DateType

@@ -18,6 +18,7 @@
 """
 Exceptions/Errors used in pandas-on-Spark.
 """
+
 from typing import Optional
 
 
@@ -126,7 +127,7 @@ def _test() -> None:
         .appName("pyspark.pandas.exceptions tests")
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.exceptions,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
