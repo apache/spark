@@ -482,11 +482,11 @@ class UserDefinedFunction:
                 def func(*args: Any, **kwargs: Any) -> Any:
                     assert memory_profiler is not None
                     return memory_profiler.profile(
-                        sub_lines,
+                        sub_lines,  # type: ignore[arg-type]
                         start_line,
                         f,
                         *args,
-                        **kwargs,  # type: ignore[arg-type]
+                        **kwargs,
                     )
 
                 func.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]

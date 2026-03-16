@@ -1646,9 +1646,9 @@ class SparkSession(SparkConversionMixin):
             )
         return self._create_dataframe(
             data,
-            schema,
+            schema,  # type: ignore[arg-type]
             samplingRatio,
-            verifySchema,  # type: ignore[arg-type]
+            verifySchema,
         )
 
     def _create_dataframe(
@@ -1692,8 +1692,8 @@ class SparkSession(SparkConversionMixin):
             rdd, struct = self._createFromRDD(data.map(prepare), schema, samplingRatio)
         else:
             rdd, struct = self._createFromLocal(
-                map(prepare, data),
-                schema,  # type: ignore[arg-type]
+                map(prepare, data),  # type: ignore[arg-type]
+                schema,
             )
         assert self._jvm is not None
         jrdd = self._jvm.SerDeUtil.toJavaArray(rdd._to_java_object_rdd())

@@ -2171,8 +2171,8 @@ class DataFrame(ParentDataFrame):
             self._plan,
             self._session,
             table,
-            condition,
-            cb,  # type: ignore[arg-type]
+            condition,  # type: ignore[arg-type]
+            cb,
         )
 
     def offset(self, num: int) -> ParentDataFrame:

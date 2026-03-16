@@ -937,8 +937,8 @@ class StreamingLogisticRegressionWithSGD(StreamingLinearAlgorithm):
         self._model = LogisticRegressionModel(
             initialWeights,
             0,
-            initialWeights.size,
-            2,  # type: ignore[attr-defined]
+            initialWeights.size,  # type: ignore[attr-defined]
+            2,
         )
         return self
 

@@ -6257,10 +6257,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         return self._fillna_with_method(
             value=value,
-            method=method,
+            method=method,  # type: ignore[arg-type]
             axis=axis,
             inplace=inplace,
-            limit=limit,  # type: ignore[arg-type]
+            limit=limit,
         )
 
     def _fillna_with_method(
@@ -6509,8 +6509,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 if psser.name in to_replace_dict:
                     return psser.replace(
                         to_replace=to_replace_dict[psser.name],
-                        value=value,
-                        regex=regex,  # type: ignore[arg-type]
+                        value=value,  # type: ignore[arg-type]
+                        regex=regex,
                     )
                 else:
                     return psser
@@ -6527,8 +6527,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             def op(psser: ps.Series) -> ps.Series:
                 return psser.replace(
                     to_replace=to_replace,
-                    value=value,
-                    regex=regex,  # type: ignore[arg-type]
+                    value=value,  # type: ignore[arg-type]
+                    regex=regex,
                 )
 
         psdf = self._apply_series_op(op)

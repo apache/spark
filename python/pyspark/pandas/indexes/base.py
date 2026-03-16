@@ -550,8 +550,8 @@ class Index(IndexOpsMixin):
             "It should only be used if the resulting NumPy ndarray is expected to be small."
         )
         result = np.asarray(
-            self._to_internal_pandas()._values,
-            dtype=dtype,  # type: ignore[attr-defined, arg-type]
+            self._to_internal_pandas()._values,  # type: ignore[attr-defined]
+            dtype=dtype,  # type: ignore[arg-type]
         )
         if copy:
             result = result.copy()

@@ -2207,10 +2207,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         return self._fillna_with_method(
             value=value,
-            method=method,
+            method=method,  # type: ignore[arg-type]
             axis=axis,
             inplace=inplace,
-            limit=limit,  # type: ignore[arg-type]
+            limit=limit,
         )
 
     def _fillna_with_method(
