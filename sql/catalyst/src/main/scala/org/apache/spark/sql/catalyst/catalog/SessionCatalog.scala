@@ -2380,6 +2380,7 @@ class SessionCatalog(
               FunctionIdentifier(name), arguments))
           } catch {
             case _: NoSuchFunctionException => None
+            case e: AnalysisException if e.getCondition == "UNRESOLVED_ROUTINE" => None
           }
         }
       case SessionCatalog.Temp =>
