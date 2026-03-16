@@ -40,7 +40,11 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, SchemaMergeUtils}
+import org.apache.spark.sql.execution.datasources.{
+  AggregatePushDownUtils,
+  DataSourceUtils,
+  SchemaMergeUtils
+}
 import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -84,7 +88,7 @@ object OrcUtils extends Logging {
       }
     } catch {
       case e: org.apache.orc.FileFormatException =>
-        if (ignoreCorruptFiles) {
+        if (ignoreCorruptFiles && DataSourceUtils.shouldIgnoreCorruptFileException(e)) {
           logWarning(s"Skipped the footer in the corrupted file: $file", e)
           None
         } else {

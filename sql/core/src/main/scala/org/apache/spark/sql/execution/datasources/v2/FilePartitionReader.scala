@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.io.{FileNotFoundException, IOException}
+import java.io.FileNotFoundException
 
 import scala.util.control.NonFatal
 
@@ -26,7 +26,10 @@ import org.apache.spark.rdd.InputFileBlockHolder
 import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.connector.read.PartitionReader
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
+import org.apache.spark.sql.execution.datasources.{
+  DataSourceUtils,
+  SchemaColumnConvertNotSupportedException
+}
 
 class FilePartitionReader[T](
     readers: Iterator[PartitionedFileReader[T]],
@@ -49,7 +52,8 @@ class FilePartitionReader[T](
           // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
           case e: FileNotFoundException if !ignoreMissingFiles =>
             throw QueryExecutionErrors.fileNotFoundError(e)
-          case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
+          case e if ignoreCorruptFiles &&
+              DataSourceUtils.shouldIgnoreCorruptFileException(e) =>
             logWarning(
               s"Skipped the rest of the content in the corrupted file.", e)
             currentReader = null
@@ -68,7 +72,8 @@ class FilePartitionReader[T](
         throw QueryExecutionErrors.unsupportedSchemaColumnConvertError(
           currentReader.file.urlEncodedPath,
           e.getColumn, e.getLogicalType, e.getPhysicalType, e)
-      case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
+      case e if ignoreCorruptFiles &&
+          DataSourceUtils.shouldIgnoreCorruptFileException(e) =>
         logWarning(
           s"Skipped the rest of the content in the corrupted file: $currentReader", e)
         false

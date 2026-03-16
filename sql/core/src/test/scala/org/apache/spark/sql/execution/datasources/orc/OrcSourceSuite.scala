@@ -229,15 +229,16 @@ abstract class OrcSuite
 
   protected def testMergeSchemasInParallel(
       schemaReader: (Seq[FileStatus], Configuration, Boolean) => Seq[StructType]): Unit = {
-    testMergeSchemasInParallel(true, schemaReader)
-    checkError(
-      exception = intercept[SparkException] {
-        testMergeSchemasInParallel(false, schemaReader)
-      }.getCause.getCause.asInstanceOf[SparkException],
-      errorClass = "CANNOT_READ_FILE_FOOTER",
-      parameters = Map("file" -> "file:.*"),
-      matchPVals = true
-    )
+    Seq(true, false).foreach { ignoreCorruptFiles =>
+      checkError(
+        exception = intercept[SparkException] {
+          testMergeSchemasInParallel(ignoreCorruptFiles, schemaReader)
+        }.getCause.getCause.asInstanceOf[SparkException],
+        errorClass = "CANNOT_READ_FILE_FOOTER",
+        parameters = Map("file" -> "file:.*"),
+        matchPVals = true
+      )
+    }
   }
 
   test("create temporary orc table") {
@@ -474,13 +475,8 @@ abstract class OrcSuite
         spark.range(0, 10).toDF("b").write.orc(new Path(basePath, "foo=2").toString)
         spark.range(0, 10).toDF("c").write.json(new Path(basePath, "foo=3").toString)
 
-        // ignore corrupt files
-        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
-          assert(spark.read.orc(basePath).columns.length === 3)
-        }
-
-        // don't ignore corrupt files
-        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
+        Seq("true", "false").foreach { ignoreCorruptFiles =>
+          withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> ignoreCorruptFiles) {
           checkError(
             exception = intercept[SparkException] {
               spark.read.orc(basePath).columns.length
@@ -489,6 +485,7 @@ abstract class OrcSuite
             parameters = Map("file" -> "file:.*"),
             matchPVals = true
           )
+        }
         }
       }
     }

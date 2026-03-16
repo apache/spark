@@ -354,38 +354,22 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
       }
     }
 
-    // Test ignoreCorruptFiles = true
+    // ignoreCorruptFiles is only effective for a specific Parquet CRC corruption error and
+    // should not suppress generic non-Parquet corruption cases.
     Seq("SQLConf", "FormatOption").foreach { by =>
       val (sqlConf, options) = by match {
         case "SQLConf" => ("true", Map.empty[String, String])
-        // Explicitly set SQLConf to false but still should ignore corrupt files
         case "FormatOption" => ("false", Map("ignoreCorruptFiles" -> "true"))
       }
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> sqlConf) {
-        testIgnoreCorruptFiles(options)
-        testIgnoreCorruptFilesWithoutSchemaInfer(options)
-      }
-    }
-
-    // Test ignoreCorruptFiles = false
-    Seq("SQLConf", "FormatOption").foreach { by =>
-      val (sqlConf, options) = by match {
-        case "SQLConf" => ("false", Map.empty[String, String])
-        // Explicitly set SQLConf to true but still should not ignore corrupt files
-        case "FormatOption" => ("true", Map("ignoreCorruptFiles" -> "false"))
-      }
-
-      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> sqlConf) {
-        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
-          val exception = intercept[SparkException] {
-            testIgnoreCorruptFiles(options)
-          }
-          assert(exception.getMessage().contains("is not a Parquet file"))
-          val exception2 = intercept[SparkException] {
-            testIgnoreCorruptFilesWithoutSchemaInfer(options)
-          }
-          assert(exception2.getMessage().contains("is not a Parquet file"))
+        val exception = intercept[SparkException] {
+          testIgnoreCorruptFiles(options)
         }
+        assert(exception.getMessage().contains("is not a Parquet file"))
+        val exception2 = intercept[SparkException] {
+          testIgnoreCorruptFilesWithoutSchemaInfer(options)
+        }
+        assert(exception2.getMessage().contains("is not a Parquet file"))
       }
     }
   }

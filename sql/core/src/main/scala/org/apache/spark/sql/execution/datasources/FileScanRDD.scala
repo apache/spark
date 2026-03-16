@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.{Closeable, FileNotFoundException, IOException}
+import java.io.{Closeable, FileNotFoundException}
 import java.net.URI
 
 import scala.util.control.NonFatal
@@ -259,7 +259,8 @@ class FileScanRDD(
                     null
                   // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
                   case e: FileNotFoundException if !ignoreMissingFiles => throw e
-                  case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
+                  case e if ignoreCorruptFiles &&
+                      DataSourceUtils.shouldIgnoreCorruptFileException(e) =>
                     logWarning(
                       s"Skipped the rest of the content in the corrupted file: $currentFile", e)
                     finished = true

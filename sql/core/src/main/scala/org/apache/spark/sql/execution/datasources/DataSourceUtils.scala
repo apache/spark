@@ -22,6 +22,7 @@ import java.util.Locale
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
+import org.apache.parquet.io.ParquetDecodingException
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
@@ -41,6 +42,9 @@ import org.apache.spark.util.Utils
 
 
 object DataSourceUtils extends PredicateHelper {
+  private val parquetCrcCorruptionMessage =
+    "could not verify page integrity, CRC checksum verification failed"
+
   /**
    * The key to use for storing partitionBy columns as options.
    */
@@ -185,6 +189,22 @@ object DataSourceUtils extends PredicateHelper {
       case _ => throw new IllegalStateException(s"Unrecognized format $format.")
     }
     QueryExecutionErrors.sparkUpgradeInWritingDatesError(format, config)
+  }
+
+  def shouldIgnoreCorruptFileException(e: Throwable): Boolean = {
+    var current = e
+    while (current != null) {
+      current match {
+        case parquetException: ParquetDecodingException =>
+          if (parquetException.getMessage != null &&
+              parquetException.getMessage.contains(parquetCrcCorruptionMessage)) {
+            return true
+          }
+        case _ =>
+      }
+      current = current.getCause
+    }
+    false
   }
 
   def createDateRebaseFuncInRead(

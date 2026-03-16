@@ -587,20 +587,7 @@ abstract class OrcQueryTest extends OrcTest {
       }
     }
 
-    withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
-      testIgnoreCorruptFiles()
-      testIgnoreCorruptFilesWithoutSchemaInfer()
-      checkError(
-        exception = intercept[AnalysisException] {
-          testAllCorruptFiles()
-        },
-        errorClass = "UNABLE_TO_INFER_SCHEMA",
-        parameters = Map("format" -> "ORC")
-      )
-      testAllCorruptFilesWithoutSchemaInfer()
-    }
-
-    withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
+    def assertIgnoreCorruptFilesIsIneffective(): Unit = {
       val e1 = intercept[SparkException] {
         testIgnoreCorruptFiles()
       }
@@ -609,18 +596,37 @@ abstract class OrcQueryTest extends OrcTest {
         testIgnoreCorruptFilesWithoutSchemaInfer()
       }
       assert(e2.getMessage.contains("Malformed ORC file"))
-      checkError(
-        exception = intercept[SparkException] {
-          testAllCorruptFiles()
-        },
-        errorClass = "CANNOT_READ_FILE_FOOTER",
-        parameters = Map("file" -> "file:.*"),
-        matchPVals = true
-      )
+      intercept[Throwable] {
+        testAllCorruptFiles()
+      } match {
+        case e: AnalysisException =>
+          checkError(
+            exception = e,
+            errorClass = "UNABLE_TO_INFER_SCHEMA",
+            parameters = Map("format" -> "ORC")
+          )
+        case e: SparkException =>
+          checkError(
+            exception = e,
+            errorClass = "CANNOT_READ_FILE_FOOTER",
+            parameters = Map("file" -> "file:.*"),
+            matchPVals = true
+          )
+        case e =>
+          fail(s"Expected AnalysisException or SparkException, got ${e.getClass.getName}")
+      }
       val e4 = intercept[SparkException] {
         testAllCorruptFilesWithoutSchemaInfer()
       }
       assert(e4.getMessage.contains("Malformed ORC file"))
+    }
+
+    withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+      assertIgnoreCorruptFilesIsIneffective()
+    }
+
+    withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
+      assertIgnoreCorruptFilesIsIneffective()
     }
   }
 

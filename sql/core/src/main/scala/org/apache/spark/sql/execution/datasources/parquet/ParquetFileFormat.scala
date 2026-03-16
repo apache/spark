@@ -433,8 +433,8 @@ object ParquetFileFormat extends Logging {
 
   /**
    * Reads Parquet footers in multi-threaded manner.
-   * If the config "spark.sql.files.ignoreCorruptFiles" is set to true, we will ignore the corrupted
-   * files when reading footers.
+   * If the config "spark.sql.files.ignoreCorruptFiles" is set to true, we only ignore
+   * eligible Parquet corruption errors when reading footers.
    */
   private[parquet] def readParquetFootersInParallel(
       conf: Configuration,
@@ -449,7 +449,7 @@ object ParquetFileFormat extends Logging {
           ParquetFooterReader.readFooter(
             conf, currentFile, SKIP_ROW_GROUPS)))
       } catch { case e: RuntimeException =>
-        if (ignoreCorruptFiles) {
+        if (ignoreCorruptFiles && DataSourceUtils.shouldIgnoreCorruptFileException(e)) {
           logWarning(s"Skipped the footer in the corrupted file: $currentFile", e)
           None
         } else {

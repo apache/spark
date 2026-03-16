@@ -60,15 +60,16 @@ abstract class ParquetFileFormatSuite
       }
     }
 
-    testReadFooters(true)
-    checkError(
-      exception = intercept[SparkException] {
-        testReadFooters(false)
-      }.getCause.asInstanceOf[SparkException],
-      errorClass = "CANNOT_READ_FILE_FOOTER",
-      parameters = Map("file" -> "file:.*"),
-      matchPVals = true
-    )
+    Seq(true, false).foreach { ignoreCorruptFiles =>
+      checkError(
+        exception = intercept[SparkException] {
+          testReadFooters(ignoreCorruptFiles)
+        }.getCause.asInstanceOf[SparkException],
+        errorClass = "CANNOT_READ_FILE_FOOTER",
+        parameters = Map("file" -> "file:.*"),
+        matchPVals = true
+      )
+    }
   }
 
   test("SPARK-36825, SPARK-36854: year-month/day-time intervals written and read as INT32/INT64") {
