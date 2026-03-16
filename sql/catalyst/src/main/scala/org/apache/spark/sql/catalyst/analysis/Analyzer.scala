@@ -1152,15 +1152,16 @@ class Analyzer(
   object ResolveInsertInto extends ResolveInsertionBase {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       AlwaysProcess.fn, ruleId) {
-      // Handle INSERT INTO ... REPLACE ON/USING for V2 tables.
-      // Data sources should intercept InsertIntoStatement with replaceCriteriaOpt in their
-      // own analysis rules before ResolveInsertInto runs. If they don't, we throw an error.
-      case i @ InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _, _, _, _, Some(criteria))
-          if i.query.resolved =>
+      case i: InsertIntoStatement
+          if i.table.isInstanceOf[DataSourceV2Relation] &&
+            i.query.resolved &&
+            i.replaceCriteriaOpt.isDefined =>
         throw QueryCompilationErrors.unsupportedInsertReplaceOnOrUsing()
 
-      case i @ InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _, _, _, _, None)
-          if i.query.resolved =>
+      case i: InsertIntoStatement
+          if i.table.isInstanceOf[DataSourceV2Relation] &&
+            i.query.resolved &&
+            i.replaceCriteriaOpt.isEmpty =>
         // ifPartitionNotExists is append with validation, but validation is not supported
         if (i.ifPartitionNotExists) {
           throw QueryCompilationErrors.unsupportedIfNotExistsError(r.table.name)
