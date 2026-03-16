@@ -17,21 +17,22 @@
 
 # $example on$
 from pyspark.ml.feature import HashingTF, IDF, Tokenizer
+
 # $example off$
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("TfIdfExample")\
-        .getOrCreate()
+    spark = SparkSession.builder.appName("TfIdfExample").getOrCreate()
 
     # $example on$
-    sentenceData = spark.createDataFrame([
-        (0.0, "Hi I heard about Spark"),
-        (0.0, "I wish Java could use case classes"),
-        (1.0, "Logistic regression models are neat")
-    ], ["label", "sentence"])
+    sentenceData = spark.createDataFrame(
+        [
+            (0.0, "Hi I heard about Spark"),
+            (0.0, "I wish Java could use case classes"),
+            (1.0, "Logistic regression models are neat"),
+        ],
+        ["label", "sentence"],
+    )
 
     tokenizer = Tokenizer(inputCol="sentence", outputCol="words")
     wordsData = tokenizer.transform(sentenceData)

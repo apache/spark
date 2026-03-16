@@ -153,8 +153,7 @@ class ProfilerTests2(unittest.TestCase, PySparkErrorTestUtils):
         try:
             self.assertRaisesRegex(
                 PythonException,
-                "Install the 'memory_profiler' library in the cluster to enable memory "
-                "profiling",
+                "Install the 'memory_profiler' library in the cluster to enable memory profiling",
                 lambda: spark.range(10).select(plus_one("id")).collect(),
             )
         finally:

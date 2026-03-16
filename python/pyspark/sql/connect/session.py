@@ -609,7 +609,9 @@ class SparkSession:
                     (
                         TimestampType()
                         if is_datetime64_dtype(t) or isinstance(t, pd.DatetimeTZDtype)
-                        else DayTimeIntervalType() if is_timedelta64_dtype(t) else None
+                        else DayTimeIntervalType()
+                        if is_timedelta64_dtype(t)
+                        else None
                     )
                     for t in data.dtypes
                 ]

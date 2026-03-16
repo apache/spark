@@ -78,13 +78,14 @@ def ser_to_frame_pandas_udf_example(spark: SparkSession) -> None:
 
     @pandas_udf("col1 string, col2 long")  # type: ignore[call-overload]
     def func(s1: pd.Series, s2: pd.Series, s3: pd.DataFrame) -> pd.DataFrame:
-        s3['col2'] = s1 + s2.str.len()
+        s3["col2"] = s1 + s2.str.len()
         return s3
 
     # Create a Spark DataFrame that has three columns including a struct column.
     df = spark.createDataFrame(
         [[1, "a string", ("a nested string",)]],
-        "long_col long, string_col string, struct_col struct<col1:string>")
+        "long_col long, string_col string, struct_col struct<col1:string>",
+    )
 
     df.printSchema()
     # root
@@ -171,8 +172,7 @@ def iter_sers_to_iter_ser_pandas_udf_example(spark: SparkSession) -> None:
 
     # Declare the function and create the UDF
     @pandas_udf("long")  # type: ignore[call-overload]
-    def multiply_two_cols(
-            iterator: Iterator[Tuple[pd.Series, pd.Series]]) -> Iterator[pd.Series]:
+    def multiply_two_cols(iterator: Iterator[Tuple[pd.Series, pd.Series]]) -> Iterator[pd.Series]:
         for a, b in iterator:
             yield a * b
 
@@ -192,23 +192,21 @@ def ser_to_scalar_pandas_udf_example(spark: SparkSession) -> None:
     from pyspark.sql.functions import pandas_udf
     from pyspark.sql import Window
 
-    df = spark.createDataFrame(
-        [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
-        ("id", "v"))
+    df = spark.createDataFrame([(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v"))
 
     # Declare the function and create the UDF
     @pandas_udf("double")  # type: ignore[call-overload]
     def mean_udf(v: pd.Series) -> float:
         return v.mean()
 
-    df.select(mean_udf(df['v'])).show()
+    df.select(mean_udf(df["v"])).show()
     # +-----------+
     # |mean_udf(v)|
     # +-----------+
     # |        4.2|
     # +-----------+
 
-    df.groupby("id").agg(mean_udf(df['v'])).show()
+    df.groupby("id").agg(mean_udf(df["v"])).show()
     # +---+-----------+
     # | id|mean_udf(v)|
     # +---+-----------+
@@ -216,10 +214,8 @@ def ser_to_scalar_pandas_udf_example(spark: SparkSession) -> None:
     # |  2|        6.0|
     # +---+-----------+
 
-    w = Window \
-        .partitionBy('id') \
-        .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
-    df.withColumn('mean_v', mean_udf(df['v']).over(w)).show()
+    w = Window.partitionBy("id").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+    df.withColumn("mean_v", mean_udf(df["v"]).over(w)).show()
     # +---+----+------+
     # | id|   v|mean_v|
     # +---+----+------+
@@ -232,9 +228,7 @@ def ser_to_scalar_pandas_udf_example(spark: SparkSession) -> None:
 
 
 def grouped_apply_in_pandas_example(spark: SparkSession) -> None:
-    df = spark.createDataFrame(
-        [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
-        ("id", "v"))
+    df = spark.createDataFrame([(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v"))
 
     def subtract_mean(pdf: pd.DataFrame) -> pd.DataFrame:
         # pdf is a pandas.DataFrame
@@ -273,17 +267,17 @@ def cogrouped_apply_in_pandas_example(spark: SparkSession) -> None:
 
     df1 = spark.createDataFrame(
         [(20000101, 1, 1.0), (20000101, 2, 2.0), (20000102, 1, 3.0), (20000102, 2, 4.0)],
-        ("time", "id", "v1"))
+        ("time", "id", "v1"),
+    )
 
-    df2 = spark.createDataFrame(
-        [(20000101, 1, "x"), (20000101, 2, "y")],
-        ("time", "id", "v2"))
+    df2 = spark.createDataFrame([(20000101, 1, "x"), (20000101, 2, "y")], ("time", "id", "v2"))
 
     def merge_ordered(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
         return pd.merge_ordered(left, right)
 
     df1.groupby("id").cogroup(df2.groupby("id")).applyInPandas(
-        merge_ordered, schema="time int, id int, v1 double, v2 string").show()
+        merge_ordered, schema="time int, id int, v1 double, v2 string"
+    ).show()
     # +--------+---+---+----+
     # |    time| id| v1|  v2|
     # +--------+---+---+----+
@@ -297,11 +291,11 @@ def cogrouped_apply_in_pandas_example(spark: SparkSession) -> None:
 def arrow_python_udf_example(spark: SparkSession) -> None:
     from pyspark.sql.functions import udf
 
-    @udf(returnType='int')  # A default, pickled Python UDF
+    @udf(returnType="int")  # A default, pickled Python UDF
     def slen(s):  # type: ignore[no-untyped-def]
         return len(s)
 
-    @udf(returnType='int', useArrow=True)  # An Arrow Python UDF
+    @udf(returnType="int", useArrow=True)  # An Arrow Python UDF
     def arrow_slen(s):  # type: ignore[no-untyped-def]
         return len(s)
 
@@ -316,10 +310,7 @@ def arrow_python_udf_example(spark: SparkSession) -> None:
 
 
 if __name__ == "__main__":
-    spark = SparkSession \
-        .builder \
-        .appName("Python Arrow-in-Spark example") \
-        .getOrCreate()
+    spark = SparkSession.builder.appName("Python Arrow-in-Spark example").getOrCreate()
 
     print("Running Arrow conversion example: DataFrame to Table")
     dataframe_to_from_arrow_table_example(spark)

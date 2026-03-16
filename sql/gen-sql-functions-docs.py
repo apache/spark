@@ -29,19 +29,36 @@ from pyspark.java_gateway import launch_gateway
 ExpressionInfo = namedtuple("ExpressionInfo", "name usage examples group")
 
 groups = {
-    "agg_funcs", "array_funcs", "datetime_funcs",
-    "json_funcs", "map_funcs", "window_funcs",
-    "math_funcs", "conditional_funcs", "generator_funcs",
-    "predicate_funcs", "string_funcs", "misc_funcs",
-    "bitwise_funcs", "conversion_funcs", "csv_funcs",
-    "xml_funcs", "lambda_funcs", "collection_funcs",
-    "url_funcs", "hash_funcs", "struct_funcs",
-    "table_funcs", "variant_funcs", "protobuf_funcs", "sketch_funcs"
+    "agg_funcs",
+    "array_funcs",
+    "datetime_funcs",
+    "json_funcs",
+    "map_funcs",
+    "window_funcs",
+    "math_funcs",
+    "conditional_funcs",
+    "generator_funcs",
+    "predicate_funcs",
+    "string_funcs",
+    "misc_funcs",
+    "bitwise_funcs",
+    "conversion_funcs",
+    "csv_funcs",
+    "xml_funcs",
+    "lambda_funcs",
+    "collection_funcs",
+    "url_funcs",
+    "hash_funcs",
+    "struct_funcs",
+    "table_funcs",
+    "variant_funcs",
+    "protobuf_funcs",
+    "sketch_funcs",
 }
 
 
 def _print_red(text):
-    print('\033[31m' + text + '\033[0m')
+    print("\033[31m" + text + "\033[0m")
 
 
 def _list_grouped_function_infos(jvm):
@@ -55,7 +72,7 @@ def _list_grouped_function_infos(jvm):
 
     for jinfo in filter(lambda x: x.getGroup() in groups, jinfos):
         name = jinfo.getName()
-        if (name == "raise_error"):
+        if name == "raise_error":
             continue
 
         # SPARK-45232: convert lambda_funcs to collection_funcs in doc generation
@@ -65,11 +82,14 @@ def _list_grouped_function_infos(jvm):
 
         usage = jinfo.getUsage()
         usage = usage.replace("_FUNC_", name) if usage is not None else usage
-        infos.append(ExpressionInfo(
-            name=name,
-            usage=usage,
-            examples=jinfo.getExamples().replace("_FUNC_", name),
-            group=group))
+        infos.append(
+            ExpressionInfo(
+                name=name,
+                usage=usage,
+                examples=jinfo.getExamples().replace("_FUNC_", name),
+                group=group,
+            )
+        )
 
     # Groups expression info by each group value
     grouped_infos = itertools.groupby(sorted(infos, key=lambda x: x.group), key=lambda x: x.group)
@@ -112,10 +132,10 @@ def _make_pretty_usage(infos):
     """
 
     result = []
-    result.append("<table class=\"table\">")
+    result.append('<table class="table">')
     result.append("  <thead>")
     result.append("    <tr>")
-    result.append("      <th style=\"width:25%\">Function</th>")
+    result.append('      <th style="width:25%">Function</th>')
     result.append("      <th>Description</th>")
     result.append("    </tr>")
     result.append("  </thead>")
@@ -127,18 +147,20 @@ def _make_pretty_usage(infos):
         #  - `_FUNC_(...) - description`, or
         #  - `_FUNC_ - description`
         func_name = info.name
-        if (info.name == "*" or info.name == "+"):
+        if info.name == "*" or info.name == "+":
             func_name = "\\" + func_name
-        elif (info.name == "when"):
+        elif info.name == "when":
             func_name = "CASE WHEN"
         expr_usages = re.split(r"(.*%s.*) - " % func_name, info.usage.strip())
         if len(expr_usages) <= 1:
-            _print_red("\nThe `usage` of %s is not standardized, please correct it. "
-                       "Refer to: `AesDecrypt`" % (func_name))
+            _print_red(
+                "\nThe `usage` of %s is not standardized, please correct it. "
+                "Refer to: `AesDecrypt`" % (func_name)
+            )
             os._exit(-1)
         usages = iter(expr_usages[1:])
 
-        for (sig, description) in zip(usages, usages):
+        for sig, description in zip(usages, usages):
             result.append("    <tr>")
             result.append("      <td>%s</td>" % sig)
             result.append("      <td>%s</td>" % description.strip())
@@ -174,8 +196,13 @@ def _make_pretty_examples(jspark, infos):
 
     pretty_output = ""
     for info in infos:
-        if (info.examples.startswith("\n    Examples:") and info.name.lower() not in
-                ("from_avro", "to_avro", "from_protobuf", "to_protobuf", "measure")):
+        if info.examples.startswith("\n    Examples:") and info.name.lower() not in (
+            "from_avro",
+            "to_avro",
+            "from_protobuf",
+            "to_protobuf",
+            "measure",
+        ):
             output = []
             output.append("-- %s" % info.name)
             query_examples = filter(lambda x: x.startswith("      > "), info.examples.split("\n"))
@@ -188,7 +215,8 @@ def _make_pretty_examples(jspark, infos):
             pretty_output += "\n" + "\n".join(output)
     if pretty_output != "":
         return markdown.markdown(
-            "```sql%s```" % pretty_output, extensions=['codehilite', 'fenced_code'])
+            "```sql%s```" % pretty_output, extensions=["codehilite", "fenced_code"]
+        )
 
 
 def generate_functions_table_html(jvm, html_output_dir):
@@ -222,7 +250,7 @@ def generate_functions_table_html(jvm, html_output_dir):
     for key, infos in _list_grouped_function_infos(jvm):
         function_table = _make_pretty_usage(infos)
         key = key.replace("_", "-")
-        with open("%s/generated-%s-table.html" % (html_output_dir, key), 'w') as table_html:
+        with open("%s/generated-%s-table.html" % (html_output_dir, key), "w") as table_html:
             table_html.write(function_table)
 
 
@@ -247,8 +275,9 @@ def generate_functions_examples_html(jvm, jspark, html_output_dir):
         examples = _make_pretty_examples(jspark, infos)
         key = key.replace("_", "-")
         if examples is not None:
-            with open("%s/generated-%s-examples.html" % (
-                    html_output_dir, key), 'w') as examples_html:
+            with open(
+                "%s/generated-%s-examples.html" % (html_output_dir, key), "w"
+            ) as examples_html:
                 examples_html.write(examples)
 
 

@@ -17,14 +17,12 @@
 
 # $example on$
 from pyspark.ml.classification import LinearSVC
+
 # $example off$
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("linearSVC Example")\
-        .getOrCreate()
+    spark = SparkSession.builder.appName("linearSVC Example").getOrCreate()
 
     # $example on$
     # Load training data

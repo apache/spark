@@ -17,14 +17,12 @@
 
 # $example on$
 from pyspark.ml.feature import VectorIndexer
+
 # $example off$
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("VectorIndexerExample")\
-        .getOrCreate()
+    spark = SparkSession.builder.appName("VectorIndexerExample").getOrCreate()
 
     # $example on$
     data = spark.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
@@ -33,8 +31,10 @@ if __name__ == "__main__":
     indexerModel = indexer.fit(data)
 
     categoricalFeatures = indexerModel.categoryMaps
-    print("Chose %d categorical features: %s" %
-          (len(categoricalFeatures), ", ".join(str(k) for k in categoricalFeatures.keys())))
+    print(
+        "Chose %d categorical features: %s"
+        % (len(categoricalFeatures), ", ".join(str(k) for k in categoricalFeatures.keys()))
+    )
 
     # Create new column "indexed" with categorical values transformed to indices
     indexedData = indexerModel.transform(data)

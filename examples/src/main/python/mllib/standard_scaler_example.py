@@ -16,6 +16,7 @@
 #
 
 from pyspark import SparkContext
+
 # $example on$
 from pyspark.mllib.feature import StandardScaler
 from pyspark.mllib.linalg import Vectors

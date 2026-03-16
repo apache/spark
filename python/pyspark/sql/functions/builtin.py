@@ -8117,7 +8117,7 @@ def struct(__cols: Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]) 
 
 @_try_remote_functions
 def struct(
-    *cols: Union["ColumnOrName", Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]]
+    *cols: Union["ColumnOrName", Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]],
 ) -> Column:
     """Creates a new struct column.
 
@@ -18319,7 +18319,7 @@ def create_map(__cols: Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...
 
 @_try_remote_functions
 def create_map(
-    *cols: Union["ColumnOrName", Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]]
+    *cols: Union["ColumnOrName", Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]],
 ) -> Column:
     """
     Map function: Creates a new map column from an even number of input columns or
@@ -18484,7 +18484,7 @@ def array(__cols: Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]) -
 
 @_try_remote_functions
 def array(
-    *cols: Union["ColumnOrName", Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]]
+    *cols: Union["ColumnOrName", Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]],
 ) -> Column:
     """
     Collection function: Creates a new array column from the input columns or column names.
@@ -23105,7 +23105,7 @@ def map_concat(__cols: Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...
 
 @_try_remote_functions
 def map_concat(
-    *cols: Union["ColumnOrName", Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]]
+    *cols: Union["ColumnOrName", Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]],
 ) -> Column:
     """
     Map function: Returns the union of all given maps.

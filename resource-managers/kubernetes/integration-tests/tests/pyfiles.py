@@ -24,18 +24,15 @@ if __name__ == "__main__":
     """
         Usage: pyfiles [major_python_version]
     """
-    spark = SparkSession \
-        .builder \
-        .appName("PyFilesTest") \
-        .getOrCreate()
+    spark = SparkSession.builder.appName("PyFilesTest").getOrCreate()
 
     from py_container_checks import version_check
+
     # Begin of Python container checks
     version_check(sys.argv[1], 3)
 
     # Check python executable at executors
-    spark.udf.register("get_sys_ver",
-                       lambda: "%d.%d" % sys.version_info[:2], StringType())
+    spark.udf.register("get_sys_ver", lambda: "%d.%d" % sys.version_info[:2], StringType())
     [row] = spark.sql("SELECT get_sys_ver()").collect()
     driver_version = "%d.%d" % sys.version_info[:2]
     print("Python runtime version check for executor is: " + str(row[0] == driver_version))

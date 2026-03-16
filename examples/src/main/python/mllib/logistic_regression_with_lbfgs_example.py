@@ -18,20 +18,21 @@
 """
 Logistic Regression With LBFGS Example.
 """
+
 from pyspark import SparkContext
+
 # $example on$
 from pyspark.mllib.classification import LogisticRegressionWithLBFGS, LogisticRegressionModel
 from pyspark.mllib.regression import LabeledPoint
 # $example off$
 
 if __name__ == "__main__":
-
     sc = SparkContext(appName="PythonLogisticRegressionWithLBFGSExample")
 
     # $example on$
     # Load and parse the data
     def parsePoint(line):
-        values = [float(x) for x in line.split(' ')]
+        values = [float(x) for x in line.split(" ")]
         return LabeledPoint(values[0], values[1:])
 
     data = sc.textFile("data/mllib/sample_svm_data.txt")
@@ -47,6 +48,7 @@ if __name__ == "__main__":
 
     # Save and load model
     model.save(sc, "target/tmp/pythonLogisticRegressionWithLBFGSModel")
-    sameModel = LogisticRegressionModel.load(sc,
-                                             "target/tmp/pythonLogisticRegressionWithLBFGSModel")
+    sameModel = LogisticRegressionModel.load(
+        sc, "target/tmp/pythonLogisticRegressionWithLBFGSModel"
+    )
     # $example off$

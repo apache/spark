@@ -20,14 +20,12 @@ from pyspark.sql import SparkSession
 
 
 if __name__ == "__main__":
-    spark = SparkSession \
-        .builder \
-        .appName("PythonExecutableTest") \
-        .getOrCreate()
+    spark = SparkSession.builder.appName("PythonExecutableTest").getOrCreate()
 
     # Check python executable at executors
-    is_custom_python_executor = spark.range(1).rdd.map(
-        lambda _: "IS_CUSTOM_PYTHON" in os.environ).first()
+    is_custom_python_executor = (
+        spark.range(1).rdd.map(lambda _: "IS_CUSTOM_PYTHON" in os.environ).first()
+    )
 
     print("PYSPARK_PYTHON: %s" % os.environ.get("PYSPARK_PYTHON"))
     print("PYSPARK_DRIVER_PYTHON: %s" % os.environ.get("PYSPARK_DRIVER_PYTHON"))

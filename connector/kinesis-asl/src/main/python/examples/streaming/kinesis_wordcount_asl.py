@@ -55,6 +55,7 @@
   See https://spark.apache.org/docs/latest/streaming-kinesis-integration.html for more details on
   the Kinesis Spark Streaming integration.
 """
+
 import sys
 
 from pyspark import SparkContext
@@ -65,17 +66,21 @@ if __name__ == "__main__":
     if len(sys.argv) != 5:
         print(
             "Usage: kinesis_wordcount_asl.py <app-name> <stream-name> <endpoint-url> <region-name>",
-            file=sys.stderr)
+            file=sys.stderr,
+        )
         sys.exit(-1)
 
     sc = SparkContext(appName="PythonStreamingKinesisWordCountAsl")
     ssc = StreamingContext(sc, 1)
     appName, streamName, endpointUrl, regionName = sys.argv[1:]
     lines = KinesisUtils.createStream(
-        ssc, appName, streamName, endpointUrl, regionName, InitialPositionInStream.LATEST, 2)
-    counts = lines.flatMap(lambda line: line.split(" ")) \
-        .map(lambda word: (word, 1)) \
+        ssc, appName, streamName, endpointUrl, regionName, InitialPositionInStream.LATEST, 2
+    )
+    counts = (
+        lines.flatMap(lambda line: line.split(" "))
+        .map(lambda word: (word, 1))
         .reduceByKey(lambda a, b: a + b)
+    )
     counts.pprint()
 
     ssc.start()

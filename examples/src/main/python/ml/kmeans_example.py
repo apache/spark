@@ -22,6 +22,7 @@ Run with:
 
 This example requires NumPy (http://www.numpy.org/).
 """
+
 # $example on$
 from pyspark.ml.clustering import KMeans
 from pyspark.ml.evaluation import ClusteringEvaluator
@@ -30,10 +31,7 @@ from pyspark.ml.evaluation import ClusteringEvaluator
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("KMeansExample")\
-        .getOrCreate()
+    spark = SparkSession.builder.appName("KMeansExample").getOrCreate()
 
     # $example on$
     # Loads data.

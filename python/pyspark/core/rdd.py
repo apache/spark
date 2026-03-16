@@ -1731,8 +1731,7 @@ class RDD(Generic[T_co]):
         :meth:`SparkContext.setJobGroup`
         """
         warnings.warn(
-            "Deprecated in 3.1, Use pyspark.InheritableThread with "
-            "the pinned thread mode enabled.",
+            "Deprecated in 3.1, Use pyspark.InheritableThread with the pinned thread mode enabled.",
             FutureWarning,
         )
 

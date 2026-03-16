@@ -74,7 +74,7 @@ while (( "$#" )); do
   shift
 done
 
-if [[ -z "$COMPILE_TEST$BLACK_TEST$PYSPARK_CUSTOM_ERRORS_CHECK_TEST$FLAKE8_TEST$RUFF_TEST$MYPY_TEST$MYPY_EXAMPLES_TEST$MYPY_DATA_TEST" ]]; then
+if [[ -z "$COMPILE_TEST$PYSPARK_CUSTOM_ERRORS_CHECK_TEST$FLAKE8_TEST$RUFF_TEST$MYPY_TEST$MYPY_EXAMPLES_TEST$MYPY_DATA_TEST" ]]; then
   COMPILE_TEST=true
   BLACK_TEST=true
   PYSPARK_CUSTOM_ERRORS_CHECK_TEST=true
@@ -312,6 +312,19 @@ ruff checks failed."
         exit "$RUFF_STATUS"
     else
         echo "ruff checks passed."
+        echo
+    fi
+
+    RUFF_REPORT=$( ($RUFF_BUILD format --diff) 2>&1)
+    RUFF_STATUS=$?
+
+    if [ "$RUFF_STATUS" -ne 0 ]; then
+        echo "ruff format checks failed:"
+        echo "$RUFF_REPORT"
+        echo "$RUFF_STATUS"
+        exit "$RUFF_STATUS"
+    else
+        echo "ruff format checks passed."
         echo
     fi
 

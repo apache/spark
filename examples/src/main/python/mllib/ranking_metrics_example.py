@@ -18,6 +18,7 @@
 # $example on$
 from pyspark.mllib.recommendation import ALS, Rating
 from pyspark.mllib.evaluation import RegressionMetrics
+
 # $example off$
 from pyspark import SparkContext
 
@@ -32,6 +33,7 @@ if __name__ == "__main__":
     def parseLine(line):
         fields = line.split("::")
         return Rating(int(fields[0]), int(fields[1]), float(fields[2]) - 2.5)
+
     ratings = lines.map(lambda r: parseLine(r))
 
     # Train a model on to predict user-product ratings

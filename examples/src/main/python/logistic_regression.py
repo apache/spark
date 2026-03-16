@@ -22,6 +22,7 @@ to act on batches of input data using efficient matrix operations.
 In practice, one may prefer to use the LogisticRegression algorithm in
 ML, as shown in examples/src/main/python/ml/logistic_regression_with_elastic_net.py.
 """
+
 import sys
 from typing import Iterable, List
 
@@ -41,28 +42,28 @@ def readPointBatch(iterator: Iterable[str]) -> List[np.ndarray]:
     strs = list(iterator)
     matrix = np.zeros((len(strs), D + 1))
     for i, s in enumerate(strs):
-        matrix[i] = np.fromstring(s.replace(',', ' '), dtype=np.float32, sep=' ')
+        matrix[i] = np.fromstring(s.replace(",", " "), dtype=np.float32, sep=" ")
     return [matrix]
 
 
 if __name__ == "__main__":
-
     if len(sys.argv) != 3:
         print("Usage: logistic_regression <file> <iterations>", file=sys.stderr)
         sys.exit(-1)
 
-    print("""WARN: This is a naive implementation of Logistic Regression and is
+    print(
+        """WARN: This is a naive implementation of Logistic Regression and is
       given as an example!
       Please refer to examples/src/main/python/ml/logistic_regression_with_elastic_net.py
-      to see how ML's implementation is used.""", file=sys.stderr)
+      to see how ML's implementation is used.""",
+        file=sys.stderr,
+    )
 
-    spark = SparkSession\
-        .builder\
-        .appName("PythonLR")\
-        .getOrCreate()
+    spark = SparkSession.builder.appName("PythonLR").getOrCreate()
 
-    points = spark.read.text(sys.argv[1]).rdd.map(lambda r: r[0])\
-        .mapPartitions(readPointBatch).cache()
+    points = (
+        spark.read.text(sys.argv[1]).rdd.map(lambda r: r[0]).mapPartitions(readPointBatch).cache()
+    )
     iterations = int(sys.argv[2])
 
     # Initialize w to a random value
@@ -71,8 +72,8 @@ if __name__ == "__main__":
 
     # Compute logistic regression gradient for a matrix of data points
     def gradient(matrix: np.ndarray, w: np.ndarray) -> np.ndarray:
-        Y = matrix[:, 0]    # point labels (first column of input file)
-        X = matrix[:, 1:]   # point coordinates
+        Y = matrix[:, 0]  # point labels (first column of input file)
+        X = matrix[:, 1:]  # point coordinates
         # For each point (x, y), compute gradient function, then sum these up
         return ((1.0 / (1.0 + np.exp(-Y * X.dot(w))) - 1.0) * Y * X.T).sum(1)
 

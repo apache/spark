@@ -16,6 +16,7 @@
 #
 
 from pyspark import SparkContext
+
 # $example on$
 from pyspark.mllib.feature import Word2Vec
 # $example off$
@@ -29,7 +30,7 @@ if __name__ == "__main__":
     word2vec = Word2Vec()
     model = word2vec.fit(inp)
 
-    synonyms = model.findSynonyms('1', 5)
+    synonyms = model.findSynonyms("1", 5)
 
     for word, cosine_distance in synonyms:
         print("{}: {}".format(word, cosine_distance))

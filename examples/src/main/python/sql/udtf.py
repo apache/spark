@@ -32,7 +32,6 @@ require_minimum_pyarrow_version()
 
 
 def python_udtf_simple_example(spark: SparkSession) -> None:
-
     # Define the UDTF class and implement the required `eval` method.
     class SquareNumbers:
         def eval(self, start: int, end: int):
@@ -56,7 +55,6 @@ def python_udtf_simple_example(spark: SparkSession) -> None:
 
 
 def python_udtf_decorator_example(spark: SparkSession) -> None:
-
     from pyspark.sql.functions import lit, udtf
 
     # Define a UDTF using the `udtf` decorator directly on the class.
@@ -78,7 +76,6 @@ def python_udtf_decorator_example(spark: SparkSession) -> None:
 
 
 def python_udtf_registration(spark: SparkSession) -> None:
-
     from pyspark.sql.functions import udtf
 
     @udtf(returnType="word: string")
@@ -103,8 +100,7 @@ def python_udtf_registration(spark: SparkSession) -> None:
     # The lateral join allows us to reference the columns and aliases
     # in the previous FROM clause items as inputs to the UDTF.
     spark.sql(
-        "SELECT * FROM VALUES ('Hello World'), ('Apache Spark') t(text), "
-        "LATERAL split_words(text)"
+        "SELECT * FROM VALUES ('Hello World'), ('Apache Spark') t(text), LATERAL split_words(text)"
     ).show()
     # +------------+------+
     # |        text|  word|
@@ -117,7 +113,6 @@ def python_udtf_registration(spark: SparkSession) -> None:
 
 
 def python_udtf_arrow_example(spark: SparkSession) -> None:
-
     from pyspark.sql.functions import udtf
 
     @udtf(returnType="c1: int, c2: int", useArrow=True)
@@ -127,17 +122,16 @@ def python_udtf_arrow_example(spark: SparkSession) -> None:
 
 
 def python_udtf_date_expander_example(spark: SparkSession) -> None:
-
     from datetime import datetime, timedelta
     from pyspark.sql.functions import lit, udtf
 
     @udtf(returnType="date: string")
     class DateExpander:
         def eval(self, start_date: str, end_date: str):
-            current = datetime.strptime(start_date, '%Y-%m-%d')
-            end = datetime.strptime(end_date, '%Y-%m-%d')
+            current = datetime.strptime(start_date, "%Y-%m-%d")
+            end = datetime.strptime(end_date, "%Y-%m-%d")
             while current <= end:
-                yield (current.strftime('%Y-%m-%d'),)
+                yield (current.strftime("%Y-%m-%d"),)
                 current += timedelta(days=1)
 
     DateExpander(lit("2023-02-25"), lit("2023-03-01")).show()
@@ -153,7 +147,6 @@ def python_udtf_date_expander_example(spark: SparkSession) -> None:
 
 
 def python_udtf_terminate_example(spark: SparkSession) -> None:
-
     from pyspark.sql.functions import udtf
 
     @udtf(returnType="cnt: int")
@@ -168,7 +161,7 @@ def python_udtf_terminate_example(spark: SparkSession) -> None:
 
         def terminate(self):
             # Yield the final count when the UDTF is done processing.
-            yield self.count,
+            yield (self.count,)
 
     spark.udtf.register("count_udtf", CountUDTF)
     spark.sql("SELECT * FROM range(0, 10, 1, 1), LATERAL count_udtf(id)").show()
@@ -187,7 +180,6 @@ def python_udtf_terminate_example(spark: SparkSession) -> None:
 
 
 def python_udtf_table_argument(spark: SparkSession) -> None:
-
     from pyspark.sql.functions import udtf
     from pyspark.sql.types import Row
 
@@ -195,7 +187,7 @@ def python_udtf_table_argument(spark: SparkSession) -> None:
     class FilterUDTF:
         def eval(self, row: Row):
             if row["id"] > 5:
-                yield row["id"],
+                yield (row["id"],)
 
     spark.udtf.register("filter_udtf", FilterUDTF)
 
@@ -211,7 +203,6 @@ def python_udtf_table_argument(spark: SparkSession) -> None:
 
 
 def python_udtf_table_argument_with_partitioning(spark: SparkSession) -> None:
-
     from pyspark.sql.functions import udtf
     from pyspark.sql.types import Row
 
@@ -288,10 +279,7 @@ def python_udtf_table_argument_with_partitioning(spark: SparkSession) -> None:
 
 
 if __name__ == "__main__":
-    spark = SparkSession \
-        .builder \
-        .appName("Python UDTF example") \
-        .getOrCreate()
+    spark = SparkSession.builder.appName("Python UDTF example").getOrCreate()
 
     print("Running Python UDTF single example")
     python_udtf_simple_example(spark)

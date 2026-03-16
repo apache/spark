@@ -18,12 +18,14 @@
 """
 Streaming Linear Regression Example.
 """
+
 # $example on$
 import sys
 # $example off$
 
 from pyspark import SparkContext
 from pyspark.streaming import StreamingContext
+
 # $example on$
 from pyspark.mllib.linalg import Vectors
 from pyspark.mllib.regression import LabeledPoint
@@ -32,8 +34,9 @@ from pyspark.mllib.regression import StreamingLinearRegressionWithSGD
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print("Usage: streaming_linear_regression_example.py <trainingDir> <testDir>",
-              file=sys.stderr)
+        print(
+            "Usage: streaming_linear_regression_example.py <trainingDir> <testDir>", file=sys.stderr
+        )
         sys.exit(-1)
 
     sc = SparkContext(appName="PythonLogisticRegressionWithLBFGSExample")
@@ -41,8 +44,8 @@ if __name__ == "__main__":
 
     # $example on$
     def parse(lp):
-        label = float(lp[lp.find('(') + 1: lp.find(',')])
-        vec = Vectors.dense(lp[lp.find('[') + 1: lp.find(']')].split(','))
+        label = float(lp[lp.find("(") + 1 : lp.find(",")])
+        vec = Vectors.dense(lp[lp.find("[") + 1 : lp.find("]")].split(","))
         return LabeledPoint(label, vec)
 
     trainingData = ssc.textFileStream(sys.argv[1]).map(parse).cache()

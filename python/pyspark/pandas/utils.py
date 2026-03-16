@@ -142,19 +142,19 @@ def combine_frames(
     from pyspark.pandas.series import Series
 
     if all(isinstance(arg, Series) for arg in args):
-        assert all(
-            same_anchor(arg, args[0]) for arg in args
-        ), "Currently only one different DataFrame (from given Series) is supported"
+        assert all(same_anchor(arg, args[0]) for arg in args), (
+            "Currently only one different DataFrame (from given Series) is supported"
+        )
         assert not same_anchor(this, args[0]), "We don't need to combine. All series is in this."
         that = args[0]._psdf[list(args)]
     elif len(args) == 1 and isinstance(args[0], DataFrame):
         assert isinstance(args[0], DataFrame)
-        assert not same_anchor(
-            this, args[0]
-        ), "We don't need to combine. `this` and `that` are same."
+        assert not same_anchor(this, args[0]), (
+            "We don't need to combine. `this` and `that` are same."
+        )
         that = args[0]
     else:
-        raise AssertionError("args should be single DataFrame or " "single/multiple Series")
+        raise AssertionError("args should be single DataFrame or single/multiple Series")
 
     if get_option("compute.ops_on_diff_frames"):
 
@@ -761,8 +761,9 @@ def validate_bool_kwarg(value: Any, arg_name: str) -> Optional[bool]:
     """Ensures that argument passed in arg_name is of type bool."""
     if not (isinstance(value, bool) or value is None):
         raise TypeError(
-            'For argument "{}" expected type bool, received '
-            "type {}.".format(arg_name, type(value).__name__)
+            'For argument "{}" expected type bool, received type {}.'.format(
+                arg_name, type(value).__name__
+            )
         )
     return value
 
@@ -907,26 +908,26 @@ def verify_temp_column_name(
         ), "The temporary column name should be empty or start and end with `__`: {}".format(
             column_name_or_label
         )
-        assert all(
-            column_name_or_label != label for label in df._internal.column_labels
-        ), "The given column name `{}` already exists in the pandas-on-Spark DataFrame: {}".format(
-            name_like_string(column_name_or_label), df.columns
+        assert all(column_name_or_label != label for label in df._internal.column_labels), (
+            "The given column name `{}` already exists in the pandas-on-Spark DataFrame: {}".format(
+                name_like_string(column_name_or_label), df.columns
+            )
         )
         df = df._internal.resolved_copy.spark_frame
     else:
         assert isinstance(column_name_or_label, str), type(column_name_or_label)
-        assert column_name_or_label.startswith("__") and column_name_or_label.endswith(
-            "__"
-        ), "The temporary column name should start and end with `__`: {}".format(
-            column_name_or_label
+        assert column_name_or_label.startswith("__") and column_name_or_label.endswith("__"), (
+            "The temporary column name should start and end with `__`: {}".format(
+                column_name_or_label
+            )
         )
         column_name = column_name_or_label
 
     assert isinstance(df, PySparkDataFrame), type(df)
-    assert (
-        column_name not in df.columns
-    ), "The given column name `{}` already exists in the Spark DataFrame: {}".format(
-        column_name, df.columns
+    assert column_name not in df.columns, (
+        "The given column name `{}` already exists in the Spark DataFrame: {}".format(
+            column_name, df.columns
+        )
     )
 
     return column_name_or_label

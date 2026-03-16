@@ -24,7 +24,8 @@ from pyspark.java_gateway import launch_gateway
 
 
 ExpressionInfo = namedtuple(
-    "ExpressionInfo", "className name usage arguments examples note since deprecated group")
+    "ExpressionInfo", "className name usage arguments examples note since deprecated group"
+)
 
 
 def _make_anchor(name):
@@ -40,29 +41,29 @@ def _make_anchor(name):
     """
     # Map special characters to descriptive names
     special_chars = {
-        '!': 'not',
-        '!=': 'notequal',
-        '<>': 'notequal2',
-        '<': 'lt',
-        '<=': 'lte',
-        '<=>': 'nullsafeequal',
-        '=': 'eq',
-        '==': 'equal',
-        '>': 'gt',
-        '>=': 'gte',
-        '&': 'bitand',
-        '|': 'bitor',
-        '^': 'bitxor',
-        '~': 'bitnot',
-        '<<': 'shiftleft',
-        '>>': 'shiftright',
-        '>>>': 'shiftrightunsigned',
-        '+': 'plus',
-        '-': 'minus',
-        '*': 'multiply',
-        '/': 'divide',
-        '%': 'mod',
-        '||': 'concat',
+        "!": "not",
+        "!=": "notequal",
+        "<>": "notequal2",
+        "<": "lt",
+        "<=": "lte",
+        "<=>": "nullsafeequal",
+        "=": "eq",
+        "==": "equal",
+        ">": "gt",
+        ">=": "gte",
+        "&": "bitand",
+        "|": "bitor",
+        "^": "bitxor",
+        "~": "bitnot",
+        "<<": "shiftleft",
+        ">>": "shiftright",
+        ">>>": "shiftrightunsigned",
+        "+": "plus",
+        "-": "minus",
+        "*": "multiply",
+        "/": "divide",
+        "%": "mod",
+        "||": "concat",
     }
 
     if name in special_chars:
@@ -71,7 +72,7 @@ def _make_anchor(name):
     # For regular names, convert to lowercase and replace spaces with hyphens
     # Remove any remaining special characters
     anchor = name.lower().replace(" ", "-")
-    anchor = re.sub(r'[^a-z0-9_-]', '', anchor)
+    anchor = re.sub(r"[^a-z0-9_-]", "", anchor)
     return anchor
 
 
@@ -121,91 +122,95 @@ _virtual_operator_infos = [
     ExpressionInfo(
         className="",
         name="!=",
-        usage="expr1 != expr2 - Returns true if `expr1` is not equal to `expr2`, " +
-              "or false otherwise.",
-        arguments="\n    Arguments:\n      " +
-                  """* expr1, expr2 - the two expressions must be same type or can be casted to
+        usage="expr1 != expr2 - Returns true if `expr1` is not equal to `expr2`, "
+        + "or false otherwise.",
+        arguments="\n    Arguments:\n      "
+        + """* expr1, expr2 - the two expressions must be same type or can be casted to
                        a common type, and must be a type that can be used in equality comparison.
                        Map type is not supported. For complex types such array/struct,
                        the data types of fields must be orderable.""",
-        examples="\n    Examples:\n      " +
-                 "> SELECT 1 != 2;\n      " +
-                 " true\n      " +
-                 "> SELECT 1 != '2';\n      " +
-                 " true\n      " +
-                 "> SELECT true != NULL;\n      " +
-                 " NULL\n      " +
-                 "> SELECT NULL != NULL;\n      " +
-                 " NULL",
+        examples="\n    Examples:\n      "
+        + "> SELECT 1 != 2;\n      "
+        + " true\n      "
+        + "> SELECT 1 != '2';\n      "
+        + " true\n      "
+        + "> SELECT true != NULL;\n      "
+        + " NULL\n      "
+        + "> SELECT NULL != NULL;\n      "
+        + " NULL",
         note="",
         since="1.0.0",
         deprecated="",
-        group="predicate_funcs"),
+        group="predicate_funcs",
+    ),
     ExpressionInfo(
         className="",
         name="<>",
-        usage="expr1 != expr2 - Returns true if `expr1` is not equal to `expr2`, " +
-              "or false otherwise.",
-        arguments="\n    Arguments:\n      " +
-                  """* expr1, expr2 - the two expressions must be same type or can be casted to
+        usage="expr1 != expr2 - Returns true if `expr1` is not equal to `expr2`, "
+        + "or false otherwise.",
+        arguments="\n    Arguments:\n      "
+        + """* expr1, expr2 - the two expressions must be same type or can be casted to
                        a common type, and must be a type that can be used in equality comparison.
                        Map type is not supported. For complex types such array/struct,
                        the data types of fields must be orderable.""",
-        examples="\n    Examples:\n      " +
-                 "> SELECT 1 != 2;\n      " +
-                 " true\n      " +
-                 "> SELECT 1 != '2';\n      " +
-                 " true\n      " +
-                 "> SELECT true != NULL;\n      " +
-                 " NULL\n      " +
-                 "> SELECT NULL != NULL;\n      " +
-                 " NULL",
+        examples="\n    Examples:\n      "
+        + "> SELECT 1 != 2;\n      "
+        + " true\n      "
+        + "> SELECT 1 != '2';\n      "
+        + " true\n      "
+        + "> SELECT true != NULL;\n      "
+        + " NULL\n      "
+        + "> SELECT NULL != NULL;\n      "
+        + " NULL",
         note="",
         since="1.0.0",
         deprecated="",
-        group="predicate_funcs"),
+        group="predicate_funcs",
+    ),
     ExpressionInfo(
         className="",
         name="case",
-        usage="CASE expr1 WHEN expr2 THEN expr3 " +
-              "[WHEN expr4 THEN expr5]* [ELSE expr6] END - " +
-              "When `expr1` = `expr2`, returns `expr3`; " +
-              "when `expr1` = `expr4`, return `expr5`; else return `expr6`.",
-        arguments="\n    Arguments:\n      " +
-                  "* expr1 - the expression which is one operand of comparison.\n      " +
-                  "* expr2, expr4 - the expressions each of which is the other " +
-                  "  operand of comparison.\n      " +
-                  "* expr3, expr5, expr6 - the branch value expressions and else value expression" +
-                  "  should all be same type or coercible to a common type.",
-        examples="\n    Examples:\n      " +
-                 "> SELECT CASE col1 WHEN 1 THEN 'one' " +
-                 "WHEN 2 THEN 'two' ELSE '?' END FROM VALUES 1, 2, 3;\n      " +
-                 " one\n      " +
-                 " two\n      " +
-                 " ?\n      " +
-                 "> SELECT CASE col1 WHEN 1 THEN 'one' " +
-                 "WHEN 2 THEN 'two' END FROM VALUES 1, 2, 3;\n      " +
-                 " one\n      " +
-                 " two\n      " +
-                 " NULL",
+        usage="CASE expr1 WHEN expr2 THEN expr3 "
+        + "[WHEN expr4 THEN expr5]* [ELSE expr6] END - "
+        + "When `expr1` = `expr2`, returns `expr3`; "
+        + "when `expr1` = `expr4`, return `expr5`; else return `expr6`.",
+        arguments="\n    Arguments:\n      "
+        + "* expr1 - the expression which is one operand of comparison.\n      "
+        + "* expr2, expr4 - the expressions each of which is the other "
+        + "  operand of comparison.\n      "
+        + "* expr3, expr5, expr6 - the branch value expressions and else value expression"
+        + "  should all be same type or coercible to a common type.",
+        examples="\n    Examples:\n      "
+        + "> SELECT CASE col1 WHEN 1 THEN 'one' "
+        + "WHEN 2 THEN 'two' ELSE '?' END FROM VALUES 1, 2, 3;\n      "
+        + " one\n      "
+        + " two\n      "
+        + " ?\n      "
+        + "> SELECT CASE col1 WHEN 1 THEN 'one' "
+        + "WHEN 2 THEN 'two' END FROM VALUES 1, 2, 3;\n      "
+        + " one\n      "
+        + " two\n      "
+        + " NULL",
         note="",
         since="1.0.1",
         deprecated="",
-        group="conditional_funcs"),
+        group="conditional_funcs",
+    ),
     ExpressionInfo(
         className="",
         name="||",
         usage="expr1 || expr2 - Returns the concatenation of `expr1` and `expr2`.",
         arguments="",
-        examples="\n    Examples:\n      " +
-                 "> SELECT 'Spark' || 'SQL';\n      " +
-                 " SparkSQL\n      " +
-                 "> SELECT array(1, 2, 3) || array(4, 5) || array(6);\n      " +
-                 " [1,2,3,4,5,6]",
+        examples="\n    Examples:\n      "
+        + "> SELECT 'Spark' || 'SQL';\n      "
+        + " SparkSQL\n      "
+        + "> SELECT array(1, 2, 3) || array(4, 5) || array(6);\n      "
+        + " [1,2,3,4,5,6]",
         note="\n    || for arrays is available since 2.4.0.\n",
         since="2.3.0",
         deprecated="",
-        group="string_funcs")
+        group="string_funcs",
+    ),
 ]
 
 
@@ -224,16 +229,19 @@ def _list_function_infos(jvm):
         # Get the group and apply any merges
         group = jinfo.getGroup()
         group = GROUP_MERGES.get(group, group)
-        infos.append(ExpressionInfo(
-            className=jinfo.getClassName(),
-            name=name,
-            usage=usage,
-            arguments=jinfo.getArguments().replace("_FUNC_", name),
-            examples=jinfo.getExamples().replace("_FUNC_", name),
-            note=jinfo.getNote().replace("_FUNC_", name),
-            since=jinfo.getSince(),
-            deprecated=jinfo.getDeprecated(),
-            group=group))
+        infos.append(
+            ExpressionInfo(
+                className=jinfo.getClassName(),
+                name=name,
+                usage=usage,
+                arguments=jinfo.getArguments().replace("_FUNC_", name),
+                examples=jinfo.getExamples().replace("_FUNC_", name),
+                note=jinfo.getNote().replace("_FUNC_", name),
+                since=jinfo.getSince(),
+                deprecated=jinfo.getDeprecated(),
+                group=group,
+            )
+        )
     return sorted(infos, key=lambda i: i.name)
 
 
@@ -245,8 +253,7 @@ def _list_grouped_function_infos(jvm):
     infos = _list_function_infos(jvm)
     # Group by category
     grouped = itertools.groupby(
-        sorted(infos, key=lambda x: (x.group or "", x.name)),
-        key=lambda x: x.group
+        sorted(infos, key=lambda x: (x.group or "", x.name)), key=lambda x: x.group
     )
     return [(k, list(g)) for k, g in grouped]
 
@@ -440,16 +447,18 @@ def generate_sql_api_markdown(jvm, docs_dir):
         categories_with_functions.append((group_key, display_name, file_name, len(infos)))
 
         category_path = os.path.join(docs_dir, "%s.md" % file_name)
-        with open(category_path, 'w') as mdfile:
+        with open(category_path, "w") as mdfile:
             mdfile.write("# %s\n\n" % display_name)
-            mdfile.write("This page lists all %s available in Spark SQL.\n\n" % display_name.lower())
+            mdfile.write(
+                "This page lists all %s available in Spark SQL.\n\n" % display_name.lower()
+            )
             mdfile.write("---\n\n")
             for info in infos:
                 _write_function_entry(mdfile, info)
 
     # Generate the index file with links to all categories
     index_path = os.path.join(docs_dir, "index.md")
-    with open(index_path, 'w') as mdfile:
+    with open(index_path, "w") as mdfile:
         mdfile.write("# Built-in Functions\n\n")
         # Inline CSS for responsive grid layout
         css = """<style>
@@ -498,7 +507,7 @@ def generate_sql_api_markdown(jvm, docs_dir):
             for info in category_infos:
                 anchor = _make_anchor(info.name)
                 mdfile.write('<a href="%s/#%s">%s</a>\n' % (file_name, anchor, info.name))
-            mdfile.write('</div>\n\n')
+            mdfile.write("</div>\n\n")
 
     # Auto-generate mkdocs.yml with navigation
     _generate_mkdocs_yml(docs_dir, categories_with_functions)
@@ -518,7 +527,7 @@ def _generate_mkdocs_yml(docs_dir, categories_with_functions):
     # Sort categories by display name for consistent ordering
     sorted_categories = sorted(categories_with_functions, key=lambda x: x[1])
 
-    with open(mkdocs_path, 'w') as f:
+    with open(mkdocs_path, "w") as f:
         f.write("# AUTO-GENERATED FILE - DO NOT EDIT MANUALLY\n")
         f.write("# This file is generated by gen-sql-api-docs.py\n")
         f.write("# Run 'sql/create-docs.sh' to regenerate\n")

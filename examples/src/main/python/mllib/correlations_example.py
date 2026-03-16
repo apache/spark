@@ -18,6 +18,7 @@
 import numpy as np
 
 from pyspark import SparkContext
+
 # $example on$
 from pyspark.mllib.stat import Statistics
 # $example off$

@@ -18,19 +18,20 @@
 """
 Linear Regression With SGD Example.
 """
+
 from pyspark import SparkContext
+
 # $example on$
 from pyspark.mllib.regression import LabeledPoint, LinearRegressionWithSGD, LinearRegressionModel
 # $example off$
 
 if __name__ == "__main__":
-
     sc = SparkContext(appName="PythonLinearRegressionWithSGDExample")
 
     # $example on$
     # Load and parse the data
     def parsePoint(line):
-        values = [float(x) for x in line.replace(',', ' ').split(' ')]
+        values = [float(x) for x in line.replace(",", " ").split(" ")]
         return LabeledPoint(values[0], values[1:])
 
     data = sc.textFile("data/mllib/ridge-data/lpsa.data")
@@ -41,9 +42,10 @@ if __name__ == "__main__":
 
     # Evaluate the model on training data
     valuesAndPreds = parsedData.map(lambda p: (p.label, model.predict(p.features)))
-    MSE = valuesAndPreds \
-        .map(lambda vp: (vp[0] - vp[1])**2) \
-        .reduce(lambda x, y: x + y) / valuesAndPreds.count()
+    MSE = (
+        valuesAndPreds.map(lambda vp: (vp[0] - vp[1]) ** 2).reduce(lambda x, y: x + y)
+        / valuesAndPreds.count()
+    )
     print("Mean Squared Error = " + str(MSE))
 
     # Save and load model

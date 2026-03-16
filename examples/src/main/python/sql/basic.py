@@ -20,6 +20,7 @@ A simple example demonstrating basic Spark SQL features.
 Run with:
   ./bin/spark-submit examples/src/main/python/sql/basic.py
 """
+
 # $example on:init_session$
 from pyspark.sql import SparkSession
 # $example off:init_session$
@@ -68,7 +69,7 @@ def basic_df_example(spark: SparkSession) -> None:
     # +-------+
 
     # Select everybody, but increment the age by 1
-    df.select(df['name'], df['age'] + 1).show()
+    df.select(df["name"], df["age"] + 1).show()
     # +-------+---------+
     # |   name|(age + 1)|
     # +-------+---------+
@@ -78,7 +79,7 @@ def basic_df_example(spark: SparkSession) -> None:
     # +-------+---------+
 
     # Select people older than 21
-    df.filter(df['age'] > 21).show()
+    df.filter(df["age"] > 21).show()
     # +---+----+
     # |age|name|
     # +---+----+
@@ -200,11 +201,11 @@ def programmatic_schema_example(spark: SparkSession) -> None:
 
 if __name__ == "__main__":
     # $example on:init_session$
-    spark = SparkSession \
-        .builder \
-        .appName("Python Spark SQL basic example") \
-        .config("spark.some.config.option", "some-value") \
+    spark = (
+        SparkSession.builder.appName("Python Spark SQL basic example")
+        .config("spark.some.config.option", "some-value")
         .getOrCreate()
+    )
     # $example off:init_session$
 
     basic_df_example(spark)

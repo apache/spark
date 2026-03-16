@@ -17,20 +17,24 @@
 
 # $example on$
 from pyspark.mllib.evaluation import MultilabelMetrics
+
 # $example off$
 from pyspark import SparkContext
 
 if __name__ == "__main__":
     sc = SparkContext(appName="MultiLabelMetricsExample")
     # $example on$
-    scoreAndLabels = sc.parallelize([
-        ([0.0, 1.0], [0.0, 2.0]),
-        ([0.0, 2.0], [0.0, 1.0]),
-        ([], [0.0]),
-        ([2.0], [2.0]),
-        ([2.0, 0.0], [2.0, 0.0]),
-        ([0.0, 1.0, 2.0], [0.0, 1.0]),
-        ([1.0], [1.0, 2.0])])
+    scoreAndLabels = sc.parallelize(
+        [
+            ([0.0, 1.0], [0.0, 2.0]),
+            ([0.0, 2.0], [0.0, 1.0]),
+            ([], [0.0]),
+            ([2.0], [2.0]),
+            ([2.0, 0.0], [2.0, 0.0]),
+            ([0.0, 1.0, 2.0], [0.0, 1.0]),
+            ([1.0], [1.0, 2.0]),
+        ]
+    )
 
     # Instantiate metrics object
     metrics = MultilabelMetrics(scoreAndLabels)

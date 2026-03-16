@@ -21,6 +21,7 @@ pyspark.ml.recommendation.ALS for more conventional use.
 
 This example requires numpy (http://www.numpy.org/)
 """
+
 import sys
 
 import numpy as np
@@ -28,7 +29,7 @@ from numpy.random import rand
 from numpy import matrix
 from pyspark.sql import SparkSession
 
-LAMBDA = 0.01   # regularization
+LAMBDA = 0.01  # regularization
 np.random.seed(42)
 
 
@@ -51,19 +52,18 @@ def update(i: int, mat: np.ndarray, ratings: np.ndarray) -> np.ndarray:
 
 
 if __name__ == "__main__":
-
     """
     Usage: als [M] [U] [F] [iterations] [partitions]"
     """
 
-    print("""WARN: This is a naive implementation of ALS and is given as an
+    print(
+        """WARN: This is a naive implementation of ALS and is given as an
       example. Please use pyspark.ml.recommendation.ALS for more
-      conventional use.""", file=sys.stderr)
+      conventional use.""",
+        file=sys.stderr,
+    )
 
-    spark = SparkSession\
-        .builder\
-        .appName("PythonALS")\
-        .getOrCreate()
+    spark = SparkSession.builder.appName("PythonALS").getOrCreate()
 
     sc = spark.sparkContext
 
@@ -73,8 +73,10 @@ if __name__ == "__main__":
     ITERATIONS = int(sys.argv[4]) if len(sys.argv) > 4 else 5
     partitions = int(sys.argv[5]) if len(sys.argv) > 5 else 2
 
-    print("Running ALS with M=%d, U=%d, F=%d, iters=%d, partitions=%d\n" %
-          (M, U, F, ITERATIONS, partitions))
+    print(
+        "Running ALS with M=%d, U=%d, F=%d, iters=%d, partitions=%d\n"
+        % (M, U, F, ITERATIONS, partitions)
+    )
 
     R = matrix(rand(M, F)) * matrix(rand(U, F).T)
     ms: matrix = matrix(rand(M, F))
@@ -85,17 +87,21 @@ if __name__ == "__main__":
     usb = sc.broadcast(us)
 
     for i in range(ITERATIONS):
-        ms_ = sc.parallelize(range(M), partitions) \
-            .map(lambda x: update(x, usb.value, Rb.value)) \
+        ms_ = (
+            sc.parallelize(range(M), partitions)
+            .map(lambda x: update(x, usb.value, Rb.value))
             .collect()
+        )
         # collect() returns a list, so array ends up being
         # a 3-d array, we take the first 2 dims for the matrix
         ms = matrix(np.array(ms_)[:, :, 0])
         msb = sc.broadcast(ms)
 
-        us_ = sc.parallelize(range(U), partitions) \
-            .map(lambda x: update(x, msb.value, Rb.value.T)) \
+        us_ = (
+            sc.parallelize(range(U), partitions)
+            .map(lambda x: update(x, msb.value, Rb.value.T))
             .collect()
+        )
         us = matrix(np.array(us_)[:, :, 0])
         usb = sc.broadcast(us)
 

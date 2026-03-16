@@ -18,7 +18,9 @@
 """
 Isotonic Regression Example.
 """
+
 from pyspark import SparkContext
+
 # $example on$
 import math
 from pyspark.mllib.regression import IsotonicRegression, IsotonicRegressionModel
@@ -26,7 +28,6 @@ from pyspark.mllib.util import MLUtils
 # $example off$
 
 if __name__ == "__main__":
-
     sc = SparkContext(appName="PythonIsotonicRegressionExample")
 
     # $example on$

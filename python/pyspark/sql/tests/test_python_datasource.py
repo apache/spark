@@ -88,7 +88,7 @@ class BasePythonDataSourceTestsMixin:
     def test_basic_data_source_reader_class(self):
         class MyDataSourceReader(DataSourceReader):
             def read(self, partition):
-                yield None,
+                yield (None,)
 
         reader = MyDataSourceReader()
         self.assertEqual(list(reader.read(None)), [(None,)])
@@ -895,7 +895,7 @@ class BasePythonDataSourceTestsMixin:
                     class TestReader2(DataSourceReader):
                         def read(self, partition):
                             ctypes.string_at(0)
-                            yield "x",
+                            yield ("x",)
 
                     self.spark.dataSource.register(TestDataSource)
 

@@ -20,16 +20,15 @@ An example demonstrating Logistic Regression Summary.
 Run with:
   bin/spark-submit examples/src/main/python/ml/logistic_regression_summary_example.py
 """
+
 # $example on$
 from pyspark.ml.classification import LogisticRegression
+
 # $example off$
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession \
-        .builder \
-        .appName("LogisticRegressionSummary") \
-        .getOrCreate()
+    spark = SparkSession.builder.appName("LogisticRegressionSummary").getOrCreate()
 
     # Load training data
     training = spark.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
@@ -56,9 +55,12 @@ if __name__ == "__main__":
 
     # Set the model threshold to maximize F-Measure
     fMeasure = trainingSummary.fMeasureByThreshold
-    maxFMeasure = fMeasure.groupBy().max('F-Measure').select('max(F-Measure)').head()
-    bestThreshold = fMeasure.where(fMeasure['F-Measure'] == maxFMeasure['max(F-Measure)']) \
-        .select('threshold').head()['threshold']
+    maxFMeasure = fMeasure.groupBy().max("F-Measure").select("max(F-Measure)").head()
+    bestThreshold = (
+        fMeasure.where(fMeasure["F-Measure"] == maxFMeasure["max(F-Measure)"])
+        .select("threshold")
+        .head()["threshold"]
+    )
     lr.setThreshold(bestThreshold)
     # $example off$
 

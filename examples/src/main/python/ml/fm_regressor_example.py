@@ -18,19 +18,18 @@
 """
 FMRegressor Example.
 """
+
 # $example on$
 from pyspark.ml import Pipeline
 from pyspark.ml.regression import FMRegressor
 from pyspark.ml.feature import MinMaxScaler
 from pyspark.ml.evaluation import RegressionEvaluator
+
 # $example off$
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession \
-        .builder \
-        .appName("FMRegressorExample") \
-        .getOrCreate()
+    spark = SparkSession.builder.appName("FMRegressorExample").getOrCreate()
 
     # $example on$
     # Load and parse the data file, converting it to a DataFrame.
@@ -58,8 +57,7 @@ if __name__ == "__main__":
     predictions.select("prediction", "label", "features").show(5)
 
     # Select (prediction, true label) and compute test error
-    evaluator = RegressionEvaluator(
-        labelCol="label", predictionCol="prediction", metricName="rmse")
+    evaluator = RegressionEvaluator(labelCol="label", predictionCol="prediction", metricName="rmse")
     rmse = evaluator.evaluate(predictions)
     print("Root Mean Squared Error (RMSE) on test data = %g" % rmse)
 

@@ -1,6 +1,7 @@
 """
 Generate a unified page of documentation for all error conditions.
 """
+
 import json
 import os
 import re
@@ -35,8 +36,8 @@ def load_error_conditions(path):
             continue
         if "subClass" in details:
             for sub_name in details["subClass"]:
-                details["subClass"][sub_name]["message"] = (
-                    assemble_message(details["subClass"][sub_name]["message"])
+                details["subClass"][sub_name]["message"] = assemble_message(
+                    details["subClass"][sub_name]["message"]
                 )
         details["message"] = assemble_message(details["message"])
         error_conditions[name] = details
@@ -49,10 +50,7 @@ def anchor_name(condition_name: str, sub_condition_name: str = None):
     the condition name mostly as-is for use in the anchor, even when that name is very long.
     See: https://stackoverflow.com/a/417184
     """
-    parts = [
-        part for part in (condition_name, sub_condition_name)
-        if part
-    ]
+    parts = [part for part in (condition_name, sub_condition_name) if part]
     anchor = "-".join(parts).lower().replace("_", "-")
     return anchor
 
@@ -72,8 +70,7 @@ def generate_doc_rows(condition_name, condition_details):
             </td>
             <td>{message}</td>
         </tr>
-        """
-        .format(
+        """.format(
             anchor=anchor_name(condition_name),
             sql_state=condition_details["sqlState"],
             # This inserts soft break opportunities so that if a long name needs to be wrapped
@@ -100,8 +97,7 @@ def generate_doc_rows(condition_name, condition_details):
                     </td>
                     <td class="error-sub-condition">{message}</td>
                 </tr>
-                """
-                .format(
+                """.format(
                     anchor=anchor_name(condition_name, sub_condition_name),
                     # See comment above for explanation of `<wbr />`.
                     sub_condition_name=sub_condition_name.replace("_", "<wbr />_"),
@@ -109,23 +105,20 @@ def generate_doc_rows(condition_name, condition_details):
                 )
             )
     doc_rows = condition_row + sub_condition_rows
-    return [
-        dedent(row).strip()
-        for row in doc_rows
-    ]
+    return [dedent(row).strip() for row in doc_rows]
 
 
 def generate_doc_table(error_conditions):
-    doc_rows = chain.from_iterable([
-        generate_doc_rows(condition_name, condition_details)
-        for condition_name, condition_details
-        in sorted(
-            error_conditions.items(),
-            key=lambda x: (x[1]["sqlState"], x[0]),
-        )
-    ])
-    table_html = (
-        """
+    doc_rows = chain.from_iterable(
+        [
+            generate_doc_rows(condition_name, condition_details)
+            for condition_name, condition_details in sorted(
+                error_conditions.items(),
+                key=lambda x: (x[1]["sqlState"], x[0]),
+            )
+        ]
+    )
+    table_html = """
         <table id="error-conditions">
         <tr>
             <th>Error State / SQLSTATE</th>
@@ -135,7 +128,6 @@ def generate_doc_table(error_conditions):
         {rows}
         </table>
         """
-    )
     # We dedent here rather than above so that the interpolated rows (which are not
     # indented) don't prevent the dedent from working.
     table_html = dedent(table_html).strip().format(rows="\n".join(list(doc_rows)))

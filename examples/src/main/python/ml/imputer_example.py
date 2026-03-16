@@ -20,25 +20,21 @@ An example demonstrating Imputer.
 Run with:
   bin/spark-submit examples/src/main/python/ml/imputer_example.py
 """
+
 # $example on$
 from pyspark.ml.feature import Imputer
+
 # $example off$
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("ImputerExample")\
-        .getOrCreate()
+    spark = SparkSession.builder.appName("ImputerExample").getOrCreate()
 
     # $example on$
-    df = spark.createDataFrame([
-        (1.0, float("nan")),
-        (2.0, float("nan")),
-        (float("nan"), 3.0),
-        (4.0, 4.0),
-        (5.0, 5.0)
-    ], ["a", "b"])
+    df = spark.createDataFrame(
+        [(1.0, float("nan")), (2.0, float("nan")), (float("nan"), 3.0), (4.0, 4.0), (5.0, 5.0)],
+        ["a", "b"],
+    )
 
     imputer = Imputer(inputCols=["a", "b"], outputCols=["out_a", "out_b"])
     model = imputer.fit(df)

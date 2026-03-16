@@ -20,6 +20,7 @@ A simple example demonstrating Spark SQL Hive integration.
 Run with:
   ./bin/spark-submit examples/src/main/python/sql/hive.py
 """
+
 # $example on:spark_hive$
 from os.path import abspath
 
@@ -31,14 +32,14 @@ from pyspark.sql import Row
 if __name__ == "__main__":
     # $example on:spark_hive$
     # warehouse_location points to the default location for managed databases and tables
-    warehouse_location = abspath('spark-warehouse')
+    warehouse_location = abspath("spark-warehouse")
 
-    spark = SparkSession \
-        .builder \
-        .appName("Python Spark SQL Hive integration example") \
-        .config("spark.sql.warehouse.dir", warehouse_location) \
-        .enableHiveSupport() \
+    spark = (
+        SparkSession.builder.appName("Python Spark SQL Hive integration example")
+        .config("spark.sql.warehouse.dir", warehouse_location)
+        .enableHiveSupport()
         .getOrCreate()
+    )
 
     # spark is an existing SparkSession
     spark.sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING) USING hive")

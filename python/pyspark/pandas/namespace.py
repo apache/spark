@@ -437,7 +437,7 @@ def read_csv(
                 )
             if len(missing) > 0:
                 raise ValueError(
-                    "Usecols do not match columns, columns expected but not " "found: %s" % missing
+                    "Usecols do not match columns, columns expected but not found: %s" % missing
                 )
 
             if len(column_labels) > 0:
@@ -2284,7 +2284,9 @@ def get_dummies(
                         (
                             str(label[len(columns) :])
                             if len(label) > len(columns) + 1
-                            else label[len(columns)] if len(label) == len(columns) + 1 else ""
+                            else label[len(columns)]
+                            if len(label) == len(columns) + 1
+                            else ""
                         )
                         for label in column_labels
                     ]

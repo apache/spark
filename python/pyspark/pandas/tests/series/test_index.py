@@ -348,14 +348,12 @@ class SeriesIndexMixin:
             psser.droplevel(-10)
         with self.assertRaisesRegex(
             ValueError,
-            "Cannot remove 3 levels from an index with 3 levels: "
-            "at least one level must be left.",
+            "Cannot remove 3 levels from an index with 3 levels: at least one level must be left.",
         ):
             psser.droplevel([0, 1, 2])
         with self.assertRaisesRegex(
             ValueError,
-            "Cannot remove 5 levels from an index with 3 levels: "
-            "at least one level must be left.",
+            "Cannot remove 5 levels from an index with 3 levels: at least one level must be left.",
         ):
             psser.droplevel([1, 1, 1, 1, 1])
 

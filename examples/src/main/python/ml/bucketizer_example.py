@@ -16,15 +16,13 @@
 #
 
 from pyspark.sql import SparkSession
+
 # $example on$
 from pyspark.ml.feature import Bucketizer
 # $example off$
 
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("BucketizerExample")\
-        .getOrCreate()
+    spark = SparkSession.builder.appName("BucketizerExample").getOrCreate()
 
     # $example on$
     splits = [-float("inf"), -0.5, 0.0, 0.5, float("inf")]

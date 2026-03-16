@@ -28,7 +28,7 @@ from pyspark.mllib.clustering import GaussianMixture
 
 
 def parseVector(line):
-    return np.array([float(x) for x in line.split(' ')])
+    return np.array([float(x) for x in line.split(" ")])
 
 
 if __name__ == "__main__":
@@ -43,12 +43,11 @@ if __name__ == "__main__":
     """
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('inputFile', help='Input File')
-    parser.add_argument('k', type=int, help='Number of clusters')
-    parser.add_argument('--convergenceTol', default=1e-3, type=float, help='convergence threshold')
-    parser.add_argument('--maxIterations', default=100, type=int, help='Number of iterations')
-    parser.add_argument('--seed', default=random.getrandbits(19),
-                        type=int, help='Random seed')
+    parser.add_argument("inputFile", help="Input File")
+    parser.add_argument("k", type=int, help="Number of clusters")
+    parser.add_argument("--convergenceTol", default=1e-3, type=float, help="convergence threshold")
+    parser.add_argument("--maxIterations", default=100, type=int, help="Number of iterations")
+    parser.add_argument("--seed", default=random.getrandbits(19), type=int, help="Random seed")
     args = parser.parse_args()
 
     conf = SparkConf().setAppName("GMM")
@@ -56,14 +55,25 @@ if __name__ == "__main__":
 
     lines = sc.textFile(args.inputFile)
     data = lines.map(parseVector)
-    model = GaussianMixture.train(data, args.k, args.convergenceTol,
-                                  args.maxIterations, args.seed)
+    model = GaussianMixture.train(data, args.k, args.convergenceTol, args.maxIterations, args.seed)
     for i in range(args.k):
-        print(("weight = ", model.weights[i], "mu = ", model.gaussians[i].mu,
-               "sigma = ", model.gaussians[i].sigma.toArray()))
+        print(
+            (
+                "weight = ",
+                model.weights[i],
+                "mu = ",
+                model.gaussians[i].mu,
+                "sigma = ",
+                model.gaussians[i].sigma.toArray(),
+            )
+        )
     print("\n")
-    print(("The membership value of each vector to all mixture components (first 100): ",
-           model.predictSoft(data).take(100)))
+    print(
+        (
+            "The membership value of each vector to all mixture components (first 100): ",
+            model.predictSoft(data).take(100),
+        )
+    )
     print("\n")
     print(("Cluster labels (first 100): ", model.predict(data).take(100)))
     sc.stop()

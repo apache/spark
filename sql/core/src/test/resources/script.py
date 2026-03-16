@@ -17,7 +17,8 @@
 #
 
 import sys
+
 for line in sys.stdin:
-    (a, b, c, d, e) = line.split('\t')
-    sys.stdout.write('\t'.join([a, b, c, d, e]))
+    (a, b, c, d, e) = line.split("\t")
+    sys.stdout.write("\t".join([a, b, c, d, e]))
     sys.stdout.flush()

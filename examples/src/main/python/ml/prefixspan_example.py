@@ -20,26 +20,28 @@ An example demonstrating PrefixSpan.
 Run with:
   bin/spark-submit examples/src/main/python/ml/prefixspan_example.py
 """
+
 # $example on$
 from pyspark.ml.fpm import PrefixSpan
+
 # $example off$
 from pyspark.sql import Row, SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("PrefixSpanExample")\
-        .getOrCreate()
+    spark = SparkSession.builder.appName("PrefixSpanExample").getOrCreate()
     sc = spark.sparkContext
 
     # $example on$
-    df = sc.parallelize([Row(sequence=[[1, 2], [3]]),
-                         Row(sequence=[[1], [3, 2], [1, 2]]),
-                         Row(sequence=[[1, 2], [5]]),
-                         Row(sequence=[[6]])]).toDF()
+    df = sc.parallelize(
+        [
+            Row(sequence=[[1, 2], [3]]),
+            Row(sequence=[[1], [3, 2], [1, 2]]),
+            Row(sequence=[[1, 2], [5]]),
+            Row(sequence=[[6]]),
+        ]
+    ).toDF()
 
-    prefixSpan = PrefixSpan(minSupport=0.5, maxPatternLength=5,
-                            maxLocalProjDBSize=32000000)
+    prefixSpan = PrefixSpan(minSupport=0.5, maxPatternLength=5, maxLocalProjDBSize=32000000)
 
     # Find frequent sequential patterns.
     prefixSpan.findFrequentSequentialPatterns(df).show()

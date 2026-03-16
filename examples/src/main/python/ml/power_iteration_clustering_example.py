@@ -20,25 +20,20 @@ An example demonstrating PowerIterationClustering.
 Run with:
   bin/spark-submit examples/src/main/python/ml/power_iteration_clustering_example.py
 """
+
 # $example on$
 from pyspark.ml.clustering import PowerIterationClustering
+
 # $example off$
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("PowerIterationClusteringExample")\
-        .getOrCreate()
+    spark = SparkSession.builder.appName("PowerIterationClusteringExample").getOrCreate()
 
     # $example on$
-    df = spark.createDataFrame([
-        (0, 1, 1.0),
-        (0, 2, 1.0),
-        (1, 2, 1.0),
-        (3, 4, 1.0),
-        (4, 0, 0.1)
-    ], ["src", "dst", "weight"])
+    df = spark.createDataFrame(
+        [(0, 1, 1.0), (0, 2, 1.0), (1, 2, 1.0), (3, 4, 1.0), (4, 0, 0.1)], ["src", "dst", "weight"]
+    )
 
     pic = PowerIterationClustering(k=2, maxIter=20, initMode="degree", weightCol="weight")
 

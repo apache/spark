@@ -18,6 +18,7 @@
 #
 import sys
 import re
+
 line = sys.stdin.readline()
 x = 1
 while line:
@@ -25,6 +26,6 @@ while line:
     if line == tem:
         x += 1
     else:
-        print(str(x).strip() + '\t' + re.sub('\t', '_', line.strip()))
+        print(str(x).strip() + "\t" + re.sub("\t", "_", line.strip()))
         line = tem
         x = 1

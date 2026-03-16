@@ -17,6 +17,7 @@
 
 from pyspark import SparkContext
 from pyspark.streaming import StreamingContext
+
 # $example on$
 from pyspark.mllib.linalg import Vectors
 from pyspark.mllib.regression import LabeledPoint
@@ -31,13 +32,14 @@ if __name__ == "__main__":
     # we make an input stream of vectors for training,
     # as well as a stream of vectors for testing
     def parse(lp):
-        label = float(lp[lp.find('(') + 1: lp.find(')')])
-        vec = Vectors.dense(lp[lp.find('[') + 1: lp.find(']')].split(','))
+        label = float(lp[lp.find("(") + 1 : lp.find(")")])
+        vec = Vectors.dense(lp[lp.find("[") + 1 : lp.find("]")].split(","))
 
         return LabeledPoint(label, vec)
 
-    trainingData = sc.textFile("data/mllib/kmeans_data.txt")\
-        .map(lambda line: Vectors.dense([float(x) for x in line.strip().split(' ')]))
+    trainingData = sc.textFile("data/mllib/kmeans_data.txt").map(
+        lambda line: Vectors.dense([float(x) for x in line.strip().split(" ")])
+    )
 
     testingData = sc.textFile("data/mllib/streaming_kmeans_data_test.txt").map(parse)
 

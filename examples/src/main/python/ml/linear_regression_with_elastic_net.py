@@ -17,19 +17,16 @@
 
 # $example on$
 from pyspark.ml.regression import LinearRegression
+
 # $example off$
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("LinearRegressionWithElasticNet")\
-        .getOrCreate()
+    spark = SparkSession.builder.appName("LinearRegressionWithElasticNet").getOrCreate()
 
     # $example on$
     # Load training data
-    training = spark.read.format("libsvm")\
-        .load("data/mllib/sample_linear_regression_data.txt")
+    training = spark.read.format("libsvm").load("data/mllib/sample_linear_regression_data.txt")
 
     lr = LinearRegression(maxIter=10, regParam=0.3, elasticNetParam=0.8)
 

@@ -16,6 +16,7 @@
 #
 
 from pyspark import SparkContext
+
 # $example on$
 from pyspark.mllib.classification import SVMWithSGD, SVMModel
 from pyspark.mllib.regression import LabeledPoint
@@ -27,7 +28,7 @@ if __name__ == "__main__":
     # $example on$
     # Load and parse the data
     def parsePoint(line):
-        values = [float(x) for x in line.split(' ')]
+        values = [float(x) for x in line.split(" ")]
         return LabeledPoint(values[0], values[1:])
 
     data = sc.textFile("data/mllib/sample_svm_data.txt")

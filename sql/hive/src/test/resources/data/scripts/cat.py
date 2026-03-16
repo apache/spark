@@ -20,8 +20,8 @@ import sys
 import os
 
 table_name = None
-if os.environ in 'hive_streaming_tablename':
-    table_name = os.environ['hive_streaming_tablename']
+if os.environ in "hive_streaming_tablename":
+    table_name = os.environ["hive_streaming_tablename"]
 
 for line in sys.stdin:
     print(line)
