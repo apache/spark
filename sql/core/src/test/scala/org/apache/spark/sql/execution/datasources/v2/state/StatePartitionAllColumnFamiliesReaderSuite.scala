@@ -808,11 +808,6 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
   } // End of foreach loop for changelog checkpointing dimension
 
   // TODO: Add a V4 stream-stream join test similar to "SPARK-54419: stream-stream joinV3".
-  //  The bytes reader (StatePartitionAllColumnFamiliesReader) currently does not support V4 join
-  //  CFs because: (1) isListType returns false for join CFs, so V4 CFs with
-  //  useMultipleValuesPerKey=true are registered with useMultipleValuesPerKey=false, and
-  //  (2) timestamp-based key encoders produce physical keys that include the timestamp, while
-  //  the normal reader exposes only the join key, causing key bytes comparison to fail.
 
   test("internalOnlyReadAllColumnFamilies should fail with HDFS-backed state store") {
     withTempDir { tempDir =>
