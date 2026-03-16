@@ -29,6 +29,7 @@ import com.google.common.collect.MapMaker
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Tests.TEST_USE_COMPRESSED_OOPS_KEY
+import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.OpenHashSet
 
 /**
@@ -106,7 +107,7 @@ object SizeEstimator extends Logging {
   // Sets object size, pointer size based on architecture and CompressedOops settings
   // from the JVM.
   private def initialize(): Unit = {
-    val arch = System.getProperty("os.arch")
+    val arch = Utils.osArch
     is64bit = arch.contains("64") || arch.contains("s390x")
     isCompressedOops = getIsCompressedOops
 

@@ -14,18 +14,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import ClassVar, Type, Dict, List, Optional, Union, cast, TYPE_CHECKING
+from typing import ClassVar, Type, TypeVar, Dict, List, Optional, Union, cast
 
 from pyspark.util import local_connect_and_auth
 from pyspark.serializers import read_int, write_int, write_with_length, UTF8Deserializer
 from pyspark.errors import PySparkRuntimeError
+from pyspark.resource import ResourceInformation
 
-if TYPE_CHECKING:
-    from pyspark.resource import ResourceInformation
+T = TypeVar("T", bound="TaskContext")
 
 
 class TaskContext:
-
     """
     Contextual information about a task which can be read or mutated during
     execution. To access the TaskContext for a running task, use:
@@ -131,7 +130,7 @@ class TaskContext:
     _cpus: Optional[int] = None
     _resources: Optional[Dict[str, "ResourceInformation"]] = None
 
-    def __new__(cls: Type["TaskContext"]) -> "TaskContext":
+    def __new__(cls: Type["TaskContext"], **kwargs: Dict) -> "TaskContext":
         """
         Even if users construct :class:`TaskContext` instead of using get, give them the singleton.
         """
@@ -140,6 +139,19 @@ class TaskContext:
             return taskContext
         cls._taskContext = taskContext = object.__new__(cls)
         return taskContext
+
+    def __init__(
+        self,
+        **kwargs: Dict,
+    ) -> None:
+        # Set attributes only if they are passed in and not None
+        # The kwargs are auto-mapped to the private attributes of TaskContext
+        # e.g., stageId -> _stageId
+        for key, val in kwargs.items():
+            if not hasattr(self, f"_{key}"):
+                raise TypeError(f"__init__() got an unexpected keyword argument '{key}'")
+            if val is not None:
+                setattr(self, f"_{key}", val)
 
     @classmethod
     def _getOrCreate(cls: Type["TaskContext"]) -> "TaskContext":
@@ -167,6 +179,24 @@ class TaskContext:
         Must be called on the worker, not the driver. Returns ``None`` if not initialized.
         """
         return cls._taskContext
+
+    @classmethod
+    def from_json(cls: Type[T], json: dict) -> T:
+        """
+        Create a TaskContext from a JSON dictionary.
+        """
+        return cls(
+            stageId=json["stageId"],
+            partitionId=json["partitionId"],
+            attemptNumber=json["attemptNumber"],
+            taskAttemptId=json["taskAttemptId"],
+            cpus=json["cpus"],
+            resources={
+                k: ResourceInformation(v["name"], v["addresses"])
+                for k, v in json["resources"].items()
+            },
+            localProperties=json["localProperties"],
+        )
 
     def stageId(self) -> int:
         """
@@ -252,8 +282,6 @@ class TaskContext:
         dict
             a dictionary of a string resource name, and :class:`ResourceInformation`.
         """
-        from pyspark.resource import ResourceInformation
-
         return cast(Dict[str, "ResourceInformation"], self._resources)
 
 
@@ -262,8 +290,8 @@ ALL_GATHER_FUNCTION = 2
 
 
 def _load_from_socket(
-    port: Optional[Union[str, int]],
-    auth_secret: str,
+    conn_info: Optional[Union[str, int]],
+    auth_secret: Optional[str],
     function: int,
     all_gather_message: Optional[str] = None,
 ) -> List[str]:
@@ -271,7 +299,7 @@ def _load_from_socket(
     Load data from a given socket, this is a blocking method thus only return when the socket
     connection has been closed.
     """
-    (sockfile, sock) = local_connect_and_auth(port, auth_secret)
+    sockfile, sock = local_connect_and_auth(conn_info, auth_secret)
 
     # The call may block forever, so no timeout
     sock.settimeout(None)
@@ -301,7 +329,6 @@ def _load_from_socket(
 
 
 class BarrierTaskContext(TaskContext):
-
     """
     A :class:`TaskContext` with extra contextual info and tooling for tasks in a barrier stage.
     Use :func:`BarrierTaskContext.get` to obtain the barrier context for a running barrier task.
@@ -331,7 +358,7 @@ class BarrierTaskContext(TaskContext):
     [1]
     """
 
-    _port: ClassVar[Optional[Union[str, int]]] = None
+    _conn_info: ClassVar[Optional[Union[str, int]]] = None
     _secret: ClassVar[Optional[str]] = None
 
     @classmethod
@@ -368,14 +395,22 @@ class BarrierTaskContext(TaskContext):
 
     @classmethod
     def _initialize(
-        cls: Type["BarrierTaskContext"], port: Optional[Union[str, int]], secret: str
+        cls: Type["BarrierTaskContext"], conn_info: Optional[Union[str, int]], secret: Optional[str]
     ) -> None:
         """
         Initialize :class:`BarrierTaskContext`, other methods within :class:`BarrierTaskContext`
         can only be called after BarrierTaskContext is initialized.
         """
-        cls._port = port
+        cls._conn_info = conn_info
         cls._secret = secret
+
+    @classmethod
+    def from_json(cls: Type["BarrierTaskContext"], json: dict) -> "BarrierTaskContext":
+        """
+        Create a BarrierTaskContext from a JSON dictionary.
+        """
+        cls._initialize(json["connInfo"], json["secret"])
+        return super().from_json(json)
 
     def barrier(self) -> None:
         """
@@ -393,7 +428,7 @@ class BarrierTaskContext(TaskContext):
         calls, in all possible code branches. Otherwise, you may get the job hanging
         or a `SparkException` after timeout.
         """
-        if self._port is None or self._secret is None:
+        if self._conn_info is None:
             raise PySparkRuntimeError(
                 errorClass="CALL_BEFORE_INITIALIZE",
                 messageParameters={
@@ -402,7 +437,7 @@ class BarrierTaskContext(TaskContext):
                 },
             )
         else:
-            _load_from_socket(self._port, self._secret, BARRIER_FUNCTION)
+            _load_from_socket(self._conn_info, self._secret, BARRIER_FUNCTION)
 
     def allGather(self, message: str = "") -> List[str]:
         """
@@ -422,7 +457,7 @@ class BarrierTaskContext(TaskContext):
         """
         if not isinstance(message, str):
             raise TypeError("Argument `message` must be of type `str`")
-        elif self._port is None or self._secret is None:
+        elif self._conn_info is None:
             raise PySparkRuntimeError(
                 errorClass="CALL_BEFORE_INITIALIZE",
                 messageParameters={
@@ -431,7 +466,7 @@ class BarrierTaskContext(TaskContext):
                 },
             )
         else:
-            return _load_from_socket(self._port, self._secret, ALL_GATHER_FUNCTION, message)
+            return _load_from_socket(self._conn_info, self._secret, ALL_GATHER_FUNCTION, message)
 
     def getTaskInfos(self) -> List["BarrierTaskInfo"]:
         """
@@ -453,7 +488,7 @@ class BarrierTaskContext(TaskContext):
         >>> barrier_info.address
         '...:...'
         """
-        if self._port is None or self._secret is None:
+        if self._conn_info is None:
             raise PySparkRuntimeError(
                 errorClass="CALL_BEFORE_INITIALIZE",
                 messageParameters={
@@ -495,7 +530,7 @@ def _test() -> None:
     globs["spark"] = (
         SparkSession.builder.master("local[2]").appName("taskcontext tests").getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    failure_count, test_count = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs["spark"].stop()
 
     if failure_count:

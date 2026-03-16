@@ -23,8 +23,9 @@ import scala.jdk.CollectionConverters._
 
 import net.razorvine.pickle.Unpickler
 
-import org.apache.spark.{JobArtifactSet, TaskContext}
+import org.apache.spark.{JobArtifactSet, SparkEnv, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, PythonWorkerUtils}
+import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.GenericArrayData
@@ -50,6 +51,12 @@ case class BatchEvalPythonUDTFExec(
   extends EvalPythonUDTFExec with PythonSQLMetrics {
 
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
+  private[this] val sessionUUID = {
+    Option(session).collect {
+      case session if session.sessionState.conf.pythonWorkerLoggingEnabled =>
+        session.sessionUUID
+    }
+  }
 
   /**
    * Evaluates a Python UDTF. It computes the results using the PythonUDFRunner, and returns
@@ -63,11 +70,13 @@ case class BatchEvalPythonUDTFExec(
     EvaluatePython.registerPicklers()  // register pickler for Row
 
     // Input iterator to Python.
-    val inputIterator = BatchEvalPythonExec.getInputIterator(iter, schema)
+    // For Python UDTF, we don't have a separate configuration for the batch size yet.
+    val inputIterator = BatchEvalPythonExec.getInputIterator(
+      iter, schema, 100, conf.pysparkBinaryAsBytes)
 
     // Output iterator for results from Python.
     val outputIterator =
-      new PythonUDTFRunner(udtf, argMetas, pythonMetrics, jobArtifactUUID)
+      new PythonUDTFRunner(udtf, argMetas, pythonMetrics, jobArtifactUUID, sessionUUID)
         .compute(inputIterator, context.partitionId(), context)
 
     val unpickle = new Unpickler
@@ -96,10 +105,15 @@ class PythonUDTFRunner(
     udtf: PythonUDTF,
     argMetas: Array[ArgumentMetadata],
     pythonMetrics: Map[String, SQLMetric],
-    jobArtifactUUID: Option[String])
+    jobArtifactUUID: Option[String],
+    sessionUUID: Option[String])
   extends BasePythonUDFRunner(
     Seq((ChainedPythonFunctions(Seq(udtf.func)), udtf.resultId.id)),
-    PythonEvalType.SQL_TABLE_UDF, Array(argMetas.map(_.offset)), pythonMetrics, jobArtifactUUID) {
+    PythonEvalType.SQL_TABLE_UDF, Array(argMetas.map(_.offset)), pythonMetrics,
+    jobArtifactUUID, sessionUUID) {
+
+  // Overriding here to NOT use the same value of UDF config in UDTF.
+  override val bufferSize: Int = SparkEnv.get.conf.get(BUFFER_SIZE)
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
     PythonUDTFRunner.writeUDTF(dataOut, udtf, argMetas)
@@ -115,7 +129,7 @@ object PythonUDTFRunner {
     // Write the argument types of the UDTF.
     dataOut.writeInt(argMetas.length)
     argMetas.foreach {
-      case ArgumentMetadata(offset, name) =>
+      case ArgumentMetadata(offset, name, _) =>
         dataOut.writeInt(offset)
         name match {
           case Some(name) =>

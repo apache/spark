@@ -18,16 +18,9 @@
 import os
 import unittest
 
-from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
-
-have_sklearn = True
-sklearn_requirement_message = None
-try:
-    from sklearn.datasets import load_breast_cancer  # noqa: F401
-except ImportError:
-    have_sklearn = False
-    sklearn_requirement_message = "No sklearn found"
+from pyspark.testing.utils import have_sklearn, sklearn_requirement_message
+from pyspark.testing.connectutils import ReusedConnectTestCase
 
 if should_test_connect:
     from pyspark.ml.tests.connect.test_legacy_mode_feature import FeatureTestsMixin
@@ -36,23 +29,13 @@ if should_test_connect:
         not should_test_connect or not have_sklearn,
         connect_requirement_message or sklearn_requirement_message,
     )
-    class FeatureTestsOnConnect(FeatureTestsMixin, unittest.TestCase):
-        def setUp(self) -> None:
-            self.spark = SparkSession.builder.remote(
-                os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[2]")
-            ).getOrCreate()
-
-        def tearDown(self) -> None:
-            self.spark.stop()
+    class FeatureTestsOnConnect(FeatureTestsMixin, ReusedConnectTestCase):
+        @classmethod
+        def master(cls):
+            return os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[2]")
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.connect.test_connect_feature import *  # noqa: F401,F403
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

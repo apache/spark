@@ -105,22 +105,19 @@ else:
 
 sql = spark.sql
 
-print(
-    r"""Welcome to
+print(r"""Welcome to
       ____              __
      / __/__  ___ _____/ /__
     _\ \/ _ \/ _ `/ __/  '_/
    /__ / .__/\_,_/_/ /_/\_\   version %s
       /_/
-"""
-    % version
-)
+""" % version)
 print(
     "Using Python version %s (%s, %s)"
     % (platform.python_version(), platform.python_build()[0], platform.python_build()[1])
 )
 if is_remote():
-    url = os.environ.get("SPARK_REMOTE", None)
+    url = os.environ.get("SPARK_REMOTE", os.environ.get("MASTER", None))
     assert url is not None
     if url.startswith("local"):
         url = "sc://localhost"  # only for display in the console.

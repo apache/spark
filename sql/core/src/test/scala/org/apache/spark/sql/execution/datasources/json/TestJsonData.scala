@@ -217,11 +217,11 @@ private[json] trait TestJsonData {
 
   def floatingValueRecords: Dataset[String] =
     spark.createDataset(spark.sparkContext.parallelize(
-      s"""{"a": 0.${"0" * 38}1, "b": 0.01}""" :: Nil))(Encoders.STRING)
+      s"""{"a": 0.${"0".repeat(38)}1, "b": 0.01}""" :: Nil))(Encoders.STRING)
 
   def bigIntegerRecords: Dataset[String] =
     spark.createDataset(spark.sparkContext.parallelize(
-      s"""{"a": 1${"0" * 38}, "b": 92233720368547758070}""" :: Nil))(Encoders.STRING)
+      s"""{"a": 1${"0".repeat(38)}, "b": 92233720368547758070}""" :: Nil))(Encoders.STRING)
 
   def datesRecords: Dataset[String] =
     spark.createDataset(spark.sparkContext.parallelize(

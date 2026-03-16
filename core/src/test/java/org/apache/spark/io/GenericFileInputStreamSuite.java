@@ -16,7 +16,6 @@
  */
 package org.apache.spark.io;
 
-import org.apache.commons.io.FileUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
 import java.util.concurrent.ThreadLocalRandom;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -44,7 +44,7 @@ public abstract class GenericFileInputStreamSuite {
   public void setUp() throws IOException {
     ThreadLocalRandom.current().nextBytes(randomBytes);
     inputFile = File.createTempFile("temp-file", ".tmp");
-    FileUtils.writeByteArrayToFile(inputFile, randomBytes);
+    Files.write(inputFile.toPath(), randomBytes);
   }
 
   @AfterEach

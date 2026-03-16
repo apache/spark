@@ -32,7 +32,7 @@ __all__ = ["Window", "WindowSpec"]
 
 
 def _to_java_cols(
-    cols: Tuple[Union["ColumnOrName", Sequence["ColumnOrName"]], ...]
+    cols: Tuple[Union["ColumnOrName", Sequence["ColumnOrName"]], ...],
 ) -> "JavaObject":
     from pyspark.sql.classic.column import _to_seq, _to_java_column
 
@@ -48,9 +48,9 @@ class Window(ParentWindow):
         from py4j.java_gateway import JVMView
 
         sc = get_active_spark_context()
-        jspec = cast(JVMView, sc._jvm).org.apache.spark.sql.expressions.Window.partitionBy(
-            _to_java_cols(cols)
-        )
+        jspec = getattr(
+            cast(JVMView, sc._jvm), "org.apache.spark.sql.expressions.Window"
+        ).partitionBy(_to_java_cols(cols))
         return WindowSpec(jspec)
 
     @staticmethod
@@ -58,7 +58,7 @@ class Window(ParentWindow):
         from py4j.java_gateway import JVMView
 
         sc = get_active_spark_context()
-        jspec = cast(JVMView, sc._jvm).org.apache.spark.sql.expressions.Window.orderBy(
+        jspec = getattr(cast(JVMView, sc._jvm), "org.apache.spark.sql.expressions.Window").orderBy(
             _to_java_cols(cols)
         )
         return WindowSpec(jspec)
@@ -72,9 +72,9 @@ class Window(ParentWindow):
         if end >= Window._FOLLOWING_THRESHOLD:
             end = Window.unboundedFollowing
         sc = get_active_spark_context()
-        jspec = cast(JVMView, sc._jvm).org.apache.spark.sql.expressions.Window.rowsBetween(
-            start, end
-        )
+        jspec = getattr(
+            cast(JVMView, sc._jvm), "org.apache.spark.sql.expressions.Window"
+        ).rowsBetween(start, end)
         return WindowSpec(jspec)
 
     @staticmethod
@@ -86,9 +86,9 @@ class Window(ParentWindow):
         if end >= Window._FOLLOWING_THRESHOLD:
             end = Window.unboundedFollowing
         sc = get_active_spark_context()
-        jspec = cast(JVMView, sc._jvm).org.apache.spark.sql.expressions.Window.rangeBetween(
-            start, end
-        )
+        jspec = getattr(
+            cast(JVMView, sc._jvm), "org.apache.spark.sql.expressions.Window"
+        ).rangeBetween(start, end)
         return WindowSpec(jspec)
 
 
@@ -136,7 +136,7 @@ def _test() -> None:
         SparkSession.builder.master("local[4]").appName("sql.classic.window tests").getOrCreate()
     )
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.window,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,

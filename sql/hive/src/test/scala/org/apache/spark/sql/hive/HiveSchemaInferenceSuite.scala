@@ -22,8 +22,6 @@ import java.util.Locale
 
 import scala.util.Random
 
-import org.scalatest.BeforeAndAfterEach
-
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
@@ -35,7 +33,7 @@ import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
 class HiveSchemaInferenceSuite
-  extends QueryTest with TestHiveSingleton with SQLTestUtils with BeforeAndAfterEach {
+  extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
   import HiveSchemaInferenceSuite._
   import HiveExternalCatalog.DATASOURCE_SCHEMA_PREFIX
@@ -109,6 +107,7 @@ class HiveSchemaInferenceSuite
           locationUri = Option(dir.toURI),
           inputFormat = serde.inputFormat,
           outputFormat = serde.outputFormat,
+          serdeName = None,
           serde = serde.serde,
           compressed = false,
           properties = Map("serialization.format" -> "1")),
@@ -157,8 +156,6 @@ class HiveSchemaInferenceSuite
       HiveUtils.CONVERT_METASTORE_ORC.key -> "true",
       SQLConf.HIVE_CASE_SENSITIVE_INFERENCE.key -> mode.toString)(f)
   }
-
-  private val inferenceKey = SQLConf.HIVE_CASE_SENSITIVE_INFERENCE.key
 
   private def testFieldQuery(fields: Seq[String]): Unit = {
     if (!fields.isEmpty) {

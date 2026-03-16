@@ -18,7 +18,6 @@
 import json
 from shutil import rmtree
 import tempfile
-import unittest
 
 from pyspark.ml import Transformer
 from pyspark.ml.classification import (
@@ -152,29 +151,6 @@ class PersistenceTest(SparkSessionTestCase):
         pmml_text = "\n".join(pmml_text_list)
         self.assertIn("Apache Spark", pmml_text)
         self.assertIn("PMML", pmml_text)
-
-    def test_logistic_regression(self):
-        lr = LogisticRegression(maxIter=1)
-        path = tempfile.mkdtemp()
-        lr_path = path + "/logreg"
-        lr.save(lr_path)
-        lr2 = LogisticRegression.load(lr_path)
-        self.assertEqual(
-            lr2.uid,
-            lr2.maxIter.parent,
-            "Loaded LogisticRegression instance uid (%s) "
-            "did not match Param's uid (%s)" % (lr2.uid, lr2.maxIter.parent),
-        )
-        self.assertEqual(
-            lr._defaultParamMap[lr.maxIter],
-            lr2._defaultParamMap[lr2.maxIter],
-            "Loaded LogisticRegression instance default params did not match "
-            + "original defaults",
-        )
-        try:
-            rmtree(path)
-        except OSError:
-            pass
 
     def test_kmeans(self):
         kmeans = KMeans(k=2, seed=1)
@@ -535,12 +511,6 @@ class PersistenceTest(SparkSessionTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_persistence import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

@@ -20,14 +20,15 @@ package org.apache.spark.sql.execution.command
 import java.net.URI
 
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.internal.MDC
-import org.apache.spark.sql._
+import org.apache.spark.sql.{AnalysisException, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, CTERelationDef, LogicalPlan, WithCTE}
 import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUtils}
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.CommandExecutionMode
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ArrayImplicits._
@@ -79,7 +80,9 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
         bucketSpec = table.bucketSpec,
         options = table.storage.properties ++ pathOption,
         // As discussed in SPARK-19583, we don't check if the location is existed
-        catalogTable = Some(tableWithDefaultOptions)).resolveRelation(checkFilesExist = false)
+        catalogTable = Some(tableWithDefaultOptions))
+        .resolveRelation(checkFilesExist = false,
+          forceNullable = !sessionState.conf.getConf(SQLConf.FILE_SOURCE_INSERT_ENFORCE_NOT_NULL))
 
     val partitionColumnNames = if (table.schema.nonEmpty) {
       table.partitionColumnNames
@@ -118,12 +121,11 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
 
     }
 
-    // We will return Nil or throw exception at the beginning if the table already exists, so when
-    // we reach here, the table should not exist and we should set `ignoreIfExists` to false.
-    sessionState.catalog.createTable(newTable, ignoreIfExists = false)
+    sessionState.catalog.createTable(newTable, ignoreIfExists)
 
     Seq.empty[Row]
   }
+
 }
 
 /**

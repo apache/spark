@@ -15,18 +15,19 @@
 # limitations under the License.
 #
 
+import os
 import sys
 import select
 import struct
-import socketserver as SocketServer
+import socketserver
 import threading
-from typing import Callable, Dict, Generic, Tuple, Type, TYPE_CHECKING, TypeVar, Union
+from typing import Callable, Dict, Generic, Tuple, Type, TYPE_CHECKING, TypeVar, Union, Optional
 
 from pyspark.serializers import read_int, CPickleSerializer
 from pyspark.errors import PySparkRuntimeError
 
 if TYPE_CHECKING:
-    from pyspark._typing import SupportsIAdd  # noqa: F401
+    from pyspark._typing import SupportsIAdd
     import socketserver.BaseRequestHandler  # type: ignore[import-not-found]
 
 
@@ -62,7 +63,6 @@ class SpecialAccumulatorIds:
 
 
 class Accumulator(Generic[T]):
-
     """
     A shared variable that can be accumulated, i.e., has a commutative and associative "add"
     operation. Worker tasks on a Spark cluster can add values to an Accumulator with the `+=`
@@ -185,7 +185,6 @@ class Accumulator(Generic[T]):
 
 
 class AccumulatorParam(Generic[T]):
-
     """
     Helper object that defines how to accumulate values of a given type.
 
@@ -228,7 +227,6 @@ class AccumulatorParam(Generic[T]):
 
 
 class AddingAccumulatorParam(AccumulatorParam[U]):
-
     """
     An AccumulatorParam that uses the + operators to add values. Designed for simple types
     such as integers, floats, and lists. Requires the zero value for the underlying type
@@ -252,8 +250,7 @@ FLOAT_ACCUMULATOR_PARAM = AddingAccumulatorParam(0.0)  # type: ignore[type-var]
 COMPLEX_ACCUMULATOR_PARAM = AddingAccumulatorParam(0.0j)  # type: ignore[type-var]
 
 
-class _UpdateRequestHandler(SocketServer.StreamRequestHandler):
-
+class UpdateRequestHandler(socketserver.StreamRequestHandler):
     """
     This handler will keep polling updates from the same socket until the
     server is shutdown.
@@ -265,16 +262,40 @@ class _UpdateRequestHandler(SocketServer.StreamRequestHandler):
         auth_token = self.server.auth_token  # type: ignore[attr-defined]
 
         def poll(func: Callable[[], bool]) -> None:
+            poller = None
+            if os.name == "posix":
+                # On posix systems use poll to avoid problems with file descriptor
+                # numbers above 1024.
+                poller = select.poll()
+                poller.register(self.rfile, select.POLLIN)
+
             while not self.server.server_shutdown:  # type: ignore[attr-defined]
                 # Poll every 1 second for new data -- don't block in case of shutdown.
-                r, _, _ = select.select([self.rfile], [], [], 1)
-                if self.rfile in r and func():
+                if poller is not None:
+                    r = []
+                    # Unlike select, poll timeout is in millis.
+                    for fd, event in poller.poll(1000):
+                        if event & (select.POLLIN | select.POLLHUP):
+                            # Data can be read (for POLLHUP peer hang up, so reads will return
+                            # 0 bytes, in which case we want to break out - this is consistent
+                            # with how select behaves).
+                            r.append(fd)
+                        else:
+                            # Could be POLLERR or POLLNVAL (select would raise in this case).
+                            raise PySparkRuntimeError(f"Polling error - event {event} on fd {fd}")
+                else:
+                    # If poll is not available, use select.
+                    r = select.select([self.rfile.fileno()], [], [], 1)[0]
+                if self.rfile.fileno() in r and func():
                     break
+
+            if poller is not None:
+                poller.unregister(self.rfile)
 
         def accum_updates() -> bool:
             num_updates = read_int(self.rfile)
             for _ in range(num_updates):
-                (aid, update) = pickleSer._read_with_length(self.rfile)
+                aid, update = pickleSer._read_with_length(self.rfile)
                 _accumulatorRegistry[aid] += update
             # Write a byte in acknowledgement
             self.wfile.write(struct.pack("!b", 1))
@@ -293,37 +314,79 @@ class _UpdateRequestHandler(SocketServer.StreamRequestHandler):
                     "The value of the provided token to the AccumulatorServer is not correct."
                 )
 
-        # first we keep polling till we've received the authentication token
-        poll(authenticate_and_accum_updates)
+        # Unix Domain Socket does not need the auth.
+        if auth_token is not None:
+            # first we keep polling till we've received the authentication token
+            poll(authenticate_and_accum_updates)
+
         # now we've authenticated, don't need to check for the token anymore
         poll(accum_updates)
 
 
-class AccumulatorServer(SocketServer.TCPServer):
+class AccumulatorTCPServer(socketserver.TCPServer):
+    server_shutdown = False
+
     def __init__(
         self,
         server_address: Tuple[str, int],
         RequestHandlerClass: Type["socketserver.BaseRequestHandler"],
         auth_token: str,
     ):
-        SocketServer.TCPServer.__init__(self, server_address, RequestHandlerClass)
+        super().__init__(server_address, RequestHandlerClass)
         self.auth_token = auth_token
-
-    """
-    A simple TCP server that intercepts shutdown() in order to interrupt
-    our continuous polling on the handler.
-    """
-    server_shutdown = False
 
     def shutdown(self) -> None:
         self.server_shutdown = True
-        SocketServer.TCPServer.shutdown(self)
+        super().shutdown()
         self.server_close()
 
 
-def _start_update_server(auth_token: str) -> AccumulatorServer:
-    """Start a TCP server to receive accumulator updates in a daemon thread, and returns it"""
-    server = AccumulatorServer(("localhost", 0), _UpdateRequestHandler, auth_token)
+# socketserver.UnixStreamServer is not available on Windows yet
+# (https://github.com/python/cpython/issues/77589).
+if hasattr(socketserver, "UnixStreamServer"):
+
+    class AccumulatorUnixServer(socketserver.UnixStreamServer):
+        server_shutdown = False
+
+        def __init__(
+            self, socket_path: str, RequestHandlerClass: Type[socketserver.BaseRequestHandler]
+        ):
+            super().__init__(socket_path, RequestHandlerClass)
+            self.auth_token = None
+
+        def shutdown(self) -> None:
+            self.server_shutdown = True
+            super().shutdown()
+            self.server_close()
+            if os.path.exists(self.server_address):  # type: ignore[arg-type]
+                os.remove(self.server_address)  # type: ignore[arg-type]
+
+else:
+
+    class AccumulatorUnixServer(socketserver.TCPServer):  # type: ignore[no-redef]
+        def __init__(
+            self, socket_path: str, RequestHandlerClass: Type[socketserver.BaseRequestHandler]
+        ):
+            raise NotImplementedError(
+                "Unix Domain Sockets are not supported on this platform. "
+                "Please disable it by setting spark.python.unix.domain.socket.enabled to false."
+            )
+
+
+def _start_update_server(
+    auth_token: str, is_unix_domain_sock: bool, socket_path: Optional[str] = None
+) -> Union[AccumulatorTCPServer, AccumulatorUnixServer]:
+    """Start a TCP or Unix Domain Socket server for accumulator updates."""
+    if is_unix_domain_sock:
+        assert socket_path is not None
+        if os.path.exists(socket_path):
+            os.remove(socket_path)
+        server = AccumulatorUnixServer(socket_path, UpdateRequestHandler)
+    else:
+        server = AccumulatorTCPServer(
+            ("localhost", 0), UpdateRequestHandler, auth_token
+        )  # type: ignore[assignment]
+
     thread = threading.Thread(target=server.serve_forever)
     thread.daemon = True
     thread.start()
@@ -339,7 +402,7 @@ if __name__ == "__main__":
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
     globs["sc"] = SparkContext("local", "test")
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    failure_count, test_count = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs["sc"].stop()
     if failure_count:
         sys.exit(-1)

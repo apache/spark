@@ -20,8 +20,10 @@ Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for mo
 """
 
 from itertools import groupby
+from typing import TYPE_CHECKING, Any, Iterator, List, Optional, Tuple
+
+import pyspark
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
-from pyspark.loose_version import LooseVersion
 from pyspark.serializers import (
     Serializer,
     read_int,
@@ -29,12 +31,17 @@ from pyspark.serializers import (
     UTF8Deserializer,
     CPickleSerializer,
 )
+from pyspark.sql import Row
+from pyspark.sql.conversion import (
+    LocalDataToArrowConversion,
+    ArrowTableToRowsConversion,
+    ArrowBatchTransformer,
+    PandasToArrowConversion,
+    coerce_arrow_array,
+)
 from pyspark.sql.pandas.types import (
-    from_arrow_type,
-    is_variant,
+    from_arrow_schema,
     to_arrow_type,
-    _create_converter_from_pandas,
-    _create_converter_to_pandas,
 )
 from pyspark.sql.types import (
     DataType,
@@ -45,6 +52,23 @@ from pyspark.sql.types import (
     LongType,
     IntegerType,
 )
+
+if TYPE_CHECKING:
+    import pandas as pd
+    import pyarrow as pa
+
+
+def _normalize_packed(packed):
+    """
+    Normalize UDF output to a uniform tuple-of-tuples form.
+
+    Iterator UDFs yield a single (series, spark_type) tuple directly,
+    while batched UDFs return a tuple of tuples ((s1, t1), (s2, t2), ...).
+    This function normalizes both forms to a tuple of tuples.
+    """
+    if len(packed) == 2 and isinstance(packed[1], DataType):
+        return (packed,)
+    return tuple(packed)
 
 
 class SpecialLengths:
@@ -102,9 +126,30 @@ class ArrowCollectSerializer(Serializer):
 class ArrowStreamSerializer(Serializer):
     """
     Serializes Arrow record batches as a stream.
+
+    Parameters
+    ----------
+    write_start_stream : bool
+        If True, writes the START_ARROW_STREAM marker before the first
+        output batch. Default False.
+    num_dfs : int
+        Number of dataframes per group.
+        For num_dfs=0, plain batch stream without group-count protocol.
+        For num_dfs=1, grouped loading (1 dataframe per group).
+        For num_dfs=2, cogrouped loading (2 dataframes per group).
+        Default 0.
     """
 
+    def __init__(self, write_start_stream: bool = False, num_dfs: int = 0) -> None:
+        super().__init__()
+        assert num_dfs in (0, 1, 2), "num_dfs must be 0, 1, or 2"
+        self._write_start_stream: bool = write_start_stream
+        self._num_dfs: int = num_dfs
+
     def dump_stream(self, iterator, stream):
+        """Optionally prepend START_ARROW_STREAM, then write batches."""
+        if self._write_start_stream:
+            iterator = self._write_stream_start(iterator, stream)
         import pyarrow as pa
 
         writer = None
@@ -118,14 +163,70 @@ class ArrowStreamSerializer(Serializer):
                 writer.close()
 
     def load_stream(self, stream):
-        import pyarrow as pa
+        """Load batches: plain stream if num_dfs=0, grouped otherwise."""
+        if self._num_dfs == 0:
+            import pyarrow as pa
 
-        reader = pa.ipc.open_stream(stream)
-        for batch in reader:
-            yield batch
+            reader = pa.ipc.open_stream(stream)
+            for batch in reader:
+                yield batch
+        elif self._num_dfs == 1:
+            # Grouped loading: yield single dataframe groups
+            for (batches,) in self._load_group_dataframes(stream, num_dfs=1):
+                yield batches
+        elif self._num_dfs == 2:
+            # Cogrouped loading: yield tuples of (left_batches, right_batches)
+            for left_batches, right_batches in self._load_group_dataframes(stream, num_dfs=2):
+                yield left_batches, right_batches
+        else:
+            assert False, f"Unexpected num_dfs: {self._num_dfs}"
+
+    def _load_group_dataframes(self, stream, num_dfs: int = 1) -> Iterator:
+        """
+        Yield groups of dataframes from the stream using the group-count protocol.
+        """
+        dataframes_in_group = None
+
+        while dataframes_in_group is None or dataframes_in_group > 0:
+            dataframes_in_group = read_int(stream)
+
+            if dataframes_in_group == num_dfs:
+                if num_dfs == 1:
+                    # Single dataframe: can use lazy iterator
+                    yield (ArrowStreamSerializer.load_stream(self, stream),)
+                else:
+                    # Multiple dataframes: must eagerly load sequentially
+                    # to maintain correct stream position
+                    yield tuple(
+                        list(ArrowStreamSerializer.load_stream(self, stream))
+                        for _ in range(num_dfs)
+                    )
+            elif dataframes_in_group > 0:
+                raise PySparkValueError(
+                    errorClass="INVALID_NUMBER_OF_DATAFRAMES_IN_GROUP",
+                    messageParameters={"dataframes_in_group": str(dataframes_in_group)},
+                )
+
+    def _write_stream_start(
+        self, batch_iterator: Iterator["pa.RecordBatch"], stream
+    ) -> Iterator["pa.RecordBatch"]:
+        """Write START_ARROW_STREAM before the first batch, then pass batches through."""
+        import itertools
+
+        first = next(batch_iterator, None)
+        if first is None:
+            return
+
+        # Signal the JVM after the first batch succeeds, so errors during
+        # batch creation can be reported before the Arrow stream starts.
+        write_int(SpecialLengths.START_ARROW_STREAM, stream)
+        yield from itertools.chain([first], batch_iterator)
 
     def __repr__(self):
-        return "ArrowStreamSerializer"
+        return "ArrowStreamSerializer(write_start_stream=%s, num_dfs=%d)" % (
+            self._write_start_stream,
+            self._num_dfs,
+        )
 
 
 class ArrowStreamUDFSerializer(ArrowStreamSerializer):
@@ -138,57 +239,142 @@ class ArrowStreamUDFSerializer(ArrowStreamSerializer):
         """
         Flatten the struct into Arrow's record batches.
         """
-        import pyarrow as pa
-
-        batches = super(ArrowStreamUDFSerializer, self).load_stream(stream)
-        for batch in batches:
-            struct = batch.column(0)
-            yield [pa.RecordBatch.from_arrays(struct.flatten(), schema=pa.schema(struct.type))]
+        batches = super().load_stream(stream)
+        flattened = map(ArrowBatchTransformer.flatten_struct, batches)
+        return map(lambda b: [b], flattened)
 
     def dump_stream(self, iterator, stream):
         """
         Override because Pandas UDFs require a START_ARROW_STREAM before the Arrow stream is sent.
-        This should be sent after creating the first record batch so in case of an error, it can
-        be sent back to the JVM before the Arrow stream starts.
+        """
+        batches = self._write_stream_start(
+            (ArrowBatchTransformer.wrap_struct(x[0]) for x in iterator), stream
+        )
+        return super().dump_stream(batches, stream)
+
+
+class ArrowStreamUDTFSerializer(ArrowStreamUDFSerializer):
+    """
+    Same as :class:`ArrowStreamUDFSerializer` but it does not flatten when loading batches.
+    """
+
+    def load_stream(self, stream):
+        return ArrowStreamSerializer.load_stream(self, stream)
+
+
+class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
+    """
+    Serializer for PyArrow-native UDTFs that work directly with PyArrow RecordBatches and Arrays.
+    """
+
+    def __init__(self, *, table_arg_offsets=None):
+        super().__init__()
+        self.table_arg_offsets = table_arg_offsets if table_arg_offsets else []
+
+    def load_stream(self, stream):
+        """
+        Flatten the struct into Arrow's record batches.
+        """
+        for batch in super().load_stream(stream):
+            # For each column: flatten struct columns at table_arg_offsets into RecordBatch,
+            # keep other columns as Array
+            yield [
+                (
+                    ArrowBatchTransformer.flatten_struct(batch, column_index=i)
+                    if i in self.table_arg_offsets
+                    else batch.column(i)
+                )
+                for i in range(batch.num_columns)
+            ]
+
+    def dump_stream(self, iterator, stream):
+        """
+        Override to handle type coercion for ArrowUDTF outputs.
+        ArrowUDTF returns iterator of (pa.RecordBatch, arrow_return_type) tuples.
         """
         import pyarrow as pa
 
-        def wrap_and_init_stream():
-            should_write_start_length = True
-            for batch, _ in iterator:
-                assert isinstance(batch, pa.RecordBatch)
+        def apply_type_coercion():
+            for batch, arrow_return_type in iterator:
+                assert isinstance(
+                    arrow_return_type, pa.StructType
+                ), f"Expected pa.StructType, got {type(arrow_return_type)}"
 
-                # Wrap the root struct
-                struct = pa.StructArray.from_arrays(
-                    batch.columns, fields=pa.struct(list(batch.schema))
-                )
-                batch = pa.RecordBatch.from_arrays([struct], ["_0"])
+                # Handle empty struct case specially
+                if batch.num_columns == 0:
+                    coerced_batch = batch  # skip type coercion
+                else:
+                    expected_field_names = [field.name for field in arrow_return_type]
+                    actual_field_names = batch.schema.names
 
-                # Write the first record batch with initialization.
-                if should_write_start_length:
-                    write_int(SpecialLengths.START_ARROW_STREAM, stream)
-                    should_write_start_length = False
-                yield batch
+                    if expected_field_names != actual_field_names:
+                        raise PySparkTypeError(
+                            "Target schema's field names are not matching the record batch's "
+                            "field names. "
+                            f"Expected: {expected_field_names}, but got: {actual_field_names}."
+                        )
 
-        return super(ArrowStreamUDFSerializer, self).dump_stream(wrap_and_init_stream(), stream)
+                    coerced_arrays = []
+                    for i, field in enumerate(arrow_return_type):
+                        try:
+                            coerced_arrays.append(
+                                coerce_arrow_array(
+                                    batch.column(i),
+                                    field.type,
+                                    safecheck=True,
+                                )
+                            )
+                        except (pa.ArrowInvalid, pa.ArrowTypeError):
+                            raise PySparkRuntimeError(
+                                errorClass="RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDTF",
+                                messageParameters={
+                                    "expected": str(field.type),
+                                    "actual": str(batch.column(i).type),
+                                },
+                            )
+                    coerced_batch = pa.RecordBatch.from_arrays(
+                        coerced_arrays, names=expected_field_names
+                    )
+                yield coerced_batch, arrow_return_type
+
+        return super().dump_stream(apply_type_coercion(), stream)
 
 
 class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
     """
-    Serializes pyarrow.RecordBatch data with Arrow streaming format.
+    Serializer for grouped Arrow UDFs.
 
-    Loads Arrow record batches as ``[[pyarrow.RecordBatch]]`` (one ``[pyarrow.RecordBatch]`` per
-    group) and serializes ``[([pyarrow.RecordBatch], arrow_type)]``.
+    Deserializes:
+        ``Iterator[Iterator[pa.RecordBatch]]`` - one inner iterator per group.
+        Each batch contains a single struct column.
+
+    Serializes:
+        ``Iterator[Tuple[Iterator[pa.RecordBatch], pa.DataType]]``
+        Each tuple contains iterator of flattened batches and their Arrow type.
+
+    Used by:
+        - SQL_GROUPED_MAP_ARROW_UDF
+        - SQL_GROUPED_MAP_ARROW_ITER_UDF
 
     Parameters
     ----------
     assign_cols_by_name : bool
-        If True, then DataFrames will get columns by name
+        If True, reorder serialized columns by schema name.
     """
 
-    def __init__(self, assign_cols_by_name):
-        super(ArrowStreamGroupUDFSerializer, self).__init__()
+    def __init__(self, *, assign_cols_by_name):
+        super().__init__()
         self._assign_cols_by_name = assign_cols_by_name
+
+    def load_stream(self, stream):
+        """
+        Load grouped Arrow record batches from stream.
+        """
+        for (batches,) in self._load_group_dataframes(stream, num_dfs=1):
+            yield batches
+            # Make sure the batches are fully iterated before getting the next group
+            for _ in batches:
+                pass
 
     def dump_stream(self, iterator, stream):
         import pyarrow as pa
@@ -213,7 +399,7 @@ class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
                 for batch, arrow_type in batch_iter
             )
 
-        super(ArrowStreamGroupUDFSerializer, self).dump_stream(batch_iter, stream)
+        super().dump_stream(batch_iter, stream)
 
 
 class ArrowStreamPandasSerializer(ArrowStreamSerializer):
@@ -226,171 +412,92 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         A timezone to respect when handling timestamp values
     safecheck : bool
         If True, conversion from Arrow to Pandas checks for overflow/truncation
-    assign_cols_by_name : bool
-        If True, then Pandas DataFrames will get columns by name
+    int_to_decimal_coercion_enabled : bool
+        If True, applies additional coercions in Python before converting to Arrow.
+        This has performance penalties.
+    prefers_large_types : bool
+        If True, prefer large Arrow types (e.g., large_string instead of string).
+    struct_in_pandas : str, optional
+        How to represent struct in pandas ("dict", "row", etc.). Default is "dict".
+    ndarray_as_list : bool, optional
+        Whether to convert ndarray as list. Default is False.
+    prefer_int_ext_dtype : bool, optional
+        Whether to convert integers to Pandas ExtensionDType. Default is False.
+    df_for_struct : bool, optional
+        If True, convert struct columns to DataFrame instead of Series. Default is False.
     """
 
-    def __init__(self, timezone, safecheck):
-        super(ArrowStreamPandasSerializer, self).__init__()
+    def __init__(
+        self,
+        *,
+        timezone,
+        safecheck,
+        int_to_decimal_coercion_enabled: bool = False,
+        prefers_large_types: bool = False,
+        struct_in_pandas: str = "dict",
+        ndarray_as_list: bool = False,
+        prefer_int_ext_dtype: bool = False,
+        df_for_struct: bool = False,
+        input_type: Optional["StructType"] = None,
+        arrow_cast: bool = False,
+    ):
+        super().__init__()
         self._timezone = timezone
         self._safecheck = safecheck
-
-    def arrow_to_pandas(self, arrow_column, struct_in_pandas="dict", ndarray_as_list=False):
-        # If the given column is a date type column, creates a series of datetime.date directly
-        # instead of creating datetime64[ns] as intermediate data to avoid overflow caused by
-        # datetime64[ns] type handling.
-        # Cast dates to objects instead of datetime64[ns] dtype to avoid overflow.
-        pandas_options = {"date_as_object": True}
-
-        import pyarrow as pa
-
-        if LooseVersion(pa.__version__) >= LooseVersion("13.0.0"):
-            # A legacy option to coerce date32, date64, duration, and timestamp
-            # time units to nanoseconds when converting to pandas.
-            # This option can only be added since 13.0.0.
-            pandas_options.update(
-                {
-                    "coerce_temporal_nanoseconds": True,
-                }
-            )
-
-        s = arrow_column.to_pandas(**pandas_options)
-
-        # TODO(SPARK-43579): cache the converter for reuse
-        converter = _create_converter_to_pandas(
-            data_type=from_arrow_type(arrow_column.type, prefer_timestamp_ntz=True),
-            nullable=True,
-            timezone=self._timezone,
-            struct_in_pandas=struct_in_pandas,
-            error_on_duplicated_field_names=True,
-            ndarray_as_list=ndarray_as_list,
-        )
-        return converter(s)
-
-    def _create_array(self, series, arrow_type, spark_type=None, arrow_cast=False):
-        """
-        Create an Arrow Array from the given pandas.Series and optional type.
-
-        Parameters
-        ----------
-        series : pandas.Series
-            A single series
-        arrow_type : pyarrow.DataType, optional
-            If None, pyarrow's inferred type will be used
-        spark_type : DataType, optional
-            If None, spark type converted from arrow_type will be used
-        arrow_cast: bool, optional
-            Whether to apply Arrow casting when the user-specified return type mismatches the
-            actual return values.
-
-        Returns
-        -------
-        pyarrow.Array
-        """
-        import pyarrow as pa
-        import pandas as pd
-
-        if isinstance(series.dtype, pd.CategoricalDtype):
-            series = series.astype(series.dtypes.categories.dtype)
-
-        if arrow_type is not None:
-            dt = spark_type or from_arrow_type(arrow_type, prefer_timestamp_ntz=True)
-            # TODO(SPARK-43579): cache the converter for reuse
-            conv = _create_converter_from_pandas(
-                dt, timezone=self._timezone, error_on_duplicated_field_names=False
-            )
-            series = conv(series)
-
-        if hasattr(series.array, "__arrow_array__"):
-            mask = None
-        else:
-            mask = series.isnull()
-        try:
-            try:
-                return pa.Array.from_pandas(
-                    series, mask=mask, type=arrow_type, safe=self._safecheck
-                )
-            except pa.lib.ArrowInvalid:
-                if arrow_cast:
-                    return pa.Array.from_pandas(series, mask=mask).cast(
-                        target_type=arrow_type, safe=self._safecheck
-                    )
-                else:
-                    raise
-        except TypeError as e:
-            error_msg = (
-                "Exception thrown when converting pandas.Series (%s) "
-                "with name '%s' to Arrow Array (%s)."
-            )
-            raise PySparkTypeError(error_msg % (series.dtype, series.name, arrow_type)) from e
-        except ValueError as e:
-            error_msg = (
-                "Exception thrown when converting pandas.Series (%s) "
-                "with name '%s' to Arrow Array (%s)."
-            )
-            if self._safecheck:
-                error_msg = error_msg + (
-                    " It can be caused by overflows or other "
-                    "unsafe conversions warned by Arrow. Arrow safe type check "
-                    "can be disabled by using SQL config "
-                    "`spark.sql.execution.pandas.convertToArrowArraySafely`."
-                )
-            raise PySparkValueError(error_msg % (series.dtype, series.name, arrow_type)) from e
-
-    def _create_batch(self, series):
-        """
-        Create an Arrow record batch from the given pandas.Series or list of Series,
-        with optional type.
-
-        Parameters
-        ----------
-        series : pandas.Series or list
-            A single series, list of series, or list of (series, arrow_type)
-
-        Returns
-        -------
-        pyarrow.RecordBatch
-            Arrow RecordBatch
-        """
-        import pyarrow as pa
-
-        # Make input conform to
-        # [(series1, arrow_type1, spark_type1), (series2, arrow_type2, spark_type2), ...]
-        if (
-            not isinstance(series, (list, tuple))
-            or (len(series) == 2 and isinstance(series[1], pa.DataType))
-            or (
-                len(series) == 3
-                and isinstance(series[1], pa.DataType)
-                and isinstance(series[2], DataType)
-            )
-        ):
-            series = [series]
-        series = ((s, None) if not isinstance(s, (list, tuple)) else s for s in series)
-        series = ((s[0], s[1], None) if len(s) == 2 else s for s in series)
-
-        arrs = [
-            self._create_array(s, arrow_type, spark_type) for s, arrow_type, spark_type in series
-        ]
-        return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
+        self._int_to_decimal_coercion_enabled = int_to_decimal_coercion_enabled
+        self._prefers_large_types = prefers_large_types
+        self._struct_in_pandas = struct_in_pandas
+        self._ndarray_as_list = ndarray_as_list
+        self._prefer_int_ext_dtype = prefer_int_ext_dtype
+        self._df_for_struct = df_for_struct
+        if input_type is not None:
+            assert isinstance(input_type, StructType)
+        self._input_type = input_type
+        self._arrow_cast = arrow_cast
 
     def dump_stream(self, iterator, stream):
         """
-        Make ArrowRecordBatches from Pandas Series and serialize. Input is a single series or
-        a list of series accompanied by an optional pyarrow type to coerce the data to.
+        Make ArrowRecordBatches from Pandas Series and serialize.
+        Each element in iterator is:
+        - For batched UDFs: tuple of (series, spark_type) tuples: ((s1, t1), (s2, t2), ...)
+        - For iterator UDFs: single (series, spark_type) tuple directly
         """
-        batches = (self._create_batch(series) for series in iterator)
-        super(ArrowStreamPandasSerializer, self).dump_stream(batches, stream)
+
+        def create_batch(
+            series_tuples: Tuple[Tuple["pd.Series", DataType], ...],
+        ) -> "pa.RecordBatch":
+            series_data = [s for s, _ in series_tuples]
+            types = [t for _, t in series_tuples]
+            schema = StructType([StructField(f"_{i}", t) for i, t in enumerate(types)])
+            return PandasToArrowConversion.convert(
+                series_data,
+                schema,
+                timezone=self._timezone,
+                safecheck=self._safecheck,
+                prefers_large_types=self._prefers_large_types,
+                int_to_decimal_coercion_enabled=self._int_to_decimal_coercion_enabled,
+            )
+
+        super().dump_stream(
+            (create_batch(_normalize_packed(packed)) for packed in iterator), stream
+        )
 
     def load_stream(self, stream):
         """
         Deserialize ArrowRecordBatches to an Arrow table and return as a list of pandas.Series.
         """
-        batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
-        import pyarrow as pa
-
-        for batch in batches:
-            yield [self.arrow_to_pandas(c) for c in pa.Table.from_batches([batch]).itercolumns()]
+        yield from map(
+            lambda batch: ArrowBatchTransformer.to_pandas(
+                batch,
+                timezone=self._timezone,
+                schema=self._input_type,
+                struct_in_pandas=self._struct_in_pandas,
+                ndarray_as_list=self._ndarray_as_list,
+                prefer_int_ext_dtype=self._prefer_int_ext_dtype,
+                df_for_struct=self._df_for_struct,
+            ),
+            super().load_stream(stream),
+        )
 
     def __repr__(self):
         return "ArrowStreamPandasSerializer"
@@ -403,158 +510,244 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
 
     def __init__(
         self,
+        *,
         timezone,
         safecheck,
         assign_cols_by_name,
-        df_for_struct=False,
-        struct_in_pandas="dict",
-        ndarray_as_list=False,
-        arrow_cast=False,
+        df_for_struct: bool = False,
+        struct_in_pandas: str = "dict",
+        ndarray_as_list: bool = False,
+        prefer_int_ext_dtype: bool = False,
+        arrow_cast: bool = False,
+        input_type: Optional[StructType] = None,
+        int_to_decimal_coercion_enabled: bool = False,
+        prefers_large_types: bool = False,
+        ignore_unexpected_complex_type_values: bool = False,
+        is_legacy: bool = False,
     ):
-        super(ArrowStreamPandasUDFSerializer, self).__init__(timezone, safecheck)
+        super().__init__(
+            timezone=timezone,
+            safecheck=safecheck,
+            int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+            prefers_large_types=prefers_large_types,
+            struct_in_pandas=struct_in_pandas,
+            ndarray_as_list=ndarray_as_list,
+            prefer_int_ext_dtype=prefer_int_ext_dtype,
+            df_for_struct=df_for_struct,
+            input_type=input_type,
+            arrow_cast=arrow_cast,
+        )
         self._assign_cols_by_name = assign_cols_by_name
-        self._df_for_struct = df_for_struct
-        self._struct_in_pandas = struct_in_pandas
-        self._ndarray_as_list = ndarray_as_list
-        self._arrow_cast = arrow_cast
-
-    def arrow_to_pandas(self, arrow_column):
-        import pyarrow.types as types
-
-        # If the arrow type is struct, return a pandas dataframe where the fields of the struct
-        # correspond to columns in the DataFrame. However, if the arrow struct is actually a
-        # Variant, which is an atomic type, treat it as a non-struct arrow type.
-        if (
-            self._df_for_struct
-            and types.is_struct(arrow_column.type)
-            and not is_variant(arrow_column.type)
-        ):
-            import pandas as pd
-
-            series = [
-                super(ArrowStreamPandasUDFSerializer, self)
-                .arrow_to_pandas(column, self._struct_in_pandas, self._ndarray_as_list)
-                .rename(field.name)
-                for column, field in zip(arrow_column.flatten(), arrow_column.type)
-            ]
-            s = pd.concat(series, axis=1)
-        else:
-            s = super(ArrowStreamPandasUDFSerializer, self).arrow_to_pandas(
-                arrow_column, self._struct_in_pandas, self._ndarray_as_list
-            )
-        return s
-
-    def _create_struct_array(self, df, arrow_struct_type):
-        """
-        Create an Arrow StructArray from the given pandas.DataFrame and arrow struct type.
-
-        Parameters
-        ----------
-        df : pandas.DataFrame
-            A pandas DataFrame
-        arrow_struct_type : pyarrow.DataType
-            pyarrow struct type
-
-        Returns
-        -------
-        pyarrow.Array
-        """
-        import pyarrow as pa
-
-        if len(df.columns) == 0:
-            return pa.array([{}] * len(df), arrow_struct_type)
-        # Assign result columns by schema name if user labeled with strings
-        if self._assign_cols_by_name and any(isinstance(name, str) for name in df.columns):
-            struct_arrs = [
-                self._create_array(df[field.name], field.type, arrow_cast=self._arrow_cast)
-                for field in arrow_struct_type
-            ]
-        # Assign result columns by position
-        else:
-            struct_arrs = [
-                # the selected series has name '1', so we rename it to field.name
-                # as the name is used by _create_array to provide a meaningful error message
-                self._create_array(
-                    df[df.columns[i]].rename(field.name),
-                    field.type,
-                    arrow_cast=self._arrow_cast,
-                )
-                for i, field in enumerate(arrow_struct_type)
-            ]
-
-        struct_names = [field.name for field in arrow_struct_type]
-        return pa.StructArray.from_arrays(struct_arrs, struct_names)
-
-    def _create_batch(self, series):
-        """
-        Create an Arrow record batch from the given pandas.Series pandas.DataFrame
-        or list of Series or DataFrame, with optional type.
-
-        Parameters
-        ----------
-        series : pandas.Series or pandas.DataFrame or list
-            A single series or dataframe, list of series or dataframe,
-            or list of (series or dataframe, arrow_type)
-
-        Returns
-        -------
-        pyarrow.RecordBatch
-            Arrow RecordBatch
-        """
-        import pandas as pd
-        import pyarrow as pa
-
-        # Make input conform to [(series1, type1), (series2, type2), ...]
-        if not isinstance(series, (list, tuple)) or (
-            len(series) == 2 and isinstance(series[1], pa.DataType)
-        ):
-            series = [series]
-        series = ((s, None) if not isinstance(s, (list, tuple)) else s for s in series)
-
-        arrs = []
-        for s, t in series:
-            # Variants are represented in arrow as structs with additional metadata (checked by
-            # is_variant). If the data type is Variant, return a VariantVal atomic type instead of
-            # a dict of two binary values.
-            if (
-                self._struct_in_pandas == "dict"
-                and t is not None
-                and pa.types.is_struct(t)
-                and not is_variant(t)
-            ):
-                # A pandas UDF should return pd.DataFrame when the return type is a struct type.
-                # If it returns a pd.Series, it should throw an error.
-                if not isinstance(s, pd.DataFrame):
-                    raise PySparkValueError(
-                        "Invalid return type. Please make sure that the UDF returns a "
-                        "pandas.DataFrame when the specified return type is StructType."
-                    )
-                arrs.append(self._create_struct_array(s, t))
-            else:
-                arrs.append(self._create_array(s, t, arrow_cast=self._arrow_cast))
-
-        return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
+        self._ignore_unexpected_complex_type_values = ignore_unexpected_complex_type_values
+        self._is_legacy = is_legacy
 
     def dump_stream(self, iterator, stream):
         """
         Override because Pandas UDFs require a START_ARROW_STREAM before the Arrow stream is sent.
         This should be sent after creating the first record batch so in case of an error, it can
         be sent back to the JVM before the Arrow stream starts.
+
+        Each element in iterator is:
+        - For batched UDFs: tuple of (series, spark_type) tuples: ((s1, t1), (s2, t2), ...)
+        - For iterator UDFs: single (series, spark_type) tuple directly
         """
+        import pandas as pd
 
-        def init_stream_yield_batches():
-            should_write_start_length = True
-            for series in iterator:
-                batch = self._create_batch(series)
-                if should_write_start_length:
-                    write_int(SpecialLengths.START_ARROW_STREAM, stream)
-                    should_write_start_length = False
-                yield batch
+        def create_batch(
+            series_tuples: Tuple[Tuple["pd.Series", DataType], ...],
+        ) -> "pa.RecordBatch":
+            # When struct_in_pandas="dict", UDF must return DataFrame for struct types
+            if self._struct_in_pandas == "dict":
+                for s, spark_type in series_tuples:
+                    if isinstance(spark_type, StructType) and not isinstance(s, pd.DataFrame):
+                        raise PySparkValueError(
+                            "Invalid return type. Please make sure that the UDF returns a "
+                            "pandas.DataFrame when the specified return type is StructType."
+                        )
 
-        return ArrowStreamSerializer.dump_stream(self, init_stream_yield_batches(), stream)
+            series_data = [s for s, _ in series_tuples]
+            types = [t for _, t in series_tuples]
+            schema = StructType([StructField(f"_{i}", t) for i, t in enumerate(types)])
+            return PandasToArrowConversion.convert(
+                series_data,
+                schema,
+                timezone=self._timezone,
+                safecheck=self._safecheck,
+                arrow_cast=self._arrow_cast,
+                prefers_large_types=self._prefers_large_types,
+                assign_cols_by_name=self._assign_cols_by_name,
+                int_to_decimal_coercion_enabled=self._int_to_decimal_coercion_enabled,
+                ignore_unexpected_complex_type_values=self._ignore_unexpected_complex_type_values,
+                is_legacy=self._is_legacy,
+            )
+
+        batches = self._write_stream_start(
+            (create_batch(_normalize_packed(packed)) for packed in iterator),
+            stream,
+        )
+        return ArrowStreamSerializer.dump_stream(self, batches, stream)
 
     def __repr__(self):
         return "ArrowStreamPandasUDFSerializer"
+
+
+class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
+    """
+    Serializer used by Python worker to evaluate Arrow UDFs
+    """
+
+    def __init__(
+        self,
+        *,
+        safecheck,
+        arrow_cast,
+    ):
+        super().__init__()
+        self._safecheck = safecheck
+        self._arrow_cast = arrow_cast
+
+    def dump_stream(self, iterator, stream):
+        """
+        Override because Arrow UDFs require a START_ARROW_STREAM before the Arrow stream is sent.
+        This should be sent after creating the first record batch so in case of an error, it can
+        be sent back to the JVM before the Arrow stream starts.
+        """
+        import pyarrow as pa
+
+        def create_batch(
+            arr_tuples: List[Tuple["pa.Array", "pa.DataType"]],
+        ) -> "pa.RecordBatch":
+            arrs = [
+                coerce_arrow_array(
+                    arr, arrow_type, safecheck=self._safecheck, arrow_cast=self._arrow_cast
+                )
+                for arr, arrow_type in arr_tuples
+            ]
+            return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
+
+        def normalize(packed):
+            if len(packed) == 2 and isinstance(packed[1], pa.DataType):
+                return [packed]
+            return list(packed)
+
+        batches = self._write_stream_start(
+            (create_batch(normalize(packed)) for packed in iterator), stream
+        )
+        return ArrowStreamSerializer.dump_stream(self, batches, stream)
+
+    def __repr__(self):
+        return "ArrowStreamArrowUDFSerializer"
+
+
+class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
+    """
+    Serializer used by Python worker to evaluate Arrow Python UDFs
+    when the legacy pandas conversion is disabled
+    (instead of legacy ArrowStreamPandasUDFSerializer).
+
+    Parameters
+    ----------
+    safecheck : bool
+        If True, conversion from Arrow to Pandas checks for overflow/truncation
+    input_type : spark data type
+        input data type for the UDF, must be a StructType
+    int_to_decimal_coercion_enabled : bool
+        If True, applies additional coercions in Python before converting to Arrow
+        This has performance penalties.
+    binary_as_bytes : bool
+        If True, binary type will be deserialized as bytes, otherwise as bytearray.
+    """
+
+    def __init__(
+        self,
+        *,
+        safecheck: bool,
+        input_type: StructType,
+        int_to_decimal_coercion_enabled: bool,
+        binary_as_bytes: bool,
+    ):
+        super().__init__(
+            safecheck=safecheck,
+            arrow_cast=True,
+        )
+        assert isinstance(input_type, StructType)
+        self._input_type = input_type
+        self._int_to_decimal_coercion_enabled = int_to_decimal_coercion_enabled
+        self._binary_as_bytes = binary_as_bytes
+
+    def load_stream(self, stream):
+        """
+        Loads a stream of Arrow record batches and converts them to Python values.
+
+        Parameters
+        ----------
+        stream : object
+            Input stream containing Arrow record batches
+
+        Yields
+        ------
+        list
+            List of columns containing list of Python values.
+        """
+        converters = [
+            ArrowTableToRowsConversion._create_converter(
+                f.dataType, none_on_identity=True, binary_as_bytes=self._binary_as_bytes
+            )
+            for f in self._input_type
+        ]
+
+        for batch in super().load_stream(stream):
+            columns = [
+                [conv(v) for v in column.to_pylist()] if conv is not None else column.to_pylist()
+                for column, conv in zip(batch.itercolumns(), converters)
+            ]
+            if len(columns) == 0:
+                yield [[pyspark._NoValue] * batch.num_rows]
+            else:
+                yield columns
+
+    def dump_stream(self, iterator, stream):
+        """
+        Dumps an iterator of Python values as a stream of Arrow record batches.
+
+        Parameters
+        ----------
+        iterator : iterator
+            Iterator yielding tuple of (data, arrow_type, spark_type) tuples.
+            Single UDF: ((results, arrow_type, spark_type),)
+            Multiple UDFs: ((r1, t1, s1), (r2, t2, s2), ...)
+        stream : object
+            Output stream to write the Arrow record batches
+
+        Returns
+        -------
+        object
+            Result of writing the Arrow stream via ArrowStreamArrowUDFSerializer dump_stream
+        """
+        import pyarrow as pa
+
+        def create_array(results, arrow_type, spark_type):
+            conv = LocalDataToArrowConversion._create_converter(
+                spark_type,
+                none_on_identity=True,
+                int_to_decimal_coercion_enabled=self._int_to_decimal_coercion_enabled,
+            )
+            converted = [conv(res) for res in results] if conv is not None else results
+            try:
+                return pa.array(converted, type=arrow_type)
+            except pa.lib.ArrowInvalid:
+                return pa.array(converted).cast(target_type=arrow_type, safe=self._safecheck)
+
+        def py_to_batch():
+            for packed in iterator:
+                if len(packed) == 3 and isinstance(packed[1], pa.DataType):
+                    # single array UDF in a projection
+                    yield create_array(packed[0], packed[1], packed[2]), packed[1]
+                else:
+                    # multiple array UDFs in a projection
+                    yield [(create_array(*t), t[1]) for t in packed]
+
+        return super().dump_stream(py_to_batch(), stream)
 
 
 class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
@@ -562,8 +755,16 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
     Serializer used by Python worker to evaluate Arrow-optimized Python UDTFs.
     """
 
-    def __init__(self, timezone, safecheck):
-        super(ArrowStreamPandasUDTFSerializer, self).__init__(
+    def __init__(
+        self,
+        *,
+        timezone,
+        safecheck,
+        input_type,
+        prefer_int_ext_dtype,
+        int_to_decimal_coercion_enabled,
+    ):
+        super().__init__(
             timezone=timezone,
             safecheck=safecheck,
             # The output pandas DataFrame's columns are unnamed.
@@ -580,126 +781,147 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
             # To ensure consistency across regular and arrow-optimized UDTFs, we further
             # convert these numpy.ndarrays into Python lists.
             ndarray_as_list=True,
+            prefer_int_ext_dtype=prefer_int_ext_dtype,
             # Enables explicit casting for mismatched return types of Arrow Python UDTFs.
             arrow_cast=True,
+            input_type=input_type,
+            # Enable additional coercions for UDTF serialization
+            int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+            # UDTF-specific: ignore unexpected complex type values in converter
+            ignore_unexpected_complex_type_values=True,
+            # Legacy UDTF pandas conversion: enables broader Arrow exception
+            # handling to allow more implicit type coercions
+            is_legacy=True,
         )
-        self._converter_map = dict()
-
-    def _create_batch(self, series):
-        """
-        Create an Arrow record batch from the given pandas.Series pandas.DataFrame
-        or list of Series or DataFrame, with optional type.
-
-        Parameters
-        ----------
-        series : pandas.Series or pandas.DataFrame or list
-            A single series or dataframe, list of series or dataframe,
-            or list of (series or dataframe, arrow_type)
-
-        Returns
-        -------
-        pyarrow.RecordBatch
-            Arrow RecordBatch
-        """
-        import pandas as pd
-        import pyarrow as pa
-
-        # Make input conform to [(series1, type1), (series2, type2), ...]
-        if not isinstance(series, (list, tuple)) or (
-            len(series) == 2 and isinstance(series[1], pa.DataType)
-        ):
-            series = [series]
-        series = ((s, None) if not isinstance(s, (list, tuple)) else s for s in series)
-
-        arrs = []
-        for s, t in series:
-            if not isinstance(s, pd.DataFrame):
-                raise PySparkValueError(
-                    "Output of an arrow-optimized Python UDTFs expects "
-                    f"a pandas.DataFrame but got: {type(s)}"
-                )
-
-            arrs.append(self._create_struct_array(s, t))
-
-        return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
-
-    def _get_or_create_converter_from_pandas(self, dt):
-        if dt not in self._converter_map:
-            conv = _create_converter_from_pandas(
-                dt,
-                timezone=self._timezone,
-                error_on_duplicated_field_names=False,
-                ignore_unexpected_complex_type_values=True,
-            )
-            self._converter_map[dt] = conv
-        return self._converter_map[dt]
-
-    def _create_array(self, series, arrow_type, spark_type=None, arrow_cast=False):
-        """
-        Override the `_create_array` method in the superclass to create an Arrow Array
-        from a given pandas.Series and an arrow type. The difference here is that we always
-        use arrow cast when creating the arrow array. Also, the error messages are specific
-        to arrow-optimized Python UDTFs.
-
-        Parameters
-        ----------
-        series : pandas.Series
-            A single series
-        arrow_type : pyarrow.DataType, optional
-            If None, pyarrow's inferred type will be used
-        spark_type : DataType, optional
-            If None, spark type converted from arrow_type will be used
-        arrow_cast: bool, optional
-            Whether to apply Arrow casting when the user-specified return type mismatches the
-            actual return values.
-
-        Returns
-        -------
-        pyarrow.Array
-        """
-        import pyarrow as pa
-        import pandas as pd
-
-        if isinstance(series.dtype, pd.CategoricalDtype):
-            series = series.astype(series.dtypes.categories.dtype)
-
-        if arrow_type is not None:
-            dt = spark_type or from_arrow_type(arrow_type, prefer_timestamp_ntz=True)
-            conv = self._get_or_create_converter_from_pandas(dt)
-            series = conv(series)
-
-        if hasattr(series.array, "__arrow_array__"):
-            mask = None
-        else:
-            mask = series.isnull()
-
-        try:
-            try:
-                return pa.Array.from_pandas(
-                    series, mask=mask, type=arrow_type, safe=self._safecheck
-                )
-            except pa.lib.ArrowException:
-                if arrow_cast:
-                    return pa.Array.from_pandas(series, mask=mask).cast(
-                        target_type=arrow_type, safe=self._safecheck
-                    )
-                else:
-                    raise
-        except pa.lib.ArrowException:
-            # Display the most user-friendly error messages instead of showing
-            # arrow's error message. This also works better with Spark Connect
-            # where the exception messages are by default truncated.
-            raise PySparkRuntimeError(
-                errorClass="UDTF_ARROW_TYPE_CAST_ERROR",
-                messageParameters={
-                    "col_name": series.name,
-                    "col_type": str(series.dtype),
-                    "arrow_type": arrow_type,
-                },
-            ) from None
 
     def __repr__(self):
         return "ArrowStreamPandasUDTFSerializer"
+
+
+# Serializer for SQL_GROUPED_AGG_ARROW_UDF, SQL_WINDOW_AGG_ARROW_UDF,
+# and SQL_GROUPED_AGG_ARROW_ITER_UDF
+class ArrowStreamAggArrowUDFSerializer(ArrowStreamArrowUDFSerializer):
+    def load_stream(self, stream):
+        """
+        Yield an iterator that produces one tuple of column arrays per batch.
+        Each group yields Iterator[Tuple[pa.Array, ...]], allowing UDF to process batches one by one
+        without consuming all batches upfront.
+        """
+        for (batches,) in self._load_group_dataframes(stream, num_dfs=1):
+            # Lazily read and convert Arrow batches one at a time from the stream
+            # This avoids loading all batches into memory for the group
+            columns_iter = (batch.columns for batch in batches)
+            yield columns_iter
+            # Make sure the batches are fully iterated before getting the next group
+            for _ in columns_iter:
+                pass
+
+    def __repr__(self):
+        return "ArrowStreamAggArrowUDFSerializer"
+
+
+# Serializer for SQL_GROUPED_AGG_PANDAS_UDF, SQL_WINDOW_AGG_PANDAS_UDF,
+# and SQL_GROUPED_AGG_PANDAS_ITER_UDF
+class ArrowStreamAggPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
+    def __init__(
+        self,
+        *,
+        timezone,
+        safecheck,
+        assign_cols_by_name,
+        prefer_int_ext_dtype,
+        int_to_decimal_coercion_enabled,
+    ):
+        super().__init__(
+            timezone=timezone,
+            safecheck=safecheck,
+            assign_cols_by_name=assign_cols_by_name,
+            df_for_struct=False,
+            struct_in_pandas="dict",
+            ndarray_as_list=False,
+            prefer_int_ext_dtype=prefer_int_ext_dtype,
+            arrow_cast=True,
+            input_type=None,
+            int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+        )
+
+    def load_stream(self, stream):
+        """
+        Yield an iterator that produces one tuple of pandas.Series per batch.
+        Each group yields Iterator[Tuple[pd.Series, ...]], allowing UDF to
+        process batches one by one without consuming all batches upfront.
+        """
+        for (batches,) in self._load_group_dataframes(stream, num_dfs=1):
+            # Lazily read and convert Arrow batches to pandas Series one at a time
+            # from the stream. This avoids loading all batches into memory for the group
+            series_iter = map(
+                lambda batch: tuple(
+                    ArrowBatchTransformer.to_pandas(
+                        batch,
+                        timezone=self._timezone,
+                        schema=self._input_type,
+                        struct_in_pandas=self._struct_in_pandas,
+                        ndarray_as_list=self._ndarray_as_list,
+                        prefer_int_ext_dtype=self._prefer_int_ext_dtype,
+                        df_for_struct=self._df_for_struct,
+                    )
+                ),
+                batches,
+            )
+            yield series_iter
+            # Make sure the batches are fully iterated before getting the next group
+            for _ in series_iter:
+                pass
+
+    def __repr__(self):
+        return "ArrowStreamAggPandasUDFSerializer"
+
+
+# Serializer for SQL_GROUPED_MAP_PANDAS_UDF, SQL_GROUPED_MAP_PANDAS_ITER_UDF
+class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
+    def __init__(
+        self,
+        *,
+        timezone,
+        safecheck,
+        assign_cols_by_name,
+        prefer_int_ext_dtype,
+        int_to_decimal_coercion_enabled,
+    ):
+        super().__init__(
+            timezone=timezone,
+            safecheck=safecheck,
+            assign_cols_by_name=assign_cols_by_name,
+            df_for_struct=False,
+            struct_in_pandas="dict",
+            ndarray_as_list=False,
+            prefer_int_ext_dtype=prefer_int_ext_dtype,
+            arrow_cast=True,
+            input_type=None,
+            int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+        )
+
+    def load_stream(self, stream):
+        """
+        Deserialize Grouped ArrowRecordBatches and yield raw Iterator[pa.RecordBatch].
+        Each outer iterator element represents a group.
+        """
+        for (batches,) in self._load_group_dataframes(stream, num_dfs=1):
+            yield batches
+            # Make sure the batches are fully iterated before getting the next group
+            for _ in batches:
+                pass
+
+    def dump_stream(self, iterator, stream):
+        """
+        Flatten the grouped iterator structure.
+        """
+        # Flatten: Iterator[Iterator[[(df, spark_type)]]] -> Iterator[[(df, spark_type)]]
+        flattened_iter = (batch for generator in iterator for batch in generator)
+        super().dump_stream(flattened_iter, stream)
+
+    def __repr__(self):
+        return "GroupPandasUDFSerializer"
 
 
 class CogroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
@@ -715,28 +937,12 @@ class CogroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
         If True, then DataFrames will get columns by name
     """
 
-    def __init__(self, assign_cols_by_name):
-        super(CogroupArrowUDFSerializer, self).__init__(assign_cols_by_name)
-
     def load_stream(self, stream):
         """
         Deserialize Cogrouped ArrowRecordBatches and yield as two `pyarrow.RecordBatch`es.
         """
-        dataframes_in_group = None
-
-        while dataframes_in_group is None or dataframes_in_group > 0:
-            dataframes_in_group = read_int(stream)
-
-            if dataframes_in_group == 2:
-                batches1 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
-                batches2 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
-                yield batches1, batches2
-
-            elif dataframes_in_group != 0:
-                raise PySparkValueError(
-                    errorClass="INVALID_NUMBER_OF_DATAFRAMES_IN_GROUP",
-                    messageParameters={"dataframes_in_group": str(dataframes_in_group)},
-                )
+        for left_batches, right_batches in self._load_group_dataframes(stream, num_dfs=2):
+            yield left_batches, right_batches
 
 
 class CogroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
@@ -747,24 +953,29 @@ class CogroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
         """
         import pyarrow as pa
 
-        dataframes_in_group = None
-
-        while dataframes_in_group is None or dataframes_in_group > 0:
-            dataframes_in_group = read_int(stream)
-
-            if dataframes_in_group == 2:
-                batch1 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
-                batch2 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
-                yield (
-                    [self.arrow_to_pandas(c) for c in pa.Table.from_batches(batch1).itercolumns()],
-                    [self.arrow_to_pandas(c) for c in pa.Table.from_batches(batch2).itercolumns()],
-                )
-
-            elif dataframes_in_group != 0:
-                raise PySparkValueError(
-                    errorClass="INVALID_NUMBER_OF_DATAFRAMES_IN_GROUP",
-                    messageParameters={"dataframes_in_group": str(dataframes_in_group)},
-                )
+        for left_batches, right_batches in self._load_group_dataframes(stream, num_dfs=2):
+            left_table = pa.Table.from_batches(left_batches)
+            right_table = pa.Table.from_batches(right_batches)
+            yield (
+                ArrowBatchTransformer.to_pandas(
+                    left_table,
+                    timezone=self._timezone,
+                    schema=from_arrow_schema(left_table.schema),
+                    struct_in_pandas=self._struct_in_pandas,
+                    ndarray_as_list=self._ndarray_as_list,
+                    prefer_int_ext_dtype=self._prefer_int_ext_dtype,
+                    df_for_struct=self._df_for_struct,
+                ),
+                ArrowBatchTransformer.to_pandas(
+                    right_table,
+                    timezone=self._timezone,
+                    schema=from_arrow_schema(right_table.schema),
+                    struct_in_pandas=self._struct_in_pandas,
+                    ndarray_as_list=self._ndarray_as_list,
+                    prefer_int_ext_dtype=self._prefer_int_ext_dtype,
+                    df_for_struct=self._df_for_struct,
+                ),
+            )
 
 
 class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
@@ -787,14 +998,28 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
 
     def __init__(
         self,
+        *,
         timezone,
         safecheck,
         assign_cols_by_name,
+        prefer_int_ext_dtype,
         state_object_schema,
         arrow_max_records_per_batch,
+        prefers_large_var_types,
+        int_to_decimal_coercion_enabled,
     ):
-        super(ApplyInPandasWithStateSerializer, self).__init__(
-            timezone, safecheck, assign_cols_by_name
+        super().__init__(
+            timezone=timezone,
+            safecheck=safecheck,
+            assign_cols_by_name=assign_cols_by_name,
+            df_for_struct=False,
+            struct_in_pandas="dict",
+            ndarray_as_list=False,
+            prefer_int_ext_dtype=prefer_int_ext_dtype,
+            arrow_cast=True,
+            input_type=None,
+            int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+            prefers_large_types=prefers_large_var_types,
         )
         self.pickleSer = CPickleSerializer()
         self.utf8_deserializer = UTF8Deserializer()
@@ -807,7 +1032,9 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             ]
         )
 
-        self.result_count_pdf_arrow_type = to_arrow_type(self.result_count_df_type)
+        self.result_count_pdf_arrow_type = to_arrow_type(
+            self.result_count_df_type, timezone="UTC", prefers_large_types=prefers_large_var_types
+        )
 
         self.result_state_df_type = StructType(
             [
@@ -818,8 +1045,12 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             ]
         )
 
-        self.result_state_pdf_arrow_type = to_arrow_type(self.result_state_df_type)
-        self.arrow_max_records_per_batch = arrow_max_records_per_batch
+        self.result_state_pdf_arrow_type = to_arrow_type(
+            self.result_state_df_type, timezone="UTC", prefers_large_types=prefers_large_var_types
+        )
+        self.arrow_max_records_per_batch = (
+            arrow_max_records_per_batch if arrow_max_records_per_batch > 0 else 2**31 - 1
+        )
 
     def load_stream(self, stream):
         """
@@ -911,8 +1142,15 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                     schema=state_schema,
                 )
 
-                state_arrow = pa.Table.from_batches([state_batch]).itercolumns()
-                state_pandas = [self.arrow_to_pandas(c) for c in state_arrow][0]
+                state_pandas = ArrowBatchTransformer.to_pandas(
+                    state_batch,
+                    timezone=self._timezone,
+                    schema=None,
+                    struct_in_pandas=self._struct_in_pandas,
+                    ndarray_as_list=self._ndarray_as_list,
+                    prefer_int_ext_dtype=self._prefer_int_ext_dtype,
+                    df_for_struct=self._df_for_struct,
+                )[0]
 
                 for state_idx in range(0, len(state_pandas)):
                     state_info_col = state_pandas.iloc[state_idx]
@@ -942,9 +1180,15 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                         state_for_current_group = state
 
                     data_batch_for_group = data_batch.slice(data_start_offset, num_data_rows)
-                    data_arrow = pa.Table.from_batches([data_batch_for_group]).itercolumns()
-
-                    data_pandas = [self.arrow_to_pandas(c) for c in data_arrow]
+                    data_pandas = ArrowBatchTransformer.to_pandas(
+                        data_batch_for_group,
+                        timezone=self._timezone,
+                        schema=None,
+                        struct_in_pandas=self._struct_in_pandas,
+                        ndarray_as_list=self._ndarray_as_list,
+                        prefer_int_ext_dtype=self._prefer_int_ext_dtype,
+                        df_for_struct=self._df_for_struct,
+                    )
 
                     # state info
                     yield (
@@ -970,7 +1214,6 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         """
 
         import pandas as pd
-        import pyarrow as pa
 
         def construct_state_pdf(state):
             """
@@ -1030,7 +1273,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             empty_row_cnt_in_state = max_data_cnt - state_data_cnt
 
             empty_rows_pdf = pd.DataFrame(
-                dict.fromkeys(pa.schema(pdf_schema).names),
+                dict.fromkeys(pdf_schema.names),
                 index=[x for x in range(0, empty_row_cnt_in_data)],
             )
             empty_rows_state = pd.DataFrame(
@@ -1044,12 +1287,25 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             merged_pdf = pd.concat(pdfs, ignore_index=True)
             merged_state_pdf = pd.concat(state_pdfs, ignore_index=True)
 
-            return self._create_batch(
+            # Create batch from list of DataFrames, each wrapped as a StructArray.
+            # Schema fields map to: _0=count, _1=output data, _2=state data
+            # (types defined in __init__: result_count_df_type, pdf_schema, result_state_df_type)
+            data = [count_pdf, merged_pdf, merged_state_pdf]
+            schema = StructType(
                 [
-                    (count_pdf, self.result_count_pdf_arrow_type),
-                    (merged_pdf, pdf_schema),
-                    (merged_state_pdf, self.result_state_pdf_arrow_type),
+                    StructField("_0", self.result_count_df_type),
+                    StructField("_1", pdf_schema),
+                    StructField("_2", self.result_state_df_type),
                 ]
+            )
+            return PandasToArrowConversion.convert(
+                data,
+                schema,
+                timezone=self._timezone,
+                safecheck=self._safecheck,
+                arrow_cast=self._arrow_cast,
+                assign_cols_by_name=self._assign_cols_by_name,
+                int_to_decimal_coercion_enabled=self._int_to_decimal_coercion_enabled,
             )
 
         def serialize_batches():
@@ -1119,26 +1375,8 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
 
                 yield batch
 
-        def init_stream_yield_batches(batches):
-            """
-            This function helps to ensure the requirement for Pandas UDFs - Pandas UDFs require a
-            START_ARROW_STREAM before the Arrow stream is sent.
-
-            START_ARROW_STREAM should be sent after creating the first record batch so in case of
-            an error, it can be sent back to the JVM before the Arrow stream starts.
-            """
-            should_write_start_length = True
-
-            for batch in batches:
-                if should_write_start_length:
-                    write_int(SpecialLengths.START_ARROW_STREAM, stream)
-                    should_write_start_length = False
-
-                yield batch
-
-        batches_to_write = init_stream_yield_batches(serialize_batches())
-
-        return ArrowStreamSerializer.dump_stream(self, batches_to_write, stream)
+        batches = self._write_stream_start(serialize_batches(), stream)
+        return ArrowStreamSerializer.dump_stream(self, batches, stream)
 
 
 class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
@@ -1158,26 +1396,68 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         Limit of the number of records that can be written to a single ArrowRecordBatch in memory.
     """
 
-    def __init__(self, timezone, safecheck, assign_cols_by_name, arrow_max_records_per_batch):
-        super(TransformWithStateInPandasSerializer, self).__init__(
-            timezone, safecheck, assign_cols_by_name
+    def __init__(
+        self,
+        *,
+        timezone,
+        safecheck,
+        assign_cols_by_name,
+        prefer_int_ext_dtype,
+        arrow_max_records_per_batch,
+        arrow_max_bytes_per_batch,
+        int_to_decimal_coercion_enabled,
+    ):
+        super().__init__(
+            timezone=timezone,
+            safecheck=safecheck,
+            assign_cols_by_name=assign_cols_by_name,
+            df_for_struct=False,
+            struct_in_pandas="dict",
+            ndarray_as_list=False,
+            prefer_int_ext_dtype=prefer_int_ext_dtype,
+            arrow_cast=True,
+            input_type=None,
+            int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
         )
-        self.arrow_max_records_per_batch = arrow_max_records_per_batch
+        self.arrow_max_records_per_batch = (
+            arrow_max_records_per_batch if arrow_max_records_per_batch > 0 else 2**31 - 1
+        )
+        self.arrow_max_bytes_per_batch = arrow_max_bytes_per_batch
         self.key_offsets = None
+        self.average_arrow_row_size = 0
+        self.total_bytes = 0
+        self.total_rows = 0
+
+    def _update_batch_size_stats(self, batch):
+        """
+        Update batch size statistics for adaptive batching.
+        """
+        # Short circuit batch size calculation if the batch size is
+        # unlimited as computing batch size is computationally expensive.
+        if self.arrow_max_bytes_per_batch != 2**31 - 1 and batch.num_rows > 0:
+            batch_bytes = sum(
+                buf.size for col in batch.columns for buf in col.buffers() if buf is not None
+            )
+            self.total_bytes += batch_bytes
+            self.total_rows += batch.num_rows
+            self.average_arrow_row_size = self.total_bytes / self.total_rows
 
     def load_stream(self, stream):
         """
         Read ArrowRecordBatches from stream, deserialize them to populate a list of data chunk, and
-        convert the data into a list of pandas.Series.
+        convert the data into Rows.
 
         Please refer the doc of inner function `generate_data_batches` for more details how
         this function works in overall.
         """
-        import pyarrow as pa
+        import pandas as pd
+        from pyspark.sql.streaming.stateful_processor_util import (
+            TransformWithStateInPandasFuncMode,
+        )
 
         def generate_data_batches(batches):
             """
-            Deserialize ArrowRecordBatches and return a generator of pandas.Series list.
+            Deserialize ArrowRecordBatches and return a generator of Rows.
 
             The deserialization logic assumes that Arrow RecordBatches contain the data with the
             ordering that data chunks for same grouping key will appear sequentially.
@@ -1185,27 +1465,62 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
             This function must avoid materializing multiple Arrow RecordBatches into memory at the
             same time. And data chunks from the same grouping key should appear sequentially.
             """
-            for batch in batches:
-                data_pandas = [
-                    self.arrow_to_pandas(c) for c in pa.Table.from_batches([batch]).itercolumns()
-                ]
-                key_series = [data_pandas[o] for o in self.key_offsets]
-                batch_key = tuple(s[0] for s in key_series)
-                yield (batch_key, data_pandas)
+
+            def row_stream():
+                for batch in batches:
+                    self._update_batch_size_stats(batch)
+                    data_pandas = ArrowBatchTransformer.to_pandas(
+                        batch,
+                        timezone=self._timezone,
+                        schema=self._input_type,
+                        struct_in_pandas=self._struct_in_pandas,
+                        ndarray_as_list=self._ndarray_as_list,
+                        prefer_int_ext_dtype=self._prefer_int_ext_dtype,
+                        df_for_struct=self._df_for_struct,
+                    )
+                    for row in pd.concat(data_pandas, axis=1).itertuples(index=False):
+                        batch_key = tuple(row[s] for s in self.key_offsets)
+                        yield (batch_key, row)
+
+            for batch_key, group_rows in groupby(row_stream(), key=lambda x: x[0]):
+                rows = []
+                for _, row in group_rows:
+                    rows.append(row)
+                    if (
+                        len(rows) >= self.arrow_max_records_per_batch
+                        or len(rows) * self.average_arrow_row_size >= self.arrow_max_bytes_per_batch
+                    ):
+                        yield (batch_key, pd.DataFrame(rows))
+                        rows = []
+                if rows:
+                    yield (batch_key, pd.DataFrame(rows))
 
         _batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
         data_batches = generate_data_batches(_batches)
 
         for k, g in groupby(data_batches, key=lambda x: x[0]):
-            yield (k, g)
+            yield (TransformWithStateInPandasFuncMode.PROCESS_DATA, k, g)
+
+        yield (TransformWithStateInPandasFuncMode.PROCESS_TIMER, None, None)
+
+        yield (TransformWithStateInPandasFuncMode.COMPLETE, None, None)
 
     def dump_stream(self, iterator, stream):
         """
         Read through an iterator of (iterator of pandas DataFrame), serialize them to Arrow
         RecordBatches, and write batches to stream.
         """
-        result = [(b, t) for x in iterator for y, t in x for b in y]
-        super().dump_stream(result, stream)
+
+        def flatten_iterator():
+            # iterator: iter[list[(iter[pandas.DataFrame], pdf_type)]]
+            for packed in iterator:
+                iter_pdf_with_type = packed[0]
+                iter_pdf = iter_pdf_with_type[0]
+                pdf_type = iter_pdf_with_type[1]
+                for pdf in iter_pdf:
+                    yield [(pdf, pdf_type)]
+
+        super().dump_stream(flatten_iterator(), stream)
 
 
 class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSerializer):
@@ -1217,18 +1532,39 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
     Same as input parameters in TransformWithStateInPandasSerializer.
     """
 
-    def __init__(self, timezone, safecheck, assign_cols_by_name, arrow_max_records_per_batch):
-        super(TransformWithStateInPandasInitStateSerializer, self).__init__(
-            timezone, safecheck, assign_cols_by_name, arrow_max_records_per_batch
+    def __init__(
+        self,
+        *,
+        timezone,
+        safecheck,
+        assign_cols_by_name,
+        prefer_int_ext_dtype,
+        arrow_max_records_per_batch,
+        arrow_max_bytes_per_batch,
+        int_to_decimal_coercion_enabled,
+    ):
+        super().__init__(
+            timezone=timezone,
+            safecheck=safecheck,
+            assign_cols_by_name=assign_cols_by_name,
+            prefer_int_ext_dtype=prefer_int_ext_dtype,
+            arrow_max_records_per_batch=arrow_max_records_per_batch,
+            arrow_max_bytes_per_batch=arrow_max_bytes_per_batch,
+            int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
         )
         self.init_key_offsets = None
 
     def load_stream(self, stream):
         import pyarrow as pa
+        import pandas as pd
+        from pyspark.sql.streaming.stateful_processor_util import (
+            TransformWithStateInPandasFuncMode,
+        )
 
         def generate_data_batches(batches):
             """
             Deserialize ArrowRecordBatches and return a generator of pandas.Series list.
+
             The deserialization logic assumes that Arrow RecordBatches contain the data with the
             ordering that data chunks for same grouping key will appear sequentially.
             See `TransformWithStateInPandasPythonInitialStateRunner` for arrow batch schema sent
@@ -1239,6 +1575,12 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
 
             def flatten_columns(cur_batch, col_name):
                 state_column = cur_batch.column(cur_batch.schema.get_field_index(col_name))
+
+                # Check if the entire column is null
+                if state_column.null_count == len(state_column):
+                    # Return empty table with no columns
+                    return pa.Table.from_arrays([], names=[])
+
                 state_field_names = [
                     state_column.type[i].name for i in range(state_column.type.num_fields)
                 ]
@@ -1256,29 +1598,301 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                 .add("inputData", dataSchema)
                 .add("initState", initStateSchema)
             We'll parse batch into Tuples of (key, inputData, initState) and pass into the Python
-             data generator. All rows in the same batch have the same grouping key.
+             data generator. Rows in the same batch may have different grouping keys,
+             but each batch will have either init_data or input_data, not mix.
             """
-            for batch in batches:
-                flatten_state_table = flatten_columns(batch, "inputData")
-                data_pandas = [self.arrow_to_pandas(c) for c in flatten_state_table.itercolumns()]
 
-                flatten_init_table = flatten_columns(batch, "initState")
-                init_data_pandas = [
-                    self.arrow_to_pandas(c) for c in flatten_init_table.itercolumns()
-                ]
-                key_series = [data_pandas[o] for o in self.key_offsets]
-                init_key_series = [init_data_pandas[o] for o in self.init_key_offsets]
+            def to_pandas(table):
+                return ArrowBatchTransformer.to_pandas(
+                    table,
+                    timezone=self._timezone,
+                    schema=self._input_type,
+                    struct_in_pandas=self._struct_in_pandas,
+                    ndarray_as_list=self._ndarray_as_list,
+                    prefer_int_ext_dtype=self._prefer_int_ext_dtype,
+                    df_for_struct=self._df_for_struct,
+                )
 
-                if any(s.empty for s in key_series):
-                    # If any row is empty, assign batch_key using init_key_series
-                    batch_key = tuple(s[0] for s in init_key_series)
-                else:
-                    # If all rows are non-empty, create batch_key from key_series
-                    batch_key = tuple(s[0] for s in key_series)
-                yield (batch_key, data_pandas, init_data_pandas)
+            def row_stream():
+                for batch in batches:
+                    self._update_batch_size_stats(batch)
+
+                    data_table = flatten_columns(batch, "inputData")
+                    init_table = flatten_columns(batch, "initState")
+
+                    # Check column count - empty table has no columns
+                    has_data = data_table.num_columns > 0
+                    has_init = init_table.num_columns > 0
+
+                    assert not (has_data and has_init)
+
+                    if has_data:
+                        for row in pd.concat(to_pandas(data_table), axis=1).itertuples(index=False):
+                            batch_key = tuple(row[s] for s in self.key_offsets)
+                            yield (batch_key, row, None)
+                    elif has_init:
+                        for row in pd.concat(to_pandas(init_table), axis=1).itertuples(index=False):
+                            batch_key = tuple(row[s] for s in self.init_key_offsets)
+                            yield (batch_key, None, row)
+
+            EMPTY_DATAFRAME = pd.DataFrame()
+            for batch_key, group_rows in groupby(row_stream(), key=lambda x: x[0]):
+                rows = []
+                init_state_rows = []
+                for _, row, init_state_row in group_rows:
+                    if row is not None:
+                        rows.append(row)
+                    if init_state_row is not None:
+                        init_state_rows.append(init_state_row)
+
+                    total_len = len(rows) + len(init_state_rows)
+                    if (
+                        total_len >= self.arrow_max_records_per_batch
+                        or total_len * self.average_arrow_row_size >= self.arrow_max_bytes_per_batch
+                    ):
+                        yield (
+                            batch_key,
+                            pd.DataFrame(rows) if len(rows) > 0 else EMPTY_DATAFRAME.copy(),
+                            (
+                                pd.DataFrame(init_state_rows)
+                                if len(init_state_rows) > 0
+                                else EMPTY_DATAFRAME.copy()
+                            ),
+                        )
+                        rows = []
+                        init_state_rows = []
+                if rows or init_state_rows:
+                    yield (
+                        batch_key,
+                        pd.DataFrame(rows) if len(rows) > 0 else EMPTY_DATAFRAME.copy(),
+                        (
+                            pd.DataFrame(init_state_rows)
+                            if len(init_state_rows) > 0
+                            else EMPTY_DATAFRAME.copy()
+                        ),
+                    )
 
         _batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
         data_batches = generate_data_batches(_batches)
 
         for k, g in groupby(data_batches, key=lambda x: x[0]):
-            yield (k, g)
+            yield (TransformWithStateInPandasFuncMode.PROCESS_DATA, k, g)
+
+        yield (TransformWithStateInPandasFuncMode.PROCESS_TIMER, None, None)
+
+        yield (TransformWithStateInPandasFuncMode.COMPLETE, None, None)
+
+
+class TransformWithStateInPySparkRowSerializer(ArrowStreamUDFSerializer):
+    """
+    Serializer used by Python worker to evaluate UDF for
+    :meth:`pyspark.sql.GroupedData.transformWithState`.
+
+    Parameters
+    ----------
+    arrow_max_records_per_batch : int
+        Limit of the number of records that can be written to a single ArrowRecordBatch in memory.
+    """
+
+    def __init__(self, *, arrow_max_records_per_batch):
+        super().__init__()
+        self.arrow_max_records_per_batch = (
+            arrow_max_records_per_batch if arrow_max_records_per_batch > 0 else 2**31 - 1
+        )
+        self.key_offsets = None
+
+    def load_stream(self, stream):
+        """
+        Read ArrowRecordBatches from stream, deserialize them to populate a list of data chunks,
+        and convert the data into a list of pandas.Series.
+
+        Please refer the doc of inner function `generate_data_batches` for more details how
+        this function works in overall.
+        """
+        from pyspark.sql.streaming.stateful_processor_util import (
+            TransformWithStateInPandasFuncMode,
+        )
+        import itertools
+
+        def generate_data_batches(batches):
+            """
+            Deserialize ArrowRecordBatches and return a generator of Row.
+
+            The deserialization logic assumes that Arrow RecordBatches contain the data with the
+            ordering that data chunks for same grouping key will appear sequentially.
+
+            This function must avoid materializing multiple Arrow RecordBatches into memory at the
+            same time. And data chunks from the same grouping key should appear sequentially.
+            """
+            for batch in batches:
+                DataRow = Row(*batch.schema.names)
+
+                # Iterate row by row without converting the whole batch
+                num_cols = batch.num_columns
+                for row_idx in range(batch.num_rows):
+                    # build the key for this row
+                    row_key = tuple(batch[o][row_idx].as_py() for o in self.key_offsets)
+                    row = DataRow(*(batch.column(i)[row_idx].as_py() for i in range(num_cols)))
+                    yield row_key, row
+
+        _batches = super(ArrowStreamUDFSerializer, self).load_stream(stream)
+        data_batches = generate_data_batches(_batches)
+
+        for k, g in groupby(data_batches, key=lambda x: x[0]):
+            chained = itertools.chain(g)
+            chained_values = map(lambda x: x[1], chained)
+            yield (TransformWithStateInPandasFuncMode.PROCESS_DATA, k, chained_values)
+
+        yield (TransformWithStateInPandasFuncMode.PROCESS_TIMER, None, None)
+
+        yield (TransformWithStateInPandasFuncMode.COMPLETE, None, None)
+
+    def dump_stream(self, iterator, stream):
+        """
+        Read through an iterator of (iterator of Row), serialize them to Arrow
+        RecordBatches, and write batches to stream.
+        """
+        import pyarrow as pa
+
+        from pyspark.sql.pandas.types import to_arrow_type
+
+        def flatten_iterator():
+            # iterator: iter[list[(iter[Row], spark_type)]]
+            for packed in iterator:
+                iter_row_with_type = packed[0]
+                iter_row = iter_row_with_type[0]
+                spark_type = iter_row_with_type[1]
+
+                # Convert spark type to arrow type
+                # TODO: WE need to make this configurable, currently using default values.
+                arrow_type = to_arrow_type(
+                    spark_type,
+                    timezone="UTC",
+                    prefers_large_types=False,
+                )
+
+                rows_as_dict = []
+                for row in iter_row:
+                    row_as_dict = row.asDict(True)
+                    rows_as_dict.append(row_as_dict)
+
+                pdf_schema = pa.schema(list(arrow_type))
+                record_batch = pa.RecordBatch.from_pylist(rows_as_dict, schema=pdf_schema)
+
+                yield (record_batch, arrow_type)
+
+        return ArrowStreamUDFSerializer.dump_stream(self, flatten_iterator(), stream)
+
+
+class TransformWithStateInPySparkRowInitStateSerializer(TransformWithStateInPySparkRowSerializer):
+    """
+    Serializer used by Python worker to evaluate UDF for
+    :meth:`pyspark.sql.GroupedData.transformWithStateInPySparkRowInitStateSerializer`.
+    Parameters
+    ----------
+    Same as input parameters in TransformWithStateInPySparkRowSerializer.
+    """
+
+    def __init__(self, *, arrow_max_records_per_batch):
+        super().__init__(arrow_max_records_per_batch=arrow_max_records_per_batch)
+        self.init_key_offsets = None
+
+    def load_stream(self, stream):
+        import pyarrow as pa
+        from pyspark.sql.streaming.stateful_processor_util import (
+            TransformWithStateInPandasFuncMode,
+        )
+
+        def generate_data_batches(batches) -> Iterator[Tuple[Any, Optional[Any], Optional[Any]]]:
+            """
+            Deserialize ArrowRecordBatches and return a generator of Row.
+            The deserialization logic assumes that Arrow RecordBatches contain the data with the
+            ordering that data chunks for same grouping key will appear sequentially.
+            See `TransformWithStateInPySparkPythonInitialStateRunner` for arrow batch schema sent
+             from JVM.
+            This function flattens the columns of input rows and initial state rows and feed them
+             into the data generator.
+            """
+
+            def extract_rows(
+                cur_batch, col_name, key_offsets
+            ) -> Optional[Iterator[Tuple[Any, Any]]]:
+                data_column = cur_batch.column(cur_batch.schema.get_field_index(col_name))
+
+                # Check if the entire column is null
+                if data_column.null_count == len(data_column):
+                    return None
+
+                data_field_names = [
+                    data_column.type[i].name for i in range(data_column.type.num_fields)
+                ]
+                data_field_arrays = [
+                    data_column.field(i) for i in range(data_column.type.num_fields)
+                ]
+
+                DataRow = Row(*data_field_names)
+
+                table = pa.Table.from_arrays(data_field_arrays, names=data_field_names)
+
+                if table.num_rows == 0:
+                    return None
+
+                def row_iterator():
+                    for row_idx in range(table.num_rows):
+                        key = tuple(table.column(o)[row_idx].as_py() for o in key_offsets)
+                        row = DataRow(
+                            *(table.column(i)[row_idx].as_py() for i in range(table.num_columns))
+                        )
+                        yield (key, row)
+
+                return row_iterator()
+
+            """
+            The arrow batch is written in the schema:
+            schema: StructType = new StructType()
+                .add("inputData", dataSchema)
+                .add("initState", initStateSchema)
+            We'll parse batch into Tuples of (key, inputData, initState) and pass into the Python
+             data generator. Each batch will have either init_data or input_data, not mix.
+            """
+            for batch in batches:
+                # Detect which column has data - each batch contains only one type
+                input_result = extract_rows(batch, "inputData", self.key_offsets)
+                init_result = extract_rows(batch, "initState", self.init_key_offsets)
+
+                assert not (input_result is not None and init_result is not None)
+
+                if input_result is not None:
+                    for key, input_data_row in input_result:
+                        yield (key, input_data_row, None)
+                elif init_result is not None:
+                    for key, init_state_row in init_result:
+                        yield (key, None, init_state_row)
+
+        _batches = super(ArrowStreamUDFSerializer, self).load_stream(stream)
+        data_batches = generate_data_batches(_batches)
+
+        for k, g in groupby(data_batches, key=lambda x: x[0]):
+            input_rows = []
+            init_rows = []
+
+            for batch_key, input_row, init_row in g:
+                if input_row is not None:
+                    input_rows.append(input_row)
+                if init_row is not None:
+                    init_rows.append(init_row)
+
+                total_len = len(input_rows) + len(init_rows)
+                if total_len >= self.arrow_max_records_per_batch:
+                    ret_tuple = (iter(input_rows), iter(init_rows))
+                    yield (TransformWithStateInPandasFuncMode.PROCESS_DATA, k, ret_tuple)
+                    input_rows = []
+                    init_rows = []
+
+            if input_rows or init_rows:
+                ret_tuple = (iter(input_rows), iter(init_rows))
+                yield (TransformWithStateInPandasFuncMode.PROCESS_DATA, k, ret_tuple)
+
+        yield (TransformWithStateInPandasFuncMode.PROCESS_TIMER, None, None)
+
+        yield (TransformWithStateInPandasFuncMode.COMPLETE, None, None)

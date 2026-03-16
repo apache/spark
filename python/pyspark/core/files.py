@@ -17,7 +17,6 @@
 
 import os
 
-
 __all__ = ["SparkFiles"]
 
 from typing import cast, ClassVar, Optional, TYPE_CHECKING
@@ -27,7 +26,6 @@ if TYPE_CHECKING:
 
 
 class SparkFiles:
-
     """
     Resolves paths to files added through :meth:`SparkContext.addFile`.
 
@@ -145,7 +143,7 @@ class SparkFiles:
             # This will have to change if we support multiple SparkContexts:
             assert cls._sc is not None
             assert cls._sc._jvm is not None
-            return cls._sc._jvm.org.apache.spark.SparkFiles.getRootDirectory()
+            return getattr(cls._sc._jvm, "org.apache.spark.SparkFiles").getRootDirectory()
 
 
 def _test() -> None:
@@ -155,7 +153,7 @@ def _test() -> None:
 
     globs = globals().copy()
     globs["sc"] = SparkContext("local[2]", "files tests")
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    failure_count, test_count = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs["sc"].stop()
     if failure_count:
         sys.exit(-1)

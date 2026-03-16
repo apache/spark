@@ -19,16 +19,16 @@ from typing import cast, no_type_check, Any
 from functools import partial
 
 import pandas as pd
-from pandas.api.types import is_hashable  # type: ignore[attr-defined]
+from pandas.api.types import is_hashable
 import numpy as np
 
 from pyspark import pandas as ps
 from pyspark._globals import _NoValue
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas.indexes.base import Index
 from pyspark.pandas.missing.indexes import MissingPandasLikeTimedeltaIndex
 from pyspark.pandas.series import Series
 from pyspark.sql import functions as F
-
 
 HOURS_PER_DAY = 24
 MINUTES_PER_HOUR = 60
@@ -94,14 +94,14 @@ class TimedeltaIndex(Index):
     def __new__(
         cls,
         data=None,
-        unit=None,
+        unit=_NoValue,
         freq=_NoValue,
-        closed=None,
+        closed=_NoValue,
         dtype=None,
         copy=False,
         name=None,
     ) -> "TimedeltaIndex":
-        if closed is not None:
+        if closed is not _NoValue:
             warnings.warn(
                 "The 'closed' keyword in TimedeltaIndex construction is deprecated "
                 "and will be removed in a future version.",
@@ -111,20 +111,32 @@ class TimedeltaIndex(Index):
             raise TypeError("Index.name must be a hashable type")
 
         if isinstance(data, (Series, Index)):
-            if dtype is None:
-                dtype = "timedelta64[ns]"
+            if LooseVersion(pd.__version__) < "3.0.0":
+                if dtype is None:
+                    dtype = "timedelta64[ns]"
             return cast(TimedeltaIndex, Index(data, dtype=dtype, copy=copy, name=name))
 
         kwargs = dict(
             data=data,
-            unit=unit,
-            closed=closed,
             dtype=dtype,
             copy=copy,
             name=name,
         )
         if freq is not _NoValue:
             kwargs["freq"] = freq
+
+        if LooseVersion(pd.__version__) < "3.0.0":
+            if unit is not _NoValue:
+                kwargs["unit"] = unit
+
+            if closed is not _NoValue:
+                kwargs["closed"] = closed
+        else:
+            if unit is not _NoValue:
+                raise TypeError("The 'unit' keyword is not supported in pandas 3.0.0 and later.")
+
+            if closed is not _NoValue:
+                raise TypeError("The 'closed' keyword is not supported in pandas 3.0.0 and later.")
 
         return cast(TimedeltaIndex, ps.from_pandas(pd.TimedeltaIndex(**kwargs)))
 

@@ -21,6 +21,7 @@ import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
 import scala.collection.immutable.HashSet
+import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.Random
@@ -35,16 +36,18 @@ import org.apache.spark.TestUtils.withListener
 import org.apache.spark.internal.config.MAX_RESULT_SIZE
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, ScroogeLikeExample}
-import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoders, ExpressionEncoder, OuterScopes}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.BoxedIntEncoder
-import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, GenericRowWithSchema}
+import org.apache.spark.sql.catalyst.DeserializerBuildHelper.createDeserializerForString
+import org.apache.spark.sql.catalyst.SerializerBuildHelper.createSerializerForString
+import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoders, AgnosticExpressionPathEncoder, ExpressionEncoder, OuterScopes}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedIntEncoder, ProductEncoder}
+import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, Expression, GenericRowWithSchema}
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.trees.DataFrameQueryContext
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -854,6 +857,90 @@ class DatasetSuite extends QueryTest
       1 -> "a", 2 -> "bc", 3 -> "d")
   }
 
+  test("cogroup with complex key types") {
+    // Test cogroup with nested structure as key using existing ClassData
+    val ds1 = Seq(
+      (ClassData("x", 1), "left1"),
+      (ClassData("x", 1), "left2"),
+      (ClassData("y", 2), "left3")
+    ).toDS()
+
+    val ds2 = Seq(
+      (ClassData("x", 1), 100),
+      (ClassData("z", 3), 200)
+    ).toDS()
+
+    val cogrouped = ds1.groupByKey(_._1).cogroup(ds2.groupByKey(_._1)) {
+      case (key, left, right) =>
+        Iterator((key.a, key.b, left.size, right.size))
+    }
+
+    checkDatasetUnorderly(
+      cogrouped,
+      ("x", 1, 2, 1),  // ClassData("x", 1): 2 left, 1 right
+      ("y", 2, 1, 0),  // ClassData("y", 2): 1 left, 0 right
+      ("z", 3, 0, 1)   // ClassData("z", 3): 0 left, 1 right
+    )
+  }
+
+  test("cogroup with null keys") {
+    // Test that null keys are handled correctly - rows with null keys should be grouped together.
+    val ds1 = Seq(
+      (Some(1), "a"),
+      (Some(1), "b"),
+      (None, "c"),
+      (None, "d"),
+      (Some(2), "e")
+    ).toDS()
+    val ds2 = Seq(
+      (Some(1), 10),
+      (None, 20),
+      (Some(3), 30)
+    ).toDS()
+
+    val cogrouped = ds1.groupByKey(_._1).cogroup(ds2.groupByKey(_._1)) {
+      case (key, left, right) =>
+        Iterator((key, left.size, right.size))
+    }
+
+    checkDatasetUnorderly(
+      cogrouped,
+      (Some(1), 2, 1),  // key=1: 2 left ("a","b"), 1 right (10)
+      (None, 2, 1),     // key=null: 2 left ("c","d"), 1 right (20)
+      (Some(2), 1, 0),  // key=2: 1 left ("e"), 0 right
+      (Some(3), 0, 1)   // key=3: 0 left, 1 right (30)
+    )
+  }
+
+  test("cogroup with empty datasets") {
+    val ds1 = Seq(1 -> "a", 2 -> "b").toDS()
+    val ds2 = Seq(2 -> 100, 3 -> 200).toDS()
+    val emptyDs = spark.emptyDataset[(Int, String)]
+    val emptyDs2 = spark.emptyDataset[(Int, Long)]
+
+    // Helper function to count elements from each side
+    def countElements[L, R](left: Iterator[L], right: Iterator[R]): (Int, Int) =
+      (left.size, right.size)
+
+    // Empty left: all keys come from right, left iterator is always empty
+    val emptyLeftResult = emptyDs.groupByKey(_._1).cogroup(ds2.groupByKey(_._1)) {
+      case (key, left, right) => Iterator((key, countElements(left, right)))
+    }.collect().sortBy(_._1)
+    assert(emptyLeftResult === Array((2, (0, 1)), (3, (0, 1))))
+
+    // Empty right: all keys come from left, right iterator is always empty
+    val emptyRightResult = ds1.groupByKey(_._1).cogroup(emptyDs.groupByKey(_._1)) {
+      case (key, left, right) => Iterator((key, countElements(left, right)))
+    }.collect().sortBy(_._1)
+    assert(emptyRightResult === Array((1, (1, 0)), (2, (1, 0))))
+
+    // Both empty: result should be empty
+    val bothEmptyResult = emptyDs.groupByKey(_._1).cogroup(emptyDs2.groupByKey(_._1)) {
+      case (key, left, right) => Iterator((key, countElements(left, right)))
+    }.collect()
+    assert(bothEmptyResult.isEmpty)
+  }
+
   test("cogroup with groupBy and sorted") {
     val left = Seq(1 -> "a", 3 -> "xyz", 5 -> "hello", 3 -> "abc", 3 -> "ijk").toDS()
     val right = Seq(2 -> "q", 3 -> "w", 5 -> "x", 5 -> "z", 3 -> "a", 5 -> "y").toDS()
@@ -1009,7 +1096,7 @@ class DatasetSuite extends QueryTest
     assert(err.getMessage.contains("An Observation can be used with a Dataset only once"))
 
     // streaming datasets are not supported
-    val streamDf = new MemoryStream[Int](0, sqlContext).toDF()
+    val streamDf = new MemoryStream[Int](0, spark).toDF()
     val streamObservation = Observation("stream")
     val streamErr = intercept[IllegalArgumentException] {
       streamDf.observe(streamObservation, avg($"value").cast("int").as("avg_val"))
@@ -1070,6 +1157,24 @@ class DatasetSuite extends QueryTest
 
     assert(namedObservation1.get === expected1)
     assert(namedObservation2.get === expected2)
+  }
+
+  test("SPARK-55150: observation errors are thrown in Observation.get in classic mode") {
+    val observation = Observation("test_observation")
+    val observed_df = spark.range(10).observe(
+      observation,
+      sum($"id").as("sum_id"),
+      raise_error(lit("test error")).as("raise_error")
+    )
+
+    val actual = observed_df.collect()
+    assert(actual.toSeq === (0 until 10).map(_.toLong))
+
+    val exception = intercept[SparkRuntimeException] {
+      observation.get
+    }
+
+    assert(exception.getMessage.contains("test error"))
   }
 
   test("sample with replacement") {
@@ -1461,7 +1566,7 @@ class DatasetSuite extends QueryTest
     checkAnswer(df.map(row => row)(ExpressionEncoder(df.schema)).select("b", "a"), Row(2, 1))
   }
 
-  private def checkShowString[T](ds: Dataset[T], expected: String): Unit = {
+  private def checkShowString[T](ds: classic.Dataset[T], expected: String): Unit = {
     val numRows = expected.split("\n").length - 4
     val actual = ds.showString(numRows, truncate = 20)
 
@@ -1926,20 +2031,20 @@ class DatasetSuite extends QueryTest
       exception = intercept[SparkUnsupportedOperationException] {
         Seq(CircularReferenceClassA(null)).toDS()
       },
-      condition = "_LEGACY_ERROR_TEMP_2139",
-      parameters = Map("t" -> "org.apache.spark.sql.CircularReferenceClassA"))
+      condition = "CIRCULAR_CLASS_REFERENCE",
+      parameters = Map("t" -> "'org.apache.spark.sql.CircularReferenceClassA'"))
     checkError(
       exception = intercept[SparkUnsupportedOperationException] {
         Seq(CircularReferenceClassC(null)).toDS()
       },
-      condition = "_LEGACY_ERROR_TEMP_2139",
-      parameters = Map("t" -> "org.apache.spark.sql.CircularReferenceClassC"))
+      condition = "CIRCULAR_CLASS_REFERENCE",
+      parameters = Map("t" -> "'org.apache.spark.sql.CircularReferenceClassC'"))
     checkError(
       exception = intercept[SparkUnsupportedOperationException] {
         Seq(CircularReferenceClassD(null)).toDS()
       },
-      condition = "_LEGACY_ERROR_TEMP_2139",
-      parameters = Map("t" -> "org.apache.spark.sql.CircularReferenceClassD"))
+      condition = "CIRCULAR_CLASS_REFERENCE",
+      parameters = Map("t" -> "'org.apache.spark.sql.CircularReferenceClassD'"))
   }
 
   test("SPARK-20125: option of map") {
@@ -2326,6 +2431,11 @@ class DatasetSuite extends QueryTest
     assert(spark.range(1).map { _ => instant }.head() === instant)
   }
 
+  test("implicit encoder for LocalTime") {
+    val localTime = java.time.LocalTime.of(19, 30, 30)
+    assert(spark.range(1).map { _ => localTime }.head() === localTime)
+  }
+
   val dotColumnTestModes = Table(
     ("caseSensitive", "colName"),
     ("true", "field.1"),
@@ -2429,9 +2539,9 @@ class DatasetSuite extends QueryTest
   }
 
   test("SparkSession.active should be the same instance after dataset operations") {
-    val active = SparkSession.getActiveSession.get
+    val active = classic.SparkSession.getActiveSession.get
     val clone = active.cloneSession()
-    val ds = new Dataset(clone, spark.range(10).queryExecution.logical, Encoders.INT)
+    val ds = new classic.Dataset(clone, spark.range(10).queryExecution.logical, Encoders.INT)
 
     ds.queryExecution.analyzed
 
@@ -2778,6 +2888,21 @@ class DatasetSuite extends QueryTest
     }
   }
 
+  test("SPARK-51312: createDataFrame should work with both Date and LocalDate") {
+    for (confVal <- Seq("true", "false")) {
+      withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> confVal) {
+        val schema = new org.apache.spark.sql.types.StructType().add("a", "date").add("b", "date")
+        val rdd = spark.sparkContext.parallelize(
+          Seq(Row(java.time.LocalDate.of(2020, 5, 13), java.sql.Date.valueOf("2020-05-13")))
+        )
+        checkAnswer(
+          spark.createDataFrame(rdd, schema),
+          sql("select date'2020-05-13' as a, date'2020-05-13' as b")
+        )
+      }
+    }
+  }
+
   test("SPARK-46791: Dataset with set field") {
     val ds = Seq(WithSet(0, HashSet("foo", "bar")), WithSet(1, HashSet("bar", "zoo"))).toDS()
     checkDataset(ds.map(t => t),
@@ -2802,6 +2927,151 @@ class DatasetSuite extends QueryTest
       }
     }
   }
+
+  test("SPARK-49960: joinWith custom encoder") {
+    /*
+    test based on "joinWith class with primitive, toDF"
+    with "custom" encoder.  Removing the use of AgnosticExpressionPathEncoder
+    within SerializerBuildHelper and DeserializerBuildHelper will trigger MatchErrors
+     */
+    val ds1 = Seq(1, 1, 2).toDS()
+    val ds2 = spark.createDataset[ClassData](Seq(ClassData("a", 1),
+      ClassData("b", 2)))(CustomPathEncoder.custClassDataEnc)
+
+    checkAnswer(
+      ds1.joinWith(ds2, $"value" === $"b").toDF().select($"_1", $"_2.a", $"_2.b"),
+      Row(1, "a", 1) :: Row(1, "a", 1) :: Row(2, "b", 2) :: Nil)
+  }
+
+  test("SPARK-49961: transform type should be consistent (classic)") {
+    val ds = Seq(1, 2).toDS()
+    val f: classic.Dataset[Int] => classic.Dataset[Int] =
+      d => d.selectExpr("(value + 1) value").as[Int]
+    val transformed = ds.transform(f)
+    assert(transformed.collect().sorted === Array(2, 3))
+  }
+
+  test("SPARK-49961: transform type should be consistent (base to classic)") {
+    val ds = Seq(1, 2).toDS()
+    val f: Dataset[Int] => classic.Dataset[Int] =
+      d => d.selectExpr("(value + 1) value").as[Int]
+    val transformed = ds.transform(f)
+    assert(transformed.collect().sorted === Array(2, 3))
+  }
+
+  test("SPARK-49961: transform type should be consistent (as base)") {
+    val ds = Seq(1, 2).toDS().asInstanceOf[Dataset[Int]]
+    val f: Dataset[Int] => Dataset[Int] =
+      d => d.selectExpr("(value + 1) value").as[Int]
+    val transformed = ds.transform(f)
+    assert(transformed.collect().sorted === Array(2, 3))
+  }
+
+  test("SPARK-51070: array/seq/map of mutable set") {
+    val set: collection.Set[Int] = mutable.Set(1, 2)
+
+    implicit val arrayEncoder = ExpressionEncoder[Array[collection.Set[Int]]]()
+
+    val arrayMutableSet = Array(set)
+    val seqMutableSet = Seq(set)
+    val mapMutableSet = Map(1 -> set)
+
+    checkDataset(Seq(arrayMutableSet).toDS(), arrayMutableSet)
+    checkDataset(Seq(seqMutableSet).toDS(), seqMutableSet)
+    checkDataset(Seq(mapMutableSet).toDS(), mapMutableSet)
+  }
+
+  test("SPARK-54620: Observation should not blocking forever") {
+    val observation = Observation("row_count")
+
+    var df = Seq.empty[(Int, Int)].toDF("v1", "v2")
+    df = df.observe(observation,
+      functions.count(functions.lit(1)).alias("record_cnt"))
+    df = df.repartition($"v1")
+      .select($"v1" + 1 as "v1", $"v2" + 1 as "v2")
+      .join(
+        Seq((1, 2), (3, 4)).toDF("v1", "v2").repartition($"v2"),
+        Seq("v1"),
+        "inner")
+    df.collect()
+
+    val metrics = observation.get
+    assert(metrics.isEmpty)
+  }
+
+  test("zipWithIndex should append consecutive 0-based indices") {
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3), ("d", 4), ("e", 5)).toDS().repartition(3)
+    val result = ds.zipWithIndex()
+
+    // Index column should be the last column
+    assert(result.columns === Array("_1", "_2", "index"))
+    assert(result.schema.last.dataType === LongType)
+
+    // Indices should be consecutive 0-based
+    val indices = result.collect().map(_.getLong(2)).sorted
+    assert(indices === (0L until 5L).toArray)
+  }
+
+  test("zipWithIndex with custom column name") {
+    val ds = Seq(1, 2, 3, 4, 5).toDS()
+    val result = ds.zipWithIndex("row_num")
+
+    assert(result.columns === Array("value", "row_num"))
+    val indices = result.collect().map(_.getLong(1)).sorted
+    assert(indices === (0L until 5L).toArray)
+  }
+
+  test("zipWithIndex should throw AMBIGUOUS_REFERENCE when selecting duplicate column") {
+    val ds = Seq(("a", 1), ("b", 2)).toDF("_1", "index")
+    val result = ds.zipWithIndex() // Creates df with two "index" columns
+    val ex = intercept[AnalysisException] {
+      result.select("index").collect()
+    }
+    assert(ex.getCondition == "AMBIGUOUS_REFERENCE")
+  }
+
+  test("zipWithIndex should throw COLUMN_ALREADY_EXISTS when writing duplicate columns") {
+    val ds = Seq(("a", 1), ("b", 2)).toDF("_1", "index")
+    val result = ds.zipWithIndex() // Creates df with two "index" columns
+    withTempPath { path =>
+      val ex = intercept[AnalysisException] {
+        result.write.parquet(path.getAbsolutePath)
+      }
+      assert(ex.getCondition == "COLUMN_ALREADY_EXISTS")
+    }
+  }
+}
+
+/**
+ * SPARK-49960 - Mimic a custom encoder such as those provided by typelevel Frameless
+ */
+object CustomPathEncoder {
+
+  val realClassDataEnc: ProductEncoder[ClassData] =
+    Encoders.product[ClassData].asInstanceOf[ProductEncoder[ClassData]]
+
+  val custStringEnc: AgnosticExpressionPathEncoder[String] =
+    new AgnosticExpressionPathEncoder[String] {
+
+      override def toCatalyst(input: Expression): Expression =
+        createSerializerForString(input)
+
+      override def fromCatalyst(inputPath: Expression): Expression =
+        createDeserializerForString(inputPath, returnNullable = false)
+
+      override def isPrimitive: Boolean = false
+
+      override def dataType: DataType = StringType
+
+      override def clsTag: ClassTag[String] = implicitly[ClassTag[String]]
+
+      override def isStruct: Boolean = true
+    }
+
+  val custClassDataEnc: ProductEncoder[ClassData] = realClassDataEnc.copy(fields =
+    Seq(realClassDataEnc.fields.head.copy(enc = custStringEnc),
+      realClassDataEnc.fields.last)
+  )
 }
 
 class DatasetLargeResultCollectingSuite extends QueryTest
@@ -2922,7 +3192,7 @@ object JavaData {
 
 /** Used to test importing dataset.spark.implicits._ */
 object DatasetTransform {
-  def addOne(ds: Dataset[Int]): Dataset[Int] = {
+  def addOne(ds: classic.Dataset[Int]): Dataset[Int] = {
     import ds.sparkSession.implicits._
     ds.map(_ + 1)
   }

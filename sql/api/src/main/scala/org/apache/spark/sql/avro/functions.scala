@@ -94,4 +94,32 @@ object functions {
   def to_avro(data: Column, jsonFormatSchema: String): Column = {
     Column.fn("to_avro", data, lit(jsonFormatSchema))
   }
+
+  /**
+   * Returns schema in the DDL format of the avro schema in JSON string format.
+   *
+   * @param jsonFormatSchema
+   *   the avro schema in JSON string format.
+   *
+   * @since 4.0.0
+   */
+  @Experimental
+  def schema_of_avro(jsonFormatSchema: String): Column = {
+    Column.fn("schema_of_avro", lit(jsonFormatSchema))
+  }
+
+  /**
+   * Returns schema in the DDL format of the avro schema in JSON string format.
+   *
+   * @param jsonFormatSchema
+   *   the avro schema in JSON string format.
+   * @param options
+   *   options to control how the Avro record is parsed.
+   *
+   * @since 4.0.0
+   */
+  @Experimental
+  def schema_of_avro(jsonFormatSchema: String, options: java.util.Map[String, String]): Column = {
+    Column.fnWithOptions("schema_of_avro", options.asScala.iterator, lit(jsonFormatSchema))
+  }
 }

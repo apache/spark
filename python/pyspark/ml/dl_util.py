@@ -27,7 +27,7 @@ class FunctionPickler:
     This class provides a way to pickle a function and its arguments.
     It also provides a way to create a script that can run a
     function with arguments if they have them pickled to a file.
-    It also provides a way of extracting the conents of a pickle file.
+    It also provides a way of extracting the contents of a pickle file.
     """
 
     @staticmethod
@@ -108,8 +108,7 @@ class FunctionPickler:
             The path to the location of the newly created pytorch file.
         """
 
-        code_snippet = textwrap.dedent(
-            f"""
+        code_snippet = textwrap.dedent(f"""
                     from pyspark import cloudpickle
                     import os
 
@@ -119,8 +118,7 @@ class FunctionPickler:
                         output = fn(*args, **kwargs)
                         with open("{fn_output_path}", "wb") as f:
                             cloudpickle.dump(output, f)
-                    """
-        )
+                    """)
         with open(script_path, "w") as f:
             if prefix_code != "":
                 f.write(prefix_code)

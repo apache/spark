@@ -42,15 +42,11 @@ class DataFrameCollectionParityTests(
     def test_to_pandas_from_mixed_dataframe(self):
         self.check_to_pandas_from_mixed_dataframe()
 
+    def test_to_pandas_for_empty_df_with_nested_array_columns(self):
+        self.check_to_pandas_for_empty_df_with_nested_array_columns()
+
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.sql.tests.connect.test_parity_collection import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

@@ -30,7 +30,8 @@ class ArrowUtilsSuite extends SparkFunSuite {
   def roundtrip(dt: DataType): Unit = {
     dt match {
       case schema: StructType =>
-        assert(ArrowUtils.fromArrowSchema(ArrowUtils.toArrowSchema(schema, null, true)) === schema)
+        assert(ArrowUtils.fromArrowSchema(
+          ArrowUtils.toArrowSchema(schema, null, true, false)) === schema)
       case _ =>
         roundtrip(new StructType().add("value", dt))
     }
@@ -48,6 +49,10 @@ class ArrowUtilsSuite extends SparkFunSuite {
     roundtrip(BinaryType)
     roundtrip(DecimalType.SYSTEM_DEFAULT)
     roundtrip(DateType)
+    roundtrip(GeometryType("ANY"))
+    roundtrip(GeometryType(4326))
+    roundtrip(GeographyType("ANY"))
+    roundtrip(GeographyType(4326))
     roundtrip(YearMonthIntervalType())
     roundtrip(DayTimeIntervalType())
     checkError(
@@ -69,7 +74,7 @@ class ArrowUtilsSuite extends SparkFunSuite {
 
     def roundtripWithTz(timeZoneId: String): Unit = {
       val schema = new StructType().add("value", TimestampType)
-      val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId, true)
+      val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId, true, false)
       val fieldType = arrowSchema.findField("value").getType.asInstanceOf[ArrowType.Timestamp]
       assert(fieldType.getTimezone() === timeZoneId)
       assert(ArrowUtils.fromArrowSchema(arrowSchema) === schema)
@@ -100,14 +105,63 @@ class ArrowUtilsSuite extends SparkFunSuite {
       new StructType().add("i", IntegerType).add("arr", ArrayType(IntegerType))))
   }
 
+  test("metadata should be kept after roundtrip") {
+    roundtrip(new StructType()
+      .add("i", IntegerType, true, Metadata.empty)
+      .add("j", LongType, true,
+        new MetadataBuilder()
+          .putLong("a", Long.MaxValue).putString("city", "beijing").build())
+    )
+
+    roundtrip(new StructType()
+      .add("v", VariantType, true,
+        new MetadataBuilder()
+          .putDouble("a", 1.234).putBoolean("is_geo?", false).build())
+      .add("i", GeometryType("ANY"), false,
+        new MetadataBuilder()
+          .putLongArray("list", Array(1, 2, 3)).putString("is_geo?", "true").build())
+      .add("i", GeographyType("ANY"), false,
+        new MetadataBuilder()
+          .putStringArray("list", Array("x", "y")).putString("is_geo?", "true").build())
+    )
+
+    roundtrip(new StructType()
+      .add("arr", ArrayType(IntegerType), false,
+        new MetadataBuilder()
+          .putBoolean("is_array?", true).putString("old_name", "old_arr").build())
+      .add("map", MapType(LongType, StringType), false,
+        new MetadataBuilder()
+          .putBoolean("is_array?", false).putString("old_name", "old_map").build())
+      .add("struct",
+        new StructType()
+          .add("s", IntegerType, true,
+            new MetadataBuilder()
+              .putDouble("pi", 3.14)
+              .putString("what type", "struct").build()),
+        false,
+        new MetadataBuilder()
+          .putBoolean("is_array?", false).putString("old_name", "old_map").build())
+      .add("3_dim_array",
+        ArrayType(ArrayType(ArrayType(new StructType()
+          .add("i", IntegerType, true,
+            new MetadataBuilder().putLong("v", 1).putString("type", "data point").build())
+          .add("c", StringType, false,
+            new MetadataBuilder()
+              .putLong("v", 1).putString("city", "singapore").build())))),
+        true,
+        new MetadataBuilder()
+          .putBoolean("is_nested_array?", true).putString("dims", "x-y-z").build())
+    )
+  }
+
   test("struct with duplicated field names") {
 
     def check(dt: DataType, expected: DataType): Unit = {
       val schema = new StructType().add("value", dt)
       intercept[SparkUnsupportedOperationException] {
-        ArrowUtils.toArrowSchema(schema, null, true)
+        ArrowUtils.toArrowSchema(schema, null, true, false)
       }
-      assert(ArrowUtils.fromArrowSchema(ArrowUtils.toArrowSchema(schema, null, false))
+      assert(ArrowUtils.fromArrowSchema(ArrowUtils.toArrowSchema(schema, null, false, false))
         === new StructType().add("value", expected))
     }
 

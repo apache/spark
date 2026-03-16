@@ -154,7 +154,7 @@ class _DecisionTreeParams(HasCheckpointInterval, HasSeed, HasWeightCol):
     )
 
     def __init__(self) -> None:
-        super(_DecisionTreeParams, self).__init__()
+        super().__init__()
 
     def setLeafCol(self: "P", value: str) -> "P":
         """
@@ -234,7 +234,7 @@ class _TreeEnsembleModel(JavaPredictionModel[T]):
     @since("1.5.0")
     def treeWeights(self) -> List[float]:
         """Return the weights for each tree"""
-        return list(self._call_java("javaTreeWeights"))
+        return list(self._call_java("treeWeights"))
 
     @property
     @since("2.0.0")
@@ -285,7 +285,7 @@ class _TreeEnsembleParams(_DecisionTreeParams):
     )
 
     def __init__(self) -> None:
-        super(_TreeEnsembleParams, self).__init__()
+        super().__init__()
 
     @since("1.4.0")
     def getSubsamplingRate(self) -> float:
@@ -322,7 +322,7 @@ class _RandomForestParams(_TreeEnsembleParams):
     )
 
     def __init__(self) -> None:
-        super(_RandomForestParams, self).__init__()
+        super().__init__()
 
     @since("1.4.0")
     def getNumTrees(self) -> int:
@@ -387,7 +387,7 @@ class _HasVarianceImpurity(Params):
     )
 
     def __init__(self) -> None:
-        super(_HasVarianceImpurity, self).__init__()
+        super().__init__()
 
     @since("1.4.0")
     def getImpurity(self) -> str:
@@ -416,7 +416,7 @@ class _TreeClassifierParams(Params):
     )
 
     def __init__(self) -> None:
-        super(_TreeClassifierParams, self).__init__()
+        super().__init__()
 
     @since("1.6.0")
     def getImpurity(self) -> str:

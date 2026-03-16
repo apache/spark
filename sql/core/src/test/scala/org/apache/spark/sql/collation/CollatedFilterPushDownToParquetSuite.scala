@@ -43,7 +43,7 @@ abstract class CollatedFilterPushDownToParquetSuite extends QueryTest
   val collatedStructNestedCol = "f1"
   val collatedStructFieldAccess = s"$collatedStructCol.$collatedStructNestedCol"
   val collatedArrayCol = "c3"
-  val collatedMapCol = "c4"
+  val nonCollatedMapCol = "c4"
 
   val lcaseCollation = "'UTF8_LCASE'"
 
@@ -69,7 +69,7 @@ abstract class CollatedFilterPushDownToParquetSuite extends QueryTest
            |  named_struct('$collatedStructNestedCol',
            |    COLLATE(c, $lcaseCollation)) as $collatedStructCol,
            |  array(COLLATE(c, $lcaseCollation)) as $collatedArrayCol,
-           |  map(COLLATE(c, $lcaseCollation), 1) as $collatedMapCol
+           |  map(c, 1) as $nonCollatedMapCol
            |FROM VALUES ('aaa'), ('AAA'), ('bbb')
            |as data(c)
            |""".stripMargin)
@@ -215,9 +215,9 @@ abstract class CollatedFilterPushDownToParquetSuite extends QueryTest
 
   test("map - parquet does not support null check on complex types") {
     testPushDown(
-      filterString = s"map_keys($collatedMapCol) != array(collate('aaa', $lcaseCollation))",
+      filterString = s"map_keys($nonCollatedMapCol) != array('aaa')",
       expectedPushedFilters = Seq.empty,
-      expectedRowCount = 1)
+      expectedRowCount = 2)
   }
 }
 

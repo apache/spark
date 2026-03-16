@@ -35,7 +35,7 @@ UT = TypeVar("UT", bound="DistributedMatrix")
 VT = TypeVar("VT", bound="Matrix")
 
 if TYPE_CHECKING:
-    from pyspark.ml._typing import VectorLike
+    from pyspark.mllib._typing import VectorLike
 
 __all__ = [
     "BlockMatrix",
@@ -1652,7 +1652,7 @@ def _test() -> None:
     )
     globs["sc"] = spark.sparkContext
     globs["Matrices"] = Matrices
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    failure_count, test_count = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:
         sys.exit(-1)

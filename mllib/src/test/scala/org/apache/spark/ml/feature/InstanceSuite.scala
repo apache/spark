@@ -21,6 +21,7 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.serializer.KryoSerializer
+import org.apache.spark.util.collection.Utils.createArray
 
 class InstanceSuite extends SparkFunSuite {
   test("Kryo class register") {
@@ -98,7 +99,7 @@ class InstanceSuite extends SparkFunSuite {
     }
 
     // instances larger than maxMemUsage
-    val denseInstance = Instance(-1.0, 2.0, Vectors.dense(Array.fill(1000)(1.0)))
+    val denseInstance = Instance(-1.0, 2.0, Vectors.dense(createArray(1000, 1.0)))
     InstanceBlock.blokifyWithMaxMemUsage(Iterator.single(denseInstance), 64).size
     InstanceBlock.blokifyWithMaxMemUsage(Iterator.fill(10)(denseInstance), 64).size
 
@@ -109,7 +110,7 @@ class InstanceSuite extends SparkFunSuite {
 
     // nnz = 10
     val sparseInstance = Instance(-2.0, 3.0,
-      Vectors.sparse(1000, Array.range(0, 1000, 100), Array.fill(10)(0.1)))
+      Vectors.sparse(1000, Array.range(0, 1000, 100), createArray(10, 0.1)))
 
     // normally, memory usage of a block does not exceed maxMemUsage too much
     val maxMemUsage = 1 << 18

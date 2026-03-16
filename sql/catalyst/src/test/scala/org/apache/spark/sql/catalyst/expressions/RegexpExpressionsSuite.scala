@@ -153,6 +153,25 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkLiteralRow("a\u20ACa" like _, "_€_", true)
     // scalastyle:on nonascii
 
+    // multi-byte UTF-8 characters
+    // scalastyle:off nonascii
+    checkLiteralRow("😀😇🥑" like _, "%🥑", true)
+    checkLiteralRow("😀😇🥑" like _, "😀%", true)
+    checkLiteralRow("😀😇🥑" like _, "😀_🥑", true)
+    checkLiteralRow("😀" like _, "😀", true)
+    checkLiteralRow("😀" like _, "_", true)
+    checkLiteralRow("😀😇🥑" like _, "___", true)
+    checkLiteralRow("😀😇🥑" like _, "__", false)
+    checkLiteralRow("😀😇🥑" like _, "____", false)
+    checkLiteralRow("a😀b" like _, "a_b", true)
+    checkLiteralRow("😀😇🥑" like _, "😀😇🥑", true)
+    checkLiteralRow("😀😇🥑" like _, "😀😇🥒", false)
+    checkLiteralRow("😀🥑" like _, "😀%🥑", true)
+    checkLiteralRow("😀abc🥑" like _, "😀%🥑", true)
+    checkLiteralRow("😀😇🥑" like _, "😀%🥑", true)
+    checkLiteralRow("🥑" like _, "😀%🥑", false)
+    // scalastyle:on nonascii
+
     // invalid escaping
     checkError(
       exception = intercept[AnalysisException] {
@@ -564,7 +583,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       StringSplit(Literal("hello"), Literal(""), 5), Seq("h", "e", "l", "l", "o"), row1)
     checkEvaluation(
-      StringSplit(Literal("hello"), Literal(""), 3), Seq("h", "e", "l"), row1)
+      StringSplit(Literal("hello"), Literal(""), 3), Seq("h", "e", "llo"), row1)
     checkEvaluation(
       StringSplit(Literal("hello"), Literal(""), 100), Seq("h", "e", "l", "l", "o"), row1)
     checkEvaluation(

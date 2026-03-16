@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 import java.sql.Timestamp
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions.{count, expr, lit, timestamp_seconds, window}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -458,11 +458,11 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
       withTempView("tv1", "tv2") {
         val inputStream1 = MemoryStream[Int]
         val ds1 = inputStream1.toDS()
-        ds1.registerTempTable("tv1")
+        ds1.createOrReplaceTempView("tv1")
 
         val inputStream2 = MemoryStream[Int]
         val ds2 = inputStream2.toDS()
-        ds2.registerTempTable("tv2")
+        ds2.createOrReplaceTempView("tv2")
 
         // DISTINCT is rewritten to AGGREGATE, hence an AGGREGATEs for each source
         val unioned = spark.sql(

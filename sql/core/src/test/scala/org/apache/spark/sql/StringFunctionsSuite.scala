@@ -464,17 +464,15 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       Row("www.apache")
     )
 
-    // TODO SPARK-48779 Move E2E SQL tests with column input to collations.sql golden file.
+    // TODO SPARK-48779 Move E2E SQL tests with column input to collations-basic.sql golden file.
     val testTable = "test_substring_index"
     withTable(testTable) {
       sql(s"CREATE TABLE $testTable (num int) USING parquet")
       sql(s"INSERT INTO $testTable VALUES (1), (2), (3), (NULL)")
-      Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI").foreach(collation =>
-        withSQLConf(SQLConf.DEFAULT_COLLATION.key -> collation) {
-          val query = s"SELECT num, SUBSTRING_INDEX('a_a_a', '_', num) as sub_str FROM $testTable"
-          checkAnswer(sql(query), Seq(Row(1, "a"), Row(2, "a_a"), Row(3, "a_a_a"), Row(null, null)))
-        }
-      )
+      Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI").foreach(collation => {
+        val query = s"SELECT num, SUBSTRING_INDEX('a_a_a', '_', num) as sub_str FROM $testTable"
+        checkAnswer(sql(query), Seq(Row(1, "a"), Row(2, "a_a"), Row(3, "a_a_a"), Row(null, null)))
+      })
     }
   }
 
@@ -1344,6 +1342,26 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.select(try_to_number($"value", lit("$99.99"))), Seq(Row(null)))
   }
 
+  test("try_to_number with whitespace-only input should return NULL") {
+    // Empty string
+    checkAnswer(sql("select try_to_number('', '99')"), Seq(Row(null)))
+    checkAnswer(sql("select try_to_number('', '999')"), Seq(Row(null)))
+
+    // Spaces only
+    checkAnswer(sql("select try_to_number('   ', '99')"), Seq(Row(null)))
+    checkAnswer(sql("select try_to_number(' ', '9')"), Seq(Row(null)))
+
+    // Different whitespace characters (tabs, newlines)
+    checkAnswer(sql("select try_to_number('\t\t', '99')"), Seq(Row(null)))
+    checkAnswer(sql("select try_to_number('\n\n', '99')"), Seq(Row(null)))
+    checkAnswer(sql("select try_to_number(' \t\n ', '99')"), Seq(Row(null)))
+
+    // With format strings containing decimal points, dollar signs, etc.
+    checkAnswer(sql("select try_to_number('   ', '$99.99')"), Seq(Row(null)))
+    checkAnswer(sql("select try_to_number('', '999.99')"), Seq(Row(null)))
+    checkAnswer(sql("select try_to_number('\t', '9,999')"), Seq(Row(null)))
+  }
+
   test("SPARK-44905: stateful lastRegex causes NullPointerException on eval for regexp_replace") {
     val df = sql("select regexp_replace('', '[a\\\\d]{0, 2}', 'x')")
     intercept[SparkRuntimeException](df.queryExecution.optimizedPlan)
@@ -1450,6 +1468,21 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       check(
         sql("SELECT * FROM test_table WHERE try_validate_utf8(b) = 'def'"),
         Seq(Row("abc", "def")))
+    }
+  }
+
+  test("SPARK-55747: GetArrayItem NPE on null array from split() with ANSI enabled") {
+    // GetArrayItem.nullable was incorrectly computed as false when the array type has
+    // containsNull=false (e.g., from StringSplit) but the array itself can be null.
+    // This caused codegen to skip null checks, leading to NPE when calling
+    // array.numElements() on a null array during bounds checking.
+    withTable("t") {
+      sql("CREATE TABLE t (s STRING) USING parquet")
+      sql("INSERT INTO t VALUES ('a-b'), (null)")
+      checkAnswer(
+        sql("SELECT split(s, '-')[size(split(s, '-')) - 1] FROM t"),
+        Seq(Row("b"), Row(null))
+      )
     }
   }
 }

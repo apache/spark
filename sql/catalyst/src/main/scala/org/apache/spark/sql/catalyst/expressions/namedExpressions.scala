@@ -22,12 +22,14 @@ import java.util.{Objects, UUID}
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.analysis.resolver.ResolverTag
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
-import org.apache.spark.sql.catalyst.trees.TreePattern
+import org.apache.spark.sql.catalyst.trees.{TreeNodeTag, TreePattern}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, METADATA_COL_ATTR_KEY}
+import org.apache.spark.sql.connector.catalog.MetadataColumn
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.BitSet
 import org.apache.spark.util.collection.ImmutableBitSet
@@ -191,6 +193,14 @@ case class Alias(child: Expression, name: String)(
       explicitMetadata = explicitMetadata,
       nonInheritableMetadataKeys = nonInheritableMetadataKeys)
 
+  def withExprId(newExprId: ExprId): Alias = {
+    if (exprId == newExprId) {
+      this
+    } else {
+      Alias(child, name)(newExprId, qualifier, explicitMetadata, nonInheritableMetadataKeys)
+    }
+  }
+
   override def toAttribute: Attribute = {
     if (resolved) {
       AttributeReference(name, child.dataType, child.nullable, metadata)(exprId, qualifier)
@@ -243,6 +253,11 @@ case class Alias(child: Expression, name: String)(
     val qualifierPrefix =
       if (qualifier.nonEmpty) qualifier.map(quoteIfNeeded).mkString(".") + "." else ""
     s"${child.sql} AS $qualifierPrefix${quoteIfNeeded(name)}"
+  }
+
+  // Copying this alias with a new child expression.
+  def withNewChild(newChild: Expression): Alias = {
+    withNewChildInternal(newChild)
   }
 
   override protected def withNewChildInternal(newChild: Expression): Alias =
@@ -401,7 +416,21 @@ case class PrettyAttribute(
   })
 
   override def toString: String = name
-  override def sql: String = toString
+  override def sql: String = {
+    if (containsTag(ResolverTag.SINGLE_PASS_IS_LCA)) {
+      // For a query like:
+      //
+      // {{{ select 1 as a, a + 1 }}}
+      //
+      // the output schema will be: [a: int, lateralAliasReference(a): int]
+      //
+      // With current alias resolution single-pass cannot reproduce this behavior, therefore we
+      // need to explicitly assign this name if the attribute is an LCA.
+      s"lateralAliasReference($toString)"
+    } else {
+      toString
+    }
+  }
 
   override def withNullability(newNullability: Boolean): Attribute =
     throw SparkUnsupportedOperationException()
@@ -434,13 +463,42 @@ case class OuterReference(e: NamedExpression)
   override def nullable: Boolean = e.nullable
   override def prettyName: String = "outer"
 
-  override def sql: String = s"$prettyName(${e.sql})"
+  override def sql: String =
+    getTagValue(OuterReference.SINGLE_PASS_SQL_STRING_OVERRIDE) match {
+      case Some(name) =>
+        name
+      case None =>
+        s"$prettyName(${e.sql})"
+    }
   override def name: String = e.name
   override def qualifier: Seq[String] = e.qualifier
   override def exprId: ExprId = e.exprId
   override def toAttribute: Attribute = e.toAttribute
   override def newInstance(): NamedExpression = OuterReference(e.newInstance())
   final override val nodePatterns: Seq[TreePattern] = Seq(OUTER_REFERENCE)
+}
+
+/**
+ * A place holder used to hold a reference that has been resolved to a field outside of the subquery
+ * plan. We use it only for queries containing nested correlation and only in the
+ * SubqueryExpression#outerAttrs to indicate that the correlated columns referenced by
+ * this subquery expression are from the outer scopes, not the subquery plan or
+ * the immediate outer plan of the subquery plan. For example,
+ * SubqueryExpression(outerAttrs=[OuterScopeReference(a)] means a cannot be resolved by the
+ * SubqueryExpression.plan or the plan holding this SubqueryExpression.
+ */
+case class OuterScopeReference(e: NamedExpression)
+  extends LeafExpression with NamedExpression with Unevaluable {
+  override def dataType: DataType = e.dataType
+  override def nullable: Boolean = e.nullable
+  override def prettyName: String = "outerScope"
+
+  override def sql: String = s"$prettyName(${e.sql})"
+  override def name: String = e.name
+  override def qualifier: Seq[String] = e.qualifier
+  override def exprId: ExprId = e.exprId
+  override def toAttribute: Attribute = e.toAttribute
+  override def newInstance(): NamedExpression = OuterScopeReference(e.newInstance())
 }
 
 /**
@@ -478,6 +536,67 @@ case class LateralColumnAliasReference(ne: NamedExpression, nameParts: Seq[Strin
   final override val nodePatterns: Seq[TreePattern] = Seq(LATERAL_COLUMN_ALIAS_REFERENCE)
 }
 
+object OuterReference {
+
+  /**
+   * In fixed-point [[OuterReference]] is extracted in [[UpdateOuterReferences]] which is invoked
+   * after the alias assignment ([[ResolveAliases]]) which is opposite of how it is done in the
+   * single-pass implementation (first we extract the [[OuterReference]] and then assign the name -
+   * in bottom-up manner).
+   *
+   * For example, for a query like:
+   * {{{
+   *  SELECT col1 AS alias
+   *  FROM values(1)
+   *  GROUP BY col1
+   *  HAVING (
+   *    SELECT col1 = 1
+   *  )
+   * }}}
+   *
+   * Fixed-point analyzer will output:
+   *
+   * Filter cast(scalar-subquery#x [alias#x] as boolean)
+   * :  +- Project [(outer(alias#x) = 1) AS (outer(col1) = 1)#x]
+   * :     +- OneRowRelation
+   * +- Aggregate [col1#x], [col1#x AS alias#x]
+   *    +- LocalRelation [col1#x]
+   *
+   * Notice that the expression in the subquery is `(outer(alias#x) = 1) AS (outer(col1) = 1)`.
+   * This is because the initial underlying expression is `outer(col1) = 1` which we alias, but
+   * we later update the actual outer reference to `outer(alias)`.
+   */
+  val SINGLE_PASS_SQL_STRING_OVERRIDE =
+    TreeNodeTag[String]("single_pass_sql_string_override")
+
+  /**
+   * In fixed-point [[OuterReference]] is extracted in [[UpdateOuterReferences]] which is invoked
+   * after the alias assignment ([[ResolveAliases]]) which is opposite of how it is done in the
+   * single-pass implementation (first we extract the [[OuterReference]] and then assign the name -
+   * in bottom-up manner).
+   *
+   * For example, in a query like:
+   * {{{
+   *   SELECT t1a
+   *   FROM t1
+   *   WHERE t1a IN (
+   *                 SELECT t2a
+   *                 FROM t2
+   *                 WHERE EXISTS (SELECT min(t2a) FROM t3)
+   *                 )
+   * }}}
+   *
+   * In the subquery, the `min(t2c)` expression is going to be resolved to `outer(min(t2c))`. In
+   * fixed-point analyzer, the alias of this expression will be `min(outer(t2c))`, because alias
+   * resolution is triggered before [[UpdateOuterReference]]. However, in single-pass analyzer, we
+   * first resolve the expression to `outer(min(t2c))` and then assign an alias name. This causes
+   * inconsistencies between analyzer results. In order to mitigate this issue, we save the alias
+   * name before updating outer reference.
+   */
+  val SINGLE_PASS_OUTER_AGGREGATE_ALIAS_NAME_OVERRIDE =
+    TreeNodeTag[String]("single_pass_outer_aggregate_alias_name_override")
+}
+
 object VirtualColumn {
   // The attribute name used by Hive, which has different result than Spark, deprecated.
   val hiveGroupingIdName: String = "grouping__id"
@@ -503,8 +622,41 @@ object MetadataAttribute {
     .putString(METADATA_COL_ATTR_KEY, name)
     .build()
 
+  def metadata(col: MetadataColumn): Metadata = {
+    val builder = new MetadataBuilder()
+    if (col.metadataInJSON != null) {
+      builder.withMetadata(Metadata.fromJson(col.metadataInJSON))
+    }
+    builder.putString(METADATA_COL_ATTR_KEY, col.name)
+    builder.build()
+  }
+
   def isValid(metadata: Metadata): Boolean =
     metadata.contains(METADATA_COL_ATTR_KEY)
+
+  def isPreservedOnDelete(attr: Attribute): Boolean = {
+    if (attr.metadata.contains(MetadataColumn.PRESERVE_ON_DELETE)) {
+      attr.metadata.getBoolean(MetadataColumn.PRESERVE_ON_DELETE)
+    } else {
+      MetadataColumn.PRESERVE_ON_DELETE_DEFAULT
+    }
+  }
+
+  def isPreservedOnUpdate(attr: Attribute): Boolean = {
+    if (attr.metadata.contains(MetadataColumn.PRESERVE_ON_UPDATE)) {
+      attr.metadata.getBoolean(MetadataColumn.PRESERVE_ON_UPDATE)
+    } else {
+      MetadataColumn.PRESERVE_ON_UPDATE_DEFAULT
+    }
+  }
+
+  def isPreservedOnReinsert(attr: Attribute): Boolean = {
+    if (attr.metadata.contains(MetadataColumn.PRESERVE_ON_REINSERT)) {
+      attr.metadata.getBoolean(MetadataColumn.PRESERVE_ON_REINSERT)
+    } else {
+      MetadataColumn.PRESERVE_ON_REINSERT_DEFAULT
+    }
+  }
 }
 
 /**

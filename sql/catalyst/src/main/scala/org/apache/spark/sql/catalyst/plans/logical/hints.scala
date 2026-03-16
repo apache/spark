@@ -199,6 +199,10 @@ case object NO_BROADCAST_AND_REPLICATION extends JoinStrategyHint {
 
 abstract class AggregateHint;
 
+abstract class WindowHint;
+
+abstract class SortHint;
+
 /**
  * The callback for implementing customized strategies of handling hint errors.
  */
@@ -209,7 +213,7 @@ trait HintErrorHandler {
    * @param name the unrecognized hint name
    * @param parameters the hint parameters
    */
-  def hintNotRecognized(name: String, parameters: Seq[Any]): Unit
+  def hintNotRecognized(name: String, parameters: Seq[Expression]): Unit
 
   /**
    * Callback for relation names specified in a hint that cannot be associated with any relation

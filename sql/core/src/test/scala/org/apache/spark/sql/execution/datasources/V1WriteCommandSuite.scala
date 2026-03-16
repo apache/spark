@@ -22,13 +22,14 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference,
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Sort}
 import org.apache.spark.sql.execution.{QueryExecution, SortExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types.{IntegerType, StringType}
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.tags.SlowSQLTest
 
-trait V1WriteCommandSuiteBase extends SQLTestUtils {
+trait V1WriteCommandSuiteBase extends SQLTestUtils with AdaptiveSparkPlanHelper {
 
   import testImplicits._
 
@@ -62,10 +63,23 @@ trait V1WriteCommandSuiteBase extends SQLTestUtils {
       hasLogicalSort: Boolean,
       orderingMatched: Boolean,
       hasEmpty2Null: Boolean = false)(query: => Unit): Unit = {
-    var optimizedPlan: LogicalPlan = null
+    executeAndCheckOrderingAndCustomValidate(
+      hasLogicalSort, Some(orderingMatched), hasEmpty2Null)(query)(_ => ())
+  }
+
+  /**
+   * Execute a write query and check ordering of the plan, then do custom validation
+   */
+  protected def executeAndCheckOrderingAndCustomValidate(
+      hasLogicalSort: Boolean,
+      orderingMatched: Option[Boolean],
+      hasEmpty2Null: Boolean = false)(query: => Unit)(
+      customValidate: LogicalPlan => Unit): Unit = {
+    @volatile var optimizedPlan: LogicalPlan = null
 
     val listener = new QueryExecutionListener {
       override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
+        val conf = qe.sparkSession.sessionState.conf
         qe.optimizedPlan match {
           case w: V1WriteCommand =>
             if (hasLogicalSort && conf.getConf(SQLConf.PLANNED_WRITE_ENABLED)) {
@@ -84,9 +98,12 @@ trait V1WriteCommandSuiteBase extends SQLTestUtils {
 
     query
 
-    // Check whether the output ordering is matched before FileFormatWriter executes rdd.
-    assert(FileFormatWriter.outputOrderingMatched == orderingMatched,
-      s"Expect: $orderingMatched, Actual: ${FileFormatWriter.outputOrderingMatched}")
+    orderingMatched.foreach { matched =>
+      // Check whether the output ordering is matched before FileFormatWriter executes rdd.
+      assert(FileFormatWriter.outputOrderingMatched == matched,
+        s"Expect orderingMatched: $matched, " +
+          s"Actual: ${FileFormatWriter.outputOrderingMatched}")
+    }
 
     sparkContext.listenerBus.waitUntilEmpty()
 
@@ -101,6 +118,8 @@ trait V1WriteCommandSuiteBase extends SQLTestUtils {
     val empty2nullExpr = optimizedPlan.exists(p => V1WritesUtils.hasEmptyToNull(p.expressions))
     assert(empty2nullExpr == hasEmpty2Null,
       s"Expect hasEmpty2Null: $hasEmpty2Null, Actual: $empty2nullExpr. Plan:\n$optimizedPlan")
+
+    customValidate(optimizedPlan)
 
     spark.listenerManager.unregister(listener)
   }
@@ -218,7 +237,7 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
             executedPlan.asInstanceOf[WriteFilesExecBase].child
           } else {
             executedPlan.transformDown {
-              case a: AdaptiveSparkPlanExec => a.executedPlan
+              case a: AdaptiveSparkPlanExec => stripAQEPlan(a)
             }
           }
 
@@ -265,7 +284,7 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
           executedPlan.asInstanceOf[WriteFilesExecBase].child
         } else {
           executedPlan.transformDown {
-            case a: AdaptiveSparkPlanExec => a.executedPlan
+            case a: AdaptiveSparkPlanExec => stripAQEPlan(a)
           }
         }
 
@@ -386,6 +405,35 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
               |SELECT SUM(i) AS i, SUM(j) AS j, k
               |FROM t0 WHERE i > 0 GROUP BY k
               |""".stripMargin)
+        }
+      }
+    }
+  }
+
+  test("v1 write with sort by literal column preserve custom order") {
+    withPlannedWrite { enabled =>
+      withTable("t") {
+        sql(
+          """
+            |CREATE TABLE t(i INT, j INT, k STRING) USING PARQUET
+            |PARTITIONED BY (k)
+            |""".stripMargin)
+        // Skip checking orderingMatched temporarily to avoid touching `FileFormatWriter`,
+        // see details at https://github.com/apache/spark/pull/52584#issuecomment-3407716019
+        executeAndCheckOrderingAndCustomValidate(
+          hasLogicalSort = true, orderingMatched = None) {
+          sql(
+            """
+              |INSERT OVERWRITE t
+              |SELECT i, j, '0' as k FROM t0 SORT BY k, i
+              |""".stripMargin)
+        } { optimizedPlan =>
+          assert {
+            optimizedPlan.outputOrdering.exists {
+              case SortOrder(attr: AttributeReference, _, _, _) => attr.name == "i"
+              case _ => false
+            }
+          }
         }
       }
     }

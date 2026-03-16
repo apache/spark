@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.execution.FileRelation
+import org.apache.spark.sql.internal.SessionStateHelper
 import org.apache.spark.sql.sources.{BaseRelation, DataSourceRegister}
 import org.apache.spark.sql.types.{StructField, StructType}
 
@@ -46,7 +47,7 @@ case class HadoopFsRelation(
     bucketSpec: Option[BucketSpec],
     fileFormat: FileFormat,
     options: Map[String, String])(val sparkSession: SparkSession)
-  extends BaseRelation with FileRelation {
+  extends BaseRelation with FileRelation with SessionStateHelper{
 
   override def sqlContext: SQLContext = sparkSession.sqlContext
 
@@ -55,7 +56,7 @@ case class HadoopFsRelation(
   // respects the data types of the partition schema.
   val (schema: StructType, overlappedPartCols: Map[String, StructField]) =
     PartitioningUtils.mergeDataAndPartitionSchema(dataSchema,
-      partitionSchema, sparkSession.sessionState.conf.caseSensitiveAnalysis)
+      partitionSchema, getSqlConf(sparkSession).caseSensitiveAnalysis)
 
   override def toString: String = {
     fileFormat match {
@@ -65,7 +66,7 @@ case class HadoopFsRelation(
   }
 
   override def sizeInBytes: Long = {
-    val compressionFactor = sparkSession.sessionState.conf.fileCompressionFactor
+    val compressionFactor = getSqlConf(sparkSession).fileCompressionFactor
     (location.sizeInBytes * compressionFactor).toLong
   }
 

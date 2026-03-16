@@ -33,6 +33,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+
 import builtins
 import collections.abc
 import google.protobuf.any_pb2
@@ -43,6 +44,8 @@ import google.protobuf.message
 import pyspark.sql.connect.proto.commands_pb2
 import pyspark.sql.connect.proto.common_pb2
 import pyspark.sql.connect.proto.expressions_pb2
+import pyspark.sql.connect.proto.ml_pb2
+import pyspark.sql.connect.proto.pipelines_pb2
 import pyspark.sql.connect.proto.relations_pb2
 import pyspark.sql.connect.proto.types_pb2
 import sys
@@ -55,42 +58,123 @@ else:
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
+class _CompressionCodec:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _CompressionCodecEnumTypeWrapper(
+    google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_CompressionCodec.ValueType],
+    builtins.type,
+):  # noqa: F821
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    COMPRESSION_CODEC_UNSPECIFIED: _CompressionCodec.ValueType  # 0
+    COMPRESSION_CODEC_ZSTD: _CompressionCodec.ValueType  # 1
+
+class CompressionCodec(_CompressionCodec, metaclass=_CompressionCodecEnumTypeWrapper):
+    """Compression codec for plan compression."""
+
+COMPRESSION_CODEC_UNSPECIFIED: CompressionCodec.ValueType  # 0
+COMPRESSION_CODEC_ZSTD: CompressionCodec.ValueType  # 1
+global___CompressionCodec = CompressionCodec
+
 class Plan(google.protobuf.message.Message):
     """A [[Plan]] is the structure that carries the runtime information for the execution from the
-    client to the server. A [[Plan]] can either be of the type [[Relation]] which is a reference
-    to the underlying logical plan or it can be of the [[Command]] type that is used to execute
-    commands on the server.
+    client to the server. A [[Plan]] can be one of the following:
+    - [[Relation]]: a reference to the underlying logical plan.
+    - [[Command]]: used to execute commands on the server.
+    - [[CompressedOperation]]: a compressed representation of either a Relation or a Command.
     """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    class CompressedOperation(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        class _OpType:
+            ValueType = typing.NewType("ValueType", builtins.int)
+            V: typing_extensions.TypeAlias = ValueType
+
+        class _OpTypeEnumTypeWrapper(
+            google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+                Plan.CompressedOperation._OpType.ValueType
+            ],
+            builtins.type,
+        ):  # noqa: F821
+            DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+            OP_TYPE_UNSPECIFIED: Plan.CompressedOperation._OpType.ValueType  # 0
+            OP_TYPE_RELATION: Plan.CompressedOperation._OpType.ValueType  # 1
+            OP_TYPE_COMMAND: Plan.CompressedOperation._OpType.ValueType  # 2
+
+        class OpType(_OpType, metaclass=_OpTypeEnumTypeWrapper): ...
+        OP_TYPE_UNSPECIFIED: Plan.CompressedOperation.OpType.ValueType  # 0
+        OP_TYPE_RELATION: Plan.CompressedOperation.OpType.ValueType  # 1
+        OP_TYPE_COMMAND: Plan.CompressedOperation.OpType.ValueType  # 2
+
+        DATA_FIELD_NUMBER: builtins.int
+        OP_TYPE_FIELD_NUMBER: builtins.int
+        COMPRESSION_CODEC_FIELD_NUMBER: builtins.int
+        data: builtins.bytes
+        op_type: global___Plan.CompressedOperation.OpType.ValueType
+        compression_codec: global___CompressionCodec.ValueType
+        def __init__(
+            self,
+            *,
+            data: builtins.bytes = ...,
+            op_type: global___Plan.CompressedOperation.OpType.ValueType = ...,
+            compression_codec: global___CompressionCodec.ValueType = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "compression_codec", b"compression_codec", "data", b"data", "op_type", b"op_type"
+            ],
+        ) -> None: ...
+
     ROOT_FIELD_NUMBER: builtins.int
     COMMAND_FIELD_NUMBER: builtins.int
+    COMPRESSED_OPERATION_FIELD_NUMBER: builtins.int
     @property
     def root(self) -> pyspark.sql.connect.proto.relations_pb2.Relation: ...
     @property
     def command(self) -> pyspark.sql.connect.proto.commands_pb2.Command: ...
+    @property
+    def compressed_operation(self) -> global___Plan.CompressedOperation: ...
     def __init__(
         self,
         *,
         root: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
         command: pyspark.sql.connect.proto.commands_pb2.Command | None = ...,
+        compressed_operation: global___Plan.CompressedOperation | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "command", b"command", "op_type", b"op_type", "root", b"root"
+            "command",
+            b"command",
+            "compressed_operation",
+            b"compressed_operation",
+            "op_type",
+            b"op_type",
+            "root",
+            b"root",
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "command", b"command", "op_type", b"op_type", "root", b"root"
+            "command",
+            b"command",
+            "compressed_operation",
+            b"compressed_operation",
+            "op_type",
+            b"op_type",
+            "root",
+            b"root",
         ],
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["op_type", b"op_type"]
-    ) -> typing_extensions.Literal["root", "command"] | None: ...
+    ) -> typing_extensions.Literal["root", "command", "compressed_operation"] | None: ...
 
 global___Plan = Plan
 
@@ -117,6 +201,7 @@ class UserContext(google.protobuf.message.Message):
         messages into this message. Extensions are stored as a `repeated` type to be able to
         handle multiple active extensions.
         """
+
     def __init__(
         self,
         *,
@@ -145,6 +230,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         @property
         def plan(self) -> global___Plan:
             """(Required) The logical plan to be analyzed."""
+
         def __init__(
             self,
             *,
@@ -268,6 +354,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         @property
         def plan(self) -> global___Plan:
             """(Required) The logical plan to be analyzed."""
+
         def __init__(
             self,
             *,
@@ -285,6 +372,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         @property
         def plan(self) -> global___Plan:
             """(Required) The logical plan to be analyzed."""
+
         def __init__(
             self,
             *,
@@ -302,6 +390,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         @property
         def plan(self) -> global___Plan:
             """(Required) The logical plan to be analyzed."""
+
         def __init__(
             self,
             *,
@@ -344,9 +433,11 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         @property
         def target_plan(self) -> global___Plan:
             """(Required) The plan to be compared."""
+
         @property
         def other_plan(self) -> global___Plan:
             """(Required) The other plan to be compared."""
+
         def __init__(
             self,
             *,
@@ -373,6 +464,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         @property
         def plan(self) -> global___Plan:
             """(Required) The logical plan to get a hashCode."""
+
         def __init__(
             self,
             *,
@@ -391,9 +483,11 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         @property
         def relation(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
             """(Required) The logical plan to persist."""
+
         @property
         def storage_level(self) -> pyspark.sql.connect.proto.common_pb2.StorageLevel:
             """(Optional) The storage level."""
+
         def __init__(
             self,
             *,
@@ -465,6 +559,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         @property
         def relation(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
             """(Required) The logical plan to get the storage level."""
+
         def __init__(
             self,
             *,
@@ -475,6 +570,21 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         ) -> builtins.bool: ...
         def ClearField(
             self, field_name: typing_extensions.Literal["relation", b"relation"]
+        ) -> None: ...
+
+    class JsonToDDL(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        JSON_STRING_FIELD_NUMBER: builtins.int
+        json_string: builtins.str
+        """(Required) The JSON formatted string to be converted to DDL."""
+        def __init__(
+            self,
+            *,
+            json_string: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["json_string", b"json_string"]
         ) -> None: ...
 
     SESSION_ID_FIELD_NUMBER: builtins.int
@@ -494,6 +604,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     PERSIST_FIELD_NUMBER: builtins.int
     UNPERSIST_FIELD_NUMBER: builtins.int
     GET_STORAGE_LEVEL_FIELD_NUMBER: builtins.int
+    JSON_TO_DDL_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     """(Required)
 
@@ -542,6 +653,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     def unpersist(self) -> global___AnalyzePlanRequest.Unpersist: ...
     @property
     def get_storage_level(self) -> global___AnalyzePlanRequest.GetStorageLevel: ...
+    @property
+    def json_to_ddl(self) -> global___AnalyzePlanRequest.JsonToDDL: ...
     def __init__(
         self,
         *,
@@ -562,6 +675,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         persist: global___AnalyzePlanRequest.Persist | None = ...,
         unpersist: global___AnalyzePlanRequest.Unpersist | None = ...,
         get_storage_level: global___AnalyzePlanRequest.GetStorageLevel | None = ...,
+        json_to_ddl: global___AnalyzePlanRequest.JsonToDDL | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -588,6 +702,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             b"is_local",
             "is_streaming",
             b"is_streaming",
+            "json_to_ddl",
+            b"json_to_ddl",
             "persist",
             b"persist",
             "same_semantics",
@@ -631,6 +747,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             b"is_local",
             "is_streaming",
             b"is_streaming",
+            "json_to_ddl",
+            b"json_to_ddl",
             "persist",
             b"persist",
             "same_semantics",
@@ -663,9 +781,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         self, oneof_group: typing_extensions.Literal["_client_type", b"_client_type"]
     ) -> typing_extensions.Literal["client_type"] | None: ...
     @typing.overload
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["analyze", b"analyze"]
-    ) -> (
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["analyze", b"analyze"]) -> (
         typing_extensions.Literal[
             "schema",
             "explain",
@@ -680,6 +796,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             "persist",
             "unpersist",
             "get_storage_level",
+            "json_to_ddl",
         ]
         | None
     ): ...
@@ -777,6 +894,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
             """A best-effort snapshot of the files that compose this Dataset"""
+
         def __init__(
             self,
             *,
@@ -865,6 +983,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         @property
         def storage_level(self) -> pyspark.sql.connect.proto.common_pb2.StorageLevel:
             """(Required) The StorageLevel as a result of get_storage_level request."""
+
         def __init__(
             self,
             *,
@@ -875,6 +994,20 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         ) -> builtins.bool: ...
         def ClearField(
             self, field_name: typing_extensions.Literal["storage_level", b"storage_level"]
+        ) -> None: ...
+
+    class JsonToDDL(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        DDL_STRING_FIELD_NUMBER: builtins.int
+        ddl_string: builtins.str
+        def __init__(
+            self,
+            *,
+            ddl_string: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["ddl_string", b"ddl_string"]
         ) -> None: ...
 
     SESSION_ID_FIELD_NUMBER: builtins.int
@@ -892,6 +1025,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     PERSIST_FIELD_NUMBER: builtins.int
     UNPERSIST_FIELD_NUMBER: builtins.int
     GET_STORAGE_LEVEL_FIELD_NUMBER: builtins.int
+    JSON_TO_DDL_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     server_side_session_id: builtins.str
     """Server-side generated idempotency key that the client can use to assert that the server side
@@ -923,6 +1057,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     def unpersist(self) -> global___AnalyzePlanResponse.Unpersist: ...
     @property
     def get_storage_level(self) -> global___AnalyzePlanResponse.GetStorageLevel: ...
+    @property
+    def json_to_ddl(self) -> global___AnalyzePlanResponse.JsonToDDL: ...
     def __init__(
         self,
         *,
@@ -941,6 +1077,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         persist: global___AnalyzePlanResponse.Persist | None = ...,
         unpersist: global___AnalyzePlanResponse.Unpersist | None = ...,
         get_storage_level: global___AnalyzePlanResponse.GetStorageLevel | None = ...,
+        json_to_ddl: global___AnalyzePlanResponse.JsonToDDL | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -957,6 +1094,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             b"is_local",
             "is_streaming",
             b"is_streaming",
+            "json_to_ddl",
+            b"json_to_ddl",
             "persist",
             b"persist",
             "result",
@@ -990,6 +1129,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             b"is_local",
             "is_streaming",
             b"is_streaming",
+            "json_to_ddl",
+            b"json_to_ddl",
             "persist",
             b"persist",
             "result",
@@ -1012,9 +1153,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             b"unpersist",
         ],
     ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["result", b"result"]
-    ) -> (
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["result", b"result"]) -> (
         typing_extensions.Literal[
             "schema",
             "explain",
@@ -1029,6 +1168,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             "persist",
             "unpersist",
             "get_storage_level",
+            "json_to_ddl",
         ]
         | None
     ): ...
@@ -1044,16 +1184,21 @@ class ExecutePlanRequest(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         REATTACH_OPTIONS_FIELD_NUMBER: builtins.int
+        RESULT_CHUNKING_OPTIONS_FIELD_NUMBER: builtins.int
         EXTENSION_FIELD_NUMBER: builtins.int
         @property
         def reattach_options(self) -> global___ReattachOptions: ...
         @property
+        def result_chunking_options(self) -> global___ResultChunkingOptions: ...
+        @property
         def extension(self) -> google.protobuf.any_pb2.Any:
             """Extension type for request options"""
+
         def __init__(
             self,
             *,
             reattach_options: global___ReattachOptions | None = ...,
+            result_chunking_options: global___ResultChunkingOptions | None = ...,
             extension: google.protobuf.any_pb2.Any | None = ...,
         ) -> None: ...
         def HasField(
@@ -1065,6 +1210,8 @@ class ExecutePlanRequest(google.protobuf.message.Message):
                 b"reattach_options",
                 "request_option",
                 b"request_option",
+                "result_chunking_options",
+                b"result_chunking_options",
             ],
         ) -> builtins.bool: ...
         def ClearField(
@@ -1076,11 +1223,16 @@ class ExecutePlanRequest(google.protobuf.message.Message):
                 b"reattach_options",
                 "request_option",
                 b"request_option",
+                "result_chunking_options",
+                b"result_chunking_options",
             ],
         ) -> None: ...
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["request_option", b"request_option"]
-        ) -> typing_extensions.Literal["reattach_options", "extension"] | None: ...
+        ) -> (
+            typing_extensions.Literal["reattach_options", "result_chunking_options", "extension"]
+            | None
+        ): ...
 
     SESSION_ID_FIELD_NUMBER: builtins.int
     CLIENT_OBSERVED_SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
@@ -1134,6 +1286,7 @@ class ExecutePlanRequest(google.protobuf.message.Message):
         """Repeated element for options that can be passed to the request. This element is currently
         unused but allows to pass in an extension value used for arbitrary options.
         """
+
     @property
     def tags(
         self,
@@ -1142,6 +1295,7 @@ class ExecutePlanRequest(google.protobuf.message.Message):
         Tags cannot contain ',' character and cannot be empty strings.
         Used by Interrupt with interrupt.tag.
         """
+
     def __init__(
         self,
         *,
@@ -1151,8 +1305,9 @@ class ExecutePlanRequest(google.protobuf.message.Message):
         operation_id: builtins.str | None = ...,
         plan: global___Plan | None = ...,
         client_type: builtins.str | None = ...,
-        request_options: collections.abc.Iterable[global___ExecutePlanRequest.RequestOption]
-        | None = ...,
+        request_options: (
+            collections.abc.Iterable[global___ExecutePlanRequest.RequestOption] | None
+        ) = ...,
         tags: collections.abc.Iterable[builtins.str] | None = ...,
     ) -> None: ...
     def HasField(
@@ -1259,38 +1414,78 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         ROW_COUNT_FIELD_NUMBER: builtins.int
         DATA_FIELD_NUMBER: builtins.int
         START_OFFSET_FIELD_NUMBER: builtins.int
+        CHUNK_INDEX_FIELD_NUMBER: builtins.int
+        NUM_CHUNKS_IN_BATCH_FIELD_NUMBER: builtins.int
         row_count: builtins.int
         """Count rows in `data`. Must match the number of rows inside `data`."""
         data: builtins.bytes
         """Serialized Arrow data."""
         start_offset: builtins.int
         """If set, row offset of the start of this ArrowBatch in execution results."""
+        chunk_index: builtins.int
+        """Index of this chunk in the batch if chunking is enabled. The index starts from 0."""
+        num_chunks_in_batch: builtins.int
+        """Total number of chunks in this batch if chunking is enabled.
+        It is missing when chunking is disabled - the batch is returned whole
+        and client will treat this response as the batch.
+        """
         def __init__(
             self,
             *,
             row_count: builtins.int = ...,
             data: builtins.bytes = ...,
             start_offset: builtins.int | None = ...,
+            chunk_index: builtins.int | None = ...,
+            num_chunks_in_batch: builtins.int | None = ...,
         ) -> None: ...
         def HasField(
             self,
             field_name: typing_extensions.Literal[
-                "_start_offset", b"_start_offset", "start_offset", b"start_offset"
+                "_chunk_index",
+                b"_chunk_index",
+                "_num_chunks_in_batch",
+                b"_num_chunks_in_batch",
+                "_start_offset",
+                b"_start_offset",
+                "chunk_index",
+                b"chunk_index",
+                "num_chunks_in_batch",
+                b"num_chunks_in_batch",
+                "start_offset",
+                b"start_offset",
             ],
         ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
+                "_chunk_index",
+                b"_chunk_index",
+                "_num_chunks_in_batch",
+                b"_num_chunks_in_batch",
                 "_start_offset",
                 b"_start_offset",
+                "chunk_index",
+                b"chunk_index",
                 "data",
                 b"data",
+                "num_chunks_in_batch",
+                b"num_chunks_in_batch",
                 "row_count",
                 b"row_count",
                 "start_offset",
                 b"start_offset",
             ],
         ) -> None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_chunk_index", b"_chunk_index"]
+        ) -> typing_extensions.Literal["chunk_index"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self,
+            oneof_group: typing_extensions.Literal["_num_chunks_in_batch", b"_num_chunks_in_batch"],
+        ) -> typing_extensions.Literal["num_chunks_in_batch"] | None: ...
+        @typing.overload
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_start_offset", b"_start_offset"]
         ) -> typing_extensions.Literal["start_offset"] | None: ...
@@ -1341,10 +1536,12 @@ class ExecutePlanResponse(google.protobuf.message.Message):
                 name: builtins.str = ...,
                 plan_id: builtins.int = ...,
                 parent: builtins.int = ...,
-                execution_metrics: collections.abc.Mapping[
-                    builtins.str, global___ExecutePlanResponse.Metrics.MetricValue
-                ]
-                | None = ...,
+                execution_metrics: (
+                    collections.abc.Mapping[
+                        builtins.str, global___ExecutePlanResponse.Metrics.MetricValue
+                    ]
+                    | None
+                ) = ...,
             ) -> None: ...
             def ClearField(
                 self,
@@ -1393,8 +1590,9 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         def __init__(
             self,
             *,
-            metrics: collections.abc.Iterable[global___ExecutePlanResponse.Metrics.MetricObject]
-            | None = ...,
+            metrics: (
+                collections.abc.Iterable[global___ExecutePlanResponse.Metrics.MetricObject] | None
+            ) = ...,
         ) -> None: ...
         def ClearField(
             self, field_name: typing_extensions.Literal["metrics", b"metrics"]
@@ -1407,6 +1605,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         VALUES_FIELD_NUMBER: builtins.int
         KEYS_FIELD_NUMBER: builtins.int
         PLAN_ID_FIELD_NUMBER: builtins.int
+        ROOT_ERROR_IDX_FIELD_NUMBER: builtins.int
+        ERRORS_FIELD_NUMBER: builtins.int
         name: builtins.str
         @property
         def values(
@@ -1419,23 +1619,63 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
         plan_id: builtins.int
+        root_error_idx: builtins.int
+        """(Optional) The index of the root error in errors.
+        The field will not be set if there are no errors.
+        """
+        @property
+        def errors(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            global___FetchErrorDetailsResponse.Error
+        ]:
+            """A list of errors that occurred while collecting the observed metrics.
+            If the length is 0, it means no errors occurred.
+            """
+
         def __init__(
             self,
             *,
             name: builtins.str = ...,
-            values: collections.abc.Iterable[
-                pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
-            ]
-            | None = ...,
+            values: (
+                collections.abc.Iterable[
+                    pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
+                ]
+                | None
+            ) = ...,
             keys: collections.abc.Iterable[builtins.str] | None = ...,
             plan_id: builtins.int = ...,
+            root_error_idx: builtins.int | None = ...,
+            errors: collections.abc.Iterable[global___FetchErrorDetailsResponse.Error] | None = ...,
         ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_root_error_idx", b"_root_error_idx", "root_error_idx", b"root_error_idx"
+            ],
+        ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "keys", b"keys", "name", b"name", "plan_id", b"plan_id", "values", b"values"
+                "_root_error_idx",
+                b"_root_error_idx",
+                "errors",
+                b"errors",
+                "keys",
+                b"keys",
+                "name",
+                b"name",
+                "plan_id",
+                b"plan_id",
+                "root_error_idx",
+                b"root_error_idx",
+                "values",
+                b"values",
             ],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_root_error_idx", b"_root_error_idx"]
+        ) -> typing_extensions.Literal["root_error_idx"] | None: ...
 
     class ResultComplete(google.protobuf.message.Message):
         """If present, in a reattachable execution this means that after server sends onComplete,
@@ -1506,10 +1746,10 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         def __init__(
             self,
             *,
-            stages: collections.abc.Iterable[
-                global___ExecutePlanResponse.ExecutionProgress.StageInfo
-            ]
-            | None = ...,
+            stages: (
+                collections.abc.Iterable[global___ExecutePlanResponse.ExecutionProgress.StageInfo]
+                | None
+            ) = ...,
             num_inflight_tasks: builtins.int = ...,
         ) -> None: ...
         def ClearField(
@@ -1534,6 +1774,10 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     CREATE_RESOURCE_PROFILE_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     EXECUTION_PROGRESS_FIELD_NUMBER: builtins.int
     CHECKPOINT_COMMAND_RESULT_FIELD_NUMBER: builtins.int
+    ML_COMMAND_RESULT_FIELD_NUMBER: builtins.int
+    PIPELINE_EVENT_RESULT_FIELD_NUMBER: builtins.int
+    PIPELINE_COMMAND_RESULT_FIELD_NUMBER: builtins.int
+    PIPELINE_QUERY_FUNCTION_EXECUTION_SIGNAL_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
     OBSERVED_METRICS_FIELD_NUMBER: builtins.int
@@ -1558,53 +1802,87 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     @property
     def sql_command_result(self) -> global___ExecutePlanResponse.SqlCommandResult:
         """Special case for executing SQL commands."""
+
     @property
     def write_stream_operation_start_result(
         self,
     ) -> pyspark.sql.connect.proto.commands_pb2.WriteStreamOperationStartResult:
         """Response for a streaming query."""
+
     @property
     def streaming_query_command_result(
         self,
     ) -> pyspark.sql.connect.proto.commands_pb2.StreamingQueryCommandResult:
         """Response for commands on a streaming query."""
+
     @property
     def get_resources_command_result(
         self,
     ) -> pyspark.sql.connect.proto.commands_pb2.GetResourcesCommandResult:
         """Response for 'SparkContext.resources'."""
+
     @property
     def streaming_query_manager_command_result(
         self,
     ) -> pyspark.sql.connect.proto.commands_pb2.StreamingQueryManagerCommandResult:
         """Response for commands on the streaming query manager."""
+
     @property
     def streaming_query_listener_events_result(
         self,
     ) -> pyspark.sql.connect.proto.commands_pb2.StreamingQueryListenerEventsResult:
         """Response for commands on the client side streaming query listener."""
+
     @property
     def result_complete(self) -> global___ExecutePlanResponse.ResultComplete:
         """Response type informing if the stream is complete in reattachable execution."""
+
     @property
     def create_resource_profile_command_result(
         self,
     ) -> pyspark.sql.connect.proto.commands_pb2.CreateResourceProfileCommandResult:
         """Response for command that creates ResourceProfile."""
+
     @property
     def execution_progress(self) -> global___ExecutePlanResponse.ExecutionProgress:
         """(Optional) Intermediate query progress reports."""
+
     @property
     def checkpoint_command_result(self) -> global___CheckpointCommandResult:
         """Response for command that checkpoints a DataFrame."""
+
+    @property
+    def ml_command_result(self) -> pyspark.sql.connect.proto.ml_pb2.MlCommandResult:
+        """ML command response"""
+
+    @property
+    def pipeline_event_result(self) -> pyspark.sql.connect.proto.pipelines_pb2.PipelineEventResult:
+        """Response containing pipeline event that is streamed back to the client during a pipeline run"""
+
+    @property
+    def pipeline_command_result(
+        self,
+    ) -> pyspark.sql.connect.proto.pipelines_pb2.PipelineCommandResult:
+        """Pipeline command response"""
+
+    @property
+    def pipeline_query_function_execution_signal(
+        self,
+    ) -> pyspark.sql.connect.proto.pipelines_pb2.PipelineQueryFunctionExecutionSignal:
+        """A signal from the server to the client to execute the query function for a flow, and to
+        register its result with the server.
+        """
+
     @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """Support arbitrary result objects."""
+
     @property
     def metrics(self) -> global___ExecutePlanResponse.Metrics:
         """Metrics for the query execution. Typically, this field is only present in the last
         batch of results and then represent the overall state of the query execution.
         """
+
     @property
     def observed_metrics(
         self,
@@ -1612,9 +1890,11 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         global___ExecutePlanResponse.ObservedMetrics
     ]:
         """The metrics observed during the execution of the query plan."""
+
     @property
     def schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
         """(Optional) The Spark schema. This field is available when `collect` is called."""
+
     def __init__(
         self,
         *,
@@ -1624,25 +1904,42 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         response_id: builtins.str = ...,
         arrow_batch: global___ExecutePlanResponse.ArrowBatch | None = ...,
         sql_command_result: global___ExecutePlanResponse.SqlCommandResult | None = ...,
-        write_stream_operation_start_result: pyspark.sql.connect.proto.commands_pb2.WriteStreamOperationStartResult
-        | None = ...,
-        streaming_query_command_result: pyspark.sql.connect.proto.commands_pb2.StreamingQueryCommandResult
-        | None = ...,
-        get_resources_command_result: pyspark.sql.connect.proto.commands_pb2.GetResourcesCommandResult
-        | None = ...,
-        streaming_query_manager_command_result: pyspark.sql.connect.proto.commands_pb2.StreamingQueryManagerCommandResult
-        | None = ...,
-        streaming_query_listener_events_result: pyspark.sql.connect.proto.commands_pb2.StreamingQueryListenerEventsResult
-        | None = ...,
+        write_stream_operation_start_result: (
+            pyspark.sql.connect.proto.commands_pb2.WriteStreamOperationStartResult | None
+        ) = ...,
+        streaming_query_command_result: (
+            pyspark.sql.connect.proto.commands_pb2.StreamingQueryCommandResult | None
+        ) = ...,
+        get_resources_command_result: (
+            pyspark.sql.connect.proto.commands_pb2.GetResourcesCommandResult | None
+        ) = ...,
+        streaming_query_manager_command_result: (
+            pyspark.sql.connect.proto.commands_pb2.StreamingQueryManagerCommandResult | None
+        ) = ...,
+        streaming_query_listener_events_result: (
+            pyspark.sql.connect.proto.commands_pb2.StreamingQueryListenerEventsResult | None
+        ) = ...,
         result_complete: global___ExecutePlanResponse.ResultComplete | None = ...,
-        create_resource_profile_command_result: pyspark.sql.connect.proto.commands_pb2.CreateResourceProfileCommandResult
-        | None = ...,
+        create_resource_profile_command_result: (
+            pyspark.sql.connect.proto.commands_pb2.CreateResourceProfileCommandResult | None
+        ) = ...,
         execution_progress: global___ExecutePlanResponse.ExecutionProgress | None = ...,
         checkpoint_command_result: global___CheckpointCommandResult | None = ...,
+        ml_command_result: pyspark.sql.connect.proto.ml_pb2.MlCommandResult | None = ...,
+        pipeline_event_result: (
+            pyspark.sql.connect.proto.pipelines_pb2.PipelineEventResult | None
+        ) = ...,
+        pipeline_command_result: (
+            pyspark.sql.connect.proto.pipelines_pb2.PipelineCommandResult | None
+        ) = ...,
+        pipeline_query_function_execution_signal: (
+            pyspark.sql.connect.proto.pipelines_pb2.PipelineQueryFunctionExecutionSignal | None
+        ) = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
         metrics: global___ExecutePlanResponse.Metrics | None = ...,
-        observed_metrics: collections.abc.Iterable[global___ExecutePlanResponse.ObservedMetrics]
-        | None = ...,
+        observed_metrics: (
+            collections.abc.Iterable[global___ExecutePlanResponse.ObservedMetrics] | None
+        ) = ...,
         schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
     ) -> None: ...
     def HasField(
@@ -1662,6 +1959,14 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"get_resources_command_result",
             "metrics",
             b"metrics",
+            "ml_command_result",
+            b"ml_command_result",
+            "pipeline_command_result",
+            b"pipeline_command_result",
+            "pipeline_event_result",
+            b"pipeline_event_result",
+            "pipeline_query_function_execution_signal",
+            b"pipeline_query_function_execution_signal",
             "response_type",
             b"response_type",
             "result_complete",
@@ -1697,10 +2002,18 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"get_resources_command_result",
             "metrics",
             b"metrics",
+            "ml_command_result",
+            b"ml_command_result",
             "observed_metrics",
             b"observed_metrics",
             "operation_id",
             b"operation_id",
+            "pipeline_command_result",
+            b"pipeline_command_result",
+            "pipeline_event_result",
+            b"pipeline_event_result",
+            "pipeline_query_function_execution_signal",
+            b"pipeline_query_function_execution_signal",
             "response_id",
             b"response_id",
             "response_type",
@@ -1740,6 +2053,10 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             "create_resource_profile_command_result",
             "execution_progress",
             "checkpoint_command_result",
+            "ml_command_result",
+            "pipeline_event_result",
+            "pipeline_command_result",
+            "pipeline_query_function_execution_signal",
             "extension",
         ]
         | None
@@ -1874,17 +2191,32 @@ class ConfigRequest(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         PAIRS_FIELD_NUMBER: builtins.int
+        SILENT_FIELD_NUMBER: builtins.int
         @property
         def pairs(
             self,
         ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___KeyValue]:
             """(Required) The config key-value pairs to set."""
+        silent: builtins.bool
+        """(Optional) Whether to ignore failures."""
         def __init__(
             self,
             *,
             pairs: collections.abc.Iterable[global___KeyValue] | None = ...,
+            silent: builtins.bool | None = ...,
         ) -> None: ...
-        def ClearField(self, field_name: typing_extensions.Literal["pairs", b"pairs"]) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["_silent", b"_silent", "silent", b"silent"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_silent", b"_silent", "pairs", b"pairs", "silent", b"silent"
+            ],
+        ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_silent", b"_silent"]
+        ) -> typing_extensions.Literal["silent"] | None: ...
 
     class Get(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -1895,6 +2227,7 @@ class ConfigRequest(google.protobuf.message.Message):
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
             """(Required) The config keys to get."""
+
         def __init__(
             self,
             *,
@@ -1911,6 +2244,7 @@ class ConfigRequest(google.protobuf.message.Message):
             self,
         ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___KeyValue]:
             """(Required) The config key-value pairs to get. The value will be used as the default value."""
+
         def __init__(
             self,
             *,
@@ -1927,6 +2261,7 @@ class ConfigRequest(google.protobuf.message.Message):
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
             """(Required) The config keys to get optionally."""
+
         def __init__(
             self,
             *,
@@ -1964,6 +2299,7 @@ class ConfigRequest(google.protobuf.message.Message):
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
             """(Required) The config keys to unset."""
+
         def __init__(
             self,
             *,
@@ -1980,6 +2316,7 @@ class ConfigRequest(google.protobuf.message.Message):
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
             """(Required) The config keys to check the config is modifiable."""
+
         def __init__(
             self,
             *,
@@ -2009,6 +2346,7 @@ class ConfigRequest(google.protobuf.message.Message):
     @property
     def user_context(self) -> global___UserContext:
         """(Required) User context"""
+
     @property
     def operation(self) -> global___ConfigRequest.Operation:
         """(Required) The operation for the config."""
@@ -2101,6 +2439,7 @@ class ConfigResponse(google.protobuf.message.Message):
         Available when the operation is 'Get', 'GetWithDefault', 'GetOption', 'GetAll'.
         Also available for the operation 'IsModifiable' with boolean string "true" and "false".
         """
+
     @property
     def warnings(
         self,
@@ -2109,6 +2448,7 @@ class ConfigResponse(google.protobuf.message.Message):
 
         Warning messages for deprecated or unsupported configurations.
         """
+
     def __init__(
         self,
         *,
@@ -2179,6 +2519,7 @@ class AddArtifactsRequest(google.protobuf.message.Message):
         @property
         def data(self) -> global___AddArtifactsRequest.ArtifactChunk:
             """A single data chunk."""
+
         def __init__(
             self,
             *,
@@ -2207,8 +2548,9 @@ class AddArtifactsRequest(google.protobuf.message.Message):
         def __init__(
             self,
             *,
-            artifacts: collections.abc.Iterable[global___AddArtifactsRequest.SingleChunkArtifact]
-            | None = ...,
+            artifacts: (
+                collections.abc.Iterable[global___AddArtifactsRequest.SingleChunkArtifact] | None
+            ) = ...,
         ) -> None: ...
         def ClearField(
             self, field_name: typing_extensions.Literal["artifacts", b"artifacts"]
@@ -2239,6 +2581,7 @@ class AddArtifactsRequest(google.protobuf.message.Message):
         @property
         def initial_chunk(self) -> global___AddArtifactsRequest.ArtifactChunk:
             """The first/initial chunk."""
+
         def __init__(
             self,
             *,
@@ -2301,11 +2644,13 @@ class AddArtifactsRequest(google.protobuf.message.Message):
         The server side is notified about the total size of the large artifact as well as the
         number of chunks to expect.
         """
+
     @property
     def chunk(self) -> global___AddArtifactsRequest.ArtifactChunk:
         """A chunk of an artifact excluding metadata. This can be any chunk of a large artifact
         excluding the first chunk (which is included in `BeginChunkedArtifact`).
         """
+
     def __init__(
         self,
         *,
@@ -2433,13 +2778,15 @@ class AddArtifactsResponse(google.protobuf.message.Message):
         global___AddArtifactsResponse.ArtifactSummary
     ]:
         """The list of artifact(s) seen by the server."""
+
     def __init__(
         self,
         *,
         session_id: builtins.str = ...,
         server_side_session_id: builtins.str = ...,
-        artifacts: collections.abc.Iterable[global___AddArtifactsResponse.ArtifactSummary]
-        | None = ...,
+        artifacts: (
+            collections.abc.Iterable[global___AddArtifactsResponse.ArtifactSummary] | None
+        ) = ...,
     ) -> None: ...
     def ClearField(
         self,
@@ -2498,6 +2845,7 @@ class ArtifactStatusesRequest(google.protobuf.message.Message):
         The relative path of the file on the server's filesystem will be the same as the name of
         the provided artifact)
         """
+
     def __init__(
         self,
         *,
@@ -2614,15 +2962,16 @@ class ArtifactStatusesResponse(google.protobuf.message.Message):
         builtins.str, global___ArtifactStatusesResponse.ArtifactStatus
     ]:
         """A map of artifact names to their statuses."""
+
     def __init__(
         self,
         *,
         session_id: builtins.str = ...,
         server_side_session_id: builtins.str = ...,
-        statuses: collections.abc.Mapping[
-            builtins.str, global___ArtifactStatusesResponse.ArtifactStatus
-        ]
-        | None = ...,
+        statuses: (
+            collections.abc.Mapping[builtins.str, global___ArtifactStatusesResponse.ArtifactStatus]
+            | None
+        ) = ...,
     ) -> None: ...
     def ClearField(
         self,
@@ -2798,6 +3147,7 @@ class InterruptResponse(google.protobuf.message.Message):
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """Operation ids of the executions which were interrupted."""
+
     def __init__(
         self,
         *,
@@ -2843,6 +3193,62 @@ class ReattachOptions(google.protobuf.message.Message):
     ) -> None: ...
 
 global___ReattachOptions = ReattachOptions
+
+class ResultChunkingOptions(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ALLOW_ARROW_BATCH_CHUNKING_FIELD_NUMBER: builtins.int
+    PREFERRED_ARROW_CHUNK_SIZE_FIELD_NUMBER: builtins.int
+    allow_arrow_batch_chunking: builtins.bool
+    """Although Arrow results are split into batches with a size limit according to estimation, the
+    size of the batches is not guaranteed to be less than the limit, especially when a single row
+    is larger than the limit, in which case the server will fail to split it further into smaller
+    batches. As a result, the client may encounter a gRPC error stating “Received message larger
+    than max” when a batch is too large.
+    If allow_arrow_batch_chunking=true, the server will split large Arrow batches into smaller chunks,
+    and the client is expected to handle the chunked Arrow batches.
+
+    If false, the server will not chunk large Arrow batches.
+    """
+    preferred_arrow_chunk_size: builtins.int
+    """Optional preferred Arrow batch size in bytes for the server to use when sending Arrow results.
+    The server will attempt to use this size if it is set and within the valid range
+    ([1KB, max batch size on server]). Otherwise, the server's maximum batch size is used.
+    """
+    def __init__(
+        self,
+        *,
+        allow_arrow_batch_chunking: builtins.bool = ...,
+        preferred_arrow_chunk_size: builtins.int | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_preferred_arrow_chunk_size",
+            b"_preferred_arrow_chunk_size",
+            "preferred_arrow_chunk_size",
+            b"preferred_arrow_chunk_size",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_preferred_arrow_chunk_size",
+            b"_preferred_arrow_chunk_size",
+            "allow_arrow_batch_chunking",
+            b"allow_arrow_batch_chunking",
+            "preferred_arrow_chunk_size",
+            b"preferred_arrow_chunk_size",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self,
+        oneof_group: typing_extensions.Literal[
+            "_preferred_arrow_chunk_size", b"_preferred_arrow_chunk_size"
+        ],
+    ) -> typing_extensions.Literal["preferred_arrow_chunk_size"] | None: ...
+
+global___ResultChunkingOptions = ResultChunkingOptions
 
 class ReattachExecuteRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -3169,6 +3575,7 @@ class ReleaseSessionRequest(google.protobuf.message.Message):
     SESSION_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
     CLIENT_TYPE_FIELD_NUMBER: builtins.int
+    ALLOW_RECONNECT_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     """(Required)
 
@@ -3187,12 +3594,27 @@ class ReleaseSessionRequest(google.protobuf.message.Message):
     can be used for language or version specific information and is only intended for
     logging purposes and will not be interpreted by the server.
     """
+    allow_reconnect: builtins.bool
+    """Signals the server to allow the client to reconnect to the session after it is released.
+
+    By default, the server tombstones the session upon release, preventing reconnections and
+    fully cleaning the session state.
+
+    If this flag is set to true, the server may permit the client to reconnect to the session
+    post-release, even if the session state has been cleaned. This can result in missing state,
+    such as Temporary Views, Temporary UDFs, or the Current Catalog, in the reconnected session.
+
+    Use this option sparingly and only when the client fully understands the implications of
+    reconnecting to a released session. The client must ensure that any queries executed do not
+    rely on the session state prior to its release.
+    """
     def __init__(
         self,
         *,
         session_id: builtins.str = ...,
         user_context: global___UserContext | None = ...,
         client_type: builtins.str | None = ...,
+        allow_reconnect: builtins.bool = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -3210,6 +3632,8 @@ class ReleaseSessionRequest(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "_client_type",
             b"_client_type",
+            "allow_reconnect",
+            b"allow_reconnect",
             "client_type",
             b"client_type",
             "session_id",
@@ -3509,6 +3933,7 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         MESSAGE_PARAMETERS_FIELD_NUMBER: builtins.int
         QUERY_CONTEXTS_FIELD_NUMBER: builtins.int
         SQL_STATE_FIELD_NUMBER: builtins.int
+        BREAKING_CHANGE_INFO_FIELD_NUMBER: builtins.int
         error_class: builtins.str
         """Succinct, human-readable, unique, and consistent representation of the error category."""
         @property
@@ -3516,6 +3941,7 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
             self,
         ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
             """The message parameters for the error framework."""
+
         @property
         def query_contexts(
             self,
@@ -3527,24 +3953,34 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         """Portable error identifier across SQL engines
         If null, error class or SQLSTATE is not set.
         """
+        @property
+        def breaking_change_info(self) -> global___FetchErrorDetailsResponse.BreakingChangeInfo:
+            """Additional information if the error was caused by a breaking change."""
+
         def __init__(
             self,
             *,
             error_class: builtins.str | None = ...,
             message_parameters: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
-            query_contexts: collections.abc.Iterable[
-                global___FetchErrorDetailsResponse.QueryContext
-            ]
-            | None = ...,
+            query_contexts: (
+                collections.abc.Iterable[global___FetchErrorDetailsResponse.QueryContext] | None
+            ) = ...,
             sql_state: builtins.str | None = ...,
+            breaking_change_info: (
+                global___FetchErrorDetailsResponse.BreakingChangeInfo | None
+            ) = ...,
         ) -> None: ...
         def HasField(
             self,
             field_name: typing_extensions.Literal[
+                "_breaking_change_info",
+                b"_breaking_change_info",
                 "_error_class",
                 b"_error_class",
                 "_sql_state",
                 b"_sql_state",
+                "breaking_change_info",
+                b"breaking_change_info",
                 "error_class",
                 b"error_class",
                 "sql_state",
@@ -3554,10 +3990,14 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
+                "_breaking_change_info",
+                b"_breaking_change_info",
                 "_error_class",
                 b"_error_class",
                 "_sql_state",
                 b"_sql_state",
+                "breaking_change_info",
+                b"breaking_change_info",
                 "error_class",
                 b"error_class",
                 "message_parameters",
@@ -3570,12 +4010,108 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         ) -> None: ...
         @typing.overload
         def WhichOneof(
+            self,
+            oneof_group: typing_extensions.Literal[
+                "_breaking_change_info", b"_breaking_change_info"
+            ],
+        ) -> typing_extensions.Literal["breaking_change_info"] | None: ...
+        @typing.overload
+        def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_error_class", b"_error_class"]
         ) -> typing_extensions.Literal["error_class"] | None: ...
         @typing.overload
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_sql_state", b"_sql_state"]
         ) -> typing_extensions.Literal["sql_state"] | None: ...
+
+    class BreakingChangeInfo(google.protobuf.message.Message):
+        """BreakingChangeInfo defines the schema for breaking change information."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        MIGRATION_MESSAGE_FIELD_NUMBER: builtins.int
+        MITIGATION_CONFIG_FIELD_NUMBER: builtins.int
+        NEEDS_AUDIT_FIELD_NUMBER: builtins.int
+        @property
+        def migration_message(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+            """A message explaining how the user can migrate their job to work
+            with the breaking change.
+            """
+
+        @property
+        def mitigation_config(self) -> global___FetchErrorDetailsResponse.MitigationConfig:
+            """A spark config flag that can be used to mitigate the breaking change."""
+        needs_audit: builtins.bool
+        """If true, the breaking change should be inspected manually.
+        If false, the spark job should be retried by setting the mitigationConfig.
+        """
+        def __init__(
+            self,
+            *,
+            migration_message: collections.abc.Iterable[builtins.str] | None = ...,
+            mitigation_config: global___FetchErrorDetailsResponse.MitigationConfig | None = ...,
+            needs_audit: builtins.bool | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_mitigation_config",
+                b"_mitigation_config",
+                "_needs_audit",
+                b"_needs_audit",
+                "mitigation_config",
+                b"mitigation_config",
+                "needs_audit",
+                b"needs_audit",
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_mitigation_config",
+                b"_mitigation_config",
+                "_needs_audit",
+                b"_needs_audit",
+                "migration_message",
+                b"migration_message",
+                "mitigation_config",
+                b"mitigation_config",
+                "needs_audit",
+                b"needs_audit",
+            ],
+        ) -> None: ...
+        @typing.overload
+        def WhichOneof(
+            self,
+            oneof_group: typing_extensions.Literal["_mitigation_config", b"_mitigation_config"],
+        ) -> typing_extensions.Literal["mitigation_config"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_needs_audit", b"_needs_audit"]
+        ) -> typing_extensions.Literal["needs_audit"] | None: ...
+
+    class MitigationConfig(google.protobuf.message.Message):
+        """MitigationConfig defines a spark config flag that can be used to mitigate a breaking change."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
+        key: builtins.str
+        """The spark config key."""
+        value: builtins.str
+        """The spark config value that mitigates the breaking change."""
+        def __init__(
+            self,
+            *,
+            key: builtins.str = ...,
+            value: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
 
     class Error(google.protobuf.message.Message):
         """Error defines the schema for the representing exception."""
@@ -3608,15 +4144,16 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         @property
         def spark_throwable(self) -> global___FetchErrorDetailsResponse.SparkThrowable:
             """The structured data of a SparkThrowable exception."""
+
         def __init__(
             self,
             *,
             error_type_hierarchy: collections.abc.Iterable[builtins.str] | None = ...,
             message: builtins.str = ...,
-            stack_trace: collections.abc.Iterable[
-                global___FetchErrorDetailsResponse.StackTraceElement
-            ]
-            | None = ...,
+            stack_trace: (
+                collections.abc.Iterable[global___FetchErrorDetailsResponse.StackTraceElement]
+                | None
+            ) = ...,
             cause_idx: builtins.int | None = ...,
             spark_throwable: global___FetchErrorDetailsResponse.SparkThrowable | None = ...,
         ) -> None: ...
@@ -3679,6 +4216,7 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         global___FetchErrorDetailsResponse.Error
     ]:
         """A list of errors."""
+
     def __init__(
         self,
         *,
@@ -3721,6 +4259,7 @@ class CheckpointCommandResult(google.protobuf.message.Message):
     @property
     def relation(self) -> pyspark.sql.connect.proto.relations_pb2.CachedRemoteRelation:
         """(Required) The logical plan checkpointed."""
+
     def __init__(
         self,
         *,
@@ -3734,3 +4273,439 @@ class CheckpointCommandResult(google.protobuf.message.Message):
     ) -> None: ...
 
 global___CheckpointCommandResult = CheckpointCommandResult
+
+class CloneSessionRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SESSION_ID_FIELD_NUMBER: builtins.int
+    CLIENT_OBSERVED_SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
+    USER_CONTEXT_FIELD_NUMBER: builtins.int
+    CLIENT_TYPE_FIELD_NUMBER: builtins.int
+    NEW_SESSION_ID_FIELD_NUMBER: builtins.int
+    session_id: builtins.str
+    """(Required)
+
+    The session_id specifies a spark session for a user id (which is specified
+    by user_context.user_id). The session_id is set by the client to be able to
+    collate streaming responses from different queries within the dedicated session.
+    The id should be an UUID string of the format `00112233-4455-6677-8899-aabbccddeeff`
+    """
+    client_observed_server_side_session_id: builtins.str
+    """(Optional)
+
+    Server-side generated idempotency key from the previous responses (if any). Server
+    can use this to validate that the server side session has not changed.
+    """
+    @property
+    def user_context(self) -> global___UserContext:
+        """(Required) User context
+
+        user_context.user_id and session_id both identify a unique remote spark session on the
+        server side.
+        """
+    client_type: builtins.str
+    """Provides optional information about the client sending the request. This field
+    can be used for language or version specific information and is only intended for
+    logging purposes and will not be interpreted by the server.
+    """
+    new_session_id: builtins.str
+    """(Optional)
+    The session_id for the new cloned session. If not provided, a new UUID will be generated.
+    The id should be an UUID string of the format `00112233-4455-6677-8899-aabbccddeeff`
+    """
+    def __init__(
+        self,
+        *,
+        session_id: builtins.str = ...,
+        client_observed_server_side_session_id: builtins.str | None = ...,
+        user_context: global___UserContext | None = ...,
+        client_type: builtins.str | None = ...,
+        new_session_id: builtins.str | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_client_observed_server_side_session_id",
+            b"_client_observed_server_side_session_id",
+            "_client_type",
+            b"_client_type",
+            "_new_session_id",
+            b"_new_session_id",
+            "client_observed_server_side_session_id",
+            b"client_observed_server_side_session_id",
+            "client_type",
+            b"client_type",
+            "new_session_id",
+            b"new_session_id",
+            "user_context",
+            b"user_context",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_client_observed_server_side_session_id",
+            b"_client_observed_server_side_session_id",
+            "_client_type",
+            b"_client_type",
+            "_new_session_id",
+            b"_new_session_id",
+            "client_observed_server_side_session_id",
+            b"client_observed_server_side_session_id",
+            "client_type",
+            b"client_type",
+            "new_session_id",
+            b"new_session_id",
+            "session_id",
+            b"session_id",
+            "user_context",
+            b"user_context",
+        ],
+    ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self,
+        oneof_group: typing_extensions.Literal[
+            "_client_observed_server_side_session_id", b"_client_observed_server_side_session_id"
+        ],
+    ) -> typing_extensions.Literal["client_observed_server_side_session_id"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_client_type", b"_client_type"]
+    ) -> typing_extensions.Literal["client_type"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_new_session_id", b"_new_session_id"]
+    ) -> typing_extensions.Literal["new_session_id"] | None: ...
+
+global___CloneSessionRequest = CloneSessionRequest
+
+class CloneSessionResponse(google.protobuf.message.Message):
+    """Next ID: 5"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SESSION_ID_FIELD_NUMBER: builtins.int
+    SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
+    NEW_SESSION_ID_FIELD_NUMBER: builtins.int
+    NEW_SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
+    session_id: builtins.str
+    """Session id of the original session that was cloned."""
+    server_side_session_id: builtins.str
+    """Server-side generated idempotency key that the client can use to assert that the server side
+    session (parent of the cloned session) has not changed.
+    """
+    new_session_id: builtins.str
+    """Session id of the new cloned session."""
+    new_server_side_session_id: builtins.str
+    """Server-side session ID of the new cloned session."""
+    def __init__(
+        self,
+        *,
+        session_id: builtins.str = ...,
+        server_side_session_id: builtins.str = ...,
+        new_session_id: builtins.str = ...,
+        new_server_side_session_id: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "new_server_side_session_id",
+            b"new_server_side_session_id",
+            "new_session_id",
+            b"new_session_id",
+            "server_side_session_id",
+            b"server_side_session_id",
+            "session_id",
+            b"session_id",
+        ],
+    ) -> None: ...
+
+global___CloneSessionResponse = CloneSessionResponse
+
+class GetStatusRequest(google.protobuf.message.Message):
+    """Next ID: 6"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class OperationStatusRequest(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        OPERATION_IDS_FIELD_NUMBER: builtins.int
+        EXTENSIONS_FIELD_NUMBER: builtins.int
+        @property
+        def operation_ids(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+            """Get status of operations with these operation_ids.
+            If unset or empty, returns status of all operations in the session.
+            """
+
+        @property
+        def extensions(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            google.protobuf.any_pb2.Any
+        ]:
+            """Extension point for custom operation-level status requests."""
+
+        def __init__(
+            self,
+            *,
+            operation_ids: collections.abc.Iterable[builtins.str] | None = ...,
+            extensions: collections.abc.Iterable[google.protobuf.any_pb2.Any] | None = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "extensions", b"extensions", "operation_ids", b"operation_ids"
+            ],
+        ) -> None: ...
+
+    SESSION_ID_FIELD_NUMBER: builtins.int
+    USER_CONTEXT_FIELD_NUMBER: builtins.int
+    CLIENT_TYPE_FIELD_NUMBER: builtins.int
+    CLIENT_OBSERVED_SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
+    OPERATION_STATUS_FIELD_NUMBER: builtins.int
+    EXTENSIONS_FIELD_NUMBER: builtins.int
+    session_id: builtins.str
+    """(Required)
+
+    The session_id specifies a Spark session for a user identified by user_context.user_id.
+    The id should be an UUID string of the format `00112233-4455-6677-8899-aabbccddeeff`
+    """
+    @property
+    def user_context(self) -> global___UserContext:
+        """(Required)
+
+        user_context.user_id and session_id both identify a unique remote spark session on the
+        server side.
+        """
+    client_type: builtins.str
+    """(Optional)
+
+    Provides optional information about the client sending the request. This field
+    can be used for language or version specific information and is only intended for
+    logging purposes and will not be interpreted by the server.
+    """
+    client_observed_server_side_session_id: builtins.str
+    """(Optional)
+
+    Server-side generated idempotency key from the previous responses (if any). Server
+    can use this to validate that the server side session has not changed.
+    """
+    @property
+    def operation_status(self) -> global___GetStatusRequest.OperationStatusRequest:
+        """(Optional)
+
+        Get status of operations in the session.
+        """
+
+    @property
+    def extensions(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        google.protobuf.any_pb2.Any
+    ]:
+        """Extension point for custom status request types."""
+
+    def __init__(
+        self,
+        *,
+        session_id: builtins.str = ...,
+        user_context: global___UserContext | None = ...,
+        client_type: builtins.str | None = ...,
+        client_observed_server_side_session_id: builtins.str | None = ...,
+        operation_status: global___GetStatusRequest.OperationStatusRequest | None = ...,
+        extensions: collections.abc.Iterable[google.protobuf.any_pb2.Any] | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_client_observed_server_side_session_id",
+            b"_client_observed_server_side_session_id",
+            "_client_type",
+            b"_client_type",
+            "_operation_status",
+            b"_operation_status",
+            "client_observed_server_side_session_id",
+            b"client_observed_server_side_session_id",
+            "client_type",
+            b"client_type",
+            "operation_status",
+            b"operation_status",
+            "user_context",
+            b"user_context",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_client_observed_server_side_session_id",
+            b"_client_observed_server_side_session_id",
+            "_client_type",
+            b"_client_type",
+            "_operation_status",
+            b"_operation_status",
+            "client_observed_server_side_session_id",
+            b"client_observed_server_side_session_id",
+            "client_type",
+            b"client_type",
+            "extensions",
+            b"extensions",
+            "operation_status",
+            b"operation_status",
+            "session_id",
+            b"session_id",
+            "user_context",
+            b"user_context",
+        ],
+    ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self,
+        oneof_group: typing_extensions.Literal[
+            "_client_observed_server_side_session_id", b"_client_observed_server_side_session_id"
+        ],
+    ) -> typing_extensions.Literal["client_observed_server_side_session_id"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_client_type", b"_client_type"]
+    ) -> typing_extensions.Literal["client_type"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_operation_status", b"_operation_status"]
+    ) -> typing_extensions.Literal["operation_status"] | None: ...
+
+global___GetStatusRequest = GetStatusRequest
+
+class GetStatusResponse(google.protobuf.message.Message):
+    """Next ID: 4"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class OperationStatus(google.protobuf.message.Message):
+        """Status information for a single operation."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        class _OperationState:
+            ValueType = typing.NewType("ValueType", builtins.int)
+            V: typing_extensions.TypeAlias = ValueType
+
+        class _OperationStateEnumTypeWrapper(
+            google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+                GetStatusResponse.OperationStatus._OperationState.ValueType
+            ],
+            builtins.type,
+        ):  # noqa: F821
+            DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+            OPERATION_STATE_UNSPECIFIED: (
+                GetStatusResponse.OperationStatus._OperationState.ValueType
+            )  # 0
+            OPERATION_STATE_UNKNOWN: (
+                GetStatusResponse.OperationStatus._OperationState.ValueType
+            )  # 1
+            OPERATION_STATE_RUNNING: (
+                GetStatusResponse.OperationStatus._OperationState.ValueType
+            )  # 2
+            OPERATION_STATE_TERMINATING: (
+                GetStatusResponse.OperationStatus._OperationState.ValueType
+            )  # 3
+            OPERATION_STATE_SUCCEEDED: (
+                GetStatusResponse.OperationStatus._OperationState.ValueType
+            )  # 4
+            OPERATION_STATE_FAILED: GetStatusResponse.OperationStatus._OperationState.ValueType  # 5
+            OPERATION_STATE_CANCELLED: (
+                GetStatusResponse.OperationStatus._OperationState.ValueType
+            )  # 6
+
+        class OperationState(_OperationState, metaclass=_OperationStateEnumTypeWrapper): ...
+        OPERATION_STATE_UNSPECIFIED: GetStatusResponse.OperationStatus.OperationState.ValueType  # 0
+        OPERATION_STATE_UNKNOWN: GetStatusResponse.OperationStatus.OperationState.ValueType  # 1
+        OPERATION_STATE_RUNNING: GetStatusResponse.OperationStatus.OperationState.ValueType  # 2
+        OPERATION_STATE_TERMINATING: GetStatusResponse.OperationStatus.OperationState.ValueType  # 3
+        OPERATION_STATE_SUCCEEDED: GetStatusResponse.OperationStatus.OperationState.ValueType  # 4
+        OPERATION_STATE_FAILED: GetStatusResponse.OperationStatus.OperationState.ValueType  # 5
+        OPERATION_STATE_CANCELLED: GetStatusResponse.OperationStatus.OperationState.ValueType  # 6
+
+        OPERATION_ID_FIELD_NUMBER: builtins.int
+        STATE_FIELD_NUMBER: builtins.int
+        EXTENSIONS_FIELD_NUMBER: builtins.int
+        operation_id: builtins.str
+        """The operation_id of the operation."""
+        state: global___GetStatusResponse.OperationStatus.OperationState.ValueType
+        """The current status of the operation."""
+        @property
+        def extensions(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            google.protobuf.any_pb2.Any
+        ]:
+            """Extension point for custom operation-level status fields."""
+
+        def __init__(
+            self,
+            *,
+            operation_id: builtins.str = ...,
+            state: global___GetStatusResponse.OperationStatus.OperationState.ValueType = ...,
+            extensions: collections.abc.Iterable[google.protobuf.any_pb2.Any] | None = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "extensions", b"extensions", "operation_id", b"operation_id", "state", b"state"
+            ],
+        ) -> None: ...
+
+    SESSION_ID_FIELD_NUMBER: builtins.int
+    SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
+    OPERATION_STATUSES_FIELD_NUMBER: builtins.int
+    EXTENSIONS_FIELD_NUMBER: builtins.int
+    session_id: builtins.str
+    """Session id of the session for which the status was requested."""
+    server_side_session_id: builtins.str
+    """Server-side generated idempotency key that the client can use to assert that the server side
+    session has not changed.
+    """
+    @property
+    def operation_statuses(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___GetStatusResponse.OperationStatus
+    ]:
+        """Status information about requested operations."""
+
+    @property
+    def extensions(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        google.protobuf.any_pb2.Any
+    ]:
+        """Extension point for custom status response types."""
+
+    def __init__(
+        self,
+        *,
+        session_id: builtins.str = ...,
+        server_side_session_id: builtins.str = ...,
+        operation_statuses: (
+            collections.abc.Iterable[global___GetStatusResponse.OperationStatus] | None
+        ) = ...,
+        extensions: collections.abc.Iterable[google.protobuf.any_pb2.Any] | None = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "extensions",
+            b"extensions",
+            "operation_statuses",
+            b"operation_statuses",
+            "server_side_session_id",
+            b"server_side_session_id",
+            "session_id",
+            b"session_id",
+        ],
+    ) -> None: ...
+
+global___GetStatusResponse = GetStatusResponse

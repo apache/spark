@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.util.{FailFastMode, ParseMode, PermissiveMo
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 
-private[sql] case class AvroDataToCatalyst(
+case class AvroDataToCatalyst(
     child: Expression,
     jsonFormatSchema: String,
     options: Map[String, String])
@@ -90,7 +90,7 @@ private[sql] case class AvroDataToCatalyst(
   @transient private lazy val nullResultRow: Any = dataType match {
       case st: StructType =>
         val resultRow = new SpecificInternalRow(st.map(_.dataType))
-        for(i <- 0 until st.length) {
+        for (i <- 0 until st.length) {
           resultRow.setNullAt(i)
         }
         resultRow

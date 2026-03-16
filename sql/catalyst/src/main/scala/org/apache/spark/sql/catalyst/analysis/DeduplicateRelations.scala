@@ -19,13 +19,14 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
+import org.apache.spark.sql.catalyst.analysis.resolver.ResolverTag
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, AttributeSet, Expression, NamedExpression, OuterReference, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.internal.SQLConf
 
 object DeduplicateRelations extends Rule[LogicalPlan] {
-
   type ExprIdMap = mutable.HashMap[Class[_], mutable.HashSet[Long]]
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
@@ -56,21 +57,30 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
       case e @ Except(left, right, _) if !e.duplicateResolved && noMissingInput(right) =>
         e.copy(right = dedupRight(left, right))
       // Only after we finish by-name resolution for Union
-      case u: Union if !u.byName && !u.duplicateResolved =>
+      case u: Union if !u.byName && !u.duplicatesResolvedBetweenBranches =>
+        val unionWithChildOutputsDeduplicated =
+          DeduplicateUnionChildOutput.deduplicateOutputPerChild(u)
         // Use projection-based de-duplication for Union to avoid breaking the checkpoint sharing
         // feature in streaming.
-        val newChildren = u.children.foldRight(Seq.empty[LogicalPlan]) { (head, tail) =>
-          head +: tail.map {
-            case child if head.outputSet.intersect(child.outputSet).isEmpty =>
-              child
-            case child =>
-              val projectList = child.output.map { attr =>
-                Alias(attr, attr.name)()
+        val newChildren =
+          unionWithChildOutputsDeduplicated.children.foldRight(Seq.empty[LogicalPlan]) {
+            (head, tail) =>
+              head +: tail.map {
+                case child if head.outputSet.intersect(child.outputSet).isEmpty =>
+                  child
+                case child =>
+                  val projectList = child.output.map { attr =>
+                    Alias(attr, attr.name)()
+                  }
+                  val project = Project(projectList, child)
+                  project.setTagValue(
+                    ResolverTag.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION,
+                    ()
+                  )
+                  project
               }
-              Project(projectList, child)
           }
-        }
-        u.copy(children = newChildren)
+        unionWithChildOutputsDeduplicated.copy(children = newChildren)
       case merge: MergeIntoTable
           if !merge.duplicateResolved && noMissingInput(merge.sourceTable) =>
         merge.copy(sourceTable = dedupRight(merge.targetTable, merge.sourceTable))
@@ -132,8 +142,22 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         _.output.map(_.exprId.id),
         newFlatMap => newFlatMap.copy(output = newFlatMap.output.map(_.newInstance())))
 
+    case f: FlatMapGroupsInArrow =>
+      deduplicateAndRenew[FlatMapGroupsInArrow](
+        existingRelations,
+        f,
+        _.output.map(_.exprId.id),
+        newFlatMap => newFlatMap.copy(output = newFlatMap.output.map(_.newInstance())))
+
     case f: FlatMapCoGroupsInPandas =>
       deduplicateAndRenew[FlatMapCoGroupsInPandas](
+        existingRelations,
+        f,
+        _.output.map(_.exprId.id),
+        newFlatMap => newFlatMap.copy(output = newFlatMap.output.map(_.newInstance())))
+
+    case f: FlatMapCoGroupsInArrow =>
+      deduplicateAndRenew[FlatMapCoGroupsInArrow](
         existingRelations,
         f,
         _.output.map(_.exprId.id),
@@ -218,8 +242,17 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
       if (planChanged) {
         if (planWithNewSubquery.childrenResolved) {
           val planWithNewChildren = planWithNewSubquery.withNewChildren(newChildren.toSeq)
+          val childrenOutputLookup = AttributeSet.fromAttributeSets(newChildren.map(_.outputSet))
+          val childrenOutput = newChildren.flatMap(_.output)
           val attrMap = AttributeMap(plan.children.flatMap(_.output)
-            .zip(newChildren.flatMap(_.output)).filter { case (a1, a2) => a1.exprId != a2.exprId })
+            .zip(childrenOutput).filter { case (a1, a2) => a1.exprId != a2.exprId })
+          val preventDeduplicationIfOldExprIdStillExists =
+            conf.getConf(SQLConf.DONT_DEDUPLICATE_EXPRESSION_IF_EXPR_ID_IN_OUTPUT)
+          val missingAttributeMap = AttributeMap(attrMap.filter {
+            case (oldAttribute, _) =>
+              !preventDeduplicationIfOldExprIdStillExists ||
+              !childrenOutputLookup.contains(oldAttribute)
+          })
           if (attrMap.isEmpty) {
             planWithNewChildren
           } else {
@@ -263,7 +296,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
                   rightDeserializer = newRightDes, leftGroup = newLeftGroup,
                   rightGroup = newRightGroup, leftAttr = newLeftAttr, rightAttr = newRightAttr,
                   leftOrder = newLeftOrder, rightOrder = newRightOrder)
-              case _ => planWithNewChildren.rewriteAttrs(attrMap)
+              case _ => planWithNewChildren.rewriteAttrs(missingAttributeMap)
             }
           }
         } else {
@@ -378,7 +411,19 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         newVersion.copyTagsFrom(oldVersion)
         Seq((oldVersion, newVersion))
 
+      case oldVersion @ FlatMapGroupsInArrow(_, _, output, _)
+        if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
+        val newVersion = oldVersion.copy(output = output.map(_.newInstance()))
+        newVersion.copyTagsFrom(oldVersion)
+        Seq((oldVersion, newVersion))
+
       case oldVersion @ FlatMapCoGroupsInPandas(_, _, _, output, _, _)
+        if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
+        val newVersion = oldVersion.copy(output = output.map(_.newInstance()))
+        newVersion.copyTagsFrom(oldVersion)
+        Seq((oldVersion, newVersion))
+
+      case oldVersion @ FlatMapCoGroupsInArrow(_, _, _, output, _, _)
         if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
         val newVersion = oldVersion.copy(output = output.map(_.newInstance()))
         newVersion.copyTagsFrom(oldVersion)
@@ -396,7 +441,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         newVersion.copyTagsFrom(oldVersion)
         Seq((oldVersion, newVersion))
 
-      case oldVersion @ AttachDistributedSequence(sequenceAttr, _)
+      case oldVersion @ AttachDistributedSequence(sequenceAttr, _, _)
         if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
         val newVersion = oldVersion.copy(sequenceAttr = sequenceAttr.newInstance())
         newVersion.copyTagsFrom(oldVersion)
@@ -423,7 +468,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         newVersion.copyTagsFrom(oldVersion)
         Seq((oldVersion, newVersion))
 
-      case oldVersion @ Window(windowExpressions, _, _, child)
+      case oldVersion @ Window(windowExpressions, _, _, child, _)
           if AttributeSet(windowExpressions.map(_.toAttribute)).intersect(conflictingAttributes)
           .nonEmpty =>
         val newVersion = oldVersion.copy(windowExpressions = newAliases(windowExpressions))

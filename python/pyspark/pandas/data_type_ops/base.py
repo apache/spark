@@ -17,12 +17,13 @@
 
 import numbers
 from abc import ABCMeta
-from typing import Any, Optional, Union
+from typing import Any, Optional, Union, cast
 from itertools import chain
 
 import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
+from pandas.core.dtypes.common import is_numeric_dtype
 
 from pyspark.sql import functions as F, Column as PySparkColumn
 from pyspark.sql.types import (
@@ -45,11 +46,11 @@ from pyspark.sql.types import (
     UserDefinedType,
 )
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
-from pyspark.pandas.typedef import extension_dtypes
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
     extension_float_dtypes_available,
     extension_object_dtypes_available,
+    handle_dtype_as_extension_dtype,
     spark_type_to_pandas_dtype,
 )
 
@@ -108,6 +109,33 @@ def transform_boolean_operand_to_numeric(
         return operand
 
 
+def _should_return_all_false(left: IndexOpsLike, right: Any) -> bool:
+    """
+    Determine if binary comparison should short-circuit to all False,
+    based on incompatible dtypes: non-numeric vs. numeric (including bools).
+    """
+    from pyspark.pandas.base import IndexOpsMixin
+    from pandas.api.types import is_list_like
+
+    def are_both_numeric(left_dtype: Dtype, right_dtype: Dtype) -> bool:
+        return is_numeric_dtype(left_dtype) and is_numeric_dtype(right_dtype)
+
+    left_dtype = left.dtype
+
+    if isinstance(right, IndexOpsMixin):
+        right_dtype = right.dtype
+    elif isinstance(right, (list, tuple)):
+        right_dtype = pd.Series(right).dtype
+    else:
+        assert not is_list_like(right), (
+            "Only ps.Series, ps.Index, list, tuple, or scalar is supported as the "
+            "right-hand operand."
+        )
+        right_dtype = pd.Series([right]).dtype
+
+    return left_dtype != right_dtype and not are_both_numeric(left_dtype, right_dtype)
+
+
 def _as_categorical_type(
     index_ops: IndexOpsLike, dtype: CategoricalDtype, spark_type: DataType
 ) -> IndexOpsLike:
@@ -144,7 +172,7 @@ def _as_categorical_type(
 def _as_bool_type(index_ops: IndexOpsLike, dtype: Dtype) -> IndexOpsLike:
     """Cast `index_ops` to BooleanType Spark type, given `dtype`."""
     spark_type = BooleanType()
-    if isinstance(dtype, extension_dtypes):
+    if handle_dtype_as_extension_dtype(dtype):
         scol = index_ops.spark.column.cast(spark_type)
     else:
         null_value = (
@@ -165,7 +193,7 @@ def _as_string_type(
     representing null Spark column. Note that `null_str` is for non-extension dtypes only.
     """
     spark_type = StringType()
-    if isinstance(dtype, extension_dtypes):
+    if handle_dtype_as_extension_dtype(dtype):
         scol = index_ops.spark.column.cast(spark_type)
     else:
         casted = index_ops.spark.column.cast(spark_type)
@@ -225,7 +253,7 @@ def _is_extension_dtypes(object: Any) -> bool:
     Extention dtype includes Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype, BooleanDtype,
     StringDtype, Float32Dtype and Float64Dtype.
     """
-    return isinstance(getattr(object, "dtype", None), extension_dtypes)
+    return handle_dtype_as_extension_dtype(getattr(object, "dtype", None))
 
 
 class DataTypeOps(object, metaclass=ABCMeta):
@@ -271,7 +299,10 @@ class DataTypeOps(object, metaclass=ABCMeta):
                 return object.__new__(IntegralOps)
         elif isinstance(spark_type, StringType):
             if extension_object_dtypes_available and isinstance(dtype, StringDtype):
-                return object.__new__(StringExtensionOps)
+                if handle_dtype_as_extension_dtype(dtype):
+                    return object.__new__(StringExtensionOps)
+                else:
+                    return object.__new__(StringOps)
             else:
                 return object.__new__(StringOps)
         elif isinstance(spark_type, BooleanType):
@@ -392,6 +423,15 @@ class DataTypeOps(object, metaclass=ABCMeta):
         raise TypeError(">= can not be applied to %s." % self.pretty_name)
 
     def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import IndexOpsMixin
+
+        if _should_return_all_false(left, right):
+            left_scol = left._with_new_scol(F.lit(False))
+            if isinstance(right, IndexOpsMixin):
+                return left_scol.rename(None)  # type: ignore[attr-defined]
+            else:
+                return cast(SeriesOrIndex, left_scol)
+
         if isinstance(right, (list, tuple)):
             from pyspark.pandas.series import first_series, scol_for
             from pyspark.pandas.frame import DataFrame
@@ -485,9 +525,16 @@ class DataTypeOps(object, metaclass=ABCMeta):
             return column_op(PySparkColumn.__eq__)(left, right)
 
     def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
+        from pyspark.pandas.base import column_op, IndexOpsMixin
 
         _sanitize_list_like(right)
+
+        if _should_return_all_false(left, right):
+            left_scol = left._with_new_scol(F.lit(True))
+            if isinstance(right, IndexOpsMixin):
+                return left_scol.rename(None)  # type: ignore[attr-defined]
+            else:
+                return cast(SeriesOrIndex, left_scol)
 
         return column_op(PySparkColumn.__ne__)(left, right)
 

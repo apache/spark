@@ -238,17 +238,17 @@ SELECT TRANSFORM(zip_code, name, age)
     USING 'cat'
 FROM person
 WHERE zip_code > 94500;
-+-------+---------------------+
-|    key|                value|
-+-------+---------------------+
-|  94588|	  Anil K    27|
-|  94588|	  John V    \N|
-|  94511|	Aryan B.    18|
-|  94511|	 David K    42|
-|  94588|	 Zen Hui    50|
-|  94588|	  Dan Li    18|
-|  94511|	Lalit B.    \N|
-+-------+---------------------+
++-------+----------------+
+|    key|           value|
++-------+----------------+
+|  94588|    Anil K    27|
+|  94588|    John V    \N|
+|  94511|  Aryan B.    18|
+|  94511|   David K    42|
+|  94588|   Zen Hui    50|
+|  94588|    Dan Li    18|
+|  94511|  Lalit B.    \N|
++-------+----------------+
 ```
 
 ### Related Statements

@@ -21,7 +21,7 @@ import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.api.python.PythonUtils
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.DATA_SOURCE
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDataSource
@@ -48,13 +48,12 @@ class DataSourceManager extends Logging {
    */
   def registerDataSource(name: String, source: UserDefinedPythonDataSource): Unit = {
     val normalizedName = normalize(name)
-    if (staticDataSourceBuilders.contains(normalizedName)) {
-      // Cannot overwrite static Python Data Sources.
-      throw QueryCompilationErrors.dataSourceAlreadyExists(name)
-    }
     val previousValue = runtimeDataSourceBuilders.put(normalizedName, source)
     if (previousValue != null) {
       logWarning(log"The data source ${MDC(DATA_SOURCE, name)} replaced a previously " +
+        log"registered data source.")
+    } else if (staticDataSourceBuilders.contains(normalizedName)) {
+      logWarning(log"The data source ${MDC(DATA_SOURCE, name)} replaced a statically " +
         log"registered data source.")
     }
   }
@@ -64,11 +63,7 @@ class DataSourceManager extends Logging {
    * it does not exist.
    */
   def lookupDataSource(name: String): UserDefinedPythonDataSource = {
-    if (dataSourceExists(name)) {
-      val normalizedName = normalize(name)
-      staticDataSourceBuilders.getOrElse(
-        normalizedName, runtimeDataSourceBuilders.get(normalizedName))
-    } else {
+    getDataSource(name).getOrElse {
       throw QueryCompilationErrors.dataSourceDoesNotExist(name)
     }
   }
@@ -77,9 +72,14 @@ class DataSourceManager extends Logging {
    * Checks if a data source with the specified name exists (case-insensitive).
    */
   def dataSourceExists(name: String): Boolean = {
+    getDataSource(name).isDefined
+  }
+
+  private def getDataSource(name: String): Option[UserDefinedPythonDataSource] = {
     val normalizedName = normalize(name)
-    staticDataSourceBuilders.contains(normalizedName) ||
-      runtimeDataSourceBuilders.containsKey(normalizedName)
+    // Runtime registration takes precedence over static.
+    Option(runtimeDataSourceBuilders.get(normalizedName))
+      .orElse(staticDataSourceBuilders.get(normalizedName))
   }
 
   override def clone(): DataSourceManager = {
@@ -101,6 +101,7 @@ object DataSourceManager extends Logging {
 
   private def initialStaticDataSourceBuilders: Map[String, UserDefinedPythonDataSource] = {
     if (shouldLoadPythonDataSources) this.synchronized {
+      logInfo("Loading static Python Data Sources.")
       if (dataSourceBuilders.isEmpty) {
         val maybeResult = try {
           Some(UserDefinedPythonDataSource.lookupAllDataSourcesInPython())

@@ -15,9 +15,6 @@
 # limitations under the License.
 #
 from pyspark.errors import PySparkValueError, PySparkTypeError
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
 
 from typing import Any, Dict, Optional, Union, cast
 import warnings
@@ -48,6 +45,20 @@ class RuntimeConf:
             warnings.warn(warn)
 
     set.__doc__ = PySparkRuntimeConfig.set.__doc__
+
+    def _set_all(self, configs: Dict[str, Union[str, int, bool]], silent: bool) -> None:
+        conf_list = []
+        for key, value in configs.items():
+            if isinstance(value, bool):
+                value = "true" if value else "false"
+            elif isinstance(value, int):
+                value = str(value)
+            conf_list.append(proto.KeyValue(key=key, value=value))
+        op_set = proto.ConfigRequest.Set(pairs=conf_list, silent=silent)
+        operation = proto.ConfigRequest.Operation(set=op_set)
+        result = self._client.config(operation)
+        for warn in result.warnings:
+            warnings.warn(warn)
 
     def get(
         self, key: str, default: Union[Optional[str], _NoValueType] = _NoValue
@@ -135,7 +146,7 @@ def _test() -> None:
         .getOrCreate()
     )
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.connect.conf,
         globs=globs,
         optionflags=doctest.ELLIPSIS

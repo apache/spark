@@ -35,10 +35,14 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIfNeeded, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, ResolveDefaultColumns}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.TableIdentifierHelper
+import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.execution.CommandExecutionMode
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
@@ -232,19 +236,23 @@ case class AlterTableAddColumnsCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val catalogTable = verifyAlterTableAddColumn(sparkSession.sessionState.conf, catalog, table)
-    val colsWithProcessedDefaults =
-      constantFoldCurrentDefaultsToExistDefaults(sparkSession, catalogTable.provider)
+    ResolveDefaultColumns.validateTableProviderForDefaultValue(
+      StructType(colsToAdd), catalogTable.provider, "ALTER TABLE ADD COLUMNS", true)
 
     CommandUtils.uncacheTableOrView(sparkSession, table)
     catalog.refreshTable(table)
 
     SchemaUtils.checkColumnNameDuplication(
-      (colsWithProcessedDefaults ++ catalogTable.schema).map(_.name),
-      conf.caseSensitiveAnalysis)
-    DDLUtils.checkTableColumns(catalogTable, StructType(colsWithProcessedDefaults))
+      (colsToAdd ++ catalogTable.schema).map(_.name),
+      sparkSession.sessionState.conf.caseSensitiveAnalysis)
+    if (!conf.allowCollationsInMapKeys) {
+      colsToAdd.foreach(col => SchemaUtils.checkNoCollationsInMapKeys(col.dataType))
+    }
+    DDLUtils.checkTableColumns(catalogTable, StructType(colsToAdd))
 
-    val existingSchema = CharVarcharUtils.getRawSchema(catalogTable.dataSchema)
-    catalog.alterTableDataSchema(table, StructType(existingSchema ++ colsWithProcessedDefaults))
+    val existingDataSchema = CharVarcharUtils.getRawSchema(catalogTable.dataSchema)
+    catalog.alterTableSchema(table,
+      StructType(existingDataSchema ++ colsToAdd ++ catalogTable.partitionSchema))
     Seq.empty[Row]
   }
 
@@ -279,27 +287,6 @@ case class AlterTableAddColumnsCommand(
       }
     }
     catalogTable
-  }
-
-  /**
-   * ALTER TABLE ADD COLUMNS commands may optionally specify a DEFAULT expression for any column.
-   * In that case, this method evaluates its originally specified value and then stores the result
-   * in a separate column metadata entry, then returns the updated column definitions.
-   */
-  private def constantFoldCurrentDefaultsToExistDefaults(
-      sparkSession: SparkSession, tableProvider: Option[String]): Seq[StructField] = {
-    colsToAdd.map { col: StructField =>
-      if (col.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
-        val schema = StructType(Array(col))
-        ResolveDefaultColumns.validateTableProviderForDefaultValue(
-          schema, tableProvider, "ALTER TABLE ADD COLUMNS", true)
-        val foldedStructType = ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
-          schema, "ALTER TABLE ADD COLUMNS")
-        foldedStructType.fields(0)
-      } else {
-        col
-      }
-    }
   }
 }
 
@@ -498,7 +485,7 @@ case class TruncateTableCommand(
         partLocations
       }
     val hadoopConf = spark.sessionState.newHadoopConf()
-    val ignorePermissionAcl = conf.truncateTableIgnorePermissionAcl
+    val ignorePermissionAcl = spark.sessionState.conf.truncateTableIgnorePermissionAcl
     locations.foreach { location =>
       if (location.isDefined) {
         val path = new Path(location.get)
@@ -768,7 +755,8 @@ case class DescribeQueryCommand(queryText: String, plan: LogicalPlan)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val result = new ArrayBuffer[Row]
-    val queryExecution = sparkSession.sessionState.executePlan(plan)
+    // DESCRIBE QUERY only needs the schema, so we can skip execution.
+    val queryExecution = sparkSession.sessionState.executePlan(plan, CommandExecutionMode.SKIP)
     describeSchema(queryExecution.analyzed.schema, result, header = false)
     result.toSeq
   }
@@ -816,7 +804,8 @@ case class DescribeColumnCommand(
 
     val catalogTable = catalog.getTempViewOrPermanentTableMetadata(table)
     val colStatsMap = catalogTable.stats.map(_.colStats).getOrElse(Map.empty)
-    val colStats = if (conf.caseSensitiveAnalysis) colStatsMap else CaseInsensitiveMap(colStatsMap)
+    val colStats = if (sparkSession.sessionState.conf.caseSensitiveAnalysis) colStatsMap
+      else CaseInsensitiveMap(colStatsMap)
     val cs = colStats.get(field.name)
 
     val comment = if (field.metadata.contains("comment")) {
@@ -972,7 +961,7 @@ case class ShowTablePropertiesCommand(
       Seq.empty[Row]
     } else {
       val catalogTable = catalog.getTableMetadata(table)
-      val properties = conf.redactOptions(catalogTable.properties)
+      val properties = sparkSession.sessionState.conf.redactOptions(catalogTable.properties)
       propertyKey match {
         case Some(p) =>
           val propValue = properties
@@ -1091,6 +1080,11 @@ trait ShowCreateTableCommandBase extends SQLConfHelper {
       .foreach(builder.append)
   }
 
+  protected def showTableCollation(metadata: CatalogTable, builder: StringBuilder): Unit = {
+    metadata.collation.map(collation => "DEFAULT COLLATION " + collation + "\n")
+      .foreach(builder.append)
+  }
+
   protected def showTableProperties(metadata: CatalogTable, builder: StringBuilder): Unit = {
     if (metadata.properties.nonEmpty) {
       val props =
@@ -1112,6 +1106,7 @@ trait ShowCreateTableCommandBase extends SQLConfHelper {
   protected def showCreateView(metadata: CatalogTable, builder: StringBuilder): Unit = {
     showViewDataColumns(metadata, builder)
     showTableComment(metadata, builder)
+    showTableCollation(metadata, builder)
     showViewProperties(metadata, builder)
     showViewSchemaBinding(metadata, builder)
     showViewText(metadata, builder)
@@ -1134,6 +1129,7 @@ trait ShowCreateTableCommandBase extends SQLConfHelper {
   private def showViewProperties(metadata: CatalogTable, builder: StringBuilder): Unit = {
     val viewProps = metadata.properties
       .filter { case (k, _) => !k.startsWith(CatalogTable.VIEW_PREFIX) }
+      .filter { case (k, _) => !k.startsWith(TableCatalog.PROP_COLLATION) }
     if (viewProps.nonEmpty) {
       val props = viewProps.toSeq.sortBy(_._1).map { case (key, value) =>
         s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
@@ -1248,7 +1244,10 @@ case class ShowCreateTableCommand(
 
   private def showDataSourceTableDataColumns(
       metadata: CatalogTable, builder: StringBuilder): Unit = {
-    val columns = metadata.schema.fields.map(_.toDDL)
+    val rawSchema = CharVarcharUtils.getRawSchema(metadata.schema, conf)
+    val schemaWithExplicitCollations = DataTypeUtils.replaceNonCollatedTypesWithExplicitUTF8Binary(
+      rawSchema).asInstanceOf[StructType]
+    val columns = schemaWithExplicitCollations.fields.map(_.toDDL)
     builder ++= concatByMultiLines(columns)
   }
 
@@ -1293,6 +1292,7 @@ case class ShowCreateTableCommand(
     showDataSourceTableOptions(metadata, builder)
     showDataSourceTableNonDataColumns(metadata, builder)
     showTableComment(metadata, builder)
+    showTableCollation(metadata, builder)
     showTableLocation(metadata, builder)
     showTableProperties(metadata, builder)
   }

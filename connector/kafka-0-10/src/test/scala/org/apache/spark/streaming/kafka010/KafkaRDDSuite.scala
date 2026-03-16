@@ -38,6 +38,7 @@ import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 import org.apache.spark._
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.streaming.kafka010.mocks.MockTime
+import org.apache.spark.util.Utils
 
 class KafkaRDDSuite extends SparkFunSuite {
 
@@ -91,7 +92,7 @@ class KafkaRDDSuite extends SparkFunSuite {
     val logs = new Pool[TopicPartition, UnifiedLog]()
     val logDir = kafkaTestUtils.brokerLogDir
     val dir = new File(logDir, topic + "-" + partition)
-    dir.mkdirs()
+    Utils.createDirectory(dir)
     val logProps = new ju.Properties()
     logProps.put(TopicConfig.CLEANUP_POLICY_CONFIG, TopicConfig.CLEANUP_POLICY_COMPACT)
     logProps.put(TopicConfig.MIN_CLEANABLE_DIRTY_RATIO_CONFIG, java.lang.Float.valueOf(0.1f))

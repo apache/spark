@@ -21,16 +21,9 @@ import tempfile
 import numpy as np
 
 from pyspark.util import is_remote_only
-from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
-
-have_torcheval = True
-torcheval_requirement_message = None
-try:
-    import torcheval  # noqa: F401
-except ImportError:
-    have_torcheval = False
-    torcheval_requirement_message = "torcheval is required"
+from pyspark.testing.utils import have_torcheval, torcheval_requirement_message
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 if should_test_connect:
     from pyspark.ml.connect.evaluation import (
@@ -185,21 +178,13 @@ class EvaluationTestsMixin:
     or torcheval_requirement_message
     or "pyspark-connect cannot test classic Spark",
 )
-class EvaluationTests(EvaluationTestsMixin, unittest.TestCase):
-    def setUp(self) -> None:
-        self.spark = SparkSession.builder.master("local[2]").getOrCreate()
-
-    def tearDown(self) -> None:
-        self.spark.stop()
+class EvaluationTests(EvaluationTestsMixin, ReusedSQLTestCase):
+    @classmethod
+    def master(cls):
+        return "local[2]"
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.connect.test_legacy_mode_evaluation import *  # noqa: F401,F403
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

@@ -13,6 +13,10 @@ SELECT a, b, c, count(d) FROM grouping GROUP BY a, b, c GROUPING SETS ((a));
 -- SPARK-17849: grouping set throws NPE #3
 SELECT a, b, c, count(d) FROM grouping GROUP BY a, b, c GROUPING SETS ((c));
 
+-- SPARK-52007: grouping set doesn't produce expression IDs in grouping expressions
+SELECT a, b, c, d FROM grouping GROUP BY GROUPING SETS (a, b, c, d);
+SELECT a, b FROM grouping GROUP BY GROUPING SETS (a, b, d + 1) ORDER BY `(d + 1)`;
+
 -- Group sets without explicit group by
 SELECT c1, sum(c2) FROM (VALUES ('x', 10, 0), ('y', 20, 0)) AS t (c1, c2, c3) GROUP BY GROUPING SETS (c1);
 

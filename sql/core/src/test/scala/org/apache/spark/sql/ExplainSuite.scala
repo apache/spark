@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.physical.RoundRobinPartitioning
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
+import org.apache.spark.sql.execution.adaptive.{AQEPropagateEmptyRelation, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.datasources.SaveIntoDataSourceCommand
 import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
@@ -310,10 +310,10 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
               |""".stripMargin
 
           val expected_pattern1 =
-            "Subquery:1 Hosting operator id = 1 Hosting Expression = k#xL IN subquery#x"
+            "Subquery:1 Hosting operator id = 1 Hosting Expression = k#xL IN dynamicpruning#x"
           val expected_pattern2 =
             "PartitionFilters: \\[isnotnull\\(k#xL\\), dynamicpruningexpression\\(k#xL " +
-              "IN subquery#x\\)\\]"
+              "IN dynamicpruning#x\\)\\]"
           val expected_pattern3 =
             "Location: InMemoryFileIndex \\[\\S*org.apache.spark.sql.ExplainSuite" +
               "/df2/\\S*, ... 99 entries\\]"
@@ -557,31 +557,33 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
     val testDf = df1.join(df2, "k").groupBy("k").agg(count("v1"), sum("v1"), avg("v2"))
     // trigger the final plan for AQE
     testDf.collect()
-    // AdaptiveSparkPlan (21)
+
+    // AdaptiveSparkPlan (22)
     // +- == Final Plan ==
-    //    * HashAggregate (12)
-    //    +- AQEShuffleRead (11)
-    //       +- ShuffleQueryStage (10)
-    //          +- Exchange (9)
-    //             +- * HashAggregate (8)
-    //                +- * Project (7)
-    //                   +- * BroadcastHashJoin Inner BuildRight (6)
-    //                      :- * LocalTableScan (1)
-    //                      +- BroadcastQueryStage (5)
-    //                         +- BroadcastExchange (4)
-    //                            +- * Project (3)
-    //                               +- * LocalTableScan (2)
+    //   ResultQueryStage (13)
+    //   +- * HashAggregate (12)
+    //      +- AQEShuffleRead (11)
+    //         +- ShuffleQueryStage (10)
+    //            +- Exchange (9)
+    //               +- * HashAggregate (8)
+    //                  +- * Project (7)
+    //                     +- * BroadcastHashJoin Inner BuildRight (6)
+    //                        :- * LocalTableScan (1)
+    //                        +- BroadcastQueryStage (5)
+    //                           +- BroadcastExchange (4)
+    //                              +- * Project (3)
+    //                                 +- * LocalTableScan (2)
     // +- == Initial Plan ==
-    //    HashAggregate (20)
-    //    +- Exchange (19)
-    //       +- HashAggregate (18)
-    //          +- Project (17)
-    //             +- BroadcastHashJoin Inner BuildRight (16)
-    //                :- Project (14)
-    //                :  +- LocalTableScan (13)
-    //                +- BroadcastExchange (15)
-    //                   +- Project (3)
-    //                      +- LocalTableScan (2)
+    //   HashAggregate (21)
+    //   +- Exchange (20)
+    //      +- HashAggregate (19)
+    //         +- Project (18)
+    //            +- BroadcastHashJoin Inner BuildRight (17)
+    //               :- Project (15)
+    //               :  +- LocalTableScan (14)
+    //               +- BroadcastExchange (16)
+    //                  +- Project (3)
+    //                     +- LocalTableScan (2)
     checkKeywordsExistsInExplain(
       testDf,
       FormattedMode,
@@ -599,18 +601,18 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
         |Arguments: coalesced
         |""".stripMargin,
       """
-        |(16) BroadcastHashJoin
+        |(17) BroadcastHashJoin
         |Left keys [1]: [k#x]
         |Right keys [1]: [k#x]
         |Join type: Inner
         |Join condition: None
         |""".stripMargin,
       """
-        |(19) Exchange
+        |(20) Exchange
         |Input [5]: [k#x, count#xL, sum#xL, sum#x, count#xL]
         |""".stripMargin,
       """
-        |(21) AdaptiveSparkPlan
+        |(22) AdaptiveSparkPlan
         |Output [4]: [k#x, count(v1)#xL, sum(v1)#xL, avg(v2)#x]
         |Arguments: isFinalPlan=true
         |""".stripMargin
@@ -656,7 +658,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
           |Output [1]: [id#xL]
           |Arguments: 0""".stripMargin,
         """
-          |(12) AdaptiveSparkPlan
+          |(13) AdaptiveSparkPlan
           |Output [2]: [key#xL, value#xL]
           |Arguments: isFinalPlan=true
           |""".stripMargin,
@@ -664,11 +666,11 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
           |Subquery:1 Hosting operator id = 2 Hosting Expression = Subquery subquery#x, [id=#x]
           |""".stripMargin,
         """
-          |(16) ShuffleQueryStage
+          |(17) ShuffleQueryStage
           |Output [1]: [max#xL]
           |Arguments: 0""".stripMargin,
         """
-          |(20) AdaptiveSparkPlan
+          |(22) AdaptiveSparkPlan
           |Output [1]: [max(id)#xL]
           |Arguments: isFinalPlan=true
           |""".stripMargin
@@ -939,6 +941,60 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
     results = results.replaceAll("#\\d+", "#x").replaceAll("plan_id=\\d+", "plan_id=x")
     assert(results == expectedTree)
   }
+
+  test("SPARK-55052: Verify exposed AQEShuffleRead properties (coalesced and coalesced-skewed) " +
+    "in Physical Plan Tree") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "100",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+      withTempView("view1", "skewDataView2") {
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 10 as key1")
+          .createOrReplaceTempView("view1")
+        spark
+          .range(0, 200, 1, 10)
+          .selectExpr("id % 1 as key2")
+          .createOrReplaceTempView("skewDataView2")
+
+        val df = spark.sql("SELECT key1 FROM view1 JOIN skewDataView2 ON key1 = key2")
+        df.collect()
+
+        // Verify expected FinalPlan substring including AQEShuffleRead properties
+        checkKeywordsExistsInExplain(
+          df = df,
+          mode = ExplainMode.fromString("FORMATTED"),
+          keywords = "AQEShuffleRead (6), coalesced", "AQEShuffleRead (13), coalesced and skewed")
+      }
+    }
+  }
+
+  test("SPARK-55052: Verify exposed AQEShuffleRead properties (local) in Physical Plan Tree") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key -> AQEPropagateEmptyRelation.ruleName,
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1"
+    ) {
+      val df1 = spark.range(10).withColumn("a", $"id")
+      val df2 = spark.range(10).withColumn("b", $"id")
+
+      val joinedDF = df1.where($"a" > 10)
+        .join(df2.where($"b" > 10), Seq("id"), "left_outer")
+      checkAnswer(joinedDF, Seq())
+      joinedDF.collect()
+
+      // Verify expected FinalPlan substring including AQEShuffleRead properties
+      checkKeywordsExistsInExplain(
+        df = joinedDF,
+        mode = ExplainMode.fromString("FORMATTED"),
+        keywords = "AQEShuffleRead (6), local", "AQEShuffleRead (9), local")
+    }
+  }
+
 }
 
 case class ExplainSingleData(id: Int)

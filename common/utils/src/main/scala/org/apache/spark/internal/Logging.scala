@@ -17,6 +17,9 @@
 
 package org.apache.spark.internal
 
+import java.util.Locale
+
+import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
 import org.apache.logging.log4j.{CloseableThreadContext, Level, LogManager}
@@ -25,6 +28,7 @@ import org.apache.logging.log4j.core.appender.ConsoleAppender
 import org.apache.logging.log4j.core.config.DefaultConfiguration
 import org.apache.logging.log4j.core.filter.AbstractFilter
 import org.slf4j.{Logger, LoggerFactory}
+import org.slf4j.event.{Level => Slf4jLevel}
 
 import org.apache.spark.internal.Logging.SparkShellLoggingFilter
 import org.apache.spark.util.SparkClassUtils
@@ -58,34 +62,21 @@ import org.apache.spark.util.SparkClassUtils
  * <p>
  *
  * If you want to output logs in `scala code` through the structured log framework,
- * you can define `custom LogKey` and use it in `scala` code as follows:
+ * you can define `custom LogKey` in `java` and use it in `scala` code as follows:
  * <p>
  *
- * // To add a `custom LogKey`, implement `LogKey`
- * case object CUSTOM_LOG_KEY extends LogKey
- * import org.apache.spark.internal.MDC;
+ * // Add a `CustomLogKeys`, implement `LogKey`
+ * public enum CustomLogKeys implements LogKey {
+ *   CUSTOM_LOG_KEY
+ * }
  * logInfo(log"${MDC(CUSTOM_LOG_KEY, "key")}")
  */
-
-/**
- * Mapped Diagnostic Context (MDC) that will be used in log messages.
- * The values of the MDC will be inline in the log message, while the key-value pairs will be
- * part of the ThreadContext.
- */
-case class MDC(key: LogKey, value: Any) {
-  require(!value.isInstanceOf[MessageWithContext],
-    "the class of value cannot be MessageWithContext")
-}
-
-object MDC {
-  def of(key: LogKey, value: Any): MDC = MDC(key, value)
-}
 
 /**
  * Wrapper class for log messages that include a logging context.
  * This is used as the return type of the string interpolator `LogStringContext`.
  */
-case class MessageWithContext(message: String, context: java.util.HashMap[String, String]) {
+case class MessageWithContext(message: String, context: java.util.Map[String, String]) {
   def +(mdc: MessageWithContext): MessageWithContext = {
     val resultMap = new java.util.HashMap(context)
     resultMap.putAll(mdc.context)
@@ -103,7 +94,7 @@ class LogEntry(messageWithContext: => MessageWithContext) {
 
   def message: String = cachedMessageWithContext.message
 
-  def context: java.util.HashMap[String, String] = cachedMessageWithContext.context
+  def context: java.util.Map[String, String] = cachedMessageWithContext.context
 }
 
 /**
@@ -152,7 +143,7 @@ trait Logging {
         val value = if (mdc.value != null) mdc.value.toString else null
         sb.append(value)
         if (Logging.isStructuredLoggingEnabled) {
-          context.put(mdc.key.name, value)
+          context.put(mdc.key.name.toLowerCase(Locale.ROOT), value)
         }
 
         if (processedParts.hasNext) {
@@ -164,7 +155,7 @@ trait Logging {
     }
   }
 
-  protected def withLogContext(context: java.util.HashMap[String, String])(body: => Unit): Unit = {
+  protected def withLogContext(context: java.util.Map[String, String])(body: => Unit): Unit = {
     // put into thread context only when structured logging is enabled
     val closeableThreadContextOpt = if (Logging.isStructuredLoggingEnabled) {
       Some(CloseableThreadContext.putAll(context))
@@ -177,6 +168,12 @@ trait Logging {
     } finally {
       closeableThreadContextOpt.foreach(_.close())
     }
+  }
+
+  protected def MDC(key: LogKey, value: Any): MDC = {
+    require(!value.isInstanceOf[MessageWithContext],
+      "the class of value cannot be MessageWithContext")
+    new MDC(key, value)
   }
 
   // Log methods that take only a String
@@ -305,6 +302,16 @@ trait Logging {
     log.isTraceEnabled
   }
 
+  protected def logBasedOnLevel(level: Slf4jLevel)(f: => MessageWithContext): Unit = {
+    level match {
+      case Slf4jLevel.TRACE => logTrace(f.message)
+      case Slf4jLevel.DEBUG => logDebug(f.message)
+      case Slf4jLevel.INFO => logInfo(f)
+      case Slf4jLevel.WARN => logWarning(f)
+      case Slf4jLevel.ERROR => logError(f)
+    }
+  }
+
   protected def initializeLogIfNecessary(isInterpreter: Boolean): Unit = {
     initializeLogIfNecessary(isInterpreter, silent = false)
   }
@@ -337,9 +344,9 @@ trait Logging {
       if (Logging.defaultSparkLog4jConfig || Logging.islog4j2DefaultConfigured()) {
         Logging.defaultSparkLog4jConfig = true
         val defaultLogProps = if (Logging.isStructuredLoggingEnabled) {
-          "org/apache/spark/log4j2-defaults.properties"
+          "org/apache/spark/log4j2-json-layout.properties"
         } else {
-          "org/apache/spark/log4j2-pattern-layout-defaults.properties"
+          "org/apache/spark/log4j2-defaults.properties"
         }
         Option(SparkClassUtils.getSparkClassLoader.getResource(defaultLogProps)) match {
           case Some(url) =>
@@ -398,7 +405,6 @@ private[spark] object Logging {
   @volatile private var initialized = false
   @volatile private var defaultRootLevel: Level = null
   @volatile private var defaultSparkLog4jConfig = false
-  @volatile private var structuredLoggingEnabled = true
   @volatile private[spark] var sparkShellThresholdLevel: Level = null
   @volatile private[spark] var setLogLevelPrinted: Boolean = false
 
@@ -471,21 +477,21 @@ private[spark] object Logging {
    * Enable Structured logging framework.
    */
   private[spark] def enableStructuredLogging(): Unit = {
-    structuredLoggingEnabled = true
+    SparkLoggerFactory.enableStructuredLogging()
   }
 
   /**
    * Disable Structured logging framework.
    */
   private[spark] def disableStructuredLogging(): Unit = {
-    structuredLoggingEnabled = false
+    SparkLoggerFactory.disableStructuredLogging()
   }
 
   /**
    * Return true if Structured logging framework is enabled.
    */
   private[spark] def isStructuredLoggingEnabled: Boolean = {
-    structuredLoggingEnabled
+    SparkLoggerFactory.isStructuredLoggingEnabled
   }
 
   private[spark] class SparkShellLoggingFilter extends AbstractFilter {
@@ -530,4 +536,159 @@ private[spark] object Logging {
 
     override def isStopped: Boolean = status == LifeCycle.State.STOPPED
   }
+}
+
+/**
+ * A thread-safe token bucket-based throttler implementation with nanosecond accuracy.
+ *
+ * Each instance must be shared across all scopes it should throttle.
+ * For global throttling that means either by extending this class in an `object` or
+ * by creating the instance as a field of an `object`.
+ *
+ * @param bucketSize This corresponds to the largest possible burst without throttling,
+ *                   in number of executions.
+ * @param tokenRecoveryInterval Time between two tokens being added back to the bucket.
+ *                              This is reciprocal of the long-term average unthrottled rate.
+ *
+ * Example: With a bucket size of 100 and a recovery interval of 1s, we could log up to 100 events
+ * in under a second without throttling, but at that point the bucket is exhausted and we only
+ * regain the ability to log more events at 1 event per second. If we log less than 1 event/s
+ * the bucket will slowly refill until it's back at 100.
+ * Either way, we can always log at least 1 event/s.
+ */
+class LogThrottler(
+    val bucketSize: Int = 100,
+    val tokenRecoveryInterval: FiniteDuration = 1.second,
+    val timeSource: NanoTimeTimeSource = SystemNanoTimeSource) extends Logging {
+
+  private var remainingTokens = bucketSize
+  private var nextRecovery: DeadlineWithTimeSource =
+    DeadlineWithTimeSource.now(timeSource) + tokenRecoveryInterval
+  private var numSkipped: Long = 0
+
+  /**
+   * Run `thunk` as long as there are tokens remaining in the bucket,
+   * otherwise skip and remember number of skips.
+   *
+   * The argument to `thunk` is how many previous invocations have been skipped since the last time
+   * an invocation actually ran.
+   *
+   * Note: This method is `synchronized`, so it is concurrency safe.
+   * However, that also means no heavy-lifting should be done as part of this
+   * if the throttler is shared between concurrent threads.
+   * This also means that the synchronized block of the `thunk` that *does* execute will still
+   * hold up concurrent `thunk`s that will actually get rejected once they hold the lock.
+   * This is fine at low concurrency/low recovery rates. But if we need this to be more efficient at
+   * some point, we will need to decouple the check from the `thunk` execution.
+   */
+  def throttled(thunk: Long => Unit): Unit = this.synchronized {
+    tryRecoverTokens()
+    if (remainingTokens > 0) {
+      thunk(numSkipped)
+      numSkipped = 0
+      remainingTokens -= 1
+    } else {
+      numSkipped += 1L
+    }
+  }
+
+  /**
+   * Same as [[throttled]] but turns the number of skipped invocations into a logging message
+   * that can be appended to item being logged in `thunk`.
+   */
+  def throttledWithSkippedLogMessage(thunk: MessageWithContext => Unit): Unit = {
+    this.throttled { numSkipped =>
+      val skippedStr = if (numSkipped != 0L) {
+        log"[${MDC(LogKeys.NUM_SKIPPED, numSkipped)} similar messages were skipped.]"
+      } else {
+        log""
+      }
+      thunk(skippedStr)
+    }
+  }
+
+  /**
+   * Try to recover tokens, if the rate allows.
+   *
+   * Only call from within a `this.synchronized` block!
+   */
+  private[spark] def tryRecoverTokens(): Unit = {
+    try {
+      // Doing it one-by-one is a bit inefficient for long periods, but it's easy to avoid jumps
+      // and rounding errors this way. The inefficiency shouldn't matter as long as the bucketSize
+      // isn't huge.
+      while (remainingTokens < bucketSize && nextRecovery.isOverdue()) {
+        remainingTokens += 1
+        nextRecovery += tokenRecoveryInterval
+      }
+
+      val currentTime = DeadlineWithTimeSource.now(timeSource)
+      if (remainingTokens == bucketSize &&
+        (currentTime - nextRecovery) > tokenRecoveryInterval) {
+        // Reset the recovery time, so we don't accumulate infinite recovery while nothing is
+        // going on.
+        nextRecovery = currentTime + tokenRecoveryInterval
+      }
+    } catch {
+      case _: IllegalArgumentException =>
+        // Adding FiniteDuration throws IllegalArgumentException instead of wrapping on overflow.
+        // Given that this happens every ~300 years, we can afford some non-linearity here,
+        // rather than taking the effort to properly work around that.
+        nextRecovery = DeadlineWithTimeSource(Duration(-Long.MaxValue, NANOSECONDS), timeSource)
+    }
+  }
+
+  /**
+   * Resets throttler state to initial state.
+   * Visible for testing.
+   */
+  def reset(): Unit = this.synchronized {
+    remainingTokens = bucketSize
+    nextRecovery = DeadlineWithTimeSource.now(timeSource) + tokenRecoveryInterval
+    numSkipped = 0
+  }
+}
+
+/**
+ * This is essentially the same as Scala's [[Deadline]],
+ * just with a custom source of nanoTime so it can actually be tested properly.
+ */
+case class DeadlineWithTimeSource(
+    time: FiniteDuration,
+    timeSource: NanoTimeTimeSource = SystemNanoTimeSource) {
+  // Only implemented the methods LogThrottler actually needs for now.
+
+  /**
+   * Return a deadline advanced (i.e., moved into the future) by the given duration.
+   */
+  def +(other: FiniteDuration): DeadlineWithTimeSource = copy(time = time + other)
+
+  /**
+   * Calculate time difference between this and the other deadline, where the result is directed
+   * (i.e., may be negative).
+   */
+  def -(other: DeadlineWithTimeSource): FiniteDuration = time - other.time
+
+  /**
+   * Determine whether the deadline lies in the past at the point where this method is called.
+   */
+  def isOverdue(): Boolean = (time.toNanos - timeSource.nanoTime()) <= 0
+}
+
+object DeadlineWithTimeSource {
+  /**
+   * Construct a deadline due exactly at the point where this method is called. Useful for then
+   * advancing it to obtain a future deadline, or for sampling the current time exactly once and
+   * then comparing it to multiple deadlines (using subtraction).
+   */
+  def now(timeSource: NanoTimeTimeSource = SystemNanoTimeSource): DeadlineWithTimeSource =
+    DeadlineWithTimeSource(Duration(timeSource.nanoTime(), NANOSECONDS), timeSource)
+}
+
+/** Generalisation of [[System.nanoTime()]]. */
+private[spark] trait NanoTimeTimeSource {
+  def nanoTime(): Long
+}
+private[spark] object SystemNanoTimeSource extends NanoTimeTimeSource {
+  override def nanoTime(): Long = System.nanoTime()
 }

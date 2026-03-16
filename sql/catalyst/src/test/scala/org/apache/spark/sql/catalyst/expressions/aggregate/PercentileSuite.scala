@@ -188,7 +188,7 @@ class PercentileSuite extends SparkFunSuite {
         StringType, DateType, TimestampType,
       CalendarIntervalType, NullType)
 
-    for(dataType <- invalidDataTypes;
+    for (dataType <- invalidDataTypes;
         frequencyType <- validFrequencyTypes) {
       val child = AttributeReference("a", dataType)()
       val frq = AttributeReference("frq", frequencyType)()
@@ -207,7 +207,7 @@ class PercentileSuite extends SparkFunSuite {
       )
     }
 
-    for(dataType <- validDataTypes;
+    for (dataType <- validDataTypes;
         frequencyType <- invalidFrequencyDataTypes) {
       val child = AttributeReference("a", dataType)()
       val frq = AttributeReference("frq", frequencyType)()

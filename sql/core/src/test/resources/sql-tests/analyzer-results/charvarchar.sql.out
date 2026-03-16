@@ -376,7 +376,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`char_tbl4`, false
 insert into char_tbl4 select c, c, v, c from str_view
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/char_tbl4, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/char_tbl4], Append, `spark_catalog`.`default`.`char_tbl4`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/char_tbl4), [c7, c8, v, s]
-+- Project [static_invoke(CharVarcharCodegenUtils.charTypeWriteSideCheck(cast(c#x as string), 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.charTypeWriteSideCheck(cast(c#x as string), 8)) AS c8#x, static_invoke(CharVarcharCodegenUtils.varcharTypeWriteSideCheck(cast(v#x as string), 6)) AS v#x, cast(c#x as string) AS s#x]
++- Project [static_invoke(CharVarcharCodegenUtils.charTypeWriteSideCheck(cast(c#x as string), 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.charTypeWriteSideCheck(cast(c#x as string), 8)) AS c8#x, static_invoke(CharVarcharCodegenUtils.varcharTypeWriteSideCheck(cast(v#x as string), 6)) AS v#x, c#x AS s#x]
    +- Project [c#x, c#x, v#x, c#x]
       +- SubqueryAlias str_view
          +- View (`str_view`, [c#x, v#x])

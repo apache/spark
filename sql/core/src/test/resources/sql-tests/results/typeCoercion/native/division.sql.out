@@ -1186,9 +1186,25 @@ struct<(CAST(1 AS STRING) / CAST(1 AS DECIMAL(10,0))):double>
 -- !query
 SELECT cast(1 as string) / cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(1 AS STRING) / CAST(1 AS STRING)):double>
+struct<>
 -- !query output
-1.0
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "actualDataType" : "\"STRING\"",
+    "inputType" : "(\"DOUBLE\" or \"DECIMAL\")",
+    "sqlExpr" : "\"(CAST(1 AS STRING) / CAST(1 AS STRING))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 44,
+    "fragment" : "cast(1 as string) / cast(1 as string)"
+  } ]
+}
 
 
 -- !query
@@ -1198,11 +1214,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "left" : "\"DOUBLE\"",
-    "right" : "\"BINARY\"",
+    "actualDataType" : "\"BINARY\"",
+    "inputType" : "(\"DOUBLE\" or \"DECIMAL\")",
     "sqlExpr" : "\"(CAST(1 AS STRING) / CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
@@ -1222,11 +1238,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "left" : "\"DOUBLE\"",
-    "right" : "\"BOOLEAN\"",
+    "actualDataType" : "\"BOOLEAN\"",
+    "inputType" : "(\"DOUBLE\" or \"DECIMAL\")",
     "sqlExpr" : "\"(CAST(1 AS STRING) / CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
@@ -1246,11 +1262,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "left" : "\"DOUBLE\"",
-    "right" : "\"TIMESTAMP\"",
+    "actualDataType" : "\"TIMESTAMP\"",
+    "inputType" : "(\"DOUBLE\" or \"DECIMAL\")",
     "sqlExpr" : "\"(CAST(1 AS STRING) / CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
@@ -1270,11 +1286,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "left" : "\"DOUBLE\"",
-    "right" : "\"DATE\"",
+    "actualDataType" : "\"DATE\"",
+    "inputType" : "(\"DOUBLE\" or \"DECIMAL\")",
     "sqlExpr" : "\"(CAST(1 AS STRING) / CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
@@ -1462,11 +1478,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "left" : "\"BINARY\"",
-    "right" : "\"DOUBLE\"",
+    "actualDataType" : "\"BINARY\"",
+    "inputType" : "(\"DOUBLE\" or \"DECIMAL\")",
     "sqlExpr" : "\"(CAST(1 AS BINARY) / CAST(1 AS STRING))\""
   },
   "queryContext" : [ {
@@ -1750,11 +1766,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "left" : "\"BOOLEAN\"",
-    "right" : "\"DOUBLE\"",
+    "actualDataType" : "\"BOOLEAN\"",
+    "inputType" : "(\"DOUBLE\" or \"DECIMAL\")",
     "sqlExpr" : "\"(CAST(1 AS BOOLEAN) / CAST(1 AS STRING))\""
   },
   "queryContext" : [ {
@@ -2038,11 +2054,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "left" : "\"TIMESTAMP\"",
-    "right" : "\"DOUBLE\"",
+    "actualDataType" : "\"TIMESTAMP\"",
+    "inputType" : "(\"DOUBLE\" or \"DECIMAL\")",
     "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) / CAST(1 AS STRING))\""
   },
   "queryContext" : [ {
@@ -2326,11 +2342,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "left" : "\"DATE\"",
-    "right" : "\"DOUBLE\"",
+    "actualDataType" : "\"DATE\"",
+    "inputType" : "(\"DOUBLE\" or \"DECIMAL\")",
     "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) / CAST(1 AS STRING))\""
   },
   "queryContext" : [ {

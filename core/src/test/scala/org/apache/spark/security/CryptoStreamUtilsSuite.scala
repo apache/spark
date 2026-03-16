@@ -30,6 +30,7 @@ import org.apache.spark.network.util.CryptoUtils
 import org.apache.spark.security.CryptoStreamUtils._
 import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
 import org.apache.spark.storage.TempShuffleBlockId
+import org.apache.spark.util.Utils
 
 class CryptoStreamUtilsSuite extends SparkFunSuite {
 
@@ -92,7 +93,7 @@ class CryptoStreamUtilsSuite extends SparkFunSuite {
 
     val inputStream = new ByteArrayInputStream(encryptedBytes)
     val wrappedInputStream = serializerManager.wrapStream(blockId, inputStream)
-    val decryptedBytes = ByteStreams.toByteArray(wrappedInputStream)
+    val decryptedBytes = wrappedInputStream.readAllBytes()
     val decryptedStr = new String(decryptedBytes, UTF_8)
     assert(decryptedStr === plainStr)
   }
@@ -112,12 +113,11 @@ class CryptoStreamUtilsSuite extends SparkFunSuite {
           bytes.toByteArray()
         }.collect()(0)
 
-      assert(content != encrypted)
+      assert(!content.getBytes(UTF_8).sameElements(encrypted))
 
       val in = CryptoStreamUtils.createCryptoInputStream(new ByteArrayInputStream(encrypted),
         sc.conf, SparkEnv.get.securityManager.getIOEncryptionKey().get)
-      val decrypted = new String(ByteStreams.toByteArray(in), UTF_8)
-      assert(content === decrypted)
+      assert(content === Utils.toString(in))
     } finally {
       sc.stop()
     }
@@ -134,14 +134,14 @@ class CryptoStreamUtilsSuite extends SparkFunSuite {
 
     val outStream = createCryptoOutputStream(new FileOutputStream(file), conf, key)
     try {
-      ByteStreams.copy(new ByteArrayInputStream(testData), outStream)
+      new ByteArrayInputStream(testData).transferTo(outStream)
     } finally {
       outStream.close()
     }
 
     val inStream = createCryptoInputStream(new FileInputStream(file), conf, key)
     try {
-      val inStreamData = ByteStreams.toByteArray(inStream)
+      val inStreamData = inStream.readAllBytes()
       assert(Arrays.equals(inStreamData, testData))
     } finally {
       inStream.close()
@@ -150,14 +150,16 @@ class CryptoStreamUtilsSuite extends SparkFunSuite {
     val outChannel = createWritableChannel(new FileOutputStream(file).getChannel(), conf, key)
     try {
       val inByteChannel = Channels.newChannel(new ByteArrayInputStream(testData))
+      // scalastyle:off bytestreamscopy
       ByteStreams.copy(inByteChannel, outChannel)
+      // scalastyle:on bytestreamscopy
     } finally {
       outChannel.close()
     }
 
     val inChannel = createReadableChannel(new FileInputStream(file).getChannel(), conf, key)
     try {
-      val inChannelData = ByteStreams.toByteArray(Channels.newInputStream(inChannel))
+      val inChannelData = Channels.newInputStream(inChannel).readAllBytes()
       assert(Arrays.equals(inChannelData, testData))
     } finally {
       inChannel.close()

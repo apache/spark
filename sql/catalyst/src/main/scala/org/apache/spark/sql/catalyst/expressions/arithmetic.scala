@@ -55,6 +55,8 @@ case class UnaryMinus(
 
   override def dataType: DataType = child.dataType
 
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
   override def toString: String = s"-$child"
 
   private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
@@ -115,8 +117,7 @@ case class UnaryMinus(
   since = "1.5.0",
   group = "math_funcs")
 case class UnaryPositive(child: Expression)
-  extends RuntimeReplaceable with ImplicitCastInputTypes {
-  override def nullIntolerant: Boolean = true
+  extends UnaryExpression with RuntimeReplaceable with ImplicitCastInputTypes {
 
   override def prettyName: String = "positive"
 
@@ -124,15 +125,14 @@ case class UnaryPositive(child: Expression)
 
   override def dataType: DataType = child.dataType
 
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
   override def sql: String = s"(+ ${child.sql})"
 
   override lazy val replacement: Expression = child
 
-  override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[Expression]): UnaryPositive =
-    copy(newChildren.head)
-
-  override def children: Seq[Expression] = child :: Nil
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
 }
 
 /**
@@ -158,6 +158,8 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndAnsiInterval)
 
   override def dataType: DataType = child.dataType
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   private lazy val numeric = (dataType match {
     case _: DayTimeIntervalType => LongExactNumeric
@@ -191,7 +193,12 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
 abstract class BinaryArithmetic extends BinaryOperator with SupportQueryContext {
   override def nullIntolerant: Boolean = true
 
-  protected val evalMode: EvalMode.Value
+  override def contextIndependentFoldable: Boolean =
+    left.contextIndependentFoldable && right.contextIndependentFoldable
+
+  val evalContext: NumericEvalContext
+
+  def evalMode: EvalMode.Value = evalContext.evalMode
 
   private lazy val internalDataType: DataType = (left.dataType, right.dataType) match {
     case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
@@ -219,7 +226,7 @@ abstract class BinaryArithmetic extends BinaryOperator with SupportQueryContext 
   // When `spark.sql.decimalOperations.allowPrecisionLoss` is set to true, if the precision / scale
   // needed are out of the range of available values, the scale is reduced up to 6, in order to
   // prevent the truncation of the integer part of the decimals.
-  protected def allowPrecisionLoss: Boolean = SQLConf.get.decimalOperationsAllowPrecisionLoss
+  protected def allowPrecisionLoss: Boolean = evalContext.allowDecimalPrecisionLoss
 
   protected def resultDecimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
     throw SparkException.internalError(
@@ -400,11 +407,12 @@ object BinaryArithmetic {
 case class Add(
     left: Expression,
     right: Expression,
-    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends BinaryArithmetic
+    evalContext: NumericEvalContext = NumericEvalContext.fromSQLConf(SQLConf.get))
+  extends BinaryArithmetic
   with CommutativeExpression {
 
   def this(left: Expression, right: Expression) =
-    this(left, right, EvalMode.fromSQLConf(SQLConf.get))
+    this(left, right, NumericEvalContext.fromSQLConf(SQLConf.get))
 
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
@@ -460,9 +468,9 @@ case class Add(
 
   override lazy val canonicalized: Expression = {
     val reorderResult = buildCanonicalizedPlan(
-      { case Add(l, r, em) if em == evalMode => Seq(l, r) },
-      { case (l: Expression, r: Expression) => Add(l, r, evalMode)},
-      Some(evalMode)
+      { case Add(l, r, em) if em == evalContext => Seq(l, r) },
+      { case (l: Expression, r: Expression) => Add(l, r, evalContext)},
+      Some(evalContext)
     )
     if (resolved && reorderResult.resolved && reorderResult.dataType == dataType) {
       reorderResult
@@ -472,6 +480,11 @@ case class Add(
       withCanonicalizedChildren
     }
   }
+}
+
+object Add {
+  def apply(left: Expression, right: Expression, evalMode: EvalMode.Value): Add =
+    new Add(left, right, NumericEvalContext(evalMode))
 }
 
 @ExpressionDescription(
@@ -486,10 +499,11 @@ case class Add(
 case class Subtract(
     left: Expression,
     right: Expression,
-    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends BinaryArithmetic {
+    evalContext: NumericEvalContext = NumericEvalContext.fromSQLConf(SQLConf.get))
+  extends BinaryArithmetic {
 
   def this(left: Expression, right: Expression) =
-    this(left, right, EvalMode.fromSQLConf(SQLConf.get))
+    this(left, right, NumericEvalContext.fromSQLConf(SQLConf.get))
 
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
@@ -550,6 +564,11 @@ case class Subtract(
     newLeft: Expression, newRight: Expression): Subtract = copy(left = newLeft, right = newRight)
 }
 
+object Subtract {
+  def apply(left: Expression, right: Expression, evalMode: EvalMode.Value): Subtract =
+    new Subtract(left, right, NumericEvalContext(evalMode))
+}
+
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns `expr1`*`expr2`.",
   examples = """
@@ -562,11 +581,12 @@ case class Subtract(
 case class Multiply(
     left: Expression,
     right: Expression,
-    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends BinaryArithmetic
+    evalContext: NumericEvalContext = NumericEvalContext.fromSQLConf(SQLConf.get))
+  extends BinaryArithmetic
   with CommutativeExpression {
 
   def this(left: Expression, right: Expression) =
-    this(left, right, EvalMode.fromSQLConf(SQLConf.get))
+    this(left, right, NumericEvalContext.fromSQLConf(SQLConf.get))
 
   override def inputType: AbstractDataType = NumericType
 
@@ -615,11 +635,16 @@ case class Multiply(
 
   override lazy val canonicalized: Expression = {
     buildCanonicalizedPlan(
-      { case Multiply(l, r, em) if em == evalMode => Seq(l, r) },
-      { case (l: Expression, r: Expression) => Multiply(l, r, evalMode) },
-      Some(evalMode)
+      { case Multiply(l, r, ec) if ec == evalContext => Seq(l, r) },
+      { case (l: Expression, r: Expression) => Multiply(l, r, evalContext) },
+      Some(evalContext)
     )
   }
+}
+
+object Multiply {
+  def apply(left: Expression, right: Expression, evalMode: EvalMode.Value): Multiply =
+    new Multiply(left, right, NumericEvalContext(evalMode))
 }
 
 // Common base trait for Divide and Remainder, since these two classes are almost identical
@@ -649,7 +674,13 @@ trait DivModLike extends BinaryArithmetic {
       } else {
         if (isZero(input2)) {
           // when we reach here, failOnError must be true.
-          throw QueryExecutionErrors.divideByZeroError(getContextOrNull())
+          val context = getContextOrNull()
+          val ex = this match {
+            case _: Remainder => QueryExecutionErrors.remainderByZeroError(context)
+            case _: Pmod => QueryExecutionErrors.remainderByZeroError(context)
+            case _ => QueryExecutionErrors.divideByZeroError(context)
+          }
+          throw ex
         }
         if (checkDivideOverflow && input1 == Long.MinValue && input2 == -1) {
           throw QueryExecutionErrors.overflowInIntegralDivideError(getContextOrNull())
@@ -664,6 +695,15 @@ trait DivModLike extends BinaryArithmetic {
   /**
    * Special case handling due to division/remainder by 0 => null or ArithmeticException.
    */
+  protected def divideByZeroErrorCode(ctx: CodegenContext): String = {
+    val errorContextCode = getContextOrNullCode(ctx, failOnError)
+    this match {
+      case _: Remainder => s"QueryExecutionErrors.remainderByZeroError($errorContextCode)"
+      case _: Pmod => s"QueryExecutionErrors.remainderByZeroError($errorContextCode)"
+      case _ => s"QueryExecutionErrors.divideByZeroError($errorContextCode)"
+    }
+  }
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval1 = left.genCode(ctx)
     val eval2 = right.genCode(ctx)
@@ -701,7 +741,7 @@ trait DivModLike extends BinaryArithmetic {
     // evaluate right first as we have a chance to skip left if right is 0
     if (!left.nullable && !right.nullable) {
       val divByZero = if (failOnError) {
-        s"throw QueryExecutionErrors.divideByZeroError($errorContextCode);"
+        s"throw ${divideByZeroErrorCode(ctx)};"
       } else {
         s"${ev.isNull} = true;"
       }
@@ -719,7 +759,7 @@ trait DivModLike extends BinaryArithmetic {
     } else {
       val nullOnErrorCondition = if (failOnError) "" else s" || $isZero"
       val failOnErrorBranch = if (failOnError) {
-        s"if ($isZero) throw QueryExecutionErrors.divideByZeroError($errorContextCode);"
+        s"if ($isZero) throw ${divideByZeroErrorCode(ctx)};"
       } else {
         ""
       }
@@ -759,10 +799,11 @@ trait DivModLike extends BinaryArithmetic {
 case class Divide(
     left: Expression,
     right: Expression,
-    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends DivModLike {
+    evalContext: NumericEvalContext = NumericEvalContext.fromSQLConf(SQLConf.get))
+  extends DivModLike {
 
   def this(left: Expression, right: Expression) =
-    this(left, right, EvalMode.fromSQLConf(SQLConf.get))
+    this(left, right, NumericEvalContext.fromSQLConf(SQLConf.get))
 
   // `try_divide` has exactly the same behavior as the legacy divide, so here it only executes
   // the error code path when `evalMode` is `ANSI`.
@@ -814,6 +855,11 @@ case class Divide(
     newLeft: Expression, newRight: Expression): Divide = copy(left = newLeft, right = newRight)
 }
 
+object Divide {
+  def apply(left: Expression, right: Expression, evalMode: EvalMode.Value): Divide =
+    new Divide(left, right, NumericEvalContext(evalMode))
+}
+
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Divide `expr1` by `expr2`. It returns NULL if an operand is NULL or `expr2` is 0. The result is casted to long.",
@@ -830,10 +876,11 @@ case class Divide(
 case class IntegralDivide(
     left: Expression,
     right: Expression,
-    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends DivModLike {
+    evalContext: NumericEvalContext = NumericEvalContext.fromSQLConf(SQLConf.get))
+  extends DivModLike {
 
   def this(left: Expression, right: Expression) = this(left, right,
-    EvalMode.fromSQLConf(SQLConf.get))
+    NumericEvalContext.fromSQLConf(SQLConf.get))
 
   override def checkDivideOverflow: Boolean = left.dataType match {
     case LongType if failOnError => true
@@ -892,6 +939,11 @@ case class IntegralDivide(
     copy(left = newLeft, right = newRight)
 }
 
+object IntegralDivide {
+  def apply(left: Expression, right: Expression, evalMode: EvalMode.Value): IntegralDivide =
+    new IntegralDivide(left, right, NumericEvalContext(evalMode))
+}
+
 @ExpressionDescription(
   usage = "expr1 % expr2, or mod(expr1, expr2) - Returns the remainder after `expr1`/`expr2`.",
   examples = """
@@ -906,10 +958,11 @@ case class IntegralDivide(
 case class Remainder(
     left: Expression,
     right: Expression,
-    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends DivModLike {
+    evalContext: NumericEvalContext = NumericEvalContext.fromSQLConf(SQLConf.get))
+  extends DivModLike {
 
   def this(left: Expression, right: Expression) =
-    this(left, right, EvalMode.fromSQLConf(SQLConf.get))
+    this(left, right, NumericEvalContext.fromSQLConf(SQLConf.get))
 
   override def inputType: AbstractDataType = NumericType
 
@@ -974,6 +1027,11 @@ case class Remainder(
     newLeft: Expression, newRight: Expression): Remainder = copy(left = newLeft, right = newRight)
 }
 
+object Remainder {
+  def apply(left: Expression, right: Expression, evalMode: EvalMode.Value): Remainder =
+    new Remainder(left, right, NumericEvalContext(evalMode))
+}
+
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns the positive value of `expr1` mod `expr2`.",
   examples = """
@@ -988,10 +1046,11 @@ case class Remainder(
 case class Pmod(
     left: Expression,
     right: Expression,
-    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends BinaryArithmetic {
+    evalContext: NumericEvalContext = NumericEvalContext.fromSQLConf(SQLConf.get))
+  extends BinaryArithmetic {
 
   def this(left: Expression, right: Expression) =
-    this(left, right, EvalMode.fromSQLConf(SQLConf.get))
+    this(left, right, NumericEvalContext.fromSQLConf(SQLConf.get))
 
   override def toString: String = s"pmod($left, $right)"
 
@@ -1042,7 +1101,7 @@ case class Pmod(
       } else {
         if (isZero(input2)) {
           // when we reach here, failOnError must bet true.
-          throw QueryExecutionErrors.divideByZeroError(getContextOrNull())
+          throw QueryExecutionErrors.remainderByZeroError(getContextOrNull())
         }
         pmodFunc(input1, input2)
       }
@@ -1099,7 +1158,7 @@ case class Pmod(
     // evaluate right first as we have a chance to skip left if right is 0
     if (!left.nullable && !right.nullable) {
       val divByZero = if (failOnError) {
-        s"throw QueryExecutionErrors.divideByZeroError($errorContext);"
+        s"throw QueryExecutionErrors.remainderByZeroError($errorContext);"
       } else {
         s"${ev.isNull} = true;"
       }
@@ -1116,7 +1175,7 @@ case class Pmod(
     } else {
       val nullOnErrorCondition = if (failOnError) "" else s" || $isZero"
       val failOnErrorBranch = if (failOnError) {
-        s"if ($isZero) throw QueryExecutionErrors.divideByZeroError($errorContext);"
+        s"if ($isZero) throw QueryExecutionErrors.remainderByZeroError($errorContext);"
       } else {
         ""
       }
@@ -1179,6 +1238,11 @@ case class Pmod(
     copy(left = newLeft, right = newRight)
 }
 
+object Pmod {
+  def apply(left: Expression, right: Expression, evalMode: EvalMode.Value): Pmod =
+    new Pmod(left, right, NumericEvalContext(evalMode))
+}
+
 /**
  * A function that returns the least value of all parameters, skipping null values.
  * It takes at least 2 parameters, and returns null iff all parameters are null.
@@ -1197,6 +1261,7 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
 
   override def nullable: Boolean = children.forall(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   private lazy val ordering = TypeUtils.getInterpretedOrdering(dataType)
 
@@ -1285,6 +1350,7 @@ case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpress
 
   override def nullable: Boolean = children.forall(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   private lazy val ordering = TypeUtils.getInterpretedOrdering(dataType)
 

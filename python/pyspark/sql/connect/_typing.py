@@ -26,7 +26,6 @@ from pyspark.sql.column import Column
 from pyspark.sql.connect.types import DataType
 from pyspark.sql.streaming.state import GroupState
 
-
 ColumnOrName = Union[Column, str]
 
 ColumnOrNameOrOrdinal = Union[Column, str, int]
@@ -39,7 +38,7 @@ LiteralType = PrimitiveType
 
 DecimalLiteral = decimal.Decimal
 
-DateTimeLiteral = Union[datetime.datetime, datetime.date]
+DateTimeLiteral = Union[datetime.date, datetime.time, datetime.datetime]
 
 DataTypeOrString = Union[DataType, str]
 
@@ -77,16 +76,12 @@ class UserDefinedFunctionLike(Protocol):
     deterministic: bool
 
     @property
-    def returnType(self) -> DataType:
-        ...
+    def returnType(self) -> DataType: ...
 
-    def __call__(self, *args: ColumnOrName) -> Column:
-        ...
+    def __call__(self, *args: ColumnOrName) -> Column: ...
 
-    def asNondeterministic(self) -> "UserDefinedFunctionLike":
-        ...
+    def asNondeterministic(self) -> "UserDefinedFunctionLike": ...
 
 
 class UserDefinedFunctionCallable(Protocol):
-    def __call__(self, *_: ColumnOrName) -> Column:
-        ...
+    def __call__(self, *_: ColumnOrName) -> Column: ...

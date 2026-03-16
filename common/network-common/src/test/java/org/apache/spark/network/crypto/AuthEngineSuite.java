@@ -21,7 +21,6 @@ import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.util.Map;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.crypto.tink.subtle.Hex;
 import org.apache.spark.network.util.*;
 
@@ -49,7 +48,7 @@ abstract class AuthEngineSuite {
   static TransportConf getConf(int authEngineVerison, boolean useCtr) {
     String authEngineVersion = (authEngineVerison == 1) ? "1" : "2";
     String mode = useCtr ? "AES/CTR/NoPadding" : "AES/GCM/NoPadding";
-    Map<String, String> confMap = ImmutableMap.of(
+    Map<String, String> confMap = Map.of(
             "spark.network.crypto.enabled", "true",
             "spark.network.crypto.authEngineVersion", authEngineVersion,
             "spark.network.crypto.cipher", mode

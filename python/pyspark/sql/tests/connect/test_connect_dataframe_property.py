@@ -17,12 +17,21 @@
 
 import unittest
 
-from pyspark.sql.types import StructType, StructField, StringType, IntegerType, LongType, DoubleType
+from pyspark.sql.types import (
+    StructType,
+    StructField,
+    StringType,
+    IntegerType,
+    LongType,
+    DoubleType,
+    Row,
+)
 from pyspark.sql.utils import is_remote
 from pyspark.sql import functions as SF
-from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
-from pyspark.testing.connectutils import should_test_connect
-from pyspark.testing.sqlutils import (
+from pyspark.testing import assertDataFrameEqual
+from pyspark.testing.connectutils import should_test_connect, ReusedMixedTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
+from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
@@ -40,7 +49,7 @@ if should_test_connect:
     from pyspark.sql.connect import functions as CF
 
 
-class SparkConnectDataFramePropertyTests(SparkConnectSQLTestCase):
+class SparkConnectDataFramePropertyTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
     def test_cached_property_is_copied(self):
         schema = StructType(
             [
@@ -64,9 +73,19 @@ class SparkConnectDataFramePropertyTests(SparkConnectSQLTestCase):
             df_columns.remove(col)
         assert len(df.columns) == 4
 
+        cdf = self.connect.createDataFrame(data, schema)
+        cdf_schema = cdf.schema
+        assert len(cdf._cached_schema_serialized) > 0
+        assert cdf_schema.jsonValue() == cdf._cached_schema.jsonValue()
+        assert len(cdf_schema.fields) == 4
+        cdf_schema.fields.pop(0)
+        assert cdf.schema.jsonValue() == cdf._cached_schema.jsonValue()
+        assert len(cdf.schema.fields) == 4
+
     def test_cached_schema_to(self):
-        cdf = self.connect.read.table(self.tbl_name)
-        sdf = self.spark.read.table(self.tbl_name)
+        rows = [Row(id=x, name=str(x)) for x in range(100)]
+        cdf = self.connect.createDataFrame(rows)
+        sdf = self.spark.createDataFrame(rows)
 
         schema = StructType(
             [
@@ -80,8 +99,7 @@ class SparkConnectDataFramePropertyTests(SparkConnectSQLTestCase):
 
         sdf1 = sdf.to(schema)
 
-        self.assertEqual(cdf1.schema, sdf1.schema)
-        self.assertEqual(cdf1.collect(), sdf1.collect())
+        assertDataFrameEqual(cdf1, sdf1)
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
@@ -110,6 +128,12 @@ class SparkConnectDataFramePropertyTests(SparkConnectSQLTestCase):
             cdf1 = cdf.mapInPandas(func, schema)
             self.assertEqual(cdf1._cached_schema, schema)
 
+        with self.temp_env({"SPARK_CONNECT_MODE_ENABLED": "1"}):
+            self.assertTrue(is_remote())
+            cdf1 = cdf.mapInPandas(func, "a int, b string")
+            # Properly cache the parsed schema
+            self.assertEqual(cdf1._cached_schema, schema)
+
         with self.temp_env({"SPARK_CONNECT_MODE_ENABLED": None}):
             # 'mapInPandas' depends on the method 'pandas_udf', which is dispatched
             # based on 'is_remote'. However, in SparkConnectSQLTestCase, the remote
@@ -118,8 +142,7 @@ class SparkConnectDataFramePropertyTests(SparkConnectSQLTestCase):
             self.assertFalse(is_remote())
             sdf1 = sdf.mapInPandas(func, schema)
 
-        self.assertEqual(cdf1.schema, sdf1.schema)
-        self.assertEqual(cdf1.collect(), sdf1.collect())
+        assertDataFrameEqual(cdf1, sdf1)
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
@@ -152,8 +175,7 @@ class SparkConnectDataFramePropertyTests(SparkConnectSQLTestCase):
             self.assertFalse(is_remote())
             sdf1 = sdf.mapInArrow(func, schema)
 
-        self.assertEqual(cdf1.schema, sdf1.schema)
-        self.assertEqual(cdf1.collect(), sdf1.collect())
+        assertDataFrameEqual(cdf1, sdf1)
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
@@ -180,12 +202,17 @@ class SparkConnectDataFramePropertyTests(SparkConnectSQLTestCase):
             cdf1 = cdf.groupby("id").applyInPandas(normalize, schema)
             self.assertEqual(cdf1._cached_schema, schema)
 
+        with self.temp_env({"SPARK_CONNECT_MODE_ENABLED": "1"}):
+            self.assertTrue(is_remote())
+            cdf1 = cdf.groupby("id").applyInPandas(normalize, "id long, v double")
+            # Properly cache the parsed schema
+            self.assertEqual(cdf1._cached_schema, schema)
+
         with self.temp_env({"SPARK_CONNECT_MODE_ENABLED": None}):
             self.assertFalse(is_remote())
             sdf1 = sdf.groupby("id").applyInPandas(normalize, schema)
 
-        self.assertEqual(cdf1.schema, sdf1.schema)
-        self.assertEqual(cdf1.collect(), sdf1.collect())
+        assertDataFrameEqual(cdf1, sdf1)
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
@@ -217,8 +244,7 @@ class SparkConnectDataFramePropertyTests(SparkConnectSQLTestCase):
             self.assertFalse(is_remote())
             sdf1 = sdf.groupby("id").applyInArrow(normalize, schema)
 
-        self.assertEqual(cdf1.schema, sdf1.schema)
-        self.assertEqual(cdf1.collect(), sdf1.collect())
+        assertDataFrameEqual(cdf1, sdf1)
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
@@ -254,8 +280,7 @@ class SparkConnectDataFramePropertyTests(SparkConnectSQLTestCase):
             self.assertFalse(is_remote())
             sdf3 = sdf1.groupby("id").cogroup(sdf2.groupby("id")).applyInPandas(asof_join, schema)
 
-        self.assertEqual(cdf3.schema, sdf3.schema)
-        self.assertEqual(cdf3.collect(), sdf3.collect())
+        assertDataFrameEqual(cdf3, sdf3)
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
@@ -294,8 +319,7 @@ class SparkConnectDataFramePropertyTests(SparkConnectSQLTestCase):
             self.assertFalse(is_remote())
             sdf3 = sdf1.groupby("id").cogroup(sdf2.groupby("id")).applyInArrow(summarize, schema)
 
-        self.assertEqual(cdf3.schema, sdf3.schema)
-        self.assertEqual(cdf3.collect(), sdf3.collect())
+        assertDataFrameEqual(cdf3, sdf3)
 
     def test_cached_schema_set_op(self):
         data1 = [(1, 2, 3)]
@@ -431,13 +455,6 @@ class SparkConnectDataFramePropertyTests(SparkConnectSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.connect.test_connect_dataframe_property import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

@@ -46,7 +46,6 @@ from pyspark.sql.dataframe import DataFrame
 from pyspark.sql import SparkSession
 from pyspark.sql.utils import is_remote
 
-
 if TYPE_CHECKING:
     from pyspark.ml._typing import ParamMap
 
@@ -95,6 +94,8 @@ class _CrossValidatorParams(_ValidatorParams):
     Params for :py:class:`CrossValidator` and :py:class:`CrossValidatorModel`.
 
     .. versionadded:: 3.5.0
+
+    .. deprecated:: 4.0.0
     """
 
     numFolds: Param[int] = Param(
@@ -116,7 +117,7 @@ class _CrossValidatorParams(_ValidatorParams):
     )
 
     def __init__(self, *args: Any):
-        super(_CrossValidatorParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(numFolds=3, foldCol="")
 
     @since("1.4.0")
@@ -170,7 +171,7 @@ def _parallelFitTasks(
 
     if active_session is None:
         raise RuntimeError(
-            "An active SparkSession is required for running cross valiator fit tasks."
+            "An active SparkSession is required for running cross validator fit tasks."
         )
 
     def get_single_task(index: int, param_map: Any) -> Callable[[], Tuple[int, float]]:
@@ -178,7 +179,7 @@ def _parallelFitTasks(
             if not is_remote():
                 # Active session is thread-local variable, in background thread the active session
                 # is not set, the following line sets it as the main thread active session.
-                active_session._jvm.SparkSession.setActiveSession(  # type: ignore[union-attr]
+                SparkSession._get_j_spark_session_class(active_session._jvm).setActiveSession(
                     active_session._jsparkSession
                 )
 
@@ -280,6 +281,8 @@ class CrossValidator(
 
     .. versionadded:: 3.5.0
 
+    .. deprecated:: 4.0.0
+
     Examples
     --------
     >>> from pyspark.ml.connect.tuning import CrossValidator
@@ -322,7 +325,7 @@ class CrossValidator(
         __init__(self, \\*, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,\
                  seed=None, parallelism=1, foldCol="")
         """
-        super(CrossValidator, self).__init__()
+        super().__init__()
         self._setDefault(parallelism=1)
         kwargs = self._input_kwargs
         self._set(**kwargs)
@@ -430,7 +433,7 @@ class CrossValidator(
 
             tasks = _parallelFitTasks(est, train, eva, validation, epm)
             if not is_remote():
-                tasks = list(map(inheritable_thread_target, tasks))
+                tasks = list(map(inheritable_thread_target(dataset.sparkSession), tasks))
 
             for j, metric in pool.imap_unordered(lambda f: f(), tasks):
                 metrics_all[i][j] = metric
@@ -493,8 +496,9 @@ class CrossValidator(
         and some extra params. This copies creates a deep copy of
         the embedded paramMap, and copies the embedded and extra parameters over.
 
-
         .. versionadded:: 3.5.0
+
+        .. deprecated:: 4.0.0
 
         Parameters
         ----------
@@ -524,6 +528,8 @@ class CrossValidatorModel(Model, _CrossValidatorParams, _CrossValidatorReadWrite
     also tracks the metrics for each param map evaluated.
 
     .. versionadded:: 3.5.0
+
+    .. deprecated:: 4.0.0
     """
 
     def __init__(
@@ -532,7 +538,7 @@ class CrossValidatorModel(Model, _CrossValidatorParams, _CrossValidatorReadWrite
         avgMetrics: Optional[List[float]] = None,
         stdMetrics: Optional[List[float]] = None,
     ) -> None:
-        super(CrossValidatorModel, self).__init__()
+        super().__init__()
         #: best model from cross validation
         self.bestModel = bestModel
         #: Average cross-validation metrics for each paramMap in
@@ -554,6 +560,8 @@ class CrossValidatorModel(Model, _CrossValidatorParams, _CrossValidatorReadWrite
         It does not copy the extra Params into the subModels.
 
         .. versionadded:: 3.5.0
+
+        .. deprecated:: 4.0.0
 
         Parameters
         ----------

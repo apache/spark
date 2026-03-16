@@ -40,17 +40,24 @@ private[sql] case class ProtobufDataToCatalyst(
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
 
   override lazy val dataType: DataType =
-    SchemaConverters.toSqlType(messageDescriptor, protobufOptions).dataType
+    SchemaConverters.toSqlType(messageDescriptor, fullNamesToExtensions, protobufOptions).dataType
 
   override def nullable: Boolean = true
 
   private lazy val protobufOptions = ProtobufOptions(options)
 
-  @transient private lazy val messageDescriptor =
+  @transient private lazy val descriptorWithExtensions =
     ProtobufUtils.buildDescriptor(messageName, binaryFileDescriptorSet)
 
-  @transient private lazy val fieldsNumbers =
-    messageDescriptor.getFields.asScala.map(f => f.getNumber).toSet
+  @transient private lazy val messageDescriptor = descriptorWithExtensions.descriptor
+
+  @transient private lazy val extensionRegistry = descriptorWithExtensions.extensionRegistry
+
+  @transient private lazy val fullNamesToExtensions =
+    descriptorWithExtensions.fullNamesToExtensions
+
+  @transient private lazy val regularFieldNumbers =
+    messageDescriptor.getFields.asScala.map(_.getNumber).toSet
 
   @transient private lazy val deserializer = {
     val typeRegistry = binaryFileDescriptorSet match {
@@ -65,8 +72,8 @@ private[sql] case class ProtobufDataToCatalyst(
       dataType,
       typeRegistry = typeRegistry,
       emitDefaultValues = protobufOptions.emitDefaultValues,
-      enumsAsInts = protobufOptions.enumsAsInts
-    )
+      enumsAsInts = protobufOptions.enumsAsInts,
+      fullNamesToExtensions = fullNamesToExtensions)
   }
 
   @transient private var result: DynamicMessage = _
@@ -92,14 +99,18 @@ private[sql] case class ProtobufDataToCatalyst(
   override def nullSafeEval(input: Any): Any = {
     val binary = input.asInstanceOf[Array[Byte]]
     try {
-      result = DynamicMessage.parseFrom(messageDescriptor, binary)
+      result = DynamicMessage.parseFrom(messageDescriptor, binary, extensionRegistry)
       // If the Java class is available, it is likely more efficient to parse with it than using
       // DynamicMessage. Can consider it in the future if parsing overhead is noticeable.
 
-      result.getUnknownFields.asMap().keySet().asScala.find(fieldsNumbers.contains(_)) match {
+      result.getUnknownFields
+        .asMap()
+        .keySet()
+        .asScala
+        .find(regularFieldNumbers.contains(_)) match {
         case Some(number) =>
-          // Unknown fields contain a field with same number as a known field. Must be due to
-          // mismatch of schema between writer and reader here.
+          // Unknown fields contain a field with same number as a known regular field. Must be due
+          // to mismatch of schema between writer and reader here.
           throw QueryCompilationErrors.protobufFieldTypeMismatchError(
             messageDescriptor.getFields.get(number).toString)
         case None =>
@@ -142,4 +153,35 @@ private[sql] case class ProtobufDataToCatalyst(
 
   override protected def withNewChildInternal(newChild: Expression): ProtobufDataToCatalyst =
     copy(child = newChild)
+
+  override def equals(that: Any): Boolean = {
+    that match {
+      case that: ProtobufDataToCatalyst =>
+        this.child == that.child &&
+        this.messageName == that.messageName &&
+        (
+          (this.binaryFileDescriptorSet.isEmpty && that.binaryFileDescriptorSet.isEmpty) ||
+          (
+            this.binaryFileDescriptorSet.nonEmpty && that.binaryFileDescriptorSet.nonEmpty &&
+            this.binaryFileDescriptorSet.get.sameElements(that.binaryFileDescriptorSet.get)
+          )
+        ) &&
+        this.options == that.options
+      case _ => false
+    }
+  }
+
+  override def hashCode(): Int = {
+    val prime = 31
+    var result = 1
+    var i = 0
+    while (i < binaryFileDescriptorSet.map(_.length).getOrElse(0)) {
+      result = prime * result + binaryFileDescriptorSet.get.apply(i).hashCode
+      i += 1
+    }
+    result = prime * result + child.hashCode
+    result = prime * result + messageName.hashCode
+    result = prime * result + options.hashCode
+    result
+  }
 }

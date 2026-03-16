@@ -105,8 +105,8 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
            |  'start': new Date(${submissionTime}),
            |  'end': new Date(${completionTime}),
            |  'content': '<div class="application-timeline-content"' +
-           |     'data-html="true" data-placement="top" data-toggle="tooltip"' +
-           |     'data-title="${jsEscapedDescForTooltip} (Job ${jobId})<br>' +
+           |     'data-bs-html="true" data-bs-toggle="tooltip"' +
+           |     'data-bs-title="${jsEscapedDescForTooltip} (Job ${jobId})<br>' +
            |     'Status: ${status}<br>' +
            |     'Submitted: ${UIUtils.formatDate(new Date(submissionTime))}' +
            |     '${
@@ -136,10 +136,10 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
            |  'group': 'executors',
            |  'start': new Date(${e.addTime.getTime()}),
            |  'content': '<div class="executor-event-content"' +
-           |    'data-toggle="tooltip" data-placement="top"' +
-           |    'data-title="Executor ${e.id}<br>' +
+           |    'data-bs-toggle="tooltip"' +
+           |    'data-bs-title="Executor ${e.id}<br>' +
            |    'Added at ${UIUtils.formatDate(e.addTime)}"' +
-           |    'data-html="true">Executor ${e.id} added</div>'
+           |    'data-bs-html="true">Executor ${e.id} added</div>'
            |}
          """.stripMargin
       events += addedEvent
@@ -152,8 +152,8 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
              |  'group': 'executors',
              |  'start': new Date(${removeTime.getTime()}),
              |  'content': '<div class="executor-event-content"' +
-             |    'data-toggle="tooltip" data-placement="top"' +
-             |    'data-title="Executor ${e.id}<br>' +
+             |    'data-bs-toggle="tooltip"' +
+             |    'data-bs-title="Executor ${e.id}<br>' +
              |    'Removed at ${UIUtils.formatDate(removeTime)}' +
              |    '${
                       e.removeReason.map { reason =>
@@ -161,7 +161,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
                           reason.replace("\n", " "))}"""
                       }.getOrElse("")
                    }"' +
-             |    'data-html="true">Executor ${e.id} removed</div>'
+             |    'data-bs-html="true">Executor ${e.id} removed</div>'
              |}
            """.stripMargin
         events += removedEvent
@@ -199,9 +199,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
 
     <span class="expand-application-timeline">
       <span class="expand-application-timeline-arrow arrow-closed"></span>
-      <a data-toggle="tooltip" title={ToolTips.JOB_TIMELINE} data-placement="top">
-        Event Timeline
-      </a>
+      {UIUtils.tooltipLink(<xml:group>Event Timeline</xml:group>, ToolTips.JOB_TIMELINE)}
     </span> ++
     <div id="application-timeline" class="collapsed">
       {
@@ -235,7 +233,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
         </div>
       </div>
     </div> ++
-    <script type="text/javascript">
+    <script type="text/javascript" nonce={CspNonce.get}>
       {Unparsed(s"drawApplicationTimeline(${groupJsonArrayAsStr}," +
       s"${eventArrayAsStr}, ${startTime}, ${UIUtils.getTimeZoneOffset()});")}
     </script>
@@ -266,7 +264,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       ).table(jobPage)
     } catch {
       case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
-        <div class="alert alert-error">
+        <div class="alert alert-danger">
           <p>Error while rendering job table:</p>
           <pre>
             {Utils.exceptionString(e)}
@@ -324,25 +322,6 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       <div>
         <ul class="list-unstyled">
           <li>
-
-            <strong>User:</strong>
-            {parent.getSparkUser}
-          </li>
-          <li>
-            <strong>Started At:</strong>
-            {UIUtils.formatDate(startDate)}
-          </li>
-          <li>
-            <strong>Total Uptime:</strong>
-            {
-              if (endTime < 0 && parent.sc.isDefined) {
-                UIUtils.formatDuration(System.currentTimeMillis() - startTime)
-              } else if (endTime > 0) {
-                UIUtils.formatDuration(endTime - startTime)
-              }
-            }
-          </li>
-          <li>
             <strong>Scheduling Mode: </strong>
             {schedulingMode}
           </li>
@@ -379,40 +358,46 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
 
     if (shouldShowActiveJobs) {
       content ++=
-        <span id="active" class="collapse-aggregated-activeJobs collapse-table"
-            onClick="collapseTable('collapse-aggregated-activeJobs','aggregated-activeJobs')">
+        <span id="active" class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-activeJobs"
+            aria-expanded="true" aria-controls="aggregated-activeJobs"
+            data-collapse-name="collapse-aggregated-activeJobs">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Active Jobs ({activeJobs.size})</a>
           </h4>
         </span> ++
-        <div class="aggregated-activeJobs collapsible-table">
+        <div class="collapsible-table collapse show" id="aggregated-activeJobs">
           {activeJobsTable}
         </div>
     }
     if (shouldShowCompletedJobs) {
       content ++=
-        <span id="completed" class="collapse-aggregated-completedJobs collapse-table"
-            onClick="collapseTable('collapse-aggregated-completedJobs','aggregated-completedJobs')">
+        <span id="completed" class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-completedJobs"
+            aria-expanded="true" aria-controls="aggregated-completedJobs"
+            data-collapse-name="collapse-aggregated-completedJobs">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Completed Jobs ({completedJobNumStr})</a>
           </h4>
         </span> ++
-        <div class="aggregated-completedJobs collapsible-table">
+        <div class="collapsible-table collapse show" id="aggregated-completedJobs">
           {completedJobsTable}
         </div>
     }
     if (shouldShowFailedJobs) {
       content ++=
-        <span id ="failed" class="collapse-aggregated-failedJobs collapse-table"
-            onClick="collapseTable('collapse-aggregated-failedJobs','aggregated-failedJobs')">
+        <span id ="failed" class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-failedJobs"
+            aria-expanded="true" aria-controls="aggregated-failedJobs"
+            data-collapse-name="collapse-aggregated-failedJobs">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Failed Jobs ({failedJobs.size})</a>
           </h4>
         </span> ++
-      <div class="aggregated-failedJobs collapsible-table">
+      <div class="collapsible-table collapse show" id="aggregated-failedJobs">
         {failedJobsTable}
       </div>
     }
@@ -573,19 +558,11 @@ private[ui] class JobPagedTable(
     val job = jobTableRow.jobData
 
     val killLink = if (killEnabled) {
-      val confirm =
-        s"if (window.confirm('Are you sure you want to kill job ${job.jobId} ?')) " +
-          "{ this.parentNode.submit(); return true; } else { return false; }"
       // SPARK-6846 this should be POST-only but YARN AM won't proxy POST
-      /*
-      val killLinkUri = s"$basePathUri/jobs/job/kill/"
-      <form action={killLinkUri} method="POST" style="display:inline">
-        <input type="hidden" name="id" value={job.jobId.toString}/>
-        <a href="#" onclick={confirm} class="kill-link">(kill)</a>
-      </form>
-       */
       val killLinkUri = s"$basePath/jobs/job/kill/?id=${job.jobId}"
-      <a href={killLinkUri} onclick={confirm} class="kill-link">(kill)</a>
+      <a href={killLinkUri}
+         data-kill-message={s"Are you sure you want to kill job ${job.jobId} ?"}
+         class="kill-link float-end">(kill)</a>
     } else {
       Seq.empty
     }

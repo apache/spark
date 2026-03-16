@@ -23,13 +23,14 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.plan.FileSinkDesc
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.CommandUtils
@@ -143,15 +144,15 @@ case class InsertIntoHiveTable(
 
     if (partition.nonEmpty) {
       if (numDynamicPartitions > 0) {
+        val numWrittenParts = writtenParts.size
+        val maxDynamicPartitionsKey = HiveConf.ConfVars.DYNAMICPARTITIONMAXPARTS.varname
+        val maxDynamicPartitions = hadoopConf.getInt(maxDynamicPartitionsKey,
+          HiveConf.ConfVars.DYNAMICPARTITIONMAXPARTS.defaultIntVal)
+        if (numWrittenParts > maxDynamicPartitions) {
+          throw QueryExecutionErrors.writePartitionExceedConfigSizeWhenDynamicPartitionError(
+            numWrittenParts, maxDynamicPartitions, maxDynamicPartitionsKey)
+        }
         if (overwrite && table.tableType == CatalogTableType.EXTERNAL) {
-          val numWrittenParts = writtenParts.size
-          val maxDynamicPartitionsKey = HiveConf.ConfVars.DYNAMICPARTITIONMAXPARTS.varname
-          val maxDynamicPartitions = hadoopConf.getInt(maxDynamicPartitionsKey,
-            HiveConf.ConfVars.DYNAMICPARTITIONMAXPARTS.defaultIntVal)
-          if (numWrittenParts > maxDynamicPartitions) {
-            throw QueryExecutionErrors.writePartitionExceedConfigSizeWhenDynamicPartitionError(
-              numWrittenParts, maxDynamicPartitions, maxDynamicPartitionsKey)
-          }
           // SPARK-29295: When insert overwrite to a Hive external table partition, if the
           // partition does not exist, Hive will not check if the external partition directory
           // exists or not before copying files. So if users drop the partition, and then do

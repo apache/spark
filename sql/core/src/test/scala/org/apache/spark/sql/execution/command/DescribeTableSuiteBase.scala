@@ -252,7 +252,6 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       df.write.mode("append").clusterBy("col1", "col2.x").saveAsTable(tbl)
       val descriptionDf = sql(s"DESC $tbl")
 
-      descriptionDf.show(false)
       assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
         ("col_name", StringType),
         ("data_type", StringType),
@@ -277,7 +276,6 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       df.writeTo(tbl).clusterBy("col1", "col2.x").create()
       val descriptionDf = sql(s"DESC $tbl")
 
-      descriptionDf.show(false)
       assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
         ("col_name", StringType),
         ("data_type", StringType),
@@ -293,4 +291,94 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
           Row("col1", "string", null)))
     }
   }
+
+  Seq(true, false).foreach { hasCollations =>
+    test(s"DESCRIBE TABLE EXTENDED with collation specified = $hasCollations") {
+
+      withNamespaceAndTable("ns", "tbl") { tbl =>
+        val getCollationDescription = () => sql(s"DESCRIBE TABLE EXTENDED $tbl")
+          .where("col_name = 'Collation'")
+
+        val defaultCollation = if (hasCollations) "DEFAULT COLLATION uNiCoDe" else ""
+
+        sql(s"CREATE TABLE $tbl (id string) $defaultUsing $defaultCollation")
+        val descriptionDf = getCollationDescription()
+
+        if (hasCollations) {
+          checkAnswer(descriptionDf, Seq(Row("Collation", "UNICODE", "")))
+        } else {
+          assert(descriptionDf.isEmpty)
+        }
+
+        sql(s"ALTER TABLE $tbl DEFAULT COLLATION UniCode_cI_rTrIm")
+        val newDescription = getCollationDescription()
+        checkAnswer(newDescription, Seq(Row("Collation", "UNICODE_CI_RTRIM", "")))
+      }
+    }
+  }
 }
+
+/** Represents JSON output of DESCRIBE TABLE AS JSON */
+case class DescribeTableJson(
+    table_name: Option[String] = None,
+    catalog_name: Option[String] = None,
+    namespace: Option[List[String]] = Some(Nil),
+    schema_name: Option[String] = None,
+    columns: Option[List[TableColumn]] = Some(Nil),
+    created_time: Option[String] = None,
+    last_access: Option[String] = None,
+    created_by: Option[String] = None,
+    `type`: Option[String] = None,
+    collation: Option[String] = None,
+    provider: Option[String] = None,
+    bucket_columns: Option[List[String]] = Some(Nil),
+    sort_columns: Option[List[String]] = Some(Nil),
+    comment: Option[String] = None,
+    table_properties: Option[Map[String, String]] = None,
+    location: Option[String] = None,
+    serde_library: Option[String] = None,
+    storage_properties: Option[Map[String, String]] = None,
+    partition_provider: Option[String] = None,
+    partition_columns: Option[List[String]] = Some(Nil),
+    partition_values: Option[Map[String, String]] = None,
+    clustering_columns: Option[List[String]] = None,
+    statistics: Option[Map[String, Any]] = None,
+    view_text: Option[String] = None,
+    view_original_text: Option[String] = None,
+    view_schema_mode: Option[String] = None,
+    view_catalog_and_namespace: Option[String] = None,
+    view_query_output_columns: Option[List[String]] = None,
+    view_creation_spark_configuration: Option[Map[String, String]] = None
+)
+
+/** Used for columns field of DescribeTableJson */
+case class TableColumn(
+    name: String,
+    `type`: Type,
+    element_nullable: Boolean = true,
+    comment: Option[String] = None,
+    default: Option[String] = None
+)
+
+case class Type(
+    name: String,
+    collation: Option[String] = None,
+    fields: Option[List[Field]] = None,
+    `type`: Option[Type] = None,
+    element_type: Option[Type] = None,
+    key_type: Option[Type] = None,
+    value_type: Option[Type] = None,
+    comment: Option[String] = None,
+    default: Option[String] = None,
+    element_nullable: Option[Boolean] = Some(true),
+    value_nullable: Option[Boolean] = Some(true),
+    nullable: Option[Boolean] = Some(true)
+)
+
+case class Field(
+    name: String,
+    `type`: Type,
+    element_nullable: Boolean = true,
+    comment: Option[String] = None,
+    default: Option[String] = None
+)

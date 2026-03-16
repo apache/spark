@@ -27,7 +27,7 @@ license: |
 ## Apache Maven
 
 The Maven-based build is the build of reference for Apache Spark.
-Building Spark using Maven requires Maven 3.9.9 and Java 17/21.
+Building Spark using Maven requires Maven 3.9.13 and Java 17/21.
 Spark requires Scala 2.13; support for Scala 2.12 was removed in Spark 4.0.0.
 
 ### Setting up Maven's Memory Usage
@@ -35,7 +35,7 @@ Spark requires Scala 2.13; support for Scala 2.12 was removed in Spark 4.0.0.
 You'll need to configure Maven to use more memory than usual by setting `MAVEN_OPTS`:
 
 ```sh
-export MAVEN_OPTS="-Xss64m -Xmx2g -XX:ReservedCodeCacheSize=1g"
+export MAVEN_OPTS="-Xss64m -Xmx4g -Xms4g -XX:ReservedCodeCacheSize=128m"
 ```
 
 (The `ReservedCodeCacheSize` setting is optional but recommended.)
@@ -63,23 +63,27 @@ Other build examples can be found below.
 
 To create a Spark distribution like those distributed by the
 [Spark Downloads](https://spark.apache.org/downloads.html) page, and that is laid out so as
-to be runnable, use `./dev/make-distribution.sh` in the project root directory. It can be configured
-with Maven profile settings and so on like the direct Maven build. Example:
+to be runnable, use `./dev/make-distribution.sh` in the project root directory. By default,
+it uses Maven as building tool, and can be configured with Maven profile settings and so on
+like the direct Maven build. Example:
 
     ./dev/make-distribution.sh --name custom-spark --pip --r --tgz -Psparkr -Phive -Phive-thriftserver -Pyarn -Pkubernetes
 
-This will build Spark distribution along with Python pip and R packages. For more information on usage, run `./dev/make-distribution.sh --help`
+This will build Spark distribution along with Python pip and R packages.
+
+To switch to SBT (experimental), use `--sbt-enabled`. Example:
+
+    ./dev/make-distribution.sh --name custom-spark --pip --r --tgz --sbt-enabled -Psparkr -Phive -Phive-thriftserver -Pyarn -Pkubernetes
+
+For more information on usage, run `./dev/make-distribution.sh --help`
 
 ## Specifying the Hadoop Version and Enabling YARN
 
-You can specify the exact version of Hadoop to compile against through the `hadoop.version` property.
-
-You can enable the `yarn` profile and optionally set the `yarn.version` property if it is different
-from `hadoop.version`.
+You can enable the `yarn` profile and specify the exact version of Hadoop to compile against through the `hadoop.version` property.
 
 Example:
 
-    ./build/mvn -Pyarn -Dhadoop.version=3.4.0 -DskipTests clean package
+    ./build/mvn -Pyarn -Dhadoop.version=3.4.3 -DskipTests clean package
 
 ## Building With Hive and JDBC Support
 
@@ -264,7 +268,7 @@ On Linux, this can be done by `sudo service docker start`.
 
 or
 
-    ./build/sbt docker-integration-tests/test
+    ./build/sbt -Pdocker-integration-tests docker-integration-tests/test
 
 <!---
 ## Change Scala Version

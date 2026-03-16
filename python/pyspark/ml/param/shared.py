@@ -35,7 +35,7 @@ class HasMaxIter(Params):
     )
 
     def __init__(self) -> None:
-        super(HasMaxIter, self).__init__()
+        super().__init__()
 
     def getMaxIter(self) -> int:
         """
@@ -57,7 +57,7 @@ class HasRegParam(Params):
     )
 
     def __init__(self) -> None:
-        super(HasRegParam, self).__init__()
+        super().__init__()
 
     def getRegParam(self) -> float:
         """
@@ -79,7 +79,7 @@ class HasFeaturesCol(Params):
     )
 
     def __init__(self) -> None:
-        super(HasFeaturesCol, self).__init__()
+        super().__init__()
         self._setDefault(featuresCol="features")
 
     def getFeaturesCol(self) -> str:
@@ -102,7 +102,7 @@ class HasLabelCol(Params):
     )
 
     def __init__(self) -> None:
-        super(HasLabelCol, self).__init__()
+        super().__init__()
         self._setDefault(labelCol="label")
 
     def getLabelCol(self) -> str:
@@ -125,7 +125,7 @@ class HasPredictionCol(Params):
     )
 
     def __init__(self) -> None:
-        super(HasPredictionCol, self).__init__()
+        super().__init__()
         self._setDefault(predictionCol="prediction")
 
     def getPredictionCol(self) -> str:
@@ -148,7 +148,7 @@ class HasProbabilityCol(Params):
     )
 
     def __init__(self) -> None:
-        super(HasProbabilityCol, self).__init__()
+        super().__init__()
         self._setDefault(probabilityCol="probability")
 
     def getProbabilityCol(self) -> str:
@@ -171,7 +171,7 @@ class HasRawPredictionCol(Params):
     )
 
     def __init__(self) -> None:
-        super(HasRawPredictionCol, self).__init__()
+        super().__init__()
         self._setDefault(rawPredictionCol="rawPrediction")
 
     def getRawPredictionCol(self) -> str:
@@ -194,7 +194,7 @@ class HasInputCol(Params):
     )
 
     def __init__(self) -> None:
-        super(HasInputCol, self).__init__()
+        super().__init__()
 
     def getInputCol(self) -> str:
         """
@@ -216,7 +216,7 @@ class HasInputCols(Params):
     )
 
     def __init__(self) -> None:
-        super(HasInputCols, self).__init__()
+        super().__init__()
 
     def getInputCols(self) -> List[str]:
         """
@@ -238,7 +238,7 @@ class HasOutputCol(Params):
     )
 
     def __init__(self) -> None:
-        super(HasOutputCol, self).__init__()
+        super().__init__()
         self._setDefault(outputCol=self.uid + "__output")
 
     def getOutputCol(self) -> str:
@@ -261,7 +261,7 @@ class HasOutputCols(Params):
     )
 
     def __init__(self) -> None:
-        super(HasOutputCols, self).__init__()
+        super().__init__()
 
     def getOutputCols(self) -> List[str]:
         """
@@ -283,7 +283,7 @@ class HasNumFeatures(Params):
     )
 
     def __init__(self) -> None:
-        super(HasNumFeatures, self).__init__()
+        super().__init__()
         self._setDefault(numFeatures=262144)
 
     def getNumFeatures(self) -> int:
@@ -306,7 +306,7 @@ class HasCheckpointInterval(Params):
     )
 
     def __init__(self) -> None:
-        super(HasCheckpointInterval, self).__init__()
+        super().__init__()
 
     def getCheckpointInterval(self) -> int:
         """
@@ -328,7 +328,7 @@ class HasSeed(Params):
     )
 
     def __init__(self) -> None:
-        super(HasSeed, self).__init__()
+        super().__init__()
         self._setDefault(seed=hash(type(self).__name__))
 
     def getSeed(self) -> int:
@@ -351,7 +351,7 @@ class HasTol(Params):
     )
 
     def __init__(self) -> None:
-        super(HasTol, self).__init__()
+        super().__init__()
 
     def getTol(self) -> float:
         """
@@ -373,7 +373,7 @@ class HasRelativeError(Params):
     )
 
     def __init__(self) -> None:
-        super(HasRelativeError, self).__init__()
+        super().__init__()
         self._setDefault(relativeError=0.001)
 
     def getRelativeError(self) -> float:
@@ -396,7 +396,7 @@ class HasStepSize(Params):
     )
 
     def __init__(self) -> None:
-        super(HasStepSize, self).__init__()
+        super().__init__()
 
     def getStepSize(self) -> float:
         """
@@ -418,7 +418,7 @@ class HasHandleInvalid(Params):
     )
 
     def __init__(self) -> None:
-        super(HasHandleInvalid, self).__init__()
+        super().__init__()
 
     def getHandleInvalid(self) -> str:
         """
@@ -440,7 +440,7 @@ class HasElasticNetParam(Params):
     )
 
     def __init__(self) -> None:
-        super(HasElasticNetParam, self).__init__()
+        super().__init__()
         self._setDefault(elasticNetParam=0.0)
 
     def getElasticNetParam(self) -> float:
@@ -463,7 +463,7 @@ class HasFitIntercept(Params):
     )
 
     def __init__(self) -> None:
-        super(HasFitIntercept, self).__init__()
+        super().__init__()
         self._setDefault(fitIntercept=True)
 
     def getFitIntercept(self) -> bool:
@@ -486,7 +486,7 @@ class HasStandardization(Params):
     )
 
     def __init__(self) -> None:
-        super(HasStandardization, self).__init__()
+        super().__init__()
         self._setDefault(standardization=True)
 
     def getStandardization(self) -> bool:
@@ -509,7 +509,7 @@ class HasThresholds(Params):
     )
 
     def __init__(self) -> None:
-        super(HasThresholds, self).__init__()
+        super().__init__()
 
     def getThresholds(self) -> List[float]:
         """
@@ -531,7 +531,7 @@ class HasThreshold(Params):
     )
 
     def __init__(self) -> None:
-        super(HasThreshold, self).__init__()
+        super().__init__()
         self._setDefault(threshold=0.5)
 
     def getThreshold(self) -> float:
@@ -554,7 +554,7 @@ class HasWeightCol(Params):
     )
 
     def __init__(self) -> None:
-        super(HasWeightCol, self).__init__()
+        super().__init__()
 
     def getWeightCol(self) -> str:
         """
@@ -576,7 +576,7 @@ class HasSolver(Params):
     )
 
     def __init__(self) -> None:
-        super(HasSolver, self).__init__()
+        super().__init__()
         self._setDefault(solver="auto")
 
     def getSolver(self) -> str:
@@ -599,7 +599,7 @@ class HasVarianceCol(Params):
     )
 
     def __init__(self) -> None:
-        super(HasVarianceCol, self).__init__()
+        super().__init__()
 
     def getVarianceCol(self) -> str:
         """
@@ -621,7 +621,7 @@ class HasAggregationDepth(Params):
     )
 
     def __init__(self) -> None:
-        super(HasAggregationDepth, self).__init__()
+        super().__init__()
         self._setDefault(aggregationDepth=2)
 
     def getAggregationDepth(self) -> int:
@@ -644,7 +644,7 @@ class HasParallelism(Params):
     )
 
     def __init__(self) -> None:
-        super(HasParallelism, self).__init__()
+        super().__init__()
         self._setDefault(parallelism=1)
 
     def getParallelism(self) -> int:
@@ -667,7 +667,7 @@ class HasCollectSubModels(Params):
     )
 
     def __init__(self) -> None:
-        super(HasCollectSubModels, self).__init__()
+        super().__init__()
         self._setDefault(collectSubModels=False)
 
     def getCollectSubModels(self) -> bool:
@@ -690,7 +690,7 @@ class HasLoss(Params):
     )
 
     def __init__(self) -> None:
-        super(HasLoss, self).__init__()
+        super().__init__()
 
     def getLoss(self) -> str:
         """
@@ -712,7 +712,7 @@ class HasDistanceMeasure(Params):
     )
 
     def __init__(self) -> None:
-        super(HasDistanceMeasure, self).__init__()
+        super().__init__()
         self._setDefault(distanceMeasure="euclidean")
 
     def getDistanceMeasure(self) -> str:
@@ -735,7 +735,7 @@ class HasValidationIndicatorCol(Params):
     )
 
     def __init__(self) -> None:
-        super(HasValidationIndicatorCol, self).__init__()
+        super().__init__()
 
     def getValidationIndicatorCol(self) -> str:
         """
@@ -757,7 +757,7 @@ class HasBlockSize(Params):
     )
 
     def __init__(self) -> None:
-        super(HasBlockSize, self).__init__()
+        super().__init__()
 
     def getBlockSize(self) -> int:
         """
@@ -779,7 +779,7 @@ class HasMaxBlockSizeInMB(Params):
     )
 
     def __init__(self) -> None:
-        super(HasMaxBlockSizeInMB, self).__init__()
+        super().__init__()
         self._setDefault(maxBlockSizeInMB=0.0)
 
     def getMaxBlockSizeInMB(self) -> float:
@@ -802,7 +802,7 @@ class HasNumTrainWorkers(Params):
     )
 
     def __init__(self) -> None:
-        super(HasNumTrainWorkers, self).__init__()
+        super().__init__()
         self._setDefault(numTrainWorkers=1)
 
     def getNumTrainWorkers(self) -> int:
@@ -825,7 +825,7 @@ class HasBatchSize(Params):
     )
 
     def __init__(self) -> None:
-        super(HasBatchSize, self).__init__()
+        super().__init__()
 
     def getBatchSize(self) -> int:
         """
@@ -847,7 +847,7 @@ class HasLearningRate(Params):
     )
 
     def __init__(self) -> None:
-        super(HasLearningRate, self).__init__()
+        super().__init__()
 
     def getLearningRate(self) -> float:
         """
@@ -869,7 +869,7 @@ class HasMomentum(Params):
     )
 
     def __init__(self) -> None:
-        super(HasMomentum, self).__init__()
+        super().__init__()
 
     def getMomentum(self) -> float:
         """
@@ -891,7 +891,7 @@ class HasFeatureSizes(Params):
     )
 
     def __init__(self) -> None:
-        super(HasFeatureSizes, self).__init__()
+        super().__init__()
 
     def getFeatureSizes(self) -> List[int]:
         """

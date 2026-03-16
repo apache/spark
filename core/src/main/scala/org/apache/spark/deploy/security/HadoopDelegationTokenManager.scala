@@ -31,7 +31,7 @@ import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config._
 import org.apache.spark.rpc.RpcEndpointRef
@@ -151,7 +151,7 @@ private[spark] class HadoopDelegationTokenManager(
           creds.addAll(newTokens)
         }
       })
-      if(!currentUser.equals(freshUGI)) {
+      if (!currentUser.equals(freshUGI)) {
         FileSystem.closeAllForUGI(freshUGI)
       }
     }
@@ -270,9 +270,14 @@ private[spark] class HadoopDelegationTokenManager(
     val providers = mutable.ArrayBuffer[HadoopDelegationTokenProvider]()
 
     val iterator = loader.iterator
-    while (iterator.hasNext) {
+    var keepLoading = true
+    while (keepLoading) {
       try {
-        providers += iterator.next
+        if (iterator.hasNext) {
+          providers += iterator.next()
+        } else {
+          keepLoading = false
+        }
       } catch {
         case t: Throwable =>
           logDebug(s"Failed to load built in provider.", t)

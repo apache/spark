@@ -16,7 +16,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from typing import Callable, Iterable, Sized, TypeVar, Union
+from typing import Any, Callable, Iterable, Sized, TypeVar, Union
 from typing_extensions import Literal, Protocol
 
 from numpy import int32, int64, float32, float64, ndarray
@@ -29,10 +29,10 @@ PrimitiveType = Union[bool, float, int, str]
 NonUDFType = Literal[0]
 
 class SupportsIAdd(Protocol):
-    def __iadd__(self, other: SupportsIAdd) -> SupportsIAdd: ...
+    def __iadd__(self, other: Any) -> SupportsIAdd: ...
 
 class SupportsOrdering(Protocol):
-    def __lt__(self, other: SupportsOrdering) -> bool: ...
+    def __lt__(self, other: Any) -> bool: ...
 
 class SizedIterable(Protocol, Sized, Iterable[T_co]): ...
 

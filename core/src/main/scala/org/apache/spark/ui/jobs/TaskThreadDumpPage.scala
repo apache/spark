@@ -71,17 +71,15 @@ private[spark] class TaskThreadDumpPage(
 
       <div class="row">
         <div class="col-12">
-          <p>Updated at{UIUtils.formatDate(time)}</p>
+          <p>Updated at {UIUtils.formatDate(time)}</p>
           <table class={UIUtils.TABLE_CLASS_NOT_STRIPED + " accordion-group"}>
             <thead>
               <th>Thread ID</th>
               <th>Thread Name</th>
               <th>Thread State</th>
               <th>
-                <span data-toggle="tooltip" data-placement="top"
-                      title="Objects whose lock the thread currently holds">
-                  Thread Locks
-                </span>
+                {UIUtils.tooltipSpan(<xml:group>Thread Locks</xml:group>,
+                  "Objects whose lock the thread currently holds")}
               </th>
             </thead>
             <tbody>

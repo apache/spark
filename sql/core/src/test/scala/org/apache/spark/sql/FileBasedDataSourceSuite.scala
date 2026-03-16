@@ -64,6 +64,14 @@ class FileBasedDataSourceSuite extends QueryTest
   }
 
   private val allFileBasedDataSources = Seq("orc", "parquet", "csv", "json", "text")
+  private val formatMapping = Map(
+    "csv" -> "CSV",
+    "json" -> "JSON",
+    "parquet" -> "Parquet",
+    "orc" -> "ORC",
+    "text" -> "Text",
+    "xml" -> "XML"
+  )
   private val nameWithSpecialChars = "sp&cial%c hars"
 
   allFileBasedDataSources.foreach { format =>
@@ -128,13 +136,6 @@ class FileBasedDataSourceSuite extends QueryTest
 
   allFileBasedDataSources.foreach { format =>
     test(s"SPARK-23372 error while writing empty schema files using $format") {
-      val formatMapping = Map(
-        "csv" -> "CSV",
-        "json" -> "JSON",
-        "parquet" -> "Parquet",
-        "orc" -> "ORC",
-        "text" -> "Text"
-      )
       withTempPath { outputPath =>
         checkError(
           exception = intercept[AnalysisException] {
@@ -503,8 +504,7 @@ class FileBasedDataSourceSuite extends QueryTest
   test("SPARK-24204 error handling for unsupported Interval data types - csv, json, parquet, orc") {
     withTempDir { dir =>
       val tempDir = new File(dir, "files").getCanonicalPath
-      // TODO: test file source V2 after write path is fixed.
-      Seq(true).foreach { useV1 =>
+      Seq(true, false).foreach { useV1 =>
         val useV1List = if (useV1) {
           "csv,json,orc,parquet"
         } else {
@@ -513,12 +513,6 @@ class FileBasedDataSourceSuite extends QueryTest
         withSQLConf(
           SQLConf.USE_V1_SOURCE_LIST.key -> useV1List,
           SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
-          val formatMapping = Map(
-            "csv" -> "CSV",
-            "json" -> "JSON",
-            "parquet" -> "Parquet",
-            "orc" -> "ORC"
-          )
           // write path
           Seq("csv", "json", "parquet", "orc").foreach { format =>
             checkError(
@@ -571,11 +565,10 @@ class FileBasedDataSourceSuite extends QueryTest
     }
   }
 
-  test("SPARK-24204 error handling for unsupported Null data types - csv, parquet, orc") {
-    // TODO: test file source V2 after write path is fixed.
-    Seq(true).foreach { useV1 =>
+  test("SPARK-24204 error handling for unsupported Null data types - csv, orc") {
+    Seq(true, false).foreach { useV1 =>
       val useV1List = if (useV1) {
-        "csv,orc,parquet"
+        "csv,orc"
       } else {
         ""
       }
@@ -583,13 +576,7 @@ class FileBasedDataSourceSuite extends QueryTest
         withTempDir { dir =>
           val tempDir = new File(dir, "files").getCanonicalPath
 
-          Seq("parquet", "csv", "orc").foreach { format =>
-            val formatParameter = format match {
-              case "parquet" => "Parquet"
-              case "orc" => "ORC"
-              case _ => "CSV"
-            }
-
+          Seq("csv", "orc").foreach { format =>
             // write path
             checkError(
               exception = intercept[AnalysisException] {
@@ -599,7 +586,7 @@ class FileBasedDataSourceSuite extends QueryTest
               parameters = Map(
                 "columnName" -> "`NULL`",
                 "columnType" -> "\"VOID\"",
-                "format" -> formatParameter
+                "format" -> formatMapping(format)
               )
             )
 
@@ -612,7 +599,7 @@ class FileBasedDataSourceSuite extends QueryTest
               parameters = Map(
                 "columnName" -> "`testType()`",
                 "columnType" -> "UDT(\"VOID\")",
-                "format" -> formatParameter
+                "format" -> formatMapping(format)
               )
             )
 
@@ -627,7 +614,7 @@ class FileBasedDataSourceSuite extends QueryTest
               parameters = Map(
                 "columnName" -> "`a`",
                 "columnType" -> "\"VOID\"",
-                "format" -> formatParameter
+                "format" -> formatMapping(format)
               )
             )
 
@@ -641,7 +628,7 @@ class FileBasedDataSourceSuite extends QueryTest
               parameters = Map(
                 "columnName" -> "`a`",
                 "columnType" -> "UDT(\"VOID\")",
-                "format" -> formatParameter
+                "format" -> formatMapping(format)
               )
             )
           }
@@ -1254,6 +1241,73 @@ class FileBasedDataSourceSuite extends QueryTest
             case b: BatchScanExec => b.scan.asInstanceOf[FileScan].dataFilters
           }.flatten
           assert(filters.contains(GreaterThan(scan.logicalPlan.output.head, Literal(5L))))
+        }
+      }
+    }
+  }
+
+  test("SPARK-51590: unsupported the TIME data types in data sources") {
+    val datasources = Seq("text")
+    Seq(true, false).foreach { useV1 =>
+      val useV1List = if (useV1) {
+        datasources.mkString(",")
+      } else {
+        ""
+      }
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
+        withTempDir { dir =>
+          val tempDir = new File(dir, "files").getCanonicalPath
+          datasources.foreach { format =>
+            checkError(
+              exception = intercept[AnalysisException] {
+                sql("select time'12:01:02' as t")
+                  .write.format(format).mode("overwrite").save(tempDir)
+              },
+              condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+              parameters = Map(
+                "columnName" -> "`t`",
+                "columnType" -> s"\"${TimeType().sql}\"",
+                "format" -> formatMapping(format)))
+          }
+        }
+      }
+    }
+  }
+
+  test("Geospatial types are not supported in file data sources other than Parquet") {
+    // All of these file formats do NOT support geospatial types (GEOMETRY and GEOGRAPHY).
+    val unsupportedDataSources = Seq("csv", "json", "orc", "text", "xml")
+    // Test both v1 and v2 data sources.
+    Seq(true, false).foreach { useV1 =>
+      val useV1List = if (useV1) {
+        unsupportedDataSources.mkString(",")
+      } else {
+        ""
+      }
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
+        withTempDir { dir =>
+          // Temporary directory for writing the test data.
+          val tempDir = new File(dir, "files").getCanonicalPath
+          // Test data: WKB representation of POINT(1 2).
+          val wkb = "0101000000000000000000F03F0000000000000040"
+          // Test GEOMETRY and GEOGRAPHY data types.
+          val geoTestCases = Seq(
+            (s"ST_GeomFromWKB(X'$wkb')", "\"GEOMETRY(0)\""),
+            (s"ST_GeogFromWKB(X'$wkb')", "\"GEOGRAPHY(4326)\"")
+          )
+          unsupportedDataSources.foreach { format =>
+            geoTestCases.foreach { case (expr, expectedType) =>
+              checkError(
+                exception = intercept[AnalysisException] {
+                  sql(s"select $expr as g").write.format(format).mode("overwrite").save(tempDir)
+                },
+                condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+                parameters = Map(
+                  "columnName" -> "`g`",
+                  "columnType" -> expectedType,
+                  "format" -> formatMapping(format)))
+            }
+          }
         }
       }
     }

@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.connector.catalog;
 
-import org.apache.arrow.util.Preconditions;
-
 import java.util.Arrays;
 import java.util.Objects;
 import java.util.StringJoiner;
@@ -36,10 +34,8 @@ class IdentifierImpl implements Identifier {
   private String name;
 
   IdentifierImpl(String[] namespace, String name) {
-    Preconditions.checkNotNull(namespace, "Identifier namespace cannot be null");
-    Preconditions.checkNotNull(name, "Identifier name cannot be null");
-    this.namespace = namespace;
-    this.name = name;
+    this.namespace = Objects.requireNonNull(namespace, "Identifier namespace cannot be null");
+    this.name = Objects.requireNonNull(name, "Identifier name cannot be null");
   }
 
   @Override

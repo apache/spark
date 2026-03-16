@@ -16,6 +16,8 @@
  */
 package org.apache.spark.deploy.k8s.features
 
+import java.util.Locale
+
 import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model._
@@ -39,9 +41,7 @@ private[spark] class BasicExecutorFeatureStep(
   extends KubernetesFeatureConfigStep with Logging {
 
   // Consider moving some of these fields to KubernetesConf or KubernetesExecutorSpecificConf
-  private val executorContainerImage = kubernetesConf
-    .get(EXECUTOR_CONTAINER_IMAGE)
-    .getOrElse(throw new SparkException("Must specify the executor container image"))
+  private val executorContainerImage = kubernetesConf.image
   private val blockManagerPort = kubernetesConf
     .sparkConf
     .getInt(BLOCK_MANAGER_PORT.key, DEFAULT_BLOCKMANAGER_PORT)
@@ -51,8 +51,13 @@ private[spark] class BasicExecutorFeatureStep(
 
   private val executorPodNamePrefix = kubernetesConf.resourceNamePrefix
 
+  private val driverAddress = if (kubernetesConf.get(KUBERNETES_EXECUTOR_USE_DRIVER_POD_IP)) {
+    kubernetesConf.get(DRIVER_BIND_ADDRESS)
+  } else {
+    kubernetesConf.get(DRIVER_HOST_ADDRESS)
+  }
   private val driverUrl = RpcEndpointAddress(
-    kubernetesConf.get(DRIVER_HOST_ADDRESS),
+    driverAddress,
     kubernetesConf.sparkConf.getInt(DRIVER_PORT.key, DEFAULT_DRIVER_PORT),
     CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
 
@@ -112,11 +117,16 @@ private[spark] class BasicExecutorFeatureStep(
     // hostname must be no longer than `KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH`(63) characters,
     // so take the last 63 characters of the pod name as the hostname.
     // This preserves uniqueness since the end of name contains executorId
-    val hostname = name.substring(Math.max(0, name.length - KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH))
+    var hostname = name.substring(Math.max(0, name.length - KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH))
       // Remove non-word characters from the start of the hostname
       .replaceAll("^[^\\w]+", "")
       // Replace dangerous characters in the remaining string with a safe alternative.
       .replaceAll("[^\\w-]+", "_")
+
+    // Deployment resource does not support capital characters in the hostname
+    if (kubernetesConf.get(KUBERNETES_ALLOCATION_PODS_ALLOCATOR).equals("deployment")) {
+      hostname = hostname.toLowerCase(Locale.ROOT)
+    }
 
     val executorMemoryQuantity = new Quantity(s"${execResources.totalMemMiB}Mi")
     val executorCpuQuantity = new Quantity(executorCoresRequest)
@@ -154,7 +164,13 @@ private[spark] class BasicExecutorFeatureStep(
       KubernetesUtils.buildEnvVars(
         Seq(
           ENV_DRIVER_URL -> driverUrl,
-          ENV_EXECUTOR_CORES -> execResources.cores.get.toString,
+          ENV_EXECUTOR_CORES -> {
+            if (kubernetesConf.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED).getOrElse(false)) {
+              kubernetesConf.get("spark.task.cpus", "1")
+            } else {
+              execResources.cores.get.toString
+            }
+          },
           ENV_EXECUTOR_MEMORY -> executorMemoryString,
           ENV_APPLICATION_ID -> kubernetesConf.appId,
           // This is to set the SPARK_CONF_DIR to be /opt/spark/conf
@@ -207,6 +223,14 @@ private[spark] class BasicExecutorFeatureStep(
         .addToRequests("cpu", executorCpuQuantity)
         .addToLimits(executorResourceQuantities.asJava)
         .endResources()
+      .addNewResizePolicy()
+        .withResourceName("cpu")
+        .withRestartPolicy("NotRequired")
+        .endResizePolicy()
+      .addNewResizePolicy()
+        .withResourceName("memory")
+        .withRestartPolicy("NotRequired")
+        .endResizePolicy()
       .addNewEnv()
         .withName(ENV_SPARK_USER)
         .withValue(Utils.getCurrentUserName())
@@ -228,6 +252,10 @@ private[spark] class BasicExecutorFeatureStep(
     val containerWithLimitCores = if (isDefaultProfile) {
       executorLimitCores.map { limitCores =>
         val executorCpuLimitQuantity = new Quantity(limitCores)
+        if (executorCpuLimitQuantity.compareTo(executorCpuQuantity) < 0) {
+          throw new IllegalArgumentException(s"The executor cpu request ($executorCpuQuantity) " +
+            s"should be less than or equal to cpu limit ($executorCpuLimitQuantity)")
+        }
         new ContainerBuilder(executorContainerWithConfVolume)
           .editResources()
           .addToLimits("cpu", executorCpuLimitQuantity)
@@ -263,7 +291,7 @@ private[spark] class BasicExecutorFeatureStep(
     }
 
     val policy = kubernetesConf.get(KUBERNETES_ALLOCATION_PODS_ALLOCATOR) match {
-      case "statefulset" => "Always"
+      case "statefulset" | "deployment" => "Always"
       case _ => "Never"
     }
 
@@ -277,6 +305,8 @@ private[spark] class BasicExecutorFeatureStep(
       .editOrNewSpec()
         .withHostname(hostname)
         .withRestartPolicy(policy)
+        .withTerminationGracePeriodSeconds(
+          kubernetesConf.get(KUBERNETES_EXECUTOR_TERMINATION_GRACE_PERIOD_SECONDS))
         .addToNodeSelector(kubernetesConf.nodeSelector.asJava)
         .addToNodeSelector(kubernetesConf.executorNodeSelector.asJava)
         .addToImagePullSecrets(kubernetesConf.imagePullSecrets: _*)

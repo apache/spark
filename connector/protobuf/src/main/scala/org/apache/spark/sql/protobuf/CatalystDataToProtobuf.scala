@@ -35,11 +35,16 @@ private[sql] case class CatalystDataToProtobuf(
 
   override def dataType: DataType = BinaryType
 
-  @transient private lazy val protoDescriptor =
+  @transient private lazy val descriptorWithExtensions =
     ProtobufUtils.buildDescriptor(messageName, binaryFileDescriptorSet)
 
+  @transient private lazy val protoDescriptor = descriptorWithExtensions.descriptor
+
+  @transient private lazy val fullNamesToExtensions =
+    descriptorWithExtensions.fullNamesToExtensions
+
   @transient private lazy val serializer =
-    new ProtobufSerializer(child.dataType, protoDescriptor, child.nullable)
+    new ProtobufSerializer(child.dataType, protoDescriptor, child.nullable, fullNamesToExtensions)
 
   override def nullSafeEval(input: Any): Any = {
     val dynamicMessage = serializer.serialize(input).asInstanceOf[DynamicMessage]
@@ -55,4 +60,35 @@ private[sql] case class CatalystDataToProtobuf(
 
   override protected def withNewChildInternal(newChild: Expression): CatalystDataToProtobuf =
     copy(child = newChild)
+
+  override def equals(that: Any): Boolean = {
+    that match {
+      case that: CatalystDataToProtobuf =>
+        this.child == that.child &&
+        this.messageName == that.messageName &&
+        (
+          (this.binaryFileDescriptorSet.isEmpty && that.binaryFileDescriptorSet.isEmpty) ||
+          (
+            this.binaryFileDescriptorSet.nonEmpty && that.binaryFileDescriptorSet.nonEmpty &&
+            this.binaryFileDescriptorSet.get.sameElements(that.binaryFileDescriptorSet.get)
+          )
+        ) &&
+        this.options == that.options
+      case _ => false
+    }
+  }
+
+  override def hashCode(): Int = {
+    val prime = 31
+    var result = 1
+    var i = 0
+    while (i < binaryFileDescriptorSet.map(_.length).getOrElse(0)) {
+      result = prime * result + binaryFileDescriptorSet.get.apply(i).hashCode
+      i += 1
+    }
+    result = prime * result + child.hashCode
+    result = prime * result + messageName.hashCode
+    result = prime * result + options.hashCode
+    result
+  }
 }

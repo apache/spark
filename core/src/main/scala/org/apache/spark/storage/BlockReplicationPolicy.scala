@@ -21,7 +21,7 @@ import scala.collection.mutable
 import scala.util.Random
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 
 /**

@@ -16,11 +16,13 @@
 #
 import unittest
 
+from pyspark import is_remote_only
 from pyspark.pandas.tests.frame.test_take_adv import FrameTakeAdvMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
+@unittest.skipIf(is_remote_only(), "Flaky with OOM")
 class FrameTakeAdvParityTests(
     FrameTakeAdvMixin,
     PandasOnSparkTestUtils,
@@ -30,12 +32,6 @@ class FrameTakeAdvParityTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.frame.test_parity_take_adv import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

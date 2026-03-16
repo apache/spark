@@ -20,7 +20,7 @@ import math
 
 import pandas as pd
 import numpy as np
-from pandas.core.base import PandasObject
+from pandas.core.base import PandasObject  # type: ignore[attr-defined]
 from pandas.core.dtypes.inference import is_integer
 
 from pyspark.sql import functions as F, Column
@@ -573,7 +573,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
         """
         Plot DataFrame/Series as lines.
 
-        This function is useful to plot lines using DataFrame’s values
+        This function is useful to plot lines using DataFrame's values
         as coordinates.
 
         Parameters
@@ -904,12 +904,12 @@ class PandasOnSparkPlotAccessor(PandasObject):
 
     def hist(self, bins=10, **kwds):
         """
-        Draw one histogram of the DataFrame’s columns.
+        Draw one histogram of the DataFrame's columns.
 
         A `histogram`_ is a representation of the distribution of data.
         This function calls :meth:`plotting.backend.plot`,
         on each series in the DataFrame, resulting in one histogram per column.
-        This is useful when the DataFrame’s Series are in a similar scale.
+        This is useful when the DataFrame's Series are in a similar scale.
 
         .. _histogram: https://en.wikipedia.org/wiki/Histogram
 
@@ -990,12 +990,12 @@ class PandasOnSparkPlotAccessor(PandasObject):
         .. plotly::
 
             >>> s = ps.Series([1, 2, 2.5, 3, 3.5, 4, 5])
-            >>> s.plot.kde(bw_method=0.3)  # doctest: +SKIP
+            >>> s.plot.kde(bw_method=0.3, ind=100)  # doctest: +SKIP
 
         .. plotly::
 
             >>> s = ps.Series([1, 2, 2.5, 3, 3.5, 4, 5])
-            >>> s.plot.kde(bw_method=3)  # doctest: +SKIP
+            >>> s.plot.kde(bw_method=3, ind=100)  # doctest: +SKIP
 
         The `ind` parameter determines the evaluation points for the
         plot of the estimated KDF:
@@ -1013,7 +1013,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             ...     'x': [1, 2, 2.5, 3, 3.5, 4, 5],
             ...     'y': [4, 4, 4.5, 5, 5.5, 6, 6],
             ... })
-            >>> df.plot.kde(bw_method=0.3)  # doctest: +SKIP
+            >>> df.plot.kde(bw_method=0.3, ind=100)  # doctest: +SKIP
 
         .. plotly::
 
@@ -1021,7 +1021,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             ...     'x': [1, 2, 2.5, 3, 3.5, 4, 5],
             ...     'y': [4, 4, 4.5, 5, 5.5, 6, 6],
             ... })
-            >>> df.plot.kde(bw_method=3)  # doctest: +SKIP
+            >>> df.plot.kde(bw_method=3, ind=100)  # doctest: +SKIP
 
         .. plotly::
 

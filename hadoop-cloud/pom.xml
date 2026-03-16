@@ -22,7 +22,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.13</artifactId>
-    <version>4.0.0-SNAPSHOT</version>
+    <version>4.2.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -34,6 +34,9 @@
   </description>
   <properties>
     <sbt.project.name>hadoop-cloud</sbt.project.name>
+    <okhttp.version>3.12.12</okhttp.version>
+    <okio.version>1.17.6</okio.version>
+    <wildfly-openssl.version>2.2.5.Final</wildfly-openssl.version>
   </properties>
 
   <dependencies>
@@ -78,6 +81,17 @@
       <artifactId>hadoop-aws</artifactId>
       <version>${hadoop.version}</version>
       <scope>${hadoop.deps.scope}</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>org.wildfly.openssl</groupId>
+          <artifactId>wildfly-openssl</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>org.wildfly.openssl</groupId>
+      <artifactId>wildfly-openssl</artifactId>
+      <version>${wildfly-openssl.version}</version>
     </dependency>
     <dependency>
       <groupId>software.amazon.awssdk</groupId>
@@ -89,6 +103,12 @@
           <artifactId>*</artifactId>
         </exclusion>
       </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>software.amazon.s3.analyticsaccelerator</groupId>
+      <artifactId>analyticsaccelerator-s3</artifactId>
+      <version>${analyticsaccelerator-s3.version}</version>
+      <scope>${hadoop.deps.scope}</scope>
     </dependency>
     <dependency>
       <groupId>com.google.cloud.bigdataoss</groupId>
@@ -146,6 +166,12 @@
       <version>${hadoop.version}</version>
       <scope>${hadoop.deps.scope}</scope>
     </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-huaweicloud</artifactId>
+      <version>${hadoop.version}</version>
+      <scope>${huaweicloud.deps.scope}</scope>
+    </dependency>
     <!--
     There's now a hadoop-cloud-storage which transitively pulls in the store JARs,
     but it still needs some selective exclusion across versions, especially 3.0.x.
@@ -171,6 +197,10 @@
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-cos</artifactId>
         </exclusion>
+        <exclusion>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-huaweicloud</artifactId>
+        </exclusion>
       </exclusions>
     </dependency>
     <!--
@@ -190,6 +220,18 @@
       <artifactId>jetty-util-ajax</artifactId>
       <version>${jetty.version}</version>
       <scope>${hadoop.deps.scope}</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.squareup.okhttp3</groupId>
+      <artifactId>okhttp</artifactId>
+      <version>${okhttp.version}</version>
+      <scope>${huaweicloud.deps.scope}</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.squareup.okio</groupId>
+      <artifactId>okio</artifactId>
+      <version>${okio.version}</version>
+      <scope>${huaweicloud.deps.scope}</scope>
     </dependency>
   </dependencies>
 
@@ -218,6 +260,12 @@
   </build>
 
   <profiles>
+    <profile>
+      <id>huaweicloud-provided</id>
+      <properties>
+        <huaweicloud.deps.scope>provided</huaweicloud.deps.scope>
+      </properties>
+    </profile>
     <profile>
       <id>integration-test</id>
       <build>

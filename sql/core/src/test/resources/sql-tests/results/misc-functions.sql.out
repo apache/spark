@@ -58,7 +58,7 @@ array<int>	map<int,int>	struct<a:int,b:string>
 -- !query
 SELECT assert_true(true), assert_true(boolean(1))
 -- !query schema
-struct<assert_true(true, 'true' is not true!):void,assert_true(1, 'cast(1 as boolean)' is not true!):void>
+struct<assert_true(true, 'true' is not true!):void,assert_true(1, '1' is not true!):void>
 -- !query output
 NULL	NULL
 
@@ -88,7 +88,7 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "USER_RAISED_EXCEPTION",
   "sqlState" : "P0001",
   "messageParameters" : {
-    "errorMessage" : "'cast(0 as boolean)' is not true!"
+    "errorMessage" : "'0' is not true!"
   }
 }
 
@@ -103,7 +103,7 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "USER_RAISED_EXCEPTION",
   "sqlState" : "P0001",
   "messageParameters" : {
-    "errorMessage" : "'null' is not true!"
+    "errorMessage" : "'NULL' is not true!"
   }
 }
 
@@ -118,7 +118,7 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "USER_RAISED_EXCEPTION",
   "sqlState" : "P0001",
   "messageParameters" : {
-    "errorMessage" : "'cast(null as boolean)' is not true!"
+    "errorMessage" : "'NULL' is not true!"
   }
 }
 
@@ -313,3 +313,11 @@ SET spark.sql.legacy.raiseErrorWithoutErrorClass=false
 struct<key:string,value:string>
 -- !query output
 spark.sql.legacy.raiseErrorWithoutErrorClass	false
+
+
+-- !query
+SELECT assert_true(col1 <= col2) FROM VALUES ('2025-03-01', '2025-03-10')
+-- !query schema
+struct<assert_true((col1 <= col2), '(col1 <= col2)' is not true!):void>
+-- !query output
+NULL

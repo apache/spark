@@ -19,10 +19,6 @@
 A collections of builtin protobuf functions
 """
 
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
-
 from typing import Dict, Optional, TYPE_CHECKING
 
 from pyspark.sql.protobuf import functions as PyProtobufFunctions
@@ -120,7 +116,7 @@ def _read_descriptor_set_file(filePath: str) -> bytes:
 def _test() -> None:
     import os
     import sys
-    from pyspark.testing.utils import search_jar
+    from pyspark.testing.sqlutils import search_jar
 
     protobuf_jar = search_jar("connector/protobuf", "spark-protobuf-assembly-", "spark-protobuf")
     if protobuf_jar is None:
@@ -147,7 +143,7 @@ def _test() -> None:
         .getOrCreate()
     )
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.connect.protobuf.functions,
         globs=globs,
         optionflags=doctest.ELLIPSIS

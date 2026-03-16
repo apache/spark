@@ -108,4 +108,49 @@ class DatasketchesHllSketchSuite extends SparkFunSuite {
 
     assert(HllSketch.heapify(Memory.wrap(binary3.asInstanceOf[Array[Byte]])).getLgConfigK == 12)
   }
+
+  test("HllUnionAgg throws proper error for invalid binary input causing ArrayIndexOutOfBounds") {
+    val aggFunc = new HllUnionAgg(BoundReference(0, BinaryType, nullable = true), true)
+    val union = aggFunc.createAggregationBuffer()
+
+    // Craft a byte array that passes initial size checks but has an invalid CurMode ordinal.
+    // HLL preamble layout:
+    //   Byte 0: preInts (preamble size in ints)
+    //   Byte 1: serVer (must be 1)
+    //   Byte 2: famId (must be 7 for HLL)
+    //   Byte 3: lgK (4-21)
+    //   Byte 5: flags
+    //   Byte 7: modeByte - bits 0-1 contain curMode ordinal (0=LIST, 1=SET, 2=HLL)
+    //
+    // Setting bits 0-1 of byte 7 to 0b11 (=3) causes CurMode.fromOrdinal(3) to throw
+    // ArrayIndexOutOfBoundsException since CurMode only has ordinals 0, 1, 2.
+    // This happens in PreambleUtil.extractCurMode() before other validations run.
+    val invalidBinary = Array[Byte](
+      2,    // byte 0: preInts = 2 (LIST_PREINTS, passes check)
+      1,    // byte 1: serVer = 1 (valid)
+      7,    // byte 2: famId = 7 (HLL family)
+      12,   // byte 3: lgK = 12 (valid range 4-21)
+      0,    // byte 4: unused
+      0,    // byte 5: flags = 0
+      0,    // byte 6: unused
+      3     // byte 7: modeByte with bits 0-1 = 0b11 = 3 (INVALID curMode ordinal!)
+    )
+
+    val exception = intercept[Exception] {
+      aggFunc.update(union, InternalRow(invalidBinary))
+    }
+
+    // Verify that ArrayIndexOutOfBoundsException is properly caught and converted
+    // to the user-friendly HLL_INVALID_INPUT_SKETCH_BUFFER error
+    assert(
+      !exception.isInstanceOf[ArrayIndexOutOfBoundsException],
+      s"ArrayIndexOutOfBoundsException should be caught and converted to " +
+        s"HLL_INVALID_INPUT_SKETCH_BUFFER error, but got: ${exception.getClass.getName}"
+    )
+    assert(
+      exception.getMessage.contains("HLL_INVALID_INPUT_SKETCH_BUFFER"),
+      s"Expected HLL_INVALID_INPUT_SKETCH_BUFFER error, " +
+        s"but got: ${exception.getClass.getName}: ${exception.getMessage}"
+    )
+  }
 }

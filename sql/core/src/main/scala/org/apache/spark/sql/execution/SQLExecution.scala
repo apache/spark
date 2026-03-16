@@ -17,28 +17,69 @@
 
 package org.apache.spark.sql.execution
 
-import java.util.concurrent.{ConcurrentHashMap, ExecutorService, Future => JFuture}
+import java.util.concurrent.{CompletableFuture, ConcurrentHashMap, ExecutorService}
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-import org.apache.spark.{ErrorMessageFormat, JobArtifactSet, SparkContext, SparkEnv, SparkException, SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.{ErrorMessageFormat, JobArtifactSet, JobArtifactState, SparkContext, SparkEnv, SparkException, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.SparkContext.{SPARK_JOB_DESCRIPTION, SPARK_JOB_INTERRUPT_ON_CANCEL}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{SPARK_DRIVER_PREFIX, SPARK_EXECUTOR_PREFIX}
 import org.apache.spark.internal.config.Tests.IS_TESTING
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
+import org.apache.spark.sql.execution.command.DataWritingCommandExec
+import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.SQL_EVENT_TRUNCATE_LENGTH
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{Utils, UUIDv7Generator}
+
+/**
+ * Captures SQL-specific thread-local variables so they can be restored on a different thread.
+ * Use [[SQLExecution.captureThreadLocals]] to create an instance on the originating thread,
+ * then call [[runWith]] on the target thread to execute a block with these thread locals applied.
+ */
+case class SQLExecutionThreadLocalCaptured(
+  sparkSession: SparkSession,
+  localProps: java.util.Properties,
+  artifactState: JobArtifactState) {
+
+  /**
+   * Run the given body with the captured thread-local variables applied on the current thread.
+   * Original thread-local values are saved and restored after the body completes.
+   */
+  def runWith[T](body: => T): T = {
+    val sc = sparkSession.sparkContext
+    JobArtifactSet.withActiveJobArtifactState(artifactState) {
+      val originalSession = SparkSession.getActiveSession
+      val originalLocalProps = sc.getLocalProperties
+      SparkSession.setActiveSession(sparkSession)
+      val res = SQLExecution.withSessionTagsApplied(sparkSession) {
+        sc.setLocalProperties(localProps)
+        val res = body
+        // reset active session and local props.
+        sc.setLocalProperties(originalLocalProps)
+        res
+      }
+      if (originalSession.nonEmpty) {
+        SparkSession.setActiveSession(originalSession.get)
+      } else {
+        SparkSession.clearActiveSession()
+      }
+      res
+    }
+  }
+}
 
 object SQLExecution extends Logging {
 
   val EXECUTION_ID_KEY = "spark.sql.execution.id"
   val EXECUTION_ROOT_ID_KEY = "spark.sql.execution.root.id"
+  val QUERY_ID_KEY = "spark.sql.execution.query.id"
 
   private val _nextExecutionId = new AtomicLong(0)
 
@@ -67,6 +108,18 @@ object SQLExecution extends Logging {
     }
   }
 
+  private def extractShuffleIds(plan: SparkPlan): Seq[Int] = {
+    val shuffleIdsOption = plan.collectFirst {
+      case ae: AdaptiveSparkPlanExec =>
+        ae.context.shuffleIds.asScala.keys.toSeq
+    }
+    shuffleIdsOption.getOrElse {
+        plan.collect {
+          case exec: ShuffleExchangeLike => exec.shuffleId
+        }
+    }
+  }
+
   /**
    * Wrap an action that will execute "queryExecution" to track all Spark jobs in the body so that
    * we can connect them with an execution.
@@ -78,16 +131,28 @@ object SQLExecution extends Logging {
     val sparkSession = queryExecution.sparkSession
     val sc = sparkSession.sparkContext
     val oldExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY)
+    val oldQueryId = sc.getLocalProperty(QUERY_ID_KEY)
     val executionId = SQLExecution.nextExecutionId
+    // Use the original queryId for the first execution, generate new ones for
+    // subsequent executions
+    val queryId = if (queryExecution.firstExecution.compareAndSet(true, false)) {
+      queryExecution.queryId
+    } else {
+      UUIDv7Generator.generate()
+    }
     sc.setLocalProperty(EXECUTION_ID_KEY, executionId.toString)
+    sc.setLocalProperty(QUERY_ID_KEY, queryId.toString)
     // Track the "root" SQL Execution Id for nested/sub queries. The current execution is the
     // root execution if the root execution ID is null.
     // And for the root execution, rootExecutionId == executionId.
-    if (sc.getLocalProperty(EXECUTION_ROOT_ID_KEY) == null) {
+    val existingRootId = sc.getLocalProperty(EXECUTION_ROOT_ID_KEY)
+    val rootExecutionId = if (existingRootId != null) {
+      existingRootId.toLong
+    } else {
       sc.setLocalProperty(EXECUTION_ROOT_ID_KEY, executionId.toString)
       sc.addJobTag(executionIdJobTag(sparkSession, executionId))
+      executionId
     }
-    val rootExecutionId = sc.getLocalProperty(EXECUTION_ROOT_ID_KEY).toLong
     executionIdToQueryExecution.put(executionId, queryExecution)
     val originalInterruptOnCancel = sc.getLocalProperty(SPARK_JOB_INTERRUPT_ON_CANCEL)
     if (originalInterruptOnCancel == null) {
@@ -135,7 +200,8 @@ object SQLExecution extends Logging {
               time = System.currentTimeMillis(),
               modifiedConfigs = redactedConfigs,
               jobTags = sc.getJobTags(),
-              jobGroupId = Option(sc.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID))
+              jobGroupId = Option(sc.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID)),
+              queryId = Some(queryId)
             )
             try {
               body match {
@@ -176,10 +242,12 @@ object SQLExecution extends Logging {
               if (queryExecution.shuffleCleanupMode != DoNotCleanup
                 && isExecutedPlanAvailable) {
                 val shuffleIds = queryExecution.executedPlan match {
-                  case ae: AdaptiveSparkPlanExec =>
-                    ae.context.shuffleIds.asScala.keys
-                  case _ =>
-                    Iterable.empty
+                  case command: V2CommandExec =>
+                    command.children.flatMap(extractShuffleIds)
+                  case dataWritingCommand: DataWritingCommandExec =>
+                    extractShuffleIds(dataWritingCommand.child)
+                  case plan =>
+                    extractShuffleIds(plan)
                 }
                 shuffleIds.foreach { shuffleId =>
                   queryExecution.shuffleCleanupMode match {
@@ -200,7 +268,8 @@ object SQLExecution extends Logging {
                 System.currentTimeMillis(),
                 // Use empty string to indicate no error, as None may mean events generated by old
                 // versions of Spark.
-                errorMessage.orElse(Some("")))
+                errorMessage.orElse(Some("")),
+                Some(queryId))
               // Currently only `Dataset.withAction` and `DataFrameWriter.runCommand` specify the
               // `name` parameter. The `ExecutionListenerManager` only watches SQL executions with
               // name. We can specify the execution name in more places in the future, so that
@@ -209,7 +278,21 @@ object SQLExecution extends Logging {
               event.duration = endTime - startTime
               event.qe = queryExecution
               event.executionFailure = ex
+              if (Utils.isTesting) {
+                import scala.jdk.CollectionConverters._
+                event.jobIds = Option(sc.dagScheduler.activeQueryToJobs.get(executionId))
+                  .map(_.asScala.map(_.jobId).toSet)
+                  .getOrElse(Set.empty)
+              }
+
+              // Clean up jobs tracked by DAGScheduler for this query execution.
+              sc.dagScheduler.cleanupQueryJobs(executionId)
+
               sc.listenerBus.post(event)
+
+              // Observation.tryComplete is called here to ensure the observation is completed,
+              // but it is not high priority, so it is fine to call it later.
+              sparkSession.observationManager.tryComplete(queryExecution)
             }
           }
         }
@@ -217,6 +300,7 @@ object SQLExecution extends Logging {
     } finally {
       executionIdToQueryExecution.remove(executionId)
       sc.setLocalProperty(EXECUTION_ID_KEY, oldExecutionId)
+      sc.setLocalProperty(QUERY_ID_KEY, oldQueryId)
       // Unset the "root" SQL Execution Id once the "root" SQL execution completes.
       // The current execution is the root execution if rootExecutionId == executionId.
       if (sc.getLocalProperty(EXECUTION_ROOT_ID_KEY) == executionId.toString) {
@@ -261,7 +345,7 @@ object SQLExecution extends Logging {
   }
 
   private[sql] def withSessionTagsApplied[T](sparkSession: SparkSession)(block: => T): T = {
-    val allTags = sparkSession.managedJobTags.values().asScala.toSet + sparkSession.sessionJobTag
+    val allTags = sparkSession.managedJobTags.get().values.toSet + sparkSession.sessionJobTag
     sparkSession.sparkContext.addJobTags(allTags)
 
     try {
@@ -296,36 +380,25 @@ object SQLExecution extends Logging {
     }
   }
 
+  def captureThreadLocals(sparkSession: SparkSession): SQLExecutionThreadLocalCaptured = {
+    val sc = sparkSession.sparkContext
+    val localProps = Utils.cloneProperties(sc.getLocalProperties)
+    // `getCurrentJobArtifactState` will return a stat only in Spark Connect mode. In non-Connect
+    // mode, we default back to the resources of the current Spark session.
+    val artifactState =
+      JobArtifactSet.getCurrentJobArtifactState.getOrElse(sparkSession.artifactManager.state)
+    SQLExecutionThreadLocalCaptured(sparkSession, localProps, artifactState)
+  }
+
   /**
    * Wrap passed function to ensure necessary thread-local variables like
    * SparkContext local properties are forwarded to execution thread
    */
   def withThreadLocalCaptured[T](
-      sparkSession: SparkSession, exec: ExecutorService) (body: => T): JFuture[T] = {
-    val activeSession = sparkSession
-    val sc = sparkSession.sparkContext
-    val localProps = Utils.cloneProperties(sc.getLocalProperties)
-    // `getCurrentJobArtifactState` will return a stat only in Spark Connect mode. In non-Connect
-    // mode, we default back to the resources of the current Spark session.
-    val artifactState = JobArtifactSet.getCurrentJobArtifactState.getOrElse(
-      activeSession.artifactManager.state)
-    exec.submit(() => JobArtifactSet.withActiveJobArtifactState(artifactState) {
-      val originalSession = SparkSession.getActiveSession
-      val originalLocalProps = sc.getLocalProperties
-      SparkSession.setActiveSession(activeSession)
-      val res = withSessionTagsApplied(activeSession) {
-        sc.setLocalProperties(localProps)
-        val res = body
-        // reset active session and local props.
-        sc.setLocalProperties(originalLocalProps)
-        res
-      }
-      if (originalSession.nonEmpty) {
-        SparkSession.setActiveSession(originalSession.get)
-      } else {
-        SparkSession.clearActiveSession()
-      }
-      res
-    })
+      sparkSession: SparkSession, exec: ExecutorService) (body: => T): CompletableFuture[T] = {
+    val threadLocalCaptured = captureThreadLocals(sparkSession)
+    CompletableFuture.supplyAsync(() => {
+      threadLocalCaptured.runWith(body)
+    }, exec)
   }
 }

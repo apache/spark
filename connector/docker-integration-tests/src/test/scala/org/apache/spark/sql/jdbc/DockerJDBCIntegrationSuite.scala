@@ -37,7 +37,6 @@ import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, CONTAINER, STATUS}
-import org.apache.spark.internal.MDC
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.{DockerUtils, Utils}
@@ -211,6 +210,7 @@ abstract class DockerJDBCIntegrationSuite
         assert(response.getState.getRunning)
       }
       jdbcUrl = db.getJdbcUrl(dockerIp, externalPort)
+      sleepBeforeTesting()
       var conn: Connection = null
       eventually(connectionTimeout, interval(1.second)) {
         conn = getConnection()
@@ -255,6 +255,11 @@ abstract class DockerJDBCIntegrationSuite
    * Prepare databases and tables for testing.
    */
   def dataPreparation(connection: Connection): Unit
+
+  /**
+   * Sleep for a while before testing.
+   */
+  def sleepBeforeTesting(): Unit = {}
 
   private def cleanupContainer(): Unit = {
     if (docker != null && container != null && !keepContainer) {

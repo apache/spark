@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.internal
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.internal.SQLConf._
 
 class SQLConfEntrySuite extends SparkFunSuite {
@@ -40,10 +40,16 @@ class SQLConfEntrySuite extends SparkFunSuite {
     conf.setConfString(key, " 20")
     assert(conf.getConf(confEntry, 5) === 20)
 
-    val e = intercept[IllegalArgumentException] {
-      conf.setConfString(key, "abc")
-    }
-    assert(e.getMessage === s"$key should be int, but was abc")
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        conf.setConfString(key, "abc")
+      },
+      condition = "INVALID_CONF_VALUE.TYPE_MISMATCH",
+      parameters = Map(
+        "confName" -> key,
+        "confValue" -> "abc",
+        "confType" -> "int")
+    )
   }
 
   test("longConf") {
@@ -59,10 +65,16 @@ class SQLConfEntrySuite extends SparkFunSuite {
     assert(conf.getConfString(key) === "20")
     assert(conf.getConf(confEntry, 5L) === 20L)
 
-    val e = intercept[IllegalArgumentException] {
-      conf.setConfString(key, "abc")
-    }
-    assert(e.getMessage === s"$key should be long, but was abc")
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        conf.setConfString(key, "abc")
+      },
+      condition = "INVALID_CONF_VALUE.TYPE_MISMATCH",
+      parameters = Map(
+        "confName" -> key,
+        "confValue" -> "abc",
+        "confType" -> "long")
+    )
   }
 
   test("booleanConf") {
@@ -80,10 +92,16 @@ class SQLConfEntrySuite extends SparkFunSuite {
 
     conf.setConfString(key, " true ")
     assert(conf.getConf(confEntry, false))
-    val e = intercept[IllegalArgumentException] {
-      conf.setConfString(key, "abc")
-    }
-    assert(e.getMessage === s"$key should be boolean, but was abc")
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        conf.setConfString(key, "abc")
+      },
+      condition = "INVALID_CONF_VALUE.TYPE_MISMATCH",
+      parameters = Map(
+        "confName" -> key,
+        "confValue" -> "abc",
+        "confType" -> "boolean")
+    )
   }
 
   test("doubleConf") {
@@ -99,10 +117,16 @@ class SQLConfEntrySuite extends SparkFunSuite {
     assert(conf.getConfString(key) === "20.0")
     assert(conf.getConf(confEntry, 5.0) === 20.0)
 
-    val e = intercept[IllegalArgumentException] {
-      conf.setConfString(key, "abc")
-    }
-    assert(e.getMessage === s"$key should be double, but was abc")
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        conf.setConfString(key, "abc")
+      },
+      condition = "INVALID_CONF_VALUE.TYPE_MISMATCH",
+      parameters = Map(
+        "confName" -> key,
+        "confValue" -> "abc",
+        "confType" -> "double")
+    )
   }
 
   test("stringConf") {
@@ -121,9 +145,10 @@ class SQLConfEntrySuite extends SparkFunSuite {
 
   test("enumConf") {
     val key = "spark.sql.SQLConfEntrySuite.enum"
+    val candidates = Set("a", "b", "c")
     val confEntry = buildConf(key)
       .stringConf
-      .checkValues(Set("a", "b", "c"))
+      .checkValues(candidates)
       .createWithDefault("a")
     assert(conf.getConf(confEntry) === "a")
 
@@ -135,10 +160,16 @@ class SQLConfEntrySuite extends SparkFunSuite {
     assert(conf.getConfString(key) === "c")
     assert(conf.getConf(confEntry) === "c")
 
-    val e = intercept[IllegalArgumentException] {
-      conf.setConfString(key, "d")
-    }
-    assert(e.getMessage === s"The value of $key should be one of a, b, c, but was d")
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        conf.setConfString(key, "abc")
+      },
+      condition = "INVALID_CONF_VALUE.OUT_OF_RANGE_OF_OPTIONS",
+      parameters = Map(
+        "confName" -> key,
+        "confValue" -> "abc",
+        "confOptions" -> candidates.mkString(", "))
+    )
   }
 
   test("stringSeqConf") {
@@ -182,17 +213,27 @@ class SQLConfEntrySuite extends SparkFunSuite {
     assert(conf.getConf(confEntry) === 1000)
 
     conf.setConf(confEntry, -1)
-    val e1 = intercept[IllegalArgumentException] {
-      conf.getConf(confEntry)
-    }
-    assert(e1.getMessage === s"'-1' in ${confEntry.key} is invalid." +
-      s" The maximum size of the cache must not be negative")
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        conf.getConf(confEntry)
+      },
+      condition = "INVALID_CONF_VALUE.REQUIREMENT",
+      parameters = Map(
+        "confName" -> confEntry.key,
+        "confValue" -> "-1",
+        "confRequirement" -> "The maximum size of the cache must not be negative")
+    )
 
-    val e2 = intercept[IllegalArgumentException] {
-      conf.setConfString(confEntry.key, "-1")
-    }
-    assert(e2.getMessage === s"'-1' in ${confEntry.key} is invalid." +
-      s" The maximum size of the cache must not be negative")
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        conf.setConfString(confEntry.key, "-1")
+      },
+      condition = "INVALID_CONF_VALUE.REQUIREMENT",
+      parameters = Map(
+        "confName" -> confEntry.key,
+        "confValue" -> "-1",
+        "confRequirement" -> "The maximum size of the cache must not be negative")
+    )
   }
 
   test("clone SQLConf") {

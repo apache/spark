@@ -21,8 +21,6 @@ import java.io.File;
 import java.util.Locale;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
-import com.google.common.base.Preconditions;
-import com.google.common.primitives.Ints;
 import io.netty.util.NettyRuntime;
 
 /**
@@ -30,6 +28,7 @@ import io.netty.util.NettyRuntime;
  */
 public class TransportConf {
 
+  private final String SPARK_NETWORK_DEFAULT_IO_MODE_KEY = "spark.io.mode.default";
   private final String SPARK_NETWORK_IO_MODE_KEY;
   private final String SPARK_NETWORK_IO_PREFERDIRECTBUFS_KEY;
   private final String SPARK_NETWORK_IO_CONNECTIONTIMEOUT_KEY;
@@ -88,9 +87,10 @@ public class TransportConf {
     return module;
   }
 
-  /** IO mode: nio or epoll */
+  /** IO mode: NIO, EPOLL, KQUEUE, or AUTO */
   public String ioMode() {
-    return conf.get(SPARK_NETWORK_IO_MODE_KEY, "NIO").toUpperCase(Locale.ROOT);
+    String defaultIOMode = conf.get(SPARK_NETWORK_DEFAULT_IO_MODE_KEY, "AUTO");
+    return conf.get(SPARK_NETWORK_IO_MODE_KEY, defaultIOMode).toUpperCase(Locale.ROOT);
   }
 
   /** If true, we will prefer allocating off-heap byte buffers within Netty. */
@@ -171,7 +171,7 @@ public class TransportConf {
    * memory mapping has high overhead for blocks close to or below the page size of the OS.
    */
   public int memoryMapBytes() {
-    return Ints.checkedCast(JavaUtils.byteStringAsBytes(
+    return JavaUtils.checkedCast(JavaUtils.byteStringAsBytes(
       conf.get("spark.storage.memoryMapThreshold", "2m")));
   }
 
@@ -248,7 +248,7 @@ public class TransportConf {
    * Maximum number of bytes to be encrypted at a time when SASL encryption is used.
    */
   public int maxSaslEncryptedBlockSize() {
-    return Ints.checkedCast(JavaUtils.byteStringAsBytes(
+    return JavaUtils.checkedCast(JavaUtils.byteStringAsBytes(
       conf.get("spark.network.sasl.maxEncryptedBlockSize", "64k")));
   }
 
@@ -263,7 +263,7 @@ public class TransportConf {
    * When Secure (SSL/TLS) Shuffle is enabled, the Chunk size to use for shuffling files.
    */
   public int sslShuffleChunkSize() {
-    return Ints.checkedCast(JavaUtils.byteStringAsBytes(
+    return JavaUtils.checkedCast(JavaUtils.byteStringAsBytes(
       conf.get("spark.network.ssl.maxEncryptedBlockSize", "64k")));
   }
 
@@ -473,6 +473,7 @@ public class TransportConf {
    * spark.shuffle.server.chunkFetchHandlerThreadsPercent. The returned value is rounded off to
    * ceiling of the nearest integer.
    */
+  @Deprecated(since = "4.2.0", forRemoval = true)
   public int chunkFetchHandlerThreads() {
     if (!this.getModuleName().equalsIgnoreCase("shuffle")) {
       return 0;
@@ -488,6 +489,7 @@ public class TransportConf {
    * Whether to use a separate EventLoopGroup to process ChunkFetchRequest messages, it is decided
    * by the config `spark.shuffle.server.chunkFetchHandlerThreadsPercent` is set or not.
    */
+  @Deprecated(since = "4.2.0", forRemoval = true)
   public boolean separateChunkFetchRequest() {
     return conf.getInt("spark.shuffle.server.chunkFetchHandlerThreadsPercent", 0) > 0;
   }
@@ -500,11 +502,12 @@ public class TransportConf {
    * handling finalizeShuffleMerge requests are percentage of io.serverThreads (if defined) else it
    * is a percentage of 2 * #cores.
    */
+  @Deprecated(since = "4.2.0", forRemoval = true)
   public int finalizeShuffleMergeHandlerThreads() {
     if (!this.getModuleName().equalsIgnoreCase("shuffle")) {
       return 0;
     }
-    Preconditions.checkArgument(separateFinalizeShuffleMerge(),
+    JavaUtils.checkArgument(separateFinalizeShuffleMerge(),
         "Please set spark.shuffle.server.finalizeShuffleMergeThreadsPercent to a positive value");
     int finalizeShuffleMergeThreadsPercent =
         Integer.parseInt(conf.get("spark.shuffle.server.finalizeShuffleMergeThreadsPercent"));
@@ -517,6 +520,7 @@ public class TransportConf {
    * Whether to use a separate EventLoopGroup to process FinalizeShuffleMerge messages, it is
    * decided by the config `spark.shuffle.server.finalizeShuffleMergeThreadsPercent` is set or not.
    */
+  @Deprecated(since = "4.2.0", forRemoval = true)
   public boolean separateFinalizeShuffleMerge() {
     return conf.getInt("spark.shuffle.server.finalizeShuffleMergeThreadsPercent", 0) > 0;
   }
@@ -567,7 +571,7 @@ public class TransportConf {
    * service unnecessarily.
    */
   public int minChunkSizeInMergedShuffleFile() {
-    return Ints.checkedCast(JavaUtils.byteStringAsBytes(
+    return JavaUtils.checkedCast(JavaUtils.byteStringAsBytes(
       conf.get("spark.shuffle.push.server.minChunkSizeInMergedShuffleFile", "2m")));
   }
 

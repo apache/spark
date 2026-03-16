@@ -205,57 +205,193 @@ Project [hex(cast(abc as binary)) AS hex(CAST(abc AS BINARY))#x]
 -- !query
 SELECT HEX(CAST(CAST(123 AS byte) AS binary))
 -- !query analysis
-Project [hex(cast(cast(123 as tinyint) as binary)) AS hex(CAST(CAST(123 AS TINYINT) AS BINARY))#x]
-+- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(CAST(123 AS TINYINT) AS BINARY)\"",
+    "srcType" : "\"TINYINT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 44,
+    "fragment" : "CAST(CAST(123 AS byte) AS binary)"
+  } ]
+}
 
 
 -- !query
 SELECT HEX(CAST(CAST(-123 AS byte) AS binary))
 -- !query analysis
-Project [hex(cast(cast(-123 as tinyint) as binary)) AS hex(CAST(CAST(-123 AS TINYINT) AS BINARY))#x]
-+- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(CAST(-123 AS TINYINT) AS BINARY)\"",
+    "srcType" : "\"TINYINT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 45,
+    "fragment" : "CAST(CAST(-123 AS byte) AS binary)"
+  } ]
+}
 
 
 -- !query
 SELECT HEX(CAST(123S AS binary))
 -- !query analysis
-Project [hex(cast(123 as binary)) AS hex(CAST(123 AS BINARY))#x]
-+- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(123 AS BINARY)\"",
+    "srcType" : "\"SMALLINT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 31,
+    "fragment" : "CAST(123S AS binary)"
+  } ]
+}
 
 
 -- !query
 SELECT HEX(CAST(-123S AS binary))
 -- !query analysis
-Project [hex(cast(-123 as binary)) AS hex(CAST(-123 AS BINARY))#x]
-+- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(-123 AS BINARY)\"",
+    "srcType" : "\"SMALLINT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 32,
+    "fragment" : "CAST(-123S AS binary)"
+  } ]
+}
 
 
 -- !query
 SELECT HEX(CAST(123 AS binary))
 -- !query analysis
-Project [hex(cast(123 as binary)) AS hex(CAST(123 AS BINARY))#x]
-+- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(123 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 30,
+    "fragment" : "CAST(123 AS binary)"
+  } ]
+}
 
 
 -- !query
 SELECT HEX(CAST(-123 AS binary))
 -- !query analysis
-Project [hex(cast(-123 as binary)) AS hex(CAST(-123 AS BINARY))#x]
-+- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(-123 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 31,
+    "fragment" : "CAST(-123 AS binary)"
+  } ]
+}
 
 
 -- !query
 SELECT HEX(CAST(123L AS binary))
 -- !query analysis
-Project [hex(cast(123 as binary)) AS hex(CAST(123 AS BINARY))#x]
-+- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(123 AS BINARY)\"",
+    "srcType" : "\"BIGINT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 31,
+    "fragment" : "CAST(123L AS binary)"
+  } ]
+}
 
 
 -- !query
 SELECT HEX(CAST(-123L AS binary))
 -- !query analysis
-Project [hex(cast(-123 as binary)) AS hex(CAST(-123 AS BINARY))#x]
-+- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(-123 AS BINARY)\"",
+    "srcType" : "\"BIGINT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 32,
+    "fragment" : "CAST(-123L AS binary)"
+  } ]
+}
 
 
 -- !query
@@ -746,6 +882,97 @@ Project [cast(10.654321 as interval month) AS CAST(10.654321 AS INTERVAL MONTH)#
 
 
 -- !query
+SELECT CAST(TIME '00:01:52' AS tinyint)
+-- !query analysis
+Project [cast(00:01:52 as tinyint) AS CAST(TIME '00:01:52' AS TINYINT)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(TIME '00:01:52' AS smallint)
+-- !query analysis
+Project [cast(00:01:52 as smallint) AS CAST(TIME '00:01:52' AS SMALLINT)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(TIME '00:01:52' AS int)
+-- !query analysis
+Project [cast(00:01:52 as int) AS CAST(TIME '00:01:52' AS INT)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(TIME '00:01:52' AS bigint)
+-- !query analysis
+Project [cast(00:01:52 as bigint) AS CAST(TIME '00:01:52' AS BIGINT)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(TIME '23:59:59' AS tinyint)
+-- !query analysis
+Project [cast(23:59:59 as tinyint) AS CAST(TIME '23:59:59' AS TINYINT)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(TIME '23:59:59' AS smallint)
+-- !query analysis
+Project [cast(23:59:59 as smallint) AS CAST(TIME '23:59:59' AS SMALLINT)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(TIME '23:59:59' AS int)
+-- !query analysis
+Project [cast(23:59:59 as int) AS CAST(TIME '23:59:59' AS INT)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(TIME '23:59:59' AS bigint)
+-- !query analysis
+Project [cast(23:59:59 as bigint) AS CAST(TIME '23:59:59' AS BIGINT)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(TIME '00:00:17.5' AS tinyint)
+-- !query analysis
+Project [cast(00:00:17.5 as tinyint) AS CAST(TIME '00:00:17.5' AS TINYINT)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(TIME '00:00:17.5' AS int)
+-- !query analysis
+Project [cast(00:00:17.5 as int) AS CAST(TIME '00:00:17.5' AS INT)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(TIME '00:00:17.9' AS int)
+-- !query analysis
+Project [cast(00:00:17.9 as int) AS CAST(TIME '00:00:17.9' AS INT)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(TIME '00:00:00' AS tinyint)
+-- !query analysis
+Project [cast(00:00:00 as tinyint) AS CAST(TIME '00:00:00' AS TINYINT)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(TIME '00:00:00' AS int)
+-- !query analysis
+Project [cast(00:00:00 as int) AS CAST(TIME '00:00:00' AS INT)#x]
++- OneRowRelation
+
+
+-- !query
 SELECT '1.23' :: int
 -- !query analysis
 Project [cast(1.23 as int) AS CAST(1.23 AS INT)#x]
@@ -804,8 +1031,25 @@ Project [hex(cast(abc as binary)) AS hex(CAST(abc AS BINARY))#x]
 -- !query
 SELECT HEX((123 :: byte) :: binary)
 -- !query analysis
-Project [hex(cast(cast(123 as tinyint) as binary)) AS hex(CAST(CAST(123 AS TINYINT) AS BINARY))#x]
-+- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(CAST(123 AS TINYINT) AS BINARY)\"",
+    "srcType" : "\"TINYINT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 34,
+    "fragment" : "(123 :: byte) :: binary"
+  } ]
+}
 
 
 -- !query
@@ -877,6 +1121,34 @@ Project [cast(INTERVAL '08:11:10.001' HOUR TO SECOND as decimal(10,4)) AS CAST(I
 select 10.123456BD :: interval day to second
 -- !query analysis
 Project [cast(10.123456 as interval day to second) AS CAST(10.123456 AS INTERVAL DAY TO SECOND)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIME '00:01:52' :: tinyint
+-- !query analysis
+Project [cast(00:01:52 as tinyint) AS CAST(TIME '00:01:52' AS TINYINT)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIME '00:01:52' :: int
+-- !query analysis
+Project [cast(00:01:52 as int) AS CAST(TIME '00:01:52' AS INT)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIME '23:59:59' :: tinyint
+-- !query analysis
+Project [cast(23:59:59 as tinyint) AS CAST(TIME '23:59:59' AS TINYINT)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIME '23:59:59' :: int
+-- !query analysis
+Project [cast(23:59:59 as int) AS CAST(TIME '23:59:59' AS INT)#x]
 +- OneRowRelation
 
 
@@ -960,3 +1232,122 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "hint" : ""
   }
 }
+
+
+-- !query
+SELECT CAST(time '00:00:00' AS decimal(1, 0))
+-- !query analysis
+Project [cast(00:00:00 as decimal(1,0)) AS CAST(TIME '00:00:00' AS DECIMAL(1,0))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(time '12:00:00' AS decimal(7, 2))
+-- !query analysis
+Project [cast(12:00:00 as decimal(7,2)) AS CAST(TIME '12:00:00' AS DECIMAL(7,2))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(time '01:30:45' AS decimal(8, 3))
+-- !query analysis
+Project [cast(01:30:45 as decimal(8,3)) AS CAST(TIME '01:30:45' AS DECIMAL(8,3))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(time '23:59:59' AS decimal(9, 4))
+-- !query analysis
+Project [cast(23:59:59 as decimal(9,4)) AS CAST(TIME '23:59:59' AS DECIMAL(9,4))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(time '01:02:03' AS decimal(15, 9))
+-- !query analysis
+Project [cast(01:02:03 as decimal(15,9)) AS CAST(TIME '01:02:03' AS DECIMAL(15,9))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(time '10:20:30' AS decimal(20, 10))
+-- !query analysis
+Project [cast(10:20:30 as decimal(20,10)) AS CAST(TIME '10:20:30' AS DECIMAL(20,10))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(time '23:59:59.001' AS decimal(8, 3))
+-- !query analysis
+Project [cast(23:59:59.001 as decimal(8,3)) AS CAST(TIME '23:59:59.001' AS DECIMAL(8,3))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(time '23:59:59.999999' AS decimal(11, 6))
+-- !query analysis
+Project [cast(23:59:59.999999 as decimal(11,6)) AS CAST(TIME '23:59:59.999999' AS DECIMAL(11,6))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(time '23:59:59.999999999' AS decimal(14, 9))
+-- !query analysis
+Project [cast(23:59:59.999999 as decimal(14,9)) AS CAST(TIME '23:59:59.999999' AS DECIMAL(14,9))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(time '23:59:59.999999999' AS decimal(20, 10))
+-- !query analysis
+Project [cast(23:59:59.999999 as decimal(20,10)) AS CAST(TIME '23:59:59.999999' AS DECIMAL(20,10))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(time '00:01:00' AS decimal(1, 0))
+-- !query analysis
+Project [cast(00:01:00 as decimal(1,0)) AS CAST(TIME '00:01:00' AS DECIMAL(1,0))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(time '01:00:00' AS decimal(3, 0))
+-- !query analysis
+Project [cast(01:00:00 as decimal(3,0)) AS CAST(TIME '01:00:00' AS DECIMAL(3,0))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(time '10:00:00' AS decimal(5, 2))
+-- !query analysis
+Project [cast(10:00:00 as decimal(5,2)) AS CAST(TIME '10:00:00' AS DECIMAL(5,2))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(time '23:59:59.9' AS decimal(6, 0))
+-- !query analysis
+Project [cast(23:59:59.9 as decimal(6,0)) AS CAST(TIME '23:59:59.9' AS DECIMAL(6,0))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(time '23:59:59.999' AS decimal(8, 2))
+-- !query analysis
+Project [cast(23:59:59.999 as decimal(8,2)) AS CAST(TIME '23:59:59.999' AS DECIMAL(8,2))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(time '23:59:59.999999' AS decimal(11, 5))
+-- !query analysis
+Project [cast(23:59:59.999999 as decimal(11,5)) AS CAST(TIME '23:59:59.999999' AS DECIMAL(11,5))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(time '23:59:59.999999999' AS decimal(14, 8))
+-- !query analysis
+Project [cast(23:59:59.999999 as decimal(14,8)) AS CAST(TIME '23:59:59.999999' AS DECIMAL(14,8))#x]
++- OneRowRelation

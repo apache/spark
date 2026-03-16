@@ -67,6 +67,54 @@ class VariantWriteShreddingSuite extends SparkFunSuite with ExpressionEvalHelper
 
   private val emptyMetadata: Array[Byte] = parseJson("null").getMetadata
 
+  test("variantShreddingSchema") {
+    // Validate the schema produced by SparkShreddingUtils.variantShreddingSchema for a few simple
+    // cases.
+    // metadata is always non-nullable.
+    assert(SparkShreddingUtils.variantShreddingSchema(IntegerType) ==
+      StructType(Seq(
+        StructField("metadata", BinaryType, nullable = false),
+        StructField("value", BinaryType, nullable = true),
+        StructField("typed_value", IntegerType, nullable = true))))
+
+    // If typed_value is not provided, value is required.
+    assert(SparkShreddingUtils.variantShreddingSchema(VariantType) ==
+      StructType(Seq(
+        StructField("metadata", BinaryType, nullable = false),
+        StructField("value", BinaryType, nullable = false))))
+
+    val fieldA = StructType(Seq(
+      StructField("value", BinaryType, nullable = true),
+      StructField("typed_value", TimestampNTZType, nullable = true)))
+    val arrayType = ArrayType(StructType(Seq(
+      StructField("value", BinaryType, nullable = true),
+      StructField("typed_value", StringType, nullable = true))), containsNull = false)
+    val fieldB = StructType(Seq(
+      StructField("value", BinaryType, nullable = true),
+      StructField("typed_value", arrayType, nullable = true)))
+    // If typed_value is not provided for an object field, value is still optional.
+    val fieldC = StructType(Seq(
+      StructField("value", BinaryType, nullable = true)))
+    // If typed_value is not provided for an array element, value is required.
+    val untypedArrayType = ArrayType(StructType(Seq(
+      StructField("value", BinaryType, nullable = false))), containsNull = false)
+    val fieldD = StructType(Seq(
+      StructField("value", BinaryType, nullable = true),
+      StructField("typed_value", untypedArrayType, nullable = true)))
+    val objectType = StructType(Seq(
+      StructField("a", fieldA, nullable = false),
+      StructField("b", fieldB, nullable = false),
+      StructField("c", fieldC, nullable = false),
+      StructField("d", fieldD, nullable = false)))
+    val structSchema = DataType.fromDDL(
+      "a timestamp_ntz, b array<string>, c variant, d array<variant>")
+    assert(SparkShreddingUtils.variantShreddingSchema(structSchema) ==
+      StructType(Seq(
+        StructField("metadata", BinaryType, nullable = false),
+        StructField("value", BinaryType, nullable = true),
+        StructField("typed_value", objectType, nullable = true))))
+  }
+
   test("shredding as fixed numeric types") {
     /* Cast integer to any wider numeric type. */
     testWithSchema("1", IntegerType, Row(emptyMetadata, null, 1))
@@ -155,6 +203,8 @@ class VariantWriteShreddingSuite extends SparkFunSuite with ExpressionEvalHelper
       testWithSchema(obj, t, Row(obj.getMetadata, untypedValue(obj), null))
     }
 
+    testWithSchema(obj, VariantType, Row(obj.getMetadata, untypedValue(obj)))
+
     // Happy path
     testWithSchema(obj, StructType.fromDDL("a int, b string"),
       Row(obj.getMetadata, null, Row(Row(null, 1), Row(null, "hello"))))
@@ -179,6 +229,22 @@ class VariantWriteShreddingSuite extends SparkFunSuite with ExpressionEvalHelper
     // Not an object
     testWithSchema(obj, ArrayType(StructType.fromDDL("a int, b string")),
       Row(obj.getMetadata, untypedValue(obj), null))
+
+    // Shred with no typed_value in field schema
+    testWithSchema(obj, StructType.fromDDL("a variant, b variant"),
+      Row(obj.getMetadata, null,
+        Row(Row(untypedValue("1")), Row(untypedValue("\"hello\"")))))
+
+    // Similar to the case above where "b" was not in the shredding schema, but with the unshredded
+    // value being an object. Check that the copied value has correct dictionary IDs.
+    val obj2 = parseJson("""{"a": 1, "b": {"c": "hello"}}""")
+    val residual2 = untypedValue("""{"b": {"c": "hello"}}""")
+    // First byte is the type, second is number of fields, and the third is the ID for "b"
+    residual2(2) = 1
+    // Followed by 2 bytes for offsets, inner object type and number of fields, then ID for "c".
+    residual2(7) = 2
+    testWithSchema(obj2, StructType.fromDDL("a int, c string"),
+      Row(obj2.getMetadata, residual2, Row(Row(null, 1), Row(null, null))))
   }
 
   test("shredding as array") {
@@ -189,6 +255,9 @@ class VariantWriteShreddingSuite extends SparkFunSuite with ExpressionEvalHelper
       StructType.fromDDL("a int, b string")).foreach { t =>
       testWithSchema(arr, t, Row(arr.getMetadata, untypedValue(arr), null))
     }
+
+    testWithSchema(arr, VariantType, Row(arr.getMetadata, untypedValue(arr)))
+
     // First element is shredded
     testWithSchema(arr, ArrayType(StructType.fromDDL("a int, b string")),
       Row(arr.getMetadata, null, Array(
@@ -212,6 +281,15 @@ class VariantWriteShreddingSuite extends SparkFunSuite with ExpressionEvalHelper
         Row(null, 1),
         Row(null, 2),
         Row(null, 3)
+      )))
+
+    // No typed_value in element schema
+    testWithSchema(arr, ArrayType(VariantType),
+      Row(arr.getMetadata, null, Array(
+        Row(untypedValue("""{"a": 1, "b": "hello"}""")),
+        Row(untypedValue("2")),
+        Row(untypedValue("null")),
+        Row(untypedValue("4"))
       )))
   }
 

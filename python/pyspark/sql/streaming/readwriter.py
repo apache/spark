@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import re
 import sys
 from collections.abc import Iterator
 from typing import cast, overload, Any, Callable, List, Optional, TYPE_CHECKING, Union
@@ -239,6 +240,52 @@ class DataStreamReader(OptionUtils):
         """
         for k in options:
             self._jreader = self._jreader.option(k, to_str(options[k]))
+        return self
+
+    def name(self, source_name: str) -> "DataStreamReader":
+        """Specifies a name for the streaming source.
+
+        This name is used to identify the source in checkpoint metadata and enables
+        stable checkpoint locations for source evolution.
+
+        .. versionadded:: 4.2.0
+
+        Parameters
+        ----------
+        source_name : str
+            the name to assign to this streaming source. Must contain only ASCII letters,
+            digits, and underscores.
+
+        Returns
+        -------
+        :class:`DataStreamReader`
+
+        Notes
+        -----
+        This API is experimental.
+
+        Examples
+        --------
+        >>> spark.readStream.format("rate").name("my_source")  # doctest: +SKIP
+        <...streaming.readwriter.DataStreamReader object ...>
+        """
+        if not isinstance(source_name, str):
+            raise PySparkTypeError(
+                errorClass="NOT_STR",
+                messageParameters={
+                    "arg_name": "source_name",
+                    "arg_type": type(source_name).__name__,
+                },
+            )
+
+        # Validate that source_name contains only ASCII letters, digits, and underscores
+        if not re.match(r"^[a-zA-Z0-9_]+$", source_name):
+            raise PySparkValueError(
+                errorClass="INVALID_STREAMING_SOURCE_NAME",
+                messageParameters={"source_name": source_name},
+            )
+
+        self._jreader = self._jreader.name(source_name)
         return self
 
     def load(
@@ -1068,12 +1115,10 @@ class DataStreamWriter:
         return self
 
     @overload
-    def partitionBy(self, *cols: str) -> "DataStreamWriter":
-        ...
+    def partitionBy(self, *cols: str) -> "DataStreamWriter": ...
 
     @overload
-    def partitionBy(self, __cols: List[str]) -> "DataStreamWriter":
-        ...
+    def partitionBy(self, __cols: List[str]) -> "DataStreamWriter": ...
 
     def partitionBy(self, *cols: str) -> "DataStreamWriter":  # type: ignore[misc]
         """Partitions the output by the given columns on the file system.
@@ -1126,12 +1171,10 @@ class DataStreamWriter:
         return self
 
     @overload
-    def clusterBy(self, *cols: str) -> "DataStreamWriter":
-        ...
+    def clusterBy(self, *cols: str) -> "DataStreamWriter": ...
 
     @overload
-    def clusterBy(self, __cols: List[str]) -> "DataStreamWriter":
-        ...
+    def clusterBy(self, __cols: List[str]) -> "DataStreamWriter": ...
 
     def clusterBy(self, *cols: str) -> "DataStreamWriter":  # type: ignore[misc]
         """Clusters the output by the given columns.
@@ -1221,20 +1264,16 @@ class DataStreamWriter:
         return self
 
     @overload
-    def trigger(self, *, processingTime: str) -> "DataStreamWriter":
-        ...
+    def trigger(self, *, processingTime: str) -> "DataStreamWriter": ...
 
     @overload
-    def trigger(self, *, once: bool) -> "DataStreamWriter":
-        ...
+    def trigger(self, *, once: bool) -> "DataStreamWriter": ...
 
     @overload
-    def trigger(self, *, continuous: str) -> "DataStreamWriter":
-        ...
+    def trigger(self, *, continuous: str) -> "DataStreamWriter": ...
 
     @overload
-    def trigger(self, *, availableNow: bool) -> "DataStreamWriter":
-        ...
+    def trigger(self, *, availableNow: bool) -> "DataStreamWriter": ...
 
     def trigger(
         self,
@@ -1243,6 +1282,7 @@ class DataStreamWriter:
         once: Optional[bool] = None,
         continuous: Optional[str] = None,
         availableNow: Optional[bool] = None,
+        realTime: Optional[str] = None,
     ) -> "DataStreamWriter":
         """Set the trigger for the stream query. If this is not set it will run the query as fast
         as possible, which is equivalent to setting the trigger to ``processingTime='0 seconds'``.
@@ -1268,6 +1308,10 @@ class DataStreamWriter:
         availableNow : bool, optional
             if set to True, set a trigger that processes all available data in multiple
             batches then terminates the query. Only one trigger can be set.
+        realTime : str, optional
+            a batch duration as a string, e.g. '5 seconds', '1 minute'.
+            Set a trigger that runs a real time mode query with
+            batch at the specified duration. Only one trigger can be set.
 
         Notes
         -----
@@ -1291,15 +1335,20 @@ class DataStreamWriter:
 
         >>> df.writeStream.trigger(availableNow=True)
         <...streaming.readwriter.DataStreamWriter object ...>
-        """
-        params = [processingTime, once, continuous, availableNow]
 
-        if params.count(None) == 4:
+        Trigger the query for real time mode execution every 5 seconds.
+
+        >>> df.writeStream.trigger(realTime='5 seconds')
+        <...streaming.readwriter.DataStreamWriter object ...>
+        """
+        params = [processingTime, once, continuous, availableNow, realTime]
+
+        if params.count(None) == 5:
             raise PySparkValueError(
                 errorClass="ONLY_ALLOW_SINGLE_TRIGGER",
                 messageParameters={},
             )
-        elif params.count(None) < 3:
+        elif params.count(None) < 4:
             raise PySparkValueError(
                 errorClass="ONLY_ALLOW_SINGLE_TRIGGER",
                 messageParameters={},
@@ -1317,9 +1366,9 @@ class DataStreamWriter:
                     },
                 )
             interval = processingTime.strip()
-            jTrigger = self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.ProcessingTime(
-                interval
-            )
+            jTrigger = getattr(
+                self._spark._sc._jvm, "org.apache.spark.sql.streaming.Trigger"
+            ).ProcessingTime(interval)
 
         elif once is not None:
             if once is not True:
@@ -1328,7 +1377,9 @@ class DataStreamWriter:
                     messageParameters={"arg_name": "once", "arg_value": str(once)},
                 )
 
-            jTrigger = self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.Once()
+            jTrigger = getattr(
+                self._spark._sc._jvm, "org.apache.spark.sql.streaming.Trigger"
+            ).Once()
 
         elif continuous is not None:
             if type(continuous) != str or len(continuous.strip()) == 0:
@@ -1337,23 +1388,35 @@ class DataStreamWriter:
                     messageParameters={"arg_name": "continuous", "arg_value": str(continuous)},
                 )
             interval = continuous.strip()
-            jTrigger = self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.Continuous(
-                interval
-            )
+            jTrigger = getattr(
+                self._spark._sc._jvm, "org.apache.spark.sql.streaming.Trigger"
+            ).Continuous(interval)
+        elif realTime is not None:
+            if type(realTime) != str or len(realTime.strip()) == 0:
+                raise PySparkValueError(
+                    errorClass="VALUE_NOT_NON_EMPTY_STR",
+                    messageParameters={"arg_name": "realTime", "arg_value": str(realTime)},
+                )
+            batch_duration = realTime.strip()
+            jTrigger = getattr(
+                self._spark._sc._jvm, "org.apache.spark.sql.streaming.Trigger"
+            ).RealTime(batch_duration)
         else:
             if availableNow is not True:
                 raise PySparkValueError(
                     errorClass="VALUE_NOT_TRUE",
                     messageParameters={"arg_name": "availableNow", "arg_value": str(availableNow)},
                 )
-            jTrigger = self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.AvailableNow()
+            jTrigger = getattr(
+                self._spark._sc._jvm, "org.apache.spark.sql.streaming.Trigger"
+            ).AvailableNow()
 
         self._jwrite = self._jwrite.trigger(jTrigger)
         return self
 
     @staticmethod
     def _construct_foreach_function(
-        f: Union[Callable[[Row], None], "SupportsProcess"]
+        f: Union[Callable[[Row], None], "SupportsProcess"],
     ) -> Callable[[Any, Iterator], Iterator]:
         from pyspark.taskcontext import TaskContext
 
@@ -1435,12 +1498,10 @@ class DataStreamWriter:
             return func_with_open_process_close
 
     @overload
-    def foreach(self, f: Callable[[Row], None]) -> "DataStreamWriter":
-        ...
+    def foreach(self, f: Callable[[Row], None]) -> "DataStreamWriter": ...
 
     @overload
-    def foreach(self, f: "SupportsProcess") -> "DataStreamWriter":
-        ...
+    def foreach(self, f: "SupportsProcess") -> "DataStreamWriter": ...
 
     def foreach(self, f: Union[Callable[[Row], None], "SupportsProcess"]) -> "DataStreamWriter":
         """
@@ -1545,7 +1606,7 @@ class DataStreamWriter:
         ...     def close(self, error):
         ...         print("Closed with error: %s" % str(error))
         ...
-        >>> q = df.writeStream.foreach(print_row).start()
+        >>> q = df.writeStream.foreach(RowPrinter()).start()
         >>> time.sleep(3)
         >>> q.stop()
         """
@@ -1557,11 +1618,10 @@ class DataStreamWriter:
         serializer = AutoBatchedSerializer(CPickleSerializer())
         wrapped_func = _wrap_function(self._spark._sc, func, serializer, serializer)
         assert self._spark._sc._jvm is not None
-        jForeachWriter = (
-            self._spark._sc._jvm.org.apache.spark.sql.execution.python.PythonForeachWriter(
-                wrapped_func, self._df._jdf.schema()
-            )
-        )
+        jForeachWriter = getattr(
+            self._spark._sc._jvm,
+            "org.apache.spark.sql.execution.python.streaming.PythonForeachWriter",
+        )(wrapped_func, self._df._jdf.schema())
         self._jwrite.foreach(jForeachWriter)
         return self
 
@@ -1811,7 +1871,7 @@ def _test() -> None:
         .getOrCreate()
     )
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.streaming.readwriter,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,

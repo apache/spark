@@ -20,19 +20,21 @@ package org.apache.spark.sql.connect.execution
 import java.util.concurrent.atomic.AtomicReference
 
 import scala.jdk.CollectionConverters._
+import scala.util.{Success, Try}
 import scala.util.control.NonFatal
 
 import com.google.protobuf.Message
-import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.SparkSQLException
 import org.apache.spark.connect.proto
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.connect.common.ProtoUtils
-import org.apache.spark.sql.connect.planner.SparkConnectPlanner
+import org.apache.spark.sql.connect.planner.InvalidInputErrors
 import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteSessionTag, SparkConnectService}
 import org.apache.spark.sql.connect.utils.ErrorUtils
+import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.Utils
+import org.apache.spark.util.Utils.CONNECT_EXECUTE_THREAD_PREFIX
 
 /**
  * This class launches the actual execution in an execution thread. The execution pushes the
@@ -61,6 +63,16 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
       // This assertion does not hold if it is called more than once.
       assert(currentState == ThreadState.interrupted)
     }
+  }
+
+  /**
+   * Checks if the thread is alive.
+   *
+   * @return
+   *   true if the execution thread is currently running.
+   */
+  private[connect] def isAlive(): Boolean = {
+    executionThread.isAlive()
   }
 
   /**
@@ -181,6 +193,11 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
       return
     }
 
+    // SPARK-53339: Post the Started event here, right after the CAS succeeds, to ensure that
+    // postStarted() is never called when interrupt() has already transitioned the state to
+    // interrupted. This eliminates the race between postStarted() and interrupt().
+    executeHolder.eventsManager.postStarted()
+
     // `withSession` ensures that session-specific artifacts (such as JARs and class files) are
     // available during processing.
     executeHolder.sessionHolder.withSession { session =>
@@ -199,40 +216,39 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
             tag))
       }
       session.sparkContext.setJobDescription(
-        s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}")
+        s"Spark Connect - ${Utils.abbreviate(debugString, 128)}")
       session.sparkContext.setInterruptOnCancel(true)
 
       // Add debug information to the query execution so that the jobs are traceable.
       session.sparkContext.setLocalProperty(
         "callSite.short",
-        s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}")
-      session.sparkContext.setLocalProperty(
-        "callSite.long",
-        StringUtils.abbreviate(debugString, 2048))
+        s"Spark Connect - ${Utils.abbreviate(debugString, 128)}")
+      session.sparkContext.setLocalProperty("callSite.long", Utils.abbreviate(debugString, 2048))
 
       executeHolder.request.getPlan.getOpTypeCase match {
-        case proto.Plan.OpTypeCase.COMMAND => handleCommand(executeHolder.request)
-        case proto.Plan.OpTypeCase.ROOT => handlePlan(executeHolder.request)
-        case _ =>
-          throw new UnsupportedOperationException(
-            s"${executeHolder.request.getPlan.getOpTypeCase} not supported.")
+        case proto.Plan.OpTypeCase.ROOT | proto.Plan.OpTypeCase.COMMAND =>
+          val execution = new SparkConnectPlanExecution(executeHolder)
+          execution.handlePlan(executeHolder.responseObserver)
+        case other =>
+          throw InvalidInputErrors.invalidOneOfField(
+            other,
+            executeHolder.request.getPlan.getDescriptorForType)
       }
 
-      val observedMetrics: Map[String, Seq[(Option[String], Any)]] = {
+      val observedMetrics: Map[String, Try[Seq[(Option[String], Any, Option[DataType])]]] = {
         executeHolder.observations.map { case (name, observation) =>
-          val values = observation.getOrEmpty.map { case (key, value) =>
-            (Some(key), value)
-          }.toSeq
-          name -> values
+          name -> observation.future.value
+            .map(_.map(SparkConnectPlanExecution.toObservedMetricsValues))
+            .getOrElse(Success(Seq.empty))
         }.toMap
       }
-      val accumulatedInPython: Map[String, Seq[(Option[String], Any)]] = {
+      val accumulatedInPython: Map[String, Try[Seq[(Option[String], Any, Option[DataType])]]] = {
         executeHolder.sessionHolder.pythonAccumulator.flatMap { accumulator =>
           accumulator.synchronized {
             val value = accumulator.value.asScala.toSeq
             if (value.nonEmpty) {
               accumulator.reset()
-              Some("__python_accumulator__" -> value.map(value => (None, value)))
+              Some("__python_accumulator__" -> Success(value.map(value => (None, value, None))))
             } else {
               None
             }
@@ -245,7 +261,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
             .createObservedMetricsResponse(
               executeHolder.sessionHolder.sessionId,
               executeHolder.sessionHolder.serverSessionId,
-              executeHolder.request.getPlan.getRoot.getCommon.getPlanId,
+              executeHolder.allObservationAndPlanIds,
               observedMetrics ++ accumulatedInPython))
       }
 
@@ -288,27 +304,13 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
    *   True if we should delegate sending the final ResultComplete to the handler thread, i.e.
    *   don't send a ResultComplete when the ExecuteThread returns.
    */
-  private def shouldDelegateCompleteResponse(request: proto.ExecutePlanRequest): Boolean = {
+  private[connect] def shouldDelegateCompleteResponse(
+      request: proto.ExecutePlanRequest): Boolean = {
     request.getPlan.getOpTypeCase == proto.Plan.OpTypeCase.COMMAND &&
     request.getPlan.getCommand.getCommandTypeCase ==
       proto.Command.CommandTypeCase.STREAMING_QUERY_LISTENER_BUS_COMMAND &&
       request.getPlan.getCommand.getStreamingQueryListenerBusCommand.getCommandCase ==
       proto.StreamingQueryListenerBusCommand.CommandCase.ADD_LISTENER_BUS_LISTENER
-  }
-
-  private def handlePlan(request: proto.ExecutePlanRequest): Unit = {
-    val responseObserver = executeHolder.responseObserver
-
-    val execution = new SparkConnectPlanExecution(executeHolder)
-    execution.handlePlan(responseObserver)
-  }
-
-  private def handleCommand(request: proto.ExecutePlanRequest): Unit = {
-    val responseObserver = executeHolder.responseObserver
-
-    val command = request.getPlan.getCommand
-    val planner = new SparkConnectPlanner(executeHolder)
-    planner.process(command = command, responseObserver = responseObserver)
   }
 
   private def requestString(request: Message) = {
@@ -332,7 +334,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
   }
 
   private class ExecutionThread()
-      extends Thread(s"SparkConnectExecuteThread_opId=${executeHolder.operationId}") {
+      extends Thread(s"${CONNECT_EXECUTE_THREAD_PREFIX}_opId=${executeHolder.operationId}") {
     override def run(): Unit = execute()
   }
 }

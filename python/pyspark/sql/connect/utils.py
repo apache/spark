@@ -21,22 +21,25 @@ from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_min
 from pyspark.errors import PySparkImportError
 
 
-def check_dependencies(mod_name: str) -> None:
-    if mod_name == "__main__" or mod_name == "pyspark.sql.connect.utils":
+def check_dependencies() -> None:
+    main_module = sys.modules["__main__"]
+    if main_module.__spec__ is None and not hasattr(main_module, "__file__"):
+        # The main module is not initialized at all at this point. We must be running doctests.
         from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
         if not should_test_connect:
             print(
-                f"Skipping {mod_name} doctests: {connect_requirement_message}",
+                f"Skipping doctests: {connect_requirement_message}",
                 file=sys.stderr,
             )
             sys.exit(0)
-    else:
-        require_minimum_pandas_version()
-        require_minimum_pyarrow_version()
-        require_minimum_grpc_version()
-        require_minimum_grpcio_status_version()
-        require_minimum_googleapis_common_protos_version()
+
+    require_minimum_pandas_version()
+    require_minimum_pyarrow_version()
+    require_minimum_grpc_version()
+    require_minimum_grpcio_status_version()
+    require_minimum_googleapis_common_protos_version()
+    require_minimum_zstandard_version()
 
 
 def require_minimum_grpc_version() -> None:
@@ -92,6 +95,22 @@ def require_minimum_googleapis_common_protos_version() -> None:
             messageParameters={
                 "package_name": "googleapis-common-protos",
                 "minimum_version": str(minimum_common_protos_version),
+            },
+        ) from error
+
+
+def require_minimum_zstandard_version() -> None:
+    """Raise ImportError if zstandard is not installed"""
+    minimum_zstandard_version = "0.25.0"
+
+    try:
+        import zstandard  # noqa
+    except ImportError as error:
+        raise PySparkImportError(
+            errorClass="PACKAGE_NOT_INSTALLED",
+            messageParameters={
+                "package_name": "zstandard",
+                "minimum_version": str(minimum_zstandard_version),
             },
         ) from error
 

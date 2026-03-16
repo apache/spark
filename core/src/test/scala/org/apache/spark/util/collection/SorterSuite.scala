@@ -17,12 +17,9 @@
 
 package org.apache.spark.util.collection
 
-import java.lang.{Float => JFloat}
 import java.util.Arrays
-import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.util.Utils.timeIt
 import org.apache.spark.util.random.XORShiftRandom
 
 class SorterSuite extends SparkFunSuite {
@@ -170,135 +167,6 @@ class SorterSuite extends SparkFunSuite {
     } while (i < sizeOfArrayToSort)
     assert(sum === runLengths.length)
     */
-  }
-
-  /** Runs an experiment several times. */
-  def runExperiment(name: String, skip: Boolean = false)(f: => Unit, prepare: () => Unit): Unit = {
-    if (skip) {
-      logInfo(s"Skipped experiment $name.")
-      return
-    }
-
-    val firstTry = TimeUnit.NANOSECONDS.toMillis(timeIt(1)(f, Some(prepare)))
-    System.gc()
-
-    var i = 0
-    var next10: Long = 0
-    while (i < 10) {
-      val time = TimeUnit.NANOSECONDS.toMillis(timeIt(1)(f, Some(prepare)))
-      next10 += time
-      logInfo(s"$name: Took $time ms")
-      i += 1
-    }
-
-    logInfo(s"$name: ($firstTry ms first try, ${next10 / 10} ms average)")
-  }
-
-  /**
-   * This provides a simple benchmark for comparing the Sorter with Java internal sorting.
-   * Ideally these would be executed one at a time, each in their own JVM, so their listing
-   * here is mainly to have the code. Running multiple tests within the same JVM session would
-   * prevent JIT inlining overridden methods and hence hurt the performance.
-   *
-   * The goal of this code is to sort an array of key-value pairs, where the array physically
-   * has the keys and values alternating. The basic Java sorts work only on the keys, so the
-   * real Java solution is to make Tuple2s to store the keys and values and sort an array of
-   * those, while the Sorter approach can work directly on the input data format.
-   */
-  ignore("Sorter benchmark for key-value pairs") {
-    val numElements = 25000000 // 25 mil
-    val rand = new XORShiftRandom(123)
-
-    // Test our key-value pairs where each element is a Tuple2[Float, Integer].
-
-    val kvTuples = Array.tabulate(numElements) { i =>
-      (JFloat.valueOf(rand.nextFloat()), Integer.valueOf(i))
-    }
-
-    val kvTupleArray = new Array[AnyRef](numElements)
-    val prepareKvTupleArray = () => {
-      System.arraycopy(kvTuples, 0, kvTupleArray, 0, numElements)
-    }
-    runExperiment("Tuple-sort using Arrays.sort()")({
-      Arrays.sort(kvTupleArray, (x: AnyRef, y: AnyRef) =>
-        x.asInstanceOf[(JFloat, _)]._1.compareTo(y.asInstanceOf[(JFloat, _)]._1))
-    }, prepareKvTupleArray)
-
-    // Test our Sorter where each element alternates between Float and Integer, non-primitive
-
-    val keyValues = {
-      val data = new Array[AnyRef](numElements * 2)
-      var i = 0
-      while (i < numElements) {
-        data(2 * i) = kvTuples(i)._1
-        data(2 * i + 1) = kvTuples(i)._2
-        i += 1
-      }
-      data
-    }
-
-    val keyValueArray = new Array[AnyRef](numElements * 2)
-    val prepareKeyValueArray = () => {
-      System.arraycopy(keyValues, 0, keyValueArray, 0, numElements * 2)
-    }
-
-    val sorter = new Sorter(new KVArraySortDataFormat[JFloat, AnyRef])
-    runExperiment("KV-sort using Sorter")({
-      sorter.sort(keyValueArray, 0, numElements, (x: JFloat, y: JFloat) => x.compareTo(y))
-    }, prepareKeyValueArray)
-  }
-
-  /**
-   * Tests for sorting with primitive keys with/without key reuse. Java's Arrays.sort is used as
-   * reference, which is expected to be faster but it can only sort a single array. Sorter can be
-   * used to sort parallel arrays.
-   *
-   * Ideally these would be executed one at a time, each in their own JVM, so their listing
-   * here is mainly to have the code. Running multiple tests within the same JVM session would
-   * prevent JIT inlining overridden methods and hence hurt the performance.
-   */
-  ignore("Sorter benchmark for primitive int array") {
-    val numElements = 25000000 // 25 mil
-    val rand = new XORShiftRandom(123)
-
-    val ints = Array.fill(numElements)(rand.nextInt())
-    val intObjects = {
-      val data = new Array[Integer](numElements)
-      var i = 0
-      while (i < numElements) {
-        data(i) = Integer.valueOf(ints(i))
-        i += 1
-      }
-      data
-    }
-
-    val intObjectArray = new Array[Integer](numElements)
-    val prepareIntObjectArray = () => {
-      System.arraycopy(intObjects, 0, intObjectArray, 0, numElements)
-    }
-
-    runExperiment("Java Arrays.sort() on non-primitive int array")(
-      Arrays.sort(intObjectArray, (x: Integer, y: Integer) => x.compareTo(y)),
-      prepareIntObjectArray)
-
-    val intPrimitiveArray = new Array[Int](numElements)
-    val prepareIntPrimitiveArray = () => {
-      System.arraycopy(ints, 0, intPrimitiveArray, 0, numElements)
-    }
-
-    runExperiment("Java Arrays.sort() on primitive int array")({
-      Arrays.sort(intPrimitiveArray)
-    }, prepareIntPrimitiveArray)
-
-    val sorterWithoutKeyReuse = new Sorter(new IntArraySortDataFormat)
-    runExperiment("Sorter without key reuse on primitive int array")({
-      sorterWithoutKeyReuse.sort(intPrimitiveArray, 0, numElements, Ordering[Int])
-    }, prepareIntPrimitiveArray)
-
-    val sorterWithKeyReuse = new Sorter(new KeyReuseIntArraySortDataFormat)
-    runExperiment("Sorter with key reuse on primitive int array")({
-      sorterWithKeyReuse.sort(intPrimitiveArray, 0, numElements, Ordering[IntWrapper])
-    }, prepareIntPrimitiveArray)
   }
 }
 

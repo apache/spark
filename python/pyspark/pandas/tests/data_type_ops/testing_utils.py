@@ -22,6 +22,7 @@ import numpy as np
 import pandas as pd
 
 import pyspark.pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
     extension_float_dtypes_available,
@@ -40,6 +41,12 @@ if extension_object_dtypes_available:
 
 class OpsTestBase:
     """The test base for arithmetic operations of different data types."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        # Some nanosecond->microsecond conversions throw loss of precision errors
+        cls.spark.conf.set("spark.sql.execution.pandas.convertToArrowArraySafely", "false")
 
     @property
     def numeric_pdf(self):
@@ -213,3 +220,6 @@ class OpsTestBase:
         pandas versions. Please refer to https://github.com/pandas-dev/pandas/issues/39410.
         """
         self.assert_eq(left, right)
+
+    def ignore_null(self, col):
+        return LooseVersion(pd.__version__) >= LooseVersion("3.0") and col == "decimal_nan"

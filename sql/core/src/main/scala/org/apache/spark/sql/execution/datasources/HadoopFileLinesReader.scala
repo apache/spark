@@ -25,6 +25,7 @@ import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{FileSplit, LineRecordReader}
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 /**
@@ -57,10 +58,13 @@ class HadoopFileLinesReader(
     val hadoopAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
 
     Utils.tryInitializeResource(
-      lineSeparator match {
-        case Some(sep) => new LineRecordReader(sep)
-        // If the line separator is `None`, it covers `\r`, `\r\n` and `\n`.
-        case _ => new LineRecordReader()
+      // HadoopLineRecordReader is LineRecordReader with some changes like support for specifying
+      // compression codec as opposed to always infer from file extension.
+      // If the line separator is `None`, it covers `\r`, `\r\n` and `\n`.
+      if (SQLConf.get.hadoopLineRecordReaderEnabled) {
+        new HadoopLineRecordReader(lineSeparator.orNull)
+      } else {
+        new LineRecordReader(lineSeparator.orNull)
       }
     ) { reader =>
       reader.initialize(fileSplit, hadoopAttemptContext)

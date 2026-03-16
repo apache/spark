@@ -266,7 +266,7 @@ object Pipeline extends MLReadable[Pipeline] {
       // Save stages
       val stagesDir = new Path(path, "stages").toString
       stages.zipWithIndex.foreach { case (stage, idx) =>
-        val writer = stage.asInstanceOf[MLWritable].write
+        val writer = stage.asInstanceOf[MLWritable].write.session(spark)
         val stagePath = getStagePath(stage.uid, idx, stages.length, stagesDir)
         instr.withSaveInstanceEvent(writer, stagePath)(writer.save(stagePath))
       }

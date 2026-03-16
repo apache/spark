@@ -64,17 +64,17 @@ abstract class RealBrowserUISeleniumSuite(val driverProp: String)
 
         val jobDesc =
           webDriver.findElement(By.cssSelector("div[class='application-timeline-content']"))
-        jobDesc.getAttribute("data-title") should include  ("collect at &lt;console&gt;:25")
+        jobDesc.getDomAttribute("data-title") should include  ("collect at &lt;console&gt;:25")
 
         goToUi(sc, "/jobs/job/?id=0")
         webDriver.get(sc.ui.get.webUrl.stripSuffix("/") + "/jobs/job/?id=0")
         val stageDesc = webDriver.findElement(By.cssSelector("div[class='job-timeline-content']"))
-        stageDesc.getAttribute("data-title") should include ("collect at &lt;console&gt;:25")
+        stageDesc.getDomAttribute("data-title") should include ("collect at &lt;console&gt;:25")
 
         // Open DAG Viz.
         webDriver.findElement(By.id("job-dag-viz")).click()
         val nodeDesc = webDriver.findElement(By.cssSelector("g[id='node_0']"))
-        nodeDesc.getAttribute("innerHTML") should include ("collect at &lt;console&gt;:25")
+        nodeDesc.getDomProperty("innerHTML") should include ("collect at &lt;console&gt;:25")
       }
     }
   }
@@ -94,9 +94,9 @@ abstract class RealBrowserUISeleniumSuite(val driverProp: String)
         val stages = webDriver.findElements(By.cssSelector("svg[class='job'] > a"))
         stages.size() should be (3)
 
-        stages.get(0).getAttribute("href") should include ("/stages/stage/?id=0&attempt=0")
-        stages.get(1).getAttribute("href") should include ("/stages/stage/?id=1&attempt=0")
-        stages.get(2).getAttribute("href") should include ("/stages/stage/?id=2&attempt=0")
+        stages.get(0).getDomProperty("href") should include ("/stages/stage/?id=0&attempt=0")
+        stages.get(1).getDomProperty("href") should include ("/stages/stage/?id=1&attempt=0")
+        stages.get(2).getDomProperty("href") should include ("/stages/stage/?id=2&attempt=0")
       }
     }
   }
@@ -114,8 +114,8 @@ abstract class RealBrowserUISeleniumSuite(val driverProp: String)
         val stage1 = webDriver.findElement(By.cssSelector("g[id='graph_stage_1']"))
           .findElement(By.xpath(".."))
         val barrieredOps = webDriver.findElements(By.className("barrier-rdd")).iterator()
-        val id1 = barrieredOps.next().getAttribute("innerHTML")
-        val id2 = barrieredOps.next().getAttribute("innerHTML")
+        val id1 = barrieredOps.next().getDomProperty("innerHTML")
+        val id2 = barrieredOps.next().getDomProperty("innerHTML")
         assert(!barrieredOps.hasNext())
 
         val prefix = "g[class='cluster barrier']#cluster_"

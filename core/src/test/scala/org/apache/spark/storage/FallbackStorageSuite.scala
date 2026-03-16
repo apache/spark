@@ -30,6 +30,7 @@ import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite, TestUtils}
 import org.apache.spark.LocalSparkContext.withSpark
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.launcher.SparkLauncher.{EXECUTOR_MEMORY, SPARK_MASTER}
@@ -67,8 +68,10 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
       .set(STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, true)
       .set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH,
         Files.createTempDirectory("tmp").toFile.getAbsolutePath + "/")
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+    val rpcEndpointRef = new FallbackStorageRpcEndpointRef(conf, hadoopConf)
     val fallbackStorage = new FallbackStorage(conf)
-    val bmm = new BlockManagerMaster(new NoopRpcEndpointRef(conf), null, conf, false)
+    val bmm = new BlockManagerMaster(rpcEndpointRef, null, conf, false)
 
     val bm = mock(classOf[BlockManager])
     val dbm = new DiskBlockManager(conf, deleteFilesOnStop = false, isDriver = false)
@@ -118,8 +121,10 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
       .set(STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, true)
       .set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH,
         "file://" + Files.createTempDirectory("tmp").toFile.getAbsolutePath + "/")
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+    val rpcEndpointRef = new FallbackStorageRpcEndpointRef(conf, hadoopConf)
     val fallbackStorage = new FallbackStorage(conf)
-    val bmm = new BlockManagerMaster(new NoopRpcEndpointRef(conf), null, conf, false)
+    val bmm = new BlockManagerMaster(rpcEndpointRef, null, conf, false)
 
     val bm = mock(classOf[BlockManager])
     val dbm = new DiskBlockManager(conf, deleteFilesOnStop = false, isDriver = false)
@@ -153,7 +158,7 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
     assert(readResult.nioByteBuffer().array().sameElements(content))
   }
 
-  test("SPARK-34142: fallback storage API - cleanUp") {
+  test("SPARK-34142: fallback storage API - cleanUp app") {
     withTempDir { dir =>
       Seq(true, false).foreach { cleanUp =>
         val appId = s"test$cleanUp"
@@ -165,8 +170,38 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
         val location = new File(dir, appId)
         assert(location.mkdir())
         assert(location.exists())
+        val shuffle = new File(location, "1")
+        assert(shuffle.mkdir())
+        assert(shuffle.exists())
         FallbackStorage.cleanUp(conf, new Configuration())
         assert(location.exists() != cleanUp)
+        assert(shuffle.exists() != cleanUp)
+      }
+    }
+  }
+
+  test("SPARK-34142: fallback storage API - cleanUp shuffle") {
+    withTempDir { dir =>
+      Seq(true, false).foreach { cleanUp =>
+        val appId = s"test$cleanUp"
+        val conf = new SparkConf(false)
+          .set("spark.app.id", appId)
+          .set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH, dir.getAbsolutePath + "/")
+          .set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_CLEANUP, cleanUp)
+
+        val location = new File(dir, appId)
+        assert(location.mkdir())
+        assert(location.exists())
+        val shuffle1 = new File(location, "1")
+        assert(shuffle1.mkdir())
+        assert(shuffle1.exists())
+        val shuffle2 = new File(location, "2")
+        assert(shuffle2.mkdir())
+        assert(shuffle2.exists())
+        FallbackStorage.cleanUp(conf, new Configuration(), Some(1))
+        assert(location.exists())
+        assert(shuffle1.exists() != cleanUp)
+        assert(shuffle2.exists())
       }
     }
   }
@@ -177,6 +212,8 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
       .set(STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, true)
       .set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH,
         Files.createTempDirectory("tmp").toFile.getAbsolutePath + "/")
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+    val rpcEndpointRef = new FallbackStorageRpcEndpointRef(conf, hadoopConf)
 
     val ids = Set((1, 1L, 1))
     val bm = mock(classOf[BlockManager])
@@ -202,7 +239,7 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
 
     when(bm.getPeers(mc.any()))
       .thenReturn(Seq(FallbackStorage.FALLBACK_BLOCK_MANAGER_ID))
-    val bmm = new BlockManagerMaster(new NoopRpcEndpointRef(conf), null, conf, false)
+    val bmm = new BlockManagerMaster(rpcEndpointRef, null, conf, false)
     when(bm.master).thenReturn(bmm)
     val blockTransferService = mock(classOf[BlockTransferService])
     when(blockTransferService.uploadBlockSync(mc.any(), mc.any(), mc.any(), mc.any(), mc.any(),

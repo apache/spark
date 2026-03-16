@@ -43,7 +43,8 @@ class UpdatingSessionsIterator(
     sessionExpression: NamedExpression,
     inputSchema: Seq[Attribute],
     inMemoryThreshold: Int,
-    spillThreshold: Int) extends Iterator[InternalRow] {
+    spillThreshold: Int,
+    sizeInBytesSpillThreshold: Long) extends Iterator[InternalRow] {
 
   private val groupingWithoutSession: Seq[NamedExpression] =
     groupingExpressions.diff(Seq(sessionExpression))
@@ -150,7 +151,13 @@ class UpdatingSessionsIterator(
     currentKeys = groupingKey.copy()
     currentSession = sessionStruct.copy()
 
-    rowsForCurrentSession = new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold)
+    rowsForCurrentSession = new ExternalAppendOnlyUnsafeRowArray(
+      inMemoryThreshold,
+      // TODO: shall we have a new config to specify the max in-memory buffer size
+      //       of ExternalAppendOnlyUnsafeRowArray?
+      sizeInBytesSpillThreshold,
+      spillThreshold,
+      sizeInBytesSpillThreshold)
     rowsForCurrentSession.add(currentRow.asInstanceOf[UnsafeRow])
   }
 

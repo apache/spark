@@ -23,7 +23,6 @@ import java.text.SimpleDateFormat
 import java.util.{Calendar, Date, Locale}
 import java.util.concurrent.TimeUnit._
 
-import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
@@ -33,9 +32,10 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC
-import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.operators.stateful.{EventTimeStats, StateStoreSaveExec}
+import org.apache.spark.sql.execution.streaming.runtime._
 import org.apache.spark.sql.execution.streaming.sources.MemorySink
-import org.apache.spark.sql.functions.{count, expr, timestamp_seconds, window}
+import org.apache.spark.sql.functions.{count, expr, struct, timestamp_seconds, to_timestamp, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode._
 import org.apache.spark.tags.SlowSQLTest
@@ -129,6 +129,50 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     }
     assert(e.getMessage contains "value")
     assert(e.getMessage contains "int")
+  }
+
+  test("error on nested column") {
+    // Cannot past nested column as `eventTime` to `withWatermark`.
+    val e = intercept[AnalysisException] {
+      Seq((1, ("2024-01-01 10:00:00", "val1")))
+        .toDF("id", "data")
+        .select(
+          $"id",
+          struct(
+            to_timestamp($"data._1").as("timestamp"),
+            $"data._2".as("value")
+          ).as("nested_struct")
+        )
+        .withWatermark("nested_struct.timestamp", "0 seconds")
+        .schema
+    }
+    checkError(
+      e,
+      condition = "EVENT_TIME_MUST_BE_TOP_LEVEL_COLUMN",
+      parameters = Map("eventExpr" -> ".*nested_struct.*timestamp.*"),
+      matchPVals = true)
+  }
+
+  test("withWatermark should work with alias-qualified column name") {
+    // When a DataFrame has an alias, referencing the event time column via
+    // "alias.columnName" should be allowed because it still refers to a top-level column.
+    val inputData = MemoryStream[Int]
+    val df = inputData.toDF()
+      .withColumn("eventTime", timestamp_seconds($"value"))
+      .alias("a")
+      .withWatermark("a.eventTime", "10 seconds")
+      .groupBy(window($"eventTime", "5 seconds") as Symbol("window"))
+      .agg(count("*") as Symbol("count"))
+      .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
+
+    testStream(df)(
+      AddData(inputData, 15),
+      CheckAnswer(),
+      AddData(inputData, 10, 12, 14),
+      CheckAnswer(),
+      AddData(inputData, 25),
+      CheckAnswer((10, 3))
+    )
   }
 
   test("event time and watermark metrics") {
@@ -245,7 +289,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
-    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+    Utils.copyDirectory(new File(resourceUri), checkpointDir)
 
     inputData.addData(15)
     inputData.addData(10, 12, 14)
@@ -850,7 +894,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
-    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+    Utils.copyDirectory(new File(resourceUri), checkpointDir)
 
     input1.addData(20)
     input2.addData(30)

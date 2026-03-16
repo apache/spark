@@ -19,9 +19,16 @@ package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
 
+import org.apache.spark.SparkConf
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.DockerJDBCIntegrationSuite
 
 abstract class DockerJDBCIntegrationV2Suite extends DockerJDBCIntegrationSuite {
+
+  override def sparkConf: SparkConf = super.sparkConf
+    // DS V2 relies on ANSI mode to translate expressions, we should always
+    // run JDBC v2 tests with ANSI on.
+    .set(SQLConf.ANSI_ENABLED, true)
 
   /**
    * Prepare databases and tables for testing.

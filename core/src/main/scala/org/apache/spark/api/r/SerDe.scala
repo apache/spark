@@ -389,7 +389,7 @@ private[spark] object SerDe {
           writeType(dos, "map")
           writeInt(dos, v.size)
           val iter = v.entrySet.iterator
-          while(iter.hasNext) {
+          while (iter.hasNext) {
             val entry = iter.next
             val key = entry.getKey
             val value = entry.getValue

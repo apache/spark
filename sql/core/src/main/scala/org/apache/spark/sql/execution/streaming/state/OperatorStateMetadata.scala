@@ -20,19 +20,23 @@ package org.apache.spark.sql.execution.streaming.state
 import java.io.{BufferedReader, InputStreamReader}
 import java.nio.charset.StandardCharsets
 
+import scala.collection.immutable.ArraySeq
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FSDataInputStream, FSDataOutputStream, Path, PathFilter}
-import org.json4s.{Formats, NoTypeHints}
+import org.json4s.{Formats, JBool, JObject, NoTypeHints}
+import org.json4s.jackson.JsonMethods.{compact, render}
 import org.json4s.jackson.Serialization
 
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.datasources.v2.state.StateDataSourceErrors
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, CommitLog, MetadataVersionUtil, OffsetSeqLog, StateStoreWriter}
-import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
-import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CommitLog, MetadataVersionUtil}
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager.CancellableFSDataOutputStream
+import org.apache.spark.sql.execution.streaming.operators.stateful.StateStoreWriter
+import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.DIR_NAME_OFFSETS
+import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryCheckpointMetadata
 import org.apache.spark.sql.execution.streaming.state.OperatorStateMetadataUtils.{OperatorStateMetadataReader, OperatorStateMetadataWriter}
 
 /**
@@ -51,7 +55,7 @@ case class StateStoreMetadataV2(
     storeName: String,
     numColsPrefixKey: Int,
     numPartitions: Int,
-    stateSchemaFilePath: String)
+    stateSchemaFilePaths: List[String])
   extends StateStoreMetadata with Serializable
 
 object StateStoreMetadataV2 {
@@ -77,12 +81,17 @@ trait OperatorStateMetadata {
   def version: Int
 
   def operatorInfo: OperatorInfo
+
+  def stateStoresMetadata: Seq[StateStoreMetadata]
 }
 
 case class OperatorStateMetadataV1(
     operatorInfo: OperatorInfoV1,
     stateStoreInfo: Array[StateStoreMetadataV1]) extends OperatorStateMetadata {
   override def version: Int = 1
+
+  override def stateStoresMetadata: Seq[StateStoreMetadata] =
+    ArraySeq.unsafeWrapArray(stateStoreInfo)
 }
 
 case class OperatorStateMetadataV2(
@@ -90,6 +99,9 @@ case class OperatorStateMetadataV2(
     stateStoreInfo: Array[StateStoreMetadataV2],
     operatorPropertiesJson: String) extends OperatorStateMetadata {
   override def version: Int = 2
+
+  override def stateStoresMetadata: Seq[StateStoreMetadata] =
+    ArraySeq.unsafeWrapArray(stateStoreInfo)
 }
 
 object OperatorStateMetadataUtils extends Logging {
@@ -171,14 +183,15 @@ object OperatorStateMetadataUtils extends Logging {
   }
 
   def getLastOffsetBatch(session: SparkSession, checkpointLocation: String): Long = {
-    val offsetLog = new OffsetSeqLog(session,
-      new Path(checkpointLocation, DIR_NAME_OFFSETS).toString)
+    val offsetLog = new StreamingQueryCheckpointMetadata(
+      session, checkpointLocation, readOnly = true).offsetLog
     offsetLog.getLatest().map(_._1).getOrElse(throw
       StateDataSourceErrors.offsetLogUnavailable(0, checkpointLocation))
   }
 
   def getLastCommittedBatch(session: SparkSession, checkpointLocation: String): Option[Long] = {
-    val commitLog = new CommitLog(session, new Path(checkpointLocation, DIR_NAME_COMMITS).toString)
+    val commitLog = new StreamingQueryCheckpointMetadata(
+      session, checkpointLocation, readOnly = true).commitLog
     commitLog.getLatest().map(_._1)
   }
 }
@@ -188,12 +201,14 @@ object OperatorStateMetadataReader {
       stateCheckpointPath: Path,
       hadoopConf: Configuration,
       version: Int,
-      batchId: Long): OperatorStateMetadataReader = {
+      batchId: Long,
+      createMetadataDir: Boolean = true): OperatorStateMetadataReader = {
     version match {
       case 1 =>
         new OperatorStateMetadataV1Reader(stateCheckpointPath, hadoopConf)
       case 2 =>
-        new OperatorStateMetadataV2Reader(stateCheckpointPath, hadoopConf, batchId)
+        new OperatorStateMetadataV2Reader(stateCheckpointPath, hadoopConf, batchId,
+          createMetadataDir)
       case _ =>
         throw new IllegalArgumentException(s"Failed to create reader for operator metadata " +
           s"with version=$version")
@@ -308,7 +323,8 @@ class OperatorStateMetadataV2Writer(
 class OperatorStateMetadataV2Reader(
     stateCheckpointPath: Path,
     hadoopConf: Configuration,
-    batchId: Long) extends OperatorStateMetadataReader {
+    batchId: Long,
+    createMetadataDir: Boolean = true) extends OperatorStateMetadataReader with Logging {
 
   // Check that the requested batchId is available in the checkpoint directory
   val baseCheckpointDir = stateCheckpointPath.getParent.getParent
@@ -320,7 +336,12 @@ class OperatorStateMetadataV2Reader(
   private val metadataDirPath = OperatorStateMetadataV2.metadataDirPath(stateCheckpointPath)
   private lazy val fm = CheckpointFileManager.create(metadataDirPath, hadoopConf)
 
-  fm.mkdirs(metadataDirPath.getParent)
+  if (createMetadataDir && !fm.exists(metadataDirPath.getParent)) {
+    fm.mkdirs(metadataDirPath.getParent)
+  } else if (!createMetadataDir) {
+    logInfo(log"Skipping metadata directory creation (createMetadataDir=false) " +
+      log"at ${MDC(LogKeys.CHECKPOINT_LOCATION, baseCheckpointDir.toString)}")
+  }
 
   override def version: Int = 2
 
@@ -331,17 +352,25 @@ class OperatorStateMetadataV2Reader(
     if (!fm.exists(offsetLog)) {
       return Array.empty
     }
+    // Offset Log files are numeric so we want to skip any files that don't
+    // conform to this
     fm.list(offsetLog)
       .filter(f => !f.getPath.getName.startsWith(".")) // ignore hidden files
-      .map(_.getPath.getName.toLong).sorted
+      .flatMap(f => scala.util.Try(f.getPath.getName.toLong).toOption)
+      .sorted
   }
 
   // List the available batches in the operator metadata directory
   private def listOperatorMetadataBatches(): Array[Long] = {
-    if (!fm.exists(metadataDirPath)) {
+    // If parent doesn't exist, return empty array rather than throwing an exception
+    if (!fm.exists(metadataDirPath.getParent) || !fm.exists(metadataDirPath)) {
       return Array.empty
     }
-    fm.list(metadataDirPath).map(_.getPath.getName.toLong).sorted
+
+    // filter out non-numeric file names (as OperatorStateMetadataV2 file names are numeric)
+    fm.list(metadataDirPath)
+      .flatMap(f => scala.util.Try(f.getPath.getName.toLong).toOption)
+      .sorted
   }
 
   override def read(): Option[OperatorStateMetadata] = {
@@ -406,6 +435,8 @@ class OperatorStateMetadataV2FileManager(
     if (thresholdBatchId != 0) {
       val earliestBatchIdKept = deleteMetadataFiles(thresholdBatchId)
       // we need to delete everything from 0 to (earliestBatchIdKept - 1), inclusive
+      // TODO: [SPARK-50845]: Currently, deleteSchemaFiles is a no-op since earliestBatchIdKept
+      // is always 0, and the earliest schema file to 'keep' is -1.
       deleteSchemaFiles(earliestBatchIdKept - 1)
     }
   }
@@ -417,11 +448,19 @@ class OperatorStateMetadataV2FileManager(
     commitLog.listBatchesOnDisk.headOption.getOrElse(0L)
   }
 
+  // TODO: [SPARK-50845]: Currently, deleteSchemaFiles is a no-op since thresholdBatchId
+  // is always -1
   private def deleteSchemaFiles(thresholdBatchId: Long): Unit = {
+    if (thresholdBatchId <= 0) {
+      return
+    }
+    // StateSchemaV3 filenames are of the format {batchId}_{UUID}
+    // so we want to filter for files that do not have this format
     val schemaFiles = fm.list(stateSchemaPath).sorted.map(_.getPath)
     val filesBeforeThreshold = schemaFiles.filter { path =>
-      val batchIdInPath = path.getName.split("_").head.toLong
-      batchIdInPath <= thresholdBatchId
+      scala.util.Try(path.getName.split("_").head.toLong)
+        .toOption
+        .exists(_ <= thresholdBatchId)
     }
     filesBeforeThreshold.foreach { path =>
       fm.delete(path)
@@ -458,21 +497,22 @@ class OperatorStateMetadataV2FileManager(
         fm.delete(batchFile.getPath)
       }
     }
-    val latestMetadata = OperatorStateMetadataReader.createReader(
-      stateOpIdPath,
-      hadoopConf,
-      2,
-      latestBatchId
-    ).read()
 
-    // find the batchId of the earliest schema file we need to keep
-    val earliestBatchToKeep = latestMetadata match {
-      case Some(OperatorStateMetadataV2(_, stateStoreInfo, _)) =>
-        val schemaFilePath = stateStoreInfo.head.stateSchemaFilePath
-        new Path(schemaFilePath).getName.split("_").head.toLong
-      case _ => 0
-    }
+    // TODO: [SPARK-50845]: Return earliest schema file we need after implementing
+    // full-rewrite
+    0
+  }
+}
 
-    earliestBatchToKeep
+/**
+ * Case class used to store additional properties for join operation.
+ * This is only used for unit tests, which verify that the properties in
+ * the corresponding OperatorStateMetadataV2 result are non-empty.
+ */
+case class StreamingJoinOperatorProperties(useVirtualColumnFamilies: Boolean) {
+  def json: String = {
+    val json =
+      JObject("useVirtualColumnFamilies" -> JBool(useVirtualColumnFamilies))
+    compact(render(json))
   }
 }

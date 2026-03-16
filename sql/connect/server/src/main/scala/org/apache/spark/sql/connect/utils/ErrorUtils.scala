@@ -27,23 +27,22 @@ import scala.util.control.NonFatal
 
 import com.google.protobuf.{Any => ProtoAny}
 import com.google.rpc.{Code => RPCCode, ErrorInfo, Status => RPCStatus}
-import io.grpc.Status
+import io.grpc.{Metadata, ServerCall, Status, StatusRuntimeException}
 import io.grpc.protobuf.StatusProto
 import io.grpc.stub.StreamObserver
-import org.apache.commons.lang3.StringUtils
-import org.apache.commons.lang3.exception.ExceptionUtils
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.{QueryContextType, SparkEnv, SparkException, SparkThrowable}
 import org.apache.spark.api.python.PythonException
 import org.apache.spark.connect.proto.FetchErrorDetailsResponse
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{OP_TYPE, SESSION_ID, USER_ID}
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.{ExecuteEventsManager, SessionHolder, SessionKey, SparkConnectService}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.Utils
 
 private[connect] object ErrorUtils extends Logging {
 
@@ -68,17 +67,17 @@ private[connect] object ErrorUtils extends Logging {
   private[connect] val MAX_ERROR_CHAIN_LENGTH = 5
 
   /**
-   * Convert Throwable to a protobuf message FetchErrorDetailsResponse.
+   * Convert Throwable to a sequence of protobuf Error messages.
    * @param st
    *   the Throwable to be converted
    * @param serverStackTraceEnabled
    *   whether to return the server stack trace.
    * @return
-   *   FetchErrorDetailsResponse
+   *   A tuple of (rootErrorIdx, sequence of FetchErrorDetailsResponse.Error)
    */
-  private[connect] def throwableToFetchErrorDetailsResponse(
+  private[connect] def throwableToProtoErrors(
       st: Throwable,
-      serverStackTraceEnabled: Boolean = false): FetchErrorDetailsResponse = {
+      serverStackTraceEnabled: Boolean = false): (Int, Seq[FetchErrorDetailsResponse.Error]) = {
 
     var currentError = st
     val buffer = mutable.Buffer.empty[FetchErrorDetailsResponse.Error]
@@ -143,6 +142,25 @@ private[connect] object ErrorUtils extends Logging {
           if (sparkThrowable.getSqlState != null) {
             sparkThrowableBuilder.setSqlState(sparkThrowable.getSqlState)
           }
+          // Add breaking change info if present
+          if (sparkThrowable.getBreakingChangeInfo != null) {
+            val breakingChangeInfo = sparkThrowable.getBreakingChangeInfo
+            val breakingChangeInfoBuilder = FetchErrorDetailsResponse.BreakingChangeInfo
+              .newBuilder()
+            import scala.jdk.CollectionConverters._
+            breakingChangeInfoBuilder
+              .addAllMigrationMessage(breakingChangeInfo.migrationMessage.asJava)
+            if (breakingChangeInfo.mitigationConfig.isDefined) {
+              val mitigationConfig = breakingChangeInfo.mitigationConfig.get
+              val mitigationConfigBuilder = FetchErrorDetailsResponse.MitigationConfig
+                .newBuilder()
+                .setKey(mitigationConfig.key)
+                .setValue(mitigationConfig.value)
+              breakingChangeInfoBuilder.setMitigationConfig(mitigationConfigBuilder.build())
+            }
+            breakingChangeInfoBuilder.setNeedsAudit(breakingChangeInfo.needsAudit)
+            sparkThrowableBuilder.setBreakingChangeInfo(breakingChangeInfoBuilder.build())
+          }
           sparkThrowableBuilder.putAllMessageParameters(sparkThrowable.getMessageParameters)
           builder.setSparkThrowable(sparkThrowableBuilder.build())
         case _ =>
@@ -159,10 +177,28 @@ private[connect] object ErrorUtils extends Logging {
       currentError = currentError.getCause
     }
 
+    (0, buffer.toSeq)
+  }
+
+  /**
+   * Convert Throwable to a protobuf message FetchErrorDetailsResponse.
+   * @param st
+   *   the Throwable to be converted
+   * @param serverStackTraceEnabled
+   *   whether to return the server stack trace.
+   * @return
+   *   FetchErrorDetailsResponse
+   */
+  private[connect] def throwableToFetchErrorDetailsResponse(
+      st: Throwable,
+      serverStackTraceEnabled: Boolean = false): FetchErrorDetailsResponse = {
+
+    val (rootErrorIdx, errors) = throwableToProtoErrors(st, serverStackTraceEnabled)
+
     FetchErrorDetailsResponse
       .newBuilder()
-      .setRootErrorIdx(0)
-      .addAllErrors(buffer.asJava)
+      .setRootErrorIdx(rootErrorIdx)
+      .addAllErrors(errors.asJava)
       .build()
   }
 
@@ -217,7 +253,7 @@ private[connect] object ErrorUtils extends Logging {
         .put(errorId, st)
     }
 
-    lazy val stackTrace = Option(ExceptionUtils.getStackTrace(st))
+    lazy val stackTrace = Option(Utils.stackTraceToString(st))
     val stackTraceEnabled = sessionHolderOpt.exists(
       _.session.sessionState.conf.getConf(SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED))
     val withStackTrace =
@@ -225,7 +261,7 @@ private[connect] object ErrorUtils extends Logging {
         val maxSize = Math.min(
           SparkEnv.get.conf.get(Connect.CONNECT_JVM_STACK_TRACE_MAX_SIZE),
           maxMetadataSize)
-        errorInfo.putMetadata("stackTrace", StringUtils.abbreviate(stackTrace.get, maxSize.toInt))
+        errorInfo.putMetadata("stackTrace", Utils.abbreviate(stackTrace.get, maxSize.toInt))
       } else {
         errorInfo
       }
@@ -243,6 +279,97 @@ private[connect] object ErrorUtils extends Logging {
     se.getCause != null && se.getCause
       .isInstanceOf[PythonException] && se.getCause.getStackTrace
       .exists(_.toString.contains("org.apache.spark.sql.execution.python"))
+  }
+
+  /**
+   * Process an error by retrieving session context, converting to gRPC status, logging, posting
+   * events, and executing callbacks. This is the core error handling logic shared by both
+   * StreamObserver and ServerCall variants.
+   *
+   * @param opType
+   *   The operation type (analysis, execution, planDecompression, etc.)
+   * @param userId
+   *   The user id
+   * @param sessionId
+   *   The session id
+   * @param st
+   *   The throwable to process
+   * @param events
+   *   Optional ExecuteEventsManager to report failures (None for interceptors)
+   * @param isInterrupted
+   *   Whether the error was caused by interruption
+   * @param callback
+   *   Optional callback to execute after processing
+   * @return
+   *   Tuple of (original throwable, wrapped StatusRuntimeException)
+   */
+  private def processErrorCommon(
+      opType: String,
+      userId: String,
+      sessionId: String,
+      st: Throwable,
+      events: Option[ExecuteEventsManager] = None,
+      isInterrupted: Boolean = false,
+      callback: Option[() => Unit] = None): (Throwable, StatusRuntimeException) = {
+
+    // SessionHolder may not be present, e.g. if the session was already closed.
+    // When SessionHolder is not present error details will not be available for FetchErrorDetails.
+    val sessionHolderOpt =
+      SparkConnectService.sessionManager.getIsolatedSessionIfPresent(
+        SessionKey(userId, sessionId))
+    if (sessionHolderOpt.isEmpty) {
+      logWarning(
+        log"SessionHolder not found during error handling for " +
+          log"${MDC(OP_TYPE, opType)}. " +
+          log"UserId: ${MDC(USER_ID, userId)}, SessionId: ${MDC(SESSION_ID, sessionId)}. " +
+          log"Error details will not be available for FetchErrorDetails.")
+    }
+
+    // Convert throwable to StatusRuntimeException with appropriate error metadata
+    val wrapped: StatusRuntimeException = st match {
+      case se: SparkException if isPythonExecutionException(se) =>
+        StatusProto.toStatusRuntimeException(
+          buildStatusFromThrowable(se.getCause, sessionHolderOpt))
+
+      case e: Throwable if e.isInstanceOf[SparkThrowable] || NonFatal.apply(e) =>
+        StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e, sessionHolderOpt))
+
+      case e: Throwable =>
+        Status.UNKNOWN
+          .withCause(e)
+          .withDescription(Utils.abbreviate(e.getMessage, 2048))
+          .asRuntimeException()
+    }
+
+    // Log the error based on context
+    if (events.isDefined) {
+      // Errors thrown inside execution are user query errors, return then as INFO.
+      logInfo(
+        log"Spark Connect error during: ${MDC(OP_TYPE, opType)}. " +
+          log"UserId: ${MDC(USER_ID, userId)}. SessionId: ${MDC(SESSION_ID, sessionId)}.",
+        st)
+    } else {
+      // Other errors are server RPC errors, return them as ERROR.
+      logError(
+        log"Spark Connect RPC error during: ${MDC(OP_TYPE, opType)}. " +
+          log"UserId: ${MDC(USER_ID, userId)}. SessionId: ${MDC(SESSION_ID, sessionId)}.",
+        st)
+    }
+
+    // If ExecuteEventsManager is present, this is an execution error that needs to be
+    // posted to it.
+    events.foreach { executeEventsManager =>
+      if (isInterrupted) {
+        executeEventsManager.postCanceled()
+      } else {
+        executeEventsManager.postFailed(wrapped.getMessage)
+      }
+    }
+
+    // Execute callback if present
+    callback.foreach(_.apply())
+
+    (st, wrapped)
   }
 
   /**
@@ -275,58 +402,49 @@ private[connect] object ErrorUtils extends Logging {
       events: Option[ExecuteEventsManager] = None,
       isInterrupted: Boolean = false,
       callback: Option[() => Unit] = None): PartialFunction[Throwable, Unit] = {
-
-    // SessionHolder may not be present, e.g. if the session was already closed.
-    // When SessionHolder is not present error details will not be available for FetchErrorDetails.
-    val sessionHolderOpt =
-      SparkConnectService.sessionManager.getIsolatedSessionIfPresent(
-        SessionKey(userId, sessionId))
-
-    val partial: PartialFunction[Throwable, (Throwable, Throwable)] = {
-      case se: SparkException if isPythonExecutionException(se) =>
-        (
-          se,
-          StatusProto.toStatusRuntimeException(
-            buildStatusFromThrowable(se.getCause, sessionHolderOpt)))
-
-      case e: Throwable if e.isInstanceOf[SparkThrowable] || NonFatal.apply(e) =>
-        (e, StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e, sessionHolderOpt)))
-
-      case e: Throwable =>
-        (
-          e,
-          Status.UNKNOWN
-            .withCause(e)
-            .withDescription(StringUtils.abbreviate(e.getMessage, 2048))
-            .asRuntimeException())
+    { case st: Throwable =>
+      val (_, wrapped) =
+        processErrorCommon(opType, userId, sessionId, st, events, isInterrupted, callback)
+      observer.onError(wrapped)
     }
-    partial
-      .andThen { case (original, wrapped) =>
-        if (events.isDefined) {
-          // Errors thrown inside execution are user query errors, return then as INFO.
-          logInfo(
-            log"Spark Connect error during: ${MDC(OP_TYPE, opType)}. " +
-              log"UserId: ${MDC(USER_ID, userId)}. SessionId: ${MDC(SESSION_ID, sessionId)}.",
-            original)
-        } else {
-          // Other errors are server RPC errors, return them as ERROR.
-          logError(
-            log"Spark Connect RPC error during: ${MDC(OP_TYPE, opType)}. " +
-              log"UserId: ${MDC(USER_ID, userId)}. SessionId: ${MDC(SESSION_ID, sessionId)}.",
-            original)
-        }
+  }
 
-        // If ExecuteEventsManager is present, this this is an execution error that needs to be
-        // posted to it.
-        events.foreach { executeEventsManager =>
-          if (isInterrupted) {
-            executeEventsManager.postCanceled()
-          } else {
-            executeEventsManager.postFailed(wrapped.getMessage)
-          }
-        }
-        callback.foreach(_.apply())
-        observer.onError(wrapped)
-      }
+  /**
+   * Common exception handling function for interceptor-level errors. Closes the ServerCall after
+   * the error has been sent.
+   *
+   * Note: Interceptors typically pass events=None since ExecuteEventsManager is not available at
+   * the interceptor level.
+   *
+   * @param opType
+   *   String value indicating the operation type (planDecompression, etc.)
+   * @param call
+   *   The ServerCall to close with error status
+   * @param userId
+   *   The user id
+   * @param sessionId
+   *   The session id
+   * @tparam ReqT
+   *   Request type
+   * @tparam RespT
+   *   Response type
+   * @return
+   *   PartialFunction for error handling
+   */
+  def handleError[ReqT, RespT](
+      opType: String,
+      call: ServerCall[ReqT, RespT],
+      userId: String,
+      sessionId: String): PartialFunction[Throwable, Unit] = { { case st: Throwable =>
+    // Include method name in opType for better error logging
+    val methodName = call.getMethodDescriptor.getBareMethodName
+    val opTypeWithMethod = s"$opType [$methodName]"
+    val (_, wrapped) = processErrorCommon(opTypeWithMethod, userId, sessionId, st)
+
+    // Close ServerCall with error status and trailers
+    val status = wrapped.getStatus
+    val trailers = Option(wrapped.getTrailers).getOrElse(new Metadata())
+    call.close(status, trailers)
+  }
   }
 }

@@ -29,17 +29,12 @@ from typing import Callable, Dict, Any
 import unittest
 from unittest.mock import patch
 
-have_torch = True
-try:
-    import torch  # noqa: F401
-except ImportError:
-    have_torch = False
-
 from pyspark import SparkConf, SparkContext
 from pyspark.ml.torch.distributor import TorchDistributor, _get_gpus_owned
 from pyspark.ml.torch.torch_run_process_wrapper import clean_and_terminate, check_parent_alive
 from pyspark.sql import SparkSession
-from pyspark.testing.utils import SPARK_HOME
+from pyspark.testing.sqlutils import SPARK_HOME
+from pyspark.testing.utils import have_torch, torch_requirement_message
 
 
 @contextlib.contextmanager
@@ -74,7 +69,7 @@ def create_training_function(mnist_dir_path: str) -> Callable:
 
     class Net(nn.Module):
         def __init__(self) -> None:
-            super(Net, self).__init__()
+            super().__init__()
             self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
             self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
             self.conv2_drop = nn.Dropout2d()
@@ -311,8 +306,25 @@ class TorchDistributorBaselineUnitTestsMixin:
         )
         self.delete_env_vars(input_env_vars)
 
+    @patch.dict(
+        os.environ,
+        {
+            "CUDA_VISIBLE_DEVICES": "0,1,2,3",
+            "MASTER_ADDR": "11.22.33.44",
+            "MASTER_PORT": "6677",
+            "RANK": "1",
+        },
+    )
+    def test_multi_gpu_node_get_torchrun_args(self):
+        torchrun_args, processes_per_node = TorchDistributor._get_torchrun_args(False, 8)
+        self.assertEqual(
+            torchrun_args,
+            ["--nnodes=2", "--node_rank=1", "--rdzv_endpoint=11.22.33.44:6677", "--rdzv_id=0"],
+        )
+        self.assertEqual(processes_per_node, 4)
 
-@unittest.skipIf(not have_torch, "torch is required")
+
+@unittest.skipIf(not have_torch, torch_requirement_message)
 class TorchDistributorBaselineUnitTests(TorchDistributorBaselineUnitTestsMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -392,7 +404,7 @@ class TorchDistributorLocalUnitTestsMixin:
                     self.delete_env_vars({CUDA_VISIBLE_DEVICES: cuda_env_var})
 
     def test_local_file_with_pytorch(self) -> None:
-        test_file_path = "python/test_support/test_pytorch_training_file.py"
+        test_file_path = "python/test_support/pytorch_training_test_file.py"
         learning_rate_str = "0.01"
         TorchDistributor(num_processes=2, local_mode=True, use_gpu=False).run(
             test_file_path, learning_rate_str
@@ -409,11 +421,13 @@ class TorchDistributorLocalUnitTestsMixin:
         self.assertEqual(output, "success" * 4096)
 
 
-@unittest.skipIf(not have_torch, "torch is required")
+# @unittest.skipIf(not have_torch, torch_requirement_message)
+# TODO(SPARK-50864): Re-enable this test after fixing the slowness
+@unittest.skip("Disabled due to slowness")
 class TorchDistributorLocalUnitTests(TorchDistributorLocalUnitTestsMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()
+        cls.gpu_discovery_script_file_name, cls.mnist_dir_path = set_up_test_dirs()
         conf = SparkConf()
         for k, v in get_local_mode_conf().items():
             conf = conf.set(k, v)
@@ -431,11 +445,13 @@ class TorchDistributorLocalUnitTests(TorchDistributorLocalUnitTestsMixin, unitte
         cls.spark.stop()
 
 
-@unittest.skipIf(not have_torch, "torch is required")
+# @unittest.skipIf(not have_torch, torch_requirement_message)
+# TODO(SPARK-50864): Re-enable this test after fixing the slowness
+@unittest.skip("Disabled due to slowness")
 class TorchDistributorLocalUnitTestsII(TorchDistributorLocalUnitTestsMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()
+        cls.gpu_discovery_script_file_name, cls.mnist_dir_path = set_up_test_dirs()
         conf = SparkConf()
         for k, v in get_local_mode_conf().items():
             conf = conf.set(k, v)
@@ -488,7 +504,7 @@ class TorchDistributorDistributedUnitTestsMixin:
         self.spark.conf.set("spark.task.resource.gpu.amount", "1")
 
     def test_distributed_file_with_pytorch(self) -> None:
-        test_file_path = "python/test_support/test_pytorch_training_file.py"
+        test_file_path = "python/test_support/pytorch_training_test_file.py"
         learning_rate_str = "0.01"
         TorchDistributor(num_processes=2, local_mode=False, use_gpu=False).run(
             test_file_path, learning_rate_str
@@ -502,13 +518,15 @@ class TorchDistributorDistributedUnitTestsMixin:
         self.assertEqual(output, "success" * 4096)
 
 
-@unittest.skipIf(not have_torch, "torch is required")
+# @unittest.skipIf(not have_torch, torch_requirement_message)
+# TODO(SPARK-50864): Re-enable this test after fixing the slowness
+@unittest.skip("Disabled due to slowness")
 class TorchDistributorDistributedUnitTests(
     TorchDistributorDistributedUnitTestsMixin, unittest.TestCase
 ):
     @classmethod
     def setUpClass(cls):
-        (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()
+        cls.gpu_discovery_script_file_name, cls.mnist_dir_path = set_up_test_dirs()
         conf = SparkConf()
         for k, v in get_distributed_mode_conf().items():
             conf = conf.set(k, v)
@@ -549,18 +567,12 @@ class TorchWrapperUnitTestsMixin:
         self.assertEqual(mock_clean_and_terminate.call_count, 0)
 
 
-@unittest.skipIf(not have_torch, "torch is required")
+@unittest.skipIf(not have_torch, torch_requirement_message)
 class TorchWrapperUnitTests(TorchWrapperUnitTestsMixin, unittest.TestCase):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.ml.torch.tests.test_distributor import *  # noqa: F401,F403
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

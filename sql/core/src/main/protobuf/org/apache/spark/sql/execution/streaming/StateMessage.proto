@@ -26,6 +26,7 @@ message StateRequest {
     StateVariableRequest stateVariableRequest = 3;
     ImplicitGroupingKeyRequest implicitGroupingKeyRequest = 4;
     TimerRequest timerRequest = 5;
+    UtilsRequest utilsRequest = 6;
   }
 }
 
@@ -39,6 +40,50 @@ message StateResponseWithLongTypeVal {
   int32 statusCode = 1;
   string errorMessage = 2;
   int64 value = 3;
+}
+
+message StateResponseWithStringTypeVal {
+  int32 statusCode = 1;
+  string errorMessage = 2;
+  string value = 3;
+}
+
+message StateResponseWithListGet {
+  int32 statusCode = 1;
+  string errorMessage = 2;
+  repeated bytes value = 3;
+  bool requireNextFetch = 4;
+}
+
+message StateResponseWithMapKeysOrValues {
+  int32 statusCode = 1;
+  string errorMessage = 2;
+  repeated bytes value = 3;
+  bool requireNextFetch = 4;
+}
+
+message KeyAndValuePair {
+  bytes key = 1;
+  bytes value = 2;
+}
+
+message StateResponseWithMapIterator {
+  int32 statusCode = 1;
+  string errorMessage = 2;
+  repeated KeyAndValuePair kvPair = 3;
+  bool requireNextFetch = 4;
+}
+
+message TimerInfo {
+  optional bytes key = 1;
+  int64 timestampMs = 2;
+}
+
+message StateResponseWithTimer {
+  int32 statusCode = 1;
+  string errorMessage = 2;
+  repeated TimerInfo timer = 3;
+  bool requireNextFetch = 4;
 }
 
 message StatefulProcessorCall {
@@ -82,13 +127,24 @@ message TimerValueRequest {
 }
 
 message ExpiryTimerRequest {
-  int64 expiryTimestampMs = 1;
+  string iteratorId = 1;
+  int64 expiryTimestampMs = 2;
 }
 
 message GetProcessingTime {
 }
 
 message GetWatermark {
+}
+
+message UtilsRequest {
+  oneof method {
+    ParseStringSchema parseStringSchema = 1;
+  }
+}
+
+message ParseStringSchema {
+  string schema = 1;
 }
 
 message StateCallCommand {
@@ -180,6 +236,8 @@ message ListStateGet {
 }
 
 message ListStatePut {
+  repeated bytes value = 1;
+  bool fetchWithArrow = 2;
 }
 
 message AppendValue {
@@ -187,6 +245,8 @@ message AppendValue {
 }
 
 message AppendList {
+  repeated bytes value = 1;
+  bool fetchWithArrow = 2;
 }
 
 message GetValue {
@@ -219,11 +279,12 @@ message RemoveKey {
 }
 
 enum HandleState {
-  CREATED = 0;
-  INITIALIZED = 1;
-  DATA_PROCESSED = 2;
-  TIMER_PROCESSED = 3;
-  CLOSED = 4;
+  PRE_INIT = 0;
+  CREATED = 1;
+  INITIALIZED = 2;
+  DATA_PROCESSED = 3;
+  TIMER_PROCESSED = 4;
+  CLOSED = 5;
 }
 
 message SetHandleState {
@@ -231,5 +292,5 @@ message SetHandleState {
 }
 
 message TTLConfig {
-  int32 durationMs = 1;
+  int64 durationMs = 1;
 }

@@ -32,7 +32,7 @@ class DaemonTests(unittest.TestCase):
         sock = socket(family, SOCK_STREAM)
         sock.connect((host, port))
         # send a split index of -1 to shutdown the worker
-        sock.send(b"\xFF\xFF\xFF\xFF")
+        sock.send(b"\xff\xff\xff\xff")
         sock.close()
         return True
 
@@ -78,12 +78,6 @@ class DaemonTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.tests.test_daemon import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

@@ -19,18 +19,17 @@ package org.apache.spark.sql.hive.execution
 
 import java.io._
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util
 import java.util.Locale
 
 import scala.util.control.NonFatal
 
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command._
@@ -46,7 +45,7 @@ import org.apache.spark.sql.hive.test.{TestHive, TestHiveQueryExecution}
  * See the documentation of public vals in this class for information on how test execution can be
  * configured using system properties.
  */
-abstract class HiveComparisonTest extends SparkFunSuite with BeforeAndAfterAll {
+abstract class HiveComparisonTest extends SparkFunSuite {
 
   override protected val enableAutoThreadAudit = false
 
@@ -162,7 +161,7 @@ abstract class HiveComparisonTest extends SparkFunSuite with BeforeAndAfterAll {
 
     def isSorted(plan: LogicalPlan): Boolean = plan match {
       case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
-      case PhysicalOperation(_, _, Sort(_, true, _)) => true
+      case PhysicalOperation(_, _, Sort(_, true, _, _)) => true
       case _ => plan.children.iterator.exists(isSorted)
     }
 
@@ -322,7 +321,7 @@ abstract class HiveComparisonTest extends SparkFunSuite with BeforeAndAfterAll {
         val hiveCachedResults = hiveCacheFiles.flatMap { cachedAnswerFile =>
           logDebug(s"Looking for cached answer file $cachedAnswerFile.")
           if (cachedAnswerFile.exists) {
-            Some(fileToString(cachedAnswerFile))
+            Some(Files.readString(cachedAnswerFile.toPath))
           } else {
             logDebug(s"File $cachedAnswerFile not found")
             None

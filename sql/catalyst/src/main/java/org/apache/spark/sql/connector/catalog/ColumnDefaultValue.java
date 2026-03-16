@@ -18,9 +18,10 @@
 package org.apache.spark.sql.connector.catalog;
 
 import java.util.Objects;
-import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.Literal;
 
 /**
@@ -33,33 +34,31 @@ import org.apache.spark.sql.connector.expressions.Literal;
  * data that do not have these new columns.
  */
 @Evolving
-public class ColumnDefaultValue {
-  private String sql;
-  private Literal<?> value;
+public class ColumnDefaultValue extends DefaultValue {
+  private final Literal<?> value;
 
   public ColumnDefaultValue(String sql, Literal<?> value) {
-    this.sql = sql;
+    this(sql, null /* no expression */, value);
+  }
+
+  public ColumnDefaultValue(Expression expr, Literal<?> value) {
+    this(null /* no sql */, expr, value);
+  }
+
+  public ColumnDefaultValue(String sql, Expression expr, Literal<?> value) {
+    super(sql, expr);
     this.value = value;
   }
 
   /**
-   * Returns the SQL string (Spark SQL dialect) of the default value expression. This is the
-   * original string contents of the SQL expression specified at the time the column was created in
-   * a CREATE TABLE, REPLACE TABLE, or ADD COLUMN command. For example, for
-   * "CREATE TABLE t (col INT DEFAULT 40 + 2)", this returns the string literal "40 + 2" (without
-   * quotation marks).
-   */
-  @Nonnull
-  public String getSql() {
-    return sql;
-  }
-
-  /**
    * Returns the default value literal. This is the literal value corresponding to
-   * {@link #getSql()}. For the example in the doc of {@link #getSql()}, this returns a literal
-   * integer with a value of 42.
+   * {@link #getSql()}. For example if the SQL is "current_date()", this literal value
+   * will be the evaluated current_date() at the time the column was added/altered.
+   * Spark always sets this value when passing ColumnDefaultValue to createTable/alterTable,
+   * but {@link Table#columns()} may not do so as some data sources have its own system to do
+   * column default value back-fill.
    */
-  @Nonnull
+  @Nullable
   public Literal<?> getValue() {
     return value;
   }
@@ -68,16 +67,20 @@ public class ColumnDefaultValue {
   public boolean equals(Object o) {
     if (this == o) return true;
     if (!(o instanceof ColumnDefaultValue that)) return false;
-    return sql.equals(that.sql) && value.equals(that.value);
+    return Objects.equals(getSql(), that.getSql()) &&
+        Objects.equals(getExpression(), that.getExpression()) &&
+        value.equals(that.value);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(sql, value);
+    return Objects.hash(getSql(), getExpression(), value);
   }
 
   @Override
   public String toString() {
-    return "ColumnDefaultValue{sql='" + sql + "\', value=" + value + '}';
+    return String.format(
+        "ColumnDefaultValue{sql=%s, expression=%s, value=%s}",
+        getSql(), getExpression(), value);
   }
 }

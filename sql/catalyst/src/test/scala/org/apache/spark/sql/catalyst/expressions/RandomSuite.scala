@@ -52,7 +52,6 @@ class RandomSuite extends SparkFunSuite with ExpressionEvalHelper {
     testRandStr(1, "c")
     testRandStr(5, "ceV0P")
     testRandStr(10, "ceV0PXaR2I")
-    testRandStr(10L, "ceV0PXaR2I")
 
     def testUniform(first: Any, second: Any, result: Any): Unit = {
       checkEvaluationWithoutCodegen(

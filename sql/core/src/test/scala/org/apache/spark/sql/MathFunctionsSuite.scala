@@ -117,6 +117,15 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("different NaN comparison") {
+    assert(QueryTest.compare(
+      java.lang.Double.longBitsToDouble(0x7ff8000000000000L),
+      java.lang.Double.longBitsToDouble(0xfff8000000000000L)))
+    assert(QueryTest.compare(
+      java.lang.Float.intBitsToFloat(0x7fc00000),
+      java.lang.Float.intBitsToFloat(0xffc00000)))
+  }
+
   test("sin") {
     testOneToOneMathFunction(sin, math.sin)
   }
@@ -246,7 +255,8 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-36229 inconsistently behaviour where returned value is above the 64 char threshold") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
-      val df = Seq(("?" * 64), ("?" * 65), ("a" * 4 + "?" * 60), ("a" * 4 + "?" * 61)).toDF("num")
+      val df = Seq(("?".repeat(64)), ("?".repeat(65)), ("a".repeat(4) + "?".repeat(60)),
+          ("a".repeat(4) + "?".repeat(61))).toDF("num")
       val expectedResult = Seq(Row("0"), Row("0"), Row("43690"), Row("43690"))
       checkAnswer(df.select(conv($"num", 16, 10)), expectedResult)
       checkAnswer(df.select(conv($"num", 16, -10)), expectedResult)

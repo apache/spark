@@ -27,7 +27,6 @@ import javax.crypto.spec.SecretKeySpec;
 import javax.crypto.spec.IvParameterSpec;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
@@ -37,6 +36,7 @@ import org.apache.commons.crypto.stream.CryptoOutputStream;
 import org.apache.spark.network.util.AbstractFileRegion;
 import org.apache.spark.network.util.ByteArrayReadableChannel;
 import org.apache.spark.network.util.ByteArrayWritableChannel;
+import org.apache.spark.network.util.JavaUtils;
 
 /**
  * Cipher for encryption and decryption.
@@ -239,7 +239,7 @@ public class CtrTransportCipher implements TransportCipher {
         Object msg,
         ByteArrayWritableChannel byteEncChannel,
         ByteArrayWritableChannel byteRawChannel) {
-      Preconditions.checkArgument(msg instanceof ByteBuf || msg instanceof FileRegion,
+      JavaUtils.checkArgument(msg instanceof ByteBuf || msg instanceof FileRegion,
         "Unrecognized message type: %s", msg.getClass().getName());
       this.handler = handler;
       this.isByteBuf = msg instanceof ByteBuf;
@@ -304,7 +304,7 @@ public class CtrTransportCipher implements TransportCipher {
 
     @Override
     public long transferTo(WritableByteChannel target, long position) throws IOException {
-      Preconditions.checkArgument(position == transferred(), "Invalid position.");
+      JavaUtils.checkArgument(position == transferred(), "Invalid position.");
 
       if (transferred == count) {
         return 0;

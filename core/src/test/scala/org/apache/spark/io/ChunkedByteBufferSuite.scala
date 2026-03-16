@@ -20,11 +20,11 @@ package org.apache.spark.io
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
 import java.nio.ByteBuffer
 
-import com.google.common.io.ByteStreams
-
 import org.apache.spark.{SharedSparkContext, SparkFunSuite}
 import org.apache.spark.internal.config
 import org.apache.spark.network.util.ByteArrayWritableChannel
+import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.Utils.createArray
 import org.apache.spark.util.io.ChunkedByteBuffer
 
 class ChunkedByteBufferSuite extends SparkFunSuite with SharedSparkContext {
@@ -129,7 +129,7 @@ class ChunkedByteBufferSuite extends SparkFunSuite with SharedSparkContext {
   test("toArray() throws UnsupportedOperationException if size exceeds 2GB") {
     val fourMegabyteBuffer = ByteBuffer.allocate(1024 * 1024 * 4)
     fourMegabyteBuffer.limit(fourMegabyteBuffer.capacity())
-    val chunkedByteBuffer = new ChunkedByteBuffer(Array.fill(1024)(fourMegabyteBuffer))
+    val chunkedByteBuffer = new ChunkedByteBuffer(createArray(1024, fourMegabyteBuffer))
     assert(chunkedByteBuffer.size === (1024L * 1024L * 1024L * 4L))
     intercept[UnsupportedOperationException] {
       chunkedByteBuffer.toArray
@@ -145,7 +145,7 @@ class ChunkedByteBufferSuite extends SparkFunSuite with SharedSparkContext {
 
     val inputStream = chunkedByteBuffer.toInputStream(dispose = false)
     val bytesFromStream = new Array[Byte](chunkedByteBuffer.size.toInt)
-    ByteStreams.readFully(inputStream, bytesFromStream)
+    Utils.readFully(inputStream, bytesFromStream, 0, bytesFromStream.length)
     assert(bytesFromStream === bytes1.array() ++ bytes2.array())
     assert(chunkedByteBuffer.getChunks().head.position() === 0)
   }

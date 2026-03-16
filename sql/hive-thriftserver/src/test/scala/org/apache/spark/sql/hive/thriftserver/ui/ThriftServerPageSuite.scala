@@ -28,6 +28,7 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.scheduler.SparkListenerJobStart
 import org.apache.spark.sql.hive.thriftserver._
 import org.apache.spark.status.ElementTrackingStore
+import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore.InMemoryStore
 
 
@@ -39,7 +40,7 @@ class ThriftServerPageSuite extends SparkFunSuite with BeforeAndAfter {
     val tmpDirName = System.getProperty("java.io.tmpdir")
     val tmpDir = new File(tmpDirName)
     if (!tmpDir.exists()) {
-      tmpDir.mkdirs()
+      Utils.createDirectory(tmpDir)
     }
     super.beforeAll()
   }
@@ -97,11 +98,11 @@ class ThriftServerPageSuite extends SparkFunSuite with BeforeAndAfter {
     assert(html.contains("dummy plan"))
 
     // Pagination support
-    assert(html.contains("<label>1 pages. jump to</label>"))
+    assert(html.contains("<label class=\"text-nowrap\">1 pages. jump to</label>"))
 
     // Hiding table support
-    assert(html.contains("class=\"collapse-aggregated-sessionstat" +
-       " collapse-table\" onclick=\"collapsetable"))
+    assert(html.contains("class=\"collapse-table\" data-bs-toggle=\"collapse\"" +
+       " data-bs-target=\"#aggregated-sessionstat\""))
   }
 
   test("thriftserver session page should load successfully") {
@@ -123,11 +124,11 @@ class ThriftServerPageSuite extends SparkFunSuite with BeforeAndAfter {
     assert(html.contains("groupid"))
 
     // Pagination support
-    assert(html.contains("<label>1 pages. jump to</label>"))
+    assert(html.contains("<label class=\"text-nowrap\">1 pages. jump to</label>"))
 
     // Hiding table support
-    assert(html.contains("collapse-aggregated-sqlsessionstat collapse-table\"" +
-          " onclick=\"collapsetable"))
+    assert(html.contains("collapse-table\" data-bs-toggle=\"collapse\"" +
+          " data-bs-target=\"#aggregated-sqlsessionstat\""))
   }
 }
 

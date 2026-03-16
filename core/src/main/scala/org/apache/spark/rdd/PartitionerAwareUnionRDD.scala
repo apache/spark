@@ -47,23 +47,12 @@ class PartitionerAwareUnionRDDPartition(
   }
 }
 
-/**
- * Class representing an RDD that can take multiple RDDs partitioned by the same partitioner and
- * unify them into a single RDD while preserving the partitioner. So m RDDs with p partitions each
- * will be unified to a single RDD with p partitions and the same partitioner. The preferred
- * location for each partition of the unified RDD will be the most common preferred location
- * of the corresponding partitions of the parent RDDs. For example, location of partition 0
- * of the unified RDD will be where most of partition 0 of the parent RDDs are located.
- */
 private[spark]
-class PartitionerAwareUnionRDD[T: ClassTag](
+abstract class PartitionerAwareUnionRDDBase[T: ClassTag](
     sc: SparkContext,
     var rdds: Seq[RDD[T]]
   ) extends RDD[T](sc, rdds.map(x => new OneToOneDependency(x))) {
-  require(rdds.nonEmpty)
-  require(rdds.forall(_.partitioner.isDefined))
-  require(rdds.flatMap(_.partitioner).toSet.size == 1,
-    "Parent RDDs have different partitioners: " + rdds.flatMap(_.partitioner))
+  require(rdds.nonEmpty, "RDDs cannot be empty")
 
   override val partitioner = rdds.head.partitioner
 
@@ -111,3 +100,49 @@ class PartitionerAwareUnionRDD[T: ClassTag](
     rdd.context.getPreferredLocs(rdd, part.index).map(tl => tl.host)
   }
 }
+
+/**
+ * Class representing an RDD that can take multiple RDDs partitioned by the same partitioner and
+ * unify them into a single RDD while preserving the partitioner. So m RDDs with p partitions each
+ * will be unified to a single RDD with p partitions and the same partitioner. The preferred
+ * location for each partition of the unified RDD will be the most common preferred location
+ * of the corresponding partitions of the parent RDDs. For example, location of partition 0
+ * of the unified RDD will be where most of partition 0 of the parent RDDs are located.
+ */
+private[spark]
+class PartitionerAwareUnionRDD[T: ClassTag](
+    sc: SparkContext,
+    var _rdds: Seq[RDD[T]]
+  ) extends PartitionerAwareUnionRDDBase(sc, _rdds) {
+  require(_rdds.forall(_.partitioner.isDefined))
+  require(_rdds.flatMap(_.partitioner).toSet.size == 1,
+    "Parent RDDs have different partitioners: " + _rdds.flatMap(_.partitioner))
+}
+
+/**
+ * This is similar to [[PartitionerAwareUnionRDD]], but it doesn't require the parent RDDs
+ * to have defined partitioner and have the same partitioner if defined.
+ * It is because SQL's shuffle RDD's partitioner is not defined in `ShuffledRowRDD`.
+ * The actual partitioning is implemented in `ShuffleExchangeExec.prepareShuffleDependency`.
+ *
+ * Thus, this RDD doesn't check the partitioner of parent RDDs. Its correctness relies on the
+ * fact that the given RDDs are partitioned in the same way. So before using this RDD, you must
+ * ensure that all parent RDDs are partitioned correctly by checking their SQL output partitioning.
+ */
+private[spark]
+class SQLPartitioningAwareUnionRDD[T: ClassTag](
+    sc: SparkContext,
+    var _rdds: Seq[RDD[T]],
+    val numPartitions: Int
+  ) extends PartitionerAwareUnionRDDBase(sc, _rdds) {
+  require(partitioner.isEmpty || partitioner.get.numPartitions == numPartitions,
+    "Partitioner of parent RDDs does not match the number of partitions: " +
+      s"expected $numPartitions, but got ${partitioner.map(_.numPartitions).getOrElse("none")}")
+
+  override def getPartitions: Array[Partition] = {
+    (0 until numPartitions).map { index =>
+      new PartitionerAwareUnionRDDPartition(_rdds, index)
+    }.toArray
+  }
+}
+

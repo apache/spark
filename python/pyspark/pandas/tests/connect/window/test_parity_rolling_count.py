@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 
 from pyspark.pandas.tests.window.test_rolling_count import RollingCountMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
@@ -30,12 +29,6 @@ class RollingParityCountTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.window.test_parity_rolling_count import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

@@ -25,15 +25,13 @@ import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types.{IntegerType, LongType, _}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
 
-class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestBase
-    with ExpressionEvalHelper {
+class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with ExpressionEvalHelper {
 
   private def roundedSize(size: Int) = ByteArrayMethods.roundNumberOfBytesToNearestWord(size)
 
@@ -116,14 +114,14 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     // Date is represented as Int in unsafeRow
     assert(DateTimeUtils.toJavaDate(unsafeRow.getInt(2)) === Date.valueOf("1970-01-01"))
     // Timestamp is represented as Long in unsafeRow
-    DateTimeUtils.toJavaTimestamp(unsafeRow.getLong(3)) should be
-    (Timestamp.valueOf("2015-05-08 08:10:25"))
+    DateTimeUtils.toJavaTimestamp(unsafeRow.getLong(3)) should be(
+      Timestamp.valueOf("2015-05-08 08:10:25"))
 
     unsafeRow.setInt(2, DateTimeUtils.fromJavaDate(Date.valueOf("2015-06-22")))
     assert(DateTimeUtils.toJavaDate(unsafeRow.getInt(2)) === Date.valueOf("2015-06-22"))
     unsafeRow.setLong(3, DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-06-22 08:10:25")))
-    DateTimeUtils.toJavaTimestamp(unsafeRow.getLong(3)) should be
-    (Timestamp.valueOf("2015-06-22 08:10:25"))
+    DateTimeUtils.toJavaTimestamp(unsafeRow.getLong(3)) should be(
+      Timestamp.valueOf("2015-06-22 08:10:25"))
   }
 
   testBothCodegenAndInterpreted(

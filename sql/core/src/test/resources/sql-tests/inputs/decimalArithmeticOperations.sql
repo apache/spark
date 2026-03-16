@@ -88,7 +88,7 @@ SELECT CAST(10 AS DECIMAL(10, 2)) div CAST(3 AS DECIMAL(5, 1));
 set spark.sql.decimalOperations.allowPrecisionLoss=false;
 
 -- test decimal operations
-select id, a+b, a-b, a*b, a/b from decimals_test order by id;
+select /*+ COALESCE(1) */ id, a+b, a-b, a*b, a/b from decimals_test order by id;
 
 -- test operations between decimals and constants
 select id, a*10, b/10 from decimals_test order by id;

@@ -18,18 +18,33 @@
 """
 Base and utility classes for pandas-on-Spark objects.
 """
+
 import warnings
 from abc import ABCMeta, abstractmethod
 from functools import wraps, partial
 from itertools import chain
-from typing import Any, Callable, Optional, Sequence, Tuple, Union, cast, TYPE_CHECKING
+from typing import Any, Callable, ClassVar, Optional, Sequence, Tuple, Union, cast, TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_list_like, CategoricalDtype  # type: ignore[attr-defined]
+from pandas.api.types import is_list_like, CategoricalDtype
 
 from pyspark.sql import functions as F, Column, Window
-from pyspark.sql.types import LongType, BooleanType, NumericType
+from pyspark.sql.types import (
+    BinaryType,
+    BooleanType,
+    CharType,
+    DataType,
+    DateType,
+    DayTimeIntervalType,
+    LongType,
+    NumericType,
+    StringType,
+    TimestampNTZType,
+    TimestampType,
+    TimeType,
+    VarcharType,
+)
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Axis, Dtype, IndexOpsLike, Label, SeriesOrIndex
 from pyspark.pandas.config import get_option, option_context
@@ -40,8 +55,9 @@ from pyspark.pandas.internal import (
     SPARK_DEFAULT_INDEX_NAME,
 )
 from pyspark.pandas.spark.accessors import SparkIndexOpsMethods
-from pyspark.pandas.typedef import extension_dtypes
+from pyspark.pandas.typedef.typehints import handle_dtype_as_extension_dtype
 from pyspark.pandas.utils import (
+    ansi_mode_context,
     combine_frames,
     same_anchor,
     scol_for,
@@ -117,9 +133,11 @@ def align_diff_index_ops(
                     column_op(func)(
                         this_index_ops.to_series().reset_index(drop=True),
                         *[
-                            arg.to_series().reset_index(drop=True)
-                            if isinstance(arg, Index)
-                            else arg
+                            (
+                                arg.to_series().reset_index(drop=True)
+                                if isinstance(arg, Index)
+                                else arg
+                            )
                             for arg in args
                         ],
                     ).sort_index(),
@@ -227,7 +245,7 @@ def column_op(f: Callable[..., Column]) -> Callable[..., SeriesOrIndex]:
             field = InternalField.from_struct_field(
                 self._internal.spark_frame.select(scol).schema[0],
                 use_extension_dtypes=any(
-                    isinstance(col.dtype, extension_dtypes) for col in [self] + cols
+                    handle_dtype_as_extension_dtype(col.dtype) for col in [self] + cols
                 ),
             )
 
@@ -269,11 +287,54 @@ def numpy_column_op(f: Callable[..., Column]) -> Callable[..., SeriesOrIndex]:
     return wrapper
 
 
+def _exclude_pd_np_operand(other: Any) -> None:
+    if isinstance(other, (pd.Series, pd.Index, pd.DataFrame, np.ndarray)):
+        raise TypeError(
+            f"Operand of type {type(other).__module__}.{type(other).__qualname__} "
+            f"is not supported for this operation. "
+        )
+
+
+def _is_value_type_compatible(value: Any, spark_type: DataType) -> bool:
+    """Check if a Python value's type is compatible with a Spark column type for isin matching.
+
+    Pandas isin() uses strict type matching: an integer 1 never matches a string "1".
+    However, numeric types (int, float, bool) are cross-compatible, matching Python semantics
+    where bool is a subclass of int and int/float compare equal when values match.
+    """
+    import datetime
+    import decimal
+
+    if isinstance(spark_type, NumericType):
+        return isinstance(value, (int, float, bool, decimal.Decimal, np.number))
+    if isinstance(spark_type, BooleanType):
+        return isinstance(value, (bool, np.bool_, int, float, np.number))
+    if isinstance(spark_type, (StringType, CharType, VarcharType)):
+        return isinstance(value, str)
+    if isinstance(spark_type, BinaryType):
+        return isinstance(value, (bytes, bytearray))
+    if isinstance(spark_type, (TimestampType, TimestampNTZType)):
+        return isinstance(value, (datetime.datetime, pd.Timestamp))
+    if isinstance(spark_type, DateType):
+        return isinstance(value, (datetime.date, pd.Timestamp))
+    if isinstance(spark_type, TimeType):
+        return isinstance(value, datetime.time)
+    if isinstance(spark_type, DayTimeIntervalType):
+        return isinstance(value, datetime.timedelta)
+    # For complex types (ArrayType, MapType, StructType) and other exotic types
+    # (VariantType, spatial types, YearMonthIntervalType, CalendarIntervalType),
+    # skip filtering and let Spark handle type resolution.
+    return True
+
+
 class IndexOpsMixin(object, metaclass=ABCMeta):
     """common ops mixin to support a unified interface / docs for Series / Index
 
     Assuming there are following attributes or properties and functions.
     """
+
+    # Keep pandas-on-Spark above pandas Series and Index for reflected ops.
+    __pandas_priority__: ClassVar[int] = pd.Series.__pandas_priority__ + 500  # type: ignore[attr-defined]
 
     @property
     @abstractmethod
@@ -313,16 +374,20 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
     # arithmetic operators
     def __neg__(self: IndexOpsLike) -> IndexOpsLike:
-        return self._dtype_op.neg(self)
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            return self._dtype_op.neg(self)
 
     def __add__(self, other: Any) -> SeriesOrIndex:
-        return self._dtype_op.add(self, other)
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            return self._dtype_op.add(self, other)
 
     def __sub__(self, other: Any) -> SeriesOrIndex:
-        return self._dtype_op.sub(self, other)
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            return self._dtype_op.sub(self, other)
 
     def __mul__(self, other: Any) -> SeriesOrIndex:
-        return self._dtype_op.mul(self, other)
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            return self._dtype_op.mul(self, other)
 
     def __truediv__(self, other: Any) -> SeriesOrIndex:
         """
@@ -342,22 +407,28 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         |          -10          |   null  | -np.inf |
         +-----------------------|---------|---------+
         """
-        return self._dtype_op.truediv(self, other)
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            return self._dtype_op.truediv(self, other)
 
     def __mod__(self, other: Any) -> SeriesOrIndex:
-        return self._dtype_op.mod(self, other)
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            return self._dtype_op.mod(self, other)
 
     def __radd__(self, other: Any) -> SeriesOrIndex:
-        return self._dtype_op.radd(self, other)
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            return self._dtype_op.radd(self, other)
 
     def __rsub__(self, other: Any) -> SeriesOrIndex:
-        return self._dtype_op.rsub(self, other)
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            return self._dtype_op.rsub(self, other)
 
     def __rmul__(self, other: Any) -> SeriesOrIndex:
-        return self._dtype_op.rmul(self, other)
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            return self._dtype_op.rmul(self, other)
 
     def __rtruediv__(self, other: Any) -> SeriesOrIndex:
-        return self._dtype_op.rtruediv(self, other)
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            return self._dtype_op.rtruediv(self, other)
 
     def __floordiv__(self, other: Any) -> SeriesOrIndex:
         """
@@ -377,68 +448,93 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         |          -10          |   null  | -np.inf |
         +-----------------------|---------|---------+
         """
-        return self._dtype_op.floordiv(self, other)
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            return self._dtype_op.floordiv(self, other)
 
     def __rfloordiv__(self, other: Any) -> SeriesOrIndex:
-        return self._dtype_op.rfloordiv(self, other)
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            return self._dtype_op.rfloordiv(self, other)
 
     def __rmod__(self, other: Any) -> SeriesOrIndex:
-        return self._dtype_op.rmod(self, other)
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            return self._dtype_op.rmod(self, other)
 
     def __pow__(self, other: Any) -> SeriesOrIndex:
-        return self._dtype_op.pow(self, other)
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            return self._dtype_op.pow(self, other)
 
     def __rpow__(self, other: Any) -> SeriesOrIndex:
-        return self._dtype_op.rpow(self, other)
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            return self._dtype_op.rpow(self, other)
 
     def __abs__(self: IndexOpsLike) -> IndexOpsLike:
-        return self._dtype_op.abs(self)
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            return self._dtype_op.abs(self)
 
     # comparison operators
     def __eq__(self, other: Any) -> SeriesOrIndex:  # type: ignore[override]
         # pandas always returns False for all items with dict and set.
-        if isinstance(other, (dict, set)):
-            return self != self
-        else:
-            return self._dtype_op.eq(self, other)
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            _exclude_pd_np_operand(other)
+            if isinstance(other, (dict, set)):
+                return self != self
+            else:
+                return self._dtype_op.eq(self, other)
 
     def __ne__(self, other: Any) -> SeriesOrIndex:  # type: ignore[override]
-        return self._dtype_op.ne(self, other)
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            _exclude_pd_np_operand(other)
+            return self._dtype_op.ne(self, other)
 
     def __lt__(self, other: Any) -> SeriesOrIndex:
-        return self._dtype_op.lt(self, other)
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            _exclude_pd_np_operand(other)
+            return self._dtype_op.lt(self, other)
 
     def __le__(self, other: Any) -> SeriesOrIndex:
-        return self._dtype_op.le(self, other)
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            _exclude_pd_np_operand(other)
+            return self._dtype_op.le(self, other)
 
     def __ge__(self, other: Any) -> SeriesOrIndex:
-        return self._dtype_op.ge(self, other)
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            _exclude_pd_np_operand(other)
+            return self._dtype_op.ge(self, other)
 
     def __gt__(self, other: Any) -> SeriesOrIndex:
-        return self._dtype_op.gt(self, other)
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            _exclude_pd_np_operand(other)
+            return self._dtype_op.gt(self, other)
 
     def __invert__(self: IndexOpsLike) -> IndexOpsLike:
-        return self._dtype_op.invert(self)
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            return self._dtype_op.invert(self)
 
     # `and`, `or`, `not` cannot be overloaded in Python,
     # so use bitwise operators as boolean operators
     def __and__(self, other: Any) -> SeriesOrIndex:
-        return self._dtype_op.__and__(self, other)
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            return self._dtype_op.__and__(self, other)
 
     def __or__(self, other: Any) -> SeriesOrIndex:
-        return self._dtype_op.__or__(self, other)
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            return self._dtype_op.__or__(self, other)
 
     def __rand__(self, other: Any) -> SeriesOrIndex:
-        return self._dtype_op.rand(self, other)
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            return self._dtype_op.rand(self, other)
 
     def __ror__(self, other: Any) -> SeriesOrIndex:
-        return self._dtype_op.ror(self, other)
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            return self._dtype_op.ror(self, other)
 
     def __xor__(self, other: Any) -> SeriesOrIndex:
-        return self._dtype_op.xor(self, other)
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            return self._dtype_op.xor(self, other)
 
     def __rxor__(self, other: Any) -> SeriesOrIndex:
-        return self._dtype_op.rxor(self, other)
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            return self._dtype_op.rxor(self, other)
 
     def __len__(self) -> int:
         return len(self._psdf)
@@ -880,12 +976,19 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
             cast(np.ndarray, values).tolist() if isinstance(values, np.ndarray) else list(values)
         )
 
-        other = [F.lit(v) for v in values]
-        scol = self.spark.column.isin(other)
+        spark_type = self._internal.data_fields[0].spark_type
+        compatible = [
+            F.lit(v).cast(spark_type) for v in values if _is_value_type_compatible(v, spark_type)
+        ]
+        scol = (
+            F.coalesce(self.spark.column.isin(compatible), F.lit(False))
+            if compatible
+            else F.lit(False)
+        )
         field = self._internal.data_fields[0].copy(
             dtype=np.dtype("bool"), spark_type=BooleanType(), nullable=False
         )
-        return self._with_new_scol(scol=F.coalesce(scol, F.lit(False)), field=field)
+        return self._with_new_scol(scol=scol, field=field)
 
     def isnull(self: IndexOpsLike) -> IndexOpsLike:
         """
@@ -1123,7 +1226,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         Shift Series/Index by desired number of periods.
 
         .. note:: the current implementation of shift uses Spark's Window without
-            specifying partition specification. This leads to moveing all data into
+            specifying partition specification. This leads to moving all data into
             a single partition in a single machine and could cause serious
             performance degradation. Avoid this method with very large datasets.
 
@@ -1405,7 +1508,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         Parameters
         ----------
         dropna : bool, default True
-            Don’t include NaN in the count.
+            Don't include NaN in the count.
         approx: bool, default False
             If False, will use the exact algorithm and return the exact number of unique.
             If True, it uses the HyperLogLog approximate algorithm, which is significantly faster
@@ -1701,7 +1804,7 @@ def _test() -> None:
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.base tests").getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.base,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

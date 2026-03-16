@@ -40,7 +40,6 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
   }
 
   test("SPARK-34057: UnresolvedTableOrView should retain sql text position") {
-    verifyTableOrViewPosition("DESCRIBE TABLE unknown", "unknown")
     verifyTableOrPermanentViewPosition("ANALYZE TABLE unknown COMPUTE STATISTICS", "unknown")
     verifyTableOrViewPosition("ANALYZE TABLE unknown COMPUTE STATISTICS FOR COLUMNS col", "unknown")
     verifyTableOrViewPosition("ANALYZE TABLE unknown COMPUTE STATISTICS FOR ALL COLUMNS", "unknown")

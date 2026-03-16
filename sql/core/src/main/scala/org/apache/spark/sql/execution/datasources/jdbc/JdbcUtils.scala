@@ -26,12 +26,12 @@ import java.util
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException, TaskContext}
+import org.apache.spark.{SparkContext, SparkThrowable, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.executor.InputMetrics
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{DEFAULT_ISOLATION_LEVEL, ISOLATION_LEVEL}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
@@ -46,6 +46,7 @@ import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.index.{SupportsIndex, TableIndex}
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType, NoopDialect}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -64,18 +65,21 @@ object JdbcUtils extends Logging with SQLConfHelper {
   def tableExists(conn: Connection, options: JdbcOptionsInWrite): Boolean = {
     val dialect = JdbcDialects.get(options.url)
 
-    // Somewhat hacky, but there isn't a good way to identify whether a table exists for all
-    // SQL database systems using JDBC meta data calls, considering "table" could also include
-    // the database name. Query used to find table exists can be overridden by the dialects.
-    Try {
+    val executionResult = Try {
       val statement = conn.prepareStatement(dialect.getTableExistsQuery(options.table))
       try {
         statement.setQueryTimeout(options.queryTimeout)
-        statement.executeQuery()
+        statement.executeQuery()  // Success means table exists (query executed without error)
       } finally {
         statement.close()
       }
-    }.isSuccess
+    }
+
+    executionResult match {
+      case Success(_) => true
+      case Failure(e: SQLException) if dialect.isObjectNotFoundException(e) => false
+      case Failure(e) => throw e  // Re-throw unexpected exceptions
+    }
   }
 
   /**
@@ -127,7 +131,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       // RDD column names for user convenience.
       rddSchema.fields.map { col =>
         tableSchema.get.find(f => conf.resolver(f.name, col.name)).getOrElse {
-          throw QueryCompilationErrors.columnNotFoundInSchemaError(col, tableSchema)
+          throw QueryCompilationErrors.columnNotFoundInSchemaError(
+            col.dataType, col.name, table, rddSchema.fieldNames)
         }
       }
     }
@@ -151,8 +156,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       case BooleanType => Option(JdbcType("BIT(1)", java.sql.Types.BIT))
       case StringType => Option(JdbcType("TEXT", java.sql.Types.CLOB))
       case BinaryType => Option(JdbcType("BLOB", java.sql.Types.BLOB))
-      case CharType(n) => Option(JdbcType(s"CHAR($n)", java.sql.Types.CHAR))
-      case VarcharType(n) => Option(JdbcType(s"VARCHAR($n)", java.sql.Types.VARCHAR))
+      case c: CharType => Option(JdbcType(s"CHAR(${c.length})", java.sql.Types.CHAR))
+      case v: VarcharType => Option(JdbcType(s"VARCHAR(${v.length})", java.sql.Types.VARCHAR))
       case TimestampType => Option(JdbcType("TIMESTAMP", java.sql.Types.TIMESTAMP))
       // This is a common case of timestamp without time zone. Most of the databases either only
       // support TIMESTAMP type or use TIMESTAMP as an alias for TIMESTAMP WITHOUT TIME ZONE.
@@ -202,7 +207,11 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.DECIMAL | java.sql.Types.NUMERIC if scale < 0 =>
       DecimalType.bounded(precision - scale, 0)
     case java.sql.Types.DECIMAL | java.sql.Types.NUMERIC =>
-      DecimalPrecisionTypeCoercion.bounded(precision, scale)
+      DecimalPrecisionTypeCoercion.bounded(
+        // A safeguard in case the JDBC scale is larger than the precision that is not supported
+        // by Spark.
+        math.max(precision, scale),
+        scale)
     case java.sql.Types.DOUBLE => DoubleType
     case java.sql.Types.FLOAT => FloatType
     case java.sql.Types.INTEGER => if (signed) IntegerType else LongType
@@ -313,6 +322,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       metadata.putBoolean("isSigned", isSigned)
       metadata.putBoolean("isTimestampNTZ", isTimestampNTZ)
       metadata.putLong("scale", fieldScale)
+      metadata.putString("jdbcClientType", typeName)
       dialect.updateExtraColumnMeta(conn, rsmd, i + 1, metadata)
 
       val columnType =
@@ -348,7 +358,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       resultSet: ResultSet,
       dialect: JdbcDialect,
       schema: StructType,
-      inputMetrics: InputMetrics): Iterator[InternalRow] = {
+      inputMetrics: InputMetrics,
+      fetchAndTransformToInternalRowsMetric: Option[SQLMetric] = None): Iterator[InternalRow] = {
     new NextIterator[InternalRow] {
       private[this] val rs = resultSet
       private[this] val getters: Array[JDBCValueGetter] = makeGetters(dialect, schema)
@@ -363,7 +374,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
         }
       }
 
-      override protected def getNext(): InternalRow = {
+      private def getNextWithoutTiming: InternalRow = {
         if (rs.next()) {
           inputMetrics.incRecordsRead(1)
           var i = 0
@@ -378,7 +389,24 @@ object JdbcUtils extends Logging with SQLConfHelper {
           null.asInstanceOf[InternalRow]
         }
       }
+
+      override protected def getNext(): InternalRow = {
+        if (fetchAndTransformToInternalRowsMetric.isDefined) {
+          SQLMetrics.withTimingNs(fetchAndTransformToInternalRowsMetric.get) {
+            getNextWithoutTiming
+          }
+        } else {
+          getNextWithoutTiming
+        }
+      }
     }
+  }
+
+  def createSchemaFetchMetric(sparkContext: SparkContext): SQLMetric = {
+    SQLMetrics.createNanoTimingMetric(
+      sparkContext,
+      JDBCRelation.schemaFetchName
+    )
   }
 
   // A `JDBCValueGetter` is responsible for getting a value from `ResultSet` into a field
@@ -785,12 +813,14 @@ object JdbcUtils extends Logging with SQLConfHelper {
             // Finally update to actually requested level if possible
             finalIsolationLevel = isolationLevel
           } else {
-            logWarning(log"Requested isolation level ${MDC(ISOLATION_LEVEL, isolationLevel)} " +
+            logWarning(log"Requested isolation level " +
+              log"${MDC(ISOLATION_LEVEL, isolationLevelString(isolationLevel))} " +
               log"is not supported; falling back to default isolation level " +
-              log"${MDC(DEFAULT_ISOLATION_LEVEL, defaultIsolation)}")
+              log"${MDC(DEFAULT_ISOLATION_LEVEL, isolationLevelString(defaultIsolation))}")
           }
         } else {
-          logWarning(log"Requested isolation level ${MDC(ISOLATION_LEVEL, isolationLevel)}, " +
+          logWarning(log"Requested isolation level " +
+            log"${MDC(ISOLATION_LEVEL, isolationLevelString(isolationLevel))}, " +
             log"but transactions are unsupported")
         }
       } catch {
@@ -884,6 +914,20 @@ object JdbcUtils extends Logging with SQLConfHelper {
           case e: Exception => logWarning("Transaction succeeded, but closing failed", e)
         }
       }
+    }
+  }
+
+  /**
+   * Convert the value of isolation level to string.
+   */
+  private def isolationLevelString(isolationLevel: Int): String = {
+    isolationLevel match {
+      case Connection.TRANSACTION_NONE => "NONE"
+      case Connection.TRANSACTION_READ_UNCOMMITTED => "READ_UNCOMMITTED"
+      case Connection.TRANSACTION_READ_COMMITTED => "READ_COMMITTED"
+      case Connection.TRANSACTION_REPEATABLE_READ => "REPEATABLE_READ"
+      case Connection.TRANSACTION_SERIALIZABLE => "SERIALIZABLE"
+      case value => value.toString
     }
   }
 
@@ -1271,7 +1315,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
   }
 
   def classifyException[T](
-      errorClass: String,
+      condition: String,
       messageParameters: Map[String, String],
       dialect: JdbcDialect,
       description: String,
@@ -1281,13 +1325,23 @@ object JdbcUtils extends Logging with SQLConfHelper {
     } catch {
       case e: SparkThrowable with Throwable => throw e
       case e: Throwable =>
-        throw dialect.classifyException(e, errorClass, messageParameters, description, isRuntime)
+        throw dialect.classifyException(e, condition, messageParameters, description, isRuntime)
     }
   }
 
   def withConnection[T](options: JDBCOptions)(f: Connection => T): T = {
     val dialect = JdbcDialects.get(options.url)
-    val conn = dialect.createConnectionFactory(options)(-1)
+
+    var conn : Connection = null
+    classifyException(
+      condition = "FAILED_JDBC.CONNECTION",
+      messageParameters = Map("url" -> options.getRedactUrl()),
+      dialect,
+      description = "Failed to connect",
+      isRuntime = false
+    ) {
+      conn = dialect.createConnectionFactory(options)(-1)
+    }
     try {
       f(conn)
     } finally {

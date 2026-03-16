@@ -25,7 +25,6 @@ import scala.concurrent.duration._
 import scala.util.Try
 
 import org.apache.commons.io.output.TeeOutputStream
-import org.apache.commons.lang3.SystemUtils
 
 import org.apache.spark.util.Utils
 
@@ -211,10 +210,10 @@ private[spark] object Benchmark {
    * This should return something like "Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz"
    */
   def getProcessorName(): String = {
-    val cpu = if (SystemUtils.IS_OS_MAC_OSX) {
+    val cpu = if (Utils.isMac) {
       Utils.executeAndGetOutput(Seq("/usr/sbin/sysctl", "-n", "machdep.cpu.brand_string"))
         .stripLineEnd
-    } else if (SystemUtils.IS_OS_LINUX) {
+    } else if (Utils.isLinux) {
       Try {
         val grepPath = Utils.executeAndGetOutput(Seq("which", "grep")).stripLineEnd
         Utils.executeAndGetOutput(Seq(grepPath, "-m", "1", "model name", "/proc/cpuinfo"))
@@ -234,8 +233,6 @@ private[spark] object Benchmark {
   def getJVMOSInfo(): String = {
     val vmName = System.getProperty("java.vm.name")
     val runtimeVersion = System.getProperty("java.runtime.version")
-    val osName = System.getProperty("os.name")
-    val osVersion = System.getProperty("os.version")
-    s"${vmName} ${runtimeVersion} on ${osName} ${osVersion}"
+    s"${vmName} ${runtimeVersion} on ${Utils.osName} ${Utils.osVersion}"
   }
 }

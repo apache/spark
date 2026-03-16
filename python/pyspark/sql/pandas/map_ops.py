@@ -94,7 +94,7 @@ class PandasMapOpsMixin:
                 jvm = self.sparkSession.sparkContext._jvm
                 assert jvm is not None
 
-                builder = jvm.org.apache.spark.resource.ResourceProfileBuilder()
+                builder = getattr(jvm, "org.apache.spark.resource.ResourceProfileBuilder")()
                 ereqs = ExecutorResourceRequests(jvm, profile._executor_resource_requests)
                 treqs = TaskResourceRequests(jvm, profile._task_resource_requests)
                 builder.require(ereqs._java_executor_resource_requests)
@@ -113,7 +113,7 @@ def _test() -> None:
         SparkSession.builder.master("local[4]").appName("sql.pandas.map_ops tests").getOrCreate()
     )
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.pandas.map_ops,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,

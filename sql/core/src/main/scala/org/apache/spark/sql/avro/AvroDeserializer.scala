@@ -19,6 +19,7 @@ package org.apache.spark.sql.avro
 
 import java.math.BigDecimal
 import java.nio.ByteBuffer
+import java.time.ZoneOffset
 
 import scala.jdk.CollectionConverters._
 
@@ -159,6 +160,12 @@ private[sql] class AvroDeserializer(
       case (INT, DateType) => (updater, ordinal, value) =>
         updater.setInt(ordinal, dateRebaseFunc(value.asInstanceOf[Int]))
 
+      case (INT, TimestampNTZType) if avroType.getLogicalType.isInstanceOf[LogicalTypes.Date] =>
+        (updater, ordinal, value) =>
+          val days = dateRebaseFunc(value.asInstanceOf[Int])
+          val micros = DateTimeUtils.daysToMicros(days, ZoneOffset.UTC)
+          updater.setLong(ordinal, micros)
+
       case (LONG, dt: DatetimeType)
         if preventReadingIncorrectType && realDataType.isInstanceOf[DayTimeIntervalType] =>
         throw QueryCompilationErrors.avroIncompatibleReadError(toFieldStr(avroPath),
@@ -194,6 +201,14 @@ private[sql] class AvroDeserializer(
           updater.setLong(ordinal, micros)
         case other => throw new IncompatibleSchemaException(errorPrefix +
           s"Avro logical type $other cannot be converted to SQL type ${TimestampNTZType.sql}.")
+      }
+
+      case (LONG, _: TimeType) => avroType.getLogicalType match {
+        case _: LogicalTypes.TimeMicros => (updater, ordinal, value) =>
+          val micros = value.asInstanceOf[Long]
+          updater.setLong(ordinal, micros)
+        case other => throw new IncompatibleSchemaException(errorPrefix +
+          s"Avro logical type $other cannot be converted to SQL type ${TimeType().sql}.")
       }
 
       // Before we upgrade Avro to 1.8 for logical type support, spark-avro converts Long to Date.

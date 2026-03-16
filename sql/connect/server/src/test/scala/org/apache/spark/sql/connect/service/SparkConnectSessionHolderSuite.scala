@@ -32,11 +32,13 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.api.python.SimplePythonFunction
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.IntegratedUDFTestUtils
-import org.apache.spark.sql.connect.SparkConnectTestUtils
+import org.apache.spark.sql.connect.{PythonTestDepsChecker, SparkConnectTestUtils}
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.planner.{PythonStreamingQueryListener, SparkConnectPlanner, StreamingForeachBatchHelper}
 import org.apache.spark.sql.connect.planner.StreamingForeachBatchHelper.RunnerCleaner
+import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl}
+import org.apache.spark.sql.pipelines.logging.PipelineEvent
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.ArrayImplicits._
 
@@ -178,6 +180,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
   test("python listener process: process terminates after listener is removed") {
     // scalastyle:off assume
     assume(IntegratedUDFTestUtils.shouldTestPandasUDFs)
+    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     // scalastyle:on assume
 
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
@@ -228,6 +231,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
   test("python foreachBatch process: process terminates after query is stopped") {
     // scalastyle:off assume
     assume(IntegratedUDFTestUtils.shouldTestPandasUDFs)
+    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     // scalastyle:on assume
 
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
@@ -399,19 +403,23 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
   test("Test session plan cache - disabled") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     // Disable plan cache of the session
-    sessionHolder.session.conf.set(Connect.CONNECT_SESSION_PLAN_CACHE_ENABLED.key, false)
-    val planner = new SparkConnectPlanner(sessionHolder)
+    try {
+      sessionHolder.session.conf.set(Connect.CONNECT_SESSION_PLAN_CACHE_ENABLED.key, false)
+      val planner = new SparkConnectPlanner(sessionHolder)
 
-    val query = buildRelation("select 1")
+      val query = buildRelation("select 1")
 
-    // If cachePlan is false, the cache is still empty.
-    // Although the cache is created as cache size is greater than zero, it won't be used.
-    planner.transformRelation(query, cachePlan = false)
-    assertPlanCache(sessionHolder, Some(Set()))
+      // If cachePlan is false, the cache is still empty.
+      // Although the cache is created as cache size is greater than zero, it won't be used.
+      planner.transformRelation(query, cachePlan = false)
+      assertPlanCache(sessionHolder, Some(Set()))
 
-    // Even if we specify "cachePlan = true", the cache is still empty.
-    planner.transformRelation(query, cachePlan = true)
-    assertPlanCache(sessionHolder, Some(Set()))
+      // Even if we specify "cachePlan = true", the cache is still empty.
+      planner.transformRelation(query, cachePlan = true)
+      assertPlanCache(sessionHolder, Some(Set()))
+    } finally {
+      sessionHolder.session.conf.set(Connect.CONNECT_SESSION_PLAN_CACHE_ENABLED, true)
+    }
   }
 
   test("Test duplicate operation IDs") {
@@ -421,5 +429,146 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
       sessionHolder.addOperationId("DUMMY")
     }
     assert(ex.getMessage.contains("already exists"))
+  }
+
+  test("getInactiveOperationInfo returns TerminationInfo for closed operations") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    val command = proto.Command.newBuilder().build()
+    val executeHolder = SparkConnectTestUtils.createDummyExecuteHolder(sessionHolder, command)
+    val operationId = executeHolder.operationId
+
+    sessionHolder.closeOperation(executeHolder)
+
+    val inactiveInfo = sessionHolder.getInactiveOperationInfo(operationId)
+    assert(inactiveInfo.isDefined)
+    assert(inactiveInfo.get.operationId == operationId)
+  }
+
+  test("getInactiveOperationInfo returns None for active operations") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    val command = proto.Command.newBuilder().build()
+    val executeHolder = SparkConnectTestUtils.createDummyExecuteHolder(sessionHolder, command)
+    val operationId = executeHolder.operationId
+
+    assert(sessionHolder.getInactiveOperationInfo(operationId) == None)
+  }
+
+  test("getInactiveOperationInfo returns None for unknown operations") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    assert(sessionHolder.getInactiveOperationInfo("unknown-op") == None)
+  }
+
+  test("listInactiveOperations returns all closed operations") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+
+    val command = proto.Command.newBuilder().build()
+    val executeHolder1 = SparkConnectTestUtils.createDummyExecuteHolder(sessionHolder, command)
+    val executeHolder2 = SparkConnectTestUtils.createDummyExecuteHolder(sessionHolder, command)
+    val executeHolder3 = SparkConnectTestUtils.createDummyExecuteHolder(sessionHolder, command)
+
+    sessionHolder.closeOperation(executeHolder1)
+    sessionHolder.closeOperation(executeHolder2)
+    sessionHolder.closeOperation(executeHolder3)
+
+    val inactiveOps = sessionHolder.listInactiveOperations()
+    assert(inactiveOps.size == 3)
+    val inactiveOpIds = inactiveOps.map(_.operationId).toSet
+    assert(inactiveOpIds.contains(executeHolder1.operationId))
+    assert(inactiveOpIds.contains(executeHolder2.operationId))
+    assert(inactiveOpIds.contains(executeHolder3.operationId))
+  }
+
+  test("listInactiveOperations returns empty for new session") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    assert(sessionHolder.listInactiveOperations().isEmpty)
+  }
+
+  test("listActiveOperationIds returns all active operations") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+
+    val command = proto.Command.newBuilder().build()
+    val executeHolder1 = SparkConnectTestUtils.createDummyExecuteHolder(sessionHolder, command)
+    val executeHolder2 = SparkConnectTestUtils.createDummyExecuteHolder(sessionHolder, command)
+    val executeHolder3 = SparkConnectTestUtils.createDummyExecuteHolder(sessionHolder, command)
+
+    val activeOps = sessionHolder.listActiveOperationIds()
+    assert(activeOps.size == 3)
+    val activeOpIds = activeOps.toSet
+    assert(activeOpIds.contains(executeHolder1.operationId))
+    assert(activeOpIds.contains(executeHolder2.operationId))
+    assert(activeOpIds.contains(executeHolder3.operationId))
+  }
+
+  test("listActiveOperationIds returns empty for new session") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    assert(sessionHolder.listActiveOperationIds().isEmpty)
+  }
+
+  test("listActiveOperationIds excludes closed operations") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+
+    val command = proto.Command.newBuilder().build()
+    val executeHolder1 = SparkConnectTestUtils.createDummyExecuteHolder(sessionHolder, command)
+    val executeHolder2 = SparkConnectTestUtils.createDummyExecuteHolder(sessionHolder, command)
+
+    sessionHolder.closeOperation(executeHolder1)
+
+    val activeOps = sessionHolder.listActiveOperationIds()
+    assert(activeOps.size == 1)
+    assert(activeOps.contains(executeHolder2.operationId))
+    assert(!activeOps.contains(executeHolder1.operationId))
+  }
+
+  test("Pipeline execution cache") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    val graphId = "test_graph"
+    val pipelineUpdateContext = new PipelineUpdateContextImpl(
+      new DataflowGraph(Seq(), Seq(), Seq(), Seq()),
+      (_: PipelineEvent) => None,
+      storageRoot = "file:///test_storage_root")
+    sessionHolder.cachePipelineExecution(graphId, pipelineUpdateContext)
+    assert(
+      sessionHolder.getPipelineExecution(graphId).nonEmpty,
+      "pipeline execution was not cached")
+    sessionHolder.removeAllPipelineExecutions()
+    assert(
+      sessionHolder.getPipelineExecution(graphId).isEmpty,
+      "pipeline execution was not removed")
+  }
+
+  gridTest("Actively cache data source reads")(Seq(true, false)) { enabled =>
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    val planner = new SparkConnectPlanner(sessionHolder)
+
+    val dataSourceRead = proto.Relation
+      .newBuilder()
+      .setRead(
+        proto.Read
+          .newBuilder()
+          .setDataSource(proto.Read.DataSource
+            .newBuilder()
+            .setSchema("col int")))
+      .setCommon(proto.RelationCommon.newBuilder().setPlanId(Random.nextLong()).build())
+      .build()
+    val dataSourceReadJoin = proto.Relation
+      .newBuilder()
+      .setJoin(
+        proto.Join
+          .newBuilder()
+          .setLeft(dataSourceRead)
+          .setRight(dataSourceRead)
+          .setJoinType(proto.Join.JoinType.JOIN_TYPE_CROSS))
+      .setCommon(proto.RelationCommon.newBuilder().setPlanId(Random.nextLong()).build())
+      .build()
+
+    sessionHolder.session.conf
+      .set(Connect.CONNECT_ALWAYS_CACHE_DATA_SOURCE_READS_ENABLED, enabled)
+    planner.transformRelation(dataSourceReadJoin, cachePlan = true)
+    val expected = if (enabled) {
+      Set(dataSourceReadJoin, dataSourceRead)
+    } else {
+      Set(dataSourceReadJoin)
+    }
+    assertPlanCache(sessionHolder, Some(expected))
   }
 }

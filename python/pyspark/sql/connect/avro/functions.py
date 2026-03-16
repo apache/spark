@@ -20,9 +20,6 @@ A collections of builtin avro functions
 """
 
 from pyspark.errors import PySparkTypeError
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
 
 from typing import Dict, Optional, TYPE_CHECKING
 
@@ -94,7 +91,7 @@ to_avro.__doc__ = PyAvroFunctions.to_avro.__doc__
 def _test() -> None:
     import os
     import sys
-    from pyspark.testing.utils import search_jar
+    from pyspark.testing.sqlutils import search_jar
 
     avro_jar = search_jar("connector/avro", "spark-avro", "spark-avro")
     if avro_jar is None:
@@ -121,7 +118,7 @@ def _test() -> None:
         .getOrCreate()
     )
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.connect.avro.functions,
         globs=globs,
         optionflags=doctest.ELLIPSIS

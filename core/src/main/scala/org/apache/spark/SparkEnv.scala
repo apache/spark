@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import java.io.File
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.collection.concurrent
 import scala.collection.mutable
@@ -32,7 +33,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.{PythonWorker, PythonWorkerFactory}
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.ExecutorBackend
-import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config._
 import org.apache.spark.memory.{MemoryManager, UnifiedMemoryManager}
@@ -75,7 +76,30 @@ class SparkEnv (
   // user jars to define custom ShuffleManagers.
   @volatile private var _shuffleManager: ShuffleManager = _
 
+  // Latch to signal when the ShuffleManager has been initialized.
+  // Used to allow callers to wait for initialization.
+  private val shuffleManagerInitLatch = new CountDownLatch(1)
+
   def shuffleManager: ShuffleManager = _shuffleManager
+
+  /**
+   * Wait for the ShuffleManager to be initialized within the specified timeout.
+   *
+   * @param timeoutMs Maximum time to wait in milliseconds
+   * @return true if the ShuffleManager was initialized within the timeout, false otherwise
+   */
+  private[spark] def waitForShuffleManagerInit(timeoutMs: Long): Boolean = {
+    shuffleManagerInitLatch.await(timeoutMs, TimeUnit.MILLISECONDS)
+  }
+
+  /**
+   * Check if the ShuffleManager has been initialized.
+   *
+   * @return true if the ShuffleManager is initialized, false otherwise
+   */
+  private[spark] def isShuffleManagerInitialized: Boolean = {
+    _shuffleManager != null
+  }
 
   // We initialize the MemoryManager later in SparkContext after DriverPlugin is loaded
   // to allow the plugin to overwrite executor memory configurations
@@ -144,7 +168,7 @@ class SparkEnv (
       workerModule: String,
       daemonModule: String,
       envVars: Map[String, String],
-      useDaemon: Boolean): (PythonWorker, Option[Int]) = {
+      useDaemon: Boolean): (PythonWorker, Option[ProcessHandle]) = {
     synchronized {
       val key = PythonWorkersKey(pythonExec, workerModule, daemonModule, envVars)
       val workerFactory = pythonWorkers.getOrElseUpdate(key, new PythonWorkerFactory(
@@ -163,7 +187,7 @@ class SparkEnv (
       pythonExec: String,
       workerModule: String,
       envVars: Map[String, String],
-      useDaemon: Boolean): (PythonWorker, Option[Int]) = {
+      useDaemon: Boolean): (PythonWorker, Option[ProcessHandle]) = {
     createPythonWorker(
       pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars, useDaemon)
   }
@@ -172,7 +196,7 @@ class SparkEnv (
       pythonExec: String,
       workerModule: String,
       daemonModule: String,
-      envVars: Map[String, String]): (PythonWorker, Option[Int]) = {
+      envVars: Map[String, String]): (PythonWorker, Option[ProcessHandle]) = {
     val useDaemon = conf.get(Python.PYTHON_USE_DAEMON)
     createPythonWorker(
       pythonExec, workerModule, daemonModule, envVars, useDaemon)
@@ -223,7 +247,12 @@ class SparkEnv (
   private[spark] def initializeShuffleManager(): Unit = {
     Preconditions.checkState(null == _shuffleManager,
       "Shuffle manager already initialized to %s", _shuffleManager)
-    _shuffleManager = ShuffleManager.create(conf, executorId == SparkContext.DRIVER_IDENTIFIER)
+    try {
+      _shuffleManager = ShuffleManager.create(conf, executorId == SparkContext.DRIVER_IDENTIFIER)
+    } finally {
+      // Signal that the ShuffleManager has been initialized
+      shuffleManagerInitLatch.countDown()
+    }
   }
 
   private[spark] def initializeMemoryManager(numUsableCores: Int): Unit = {

@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   Literal,
   SubtractDates,
   SubtractTimestamps,
-  TimeAdd,
+  TimestampAddInterval,
   UnaryMinus,
   UnaryPositive
 }
@@ -42,6 +42,7 @@ import org.apache.spark.sql.types.{
   IntegralType,
   LongType,
   NullType,
+  StringHelper,
   StringType,
   StringTypeExpression,
   TimestampType
@@ -76,7 +77,7 @@ object AnsiStringPromotionTypeCoercion {
       s.copy(left = Cast(s.left, DateType))
     case s @ SubtractDates(_, right @ StringTypeExpression(), _) =>
       s.copy(right = Cast(s.right, DateType))
-    case t @ TimeAdd(left @ StringTypeExpression(), _, _) =>
+    case t @ TimestampAddInterval(left @ StringTypeExpression(), _, _) =>
       t.copy(start = Cast(t.start, TimestampType))
     case t @ SubtractTimestamps(left @ StringTypeExpression(), _, _, _) =>
       t.copy(left = Cast(t.left, t.right.dataType))
@@ -99,7 +100,7 @@ object AnsiStringPromotionTypeCoercion {
       case (_: StringType, _: AnsiIntervalType) => None
       // [SPARK-50060] If a binary operation contains two collated string types with different
       // collation IDs, we can't decide which collation ID the result should have.
-      case (st1: StringType, st2: StringType) if st1.collationId != st2.collationId => None
+      case (st1: StringType, st2: StringType) => StringHelper.tightestCommonString(st1, st2)
       case (_: StringType, a: AtomicType) => Some(a)
       case (other, st: StringType) if !other.isInstanceOf[StringType] =>
         findWiderTypeForString(st, other)

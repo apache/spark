@@ -25,8 +25,9 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkException}
+import org.apache.spark.SparkMasterRegex._
 import org.apache.spark.annotation.{Evolving, Since}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python.PYSPARK_EXECUTOR_MEMORY
@@ -106,6 +107,14 @@ class ResourceProfile(
     executorResources.get(ResourceProfile.PYSPARK_MEM).map(_.amount)
   }
 
+  private[spark] def getOverheadMemory: Option[Long] = {
+    executorResources.get(ResourceProfile.OVERHEAD_MEM).map(_.amount)
+  }
+
+  private[spark] def getExecutorOffHeap: Option[Long] = {
+    executorResources.get(ResourceProfile.OFFHEAP_MEM).map(_.amount)
+  }
+
   private[spark] def getExecutorMemory: Option[Long] = {
     executorResources.get(ResourceProfile.MEMORY).map(_.amount)
   }
@@ -170,8 +179,8 @@ class ResourceProfile(
   // only applies to yarn/k8s
   private def shouldCheckExecutorCores(sparkConf: SparkConf): Boolean = {
     val master = sparkConf.getOption("spark.master")
-    sparkConf.contains(EXECUTOR_CORES) ||
-      (master.isDefined && (master.get.equalsIgnoreCase("yarn") || master.get.startsWith("k8s")))
+    sparkConf.contains(EXECUTOR_CORES) || isK8s(master) ||
+      (master.isDefined && master.get.equalsIgnoreCase("yarn"))
   }
 
   /**

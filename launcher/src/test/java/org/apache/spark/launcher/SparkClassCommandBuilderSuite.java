@@ -33,6 +33,7 @@ public class SparkClassCommandBuilderSuite extends BaseSuite {
     SparkClassCommandBuilder builder =
       new SparkClassCommandBuilder("org.apache.hive.beeline.BeeLine", args);
     List<String> strings = builder.buildCommand(new HashMap<>());
+    assertTrue(strings.containsAll(Arrays.asList(JavaModuleOptions.defaultModuleOptionArray())));
     assertTrue(strings.contains("-DmyKey=yourValue"));
     assertTrue(strings.contains("myBeelineArg"));
   }

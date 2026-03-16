@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import uuid
 import os
 import shutil
 import signal
@@ -75,6 +76,7 @@ from py4j.java_gateway import is_instance_of, JavaGateway, JavaObject, JVMView
 
 if TYPE_CHECKING:
     from pyspark.accumulators import AccumulatorParam
+    from pyspark.sql.types import DataType, StructType
 
 __all__ = ["SparkContext"]
 
@@ -93,7 +95,6 @@ U = TypeVar("U")
 
 
 class SparkContext:
-
     """
     Main entry point for Spark functionality. A SparkContext represents the
     connection to a Spark cluster, and can be used to create :class:`RDD` and
@@ -160,9 +161,9 @@ class SparkContext:
     _next_accum_id = 0
     _active_spark_context: ClassVar[Optional["SparkContext"]] = None
     _lock = RLock()
-    _python_includes: Optional[
-        List[str]
-    ] = None  # zip and egg files that need to be added to PYTHONPATH
+    _python_includes: Optional[List[str]] = (
+        None  # zip and egg files that need to be added to PYTHONPATH
+    )
     serializer: Serializer
     profiler_collector: ProfilerCollector
 
@@ -304,11 +305,29 @@ class SparkContext:
         # they will be passed back to us through a TCP server
         assert self._gateway is not None
         auth_token = self._gateway.gateway_parameters.auth_token
+        is_unix_domain_sock = (
+            self._conf.get(
+                "spark.python.unix.domain.socket.enabled",
+                os.environ.get("PYSPARK_UDS_MODE", "false"),
+            ).lower()
+            == "true"
+        )
+        socket_path = None
+        if is_unix_domain_sock:
+            socket_dir = self._conf.get("spark.python.unix.domain.socket.dir")
+            if socket_dir is None:
+                socket_dir = getattr(self._jvm, "java.lang.System").getProperty("java.io.tmpdir")
+            socket_path = os.path.join(socket_dir, f".{uuid.uuid4()}.sock")
         start_update_server = accumulators._start_update_server
-        self._accumulatorServer = start_update_server(auth_token)
-        (host, port) = self._accumulatorServer.server_address
+        self._accumulatorServer = start_update_server(auth_token, is_unix_domain_sock, socket_path)
         assert self._jvm is not None
-        self._javaAccumulator = self._jvm.PythonAccumulatorV2(host, port, auth_token)
+        if is_unix_domain_sock:
+            self._javaAccumulator = self._jvm.PythonAccumulatorV2(
+                self._accumulatorServer.server_address
+            )
+        else:
+            host, port = self._accumulatorServer.server_address  # type: ignore[misc]
+            self._javaAccumulator = self._jvm.PythonAccumulatorV2(host, port, auth_token)
         self._jsc.sc().register(self._javaAccumulator)
 
         # If encryption is enabled, we need to setup a server in the jvm to read broadcast
@@ -342,7 +361,7 @@ class SparkContext:
         # with SparkContext.addFile, so we just need to add them to the PYTHONPATH
         for path in self._conf.get("spark.submit.pyFiles", "").split(","):
             if path != "":
-                (dirname, filename) = os.path.split(path)
+                dirname, filename = os.path.split(path)
                 try:
                     filepath = os.path.join(SparkFiles.getRootDirectory(), filename)
                     if not os.path.exists(filepath):
@@ -362,10 +381,14 @@ class SparkContext:
 
         # Create a temporary directory inside spark.local.dir:
         assert self._jvm is not None
-        local_dir = self._jvm.org.apache.spark.util.Utils.getLocalDir(self._jsc.sc().conf())
-        self._temp_dir = self._jvm.org.apache.spark.util.Utils.createTempDir(
-            local_dir, "pyspark"
-        ).getAbsolutePath()
+        local_dir = getattr(self._jvm, "org.apache.spark.util.Utils").getLocalDir(
+            self._jsc.sc().conf()
+        )
+        self._temp_dir = (
+            getattr(self._jvm, "org.apache.spark.util.Utils")
+            .createTempDir(local_dir, "pyspark")
+            .getAbsolutePath()
+        )
 
         # profiling stats collected for each PythonRDD
         if (
@@ -381,8 +404,10 @@ class SparkContext:
 
         # create a signal handler which would be invoked on receiving SIGINT
         def signal_handler(signal: Any, frame: Any) -> NoReturn:
-            self.cancelAllJobs()
-            raise KeyboardInterrupt()
+            try:
+                self.cancelAllJobs()
+            finally:
+                raise KeyboardInterrupt()
 
         # see http://stackoverflow.com/questions/23206787/
         if isinstance(
@@ -412,9 +437,7 @@ class SparkContext:
                 <dd><code>{sc.appName}</code></dd>
             </dl>
         </div>
-        """.format(
-            sc=self
-        )
+        """.format(sc=self)
 
     def _initialize_context(self, jconf: JavaObject) -> JavaObject:
         """
@@ -554,7 +577,7 @@ class SparkContext:
         """
         SparkContext._ensure_initialized()
         assert SparkContext._jvm is not None
-        SparkContext._jvm.java.lang.System.setProperty(key, value)
+        getattr(SparkContext._jvm, "java.lang.System").setProperty(key, value)
 
     @classmethod
     def getSystemProperty(cls, key: str) -> str:
@@ -576,7 +599,7 @@ class SparkContext:
         """
         SparkContext._ensure_initialized()
         assert SparkContext._jvm is not None
-        return SparkContext._jvm.java.lang.System.getProperty(key)
+        return getattr(SparkContext._jvm, "java.lang.System").getProperty(key)
 
     @property
     def version(self) -> str:
@@ -810,8 +833,8 @@ class SparkContext:
             size = len(c)
             if size == 0:
                 return self.parallelize([], numSlices)
-            step = c[1] - c[0] if size > 1 else 1  # type: ignore[index]
-            start0 = c[0]  # type: ignore[index]
+            step = c[1] - c[0] if size > 1 else 1
+            start0 = c[0]
 
             def getStart(split: int) -> int:
                 assert numSlices is not None
@@ -875,7 +898,7 @@ class SparkContext:
         if self._encryption_enabled:
             # with encryption, we open a server in java and send the data directly
             server = server_func()
-            (sock_file, _) = local_connect_and_auth(server.port(), server.secret())
+            sock_file, _ = local_connect_and_auth(server.connInfo(), server.secret())
             chunked_out = ChunkedStream(sock_file, 8192)
             serializer.dump_stream(data, chunked_out)
             chunked_out.close()
@@ -1201,7 +1224,7 @@ class SparkContext:
 
     def _dictToJavaMap(self, d: Optional[Dict[str, str]]) -> JavaMap:
         assert self._jvm is not None
-        jm = self._jvm.java.util.HashMap()
+        jm = getattr(self._jvm, "java.util.HashMap")()
         if not d:
             d = {}
         for k, v in d.items():
@@ -1740,9 +1763,9 @@ class SparkContext:
         assert gw is not None
         jvm = SparkContext._jvm
         assert jvm is not None
-        jrdd_cls = jvm.org.apache.spark.api.java.JavaRDD
-        jpair_rdd_cls = jvm.org.apache.spark.api.java.JavaPairRDD
-        jdouble_rdd_cls = jvm.org.apache.spark.api.java.JavaDoubleRDD
+        jrdd_cls = getattr(jvm, "org.apache.spark.api.java.JavaRDD")
+        jpair_rdd_cls = getattr(jvm, "org.apache.spark.api.java.JavaPairRDD")
+        jdouble_rdd_cls = getattr(jvm, "org.apache.spark.api.java.JavaDoubleRDD")
         if is_instance_of(gw, rdds[0]._jrdd, jrdd_cls):
             cls = jrdd_cls
         elif is_instance_of(gw, rdds[0]._jrdd, jpair_rdd_cls):
@@ -1933,7 +1956,7 @@ class SparkContext:
         :meth:`SparkContext.addFile`
         """
         return list(
-            self._jvm.scala.jdk.javaapi.CollectionConverters.asJava(  # type: ignore[union-attr]
+            getattr(self._jvm, "scala.jdk.javaapi.CollectionConverters").asJava(
                 self._jsc.sc().listFiles()
             )
         )
@@ -1961,7 +1984,7 @@ class SparkContext:
         A path can be added only once. Subsequent additions of the same path are ignored.
         """
         self.addFile(path)
-        (dirname, filename) = os.path.split(path)  # dirname may be directory or HDFS/S3 prefix
+        dirname, filename = os.path.split(path)  # dirname may be directory or HDFS/S3 prefix
         if filename[-4:].lower() in self.PACKAGE_EXTENSIONS:
             assert self._python_includes is not None
             self._python_includes.append(filename)
@@ -2061,7 +2084,7 @@ class SparkContext:
         :meth:`SparkContext.addArchive`
         """
         return list(
-            self._jvm.scala.jdk.javaapi.CollectionConverters.asJava(  # type: ignore[union-attr]
+            getattr(self._jvm, "scala.jdk.javaapi.CollectionConverters").asJava(
                 self._jsc.sc().listArchives()
             )
         )
@@ -2111,7 +2134,7 @@ class SparkContext:
         if not isinstance(storageLevel, StorageLevel):
             raise TypeError("storageLevel must be of type pyspark.StorageLevel")
         assert self._jvm is not None
-        newStorageLevel = self._jvm.org.apache.spark.storage.StorageLevel
+        newStorageLevel = getattr(self._jvm, "org.apache.spark.storage.StorageLevel")
         return newStorageLevel(
             storageLevel.useDisk,
             storageLevel.useMemory,
@@ -2544,7 +2567,8 @@ class SparkContext:
         mappedRDD = rdd.mapPartitions(partitionFunc)
         assert self._jvm is not None
         sock_info = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, partitions)
-        return list(_load_from_socket(sock_info, mappedRDD._jrdd_deserializer))
+        with _load_from_socket(sock_info, mappedRDD._jrdd_deserializer) as stream:
+            return list(stream)
 
     def show_profiles(self) -> None:
         """Print the profile stats to stdout
@@ -2619,6 +2643,16 @@ class SparkContext:
                 messageParameters={},
             )
 
+    def _to_ddl(self, struct: "StructType") -> str:
+        assert self._jvm is not None
+        return self._jvm.PythonSQLUtils.jsonToDDL(struct.json())
+
+    def _parse_ddl(self, ddl: str) -> "DataType":
+        from pyspark.sql.types import _parse_datatype_json_string
+
+        assert self._jvm is not None
+        return _parse_datatype_json_string(self._jvm.PythonSQLUtils.ddlToJson(ddl))
+
 
 def _test() -> None:
     import doctest
@@ -2626,7 +2660,7 @@ def _test() -> None:
     globs = globals().copy()
     conf = SparkConf().set("spark.ui.enabled", "True")
     globs["sc"] = SparkContext("local[4]", "context tests", conf=conf)
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    failure_count, test_count = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs["sc"].stop()
     if failure_count:
         sys.exit(-1)

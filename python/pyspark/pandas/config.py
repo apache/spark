@@ -18,13 +18,14 @@
 """
 Infrastructure of options for pandas-on-Spark.
 """
+
 from contextlib import contextmanager
 import json
-from typing import Any, Callable, Dict, Iterator, List, Tuple, Union
+from typing import Any, Callable, Dict, Iterator, List, Tuple, Union, Optional
 
 from pyspark._globals import _NoValue, _NoValueType
+from pyspark.sql.session import SparkSession
 from pyspark.pandas.utils import default_session
-
 
 __all__ = ["get_option", "set_option", "reset_option", "options", "option_context"]
 
@@ -112,7 +113,7 @@ class Option:
 #
 # NOTE: if you are fixing or adding an option here, make sure you execute `show_options()` and
 #     copy & paste the results into show_options
-#     'docs/source/user_guide/pandas_on_spark/options.rst' as well.
+#     'python/docs/source/tutorial/pandas_on_spark/options.rst' as well.
 #     See the examples below:
 #     >>> from pyspark.pandas.config import show_options
 #     >>> show_options()
@@ -249,7 +250,7 @@ _options: List[Option] = [
         key="compute.isin_limit",
         doc=(
             "'compute.isin_limit' sets the limit for filtering by 'Column.isin(list)'. "
-            "If the length of the ‘list’ is above the limit, broadcast join is used instead "
+            "If the length of the 'list' is above the limit, broadcast join is used instead "
             "for better performance."
         ),
         default=80,
@@ -266,6 +267,27 @@ _options: List[Option] = [
             "to Pandas' implementation."
         ),
         default=False,
+        types=bool,
+    ),
+    Option(
+        key="compute.fail_on_ansi_mode",
+        doc=(
+            "'compute.fail_on_ansi_mode' sets whether or not work with ANSI mode. "
+            "If True, pandas API on Spark raises an exception if the underlying Spark is "
+            "working with ANSI mode enabled and the option 'compute.ansi_mode_support' is False."
+        ),
+        default=True,
+        types=bool,
+    ),
+    Option(
+        key="compute.ansi_mode_support",
+        doc=(
+            "'compute.ansi_mode_support' sets whether or not to support the ANSI mode of "
+            "the underlying Spark. "
+            "If False, pandas API on Spark may hit unexpected results or errors. "
+            "The default is False."
+        ),
+        default=True,
         types=bool,
     ),
     Option(
@@ -351,7 +373,12 @@ def show_options() -> None:
     print(row_format.format("=" * 31, "=" * 23, "=" * 53))
 
 
-def get_option(key: str, default: Union[Any, _NoValueType] = _NoValue) -> Any:
+def get_option(
+    key: str,
+    default: Union[Any, _NoValueType] = _NoValue,
+    *,
+    spark_session: Optional[SparkSession] = None,
+) -> Any:
     """
     Retrieves the value of the specified option.
 
@@ -361,6 +388,9 @@ def get_option(key: str, default: Union[Any, _NoValueType] = _NoValue) -> Any:
         The key which should match a single option.
     default : object
         The default value if the option is not set yet. The value should be JSON serializable.
+    spark_session : :class:`SparkSession`, optional
+        The explicit :class:`SparkSession` object to get the option.
+        If not specified, the default session will be used.
 
     Returns
     -------
@@ -374,12 +404,12 @@ def get_option(key: str, default: Union[Any, _NoValueType] = _NoValue) -> Any:
     if default is _NoValue:
         default = _options_dict[key].default
     _options_dict[key].validate(default)
-    spark_session = default_session()
+    spark_session = spark_session or default_session(check_ansi_mode=False)
 
     return json.loads(spark_session.conf.get(_key_format(key), default=json.dumps(default)))
 
 
-def set_option(key: str, value: Any) -> None:
+def set_option(key: str, value: Any, *, spark_session: Optional[SparkSession] = None) -> None:
     """
     Sets the value of the specified option.
 
@@ -389,6 +419,9 @@ def set_option(key: str, value: Any) -> None:
         The key which should match a single option.
     value : object
         New value of option. The value should be JSON serializable.
+    spark_session : :class:`SparkSession`, optional
+        The explicit :class:`SparkSession` object to set the option.
+        If not specified, the default session will be used.
 
     Returns
     -------
@@ -396,12 +429,12 @@ def set_option(key: str, value: Any) -> None:
     """
     _check_option(key)
     _options_dict[key].validate(value)
-    spark_session = default_session()
+    spark_session = spark_session or default_session(check_ansi_mode=False)
 
     spark_session.conf.set(_key_format(key), json.dumps(value))
 
 
-def reset_option(key: str) -> None:
+def reset_option(key: str, *, spark_session: Optional[SparkSession] = None) -> None:
     """
     Reset one option to their default value.
 
@@ -411,13 +444,17 @@ def reset_option(key: str) -> None:
     ----------
     key : str
         If specified only option will be reset.
+    spark_session : :class:`SparkSession`, optional
+        The explicit :class:`SparkSession` object to reset the option.
+        If not specified, the default session will be used.
 
     Returns
     -------
     None
     """
     _check_option(key)
-    default_session().conf.unset(_key_format(key))
+    spark_session = spark_session or default_session(check_ansi_mode=False)
+    spark_session.conf.unset(_key_format(key))
 
 
 @contextmanager
@@ -534,7 +571,7 @@ def _test() -> None:
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.config tests").getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.config,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

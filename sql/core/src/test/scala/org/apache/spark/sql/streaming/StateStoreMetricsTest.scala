@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming
 
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.sql.execution.streaming.StreamExecution
+import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.util.ArrayImplicits._
 
 trait StateStoreMetricsTest extends StreamTest {

@@ -280,7 +280,9 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("acosh") {
-    testUnary(Acosh, (x: Double) => StrictMath.log(x + math.sqrt(x * x - 1.0)))
+    def f: (Double) => Double = (x: Double) => StrictMath.log(x + math.sqrt(x * x - 1.0))
+    testUnary(Acosh, f, (10 to 20).map(_ * 0.1))
+    testUnary(Acosh, f, (-20 to 9).map(_ * 0.1), expectNaN = true)
     checkConsistencyBetweenInterpretedAndCodegen(Cosh, DoubleType)
 
     val nullLit = Literal.create(null, NullType)
@@ -963,4 +965,64 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(WidthBucket(5.35, 0.024, Double.NegativeInfinity, 5L), null)
     checkEvaluation(WidthBucket(5.35, 0.024, Double.PositiveInfinity, 5L), null)
   }
+
+  test("context independent foldable math expressions") {
+    // Create some base literals
+    val intLit = Literal(5)
+    val doubleLit = Literal(10.5)
+    val decimalLit = Literal(Decimal(7.5))
+
+    // Create math expressions using these literals
+    val expressions = Seq(
+      // Basic arithmetic
+      Add(intLit, Literal(10)),
+      Subtract(doubleLit, Literal(2.5)),
+      Multiply(intLit, Literal(2)),
+      Divide(decimalLit, Literal(Decimal(2.5))),
+      Remainder(intLit, Literal(2)),
+
+      // Unary operations
+      UnaryMinus(intLit),
+      Abs(Literal(-10)),
+
+      // Math functions
+      Log(doubleLit),
+      Log10(doubleLit),
+      Log2(doubleLit),
+      Exp(doubleLit),
+      Sqrt(doubleLit),
+      Floor(doubleLit),
+      Ceil(doubleLit),
+
+      // Trig functions
+      Sin(doubleLit),
+      Cos(doubleLit),
+      Tan(doubleLit),
+      Asin(Literal(0.5)),
+      Acos(Literal(0.5)),
+      Atan(doubleLit),
+
+      // Nested expressions
+      Add(Multiply(intLit, Literal(2)), Divide(doubleLit, Literal(2.0)))
+    )
+
+    expressions.foreach { expr =>
+      assert(expr.foldable, s"Expression $expr should be foldable")
+      assert(expr.contextIndependentFoldable,
+        s"Expression $expr should be context independent foldable")
+    }
+  }
+
+  test("SPARK-55557: hyperbolic functions should not overflow with large inputs") {
+    checkEvaluation(Asinh(Double.MaxValue), 710.4758600739439)
+    checkEvaluation(Asinh(Math.sqrt(Double.MaxValue)), 355.58450362725193)
+    checkEvaluation(Acosh(Double.MaxValue), 710.4758600739439)
+    checkEvaluation(Acosh(Math.sqrt(Double.MaxValue)), 355.58450362725193)
+    checkEvaluation(Asinh(Double.MinValue), -710.4758600739439)
+    checkEvaluation(Asinh(-Math.sqrt(Double.MaxValue)), -355.58450362725193)
+    checkNaN(Acosh(Double.MinValue))
+    checkNaN(Acosh(-Math.sqrt(Double.MaxValue) + 1))
+    checkNaN(Acosh(-Math.sqrt(Double.MaxValue) + 2))
+  }
+
 }

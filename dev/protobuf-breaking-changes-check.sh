@@ -35,7 +35,7 @@ fi
 
 pushd sql/connect/common/src/main &&
 echo "Start protobuf breaking changes checking against $BRANCH" &&
-buf breaking --against "https://github.com/apache/spark.git#branch=$BRANCH,subdir=connector/connect/common/src/main" &&
+buf breaking --against "https://github.com/apache/spark.git#branch=$BRANCH,subdir=sql/connect/common/src/main" &&
 echo "Finsh protobuf breaking changes checking: SUCCESS"
 
 if [[ $? -ne -0 ]]; then

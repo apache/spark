@@ -124,7 +124,6 @@ class ExecutorResourceRequest:
 
 
 class ExecutorResourceRequests:
-
     """
     A set of Executor resource requests. This is used in conjunction with the
     :class:`pyspark.resource.ResourceProfileBuilder` to programmatically specify the
@@ -148,16 +147,14 @@ class ExecutorResourceRequests:
     _OFFHEAP_MEM = "offHeap"
 
     @overload
-    def __init__(self, _jvm: "JVMView"):
-        ...
+    def __init__(self, _jvm: "JVMView"): ...
 
     @overload
     def __init__(
         self,
         _jvm: None = ...,
         _requests: Optional[Dict[str, ExecutorResourceRequest]] = ...,
-    ):
-        ...
+    ): ...
 
     def __init__(
         self,
@@ -173,9 +170,9 @@ class ExecutorResourceRequests:
             jvm = _jvm or SparkContext._jvm
 
         if jvm is not None:
-            self._java_executor_resource_requests = (
-                jvm.org.apache.spark.resource.ExecutorResourceRequests()
-            )
+            self._java_executor_resource_requests = getattr(
+                jvm, "org.apache.spark.resource.ExecutorResourceRequests"
+            )()
             if _requests is not None:
                 for k, v in _requests.items():
                     if k == self._MEMORY:
@@ -429,7 +426,6 @@ class TaskResourceRequest:
 
 
 class TaskResourceRequests:
-
     """
     A set of task resource requests. This is used in conjunction with the
     :class:`pyspark.resource.ResourceProfileBuilder` to programmatically specify the resources
@@ -449,16 +445,14 @@ class TaskResourceRequests:
     _CPUS = "cpus"
 
     @overload
-    def __init__(self, _jvm: "JVMView"):
-        ...
+    def __init__(self, _jvm: "JVMView"): ...
 
     @overload
     def __init__(
         self,
         _jvm: None = ...,
         _requests: Optional[Dict[str, TaskResourceRequest]] = ...,
-    ):
-        ...
+    ): ...
 
     def __init__(
         self,
@@ -474,9 +468,9 @@ class TaskResourceRequests:
             jvm = _jvm or SparkContext._jvm
 
         if jvm is not None:
-            self._java_task_resource_requests: Optional[
-                "JavaObject"
-            ] = jvm.org.apache.spark.resource.TaskResourceRequests()
+            self._java_task_resource_requests: Optional["JavaObject"] = getattr(
+                jvm, "org.apache.spark.resource.TaskResourceRequests"
+            )()
             if _requests is not None:
                 for k, v in _requests.items():
                     if k == self._CPUS:

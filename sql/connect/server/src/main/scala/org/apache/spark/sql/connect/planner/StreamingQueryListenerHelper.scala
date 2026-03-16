@@ -21,8 +21,10 @@ import java.io.EOFException
 
 import org.apache.spark.SparkException
 import org.apache.spark.api.python.{PythonException, PythonWorkerUtils, SimplePythonFunction, SpecialLengths, StreamingPythonRunner}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.FUNCTION_NAME
+import org.apache.spark.sql.connect.IllegalStateErrors
+import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.{SessionHolder, SparkConnectService}
 import org.apache.spark.sql.streaming.StreamingQueryListener
 
@@ -36,7 +38,10 @@ class PythonStreamingQueryListener(listener: SimplePythonFunction, sessionHolder
     with Logging {
 
   private val port = SparkConnectService.localPort
-  private val connectUrl = s"sc://localhost:$port/;user_id=${sessionHolder.userId}"
+  private var connectUrl = s"sc://localhost:$port/;user_id=${sessionHolder.userId}"
+  Connect.getAuthenticateToken.foreach { token =>
+    connectUrl = s"$connectUrl;token=$token"
+  }
   // Scoped for testing
   private[connect] val runner = StreamingPythonRunner(
     listener,
@@ -87,15 +92,17 @@ class PythonStreamingQueryListener(listener: SimplePythonFunction, sessionHolder
             log"Streaming query listener function ${MDC(FUNCTION_NAME, functionName)} " +
               log"completed (ret: 0)")
         case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
-          val msg = PythonWorkerUtils.readUTF(dataIn)
+          val traceback = PythonWorkerUtils.readUTF(dataIn)
+          val msg = s"Found error inside Streaming query listener Python " +
+            s"process for function $functionName"
           throw new PythonException(
-            s"Found error inside Streaming query listener Python " +
-              s"process for function $functionName: $msg",
-            null)
+            errorClass = "PYTHON_EXCEPTION",
+            messageParameters = Map("msg" -> msg, "traceback" -> traceback))
         case otherValue =>
-          throw new IllegalStateException(
-            s"Unexpected return value $otherValue from the " +
-              s"Python worker.")
+          throw IllegalStateErrors.streamingQueryUnexpectedReturnValue(
+            sessionHolder.key.toString,
+            otherValue,
+            s"streaming query listener function $functionName")
       }
     } catch {
       case eof: EOFException =>

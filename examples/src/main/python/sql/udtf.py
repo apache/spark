@@ -21,7 +21,7 @@ Run with:
   ./bin/spark-submit examples/src/main/python/sql/udtf.py
 """
 
-# NOTE that this file is imported in the User Guides in PySpark documentation.
+# NOTE that this file is imported in the tutorials in PySpark documentation.
 # The codes are referred via line numbers. See also `literalinclude` directive in Sphinx.
 from pyspark.sql import SparkSession
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version

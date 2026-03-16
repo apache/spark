@@ -855,6 +855,27 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
 
   /*
     =======================================================================================
+                                 REAL-TIME STREAMING
+    =======================================================================================
+  */
+
+  {
+    assertNotSupportedForRealTime(
+      "real-time without operators - append mode",
+      streamRelation,
+      Append,
+      "STREAMING_REAL_TIME_MODE.OUTPUT_MODE_NOT_SUPPORTED"
+    )
+
+    assertSupportedForRealTime(
+      "real-time with stream-batch join - update mode",
+      streamRelation.join(batchRelation, joinType = Inner),
+      Update
+    )
+  }
+
+  /*
+    =======================================================================================
                                      TESTING FUNCTIONS
     =======================================================================================
    */
@@ -1014,6 +1035,31 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     outputMode: OutputMode): Unit = {
     test(s"continuous processing - $name: supported") {
       UnsupportedOperationChecker.checkForContinuous(plan, outputMode)
+    }
+  }
+
+  /** Assert that the logical plan is supported for real-time mode */
+  def assertSupportedForRealTime(name: String, plan: LogicalPlan, outputMode: OutputMode): Unit = {
+    test(s"real-time trigger - $name: supported") {
+      UnsupportedOperationChecker.checkAdditionalRealTimeModeConstraints(plan, outputMode)
+    }
+  }
+
+  /**
+   * Assert that the logical plan is not supported inside a streaming plan with the
+   * real-time trigger.
+   */
+  def assertNotSupportedForRealTime(
+      name: String,
+      plan: LogicalPlan,
+      outputMode: OutputMode,
+      condition: String): Unit = {
+    testError(
+      s"real-time trigger - $name: not supported",
+      Seq("Streaming real-time mode"),
+      condition
+    ) {
+      UnsupportedOperationChecker.checkAdditionalRealTimeModeConstraints(plan, outputMode)
     }
   }
 

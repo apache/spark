@@ -395,7 +395,7 @@ Input [2]: [d_date_sk#29, d_month_seq#41]
 
 (67) Filter [codegen id : 1]
 Input [2]: [d_date_sk#29, d_month_seq#41]
-Condition : (((isnotnull(d_month_seq#41) AND (d_month_seq#41 >= ReusedSubquery Subquery scalar-subquery#42, [id=#44])) AND (d_month_seq#41 <= ReusedSubquery Subquery scalar-subquery#43, [id=#45])) AND isnotnull(d_date_sk#29))
+Condition : (((isnotnull(d_month_seq#41) AND (d_month_seq#41 >= ReusedSubquery Subquery scalar-subquery#42, [id=#9])) AND (d_month_seq#41 <= ReusedSubquery Subquery scalar-subquery#43, [id=#10])) AND isnotnull(d_date_sk#29))
 
 (68) Project [codegen id : 1]
 Output [1]: [d_date_sk#29]
@@ -403,13 +403,13 @@ Input [2]: [d_date_sk#29, d_month_seq#41]
 
 (69) BroadcastExchange
 Input [1]: [d_date_sk#29]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=9]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=11]
 
-Subquery:4 Hosting operator id = 67 Hosting Expression = ReusedSubquery Subquery scalar-subquery#42, [id=#44]
+Subquery:4 Hosting operator id = 67 Hosting Expression = ReusedSubquery Subquery scalar-subquery#42, [id=#9]
 
-Subquery:5 Hosting operator id = 67 Hosting Expression = ReusedSubquery Subquery scalar-subquery#43, [id=#45]
+Subquery:5 Hosting operator id = 67 Hosting Expression = ReusedSubquery Subquery scalar-subquery#43, [id=#10]
 
-Subquery:6 Hosting operator id = 65 Hosting Expression = Subquery scalar-subquery#42, [id=#44]
+Subquery:6 Hosting operator id = 65 Hosting Expression = Subquery scalar-subquery#42, [id=#9]
 * HashAggregate (76)
 +- Exchange (75)
    +- * HashAggregate (74)
@@ -420,42 +420,42 @@ Subquery:6 Hosting operator id = 65 Hosting Expression = Subquery scalar-subquer
 
 
 (70) Scan parquet spark_catalog.default.date_dim
-Output [3]: [d_month_seq#46, d_year#47, d_moy#48]
+Output [3]: [d_month_seq#44, d_year#45, d_moy#46]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,1998), EqualTo(d_moy,12)]
 ReadSchema: struct<d_month_seq:int,d_year:int,d_moy:int>
 
 (71) ColumnarToRow [codegen id : 1]
-Input [3]: [d_month_seq#46, d_year#47, d_moy#48]
+Input [3]: [d_month_seq#44, d_year#45, d_moy#46]
 
 (72) Filter [codegen id : 1]
-Input [3]: [d_month_seq#46, d_year#47, d_moy#48]
-Condition : (((isnotnull(d_year#47) AND isnotnull(d_moy#48)) AND (d_year#47 = 1998)) AND (d_moy#48 = 12))
+Input [3]: [d_month_seq#44, d_year#45, d_moy#46]
+Condition : (((isnotnull(d_year#45) AND isnotnull(d_moy#46)) AND (d_year#45 = 1998)) AND (d_moy#46 = 12))
 
 (73) Project [codegen id : 1]
-Output [1]: [(d_month_seq#46 + 1) AS (d_month_seq + 1)#49]
-Input [3]: [d_month_seq#46, d_year#47, d_moy#48]
+Output [1]: [(d_month_seq#44 + 1) AS (d_month_seq + 1)#47]
+Input [3]: [d_month_seq#44, d_year#45, d_moy#46]
 
 (74) HashAggregate [codegen id : 1]
-Input [1]: [(d_month_seq + 1)#49]
-Keys [1]: [(d_month_seq + 1)#49]
+Input [1]: [(d_month_seq + 1)#47]
+Keys [1]: [(d_month_seq + 1)#47]
 Functions: []
 Aggregate Attributes: []
-Results [1]: [(d_month_seq + 1)#49]
+Results [1]: [(d_month_seq + 1)#47]
 
 (75) Exchange
-Input [1]: [(d_month_seq + 1)#49]
-Arguments: hashpartitioning((d_month_seq + 1)#49, 5), ENSURE_REQUIREMENTS, [plan_id=10]
+Input [1]: [(d_month_seq + 1)#47]
+Arguments: hashpartitioning((d_month_seq + 1)#47, 5), ENSURE_REQUIREMENTS, [plan_id=12]
 
 (76) HashAggregate [codegen id : 2]
-Input [1]: [(d_month_seq + 1)#49]
-Keys [1]: [(d_month_seq + 1)#49]
+Input [1]: [(d_month_seq + 1)#47]
+Keys [1]: [(d_month_seq + 1)#47]
 Functions: []
 Aggregate Attributes: []
-Results [1]: [(d_month_seq + 1)#49]
+Results [1]: [(d_month_seq + 1)#47]
 
-Subquery:7 Hosting operator id = 65 Hosting Expression = Subquery scalar-subquery#43, [id=#45]
+Subquery:7 Hosting operator id = 65 Hosting Expression = Subquery scalar-subquery#43, [id=#10]
 * HashAggregate (83)
 +- Exchange (82)
    +- * HashAggregate (81)
@@ -466,39 +466,39 @@ Subquery:7 Hosting operator id = 65 Hosting Expression = Subquery scalar-subquer
 
 
 (77) Scan parquet spark_catalog.default.date_dim
-Output [3]: [d_month_seq#50, d_year#51, d_moy#52]
+Output [3]: [d_month_seq#48, d_year#49, d_moy#50]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,1998), EqualTo(d_moy,12)]
 ReadSchema: struct<d_month_seq:int,d_year:int,d_moy:int>
 
 (78) ColumnarToRow [codegen id : 1]
-Input [3]: [d_month_seq#50, d_year#51, d_moy#52]
+Input [3]: [d_month_seq#48, d_year#49, d_moy#50]
 
 (79) Filter [codegen id : 1]
-Input [3]: [d_month_seq#50, d_year#51, d_moy#52]
-Condition : (((isnotnull(d_year#51) AND isnotnull(d_moy#52)) AND (d_year#51 = 1998)) AND (d_moy#52 = 12))
+Input [3]: [d_month_seq#48, d_year#49, d_moy#50]
+Condition : (((isnotnull(d_year#49) AND isnotnull(d_moy#50)) AND (d_year#49 = 1998)) AND (d_moy#50 = 12))
 
 (80) Project [codegen id : 1]
-Output [1]: [(d_month_seq#50 + 3) AS (d_month_seq + 3)#53]
-Input [3]: [d_month_seq#50, d_year#51, d_moy#52]
+Output [1]: [(d_month_seq#48 + 3) AS (d_month_seq + 3)#51]
+Input [3]: [d_month_seq#48, d_year#49, d_moy#50]
 
 (81) HashAggregate [codegen id : 1]
-Input [1]: [(d_month_seq + 3)#53]
-Keys [1]: [(d_month_seq + 3)#53]
+Input [1]: [(d_month_seq + 3)#51]
+Keys [1]: [(d_month_seq + 3)#51]
 Functions: []
 Aggregate Attributes: []
-Results [1]: [(d_month_seq + 3)#53]
+Results [1]: [(d_month_seq + 3)#51]
 
 (82) Exchange
-Input [1]: [(d_month_seq + 3)#53]
-Arguments: hashpartitioning((d_month_seq + 3)#53, 5), ENSURE_REQUIREMENTS, [plan_id=11]
+Input [1]: [(d_month_seq + 3)#51]
+Arguments: hashpartitioning((d_month_seq + 3)#51, 5), ENSURE_REQUIREMENTS, [plan_id=13]
 
 (83) HashAggregate [codegen id : 2]
-Input [1]: [(d_month_seq + 3)#53]
-Keys [1]: [(d_month_seq + 3)#53]
+Input [1]: [(d_month_seq + 3)#51]
+Keys [1]: [(d_month_seq + 3)#51]
 Functions: []
 Aggregate Attributes: []
-Results [1]: [(d_month_seq + 3)#53]
+Results [1]: [(d_month_seq + 3)#51]
 
 

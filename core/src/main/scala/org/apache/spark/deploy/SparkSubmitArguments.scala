@@ -28,7 +28,7 @@ import scala.util.Try
 
 import org.apache.spark.{SparkConf, SparkException, SparkUserAppException}
 import org.apache.spark.deploy.SparkSubmitAction._
-import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.DYN_ALLOCATION_ENABLED
 import org.apache.spark.launcher.SparkSubmitArgumentsParser
@@ -51,6 +51,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var executorCores: String = null
   var totalExecutorCores: String = null
   var propertiesFile: String = null
+  var extraPropertiesFiles: Seq[String] = Nil
   private var loadSparkDefaults: Boolean = false
   var driverMemory: String = null
   var driverExtraClassPath: String = null
@@ -132,8 +133,33 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
    * When this is called, `sparkProperties` is already filled with configs from the latter.
    */
   private def mergeDefaultSparkProperties(): Unit = {
+    // Save properties from --conf (these have the highest priority)
+    val confProperties = sparkProperties.clone()
+
     // Honor --conf before the specified properties file and defaults file
     loadPropertiesFromFile(propertiesFile)
+
+    // Extra properties files should override base properties file
+    // Later files override earlier files
+    extraPropertiesFiles.foreach { filePath =>
+      if (filePath != null) {
+        if (verbose) {
+          logInfo(log"Using properties file: ${MDC(PATH, filePath)}")
+        }
+        val properties = Utils.getPropertiesFromFile(filePath)
+        properties.foreach { case (k, v) =>
+          // Override any existing property except those from --conf
+          if (!confProperties.contains(k)) {
+            sparkProperties(k) = v
+          }
+        }
+        if (verbose) {
+          Utils.redact(properties).foreach { case (k, v) =>
+            logInfo(log"Adding default property: ${MDC(KEY, k)}=${MDC(VALUE, v)}")
+          }
+        }
+      }
+    }
 
     // Also load properties from `spark-defaults.conf` if they do not exist in the properties file
     // and --conf list when:
@@ -253,8 +279,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     if (args.length == 0) {
       printUsageAndExit(-1)
     }
-    if (!sparkProperties.contains("spark.local.connect") &&
-        maybeRemote.isDefined && (maybeMaster.isDefined || deployMode != null)) {
+    if (maybeRemote.isDefined && (maybeMaster.isDefined || deployMode != null)) {
       error("Remote cannot be specified with master and/or deploy mode.")
     }
     if (primaryResource == null) {
@@ -320,6 +345,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     |  executorCores           $executorCores
     |  totalExecutorCores      $totalExecutorCores
     |  propertiesFile          $propertiesFile
+    |  extraPropertiesFiles    [${extraPropertiesFiles.mkString(", ")}]
     |  driverMemory            $driverMemory
     |  driverCores             $driverCores
     |  driverExtraClassPath    $driverExtraClassPath
@@ -342,7 +368,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     |  verbose                 $verbose
     |
     |Spark properties used, including those specified through
-    | --conf and those from the properties file $propertiesFile:
+    | --conf and those from the properties files:
     |${Utils.redact(sparkProperties).sorted.mkString("  ", "\n  ", "\n")}
     """.stripMargin
   }
@@ -397,6 +423,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
 
       case PROPERTIES_FILE =>
         propertiesFile = value
+
+      case EXTRA_PROPERTIES_FILE =>
+        extraPropertiesFiles :+= value
 
       case LOAD_SPARK_DEFAULTS =>
         loadSparkDefaults = true
@@ -568,8 +597,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         | Spark Connect only:
         |   --remote CONNECT_URL       URL to connect to the server for Spark Connect, e.g.,
         |                              sc://host:port. --master and --deploy-mode cannot be set
-        |                              together with this option. This option is experimental, and
-        |                              might change between minor releases.
+        |                              together with this option.
         |
         | Cluster deploy mode only:
         |  --driver-cores NUM          Number of cores used by the driver, only in cluster mode

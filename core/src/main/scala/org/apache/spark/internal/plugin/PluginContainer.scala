@@ -22,7 +22,7 @@ import scala.util.{Either, Left, Right}
 
 import org.apache.spark.{SparkContext, SparkEnv, TaskFailedReason}
 import org.apache.spark.api.plugin._
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.util.Utils

@@ -17,15 +17,16 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.{Closeable, FileNotFoundException, IOException}
+import java.io.{Closeable, FileNotFoundException}
 import java.net.URI
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hdfs.BlockMissingException
+import org.apache.hadoop.security.AccessControlException
 
 import org.apache.spark.{Partition => RDDPartition, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.LogKeys.{CURRENT_FILE, PATH}
-import org.apache.spark.internal.MDC
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
 import org.apache.spark.sql.SparkSession
@@ -266,7 +267,9 @@ class FileScanRDD(
                     null
                   // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
                   case e: FileNotFoundException if !ignoreMissingFiles => throw e
-                  case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
+                  case e @ (_ : AccessControlException | _ : BlockMissingException) => throw e
+                  case e if ignoreCorruptFiles &&
+                      DataSourceUtils.shouldIgnoreCorruptFileException(e) =>
                     logWarning(log"Skipped the rest of the content in the corrupted file: " +
                       log"${MDC(PATH, currentFile)}", e)
                     finished = true

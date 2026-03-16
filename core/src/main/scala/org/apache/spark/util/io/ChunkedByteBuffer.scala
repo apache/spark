@@ -21,10 +21,8 @@ import java.io.{Externalizable, File, FileInputStream, InputStream, ObjectInput,
 import java.nio.ByteBuffer
 import java.nio.channels.WritableByteChannel
 
-import com.google.common.io.ByteStreams
 import com.google.common.primitives.UnsignedBytes
 import io.netty.handler.stream.ChunkedStream
-import org.apache.commons.io.IOUtils
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.config
@@ -246,12 +244,12 @@ private[spark] object ChunkedByteBuffer {
     // and spark currently is not expecting memory-mapped buffers in the memory store, it conflicts
     // with other parts that manage the lifecycle of buffers and dispose them.  See SPARK-25422.
     val is = new FileInputStream(file)
-    ByteStreams.skipFully(is, offset)
+    is.skipNBytes(offset)
     val in = new LimitedInputStream(is, length)
     val chunkSize = math.min(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH, length).toInt
     val out = new ChunkedByteBufferOutputStream(chunkSize, ByteBuffer.allocate _)
     Utils.tryWithSafeFinally {
-      IOUtils.copy(in, out)
+      in.transferTo(out)
     } {
       in.close()
       out.close()

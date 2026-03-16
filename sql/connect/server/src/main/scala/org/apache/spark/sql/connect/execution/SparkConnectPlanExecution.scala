@@ -19,7 +19,7 @@ package org.apache.spark.sql.connect.execution
 
 import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters._
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
@@ -27,18 +27,20 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.SparkEnv
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
-import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
-import org.apache.spark.sql.connect.planner.SparkConnectPlanner
+import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_ARROW_MAX_BATCH_SIZE, CONNECT_SESSION_RESULT_CHUNKING_MAX_CHUNK_SIZE}
+import org.apache.spark.sql.connect.planner.{InvalidInputErrors, SparkConnectPlanner}
 import org.apache.spark.sql.connect.service.ExecuteHolder
-import org.apache.spark.sql.connect.utils.MetricGenerator
-import org.apache.spark.sql.execution.{DoNotCleanup, LocalTableScanExec, RemoveShuffleFiles, SkipMigration, SQLExecution}
+import org.apache.spark.sql.connect.utils.{ErrorUtils, MetricGenerator, PipelineAnalysisContextUtils}
+import org.apache.spark.sql.execution.{CollectLimitExec, CollectTailExec, DoNotCleanup, LocalTableScanExec, QueryExecution, RemoveShuffleFiles, SkipMigration, SQLExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -53,32 +55,55 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
 
   def handlePlan(responseObserver: ExecuteResponseObserver[proto.ExecutePlanResponse]): Unit = {
     val request = executeHolder.request
-    if (request.getPlan.getOpTypeCase != proto.Plan.OpTypeCase.ROOT) {
-      throw new IllegalStateException(
-        s"Illegal operation type ${request.getPlan.getOpTypeCase} to be handled here.")
-    }
     val planner = new SparkConnectPlanner(executeHolder)
     val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
     val conf = session.sessionState.conf
     val shuffleCleanupMode =
-      if (conf.getConf(SQLConf.SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED)) {
+      if (conf.getConf(SQLConf.CONNECT_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED)) {
         RemoveShuffleFiles
       } else if (conf.getConf(SQLConf.SHUFFLE_DEPENDENCY_SKIP_MIGRATION_ENABLED)) {
         SkipMigration
       } else {
         DoNotCleanup
       }
-    val dataframe =
-      Dataset.ofRows(
-        sessionHolder.session,
-        planner.transformRelation(request.getPlan.getRoot, cachePlan = true),
-        tracker,
-        shuffleCleanupMode)
-    responseObserver.onNext(createSchemaResponse(request.getSessionId, dataframe.schema))
-    processAsArrowBatches(dataframe, responseObserver, executeHolder)
-    responseObserver.onNext(MetricGenerator.createMetricsResponse(sessionHolder, dataframe))
-    createObservedMetricsResponse(request.getSessionId, dataframe).foreach(
-      responseObserver.onNext)
+    val userContext = request.getUserContext
+
+    // if the eager execution is triggered inside pipeline flow function,
+    // block the eager execution command that is not allowed.
+    if (PipelineAnalysisContextUtils.isUnsupportedEagerExecutionInsideFlowFunction(
+        userContext = userContext,
+        plan = request.getPlan)) {
+      throw new AnalysisException("ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION", Map())
+    }
+
+    request.getPlan.getOpTypeCase match {
+      case proto.Plan.OpTypeCase.ROOT =>
+        val dataframe =
+          Dataset.ofRows(
+            sessionHolder.session,
+            planner.transformRelation(request.getPlan.getRoot, cachePlan = true),
+            tracker,
+            shuffleCleanupMode)
+        responseObserver.onNext(createSchemaResponse(request.getSessionId, dataframe.schema))
+        processAsArrowBatches(dataframe, responseObserver, executeHolder)
+        responseObserver.onNext(MetricGenerator.createMetricsResponse(sessionHolder, dataframe))
+      case proto.Plan.OpTypeCase.COMMAND =>
+        val command = request.getPlan.getCommand
+        planner.transformCommand(command) match {
+          case Some(transformer) =>
+            val qe = new QueryExecution(
+              session,
+              transformer(tracker),
+              tracker,
+              shuffleCleanupModeOpt = Some(shuffleCleanupMode))
+            qe.assertCommandExecuted()
+            executeHolder.eventsManager.postFinished()
+          case None =>
+            planner.process(command, responseObserver)
+        }
+      case other =>
+        throw InvalidInputErrors.invalidOneOfField(other, request.getPlan.getDescriptorForType)
+    }
   }
 
   type Batch = (Array[Byte], Long)
@@ -88,14 +113,16 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       maxRecordsPerBatch: Int,
       maxBatchSize: Long,
       timeZoneId: String,
-      errorOnDuplicatedFieldNames: Boolean): Iterator[InternalRow] => Iterator[Batch] = { rows =>
+      errorOnDuplicatedFieldNames: Boolean,
+      largeVarTypes: Boolean): Iterator[InternalRow] => Iterator[Batch] = { rows =>
     val batches = ArrowConverters.toBatchWithSchemaIterator(
       rows,
       schema,
       maxRecordsPerBatch,
       maxBatchSize,
       timeZoneId,
-      errorOnDuplicatedFieldNames)
+      errorOnDuplicatedFieldNames,
+      largeVarTypes)
     batches.map(b => b -> batches.rowCountInLastBatch)
   }
 
@@ -106,36 +133,85 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     val sessionId = executePlan.sessionHolder.sessionId
     val spark = dataframe.sparkSession
     val schema = dataframe.schema
+    TypeUtils.failUnsupportedDataType(schema, spark.sessionState.conf)
     val maxRecordsPerBatch = spark.sessionState.conf.arrowMaxRecordsPerBatch
     val timeZoneId = spark.sessionState.conf.sessionLocalTimeZone
+    val largeVarTypes = spark.sessionState.conf.arrowUseLargeVarTypes
     // Conservatively sets it 70% because the size is not accurate but estimated.
     val maxBatchSize = (SparkEnv.get.conf.get(CONNECT_GRPC_ARROW_MAX_BATCH_SIZE) * 0.7).toLong
+    // Whether to enable arrow batch chunking for large result batches.
+    val isResultChunkingEnabled = executePlan.resultChunkingEnabled
 
     val converter = rowToArrowConverter(
       schema,
       maxRecordsPerBatch,
       maxBatchSize,
       timeZoneId,
-      errorOnDuplicatedFieldNames = false)
+      errorOnDuplicatedFieldNames = false,
+      largeVarTypes = largeVarTypes)
 
     var numSent = 0
     def sendBatch(bytes: Array[Byte], count: Long, startOffset: Long): Unit = {
-      val response = proto.ExecutePlanResponse
-        .newBuilder()
-        .setSessionId(sessionId)
-        .setServerSideSessionId(sessionHolder.serverSessionId)
+      def newExecutePlanResponseBuilder = {
+        proto.ExecutePlanResponse
+          .newBuilder()
+          .setSessionId(sessionId)
+          .setServerSideSessionId(sessionHolder.serverSessionId)
+      }
+      if (isResultChunkingEnabled) {
+        // Result chunking is enabled. Split the result batch into multiple chunks if needed.
+        // The server will attempt to use the preferred chunk size if it is set and within the
+        // valid range ([1KB, max batch size on server]). Otherwise, the server's max batch size
+        // is used.
+        val maxChunkSize = executePlan.preferredArrowChunkSize match {
+          case Some(preferred)
+              if preferred >= 1024 &&
+                preferred <= spark.conf.get(CONNECT_SESSION_RESULT_CHUNKING_MAX_CHUNK_SIZE) =>
+            preferred
+          case _ =>
+            spark.conf.get(CONNECT_SESSION_RESULT_CHUNKING_MAX_CHUNK_SIZE).toInt
+        }
+        val numChunks = (bytes.length + maxChunkSize - 1) / maxChunkSize
 
-      val batch = proto.ExecutePlanResponse.ArrowBatch
-        .newBuilder()
-        .setRowCount(count)
-        .setData(ByteString.copyFrom(bytes))
-        .setStartOffset(startOffset)
-        .build()
-      response.setArrowBatch(batch)
-      responseObserver.onNext(response.build())
+        (0 until numChunks).foreach { i =>
+          val from = i * maxChunkSize
+          val to = math.min(from + maxChunkSize, bytes.length)
+          val length = to - from
+
+          val response = newExecutePlanResponseBuilder
+          val batch = proto.ExecutePlanResponse.ArrowBatch
+            .newBuilder()
+            .setRowCount(count) // same for all chunks - total rows
+            .setData(ByteString.copyFrom(bytes, from, length))
+            .setStartOffset(startOffset)
+            .setChunkIndex(i)
+            .setNumChunksInBatch(numChunks) // same for all chunks - num chunks
+            .build()
+          response.setArrowBatch(batch)
+          responseObserver.onNext(response.build())
+        }
+      } else {
+        // Result chunking is not enabled. Return the entire batch without chunking.
+        val response = newExecutePlanResponseBuilder
+        val batch = proto.ExecutePlanResponse.ArrowBatch
+          .newBuilder()
+          .setRowCount(count)
+          .setData(ByteString.copyFrom(bytes))
+          .setStartOffset(startOffset)
+          .build()
+        response.setArrowBatch(batch)
+        responseObserver.onNext(response.build())
+      }
       numSent += 1
     }
-
+    def sendCollectedRows(rows: Array[InternalRow]): Unit = {
+      executePlan.eventsManager.postFinished(Some(rows.length))
+      var offset = 0L
+      converter(rows.iterator).foreach { case (bytes, count) =>
+        sendBatch(bytes, count, offset)
+        offset += count
+      }
+    }
     dataframe.queryExecution.executedPlan match {
       case LocalTableScanExec(_, rows, _) =>
         executePlan.eventsManager.postFinished(Some(rows.length))
@@ -143,6 +219,14 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
         converter(rows.iterator).foreach { case (bytes, count) =>
           sendBatch(bytes, count, offset)
           offset += count
+        }
+      case collectLimit: CollectLimitExec =>
+        SQLExecution.withNewExecutionId(dataframe.queryExecution, Some("collectLimitArrow")) {
+          sendCollectedRows(collectLimit.executeCollect())
+        }
+      case collectTail: CollectTailExec =>
+        SQLExecution.withNewExecutionId(dataframe.queryExecution, Some("collectTailArrow")) {
+          sendCollectedRows(collectTail.executeCollect())
         }
       case _ =>
         SQLExecution.withNewExecutionId(dataframe.queryExecution, Some("collectArrow")) {
@@ -237,7 +321,8 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
         ArrowConverters.createEmptyArrowBatch(
           schema,
           timeZoneId,
-          errorOnDuplicatedFieldNames = false),
+          errorOnDuplicatedFieldNames = false,
+          largeVarTypes = largeVarTypes),
         0L,
         0L)
     }
@@ -252,46 +337,48 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       .setSchema(DataTypeProtoConverter.toConnectProtoType(schema))
       .build()
   }
-
-  private def createObservedMetricsResponse(
-      sessionId: String,
-      dataframe: DataFrame): Option[ExecutePlanResponse] = {
-    val observedMetrics = dataframe.queryExecution.observedMetrics.collect {
-      case (name, row) if !executeHolder.observations.contains(name) =>
-        val values = (0 until row.length).map { i =>
-          (if (row.schema != null) Some(row.schema.fieldNames(i)) else None, row(i))
-        }
-        name -> values
-    }
-    if (observedMetrics.nonEmpty) {
-      val planId = executeHolder.request.getPlan.getRoot.getCommon.getPlanId
-      Some(
-        SparkConnectPlanExecution
-          .createObservedMetricsResponse(
-            sessionId,
-            sessionHolder.serverSessionId,
-            planId,
-            observedMetrics))
-    } else None
-  }
 }
 
 object SparkConnectPlanExecution {
+
+  def toObservedMetricsValues(row: Row): Seq[(Option[String], Any, Option[DataType])] = {
+    if (row.schema == null) {
+      (0 until row.length).map { i => (None, row(i), None) }
+    } else {
+      (0 until row.length).map { i =>
+        (Some(row.schema.fieldNames(i)), row(i), Some(row.schema(i).dataType))
+      }
+    }
+  }
+
   def createObservedMetricsResponse(
       sessionId: String,
       serverSessionId: String,
-      planId: Long,
-      metrics: Map[String, Seq[(Option[String], Any)]]): ExecutePlanResponse = {
-    val observedMetrics = metrics.map { case (name, values) =>
-      val metrics = ExecutePlanResponse.ObservedMetrics
+      observationAndPlanIds: Map[String, Long],
+      metrics: Map[String, Try[Seq[(Option[String], Any, Option[DataType])]]])
+      : ExecutePlanResponse = {
+    val observedMetrics = metrics.map { case (name, result) =>
+      val metricsBuilder = ExecutePlanResponse.ObservedMetrics
         .newBuilder()
         .setName(name)
-        .setPlanId(planId)
-      values.foreach { case (key, value) =>
-        metrics.addValues(toLiteralProto(value))
-        key.foreach(metrics.addKeys)
+      result match {
+        case Success(values) =>
+          values.foreach { case (keyOpt, value, dataTypeOpt) =>
+            dataTypeOpt match {
+              case Some(dataType) =>
+                metricsBuilder.addValues(toLiteralProto(value, dataType))
+              case None =>
+                metricsBuilder.addValues(toLiteralProto(value))
+            }
+            keyOpt.foreach(metricsBuilder.addKeys)
+          }
+        case Failure(throwable) =>
+          val (rootErrorIdx, errors) = ErrorUtils.throwableToProtoErrors(throwable)
+          metricsBuilder.setRootErrorIdx(rootErrorIdx)
+          metricsBuilder.addAllErrors(errors.asJava)
       }
-      metrics.build()
+      observationAndPlanIds.get(name).foreach(metricsBuilder.setPlanId)
+      metricsBuilder.build()
     }
     // Prepare a response with the observed metrics.
     ExecutePlanResponse

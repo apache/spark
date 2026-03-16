@@ -62,7 +62,7 @@ object CharVarcharBenchmark extends SqlBasedBenchmark {
             createTable(tblName, colType, path)
             spark.range(card).map { _ =>
               if (hasSpaces) {
-                "st" + " " * length
+                "st" + " ".repeat(length)
               } else {
                 "st"
               }

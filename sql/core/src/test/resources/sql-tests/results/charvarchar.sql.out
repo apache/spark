@@ -50,8 +50,8 @@ show create table char_tbl
 struct<createtab_stmt:string>
 -- !query output
 CREATE TABLE spark_catalog.default.char_tbl (
-  c CHAR(5),
-  v VARCHAR(6))
+  c CHAR(5) COLLATE UTF8_BINARY,
+  v VARCHAR(6) COLLATE UTF8_BINARY)
 USING parquet
 
 
@@ -69,8 +69,8 @@ show create table char_tbl2
 struct<createtab_stmt:string>
 -- !query output
 CREATE TABLE spark_catalog.default.char_tbl2 (
-  c CHAR(5),
-  v VARCHAR(6))
+  c CHAR(5) COLLATE UTF8_BINARY,
+  v VARCHAR(6) COLLATE UTF8_BINARY)
 USING parquet
 
 
@@ -162,8 +162,8 @@ show create table char_tbl3
 struct<createtab_stmt:string>
 -- !query output
 CREATE TABLE spark_catalog.default.char_tbl3 (
-  c CHAR(5),
-  v VARCHAR(6))
+  c CHAR(5) COLLATE UTF8_BINARY,
+  v VARCHAR(6) COLLATE UTF8_BINARY)
 USING parquet
 
 
@@ -195,7 +195,7 @@ View Text           	select * from char_tbl
 View Original Text  	select * from char_tbl	                    
 View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c, v]
+View Query Output Columns	[`c`, `v`]
 
 
 -- !query
@@ -366,7 +366,7 @@ View Text           	select * from char_tbl2
 View Original Text  	select * from char_tbl2	                    
 View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c, v]
+View Query Output Columns	[`c`, `v`]
 
 
 -- !query
@@ -427,7 +427,7 @@ View Text           	select * from char_tbl2
 View Original Text  	select * from char_tbl2	                    
 View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c, v]              	                    
+View Query Output Columns	[`c`, `v`]          	                    
 Table Properties    	[yes=no]
 
 
@@ -488,7 +488,7 @@ View Text           	select * from char_tbl2
 View Original Text  	select * from char_tbl2	                    
 View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c, v]
+View Query Output Columns	[`c`, `v`]
 
 
 -- !query

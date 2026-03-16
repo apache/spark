@@ -137,7 +137,7 @@ class Node @Since("1.2.0") (
         }
       }
     }
-    val prefix: String = " " * indentFactor
+    val prefix: String = " ".repeat(indentFactor)
     if (isLeaf) {
       prefix + s"Predict: ${predict.predict}\n"
     } else {

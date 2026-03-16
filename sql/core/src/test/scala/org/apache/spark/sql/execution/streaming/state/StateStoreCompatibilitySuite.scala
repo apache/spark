@@ -19,13 +19,11 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io.File
 
-import org.apache.commons.io.FileUtils
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Update
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamTest
@@ -37,7 +35,7 @@ class StateStoreCompatibilitySuite extends StreamTest with StateStoreCodecsTest 
      val resourceUri = this.getClass.getResource(
        "/structured-streaming/checkpoint-version-3.0.0-streaming-statestore-codec/").toURI
      val checkpointDir = Utils.createTempDir().getCanonicalFile
-     FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+     Utils.copyDirectory(new File(resourceUri), checkpointDir)
 
      import testImplicits._
 

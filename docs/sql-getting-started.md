@@ -124,9 +124,9 @@ latter form, which is future proof and won't break with column names that
 are also attributes on the DataFrame class.
 
 {% include_example untyped_ops python/sql/basic.py %}
-For a complete list of the types of operations that can be performed on a DataFrame refer to the [API Documentation](api/python/reference/pyspark.sql.html#dataframe-apis).
+For a complete list of the types of operations that can be performed on a DataFrame refer to the [API Documentation](api/python/reference/pyspark.sql/dataframe.html).
 
-In addition to simple column references and expressions, DataFrames also have a rich library of functions including string manipulation, date arithmetic, common math operations and more. The complete list is available in the [DataFrame Function Reference](api/python/reference/pyspark.sql.html#functions).
+In addition to simple column references and expressions, DataFrames also have a rich library of functions including string manipulation, date arithmetic, common math operations and more. The complete list is available in the [DataFrame Function Reference](api/python/reference/pyspark.sql/functions.html).
 
 </div>
 

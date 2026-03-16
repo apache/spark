@@ -609,12 +609,15 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-        val message = intercept[AnalysisException] {
-          sql(s"ANALYZE TABLE $tableName PARTITION (DS='2010-01-01') COMPUTE STATISTICS")
-        }.getMessage
-        assert(message.contains(
-          "DS is not a valid partition column in table " +
-            s"`$SESSION_CATALOG_NAME`.`default`.`$tableName`"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"ANALYZE TABLE $tableName PARTITION (DS='2010-01-01') COMPUTE STATISTICS")
+          },
+          condition = "PARTITIONS_NOT_FOUND",
+          parameters = Map(
+            "partitionList" -> "`DS`",
+            "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$tableName`")
+        )
       }
     }
   }
@@ -692,16 +695,26 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
       sql(s"INSERT INTO TABLE $tableName PARTITION (ds='2010-01-01') SELECT * FROM src")
 
-      assertAnalysisException(
-        s"ANALYZE TABLE $tableName PARTITION (hour=20) COMPUTE STATISTICS",
-        "hour is not a valid partition column in table " +
-          s"`$SESSION_CATALOG_NAME`.`default`.`${tableName.toLowerCase(Locale.ROOT)}`"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $tableName PARTITION (hour=20) COMPUTE STATISTICS")
+        },
+        condition = "PARTITIONS_NOT_FOUND",
+        parameters = Map(
+          "partitionList" -> "`hour`",
+          "tableName" ->
+            s"`$SESSION_CATALOG_NAME`.`default`.`${tableName.toLowerCase(Locale.ROOT)}`")
       )
 
-      assertAnalysisException(
-        s"ANALYZE TABLE $tableName PARTITION (hour) COMPUTE STATISTICS",
-        "hour is not a valid partition column in table " +
-          s"`$SESSION_CATALOG_NAME`.`default`.`${tableName.toLowerCase(Locale.ROOT)}`"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $tableName PARTITION (hour) COMPUTE STATISTICS")
+        },
+        condition = "PARTITIONS_NOT_FOUND",
+        parameters = Map(
+          "partitionList" -> "`hour`",
+          "tableName" ->
+            s"`$SESSION_CATALOG_NAME`.`default`.`${tableName.toLowerCase(Locale.ROOT)}`")
       )
 
       intercept[NoSuchPartitionException] {
@@ -1055,14 +1068,14 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           withTempPaths(numPaths = 2) { case Seq(dir1, dir2) =>
             val partDir1 = new File(new File(dir1, "ds=2008-04-09"), "hr=11")
             val file1 = new File(partDir1, "data")
-            file1.getParentFile.mkdirs()
+            Utils.createDirectory(file1.getParentFile)
             Utils.tryWithResource(new PrintWriter(file1)) { writer =>
               writer.write("1,a")
             }
 
             val partDir2 = new File(new File(dir2, "ds=2008-04-09"), "hr=12")
             val file2 = new File(partDir2, "data")
-            file2.getParentFile.mkdirs()
+            Utils.createDirectory(file2.getParentFile)
             Utils.tryWithResource(new PrintWriter(file2)) { writer =>
               writer.write("1,a")
             }
@@ -1589,42 +1602,44 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     val tbl = "SPARK_30269"
     val ext_tbl = "SPARK_30269_external"
     withTempDir { dir =>
-      withTable(tbl, ext_tbl) {
-        sql(s"CREATE TABLE $tbl (key INT, value STRING, ds STRING)" +
-          "USING parquet PARTITIONED BY (ds)")
-        sql(
-          s"""
-             | CREATE TABLE $ext_tbl (key INT, value STRING, ds STRING)
-             | USING PARQUET
-             | PARTITIONED BY (ds)
-             | LOCATION '${dir.toURI}'
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "false") {
+        withTable(tbl, ext_tbl) {
+          sql(s"CREATE TABLE $tbl (key INT, value STRING, ds STRING)" +
+            "USING parquet PARTITIONED BY (ds)")
+          sql(
+            s"""
+               | CREATE TABLE $ext_tbl (key INT, value STRING, ds STRING)
+               | USING PARQUET
+               | PARTITIONED BY (ds)
+               | LOCATION '${dir.toURI}'
            """.stripMargin)
 
-        Seq(tbl, ext_tbl).foreach { tblName =>
-          sql(s"INSERT INTO $tblName VALUES (1, 'a', '2019-12-13')")
+          Seq(tbl, ext_tbl).foreach { tblName =>
+            sql(s"INSERT INTO $tblName VALUES (1, 'a', '2019-12-13')")
+            assert(getCatalogTable(tblName).stats.isEmpty)
 
-          val expectedSize = 690
-          // analyze table
-          sql(s"ANALYZE TABLE $tblName COMPUTE STATISTICS NOSCAN")
-          var tableStats = getTableStats(tblName)
-          assert(tableStats.sizeInBytes == expectedSize)
-          assert(tableStats.rowCount.isEmpty)
+            // analyze table
+            sql(s"ANALYZE TABLE $tblName COMPUTE STATISTICS NOSCAN")
+            var tableStats = getTableStats(tblName)
+            val expectedSize = tableStats.sizeInBytes
+            assert(tableStats.rowCount.isEmpty)
 
-          sql(s"ANALYZE TABLE $tblName COMPUTE STATISTICS")
-          tableStats = getTableStats(tblName)
-          assert(tableStats.sizeInBytes == expectedSize)
-          assert(tableStats.rowCount.get == 1)
+            sql(s"ANALYZE TABLE $tblName COMPUTE STATISTICS")
+            tableStats = getTableStats(tblName)
+            assert(tableStats.sizeInBytes == expectedSize)
+            assert(tableStats.rowCount.get == 1)
 
-          // analyze a single partition
-          sql(s"ANALYZE TABLE $tblName PARTITION (ds='2019-12-13') COMPUTE STATISTICS NOSCAN")
-          var partStats = getPartitionStats(tblName, Map("ds" -> "2019-12-13"))
-          assert(partStats.sizeInBytes == expectedSize)
-          assert(partStats.rowCount.isEmpty)
+            // analyze a single partition
+            sql(s"ANALYZE TABLE $tblName PARTITION (ds='2019-12-13') COMPUTE STATISTICS NOSCAN")
+            var partStats = getPartitionStats(tblName, Map("ds" -> "2019-12-13"))
+            assert(partStats.sizeInBytes == expectedSize)
+            assert(partStats.rowCount.isEmpty)
 
-          sql(s"ANALYZE TABLE $tblName PARTITION (ds='2019-12-13') COMPUTE STATISTICS")
-          partStats = getPartitionStats(tblName, Map("ds" -> "2019-12-13"))
-          assert(partStats.sizeInBytes == expectedSize)
-          assert(partStats.rowCount.get == 1)
+            sql(s"ANALYZE TABLE $tblName PARTITION (ds='2019-12-13') COMPUTE STATISTICS")
+            partStats = getPartitionStats(tblName, Map("ds" -> "2019-12-13"))
+            assert(partStats.sizeInBytes == expectedSize)
+            assert(partStats.rowCount.get == 1)
+          }
         }
       }
     }
@@ -1657,14 +1672,14 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         withTempPaths(numPaths = 2) { case Seq(dir1, dir2) =>
           val partDir1 = new File(new File(dir1, "ds=2008-04-09"), "hr=11")
           val file1 = new File(partDir1, "data")
-          file1.getParentFile.mkdirs()
+          Utils.createDirectory(file1.getParentFile)
           Utils.tryWithResource(new PrintWriter(file1)) { writer =>
             writer.write("1,a")
           }
 
           val partDir2 = new File(new File(dir2, "ds=2008-04-09"), "hr=12")
           val file2 = new File(partDir2, "data")
-          file2.getParentFile.mkdirs()
+          Utils.createDirectory(file2.getParentFile)
           Utils.tryWithResource(new PrintWriter(file2)) { writer =>
             writer.write("1,a")
           }

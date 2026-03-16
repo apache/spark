@@ -31,7 +31,7 @@ import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.worker.WorkerWatcher
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config._
 import org.apache.spark.network.netty.SparkTransportConf
@@ -265,8 +265,9 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer): Unit = {
-    val resources = executor.runningTasks.get(taskId).taskDescription.resources
-    val cpus = executor.runningTasks.get(taskId).taskDescription.cpus
+    val taskDescription = executor.runningTasks.get(taskId).taskDescription
+    val resources = taskDescription.resources
+    val cpus = taskDescription.cpus
     val msg = StatusUpdate(executorId, taskId, state, data, cpus, resources)
     if (TaskState.isFinished(state)) {
       lastTaskFinishTime.set(System.nanoTime())
@@ -479,6 +480,29 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       driverConf.set(EXECUTOR_ID, arguments.executorId)
       cfg.logLevel.foreach(logLevel => Utils.setLogLevelIfNeeded(logLevel))
 
+      // Set executor memory related config here according to resource profile
+      if (cfg.resourceProfile.id != ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) {
+        cfg.resourceProfile
+          .executorResources
+          .foreach {
+            case (ResourceProfile.OFFHEAP_MEM, request) =>
+              driverConf.set(MEMORY_OFFHEAP_SIZE.key, request.amount.toString + "m")
+              logInfo(log"Set executor off-heap memory to " +
+                log"${MDC(LogKeys.EXECUTOR_MEMORY_OFFHEAP, request)}")
+            case (ResourceProfile.MEMORY, request) =>
+              driverConf.set(EXECUTOR_MEMORY.key, request.amount.toString + "m")
+              logInfo(log"Set executor memory to ${MDC(LogKeys.EXECUTOR_MEMORY_SIZE, request)}")
+            case (ResourceProfile.OVERHEAD_MEM, request) =>
+              // Maybe don't need to set this since it's nearly used by tasks.
+              driverConf.set(EXECUTOR_MEMORY_OVERHEAD.key, request.amount.toString + "m")
+              logInfo(log"Set executor memory_overhead to " +
+                log"${MDC(LogKeys.EXECUTOR_MEMORY_OVERHEAD_SIZE, request)}")
+            case (ResourceProfile.CORES, request) =>
+              driverConf.set(EXECUTOR_CORES.key, request.amount.toString)
+              logInfo(log"Set executor cores to ${MDC(LogKeys.NUM_EXECUTOR_CORES, request)}")
+            case _ =>
+          }
+      }
       val env = SparkEnv.createExecutorEnv(driverConf, arguments.executorId, arguments.bindAddress,
         arguments.hostname, arguments.cores, cfg.ioEncryptionKey, isLocal = false)
       // Set the application attemptId in the BlockStoreClient if available.

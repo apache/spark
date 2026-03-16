@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql
 
-import java.util
+import java.util.{Locale, Map, Properties}
 
 import scala.jdk.CollectionConverters._
 
@@ -25,8 +25,8 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.CompilationErrors
 
 /**
- * Interface used to write a [[org.apache.spark.sql.api.Dataset]] to external storage systems
- * (e.g. file systems, key-value stores, etc). Use `Dataset.write` to access this.
+ * Interface used to write a [[org.apache.spark.sql.Dataset]] to external storage systems (e.g.
+ * file systems, key-value stores, etc). Use `Dataset.write` to access this.
  *
  * @since 1.4.0
  */
@@ -43,7 +43,7 @@ abstract class DataFrameWriter[T] {
    * @since 1.4.0
    */
   def mode(saveMode: SaveMode): this.type = {
-    this.mode = saveMode
+    this.curmode = saveMode
     this
   }
 
@@ -56,7 +56,7 @@ abstract class DataFrameWriter[T] {
    * @since 1.4.0
    */
   def mode(saveMode: String): this.type = {
-    saveMode.toLowerCase(util.Locale.ROOT) match {
+    saveMode.toLowerCase(Locale.ROOT) match {
       case "overwrite" => mode(SaveMode.Overwrite)
       case "append" => mode(SaveMode.Append)
       case "ignore" => mode(SaveMode.Ignore)
@@ -139,7 +139,7 @@ abstract class DataFrameWriter[T] {
    *
    * @since 1.4.0
    */
-  def options(options: util.Map[String, String]): this.type = {
+  def options(options: Map[String, String]): this.type = {
     this.options(options.asScala)
     this
   }
@@ -323,7 +323,7 @@ abstract class DataFrameWriter[T] {
    *   "READ_UNCOMMITTED".
    * @since 1.4.0
    */
-  def jdbc(url: String, table: String, connectionProperties: util.Properties): Unit = {
+  def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {
     assertNotPartitioned("jdbc")
     assertNotBucketed("jdbc")
     assertNotClustered("jdbc")
@@ -501,9 +501,10 @@ abstract class DataFrameWriter[T] {
 
   protected var source: String = ""
 
-  protected var mode: SaveMode = SaveMode.ErrorIfExists
+  protected var curmode: SaveMode = SaveMode.ErrorIfExists
 
-  protected var extraOptions: CaseInsensitiveMap[String] = CaseInsensitiveMap[String](Map.empty)
+  protected var extraOptions: CaseInsensitiveMap[String] =
+    CaseInsensitiveMap[String](scala.collection.immutable.Map.empty)
 
   protected var partitioningColumns: Option[Seq[String]] = None
 

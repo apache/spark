@@ -23,7 +23,7 @@ import scala.collection.immutable.TreeSet
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedPlanId}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
 import org.apache.spark.sql.catalyst.expressions.Cast._
@@ -36,6 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SparkStringUtils.truncatedString
 
 /**
  * A base class for generated/interpreted predicate
@@ -66,6 +67,8 @@ case class InterpretedPredicate(expression: Expression) extends BasePredicate {
  */
 trait Predicate extends Expression {
   override def dataType: DataType = BooleanType
+
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 }
 
 /**
@@ -318,6 +321,8 @@ case class Not(child: Expression)
   extends UnaryExpression with Predicate with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
 
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
   override def toString: String = s"NOT $child"
 
   override def inputTypes: Seq[DataType] = Seq(BooleanType)
@@ -418,6 +423,13 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
     copy(values = newChildren.dropRight(1), query = newChildren.last.asInstanceOf[ListQuery])
 }
 
+case class UnresolvedInSubqueryPlanId(values: Seq[Expression], planId: Long)
+  extends UnresolvedPlanId {
+
+  override def withPlan(plan: LogicalPlan): Expression = {
+    InSubquery(values, ListQuery(plan))
+  }
+}
 
 /**
  * Evaluates to `true` if `list` contains `value`.
@@ -473,6 +485,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(IN)
   private val legacyNullInEmptyBehavior =
@@ -487,7 +500,10 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     }
   }
 
-  override def toString: String = s"$value IN ${list.mkString("(", ",", ")")}"
+  override def simpleString(maxFields: Int): String =
+    s"$value IN ${truncatedString(list, "(", ",", ")", maxFields)}"
+
+  override def toString: String = simpleString(Int.MaxValue)
 
   override def eval(input: InternalRow): Any = {
     if (list.isEmpty && !legacyNullInEmptyBehavior) {
@@ -608,14 +624,30 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
 
   require(hset != null, "hset could not be null")
 
-  override def toString: String = {
-    val listString = hset.toSeq
-      .map(elem => Literal(elem, child.dataType).toString)
-      // Sort elements for deterministic behaviours
-      .sorted
-      .mkString(", ")
-    s"$child INSET $listString"
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
+  override def simpleString(maxFields: Int): String = {
+    if (!child.resolved) {
+      return s"$child INSET (values with unresolved data types)"
+    }
+    if (hset.size <= maxFields) {
+      val listString = hset.toSeq
+        .map(elem => Literal(elem, child.dataType).toString)
+        // Sort elements for deterministic behaviours
+        .sorted
+        .mkString(", ")
+      s"$child INSET $listString"
+    } else {
+      // Skip sorting if there are many elements. Do not use truncatedString because we would have
+      // to convert elements we do not print to Literals.
+      val listString = hset.take(maxFields).toSeq
+        .map(elem => Literal(elem, child.dataType).toString)
+        .mkString(", ")
+      s"$child INSET $listString, ... ${hset.size - maxFields} more fields"
+    }
   }
+
+  override def toString: String = simpleString(Int.MaxValue)
 
   @transient private[this] lazy val hasNull: Boolean = hset.contains(null)
   @transient private[this] lazy val isNaN: Any => Boolean = child.dataType match {
@@ -991,6 +1023,11 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
   // Note that we need to give a superset of allowable input types since orderable types are not
   // finitely enumerable. The allowable types are checked below by checkInputDataTypes.
   override def inputType: AbstractDataType = AnyDataType
+
+  // For value comparison, the struct field name and nullability does not matter.
+  protected override def sameType(left: DataType, right: DataType): Boolean = {
+    DataType.equalsStructurally(left, right, ignoreNullability = true)
+  }
 
   final override val nodePatterns: Seq[TreePattern] = Seq(BINARY_COMPARISON)
 

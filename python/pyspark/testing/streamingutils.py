@@ -21,8 +21,7 @@ import unittest
 
 from pyspark import SparkConf, SparkContext, RDD
 from pyspark.streaming import StreamingContext
-from pyspark.testing.utils import search_jar
-
+from pyspark.testing.sqlutils import search_jar
 
 # Must be same as the variable and condition defined in KinesisTestUtils.scala and modules.py
 kinesis_test_environ_var = "ENABLE_KINESIS_TESTS"
@@ -51,9 +50,9 @@ else:
         existing_args = os.environ.get("PYSPARK_SUBMIT_ARGS", "pyspark-shell")
         jars_args = "--jars %s" % kinesis_asl_assembly_jar
         os.environ["PYSPARK_SUBMIT_ARGS"] = " ".join([jars_args, existing_args])
-        kinesis_requirement_message = None  # type: ignore
+        kinesis_requirement_message = ""
 
-should_test_kinesis = kinesis_requirement_message is None
+should_test_kinesis = not kinesis_requirement_message
 
 
 class PySparkStreamingTestCase(unittest.TestCase):

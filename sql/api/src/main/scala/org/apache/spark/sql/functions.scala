@@ -64,6 +64,7 @@ import org.apache.spark.util.SparkClassUtils
  * @groupname conditional_funcs Conditional functions
  * @groupname hash_funcs Hash functions
  * @groupname misc_funcs Misc functions
+ * @groupname sketch_funcs Datasketch functions
  * @groupname window_funcs Window functions
  * @groupname generator_funcs Generator functions
  * @groupname string_funcs String functions
@@ -71,9 +72,11 @@ import org.apache.spark.util.SparkClassUtils
  * @groupname array_funcs Array functions
  * @groupname map_funcs Map functions
  * @groupname struct_funcs Struct functions
+ * @groupname st_funcs ST geospatial functions
  * @groupname csv_funcs CSV functions
  * @groupname json_funcs JSON functions
  * @groupname variant_funcs VARIANT functions
+ * @groupname vector_funcs Vector functions
  * @groupname xml_funcs XML functions
  * @groupname url_funcs URL functions
  * @groupname partition_transforms Partition transform functions
@@ -631,6 +634,7 @@ object functions {
    * @group agg_funcs
    * @since 2.0.0
    */
+  @scala.annotation.varargs
   def grouping_id(cols: Column*): Column = Column.fn("grouping_id", cols: _*)
 
   /**
@@ -646,6 +650,7 @@ object functions {
    * @group agg_funcs
    * @since 2.0.0
    */
+  @scala.annotation.varargs
   def grouping_id(colName: String, colNames: String*): Column = {
     grouping_id((Seq(colName) ++ colNames).map(n => Column(n)): _*)
   }
@@ -870,6 +875,22 @@ object functions {
     Column.fn("last_value", e, ignoreNulls)
 
   /**
+   * Create time from hour, minute and second fields. For invalid inputs it will throw an error.
+   *
+   * @param hour
+   *   the hour to represent, from 0 to 23
+   * @param minute
+   *   the minute to represent, from 0 to 59
+   * @param second
+   *   the second to represent, from 0 to 59.999999
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def make_time(hour: Column, minute: Column, second: Column): Column = {
+    Column.fn("make_time", hour, minute, second)
+  }
+
+  /**
    * Aggregate function: returns the most frequent value in a group.
    *
    * @group agg_funcs
@@ -916,6 +937,42 @@ object functions {
    * @since 3.3.0
    */
   def max_by(e: Column, ord: Column): Column = Column.fn("max_by", e, ord)
+
+  /**
+   * Aggregate function: returns an array of values associated with the top `k` values of `ord`.
+   *
+   * The result array contains values in descending order by their associated ordering values.
+   * Returns null if there are no non-null ordering values.
+   *
+   * @note
+   *   The function is non-deterministic because the order of collected results depends on the
+   *   order of the rows which may be non-deterministic after a shuffle when there are ties in the
+   *   ordering expression.
+   * @note
+   *   The maximum value of `k` is 100000.
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def max_by(e: Column, ord: Column, k: Int): Column = Column.fn("max_by", e, ord, lit(k))
+
+  /**
+   * Aggregate function: returns an array of values associated with the top `k` values of `ord`.
+   *
+   * The result array contains values in descending order by their associated ordering values.
+   * Returns null if there are no non-null ordering values.
+   *
+   * @note
+   *   The function is non-deterministic because the order of collected results depends on the
+   *   order of the rows which may be non-deterministic after a shuffle when there are ties in the
+   *   ordering expression.
+   * @note
+   *   The maximum value of `k` is 100000.
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def max_by(e: Column, ord: Column, k: Column): Column = Column.fn("max_by", e, ord, k)
 
   /**
    * Aggregate function: returns the average of the values in a group. Alias for avg.
@@ -968,6 +1025,44 @@ object functions {
    * @since 3.3.0
    */
   def min_by(e: Column, ord: Column): Column = Column.fn("min_by", e, ord)
+
+  /**
+   * Aggregate function: returns an array of values associated with the bottom `k` values of
+   * `ord`.
+   *
+   * The result array contains values in ascending order by their associated ordering values.
+   * Returns null if there are no non-null ordering values.
+   *
+   * @note
+   *   The function is non-deterministic because the order of collected results depends on the
+   *   order of the rows which may be non-deterministic after a shuffle when there are ties in the
+   *   ordering expression.
+   * @note
+   *   The maximum value of `k` is 100000.
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def min_by(e: Column, ord: Column, k: Int): Column = Column.fn("min_by", e, ord, lit(k))
+
+  /**
+   * Aggregate function: returns an array of values associated with the bottom `k` values of
+   * `ord`.
+   *
+   * The result array contains values in ascending order by their associated ordering values.
+   * Returns null if there are no non-null ordering values.
+   *
+   * @note
+   *   The function is non-deterministic because the order of collected results depends on the
+   *   order of the rows which may be non-deterministic after a shuffle when there are ties in the
+   *   ordering expression.
+   * @note
+   *   The maximum value of `k` is 100000.
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def min_by(e: Column, ord: Column, k: Column): Column = Column.fn("min_by", e, ord, k)
 
   /**
    * Aggregate function: returns the exact percentile(s) of numeric column `expr` at the given
@@ -1148,6 +1243,1024 @@ object functions {
   def sum_distinct(e: Column): Column = Column.fn("sum", isDistinct = true, e)
 
   /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * ThetaSketch, generated by intersecting the Datasketches ThetaSketch instances in the input
+   * column via a Datasketches Intersection instance.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def theta_intersection_agg(e: Column): Column =
+    Column.fn("theta_intersection_agg", e)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * ThetaSketch, generated by intersecting the Datasketches ThetaSketch instances in the input
+   * volumn via a Datasketches Intersection instance.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def theta_intersection_agg(columnName: String): Column =
+    theta_intersection_agg(Column(columnName))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches ThetaSketch
+   * built with the values in the input column and configured with the `lgNomEntries` nominal
+   * entries.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def theta_sketch_agg(e: Column, lgNomEntries: Column): Column =
+    Column.fn("theta_sketch_agg", e, lgNomEntries)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches ThetaSketch
+   * built with the values in the input column and configured with the `lgNomEntries` nominal
+   * entries.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def theta_sketch_agg(e: Column, lgNomEntries: Int): Column =
+    Column.fn("theta_sketch_agg", e, lit(lgNomEntries))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches ThetaSketch
+   * built with the values in the input column and configured with the `lgNomEntries` nominal
+   * entries.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def theta_sketch_agg(columnName: String, lgNomEntries: Int): Column =
+    theta_sketch_agg(Column(columnName), lgNomEntries)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches ThetaSketch
+   * built with the values in the input column and configured with the default value of 12 for
+   * `lgNomEntries`.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def theta_sketch_agg(e: Column): Column =
+    Column.fn("theta_sketch_agg", e)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches ThetaSketch
+   * built with the values in the input column and configured with the default value of 12 for
+   * `lgNomEntries`.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def theta_sketch_agg(columnName: String): Column =
+    theta_sketch_agg(Column(columnName))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * ThetaSketch, generated by the union of Datasketches ThetaSketch instances in the input column
+   * via a Datasketches Union instance. It allows the configuration of `lgNomEntries` log nominal
+   * entries for the union buffer.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def theta_union_agg(e: Column, lgNomEntries: Column): Column =
+    Column.fn("theta_union_agg", e, lgNomEntries)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * ThetaSketch, generated by the union of Datasketches ThetaSketch instances in the input column
+   * via a Datasketches Union instance. It allows the configuration of `lgNomEntries` log nominal
+   * entries for the union buffer.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def theta_union_agg(e: Column, lgNomEntries: Int): Column =
+    Column.fn("theta_union_agg", e, lit(lgNomEntries))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * ThetaSketch, generated by the union of Datasketches ThetaSketch instances in the input column
+   * via a Datasketches Union instance. It allows the configuration of `lgNomEntries` log nominal
+   * entries for the union buffer.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def theta_union_agg(columnName: String, lgNomEntries: Int): Column =
+    theta_union_agg(Column(columnName), lgNomEntries)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * ThetaSketch, generated by the union of Datasketches ThetaSketch instances in the input column
+   * via a Datasketches Union instance. It is configured with the default value of 12 for
+   * `lgNomEntries`.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def theta_union_agg(e: Column): Column =
+    Column.fn("theta_union_agg", e)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * ThetaSketch, generated by the union of Datasketches ThetaSketch instances in the input column
+   * via a Datasketches Union instance. It is configured with the default value of 12 for
+   * `lgNomEntries`.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def theta_union_agg(columnName: String): Column =
+    theta_union_agg(Column(columnName))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with a double type summary, generated by intersecting the Datasketches TupleSketch instances
+   * in the input column via a Datasketches Intersection instance. The mode parameter specifies
+   * the aggregation mode for numeric summaries during intersection (sum, min, max, alwaysone).
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_agg_double(e: Column, mode: Column): Column =
+    Column.fn("tuple_intersection_agg_double", e, mode)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with a double type summary, generated by intersecting the Datasketches TupleSketch instances
+   * in the input column via a Datasketches Intersection instance. The mode parameter specifies
+   * the aggregation mode for numeric summaries during intersection (sum, min, max, alwaysone).
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_agg_double(e: Column, mode: String): Column =
+    Column.fn("tuple_intersection_agg_double", e, lit(mode))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with a double type summary, generated by intersecting the Datasketches TupleSketch instances
+   * in the input column via a Datasketches Intersection instance. The mode parameter specifies
+   * the aggregation mode for numeric summaries during intersection (sum, min, max, alwaysone).
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_agg_double(columnName: String, mode: String): Column =
+    tuple_intersection_agg_double(Column(columnName), mode)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with a double type summary, generated by intersecting the Datasketches TupleSketch instances
+   * in the input column via a Datasketches Intersection instance. It is configured with the
+   * default mode of 'sum'.
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_agg_double(e: Column): Column =
+    Column.fn("tuple_intersection_agg_double", e)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with a double type summary, generated by intersecting the Datasketches TupleSketch instances
+   * in the input column via a Datasketches Intersection instance. It is configured with the
+   * default mode of 'sum'.
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_agg_double(columnName: String): Column =
+    tuple_intersection_agg_double(Column(columnName))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with an integer type summary, generated by intersecting the Datasketches TupleSketch
+   * instances in the input column via a Datasketches Intersection instance. The mode parameter
+   * specifies the aggregation mode for numeric summaries during intersection (sum, min, max,
+   * alwaysone).
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_agg_integer(e: Column, mode: Column): Column =
+    Column.fn("tuple_intersection_agg_integer", e, mode)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with an integer type summary, generated by intersecting the Datasketches TupleSketch
+   * instances in the input column via a Datasketches Intersection instance. The mode parameter
+   * specifies the aggregation mode for numeric summaries during intersection (sum, min, max,
+   * alwaysone).
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_agg_integer(e: Column, mode: String): Column =
+    Column.fn("tuple_intersection_agg_integer", e, lit(mode))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with an integer type summary, generated by intersecting the Datasketches TupleSketch
+   * instances in the input column via a Datasketches Intersection instance. The mode parameter
+   * specifies the aggregation mode for numeric summaries during intersection (sum, min, max,
+   * alwaysone).
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_agg_integer(columnName: String, mode: String): Column =
+    tuple_intersection_agg_integer(Column(columnName), mode)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with an integer type summary, generated by intersecting the Datasketches TupleSketch
+   * instances in the input column via a Datasketches Intersection instance. It is configured with
+   * the default mode of 'sum'.
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_agg_integer(e: Column): Column =
+    Column.fn("tuple_intersection_agg_integer", e)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with an integer type summary, generated by intersecting the Datasketches TupleSketch
+   * instances in the input column via a Datasketches Intersection instance. It is configured with
+   * the default mode of 'sum'.
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_agg_integer(columnName: String): Column =
+    tuple_intersection_agg_integer(Column(columnName))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with a double type summary built with the key and summary values in the input columns and
+   * configured with the `lgNomEntries` nominal entries and aggregation mode. The mode parameter
+   * specifies the aggregation mode for numeric summaries (sum, min, max, alwaysone).
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_sketch_agg_double(
+      key: Column,
+      summary: Column,
+      lgNomEntries: Column,
+      mode: Column): Column =
+    Column.fn("tuple_sketch_agg_double", key, summary, lgNomEntries, mode)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with a double type summary built with the key and summary values in the input columns and
+   * configured with the `lgNomEntries` nominal entries and aggregation mode. The mode parameter
+   * specifies the aggregation mode for numeric summaries (sum, min, max, alwaysone).
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_sketch_agg_double(
+      key: Column,
+      summary: Column,
+      lgNomEntries: Int,
+      mode: String): Column =
+    Column.fn("tuple_sketch_agg_double", key, summary, lit(lgNomEntries), lit(mode))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with a double type summary built with the key and summary values in the input columns and
+   * configured with the `lgNomEntries` nominal entries and aggregation mode. The mode parameter
+   * specifies the aggregation mode for numeric summaries (sum, min, max, alwaysone).
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_sketch_agg_double(
+      keyColumnName: String,
+      summaryColumnName: String,
+      lgNomEntries: Int,
+      mode: String): Column =
+    tuple_sketch_agg_double(Column(keyColumnName), Column(summaryColumnName), lgNomEntries, mode)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with a double type summary built with the key and summary values in the input columns and
+   * configured with the `lgNomEntries` nominal entries. It uses the default mode of 'sum'.
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_sketch_agg_double(key: Column, summary: Column, lgNomEntries: Int): Column =
+    Column.fn("tuple_sketch_agg_double", key, summary, lit(lgNomEntries))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with a double type summary built with the key and summary values in the input columns and
+   * configured with the `lgNomEntries` nominal entries. It uses the default mode of 'sum'.
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_sketch_agg_double(
+      keyColumnName: String,
+      summaryColumnName: String,
+      lgNomEntries: Int): Column =
+    tuple_sketch_agg_double(Column(keyColumnName), Column(summaryColumnName), lgNomEntries)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with a double type summary built with the key and summary values in the input columns. It
+   * uses the default values of 12 for `lgNomEntries` and 'sum' for mode.
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_sketch_agg_double(key: Column, summary: Column): Column =
+    Column.fn("tuple_sketch_agg_double", key, summary)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with a double type summary built with the key and summary values in the input columns. It
+   * uses the default values of 12 for `lgNomEntries` and 'sum' for mode.
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_sketch_agg_double(keyColumnName: String, summaryColumnName: String): Column =
+    tuple_sketch_agg_double(Column(keyColumnName), Column(summaryColumnName))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with an integer type summary built with the key and summary values in the input columns and
+   * configured with the `lgNomEntries` nominal entries and aggregation mode. The mode parameter
+   * specifies the aggregation mode for numeric summaries (sum, min, max, alwaysone).
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_sketch_agg_integer(
+      key: Column,
+      summary: Column,
+      lgNomEntries: Column,
+      mode: Column): Column =
+    Column.fn("tuple_sketch_agg_integer", key, summary, lgNomEntries, mode)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with an integer type summary built with the key and summary values in the input columns and
+   * configured with the `lgNomEntries` nominal entries and aggregation mode. The mode parameter
+   * specifies the aggregation mode for numeric summaries (sum, min, max, alwaysone).
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_sketch_agg_integer(
+      key: Column,
+      summary: Column,
+      lgNomEntries: Int,
+      mode: String): Column =
+    Column.fn("tuple_sketch_agg_integer", key, summary, lit(lgNomEntries), lit(mode))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with an integer type summary built with the key and summary values in the input columns and
+   * configured with the `lgNomEntries` nominal entries and aggregation mode. The mode parameter
+   * specifies the aggregation mode for numeric summaries (sum, min, max, alwaysone).
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_sketch_agg_integer(
+      keyColumnName: String,
+      summaryColumnName: String,
+      lgNomEntries: Int,
+      mode: String): Column =
+    tuple_sketch_agg_integer(Column(keyColumnName), Column(summaryColumnName), lgNomEntries, mode)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with an integer type summary built with the key and summary values in the input columns and
+   * configured with the `lgNomEntries` nominal entries. It uses the default mode of 'sum'.
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_sketch_agg_integer(key: Column, summary: Column, lgNomEntries: Int): Column =
+    Column.fn("tuple_sketch_agg_integer", key, summary, lit(lgNomEntries))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with an integer type summary built with the key and summary values in the input columns and
+   * configured with the `lgNomEntries` nominal entries. It uses the default mode of 'sum'.
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_sketch_agg_integer(
+      keyColumnName: String,
+      summaryColumnName: String,
+      lgNomEntries: Int): Column =
+    tuple_sketch_agg_integer(Column(keyColumnName), Column(summaryColumnName), lgNomEntries)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with an integer type summary built with the key and summary values in the input columns. It
+   * uses the default values of 12 for `lgNomEntries` and 'sum' for mode.
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_sketch_agg_integer(key: Column, summary: Column): Column =
+    Column.fn("tuple_sketch_agg_integer", key, summary)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with an integer type summary built with the key and summary values in the input columns. It
+   * uses the default values of 12 for `lgNomEntries` and 'sum' for mode.
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_sketch_agg_integer(keyColumnName: String, summaryColumnName: String): Column =
+    tuple_sketch_agg_integer(Column(keyColumnName), Column(summaryColumnName))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with a double type summary, generated by the union of Datasketches TupleSketch instances in
+   * the input column via a Datasketches Union instance. It allows the configuration of
+   * `lgNomEntries` log nominal entries for the union buffer and the aggregation mode for numeric
+   * summaries (sum, min, max, alwaysone).
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_agg_double(e: Column, lgNomEntries: Column, mode: Column): Column =
+    Column.fn("tuple_union_agg_double", e, lgNomEntries, mode)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with a double type summary, generated by the union of Datasketches TupleSketch instances in
+   * the input column via a Datasketches Union instance. It allows the configuration of
+   * `lgNomEntries` log nominal entries for the union buffer and the aggregation mode for numeric
+   * summaries (sum, min, max, alwaysone).
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_agg_double(e: Column, lgNomEntries: Int, mode: String): Column =
+    Column.fn("tuple_union_agg_double", e, lit(lgNomEntries), lit(mode))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with a double type summary, generated by the union of Datasketches TupleSketch instances in
+   * the input column via a Datasketches Union instance. It allows the configuration of
+   * `lgNomEntries` log nominal entries for the union buffer and the aggregation mode for numeric
+   * summaries (sum, min, max, alwaysone).
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_agg_double(columnName: String, lgNomEntries: Int, mode: String): Column =
+    tuple_union_agg_double(Column(columnName), lgNomEntries, mode)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with a double type summary, generated by the union of Datasketches TupleSketch instances in
+   * the input column via a Datasketches Union instance. It allows the configuration of
+   * `lgNomEntries` log nominal entries for the union buffer. It uses the default mode of 'sum'.
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_agg_double(e: Column, lgNomEntries: Int): Column =
+    Column.fn("tuple_union_agg_double", e, lit(lgNomEntries))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with a double type summary, generated by the union of Datasketches TupleSketch instances in
+   * the input column via a Datasketches Union instance. It allows the configuration of
+   * `lgNomEntries` log nominal entries for the union buffer. It uses the default mode of 'sum'.
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_agg_double(columnName: String, lgNomEntries: Int): Column =
+    tuple_union_agg_double(Column(columnName), lgNomEntries)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with a double type summary, generated by the union of Datasketches TupleSketch instances in
+   * the input column via a Datasketches Union instance. It is configured with the default values
+   * of 12 for `lgNomEntries` and 'sum' for mode.
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_agg_double(e: Column): Column =
+    Column.fn("tuple_union_agg_double", e)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with a double type summary, generated by the union of Datasketches TupleSketch instances in
+   * the input column via a Datasketches Union instance. It is configured with the default values
+   * of 12 for `lgNomEntries` and 'sum' for mode.
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_agg_double(columnName: String): Column =
+    tuple_union_agg_double(Column(columnName))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with an integer type summary, generated by the union of Datasketches TupleSketch instances in
+   * the input column via a Datasketches Union instance. It allows the configuration of
+   * `lgNomEntries` log nominal entries for the union buffer and the aggregation mode for numeric
+   * summaries (sum, min, max, alwaysone).
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_agg_integer(e: Column, lgNomEntries: Column, mode: Column): Column =
+    Column.fn("tuple_union_agg_integer", e, lgNomEntries, mode)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with an integer type summary, generated by the union of Datasketches TupleSketch instances in
+   * the input column via a Datasketches Union instance. It allows the configuration of
+   * `lgNomEntries` log nominal entries for the union buffer and the aggregation mode for numeric
+   * summaries (sum, min, max, alwaysone).
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_agg_integer(e: Column, lgNomEntries: Int, mode: String): Column =
+    Column.fn("tuple_union_agg_integer", e, lit(lgNomEntries), lit(mode))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with an integer type summary, generated by the union of Datasketches TupleSketch instances in
+   * the input column via a Datasketches Union instance. It allows the configuration of
+   * `lgNomEntries` log nominal entries for the union buffer and the aggregation mode for numeric
+   * summaries (sum, min, max, alwaysone).
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_agg_integer(columnName: String, lgNomEntries: Int, mode: String): Column =
+    tuple_union_agg_integer(Column(columnName), lgNomEntries, mode)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with an integer type summary, generated by the union of Datasketches TupleSketch instances in
+   * the input column via a Datasketches Union instance. It allows the configuration of
+   * `lgNomEntries` log nominal entries for the union buffer. It uses the default mode of 'sum'.
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_agg_integer(e: Column, lgNomEntries: Int): Column =
+    Column.fn("tuple_union_agg_integer", e, lit(lgNomEntries))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with an integer type summary, generated by the union of Datasketches TupleSketch instances in
+   * the input column via a Datasketches Union instance. It allows the configuration of
+   * `lgNomEntries` log nominal entries for the union buffer. It uses the default mode of 'sum'.
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_agg_integer(columnName: String, lgNomEntries: Int): Column =
+    tuple_union_agg_integer(Column(columnName), lgNomEntries)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with an integer type summary, generated by the union of Datasketches TupleSketch instances in
+   * the input column via a Datasketches Union instance. It is configured with the default values
+   * of 12 for `lgNomEntries` and 'sum' for mode.
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_agg_integer(e: Column): Column =
+    Column.fn("tuple_union_agg_integer", e)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches TupleSketch
+   * with an integer type summary, generated by the union of Datasketches TupleSketch instances in
+   * the input column via a Datasketches Union instance. It is configured with the default values
+   * of 12 for `lgNomEntries` and 'sum' for mode.
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_agg_integer(columnName: String): Column =
+    tuple_union_agg_integer(Column(columnName))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * KllLongsSketch built with the values in the input column. The optional k parameter controls
+   * the size and accuracy of the sketch (default 200, range 8-65535).
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_agg_bigint(e: Column, k: Column): Column =
+    Column.fn("kll_sketch_agg_bigint", e, k)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * KllLongsSketch built with the values in the input column. The optional k parameter controls
+   * the size and accuracy of the sketch (default 200, range 8-65535).
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_agg_bigint(e: Column, k: Int): Column =
+    Column.fn("kll_sketch_agg_bigint", e, lit(k))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * KllLongsSketch built with the values in the input column. The optional k parameter controls
+   * the size and accuracy of the sketch (default 200, range 8-65535).
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_agg_bigint(columnName: String, k: Int): Column =
+    kll_sketch_agg_bigint(Column(columnName), k)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * KllLongsSketch built with the values in the input column with default k value of 200.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_agg_bigint(e: Column): Column =
+    Column.fn("kll_sketch_agg_bigint", e)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * KllLongsSketch built with the values in the input column with default k value of 200.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_agg_bigint(columnName: String): Column =
+    kll_sketch_agg_bigint(Column(columnName))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * KllFloatsSketch built with the values in the input column. The optional k parameter controls
+   * the size and accuracy of the sketch (default 200, range 8-65535).
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_agg_float(e: Column, k: Column): Column =
+    Column.fn("kll_sketch_agg_float", e, k)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * KllFloatsSketch built with the values in the input column. The optional k parameter controls
+   * the size and accuracy of the sketch (default 200, range 8-65535).
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_agg_float(e: Column, k: Int): Column =
+    Column.fn("kll_sketch_agg_float", e, lit(k))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * KllFloatsSketch built with the values in the input column. The optional k parameter controls
+   * the size and accuracy of the sketch (default 200, range 8-65535).
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_agg_float(columnName: String, k: Int): Column =
+    kll_sketch_agg_float(Column(columnName), k)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * KllFloatsSketch built with the values in the input column with default k value of 200.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_agg_float(e: Column): Column =
+    Column.fn("kll_sketch_agg_float", e)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * KllFloatsSketch built with the values in the input column with default k value of 200.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_agg_float(columnName: String): Column =
+    kll_sketch_agg_float(Column(columnName))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * KllDoublesSketch built with the values in the input column. The optional k parameter controls
+   * the size and accuracy of the sketch (default 200, range 8-65535).
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_agg_double(e: Column, k: Column): Column =
+    Column.fn("kll_sketch_agg_double", e, k)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * KllDoublesSketch built with the values in the input column. The optional k parameter controls
+   * the size and accuracy of the sketch (default 200, range 8-65535).
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_agg_double(e: Column, k: Int): Column =
+    Column.fn("kll_sketch_agg_double", e, lit(k))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * KllDoublesSketch built with the values in the input column. The optional k parameter controls
+   * the size and accuracy of the sketch (default 200, range 8-65535).
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_agg_double(columnName: String, k: Int): Column =
+    kll_sketch_agg_double(Column(columnName), k)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * KllDoublesSketch built with the values in the input column with default k value of 200.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_agg_double(e: Column): Column =
+    Column.fn("kll_sketch_agg_double", e)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * KllDoublesSketch built with the values in the input column with default k value of 200.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_agg_double(columnName: String): Column =
+    kll_sketch_agg_double(Column(columnName))
+
+  /**
+   * Aggregate function: merges binary KllLongsSketch representations and returns the merged
+   * sketch. The optional k parameter controls the size and accuracy of the merged sketch (range
+   * 8-65535). If k is not specified, the merged sketch adopts the k value from the first input
+   * sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_merge_agg_bigint(e: Column, k: Column): Column =
+    Column.fn("kll_merge_agg_bigint", e, k)
+
+  /**
+   * Aggregate function: merges binary KllLongsSketch representations and returns the merged
+   * sketch. The optional k parameter controls the size and accuracy of the merged sketch (range
+   * 8-65535). If k is not specified, the merged sketch adopts the k value from the first input
+   * sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_merge_agg_bigint(e: Column, k: Int): Column =
+    Column.fn("kll_merge_agg_bigint", e, lit(k))
+
+  /**
+   * Aggregate function: merges binary KllLongsSketch representations and returns the merged
+   * sketch. The optional k parameter controls the size and accuracy of the merged sketch (range
+   * 8-65535). If k is not specified, the merged sketch adopts the k value from the first input
+   * sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_merge_agg_bigint(columnName: String, k: Int): Column =
+    kll_merge_agg_bigint(Column(columnName), k)
+
+  /**
+   * Aggregate function: merges binary KllLongsSketch representations and returns the merged
+   * sketch. If k is not specified, the merged sketch adopts the k value from the first input
+   * sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_merge_agg_bigint(e: Column): Column =
+    Column.fn("kll_merge_agg_bigint", e)
+
+  /**
+   * Aggregate function: merges binary KllLongsSketch representations and returns the merged
+   * sketch. If k is not specified, the merged sketch adopts the k value from the first input
+   * sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_merge_agg_bigint(columnName: String): Column =
+    kll_merge_agg_bigint(Column(columnName))
+
+  /**
+   * Aggregate function: merges binary KllFloatsSketch representations and returns merged sketch.
+   * The optional k parameter controls the size and accuracy of the merged sketch (range 8-65535).
+   * If k is not specified, the merged sketch adopts the k value from the first input sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_merge_agg_float(e: Column, k: Column): Column =
+    Column.fn("kll_merge_agg_float", e, k)
+
+  /**
+   * Aggregate function: merges binary KllFloatsSketch representations and returns merged sketch.
+   * The optional k parameter controls the size and accuracy of the merged sketch (range 8-65535).
+   * If k is not specified, the merged sketch adopts the k value from the first input sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_merge_agg_float(e: Column, k: Int): Column =
+    Column.fn("kll_merge_agg_float", e, lit(k))
+
+  /**
+   * Aggregate function: merges binary KllFloatsSketch representations and returns merged sketch.
+   * The optional k parameter controls the size and accuracy of the merged sketch (range 8-65535).
+   * If k is not specified, the merged sketch adopts the k value from the first input sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_merge_agg_float(columnName: String, k: Int): Column =
+    kll_merge_agg_float(Column(columnName), k)
+
+  /**
+   * Aggregate function: merges binary KllFloatsSketch representations and returns merged sketch.
+   * If k is not specified, the merged sketch adopts the k value from the first input sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_merge_agg_float(e: Column): Column =
+    Column.fn("kll_merge_agg_float", e)
+
+  /**
+   * Aggregate function: merges binary KllFloatsSketch representations and returns merged sketch.
+   * If k is not specified, the merged sketch adopts the k value from the first input sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_merge_agg_float(columnName: String): Column =
+    kll_merge_agg_float(Column(columnName))
+
+  /**
+   * Aggregate function: merges binary KllDoublesSketch representations and returns merged sketch.
+   * The optional k parameter controls the size and accuracy of the merged sketch (range 8-65535).
+   * If k is not specified, the merged sketch adopts the k value from the first input sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_merge_agg_double(e: Column, k: Column): Column =
+    Column.fn("kll_merge_agg_double", e, k)
+
+  /**
+   * Aggregate function: merges binary KllDoublesSketch representations and returns merged sketch.
+   * The optional k parameter controls the size and accuracy of the merged sketch (range 8-65535).
+   * If k is not specified, the merged sketch adopts the k value from the first input sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_merge_agg_double(e: Column, k: Int): Column =
+    Column.fn("kll_merge_agg_double", e, lit(k))
+
+  /**
+   * Aggregate function: merges binary KllDoublesSketch representations and returns merged sketch.
+   * The optional k parameter controls the size and accuracy of the merged sketch (range 8-65535).
+   * If k is not specified, the merged sketch adopts the k value from the first input sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_merge_agg_double(columnName: String, k: Int): Column =
+    kll_merge_agg_double(Column(columnName), k)
+
+  /**
+   * Aggregate function: merges binary KllDoublesSketch representations and returns merged sketch.
+   * If k is not specified, the merged sketch adopts the k value from the first input sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_merge_agg_double(e: Column): Column =
+    Column.fn("kll_merge_agg_double", e)
+
+  /**
+   * Aggregate function: merges binary KllDoublesSketch representations and returns merged sketch.
+   * If k is not specified, the merged sketch adopts the k value from the first input sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_merge_agg_double(columnName: String): Column =
+    kll_merge_agg_double(Column(columnName))
+
+  /**
+   * Aggregate function: returns the concatenation of non-null input values.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def listagg(e: Column): Column = Column.fn("listagg", e)
+
+  /**
+   * Aggregate function: returns the concatenation of non-null input values, separated by the
+   * delimiter.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def listagg(e: Column, delimiter: Column): Column = Column.fn("listagg", e, delimiter)
+
+  /**
+   * Aggregate function: returns the concatenation of distinct non-null input values.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def listagg_distinct(e: Column): Column = Column.fn("listagg", isDistinct = true, e)
+
+  /**
+   * Aggregate function: returns the concatenation of distinct non-null input values, separated by
+   * the delimiter.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def listagg_distinct(e: Column, delimiter: Column): Column =
+    Column.fn("listagg", isDistinct = true, e, delimiter)
+
+  /**
+   * Aggregate function: returns the concatenation of non-null input values. Alias for `listagg`.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def string_agg(e: Column): Column = Column.fn("string_agg", e)
+
+  /**
+   * Aggregate function: returns the concatenation of non-null input values, separated by the
+   * delimiter. Alias for `listagg`.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def string_agg(e: Column, delimiter: Column): Column = Column.fn("string_agg", e, delimiter)
+
+  /**
+   * Aggregate function: returns the concatenation of distinct non-null input values. Alias for
+   * `listagg`.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def string_agg_distinct(e: Column): Column = Column.fn("string_agg", isDistinct = true, e)
+
+  /**
+   * Aggregate function: returns the concatenation of distinct non-null input values, separated by
+   * the delimiter. Alias for `listagg`.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def string_agg_distinct(e: Column, delimiter: Column): Column =
+    Column.fn("string_agg", isDistinct = true, e, delimiter)
+
+  /**
    * Aggregate function: alias for `var_samp`.
    *
    * @group agg_funcs
@@ -1302,6 +2415,36 @@ object functions {
    * @since 3.5.0
    */
   def count_if(e: Column): Column = Column.fn("count_if", e)
+
+  /**
+   * Returns the current time at the start of query evaluation. Note that the result will contain
+   * 6 fractional digits of seconds.
+   *
+   * @return
+   *   A time.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def current_time(): Column = {
+    Column.fn("current_time")
+  }
+
+  /**
+   * Returns the current time at the start of query evaluation.
+   *
+   * @param precision
+   *   An integer literal in the range [0..6], indicating how many fractional digits of seconds to
+   *   include in the result.
+   * @return
+   *   A time.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def current_time(precision: Int): Column = {
+    Column.fn("current_time", lit(precision))
+  }
 
   /**
    * Aggregate function: computes a histogram on numeric 'expr' using nb bins. The return value is
@@ -1671,6 +2814,7 @@ object functions {
    * @group struct_funcs
    * @since 3.5.0
    */
+  @scala.annotation.varargs
   def named_struct(cols: Column*): Column = Column.fn("named_struct", cols: _*)
 
   /**
@@ -1723,7 +2867,7 @@ object functions {
    * @group normal_funcs
    * @since 1.5.0
    */
-  def broadcast[DS[U] <: api.Dataset[U]](df: DS[_]): df.type = {
+  def broadcast[U](df: Dataset[U]): df.type = {
     df.hint("broadcast").asInstanceOf[df.type]
   }
 
@@ -3366,73 +4510,6 @@ object functions {
   def raise_error(c: Column): Column = Column.fn("raise_error", c)
 
   /**
-   * Returns the estimated number of unique values given the binary representation of a
-   * Datasketches HllSketch.
-   *
-   * @group misc_funcs
-   * @since 3.5.0
-   */
-  def hll_sketch_estimate(c: Column): Column = Column.fn("hll_sketch_estimate", c)
-
-  /**
-   * Returns the estimated number of unique values given the binary representation of a
-   * Datasketches HllSketch.
-   *
-   * @group misc_funcs
-   * @since 3.5.0
-   */
-  def hll_sketch_estimate(columnName: String): Column = {
-    hll_sketch_estimate(Column(columnName))
-  }
-
-  /**
-   * Merges two binary representations of Datasketches HllSketch objects, using a Datasketches
-   * Union object. Throws an exception if sketches have different lgConfigK values.
-   *
-   * @group misc_funcs
-   * @since 3.5.0
-   */
-  def hll_union(c1: Column, c2: Column): Column =
-    Column.fn("hll_union", c1, c2)
-
-  /**
-   * Merges two binary representations of Datasketches HllSketch objects, using a Datasketches
-   * Union object. Throws an exception if sketches have different lgConfigK values.
-   *
-   * @group misc_funcs
-   * @since 3.5.0
-   */
-  def hll_union(columnName1: String, columnName2: String): Column = {
-    hll_union(Column(columnName1), Column(columnName2))
-  }
-
-  /**
-   * Merges two binary representations of Datasketches HllSketch objects, using a Datasketches
-   * Union object. Throws an exception if sketches have different lgConfigK values and
-   * allowDifferentLgConfigK is set to false.
-   *
-   * @group misc_funcs
-   * @since 3.5.0
-   */
-  def hll_union(c1: Column, c2: Column, allowDifferentLgConfigK: Boolean): Column =
-    Column.fn("hll_union", c1, c2, lit(allowDifferentLgConfigK))
-
-  /**
-   * Merges two binary representations of Datasketches HllSketch objects, using a Datasketches
-   * Union object. Throws an exception if sketches have different lgConfigK values and
-   * allowDifferentLgConfigK is set to false.
-   *
-   * @group misc_funcs
-   * @since 3.5.0
-   */
-  def hll_union(
-      columnName1: String,
-      columnName2: String,
-      allowDifferentLgConfigK: Boolean): Column = {
-    hll_union(Column(columnName1), Column(columnName2), allowDifferentLgConfigK)
-  }
-
-  /**
    * Returns the user name of current execution context.
    *
    * @group misc_funcs
@@ -3456,6 +4533,15 @@ object functions {
    * @since 3.5.0
    */
   def uuid(): Column = Column.fn("uuid", lit(SparkClassUtils.random.nextLong))
+
+  /**
+   * Returns an universally unique identifier (UUID) string. The value is returned as a canonical
+   * UUID 36-character string.
+   *
+   * @group misc_funcs
+   * @since 4.1.0
+   */
+  def uuid(seed: Column): Column = Column.fn("uuid", seed)
 
   /**
    * Returns an encrypted value of `input` using AES in given `mode` with the specified `padding`.
@@ -3713,6 +4799,7 @@ object functions {
    * @group misc_funcs
    * @since 3.5.0
    */
+  @scala.annotation.varargs
   def reflect(cols: Column*): Column = Column.fn("reflect", cols: _*)
 
   /**
@@ -3721,6 +4808,7 @@ object functions {
    * @group misc_funcs
    * @since 3.5.0
    */
+  @scala.annotation.varargs
   def java_method(cols: Column*): Column = Column.fn("java_method", cols: _*)
 
   /**
@@ -3730,6 +4818,7 @@ object functions {
    * @group misc_funcs
    * @since 4.0.0
    */
+  @scala.annotation.varargs
   def try_reflect(cols: Column*): Column = Column.fn("try_reflect", cols: _*)
 
   /**
@@ -3756,6 +4845,7 @@ object functions {
    * @group generator_funcs
    * @since 3.5.0
    */
+  @scala.annotation.varargs
   def stack(cols: Column*): Column = Column.fn("stack", cols: _*)
 
   /**
@@ -3846,6 +4936,15 @@ object functions {
    * @since 3.5.0
    */
   def bitmap_or_agg(col: Column): Column = Column.fn("bitmap_or_agg", col)
+
+  /**
+   * Returns a bitmap that is the bitwise AND of all of the bitmaps from the input column. The
+   * input column should be bitmaps created from bitmap_construct_agg().
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def bitmap_and_agg(col: Column): Column = Column.fn("bitmap_and_agg", col)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
@@ -4747,6 +5846,7 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
+  @scala.annotation.varargs
   def printf(format: Column, arguments: Column*): Column =
     Column.fn("printf", (format +: arguments): _*)
 
@@ -5002,6 +6102,1226 @@ object functions {
    * @since 3.5.0
    */
   def right(str: Column, len: Column): Column = Column.fn("right", str, len)
+
+  /**
+   * Returns `str` enclosed by single quotes and each instance of single quote in it is preceded
+   * by a backslash.
+   *
+   * @group string_funcs
+   * @since 4.1.0
+   */
+  def quote(str: Column): Column = Column.fn("quote", str)
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  // Datasketch functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Returns the estimated number of unique values given the binary representation of a
+   * Datasketches HllSketch.
+   *
+   * @group sketch_funcs
+   * @since 3.5.0
+   */
+  def hll_sketch_estimate(c: Column): Column = Column.fn("hll_sketch_estimate", c)
+
+  /**
+   * Returns the estimated number of unique values given the binary representation of a
+   * Datasketches HllSketch.
+   *
+   * @group sketch_funcs
+   * @since 3.5.0
+   */
+  def hll_sketch_estimate(columnName: String): Column = {
+    hll_sketch_estimate(Column(columnName))
+  }
+
+  /**
+   * Merges two binary representations of Datasketches HllSketch objects, using a Datasketches
+   * Union object. Throws an exception if sketches have different lgConfigK values.
+   *
+   * @group sketch_funcs
+   * @since 3.5.0
+   */
+  def hll_union(c1: Column, c2: Column): Column =
+    Column.fn("hll_union", c1, c2)
+
+  /**
+   * Merges two binary representations of Datasketches HllSketch objects, using a Datasketches
+   * Union object. Throws an exception if sketches have different lgConfigK values.
+   *
+   * @group sketch_funcs
+   * @since 3.5.0
+   */
+  def hll_union(columnName1: String, columnName2: String): Column = {
+    hll_union(Column(columnName1), Column(columnName2))
+  }
+
+  /**
+   * Merges two binary representations of Datasketches HllSketch objects, using a Datasketches
+   * Union object. Throws an exception if sketches have different lgConfigK values and
+   * allowDifferentLgConfigK is set to false.
+   *
+   * @group sketch_funcs
+   * @since 3.5.0
+   */
+  def hll_union(c1: Column, c2: Column, allowDifferentLgConfigK: Boolean): Column =
+    Column.fn("hll_union", c1, c2, lit(allowDifferentLgConfigK))
+
+  /**
+   * Merges two binary representations of Datasketches HllSketch objects, using a Datasketches
+   * Union object. Throws an exception if sketches have different lgConfigK values and
+   * allowDifferentLgConfigK is set to false.
+   *
+   * @group sketch_funcs
+   * @since 3.5.0
+   */
+  def hll_union(
+      columnName1: String,
+      columnName2: String,
+      allowDifferentLgConfigK: Boolean): Column = {
+    hll_union(Column(columnName1), Column(columnName2), allowDifferentLgConfigK)
+  }
+
+  /**
+   * Subtracts two binary representations of Datasketches ThetaSketch objects in the input columns
+   * using a Datasketches AnotB object
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def theta_difference(c1: Column, c2: Column): Column =
+    Column.fn("theta_difference", c1, c2)
+
+  /**
+   * Subtracts two binary representations of Datasketches ThetaSketch objects in the input columns
+   * using a Datasketches AnotB object
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def theta_difference(columnName1: String, columnName2: String): Column = {
+    theta_difference(Column(columnName1), Column(columnName2))
+  }
+
+  /**
+   * Intersects two binary representations of Datasketches ThetaSketch objects in the input
+   * columns using a Datasketches Intersection object
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def theta_intersection(c1: Column, c2: Column): Column =
+    Column.fn("theta_intersection", c1, c2)
+
+  /**
+   * Intersects two binary representations of Datasketches ThetaSketch objects in the input
+   * columns using a Datasketches Intersection object
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def theta_intersection(columnName1: String, columnName2: String): Column = {
+    theta_intersection(Column(columnName1), Column(columnName2))
+  }
+
+  /**
+   * Returns the estimated number of unique values given the binary representation of a
+   * Datasketches ThetaSketch.
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def theta_sketch_estimate(c: Column): Column = Column.fn("theta_sketch_estimate", c)
+
+  /**
+   * Returns the estimated number of unique values given the binary representation of a
+   * Datasketches ThetaSketch.
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def theta_sketch_estimate(columnName: String): Column = {
+    theta_sketch_estimate(Column(columnName))
+  }
+
+  /**
+   * Unions two binary representations of Datasketches ThetaSketch objects in the input columns
+   * using a Datasketches Union object. It is configured with the default value of 12 for
+   * `lgNomEntries`.
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def theta_union(c1: Column, c2: Column): Column =
+    Column.fn("theta_union", c1, c2)
+
+  /**
+   * Unions two binary representations of Datasketches ThetaSketch objects in the input columns
+   * using a Datasketches Union object. It is configured with the default value of 12 for
+   * `lgNomEntries`.
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def theta_union(columnName1: String, columnName2: String): Column = {
+    theta_union(Column(columnName1), Column(columnName2))
+  }
+
+  /**
+   * Unions two binary representations of Datasketches ThetaSketch objects in the input columns
+   * using a Datasketches Union object. It allows the configuration of `lgNomEntries` log nominal
+   * entries for the union buffer.
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def theta_union(c1: Column, c2: Column, lgNomEntries: Int): Column =
+    Column.fn("theta_union", c1, c2, lit(lgNomEntries))
+
+  /**
+   * Unions two binary representations of Datasketches ThetaSketch objects in the input columns
+   * using a Datasketches Union object. It allows the configuration of `lgNomEntries` log nominal
+   * entries for the union buffer.
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def theta_union(columnName1: String, columnName2: String, lgNomEntries: Int): Column = {
+    theta_union(Column(columnName1), Column(columnName2), lgNomEntries)
+  }
+
+  /**
+   * Unions two binary representations of Datasketches ThetaSketch objects in the input columns
+   * using a Datasketches Union object. It allows the configuration of `lgNomEntries` log nominal
+   * entries for the union buffer.
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def theta_union(c1: Column, c2: Column, lgNomEntries: Column): Column =
+    Column.fn("theta_union", c1, c2, lgNomEntries)
+
+  /**
+   * Subtracts two binary representations of Datasketches TupleSketch objects with double summary
+   * data type in the input columns using a Datasketches AnotB object. Returns elements in the
+   * first sketch that are not in the second sketch.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_difference_double(c1: Column, c2: Column): Column =
+    Column.fn("tuple_difference_double", c1, c2)
+
+  /**
+   * Subtracts two binary representations of Datasketches TupleSketch objects with double summary
+   * data type in the input columns using a Datasketches AnotB object. Returns elements in the
+   * first sketch that are not in the second sketch.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_difference_double(columnName1: String, columnName2: String): Column =
+    tuple_difference_double(Column(columnName1), Column(columnName2))
+
+  /**
+   * Subtracts two binary representations of Datasketches TupleSketch objects with integer summary
+   * data type in the input columns using a Datasketches AnotB object. Returns elements in the
+   * first sketch that are not in the second sketch.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_difference_integer(c1: Column, c2: Column): Column =
+    Column.fn("tuple_difference_integer", c1, c2)
+
+  /**
+   * Subtracts two binary representations of Datasketches TupleSketch objects with integer summary
+   * data type in the input columns using a Datasketches AnotB object. Returns elements in the
+   * first sketch that are not in the second sketch.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_difference_integer(columnName1: String, columnName2: String): Column =
+    tuple_difference_integer(Column(columnName1), Column(columnName2))
+
+  /**
+   * Intersects two binary representations of Datasketches TupleSketch objects with double summary
+   * data type in the input columns using a Datasketches Intersection object. The mode parameter
+   * specifies the aggregation mode for numeric summaries during intersection (sum, min, max,
+   * alwaysone). It is configured with the default mode of 'sum'.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_double(c1: Column, c2: Column): Column =
+    Column.fn("tuple_intersection_double", c1, c2)
+
+  /**
+   * Intersects two binary representations of Datasketches TupleSketch objects with double summary
+   * data type in the input columns using a Datasketches Intersection object. The mode parameter
+   * specifies the aggregation mode for numeric summaries during intersection (sum, min, max,
+   * alwaysone). It is configured with the default mode of 'sum'.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_double(columnName1: String, columnName2: String): Column =
+    tuple_intersection_double(Column(columnName1), Column(columnName2))
+
+  /**
+   * Intersects two binary representations of Datasketches TupleSketch objects with double summary
+   * data type in the input columns using a Datasketches Intersection object. The mode parameter
+   * specifies the aggregation mode for numeric summaries during intersection (sum, min, max,
+   * alwaysone).
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_double(c1: Column, c2: Column, mode: String): Column =
+    Column.fn("tuple_intersection_double", c1, c2, lit(mode))
+
+  /**
+   * Intersects two binary representations of Datasketches TupleSketch objects with double summary
+   * data type in the input columns using a Datasketches Intersection object. The mode parameter
+   * specifies the aggregation mode for numeric summaries during intersection (sum, min, max,
+   * alwaysone).
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_double(columnName1: String, columnName2: String, mode: String): Column =
+    tuple_intersection_double(Column(columnName1), Column(columnName2), mode)
+
+  /**
+   * Intersects two binary representations of Datasketches TupleSketch objects with double summary
+   * data type in the input columns using a Datasketches Intersection object. The mode parameter
+   * specifies the aggregation mode for numeric summaries during intersection (sum, min, max,
+   * alwaysone).
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_double(c1: Column, c2: Column, mode: Column): Column =
+    Column.fn("tuple_intersection_double", c1, c2, mode)
+
+  /**
+   * Intersects two binary representations of Datasketches TupleSketch objects with integer
+   * summary data type in the input columns using a Datasketches Intersection object. The mode
+   * parameter specifies the aggregation mode for numeric summaries during intersection (sum, min,
+   * max, alwaysone). It is configured with the default mode of 'sum'.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_integer(c1: Column, c2: Column): Column =
+    Column.fn("tuple_intersection_integer", c1, c2)
+
+  /**
+   * Intersects two binary representations of Datasketches TupleSketch objects with integer
+   * summary data type in the input columns using a Datasketches Intersection object. The mode
+   * parameter specifies the aggregation mode for numeric summaries during intersection (sum, min,
+   * max, alwaysone). It is configured with the default mode of 'sum'.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_integer(columnName1: String, columnName2: String): Column =
+    tuple_intersection_integer(Column(columnName1), Column(columnName2))
+
+  /**
+   * Intersects two binary representations of Datasketches TupleSketch objects with integer
+   * summary data type in the input columns using a Datasketches Intersection object. The mode
+   * parameter specifies the aggregation mode for numeric summaries during intersection (sum, min,
+   * max, alwaysone).
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_integer(c1: Column, c2: Column, mode: String): Column =
+    Column.fn("tuple_intersection_integer", c1, c2, lit(mode))
+
+  /**
+   * Intersects two binary representations of Datasketches TupleSketch objects with integer
+   * summary data type in the input columns using a Datasketches Intersection object. The mode
+   * parameter specifies the aggregation mode for numeric summaries during intersection (sum, min,
+   * max, alwaysone).
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_integer(columnName1: String, columnName2: String, mode: String): Column =
+    tuple_intersection_integer(Column(columnName1), Column(columnName2), mode)
+
+  /**
+   * Intersects two binary representations of Datasketches TupleSketch objects with integer
+   * summary data type in the input columns using a Datasketches Intersection object. The mode
+   * parameter specifies the aggregation mode for numeric summaries during intersection (sum, min,
+   * max, alwaysone).
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_integer(c1: Column, c2: Column, mode: Column): Column =
+    Column.fn("tuple_intersection_integer", c1, c2, mode)
+
+  /**
+   * Returns the estimated number of unique values given the binary representation of a
+   * Datasketches TupleSketch with double summary data type.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_sketch_estimate_double(c: Column): Column =
+    Column.fn("tuple_sketch_estimate_double", c)
+
+  /**
+   * Returns the estimated number of unique values given the binary representation of a
+   * Datasketches TupleSketch with double summary data type.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_sketch_estimate_double(columnName: String): Column =
+    tuple_sketch_estimate_double(Column(columnName))
+
+  /**
+   * Returns the estimated number of unique values given the binary representation of a
+   * Datasketches TupleSketch with integer summary data type.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_sketch_estimate_integer(c: Column): Column =
+    Column.fn("tuple_sketch_estimate_integer", c)
+
+  /**
+   * Returns the estimated number of unique values given the binary representation of a
+   * Datasketches TupleSketch with integer summary data type.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_sketch_estimate_integer(columnName: String): Column =
+    tuple_sketch_estimate_integer(Column(columnName))
+
+  /**
+   * Aggregates the summary values from a Datasketches TupleSketch with double summary data type.
+   * The mode parameter specifies the aggregation mode (sum, min, max, alwaysone). It is
+   * configured with the default mode of 'sum'.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_sketch_summary_double(c: Column): Column =
+    Column.fn("tuple_sketch_summary_double", c)
+
+  /**
+   * Aggregates the summary values from a Datasketches TupleSketch with double summary data type.
+   * The mode parameter specifies the aggregation mode (sum, min, max, alwaysone). It is
+   * configured with the default mode of 'sum'.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_sketch_summary_double(columnName: String): Column =
+    tuple_sketch_summary_double(Column(columnName))
+
+  /**
+   * Aggregates the summary values from a Datasketches TupleSketch with double summary data type.
+   * The mode parameter specifies the aggregation mode (sum, min, max, alwaysone).
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_sketch_summary_double(c: Column, mode: String): Column =
+    Column.fn("tuple_sketch_summary_double", c, lit(mode))
+
+  /**
+   * Aggregates the summary values from a Datasketches TupleSketch with double summary data type.
+   * The mode parameter specifies the aggregation mode (sum, min, max, alwaysone).
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_sketch_summary_double(columnName: String, mode: String): Column =
+    tuple_sketch_summary_double(Column(columnName), mode)
+
+  /**
+   * Aggregates the summary values from a Datasketches TupleSketch with double summary data type.
+   * The mode parameter specifies the aggregation mode (sum, min, max, alwaysone).
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_sketch_summary_double(c: Column, mode: Column): Column =
+    Column.fn("tuple_sketch_summary_double", c, mode)
+
+  /**
+   * Aggregates the summary values from a Datasketches TupleSketch with integer summary data type.
+   * The mode parameter specifies the aggregation mode (sum, min, max, alwaysone). It is
+   * configured with the default mode of 'sum'.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_sketch_summary_integer(c: Column): Column =
+    Column.fn("tuple_sketch_summary_integer", c)
+
+  /**
+   * Aggregates the summary values from a Datasketches TupleSketch with integer summary data type.
+   * The mode parameter specifies the aggregation mode (sum, min, max, alwaysone). It is
+   * configured with the default mode of 'sum'.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_sketch_summary_integer(columnName: String): Column =
+    tuple_sketch_summary_integer(Column(columnName))
+
+  /**
+   * Aggregates the summary values from a Datasketches TupleSketch with integer summary data type.
+   * The mode parameter specifies the aggregation mode (sum, min, max, alwaysone).
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_sketch_summary_integer(c: Column, mode: String): Column =
+    Column.fn("tuple_sketch_summary_integer", c, lit(mode))
+
+  /**
+   * Aggregates the summary values from a Datasketches TupleSketch with integer summary data type.
+   * The mode parameter specifies the aggregation mode (sum, min, max, alwaysone).
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_sketch_summary_integer(columnName: String, mode: String): Column =
+    tuple_sketch_summary_integer(Column(columnName), mode)
+
+  /**
+   * Aggregates the summary values from a Datasketches TupleSketch with integer summary data type.
+   * The mode parameter specifies the aggregation mode (sum, min, max, alwaysone).
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_sketch_summary_integer(c: Column, mode: Column): Column =
+    Column.fn("tuple_sketch_summary_integer", c, mode)
+
+  /**
+   * Returns the theta value (sampling rate) from a Datasketches TupleSketch with double summary
+   * data type. The theta value represents the effective sampling rate of the sketch, between 0.0
+   * and 1.0.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_sketch_theta_double(c: Column): Column =
+    Column.fn("tuple_sketch_theta_double", c)
+
+  /**
+   * Returns the theta value (sampling rate) from a Datasketches TupleSketch with double summary
+   * data type. The theta value represents the effective sampling rate of the sketch, between 0.0
+   * and 1.0.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_sketch_theta_double(columnName: String): Column =
+    tuple_sketch_theta_double(Column(columnName))
+
+  /**
+   * Returns the theta value (sampling rate) from a Datasketches TupleSketch with integer summary
+   * data type. The theta value represents the effective sampling rate of the sketch, between 0.0
+   * and 1.0.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_sketch_theta_integer(c: Column): Column =
+    Column.fn("tuple_sketch_theta_integer", c)
+
+  /**
+   * Returns the theta value (sampling rate) from a Datasketches TupleSketch with integer summary
+   * data type. The theta value represents the effective sampling rate of the sketch, between 0.0
+   * and 1.0.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_sketch_theta_integer(columnName: String): Column =
+    tuple_sketch_theta_integer(Column(columnName))
+
+  /**
+   * Unions two binary representations of Datasketches TupleSketch objects with double summary
+   * data type in the input columns using a Datasketches Union object. It is configured with the
+   * default values of 12 for `lgNomEntries` and 'sum' for mode.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_double(c1: Column, c2: Column): Column =
+    Column.fn("tuple_union_double", c1, c2)
+
+  /**
+   * Unions two binary representations of Datasketches TupleSketch objects with double summary
+   * data type in the input columns using a Datasketches Union object. It is configured with the
+   * default values of 12 for `lgNomEntries` and 'sum' for mode.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_double(columnName1: String, columnName2: String): Column =
+    tuple_union_double(Column(columnName1), Column(columnName2))
+
+  /**
+   * Unions two binary representations of Datasketches TupleSketch objects with double summary
+   * data type in the input columns using a Datasketches Union object. It allows the configuration
+   * of `lgNomEntries` log nominal entries for the union buffer. It uses the default mode of
+   * 'sum'.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_double(c1: Column, c2: Column, lgNomEntries: Int): Column =
+    Column.fn("tuple_union_double", c1, c2, lit(lgNomEntries))
+
+  /**
+   * Unions two binary representations of Datasketches TupleSketch objects with double summary
+   * data type in the input columns using a Datasketches Union object. It allows the configuration
+   * of `lgNomEntries` log nominal entries for the union buffer. It uses the default mode of
+   * 'sum'.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_double(columnName1: String, columnName2: String, lgNomEntries: Int): Column =
+    tuple_union_double(Column(columnName1), Column(columnName2), lgNomEntries)
+
+  /**
+   * Unions two binary representations of Datasketches TupleSketch objects with double summary
+   * data type in the input columns using a Datasketches Union object. It allows the configuration
+   * of `lgNomEntries` log nominal entries for the union buffer and the aggregation mode for
+   * numeric summaries (sum, min, max, alwaysone).
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_double(c1: Column, c2: Column, lgNomEntries: Int, mode: String): Column =
+    Column.fn("tuple_union_double", c1, c2, lit(lgNomEntries), lit(mode))
+
+  /**
+   * Unions two binary representations of Datasketches TupleSketch objects with double summary
+   * data type in the input columns using a Datasketches Union object. It allows the configuration
+   * of `lgNomEntries` log nominal entries for the union buffer and the aggregation mode for
+   * numeric summaries (sum, min, max, alwaysone).
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_double(
+      columnName1: String,
+      columnName2: String,
+      lgNomEntries: Int,
+      mode: String): Column =
+    tuple_union_double(Column(columnName1), Column(columnName2), lgNomEntries, mode)
+
+  /**
+   * Unions two binary representations of Datasketches TupleSketch objects with double summary
+   * data type in the input columns using a Datasketches Union object. It allows the configuration
+   * of `lgNomEntries` log nominal entries for the union buffer and the aggregation mode for
+   * numeric summaries (sum, min, max, alwaysone).
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_double(c1: Column, c2: Column, lgNomEntries: Column, mode: Column): Column =
+    Column.fn("tuple_union_double", c1, c2, lgNomEntries, mode)
+
+  /**
+   * Unions two binary representations of Datasketches TupleSketch objects with integer summary
+   * data type in the input columns using a Datasketches Union object. It is configured with the
+   * default values of 12 for `lgNomEntries` and 'sum' for mode.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_integer(c1: Column, c2: Column): Column =
+    Column.fn("tuple_union_integer", c1, c2)
+
+  /**
+   * Unions two binary representations of Datasketches TupleSketch objects with integer summary
+   * data type in the input columns using a Datasketches Union object. It is configured with the
+   * default values of 12 for `lgNomEntries` and 'sum' for mode.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_integer(columnName1: String, columnName2: String): Column =
+    tuple_union_integer(Column(columnName1), Column(columnName2))
+
+  /**
+   * Unions two binary representations of Datasketches TupleSketch objects with integer summary
+   * data type in the input columns using a Datasketches Union object. It allows the configuration
+   * of `lgNomEntries` log nominal entries for the union buffer. It uses the default mode of
+   * 'sum'.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_integer(c1: Column, c2: Column, lgNomEntries: Int): Column =
+    Column.fn("tuple_union_integer", c1, c2, lit(lgNomEntries))
+
+  /**
+   * Unions two binary representations of Datasketches TupleSketch objects with integer summary
+   * data type in the input columns using a Datasketches Union object. It allows the configuration
+   * of `lgNomEntries` log nominal entries for the union buffer. It uses the default mode of
+   * 'sum'.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_integer(columnName1: String, columnName2: String, lgNomEntries: Int): Column =
+    tuple_union_integer(Column(columnName1), Column(columnName2), lgNomEntries)
+
+  /**
+   * Unions two binary representations of Datasketches TupleSketch objects with integer summary
+   * data type in the input columns using a Datasketches Union object. It allows the configuration
+   * of `lgNomEntries` log nominal entries for the union buffer and the aggregation mode for
+   * numeric summaries (sum, min, max, alwaysone).
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_integer(c1: Column, c2: Column, lgNomEntries: Int, mode: String): Column =
+    Column.fn("tuple_union_integer", c1, c2, lit(lgNomEntries), lit(mode))
+
+  /**
+   * Unions two binary representations of Datasketches TupleSketch objects with integer summary
+   * data type in the input columns using a Datasketches Union object. It allows the configuration
+   * of `lgNomEntries` log nominal entries for the union buffer and the aggregation mode for
+   * numeric summaries (sum, min, max, alwaysone).
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_integer(
+      columnName1: String,
+      columnName2: String,
+      lgNomEntries: Int,
+      mode: String): Column =
+    tuple_union_integer(Column(columnName1), Column(columnName2), lgNomEntries, mode)
+
+  /**
+   * Unions two binary representations of Datasketches TupleSketch objects with integer summary
+   * data type in the input columns using a Datasketches Union object. It allows the configuration
+   * of `lgNomEntries` log nominal entries for the union buffer and the aggregation mode for
+   * numeric summaries (sum, min, max, alwaysone).
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_integer(c1: Column, c2: Column, lgNomEntries: Column, mode: Column): Column =
+    Column.fn("tuple_union_integer", c1, c2, lgNomEntries, mode)
+
+  /**
+   * Subtracts the binary representation of a Datasketches ThetaSketch from a TupleSketch with
+   * double summary data type in the input columns using a Datasketches AnotB object. Returns
+   * elements in the TupleSketch that are not in the ThetaSketch.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_difference_theta_double(c1: Column, c2: Column): Column =
+    Column.fn("tuple_difference_theta_double", c1, c2)
+
+  /**
+   * Subtracts the binary representation of a Datasketches ThetaSketch from a TupleSketch with
+   * double summary data type in the input columns using a Datasketches AnotB object. Returns
+   * elements in the TupleSketch that are not in the ThetaSketch.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_difference_theta_double(columnName1: String, columnName2: String): Column =
+    tuple_difference_theta_double(Column(columnName1), Column(columnName2))
+
+  /**
+   * Subtracts the binary representation of a Datasketches ThetaSketch from a TupleSketch with
+   * integer summary data type in the input columns using a Datasketches AnotB object. Returns
+   * elements in the TupleSketch that are not in the ThetaSketch.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_difference_theta_integer(c1: Column, c2: Column): Column =
+    Column.fn("tuple_difference_theta_integer", c1, c2)
+
+  /**
+   * Subtracts the binary representation of a Datasketches ThetaSketch from a TupleSketch with
+   * integer summary data type in the input columns using a Datasketches AnotB object. Returns
+   * elements in the TupleSketch that are not in the ThetaSketch.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_difference_theta_integer(columnName1: String, columnName2: String): Column =
+    tuple_difference_theta_integer(Column(columnName1), Column(columnName2))
+
+  /**
+   * Intersects the binary representation of a Datasketches TupleSketch with double summary data
+   * type with a Datasketches ThetaSketch in the input columns using a Datasketches Intersection
+   * object. The mode parameter specifies the aggregation mode for numeric summaries during
+   * intersection (sum, min, max, alwaysone). It is configured with the default mode of 'sum'.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_theta_double(c1: Column, c2: Column): Column =
+    Column.fn("tuple_intersection_theta_double", c1, c2)
+
+  /**
+   * Intersects the binary representation of a Datasketches TupleSketch with double summary data
+   * type with a Datasketches ThetaSketch in the input columns using a Datasketches Intersection
+   * object. The mode parameter specifies the aggregation mode for numeric summaries during
+   * intersection (sum, min, max, alwaysone). It is configured with the default mode of 'sum'.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_theta_double(columnName1: String, columnName2: String): Column =
+    tuple_intersection_theta_double(Column(columnName1), Column(columnName2))
+
+  /**
+   * Intersects the binary representation of a Datasketches TupleSketch with double summary data
+   * type with a Datasketches ThetaSketch in the input columns using a Datasketches Intersection
+   * object. The mode parameter specifies the aggregation mode for numeric summaries during
+   * intersection (sum, min, max, alwaysone).
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_theta_double(c1: Column, c2: Column, mode: String): Column =
+    Column.fn("tuple_intersection_theta_double", c1, c2, lit(mode))
+
+  /**
+   * Intersects the binary representation of a Datasketches TupleSketch with double summary data
+   * type with a Datasketches ThetaSketch in the input columns using a Datasketches Intersection
+   * object. The mode parameter specifies the aggregation mode for numeric summaries during
+   * intersection (sum, min, max, alwaysone).
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_theta_double(
+      columnName1: String,
+      columnName2: String,
+      mode: String): Column =
+    tuple_intersection_theta_double(Column(columnName1), Column(columnName2), mode)
+
+  /**
+   * Intersects the binary representation of a Datasketches TupleSketch with double summary data
+   * type with a Datasketches ThetaSketch in the input columns using a Datasketches Intersection
+   * object. The mode parameter specifies the aggregation mode for numeric summaries during
+   * intersection (sum, min, max, alwaysone).
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_theta_double(c1: Column, c2: Column, mode: Column): Column =
+    Column.fn("tuple_intersection_theta_double", c1, c2, mode)
+
+  /**
+   * Intersects the binary representation of a Datasketches TupleSketch with integer summary data
+   * type with a Datasketches ThetaSketch in the input columns using a Datasketches Intersection
+   * object. The mode parameter specifies the aggregation mode for numeric summaries during
+   * intersection (sum, min, max, alwaysone). It is configured with the default mode of 'sum'.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_theta_integer(c1: Column, c2: Column): Column =
+    Column.fn("tuple_intersection_theta_integer", c1, c2)
+
+  /**
+   * Intersects the binary representation of a Datasketches TupleSketch with integer summary data
+   * type with a Datasketches ThetaSketch in the input columns using a Datasketches Intersection
+   * object. The mode parameter specifies the aggregation mode for numeric summaries during
+   * intersection (sum, min, max, alwaysone). It is configured with the default mode of 'sum'.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_theta_integer(columnName1: String, columnName2: String): Column =
+    tuple_intersection_theta_integer(Column(columnName1), Column(columnName2))
+
+  /**
+   * Intersects the binary representation of a Datasketches TupleSketch with integer summary data
+   * type with a Datasketches ThetaSketch in the input columns using a Datasketches Intersection
+   * object. The mode parameter specifies the aggregation mode for numeric summaries during
+   * intersection (sum, min, max, alwaysone).
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_theta_integer(c1: Column, c2: Column, mode: String): Column =
+    Column.fn("tuple_intersection_theta_integer", c1, c2, lit(mode))
+
+  /**
+   * Intersects the binary representation of a Datasketches TupleSketch with integer summary data
+   * type with a Datasketches ThetaSketch in the input columns using a Datasketches Intersection
+   * object. The mode parameter specifies the aggregation mode for numeric summaries during
+   * intersection (sum, min, max, alwaysone).
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_theta_integer(
+      columnName1: String,
+      columnName2: String,
+      mode: String): Column =
+    tuple_intersection_theta_integer(Column(columnName1), Column(columnName2), mode)
+
+  /**
+   * Intersects the binary representation of a Datasketches TupleSketch with integer summary data
+   * type with a Datasketches ThetaSketch in the input columns using a Datasketches Intersection
+   * object. The mode parameter specifies the aggregation mode for numeric summaries during
+   * intersection (sum, min, max, alwaysone).
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_theta_integer(c1: Column, c2: Column, mode: Column): Column =
+    Column.fn("tuple_intersection_theta_integer", c1, c2, mode)
+
+  /**
+   * Unions the binary representation of a Datasketches TupleSketch with double summary data type
+   * with a Datasketches ThetaSketch in the input columns using a Datasketches Union object. It is
+   * configured with the default values of 12 for `lgNomEntries` and 'sum' for mode.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_theta_double(c1: Column, c2: Column): Column =
+    Column.fn("tuple_union_theta_double", c1, c2)
+
+  /**
+   * Unions the binary representation of a Datasketches TupleSketch with double summary data type
+   * with a Datasketches ThetaSketch in the input columns using a Datasketches Union object. It is
+   * configured with the default values of 12 for `lgNomEntries` and 'sum' for mode.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_theta_double(columnName1: String, columnName2: String): Column =
+    tuple_union_theta_double(Column(columnName1), Column(columnName2))
+
+  /**
+   * Unions the binary representation of a Datasketches TupleSketch with double summary data type
+   * with a Datasketches ThetaSketch in the input columns using a Datasketches Union object. It
+   * allows the configuration of `lgNomEntries` log nominal entries for the union buffer. It uses
+   * the default mode of 'sum'.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_theta_double(c1: Column, c2: Column, lgNomEntries: Int): Column =
+    Column.fn("tuple_union_theta_double", c1, c2, lit(lgNomEntries))
+
+  /**
+   * Unions the binary representation of a Datasketches TupleSketch with double summary data type
+   * with a Datasketches ThetaSketch in the input columns using a Datasketches Union object. It
+   * allows the configuration of `lgNomEntries` log nominal entries for the union buffer. It uses
+   * the default mode of 'sum'.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_theta_double(
+      columnName1: String,
+      columnName2: String,
+      lgNomEntries: Int): Column =
+    tuple_union_theta_double(Column(columnName1), Column(columnName2), lgNomEntries)
+
+  /**
+   * Unions the binary representation of a Datasketches TupleSketch with double summary data type
+   * with a Datasketches ThetaSketch in the input columns using a Datasketches Union object. It
+   * allows the configuration of `lgNomEntries` log nominal entries for the union buffer and the
+   * aggregation mode for numeric summaries (sum, min, max, alwaysone).
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_theta_double(c1: Column, c2: Column, lgNomEntries: Int, mode: String): Column =
+    Column.fn("tuple_union_theta_double", c1, c2, lit(lgNomEntries), lit(mode))
+
+  /**
+   * Unions the binary representation of a Datasketches TupleSketch with double summary data type
+   * with a Datasketches ThetaSketch in the input columns using a Datasketches Union object. It
+   * allows the configuration of `lgNomEntries` log nominal entries for the union buffer and the
+   * aggregation mode for numeric summaries (sum, min, max, alwaysone).
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_theta_double(
+      columnName1: String,
+      columnName2: String,
+      lgNomEntries: Int,
+      mode: String): Column =
+    tuple_union_theta_double(Column(columnName1), Column(columnName2), lgNomEntries, mode)
+
+  /**
+   * Unions the binary representation of a Datasketches TupleSketch with double summary data type
+   * with a Datasketches ThetaSketch in the input columns using a Datasketches Union object. It
+   * allows the configuration of `lgNomEntries` log nominal entries for the union buffer and the
+   * aggregation mode for numeric summaries (sum, min, max, alwaysone).
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_theta_double(
+      c1: Column,
+      c2: Column,
+      lgNomEntries: Column,
+      mode: Column): Column =
+    Column.fn("tuple_union_theta_double", c1, c2, lgNomEntries, mode)
+
+  /**
+   * Unions the binary representation of a Datasketches TupleSketch with integer summary data type
+   * with a Datasketches ThetaSketch in the input columns using a Datasketches Union object. It is
+   * configured with the default values of 12 for `lgNomEntries` and 'sum' for mode.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_theta_integer(c1: Column, c2: Column): Column =
+    Column.fn("tuple_union_theta_integer", c1, c2)
+
+  /**
+   * Unions the binary representation of a Datasketches TupleSketch with integer summary data type
+   * with a Datasketches ThetaSketch in the input columns using a Datasketches Union object. It is
+   * configured with the default values of 12 for `lgNomEntries` and 'sum' for mode.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_theta_integer(columnName1: String, columnName2: String): Column =
+    tuple_union_theta_integer(Column(columnName1), Column(columnName2))
+
+  /**
+   * Unions the binary representation of a Datasketches TupleSketch with integer summary data type
+   * with a Datasketches ThetaSketch in the input columns using a Datasketches Union object. It
+   * allows the configuration of `lgNomEntries` log nominal entries for the union buffer. It uses
+   * the default mode of 'sum'.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_theta_integer(c1: Column, c2: Column, lgNomEntries: Int): Column =
+    Column.fn("tuple_union_theta_integer", c1, c2, lit(lgNomEntries))
+
+  /**
+   * Unions the binary representation of a Datasketches TupleSketch with integer summary data type
+   * with a Datasketches ThetaSketch in the input columns using a Datasketches Union object. It
+   * allows the configuration of `lgNomEntries` log nominal entries for the union buffer. It uses
+   * the default mode of 'sum'.
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_theta_integer(
+      columnName1: String,
+      columnName2: String,
+      lgNomEntries: Int): Column =
+    tuple_union_theta_integer(Column(columnName1), Column(columnName2), lgNomEntries)
+
+  /**
+   * Unions the binary representation of a Datasketches TupleSketch with integer summary data type
+   * with a Datasketches ThetaSketch in the input columns using a Datasketches Union object. It
+   * allows the configuration of `lgNomEntries` log nominal entries for the union buffer and the
+   * aggregation mode for numeric summaries (sum, min, max, alwaysone).
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_theta_integer(c1: Column, c2: Column, lgNomEntries: Int, mode: String): Column =
+    Column.fn("tuple_union_theta_integer", c1, c2, lit(lgNomEntries), lit(mode))
+
+  /**
+   * Unions the binary representation of a Datasketches TupleSketch with integer summary data type
+   * with a Datasketches ThetaSketch in the input columns using a Datasketches Union object. It
+   * allows the configuration of `lgNomEntries` log nominal entries for the union buffer and the
+   * aggregation mode for numeric summaries (sum, min, max, alwaysone).
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_theta_integer(
+      columnName1: String,
+      columnName2: String,
+      lgNomEntries: Int,
+      mode: String): Column =
+    tuple_union_theta_integer(Column(columnName1), Column(columnName2), lgNomEntries, mode)
+
+  /**
+   * Unions the binary representation of a Datasketches TupleSketch with integer summary data type
+   * with a Datasketches ThetaSketch in the input columns using a Datasketches Union object. It
+   * allows the configuration of `lgNomEntries` log nominal entries for the union buffer and the
+   * aggregation mode for numeric summaries (sum, min, max, alwaysone).
+   *
+   * @group sketch_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_theta_integer(
+      c1: Column,
+      c2: Column,
+      lgNomEntries: Column,
+      mode: Column): Column =
+    Column.fn("tuple_union_theta_integer", c1, c2, lgNomEntries, mode)
+
+  /**
+   * Returns a string with human readable summary information about the KLL bigint sketch.
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_to_string_bigint(e: Column): Column =
+    Column.fn("kll_sketch_to_string_bigint", e)
+
+  /**
+   * Returns a string with human readable summary information about the KLL float sketch.
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_to_string_float(e: Column): Column =
+    Column.fn("kll_sketch_to_string_float", e)
+
+  /**
+   * Returns a string with human readable summary information about the KLL double sketch.
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_to_string_double(e: Column): Column =
+    Column.fn("kll_sketch_to_string_double", e)
+
+  /**
+   * Returns the number of items collected in the KLL bigint sketch.
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_get_n_bigint(e: Column): Column =
+    Column.fn("kll_sketch_get_n_bigint", e)
+
+  /**
+   * Returns the number of items collected in the KLL float sketch.
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_get_n_float(e: Column): Column =
+    Column.fn("kll_sketch_get_n_float", e)
+
+  /**
+   * Returns the number of items collected in the KLL double sketch.
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_get_n_double(e: Column): Column =
+    Column.fn("kll_sketch_get_n_double", e)
+
+  /**
+   * Merges two KLL bigint sketch buffers together into one.
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_merge_bigint(left: Column, right: Column): Column =
+    Column.fn("kll_sketch_merge_bigint", left, right)
+
+  /**
+   * Merges two KLL float sketch buffers together into one.
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_merge_float(left: Column, right: Column): Column =
+    Column.fn("kll_sketch_merge_float", left, right)
+
+  /**
+   * Merges two KLL double sketch buffers together into one.
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_merge_double(left: Column, right: Column): Column =
+    Column.fn("kll_sketch_merge_double", left, right)
+
+  /**
+   * Extracts a quantile value from a KLL bigint sketch given an input rank value. The rank can be
+   * a single value or an array.
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_get_quantile_bigint(sketch: Column, rank: Column): Column =
+    Column.fn("kll_sketch_get_quantile_bigint", sketch, rank)
+
+  /**
+   * Extracts a quantile value from a KLL float sketch given an input rank value. The rank can be
+   * a single value or an array.
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_get_quantile_float(sketch: Column, rank: Column): Column =
+    Column.fn("kll_sketch_get_quantile_float", sketch, rank)
+
+  /**
+   * Extracts a quantile value from a KLL double sketch given an input rank value. The rank can be
+   * a single value or an array.
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_get_quantile_double(sketch: Column, rank: Column): Column =
+    Column.fn("kll_sketch_get_quantile_double", sketch, rank)
+
+  /**
+   * Extracts a rank value from a KLL bigint sketch given an input quantile value. The quantile
+   * can be a single value or an array.
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_get_rank_bigint(sketch: Column, quantile: Column): Column =
+    Column.fn("kll_sketch_get_rank_bigint", sketch, quantile)
+
+  /**
+   * Extracts a rank value from a KLL float sketch given an input quantile value. The quantile can
+   * be a single value or an array.
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_get_rank_float(sketch: Column, quantile: Column): Column =
+    Column.fn("kll_sketch_get_rank_float", sketch, quantile)
+
+  /**
+   * Extracts a rank value from a KLL double sketch given an input quantile value. The quantile
+   * can be a single value or an array.
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_get_rank_double(sketch: Column, quantile: Column): Column =
+    Column.fn("kll_sketch_get_rank_double", sketch, quantile)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // DateTime functions
@@ -5312,7 +7632,7 @@ object functions {
   def dayofyear(e: Column): Column = Column.fn("dayofyear", e)
 
   /**
-   * Extracts the hours as an integer from a given date/timestamp/string.
+   * Extracts the hours as an integer from a given date/time/timestamp/string.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
@@ -5385,7 +7705,7 @@ object functions {
   def last_day(e: Column): Column = Column.fn("last_day", e)
 
   /**
-   * Extracts the minutes as an integer from a given date/timestamp/string.
+   * Extracts the minutes as an integer from a given date/time/timestamp/string.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
@@ -5491,7 +7811,7 @@ object functions {
     Column.fn("next_day", date, dayOfWeek)
 
   /**
-   * Extracts the seconds as an integer from a given date/timestamp/string.
+   * Extracts the seconds as an integer from a given date/time/timestamp/string.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a timestamp
    * @group datetime_funcs
@@ -5596,6 +7916,41 @@ object functions {
     Column.fn("unix_timestamp", s, lit(p))
 
   /**
+   * Parses a string value to a time value.
+   *
+   * @param str
+   *   A string to be parsed to time.
+   * @return
+   *   A time, or raises an error if the input is malformed.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def to_time(str: Column): Column = {
+    Column.fn("to_time", str)
+  }
+
+  /**
+   * Parses a string value to a time value.
+   *
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> Datetime
+   * Patterns</a> for valid time format patterns.
+   *
+   * @param str
+   *   A string to be parsed to time.
+   * @param format
+   *   A time format pattern to follow.
+   * @return
+   *   A time, or raises an error if the input is malformed.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def to_time(str: Column, format: Column): Column = {
+    Column.fn("to_time", str, format)
+  }
+
+  /**
    * Converts to a timestamp by casting rules to `TimestampType`.
    *
    * @param s
@@ -5626,6 +7981,41 @@ object functions {
    * @since 2.2.0
    */
   def to_timestamp(s: Column, fmt: String): Column = Column.fn("to_timestamp", s, lit(fmt))
+
+  /**
+   * Parses a string value to a time value.
+   *
+   * @param str
+   *   A string to be parsed to time.
+   * @return
+   *   A time, or null if the input is malformed.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def try_to_time(str: Column): Column = {
+    Column.fn("try_to_time", str)
+  }
+
+  /**
+   * Parses a string value to a time value.
+   *
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> Datetime
+   * Patterns</a> for valid time format patterns.
+   *
+   * @param str
+   *   A string to be parsed to time.
+   * @param format
+   *   A time format pattern to follow.
+   * @return
+   *   A time, or null if the input is malformed.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def try_to_time(str: Column, format: Column): Column = {
+    Column.fn("try_to_time", str, format)
+  }
 
   /**
    * Parses the `s` with the `format` to a timestamp. The function always returns null on an
@@ -5674,6 +8064,24 @@ object functions {
    * @since 2.2.0
    */
   def to_date(e: Column, fmt: String): Column = Column.fn("to_date", e, lit(fmt))
+
+  /**
+   * This is a special version of `to_date` that performs the same operation, but returns a NULL
+   * value instead of raising an error if date cannot be created.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def try_to_date(e: Column): Column = Column.fn("try_to_date", e)
+
+  /**
+   * This is a special version of `to_date` that performs the same operation, but returns a NULL
+   * value instead of raising an error if date cannot be created.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def try_to_date(e: Column, fmt: String): Column = Column.fn("try_to_date", e, lit(fmt))
 
   /**
    * Returns the number of days since 1970-01-01.
@@ -6069,6 +8477,98 @@ object functions {
    */
   def timestamp_add(unit: String, quantity: Column, ts: Column): Column =
     Column.internalFn("timestampadd", lit(unit), quantity, ts)
+
+  /**
+   * Returns the difference between two times, measured in specified units. Throws a
+   * SparkIllegalArgumentException, in case the specified unit is not supported.
+   *
+   * @param unit
+   *   A STRING representing the unit of the time difference. Supported units are: "HOUR",
+   *   "MINUTE", "SECOND", "MILLISECOND", and "MICROSECOND". The unit is case-insensitive.
+   * @param start
+   *   A starting TIME.
+   * @param end
+   *   An ending TIME.
+   * @return
+   *   The difference between `end` and `start` times, measured in specified units.
+   * @note
+   *   If any of the inputs is `NULL`, the result is `NULL`.
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def time_diff(unit: Column, start: Column, end: Column): Column = {
+    Column.fn("time_diff", unit, start, end)
+  }
+
+  /**
+   * Returns `time` truncated to the `unit`.
+   *
+   * @param unit
+   *   A STRING representing the unit to truncate the time to. Supported units are: "HOUR",
+   *   "MINUTE", "SECOND", "MILLISECOND", and "MICROSECOND". The unit is case-insensitive.
+   * @param time
+   *   A TIME to truncate.
+   * @return
+   *   A TIME truncated to the specified unit.
+   * @note
+   *   If any of the inputs is `NULL`, the result is `NULL`.
+   * @throws IllegalArgumentException
+   *   If the `unit` is not supported.
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def time_trunc(unit: Column, time: Column): Column = {
+    Column.fn("time_trunc", unit, time)
+  }
+
+  /**
+   * Creates a TIME from the number of seconds since midnight.
+   *
+   * @group datetime_funcs
+   * @since 4.2.0
+   */
+  def time_from_seconds(e: Column): Column = Column.fn("time_from_seconds", e)
+
+  /**
+   * Creates a TIME from the number of milliseconds since midnight.
+   *
+   * @group datetime_funcs
+   * @since 4.2.0
+   */
+  def time_from_millis(e: Column): Column = Column.fn("time_from_millis", e)
+
+  /**
+   * Creates a TIME from the number of microseconds since midnight.
+   *
+   * @group datetime_funcs
+   * @since 4.2.0
+   */
+  def time_from_micros(e: Column): Column = Column.fn("time_from_micros", e)
+
+  /**
+   * Extracts the number of seconds (including fractional seconds) from a TIME value. Returns a
+   * DECIMAL(14,6) to preserve microsecond precision.
+   *
+   * @group datetime_funcs
+   * @since 4.2.0
+   */
+  def time_to_seconds(e: Column): Column = Column.fn("time_to_seconds", e)
+
+  /**
+   * Extracts the number of milliseconds since midnight from a TIME value.
+   *
+   * @group datetime_funcs
+   * @since 4.2.0
+   */
+  def time_to_millis(e: Column): Column = Column.fn("time_to_millis", e)
+
+  /**
+   * Extracts the number of microseconds since midnight from a TIME value.
+   *
+   * @group datetime_funcs
+   * @since 4.2.0
+   */
+  def time_to_micros(e: Column): Column = Column.fn("time_to_micros", e)
 
   /**
    * Parses the `timestamp` expression with the `format` expression to a timestamp without time
@@ -6822,7 +9322,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def from_json(e: Column, schema: DataType, options: Map[String, String]): Column = {
-    from_json(e, lit(schema.json), options.iterator)
+    from_json(e, lit(schema.sql), options.iterator)
   }
 
   // scalastyle:off line.size.limit
@@ -7044,7 +9544,7 @@ object functions {
   def is_variant_null(v: Column): Column = Column.fn("is_variant_null", v)
 
   /**
-   * Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
+   * Extracts a sub-variant from `v` according to `path` string, and then cast the sub-variant to
    * `targetType`. Returns null if the path does not exist. Throws an exception if the cast fails.
    *
    * @param v
@@ -7061,7 +9561,25 @@ object functions {
     Column.fn("variant_get", v, lit(path), lit(targetType))
 
   /**
-   * Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
+   * Extracts a sub-variant from `v` according to `path` column, and then cast the sub-variant to
+   * `targetType`. Returns null if the path does not exist. Throws an exception if the cast fails.
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   the column containing the extraction path strings. A valid path string should start with
+   *   `$` and is followed by zero or more segments like `[123]`, `.name`, `['name']`, or
+   *   `["name"]`.
+   * @param targetType
+   *   the target data type to cast into, in a DDL-formatted string.
+   * @group variant_funcs
+   * @since 4.0.0
+   */
+  def variant_get(v: Column, path: Column, targetType: String): Column =
+    Column.fn("variant_get", v, path, lit(targetType))
+
+  /**
+   * Extracts a sub-variant from `v` according to `path` string, and then cast the sub-variant to
    * `targetType`. Returns null if the path does not exist or the cast fails..
    *
    * @param v
@@ -7075,6 +9593,24 @@ object functions {
    * @since 4.0.0
    */
   def try_variant_get(v: Column, path: String, targetType: String): Column =
+    Column.fn("try_variant_get", v, lit(path), lit(targetType))
+
+  /**
+   * Extracts a sub-variant from `v` according to `path` column, and then cast the sub-variant to
+   * `targetType`. Returns null if the path does not exist or the cast fails..
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   the column containing the extraction path strings. A valid path string should start with
+   *   `$` and is followed by zero or more segments like `[123]`, `.name`, `['name']`, or
+   *   `["name"]`.
+   * @param targetType
+   *   the target data type to cast into, in a DDL-formatted string.
+   * @group variant_funcs
+   * @since 4.0.0
+   */
+  def try_variant_get(v: Column, path: Column, targetType: String): Column =
     Column.fn("try_variant_get", v, lit(path), lit(targetType))
 
   /**
@@ -7658,7 +10194,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def from_xml(e: Column, schema: StructType, options: java.util.Map[String, String]): Column =
-    from_xml(e, lit(schema.json), options.asScala.iterator)
+    from_xml(e, lit(schema.sql), options.asScala.iterator)
 
   // scalastyle:off line.size.limit
   /**
@@ -8221,6 +10757,24 @@ object functions {
     Column.fn("make_timestamp", years, months, days, hours, mins, secs)
 
   /**
+   * Create a local date-time from date, time, and timezone fields.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def make_timestamp(date: Column, time: Column, timezone: Column): Column =
+    Column.fn("make_timestamp", date, time, timezone)
+
+  /**
+   * Create a local date-time from date and time fields.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def make_timestamp(date: Column, time: Column): Column =
+    Column.fn("make_timestamp", date, time)
+
+  /**
    * Try to create a timestamp from years, months, days, hours, mins, secs and timezone fields.
    * The result data type is consistent with the value of configuration `spark.sql.timestampType`.
    * The function returns NULL on invalid inputs.
@@ -8254,6 +10808,24 @@ object functions {
       mins: Column,
       secs: Column): Column =
     Column.fn("try_make_timestamp", years, months, days, hours, mins, secs)
+
+  /**
+   * Try to create a local date-time from date, time, and timezone fields.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def try_make_timestamp(date: Column, time: Column, timezone: Column): Column =
+    Column.fn("try_make_timestamp", date, time, timezone)
+
+  /**
+   * Try to create a local date-time from date and time fields.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def try_make_timestamp(date: Column, time: Column): Column =
+    Column.fn("try_make_timestamp", date, time)
 
   /**
    * Create the current timestamp with local time zone from years, months, days, hours, mins, secs
@@ -8341,6 +10913,15 @@ object functions {
     Column.fn("make_timestamp_ntz", years, months, days, hours, mins, secs)
 
   /**
+   * Create a local date-time from date and time fields.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def make_timestamp_ntz(date: Column, time: Column): Column =
+    Column.fn("make_timestamp_ntz", date, time)
+
+  /**
    * Try to create a local date-time from years, months, days, hours, mins, secs fields. The
    * function returns NULL on invalid inputs.
    *
@@ -8355,6 +10936,15 @@ object functions {
       mins: Column,
       secs: Column): Column =
     Column.fn("try_make_timestamp_ntz", years, months, days, hours, mins, secs)
+
+  /**
+   * Try to create a local date-time from date and time fields.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def try_make_timestamp_ntz(date: Column, time: Column): Column =
+    Column.fn("try_make_timestamp_ntz", date, time)
 
   /**
    * Make year-month interval from years, months.
@@ -8509,6 +11099,82 @@ object functions {
   }
 
    */
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  // ST geospatial functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Returns the input GEOGRAPHY or GEOMETRY value in WKB format.
+   *
+   * @group st_funcs
+   * @since 4.1.0
+   */
+  def st_asbinary(geo: Column): Column =
+    Column.fn("st_asbinary", geo)
+
+  /**
+   * Parses the WKB description of a geography and returns the corresponding GEOGRAPHY value.
+   *
+   * @group st_funcs
+   * @since 4.1.0
+   */
+  def st_geogfromwkb(wkb: Column): Column =
+    Column.fn("st_geogfromwkb", wkb)
+
+  /**
+   * Parses the WKB description of a geometry and returns the corresponding GEOMETRY value.
+   *
+   * @group st_funcs
+   * @since 4.1.0
+   */
+  def st_geomfromwkb(wkb: Column): Column =
+    Column.fn("st_geomfromwkb", wkb)
+
+  /**
+   * Parses the WKB description of a geometry and returns the corresponding GEOMETRY value.
+   *
+   * @group st_funcs
+   * @since 4.2.0
+   */
+  def st_geomfromwkb(wkb: Column, srid: Column): Column =
+    Column.fn("st_geomfromwkb", wkb, srid)
+
+  /**
+   * Parses the WKB description of a geometry and returns the corresponding GEOMETRY value.
+   *
+   * @group st_funcs
+   * @since 4.2.0
+   */
+  def st_geomfromwkb(wkb: Column, srid: Int): Column =
+    Column.fn("st_geomfromwkb", wkb, lit(srid))
+
+  /**
+   * Returns a new GEOGRAPHY or GEOMETRY value whose SRID is the specified SRID value.
+   *
+   * @group st_funcs
+   * @since 4.1.0
+   */
+  def st_setsrid(geo: Column, srid: Column): Column =
+    Column.fn("st_setsrid", geo, srid)
+
+  /**
+   * Returns a new GEOGRAPHY or GEOMETRY value whose SRID is the specified SRID value.
+   *
+   * @group st_funcs
+   * @since 4.1.0
+   */
+  def st_setsrid(geo: Column, srid: Int): Column =
+    Column.fn("st_setsrid", geo, lit(srid))
+
+  /**
+   * Returns the SRID of the input GEOGRAPHY or GEOMETRY value.
+   *
+   * @group st_funcs
+   * @since 4.1.0
+   */
+  def st_srid(geo: Column): Column =
+    Column.fn("st_srid", geo)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Scala UDF functions

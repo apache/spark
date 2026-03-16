@@ -83,3 +83,33 @@ select (select count(*) from data d1 where d1.country = d2.country) + count(id) 
 
 -- SELECT list contains unresolved column, should not report UNRESOLVED_ALL_IN_GROUP_BY
 select non_exist from data group by all;
+
+-- GROUP BY ALL with a * in aggregate expressions list
+SELECT * FROM data GROUP BY ALL;
+
+SELECT 4 AS a, 5 AS b, 6 AS c, * FROM data GROUP BY ALL;
+
+SELECT *, 4 AS a, 5 AS b, 6 AS c FROM data GROUP BY ALL;
+
+SELECT 4 AS a, 5 AS b, *, 6 AS c FROM data GROUP BY ALL;
+
+-- Group by ALL on subquery with CTE inside
+SELECT (
+  WITH cte AS (SELECT 1)
+  SELECT * FROM cte
+) AS subq1
+FROM
+  VALUES (1)
+GROUP BY
+  ALL
+;
+
+-- Group by ALL on subquery with relation
+SELECT (
+  SELECT country FROM data LIMIT 1
+) AS subq1
+FROM
+  VALUES (1)
+GROUP BY
+  ALL
+;

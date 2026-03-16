@@ -24,7 +24,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SecurityManager, SSLOptions}
 import org.apache.spark.deploy.Command
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.launcher.WorkerCommandBuilder
 import org.apache.spark.util.Utils
 

@@ -46,7 +46,7 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
     $"e".boolean, $"f".boolean, $"g".boolean, $"h".boolean)
 
   val testRelationWithData = LocalRelation.fromExternalRows(
-    testRelation.output, Seq(Row(1, 2, 3, "abc"))
+    testRelation.output, Seq(Row(1, 2, 3, "abc", true, true, true, true))
   )
 
   val testNotNullableRelation = LocalRelation($"a".int.notNull, $"b".int.notNull, $"c".int.notNull,
@@ -54,7 +54,7 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
     $"h".boolean.notNull)
 
   val testNotNullableRelationWithData = LocalRelation.fromExternalRows(
-    testNotNullableRelation.output, Seq(Row(1, 2, 3, "abc"))
+    testNotNullableRelation.output, Seq(Row(1, 2, 3, "abc", true, true, true, true))
   )
 
   private def checkCondition(input: Expression, expected: LogicalPlan): Unit = {
@@ -289,6 +289,37 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
   test("simplify NOT(IsNull(x)) and NOT(IsNotNull(x))") {
     checkCondition(Not(IsNotNull($"b")), IsNull($"b"))
     checkCondition(Not(IsNull($"b")), IsNotNull($"b"))
+  }
+
+  test("SPARK-54881: simplify Not(Expr) in single pass") {
+    def executeRuleOnce(exprToTest: Expression, optimizedExprExpected: Expression): Unit = {
+      val planAfterRuleApp = BooleanSimplification.apply(testRelation.where(exprToTest).analyze)
+      val expectedOptPlan = testRelation.where(optimizedExprExpected).analyze
+      comparePlans(expectedOptPlan, planAfterRuleApp)
+    }
+    // check simplify Not(A <= B OR A >= B) to (a > b AND a < b) in single pass
+    executeRuleOnce(
+      Not(($"a" <= $"b") || ($"a" >= $"b")),
+      $"a" > $"b" && $"a" < $"b"
+    )
+
+    // check simplify Not((expr1 OR expr2) OR (expr3 AND expr4)) in single pass
+    executeRuleOnce(
+      Not(($"a" <= $"b" || $"c" > $"a" + 4) || ($"a" >= $"b" && $"c" < $"a")),
+      And(
+        And($"a" > $"b", $"c" <= $"a" + 4),
+        Or($"a" < $"b", $"c" >= $"a")
+      )
+    )
+
+    // check simplify Not((expr1 OR expr2) AND (expr3 OR expr4)) in single pass
+    executeRuleOnce(
+      Not(($"a" <= $"b" || $"c" > $"a" + 4) && ($"a" >= $"b" || $"c" < $"a")),
+      Or(
+        And($"a" > $"b", $"c" <= $"a" + 4),
+        And($"a" < $"b", $"c" >= $"a")
+      )
+    )
   }
 
   protected def assertEquivalent(e1: Expression, e2: Expression): Unit = {

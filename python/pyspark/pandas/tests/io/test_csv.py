@@ -32,8 +32,7 @@ def normalize_text(s):
 class CsvTestsMixin:
     @property
     def csv_text(self):
-        return normalize_text(
-            """
+        return normalize_text("""
             name,amount
             Alice,100
             Bob,-200
@@ -48,67 +47,55 @@ class CsvTestsMixin:
             Frank,200
             Alice,300
             Edith,600
-            """
-        )
+            """)
 
     @property
     def csv_text_2(self):
-        return normalize_text(
-            """
+        return normalize_text("""
             A,B
             item1,1
             item2,1,2
             item3,1,2,3,4
             item4,1
-            """
-        )
+            """)
 
     @property
     def csv_text_with_comments(self):
-        return normalize_text(
-            """
+        return normalize_text("""
             # header
             %s
             # comment
             Alice,400
             Edith,600
             # footer
-            """
-            % self.csv_text
-        )
+            """ % self.csv_text)
 
     @property
     def tab_delimited_csv_text(self):
-        return normalize_text(
-            """
+        return normalize_text("""
             name\tamount
             Alice\t100
             Bob\t-200
             Charlie\t300
-            """
-        )
+            """)
 
     @property
     def q_quoted_csv_text(self):
-        return normalize_text(
-            """
+        return normalize_text("""
             QnameQ,QamountQ
             QA,liceQ,Q100Q
             QB,obQ,Q-200Q
             QC,harlieQ,Q300Q
-            """
-        )
+            """)
 
     @property
     def e_escapeted_csv_text(self):
-        return normalize_text(
-            """
+        return normalize_text("""
             name,amount
             "AE"lice",100
             "BE"ob",-200
             "CE"harlie",300
-            """
-        )
+            """)
 
     @contextmanager
     def csv_file(self, csv):
@@ -417,13 +404,6 @@ class CsvTests(
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.pandas.tests.io.test_csv import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

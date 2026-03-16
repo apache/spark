@@ -22,12 +22,14 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import (
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.testing.sqlutils import SQLTestUtils
+from pyspark.testing.utils import (
+    have_jinja2,
+    jinja2_requirement_message,
     have_tabulate,
-    PandasOnSparkTestCase,
     tabulate_requirement_message,
 )
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 # This file contains test cases for 'Serialization / IO / Conversion'
@@ -94,6 +96,7 @@ class FrameIOMixin:
         psdf = ps.DataFrame.from_dict(data, orient="index", columns=["A", "B", "C", "D"])
         self.assert_eq(pdf, psdf)
 
+    @unittest.skipIf(not have_jinja2, jinja2_requirement_message)
     def test_style(self):
         # Currently, the `style` function returns a pandas object `Styler` as it is,
         # processing only the number of rows declared in `compute.max_rows`.
@@ -106,8 +109,8 @@ class FrameIOMixin:
 
         def check_style():
             # If the value is negative, the text color will be displayed as red.
-            pdf_style = pdf.style.applymap(style_negative, props="color:red;")
-            psdf_style = psdf.style.applymap(style_negative, props="color:red;")
+            pdf_style = pdf.style.map(style_negative, props="color:red;")
+            psdf_style = psdf.style.map(style_negative, props="color:red;")
 
             # Test whether the same shape as pandas table is created including the color.
             self.assert_eq(pdf_style.to_latex(), psdf_style.to_latex())
@@ -154,12 +157,6 @@ class FrameIOTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.io.test_io import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

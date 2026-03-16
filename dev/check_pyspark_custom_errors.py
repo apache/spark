@@ -124,7 +124,6 @@ if __name__ == "__main__":
         "PySparkValueError",
         "PythonException",
         "QueryExecutionException",
-        "RetriesExceeded",
         "SessionNotSameException",
         "SparkNoSuchElementException",
         "SparkRuntimeException",

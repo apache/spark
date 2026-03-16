@@ -18,7 +18,6 @@
 package org.apache.spark.network.util;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.commons.lang3.SystemUtils;
 import org.apache.spark.network.shuffledb.DBBackend;
 import org.apache.spark.network.shuffledb.StoreVersion;
 import org.junit.jupiter.api.Assertions;
@@ -32,17 +31,18 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
 public class DBProviderSuite {
 
   @Test
-  public void testRockDBCheckVersionFailed() throws IOException {
+  public void testRockDBCheckVersionFailed() throws IOException, InterruptedException {
     testCheckVersionFailed(DBBackend.ROCKSDB, "rocksdb");
   }
 
   @Test
-  public void testLevelDBCheckVersionFailed() throws IOException {
-    assumeFalse(SystemUtils.IS_OS_MAC_OSX && SystemUtils.OS_ARCH.equals("aarch64"));
+  public void testLevelDBCheckVersionFailed() throws IOException, InterruptedException {
+    assumeFalse(JavaUtils.isMacOnAppleSilicon);
     testCheckVersionFailed(DBBackend.LEVELDB, "leveldb");
   }
 
-  private void testCheckVersionFailed(DBBackend dbBackend, String namePrefix) throws IOException {
+  private void testCheckVersionFailed(DBBackend dbBackend, String namePrefix)
+      throws IOException, InterruptedException {
     String root = System.getProperty("java.io.tmpdir");
     File dbFile = JavaUtils.createDirectory(root, namePrefix);
     try {

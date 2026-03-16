@@ -33,7 +33,7 @@ import org.apache.spark.InternalAccumulator.{input, shuffleRead}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorMetrics
-import org.apache.spark.internal.{config, Logging, LogKeys, MDC}
+import org.apache.spark.internal.{config, Logging, LogKeys}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile
@@ -181,15 +181,7 @@ private[spark] class TaskSchedulerImpl(
 
   private var schedulableBuilder: SchedulableBuilder = null
   // default scheduler is FIFO
-  private val schedulingModeConf = conf.get(SCHEDULER_MODE)
-  val schedulingMode: SchedulingMode =
-    try {
-      SchedulingMode.withName(schedulingModeConf)
-    } catch {
-      case e: java.util.NoSuchElementException =>
-        throw SparkCoreErrors.unrecognizedSchedulerModePropertyError(SCHEDULER_MODE_PROPERTY,
-          schedulingModeConf)
-    }
+  val schedulingMode: SchedulingMode = conf.get(SCHEDULER_MODE)
 
   val rootPool: Pool = new Pool("", schedulingMode, 0, 0)
 
@@ -325,7 +317,7 @@ private[spark] class TaskSchedulerImpl(
         }
         tsm.suspend()
         logInfo(log"Stage ${MDC(LogKeys.STAGE_ID, stageId)}." +
-          log"${MDC(LogKeys.STAGE_ATTEMPT, tsm.taskSet.stageAttemptId)} was cancelled")
+          log"${MDC(LogKeys.STAGE_ATTEMPT_ID, tsm.taskSet.stageAttemptId)} was cancelled")
       }
     }
   }
@@ -780,36 +772,17 @@ private[spark] class TaskSchedulerImpl(
   }
 
   def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer): Unit = {
-    var failedExecutor: Option[String] = None
-    var reason: Option[ExecutorLossReason] = None
     synchronized {
       try {
         Option(taskIdToTaskSetManager.get(tid)) match {
           case Some(taskSet) =>
-            if (state == TaskState.LOST) {
-              // TaskState.LOST is only used by the deprecated Mesos fine-grained scheduling mode,
-              // where each executor corresponds to a single task, so mark the executor as failed.
-              val execId = taskIdToExecutorId.getOrElse(tid, {
-                val errorMsg =
-                  "taskIdToTaskSetManager.contains(tid) <=> taskIdToExecutorId.contains(tid)"
-                taskSet.abort(errorMsg)
-                throw new SparkException(
-                  "taskIdToTaskSetManager.contains(tid) <=> taskIdToExecutorId.contains(tid)")
-              })
-              if (executorIdToRunningTaskIds.contains(execId)) {
-                reason = Some(
-                  ExecutorProcessLost(
-                    s"Task $tid was lost, so marking the executor as lost as well."))
-                removeExecutor(execId, reason.get)
-                failedExecutor = Some(execId)
-              }
-            }
+            assert(state != TaskState.LOST)
             if (TaskState.isFinished(state)) {
               cleanupTaskState(tid)
               taskSet.removeRunningTask(tid)
               if (state == TaskState.FINISHED) {
                 taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)
-              } else if (Set(TaskState.FAILED, TaskState.KILLED, TaskState.LOST).contains(state)) {
+              } else if (Set(TaskState.FAILED, TaskState.KILLED).contains(state)) {
                 taskResultGetter.enqueueFailedTask(taskSet, tid, state, serializedData)
               }
             }
@@ -825,12 +798,6 @@ private[spark] class TaskSchedulerImpl(
       } catch {
         case e: Exception => logError("Exception in statusUpdate", e)
       }
-    }
-    // Update the DAGScheduler without holding a lock on this, since that can deadlock
-    if (failedExecutor.isDefined) {
-      assert(reason.isDefined)
-      dagScheduler.executorLost(failedExecutor.get, reason.get)
-      backend.reviveOffers()
     }
   }
 
@@ -1017,17 +984,17 @@ private[spark] class TaskSchedulerImpl(
 
     synchronized {
       if (executorIdToRunningTaskIds.contains(executorId)) {
-        val hostPort = executorIdToHost(executorId)
-        logExecutorLoss(executorId, hostPort, reason)
+        val host = executorIdToHost(executorId)
+        logExecutorLoss(executorId, host, reason)
         removeExecutor(executorId, reason)
         failedExecutor = Some(executorId)
       } else {
         executorIdToHost.get(executorId) match {
-          case Some(hostPort) =>
+          case Some(host) =>
             // If the host mapping still exists, it means we don't know the loss reason for the
             // executor. So call removeExecutor() to update tasks running on that executor when
             // the real loss reason is finally known.
-            logExecutorLoss(executorId, hostPort, reason)
+            logExecutorLoss(executorId, host, reason)
             removeExecutor(executorId, reason)
 
           case None =>
@@ -1055,20 +1022,20 @@ private[spark] class TaskSchedulerImpl(
 
   private def logExecutorLoss(
       executorId: String,
-      hostPort: String,
+      host: String,
       reason: ExecutorLossReason): Unit = reason match {
     case LossReasonPending =>
-      logDebug(s"Executor $executorId on $hostPort lost, but reason not yet known.")
+      logDebug(s"Executor $executorId on $host lost, but reason not yet known.")
     case ExecutorKilled =>
       logInfo(log"Executor ${MDC(LogKeys.EXECUTOR_ID, executorId)} on " +
-        log"${MDC(LogKeys.HOST_PORT, hostPort)} killed by driver.")
+        log"${MDC(LogKeys.HOST_PORT, host)} killed by driver.")
     case _: ExecutorDecommission =>
       logInfo(log"Executor ${MDC(LogKeys.EXECUTOR_ID, executorId)} on " +
-        log"${MDC(LogKeys.HOST_PORT, hostPort)} is decommissioned" +
+        log"${MDC(LogKeys.HOST_PORT, host)} is decommissioned" +
         log"${MDC(DURATION, getDecommissionDuration(executorId))}.")
     case _ =>
       logError(log"Lost executor ${MDC(LogKeys.EXECUTOR_ID, executorId)} on " +
-        log"${MDC(LogKeys.HOST, hostPort)}: ${MDC(LogKeys.REASON, reason)}")
+        log"${MDC(LogKeys.HOST, host)}: ${MDC(LogKeys.REASON, reason)}")
   }
 
   // return decommission duration in string or "" if decommission startTime not exists

@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.tree.model
 
+import java.util.Objects
+
 import org.apache.spark.annotation.Since
 
 /**
@@ -39,6 +41,6 @@ class Predict @Since("1.2.0") (
   }
 
   override def hashCode: Int = {
-    com.google.common.base.Objects.hashCode(predict: java.lang.Double, prob: java.lang.Double)
+    Objects.hash(predict: java.lang.Double, prob: java.lang.Double)
   }
 }

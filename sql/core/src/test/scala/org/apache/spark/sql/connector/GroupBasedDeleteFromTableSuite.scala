@@ -18,11 +18,36 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.catalyst.expressions.InSubquery
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.StructType
 
 class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
 
   import testImplicits._
+
+  test("delete preserves metadata columns for carried-over records") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |{ "pk": 3, "id": 3, "dep": "hr" }
+        |{ "pk": 4, "id": 4, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"DELETE FROM $tableNameAsString WHERE id IN (1, 100)")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(2, 2, "software") :: Row(3, 3, "hr") :: Row(4, 4, "hr") :: Nil)
+
+    checkLastWriteInfo(
+      expectedRowSchema = table.schema,
+      expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD))))
+
+    checkLastWriteLog(
+      writeWithMetadataLogEntry(metadata = Row("hr", 1), data = Row(3, 3, "hr")),
+      writeWithMetadataLogEntry(metadata = Row("hr", 2), data = Row(4, 4, "hr")))
+  }
 
   test("delete with nondeterministic conditions") {
     createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
@@ -53,7 +78,7 @@ class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
 
     executeAndCheckScans(
       s"DELETE FROM $tableNameAsString WHERE salary IN (300, 400, 500)",
-      primaryScanSchema = "id INT, salary INT, dep STRING, _partition STRING",
+      primaryScanSchema = "id INT, salary INT, dep STRING, _partition STRING, index INT",
       groupFilterScanSchema = Some("salary INT, dep STRING"))
 
     checkAnswer(
@@ -85,7 +110,7 @@ class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
            | AND
            | dep IN (SELECT * FROM deleted_dep)
            |""".stripMargin,
-        primaryScanSchema = "id INT, salary INT, dep STRING, _partition STRING",
+        primaryScanSchema = "id INT, salary INT, dep STRING, _partition STRING, index INT",
         groupFilterScanSchema = Some("id INT, dep STRING"))
 
       checkAnswer(
@@ -133,7 +158,7 @@ class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
 
       executeAndCheckScans(
         s"DELETE FROM $tableNameAsString WHERE id IN (SELECT * FROM deleted_id)",
-        primaryScanSchema = "id INT, salary INT, dep STRING, _partition STRING",
+        primaryScanSchema = "id INT, salary INT, dep STRING, _partition STRING, index INT",
         groupFilterScanSchema = Some("id INT, dep STRING"))
 
       checkAnswer(
@@ -141,6 +166,69 @@ class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
         Row(2, 150, "software") :: Row(3, 120, "hr") :: Nil)
 
       checkReplacedPartitions(Seq("hr"))
+    }
+  }
+
+  test("delete does not double plan table (group filter enabled)") {
+    withSQLConf(SQLConf.RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED.key -> "true") {
+      createAndInitTable("id INT, salary INT, dep STRING",
+        """{ "id": 1, "salary": 300, "dep": 'hr' }
+          |{ "id": 2, "salary": 150, "dep": 'software' }
+          |{ "id": 3, "salary": 120, "dep": 'hr' }
+          |""".stripMargin)
+
+      val (cond, groupFilterCond) = executeAndKeepConditions {
+        sql(
+          s"""DELETE FROM $tableNameAsString
+             |WHERE id IN (SELECT id FROM $tableNameAsString WHERE salary > 200)
+             |""".stripMargin)
+      }
+
+      cond match {
+        case InSubquery(_, query) => assertNoScanPlanning(query.plan)
+        case _ => fail(s"unexpected condition: $cond")
+      }
+
+      groupFilterCond match {
+        case Some(InSubquery(_, query)) => assertNoScanPlanning(query.plan)
+        case _ => fail(s"unexpected group filter: $groupFilterCond")
+      }
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(2, 150, "software") :: Row(3, 120, "hr") :: Nil)
+
+      checkReplacedPartitions(Seq("hr"))
+    }
+  }
+
+  test("delete does not double plan table (group filter disabled)") {
+    withSQLConf(SQLConf.RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED.key -> "false") {
+      createAndInitTable("id INT, salary INT, dep STRING",
+        """{ "id": 1, "salary": 300, "dep": 'hr' }
+          |{ "id": 2, "salary": 150, "dep": 'software' }
+          |{ "id": 3, "salary": 120, "dep": 'hr' }
+          |""".stripMargin)
+
+      val (cond, groupFilterCond) = executeAndKeepConditions {
+        sql(
+          s"""DELETE FROM $tableNameAsString
+             |WHERE id IN (SELECT id FROM $tableNameAsString WHERE salary > 200)
+             |""".stripMargin)
+      }
+
+      cond match {
+        case InSubquery(_, query) => assertNoScanPlanning(query.plan)
+        case _ => fail(s"unexpected condition: $cond")
+      }
+
+      assert(groupFilterCond.isEmpty, "group filter must be empty")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(2, 150, "software") :: Row(3, 120, "hr") :: Nil)
+
+      checkReplacedPartitions(Seq("software", "hr"))
     }
   }
 }

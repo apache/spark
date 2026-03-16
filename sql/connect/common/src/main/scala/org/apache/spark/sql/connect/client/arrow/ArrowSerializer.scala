@@ -20,14 +20,14 @@ import java.io.{ByteArrayOutputStream, OutputStream}
 import java.lang.invoke.{MethodHandles, MethodType}
 import java.math.{BigDecimal => JBigDecimal, BigInteger => JBigInteger}
 import java.nio.channels.Channels
-import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period}
 import java.util.{Map => JMap, Objects}
 
 import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.ByteString
 import org.apache.arrow.memory.BufferAllocator
-import org.apache.arrow.vector.{BigIntVector, BitVector, DateDayVector, DecimalVector, DurationVector, FieldVector, Float4Vector, Float8Vector, IntervalYearVector, IntVector, NullVector, SmallIntVector, TimeStampMicroTZVector, TimeStampMicroVector, TinyIntVector, VarBinaryVector, VarCharVector, VectorSchemaRoot, VectorUnloader}
+import org.apache.arrow.vector._
 import org.apache.arrow.vector.complex.{ListVector, MapVector, StructVector}
 import org.apache.arrow.vector.ipc.{ArrowStreamWriter, WriteChannel}
 import org.apache.arrow.vector.ipc.message.{IpcOption, MessageSerializer}
@@ -38,10 +38,10 @@ import org.apache.spark.sql.catalyst.DefinedByConstructorParams
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, Codec}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.util.{SparkDateTimeUtils, SparkIntervalUtils}
-import org.apache.spark.sql.connect.client.CloseableIterator
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types.Decimal
-import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.sql.util.{ArrowUtils, CloseableIterator}
+import org.apache.spark.unsafe.types.VariantVal
 
 /**
  * Helper class for converting user objects into arrow batches.
@@ -49,8 +49,16 @@ import org.apache.spark.sql.util.ArrowUtils
 class ArrowSerializer[T](
     private[this] val enc: AgnosticEncoder[T],
     private[this] val allocator: BufferAllocator,
-    private[this] val timeZoneId: String) {
-  private val (root, serializer) = ArrowSerializer.serializerFor(enc, allocator, timeZoneId)
+    private[this] val timeZoneId: String,
+    private[this] val largeVarTypes: Boolean) {
+
+  // SPARK-51079: keep the old constructor for backward-compatibility.
+  def this(enc: AgnosticEncoder[T], allocator: BufferAllocator, timeZoneId: String) = {
+    this(enc, allocator, timeZoneId, false)
+  }
+
+  private val (root, serializer) =
+    ArrowSerializer.serializerFor(enc, allocator, timeZoneId, largeVarTypes)
   private val vectors = root.getFieldVectors.asScala
   private val unloader = new VectorUnloader(root)
   private val schemaBytes = {
@@ -143,12 +151,13 @@ object ArrowSerializer {
       maxRecordsPerBatch: Int,
       maxBatchSize: Long,
       timeZoneId: String,
+      largeVarTypes: Boolean,
       batchSizeCheckInterval: Int = 128): CloseableIterator[Array[Byte]] = {
     assert(maxRecordsPerBatch > 0)
     assert(maxBatchSize > 0)
     assert(batchSizeCheckInterval > 0)
     new CloseableIterator[Array[Byte]] {
-      private val serializer = new ArrowSerializer[T](enc, allocator, timeZoneId)
+      private val serializer = new ArrowSerializer[T](enc, allocator, timeZoneId, largeVarTypes)
       private val bytes = new ByteArrayOutputStream
       private var hasWrittenFirstBatch = false
 
@@ -190,8 +199,9 @@ object ArrowSerializer {
       input: Iterator[T],
       enc: AgnosticEncoder[T],
       allocator: BufferAllocator,
-      timeZoneId: String): ByteString = {
-    val serializer = new ArrowSerializer[T](enc, allocator, timeZoneId)
+      timeZoneId: String,
+      largeVarTypes: Boolean): ByteString = {
+    val serializer = new ArrowSerializer[T](enc, allocator, timeZoneId, largeVarTypes)
     try {
       input.foreach(serializer.append)
       val output = ByteString.newOutput()
@@ -210,9 +220,14 @@ object ArrowSerializer {
   def serializerFor[T](
       encoder: AgnosticEncoder[T],
       allocator: BufferAllocator,
-      timeZoneId: String): (VectorSchemaRoot, Serializer) = {
+      timeZoneId: String,
+      largeVarTypes: Boolean): (VectorSchemaRoot, Serializer) = {
     val arrowSchema =
-      ArrowUtils.toArrowSchema(encoder.schema, timeZoneId, errorOnDuplicatedFieldNames = true)
+      ArrowUtils.toArrowSchema(
+        encoder.schema,
+        timeZoneId,
+        errorOnDuplicatedFieldNames = true,
+        largeVarTypes = largeVarTypes)
     val root = VectorSchemaRoot.create(arrowSchema, allocator)
     val serializer = if (encoder.schema != encoder.dataType) {
       assert(root.getSchema.getFields.size() == 1)
@@ -263,8 +278,16 @@ object ArrowSerializer {
         new FieldSerializer[String, VarCharVector](v) {
           override def set(index: Int, value: String): Unit = setString(v, index, value)
         }
+      case (StringEncoder, v: LargeVarCharVector) =>
+        new FieldSerializer[String, LargeVarCharVector](v) {
+          override def set(index: Int, value: String): Unit = setString(v, index, value)
+        }
       case (JavaEnumEncoder(_), v: VarCharVector) =>
         new FieldSerializer[Enum[_], VarCharVector](v) {
+          override def set(index: Int, value: Enum[_]): Unit = setString(v, index, value.name())
+        }
+      case (JavaEnumEncoder(_), v: LargeVarCharVector) =>
+        new FieldSerializer[Enum[_], LargeVarCharVector](v) {
           override def set(index: Int, value: Enum[_]): Unit = setString(v, index, value.name())
         }
       case (ScalaEnumEncoder(_, _), v: VarCharVector) =>
@@ -272,8 +295,17 @@ object ArrowSerializer {
           override def set(index: Int, value: Enumeration#Value): Unit =
             setString(v, index, value.toString)
         }
+      case (ScalaEnumEncoder(_, _), v: LargeVarCharVector) =>
+        new FieldSerializer[Enumeration#Value, LargeVarCharVector](v) {
+          override def set(index: Int, value: Enumeration#Value): Unit =
+            setString(v, index, value.toString)
+        }
       case (BinaryEncoder, v: VarBinaryVector) =>
         new FieldSerializer[Array[Byte], VarBinaryVector](v) {
+          override def set(index: Int, value: Array[Byte]): Unit = vector.setSafe(index, value)
+        }
+      case (BinaryEncoder, v: LargeVarBinaryVector) =>
+        new FieldSerializer[Array[Byte], LargeVarBinaryVector](v) {
           override def set(index: Int, value: Array[Byte]): Unit = vector.setSafe(index, value)
         }
       case (SparkDecimalEncoder(_), v: DecimalVector) =>
@@ -359,6 +391,11 @@ object ArrowSerializer {
           override def set(index: Int, value: LocalDateTime): Unit =
             vector.setSafe(index, SparkDateTimeUtils.localDateTimeToMicros(value))
         }
+      case (LocalTimeEncoder, v: TimeNanoVector) =>
+        new FieldSerializer[LocalTime, TimeNanoVector](v) {
+          override def set(index: Int, value: LocalTime): Unit =
+            vector.setSafe(index, SparkDateTimeUtils.localTimeToNanos(value))
+        }
 
       case (OptionEncoder(value), v) =>
         new Serializer {
@@ -433,6 +470,30 @@ object ArrowSerializer {
       case (RowEncoder(fields), StructVectors(struct, vectors)) =>
         structSerializerFor(fields, struct, vectors) { (_, i) => r => r.asInstanceOf[Row].get(i) }
 
+      case (VariantEncoder, StructVectors(struct, vectors)) =>
+        assert(vectors.exists(_.getName == "value"))
+        assert(
+          vectors.exists(field =>
+            field.getName == "metadata" && field.getField.getMetadata
+              .containsKey("variant") && field.getField.getMetadata.get("variant") == "true"))
+        new StructSerializer(
+          struct,
+          Seq(
+            new StructFieldSerializer(
+              extractor = (v: Any) => v.asInstanceOf[VariantVal].getValue,
+              serializerFor(BinaryEncoder, struct.getChild("value"))),
+            new StructFieldSerializer(
+              extractor = (v: Any) => v.asInstanceOf[VariantVal].getMetadata,
+              serializerFor(BinaryEncoder, struct.getChild("metadata")))))
+
+      case (_: GeographyEncoder, StructVectors(struct, vectors)) =>
+        val gser = new GeographyArrowSerDe
+        gser.createSerializer(struct, vectors)
+
+      case (_: GeometryEncoder, StructVectors(struct, vectors)) =>
+        val gser = new GeometryArrowSerDe
+        gser.createSerializer(struct, vectors)
+
       case (JavaBeanEncoder(tag, fields), StructVectors(struct, vectors)) =>
         structSerializerFor(fields, struct, vectors) { (field, _) =>
           val getter = methodLookup.findVirtual(
@@ -442,7 +503,7 @@ object ArrowSerializer {
           o => getter.invoke(o)
         }
 
-      case (TransformingEncoder(_, encoder, provider), v) =>
+      case (TransformingEncoder(_, encoder, provider, _), v) =>
         new Serializer {
           private[this] val codec = provider().asInstanceOf[Codec[Any, Any]]
           private[this] val delegate: Serializer = serializerFor(encoder, v)
@@ -450,7 +511,7 @@ object ArrowSerializer {
             delegate.write(index, codec.encode(value))
         }
 
-      case (CalendarIntervalEncoder | VariantEncoder | _: UDTEncoder[_], _) =>
+      case (CalendarIntervalEncoder | _: UDTEncoder[_], _) =>
         throw ExecutionErrors.unsupportedDataTypeError(encoder.dataType)
 
       case _ =>
@@ -460,7 +521,7 @@ object ArrowSerializer {
 
   private val methodLookup = MethodHandles.lookup()
 
-  private def setString(vector: VarCharVector, index: Int, string: String): Unit = {
+  private def setString(vector: VariableWidthFieldVector, index: Int, string: String): Unit = {
     val bytes = Text.encode(string)
     vector.setSafe(index, bytes, 0, bytes.limit())
   }
@@ -531,12 +592,14 @@ object ArrowSerializer {
     }
   }
 
-  private class StructFieldSerializer(val extractor: Any => Any, val serializer: Serializer) {
+  private[arrow] class StructFieldSerializer(
+      val extractor: Any => Any,
+      val serializer: Serializer) {
     def write(index: Int, value: Any): Unit = serializer.write(index, extractor(value))
     def writeNull(index: Int): Unit = serializer.write(index, null)
   }
 
-  private class StructSerializer(
+  private[arrow] class StructSerializer(
       struct: StructVector,
       fieldSerializers: Seq[StructFieldSerializer])
       extends Serializer {

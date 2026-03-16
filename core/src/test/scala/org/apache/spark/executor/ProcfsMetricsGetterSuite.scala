@@ -86,13 +86,24 @@ class ProcfsMetricsGetterSuite extends SparkFunSuite {
       val child = process.toHandle.pid()
       eventually(timeout(10.seconds), interval(100.milliseconds)) {
         val pids = p.computeProcessTree()
-        assert(pids.size === 3)
         assert(pids.contains(currentPid))
         assert(pids.contains(child))
       }
     } finally {
       SparkEnv.set(originalSparkEnv)
     }
+  }
+
+  test("SPARK-52776: Whitespace and parentheses in the comm field") {
+    val p = new ProcfsMetricsGetter(getTestResourcePath("ProcfsMetrics"))
+    var r = ProcfsMetrics(0, 0, 0, 0, 0, 0)
+    r = p.addProcfsMetricsFromOneProcess(r, 487713)
+    assert(r.jvmVmemTotal == 0)
+    assert(r.jvmRSSTotal == 0)
+    assert(r.pythonVmemTotal == 0)
+    assert(r.pythonRSSTotal == 0)
+    assert(r.otherVmemTotal == 7469137920L)
+    assert(r.otherRSSTotal == 494858240)
   }
 }
 

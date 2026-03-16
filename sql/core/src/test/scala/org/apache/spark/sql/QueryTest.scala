@@ -27,15 +27,15 @@ import org.scalatest.Assertions
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.SQLExecution
+import org.apache.spark.sql.classic.ClassicConversions._
+import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
 
 
-abstract class QueryTest extends PlanTest {
-
-  protected def spark: SparkSession
+abstract class QueryTest extends PlanTest with SparkSessionProvider {
 
   /**
    * Runs the plan and makes sure the answer contains all of the keywords.
@@ -230,6 +230,10 @@ abstract class QueryTest extends PlanTest {
       s"level $storageLevel, but it doesn't.")
   }
 
+  def assertNotCached(query: Dataset[_]): Unit = {
+    assertCached(query, numCachedTables = 0)
+  }
+
   /**
    * Asserts that a given [[Dataset]] does not have missing inputs in all the analyzed plans.
    */
@@ -283,10 +287,10 @@ object QueryTest extends Assertions {
       df: DataFrame,
       expectedAnswer: Seq[Row],
       checkToRDD: Boolean = true): Option[String] = {
-    val isSorted = df.logicalPlan.collect { case s: logical.Sort => s }.nonEmpty
+    val isSorted = df.logicalPlan.collectFirst { case s: logical.Sort => s }.nonEmpty
     if (checkToRDD) {
       SQLExecution.withSQLConfPropagated(df.sparkSession) {
-        df.rdd.count() // Also attempt to deserialize as an RDD [SPARK-15791]
+        df.materializedRdd.count() // Also attempt to deserialize as an RDD [SPARK-15791]
       }
     }
 
@@ -345,6 +349,8 @@ object QueryTest extends Assertions {
       // Convert array to Seq for easy equality check.
       case b: Array[_] => b.toSeq
       case r: Row => prepareRow(r)
+      // SPARK-51349: "null" and null had the same precedence in sorting
+      case "null" => "__null_string__"
       case o => o
     })
   }
@@ -401,9 +407,12 @@ object QueryTest extends Assertions {
     case (a: Row, b: Row) =>
       compare(a.toSeq, b.toSeq)
     // 0.0 == -0.0, turn float/double to bits before comparison, to distinguish 0.0 and -0.0.
+    // in some hardware NaN can be represented with different bits, so first check for it
     case (a: Double, b: Double) =>
+      a.isNaN && b.isNaN ||
       java.lang.Double.doubleToRawLongBits(a) == java.lang.Double.doubleToRawLongBits(b)
     case (a: Float, b: Float) =>
+      a.isNaN && b.isNaN ||
       java.lang.Float.floatToRawIntBits(a) == java.lang.Float.floatToRawIntBits(b)
     case (a, b) => a == b
   }
@@ -447,6 +456,30 @@ object QueryTest extends Assertions {
       case None =>
     }
   }
+
+  def withQueryExecutionsCaptured(spark: SparkSession)(thunk: => Unit): Seq[QueryExecution] = {
+    var capturedQueryExecutions = Seq.empty[QueryExecution]
+
+    val listener = new QueryExecutionListener {
+      override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
+        capturedQueryExecutions = capturedQueryExecutions :+ qe
+      }
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
+        capturedQueryExecutions = capturedQueryExecutions :+ qe
+      }
+    }
+
+    spark.sparkContext.listenerBus.waitUntilEmpty(15000)
+    spark.listenerManager.register(listener)
+    try {
+      thunk
+      spark.sparkContext.listenerBus.waitUntilEmpty(15000)
+    } finally {
+      spark.listenerManager.unregister(listener)
+    }
+
+    capturedQueryExecutions
+  }
 }
 
 class QueryTestSuite extends QueryTest with test.SharedSparkSession {
@@ -454,5 +487,11 @@ class QueryTestSuite extends QueryTest with test.SharedSparkSession {
     intercept[org.scalatest.exceptions.TestFailedException] {
       checkAnswer(sql("SELECT 1"), Row(2) :: Nil)
     }
+  }
+
+  test("SPARK-51349: null string and true null are distinguished") {
+    checkAnswer(sql("select case when id == 0 then struct('null') else struct(null) end s " +
+      "from range(2)"),
+      Seq(Row(Row(null)), Row(Row("null"))))
   }
 }

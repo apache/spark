@@ -19,11 +19,15 @@ package org.apache.spark.types.variant;
 
 import org.apache.spark.QueryContext;
 import org.apache.spark.SparkRuntimeException;
+import org.apache.spark.network.util.JavaUtils;
 import scala.collection.immutable.Map$;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.Arrays;
+import java.util.UUID;
 
 /**
  * This class defines constants related to the variant format and provides functions for
@@ -121,6 +125,9 @@ public class VariantUtil {
   // string size) + (size bytes of string content).
   public static final int LONG_STR = 16;
 
+  // UUID, 16-byte big-endian.
+  public static final int UUID = 20;
+
   public static final byte VERSION = 1;
   // The lower 4 bits of the first metadata byte contain the version.
   public static final byte VERSION_MASK = 0x0F;
@@ -131,8 +138,10 @@ public class VariantUtil {
   public static final int U24_SIZE = 3;
   public static final int U32_SIZE = 4;
 
-  // Both variant value and variant metadata need to be no longer than 16MiB.
-  public static final int SIZE_LIMIT = U24_MAX + 1;
+  // Both variant value and variant metadata need to be no longer than 128MiB.
+  // Note: to make tests more reliable, we set the max size to 16Mib to avoid OOM in tests.
+  public static final int SIZE_LIMIT =
+    JavaUtils.isTesting() ? U24_MAX + 1 : 128 * 1024 * 1024;
 
   public static final int MAX_DECIMAL4_PRECISION = 9;
   public static final int MAX_DECIMAL8_PRECISION = 18;
@@ -210,7 +219,7 @@ public class VariantUtil {
 
   // Read a little-endian unsigned int value from `bytes[pos, pos + numBytes)`. The value must fit
   // into a non-negative int (`[0, Integer.MAX_VALUE]`).
-  static int readUnsigned(byte[] bytes, int pos, int numBytes) {
+  public static int readUnsigned(byte[] bytes, int pos, int numBytes) {
     checkIndex(pos, bytes.length);
     checkIndex(pos + numBytes - 1, bytes.length);
     int result = 0;
@@ -239,6 +248,7 @@ public class VariantUtil {
     TIMESTAMP_NTZ,
     FLOAT,
     BINARY,
+    UUID,
   }
 
   public static int getTypeInfo(byte[] value, int pos) {
@@ -291,6 +301,8 @@ public class VariantUtil {
             return Type.BINARY;
           case LONG_STR:
             return Type.STRING;
+          case UUID:
+            return Type.UUID;
           default:
             throw unknownPrimitiveTypeInVariant(typeInfo);
         }
@@ -342,6 +354,8 @@ public class VariantUtil {
           case BINARY:
           case LONG_STR:
             return 1 + U32_SIZE + readUnsigned(value, pos + 1, U32_SIZE);
+          case UUID:
+            return 17;
           default:
             throw unknownPrimitiveTypeInVariant(typeInfo);
         }
@@ -495,6 +509,20 @@ public class VariantUtil {
       return new String(value, start, length);
     }
     throw unexpectedType(Type.STRING);
+  }
+
+  // Get a UUID value from variant value `value[pos...]`.
+  // Throw `MALFORMED_VARIANT` if the variant is malformed.
+  public static UUID getUuid(byte[] value, int pos) {
+    checkIndex(pos, value.length);
+    int basicType = value[pos] & BASIC_TYPE_MASK;
+    int typeInfo = (value[pos] >> BASIC_TYPE_BITS) & TYPE_INFO_MASK;
+    if (basicType != PRIMITIVE || typeInfo != UUID) throw unexpectedType(Type.UUID);
+    int start = pos + 1;
+    checkIndex(start + 15, value.length);
+    // UUID values are big-endian, so we can't use VariantUtil.readLong().
+    ByteBuffer bb = ByteBuffer.wrap(value, start, 16).order(ByteOrder.BIG_ENDIAN);
+    return new UUID(bb.getLong(), bb.getLong());
   }
 
   public interface ObjectHandler<T> {

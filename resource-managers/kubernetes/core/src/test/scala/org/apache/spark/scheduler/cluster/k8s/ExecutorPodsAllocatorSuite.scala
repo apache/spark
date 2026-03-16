@@ -112,9 +112,14 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   @Mock
   private var schedulerBackend: KubernetesClusterSchedulerBackend = _
 
+  @Mock
+  private var lifecycleManager: ExecutorPodsLifecycleManager = _
+
   private var snapshotsStore: DeterministicExecutorPodsSnapshotsStore = _
 
   private var podsAllocatorUnderTest: ExecutorPodsAllocator = _
+
+  private val numOutstandingPods = PrivateMethod[AtomicInteger](Symbol("numOutstandingPods"))()
 
   val appId = "testapp"
 
@@ -140,6 +145,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     waitForExecutorPodsClock = new ManualClock(0L)
     podsAllocatorUnderTest = new ExecutorPodsAllocator(
       conf, secMgr, executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocatorUnderTest.setExecutorPodsLifecycleManager(lifecycleManager)
     when(schedulerBackend.getExecutorIds()).thenReturn(Seq.empty)
     podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
     when(kubernetesClient.persistentVolumeClaims()).thenReturn(persistentVolumeClaims)
@@ -200,10 +206,11 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     val confWithLowMaxPendingPods = conf.clone.set(KUBERNETES_MAX_PENDING_PODS.key, "3")
     podsAllocatorUnderTest = new ExecutorPodsAllocator(confWithLowMaxPendingPods, secMgr,
       executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocatorUnderTest.setExecutorPodsLifecycleManager(lifecycleManager)
     podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
 
     podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 2, rp -> 3))
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 3)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 3)
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(1, defaultProfile.id))
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(2, defaultProfile.id))
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(3, rp.id))
@@ -214,7 +221,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     snapshotsStore.updatePod(pendingExecutor(2, defaultProfile.id))
     snapshotsStore.updatePod(pendingExecutor(3, rp.id))
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 3)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 3)
     verify(podResource, times(3)).create()
     verify(labeledPods, never()).delete()
 
@@ -223,7 +230,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     waitForExecutorPodsClock.advance(executorIdleTimeout * 2)
     podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1, rp -> 3))
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 3)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 3)
     verify(labeledPods, times(1)).delete()
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(4, rp.id))
 
@@ -231,7 +238,76 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     snapshotsStore.updatePod(runningExecutor(3, rp.id))
     snapshotsStore.updatePod(pendingExecutor(4, rp.id))
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 3)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 3)
+    verify(podsWithNamespace).resource(podWithAttachedContainerForId(5, rp.id))
+    verify(labeledPods, times(1)).delete()
+  }
+
+  test("pending pod limit per resource profile ID") {
+    when(podOperations
+      .withField("status.phase", "Pending"))
+      .thenReturn(podOperations)
+    when(podOperations
+      .withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID))
+      .thenReturn(podOperations)
+    when(podOperations
+      .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
+      .thenReturn(podOperations)
+    when(podOperations
+      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any(classOf[Array[String]]): _*))
+      .thenReturn(podOperations)
+
+    val startTime = Instant.now.toEpochMilli
+    waitForExecutorPodsClock.setTime(startTime)
+
+    // Two resource profiles, default and rp
+    val rpb = new ResourceProfileBuilder()
+    val ereq = new ExecutorResourceRequests()
+    val treq = new TaskResourceRequests()
+    ereq.cores(4).memory("2g")
+    treq.cpus(2)
+    rpb.require(ereq).require(treq)
+    val rp = rpb.build()
+
+    val confWithLowMaxPendingPodsPerRpId = conf.clone
+      .set(KUBERNETES_MAX_PENDING_PODS_PER_RPID.key, "2")
+    podsAllocatorUnderTest = new ExecutorPodsAllocator(confWithLowMaxPendingPodsPerRpId, secMgr,
+      executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocatorUnderTest.setExecutorPodsLifecycleManager(lifecycleManager)
+    podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
+
+    // Request more than the max per rp for one rp
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 2, rp -> 3))
+    // 2 for default, and 2 for rp
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 4)
+    verify(podsWithNamespace).resource(podWithAttachedContainerForId(1, defaultProfile.id))
+    verify(podsWithNamespace).resource(podWithAttachedContainerForId(2, defaultProfile.id))
+    verify(podsWithNamespace).resource(podWithAttachedContainerForId(3, rp.id))
+    verify(podsWithNamespace).resource(podWithAttachedContainerForId(4, rp.id))
+    verify(podResource, times(4)).create()
+
+    // Mark executor 2 and 3 as pending, leaving 2 as newly created but this does not free up
+    // any pending pod slot so no new pod is requested
+    snapshotsStore.updatePod(pendingExecutor(2, defaultProfile.id))
+    snapshotsStore.updatePod(pendingExecutor(3, rp.id))
+    snapshotsStore.notifySubscribers()
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 4)
+    verify(podResource, times(4)).create()
+    verify(labeledPods, never()).delete()
+
+    // Downscaling for defaultProfile resource ID with 1 executor to make one free slot
+    // for pendings pods, the non default should still be limited by the max pending pods per rp.
+    waitForExecutorPodsClock.advance(executorIdleTimeout * 2)
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1, rp -> 3))
+    snapshotsStore.notifySubscribers()
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 3)
+    verify(labeledPods, times(1)).delete()
+
+    // Make one pod running from non-default rp so we have one more slot for pending pods.
+    snapshotsStore.updatePod(runningExecutor(3, rp.id))
+    snapshotsStore.updatePod(pendingExecutor(4, rp.id))
+    snapshotsStore.notifySubscribers()
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 3)
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(5, rp.id))
     verify(labeledPods, times(1)).delete()
   }
@@ -239,12 +315,28 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   test("Initially request executors in batches. Do not request another batch if the" +
     " first has not finished.") {
     podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> (podAllocationSize + 1)))
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 5)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 5)
     for (nextId <- 1 to podAllocationSize) {
       verify(podsWithNamespace).resource(podWithAttachedContainerForId(nextId))
     }
     verify(podsWithNamespace, never())
       .resource(podWithAttachedContainerForId(podAllocationSize + 1))
+  }
+
+  test("SPARK-53907: Support spark.kubernetes.allocation.maximum") {
+    val confWithAllocationMaximum = conf.clone.set(KUBERNETES_ALLOCATION_MAXIMUM.key, "1")
+    podsAllocatorUnderTest = new ExecutorPodsAllocator(confWithAllocationMaximum, secMgr,
+      executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocatorUnderTest.setExecutorPodsLifecycleManager(lifecycleManager)
+    podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
+
+    val counter = PrivateMethod[AtomicInteger](Symbol("EXECUTOR_ID_COUNTER"))()
+    assert(podsAllocatorUnderTest.invokePrivate(counter).get() === 0)
+
+    val m = intercept[SparkException] {
+      podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 2))
+    }.getMessage
+    assert(m.contains("Exceed the pod creation limit: 1"))
   }
 
   test("Request executors in batches. Allow another batch to be requested if" +
@@ -254,23 +346,23 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
 
     podsAllocatorUnderTest.setTotalExpectedExecutors(
       Map(defaultProfile -> (podAllocationSize + 1)))
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 5)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 5)
     for (execId <- 1 until podAllocationSize) {
       snapshotsStore.updatePod(runningExecutor(execId))
     }
     assert(podsAllocatorUnderTest.invokePrivate(counter).get() === 5)
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 1)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 1)
     verify(podsWithNamespace, never())
       .resource(podWithAttachedContainerForId(podAllocationSize + 1))
     verify(podResource, times(podAllocationSize)).create()
     snapshotsStore.updatePod(runningExecutor(podAllocationSize))
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 1)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 1)
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(podAllocationSize + 1))
     snapshotsStore.updatePod(runningExecutor(podAllocationSize))
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 1)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 1)
     verify(podResource, times(podAllocationSize + 1)).create()
   }
 
@@ -278,14 +370,14 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     " them on the next batch.") {
     podsAllocatorUnderTest.setTotalExpectedExecutors(
       Map(defaultProfile -> podAllocationSize))
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 5)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 5)
     for (execId <- 1 until podAllocationSize) {
       snapshotsStore.updatePod(runningExecutor(execId))
     }
     val failedPod = failedExecutorWithoutDeletion(podAllocationSize)
     snapshotsStore.updatePod(failedPod)
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 1)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 1)
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(podAllocationSize + 1))
   }
 
@@ -313,11 +405,11 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       .thenReturn(labeledPods)
     podsAllocatorUnderTest.setTotalExpectedExecutors(
       Map(defaultProfile -> 1))
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 1)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 1)
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(1))
     waitForExecutorPodsClock.setTime(podCreationTimeout + 1)
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 1)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 1)
     verify(labeledPods).delete()
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(2))
   }
@@ -342,13 +434,13 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     // Target 1 executor, make sure it's requested, even with an empty initial snapshot.
     podsAllocatorUnderTest.setTotalExpectedExecutors(
       Map(defaultProfile -> 1))
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 1)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 1)
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(1))
 
     // Mark executor as running, verify that subsequent allocation cycle is a no-op.
     snapshotsStore.updatePod(runningExecutor(1))
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 0)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 0)
     verify(podResource, times(1)).create()
     verify(labeledPods, never()).delete()
 
@@ -356,7 +448,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     podsAllocatorUnderTest.setTotalExpectedExecutors(
       Map(defaultProfile -> 4))
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 3)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 3)
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(2))
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(3))
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(4))
@@ -365,7 +457,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     snapshotsStore.updatePod(runningExecutor(2))
     snapshotsStore.updatePod(pendingExecutor(3))
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 2)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 2)
     verify(podResource, times(4)).create()
     verify(labeledPods, never()).delete()
 
@@ -374,7 +466,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     podsAllocatorUnderTest.setTotalExpectedExecutors(
       Map(defaultProfile -> 1))
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 0)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 0)
     verify(podResource, times(4)).create()
     verify(labeledPods).withLabelIn(SPARK_EXECUTOR_ID_LABEL, "3", "4")
     verify(labeledPods).delete()
@@ -387,7 +479,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     snapshotsStore.updatePod(deletedExecutor(4))
     snapshotsStore.removeDeletedExecutors()
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 0)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 0)
     assert(!podsAllocatorUnderTest.isDeleted("3"))
     assert(!podsAllocatorUnderTest.isDeleted("4"))
   }
@@ -455,7 +547,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     waitForExecutorPodsClock.setTime(startTime)
 
     podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 5))
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 5)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 5)
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(1))
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(2))
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(3))
@@ -469,7 +561,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     // Newly created executors (both acknowledged and not) are protected by executorIdleTimeout
     podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 0))
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 5)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 5)
     verify(podOperations, never()).withLabelIn(SPARK_EXECUTOR_ID_LABEL, "1", "2", "3", "4", "5")
     verify(podResource, never()).delete()
 
@@ -481,7 +573,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     // this is why they are not counted into the outstanding PODs and /they are not removed even
     // though executor 1 is still in pending state and executor 3 and 4 are new request without
     // any state reported by kubernetes and all the three are already timed out
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 0)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 0)
     verify(labeledPods).withLabelIn(SPARK_EXECUTOR_ID_LABEL, "2", "5")
     verify(labeledPods).delete()
   }
@@ -547,7 +639,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
 
     // 0) request 3 PODs for the default and 4 PODs for the other resource profile
     podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 3, rp -> 4))
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 7)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 7)
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(1, defaultProfile.id))
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(2, defaultProfile.id))
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(3, defaultProfile.id))
@@ -559,7 +651,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     // 1) make 1 POD known by the scheduler backend for each resource profile
     when(schedulerBackend.getExecutorIds()).thenReturn(Seq("1", "4"))
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 5,
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 5,
       "scheduler backend known PODs are not outstanding")
     verify(podResource, times(7)).create()
 
@@ -571,14 +663,14 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     snapshotsStore.updatePod(pendingExecutor(5, rp.id))
     snapshotsStore.updatePod(pendingExecutor(6, rp.id))
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 3)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 3)
     verify(podResource, times(7)).create()
 
     // 3) downscale to 1 POD for default and 1 POD for the other resource profile
     waitForExecutorPodsClock.advance(executorIdleTimeout * 2)
     podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1, rp -> 1))
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 0)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 0)
     verify(podResource, times(7)).create()
     verify(labeledPods, times(2)).delete()
     assert(podsAllocatorUnderTest.isDeleted("3"))
@@ -590,13 +682,13 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 2, rp -> 2))
     snapshotsStore.notifySubscribers()
     verify(podResource, times(7)).create()
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 0)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 0)
     verify(podResource, times(7)).create()
 
     // 5) requesting 1 more executor for each resource
     podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 3, rp -> 3))
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 2)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 2)
     verify(podResource, times(9)).create()
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(8, defaultProfile.id))
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(9, rp.id))
@@ -630,7 +722,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     // Target 1 executor for default profile, 2 for other profile,
     // make sure it's requested, even with an empty initial snapshot.
     podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1, rp -> 2))
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 3)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 3)
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(1, defaultProfile.id))
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(2, rp.id))
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(3, rp.id))
@@ -640,7 +732,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     snapshotsStore.updatePod(runningExecutor(2, rp.id))
     snapshotsStore.updatePod(runningExecutor(3, rp.id))
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 0)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 0)
     verify(podResource, times(3)).create()
     verify(podResource, never()).delete()
 
@@ -648,7 +740,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     // make sure all are requested.
     podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 4, rp -> 3))
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 4)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 4)
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(4, defaultProfile.id))
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(5, defaultProfile.id))
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(6, defaultProfile.id))
@@ -659,7 +751,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     snapshotsStore.updatePod(pendingExecutor(5, defaultProfile.id))
     snapshotsStore.updatePod(pendingExecutor(7, rp.id))
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 3)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 3)
     verify(podResource, times(7)).create()
     verify(podResource, never()).delete()
 
@@ -668,7 +760,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     waitForExecutorPodsClock.advance(executorIdleTimeout * 2)
     podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1, rp -> 1))
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 0)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 0)
     verify(podResource, times(7)).create()
     verify(labeledPods).withLabelIn(SPARK_EXECUTOR_ID_LABEL, "5", "6")
     verify(labeledPods).withLabelIn(SPARK_EXECUTOR_ID_LABEL, "7")
@@ -684,7 +776,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     snapshotsStore.updatePod(deletedExecutor(7))
     snapshotsStore.removeDeletedExecutors()
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 0)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 0)
     assert(!podsAllocatorUnderTest.isDeleted("5"))
     assert(!podsAllocatorUnderTest.isDeleted("6"))
     assert(!podsAllocatorUnderTest.isDeleted("7"))
@@ -705,7 +797,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       .thenReturn(labeledPods)
 
     podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 6))
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 5)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 5)
     // Initial request of pods
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(1))
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(2))
@@ -721,7 +813,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     // We move forward one allocation cycle
     waitForExecutorPodsClock.setTime(podAllocationDelay + 1)
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 2)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 2)
     // We request pod 6
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(6))
   }
@@ -753,6 +845,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     podsAllocatorUnderTest = new ExecutorPodsAllocator(
       confWithPVC, secMgr, executorBuilder,
       kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocatorUnderTest.setExecutorPodsLifecycleManager(lifecycleManager)
     podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
 
     when(podsWithNamespace
@@ -773,20 +866,20 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
 
     // Target 1 executor, make sure it's requested, even with an empty initial snapshot.
     podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1))
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 1)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 1)
     verify(podsWithNamespace).resource(podWithAttachedContainerForIdAndVolume(1))
 
     // Mark executor as running, verify that subsequent allocation cycle is a no-op.
     snapshotsStore.updatePod(runningExecutor(1))
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 0)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 0)
     verify(podResource, times(1)).create()
     verify(podResource, never()).delete()
 
     // Request a new executor, make sure it's using reused PVC
     podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 2))
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 1)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 1)
     verify(podsWithNamespace).resource(podWithAttachedContainerForIdAndVolume(2))
     verify(pvcWithNamespace, never()).resource(any())
   }
@@ -851,6 +944,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     podsAllocatorUnderTest = new ExecutorPodsAllocator(
       confWithPVC, secMgr, executorBuilder,
       kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocatorUnderTest.setExecutorPodsLifecycleManager(lifecycleManager)
     podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
 
     when(podsWithNamespace
@@ -874,14 +968,14 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
 
     // Target 1 executor, make sure it's requested, even with an empty initial snapshot.
     podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1))
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 1)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 1)
     verify(podsWithNamespace).resource(podWithAttachedContainerForIdAndVolume(1))
     assert(podsAllocatorUnderTest.invokePrivate(counter).get() === 1)
 
     // Mark executor as running, verify that subsequent allocation cycle is a no-op.
     snapshotsStore.updatePod(runningExecutor(1))
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 0)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 0)
     verify(podResource, times(1)).create()
     verify(podResource, never()).delete()
     verify(pvcWithNamespace, times(1)).resource(any())
@@ -890,7 +984,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     // Request a new executor, make sure that no new pod and pvc are created
     podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 2))
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 0)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 0)
     verify(podResource, times(1)).create()
     assert(podsAllocatorUnderTest.invokePrivate(counter).get() === 1)
   }
@@ -920,6 +1014,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     podsAllocatorUnderTest = new ExecutorPodsAllocator(
       confWithPVC, secMgr, executorBuilder,
       kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocatorUnderTest.setExecutorPodsLifecycleManager(lifecycleManager)
     podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
 
     val startTime = Instant.now.toEpochMilli
@@ -933,7 +1028,32 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1))
     }
     assert(podsAllocatorUnderTest.invokePrivate(counter).get() === 0)
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 0)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 0)
+  }
+
+  test("SPARK-55496: replacePVCsIfNeeded should re-use disks with larger storage") {
+    val podToModify = podWithAttachedContainerForIdAndVolume(1)
+    val resourcesFromSpec: Seq[HasMetadata] = Seq(persistentVolumeClaim("pvc-0", "gp3", "200Gi"))
+    val existingPVCName = "pvc-existing"
+    val existingPVCs = mutable
+      .Buffer[PersistentVolumeClaim](persistentVolumeClaim(existingPVCName, "gp3", "400Gi"))
+
+    val replacePVCsIfNeeded =
+      PrivateMethod[Seq[HasMetadata]](Symbol("replacePVCsIfNeeded"))
+    val newResources = podsAllocatorUnderTest invokePrivate replacePVCsIfNeeded(
+      podToModify,
+      resourcesFromSpec,
+      existingPVCs
+    )
+
+    val podVolumes = podToModify.getSpec.getVolumes;
+    assert(existingPVCs.isEmpty)
+    assert(newResources.isEmpty)
+    assert(podVolumes.size() == 1)
+
+    val modifiedVolume = podVolumes.asScala
+      .find(v => v.getPersistentVolumeClaim.getClaimName.equals(existingPVCName))
+    assert(modifiedVolume.nonEmpty)
   }
 
   private def executorPodAnswer(): Answer[KubernetesExecutorSpec] =
@@ -941,5 +1061,31 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
       KubernetesExecutorSpec(executorPodWithId(k8sConf.executorId.toInt,
         k8sConf.resourceProfileId.toInt), Seq.empty)
+  }
+
+  test("SPARK-55075: Pod creation failures are tracked by ExecutorFailureTracker") {
+    // Make all pod creation attempts fail
+    when(podResource.create()).thenThrow(new KubernetesClientException("Simulated pod" +
+      " creation failure"))
+
+    // Request 3 executors
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 3))
+
+    // Verify that pod creation was attempted 3 times (once per executor, no retries)
+    verify(podResource, times(3)).create()
+
+    // Verify that registerPodCreationFailure was called 3 times (once per failed executor)
+    verify(lifecycleManager, times(3)).registerExecutorFailure()
+
+    // Verify no pods were created since all attempts failed
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 0)
+  }
+
+  test("SPARK-55639: setRecoveryMode should not change recovery mode if it is already false") {
+    val newConf = conf.clone.set(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED, false)
+    val podsAllocator = new ExecutorPodsAllocator(newConf, secMgr, executorBuilder,
+      kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocator.setRecoveryMode()
+    assert(!newConf.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED).get)
   }
 }

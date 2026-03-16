@@ -205,7 +205,6 @@ private[deploy] object DeployMessages {
 
   case class RegisteredApplication(appId: String, master: RpcEndpointRef) extends DeployMessage
 
-  // TODO(matei): replace hostPort with host
   case class ExecutorAdded(id: Int, workerId: String, hostPort: String, cores: Int, memory: Int) {
     Utils.checkHostPort(hostPort)
   }

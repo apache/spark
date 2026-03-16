@@ -24,17 +24,20 @@ import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.FUNCTION_NAME
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.st._
 import org.apache.spark.sql.catalyst.expressions.variant._
 import org.apache.spark.sql.catalyst.expressions.xml._
-import org.apache.spark.sql.catalyst.plans.logical.{FunctionBuilderBase, Generate, LogicalPlan, OneRowRelation, Range}
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionBuilderBase, Generate, LogicalPlan, OneRowRelation, PythonWorkerLogs, Range}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
@@ -76,10 +79,13 @@ trait FunctionRegistryBase[T] {
   /* Create or replace a temporary function. */
   final def createOrReplaceTempFunction(
       name: String, builder: FunctionBuilder, source: String): Unit = {
-    registerFunction(
-      FunctionIdentifier(name),
-      builder,
-      source)
+    // Regular temporary functions are qualified with CatalogManager.SESSION_NAMESPACE
+    // to enable coexistence with builtin functions of the same name
+    val identifier = FunctionIdentifier(
+      name,
+      Some(CatalogManager.SESSION_NAMESPACE),
+      Some(CatalogManager.SYSTEM_CATALOG_NAME))
+    registerFunction(identifier, builder, source)
   }
 
   @throws[AnalysisException]("If function does not exist")
@@ -88,11 +94,16 @@ trait FunctionRegistryBase[T] {
   /* List all of the registered function names. */
   def listFunction(): Seq[FunctionIdentifier]
 
-  /* Get the class of the registered function by specified name. */
-  def lookupFunction(name: FunctionIdentifier): Option[ExpressionInfo]
+  /* Get both ExpressionInfo and FunctionBuilder in a single lookup. */
+  def lookupFunctionEntry(name: FunctionIdentifier): Option[(ExpressionInfo, FunctionBuilder)]
+
+  /* Get the ExpressionInfo of the registered function by specified name. */
+  def lookupFunction(name: FunctionIdentifier): Option[ExpressionInfo] =
+    lookupFunctionEntry(name).map(_._1)
 
   /* Get the builder of the registered function by specified name. */
-  def lookupFunctionBuilder(name: FunctionIdentifier): Option[FunctionBuilder]
+  def lookupFunctionBuilder(name: FunctionIdentifier): Option[FunctionBuilder] =
+    lookupFunctionEntry(name).map(_._2)
 
   /** Drop a function and return whether the function existed. */
   def dropFunction(name: FunctionIdentifier): Boolean
@@ -243,13 +254,9 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
     functionBuilders.iterator.map(_._1).toList
   }
 
-  override def lookupFunction(name: FunctionIdentifier): Option[ExpressionInfo] = synchronized {
-    functionBuilders.get(normalizeFuncName(name)).map(_._1)
-  }
-
-  override def lookupFunctionBuilder(
-      name: FunctionIdentifier): Option[FunctionBuilder] = synchronized {
-    functionBuilders.get(normalizeFuncName(name)).map(_._2)
+  override def lookupFunctionEntry(
+      name: FunctionIdentifier): Option[(ExpressionInfo, FunctionBuilder)] = synchronized {
+    functionBuilders.get(normalizeFuncName(name))
   }
 
   override def dropFunction(name: FunctionIdentifier): Boolean = synchronized {
@@ -279,11 +286,8 @@ trait EmptyFunctionRegistryBase[T] extends FunctionRegistryBase[T] {
     throw SparkUnsupportedOperationException()
   }
 
-  override def lookupFunction(name: FunctionIdentifier): Option[ExpressionInfo] = {
-    throw SparkUnsupportedOperationException()
-  }
-
-  override def lookupFunctionBuilder(name: FunctionIdentifier): Option[FunctionBuilder] = {
+  override def lookupFunctionEntry(
+      name: FunctionIdentifier): Option[(ExpressionInfo, FunctionBuilder)] = {
     throw SparkUnsupportedOperationException()
   }
 
@@ -463,6 +467,8 @@ object FunctionRegistry {
     expressionBuilder("try_sum", TrySumExpressionBuilder, setAlias = true),
     expression[TryToBinary]("try_to_binary"),
     expressionBuilder("try_to_timestamp", TryToTimestampExpressionBuilder, setAlias = true),
+    expressionBuilder("try_to_date", TryToDateExpressionBuilder, setAlias = true),
+    expressionBuilder("try_to_time", TryToTimeExpressionBuilder, setAlias = true),
     expression[TryAesDecrypt]("try_aes_decrypt"),
     expression[TryReflect]("try_reflect"),
     expression[TryUrlDecode]("try_url_decode"),
@@ -483,10 +489,10 @@ object FunctionRegistry {
     expression[Last]("last"),
     expression[Last]("last_value", true),
     expression[Max]("max"),
-    expression[MaxBy]("max_by"),
+    expressionBuilder("max_by", MaxByBuilder),
     expression[Average]("mean", true),
     expression[Min]("min"),
-    expression[MinBy]("min_by"),
+    expressionBuilder("min_by", MinByBuilder),
     expression[Percentile]("percentile"),
     expressionBuilder("percentile_cont", PercentileContBuilder),
     expressionBuilder("percentile_disc", PercentileDiscBuilder),
@@ -506,6 +512,8 @@ object FunctionRegistry {
     expression[CollectList]("collect_list"),
     expression[CollectList]("array_agg", true, Some("3.3.0")),
     expression[CollectSet]("collect_set"),
+    expression[ListAgg]("listagg"),
+    expression[ListAgg]("string_agg", setAlias = true),
     expressionBuilder("count_min_sketch", CountMinSketchAggExpressionBuilder),
     expression[BoolAnd]("every", true),
     expression[BoolAnd]("bool_and"),
@@ -524,6 +532,33 @@ object FunctionRegistry {
     expressionBuilder("mode", ModeBuilder),
     expression[HllSketchAgg]("hll_sketch_agg"),
     expression[HllUnionAgg]("hll_union_agg"),
+    expression[ApproxTopK]("approx_top_k"),
+    expression[ThetaSketchAgg]("theta_sketch_agg"),
+    expression[ThetaUnionAgg]("theta_union_agg"),
+    expression[ThetaIntersectionAgg]("theta_intersection_agg"),
+    expression[ApproxTopKAccumulate]("approx_top_k_accumulate"),
+    expression[ApproxTopKCombine]("approx_top_k_combine"),
+    expression[KllSketchAggBigint]("kll_sketch_agg_bigint"),
+    expression[KllSketchAggFloat]("kll_sketch_agg_float"),
+    expression[KllSketchAggDouble]("kll_sketch_agg_double"),
+    expression[KllMergeAggBigint]("kll_merge_agg_bigint"),
+    expression[KllMergeAggFloat]("kll_merge_agg_float"),
+    expression[KllMergeAggDouble]("kll_merge_agg_double"),
+    expression[TupleIntersectionAggDouble]("tuple_intersection_agg_double"),
+    expression[TupleIntersectionAggInteger]("tuple_intersection_agg_integer"),
+    expressionBuilder("tuple_sketch_agg_double", TupleSketchAggDoubleExpressionBuilder),
+    expressionBuilder("tuple_sketch_agg_integer", TupleSketchAggIntegerExpressionBuilder),
+    expressionBuilder("tuple_union_agg_double", TupleUnionAggDoubleExpressionBuilder),
+    expressionBuilder("tuple_union_agg_integer", TupleUnionAggIntegerExpressionBuilder),
+
+    // vector functions
+    expression[VectorCosineSimilarity]("vector_cosine_similarity"),
+    expression[VectorInnerProduct]("vector_inner_product"),
+    expression[VectorL2Distance]("vector_l2_distance"),
+    expression[VectorNorm]("vector_norm"),
+    expression[VectorNormalize]("vector_normalize"),
+    expression[VectorAvg]("vector_avg"),
+    expression[VectorSum]("vector_sum"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -611,6 +646,7 @@ object FunctionRegistry {
     expression[MakeValidUTF8]("make_valid_utf8"),
     expression[ValidateUTF8]("validate_utf8"),
     expression[TryValidateUTF8]("try_validate_utf8"),
+    expression[Quote]("quote"),
 
     // url functions
     expression[UrlEncode]("url_encode"),
@@ -623,6 +659,7 @@ object FunctionRegistry {
     expression[CurrentDate]("current_date"),
     expressionBuilder("curdate", CurDateExpressionBuilder, setAlias = true),
     expression[CurrentTimestamp]("current_timestamp"),
+    expression[CurrentTime]("current_time"),
     expression[CurrentTimeZone]("current_timezone"),
     expression[LocalTimestamp]("localtimestamp"),
     expression[DateDiff]("datediff"),
@@ -636,17 +673,19 @@ object FunctionRegistry {
     expression[DayOfMonth]("dayofmonth"),
     expression[FromUnixTime]("from_unixtime"),
     expression[FromUTCTimestamp]("from_utc_timestamp"),
-    expression[Hour]("hour"),
+    expressionBuilder("hour", HourExpressionBuilder),
     expression[LastDay]("last_day"),
-    expression[Minute]("minute"),
+    expressionBuilder("minute", MinuteExpressionBuilder),
     expression[Month]("month"),
     expression[MonthsBetween]("months_between"),
     expression[NextDay]("next_day"),
     expression[Now]("now"),
     expression[Quarter]("quarter"),
-    expression[Second]("second"),
+    expressionBuilder("second", SecondExpressionBuilder),
     expression[ParseToTimestamp]("to_timestamp"),
     expression[ParseToDate]("to_date"),
+    expression[TimeDiff]("time_diff"),
+    expression[ToTime]("to_time"),
     expression[ToBinary]("to_binary"),
     expression[ToUnixTimestamp]("to_unix_timestamp"),
     expression[ToUTCTimestamp]("to_utc_timestamp"),
@@ -665,8 +704,16 @@ object FunctionRegistry {
     expression[SessionWindow]("session_window"),
     expression[WindowTime]("window_time"),
     expression[MakeDate]("make_date"),
-    expression[MakeTimestamp]("make_timestamp"),
-    expression[TryMakeTimestamp]("try_make_timestamp"),
+    expression[MakeTime]("make_time"),
+    expression[TimeTrunc]("time_trunc"),
+    expression[TimeFromSeconds]("time_from_seconds"),
+    expression[TimeFromMillis]("time_from_millis"),
+    expression[TimeFromMicros]("time_from_micros"),
+    expression[TimeToSeconds]("time_to_seconds"),
+    expression[TimeToMillis]("time_to_millis"),
+    expression[TimeToMicros]("time_to_micros"),
+    expressionBuilder("make_timestamp", MakeTimestampExpressionBuilder),
+    expressionBuilder("try_make_timestamp", TryMakeTimestampExpressionBuilder),
     expression[MonthName]("monthname"),
     // We keep the 2 expression builders below to have different function docs.
     expressionBuilder("make_timestamp_ntz", MakeTimestampNTZExpressionBuilder, setAlias = true),
@@ -776,8 +823,49 @@ object FunctionRegistry {
     expression[SparkVersion]("version"),
     expression[TypeOf]("typeof"),
     expression[EqualNull]("equal_null"),
+    expression[Measure]("measure"),
+
+    // datasketch functions
     expression[HllSketchEstimate]("hll_sketch_estimate"),
     expression[HllUnion]("hll_union"),
+    expression[ThetaSketchEstimate]("theta_sketch_estimate"),
+    expression[ThetaUnion]("theta_union"),
+    expression[ThetaDifference]("theta_difference"),
+    expression[ThetaIntersection]("theta_intersection"),
+    expression[ApproxTopKEstimate]("approx_top_k_estimate"),
+    expression[TupleDifferenceDouble]("tuple_difference_double"),
+    expression[TupleDifferenceInteger]("tuple_difference_integer"),
+    expression[TupleDifferenceThetaDouble]("tuple_difference_theta_double"),
+    expression[TupleDifferenceThetaInteger]("tuple_difference_theta_integer"),
+    expression[TupleIntersectionDouble]("tuple_intersection_double"),
+    expression[TupleIntersectionInteger]("tuple_intersection_integer"),
+    expression[TupleIntersectionThetaDouble]("tuple_intersection_theta_double"),
+    expression[TupleIntersectionThetaInteger]("tuple_intersection_theta_integer"),
+    expression[TupleSketchEstimateDouble]("tuple_sketch_estimate_double"),
+    expression[TupleSketchEstimateInteger]("tuple_sketch_estimate_integer"),
+    expression[TupleSketchSummaryDouble]("tuple_sketch_summary_double"),
+    expression[TupleSketchSummaryInteger]("tuple_sketch_summary_integer"),
+    expression[TupleSketchThetaDouble]("tuple_sketch_theta_double"),
+    expression[TupleSketchThetaInteger]("tuple_sketch_theta_integer"),
+    expressionBuilder("tuple_union_double", TupleUnionDoubleExpressionBuilder),
+    expressionBuilder("tuple_union_integer", TupleUnionIntegerExpressionBuilder),
+    expressionBuilder("tuple_union_theta_double", TupleUnionThetaDoubleExpressionBuilder),
+    expressionBuilder("tuple_union_theta_integer", TupleUnionThetaIntegerExpressionBuilder),
+    expression[KllSketchToStringBigint]("kll_sketch_to_string_bigint"),
+    expression[KllSketchToStringFloat]("kll_sketch_to_string_float"),
+    expression[KllSketchToStringDouble]("kll_sketch_to_string_double"),
+    expression[KllSketchGetNBigint]("kll_sketch_get_n_bigint"),
+    expression[KllSketchGetNFloat]("kll_sketch_get_n_float"),
+    expression[KllSketchGetNDouble]("kll_sketch_get_n_double"),
+    expression[KllSketchMergeBigint]("kll_sketch_merge_bigint"),
+    expression[KllSketchMergeFloat]("kll_sketch_merge_float"),
+    expression[KllSketchMergeDouble]("kll_sketch_merge_double"),
+    expression[KllSketchGetQuantileBigint]("kll_sketch_get_quantile_bigint"),
+    expression[KllSketchGetQuantileFloat]("kll_sketch_get_quantile_float"),
+    expression[KllSketchGetQuantileDouble]("kll_sketch_get_quantile_double"),
+    expression[KllSketchGetRankBigint]("kll_sketch_get_rank_bigint"),
+    expression[KllSketchGetRankFloat]("kll_sketch_get_rank_float"),
+    expression[KllSketchGetRankDouble]("kll_sketch_get_rank_double"),
 
     // grouping sets
     expression[Grouping]("grouping"),
@@ -832,6 +920,7 @@ object FunctionRegistry {
     expression[BitmapConstructAgg]("bitmap_construct_agg"),
     expression[BitmapCount]("bitmap_count"),
     expression[BitmapOrAgg]("bitmap_or_agg"),
+    expression[BitmapAndAgg]("bitmap_and_agg"),
 
     // json
     expression[StructsToJson]("to_json"),
@@ -850,6 +939,13 @@ object FunctionRegistry {
     expression[SchemaOfVariantAgg]("schema_of_variant_agg"),
     expression[ToVariantObject]("to_variant_object"),
 
+    // Spatial
+    expression[ST_AsBinary]("st_asbinary"),
+    expression[ST_GeogFromWKB]("st_geogfromwkb"),
+    expression[ST_GeomFromWKB]("st_geomfromwkb"),
+    expression[ST_Srid]("st_srid"),
+    expression[ST_SetSrid]("st_setsrid"),
+
     // cast
     expression[Cast]("cast"),
     // Cast aliases (SPARK-16730)
@@ -863,6 +959,7 @@ object FunctionRegistry {
     castAlias("decimal", DecimalType.USER_DEFAULT),
     castAlias("date", DateType),
     castAlias("timestamp", TimestampType),
+    castAlias("time", TimeType()),
     castAlias("binary", BinaryType),
     castAlias("string", StringType),
 
@@ -882,6 +979,7 @@ object FunctionRegistry {
     // Avro
     expression[FromAvro]("from_avro"),
     expression[ToAvro]("to_avro"),
+    expression[SchemaOfAvro]("schema_of_avro"),
 
     // Protobuf
     expression[FromProtobuf]("from_protobuf"),
@@ -902,7 +1000,7 @@ object FunctionRegistry {
   /** Registry for internal functions used by Connect and the Column API. */
   private[sql] val internal: SimpleFunctionRegistry = new SimpleFunctionRegistry
 
-  private def registerInternalExpression[T <: Expression : ClassTag](
+  private[spark] def registerInternalExpression[T <: Expression : ClassTag](
       name: String,
       setAlias: Boolean = false): Unit = {
     val (info, builder) = FunctionRegistryBase.build[T](name, None)
@@ -1009,9 +1107,9 @@ object FunctionRegistry {
       name: String,
       builder: T,
       expressions: Seq[Expression]) : Seq[Expression] = {
-    val rearrangedExpressions = if (!builder.functionSignature.isEmpty) {
+    val rearrangedExpressions = if (builder.functionSignature.isDefined) {
       val functionSignature = builder.functionSignature.get
-      builder.rearrange(functionSignature, expressions, name)
+      builder.rearrange(functionSignature, expressions, name, SQLConf.get.resolver)
     } else {
       expressions
     }
@@ -1182,7 +1280,8 @@ object TableFunctionRegistry {
     generator[Collations]("collations"),
     generator[SQLKeywords]("sql_keywords"),
     generatorBuilder("variant_explode", VariantExplodeGeneratorBuilder),
-    generatorBuilder("variant_explode_outer", VariantExplodeOuterGeneratorBuilder)
+    generatorBuilder("variant_explode_outer", VariantExplodeOuterGeneratorBuilder),
+    PythonWorkerLogs.functionBuilder
   )
 
   val builtin: SimpleTableFunctionRegistry = {

@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import org.scalatest.{Assertions, BeforeAndAfterEach}
+import org.scalatest.Assertions
+import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 import org.scalatest.matchers.must.Matchers
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkIllegalArgumentException, TestUtils}
 import org.apache.spark.deploy.SparkSubmitTestUtils
@@ -31,7 +33,6 @@ import org.apache.spark.util.ResetSystemProperties
 class BufferHolderSparkSubmitSuite
   extends SparkSubmitTestUtils
     with Matchers
-    with BeforeAndAfterEach
     with ResetSystemProperties {
 
   test("SPARK-22222: Buffer holder should be able to allocate memory larger than 1GB") {
@@ -46,7 +47,10 @@ class BufferHolderSparkSubmitSuite
       "--conf", "spark.master.rest.enabled=false",
       "--conf", "spark.driver.extraJavaOptions=-ea",
       unusedJar.toString)
-    runSparkSubmit(argsForSparkSubmit)
+    // Given that the default timeout of runSparkSubmit is 60 seconds, try 3 times in total.
+    eventually(timeout(210.seconds), interval(70.seconds)) {
+      runSparkSubmit(argsForSparkSubmit)
+    }
   }
 }
 

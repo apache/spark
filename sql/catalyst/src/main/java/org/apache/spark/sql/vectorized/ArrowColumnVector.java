@@ -25,9 +25,12 @@ import org.apache.arrow.vector.holders.NullableVarCharHolder;
 
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.DeveloperApi;
+import org.apache.spark.sql.catalyst.util.STUtils;
 import org.apache.spark.sql.util.ArrowUtils;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.GeographyVal;
+import org.apache.spark.unsafe.types.GeometryVal;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -146,6 +149,30 @@ public class ArrowColumnVector extends ColumnVector {
      super(type);
   }
 
+  @Override
+  public GeographyVal getGeography(int rowId) {
+    if (isNullAt(rowId)) return null;
+
+    GeographyType gt = (GeographyType) this.type;
+    int srid = getChild(0).getInt(rowId);
+    byte[] bytes = getChild(1).getBinary(rowId);
+    gt.assertSridAllowedForType(srid);
+    // TODO(GEO-602): Geog still does not support different SRIDs, once it does,
+    // we need to update this.
+    return (bytes == null) ? null : STUtils.stGeogFromWKB(bytes);
+  }
+
+  @Override
+  public GeometryVal getGeometry(int rowId) {
+    if (isNullAt(rowId)) return null;
+
+    GeometryType gt = (GeometryType) this.type;
+    int srid = getChild(0).getInt(rowId);
+    byte[] bytes = getChild(1).getBinary(rowId);
+    gt.assertSridAllowedForType(srid);
+    return (bytes == null) ? null : STUtils.stGeomFromWKB(bytes, srid);
+  }
+
   public ArrowColumnVector(ValueVector vector) {
     this(ArrowUtils.fromArrowField(vector.getField()));
     initAccessor(vector);
@@ -182,6 +209,8 @@ public class ArrowColumnVector extends ColumnVector {
       accessor = new TimestampAccessor(timeStampMicroTZVector);
     } else if (vector instanceof TimeStampMicroVector timeStampMicroVector) {
       accessor = new TimestampNTZAccessor(timeStampMicroVector);
+    } else if (vector instanceof TimeNanoVector timeNanoVector) {
+      accessor = new TimeNanoAccessor(timeNanoVector);
     } else if (vector instanceof MapVector mapVector) {
       accessor = new MapAccessor(mapVector);
     } else if (vector instanceof ListVector listVector) {
@@ -512,6 +541,21 @@ public class ArrowColumnVector extends ColumnVector {
     private final TimeStampMicroVector accessor;
 
     TimestampNTZAccessor(TimeStampMicroVector vector) {
+      super(vector);
+      this.accessor = vector;
+    }
+
+    @Override
+    final long getLong(int rowId) {
+      return accessor.get(rowId);
+    }
+  }
+
+  static class TimeNanoAccessor extends ArrowVectorAccessor {
+
+    private final TimeNanoVector accessor;
+
+    TimeNanoAccessor(TimeNanoVector vector) {
       super(vector);
       this.accessor = vector;
     }

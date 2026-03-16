@@ -674,4 +674,96 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkInAndInSet(In(Literal(Double.NaN),
       Seq(Literal(Double.NaN), Literal(2d), Literal.create(null, DoubleType))), true)
   }
+
+  test("In and InSet logging limits") {
+    assert(In(Literal(1), Seq(Literal(1), Literal(2))).simpleString(1)
+      === "1 IN (1,... 1 more fields)")
+    assert(In(Literal(1), Seq(Literal(1), Literal(2))).simpleString(2) === "1 IN (1,2)")
+    assert(In(Literal(1), Seq(Literal(1))).simpleString(1) === "1 IN (1)")
+    assert(InSet(Literal(1), Set(1, 2)).simpleString(1) === "1 INSET 1, ... 1 more fields")
+    assert(InSet(Literal(1), Set(1, 2)).simpleString(2) === "1 INSET 1, 2")
+    assert(InSet(Literal(1), Set(1)).simpleString(1) === "1 INSET 1")
+  }
+
+  test("context independent foldable predicate expressions") {
+    // Create some base literals
+    val intLit = Literal(5)
+    val strLit = Literal("test")
+    val boolLit = Literal(true)
+    val nullLit = Literal.create(null, IntegerType)
+    val ts = java.sql.Timestamp.valueOf("2021-01-01 12:00:00")
+    val tsLit = Literal.create(ts, TimestampType)
+    val ts2 = java.sql.Timestamp.valueOf("2021-01-02 12:00:00")
+    val tsLit2 = Literal.create(ts2, TimestampType)
+
+    // Create predicate expressions using these literals
+    val expressions = Seq(
+      // Comparison predicates
+      EqualTo(intLit, Literal(5)),
+      EqualNullSafe(intLit, Literal(5)),
+      GreaterThan(intLit, Literal(3)),
+      LessThan(intLit, Literal(10)),
+      GreaterThanOrEqual(intLit, Literal(5)),
+      LessThanOrEqual(intLit, Literal(5)),
+
+      // Logical operators
+      And(boolLit, Literal(false)),
+      Or(boolLit, Literal(false)),
+      Not(boolLit),
+
+      // String predicates
+      StartsWith(strLit, Literal("te")),
+      EndsWith(strLit, Literal("st")),
+      Contains(strLit, Literal("es")),
+
+      // NULL predicates
+      IsNull(nullLit),
+      IsNotNull(intLit),
+
+      // Other predicates
+      In(intLit, Seq(Literal(1), Literal(5), Literal(10))),
+      InSet(intLit, Set(1, 5, 10)),
+
+      // Nested predicates
+      And(GreaterThan(intLit, Literal(3)), LessThan(intLit, Literal(10))),
+
+      // Timestamp comparisons
+      EqualTo(tsLit, tsLit2),
+      GreaterThan(tsLit,
+        Literal.create(java.sql.Timestamp.valueOf("2020-12-31 12:00:00"), TimestampType)),
+      LessThan(tsLit, tsLit2)
+    )
+
+    expressions.foreach { expr =>
+      assert(expr.foldable, s"Expression $expr should be foldable")
+      assert(expr.contextIndependentFoldable,
+        s"Expression $expr should be context independent foldable")
+    }
+  }
+
+  test("context dependent foldable predicate expressions") {
+    // Create timestamp literals
+    val ts = java.sql.Timestamp.valueOf("2021-01-01 12:00:00")
+    val tsLit = Literal.create(ts, TimestampType)
+    val ts2 = java.sql.Timestamp.valueOf("2021-01-02 12:00:00")
+    val tsLit2 = Literal.create(ts2, TimestampType)
+
+    // Create predicate expressions that involve timestamps
+    val expressions = Seq(
+      // Predicates with cast operations
+      EqualTo(Cast(tsLit, DateType), Cast(tsLit2, DateType)),
+
+      // Expressions using date/time operations
+      EqualTo(
+        DateDiff(Cast(tsLit, DateType), Cast(tsLit2, DateType)),
+        Literal(-1)
+      )
+    )
+
+    expressions.foreach { expr =>
+      assert(expr.foldable, s"Expression $expr should be foldable")
+      assert(!expr.contextIndependentFoldable,
+        s"Expression $expr should not be context independent foldable")
+    }
+  }
 }

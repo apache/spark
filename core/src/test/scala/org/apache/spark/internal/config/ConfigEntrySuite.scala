@@ -20,7 +20,8 @@ package org.apache.spark.internal.config
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.network.shuffledb.DBBackend
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.util.SparkConfWithEnv
 
@@ -85,6 +86,18 @@ class ConfigEntrySuite extends SparkFunSuite {
     assert(conf.get(time) === 3600L)
     conf.set(time.key, "1m")
     assert(conf.get(time) === 60L)
+
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        conf.set(time.key, "abc")
+        conf.get(time)
+      },
+      condition = "INVALID_CONF_VALUE.TYPE_MISMATCH",
+      parameters = Map(
+        "confName" -> time.key,
+        "confValue" -> "abc",
+        "confType" -> s"time in ${TimeUnit.SECONDS}")
+    )
   }
 
   test("conf entry: bytes") {
@@ -96,6 +109,18 @@ class ConfigEntrySuite extends SparkFunSuite {
     assert(conf.get(bytes) === 1L)
     conf.set(bytes.key, "2048")
     assert(conf.get(bytes) === 2048)
+
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        conf.set(bytes.key, "abc")
+        conf.get(bytes)
+      },
+      condition = "INVALID_CONF_VALUE.TYPE_MISMATCH",
+      parameters = Map(
+        "confName" -> bytes.key,
+        "confValue" -> "abc",
+        "confType" -> s"bytes in ${ByteUnit.KiB}")
+    )
   }
 
   test("conf entry: regex") {
@@ -109,8 +134,16 @@ class ConfigEntrySuite extends SparkFunSuite {
     assert(conf.get(rConf).toString === "[0-9a-f]{4}")
 
     conf.set(rConf.key, "[.")
-    val e = intercept[IllegalArgumentException](conf.get(rConf))
-    assert(e.getMessage.contains("regex should be a regex, but was"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        conf.get(rConf)
+      },
+      condition = "INVALID_CONF_VALUE.TYPE_MISMATCH",
+      parameters = Map(
+        "confName" -> rConf.key,
+        "confValue" -> "[.",
+        "confType" -> "regex")
+    )
   }
 
   test("conf entry: string seq") {
@@ -154,24 +187,35 @@ class ConfigEntrySuite extends SparkFunSuite {
 
     val entry = createEntry(10)
     conf.set(entry, -1)
-    val e1 = intercept[IllegalArgumentException] {
-      conf.get(entry)
-    }
-    assert(e1.getMessage ===
-      s"'-1' in ${testKey("checkValue")} is invalid. value must be non-negative")
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        conf.get(entry)
+      },
+      condition = "INVALID_CONF_VALUE.REQUIREMENT",
+      parameters = Map(
+        "confName" -> testKey("checkValue"),
+        "confValue" -> "-1",
+        "confRequirement" -> "value must be non-negative")
+    )
 
-    val e2 = intercept[IllegalArgumentException] {
-      createEntry(-1)
-    }
-    assert(e2.getMessage ===
-      s"'-1' in ${testKey("checkValue")} is invalid. value must be non-negative")
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        createEntry(-1)
+      },
+      condition = "INVALID_CONF_VALUE.REQUIREMENT",
+      parameters = Map(
+        "confName" -> testKey("checkValue"),
+        "confValue" -> "-1",
+        "confRequirement" -> "value must be non-negative")
+    )
   }
 
   test("conf entry: valid values check") {
     val conf = new SparkConf()
+    val configOptions = Set("a", "b", "c")
     val enumConf = ConfigBuilder(testKey("enum"))
       .stringConf
-      .checkValues(Set("a", "b", "c"))
+      .checkValues(configOptions)
       .createWithDefault("a")
     assert(conf.get(enumConf) === "a")
 
@@ -179,21 +223,32 @@ class ConfigEntrySuite extends SparkFunSuite {
     assert(conf.get(enumConf) === "b")
 
     conf.set(enumConf, "d")
-    val enumError = intercept[IllegalArgumentException] {
-      conf.get(enumConf)
-    }
-    assert(enumError.getMessage ===
-      s"The value of ${enumConf.key} should be one of a, b, c, but was d")
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        conf.get(enumConf)
+      },
+      condition = "INVALID_CONF_VALUE.OUT_OF_RANGE_OF_OPTIONS",
+      parameters = Map(
+        "confName" -> enumConf.key,
+        "confValue" -> "d",
+        "confOptions" -> configOptions.mkString(", "))
+    )
   }
 
   test("conf entry: conversion error") {
     val conf = new SparkConf()
     val conversionTest = ConfigBuilder(testKey("conversionTest")).doubleConf.createOptional
     conf.set(conversionTest.key, "abc")
-    val conversionError = intercept[IllegalArgumentException] {
-      conf.get(conversionTest)
-    }
-    assert(conversionError.getMessage === s"${conversionTest.key} should be double, but was abc")
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        conf.get(conversionTest)
+      },
+      condition = "INVALID_CONF_VALUE.TYPE_MISMATCH",
+      parameters = Map(
+        "confName" -> conversionTest.key,
+        "confValue" -> "abc",
+        "confType" -> "double")
+    )
   }
 
   test("variable expansion of spark config entries") {
@@ -386,5 +441,54 @@ class ConfigEntrySuite extends SparkFunSuite {
     onCreateCalled = false
     ConfigBuilder(testKey("oc5")).onCreate(_ => onCreateCalled = true).fallbackConf(fallback)
     assert(onCreateCalled)
+  }
+
+
+  test("SPARK-51874: Add Scala Enumeration support to ConfigBuilder") {
+    object MyTestEnum extends Enumeration {
+      val X, Y, Z = Value
+    }
+    val conf = new SparkConf()
+    val enumConf = ConfigBuilder("spark.test.enum.key")
+      .enumConf(MyTestEnum)
+      .createWithDefault(MyTestEnum.X)
+    assert(conf.get(enumConf) === MyTestEnum.X)
+    conf.set(enumConf, MyTestEnum.Y)
+    assert(conf.get(enumConf) === MyTestEnum.Y)
+    conf.set(enumConf.key, "Z")
+    assert(conf.get(enumConf) === MyTestEnum.Z)
+
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        conf.set(enumConf.key, "A")
+        conf.get(enumConf)
+      },
+      condition = "INVALID_CONF_VALUE.OUT_OF_RANGE_OF_OPTIONS",
+      parameters = Map(
+        "confName" -> enumConf.key,
+        "confValue" -> "A",
+        "confOptions" -> MyTestEnum.values.mkString(", "))
+    )
+  }
+
+  test("SPARK-51896: Add Java enum support to ConfigBuilder") {
+    val conf = new SparkConf()
+    val enumConf = ConfigBuilder("spark.test.java.enum.key")
+      .enumConf(classOf[DBBackend])
+      .createWithDefault(DBBackend.LEVELDB)
+    assert(conf.get(enumConf) === DBBackend.LEVELDB)
+    conf.set(enumConf, DBBackend.ROCKSDB)
+    assert(conf.get(enumConf) === DBBackend.ROCKSDB)
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        conf.set(enumConf.key, "ANYDB")
+        conf.get(enumConf)
+        },
+      condition = "INVALID_CONF_VALUE.OUT_OF_RANGE_OF_OPTIONS",
+      parameters = Map(
+        "confName" -> enumConf.key,
+        "confValue" -> "ANYDB",
+        "confOptions" -> DBBackend.values.mkString(", "))
+    )
   }
 }

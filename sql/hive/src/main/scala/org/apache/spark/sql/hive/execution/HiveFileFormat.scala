@@ -31,7 +31,7 @@ import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.{JobConf, Reporter}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.CLASS_NAME
 import org.apache.spark.internal.config.SPECULATION_ENABLED
 import org.apache.spark.sql.SparkSession
@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.hive.{HiveInspectors, HiveTableUtil}
+import org.apache.spark.sql.internal.SessionStateHelper
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableJobConf
@@ -48,12 +49,17 @@ import org.apache.spark.util.SerializableJobConf
  *
  * TODO: implement the read logic.
  */
-class HiveFileFormat(fileSinkConf: FileSinkDesc)
-  extends FileFormat with DataSourceRegister with Logging {
+case class HiveFileFormat(fileSinkConf: FileSinkDesc)
+  extends FileFormat
+  with SessionStateHelper
+  with DataSourceRegister
+  with Logging {
 
   def this() = this(null)
 
   override def shortName(): String = "hive"
+
+  override def toString: String = "Hive"
 
   override def inferSchema(
       sparkSession: SparkSession,
@@ -73,7 +79,7 @@ class HiveFileFormat(fileSinkConf: FileSinkDesc)
 
     // When speculation is on and output committer class name contains "Direct", we should warn
     // users that they may loss data if they are using a direct output committer.
-    val speculationEnabled = sparkSession.sparkContext.conf.get(SPECULATION_ENABLED)
+    val speculationEnabled = getSparkConf(sparkSession).get(SPECULATION_ENABLED)
     val outputCommitterClass = conf.get("mapred.output.committer.class", "")
     if (speculationEnabled && outputCommitterClass.contains("Direct")) {
       val warningMessage =

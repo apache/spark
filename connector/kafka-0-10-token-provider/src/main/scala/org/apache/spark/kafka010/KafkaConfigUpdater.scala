@@ -30,7 +30,7 @@ import org.apache.spark.internal.Logging
 /**
  * Class to conveniently update Kafka config params, while logging the changes
  */
-private[spark] case class KafkaConfigUpdater(module: String, kafkaParams: Map[String, Object])
+case class KafkaConfigUpdater(module: String, kafkaParams: Map[String, Object])
     extends Logging {
   private val map = new ju.HashMap[String, Object](kafkaParams.asJava)
 
@@ -57,8 +57,14 @@ private[spark] case class KafkaConfigUpdater(module: String, kafkaParams: Map[St
   }
 
   def setAuthenticationConfigIfNeeded(): this.type = {
+    val bootstrapServers = kafkaParams
+      .get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG)
+      .map(_.asInstanceOf[String])
+      .getOrElse(throw KafkaTokenProviderExceptions.missingKafkaOption(
+        CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG))
+
     val clusterConfig = KafkaTokenUtil.findMatchingTokenClusterConfig(SparkEnv.get.conf,
-      kafkaParams(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG).asInstanceOf[String])
+      bootstrapServers)
     setAuthenticationConfigIfNeeded(clusterConfig)
   }
 

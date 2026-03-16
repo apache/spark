@@ -181,6 +181,378 @@ NULL
 
 
 -- !query
+SELECT make_timestamp(make_date(2021, 07, 11))
+-- !query schema
+struct<make_timestamp(make_date(2021, 7, 11)):timestamp>
+-- !query output
+2021-07-11 00:00:00
+
+
+-- !query
+SELECT make_timestamp(DATE'1970-01-01')
+-- !query schema
+struct<make_timestamp(DATE '1970-01-01'):timestamp>
+-- !query output
+1970-01-01 00:00:00
+
+
+-- !query
+SELECT make_timestamp(NULL)
+-- !query schema
+struct<make_timestamp(NULL):timestamp>
+-- !query output
+NULL
+
+
+-- !query
+SELECT make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678))
+-- !query schema
+struct<make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678)):timestamp>
+-- !query output
+2021-07-11 06:30:45.678
+
+
+-- !query
+SELECT make_timestamp(DATE'1970-01-01', TIME'00:00:00')
+-- !query schema
+struct<make_timestamp(DATE '1970-01-01', TIME '00:00:00'):timestamp>
+-- !query output
+1970-01-01 00:00:00
+
+
+-- !query
+SELECT make_timestamp(NULL, TIME'00:00:00')
+-- !query schema
+struct<make_timestamp(NULL, TIME '00:00:00'):timestamp>
+-- !query output
+NULL
+
+
+-- !query
+SELECT make_timestamp(DATE'1970-01-01', NULL)
+-- !query schema
+struct<make_timestamp(DATE '1970-01-01', NULL):timestamp>
+-- !query output
+NULL
+
+
+-- !query
+SELECT make_timestamp(NULL, NULL)
+-- !query schema
+struct<make_timestamp(NULL, NULL):timestamp>
+-- !query output
+NULL
+
+
+-- !query
+SELECT make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'MIT')
+-- !query schema
+struct<make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), MIT):timestamp>
+-- !query output
+2021-07-10 10:30:45.678
+
+
+-- !query
+SELECT make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'PST')
+-- !query schema
+struct<make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), PST):timestamp>
+-- !query output
+2021-07-11 06:30:45.678
+
+
+-- !query
+SELECT make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'UTC')
+-- !query schema
+struct<make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), UTC):timestamp>
+-- !query output
+2021-07-10 23:30:45.678
+
+
+-- !query
+SELECT make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'CET')
+-- !query schema
+struct<make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), CET):timestamp>
+-- !query output
+2021-07-10 21:30:45.678
+
+
+-- !query
+SELECT make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'JST')
+-- !query schema
+struct<make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), JST):timestamp>
+-- !query output
+2021-07-10 14:30:45.678
+
+
+-- !query
+SELECT make_timestamp(DATE'1970-01-01', TIME'00:00:00', 'UTC')
+-- !query schema
+struct<make_timestamp(DATE '1970-01-01', TIME '00:00:00', UTC):timestamp>
+-- !query output
+1969-12-31 16:00:00
+
+
+-- !query
+SELECT make_timestamp(NULL, TIME'00:00:00', 'UTC')
+-- !query schema
+struct<make_timestamp(NULL, TIME '00:00:00', UTC):timestamp>
+-- !query output
+NULL
+
+
+-- !query
+SELECT make_timestamp(DATE'1970-01-01', NULL, 'UTC')
+-- !query schema
+struct<make_timestamp(DATE '1970-01-01', NULL, UTC):timestamp>
+-- !query output
+NULL
+
+
+-- !query
+SELECT make_timestamp(DATE'1970-01-01', TIME'00:00:00', NULL)
+-- !query schema
+struct<make_timestamp(DATE '1970-01-01', TIME '00:00:00', NULL):timestamp>
+-- !query output
+NULL
+
+
+-- !query
+SELECT make_timestamp(NULL, NULL, 'UTC')
+-- !query schema
+struct<make_timestamp(NULL, NULL, UTC):timestamp>
+-- !query output
+NULL
+
+
+-- !query
+SELECT make_timestamp(NULL, TIME'00:00:00', NULL)
+-- !query schema
+struct<make_timestamp(NULL, TIME '00:00:00', NULL):timestamp>
+-- !query output
+NULL
+
+
+-- !query
+SELECT make_timestamp(DATE'1970-01-01', NULL, NULL)
+-- !query schema
+struct<make_timestamp(DATE '1970-01-01', NULL, NULL):timestamp>
+-- !query output
+NULL
+
+
+-- !query
+SELECT make_timestamp(NULL, NULL, NULL)
+-- !query schema
+struct<make_timestamp(NULL, NULL, NULL):timestamp>
+-- !query output
+NULL
+
+
+-- !query
+SELECT make_timestamp(timestamp '2018-11-17 13:33:33', TIME'0:0:0', 'CET')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_NTZ '2018-11-17 13:33:33'\"",
+    "inputType" : "\"TIMESTAMP_NTZ\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"DATE\"",
+    "sqlExpr" : "\"make_timestamp(TIMESTAMP_NTZ '2018-11-17 13:33:33', TIME '00:00:00', CET)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 74,
+    "fragment" : "make_timestamp(timestamp '2018-11-17 13:33:33', TIME'0:0:0', 'CET')"
+  } ]
+}
+
+
+-- !query
+SELECT make_timestamp(timestamp_ntz '2018-11-17 13:33:33', TIME'0:0:0', 'CET')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_NTZ '2018-11-17 13:33:33'\"",
+    "inputType" : "\"TIMESTAMP_NTZ\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"DATE\"",
+    "sqlExpr" : "\"make_timestamp(TIMESTAMP_NTZ '2018-11-17 13:33:33', TIME '00:00:00', CET)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 78,
+    "fragment" : "make_timestamp(timestamp_ntz '2018-11-17 13:33:33', TIME'0:0:0', 'CET')"
+  } ]
+}
+
+
+-- !query
+SELECT make_timestamp(DATE'1970-01-01', timestamp '2018-11-17 13:33:33', 'CET')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_NTZ '2018-11-17 13:33:33'\"",
+    "inputType" : "\"TIMESTAMP_NTZ\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"TIME\"",
+    "sqlExpr" : "\"make_timestamp(DATE '1970-01-01', TIMESTAMP_NTZ '2018-11-17 13:33:33', CET)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 79,
+    "fragment" : "make_timestamp(DATE'1970-01-01', timestamp '2018-11-17 13:33:33', 'CET')"
+  } ]
+}
+
+
+-- !query
+SELECT make_timestamp(DATE'1970-01-01', timestamp_ntz '2018-11-17 13:33:33', 'CET')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_NTZ '2018-11-17 13:33:33'\"",
+    "inputType" : "\"TIMESTAMP_NTZ\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"TIME\"",
+    "sqlExpr" : "\"make_timestamp(DATE '1970-01-01', TIMESTAMP_NTZ '2018-11-17 13:33:33', CET)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 83,
+    "fragment" : "make_timestamp(DATE'1970-01-01', timestamp_ntz '2018-11-17 13:33:33', 'CET')"
+  } ]
+}
+
+
+-- !query
+SELECT try_make_timestamp(make_date(2021, 07, 11))
+-- !query schema
+struct<try_make_timestamp(make_date(2021, 7, 11)):timestamp>
+-- !query output
+2021-07-11 00:00:00
+
+
+-- !query
+SELECT try_make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678))
+-- !query schema
+struct<try_make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678)):timestamp>
+-- !query output
+2021-07-11 06:30:45.678
+
+
+-- !query
+SELECT try_make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'CET')
+-- !query schema
+struct<try_make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), CET):timestamp>
+-- !query output
+2021-07-10 21:30:45.678
+
+
+-- !query
+SELECT try_make_timestamp(NULL)
+-- !query schema
+struct<try_make_timestamp(NULL):timestamp>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_make_timestamp(NULL, NULL)
+-- !query schema
+struct<try_make_timestamp(NULL, NULL):timestamp>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_make_timestamp(NULL, NULL, NULL)
+-- !query schema
+struct<try_make_timestamp(NULL, NULL, NULL):timestamp>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_make_timestamp(timestamp '2018-11-17 13:33:33', TIME'0:0:0', 'CET')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_NTZ '2018-11-17 13:33:33'\"",
+    "inputType" : "\"TIMESTAMP_NTZ\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"DATE\"",
+    "sqlExpr" : "\"make_timestamp(TIMESTAMP_NTZ '2018-11-17 13:33:33', TIME '00:00:00', CET)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 78,
+    "fragment" : "try_make_timestamp(timestamp '2018-11-17 13:33:33', TIME'0:0:0', 'CET')"
+  } ]
+}
+
+
+-- !query
+SELECT try_make_timestamp(DATE'1970-01-01', timestamp_ntz '2018-11-17 13:33:33', 'CET')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_NTZ '2018-11-17 13:33:33'\"",
+    "inputType" : "\"TIMESTAMP_NTZ\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"TIME\"",
+    "sqlExpr" : "\"make_timestamp(DATE '1970-01-01', TIMESTAMP_NTZ '2018-11-17 13:33:33', CET)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 87,
+    "fragment" : "try_make_timestamp(DATE'1970-01-01', timestamp_ntz '2018-11-17 13:33:33', 'CET')"
+  } ]
+}
+
+
+-- !query
 select TIMESTAMP_SECONDS(1230219000),TIMESTAMP_SECONDS(-1230219000),TIMESTAMP_SECONDS(null)
 -- !query schema
 struct<timestamp_seconds(1230219000):timestamp,timestamp_seconds(-1230219000):timestamp,timestamp_seconds(NULL):timestamp>
@@ -805,49 +1177,17 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select timestamp'2011-11-11 11:11:11' + null
 -- !query schema
-struct<>
+struct<TIMESTAMP_NTZ '2011-11-11 11:11:11' + NULL:timestamp_ntz>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "left" : "\"TIMESTAMP_NTZ\"",
-    "right" : "\"VOID\"",
-    "sqlExpr" : "\"(TIMESTAMP_NTZ '2011-11-11 11:11:11' + NULL)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 44,
-    "fragment" : "timestamp'2011-11-11 11:11:11' + null"
-  } ]
-}
+NULL
 
 
 -- !query
 select null + timestamp'2011-11-11 11:11:11'
 -- !query schema
-struct<>
+struct<TIMESTAMP_NTZ '2011-11-11 11:11:11' + NULL:timestamp_ntz>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "left" : "\"VOID\"",
-    "right" : "\"TIMESTAMP_NTZ\"",
-    "sqlExpr" : "\"(NULL + TIMESTAMP_NTZ '2011-11-11 11:11:11')\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 44,
-    "fragment" : "null + timestamp'2011-11-11 11:11:11'"
-  } ]
-}
+NULL
 
 
 -- !query
@@ -880,7 +1220,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2130",
+  "errorClass" : "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+  "sqlState" : "22007",
   "messageParameters" : {
     "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'yyyy-MM-dd GGGGG'"
@@ -895,7 +1236,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2130",
+  "errorClass" : "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+  "sqlState" : "22007",
   "messageParameters" : {
     "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'dd MM yyyy EEEEEE'"
@@ -910,7 +1252,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2130",
+  "errorClass" : "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+  "sqlState" : "22007",
   "messageParameters" : {
     "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'dd MM yyyy EEEEE'"

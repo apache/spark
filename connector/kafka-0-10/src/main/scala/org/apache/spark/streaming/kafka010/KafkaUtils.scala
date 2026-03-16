@@ -24,7 +24,7 @@ import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.SparkContext
 import org.apache.spark.api.java.{ JavaRDD, JavaSparkContext }
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CONFIG, GROUP_ID}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.StreamingContext
@@ -112,7 +112,7 @@ object KafkaUtils extends Logging {
       locationStrategy: LocationStrategy,
       consumerStrategy: ConsumerStrategy[K, V]
     ): InputDStream[ConsumerRecord[K, V]] = {
-    val ppc = new DefaultPerPartitionConfig(ssc.sparkContext.getConf)
+    val ppc = new DefaultPerPartitionConfig(ssc.sparkContext.getReadOnlyConf)
     createDirectStream[K, V](ssc, locationStrategy, consumerStrategy, ppc)
   }
 

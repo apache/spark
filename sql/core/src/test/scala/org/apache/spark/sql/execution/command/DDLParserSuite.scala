@@ -18,13 +18,13 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, SchemaCompensation, UnresolvedAttribute, UnresolvedFunctionName, UnresolvedIdentifier}
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, SchemaCompensation, UnresolvedAttribute, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, FileResource, FunctionResource, JarResource}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
-import org.apache.spark.sql.catalyst.expressions.JsonTuple
+import org.apache.spark.sql.catalyst.expressions.{JsonTuple, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.test.SharedSparkSession
@@ -36,9 +36,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
   private def parseException(sqlText: String): SparkThrowable = {
     super.parseException(parser.parsePlan)(sqlText)
   }
-
-  private def intercept(sqlCommand: String, messages: String*): Unit =
-    interceptParseException(parser.parsePlan)(sqlCommand, messages: _*)()
 
   private def compareTransformQuery(sql: String, expected: LogicalPlan): Unit = {
     val plan = parser.parsePlan(sql).asInstanceOf[ScriptTransformation].copy(ioschema = null)
@@ -498,6 +495,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       UnresolvedIdentifier(Seq("view1")),
       Seq.empty[(String, Option[String])],
       None,
+      None,
       Map.empty[String, String],
       Some("SELECT * FROM tab1"),
       parser.parsePlan("SELECT * FROM tab1"),
@@ -512,6 +510,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val expected2 = CreateViewCommand(
       Seq("a").asTableIdentifier,
       Seq.empty[(String, Option[String])],
+      None,
       None,
       Map.empty[String, String],
       Some("SELECT * FROM tab1"),
@@ -539,6 +538,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         |(col1, col3 COMMENT 'hello')
         |TBLPROPERTIES('prop1Key'="prop1Val")
         |COMMENT 'BLABLA'
+        |DEFAULT COLLATION uNiCodE
         |AS SELECT * FROM tab1
       """.stripMargin
     val parsed1 = parser.parsePlan(v1)
@@ -546,6 +546,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       UnresolvedIdentifier(Seq("view1")),
       Seq("col1" -> None, "col3" -> Some("hello")),
       Some("BLABLA"),
+      Some("UNICODE"),
       Map("prop1Key" -> "prop1Val"),
       Some("SELECT * FROM tab1"),
       parser.parsePlan("SELECT * FROM tab1"),
@@ -559,6 +560,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         |CREATE OR REPLACE GLOBAL TEMPORARY VIEW a
         |(col1, col3 COMMENT 'hello')
         |COMMENT 'BLABLA'
+        |DEFAULT COLLATION uNiCoDe
         |AS SELECT * FROM tab1
           """.stripMargin
     val parsed2 = parser.parsePlan(v2)
@@ -566,6 +568,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       Seq("a").asTableIdentifier,
       Seq("col1" -> None, "col3" -> Some("hello")),
       Some("BLABLA"),
+      Some("UNICODE"),
       Map(),
       Some("SELECT * FROM tab1"),
       parser.parsePlan("SELECT * FROM tab1"),
@@ -664,45 +667,41 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   test("DROP FUNCTION") {
-    def createFuncPlan(name: Seq[String]): UnresolvedFunctionName = {
-      UnresolvedFunctionName(name, "DROP FUNCTION", true,
-        Some("Please use fully qualified identifier to drop the persistent function."))
-    }
     comparePlans(
       parser.parsePlan("DROP FUNCTION a"),
-      DropFunction(createFuncPlan(Seq("a")), false))
+      DropFunction(UnresolvedIdentifier(Seq("a")), false))
     comparePlans(
       parser.parsePlan("DROP FUNCTION a.b.c"),
-      DropFunction(createFuncPlan(Seq("a", "b", "c")), false))
+      DropFunction(UnresolvedIdentifier(Seq("a", "b", "c")), false))
     comparePlans(
       parser.parsePlan("DROP TEMPORARY FUNCTION a"),
       DropFunctionCommand(Seq("a").asFunctionIdentifier, false, true))
     comparePlans(
       parser.parsePlan("DROP FUNCTION IF EXISTS a.b.c"),
-      DropFunction(createFuncPlan(Seq("a", "b", "c")), true))
+      DropFunction(UnresolvedIdentifier(Seq("a", "b", "c")), true))
     comparePlans(
       parser.parsePlan("DROP TEMPORARY FUNCTION IF EXISTS a"),
       DropFunctionCommand(Seq("a").asFunctionIdentifier, true, true))
 
     val sql1 = "DROP TEMPORARY FUNCTION a.b"
     checkError(
-      exception = parseException(sql1),
-      condition = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
-      parameters = Map("statement" -> "DROP TEMPORARY FUNCTION", "name" -> "`a`.`b`"),
-      context = ExpectedContext(
-        fragment = sql1,
-        start = 0,
-        stop = 26))
+      exception = intercept[AnalysisException](parser.parsePlan(sql1)),
+      condition = "INVALID_TEMP_OBJ_QUALIFIER",
+      parameters = Map(
+        "objectType" -> "FUNCTION",
+        "objectName" -> "`b`",
+        "qualifier" -> "`a`"),
+      queryContext = Array(ExpectedContext(sql1, 0, sql1.length - 1)))
 
     val sql2 = "DROP TEMPORARY FUNCTION IF EXISTS a.b"
     checkError(
-      exception = parseException(sql2),
-      condition = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
-      parameters = Map("statement" -> "DROP TEMPORARY FUNCTION", "name" -> "`a`.`b`"),
-      context = ExpectedContext(
-        fragment = sql2,
-        start = 0,
-        stop = 36))
+      exception = intercept[AnalysisException](parser.parsePlan(sql2)),
+      condition = "INVALID_TEMP_OBJ_QUALIFIER",
+      parameters = Map(
+        "objectType" -> "FUNCTION",
+        "objectName" -> "`b`",
+        "qualifier" -> "`a`"),
+      queryContext = Array(ExpectedContext(sql2, 0, sql2.length - 1)))
   }
 
   test("SPARK-32374: create temporary view with properties not allowed") {
@@ -804,13 +803,13 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
   test("SET CATALOG") {
     comparePlans(
       parser.parsePlan("SET CATALOG abc"),
-      SetCatalogCommand("abc"))
+      SetCatalogCommand(UnresolvedAttribute("abc")))
     comparePlans(
       parser.parsePlan("SET CATALOG 'a b c'"),
-      SetCatalogCommand("a b c"))
+      SetCatalogCommand(Literal("a b c")))
     comparePlans(
       parser.parsePlan("SET CATALOG `a b c`"),
-      SetCatalogCommand("a b c"))
+      SetCatalogCommand(UnresolvedAttribute(Seq("a b c"))))
   }
 
   test("SHOW CATALOGS") {
@@ -820,45 +819,5 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     comparePlans(
       parser.parsePlan("SHOW CATALOGS LIKE 'defau*'"),
       ShowCatalogsCommand(Some("defau*")))
-  }
-
-  test("Create SQL functions") {
-    comparePlans(
-      parser.parsePlan("CREATE TEMP FUNCTION foo() RETURNS INT RETURN 1"),
-      CreateSQLFunctionCommand(
-        FunctionIdentifier("foo"),
-        inputParamText = None,
-        returnTypeText = "INT",
-        exprText = Some("1"),
-        queryText = None,
-        comment = None,
-        isDeterministic = None,
-        containsSQL = None,
-        isTableFunc = false,
-        isTemp = true,
-        ignoreIfExists = false,
-        replace = false))
-    intercept("CREATE FUNCTION foo() RETURNS INT RETURN 1",
-      "Operation not allowed: creating persistent SQL functions is not supported")
-  }
-
-  test("create SQL functions with unsupported routine characteristics") {
-    intercept("CREATE FUNCTION foo() RETURNS INT LANGUAGE blah RETURN 1",
-      "Operation not allowed: Unsupported language for user defined functions: blah")
-
-    intercept("CREATE FUNCTION foo() RETURNS INT SPECIFIC foo1 RETURN 1",
-      "Operation not allowed: SQL function with SPECIFIC name is not supported")
-
-    intercept("CREATE FUNCTION foo() RETURNS INT NO SQL RETURN 1",
-      "Operation not allowed: SQL function with NO SQL is not supported")
-
-    intercept("CREATE FUNCTION foo() RETURNS INT NO SQL CONTAINS SQL RETURN 1",
-      "Found duplicate clauses: SQL DATA ACCESS")
-
-    intercept("CREATE FUNCTION foo() RETURNS INT RETURNS NULL ON NULL INPUT RETURN 1",
-      "Operation not allowed: SQL function with RETURNS NULL ON NULL INPUT is not supported")
-
-    intercept("CREATE FUNCTION foo() RETURNS INT SQL SECURITY INVOKER RETURN 1",
-      "Operation not allowed: SQL function with SQL SECURITY INVOKER is not supported")
   }
 }

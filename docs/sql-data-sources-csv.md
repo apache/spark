@@ -61,6 +61,12 @@ Data source options of CSV can be set via:
     <td>read/write</td>
   </tr>
   <tr>
+    <td><code>extension</code></td>
+    <td>csv</td>
+    <td>Sets the file extension for the output files. Limited to letters. Length must equal 3.</td>
+    <td>write</td>
+  </tr>
+  <tr>
     <td><code>encoding</code><br><code>charset</code></td>
     <td>UTF-8</td>
     <td>For reading, decodes the CSV files by the given encoding type. For writing, specifies encoding (charset) of saved CSV files. CSV built-in functions ignore this option.</td>

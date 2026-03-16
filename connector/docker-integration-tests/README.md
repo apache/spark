@@ -45,7 +45,7 @@ the container bootstrapping. To run an individual Docker integration test, use t
 
 Besides the default Docker images, the integration tests can be run with custom Docker images. For example,
 
-    ORACLE_DOCKER_IMAGE_NAME=gvenzl/oracle-free:23.5-slim-faststart ./build/sbt -Pdocker-integration-tests "docker-integration-tests/testOnly *OracleIntegrationSuite"
+    ORACLE_DOCKER_IMAGE_NAME=gvenzl/oracle-free:23.9-slim ./build/sbt -Pdocker-integration-tests "docker-integration-tests/testOnly *OracleIntegrationSuite"
 
 The following environment variables can be used to specify the custom Docker images for different databases:
 
@@ -55,6 +55,7 @@ The following environment variables can be used to specify the custom Docker ima
 - MYSQL_DOCKER_IMAGE_NAME
 - ORACLE_DOCKER_IMAGE_NAME
 - POSTGRES_DOCKER_IMAGE_NAME
+- STARROCKS_DOCKER_IMAGE_NAME
 
 ## Using a custom Docker context
 

@@ -21,10 +21,10 @@ Run with:
   ./bin/spark-submit examples/src/main/python/sql/arrow.py
 """
 
-# NOTE that this file is imported in user guide in PySpark documentation.
+# NOTE that this file is imported in tutorials in PySpark documentation.
 # The codes are referred via line numbers. See also `literalinclude` directive in Sphinx.
 import pandas as pd
-from typing import Iterable
+from typing import Iterator
 
 from pyspark.sql import SparkSession
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
@@ -256,7 +256,7 @@ def grouped_apply_in_pandas_example(spark: SparkSession) -> None:
 def map_in_pandas_example(spark: SparkSession) -> None:
     df = spark.createDataFrame([(1, 21), (2, 30)], ("id", "age"))
 
-    def filter_func(iterator: Iterable[pd.DataFrame]) -> Iterable[pd.DataFrame]:
+    def filter_func(iterator: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:
         for pdf in iterator:
             yield pdf[pdf.id == 1]
 

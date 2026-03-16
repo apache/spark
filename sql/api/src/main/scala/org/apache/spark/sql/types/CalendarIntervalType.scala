@@ -39,6 +39,10 @@ class CalendarIntervalType private () extends DataType {
 
   override def typeName: String = "interval"
 
+  override def equals(obj: Any): Boolean = obj.isInstanceOf[CalendarIntervalType]
+
+  override def hashCode(): Int = classOf[CalendarIntervalType].getSimpleName.hashCode
+
   private[spark] override def asNullable: CalendarIntervalType = this
 }
 

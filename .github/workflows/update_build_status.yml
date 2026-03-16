@@ -32,7 +32,7 @@ jobs:
       checks: write
     steps:
       - name: "Update build status"
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -72,7 +72,7 @@ jobs:
                       } catch (error) {
                         console.error(error)
                         // Run not found. This can happen when the PR author removes GitHub Actions runs or
-                        // disalbes GitHub Actions.
+                        // disables GitHub Actions.
                         continue
                       }
 

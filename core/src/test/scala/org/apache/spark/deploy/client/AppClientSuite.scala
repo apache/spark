@@ -22,7 +22,6 @@ import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 
 import scala.concurrent.duration._
 
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 
 import org.apache.spark._
@@ -43,7 +42,6 @@ import org.apache.spark.util.Utils
 class AppClientSuite
     extends SparkFunSuite
     with LocalSparkContext
-    with BeforeAndAfterAll
     with Eventually
     with ScalaFutures {
   private val numWorkers = 2
@@ -232,14 +230,6 @@ class AppClientSuite
   // ===============================
   // | Utility methods for testing |
   // ===============================
-
-  /** Return a SparkConf for applications that want to talk to our Master. */
-  private def appConf: SparkConf = {
-    new SparkConf()
-      .setMaster(masterRpcEnv.address.toSparkURL)
-      .setAppName("test")
-      .set("spark.executor.memory", "256m")
-  }
 
   /** Make a master to which our application will send executor requests. */
   private def makeMaster(): Master = {

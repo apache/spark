@@ -49,6 +49,11 @@ class DDLParserSuite extends AnalysisTest {
           case u: UnresolvedRelation => i.copy(table = u.clearWritePrivileges)
           case _ => i
         }
+      case o: OverwriteByExpression =>
+        o.table match {
+          case u: UnresolvedRelation => o.copy(table = u.clearWritePrivileges)
+          case _ => o
+        }
     }
     comparePlans(parsed, expected, checkAnalysis = false)
   }
@@ -1218,14 +1223,15 @@ class DDLParserSuite extends AnalysisTest {
   test("alter table: update column type using ALTER") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c TYPE bigint"),
-      AlterColumn(
+      AlterColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ALTER COLUMN"),
-        UnresolvedFieldName(Seq("a", "b", "c")),
-        Some(LongType),
-        None,
-        None,
-        None,
-        None))
+        Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
+          Some(LongType),
+          None,
+          None,
+          None,
+          None))))
   }
 
   test("alter table: update column type invalid type") {
@@ -1244,40 +1250,43 @@ class DDLParserSuite extends AnalysisTest {
   test("alter table: update column type") {
     comparePlans(
       parsePlan("ALTER TABLE table_name CHANGE COLUMN a.b.c TYPE bigint"),
-      AlterColumn(
+      AlterColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... CHANGE COLUMN"),
-        UnresolvedFieldName(Seq("a", "b", "c")),
-        Some(LongType),
-        None,
-        None,
-        None,
-        None))
+        Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
+          Some(LongType),
+          None,
+          None,
+          None,
+          None))))
   }
 
   test("alter table: update column comment") {
     comparePlans(
       parsePlan("ALTER TABLE table_name CHANGE COLUMN a.b.c COMMENT 'new comment'"),
-      AlterColumn(
+      AlterColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... CHANGE COLUMN"),
-        UnresolvedFieldName(Seq("a", "b", "c")),
-        None,
-        None,
-        Some("new comment"),
-        None,
-        None))
+        Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
+          None,
+          None,
+          Some("new comment"),
+          None,
+          None))))
   }
 
   test("alter table: update column position") {
     comparePlans(
       parsePlan("ALTER TABLE table_name CHANGE COLUMN a.b.c FIRST"),
-      AlterColumn(
+      AlterColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... CHANGE COLUMN"),
-        UnresolvedFieldName(Seq("a", "b", "c")),
-        None,
-        None,
-        None,
-        Some(UnresolvedFieldPosition(first())),
-        None))
+        Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
+          None,
+          None,
+          None,
+          Some(UnresolvedFieldPosition(first())),
+          None))))
   }
 
   test("alter table: multiple property changes are not allowed") {
@@ -1303,25 +1312,68 @@ class DDLParserSuite extends AnalysisTest {
   test("alter table: SET/DROP NOT NULL") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c SET NOT NULL"),
-      AlterColumn(
+      AlterColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ALTER COLUMN"),
-        UnresolvedFieldName(Seq("a", "b", "c")),
-        None,
-        Some(false),
-        None,
-        None,
-        None))
+        Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
+          None,
+          Some(false),
+          None,
+          None,
+          None))))
 
     comparePlans(
       parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c DROP NOT NULL"),
-      AlterColumn(
+      AlterColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ALTER COLUMN"),
-        UnresolvedFieldName(Seq("a", "b", "c")),
-        None,
-        Some(true),
-        None,
-        None,
-        None))
+        Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
+          None,
+          Some(true),
+          None,
+          None,
+          None))))
+  }
+
+  test("alter table: bulk alter column") {
+    comparePlans(
+      parsePlan(
+        """ALTER TABLE table_name ALTER COLUMN
+          | a.b.c SET NOT NULL,
+          | d.e.f COMMENT 'new comment',
+          | x TYPE INT,
+          | y FIRST""".stripMargin),
+      AlterColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ALTER COLUMN"),
+        Seq(
+          AlterColumnSpec(
+            UnresolvedFieldName(Seq("a", "b", "c")),
+            None,
+            Some(false),
+            None,
+            None,
+            None),
+          AlterColumnSpec(
+            UnresolvedFieldName(Seq("d", "e", "f")),
+            None,
+            None,
+            Some("new comment"),
+            None,
+            None),
+          AlterColumnSpec(
+            UnresolvedFieldName(Seq("x")),
+            Some(IntegerType),
+            None,
+            None,
+            None,
+            None),
+          AlterColumnSpec(
+            UnresolvedFieldName(Seq("y")),
+            None,
+            None,
+            None,
+            Some(UnresolvedFieldPosition(first())),
+            None))))
   }
 
   test("alter table: hive style change column") {
@@ -1331,36 +1383,39 @@ class DDLParserSuite extends AnalysisTest {
 
     comparePlans(
       parsePlan(sql1),
-      AlterColumn(
+      AlterColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... CHANGE COLUMN"),
-        UnresolvedFieldName(Seq("a", "b", "c")),
-        Some(IntegerType),
-        None,
-        None,
-        None,
-        None))
+        Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
+          Some(IntegerType),
+          None,
+          None,
+          None,
+          None))))
 
     comparePlans(
       parsePlan(sql2),
-      AlterColumn(
+      AlterColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... CHANGE COLUMN"),
-        UnresolvedFieldName(Seq("a", "b", "c")),
-        Some(IntegerType),
-        None,
-        Some("new_comment"),
-        None,
-        None))
+        Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
+          Some(IntegerType),
+          None,
+          Some("new_comment"),
+          None,
+          None))))
 
     comparePlans(
       parsePlan(sql3),
-      AlterColumn(
+      AlterColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... CHANGE COLUMN"),
-        UnresolvedFieldName(Seq("a", "b", "c")),
-        Some(IntegerType),
-        None,
-        None,
-        Some(UnresolvedFieldPosition(after("other_col"))),
-        None))
+        Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
+          Some(IntegerType),
+          None,
+          None,
+          Some(UnresolvedFieldPosition(after("other_col"))),
+          None))))
 
     // renaming column not supported in hive style ALTER COLUMN.
     val sql4 = "ALTER TABLE table_name CHANGE COLUMN a.b.c new_name INT"
@@ -1713,6 +1768,112 @@ class DDLParserSuite extends AnalysisTest {
     )
   }
 
+  test("insert table: REPLACE WHERE with BY NAME") {
+    parseCompare(
+      "INSERT INTO testcat.ns1.ns2.tbl BY NAME REPLACE WHERE a > 5 SELECT * FROM source",
+      OverwriteByExpression.byName(
+        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+        org.apache.spark.sql.catalyst.expressions.GreaterThan(
+          UnresolvedAttribute("a"),
+          Literal(5))))
+  }
+
+  test("insert table: REPLACE WHERE without BY NAME") {
+    parseCompare(
+      "INSERT INTO testcat.ns1.ns2.tbl REPLACE WHERE a > 5 SELECT * FROM source",
+      OverwriteByExpression.byPosition(
+        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+        org.apache.spark.sql.catalyst.expressions.GreaterThan(
+          UnresolvedAttribute("a"),
+          Literal(5))))
+  }
+
+  for {
+    isByName <- Seq(true, false)
+    userSpecifiedCols <- if (!isByName) {
+      Seq(Seq("a", "b"), Seq.empty)
+    } else {
+      Seq(Seq.empty)
+    }
+  } {
+    val byNameClause = if (isByName) "BY NAME " else ""
+    val sourceQuery = "SELECT * FROM source"
+    val userSpecifiedColsClause =
+      if (userSpecifiedCols.isEmpty) "" else userSpecifiedCols.mkString("(", ", ", ")")
+    val testMsg = s"isByName=$isByName, userSpecifiedColsClause=$userSpecifiedColsClause"
+
+    test(s"INSERT INTO with WITH SCHEMA EVOLUTION - $testMsg") {
+      val table = "testcat.ns1.ns2.tbl"
+      val insertSQLStmt = s"INSERT WITH SCHEMA EVOLUTION INTO $table " +
+        s"${userSpecifiedColsClause}${byNameClause}${sourceQuery}"
+
+      parseCompare(
+        sql = insertSQLStmt,
+        expected = InsertIntoStatement(
+          table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+          partitionSpec = Map.empty,
+          userSpecifiedCols = userSpecifiedCols,
+          query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+          overwrite = false,
+          ifPartitionNotExists = false,
+          byName = isByName,
+          withSchemaEvolution = true)
+      )
+    }
+
+    test(s"INSERT OVERWRITE (static) with WITH SCHEMA EVOLUTION - $testMsg") {
+      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key ->
+        SQLConf.PartitionOverwriteMode.STATIC.toString) {
+        val table = "testcat.ns1.ns2.tbl"
+        val insertSQLStmt = s"INSERT WITH SCHEMA EVOLUTION OVERWRITE $table " +
+          s"${userSpecifiedColsClause}${byNameClause}${sourceQuery}"
+
+        parseCompare(
+          sql = insertSQLStmt,
+          expected = InsertIntoStatement(
+            table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+            partitionSpec = Map.empty,
+            userSpecifiedCols = userSpecifiedCols,
+            query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+            overwrite = true,
+            ifPartitionNotExists = false,
+            byName = isByName,
+            withSchemaEvolution = true)
+        )
+      }
+    }
+  }
+
+  for (isByName <- Seq(true, false)) {
+    val byNameClause = if (isByName) "BY NAME " else ""
+    val sourceQuery = "SELECT * FROM source"
+    val testMsg = s"isByName=$isByName"
+
+    test(s"INSERT OVERWRITE (dynamic) with WITH SCHEMA EVOLUTION - $testMsg") {
+      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key ->
+        SQLConf.PartitionOverwriteMode.DYNAMIC.toString) {
+        val table = "testcat.ns1.ns2.tbl"
+        val insertSQLStmt = s"INSERT WITH SCHEMA EVOLUTION OVERWRITE $table " +
+          s"${byNameClause}${sourceQuery}"
+
+        parseCompare(
+          sql = insertSQLStmt,
+          expected = InsertIntoStatement(
+            table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+            partitionSpec = Map.empty,
+            userSpecifiedCols = Seq.empty,
+            query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+            overwrite = true,
+            ifPartitionNotExists = false,
+            byName = isByName,
+            withSchemaEvolution = true)
+        )
+      }
+    }
+  }
+
   test("delete from table: delete all") {
     parseCompare("DELETE FROM testcat.ns1.ns2.tbl",
       DeleteFromTable(
@@ -1862,8 +2023,8 @@ class DDLParserSuite extends AnalysisTest {
         SubqueryAlias("target", UnresolvedRelation(Seq("testcat1", "ns1", "ns2", "tbl"))),
         SubqueryAlias("source", UnresolvedWith(Project(Seq(UnresolvedStar(None)),
           UnresolvedRelation(Seq("s"))),
-          Seq("s" -> SubqueryAlias("s", Project(Seq(UnresolvedStar(None)),
-            UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl"))))))),
+          Seq(("s", SubqueryAlias("s", Project(Seq(UnresolvedStar(None)),
+            UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl")))), None)))),
         EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
         Seq(DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete")))),
           UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update"))),
@@ -2126,6 +2287,21 @@ class DDLParserSuite extends AnalysisTest {
         fragment = sql,
         start = 0,
         stop = 106))
+  }
+
+  test("merge into table: inserted value count must match field count") {
+    val sqlText =
+      """MERGE INTO t1 USING t2 ON t1.id = t2.id
+        |WHEN NOT MATCHED THEN INSERT (col1, col2) VALUES (1)""".stripMargin
+    checkError(
+      exception = parseException(sqlText),
+      condition = "MERGE_INSERT_VALUE_COUNT_MISMATCH",
+      sqlState = "21S01",
+      parameters = Map("expectedCount" -> "2", "actualCount" -> "1"),
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = sqlText.length - 1))
   }
 
   test("show views") {
@@ -2434,7 +2610,7 @@ class DDLParserSuite extends AnalysisTest {
 
   test("DESCRIBE FUNCTION") {
     def createFuncPlan(name: Seq[String]): UnresolvedFunctionName = {
-      UnresolvedFunctionName(name, "DESCRIBE FUNCTION", false, None)
+      UnresolvedFunctionName(name, "DESCRIBE FUNCTION")
     }
     comparePlans(
       parsePlan("DESC FUNCTION a"),
@@ -2451,15 +2627,12 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("REFRESH FUNCTION") {
-    def createFuncPlan(name: Seq[String]): UnresolvedFunctionName = {
-      UnresolvedFunctionName(name, "REFRESH FUNCTION", true, None)
-    }
     parseCompare("REFRESH FUNCTION c",
-      RefreshFunction(createFuncPlan(Seq("c"))))
+      RefreshFunction(UnresolvedIdentifier(Seq("c"))))
     parseCompare("REFRESH FUNCTION b.c",
-      RefreshFunction(createFuncPlan(Seq("b", "c"))))
+      RefreshFunction(UnresolvedIdentifier(Seq("b", "c"))))
     parseCompare("REFRESH FUNCTION a.b.c",
-      RefreshFunction(createFuncPlan(Seq("a", "b", "c"))))
+      RefreshFunction(UnresolvedIdentifier(Seq("a", "b", "c"))))
   }
 
   test("CREATE INDEX") {
@@ -2655,7 +2828,7 @@ class DDLParserSuite extends AnalysisTest {
     val createTableResult =
       CreateTable(UnresolvedIdentifier(Seq("my_tab")), columnsWithDefaultValue,
         Seq.empty[Transform], UnresolvedTableSpec(Map.empty[String, String], Some("parquet"),
-         OptionList(Seq.empty), None, None, None, false), false)
+         OptionList(Seq.empty), None, None, None, None, false, Seq.empty), false)
     // Parse the CREATE TABLE statement twice, swapping the order of the NOT NULL and DEFAULT
     // options, to make sure that the parser accepts any ordering of these options.
     comparePlans(parsePlan(
@@ -2668,33 +2841,36 @@ class DDLParserSuite extends AnalysisTest {
       "b STRING NOT NULL DEFAULT 'abc') USING parquet"),
       ReplaceTable(UnresolvedIdentifier(Seq("my_tab")), columnsWithDefaultValue,
         Seq.empty[Transform], UnresolvedTableSpec(Map.empty[String, String], Some("parquet"),
-          OptionList(Seq.empty), None, None, None, false), false))
+          OptionList(Seq.empty), None, None, None, None, false, Seq.empty), false))
     // These ALTER TABLE statements should parse successfully.
     comparePlans(
       parsePlan("ALTER TABLE t1 ADD COLUMN x int NOT NULL DEFAULT 42"),
       AddColumns(UnresolvedTable(Seq("t1"), "ALTER TABLE ... ADD COLUMN"),
-        Seq(QualifiedColType(None, "x", IntegerType, false, None, None, Some("42")))))
+        Seq(QualifiedColType(None, "x", IntegerType, false, None, None,
+          Some(DefaultValueExpression(Literal(42), "42"))))))
     comparePlans(
       parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT 42"),
-      AlterColumn(
+      AlterColumns(
         UnresolvedTable(Seq("t1"), "ALTER TABLE ... ALTER COLUMN"),
-        UnresolvedFieldName(Seq("a", "b", "c")),
-        None,
-        None,
-        None,
-        None,
-        Some("42")))
+        Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
+          None,
+          None,
+          None,
+          None,
+          Some(DefaultValueExpression(Literal(42), "42"))))))
     // It is possible to pass an empty string default value using quotes.
     comparePlans(
       parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT ''"),
-      AlterColumn(
+      AlterColumns(
         UnresolvedTable(Seq("t1"), "ALTER TABLE ... ALTER COLUMN"),
-        UnresolvedFieldName(Seq("a", "b", "c")),
-        None,
-        None,
-        None,
-        None,
-        Some("''")))
+        Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
+          None,
+          None,
+          None,
+          None,
+          Some(DefaultValueExpression(Literal(""), "''"))))))
     // It is not possible to pass an empty string default value without using quotes.
     // This results in a parsing error.
     val sql1 = "ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT "
@@ -2712,14 +2888,16 @@ class DDLParserSuite extends AnalysisTest {
 
     comparePlans(
       parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c DROP DEFAULT"),
-      AlterColumn(
+      AlterColumns(
         UnresolvedTable(Seq("t1"), "ALTER TABLE ... ALTER COLUMN"),
-        UnresolvedFieldName(Seq("a", "b", "c")),
-        None,
-        None,
-        None,
-        None,
-        Some("")))
+        Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
+          None,
+          None,
+          None,
+          None,
+          None,
+          dropDefault = true))))
     // Make sure that the parser returns an exception when the feature is disabled.
     withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
       val sql = "CREATE TABLE my_tab(a INT, b STRING NOT NULL DEFAULT \"abc\") USING parquet"
@@ -2828,12 +3006,12 @@ class DDLParserSuite extends AnalysisTest {
       "CREATE TABLE my_tab(a INT, b INT NOT NULL GENERATED ALWAYS AS (a+1)) USING parquet"),
       CreateTable(UnresolvedIdentifier(Seq("my_tab")), columnsWithGenerationExpr,
         Seq.empty[Transform], UnresolvedTableSpec(Map.empty[String, String], Some("parquet"),
-          OptionList(Seq.empty), None, None, None, false), false))
+          OptionList(Seq.empty), None, None, None, None, false, Seq.empty), false))
     comparePlans(parsePlan(
       "REPLACE TABLE my_tab(a INT, b INT NOT NULL GENERATED ALWAYS AS (a+1)) USING parquet"),
       ReplaceTable(UnresolvedIdentifier(Seq("my_tab")), columnsWithGenerationExpr,
         Seq.empty[Transform], UnresolvedTableSpec(Map.empty[String, String], Some("parquet"),
-          OptionList(Seq.empty), None, None, None, false), false))
+          OptionList(Seq.empty), None, None, None, None, false, Seq.empty), false))
     // Two generation expressions
     checkError(
       exception = parseException("CREATE TABLE my_tab(a INT, " +
@@ -2903,7 +3081,9 @@ class DDLParserSuite extends AnalysisTest {
             None,
             None,
             None,
-            false
+            None,
+            false,
+            Seq.empty
           ),
           false
         )
@@ -2925,7 +3105,9 @@ class DDLParserSuite extends AnalysisTest {
             None,
             None,
             None,
-            false
+            None,
+            false,
+            Seq.empty
           ),
           false
         )
@@ -3081,7 +3263,7 @@ class DDLParserSuite extends AnalysisTest {
           nullable = false,
           comment = Some("a"),
           position = Some(UnresolvedFieldPosition(first())),
-          default = Some("'abc'")
+          default = Some(DefaultValueExpression(Literal("abc"), "'abc'"))
         )
       )
     )
@@ -3197,5 +3379,50 @@ class DDLParserSuite extends AnalysisTest {
       exception = internalException(insertDirSql),
       condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "INSERT OVERWRITE DIRECTORY is not supported."))
+  }
+
+  test("create table with bad collation name") {
+    checkError(
+      exception = internalException("CREATE TABLE t DEFAULT COLLATION XD"),
+      condition = "COLLATION_INVALID_NAME",
+      parameters = Map("proposals" -> "id, xh, af", "collationName" -> "XD")
+    )
+  }
+
+  private val testSuppCollations =
+    Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI", "UNICODE_CI_RTRIM", "sr", "sr_CI_AI")
+
+  test("create table with default collation") {
+    testSuppCollations.foreach { collation =>
+      comparePlans(parsePlan(
+        s"CREATE TABLE t (c STRING) USING parquet DEFAULT COLLATION ${collation.toLowerCase()}"),
+        CreateTable(UnresolvedIdentifier(Seq("t")),
+          Seq(ColumnDefinition("c", StringType)),
+          Seq.empty[Transform],
+          UnresolvedTableSpec(Map.empty[String, String], Some("parquet"), OptionList(Seq.empty),
+            None, None, Some(collation), None, false, Seq.empty), false))
+    }
+  }
+
+  test("replace table with default collation") {
+    testSuppCollations.foreach { collation =>
+      comparePlans(parsePlan(
+        s"REPLACE TABLE t (c STRING) USING parquet DEFAULT COLLATION ${collation.toLowerCase()}"),
+        ReplaceTable(UnresolvedIdentifier(Seq("t")),
+          Seq(ColumnDefinition("c", StringType)),
+          Seq.empty[Transform],
+          UnresolvedTableSpec(Map.empty[String, String], Some("parquet"), OptionList(Seq.empty),
+            None, None, Some(collation), None, false, Seq.empty), false))
+    }
+  }
+
+  test("alter table collation") {
+    testSuppCollations.foreach { collation =>
+      comparePlans(parsePlan(
+        s"ALTER TABLE t DEFAULT COLLATION ${collation.toLowerCase()}"),
+        AlterTableCollation(UnresolvedTable(Seq("t"),
+          "ALTER TABLE ... DEFAULT COLLATION"), collation)
+      )
+    }
   }
 }

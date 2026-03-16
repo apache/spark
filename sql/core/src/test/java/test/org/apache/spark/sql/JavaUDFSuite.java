@@ -19,6 +19,7 @@ package test.org.apache.spark.sql;
 
 import java.io.Serializable;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 
 import org.apache.spark.sql.catalyst.FunctionIdentifier;
@@ -31,9 +32,10 @@ import org.junit.jupiter.api.Test;
 
 import org.apache.spark.sql.AnalysisException;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SparkSession;
+import org.apache.spark.sql.classic.SparkSession;
 import org.apache.spark.sql.api.java.UDF2;
 import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.TimeType;
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
 // serialized, as an alternative to converting these anonymous classes to static inner classes;
@@ -134,6 +136,15 @@ public class JavaUDFSuite implements Serializable {
     } finally {
       spark.conf().set(SQLConf.DATETIME_JAVA8API_ENABLED().key(), originConf);
     }
+  }
+
+  @Test
+  public void udf8Test() {
+    spark.udf().register(
+        "plusTwoHours",
+        (java.time.LocalTime lt) -> lt.plusHours(2), new TimeType(6));
+    Row result = spark.sql("SELECT plusTwoHours(TIME '09:10:10')").head();
+    Assertions.assertEquals(LocalTime.of(11, 10, 10), result.get(0));
   }
 
   @Test

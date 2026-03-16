@@ -18,6 +18,7 @@
 package org.apache.spark.sql.avro
 
 import java.net.URI
+import java.util.HashMap
 
 import org.apache.avro.Schema
 import org.apache.hadoop.conf.Configuration
@@ -39,6 +40,21 @@ private[sql] class AvroOptions(
   extends FileSourceOptions(parameters) with Logging {
 
   import AvroOptions._
+
+  private def parseBoolean(optionName: String, value: String): Boolean = {
+    try {
+      value.toBoolean
+    } catch {
+      case _: IllegalArgumentException =>
+        throw QueryCompilationErrors.avroOptionsException(
+          optionName,
+          s"Cannot cast value '$value' to Boolean.")
+    }
+  }
+
+  private def getBoolean(optionName: String, defaultValue: => Boolean): Boolean = {
+    parameters.get(optionName).map(v => parseBoolean(optionName, v)).getOrElse(defaultValue)
+  }
 
   def this(parameters: Map[String, String], conf: Configuration) = {
     this(CaseInsensitiveMap(parameters), conf)
@@ -77,19 +93,18 @@ private[sql] class AvroOptions(
    * name. This allows for a structurally equivalent Catalyst schema to be used with an Avro schema
    * whose field names do not match. Defaults to false.
    */
-  val positionalFieldMatching: Boolean =
-    parameters.get(POSITIONAL_FIELD_MATCHING).exists(_.toBoolean)
+  val positionalFieldMatching: Boolean = getBoolean(POSITIONAL_FIELD_MATCHING, defaultValue = false)
 
   /**
    * Top level record name in write result, which is required in Avro spec.
-   * See https://avro.apache.org/docs/1.11.3/specification/#schema-record .
+   * See https://avro.apache.org/docs/1.12.1/specification/#schema-record .
    * Default value is "topLevelRecord"
    */
   val recordName: String = parameters.getOrElse(RECORD_NAME, "topLevelRecord")
 
   /**
    * Record namespace in write result. Default value is "".
-   * See Avro spec for details: https://avro.apache.org/docs/1.11.3/specification/#schema-record .
+   * See Avro spec for details: https://avro.apache.org/docs/1.12.1/specification/#schema-record .
    */
   val recordNamespace: String = parameters.getOrElse(RECORD_NAMESPACE, "")
 
@@ -106,10 +121,7 @@ private[sql] class AvroOptions(
       AvroFileFormat.IgnoreFilesWithoutExtensionProperty,
       ignoreFilesWithoutExtensionByDefault)
 
-    parameters
-      .get(IGNORE_EXTENSION)
-      .map(_.toBoolean)
-      .getOrElse(!ignoreFilesWithoutExtension)
+    getBoolean(IGNORE_EXTENSION, defaultValue = !ignoreFilesWithoutExtension)
   }
 
   /**
@@ -130,10 +142,10 @@ private[sql] class AvroOptions(
    */
   val datetimeRebaseModeInRead: String = parameters
     .get(DATETIME_REBASE_MODE)
-    .getOrElse(SQLConf.get.getConf(SQLConf.AVRO_REBASE_MODE_IN_READ))
+    .getOrElse(SQLConf.get.getConf(SQLConf.AVRO_REBASE_MODE_IN_READ).toString)
 
   val useStableIdForUnionType: Boolean =
-    parameters.get(STABLE_ID_FOR_UNION_TYPE).map(_.toBoolean).getOrElse(false)
+    getBoolean(STABLE_ID_FOR_UNION_TYPE, defaultValue = false)
 
   val stableIdPrefixForUnionType: String = parameters
     .getOrElse(STABLE_ID_PREFIX_FOR_UNION_TYPE, "member_")
@@ -145,6 +157,37 @@ private[sql] class AvroOptions(
     throw QueryCompilationErrors.avroOptionsException(
       RECURSIVE_FIELD_MAX_DEPTH,
       s"Should not be greater than $RECURSIVE_FIELD_MAX_DEPTH_LIMIT.")
+  }
+
+  /**
+   * [[hadoop.conf.Configuration]] is not comparable so we turn it into a map for [[equals]] and
+   * [[hashCode]].
+   */
+  @transient private lazy val comparableConf = {
+    val iter = conf.iterator()
+    val result = new HashMap[String, String]
+    while (iter.hasNext()) {
+      val entry = iter.next()
+      result.put(entry.getKey(), entry.getValue())
+    }
+    result
+  }
+
+  override def equals(other: Any): Boolean = {
+    other match {
+      case that: AvroOptions =>
+        this.parameters == that.parameters &&
+        this.comparableConf == that.comparableConf
+      case _ => false
+    }
+  }
+
+  override def hashCode(): Int = {
+    val prime = 31
+    var result = 1
+    result = prime * result + parameters.hashCode
+    result = prime * result + comparableConf.hashCode
+    result
   }
 }
 

@@ -16,16 +16,13 @@
 # limitations under the License.
 #
 
-import unittest
 import os
+import unittest
 
-from pyspark.ml.tests.connect.test_connect_classification import (
-    have_torch,
-    torch_requirement_message,
-)
 from pyspark.util import is_remote_only
-from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+from pyspark.testing.utils import have_torch, torch_requirement_message
+from pyspark.testing.connectutils import ReusedConnectTestCase
 
 if should_test_connect:
     from pyspark.ml.tests.connect.test_legacy_mode_tuning import CrossValidatorTestsMixin
@@ -36,27 +33,19 @@ if should_test_connect:
         or torch_requirement_message
         or "Requires PySpark core library in Spark Connect server",
     )
-    class CrossValidatorTestsOnConnect(CrossValidatorTestsMixin, unittest.TestCase):
-        def setUp(self) -> None:
-            self.spark = (
-                SparkSession.builder.remote(
-                    os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[2]")
-                )
-                .config("spark.sql.artifact.copyFromLocalToFs.allowDestLocal", "true")
-                .getOrCreate()
-            )
+    class CrossValidatorTestsOnConnect(CrossValidatorTestsMixin, ReusedConnectTestCase):
+        @classmethod
+        def conf(cls):
+            config = super().conf()
+            config.set("spark.sql.artifact.copyFromLocalToFs.allowDestLocal", "true")
+            return config
 
-        def tearDown(self) -> None:
-            self.spark.stop()
+        @classmethod
+        def master(cls):
+            return os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[2]")
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.connect.test_connect_tuning import *  # noqa: F401,F403
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

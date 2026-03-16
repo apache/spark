@@ -52,7 +52,7 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
       assert(showDDL === Array(
         s"CREATE TABLE $t (",
         "a INT,",
-        "b STRING)",
+        "b STRING COLLATE UTF8_BINARY)",
         defaultUsing,
         "PARTITIONED BY (a)",
         "COMMENT 'This is a comment'",
@@ -135,7 +135,7 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
       assert(showDDL === Array(
         s"CREATE TABLE $t (",
         "a INT,",
-        "b STRING,",
+        "b STRING COLLATE UTF8_BINARY,",
         "ts TIMESTAMP)",
         defaultUsing,
         "PARTITIONED BY (a, years(ts), months(ts), days(ts), hours(ts))",
@@ -174,11 +174,68 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
       assert(
         showDDL === Array(
           s"CREATE TABLE $fullName (",
-          "a STRUCT<b: BIGINT COMMENT 'comment', c: STRUCT<d: STRING NOT NULL, e: STRING>>)",
+          "a STRUCT<b: BIGINT COMMENT 'comment'," +
+            " c: STRUCT<d: STRING COLLATE UTF8_BINARY NOT NULL, e: STRING COLLATE UTF8_BINARY>>)",
           "USING parquet",
           "COMMENT 'This is a comment'"
         )
       )
+    }
+  }
+
+  test("show table constraints") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      withNamespaceAndTable("ns", "other_table", nonPartitionCatalog) { otherTable =>
+        sql(
+          s"""
+             |CREATE TABLE $otherTable (
+             |  id STRING PRIMARY KEY
+             |)
+             |$defaultUsing
+        """.stripMargin)
+        sql(
+          s"""
+             |CREATE TABLE $t (
+             |  a INT,
+             |  b STRING,
+             |  c STRING,
+             |  PRIMARY KEY (a),
+             |  CONSTRAINT uk_b UNIQUE (b),
+             |  CONSTRAINT fk_c FOREIGN KEY (c) REFERENCES $otherTable(id) RELY,
+             |  CONSTRAINT c1 CHECK (c IS NOT NULL),
+             |  CONSTRAINT c2 CHECK (a > 0)
+             |)
+             |$defaultUsing
+        """.stripMargin)
+        var showDDL = getShowCreateDDL(t)
+        val expectedDDLPrefix = Array(
+          s"CREATE TABLE $nonPartitionCatalog.ns.tbl (",
+          "a INT NOT NULL,",
+          "b STRING COLLATE UTF8_BINARY,",
+          "c STRING COLLATE UTF8_BINARY,",
+          "CONSTRAINT tbl_pk PRIMARY KEY (a) NOT ENFORCED NORELY,",
+          "CONSTRAINT uk_b UNIQUE (b) NOT ENFORCED NORELY,",
+          s"CONSTRAINT fk_c FOREIGN KEY (c) REFERENCES $otherTable (id) NOT ENFORCED RELY,",
+          "CONSTRAINT c1 CHECK (c IS NOT NULL) ENFORCED NORELY,"
+        )
+        assert(showDDL === expectedDDLPrefix ++ Array(
+          "CONSTRAINT c2 CHECK (a > 0) ENFORCED NORELY)",
+          defaultUsing))
+
+        sql(s"ALTER TABLE $t ADD CONSTRAINT c3 CHECK (b IS NOT NULL) ENFORCED RELY")
+        showDDL = getShowCreateDDL(t)
+        val expectedDDLArrayWithNewConstraint = expectedDDLPrefix ++ Array(
+          "CONSTRAINT c2 CHECK (a > 0) ENFORCED NORELY,",
+          "CONSTRAINT c3 CHECK (b IS NOT NULL) ENFORCED RELY)",
+          defaultUsing
+        )
+        assert(showDDL === expectedDDLArrayWithNewConstraint)
+        sql(s"ALTER TABLE $t DROP CONSTRAINT c1")
+        showDDL = getShowCreateDDL(t)
+        val expectedDDLArrayAfterDrop = expectedDDLArrayWithNewConstraint.filterNot(
+          _.contains("c1 CHECK (c IS NOT NULL) ENFORCED NORELY"))
+        assert(showDDL === expectedDDLArrayAfterDrop)
+      }
     }
   }
 }

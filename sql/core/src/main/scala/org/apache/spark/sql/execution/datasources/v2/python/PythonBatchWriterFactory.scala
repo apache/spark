@@ -32,7 +32,8 @@ case class PythonBatchWriterFactory(
     source: UserDefinedPythonDataSource,
     pickledWriteFunc: Array[Byte],
     inputSchema: StructType,
-    jobArtifactUUID: Option[String]) extends DataWriterFactory {
+    jobArtifactUUID: Option[String],
+    sessionUUID: Option[String]) extends DataWriterFactory {
   override def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] = {
     new DataWriter[InternalRow] {
 
@@ -47,7 +48,8 @@ case class PythonBatchWriterFactory(
           inputSchema,
           UserDefinedPythonDataSource.writeOutputSchema,
           metrics,
-          jobArtifactUUID)
+          jobArtifactUUID,
+          sessionUUID)
         val outputIter = evaluatorFactory.createEvaluator().eval(partitionId, records.asScala)
         outputIter.foreach { row =>
           if (commitMessage == null) {

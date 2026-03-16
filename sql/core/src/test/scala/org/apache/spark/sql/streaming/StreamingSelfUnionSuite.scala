@@ -22,7 +22,7 @@ import org.scalatest.concurrent.PatienceConfiguration.Timeout
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.streaming.test.{InMemoryStreamTable, InMemoryStreamTableCatalog}
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.{LongType, StructField, StructType}

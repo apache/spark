@@ -19,4 +19,4 @@ license: |
   limitations under the License.
 ---
 
-As of Spark 4.0.0, the Structured Streaming Programming Guide has been broken apart into smaller, more readable pages. You can find these pages [here](/streaming).
+As of Spark 4.0.0, the Structured Streaming Programming Guide has been broken apart into smaller, more readable pages. You can find these pages [here](./streaming/index.html).

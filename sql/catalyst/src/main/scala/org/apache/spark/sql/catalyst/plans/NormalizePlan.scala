@@ -17,21 +17,75 @@
 
 package org.apache.spark.sql.catalyst.plans
 
-import org.apache.spark.sql.catalyst.analysis.GetViewColumnByNameAndOrdinal
+import java.util.HashMap
+
+import org.apache.spark.sql.catalyst.analysis.NormalizeableRelation
+import org.apache.spark.sql.catalyst.analysis.resolver.ResolverTag
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions
 import org.apache.spark.sql.catalyst.plans.logical._
 
+/**
+ * Object that handles normalization of operators and expressions. Used when comparing plans.
+ */
 object NormalizePlan extends PredicateHelper {
-  def apply(plan: LogicalPlan): LogicalPlan =
-    normalizePlan(normalizeExprIds(plan))
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val withNormalizedExpressions = normalizeExpressions(plan)
+    val withNormalizedExprIds = normalizeExprIds(withNormalizedExpressions)
+    normalizePlan(withNormalizedExprIds)
+  }
+
+  /**
+   * Normalizes expressions in a plan, needed because of differences between fixed-point and
+   * single-pass resolver, due to the nature of bottom-up resolution. Before normalization,
+   * pre-process the plan by replacing all [[RuntimeReplaceable]] nodes with their replacements.
+   * Normalization includes:
+   * - Replacing [[SubqueryExpression]] plans with normalized versions.
+   * - Replacing [[CommonExpressionDef]] and [[CommonExpressionRef]] ids with 0 - needed because
+   *   these ids are different for every node.
+   * - Replacing [[ExpressionWithRandomSeed]] seeds with 0 - needed because these seeds are
+   *   randomly generated.
+   */
+  def normalizeExpressions(plan: LogicalPlan): LogicalPlan = {
+    val withNormalizedRuntimeReplaceable = normalizeRuntimeReplaceable(plan)
+    withNormalizedRuntimeReplaceable.transformAllExpressions {
+      case subqueryExpression: SubqueryExpression =>
+        val normalizedPlan = normalizeExpressions(subqueryExpression.plan)
+        subqueryExpression.withNewPlan(normalizedPlan)
+      case commonExpressionDef: CommonExpressionDef =>
+        commonExpressionDef.copy(id = new CommonExpressionId(id = 0))
+      case commonExpressionRef: CommonExpressionRef =>
+        commonExpressionRef.copy(id = new CommonExpressionId(id = 0))
+      case expressionWithRandomSeed: ExpressionWithRandomSeed =>
+        expressionWithRandomSeed.withNewSeed(0)
+    }
+  }
+
+  /**
+   * Normalize [[RuntimeReplaceable]] nodes by replacing them with their replacement expressions.
+   * This is necessary because fixed-point analyzer may produce non-deterministic results when
+   * resolving original expressions. For example, in a query like:
+   *
+   * {{{ SELECT assert_true(1) }}}
+   *
+   * Before resolution, we have [[UnresolvedFunction]] whose child is Literal(1). This child will
+   * first be converted to Cast(Literal(1), BooleanType) by type coercion. Because in this case
+   * [[Cast]] doesn't require timezone, the expression will be implicitly resolved. Because the
+   * child of initially unresolved function is resolved, the function can be converted to
+   * [[AssertTrue]], which is of type [[InheritAnalysisRules]]. However, because the only child of
+   * [[InheritAnalysisRules]] is the replacement expression, the original expression will be lost
+   * and timezone will never be applied. This causes inconsistencies, because fixed-point semantic
+   * is to ALWAYS apply timezone, regardless of whether the Cast actually needs it.
+   */
+  def normalizeRuntimeReplaceable(plan: LogicalPlan): LogicalPlan = ReplaceExpressions(plan)
 
   /**
    * Since attribute references are given globally unique ids during analysis,
    * we must normalize them to check if two different queries are identical.
    */
   def normalizeExprIds(plan: LogicalPlan): LogicalPlan = {
-    plan transformAllExpressions {
+    plan.transformAllExpressions {
       case s: ScalarSubquery =>
         s.copy(plan = normalizeExprIds(s.plan), exprId = ExprId(0))
       case s: LateralSubquery =>
@@ -68,9 +122,16 @@ object NormalizePlan extends PredicateHelper {
    *   etc., will all now be equivalent.
    * - Sample the seed will replaced by 0L.
    * - Join conditions will be resorted by hashCode.
+   * - CTERelationDef ids will be rewritten using a monitonically increasing counter from 0.
+   * - CTERelationRef ids will be remapped based on the new CTERelationDef IDs. This is possible,
+   *   because WithCTE returns cteDefs as first children, and the defs will be traversed before the
+   *   refs.
+   * - Normalizes inner [[Project]] nodes by sorting project lists alphabetically.
+   * - Normalizes inner [[Aggregate]] nodes by sorting aggregate expressions lists alphabetically.
    */
   def normalizePlan(plan: LogicalPlan): LogicalPlan = {
-    plan transform {
+    val cteIdNormalizer = new CteIdNormalizer
+    plan.transformUpWithSubqueries {
       case Filter(condition: Expression, child: LogicalPlan) =>
         Filter(
           splitConjunctivePredicates(condition)
@@ -95,16 +156,65 @@ object NormalizePlan extends PredicateHelper {
             .sortBy(_.hashCode())
             .reduce(And)
         Join(left, right, newJoinType, Some(newCondition), hint)
-      case Project(projectList, child) =>
-        val projList = projectList
-          .map { e =>
-            e.transformUp {
-              case g: GetViewColumnByNameAndOrdinal => g.copy(viewDDL = None)
-            }
-          }
-          .asInstanceOf[Seq[NamedExpression]]
-        Project(projList, child)
+      case project: Project
+          if project.containsTag(ResolverTag.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION) =>
+        project.child
+
+      case aggregate @ Aggregate(_, _, innerProject: Project, _) =>
+        aggregate.copy(child = normalizeProjectListOrder(innerProject))
+
+      case project @ Project(_, innerProject: Project) =>
+        project.copy(child = normalizeProjectListOrder(innerProject))
+
+      case project @ Project(_, innerAggregate: Aggregate) =>
+        project.copy(child = normalizeAggregateListOrder(innerAggregate))
+
+      /**
+       * ORDER BY covered by an output-retaining project on top of GROUP BY
+       */
+      case project @ Project(_, sort @ Sort(_, _, innerAggregate: Aggregate, _)) =>
+        project.copy(child = sort.copy(child = normalizeAggregateListOrder(innerAggregate)))
+
+      /**
+       * HAVING covered by an output-retaining project on top of GROUP BY
+       */
+      case project @ Project(_, filter @ Filter(_, innerAggregate: Aggregate)) =>
+        project.copy(child = filter.copy(child = normalizeAggregateListOrder(innerAggregate)))
+
+      /**
+       * HAVING ... ORDER BY covered by an output-retaining project on top of GROUP BY
+       */
+      case project @ Project(
+            _,
+            sort @ Sort(_, _, filter @ Filter(_, innerAggregate: Aggregate), _)
+          ) =>
+        project.copy(
+          child =
+            sort.copy(child = filter.copy(child = normalizeAggregateListOrder(innerAggregate)))
+        )
+
       case c: KeepAnalyzedQuery => c.storeAnalyzedQuery()
+      case localRelation: LocalRelation if !localRelation.data.isEmpty =>
+        /**
+         * A substitute for the [[LocalRelation.data]]. [[GenericInternalRow]] is incomparable for
+         * maps, because [[ArrayBasedMapData]] doesn't define [[equals]].
+         */
+        val unsafeProjection = UnsafeProjection.create(localRelation.schema)
+        localRelation.copy(data = localRelation.data.map { row =>
+          unsafeProjection(row)
+        })
+      case cteRelationDef: CTERelationDef =>
+        cteIdNormalizer.normalizeDef(cteRelationDef)
+      case unionLoop: UnionLoop =>
+        cteIdNormalizer.normalizeUnionLoop(
+          unionLoop.copy(outputAttrIds = Seq.fill(unionLoop.outputAttrIds.size)(ExprId(0)))
+        )
+      case cteRelationRef: CTERelationRef =>
+        cteIdNormalizer.normalizeRef(cteRelationRef)
+      case unionLoopRef: UnionLoopRef =>
+        cteIdNormalizer.normalizeUnionLoopRef(unionLoopRef)
+      case normalizeableRelation: NormalizeableRelation =>
+        normalizeableRelation.normalize()
     }
   }
 
@@ -123,5 +233,59 @@ object NormalizePlan extends PredicateHelper {
     case GreaterThanOrEqual(l, r) if l.hashCode() > r.hashCode() => LessThanOrEqual(r, l)
     case LessThanOrEqual(l, r) if l.hashCode() > r.hashCode() => GreaterThanOrEqual(r, l)
     case _ => condition // Don't reorder.
+  }
+
+  private def normalizeProjectListOrder(project: Project): Project = {
+    project.copy(projectList = project.projectList.sortBy(_.name))
+  }
+
+  private def normalizeAggregateListOrder(aggregate: Aggregate): Aggregate = {
+    aggregate.copy(aggregateExpressions = aggregate.aggregateExpressions.sortBy(_.name))
+  }
+}
+
+/**
+ * Helper class used for normalization of CTE ids in the plan.
+ */
+class CteIdNormalizer {
+  private var cteIdCounter: Long = 0
+  private val oldToNewIdMapping = new HashMap[Long, Long]
+
+  def normalizeDef(cteRelationDef: CTERelationDef): CTERelationDef = {
+    try {
+      if (oldToNewIdMapping.containsKey(cteRelationDef.id)) {
+        cteRelationDef.copy(id = oldToNewIdMapping.get(cteRelationDef.id))
+      } else {
+        oldToNewIdMapping.put(cteRelationDef.id, cteIdCounter)
+        cteRelationDef.copy(id = cteIdCounter)
+      }
+    } finally {
+      cteIdCounter += 1
+    }
+  }
+
+  def normalizeRef(cteRelationRef: CTERelationRef): CTERelationRef = {
+    if (oldToNewIdMapping.containsKey(cteRelationRef.cteId)) {
+      cteRelationRef.copy(cteId = oldToNewIdMapping.get(cteRelationRef.cteId))
+    } else {
+      cteRelationRef
+    }
+  }
+
+  def normalizeUnionLoop(unionLoop: UnionLoop): UnionLoop = {
+    if (oldToNewIdMapping.containsKey(unionLoop.id)) {
+      unionLoop.copy(id = oldToNewIdMapping.get(unionLoop.id))
+    } else {
+      unionLoop
+    }
+  }
+
+  def normalizeUnionLoopRef(unionLoopRef: UnionLoopRef): UnionLoopRef = {
+    try {
+      oldToNewIdMapping.put(unionLoopRef.loopId, cteIdCounter)
+      unionLoopRef.copy(loopId = cteIdCounter)
+    } finally {
+      cteIdCounter += 1
+    }
   }
 }

@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 import com.codahale.metrics.Timer
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.LogKeys.{EVENT, LISTENER, TOTAL_TIME}
 import org.apache.spark.scheduler.EventLoggingListener
 import org.apache.spark.scheduler.SparkListenerEnvironmentUpdate

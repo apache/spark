@@ -17,22 +17,140 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import java.util.concurrent.ConcurrentHashMap
+
+import scala.jdk.CollectionConverters._
+
 import org.rocksdb._
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.SparkEnv
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
+import org.apache.spark.memory.{MemoryMode, UnifiedMemoryManager, UnmanagedMemoryConsumer, UnmanagedMemoryConsumerId}
 
 /**
  * Singleton responsible for managing cache and write buffer manager associated with all RocksDB
  * state store instances running on a single executor if boundedMemoryUsage is enabled for RocksDB.
  * If boundedMemoryUsage is disabled, a new cache object is returned.
+ * This also implements UnmanagedMemoryConsumer to report RocksDB memory usage to Spark's
+ * UnifiedMemoryManager, allowing Spark to account for RocksDB memory when making
+ * memory allocation decisions.
  */
-object RocksDBMemoryManager extends Logging {
+object RocksDBMemoryManager extends Logging with UnmanagedMemoryConsumer {
   private var writeBufferManager: WriteBufferManager = null
   private var cache: Cache = null
 
+  // Tracks memory usage and bounded memory mode per unique ID
+  private case class InstanceMemoryInfo(memoryUsage: Long, isBoundedMemory: Boolean)
+  private val instanceMemoryMap = new ConcurrentHashMap[String, InstanceMemoryInfo]()
+
+  override def unmanagedMemoryConsumerId: UnmanagedMemoryConsumerId = {
+    UnmanagedMemoryConsumerId("RocksDB", "RocksDB-Memory-Manager")
+  }
+
+  override def memoryMode: MemoryMode = {
+    // RocksDB uses native/off-heap memory for its data structures
+    MemoryMode.OFF_HEAP
+  }
+
+  override def getMemBytesUsed: Long = {
+    val memoryInfos = instanceMemoryMap.values().asScala.toSeq
+    if (memoryInfos.isEmpty) {
+      return 0L
+    }
+
+    // Separate instances by bounded vs unbounded memory mode
+    val (bounded, unbounded) = memoryInfos.partition(_.isBoundedMemory)
+
+    // For bounded memory instances, they all share the same memory pool,
+    // so just take the max value (they should all be similar)
+    val boundedMemory = if (bounded.nonEmpty) bounded.map(_.memoryUsage).max else 0L
+
+    // For unbounded memory instances, sum their individual usages
+    val unboundedMemory = unbounded.map(_.memoryUsage).sum
+
+    // Total is bounded memory (shared) + sum of unbounded memory (individual)
+    boundedMemory + unboundedMemory
+  }
+
+  /**
+   * Register/update a RocksDB instance with its memory usage.
+   * @param uniqueId The instance's unique identifier
+   * @param memoryUsage The current memory usage in bytes
+   * @param isBoundedMemory Whether this instance uses bounded memory mode
+   */
+  def updateMemoryUsage(
+      uniqueId: String,
+      memoryUsage: Long,
+      isBoundedMemory: Boolean): Unit = {
+    instanceMemoryMap.put(uniqueId, InstanceMemoryInfo(memoryUsage, isBoundedMemory))
+    logDebug(s"Updated memory usage for $uniqueId: $memoryUsage bytes " +
+      s"(bounded=$isBoundedMemory)")
+  }
+
+  /**
+   * Unregister a RocksDB instance.
+   * @param uniqueId The instance's unique identifier
+   */
+  def unregisterInstance(uniqueId: String): Unit = {
+    instanceMemoryMap.remove(uniqueId)
+    logDebug(s"Unregistered instance $uniqueId")
+  }
+
+  def getNumRocksDBInstances(boundedMemory: Boolean): Long = {
+    instanceMemoryMap.values().asScala.count(_.isBoundedMemory == boundedMemory)
+  }
+
+  /**
+   * Get the memory usage for a specific instance, accounting for bounded memory sharing.
+   * @param uniqueId The instance's unique identifier
+   * @param totalMemoryUsage The total memory usage of this instance
+   * @return The adjusted memory usage accounting for sharing in bounded memory mode
+   */
+  def getInstanceMemoryUsage(uniqueId: String, totalMemoryUsage: Long): Long = {
+    val instanceInfo = instanceMemoryMap.
+      getOrDefault(uniqueId, InstanceMemoryInfo(0L, isBoundedMemory = false))
+    if (instanceInfo.isBoundedMemory) {
+      // In bounded memory mode, divide by the number of bounded instances
+      // since they share the same memory pool
+      val numBoundedInstances = getNumRocksDBInstances(true)
+      totalMemoryUsage / numBoundedInstances
+    } else {
+      // In unbounded memory mode, each instance has its own memory
+      totalMemoryUsage
+    }
+  }
+
+  /**
+   * Get the pinned blocks memory usage for a specific instance, accounting for bounded memory
+   * sharing.
+   * @param uniqueId The instance's unique identifier
+   * @param totalPinnedUsage The total pinned usage from the cache
+   * @return The adjusted pinned blocks memory usage accounting for sharing in bounded memory mode
+   */
+  def getInstancePinnedBlocksMemUsage(
+      uniqueId: String,
+      totalPinnedUsage: Long): Long = {
+    val instanceInfo = instanceMemoryMap.
+      getOrDefault(uniqueId, InstanceMemoryInfo(0L, isBoundedMemory = false))
+    if (instanceInfo.isBoundedMemory) {
+      // In bounded memory mode, divide by the number of bounded instances
+      // since they share the same cache
+      val numBoundedInstances = getNumRocksDBInstances(true /* boundedMemory */)
+      totalPinnedUsage / numBoundedInstances
+    } else {
+      // In unbounded memory mode, each instance has its own cache
+      totalPinnedUsage
+    }
+  }
+
   def getOrCreateRocksDBMemoryManagerAndCache(conf: RocksDBConf): (WriteBufferManager, Cache)
     = synchronized {
+    // Register with UnifiedMemoryManager (idempotent operation)
+    if (SparkEnv.get != null) {
+      UnifiedMemoryManager.registerUnmanagedMemoryConsumer(this)
+    }
+
     if (conf.boundedMemoryUsage) {
       if (writeBufferManager == null) {
         assert(cache == null)
@@ -72,5 +190,6 @@ object RocksDBMemoryManager extends Logging {
   def resetWriteBufferManagerAndCache: Unit = synchronized {
     writeBufferManager = null
     cache = null
+    instanceMemoryMap.clear()
   }
 }

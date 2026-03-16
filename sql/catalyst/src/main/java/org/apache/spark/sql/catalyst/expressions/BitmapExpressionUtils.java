@@ -56,4 +56,17 @@ public class BitmapExpressionUtils {
       bitmap1[i] = (byte) ((bitmap1[i] & 0x0FF) | (bitmap2[i] & 0x0FF));
     }
   }
+
+  /** Performs bitwise AND on both bitmaps and writes the result into bitmap1. */
+  public static void bitmapAndMerge(byte[] bitmap1, byte[] bitmap2) {
+    int minLen = java.lang.Math.min(bitmap1.length, bitmap2.length);
+    for (int i = 0; i < minLen; ++i) {
+      bitmap1[i] = (byte) ((bitmap1[i] & 0x0FF) & (bitmap2[i] & 0x0FF));
+    }
+    // For AND operation, any bytes beyond the input length should be set to 0
+    // since they represent bits that don't exist in the input bitmap
+    for (int i = bitmap2.length; i < bitmap1.length; ++i) {
+      bitmap1[i] = 0;
+    }
+  }
 }

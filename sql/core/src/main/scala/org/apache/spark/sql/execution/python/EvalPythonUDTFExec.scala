@@ -68,7 +68,9 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
       // flatten all the arguments
       val allInputs = new ArrayBuffer[Expression]
       val dataTypes = new ArrayBuffer[DataType]
-      val argMetas = udtf.children.map { e =>
+      val argMetas = udtf.children.zip(
+        udtf.tableArguments.getOrElse(Seq.fill(udtf.children.length)(false))
+      ).map { case (e: Expression, isTableArg: Boolean) =>
         val (key, value) = e match {
           case NamedArgumentExpression(key, value) =>
             (Some(key), value)
@@ -76,11 +78,11 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
             (None, e)
         }
         if (allInputs.exists(_.semanticEquals(value))) {
-          ArgumentMetadata(allInputs.indexWhere(_.semanticEquals(value)), key)
+          ArgumentMetadata(allInputs.indexWhere(_.semanticEquals(value)), key, isTableArg)
         } else {
           allInputs += value
           dataTypes += value.dataType
-          ArgumentMetadata(allInputs.length - 1, key)
+          ArgumentMetadata(allInputs.length - 1, key, isTableArg)
         }
       }.toArray
       val projection = MutableProjection.create(allInputs.toSeq, child.output)

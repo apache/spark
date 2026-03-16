@@ -1,7 +1,7 @@
 ---
 layout: global
-title: CREATE FUNCTION
-displayTitle: CREATE FUNCTION
+title: CREATE FUNCTION (External)
+displayTitle: CREATE FUNCTION (External)
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -21,7 +21,7 @@ license: |
 
 ### Description
 
-The `CREATE FUNCTION` statement is used to create a temporary or permanent function
+The `CREATE FUNCTION` statement is used to create a temporary or permanent external function
 in Spark. Temporary functions are scoped at a session level where as permanent
 functions are created in the persistent catalog and are made available to
 all sessions. The resources specified in the `USING` clause are made available
@@ -161,6 +161,7 @@ SELECT simple_udf(c1) AS function_return_value FROM test;
 
 ### Related Statements
 
+* [CREATE FUNCTION (SQL)](sql-ref-syntax-ddl-create-sql-function.html)
 * [SHOW FUNCTIONS](sql-ref-syntax-aux-show-functions.html)
 * [DESCRIBE FUNCTION](sql-ref-syntax-aux-describe-function.html)
 * [DROP FUNCTION](sql-ref-syntax-ddl-drop-function.html)

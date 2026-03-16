@@ -49,6 +49,7 @@ This subsection presents the usages and descriptions of these functions.
 #### Aggregate-like Functions
  * [Aggregate Functions](sql-ref-functions-builtin.html#aggregate-functions)
  * [Window Functions](sql-ref-functions-builtin.html#window-functions)
+ * [Sketch-Based Approximate Functions](sql-ref-sketch-aggregates.html)
 
 #### Generator Functions
 * [Generator Functions](sql-ref-functions-builtin.html#generator-functions)

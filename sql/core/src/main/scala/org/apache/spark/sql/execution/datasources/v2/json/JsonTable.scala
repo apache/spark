@@ -49,12 +49,16 @@ case class JsonTable(
       sparkSession, files, parsedOptions)
   }
 
-  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder =
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
     new WriteBuilder {
-      override def build(): Write = JsonWrite(paths, formatName, supportsDataType, info)
+      override def build(): Write =
+        JsonWrite(paths, formatName, supportsDataType, mergedWriteInfo(info))
     }
+  }
 
   override def supportsDataType(dataType: DataType): Boolean = dataType match {
+    case _: GeometryType | _: GeographyType => false
+
     case _: AtomicType => true
 
     case st: StructType => st.forall { f => supportsDataType(f.dataType) }

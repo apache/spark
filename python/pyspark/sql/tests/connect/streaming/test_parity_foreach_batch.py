@@ -22,7 +22,7 @@ from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_conn
 from pyspark.errors import PySparkPicklingError
 
 if should_test_connect:
-    from pyspark.errors.exceptions.connect import SparkConnectGrpcException
+    from pyspark.errors.exceptions.connect import StreamingPythonRunnerInitializationException
 
 
 class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedConnectTestCase):
@@ -95,7 +95,7 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
             print(obj)
 
         # Assert that an exception occurs during the initialization
-        with self.assertRaises(SparkConnectGrpcException) as error:
+        with self.assertRaises(StreamingPythonRunnerInitializationException) as error:
             df.select("value").writeStream.foreachBatch(fcn).start()
 
         # Assert that the error message contains the expected string
@@ -138,13 +138,6 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.sql.tests.connect.streaming.test_parity_foreach_batch import *  # noqa: F401,E501
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

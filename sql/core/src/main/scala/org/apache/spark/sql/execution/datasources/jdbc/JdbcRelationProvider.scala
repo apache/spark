@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.jdbc
 import org.apache.spark.sql.{DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils._
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider}
 
@@ -35,9 +36,17 @@ class JdbcRelationProvider extends CreatableRelationProvider
     val sparkSession = sqlContext.sparkSession
     val resolver = sparkSession.sessionState.conf.resolver
     val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
-    val schema = JDBCRelation.getSchema(resolver, jdbcOptions)
+    val remoteSchemaFetchMetric = JdbcUtils.createSchemaFetchMetric(sparkSession.sparkContext)
+    val schema = SQLMetrics.withTimingNs(remoteSchemaFetchMetric) {
+      JDBCRelation.getSchema(resolver, jdbcOptions)
+    }
     val parts = JDBCRelation.columnPartition(schema, resolver, timeZoneId, jdbcOptions)
-    JDBCRelation(schema, parts, jdbcOptions)(sparkSession)
+    JDBCRelation(
+      schema,
+      parts,
+      jdbcOptions,
+      Map(JDBCRelation.schemaFetchKey -> remoteSchemaFetchMetric)
+    )(sparkSession)
   }
 
   override def createRelation(

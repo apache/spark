@@ -23,6 +23,7 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
+from pyspark.testing.utils import have_jinja2, jinja2_requirement_message
 
 
 class SeriesConversionTestsMixin:
@@ -48,6 +49,7 @@ class SeriesConversionTestsMixin:
             psser.to_clipboard(sep=",", index=False), pser.to_clipboard(sep=",", index=False)
         )
 
+    @unittest.skipIf(not have_jinja2, jinja2_requirement_message)
     def test_to_latex(self):
         pser = self.pser
         psser = self.psser
@@ -72,12 +74,6 @@ class SeriesConversionTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.io.test_series_conversion import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

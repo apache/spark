@@ -38,28 +38,6 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-SELECT * FROM parquet.`file:tmp`
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_LOCATION",
-  "sqlState" : "42K05",
-  "messageParameters" : {
-    "location" : "file:tmp"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 32,
-    "fragment" : "parquet.`file:tmp`"
-  } ]
-}
-
-
--- !query
 SELECT * FROM parquet.`/file/not/found`
 -- !query schema
 struct<>
@@ -116,28 +94,6 @@ org.apache.spark.sql.AnalysisException
     "startIndex" : 15,
     "stopIndex" : 20,
     "fragment" : "orc.``"
-  } ]
-}
-
-
--- !query
-SELECT * FROM orc.`file:tmp`
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_LOCATION",
-  "sqlState" : "42K05",
-  "messageParameters" : {
-    "location" : "file:tmp"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 28,
-    "fragment" : "orc.`file:tmp`"
   } ]
 }
 
@@ -204,28 +160,6 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-SELECT * FROM csv.`file:tmp`
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_LOCATION",
-  "sqlState" : "42K05",
-  "messageParameters" : {
-    "location" : "file:tmp"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 28,
-    "fragment" : "csv.`file:tmp`"
-  } ]
-}
-
-
--- !query
 SELECT * FROM csv.`/file/not/found`
 -- !query schema
 struct<>
@@ -287,28 +221,6 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-SELECT * FROM json.`file:tmp`
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_LOCATION",
-  "sqlState" : "42K05",
-  "messageParameters" : {
-    "location" : "file:tmp"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 29,
-    "fragment" : "json.`file:tmp`"
-  } ]
-}
-
-
--- !query
 SELECT * FROM json.`/file/not/found`
 -- !query schema
 struct<>
@@ -345,3 +257,27 @@ DROP DATABASE sql_on_files
 struct<>
 -- !query output
 
+
+
+-- !query
+SELECT * FROM json.`https://raw.githubusercontent.com/apache/spark/refs/heads/master/examples/src/main/resources/employees.json`
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "FAILED_READ_FILE.UNSUPPORTED_FILE_SYSTEM",
+  "sqlState" : "KD001",
+  "messageParameters" : {
+    "fileSystemClass" : "org.apache.hadoop.fs.http.HttpsFileSystem",
+    "method" : "listStatus",
+    "path" : "https://raw.githubusercontent.com/apache/spark/refs/heads/master/examples/src/main/resources/employees.json"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 128,
+    "fragment" : "json.`https://raw.githubusercontent.com/apache/spark/refs/heads/master/examples/src/main/resources/employees.json`"
+  } ]
+}

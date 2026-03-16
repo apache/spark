@@ -29,7 +29,7 @@ import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.connect.proto.StreamingQueryEventType
 import org.apache.spark.connect.proto.StreamingQueryListenerEvent
 import org.apache.spark.connect.proto.StreamingQueryListenerEventsResult
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.connect.execution.ExecuteResponseObserver
 import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.util.ArrayImplicits._
@@ -78,7 +78,7 @@ private[sql] class ServerSideListenerHolder(val sessionHolder: SessionHolder) {
    * final ResultComplete response.
    */
   def cleanUp(): Unit = {
-    var listener = streamingQueryServerSideListener.getAndSet(null)
+    val listener = streamingQueryServerSideListener.getAndSet(null)
     if (listener != null) {
       sessionHolder.session.streams.removeListener(listener)
       listener.sendResultComplete()

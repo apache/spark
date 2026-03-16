@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql
 
-import java.io.File
+import java.io.{File, PrintWriter, StringWriter}
 import java.net.URI
+import java.nio.file.Files
 import java.util.Locale
 
 import org.apache.spark.{SparkConf, TestUtils}
@@ -27,8 +28,8 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
+import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.TimestampTypes
@@ -83,12 +84,33 @@ import org.apache.spark.util.Utils
  *     times, each time picks one config set from each dimension, until all the combinations are
  *     tried. For example, if dimension 1 has 2 lines, dimension 2 has 3 lines, this testing file
  *     will be run 6 times (cartesian product).
+ *  6. A line with --DEBUG (on its own line before a query) marks that query for debug mode.
+ *     When any --DEBUG marker is present, the test enters debug mode:
+ *     - Commands (CREATE TABLE, INSERT, DROP, SET, etc.) are always executed automatically.
+ *     - Only --DEBUG-marked non-command queries are executed; all others are skipped.
+ *     - For failed queries, the full error stacktrace is printed to the console.
+ *     - Query results are still compared against the golden file.
+ *     - The test always fails at the end with a reminder to remove --DEBUG markers.
+ *     To inspect the DataFrame interactively, set a breakpoint in `runDebugQueries` at the
+ *     line where `localSparkSession.sql(sql)` is called, then evaluate the DataFrame in the
+ *     debugger (e.g., `df.queryExecution.analyzed`, `df.explain(true)`).
  *
  * For example:
  * {{{
  *   -- this is a comment
  *   select 1, -1;
  *   select current_date;
+ * }}}
+ *
+ * To debug a specific query, add --DEBUG before it:
+ * {{{
+ *   CREATE TABLE t (id INT, val INT) USING parquet;
+ *   INSERT INTO t VALUES (1, 10), (2, 20);
+ *   -- this query is skipped in debug mode
+ *   SELECT count(*) FROM t;
+ *   -- this is the query I'm debugging
+ *   --DEBUG
+ *   SELECT sum(val) OVER (ORDER BY id) FROM t;
  * }}}
  *
  * The format for golden result files look roughly like:
@@ -132,7 +154,7 @@ import org.apache.spark.util.Utils
 // scalastyle:on line.size.limit
 @ExtendedSQLTest
 class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
-    with SQLQueryTestHelper {
+    with SQLQueryTestHelper with TPCDSSchema {
 
   import IntegratedUDFTestUtils._
 
@@ -156,6 +178,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     // SPARK-39564: don't print out serde to avoid introducing complicated and error-prone
     // regex magic.
     .set("spark.test.noSerdeInExplain", "true")
+    .set(SQLConf.SCHEMA_LEVEL_COLLATIONS_ENABLED, true)
 
   // SPARK-32106 Since we add SQL test 'transform.sql' will use `cat` command,
   // here we need to ignore it.
@@ -165,13 +188,17 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   protected def ignoreList: Set[String] = Set(
     "ignored.sql" // Do NOT remove this one. It is here to test the ignore functionality.
   ) ++ otherIgnoreList
+  /** List of test cases that require TPCDS table schemas to be loaded. */
+  private def requireTPCDSCases: Seq[String] = Seq("pipe-operators.sql")
+  /** List of TPCDS table names and schemas to load from the [[TPCDSSchema]] base class. */
+  private val tpcDSTableNamesToSchemas: Map[String, String] = tableColumns
 
   // Create all the test cases.
   listTestCases.foreach(createScalaTestCase)
 
   protected def createScalaTestCase(testCase: TestCase): Unit = {
     if (ignoreList.exists(t =>
-        testCase.name.toLowerCase(Locale.ROOT).contains(t.toLowerCase(Locale.ROOT)))) {
+      testCase.name.toLowerCase(Locale.ROOT).contains(t.toLowerCase(Locale.ROOT)))) {
       // Create a test case to ignore this case.
       ignore(testCase.name) { /* Do nothing */ }
     } else testCase match {
@@ -224,17 +251,20 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
 
   /** Run a test case. */
   protected def runSqlTestCase(testCase: TestCase, listTestCases: Seq[TestCase]): Unit = {
-    val input = fileToString(new File(testCase.inputFile))
+    val input = Files.readString(new File(testCase.inputFile).toPath)
     val (comments, code) = splitCommentsAndCodes(input)
-    val queries = getQueries(code, comments, listTestCases)
+    val queriesWithDebug = getQueriesWithDebugFlag(code, comments, listTestCases)
     val settings = getSparkSettings(comments)
+    val debugMode = queriesWithDebug.exists(_._2) && !testCase.isInstanceOf[AnalyzerTest]
 
-    if (regenerateGoldenFiles) {
-      runQueries(queries, testCase, settings.toImmutableArraySeq)
+    if (debugMode && !regenerateGoldenFiles) {
+      runDebugQueries(queriesWithDebug, testCase, settings.toImmutableArraySeq)
+    } else if (regenerateGoldenFiles) {
+      runQueries(queriesWithDebug.map(_._1), testCase, settings.toImmutableArraySeq)
     } else {
       val configSets = getSparkConfigDimensions(comments)
       runQueriesWithSparkConfigDimensions(
-        queries, testCase, settings, configSets)
+        queriesWithDebug.map(_._1), testCase, settings, configSets)
     }
   }
 
@@ -281,12 +311,13 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     }
   }
 
-  protected def runQueries(
-      queries: Seq[String],
+  /**
+   * Creates and configures a local SparkSession for running test queries.
+   * Handles UDF/UDTF registration, SQL config, and TPCDS table setup.
+   */
+  private def setupLocalSession(
       testCase: TestCase,
-      sparkConfigSet: Seq[(String, String)]): Unit = {
-    // Create a local SparkSession to have stronger isolation between different test cases.
-    // This does not isolate catalog changes.
+      sparkConfigSet: Seq[(String, String)]): SparkSession = {
     val localSparkSession = spark.newSession()
 
     testCase match {
@@ -306,13 +337,13 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         localSparkSession.udf.register("vol", (s: String) => s)
         localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
         localSparkSession.conf.set(SQLConf.LEGACY_INTERVAL_ENABLED.key, true)
-      case _: SQLQueryTestSuite#AnsiTest =>
-        localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
+      case _: SQLQueryTestSuite#NonAnsiTest =>
+        localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, false)
       case _: SQLQueryTestSuite#TimestampNTZTest =>
         localSparkSession.conf.set(SQLConf.TIMESTAMP_TYPE.key,
           TimestampTypes.TIMESTAMP_NTZ.toString)
       case _ =>
-        localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, false)
+        localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
     }
 
     if (sparkConfigSet.nonEmpty) {
@@ -321,6 +352,136 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       logInfo(s"Setting configs: ${setOperations.mkString(", ")}")
       setOperations.foreach(localSparkSession.sql)
     }
+
+    // Load TPCDS table schemas for the test case if required.
+    val lowercaseTestCase = testCase.name.toLowerCase(Locale.ROOT)
+    if (requireTPCDSCases.contains(lowercaseTestCase)) {
+      tpcDSTableNamesToSchemas.foreach { case (name: String, schema: String) =>
+        localSparkSession.sql(s"DROP TABLE IF EXISTS $name")
+        localSparkSession.sql(s"CREATE TABLE `$name` ($schema) USING parquet")
+      }
+    }
+
+    localSparkSession
+  }
+
+  /**
+   * Runs queries in debug mode. Only commands and --DEBUG-marked queries are executed.
+   * Failed debug queries print the full error stacktrace. Results are compared against
+   * the golden file. The test always fails at the end to prevent accidental commits.
+   *
+   * To inspect the DataFrame interactively, set a breakpoint at the line where
+   * `localSparkSession.sql(sql)` is called inside this method, then evaluate the DataFrame
+   * in the debugger (e.g., `df.queryExecution.analyzed`, `df.explain(true)`).
+   */
+  protected def runDebugQueries(
+      queriesWithDebug: Seq[(String, Boolean)],
+      testCase: TestCase,
+      sparkConfigSet: Seq[(String, String)]): Unit = {
+    val localSparkSession = setupLocalSession(testCase, sparkConfigSet)
+    val lowercaseTestCase = testCase.name.toLowerCase(Locale.ROOT)
+    val segmentsPerQuery = 3
+
+    val goldenFileExists = new File(testCase.resultFile).exists()
+    val segments = if (goldenFileExists) {
+      Files.readString(new File(testCase.resultFile).toPath).split("-- !query.*\n")
+    } else {
+      Array.empty[String]
+    }
+
+    queriesWithDebug.zipWithIndex.foreach { case ((sql, isDebug), i) =>
+      val isCommand = try {
+        localSparkSession.sessionState.sqlParser.parsePlan(sql).isInstanceOf[Command]
+      } catch {
+        case _: ParseException => false
+      }
+
+      if (isCommand) {
+        localSparkSession.sql(sql).collect()
+      } else if (isDebug) {
+        // Capture exception stacktrace if the query fails.
+        var exceptionTrace: Option[String] = None
+        val (schema, result) = handleExceptions {
+          try {
+            // Set a breakpoint here and evaluate `localSparkSession.sql(sql)` to get the
+            // DataFrame for ad-hoc debugging (e.g., df.queryExecution.analyzed).
+            getNormalizedQueryExecutionResult(localSparkSession, sql)
+          } catch {
+            case e: Throwable =>
+              val sw = new StringWriter()
+              e.printStackTrace(new PrintWriter(sw))
+              exceptionTrace = Some(sw.toString)
+              throw e
+          }
+        }
+        val output = ExecutionOutput(
+          sql = sql,
+          schema = Some(schema),
+          output = normalizeTestResults(result.mkString("\n")))
+
+        // Build consolidated debug output.
+        val debugOutput = new StringBuilder()
+        debugOutput.append(s"\n=== DEBUG: Query #$i ===")
+        debugOutput.append(s"\nSQL: $sql")
+        exceptionTrace.foreach { trace =>
+          debugOutput.append(s"\n$trace")
+        }
+
+        // Compare against golden file and append result.
+        var mismatch: Option[String] = None
+        if (goldenFileExists &&
+            segments.length > segmentsPerQuery * i + segmentsPerQuery) {
+          val expected = ExecutionOutput(
+            segments(segmentsPerQuery * i + 1).trim,
+            Some(segments(segmentsPerQuery * i + 2).trim),
+            normalizeTestResults(segments(segmentsPerQuery * i + 3)))
+
+          if (expected.sql != output.sql) {
+            debugOutput.append("\nGolden answer: no matching entry " +
+              "(SQL text differs, likely a new or moved query)")
+          } else if (expected.schema != output.schema) {
+            mismatch = Some(s"Schema did not match for query #$i\n${expected.sql}")
+            debugOutput.append(s"\nGolden answer: schema mismatch")
+            debugOutput.append(s"\n  Expected: ${expected.schema.getOrElse("")}")
+            debugOutput.append(s"\n  Actual:   ${output.schema.getOrElse("")}")
+          } else if (expected.output != output.output) {
+            mismatch = Some(s"Result did not match for query #$i\n${expected.sql}")
+            debugOutput.append(s"\nGolden answer: result mismatch")
+            debugOutput.append(s"\n  Expected:\n${expected.output}")
+            debugOutput.append(s"\n  Actual:\n${output.output}")
+          } else {
+            debugOutput.append("\nGolden answer: matches")
+          }
+        } else {
+          debugOutput.append("\nGolden answer: no golden file to compare")
+        }
+
+        // scalastyle:off println
+        println(debugOutput.toString)
+        // scalastyle:on println
+
+        mismatch.foreach(fail(_))
+      }
+    }
+
+    if (requireTPCDSCases.contains(lowercaseTestCase)) {
+      tpcDSTableNamesToSchemas.foreach { case (name: String, _: String) =>
+        localSparkSession.sql(s"DROP TABLE IF EXISTS $name")
+      }
+    }
+
+    fail("Test is in debug mode. " +
+      "Remove --DEBUG markers from the input file before committing.")
+  }
+
+  protected def runQueries(
+      queries: Seq[String],
+      testCase: TestCase,
+      sparkConfigSet: Seq[(String, String)]): Unit = {
+    // Create a local SparkSession to have stronger isolation between different test cases.
+    // This does not isolate catalog changes.
+    val localSparkSession = setupLocalSession(testCase, sparkConfigSet)
+    val lowercaseTestCase = testCase.name.toLowerCase(Locale.ROOT)
 
     // Run the SQL queries preparing them for comparison.
     val outputs: Seq[QueryTestOutput] = queries.map { sql =>
@@ -348,6 +509,13 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       }
     }
 
+    // Drop TPCDS tables after the test case if required.
+    if (requireTPCDSCases.contains(lowercaseTestCase)) {
+      tpcDSTableNamesToSchemas.foreach { case (name: String, schema: String) =>
+        localSparkSession.sql(s"DROP TABLE IF EXISTS $name")
+      }
+    }
+
     if (regenerateGoldenFiles) {
       // Again, we are explicitly not using multi-line string due to stripMargin removing "|".
       val goldenOutput = {
@@ -357,7 +525,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       val resultFile = new File(testCase.resultFile)
       val parent = resultFile.getParentFile
       if (!parent.exists()) {
-        assert(parent.mkdirs(), "Could not create directory: " + parent)
+        assert(Utils.createDirectory(parent), "Could not create directory: " + parent)
       }
       stringToFile(resultFile, goldenOutput)
     }
@@ -445,8 +613,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         }
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}postgreSQL")) {
         PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil
-      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}ansi")) {
-        AnsiTestCase(testCaseName, absPath, resultFile) :: Nil
+      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}nonansi")) {
+        NonAnsiTestCase(testCaseName, absPath, resultFile) :: Nil
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}timestampNTZ")) {
         TimestampNTZTestCase(testCaseName, absPath, resultFile) :: Nil
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}cte.sql")) {
@@ -618,7 +786,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       makeOutput: (String, Option[String], String) => QueryTestOutput): Unit = {
     // Read back the golden file.
     val expectedOutputs: Seq[QueryTestOutput] = {
-      val goldenOutput = fileToString(new File(resultFile))
+      val goldenOutput = Files.readString(new File(resultFile).toPath)
       val segments = goldenOutput.split("-- !query.*\n")
 
       val numSegments = outputs.map(_.numSegments).sum + 1

@@ -129,12 +129,12 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
       reduceId: Int,
       blockId: String): AppShufflePartitionInfo = {
     val dataFile = ShuffleTestAccessor.getMergedShuffleDataFile(mergeManager, partitionId, reduceId)
-    dataFile.getParentFile.mkdirs()
+    Utils.createDirectory(dataFile.getParentFile)
     val indexFile =
       ShuffleTestAccessor.getMergedShuffleIndexFile(mergeManager, partitionId, reduceId)
-    indexFile.getParentFile.mkdirs()
+    Utils.createDirectory(indexFile.getParentFile)
     val metaFile = ShuffleTestAccessor.getMergedShuffleMetaFile(mergeManager, partitionId, reduceId)
-    metaFile.getParentFile.mkdirs()
+    Utils.createDirectory(metaFile.getParentFile)
     val partitionInfo = ShuffleTestAccessor.getOrCreateAppShufflePartitionInfo(
       mergeManager, partitionId, reduceId, blockId)
 
@@ -616,35 +616,35 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     val mergeManager1DB = ShuffleTestAccessor.mergeManagerDB(mergeManager1)
     ShuffleTestAccessor.recoveryFile(mergeManager1) should be (mergeMgrFile)
 
-    ShuffleTestAccessor.getAppsShuffleInfo(mergeManager1).size() equals 0
-    ShuffleTestAccessor.reloadAppShuffleInfo(
-      mergeManager1, mergeManager1DB).size() equals 0
+    assert(ShuffleTestAccessor.getAppsShuffleInfo(mergeManager1).size() equals 0)
+    assert(ShuffleTestAccessor.reloadAppShuffleInfo(
+      mergeManager1, mergeManager1DB).size() equals 0)
 
     mergeManager1.registerExecutor(app1Id.toString, mergedShuffleInfo1)
     var appShuffleInfo = ShuffleTestAccessor.getAppsShuffleInfo(mergeManager1)
-    appShuffleInfo.size() equals 1
+    assert(appShuffleInfo.size() equals 1)
     appShuffleInfo.get(app1Id.toString).getAppPathsInfo should be (appPathsInfo1)
     var appShuffleInfoAfterReload =
       ShuffleTestAccessor.reloadAppShuffleInfo(mergeManager1, mergeManager1DB)
-    appShuffleInfoAfterReload.size() equals 1
+    assert(appShuffleInfoAfterReload.size() equals 1)
     appShuffleInfoAfterReload.get(app1Id.toString).getAppPathsInfo should be (appPathsInfo1)
 
     mergeManager1.registerExecutor(app2Attempt1Id.toString, mergedShuffleInfo2Attempt1)
     appShuffleInfo = ShuffleTestAccessor.getAppsShuffleInfo(mergeManager1)
-    appShuffleInfo.size() equals 2
+    assert(appShuffleInfo.size() equals 2)
     appShuffleInfo.get(app1Id.toString).getAppPathsInfo should be (appPathsInfo1)
     appShuffleInfo.get(
       app2Attempt1Id.toString).getAppPathsInfo should be (appPathsInfo2Attempt1)
     appShuffleInfoAfterReload =
       ShuffleTestAccessor.reloadAppShuffleInfo(mergeManager1, mergeManager1DB)
-    appShuffleInfoAfterReload.size() equals 2
+    assert(appShuffleInfoAfterReload.size() equals 2)
     appShuffleInfoAfterReload.get(app1Id.toString).getAppPathsInfo should be (appPathsInfo1)
     appShuffleInfoAfterReload.get(
       app2Attempt1Id.toString).getAppPathsInfo should be (appPathsInfo2Attempt1)
 
     mergeManager1.registerExecutor(app3IdNoAttemptId.toString, mergedShuffleInfo3NoAttemptId)
     appShuffleInfo = ShuffleTestAccessor.getAppsShuffleInfo(mergeManager1)
-    appShuffleInfo.size() equals 3
+    assert(appShuffleInfo.size() equals 3)
     appShuffleInfo.get(app1Id.toString).getAppPathsInfo should be (appPathsInfo1)
     appShuffleInfo.get(
       app2Attempt1Id.toString).getAppPathsInfo should be (appPathsInfo2Attempt1)
@@ -652,7 +652,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
       app3IdNoAttemptId.toString).getAppPathsInfo should be (appPathsInfo3NoAttempt)
     appShuffleInfoAfterReload =
       ShuffleTestAccessor.reloadAppShuffleInfo(mergeManager1, mergeManager1DB)
-    appShuffleInfoAfterReload.size() equals 3
+    assert(appShuffleInfoAfterReload.size() equals 3)
     appShuffleInfoAfterReload.get(app1Id.toString).getAppPathsInfo should be (appPathsInfo1)
     appShuffleInfoAfterReload.get(
       app2Attempt1Id.toString).getAppPathsInfo should be (appPathsInfo2Attempt1)
@@ -661,7 +661,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
 
     mergeManager1.registerExecutor(app2Attempt2Id.toString, mergedShuffleInfo2Attempt2)
     appShuffleInfo = ShuffleTestAccessor.getAppsShuffleInfo(mergeManager1)
-    appShuffleInfo.size() equals 3
+    assert(appShuffleInfo.size() equals 3)
     appShuffleInfo.get(app1Id.toString).getAppPathsInfo should be (appPathsInfo1)
     appShuffleInfo.get(
       app2Attempt2Id.toString).getAppPathsInfo should be (appPathsInfo2Attempt2)
@@ -669,7 +669,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
       app3IdNoAttemptId.toString).getAppPathsInfo should be (appPathsInfo3NoAttempt)
     appShuffleInfoAfterReload =
       ShuffleTestAccessor.reloadAppShuffleInfo(mergeManager1, mergeManager1DB)
-    appShuffleInfoAfterReload.size() equals 3
+    assert(appShuffleInfoAfterReload.size() equals 3)
     appShuffleInfoAfterReload.get(app1Id.toString).getAppPathsInfo should be (appPathsInfo1)
     appShuffleInfoAfterReload.get(
       app2Attempt2Id.toString).getAppPathsInfo should be (appPathsInfo2Attempt2)
@@ -678,14 +678,14 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
 
     mergeManager1.applicationRemoved(app2Attempt2Id.toString, true)
     appShuffleInfo = ShuffleTestAccessor.getAppsShuffleInfo(mergeManager1)
-    appShuffleInfo.size() equals 2
+    assert(appShuffleInfo.size() equals 2)
     appShuffleInfo.get(app1Id.toString).getAppPathsInfo should be (appPathsInfo1)
     assert(!appShuffleInfo.containsKey(app2Attempt2Id.toString))
     appShuffleInfo.get(
       app3IdNoAttemptId.toString).getAppPathsInfo should be (appPathsInfo3NoAttempt)
     appShuffleInfoAfterReload =
       ShuffleTestAccessor.reloadAppShuffleInfo(mergeManager1, mergeManager1DB)
-    appShuffleInfoAfterReload.size() equals 2
+    assert(appShuffleInfoAfterReload.size() equals 2)
     appShuffleInfoAfterReload.get(app1Id.toString).getAppPathsInfo should be (appPathsInfo1)
     assert(!appShuffleInfoAfterReload.containsKey(app2Attempt2Id.toString))
     appShuffleInfoAfterReload.get(
@@ -725,9 +725,9 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     val mergeManager1DB = ShuffleTestAccessor.mergeManagerDB(mergeManager1)
     ShuffleTestAccessor.recoveryFile(mergeManager1) should be (mergeMgrFile)
 
-    ShuffleTestAccessor.getAppsShuffleInfo(mergeManager1).size() equals 0
-    ShuffleTestAccessor.reloadAppShuffleInfo(
-      mergeManager1, mergeManager1DB).size() equals 0
+    assert(ShuffleTestAccessor.getAppsShuffleInfo(mergeManager1).size() equals 0)
+    assert(ShuffleTestAccessor.reloadAppShuffleInfo(
+      mergeManager1, mergeManager1DB).size() equals 0)
 
     mergeManager1.registerExecutor(app1Id.toString, mergedShuffleInfo1)
     mergeManager1.registerExecutor(app2Attempt1Id.toString, mergedShuffleInfo2Attempt1)
@@ -737,7 +737,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     prepareAppShufflePartition(mergeManager1, partitionId2, 2, "4")
 
     var appShuffleInfo = ShuffleTestAccessor.getAppsShuffleInfo(mergeManager1)
-    appShuffleInfo.size() equals 2
+    assert(appShuffleInfo.size() equals 2)
     appShuffleInfo.get(app1Id.toString).getAppPathsInfo should be (appPathsInfo1)
     appShuffleInfo.get(
       app2Attempt1Id.toString).getAppPathsInfo should be (appPathsInfo2Attempt1)
@@ -745,7 +745,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     assert(!appShuffleInfo.get(app2Attempt1Id.toString).getShuffles.get(2).isFinalized)
     var appShuffleInfoAfterReload =
       ShuffleTestAccessor.reloadAppShuffleInfo(mergeManager1, mergeManager1DB)
-    appShuffleInfoAfterReload.size() equals 2
+    assert(appShuffleInfoAfterReload.size() equals 2)
     appShuffleInfoAfterReload.get(app1Id.toString).getAppPathsInfo should be (appPathsInfo1)
     appShuffleInfoAfterReload.get(
       app2Attempt1Id.toString).getAppPathsInfo should be (appPathsInfo2Attempt1)
@@ -765,12 +765,12 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
 
     mergeManager1.applicationRemoved(app1Id.toString, true)
     appShuffleInfo = ShuffleTestAccessor.getAppsShuffleInfo(mergeManager1)
-    appShuffleInfo.size() equals 1
+    assert(appShuffleInfo.size() equals 1)
     assert(!appShuffleInfo.containsKey(app1Id.toString))
     assert(appShuffleInfo.get(app2Attempt1Id.toString).getShuffles.get(2).isFinalized)
     appShuffleInfoAfterReload =
       ShuffleTestAccessor.reloadAppShuffleInfo(mergeManager1, mergeManager1DB)
-    appShuffleInfoAfterReload.size() equals 1
+    assert(appShuffleInfoAfterReload.size() equals 1)
     assert(!appShuffleInfoAfterReload.containsKey(app1Id.toString))
     assert(appShuffleInfoAfterReload.get(app2Attempt1Id.toString).getShuffles.get(2).isFinalized)
 
@@ -844,7 +844,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     prepareAppShufflePartition(mergeManager1, partitionId2, 2, "4")
 
     var appShuffleInfo = ShuffleTestAccessor.getAppsShuffleInfo(mergeManager1)
-    appShuffleInfo.size() equals 2
+    assert(appShuffleInfo.size() equals 2)
     appShuffleInfo.get(app1Id.toString).getAppPathsInfo should be (appPathsInfo1)
     appShuffleInfo.get(
       app2Id.toString).getAppPathsInfo should be (appPathsInfo2Attempt1)
@@ -867,20 +867,20 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     mergeManager1.applicationRemoved(app1Id.toString, true)
 
     appShuffleInfo = ShuffleTestAccessor.getAppsShuffleInfo(mergeManager1)
-    appShuffleInfo.size() equals 1
+    assert(appShuffleInfo.size() equals 1)
     assert(!appShuffleInfo.containsKey(app1Id.toString))
     assert(appShuffleInfo.get(app2Id.toString).getShuffles.get(2).isFinalized)
     // Clear the AppsShuffleInfo hashmap and reload the hashmap from DB
     appShuffleInfoAfterReload =
       ShuffleTestAccessor.reloadAppShuffleInfo(mergeManager1, mergeManager1DB)
-    appShuffleInfoAfterReload.size() equals 1
+    assert(appShuffleInfoAfterReload.size() equals 1)
     assert(!appShuffleInfoAfterReload.containsKey(app1Id.toString))
     assert(appShuffleInfoAfterReload.get(app2Id.toString).getShuffles.get(2).isFinalized)
 
     // Register application app1Id again and reload the DB again
     mergeManager1.registerExecutor(app1Id.toString, mergedShuffleInfo1)
     appShuffleInfo = ShuffleTestAccessor.getAppsShuffleInfo(mergeManager1)
-    appShuffleInfo.size() equals 2
+    assert(appShuffleInfo.size() equals 2)
     appShuffleInfo.get(app1Id.toString).getAppPathsInfo should be (appPathsInfo1)
     assert(appShuffleInfo.get(app1Id.toString).getShuffles.isEmpty)
     assert(appShuffleInfo.get(app2Id.toString).getShuffles.get(2).isFinalized)
@@ -924,7 +924,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     prepareAppShufflePartition(mergeManager1, partitionId1, 2, "4")
 
     var appShuffleInfo = ShuffleTestAccessor.getAppsShuffleInfo(mergeManager1)
-    appShuffleInfo.size() equals 1
+    assert(appShuffleInfo.size() equals 1)
     appShuffleInfo.get(
       app1Id.toString).getAppPathsInfo should be (appPathsInfo1Attempt1)
     assert(!appShuffleInfo.get(app1Id.toString).getShuffles.get(2).isFinalized)
@@ -938,7 +938,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     prepareAppShufflePartition(mergeManager1, partitionId2, 2, "4")
 
     appShuffleInfo = ShuffleTestAccessor.getAppsShuffleInfo(mergeManager1)
-    appShuffleInfo.size() equals 1
+    assert(appShuffleInfo.size() equals 1)
     appShuffleInfo.get(
       app1Id.toString).getAppPathsInfo should be (appPathsInfo1Attempt2)
     assert(!appShuffleInfo.get(app1Id.toString).getShuffles.get(2).isFinalized)
@@ -973,7 +973,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     val mergeManager3 = s3.shuffleMergeManager.asInstanceOf[RemoteBlockPushResolver]
     val mergeManager3DB = ShuffleTestAccessor.mergeManagerDB(mergeManager3)
     appShuffleInfo = ShuffleTestAccessor.getAppsShuffleInfo(mergeManager3)
-    appShuffleInfo.size() equals 1
+    assert(appShuffleInfo.size() equals 1)
     appShuffleInfo.get(
       app1Id.toString).getAppPathsInfo should be (appPathsInfo1Attempt2)
     assert(appShuffleInfo.get(app1Id.toString).getShuffles.get(2).isFinalized)
@@ -1014,7 +1014,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     mergeManager1.registerExecutor(app1Id.toString, mergedShuffleInfo1Attempt2)
 
     val appShuffleInfo = ShuffleTestAccessor.getAppsShuffleInfo(mergeManager1)
-    appShuffleInfo.size() equals 1
+    assert(appShuffleInfo.size() equals 1)
     appShuffleInfo.get(
       app1Id.toString).getAppPathsInfo should be (appPathsInfo1Attempt2)
 

@@ -18,11 +18,10 @@
 package org.apache.spark.network.shuffle;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import com.google.common.collect.Lists;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
@@ -74,7 +73,7 @@ public class ShuffleTransportContextSuite {
   }
 
   private ByteBuf getDecodableMessageBuf(Message req) throws Exception {
-    List<Object> out = Lists.newArrayList();
+    List<Object> out = new ArrayList<>();
     ChannelHandlerContext context = mock(ChannelHandlerContext.class);
     when(context.alloc()).thenReturn(ByteBufAllocator.DEFAULT);
     MessageEncoder.INSTANCE.encode(context, req, out);
@@ -94,15 +93,16 @@ public class ShuffleTransportContextSuite {
     // SPARK-43987: test that the FinalizedHandler is added to the pipeline only when configured
     for (boolean enabled : new boolean[]{true, false}) {
       for (boolean client: new boolean[]{true, false}) {
-        ShuffleTransportContext ctx = createShuffleTransportContext(enabled);
-        SocketChannel channel = new NioSocketChannel();
-        RpcHandler rpcHandler = mock(RpcHandler.class);
-        ctx.initializePipeline(channel, rpcHandler, client);
-        String handlerName = ShuffleTransportContext.FinalizedHandler.HANDLER_NAME;
-        if (enabled) {
-          Assertions.assertNotNull(channel.pipeline().get(handlerName));
-        } else {
-          Assertions.assertNull(channel.pipeline().get(handlerName));
+        try (ShuffleTransportContext ctx = createShuffleTransportContext(enabled)) {
+          SocketChannel channel = new NioSocketChannel();
+          RpcHandler rpcHandler = mock(RpcHandler.class);
+          ctx.initializePipeline(channel, rpcHandler, client);
+          String handlerName = ShuffleTransportContext.FinalizedHandler.HANDLER_NAME;
+          if (enabled) {
+            Assertions.assertNotNull(channel.pipeline().get(handlerName));
+          } else {
+            Assertions.assertNull(channel.pipeline().get(handlerName));
+          }
         }
       }
     }
@@ -114,16 +114,17 @@ public class ShuffleTransportContextSuite {
     FinalizeShuffleMerge finalizeRequest = new FinalizeShuffleMerge("app0", 1, 2, 3);
     RpcRequest rpcRequest = new RpcRequest(1, new NioManagedBuffer(finalizeRequest.toByteBuffer()));
     ByteBuf messageBuf = getDecodableMessageBuf(rpcRequest);
-    ShuffleTransportContext shuffleTransportContext = createShuffleTransportContext(true);
-    ShuffleTransportContext.ShuffleMessageDecoder decoder =
+    try (ShuffleTransportContext shuffleTransportContext = createShuffleTransportContext(true)) {
+      ShuffleTransportContext.ShuffleMessageDecoder decoder =
         (ShuffleTransportContext.ShuffleMessageDecoder) shuffleTransportContext.getDecoder();
-    List<Object> out = Lists.newArrayList();
-    decoder.decode(mock(ChannelHandlerContext.class), messageBuf, out);
+      List<Object> out = new ArrayList<>();
+      decoder.decode(mock(ChannelHandlerContext.class), messageBuf, out);
 
-    Assertions.assertEquals(1, out.size());
-    Assertions.assertTrue(out.get(0) instanceof ShuffleTransportContext.RpcRequestInternal);
-    Assertions.assertEquals(BlockTransferMessage.Type.FINALIZE_SHUFFLE_MERGE,
+      Assertions.assertEquals(1, out.size());
+      Assertions.assertInstanceOf(ShuffleTransportContext.RpcRequestInternal.class, out.get(0));
+      Assertions.assertEquals(BlockTransferMessage.Type.FINALIZE_SHUFFLE_MERGE,
         ((ShuffleTransportContext.RpcRequestInternal) out.get(0)).messageType());
+    }
   }
 
   @Test
@@ -132,14 +133,15 @@ public class ShuffleTransportContextSuite {
     OpenBlocks openBlocks = new OpenBlocks("app0", "1", new String[]{"block1", "block2"});
     RpcRequest rpcRequest = new RpcRequest(1, new NioManagedBuffer(openBlocks.toByteBuffer()));
     ByteBuf messageBuf = getDecodableMessageBuf(rpcRequest);
-    ShuffleTransportContext shuffleTransportContext = createShuffleTransportContext(true);
-    ShuffleTransportContext.ShuffleMessageDecoder decoder =
+    try (ShuffleTransportContext shuffleTransportContext = createShuffleTransportContext(true)) {
+      ShuffleTransportContext.ShuffleMessageDecoder decoder =
         (ShuffleTransportContext.ShuffleMessageDecoder) shuffleTransportContext.getDecoder();
-    List<Object> out = Lists.newArrayList();
-    decoder.decode(mock(ChannelHandlerContext.class), messageBuf, out);
+      List<Object> out = new ArrayList<>();
+      decoder.decode(mock(ChannelHandlerContext.class), messageBuf, out);
 
-    Assertions.assertEquals(1, out.size());
-    Assertions.assertTrue(out.get(0) instanceof RpcRequest);
-    Assertions.assertEquals(rpcRequest.requestId, ((RpcRequest) out.get(0)).requestId);
+      Assertions.assertEquals(1, out.size());
+      Assertions.assertInstanceOf(RpcRequest.class, out.get(0));
+      Assertions.assertEquals(rpcRequest.requestId, ((RpcRequest) out.get(0)).requestId);
+    }
   }
 }

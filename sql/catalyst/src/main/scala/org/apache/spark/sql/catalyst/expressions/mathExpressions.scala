@@ -48,6 +48,7 @@ abstract class LeafMathExpression(c: Double, name: String)
 
   override def dataType: DataType = DoubleType
   override def foldable: Boolean = true
+  override def contextIndependentFoldable: Boolean = true
   override def nullable: Boolean = false
   override def toString: String = s"$name()"
   override def prettyName: String = name
@@ -68,6 +69,7 @@ abstract class UnaryMathExpression(val f: Double => Double, name: String)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType)
   override def dataType: DataType = DoubleType
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
   override def nullable: Boolean = true
   override def toString: String = s"$prettyName($child)"
   override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse(name)
@@ -86,6 +88,8 @@ abstract class UnaryMathExpression(val f: Double => Double, name: String)
 
 abstract class UnaryLogExpression(f: Double => Double, name: String)
     extends UnaryMathExpression(f, name) {
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   override def nullable: Boolean = true
 
@@ -122,6 +126,8 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
   override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
+
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   override def toString: String = s"$prettyName($left, $right)"
 
@@ -412,10 +418,28 @@ case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH"
   since = "3.0.0",
   group = "math_funcs")
 case class Acosh(child: Expression)
-  extends UnaryMathExpression((x: Double) => StrictMath.log(x + math.sqrt(x * x - 1.0)), "ACOSH") {
+  extends UnaryMathExpression((x: Double) => x match {
+    // in case of large values, the square would lead to Infinity; also, - 1 would be ignored due
+    // to numeric precision. So log(x + sqrt(x * x - 1)) becomes log(2x) = log(2) + log(x) for
+    // positive values.
+    case x if x >= Math.sqrt(Double.MaxValue) =>
+      StrictMath.log(2) + StrictMath.log(x)
+    case x if x < 1 =>
+      Double.NaN
+    case _ => StrictMath.log(x + math.sqrt(x * x - 1.0)) }, "ACOSH") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev,
-      c => s"java.lang.StrictMath.log($c + java.lang.Math.sqrt($c * $c - 1.0))")
+    nullSafeCodeGen(ctx, ev, c => {
+      val sm = "java.lang.StrictMath"
+      s"""
+         |if ($c >= ${Math.sqrt(Double.MaxValue)}) {
+         |  ${ev.value} = $sm.log($c) + $sm.log(2);
+         |} else if ($c < 1) {
+         |  ${ev.value} = java.lang.Double.NaN;
+         |} else {
+         |  ${ev.value} = $sm.log($c + java.lang.Math.sqrt($c * $c - 1.0));
+         |}
+         |""".stripMargin
+    })
   }
   override protected def withNewChildInternal(newChild: Expression): Acosh = copy(child = newChild)
 }
@@ -455,7 +479,7 @@ case class Conv(
   override def second: Expression = fromBaseExpr
   override def third: Expression = toBaseExpr
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCollation, IntegerType, IntegerType)
+    Seq(StringTypeWithCollation(supportsTrimCollation = true), IntegerType, IntegerType)
   override def dataType: DataType = first.dataType
   override def nullable: Boolean = true
 
@@ -842,12 +866,20 @@ case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH"
   group = "math_funcs")
 case class Asinh(child: Expression)
   extends UnaryMathExpression((x: Double) => x match {
-    case Double.NegativeInfinity => Double.NegativeInfinity
+    // in case of large values, the square would lead to Infinity; also, + 1 would be ignored due
+    // to numeric precision. So log(x + sqrt(x * x + 1)) becomes log(2x) = log(2) + log(x) for
+    // positive values. Since the function is symmetric, for large values we can use
+    // signum(x) + log(2|x|)
+    case x if Math.abs(x) >= Math.sqrt(Double.MaxValue) - 1 =>
+      Math.signum(x) * (StrictMath.log(2) + StrictMath.log(Math.abs(x)))
     case _ => StrictMath.log(x + math.sqrt(x * x + 1.0)) }, "ASINH") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, c =>
-      s"$c == Double.NEGATIVE_INFINITY ? Double.NEGATIVE_INFINITY : " +
-      s"java.lang.StrictMath.log($c + java.lang.Math.sqrt($c * $c + 1.0))")
+    defineCodeGen(ctx, ev, c => {
+      val sm = "java.lang.StrictMath"
+      s"$sm.abs($c) >= ${Math.sqrt(Double.MaxValue) - 1} ? " +
+      s"$sm.signum($c) * ($sm.log($sm.abs($c)) + $sm.log(2)) :" +
+      s"$sm.log($c + java.lang.Math.sqrt($c * $c + 1.0))"
+    })
   }
   override protected def withNewChildInternal(newChild: Expression): Asinh = copy(child = newChild)
 }
@@ -1005,10 +1037,13 @@ case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadia
   group = "math_funcs")
 // scalastyle:on line.size.limit
 case class Bin(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with Serializable {
+  extends UnaryExpression
+  with ImplicitCastInputTypes
+  with Serializable
+  with DefaultStringProducingExpression {
   override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[DataType] = Seq(LongType)
-  override def dataType: DataType = SQLConf.get.defaultStringType
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   protected override def nullSafeEval(input: Any): Any =
     UTF8String.toBinaryString(input.asInstanceOf[Long])
@@ -1114,16 +1149,20 @@ object Hex {
   since = "1.5.0",
   group = "math_funcs")
 case class Hex(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes {
+  extends UnaryExpression
+  with ImplicitCastInputTypes
+  with DefaultStringProducingExpression {
   override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(LongType, BinaryType, StringTypeWithCollation))
+    Seq(TypeCollection(LongType, BinaryType, StringTypeWithCollation(supportsTrimCollation = true)))
 
   override def dataType: DataType = child.dataType match {
     case st: StringType => st
-    case _ => SQLConf.get.defaultStringType
+    case _ => super.dataType
   }
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   protected override def nullSafeEval(num: Any): Any = child.dataType match {
     case LongType => Hex.hex(num.asInstanceOf[Long])
@@ -1160,10 +1199,12 @@ case class Hex(child: Expression)
 case class Unhex(child: Expression, failOnError: Boolean = false)
   extends UnaryExpression with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   def this(expr: Expression) = this(expr, false)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCollation)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
 
   override def nullable: Boolean = true
   override def dataType: DataType = BinaryType
@@ -1258,7 +1299,7 @@ case class Pow(left: Expression, right: Expression)
 sealed trait BitShiftOperation
   extends BinaryExpression with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
-
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
   def symbol: String
   def shiftInt: (Int, Int) => Int
   def shiftLong: (Long, Int) => Long
@@ -1378,8 +1419,10 @@ case class ShiftRightUnsigned(left: Expression, right: Expression) extends BitSh
     copy(left = newLeft, right = newRight)
 }
 
+// scalastyle:off nonascii
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Returns sqrt(`expr1`**2 + `expr2`**2).",
+  usage = "_FUNC_(expr1, expr2) - Returns sqrt(`expr1`\u00B2 + `expr2`\u00B2).",
+  // scalastyle:on nonascii
   examples = """
     Examples:
       > SELECT _FUNC_(3, 4);
@@ -1555,7 +1598,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
         val decimal = input1.asInstanceOf[Decimal]
         if (_scale >= 0) {
           // Overflow cannot happen, so no need to control nullOnOverflow
-          decimal.toPrecision(decimal.precision, s, mode)
+          decimal.toPrecision(p, s, mode)
         } else {
           Decimal(decimal.toBigDecimal.setScale(_scale, mode), p, s)
         }
@@ -1627,10 +1670,9 @@ abstract class RoundBase(child: Expression, scale: Expression,
       case DecimalType.Fixed(p, s) =>
         if (_scale >= 0) {
           s"""
-            ${ev.value} = ${ce.value}.toPrecision(${ce.value}.precision(), $s,
-            Decimal.$modeStr(), true, null);
+            ${ev.value} = ${ce.value}.toPrecision($p, $s, Decimal.$modeStr(), true, null);
             ${ev.isNull} = ${ev.value} == null;"""
-       } else {
+        } else {
           s"""
             ${ev.value} = new Decimal().set(${ce.value}.toBigDecimal()
             .setScale(${_scale}, Decimal.$modeStr()), $p, $s);

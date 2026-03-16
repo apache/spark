@@ -779,6 +779,16 @@ object UDFAdaptors extends Serializable {
   def mapToMapPartitions[V, U](f: MapFunction[V, U]): Iterator[V] => Iterator[U] =
     values => values.map(f.call)
 
+  def mapValues[IV, V](
+      vFunc: IV => V,
+      ivIsStruct: Boolean,
+      vIsStruct: Boolean): Iterator[IV] => Iterator[(Any, Any)] = {
+    val ivFunc = (iv: IV) => identity(iv)
+    val wrappedIvFunc = if (ivIsStruct) ivFunc else ivFunc.andThen(Tuple1(_))
+    val wrappedVFunc = if (vIsStruct) vFunc else vFunc.andThen(Tuple1(_))
+    input => input.map(i => (wrappedIvFunc(i), wrappedVFunc(i)))
+  }
+
   def foreachToForeachPartition[T](f: T => Unit): Iterator[T] => Unit =
     values => values.foreach(f)
 

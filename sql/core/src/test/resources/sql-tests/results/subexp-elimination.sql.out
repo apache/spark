@@ -48,12 +48,12 @@ NULL
 -- !query
 SELECT case when from_json(a, 'struct<a:int,b:string>').a > 5 then from_json(a, 'struct<a:int,b:string>').b when from_json(a, 'struct<a:int,b:string>').a > 4 then from_json(a, 'struct<a:int,b:string>').b + 1 else from_json(a, 'struct<a:int,b:string>').b + 2 end FROM testData
 -- !query schema
-struct<CASE WHEN (from_json(a).a > 5) THEN from_json(a).b WHEN (from_json(a).a > 4) THEN (from_json(a).b + 1) ELSE (from_json(a).b + 2) END:string>
+struct<CASE WHEN (from_json(a).a > 5) THEN from_json(a).b WHEN (from_json(a).a > 4) THEN (from_json(a).b + 1) ELSE (from_json(a).b + 2) END:bigint>
 -- !query output
-4.0
-4.0
-5.0
-7.0
+4
+4
+5
+7
 NULL
 
 

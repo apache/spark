@@ -23,7 +23,7 @@ import org.apache.spark.util.JsonUtils.toJsonString
 import org.apache.spark.util.SparkClassUtils
 
 private[spark] object ErrorMessageFormat extends Enumeration {
-  val PRETTY, MINIMAL, STANDARD = Value
+  val PRETTY, MINIMAL, STANDARD, DEBUG = Value
 }
 
 /**
@@ -36,6 +36,11 @@ private[spark] object SparkThrowableHelper {
     // hence why the name of the JSON file is different. We will address this inconsistency as part
     // of this ticket: https://issues.apache.org/jira/browse/SPARK-47429
     Seq(SparkClassUtils.getSparkClassLoader.getResource("error/error-conditions.json")))
+
+  // This method is only used to get default message template in SparkThrowable interface.
+  def getMessageTemplate(errorClass: String): String = {
+    errorReader.getMessageTemplate(errorClass)
+  }
 
   def getMessage(
       errorClass: String,
@@ -55,6 +60,26 @@ private[spark] object SparkThrowableHelper {
       context: String): String = {
     val displayMessage = errorReader.getErrorMessage(errorClass, messageParameters)
     val sqlState = getSqlState(errorClass)
+    formatErrorMessage(errorClass, displayMessage, sqlState, context)
+  }
+
+  def getMessage(
+      errorClass: String,
+      sqlState: String,
+      messageTemplate: String,
+      messageParameters: Map[String, String]): String = {
+    val displayMessage = errorReader.getErrorMessage(
+      errorClass,
+      messageTemplate,
+      messageParameters)
+    formatErrorMessage(errorClass, displayMessage, sqlState, "")
+  }
+
+  def formatErrorMessage(
+      errorClass: String,
+      displayMessage: String,
+      sqlState: String,
+      context: String): String = {
     val displaySqlState = if (sqlState == null) "" else s" SQLSTATE: $sqlState"
     val displayQueryContext = (if (context.isEmpty) "" else "\n") + context
     val prefix = if (errorClass.startsWith("_LEGACY_ERROR_")) "" else s"[$errorClass] "
@@ -73,6 +98,14 @@ private[spark] object SparkThrowableHelper {
     errorReader.getMessageParameters(errorClass)
   }
 
+  def getBreakingChangeInfo(errorClass: String): Option[BreakingChangeInfo] = {
+    if (errorClass == null) {
+      None
+    } else {
+      errorReader.getBreakingChangeInfo(errorClass)
+    }
+  }
+
   def isInternalError(errorClass: String): Boolean = {
     errorClass != null && errorClass.startsWith("INTERNAL_ERROR")
   }
@@ -80,7 +113,7 @@ private[spark] object SparkThrowableHelper {
   def getMessage(e: SparkThrowable with Throwable, format: ErrorMessageFormat.Value): String = {
     import ErrorMessageFormat._
     format match {
-      case PRETTY => e.getMessage
+      case PRETTY | DEBUG => e.getMessage
       case MINIMAL | STANDARD if e.getCondition == null =>
         toJsonString { generator =>
           val g = generator.useDefaultPrettyPrinter()
@@ -98,7 +131,27 @@ private[spark] object SparkThrowableHelper {
           g.writeStartObject()
           g.writeStringField("errorClass", errorClass)
           if (format == STANDARD) {
-            g.writeStringField("messageTemplate", errorReader.getMessageTemplate(errorClass))
+            val messageTemplate = e.getDefaultMessageTemplate
+            // This is required to properly handle null values when the messageTemplate
+            // is not available, ensuring correct JSON serialization of the field.
+            if (messageTemplate != null) {
+              g.writeStringField("messageTemplate", messageTemplate)
+            } else {
+              g.writeNullField("messageTemplate")
+            }
+            errorReader.getBreakingChangeInfo(errorClass).foreach { breakingChangeInfo =>
+              g.writeObjectFieldStart("breakingChangeInfo")
+              g.writeStringField("migrationMessage",
+                  breakingChangeInfo.migrationMessage.mkString("\n"))
+              breakingChangeInfo.mitigationConfig.foreach { mitigationConfig =>
+                g.writeObjectFieldStart("mitigationConfig")
+                g.writeStringField("key", mitigationConfig.key)
+                g.writeStringField("value", mitigationConfig.value)
+                g.writeEndObject()
+              }
+              g.writeBooleanField("needsAudit", breakingChangeInfo.needsAudit)
+              g.writeEndObject()
+            }
           }
           val sqlState = e.getSqlState
           if (sqlState != null) g.writeStringField("sqlState", sqlState)

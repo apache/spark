@@ -18,9 +18,7 @@
 package org.apache.spark.ml.source.libsvm
 
 import java.io.{File, IOException}
-import java.nio.charset.StandardCharsets
-
-import com.google.common.io.Files
+import java.nio.file.Files
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.AttributeGroup
@@ -65,9 +63,9 @@ class LibSVMRelationSuite
     val succ = new File(dir, "_SUCCESS")
     val file0 = new File(dir, "part-00000")
     val file1 = new File(dir, "part-00001")
-    Files.asCharSink(succ, StandardCharsets.UTF_8).write("")
-    Files.asCharSink(file0, StandardCharsets.UTF_8).write(lines0)
-    Files.asCharSink(file1, StandardCharsets.UTF_8).write(lines1)
+    Files.writeString(succ.toPath, "")
+    Files.writeString(file0.toPath, lines0)
+    Files.writeString(file1.toPath, lines1)
     path = dir.getPath
   }
 

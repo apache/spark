@@ -26,6 +26,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.types.{DataType, IntegerType, SQLUserDefinedType, UserDefinedType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -217,10 +218,10 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
           processInsert("t1", df, overwrite = false, byName = true)
         },
         v1ErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_COLUMNS",
-        v2ErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        v2ErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_COLUMNS",
         v1Parameters = Map("tableName" -> "`spark_catalog`.`default`.`t1`",
           "extraColumns" -> "`x1`"),
-        v2Parameters = Map("tableName" -> "`testcat`.`t1`", "colName" -> "`c1`")
+        v2Parameters = Map("tableName" -> "`testcat`.`t1`", "extraColumns" -> "`x1`")
       )
       val df2 = Seq((3, 2, 1, 0)).toDF(Seq("c3", "c2", "c1", "c0"): _*)
       checkV1AndV2Error(
@@ -445,7 +446,8 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
               parameters = Map(
                 "expression" -> "'ansi'",
                 "sourceType" -> "\"STRING\"",
-                "targetType" -> "\"INT\""
+                "targetType" -> "\"INT\"",
+                "ansiConfig" -> "\"spark.sql.ansi.enabled\""
               ),
               context = ExpectedContext("insert into t partition(a='ansi')", 0, 32)
             )
@@ -549,6 +551,56 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
       assert(reusedExchanges.size == 1)
     }
   }
+
+  test("SPARK-50340: unwrap UDT before insertion") {
+    withTempView("v") {
+      Seq((1, MyInt(2))).toDF("c1", "c2").createTempView("v")
+
+      withTable("t") {
+        createTable("t", Seq("c1", "c2"), Seq("int", "int"))
+        sql("INSERT INTO t SELECT * FROM v")
+        checkAnswer(spark.table("t"), Row(1, 2))
+      }
+
+      // can upcast UDT input
+      withTable("t") {
+        createTable("t", Seq("c1", "c2"), Seq("int", "long"))
+        sql("INSERT INTO t SELECT * FROM v")
+        checkAnswer(spark.table("t"), Row(1, 2L))
+      }
+
+      // Array of UDT
+      withTable("t") {
+        createTable("t", Seq("c1", "c2"), Seq("int", "array<int>"))
+        sql("INSERT INTO t SELECT c1, array(c2) FROM v")
+        checkAnswer(spark.table("t"), Row(1, Seq(2)))
+      }
+
+      // Map of UDT
+      withTable("t") {
+        createTable("t", Seq("c1", "c2"), Seq("int", "map<int, int>"))
+        sql("INSERT INTO t SELECT c1, map(c2, c2) FROM v")
+        checkAnswer(spark.table("t"), Row(1, Map(2 -> 2)))
+      }
+
+      // Struct of UDT
+      withTable("t") {
+        createTable("t", Seq("c1", "c2"), Seq("int", "struct<f1 int, f2 int>"))
+        sql("INSERT INTO t SELECT c1, struct(c2 as f1, c2 as f2) FROM v")
+        checkAnswer(spark.table("t"), Row(1, Row(2, 2)))
+      }
+    }
+  }
+}
+
+@SQLUserDefinedType(udt = classOf[MyIntUDT])
+private case class MyInt(i: Int)
+
+private class MyIntUDT extends UserDefinedType[MyInt] {
+  override def sqlType: DataType = IntegerType
+  override def serialize(obj: MyInt): Any = obj.i
+  override def deserialize(datum: Any): MyInt = MyInt(datum.asInstanceOf[Int])
+  override def userClass: Class[MyInt] = classOf[MyInt]
 }
 
 class FileSourceSQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSession {

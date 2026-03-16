@@ -25,11 +25,11 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{CodegenSupport, ExplainUtils, RowIterator}
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.types.{BooleanType, IntegralType, LongType}
+import org.apache.spark.sql.types.{BooleanType, DataType, IntegralType, LongType}
 
 /**
  * @param relationTerm variable name for HashedRelation
@@ -42,6 +42,9 @@ private[joins] case class HashedRelationInfo(
     isEmpty: Boolean)
 
 trait HashJoin extends JoinCodegenSupport {
+  assert(leftKeys.forall(key => UnsafeRowUtils.isBinaryStable(key.dataType)))
+  assert(rightKeys.forall(key => UnsafeRowUtils.isBinaryStable(key.dataType)))
+
   def buildSide: BuildSide
 
   override def simpleStringWithNodeId(): String = {
@@ -111,7 +114,7 @@ trait HashJoin extends JoinCodegenSupport {
     require(leftKeys.length == rightKeys.length &&
       leftKeys.map(_.dataType)
         .zip(rightKeys.map(_.dataType))
-        .forall(types => DataTypeUtils.sameType(types._1, types._2)),
+        .forall(types => DataType.equalsStructurally(types._1, types._2, ignoreNullability = true)),
       "Join keys from two sides should have same length and types")
     buildSide match {
       case BuildLeft => (leftKeys, rightKeys)
@@ -724,6 +727,18 @@ trait HashJoin extends JoinCodegenSupport {
 }
 
 object HashJoin extends CastSupport with SQLConfHelper {
+
+  /**
+   * Normalize join keys by injecting `CollationKey` when the keys are collated.
+   */
+  def normalizeJoinKeys(
+      leftKeys: Seq[Expression],
+      rightKeys: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
+    (
+      leftKeys.map(CollationKey.injectCollationKey),
+      rightKeys.map(CollationKey.injectCollationKey)
+    )
+  }
 
   private def canRewriteAsLongType(keys: Seq[Expression]): Boolean = {
     // TODO: support BooleanType, DateType and TimestampType

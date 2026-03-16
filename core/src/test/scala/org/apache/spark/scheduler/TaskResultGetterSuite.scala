@@ -207,7 +207,7 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
     // compile a small jar containing an exception that will be thrown on an executor.
     val tempDir = Utils.createTempDir()
     val srcDir = new File(tempDir, "repro/")
-    srcDir.mkdirs()
+    Utils.createDirectory(srcDir)
     val excSource = new JavaSourceFromString(new File(srcDir, "MyException").toURI.getPath,
       """package repro;
         |

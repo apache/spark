@@ -18,15 +18,14 @@ package org.apache.spark.streaming.kinesis
 
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.{Executors, TimeUnit}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import com.amazonaws.services.kinesis.producer.{KinesisProducer => KPLProducer,
-  KinesisProducerConfiguration, UserRecordResult}
 import com.google.common.util.concurrent.{FutureCallback, Futures}
-
-import org.apache.spark.util.ThreadUtils
+import software.amazon.kinesis.producer.{KinesisProducer => KPLProducer,
+  KinesisProducerConfiguration, UserRecordResult}
 
 private[kinesis] class KPLBasedKinesisTestUtils(streamShardCount: Int = 2)
     extends KinesisTestUtils(streamShardCount) {
@@ -53,6 +52,7 @@ private[kinesis] class KPLDataGenerator(regionName: String) extends KinesisDataG
   }
 
   override def sendData(streamName: String, data: Seq[Int]): Map[String, Seq[(Int, String)]] = {
+    val executor = Executors.newSingleThreadExecutor()
     val shardIdToSeqNumbers = new mutable.HashMap[String, ArrayBuffer[(Int, String)]]()
     data.foreach { num =>
       val str = num.toString
@@ -63,15 +63,17 @@ private[kinesis] class KPLDataGenerator(regionName: String) extends KinesisDataG
 
         override def onSuccess(result: UserRecordResult): Unit = {
           val shardId = result.getShardId
-          val seqNumber = result.getSequenceNumber()
+          val seqNumber = result.getSequenceNumber
           val sentSeqNumbers = shardIdToSeqNumbers.getOrElseUpdate(shardId,
             new ArrayBuffer[(Int, String)]())
           sentSeqNumbers += ((num, seqNumber))
         }
       }
-      Futures.addCallback(future, kinesisCallBack, ThreadUtils.sameThreadExecutorService())
+      Futures.addCallback(future, kinesisCallBack, executor)
     }
     producer.flushSync()
-    shardIdToSeqNumbers.toMap.transform((_, v) => v.toSeq)
+    executor.shutdown()
+    executor.awaitTermination(10, TimeUnit.SECONDS)
+    shardIdToSeqNumbers.toMap.transform((_, v) => v.toSeq.sortBy(_._2))
   }
 }

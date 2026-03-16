@@ -30,12 +30,7 @@ from pyspark.ml.torch.tests.test_distributor import (
     set_up_test_dirs,
     get_distributed_mode_conf,
 )
-
-have_deepspeed = True
-try:
-    import deepspeed  # noqa: F401
-except ImportError:
-    have_deepspeed = False
+from pyspark.testing.utils import have_deepspeed, deepspeed_requirement_message
 
 
 class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
@@ -197,14 +192,12 @@ def _create_pytorch_training_test_file():
     # Note: when Deepspeed CPU support becomes better,
     # switch in more realistic training files using Deepspeed
     # optimizations + constructs
-    str_to_write = textwrap.dedent(
-        """ 
+    str_to_write = textwrap.dedent(""" 
             import sys
             def pythagorean_thm(x : int, y: int): # type: ignore 
                 import deepspeed # type: ignore
                 return (x*x + y*y)**0.5 # type: ignore
-            print(pythagorean_thm(int(sys.argv[1]), int(sys.argv[2])))"""
-    )
+            print(pythagorean_thm(int(sys.argv[1]), int(sys.argv[2])))""")
     cp_path = "/tmp/test_deepspeed_training_file.py"
     with open(cp_path, "w") as f:
         f.write(str_to_write)
@@ -219,11 +212,11 @@ def _create_pytorch_training_test_file():
 # and inference, the hope is to switch out the training
 # and file for the tests with more realistic testing
 # that use Deepspeed constructs.
-@unittest.skipIf(not have_deepspeed, "deepspeed is required for these tests")
+@unittest.skipIf(not have_deepspeed, deepspeed_requirement_message)
 class DeepspeedTorchDistributorDistributedEndToEnd(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()  # noqa
+        cls.gpu_discovery_script_file_name, cls.mnist_dir_path = set_up_test_dirs()  # noqa
         # "loadDefaults" is set to False because if not, the SparkConf will
         # use contain configurations from the LocalEndToEnd test,
         # which causes the test to break.
@@ -232,7 +225,7 @@ class DeepspeedTorchDistributorDistributedEndToEnd(unittest.TestCase):
             conf = conf.set(k, v)
         conf = conf.set(
             "spark.worker.resource.gpu.discoveryScript", cls.gpu_discovery_script_file_name
-        )
+        ).set("spark.python.unix.domain.socket.enabled", "false")
         sc = SparkContext("local-cluster[2,2,512]", cls.__name__, conf=conf)
         cls.spark = SparkSession(sc)
 
@@ -259,7 +252,7 @@ class DeepspeedTorchDistributorDistributedEndToEnd(unittest.TestCase):
             dist.run(cp_path, 2, 5)
 
 
-@unittest.skipIf(not have_deepspeed, "deepspeed is required for these tests")
+@unittest.skipIf(not have_deepspeed, deepspeed_requirement_message)
 class DeepspeedDistributorLocalEndToEndTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -269,7 +262,7 @@ class DeepspeedDistributorLocalEndToEndTests(unittest.TestCase):
             conf = conf.set(k, v)
         conf = conf.set(
             "spark.driver.resource.gpu.discoveryScript", cls.gpu_discovery_script_file_name
-        )
+        ).set("spark.python.unix.domain.socket.enabled", "false")
         sc = SparkContext("local-cluster[2,2,512]", cls.__name__, conf=conf)
         cls.spark = SparkSession(sc)
 
@@ -295,12 +288,6 @@ class DeepspeedDistributorLocalEndToEndTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.deepspeed.tests.test_deepspeed_distributor import *  # noqa: F401,F403
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type:ignore
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

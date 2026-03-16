@@ -18,14 +18,71 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.expressions.DynamicPruningExpression
+import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, InSubquery}
 import org.apache.spark.sql.execution.{InSubqueryExec, ReusedSubqueryExec}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.StructType
 
 class GroupBasedUpdateTableSuite extends UpdateTableSuiteBase {
 
   import testImplicits._
+
+  test("update handles metadata columns correctly") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |{ "pk": 3, "id": 3, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"UPDATE $tableNameAsString SET id = -1 WHERE id IN (1, 100)")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr") :: Row(2, 2, "software") :: Row(3, 3, "hr") :: Nil)
+
+    checkLastWriteInfo(
+      expectedRowSchema = table.schema,
+      expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))))
+
+    checkLastWriteLog(
+      writeWithMetadataLogEntry(metadata = Row("hr", null), data = Row(1, -1, "hr")),
+      writeWithMetadataLogEntry(metadata = Row("hr", 1), data = Row(3, 3, "hr")))
+  }
+
+  test("update with subquery handles metadata columns correctly") {
+    withTempView("updated_dep") {
+      createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+        """{ "pk": 1, "id": 1, "dep": "hr" }
+          |{ "pk": 2, "id": 2, "dep": "software" }
+          |{ "pk": 3, "id": 3, "dep": "hr" }
+          |""".stripMargin)
+
+      val updatedIdDF = Seq(Some("hr"), Some("it")).toDF()
+      updatedIdDF.createOrReplaceTempView("updated_dep")
+
+      sql(
+        s"""UPDATE $tableNameAsString
+           |SET id = -1
+           |WHERE
+           | id IN (1, 20)
+           | AND
+           | dep IN (SELECT * FROM updated_dep)
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(1, -1, "hr") :: Row(2, 2, "software") :: Row(3, 3, "hr") :: Nil)
+
+      checkLastWriteInfo(
+        expectedRowSchema = table.schema,
+        expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))))
+
+      checkLastWriteLog(
+        writeWithMetadataLogEntry(metadata = Row("hr", null), data = Row(1, -1, "hr")),
+        writeWithMetadataLogEntry(metadata = Row("hr", 1), data = Row(3, 3, "hr")))
+    }
+  }
 
   test("update runtime group filtering") {
     Seq(true, false).foreach { ddpEnabled =>
@@ -53,7 +110,7 @@ class GroupBasedUpdateTableSuite extends UpdateTableSuiteBase {
 
         executeAndCheckScans(
           s"UPDATE $tableNameAsString SET salary = -1 WHERE id IN (SELECT * FROM deleted_id)",
-          primaryScanSchema = "id INT, salary INT, dep STRING, _partition STRING",
+          primaryScanSchema = "id INT, salary INT, dep STRING, _partition STRING, index INT",
           groupFilterScanSchema = Some("id INT, dep STRING"))
 
         checkAnswer(
@@ -130,5 +187,68 @@ class GroupBasedUpdateTableSuite extends UpdateTableSuiteBase {
         start = 0,
         stop = 75)
     )
+  }
+
+  test("update does not double plan table (group filter enabled)") {
+    withSQLConf(SQLConf.RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED.key -> "true") {
+      createAndInitTable("id INT, salary INT, dep STRING",
+        """{ "id": 1, "salary": 300, "dep": 'hr' }
+          |{ "id": 2, "salary": 150, "dep": 'software' }
+          |{ "id": 3, "salary": 120, "dep": 'hr' }
+          |""".stripMargin)
+
+      val (cond, groupFilterCond) = executeAndKeepConditions {
+        sql(
+          s"""UPDATE $tableNameAsString SET salary = -1
+             |WHERE id IN (SELECT id FROM $tableNameAsString WHERE salary > 200)
+             |""".stripMargin)
+      }
+
+      cond match {
+        case InSubquery(_, query) => assertNoScanPlanning(query.plan)
+        case _ => fail(s"unexpected condition: $cond")
+      }
+
+      groupFilterCond match {
+        case Some(InSubquery(_, query)) => assertNoScanPlanning(query.plan)
+        case _ => fail(s"unexpected group filter: $groupFilterCond")
+      }
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(1, -1, "hr") :: Row(2, 150, "software") :: Row(3, 120, "hr") :: Nil)
+
+      checkReplacedPartitions(Seq("hr"))
+    }
+  }
+
+  test("update does not double plan table (group filter disabled)") {
+    withSQLConf(SQLConf.RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED.key -> "false") {
+      createAndInitTable("id INT, salary INT, dep STRING",
+        """{ "id": 1, "salary": 300, "dep": 'hr' }
+          |{ "id": 2, "salary": 150, "dep": 'software' }
+          |{ "id": 3, "salary": 120, "dep": 'hr' }
+          |""".stripMargin)
+
+      val (cond, groupFilterCond) = executeAndKeepConditions {
+        sql(
+          s"""UPDATE $tableNameAsString SET salary = -1
+             |WHERE id IN (SELECT id FROM $tableNameAsString WHERE salary > 200)
+             |""".stripMargin)
+      }
+
+      cond match {
+        case InSubquery(_, query) => assertNoScanPlanning(query.plan)
+        case _ => fail(s"unexpected condition: $cond")
+      }
+
+      assert(groupFilterCond.isEmpty, "group filter must be disabled")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(1, -1, "hr") :: Row(2, 150, "software") :: Row(3, 120, "hr") :: Nil)
+
+      checkReplacedPartitions(Seq("hr", "software"))
+    }
   }
 }

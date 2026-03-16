@@ -36,11 +36,37 @@ class InMemoryPartitionTableCatalog extends InMemoryTableCatalog {
 
     InMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
 
-    val schema = CatalogV2Util.v2ColumnsToStructType(columns)
+    val finalCols = if (properties.containsKey("dropExistsDefault")) {
+      columns.map { c =>
+        if (c.defaultValue().getValue == null) {
+          c
+        } else {
+          Column.create(
+            c.name(),
+            c.dataType(),
+            c.nullable(),
+            c.comment(),
+            new ColumnDefaultValue(
+              c.defaultValue().getSql,
+              c.defaultValue().getExpression,
+              null
+            ),
+            c.metadataInJSON()
+          )
+        }
+      }
+    } else {
+      columns
+    }
+    val schema = CatalogV2Util.v2ColumnsToStructType(finalCols)
     val table = new InMemoryAtomicPartitionTable(
       s"$name.${ident.quoted}", schema, partitions, properties)
     tables.put(ident, table)
     namespaces.putIfAbsent(ident.namespace.toList, Map())
     table
+  }
+
+  override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
+    createTable(ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties)
   }
 }

@@ -24,8 +24,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.SECRET_REDACTION_PATTERN
 import org.apache.spark.util.Utils.{redact, REDACTION_REPLACEMENT_TEXT}
 
-private[spark] object KafkaRedactionUtil extends Logging {
-  private[spark] def redactParams(params: Seq[(String, Object)]): Seq[(String, String)] = {
+object KafkaRedactionUtil extends Logging {
+  def redactParams(params: Seq[(String, Object)]): Seq[(String, String)] = {
     val redactionPattern = Some(Option(SparkEnv.get).map(_.conf)
       .getOrElse(new SparkConf()).get(SECRET_REDACTION_PATTERN))
     params.map { case (key, value) =>
@@ -42,7 +42,7 @@ private[spark] object KafkaRedactionUtil extends Logging {
     }
   }
 
-  private[kafka010] def redactJaasParam(param: String): String = {
+  def redactJaasParam(param: String): String = {
     if (param != null && !param.isEmpty) {
       param.replaceAll("password=\".*\"", s"""password="$REDACTION_REPLACEMENT_TEXT"""")
     } else {

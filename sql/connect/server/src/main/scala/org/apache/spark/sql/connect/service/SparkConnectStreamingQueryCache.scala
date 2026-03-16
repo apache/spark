@@ -25,7 +25,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.{Duration, DurationInt, FiniteDuration}
 import scala.util.control.NonFatal
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{DURATION, NEW_VALUE, OLD_VALUE, QUERY_CACHE_VALUE, QUERY_ID, QUERY_RUN_ID, SESSION_ID}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.streaming.StreamingQuery
@@ -186,7 +186,7 @@ private[connect] class SparkConnectStreamingQueryCache(
   private[service] val taggedQueries: ConcurrentMap[String, QueryCacheKeySet] =
     new ConcurrentHashMap[String, QueryCacheKeySet]
 
-  private var scheduledExecutor: AtomicReference[ScheduledExecutorService] =
+  private val scheduledExecutor: AtomicReference[ScheduledExecutorService] =
     new AtomicReference[ScheduledExecutorService]()
 
   /** Schedules periodic checks if it is not already scheduled */
@@ -218,7 +218,7 @@ private[connect] class SparkConnectStreamingQueryCache(
       (k, v) => {
         if (v == null || !v.addKey(queryKey)) {
           // Create a new QueryCacheKeySet if the entry is absent or being removed.
-          var keys = mutable.HashSet.empty[QueryCacheKey]
+          val keys = mutable.HashSet.empty[QueryCacheKey]
           keys.add(queryKey)
           new QueryCacheKeySet(keys = keys)
         } else {

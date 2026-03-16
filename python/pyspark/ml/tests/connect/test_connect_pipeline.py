@@ -15,20 +15,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 import os
 import unittest
 
 from pyspark.util import is_remote_only
-from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
-
-torch_requirement_message = None
-have_torch = True
-try:
-    import torch  # noqa: F401
-except ImportError:
-    have_torch = False
-    torch_requirement_message = "torch is required"
+from pyspark.testing.utils import have_torch, torch_requirement_message
+from pyspark.testing.connectutils import ReusedConnectTestCase
 
 if should_test_connect:
     from pyspark.ml.tests.connect.test_legacy_mode_pipeline import PipelineTestsMixin
@@ -39,27 +33,19 @@ if should_test_connect:
         or torch_requirement_message
         or "Requires PySpark core library in Spark Connect server",
     )
-    class PipelineTestsOnConnect(PipelineTestsMixin, unittest.TestCase):
-        def setUp(self) -> None:
-            self.spark = (
-                SparkSession.builder.remote(
-                    os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[2]")
-                )
-                .config("spark.sql.artifact.copyFromLocalToFs.allowDestLocal", "true")
-                .getOrCreate()
-            )
+    class PipelineTestsOnConnect(PipelineTestsMixin, ReusedConnectTestCase):
+        @classmethod
+        def conf(cls):
+            config = super().conf()
+            config.set("spark.sql.artifact.copyFromLocalToFs.allowDestLocal", "true")
+            return config
 
-        def tearDown(self) -> None:
-            self.spark.stop()
+        @classmethod
+        def master(cls):
+            return os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[2]")
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.connect.test_connect_pipeline import *  # noqa: F401,F403
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

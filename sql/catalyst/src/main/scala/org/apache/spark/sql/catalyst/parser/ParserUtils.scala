@@ -19,13 +19,17 @@ package org.apache.spark.sql.catalyst.parser
 import java.util
 import java.util.Locale
 
-import scala.collection.mutable.Set
+import scala.collection.{immutable, mutable}
+import scala.util.matching.Regex
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
-import org.antlr.v4.runtime.tree.{ParseTree, TerminalNodeImpl}
+import org.antlr.v4.runtime.tree.{ParseTree, TerminalNode, TerminalNodeImpl}
 
-import org.apache.spark.sql.catalyst.parser.SqlBaseParser.{BeginLabelContext, EndLabelContext}
+import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
+import org.apache.spark.sql.catalyst.parser.SqlBaseParser.{BeginLabelContext, EndLabelContext, StrictIdentifierContext}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, ErrorCondition}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.SparkParserUtils
 import org.apache.spark.sql.catalyst.util.SparkParserUtils.withOrigin
@@ -57,12 +61,6 @@ object ParserUtils extends SparkParserUtils {
     }
   }
 
-  /** Get the code that creates the given node. */
-  def source(ctx: ParserRuleContext): String = {
-    val stream = ctx.getStart.getInputStream
-    stream.getText(Interval.of(ctx.getStart.getStartIndex, ctx.getStop.getStopIndex))
-  }
-
   /** Get all the text which comes after the given rule. */
   def remainder(ctx: ParserRuleContext): String = remainder(ctx.getStop)
 
@@ -88,6 +86,18 @@ object ParserUtils extends SparkParserUtils {
   def stringWithoutUnescape(node: Token): String = {
     // STRING parser rule forces that the input always has quotes at the starting and ending.
     node.getText.slice(1, node.getText.length - 1)
+  }
+
+  /**
+   * Obtain the string literal provided as a dollar quoted string.
+   * A dollar quoted string is defined as {{{$[tag]$<string literal>$[tag]$}}},
+   * where the string literal is parsed as a list of body sections.
+   * This helper method concatenates all body sections and restores the string literal back.
+   */
+  def dollarQuotedString(sections: util.List[TerminalNode]): String = {
+    val sb = new StringBuilder()
+    sections forEach (body => sb.append(body.getText))
+    sb.toString()
   }
 
   /** Collect the entries if any. */
@@ -140,33 +150,224 @@ object ParserUtils extends SparkParserUtils {
   }
 }
 
+class CompoundBodyParsingContext {
+
+  object State extends Enumeration {
+    type State = Value
+    val INIT, VARIABLE, CONDITION, CURSOR, HANDLER, STATEMENT = Value
+  }
+
+  private var currentState: State.State = State.INIT
+
+  /** Transition to VARIABLE state. */
+  def variable(createVariable: CreateVariable, allowVarDeclare: Boolean): Unit = {
+    if (!allowVarDeclare) {
+      throw SqlScriptingErrors.variableDeclarationNotAllowedInScope(
+        createVariable.origin,
+        createVariable.names(0).asInstanceOf[UnresolvedIdentifier].nameParts)
+    }
+    transitionTo(State.VARIABLE, createVariable = Some(createVariable), None)
+  }
+
+  /** Transition to CONDITION state. */
+  def condition(errorCondition: ErrorCondition, allowConditionDeclare: Boolean): Unit = {
+    if (!allowConditionDeclare) {
+      throw SqlScriptingErrors.conditionDeclarationNotAtStartOfCompound(
+        errorCondition.origin, errorCondition.conditionName
+      )
+    }
+    transitionTo(State.CONDITION, None, errorCondition = Some(errorCondition))
+  }
+
+  /** Transition to CURSOR state. */
+  def cursor(): Unit = {
+    transitionTo(State.CURSOR)
+  }
+
+  /** Transition to HANDLER state. */
+  def handler(): Unit = {
+    transitionTo(State.HANDLER)
+  }
+
+  /** Transition to STATEMENT state. */
+  def statement(): Unit = {
+    transitionTo(State.STATEMENT)
+  }
+
+  /**
+   * Helper method to transition to a new state.
+   * Possible states are:
+   * 1a. VARIABLE (1)
+   * 1b. CONDITION (1)
+   * 2. CURSOR (2)
+   * 3. HANDLERS (3)
+   * 4. STATEMENTS (4)
+   * Transition is allowed from state with number n to state with number m,
+   * where m >= n.
+   *
+   * @param newState The new state to transition to.
+   */
+  private def transitionTo(
+      newState: State.State,
+      createVariable: Option[CreateVariable] = None,
+      errorCondition: Option[ErrorCondition] = None): Unit = {
+    (currentState, newState) match {
+      // VALID TRANSITIONS
+
+      case (State.INIT, _) => currentState = newState
+
+      // Transitions from VARIABLE to other states.
+      case (State.VARIABLE, State.VARIABLE) =>  // do nothing
+
+      case (State.VARIABLE, State.CONDITION) => currentState = State.CONDITION
+
+      case (State.VARIABLE, State.CURSOR) => currentState = State.CURSOR
+
+      case (State.VARIABLE, State.HANDLER) => currentState = State.HANDLER
+
+      case (State.VARIABLE, State.STATEMENT) => currentState = State.STATEMENT
+
+      // Transition from CONDITION to other states.
+      case (State.CONDITION, State.CONDITION) => // do nothing
+
+      case (State.CONDITION, State.VARIABLE) => currentState = State.VARIABLE
+
+      case (State.CONDITION, State.CURSOR) => currentState = State.CURSOR
+
+      case (State.CONDITION, State.HANDLER) => currentState = State.HANDLER
+
+      case (State.CONDITION, State.STATEMENT) => currentState = State.STATEMENT
+
+      // Transition from CURSOR to other states.
+      case (State.CURSOR, State.CURSOR) => // do nothing
+
+      case (State.CURSOR, State.HANDLER) => currentState = State.HANDLER
+
+      case (State.CURSOR, State.STATEMENT) => currentState = State.STATEMENT
+
+      // Transition from HANDLER to other states.
+      case (State.HANDLER, State.HANDLER) => // do nothing
+
+      case (State.HANDLER, State.STATEMENT) => currentState = State.STATEMENT
+
+      // Transition from STATEMENT to other states.
+      case (State.STATEMENT, State.STATEMENT) => // do nothing
+
+      // INVALID TRANSITIONS
+
+      // Invalid transitions to VARIABLE state.
+      case (State.CURSOR, State.VARIABLE) =>
+        throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
+          createVariable.get.origin,
+          createVariable.get.names(0).asInstanceOf[UnresolvedIdentifier].nameParts)
+
+      case (State.STATEMENT, State.VARIABLE) =>
+        throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
+          createVariable.get.origin,
+          createVariable.get.names(0).asInstanceOf[UnresolvedIdentifier].nameParts)
+
+      case (State.HANDLER, State.VARIABLE) =>
+        throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
+          createVariable.get.origin,
+          createVariable.get.names(0).asInstanceOf[UnresolvedIdentifier].nameParts)
+
+      // Invalid transitions to CONDITION state.
+      case (State.CURSOR, State.CONDITION) =>
+        throw SqlScriptingErrors.conditionDeclarationNotAtStartOfCompound(
+          CurrentOrigin.get,
+          errorCondition.get.conditionName)
+
+      case (State.STATEMENT, State.CONDITION) =>
+        throw SqlScriptingErrors.conditionDeclarationNotAtStartOfCompound(
+          CurrentOrigin.get,
+          errorCondition.get.conditionName)
+
+      case (State.HANDLER, State.CONDITION) =>
+        throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
+          createVariable.get.origin,
+          createVariable.get.names(0).asInstanceOf[UnresolvedIdentifier].nameParts)
+
+      // Invalid transitions to CURSOR state.
+      case (State.STATEMENT, State.CURSOR) =>
+        throw SqlScriptingErrors.cursorDeclarationNotAtStartOfCompound(CurrentOrigin.get)
+
+      case (State.HANDLER, State.CURSOR) =>
+        throw SqlScriptingErrors.cursorDeclarationNotAtStartOfCompound(CurrentOrigin.get)
+
+      // Invalid transitions to HANDLER state.
+      case (State.STATEMENT, State.HANDLER) =>
+        throw SqlScriptingErrors.handlerDeclarationInWrongPlace(CurrentOrigin.get)
+
+      // This should never happen.
+      case _ =>
+        throw SparkException.internalError(
+          s"Invalid state transition from $currentState to $newState")
+    }
+  }
+}
+
+class SqlScriptingParsingContext {
+  val labelContext: SqlScriptingLabelContext = new SqlScriptingLabelContext()
+  val conditionContext: SqlScriptingConditionContext = new SqlScriptingConditionContext()
+}
+
 class SqlScriptingLabelContext {
   /** Set to keep track of labels seen so far */
-  private val seenLabels = Set[String]()
+  private val seenLabels = mutable.Set[String]()
 
   /**
    * Check if the beginLabelCtx and endLabelCtx match.
    * If the labels are defined, they must follow rules:
    *  - If both labels exist, they must match.
+   *  - If label is qualified, it is invalid.
    *  - Begin label must exist if end label exists.
+   *
+   * @param beginLabelCtx Begin label context.
+   * @param endLabelCtx The end label context.
    */
+  /**
+   * Get label text from label context, handling IDENTIFIER() syntax.
+   */
+  private def getLabelText(ctx: ParserRuleContext): String = {
+    val astBuilder = new DataTypeAstBuilder {
+      override protected def parseMultipartIdentifier(identifier: String): Seq[String] = {
+        CatalystSqlParser.parseMultipartIdentifier(identifier)
+      }
+    }
+    val parts = astBuilder.extractIdentifierParts(ctx)
+    if (parts.size > 1) {
+      throw new ParseException(
+        errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
+        messageParameters = Map("identifier" -> parts.map(part => s"`$part`").mkString("."),
+          "limit" -> "1"),
+        ctx)
+    }
+    parts.head
+  }
+
   private def checkLabels(
       beginLabelCtx: Option[BeginLabelContext],
-      endLabelCtx: Option[EndLabelContext]) : Unit = {
+      endLabelCtx: Option[EndLabelContext]): Unit = {
+    // Check label matching and other constraints.
     (beginLabelCtx, endLabelCtx) match {
-      case (Some(bl: BeginLabelContext), Some(el: EndLabelContext))
-        if bl.multipartIdentifier().getText.toLowerCase(Locale.ROOT) !=
-            el.multipartIdentifier().getText.toLowerCase(Locale.ROOT) =>
-        withOrigin(bl) {
-          throw SqlScriptingErrors.labelsMismatch(
-            CurrentOrigin.get,
-            bl.multipartIdentifier().getText,
-            el.multipartIdentifier().getText)
+      // Throw an error if labels do not match.
+      case (Some(bl: BeginLabelContext), Some(el: EndLabelContext)) =>
+        val beginLabel = getLabelText(bl.strictIdentifier()).toLowerCase(Locale.ROOT)
+        val endLabel = getLabelText(el.strictIdentifier()).toLowerCase(Locale.ROOT)
+        if (beginLabel != endLabel) {
+          withOrigin(bl) {
+            throw SqlScriptingErrors.labelsMismatch(
+              CurrentOrigin.get,
+              getLabelText(bl.strictIdentifier()),
+              getLabelText(el.strictIdentifier()))
+          }
         }
+      // Throw an error if end label exists without begin label.
       case (None, Some(el: EndLabelContext)) =>
         withOrigin(el) {
           throw SqlScriptingErrors.endLabelWithoutBeginLabel(
-            CurrentOrigin.get, el.multipartIdentifier().getText)
+            CurrentOrigin.get,
+            getLabelText(el.strictIdentifier()))
         }
       case _ =>
     }
@@ -174,7 +375,24 @@ class SqlScriptingLabelContext {
 
   /** Check if the label is defined. */
   private def isLabelDefined(beginLabelCtx: Option[BeginLabelContext]): Boolean = {
-    beginLabelCtx.map(_.multipartIdentifier().getText).isDefined
+    beginLabelCtx.isDefined
+  }
+
+  /**
+   * Assert the identifier is not contained within seenLabels.
+   * If the identifier is contained within seenLabels, raise an exception.
+   */
+  private def assertIdentifierNotInSeenLabels(
+      identifierCtx: Option[StrictIdentifierContext]): Unit = {
+    identifierCtx.foreach { ctx =>
+      val identifierName = getLabelText(ctx).toLowerCase(Locale.ROOT)
+      if (seenLabels.contains(identifierName)) {
+        withOrigin(ctx) {
+          throw SqlScriptingErrors
+            .duplicateLabels(CurrentOrigin.get, identifierName)
+        }
+      }
+    }
   }
 
   /**
@@ -191,17 +409,22 @@ class SqlScriptingLabelContext {
 
     // Get label text and add it to seenLabels.
     val labelText = if (isLabelDefined(beginLabelCtx)) {
-      val txt = beginLabelCtx.get.multipartIdentifier().getText.toLowerCase(Locale.ROOT)
+      val txt = getLabelText(beginLabelCtx.get.strictIdentifier()).toLowerCase(Locale.ROOT)
       if (seenLabels.contains(txt)) {
         withOrigin(beginLabelCtx.get) {
           throw SqlScriptingErrors.duplicateLabels(CurrentOrigin.get, txt)
         }
       }
-      seenLabels.add(beginLabelCtx.get.multipartIdentifier().getText)
+      seenLabels.add(txt)
       txt
     } else {
       // Do not add the label to the seenLabels set if it is not defined.
       java.util.UUID.randomUUID.toString.toLowerCase(Locale.ROOT)
+    }
+    if (SqlScriptingLabelContext.isForbiddenLabelOrForVariableName(labelText)) {
+      withOrigin(beginLabelCtx.get) {
+        throw SqlScriptingErrors.labelOrForVariableNameForbidden(CurrentOrigin.get, labelText)
+      }
     }
     labelText
   }
@@ -212,7 +435,63 @@ class SqlScriptingLabelContext {
    */
   def exitLabeledScope(beginLabelCtx: Option[BeginLabelContext]): Unit = {
     if (isLabelDefined(beginLabelCtx)) {
-      seenLabels.remove(beginLabelCtx.get.multipartIdentifier().getText.toLowerCase(Locale.ROOT))
+      seenLabels.remove(getLabelText(beginLabelCtx.get.strictIdentifier()).toLowerCase(Locale.ROOT))
     }
   }
+
+  /**
+   * Enter a for loop scope.
+   * If the for loop variable is defined, it will be asserted to not be inside seenLabels.
+   * Then, if the for loop variable is defined, it will be added to seenLabels.
+   */
+  def enterForScope(identifierCtx: Option[StrictIdentifierContext]): Unit = {
+    identifierCtx.foreach { ctx =>
+      val identifierName = getLabelText(ctx)
+      assertIdentifierNotInSeenLabels(identifierCtx)
+      seenLabels.add(identifierName.toLowerCase(Locale.ROOT))
+
+      if (SqlScriptingLabelContext.isForbiddenLabelOrForVariableName(identifierName)) {
+        withOrigin(ctx) {
+          throw SqlScriptingErrors.labelOrForVariableNameForbidden(
+            CurrentOrigin.get,
+            identifierName.toLowerCase(Locale.ROOT))
+        }
+      }
+    }
+  }
+
+  /**
+   * Exit a for loop scope.
+   * If the for loop variable is defined, it will be removed from seenLabels.
+   */
+  def exitForScope(identifierCtx: Option[StrictIdentifierContext]): Unit = {
+    identifierCtx.foreach { ctx =>
+      val identifierName = getLabelText(ctx)
+      seenLabels.remove(identifierName.toLowerCase(Locale.ROOT))
+    }
+  }
+
+}
+
+object SqlScriptingLabelContext {
+  private val forbiddenLabelNames: immutable.Set[Regex] =
+    immutable.Set("builtin".r, "session".r, "sys.*".r)
+
+  def isForbiddenLabelOrForVariableName(labelName: String): Boolean = {
+    forbiddenLabelNames.exists(_.matches(labelName.toLowerCase(Locale.ROOT)))
+  }
+}
+
+class SqlScriptingConditionContext {
+  private val conditionNameToSqlStateMap = mutable.HashMap[String, String]()
+
+  def contains(conditionName: String): Boolean = conditionNameToSqlStateMap.contains(conditionName)
+
+  def getSqlStateForCondition(conditionName: String): Option[String] =
+    conditionNameToSqlStateMap.get(conditionName)
+
+  def add(condition: ErrorCondition): Unit =
+    conditionNameToSqlStateMap += condition.conditionName -> condition.sqlState
+
+  def remove(toRemove: Iterable[String]): Unit = conditionNameToSqlStateMap --= toRemove
 }

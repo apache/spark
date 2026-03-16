@@ -21,7 +21,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.{DataType, Decimal}
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String, VariantVal}
+import org.apache.spark.unsafe.types._
 
 class GenericArrayData(val array: Array[Any]) extends ArrayData {
 
@@ -72,6 +72,8 @@ class GenericArrayData(val array: Array[Any]) extends ArrayData {
   override def getDecimal(ordinal: Int, precision: Int, scale: Int): Decimal = getAs(ordinal)
   override def getUTF8String(ordinal: Int): UTF8String = getAs(ordinal)
   override def getBinary(ordinal: Int): Array[Byte] = getAs(ordinal)
+  override def getGeography(ordinal: Int): GeographyVal = getAs(ordinal)
+  override def getGeometry(ordinal: Int): GeometryVal = getAs(ordinal)
   override def getInterval(ordinal: Int): CalendarInterval = getAs(ordinal)
   override def getVariant(ordinal: Int): VariantVal = getAs(ordinal)
   override def getStruct(ordinal: Int, numFields: Int): InternalRow = getAs(ordinal)

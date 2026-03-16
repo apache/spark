@@ -29,11 +29,13 @@ import org.apache.avro.Schema.Type._
 import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed, Record}
 import org.apache.avro.util.Utf8
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.avro.AvroUtils.{nonNullUnionBranches, toFieldStr, AvroMatchedField}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
@@ -51,7 +53,7 @@ private[sql] class AvroSerializer(
 
   def this(rootCatalystType: DataType, rootAvroType: Schema, nullable: Boolean) = {
     this(rootCatalystType, rootAvroType, nullable, positionalFieldMatch = false,
-      LegacyBehaviorPolicy.withName(SQLConf.get.getConf(SQLConf.AVRO_REBASE_MODE_IN_WRITE)))
+      SQLConf.get.getConf(SQLConf.AVRO_REBASE_MODE_IN_WRITE))
   }
 
   def serialize(catalystData: Any): Any = {
@@ -189,6 +191,12 @@ private[sql] class AvroSerializer(
           s"SQL type ${TimestampNTZType.sql} cannot be converted to Avro logical type $other")
       }
 
+      case (_: TimeType, LONG) => avroType.getLogicalType match {
+        case _: LogicalTypes.TimeMicros => (getter, ordinal) => getter.getLong(ordinal)
+        case other => throw new IncompatibleSchemaException(errorPrefix +
+          s"SQL type ${TimeType().sql} cannot be converted to Avro logical type $other")
+      }
+
       case (ArrayType(et, containsNull), ARRAY) =>
         val elementConverter = newConverter(
           et, resolveNullableType(avroType.getElementType, containsNull),
@@ -282,11 +290,20 @@ private[sql] class AvroSerializer(
     }.toArray.unzip
 
     val numFields = catalystStruct.length
+    val avroFields = avroStruct.getFields()
+    val isSchemaNullable = avroFields.asScala.map(_.schema().isNullable)
     row: InternalRow =>
       val result = new Record(avroStruct)
       var i = 0
       while (i < numFields) {
         if (row.isNullAt(i)) {
+          if (!isSchemaNullable(avroIndices(i))) {
+            throw new SparkRuntimeException(
+              errorClass = "AVRO_CANNOT_WRITE_NULL_FIELD",
+              messageParameters = Map(
+                "name" -> toSQLId(avroFields.get(avroIndices(i)).name),
+                "dataType" -> avroFields.get(avroIndices(i)).schema().toString))
+          }
           result.put(avroIndices(i), null)
         } else {
           result.put(avroIndices(i), fieldConverters(i).apply(row, i))

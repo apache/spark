@@ -24,12 +24,14 @@ import java.util.{Date, Locale}
 
 import scala.reflect.ClassTag
 
-import org.apache.hadoop.conf.{Configurable, Configuration}
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.hdfs.BlockMissingException
 import org.apache.hadoop.io.compress.CompressionCodecFactory
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapred.lib.CombineFileSplit
 import org.apache.hadoop.mapreduce.TaskType
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
+import org.apache.hadoop.security.AccessControlException
 import org.apache.hadoop.util.ReflectionUtils
 
 import org.apache.spark._
@@ -37,7 +39,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.rdd.HadoopRDD.HadoopMapPartitionsWithSplitRDD
@@ -144,8 +146,7 @@ class HadoopRDD[K, V](
       minPartitions: Int) = {
     this(
       sc,
-      sc.broadcast(new SerializableConfiguration(conf))
-        .asInstanceOf[Broadcast[SerializableConfiguration]],
+      SerializableConfiguration.broadcast(sc, conf),
       initLocalJobConfFuncOpt = None,
       inputFormatClass,
       keyClass,
@@ -213,14 +214,13 @@ class HadoopRDD[K, V](
     }
   }
 
-  protected def getInputFormat(conf: JobConf): InputFormat[K, V] = {
-    val newInputFormat = ReflectionUtils.newInstance(inputFormatClass.asInstanceOf[Class[_]], conf)
+  protected def getInputFormat(conf: JobConf): InputFormat[K, V] = try {
+    ReflectionUtils.newInstance(inputFormatClass.asInstanceOf[Class[_]], conf)
       .asInstanceOf[InputFormat[K, V]]
-    newInputFormat match {
-      case c: Configurable => c.setConf(conf)
-      case _ =>
-    }
-    newInputFormat
+  } catch {
+    case r: RuntimeException
+      if r.getCause != null && r.getCause.isInstanceOf[InstantiationException] =>
+      throw new RuntimeException(s"Failed to instantiate ${inputFormatClass.getName}", r.getCause)
   }
 
   override def getPartitions: Array[Partition] = {
@@ -319,6 +319,7 @@ class HadoopRDD[K, V](
             null
           // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
           case e: FileNotFoundException if !ignoreMissingFiles => throw e
+          case e @ (_ : AccessControlException | _ : BlockMissingException) => throw e
           case e: IOException if ignoreCorruptFiles =>
             logWarning(log"Skipped the rest content in the corrupted file: " +
               log"${MDC(PATH, split.inputSplit)}", e)
@@ -345,6 +346,7 @@ class HadoopRDD[K, V](
             finished = true
           // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
           case e: FileNotFoundException if !ignoreMissingFiles => throw e
+          case e @ (_ : AccessControlException | _ : BlockMissingException) => throw e
           case e: IOException if ignoreCorruptFiles =>
             logWarning(log"Skipped the rest content in the corrupted file: " +
               log"${MDC(PATH, split.inputSplit)}", e)

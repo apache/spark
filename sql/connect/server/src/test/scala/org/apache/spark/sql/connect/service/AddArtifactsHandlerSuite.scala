@@ -32,6 +32,7 @@ import io.grpc.StatusRuntimeException
 import io.grpc.protobuf.StatusProto
 import io.grpc.stub.StreamObserver
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
 import org.apache.spark.sql.connect.ResourceHelper
@@ -43,6 +44,7 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
   private val CHUNK_SIZE: Int = 32 * 1024
 
   private val sessionId = UUID.randomUUID.toString()
+  private val sessionKey = SessionKey("c1", sessionId)
 
   class DummyStreamObserver(p: Promise[AddArtifactsResponse])
       extends StreamObserver[AddArtifactsResponse] {
@@ -51,17 +53,31 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
     override def onCompleted(): Unit = {}
   }
 
-  class TestAddArtifactsHandler(responseObserver: StreamObserver[AddArtifactsResponse])
+  class TestAddArtifactsHandler(
+      responseObserver: StreamObserver[AddArtifactsResponse],
+      throwIfArtifactExists: Boolean = false)
       extends SparkConnectAddArtifactsHandler(responseObserver) {
 
     // Stop the staged artifacts from being automatically deleted
     override protected def cleanUpStagedArtifacts(): Unit = {}
 
     private val finalArtifacts = mutable.Buffer.empty[String]
+    private val artifactChecksums: mutable.Map[String, Long] = mutable.Map.empty
 
     // Record the artifacts that are sent out for final processing.
     override protected def addStagedArtifactToArtifactManager(artifact: StagedArtifact): Unit = {
+      // Throw if artifact already exists and has different checksum
+      // This mocks the behavior of ArtifactManager.addArtifact without comparing the entire file
+      if (throwIfArtifactExists
+        && finalArtifacts.contains(artifact.name)
+        && artifact.getCrc != artifactChecksums(artifact.name)) {
+        throw new SparkRuntimeException(
+          "ARTIFACT_ALREADY_EXISTS",
+          Map("normalizedRemoteRelativePath" -> artifact.name))
+      }
+
       finalArtifacts.append(artifact.name)
+      artifactChecksums += (artifact.name -> artifact.getCrc)
     }
 
     def getFinalArtifacts: Seq[String] = finalArtifacts.toSeq
@@ -193,6 +209,7 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
     try {
       val name = "classes/smallClassFile.class"
       val artifactPath = inputFilePath.resolve("smallClassFile.class")
+      assume(artifactPath.toFile.exists)
       addSingleChunkArtifact(handler, name, artifactPath)
       handler.onCompleted()
       val response = ThreadUtils.awaitResult(promise.future, 5.seconds)
@@ -217,6 +234,7 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
     try {
       val name = "jars/junitLargeJar.jar"
       val artifactPath = inputFilePath.resolve("junitLargeJar.jar")
+      assume(artifactPath.toFile.exists)
       addChunkedArtifact(handler, name, artifactPath)
       handler.onCompleted()
       val response = ThreadUtils.awaitResult(promise.future, 5.seconds)
@@ -250,6 +268,7 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
         inputFilePath.resolve("junitLargeJar.jar"),
         inputFilePath.resolve("smallClassFileDup.class"),
         inputFilePath.resolve("smallJar.jar"))
+      artifactPaths.foreach(p => assume(p.toFile.exists))
 
       addSingleChunkArtifact(handler, names.head, artifactPaths.head)
       addChunkedArtifact(handler, names(1), artifactPaths(1))
@@ -281,6 +300,7 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
     try {
       val name = "classes/smallClassFile.class"
       val artifactPath = inputFilePath.resolve("smallClassFile.class")
+      assume(artifactPath.toFile.exists)
       val dataChunks = getDataChunks(artifactPath)
       assert(dataChunks.size == 1)
       val bytes = dataChunks.head
@@ -379,11 +399,7 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
           handler.onNext(req)
         }
         assert(e.getStatus.getCode == Code.INTERNAL)
-        val statusProto = StatusProto.fromThrowable(e)
-        assert(statusProto.getDetailsCount == 1)
-        val details = statusProto.getDetails(0)
-        val info = details.unpack(classOf[ErrorInfo])
-        assert(info.getReason.contains("java.lang.IllegalArgumentException"))
+        assert(e.getMessage.contains("INVALID_ARTIFACT_PATH"))
       }
       handler.onCompleted()
     } finally {
@@ -402,11 +418,7 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
           handler.onNext(req)
         }
         assert(e.getStatus.getCode == Code.INTERNAL)
-        val statusProto = StatusProto.fromThrowable(e)
-        assert(statusProto.getDetailsCount == 1)
-        val details = statusProto.getDetails(0)
-        val info = details.unpack(classOf[ErrorInfo])
-        assert(info.getReason.contains("java.lang.IllegalArgumentException"))
+        assert(e.getMessage.contains("INVALID_ARTIFACT_PATH"))
       }
       handler.onCompleted()
     } finally {
@@ -414,4 +426,79 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
     }
   }
 
+  def addSingleChunkArtifact(
+      handler: SparkConnectAddArtifactsHandler,
+      sessionKey: SessionKey,
+      name: String,
+      artifactPath: Path): Unit = {
+    val dataChunks = getDataChunks(artifactPath)
+    assert(dataChunks.size == 1)
+    val bytes = dataChunks.head
+    val context = proto.UserContext
+      .newBuilder()
+      .setUserId(sessionKey.userId)
+      .build()
+    val fileNameNoExtension = artifactPath.getFileName.toString.split('.').head
+    val singleChunkArtifact = proto.AddArtifactsRequest.SingleChunkArtifact
+      .newBuilder()
+      .setName(name)
+      .setData(
+        proto.AddArtifactsRequest.ArtifactChunk
+          .newBuilder()
+          .setData(bytes)
+          .setCrc(getCrcValues(crcPath.resolve(fileNameNoExtension + ".txt")).head)
+          .build())
+      .build()
+
+    val singleChunkArtifactRequest = AddArtifactsRequest
+      .newBuilder()
+      .setSessionId(sessionKey.sessionId)
+      .setUserContext(context)
+      .setBatch(
+        proto.AddArtifactsRequest.Batch.newBuilder().addArtifacts(singleChunkArtifact).build())
+      .build()
+
+    handler.onNext(singleChunkArtifactRequest)
+  }
+
+  test("All artifacts are added, even if some fail") {
+    val promise = Promise[AddArtifactsResponse]()
+    val handler =
+      new TestAddArtifactsHandler(new DummyStreamObserver(promise), throwIfArtifactExists = true)
+    try {
+      val name1 = "jars/dummy1.jar"
+      val name2 = "jars/dummy2.jar"
+      val name3 = "jars/dummy3.jar"
+
+      val artifactPath1 = inputFilePath.resolve("smallClassFile.class")
+      val artifactPath2 = inputFilePath.resolve("smallJar.jar")
+
+      assume(artifactPath1.toFile.exists)
+      addSingleChunkArtifact(handler, sessionKey, name1, artifactPath1)
+      addSingleChunkArtifact(handler, sessionKey, name3, artifactPath1)
+
+      val e = intercept[StatusRuntimeException] {
+        addSingleChunkArtifact(handler, sessionKey, name1, artifactPath2)
+        addSingleChunkArtifact(handler, sessionKey, name2, artifactPath1)
+        addSingleChunkArtifact(handler, sessionKey, name3, artifactPath2)
+        handler.onCompleted()
+      }
+
+      // Both artifacts should be added, despite exception
+      assert(handler.getFinalArtifacts.contains(name1))
+      assert(handler.getFinalArtifacts.contains(name2))
+      assert(handler.getFinalArtifacts.contains(name3))
+
+      assert(e.getStatus.getCode == Code.INTERNAL)
+      val statusProto = StatusProto.fromThrowable(e)
+      assert(statusProto.getDetailsCount == 1)
+      val details = statusProto.getDetails(0)
+      val info = details.unpack(classOf[ErrorInfo])
+
+      assert(e.getMessage.contains("ARTIFACT_ALREADY_EXISTS"))
+      assert(info.getMetadataMap().get("messageParameters").contains(name1))
+    } finally {
+      handler.forceCleanUp()
+    }
+  }
 }

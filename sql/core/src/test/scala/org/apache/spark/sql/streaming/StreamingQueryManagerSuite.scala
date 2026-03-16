@@ -31,7 +31,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{Dataset, Encoders}
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2ScanRelation
-import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.runtime._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.BlockingSource
 import org.apache.spark.tags.SlowSQLTest
@@ -273,8 +273,8 @@ class StreamingQueryManagerSuite extends StreamTest {
   testQuietly("can start a streaming query with the same name in a different session") {
     val session2 = spark.cloneSession()
 
-    val ds1 = MemoryStream(Encoders.INT, spark.sqlContext).toDS()
-    val ds2 = MemoryStream(Encoders.INT, session2.sqlContext).toDS()
+    val ds1 = MemoryStream(Encoders.INT, spark).toDS()
+    val ds2 = MemoryStream(Encoders.INT, session2).toDS()
     val queryName = "abc"
 
     val query1 = ds1.writeStream.format("noop").queryName(queryName).start()
@@ -320,6 +320,8 @@ class StreamingQueryManagerSuite extends StreamTest {
           val query1 = ds1.writeStream.format("parquet")
             .option("checkpointLocation", chkLocation).start(dataLocation)
           ms1.addData(1, 2, 3)
+          query1.processAllAvailable() // ensure offset log has been written
+
           val query2 = ds2.writeStream.format("parquet")
             .option("checkpointLocation", chkLocation).start(dataLocation)
           try {
@@ -345,8 +347,8 @@ class StreamingQueryManagerSuite extends StreamTest {
       withTempDir { dir =>
         val session2 = spark.cloneSession()
 
-        val ms1 = MemoryStream(Encoders.INT, spark.sqlContext)
-        val ds2 = MemoryStream(Encoders.INT, session2.sqlContext).toDS()
+        val ms1 = MemoryStream(Encoders.INT, spark)
+        val ds2 = MemoryStream(Encoders.INT, session2).toDS()
         val chkLocation = new File(dir, "_checkpoint").getCanonicalPath
         val dataLocation = new File(dir, "data").getCanonicalPath
 
@@ -374,14 +376,16 @@ class StreamingQueryManagerSuite extends StreamTest {
         withTempDir { dir =>
           val session2 = spark.cloneSession()
 
-          val ms1 = MemoryStream(Encoders.INT, spark.sqlContext)
-          val ds2 = MemoryStream(Encoders.INT, session2.sqlContext).toDS()
+          val ms1 = MemoryStream(Encoders.INT, spark)
+          val ds2 = MemoryStream(Encoders.INT, session2).toDS()
           val chkLocation = new File(dir, "_checkpoint").getCanonicalPath
           val dataLocation = new File(dir, "data").getCanonicalPath
 
           val query1 = ms1.toDS().writeStream.format("parquet")
             .option("checkpointLocation", chkLocation).start(dataLocation)
           ms1.addData(1, 2, 3)
+          query1.processAllAvailable() // ensure offset log has been written
+
           val query2 = ds2.writeStream.format("parquet")
             .option("checkpointLocation", chkLocation).start(dataLocation)
           try {

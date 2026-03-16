@@ -22,13 +22,12 @@ import java.nio.ByteBuffer
 
 import scala.reflect.ClassTag
 
-import com.google.common.io.ByteStreams
-
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, Serializer, SerializerInstance}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.unsafe.Platform
+import org.apache.spark.util.Utils
 
 /**
  * Serializer for serializing [[UnsafeRow]]s during shuffle. Since UnsafeRows are already stored as
@@ -125,7 +124,7 @@ private class UnsafeRowSerializerInstance(
             if (rowBuffer.length < rowSize) {
               rowBuffer = new Array[Byte](rowSize)
             }
-            ByteStreams.readFully(dIn, rowBuffer, 0, rowSize)
+            Utils.readFully(dIn, rowBuffer, 0, rowSize)
             row.pointTo(rowBuffer, Platform.BYTE_ARRAY_OFFSET, rowSize)
             rowSize = readSize()
             if (rowSize == EOF) { // We are returning the last row in this stream
@@ -160,7 +159,7 @@ private class UnsafeRowSerializerInstance(
         if (rowBuffer.length < rowSize) {
           rowBuffer = new Array[Byte](rowSize)
         }
-        ByteStreams.readFully(dIn, rowBuffer, 0, rowSize)
+        Utils.readFully(dIn, rowBuffer, 0, rowSize)
         row.pointTo(rowBuffer, Platform.BYTE_ARRAY_OFFSET, rowSize)
         row.asInstanceOf[T]
       }

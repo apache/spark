@@ -58,7 +58,7 @@ case class CSVWrite(
       }
 
       override def getFileExtension(context: TaskAttemptContext): String = {
-        ".csv" + CodecStreams.getCompressionExtension(context)
+        "." + csvOptions.extension + CodecStreams.getCompressionExtension(context)
       }
     }
   }

@@ -14,7 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
+
+import datetime
 
 import numpy as np
 import pandas as pd
@@ -22,6 +23,7 @@ from pandas.tseries.offsets import DateOffset
 
 from pyspark import pandas as ps
 from pyspark.errors import PySparkValueError
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas.config import option_context
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
@@ -665,19 +667,27 @@ class FrameReindexingMixin:
         index = pd.date_range("2018-04-09", periods=4, freq="2D")
         pdf = pd.DataFrame([1, 2, 3, 4], index=index)
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(pdf.last("1D"), psdf.last("1D"))
-        self.assert_eq(pdf.last(DateOffset(days=1)), psdf.last(DateOffset(days=1)))
-        with self.assertRaisesRegex(TypeError, "'last' only supports a DatetimeIndex"):
-            ps.DataFrame([1, 2, 3, 4]).last("1D")
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assert_eq(pdf.last("1D"), psdf.last("1D"))
+            self.assert_eq(pdf.last(DateOffset(days=1)), psdf.last(DateOffset(days=1)))
+            with self.assertRaisesRegex(TypeError, "'last' only supports a DatetimeIndex"):
+                ps.DataFrame([1, 2, 3, 4]).last("1D")
+        else:
+            with self.assertRaises(AttributeError):
+                psdf.last("1D")
 
     def test_first(self):
         index = pd.date_range("2018-04-09", periods=4, freq="2D")
         pdf = pd.DataFrame([1, 2, 3, 4], index=index)
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(pdf.first("1D"), psdf.first("1D"))
-        self.assert_eq(pdf.first(DateOffset(days=1)), psdf.first(DateOffset(days=1)))
-        with self.assertRaisesRegex(TypeError, "'first' only supports a DatetimeIndex"):
-            ps.DataFrame([1, 2, 3, 4]).first("1D")
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assert_eq(pdf.first("1D"), psdf.first("1D"))
+            self.assert_eq(pdf.first(DateOffset(days=1)), psdf.first(DateOffset(days=1)))
+            with self.assertRaisesRegex(TypeError, "'first' only supports a DatetimeIndex"):
+                ps.DataFrame([1, 2, 3, 4]).first("1D")
+        else:
+            with self.assertRaises(AttributeError):
+                psdf.first("1D")
 
     def test_swaplevel(self):
         # MultiIndex with two levels
@@ -755,14 +765,18 @@ class FrameReindexingMixin:
         )
         psdf = ps.from_pandas(pdf)
 
-        self.assert_eq(psdf.swapaxes(0, 1), pdf.swapaxes(0, 1))
-        self.assert_eq(psdf.swapaxes(1, 0), pdf.swapaxes(1, 0))
-        self.assert_eq(psdf.swapaxes("index", "columns"), pdf.swapaxes("index", "columns"))
-        self.assert_eq(psdf.swapaxes("columns", "index"), pdf.swapaxes("columns", "index"))
-        self.assert_eq((psdf + 1).swapaxes(0, 1), (pdf + 1).swapaxes(0, 1))
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assert_eq(psdf.swapaxes(0, 1), pdf.swapaxes(0, 1))
+            self.assert_eq(psdf.swapaxes(1, 0), pdf.swapaxes(1, 0))
+            self.assert_eq(psdf.swapaxes("index", "columns"), pdf.swapaxes("index", "columns"))
+            self.assert_eq(psdf.swapaxes("columns", "index"), pdf.swapaxes("columns", "index"))
+            self.assert_eq((psdf + 1).swapaxes(0, 1), (pdf + 1).swapaxes(0, 1))
 
-        self.assertRaises(AssertionError, lambda: psdf.swapaxes(0, 1, copy=False))
-        self.assertRaises(ValueError, lambda: psdf.swapaxes(0, -1))
+            self.assertRaises(AssertionError, lambda: psdf.swapaxes(0, 1, copy=False))
+            self.assertRaises(ValueError, lambda: psdf.swapaxes(0, -1))
+        else:
+            with self.assertRaises(AttributeError):
+                psdf.swapaxes(0, 1)
 
     def test_isin(self):
         pdf = pd.DataFrame(
@@ -776,8 +790,7 @@ class FrameReindexingMixin:
         psdf = ps.from_pandas(pdf)
 
         self.assert_eq(psdf.isin([4, "six"]), pdf.isin([4, "six"]))
-        # Seems like pandas has a bug when passing `np.array` as parameter
-        self.assert_eq(psdf.isin(np.array([4, "six"])), pdf.isin([4, "six"]))
+        self.assert_eq(psdf.isin(np.array([4, "six"])), pdf.isin(np.array([4, "six"])))
         self.assert_eq(
             psdf.isin({"a": [2, 8], "c": ["three", "one"]}),
             pdf.isin({"a": [2, 8], "c": ["three", "one"]}),
@@ -811,6 +824,44 @@ class FrameReindexingMixin:
         self.assert_eq(psdf.isin([4, 3, 1, 1, None]), pdf.isin([4, 3, 1, 1, None]))
 
         self.assert_eq(psdf.isin({"b": [4, 3, 1, 1, None]}), pdf.isin({"b": [4, 3, 1, 1, None]}))
+
+        # Cross-type matching: string values against int columns should not match
+        pdf = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psdf.isin(["1", "2"]), pdf.isin(["1", "2"]))
+        self.assert_eq(psdf.isin({"a": ["1", "2"]}), pdf.isin({"a": ["1", "2"]}))
+
+        # Numeric cross-type: float values against int columns should match
+        self.assert_eq(psdf.isin([1.0, 2.0]), pdf.isin([1.0, 2.0]))
+
+        # Bool values are compatible with numeric columns
+        self.assert_eq(psdf.isin([True]), pdf.isin([True]))
+
+        # Bool column: int/float are compatible, string is not
+        pdf = pd.DataFrame({"a": [True, False, True], "b": [1, 2, 3]})
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psdf.isin([1]), pdf.isin([1]))
+        self.assert_eq(psdf.isin(["True"]), pdf.isin(["True"]))
+
+        # Date column: date is compatible, string/int are not
+        pdf = pd.DataFrame(
+            {
+                "a": [datetime.date(2023, 1, 1), datetime.date(2023, 1, 2)],
+                "b": [1, 2],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(
+            psdf.isin([datetime.date(2023, 1, 1)]),
+            pdf.isin([datetime.date(2023, 1, 1)]),
+        )
+        self.assert_eq(psdf.isin(["2023-01-01"]), pdf.isin(["2023-01-01"]))
+
+        # Binary column: bytes is compatible, string is not
+        pdf = pd.DataFrame({"a": [b"abc", b"def"], "b": [1, 2]})
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psdf.isin([b"abc"]), pdf.isin([b"abc"]))
+        self.assert_eq(psdf.isin(["abc"]), pdf.isin(["abc"]))
 
     def test_sample(self):
         psdf = ps.DataFrame({"A": [0, 2, 4]}, index=["x", "y", "z"])
@@ -851,12 +902,6 @@ class FrameReidexingTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.frame.test_reindexing import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

@@ -23,17 +23,21 @@ import org.apache.spark.{SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.exceptions.SqlScriptingException.errorMessageWithLineNumber
 
-class SqlScriptingException (
+private[sql] class SqlScriptingException (
     errorClass: String,
     cause: Throwable,
     val origin: Origin,
-    messageParameters: Map[String, String] = Map.empty)
+    messageParameters: Map[String, String] = Map.empty,
+    sqlState: Option[String] = None)
   extends Exception(
     errorMessageWithLineNumber(Option(origin), errorClass, messageParameters),
     cause)
   with SparkThrowable {
 
   override def getCondition: String = errorClass
+
+  override def getSqlState: String = sqlState.getOrElse(super.getSqlState)
+
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 }
 

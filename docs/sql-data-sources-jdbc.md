@@ -96,7 +96,7 @@ logging into the data sources.
             </code></li>
       </ol>
     </td>
-    <td>read/write</td>
+    <td>read</td>
   </tr>
   <tr>
     <td><code>prepareQuery</code></td>
@@ -229,9 +229,9 @@ logging into the data sources.
     <td><code>truncate</code></td>
     <td><code>false</code></td>
     <td>
-      This is a JDBC writer related option. When <code>SaveMode.Overwrite</code> is enabled, this option causes Spark to truncate an existing table instead of dropping and recreating it. This can be more efficient, and prevents the table metadata (e.g., indices) from being removed. However, it will not work in some cases, such as when the new data has a different schema. In case of failures, users should turn off <code>truncate</code> option to use <code>DROP TABLE</code> again. Also, due to the different behavior of <code>TRUNCATE TABLE</code> among DBMS, it's not always safe to use this. MySQLDialect, DB2Dialect, MsSqlServerDialect, DerbyDialect, and OracleDialect supports this while PostgresDialect and default JDBCDirect doesn't. For unknown and unsupported JDBCDirect, the user option <code>truncate</code> is ignored.
+      This is a JDBC writer related option. When <code>SaveMode.Overwrite</code> is enabled, this option causes Spark to truncate an existing table instead of dropping and recreating it. This can be more efficient, and prevents the table metadata (e.g., indices) from being removed. However, it will not work in some cases, such as when the new data has a different schema. In case of failures, users should turn off <code>truncate</code> option to use <code>DROP TABLE</code> again. Also, due to the different behavior of <code>TRUNCATE TABLE</code> among DBMSes, it's not always safe to use this. MySQLDialect, DB2Dialect, MsSqlServerDialect, DerbyDialect, and OracleDialect supports this while PostgresDialect and default JDBCDialect doesn't. For unknown and unsupported JDBCDialect, the user option <code>truncate</code> is ignored.
+    </td>
     <td>write</td>
-   </td>
   </tr>
 
   <tr>
@@ -374,6 +374,14 @@ logging into the data sources.
     </td>
     <td>read</td>
   </tr>
+  <tr>
+    <td><code>hint</code></td>
+    <td>(none)</td>
+    <td>
+      This option is used to specify the hint for reading. The supported hint format is a variant of C-style comments: it needs to start with `/*+ ` and end with ` */`. Currently, this option is only supported in MySQLDialect, OracleDialect and DatabricksDialect.
+    </td>
+    <td>read</td>
+  </tr>
 </table>
 
 Note that kerberos authentication with keytab is not always supported by the JDBC driver.<br>
@@ -381,12 +389,17 @@ Before using <code>keytab</code> and <code>principal</code> configuration option
 * The included JDBC driver version supports kerberos authentication with keytab.
 * There is a built-in connection provider which supports the used database.
 
-There is a built-in connection providers for the following databases:
+There are built-in connection providers for the following databases:
+* Databricks
 * DB2
-* MariaDB
-* MS Sql
+* Derby (deprecated)
+* H2
+* MariaDB and MySQL
+* Microsoft SQL Server
 * Oracle
 * PostgreSQL
+* Snowflake
+* Teradata
 
 If the requirements are not met, please consider using the <code>JdbcConnectionProvider</code> developer API to handle custom authentication.
 

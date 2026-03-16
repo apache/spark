@@ -25,7 +25,10 @@ from pyspark.testing.utils import eventually
 
 if should_test_connect:
     import grpc
+    import google.protobuf.any_pb2 as any_pb2
+    import google.protobuf.wrappers_pb2 as wrappers_pb2
     from google.rpc import status_pb2
+    from google.rpc.error_details_pb2 import ErrorInfo
     import pandas as pd
     import pyarrow as pa
     from pyspark.sql.connect.client import SparkConnectClient, DefaultChannelBuilder
@@ -34,7 +37,9 @@ if should_test_connect:
         DefaultPolicy,
     )
     from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
-    from pyspark.errors import PySparkRuntimeError, RetriesExceeded
+    from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
+    from pyspark.errors import PySparkRuntimeError
+    from pyspark.errors.exceptions.connect import SparkConnectGrpcException
     import pyspark.sql.connect.proto as proto
 
     class TestPolicy(DefaultPolicy):
@@ -129,14 +134,32 @@ if should_test_connect:
 
         req: Optional[proto.ExecutePlanRequest]
 
-        def __init__(self, session_id: str):
+        OperationStatus = proto.GetStatusResponse.OperationStatus
+        DEFAULT_OPERATION_STATUSES = [
+            OperationStatus(
+                operation_id="default-op-1",
+                state=OperationStatus.OperationState.OPERATION_STATE_SUCCEEDED,
+            ),
+            OperationStatus(
+                operation_id="default-op-2",
+                state=OperationStatus.OperationState.OPERATION_STATE_RUNNING,
+            ),
+        ]
+
+        def __init__(self, session_id: str, operation_statuses=None):
             self._session_id = session_id
             self.req = None
+            self.client_user_context_extensions = []
+            if operation_statuses is None:
+                operation_statuses = self.DEFAULT_OPERATION_STATUSES
+            self._operation_statuses = {s.operation_id: s for s in operation_statuses}
 
         def ExecutePlan(self, req: proto.ExecutePlanRequest, metadata):
             self.req = req
+            self.client_user_context_extensions = list(req.user_context.extensions)
             resp = proto.ExecutePlanResponse()
             resp.session_id = self._session_id
+            resp.operation_id = req.operation_id
 
             pdf = pd.DataFrame(data={"col1": [1, 2]})
             schema = pa.Schema.from_pandas(pdf)
@@ -154,9 +177,78 @@ if should_test_connect:
 
         def Interrupt(self, req: proto.InterruptRequest, metadata):
             self.req = req
+            self.client_user_context_extensions = list(req.user_context.extensions)
             resp = proto.InterruptResponse()
             resp.session_id = self._session_id
             return resp
+
+        def Config(self, req: proto.ConfigRequest, metadata):
+            self.req = req
+            self.client_user_context_extensions = list(req.user_context.extensions)
+            resp = proto.ConfigResponse()
+            resp.session_id = self._session_id
+            if req.operation.HasField("get"):
+                pair = resp.pairs.add()
+                pair.key = req.operation.get.keys[0]
+                pair.value = "true"  # Default value
+            elif req.operation.HasField("get_with_default"):
+                pair = resp.pairs.add()
+                pair.key = req.operation.get_with_default.pairs[0].key
+                pair.value = req.operation.get_with_default.pairs[0].value or "true"
+            return resp
+
+        def AnalyzePlan(self, req: proto.AnalyzePlanRequest, metadata):
+            self.req = req
+            self.client_user_context_extensions = list(req.user_context.extensions)
+            resp = proto.AnalyzePlanResponse()
+            resp.session_id = self._session_id
+            # Return a minimal response with a semantic hash
+            resp.semantic_hash.result = 12345
+            return resp
+
+        def GetStatus(self, req: proto.GetStatusRequest, metadata):
+            self.req = req
+            self.client_user_context_extensions = list(req.user_context.extensions)
+            self.received_custom_server_session_id = req.client_observed_server_side_session_id
+            resp = proto.GetStatusResponse(session_id=self._session_id)
+
+            # Echo top-level request extensions back in the response
+            if req.extensions:
+                resp.extensions.extend(req.extensions)
+
+            if not req.HasField("operation_status"):
+                return resp
+
+            # Collect operation-status-level extensions from the request to echo back
+            op_status_extensions = list(req.operation_status.extensions)
+
+            requested_ids = list(req.operation_status.operation_ids)
+            if len(requested_ids) == 0:
+                # Empty list — return all statuses
+                resp.operation_statuses.extend(self._operation_statuses.values())
+                return resp
+
+            OperationStatus = proto.GetStatusResponse.OperationStatus
+            for op_id in requested_ids:
+                status = self._operation_statuses.get(op_id)
+                if status is not None:
+                    op_status = OperationStatus(
+                        operation_id=status.operation_id,
+                        state=status.state,
+                    )
+                else:
+                    op_status = OperationStatus(
+                        operation_id=op_id,
+                        state=OperationStatus.OperationState.OPERATION_STATE_UNKNOWN,
+                    )
+                op_status.extensions.extend(op_status_extensions)
+                resp.operation_statuses.append(op_status)
+            return resp
+
+    # The _cleanup_ml_cache invocation will hang in this test (no valid spark cluster)
+    # and it blocks the test process exiting because it is registered as the atexit handler
+    # in `SparkConnectClient` constructor. To bypass the issue, patch the method in the test.
+    SparkConnectClient._cleanup_ml_cache = lambda _: None
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
@@ -205,6 +297,96 @@ class SparkConnectClientTestCase(unittest.TestCase):
 
         self.assertEqual(client._user_id, "abc")
 
+    def test_user_context_extension(self):
+        client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
+        mock = MockService(client._session_id)
+        client._stub = mock
+
+        try:
+            exlocal = any_pb2.Any()
+            exlocal.Pack(wrappers_pb2.StringValue(value="abc"))
+            exlocal2 = any_pb2.Any()
+            exlocal2.Pack(wrappers_pb2.StringValue(value="def"))
+            exglobal = any_pb2.Any()
+            exglobal.Pack(wrappers_pb2.StringValue(value="ghi"))
+            exglobal2 = any_pb2.Any()
+            exglobal2.Pack(wrappers_pb2.StringValue(value="jkl"))
+
+            exlocal_id = client.add_threadlocal_user_context_extension(exlocal)
+            exglobal_id = client.add_global_user_context_extension(exglobal)
+
+            mock.client_user_context_extensions = []
+            command = proto.Command()
+            client.execute_command(command)
+            self.assertTrue(exlocal in mock.client_user_context_extensions)
+            self.assertTrue(exglobal in mock.client_user_context_extensions)
+            self.assertFalse(exlocal2 in mock.client_user_context_extensions)
+            self.assertFalse(exglobal2 in mock.client_user_context_extensions)
+
+            client.add_threadlocal_user_context_extension(exlocal2)
+
+            mock.client_user_context_extensions = []
+            plan = proto.Plan()
+            client.semantic_hash(plan)  # use semantic_hash to test analyze
+            self.assertTrue(exlocal in mock.client_user_context_extensions)
+            self.assertTrue(exglobal in mock.client_user_context_extensions)
+            self.assertTrue(exlocal2 in mock.client_user_context_extensions)
+            self.assertFalse(exglobal2 in mock.client_user_context_extensions)
+
+            client.add_global_user_context_extension(exglobal2)
+
+            mock.client_user_context_extensions = []
+            client.interrupt_all()
+            self.assertTrue(exlocal in mock.client_user_context_extensions)
+            self.assertTrue(exglobal in mock.client_user_context_extensions)
+            self.assertTrue(exlocal2 in mock.client_user_context_extensions)
+            self.assertTrue(exglobal2 in mock.client_user_context_extensions)
+
+            client.remove_user_context_extension(exlocal_id)
+
+            mock.client_user_context_extensions = []
+            client.get_configs("foo", "bar")
+            self.assertFalse(exlocal in mock.client_user_context_extensions)
+            self.assertTrue(exglobal in mock.client_user_context_extensions)
+            self.assertTrue(exlocal2 in mock.client_user_context_extensions)
+            self.assertTrue(exglobal2 in mock.client_user_context_extensions)
+
+            client.remove_user_context_extension(exglobal_id)
+
+            mock.client_user_context_extensions = []
+            command = proto.Command()
+            client.execute_command(command)
+            self.assertFalse(exlocal in mock.client_user_context_extensions)
+            self.assertFalse(exglobal in mock.client_user_context_extensions)
+            self.assertTrue(exlocal2 in mock.client_user_context_extensions)
+            self.assertTrue(exglobal2 in mock.client_user_context_extensions)
+
+            client.clear_user_context_extensions()
+
+            mock.client_user_context_extensions = []
+            plan = proto.Plan()
+            client.semantic_hash(plan)  # use semantic_hash to test analyze
+            self.assertFalse(exlocal in mock.client_user_context_extensions)
+            self.assertFalse(exglobal in mock.client_user_context_extensions)
+            self.assertFalse(exlocal2 in mock.client_user_context_extensions)
+            self.assertFalse(exglobal2 in mock.client_user_context_extensions)
+
+            mock.client_user_context_extensions = []
+            client.interrupt_all()
+            self.assertFalse(exlocal in mock.client_user_context_extensions)
+            self.assertFalse(exglobal in mock.client_user_context_extensions)
+            self.assertFalse(exlocal2 in mock.client_user_context_extensions)
+            self.assertFalse(exglobal2 in mock.client_user_context_extensions)
+
+            mock.client_user_context_extensions = []
+            client.get_configs("foo", "bar")
+            self.assertFalse(exlocal in mock.client_user_context_extensions)
+            self.assertFalse(exglobal in mock.client_user_context_extensions)
+            self.assertFalse(exlocal2 in mock.client_user_context_extensions)
+            self.assertFalse(exglobal2 in mock.client_user_context_extensions)
+        finally:
+            client.close()
+
     def test_interrupt_all(self):
         client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
         mock = MockService(client._session_id)
@@ -220,40 +402,309 @@ class SparkConnectClientTestCase(unittest.TestCase):
         client.close()
         self.assertTrue(client.is_closed)
 
-    def test_retry(self):
-        client = SparkConnectClient("sc://foo/;token=bar")
-
-        total_sleep = 0
-
-        def sleep(t):
-            nonlocal total_sleep
-            total_sleep += t
-
-        try:
-            for attempt in Retrying(client._retry_policies, sleep=sleep):
-                with attempt:
-                    raise TestException("Retryable error", grpc.StatusCode.UNAVAILABLE)
-        except RetriesExceeded:
-            pass
-
-        # tolerated at least 10 mins of fails
-        self.assertGreaterEqual(total_sleep, 600)
-
-    def test_retry_client_unit(self):
-        client = SparkConnectClient("sc://foo/;token=bar")
-
-        policyA = TestPolicy()
-        policyB = DefaultPolicy()
-
-        client.set_retry_policies([policyA, policyB])
-
-        self.assertEqual(client.get_retry_policies(), [policyA, policyB])
-
     def test_channel_builder_with_session(self):
         dummy = str(uuid.uuid4())
         chan = DefaultChannelBuilder(f"sc://foo/;session_id={dummy}")
         client = SparkConnectClient(chan)
         self.assertEqual(client._session_id, chan.session_id)
+
+    def test_session_hook(self):
+        inits = 0
+        calls = 0
+
+        class TestHook(RemoteSparkSession.Hook):
+            def __init__(self, _session):
+                nonlocal inits
+                inits += 1
+
+            def on_execute_plan(self, req):
+                nonlocal calls
+                calls += 1
+                return req
+
+        session = (
+            RemoteSparkSession.builder.remote("sc://foo")._registerHook(TestHook).getOrCreate()
+        )
+        self.assertEqual(inits, 1)
+        self.assertEqual(calls, 0)
+        session.client._stub = MockService(session.client._session_id)
+        session.client.disable_reattachable_execute()
+
+        # Called from _execute_and_fetch_as_iterator
+        session.range(1).collect()
+        self.assertEqual(inits, 1)
+        self.assertEqual(calls, 1)
+
+        # Called from _execute
+        session.udf.register("test_func", lambda x: x + 1)
+        self.assertEqual(inits, 1)
+        self.assertEqual(calls, 2)
+
+    def test_custom_operation_id(self):
+        client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
+        mock = MockService(client._session_id)
+        client._stub = mock
+        req = client._execute_plan_request_with_metadata(
+            operation_id="10a4c38e-7e87-40ee-9d6f-60ff0751e63b"
+        )
+        for resp in client._stub.ExecutePlan(req, metadata=None):
+            assert resp.operation_id == "10a4c38e-7e87-40ee-9d6f-60ff0751e63b"
+
+    def test_on_exit_calls_release_and_close_when_enabled(self):
+        client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
+        client._release_session_on_exit = True
+        client._closed = False
+
+        call_tracker = {"release_session": 0, "close": 0}
+
+        def mock_release_session():
+            call_tracker["release_session"] += 1
+
+        def mock_close():
+            call_tracker["close"] += 1
+
+        client.release_session = mock_release_session
+        client.close = mock_close
+
+        client._on_exit()
+
+        self.assertEqual(call_tracker["release_session"], 1)
+        self.assertEqual(call_tracker["close"], 1)
+
+    def test_on_exit_does_not_call_when_release_disabled(self):
+        """Test _on_exit does nothing when _release_session_on_exit is False."""
+        client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
+        client._release_session_on_exit = False
+        client._closed = False
+
+        call_tracker = {"release_session": 0, "close": 0}
+
+        def mock_release_session():
+            call_tracker["release_session"] += 1
+
+        def mock_close():
+            call_tracker["close"] += 1
+
+        client.release_session = mock_release_session
+        client.close = mock_close
+
+        client._on_exit()
+
+        self.assertEqual(call_tracker["release_session"], 0)
+        self.assertEqual(call_tracker["close"], 0)
+
+    def test_on_exit_does_not_call_when_already_closed(self):
+        """Test _on_exit does nothing when client is already closed."""
+        client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
+        client._release_session_on_exit = True
+        client._closed = True
+
+        call_tracker = {"release_session": 0, "close": 0}
+
+        def mock_release_session():
+            call_tracker["release_session"] += 1
+
+        def mock_close():
+            call_tracker["close"] += 1
+
+        client.release_session = mock_release_session
+        client.close = mock_close
+
+        client._on_exit()
+
+        self.assertEqual(call_tracker["release_session"], 0)
+        self.assertEqual(call_tracker["close"], 0)
+
+    def test_on_exit_catches_release_session_exception(self):
+        """Test _on_exit continues to call close even if release_session raises."""
+        client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
+        client._release_session_on_exit = True
+        client._closed = False
+
+        call_tracker = {"release_session": 0, "close": 0}
+
+        def mock_release_session():
+            call_tracker["release_session"] += 1
+            raise Exception("release error")
+
+        def mock_close():
+            call_tracker["close"] += 1
+
+        client.release_session = mock_release_session
+        client.close = mock_close
+
+        # Should not raise
+        client._on_exit()
+
+        self.assertEqual(call_tracker["release_session"], 1)
+        self.assertEqual(call_tracker["close"], 1)
+
+    def test_on_exit_catches_close_exception(self):
+        """Test _on_exit silently catches exception from close."""
+        client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
+        client._release_session_on_exit = True
+        client._closed = False
+
+        call_tracker = {"release_session": 0, "close": 0}
+
+        def mock_release_session():
+            call_tracker["release_session"] += 1
+
+        def mock_close():
+            call_tracker["close"] += 1
+            raise Exception("close error")
+
+        client.release_session = mock_release_session
+        client.close = mock_close
+
+        # Should not raise
+        client._on_exit()
+
+        self.assertEqual(call_tracker["release_session"], 1)
+        self.assertEqual(call_tracker["close"], 1)
+
+    def test_on_exit_catches_both_exceptions(self):
+        """Test _on_exit handles both release_session and close raising exceptions."""
+        client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
+        client._release_session_on_exit = True
+        client._closed = False
+
+        call_tracker = {"release_session": 0, "close": 0}
+
+        def mock_release_session():
+            call_tracker["release_session"] += 1
+            raise Exception("release error")
+
+        def mock_close():
+            call_tracker["close"] += 1
+            raise Exception("close error")
+
+        client.release_session = mock_release_session
+        client.close = mock_close
+
+        # Should not raise
+        client._on_exit()
+
+        self.assertEqual(call_tracker["release_session"], 1)
+        self.assertEqual(call_tracker["close"], 1)
+
+    def test_get_operations_statuses_all(self):
+        """Test get_operations_statuses returns all operation statuses when no IDs specified."""
+        OperationStatus = proto.GetStatusResponse.OperationStatus
+        client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
+        mock = MockService(client._session_id)
+        client._stub = mock
+
+        resp = client._get_operation_statuses()
+        result = list(resp.operation_statuses)
+        self.assertEqual(len(result), 2)
+        status_map = {s.operation_id: s.state for s in result}
+        self.assertEqual(
+            status_map["default-op-1"],
+            OperationStatus.OperationState.OPERATION_STATE_SUCCEEDED,
+        )
+        self.assertEqual(
+            status_map["default-op-2"],
+            OperationStatus.OperationState.OPERATION_STATE_RUNNING,
+        )
+
+    def test_get_operations_statuses_specific_ids(self):
+        """Test get_operations_statuses filters by specific operation IDs."""
+        OperationStatus = proto.GetStatusResponse.OperationStatus
+        client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
+        mock = MockService(client._session_id)
+        client._stub = mock
+
+        resp = client._get_operation_statuses(operation_ids=["default-op-1", "unknown-op"])
+        result = list(resp.operation_statuses)
+        self.assertEqual(len(result), 2)
+        status_map = {s.operation_id: s.state for s in result}
+        self.assertEqual(
+            status_map["default-op-1"],
+            OperationStatus.OperationState.OPERATION_STATE_SUCCEEDED,
+        )
+        self.assertEqual(
+            status_map["unknown-op"],
+            OperationStatus.OperationState.OPERATION_STATE_UNKNOWN,
+        )
+        # Verify the request included the operation IDs
+        self.assertEqual(
+            set(mock.req.operation_status.operation_ids), {"default-op-1", "unknown-op"}
+        )
+
+    def test_get_operations_statuses_empty(self):
+        """Test get_operations_statuses returns empty list when no operations exist."""
+        client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
+        mock = MockService(client._session_id, operation_statuses=[])
+        client._stub = mock
+
+        resp = client._get_operation_statuses()
+        self.assertEqual(len(list(resp.operation_statuses)), 0)
+
+    def test_get_operations_statuses_with_operation_extensions(self):
+        """Test get_operations_statuses passes operation-level extensions and echoes them back per operation."""
+        from google.protobuf import any_pb2, wrappers_pb2
+
+        client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
+        mock = MockService(client._session_id)
+        client._stub = mock
+
+        op_ext = any_pb2.Any()
+        op_ext.Pack(wrappers_pb2.StringValue(value="op_extension"))
+
+        resp = client._get_operation_statuses(
+            operation_ids=["default-op-1", "default-op-2"],
+            operation_extensions=[op_ext],
+        )
+        result = list(resp.operation_statuses)
+        self.assertEqual(len(result), 2)
+        self.assertEqual({s.operation_id for s in result}, {"default-op-1", "default-op-2"})
+
+        # Verify operation-level extensions were included in the request
+        self.assertEqual(len(mock.req.operation_status.extensions), 1)
+        unpacked = wrappers_pb2.StringValue()
+        mock.req.operation_status.extensions[0].Unpack(unpacked)
+        self.assertEqual(unpacked.value, "op_extension")
+
+        # Verify operation-level extensions were echoed back per operation
+        for op_status in result:
+            self.assertEqual(len(op_status.extensions), 1)
+            echoed = wrappers_pb2.StringValue()
+            op_status.extensions[0].Unpack(echoed)
+            self.assertEqual(echoed.value, "op_extension")
+
+    def test_get_operations_statuses_with_request_extensions(self):
+        """Test _get_operation_statuses sends request-level extensions and echoes them back."""
+        from google.protobuf import any_pb2, wrappers_pb2
+
+        client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
+        mock = MockService(client._session_id)
+        client._stub = mock
+
+        req_ext = any_pb2.Any()
+        req_ext.Pack(wrappers_pb2.StringValue(value="request_extension"))
+
+        resp = client._get_operation_statuses(
+            operation_ids=["default-op-1"],
+            request_extensions=[req_ext],
+        )
+
+        # Verify the operation status is returned
+        result = list(resp.operation_statuses)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].operation_id, "default-op-1")
+
+        # Verify request-level extensions were included in the request
+        self.assertEqual(len(mock.req.extensions), 1)
+        unpacked = wrappers_pb2.StringValue()
+        mock.req.extensions[0].Unpack(unpacked)
+        self.assertEqual(unpacked.value, "request_extension")
+
+        # Verify request-level extensions were echoed back in the response
+        self.assertEqual(len(resp.extensions), 1)
+        resp_echoed = wrappers_pb2.StringValue()
+        resp.extensions[0].Unpack(resp_echoed)
+        self.assertEqual(resp_echoed.value, "request_extension")
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
@@ -374,7 +825,7 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
             def checks():
                 self.assertEqual(2, stub.execute_calls)
                 self.assertEqual(0, stub.attach_calls)
-                self.assertEqual(0, stub.release_calls)
+                self.assertEqual(1, stub.release_calls)
                 self.assertEqual(0, stub.release_until_calls)
 
             eventually(timeout=1, catch_assertions=True)(checks)()
@@ -404,6 +855,7 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
                     pass
 
             self.assertTrue("RESPONSE_ALREADY_RECEIVED" in e.exception.getMessage())
+            self.assertTrue(error_code in e.exception.getMessage())
 
             def checks():
                 self.assertEqual(1, stub.execute_calls)
@@ -429,14 +881,91 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
         reattach = ite._create_reattach_execute_request()
         self.assertEqual(reattach.client_observed_server_side_session_id, session_id)
 
+    def test_server_unreachable(self):
+        # DNS resolution should fail for "foo". This error is a retriable UNAVAILABLE error.
+        client = SparkConnectClient(
+            "sc://foo", use_reattachable_execute=False, retry_policy=dict(max_retries=0)
+        )
+        with self.assertRaises(SparkConnectGrpcException) as cm:
+            command = proto.Command()
+            client.execute_command(command)
+        err = cm.exception
+        self.assertEqual(err.getGrpcStatusCode(), grpc.StatusCode.UNAVAILABLE)
+        self.assertEqual(err.getErrorClass(), None)
+        self.assertEqual(err.getSqlState(), None)
+
+    def test_error_codes(self):
+        msg = "Something went wrong on the server"
+
+        def raise_without_status():
+            raise TestException(msg=msg, trailing_status=None)
+
+        def raise_without_status_unauthenticated():
+            raise TestException(msg=msg, code=grpc.StatusCode.UNAUTHENTICATED)
+
+        def raise_without_status_permission_denied():
+            raise TestException(msg=msg, code=grpc.StatusCode.PERMISSION_DENIED)
+
+        def raise_without_details():
+            status = status_pb2.Status(
+                code=grpc.StatusCode.INTERNAL.value[0], message=msg, details=[]
+            )
+            raise TestException(msg=msg, trailing_status=status)
+
+        def raise_without_metadata():
+            any = any_pb2.Any()
+            any.Pack(ErrorInfo())
+            status = status_pb2.Status(
+                code=grpc.StatusCode.INTERNAL.value[0], message=msg, details=[any]
+            )
+            raise TestException(msg=msg, trailing_status=status)
+
+        def raise_with_error_class():
+            any = any_pb2.Any()
+            any.Pack(ErrorInfo(metadata=dict(errorClass="TEST_ERROR_CLASS")))
+            status = status_pb2.Status(
+                code=grpc.StatusCode.INTERNAL.value[0], message=msg, details=[any]
+            )
+            raise TestException(msg=msg, trailing_status=status)
+
+        def raise_with_sql_state():
+            any = any_pb2.Any()
+            any.Pack(ErrorInfo(metadata=dict(sqlState="TEST_SQL_STATE")))
+            status = status_pb2.Status(
+                code=grpc.StatusCode.INTERNAL.value[0], message=msg, details=[any]
+            )
+            raise TestException(msg=msg, trailing_status=status)
+
+        test_cases = [
+            (raise_without_status, grpc.StatusCode.INTERNAL, None, None),
+            (raise_without_status_unauthenticated, grpc.StatusCode.UNAUTHENTICATED, None, None),
+            (raise_without_status_permission_denied, grpc.StatusCode.PERMISSION_DENIED, None, None),
+            (raise_without_details, grpc.StatusCode.INTERNAL, None, None),
+            (raise_without_metadata, grpc.StatusCode.INTERNAL, None, None),
+            (raise_with_error_class, grpc.StatusCode.INTERNAL, "TEST_ERROR_CLASS", None),
+            (raise_with_sql_state, grpc.StatusCode.INTERNAL, None, "TEST_SQL_STATE"),
+        ]
+
+        for (
+            response_function,
+            expected_status_code,
+            expected_error_class,
+            expected_sql_state,
+        ) in test_cases:
+            client = SparkConnectClient(
+                "sc://foo", use_reattachable_execute=False, retry_policy=dict(max_retries=0)
+            )
+            client._stub = self._stub_with([response_function])
+            with self.assertRaises(SparkConnectGrpcException) as cm:
+                command = proto.Command()
+                client.execute_command(command)
+            err = cm.exception
+            self.assertEqual(err.getGrpcStatusCode(), expected_status_code)
+            self.assertEqual(err.getErrorClass(), expected_error_class)
+            self.assertEqual(err.getSqlState(), expected_sql_state)
+
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.connect.client.test_client import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

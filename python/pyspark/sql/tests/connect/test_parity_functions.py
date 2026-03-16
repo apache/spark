@@ -34,14 +34,12 @@ class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):
     def test_input_file_name_reset_for_rdd(self):
         super().test_input_file_name_reset_for_rdd()
 
+    @unittest.skip("No need to test in Spark Connect.")
+    def test_wildcard_import(self):
+        super().test_wildcard_import()
+
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.connect.test_parity_functions import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

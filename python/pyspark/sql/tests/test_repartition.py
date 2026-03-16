@@ -15,9 +15,8 @@
 # limitations under the License.
 #
 
-import unittest
 
-from pyspark.sql.functions import spark_partition_id
+from pyspark.sql.functions import spark_partition_id, col, lit, when
 from pyspark.sql.types import (
     StringType,
     IntegerType,
@@ -25,7 +24,7 @@ from pyspark.sql.types import (
     StructType,
     StructField,
 )
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -84,6 +83,120 @@ class DataFrameRepartitionTestsMixin:
             messageParameters={"arg_name": "numPartitions", "arg_type": "list"},
         )
 
+    def test_repartition_by_id(self):
+        # Test basic partition ID passthrough behavior
+        numPartitions = 10
+        df = self.spark.range(100).withColumn("expected_p_id", col("id") % numPartitions)
+        repartitioned = df.repartitionById(numPartitions, col("expected_p_id").cast("int"))
+        result = repartitioned.withColumn("actual_p_id", spark_partition_id())
+
+        # All rows should be in their expected partitions
+        self.assertEqual(result.filter(col("expected_p_id") != col("actual_p_id")).count(), 0)
+
+    def test_repartition_by_id_negative_values(self):
+        df = self.spark.range(10).toDF("id")
+        repartitioned = df.repartitionById(10, (col("id") - 5).cast("int"))
+        result = repartitioned.withColumn("actual_p_id", spark_partition_id()).collect()
+
+        for row in result:
+            actualPartitionId = row["actual_p_id"]
+            id_val = row["id"]
+            expectedPartitionId = int((id_val - 5) % 10)
+            self.assertEqual(
+                actualPartitionId,
+                expectedPartitionId,
+                f"Row with id={id_val} should be in partition {expectedPartitionId}, "
+                f"but was in partition {actualPartitionId}",
+            )
+
+    def test_repartition_by_id_null_values(self):
+        # Test that null partition ids go to partition 0
+        df = self.spark.range(10).toDF("id")
+        partitionExpr = when(col("id") < 5, col("id")).otherwise(lit(None)).cast("int")
+        repartitioned = df.repartitionById(10, partitionExpr)
+        result = repartitioned.withColumn("actual_p_id", spark_partition_id()).collect()
+
+        nullRows = [row for row in result if row["id"] >= 5]
+        self.assertTrue(len(nullRows) > 0, "Should have rows with null partition expression")
+        for row in nullRows:
+            self.assertEqual(
+                row["actual_p_id"],
+                0,
+                f"Row with null partition id should go to partition 0, "
+                f"but went to partition {row['actual_p_id']}",
+            )
+
+        nonNullRows = [row for row in result if row["id"] < 5]
+        for row in nonNullRows:
+            id_val = row["id"]
+            actualPartitionId = row["actual_p_id"]
+            expectedPartitionId = id_val % 10
+            self.assertEqual(
+                actualPartitionId,
+                expectedPartitionId,
+                f"Row with id={id_val} should be in partition {expectedPartitionId}, "
+                f"but was in partition {actualPartitionId}",
+            )
+
+    def test_repartition_by_id_error_non_int_type(self):
+        # Test error for non-integer partition column type
+        df = self.spark.range(5).withColumn("s", lit("a"))
+        with self.assertRaises(Exception):  # Should raise analysis exception
+            df.repartitionById(5, col("s")).collect()
+
+    def test_repartition_by_id_error_invalid_num_partitions(self):
+        df = self.spark.range(5)
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.repartitionById("5", col("id").cast("int"))
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_INT",
+            messageParameters={"arg_name": "numPartitions", "arg_type": "str"},
+        )
+
+        with self.assertRaises(PySparkValueError) as pe:
+            df.repartitionById(0, col("id").cast("int"))
+        self.check_error(
+            exception=pe.exception,
+            errorClass="VALUE_NOT_POSITIVE",
+            messageParameters={"arg_name": "numPartitions", "arg_value": "0"},
+        )
+
+        # Test negative numPartitions
+        with self.assertRaises(PySparkValueError) as pe:
+            df.repartitionById(-1, col("id").cast("int"))
+        self.check_error(
+            exception=pe.exception,
+            errorClass="VALUE_NOT_POSITIVE",
+            messageParameters={"arg_name": "numPartitions", "arg_value": "-1"},
+        )
+
+    def test_repartition_by_id_out_of_range(self):
+        numPartitions = 10
+        df = self.spark.range(20).toDF("id")
+        repartitioned = df.repartitionById(numPartitions, col("id").cast("int"))
+        result = repartitioned.collect()
+
+        self.assertEqual(len(result), 20)
+        # Skip RDD partition count check for Connect mode since RDD is not available
+        try:
+            self.assertEqual(repartitioned.rdd.getNumPartitions(), numPartitions)
+        except Exception:
+            # Connect mode doesn't support RDD operations, so we skip this check
+            pass
+
+    def test_repartition_by_id_string_column_name(self):
+        numPartitions = 5
+        df = self.spark.range(25).withColumn(
+            "partition_id", (col("id") % numPartitions).cast("int")
+        )
+        repartitioned = df.repartitionById(numPartitions, "partition_id")
+        result = repartitioned.withColumn("actual_p_id", spark_partition_id())
+
+        mismatches = result.filter(col("partition_id") != col("actual_p_id")).count()
+        self.assertEqual(mismatches, 0)
+
 
 class DataFrameRepartitionTests(
     DataFrameRepartitionTestsMixin,
@@ -93,12 +206,6 @@ class DataFrameRepartitionTests(
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_repartition import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

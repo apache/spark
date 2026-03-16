@@ -26,12 +26,29 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{FILTER, WINDOW}
  * Inserts a `WindowGroupLimit` below `Window` if the `Window` has rank-like functions
  * and the function results are further filtered by limit-like predicates. Example query:
  * {{{
- *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE rn = 5
- *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE 5 = rn
- *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE rn < 5
- *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE 5 > rn
- *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE rn <= 5
- *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE 5 >= rn
+ *   SELECT * FROM (
+ *      SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1
+ *   ) WHERE rn = 5;
+ *
+ *   SELECT * FROM (
+ *      SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1
+ *   ) WHERE 5 = rn;
+ *
+ *   SELECT * FROM (
+ *      SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1
+ *   ) WHERE rn < 5;
+ *
+ *   SELECT * FROM (
+ *      SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1
+ *   ) WHERE 5 > rn;
+ *
+ *   SELECT * FROM (
+ *      SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1
+ *    ) WHERE rn <= 5;
+ *
+ *   SELECT * FROM (
+ *      SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1
+ *   ) WHERE 5 >= rn;
  * }}}
  */
 object InferWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
@@ -74,7 +91,7 @@ object InferWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
 
     plan.transformWithPruning(_.containsAllPatterns(FILTER, WINDOW), ruleId) {
       case filter @ Filter(condition,
-        window @ Window(windowExpressions, partitionSpec, orderSpec, child))
+        window @ Window(windowExpressions, partitionSpec, orderSpec, child, _))
         if !child.isInstanceOf[WindowGroupLimit] && windowExpressions.forall(isExpandingWindow) &&
           orderSpec.nonEmpty =>
         val limits = windowExpressions.collect {

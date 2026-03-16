@@ -17,18 +17,15 @@
 package org.apache.spark.util
 
 import org.apache.logging.log4j.Level
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.internal.Logging
 
-class PatternLoggingSuite extends LoggingSuiteBase with BeforeAndAfterAll {
+class PatternLoggingSuite extends LoggingSuiteBase {
 
   override def className: String = classOf[PatternLoggingSuite].getSimpleName
   override def logFilePath: String = "target/pattern.log"
 
   override def beforeAll(): Unit = Logging.disableStructuredLogging()
-
-  override def afterAll(): Unit = Logging.enableStructuredLogging()
 
   override def expectedPatternForBasicMsg(level: Level): String = {
     s""".*$level $className: This is a log message\n"""

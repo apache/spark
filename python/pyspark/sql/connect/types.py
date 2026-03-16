@@ -14,10 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
-
 import json
 
 from typing import Any, Dict, Optional, List
@@ -29,6 +25,7 @@ from pyspark.sql.types import (
     IntegerType,
     FloatType,
     DateType,
+    TimeType,
     TimestampType,
     TimestampNTZType,
     DayTimeIntervalType,
@@ -47,7 +44,10 @@ from pyspark.sql.types import (
     BinaryType,
     BooleanType,
     NullType,
+    NumericType,
     VariantType,
+    GeographyType,
+    GeometryType,
     UserDefinedType,
 )
 from pyspark.errors import PySparkAssertionError, PySparkValueError
@@ -128,6 +128,10 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
     ret = pb2.DataType()
     if isinstance(data_type, NullType):
         ret.null.CopyFrom(pb2.DataType.NULL())
+    elif isinstance(data_type, CharType):
+        ret.char.length = data_type.length
+    elif isinstance(data_type, VarcharType):
+        ret.var_char.length = data_type.length
     elif isinstance(data_type, StringType):
         ret.string.collation = data_type.collation
     elif isinstance(data_type, BooleanType):
@@ -151,6 +155,8 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
         ret.decimal.precision = data_type.precision
     elif isinstance(data_type, DateType):
         ret.date.CopyFrom(pb2.DataType.Date())
+    elif isinstance(data_type, TimeType):
+        ret.time.precision = data_type.precision
     elif isinstance(data_type, TimestampType):
         ret.timestamp.CopyFrom(pb2.DataType.Timestamp())
     elif isinstance(data_type, TimestampNTZType):
@@ -183,6 +189,10 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
         ret.array.contains_null = data_type.containsNull
     elif isinstance(data_type, VariantType):
         ret.variant.CopyFrom(pb2.DataType.Variant())
+    elif isinstance(data_type, GeometryType):
+        ret.geometry.srid = data_type.srid
+    elif isinstance(data_type, GeographyType):
+        ret.geography.srid = data_type.srid
     elif isinstance(data_type, UserDefinedType):
         json_value = data_type.jsonValue()
         ret.udt.type = "udt"
@@ -237,6 +247,8 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
         return VarcharType(schema.var_char.length)
     elif schema.HasField("date"):
         return DateType()
+    elif schema.HasField("time"):
+        return TimeType(schema.time.precision) if schema.time.HasField("precision") else TimeType()
     elif schema.HasField("timestamp"):
         return TimestampType()
     elif schema.HasField("timestamp_ntz"):
@@ -293,6 +305,18 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
         )
     elif schema.HasField("variant"):
         return VariantType()
+    elif schema.HasField("geometry"):
+        srid = schema.geometry.srid
+        if srid == GeometryType.MIXED_SRID:
+            return GeometryType("ANY")
+        else:
+            return GeometryType(srid)
+    elif schema.HasField("geography"):
+        srid = schema.geography.srid
+        if srid == GeographyType.MIXED_SRID:
+            return GeographyType("ANY")
+        else:
+            return GeographyType(srid)
     elif schema.HasField("udt"):
         assert schema.udt.type == "udt"
         json_value = {}
@@ -358,15 +382,42 @@ def verify_col_name(name: str, schema: StructType) -> bool:
     if parts is None or len(parts) == 0:
         return False
 
-    def _quick_verify(parts: List[str], schema: DataType) -> bool:
+    def _quick_verify(parts: List[str], dt: DataType) -> bool:
         if len(parts) == 0:
             return True
 
         _schema: Optional[StructType] = None
-        if isinstance(schema, StructType):
-            _schema = schema
-        elif isinstance(schema, ArrayType) and isinstance(schema.elementType, StructType):
-            _schema = schema.elementType
+        if isinstance(dt, StructType):
+            _schema = dt
+        elif isinstance(dt, ArrayType) and isinstance(dt.elementType, StructType):
+            _schema = dt.elementType
+        else:
+            return False
+
+        part = parts[0]
+        for field in _schema:
+            if field.name == part:
+                return _quick_verify(parts[1:], field.dataType)
+
+        return False
+
+    return _quick_verify(parts, schema)
+
+
+def verify_numeric_col_name(name: str, schema: StructType) -> bool:
+    parts = parse_attr_name(name)
+    if parts is None or len(parts) == 0:
+        return False
+
+    def _quick_verify(parts: List[str], dt: DataType) -> bool:
+        if len(parts) == 0 and isinstance(dt, NumericType):
+            return True
+
+        _schema: Optional[StructType] = None
+        if isinstance(dt, StructType):
+            _schema = dt
+        elif isinstance(dt, ArrayType) and isinstance(dt.elementType, StructType):
+            _schema = dt.elementType
         else:
             return False
 

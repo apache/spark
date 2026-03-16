@@ -42,9 +42,9 @@ from pyspark.sql.column import Column
 from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.merge import MergeIntoWriter
 from pyspark.sql.streaming import DataStreamWriter
+from pyspark.sql.table_arg import TableArg
 from pyspark.sql.types import StructType, Row
 from pyspark.sql.utils import dispatch_df_method
-
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
@@ -244,31 +244,35 @@ class DataFrame:
         """
         ...
 
-    if not is_remote_only():
+    @dispatch_df_method
+    def toJSON(self, use_unicode: bool = True) -> Union["RDD[str]", "DataFrame"]:
+        """Converts a :class:`DataFrame` into a :class:`RDD` of string or :class:`DataFrame`.
 
-        def toJSON(self, use_unicode: bool = True) -> "RDD[str]":
-            """Converts a :class:`DataFrame` into a :class:`RDD` of string.
+        Each row is turned into a JSON document as one element in the returned RDD
+        or DataFrame.
 
-            Each row is turned into a JSON document as one element in the returned RDD.
+        .. versionadded:: 1.3.0
 
-            .. versionadded:: 1.3.0
+        .. versionchanged:: 4.2.0
+            Supports Spark Connect.
 
-            Parameters
-            ----------
-            use_unicode : bool, optional, default True
-                Whether to convert to unicode or not.
+        Parameters
+        ----------
+        use_unicode : bool, optional, default True
+            Whether to convert to unicode or not. Note that this argument is disallowed
+            in Spark Connect mode.
 
-            Returns
-            -------
-            :class:`RDD`
+        Returns
+        -------
+        :class:`RDD` (in Classic mode) or :class:`DataFrame` (in connect mode)
 
-            Examples
-            --------
-            >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
-            >>> df.toJSON().first()
-            '{"age":2,"name":"Alice"}'
-            """
-            ...
+        Examples
+        --------
+        >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
+        >>> df.toJSON().first()  # doctest: +SKIP
+        '{"age":2,"name":"Alice"}'
+        """
+        ...
 
     @dispatch_df_method
     def registerTempTable(self, name: str) -> None:
@@ -755,6 +759,10 @@ class DataFrame:
         -------
         :class:`DataFrame`
 
+        See Also
+        --------
+        DataFrame.subtract : Similar to `exceptAll`, but eliminates duplicates.
+
         Examples
         --------
         >>> df1 = spark.createDataFrame(
@@ -770,6 +778,58 @@ class DataFrame:
         |  c|  4|
         +---+---+
 
+        """
+        ...
+
+    @dispatch_df_method
+    def zipWithIndex(self, indexColName: str = "index") -> "DataFrame":
+        """Returns a new :class:`DataFrame` by appending a column containing consecutive
+        0-based Long indices, similar to :meth:`RDD.zipWithIndex`.
+
+        The index column is appended as the last column of the resulting :class:`DataFrame`.
+
+        .. versionadded:: 4.2.0
+
+        Parameters
+        ----------
+        indexColName : str, default "index"
+            The name of the index column to append.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            A new DataFrame with an appended index column.
+
+        Notes
+        -----
+        If a column with `indexColName` already exists in the schema, the resulting
+        :class:`DataFrame` will have duplicate column names. Selecting the duplicate column
+        by name will throw `AMBIGUOUS_REFERENCE`, and writing the :class:`DataFrame` will
+        throw `COLUMN_ALREADY_EXISTS`.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame(
+        ...     [("a", 1), ("b", 2), ("c", 3)], ["letter", "number"])
+        >>> df.zipWithIndex().show()
+        +------+------+-----+
+        |letter|number|index|
+        +------+------+-----+
+        |     a|     1|    0|
+        |     b|     2|    1|
+        |     c|     3|    2|
+        +------+------+-----+
+
+        Custom index column name:
+
+        >>> df.zipWithIndex("row_id").show()
+        +------+------+------+
+        |letter|number|row_id|
+        +------+------+------+
+        |     a|     1|     0|
+        |     b|     2|     1|
+        |     c|     3|     2|
+        +------+------+------+
         """
         ...
 
@@ -847,7 +907,6 @@ class DataFrame:
 
         Notes
         -----
-        - Unlike `count()`, this method does not trigger any computation.
         - An empty DataFrame has no rows. It may have columns, but no data.
 
         Examples
@@ -971,8 +1030,7 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def __repr__(self) -> str:
-        ...
+    def __repr__(self) -> str: ...
 
     @dispatch_df_method
     def _repr_html_(self) -> Optional[str]:
@@ -1510,6 +1568,8 @@ class DataFrame:
         -----
         The default storage level has changed to `MEMORY_AND_DISK_DESER` to match Scala in 3.0.
 
+        Cached data is shared across all Spark sessions on the cluster.
+
         Returns
         -------
         :class:`DataFrame`
@@ -1545,6 +1605,8 @@ class DataFrame:
         Notes
         -----
         The default storage level has changed to `MEMORY_AND_DISK_DESER` to match Scala in 3.0.
+
+        Cached data is shared across all Spark sessions on the cluster.
 
         Parameters
         ----------
@@ -1615,6 +1677,9 @@ class DataFrame:
         Notes
         -----
         `blocking` default has changed to ``False`` to match Scala in 2.0.
+
+        Cached data is shared across all Spark sessions on the cluster, so unpersisting it
+        affects all sessions.
 
         Parameters
         ----------
@@ -1699,15 +1764,7 @@ class DataFrame:
         """
         return DataFrame(self._jdf.coalesce(numPartitions), self.sparkSession)
 
-    @overload
-    def repartition(self, numPartitions: int, *cols: "ColumnOrName") -> "DataFrame":
-        ...
-
-    @overload
-    def repartition(self, *cols: "ColumnOrName") -> "DataFrame":
-        ...
-
-    @dispatch_df_method  # type: ignore[misc]
+    @dispatch_df_method
     def repartition(
         self, numPartitions: Union[int, "ColumnOrName"], *cols: "ColumnOrName"
     ) -> "DataFrame":
@@ -1815,15 +1872,7 @@ class DataFrame:
         """
         ...
 
-    @overload
-    def repartitionByRange(self, numPartitions: int, *cols: "ColumnOrName") -> "DataFrame":
-        ...
-
-    @overload
-    def repartitionByRange(self, *cols: "ColumnOrName") -> "DataFrame":
-        ...
-
-    @dispatch_df_method  # type: ignore[misc]
+    @dispatch_df_method
     def repartitionByRange(
         self, numPartitions: Union[int, "ColumnOrName"], *cols: "ColumnOrName"
     ) -> "DataFrame":
@@ -1879,6 +1928,67 @@ class DataFrame:
         | 16|  Bob|                   0|
         | 23|Alice|                   1|
         +---+-----+--------------------+
+        """
+        ...
+
+    @dispatch_df_method
+    def repartitionById(self, numPartitions: int, partitionIdCol: "ColumnOrName") -> "DataFrame":
+        """
+        Returns a new :class:`DataFrame` partitioned by the given partition ID expression.
+        Each row's target partition is determined directly by the value of the partition ID column.
+
+        .. versionadded:: 4.1.0
+
+        .. versionchanged:: 4.1.0
+            Supports Spark Connect.
+
+        Parameters
+        ----------
+        numPartitions : int
+            target number of partitions
+        partitionIdCol : str or :class:`Column`
+            column expression that evaluates to the target partition ID for each row.
+            Must be an integer type. Values are taken modulo numPartitions to determine
+            the final partition. Null values are sent to partition 0.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Repartitioned DataFrame.
+
+        Notes
+        -----
+        The partition ID expression must evaluate to an integer type.
+        Partition IDs are taken modulo numPartitions, so values outside the range [0, numPartitions)
+        are automatically mapped to valid partition IDs. If the partition ID expression evaluates to
+        a NULL value, the row is sent to partition 0.
+
+        This method provides direct control over partition placement, similar to RDD's
+        partitionBy with custom partitioners, but at the DataFrame level.
+
+        Examples
+        --------
+        Partition rows based on a computed partition ID:
+
+        >>> from pyspark.sql import functions as sf
+        >>> from pyspark.sql.functions import col
+        >>> df = spark.range(10).withColumn("partition_id", (col("id") % 3).cast("int"))
+        >>> repartitioned = df.repartitionById(3, "partition_id")
+        >>> repartitioned.select("id", "partition_id", sf.spark_partition_id()).orderBy("id").show()
+        +---+------------+--------------------+
+        | id|partition_id|SPARK_PARTITION_ID()|
+        +---+------------+--------------------+
+        |  0|           0|                   0|
+        |  1|           1|                   1|
+        |  2|           2|                   2|
+        |  3|           0|                   0|
+        |  4|           1|                   1|
+        |  5|           2|                   2|
+        |  6|           0|                   0|
+        |  7|           1|                   1|
+        |  8|           2|                   2|
+        |  9|           0|                   0|
+        +---+------------+--------------------+
         """
         ...
 
@@ -1984,8 +2094,7 @@ class DataFrame:
         ...
 
     @overload
-    def sample(self, fraction: float, seed: Optional[int] = ...) -> "DataFrame":
-        ...
+    def sample(self, fraction: float, seed: Optional[int] = ...) -> "DataFrame": ...
 
     @overload
     def sample(
@@ -1993,8 +2102,7 @@ class DataFrame:
         withReplacement: Optional[bool],
         fraction: float,
         seed: Optional[int] = ...,
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     @dispatch_df_method  # type: ignore[misc]
     def sample(
@@ -2033,13 +2141,13 @@ class DataFrame:
 
         Examples
         --------
-        >>> df = spark.range(10)
+        >>> df = spark.range(0, 10, 1, 1)
         >>> df.sample(0.5, 3).count() # doctest: +SKIP
         7
-        >>> df.sample(fraction=0.5, seed=3).count() # doctest: +SKIP
-        7
-        >>> df.sample(withReplacement=True, fraction=0.5, seed=3).count() # doctest: +SKIP
-        1
+        >>> df.sample(fraction=0.5, seed=3).count()
+        4
+        >>> df.sample(withReplacement=True, fraction=0.5, seed=3).count()
+        2
         >>> df.sample(1.0).count()
         10
         >>> df.sample(fraction=1.0).count()
@@ -2121,17 +2229,18 @@ class DataFrame:
 
         Examples
         --------
-        >>> from pyspark.sql.functions import col
-        >>> dataset = spark.range(0, 100).select((col("id") % 3).alias("key"))
+        >>> from pyspark.sql import functions as sf
+        >>> dataset = spark.range(0, 100, 1, 5).select((sf.col("id") % 3).alias("key"))
         >>> sampled = dataset.sampleBy("key", fractions={0: 0.1, 1: 0.2}, seed=0)
         >>> sampled.groupBy("key").count().orderBy("key").show()
         +---+-----+
         |key|count|
         +---+-----+
-        |  0|    3|
-        |  1|    6|
+        |  0|    4|
+        |  1|    9|
         +---+-----+
-        >>> dataset.sampleBy(col("key"), fractions={2: 1.0}, seed=0).count()
+
+        >>> dataset.sampleBy(sf.col("key"), fractions={2: 1.0}, seed=0).count()
         33
         """
         ...
@@ -2248,9 +2357,9 @@ class DataFrame:
 
         Example 4: Iterating over columns to apply a transformation
 
-        >>> import pyspark.sql.functions as f
+        >>> import pyspark.sql.functions as sf
         >>> for col_name in df.columns:
-        ...     df = df.withColumn(col_name, f.upper(f.col(col_name)))
+        ...     df = df.withColumn(col_name, sf.upper(col_name))
         >>> df.show()
         +---+-----+-----+
         |age| name|state|
@@ -2273,6 +2382,28 @@ class DataFrame:
         ...     [(30, "Eve", "FL"), (40, "Sam", "WA")], ["age", "name", "location"])
         >>> df.columns == df2.columns
         False
+        """
+        ...
+
+    @dispatch_df_method
+    def metadataColumn(self, colName: str) -> Column:
+        """
+        Selects a metadata column based on its logical column name and returns it as a
+        :class:`Column`.
+
+        A metadata column can be accessed this way even if the underlying data source defines a data
+        column with a conflicting name.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        colName : str
+            string, metadata column name
+
+        Returns
+        -------
+        :class:`Column`
         """
         ...
 
@@ -2389,14 +2520,16 @@ class DataFrame:
 
         Examples
         --------
-        >>> from pyspark.sql.functions import col, desc
+        >>> from pyspark.sql import functions as sf
         >>> df = spark.createDataFrame(
         ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
         >>> df_as1 = df.alias("df_as1")
         >>> df_as2 = df.alias("df_as2")
-        >>> joined_df = df_as1.join(df_as2, col("df_as1.name") == col("df_as2.name"), 'inner')
+        >>> joined_df = df_as1.join(df_as2,
+        ...     sf.col("df_as1.name") == sf.col("df_as2.name"), 'inner')
         >>> joined_df.select(
-        ...     "df_as1.name", "df_as2.name", "df_as2.age").sort(desc("df_as1.name")).show()
+        ...     "df_as1.name", "df_as2.name", "df_as2.age"
+        ... ).sort(sf.desc("df_as1.name")).show()
         +-----+-----+---+
         | name| name|age|
         +-----+-----+---+
@@ -2521,7 +2654,7 @@ class DataFrame:
         they will appear with `NULL` in the `name` column of `df`, and vice versa for `df2`.
 
         >>> joined = df.join(df2, df.name == df2.name, "outer").sort(sf.desc(df.name))
-        >>> joined.show() # doctest: +SKIP
+        >>> joined.show()
         +-----+----+----+------+
         | name| age|name|height|
         +-----+----+----+------+
@@ -2532,7 +2665,7 @@ class DataFrame:
 
         To unambiguously select output columns, specify the dataframe along with the column name:
 
-        >>> joined.select(df.name, df2.height).show() # doctest: +SKIP
+        >>> joined.select(df.name, df2.height).show()
         +-----+------+
         | name|height|
         +-----+------+
@@ -2549,7 +2682,7 @@ class DataFrame:
         pyspark.errors.exceptions.captured.AnalysisException: Column name#0 are ambiguous...
 
         A better approach is to assign aliases to the dataframes, and then reference
-        the ouptut columns from the join operation using these aliases:
+        the output columns from the join operation using these aliases:
 
         >>> df.alias("a").join(
         ...     df.alias("b"), sf.col("a.name") == sf.col("b.name"), "outer"
@@ -2626,6 +2759,108 @@ class DataFrame:
         +-----+---+
         |Alice|  2|
         +-----+---+
+        """
+        ...
+
+    def lateralJoin(
+        self,
+        other: "DataFrame",
+        on: Optional[Column] = None,
+        how: Optional[str] = None,
+    ) -> "DataFrame":
+        """
+        Lateral joins with another :class:`DataFrame`, using the given join expression.
+
+        A lateral join (also known as a correlated join) is a type of join where each row from
+        one DataFrame is used as input to a subquery or a derived table that computes a result
+        specific to that row. The right side `DataFrame` can reference columns from the current
+        row of the left side `DataFrame`, allowing for more complex and context-dependent results
+        than a standard join.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Right side of the join
+        on : :class:`Column`, optional
+            a join expression (Column).
+        how : str, optional
+            default ``inner``. Must be one of: ``inner``, ``cross``, ``left``, ``leftouter``,
+            and ``left_outer``.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Joined DataFrame.
+
+        Examples
+        --------
+        Setup a sample DataFrame.
+
+        >>> from pyspark.sql import functions as sf
+        >>> from pyspark.sql import Row
+        >>> customers_data = [
+        ...     Row(customer_id=1, name="Alice"), Row(customer_id=2, name="Bob"),
+        ...     Row(customer_id=3, name="Charlie"), Row(customer_id=4, name="Diana")
+        ... ]
+        >>> customers = spark.createDataFrame(customers_data)
+        >>> orders_data = [
+        ...     Row(order_id=101, customer_id=1, order_date="2024-01-10",
+        ...         items=[Row(product="laptop", quantity=5), Row(product="mouse", quantity=12)]),
+        ...     Row(order_id=102, customer_id=1, order_date="2024-02-15",
+        ...         items=[Row(product="phone", quantity=2), Row(product="charger", quantity=15)]),
+        ...     Row(order_id=105, customer_id=1, order_date="2024-03-20",
+        ...         items=[Row(product="tablet", quantity=4)]),
+        ...     Row(order_id=103, customer_id=2, order_date="2024-01-12",
+        ...         items=[Row(product="tablet", quantity=8)]),
+        ...     Row(order_id=104, customer_id=2, order_date="2024-03-05",
+        ...         items=[Row(product="laptop", quantity=7)]),
+        ...     Row(order_id=106, customer_id=3, order_date="2024-04-05",
+        ...         items=[Row(product="monitor", quantity=1)]),
+        ... ]
+        >>> orders = spark.createDataFrame(orders_data)
+
+        Example 1 (use TVF): Expanding Items in Each Order into Separate Rows
+
+        >>> customers.join(orders, "customer_id").lateralJoin(
+        ...     spark.tvf.explode(sf.col("items").outer()).select("col.*")
+        ... ).select(
+        ...     "customer_id", "name", "order_id", "order_date", "product", "quantity"
+        ... ).orderBy("customer_id", "order_id", "product").show()
+        +-----------+-------+--------+----------+-------+--------+
+        |customer_id|   name|order_id|order_date|product|quantity|
+        +-----------+-------+--------+----------+-------+--------+
+        |          1|  Alice|     101|2024-01-10| laptop|       5|
+        |          1|  Alice|     101|2024-01-10|  mouse|      12|
+        |          1|  Alice|     102|2024-02-15|charger|      15|
+        |          1|  Alice|     102|2024-02-15|  phone|       2|
+        |          1|  Alice|     105|2024-03-20| tablet|       4|
+        |          2|    Bob|     103|2024-01-12| tablet|       8|
+        |          2|    Bob|     104|2024-03-05| laptop|       7|
+        |          3|Charlie|     106|2024-04-05|monitor|       1|
+        +-----------+-------+--------+----------+-------+--------+
+
+        Example 2 (use subquery): Finding the Two Most Recent Orders for Customer
+
+        >>> customers.alias("c").lateralJoin(
+        ...     orders.alias("o")
+        ...     .where(sf.col("o.customer_id") == sf.col("c.customer_id").outer())
+        ...     .select("order_id", "order_date")
+        ...     .orderBy(sf.col("order_date").desc())
+        ...     .limit(2),
+        ...     how="left"
+        ... ).orderBy("customer_id", "order_id").show()
+        +-----------+-------+--------+----------+
+        |customer_id|   name|order_id|order_date|
+        +-----------+-------+--------+----------+
+        |          1|  Alice|     102|2024-02-15|
+        |          1|  Alice|     105|2024-03-20|
+        |          2|    Bob|     103|2024-01-12|
+        |          2|    Bob|     104|2024-03-05|
+        |          3|Charlie|     106|2024-04-05|
+        |          4|  Diana|    NULL|      NULL|
+        +-----------+-------+--------+----------+
         """
         ...
 
@@ -2719,7 +2954,7 @@ class DataFrame:
     @dispatch_df_method
     def sortWithinPartitions(
         self,
-        *cols: Union[int, str, Column, List[Union[int, str, Column]]],
+        *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"],
         **kwargs: Any,
     ) -> "DataFrame":
         """Returns a new :class:`DataFrame` with each partition sorted by the specified column(s).
@@ -2783,7 +3018,7 @@ class DataFrame:
     @dispatch_df_method
     def sort(
         self,
-        *cols: Union[int, str, Column, List[Union[int, str, Column]]],
+        *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"],
         **kwargs: Any,
     ) -> "DataFrame":
         """Returns a new :class:`DataFrame` sorted by the specified column(s).
@@ -2943,7 +3178,7 @@ class DataFrame:
     def _preapare_cols_for_sort(
         self,
         _to_col: Callable[[str], Column],
-        cols: Sequence[Union[int, str, Column, List[Union[int, str, Column]]]],
+        cols: Sequence[Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"]],
         kwargs: Dict[str, Any],
     ) -> Sequence[Column]:
         from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkIndexError
@@ -2953,27 +3188,32 @@ class DataFrame:
                 errorClass="CANNOT_BE_EMPTY", messageParameters={"item": "cols"}
             )
 
-        if len(cols) == 1 and isinstance(cols[0], list):
-            cols = cols[0]
+        if (
+            len(cols) == 1
+            and not isinstance(cols[0], (int, str, Column))
+            and isinstance(cols[0], Sequence)
+        ):
+            cols = tuple(cols[0])
 
-        _cols: List[Column] = []
-        for c in cols:
+        def _get_col(
+            c: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"],
+        ) -> Column:
             if isinstance(c, int) and not isinstance(c, bool):
                 # ordinal is 1-based
                 if c > 0:
-                    _cols.append(self[c - 1])
+                    return self[c - 1]
                 # negative ordinal means sort by desc
                 elif c < 0:
-                    _cols.append(self[-c - 1].desc())
+                    return self[-c - 1].desc()
                 else:
                     raise PySparkIndexError(
                         errorClass="ZERO_INDEX",
                         messageParameters={},
                     )
             elif isinstance(c, Column):
-                _cols.append(c)
+                return c
             elif isinstance(c, str):
-                _cols.append(_to_col(c))
+                return _to_col(c)
             else:
                 raise PySparkTypeError(
                     errorClass="NOT_COLUMN_OR_INT_OR_STR",
@@ -2983,6 +3223,7 @@ class DataFrame:
                     },
                 )
 
+        _cols: List[Column] = [_get_col(c) for c in cols]
         ascending = kwargs.get("ascending", True)
         if isinstance(ascending, (bool, int)):
             if not ascending:
@@ -3134,12 +3375,10 @@ class DataFrame:
         ...
 
     @overload
-    def head(self) -> Optional[Row]:
-        ...
+    def head(self) -> Optional[Row]: ...
 
     @overload
-    def head(self, n: int) -> List[Row]:
-        ...
+    def head(self, n: int) -> List[Row]: ...
 
     @dispatch_df_method
     def head(self, n: Optional[int] = None) -> Union[Optional[Row], List[Row]]:
@@ -3203,12 +3442,10 @@ class DataFrame:
         ...
 
     @overload
-    def __getitem__(self, item: Union[int, str]) -> Column:
-        ...
+    def __getitem__(self, item: Union[int, str]) -> Column: ...
 
     @overload
-    def __getitem__(self, item: Union[Column, List, Tuple]) -> "DataFrame":
-        ...
+    def __getitem__(self, item: Union[Column, List, Tuple]) -> "DataFrame": ...
 
     @dispatch_df_method
     def __getitem__(self, item: Union[int, str, Column, List, Tuple]) -> Union[Column, "DataFrame"]:
@@ -3362,15 +3599,13 @@ class DataFrame:
         ...
 
     @overload
-    def select(self, *cols: "ColumnOrName") -> "DataFrame":
-        ...
+    def select(self, *cols: "ColumnOrName") -> "DataFrame": ...
 
     @overload
-    def select(self, __cols: Union[List[Column], List[str]]) -> "DataFrame":
-        ...
+    def select(self, __cols: Sequence["ColumnOrName"]) -> "DataFrame": ...
 
-    @dispatch_df_method  # type: ignore[misc]
-    def select(self, *cols: "ColumnOrName") -> "DataFrame":
+    @dispatch_df_method
+    def select(self, *cols: Union[Sequence["ColumnOrName"], "ColumnOrName"]) -> "DataFrame":
         """Projects a set of expressions and returns a new :class:`DataFrame`.
 
         .. versionadded:: 1.3.0
@@ -3418,12 +3653,10 @@ class DataFrame:
         ...
 
     @overload
-    def selectExpr(self, *expr: str) -> "DataFrame":
-        ...
+    def selectExpr(self, *expr: str) -> "DataFrame": ...
 
     @overload
-    def selectExpr(self, *expr: List[str]) -> "DataFrame":
-        ...
+    def selectExpr(self, *expr: List[str]) -> "DataFrame": ...
 
     @dispatch_df_method
     def selectExpr(self, *expr: Union[str, List[str]]) -> "DataFrame":
@@ -3612,15 +3845,15 @@ class DataFrame:
         ...
 
     @overload
-    def groupBy(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
-        ...
+    def groupBy(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData": ...
 
     @overload
-    def groupBy(self, __cols: Union[List[Column], List[str], List[int]]) -> "GroupedData":
-        ...
+    def groupBy(self, __cols: Sequence["ColumnOrNameOrOrdinal"]) -> "GroupedData": ...
 
-    @dispatch_df_method  # type: ignore[misc]
-    def groupBy(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
+    @dispatch_df_method
+    def groupBy(
+        self, *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"]
+    ) -> "GroupedData":
         """
         Groups the :class:`DataFrame` by the specified columns so that aggregation
         can be performed on them.
@@ -3722,15 +3955,15 @@ class DataFrame:
         ...
 
     @overload
-    def rollup(self, *cols: "ColumnOrName") -> "GroupedData":
-        ...
+    def rollup(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData": ...
 
     @overload
-    def rollup(self, __cols: Union[List[Column], List[str]]) -> "GroupedData":
-        ...
+    def rollup(self, __cols: Sequence["ColumnOrNameOrOrdinal"]) -> "GroupedData": ...
 
-    @dispatch_df_method  # type: ignore[misc]
-    def rollup(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
+    @dispatch_df_method
+    def rollup(
+        self, *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"]
+    ) -> "GroupedData":
         """
         Create a multi-dimensional rollup for the current :class:`DataFrame` using
         the specified columns, allowing for aggregation on them.
@@ -3805,15 +4038,15 @@ class DataFrame:
         ...
 
     @overload
-    def cube(self, *cols: "ColumnOrName") -> "GroupedData":
-        ...
+    def cube(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData": ...
 
     @overload
-    def cube(self, __cols: Union[List[Column], List[str]]) -> "GroupedData":
-        ...
+    def cube(self, __cols: Sequence["ColumnOrNameOrOrdinal"]) -> "GroupedData": ...
 
-    @dispatch_df_method  # type: ignore[misc]
-    def cube(self, *cols: "ColumnOrName") -> "GroupedData":
+    @dispatch_df_method
+    def cube(
+        self, *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"]
+    ) -> "GroupedData":
         """
         Create a multi-dimensional cube for the current :class:`DataFrame` using
         the specified columns, allowing aggregations to be performed on them.
@@ -3894,7 +4127,9 @@ class DataFrame:
 
     @dispatch_df_method
     def groupingSets(
-        self, groupingSets: Sequence[Sequence["ColumnOrName"]], *cols: "ColumnOrName"
+        self,
+        groupingSets: Sequence[Sequence["ColumnOrNameOrOrdinal"]],
+        *cols: "ColumnOrNameOrOrdinal",
     ) -> "GroupedData":
         """
         Create multi-dimensional aggregation for the current :class:`DataFrame` using the specified
@@ -3907,7 +4142,7 @@ class DataFrame:
         groupingSets : sequence of sequence of columns or str
             Individual set of columns to group on.
         cols : :class:`Column` or str
-            Addional grouping columns specified by users.
+            Additional grouping columns specified by users.
             Those columns are shown as the output columns after aggregation.
 
         Returns
@@ -4052,7 +4287,10 @@ class DataFrame:
         |  2| 12|   1.2|
         +---+---+------+
 
-        >>> df.unpivot("id", ["int", "double"], "var", "val").show()
+        >>> from pyspark.sql import functions as sf
+        >>> df.unpivot(
+        ...     "id", ["int", "double"], "var", "val"
+        ... ).sort("id", sf.desc("var")).show()
         +---+------+----+
         | id|   var| val|
         +---+------+----+
@@ -4210,11 +4448,11 @@ class DataFrame:
         --------
         When ``observation`` is :class:`Observation`, only batch queries work as below.
 
-        >>> from pyspark.sql.functions import col, count, lit, max
-        >>> from pyspark.sql import Observation
+        >>> from pyspark.sql import Observation, functions as sf
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
         >>> observation = Observation("my metrics")
-        >>> observed_df = df.observe(observation, count(lit(1)).alias("count"), max(col("age")))
+        >>> observed_df = df.observe(observation,
+        ...     sf.count(sf.lit(1)).alias("count"), sf.max("age"))
         >>> observed_df.count()
         2
         >>> observation.get
@@ -4247,13 +4485,13 @@ class DataFrame:
         >>> error_listener = MyErrorListener()
         >>> spark.streams.addListener(error_listener)
         >>> sdf = spark.readStream.format("rate").load().withColumn(
-        ...     "error", col("value")
+        ...     "error", sf.col("value")
         ... )
         >>> # Observe row count (rc) and error row count (erc) in the streaming Dataset
         ... observed_ds = sdf.observe(
         ...     "my_event",
-        ...     count(lit(1)).alias("rc"),
-        ...     count(col("error")).alias("erc"))
+        ...     sf.count(sf.lit(1)).alias("rc"),
+        ...     sf.count(sf.col("error")).alias("erc"))
         >>> try:
         ...     q = observed_ds.writeStream.format("console").start()
         ...     time.sleep(5)
@@ -4318,11 +4556,11 @@ class DataFrame:
 
         Example 2: Combining two DataFrames with different schemas
 
-        >>> from pyspark.sql.functions import lit
+        >>> from pyspark.sql import functions as sf
         >>> df1 = spark.createDataFrame([(100001, 1), (100002, 2)], schema="id LONG, money INT")
         >>> df2 = spark.createDataFrame([(3, 100003), (4, 100003)], schema="money INT, id LONG")
-        >>> df1 = df1.withColumn("age", lit(30))
-        >>> df2 = df2.withColumn("age", lit(40))
+        >>> df1 = df1.withColumn("age", sf.lit(30))
+        >>> df2 = df2.withColumn("age", sf.lit(40))
         >>> df3 = df1.union(df2)
         >>> df3.show()
         +------+------+---+
@@ -4557,14 +4795,6 @@ class DataFrame:
 
         .. versionadded:: 2.4.0
 
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-
-        Parameters
-        ----------
-        other : :class:`DataFrame`
-            Another :class:`DataFrame` that needs to be combined.
-
         Returns
         -------
         :class:`DataFrame`
@@ -4636,6 +4866,10 @@ class DataFrame:
         Notes
         -----
         This is equivalent to `EXCEPT DISTINCT` in SQL.
+
+        See Also
+        --------
+        DataFrame.exceptAll : Similar to `subtract`, but preserves duplicates.
 
         Examples
         --------
@@ -4869,18 +5103,6 @@ class DataFrame:
         """
         ...
 
-    @overload
-    def fillna(
-        self,
-        value: "LiteralType",
-        subset: Optional[Union[str, Tuple[str, ...], List[str]]] = ...,
-    ) -> "DataFrame":
-        ...
-
-    @overload
-    def fillna(self, value: Dict[str, "LiteralType"]) -> "DataFrame":
-        ...
-
     @dispatch_df_method
     def fillna(
         self,
@@ -4979,8 +5201,7 @@ class DataFrame:
         to_replace: "LiteralType",
         value: "OptionalPrimitiveType",
         subset: Optional[List[str]] = ...,
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     @overload
     def replace(
@@ -4988,16 +5209,14 @@ class DataFrame:
         to_replace: List["LiteralType"],
         value: List["OptionalPrimitiveType"],
         subset: Optional[List[str]] = ...,
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     @overload
     def replace(
         self,
         to_replace: Dict["LiteralType", "OptionalPrimitiveType"],
         subset: Optional[List[str]] = ...,
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     @overload
     def replace(
@@ -5005,8 +5224,7 @@ class DataFrame:
         to_replace: List["LiteralType"],
         value: "OptionalPrimitiveType",
         subset: Optional[List[str]] = ...,
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     @dispatch_df_method  # type: ignore[misc]
     def replace(
@@ -5100,7 +5318,7 @@ class DataFrame:
         |NULL|  NULL|NULL|
         +----+------+----+
 
-        Example 4: Replace 10 to 20 in the 'name' column.
+        Example 4: Replace 10 to 18 in the 'age' column.
 
         >>> df.na.replace(10, 18, 'age').show()
         +----+------+-----+
@@ -5120,8 +5338,7 @@ class DataFrame:
         col: str,
         probabilities: Union[List[float], Tuple[float]],
         relativeError: float,
-    ) -> List[float]:
-        ...
+    ) -> List[float]: ...
 
     @overload
     def approxQuantile(
@@ -5129,8 +5346,7 @@ class DataFrame:
         col: Union[List[str], Tuple[str]],
         probabilities: Union[List[float], Tuple[float]],
         relativeError: float,
-    ) -> List[List[float]]:
-        ...
+    ) -> List[List[float]]: ...
 
     @dispatch_df_method
     def approxQuantile(
@@ -5385,12 +5601,14 @@ class DataFrame:
 
         Examples
         --------
+        >>> from pyspark.sql import functions as sf
         >>> df = spark.createDataFrame([(1, 11), (1, 11), (3, 10), (4, 8), (4, 8)], ["c1", "c2"])
-        >>> df.freqItems(["c1", "c2"]).show()  # doctest: +SKIP
+        >>> df = df.freqItems(["c1", "c2"])
+        >>> df.select([sf.sort_array(c).alias(c) for c in df.columns]).show()
         +------------+------------+
         |c1_freqItems|c2_freqItems|
         +------------+------------+
-        |   [4, 1, 3]| [8, 11, 10]|
+        |   [1, 3, 4]| [8, 10, 11]|
         +------------+------------+
         """
         ...
@@ -5659,15 +5877,7 @@ class DataFrame:
         """
         ...
 
-    @overload
-    def drop(self, cols: "ColumnOrName") -> "DataFrame":
-        ...
-
-    @overload
-    def drop(self, *cols: str) -> "DataFrame":
-        ...
-
-    @dispatch_df_method  # type: ignore[misc]
+    @dispatch_df_method
     def drop(self, *cols: "ColumnOrName") -> "DataFrame":
         """
         Returns a new :class:`DataFrame` without specified columns.
@@ -5802,7 +6012,7 @@ class DataFrame:
 
     @dispatch_df_method
     def toDF(self, *cols: str) -> "DataFrame":
-        """Returns a new :class:`DataFrame` that with new specified column names
+        """Returns a new :class:`DataFrame` with new specified column names
 
         .. versionadded:: 1.6.0
 
@@ -5865,10 +6075,10 @@ class DataFrame:
 
         Examples
         --------
-        >>> from pyspark.sql.functions import col
+        >>> from pyspark.sql import functions as sf
         >>> df = spark.createDataFrame([(1, 1.0), (2, 2.0)], ["int", "float"])
         >>> def cast_all_to_int(input_df):
-        ...     return input_df.select([col(col_name).cast("int") for col_name in input_df.columns])
+        ...     return input_df.select([sf.col(c).cast("int") for c in input_df.columns])
         ...
         >>> def sort_columns_asc(input_df):
         ...     return input_df.select(*sorted(input_df.columns))
@@ -5882,8 +6092,9 @@ class DataFrame:
         +-----+---+
 
         >>> def add_n(input_df, n):
-        ...     return input_df.select([(col(col_name) + n).alias(col_name)
-        ...                             for col_name in input_df.columns])
+        ...     cols = [(sf.col(c) + n).alias(c) for c in input_df.columns]
+        ...     return input_df.select(cols)
+        ...
         >>> df.transform(add_n, 1).transform(add_n, n=10).show()
         +---+-----+
         |int|float|
@@ -6021,15 +6232,15 @@ class DataFrame:
     # aliases as of Spark 3.0. Two methods below remain just
     # for legacy users currently.
     @overload
-    def groupby(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
-        ...
+    def groupby(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData": ...
 
     @overload
-    def groupby(self, __cols: Union[List[Column], List[str], List[int]]) -> "GroupedData":
-        ...
+    def groupby(self, __cols: Sequence["ColumnOrNameOrOrdinal"]) -> "GroupedData": ...
 
-    @dispatch_df_method  # type: ignore[misc]
-    def groupby(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
+    @dispatch_df_method
+    def groupby(
+        self, *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"]
+    ) -> "GroupedData":
         """
         :func:`groupby` is an alias for :func:`groupBy`.
 
@@ -6156,7 +6367,7 @@ class DataFrame:
         >>> df = spark.createDataFrame(
         ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
 
-        >>> df.pandas_api()  # doctest: +SKIP
+        >>> df.pandas_api()
            age   name
         0   14    Tom
         1   23  Alice
@@ -6164,7 +6375,7 @@ class DataFrame:
 
         We can specify the index columns.
 
-        >>> df.pandas_api(index_col="age")  # doctest: +SKIP
+        >>> df.pandas_api(index_col="age")
               name
         age
         14     Tom
@@ -6227,7 +6438,7 @@ class DataFrame:
         ...     for pdf in iterator:
         ...         yield pdf[pdf.id == 1]
         ...
-        >>> df.mapInPandas(filter_func, df.schema).show()  # doctest: +SKIP
+        >>> df.mapInPandas(filter_func, df.schema).show()
         +---+---+
         | id|age|
         +---+---+
@@ -6240,7 +6451,7 @@ class DataFrame:
         ...     for pdf in iterator:
         ...         yield pdf.groupby("id").mean().reset_index()
         ...
-        >>> df.mapInPandas(mean_age, "id: bigint, age: double").show()  # doctest: +SKIP
+        >>> df.mapInPandas(mean_age, "id: bigint, age: double").show()
         +---+----+
         | id| age|
         +---+----+
@@ -6256,7 +6467,7 @@ class DataFrame:
         ...         yield pdf
         ...
         >>> df.mapInPandas(
-        ...     double_age, "id: bigint, age: bigint, double_age: bigint").show()  # doctest: +SKIP
+        ...     double_age, "id: bigint, age: bigint, double_age: bigint").show()
         +---+---+----------+
         | id|age|double_age|
         +---+---+----------+
@@ -6268,12 +6479,8 @@ class DataFrame:
         barrier mode, it ensures all Python workers in the stage will be
         launched concurrently.
 
-        >>> df.mapInPandas(filter_func, df.schema, barrier=True).show()  # doctest: +SKIP
-        +---+---+
-        | id|age|
-        +---+---+
-        |  1| 21|
-        +---+---+
+        >>> df.mapInPandas(filter_func, df.schema, barrier=True).collect()
+        [Row(id=1, age=21)]
 
         See Also
         --------
@@ -6324,13 +6531,12 @@ class DataFrame:
 
         Examples
         --------
-        >>> import pyarrow  # doctest: +SKIP
+        >>> import pyarrow as pa
         >>> df = spark.createDataFrame([(1, 21), (2, 30)], ("id", "age"))
         >>> def filter_func(iterator):
         ...     for batch in iterator:
-        ...         pdf = batch.to_pandas()
-        ...         yield pyarrow.RecordBatch.from_pandas(pdf[pdf.id == 1])
-        >>> df.mapInArrow(filter_func, df.schema).show()  # doctest: +SKIP
+        ...         yield batch.filter(pa.compute.field("id") == 1)
+        >>> df.mapInArrow(filter_func, df.schema).show()
         +---+---+
         | id|age|
         +---+---+
@@ -6341,12 +6547,8 @@ class DataFrame:
         barrier mode, it ensures all Python workers in the stage will be
         launched concurrently.
 
-        >>> df.mapInArrow(filter_func, df.schema, barrier=True).show()  # doctest: +SKIP
-        +---+---+
-        | id|age|
-        +---+---+
-        |  1| 21|
-        +---+---+
+        >>> df.mapInArrow(filter_func, df.schema, barrier=True).collect()
+        [Row(id=1, age=21)]
 
         See Also
         --------
@@ -6373,7 +6575,8 @@ class DataFrame:
 
         Examples
         --------
-        >>> df.toArrow()  # doctest: +SKIP
+        >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
+        >>> df.coalesce(1).toArrow()
         pyarrow.Table
         age: int64
         name: string
@@ -6403,7 +6606,8 @@ class DataFrame:
 
         Examples
         --------
-        >>> df.toPandas()  # doctest: +SKIP
+        >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
+        >>> df.toPandas()
            age   name
         0    2  Alice
         1    5    Bob
@@ -6476,6 +6680,88 @@ class DataFrame:
         """
         ...
 
+    def asTable(self) -> TableArg:
+        """
+        Converts the DataFrame into a :class:`table_arg.TableArg` object, which can
+        be used as a table argument in a TVF(Table-Valued Function) including UDTF
+        (User-Defined Table Function).
+
+        After obtaining a TableArg from a DataFrame using this method, you can specify partitioning
+        and ordering for the table argument by calling methods such as `partitionBy`, `orderBy`, and
+        `withSinglePartition` on the `TableArg` instance.
+        - partitionBy: Partitions the data based on the specified columns. This method cannot
+        be called after withSinglePartition() has been called.
+        - orderBy: Orders the data within partitions based on the specified columns.
+        - withSinglePartition: Indicates that the data should be treated as a single partition.
+        This method cannot be called after partitionBy() has been called.
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        :class:`table_arg.TableArg`
+            A `TableArg` object representing a table argument.
+
+        Examples
+        --------
+        >>> from pyspark.sql.functions import udtf
+        >>>
+        >>> # Create a simple UDTF that processes table data
+        >>> @udtf(returnType="id: int, doubled: int")
+        ... class DoubleUDTF:
+        ...     def eval(self, row):
+        ...         yield row["id"], row["id"] * 2
+        ...
+        >>> # Create a DataFrame
+        >>> df = spark.createDataFrame([(1,), (2,), (3,)], ["id"])
+        >>>
+        >>> # Use asTable() to pass the DataFrame as a table argument to the UDTF
+        >>> result = DoubleUDTF(df.asTable())
+        >>> result.show()
+        +---+-------+
+        | id|doubled|
+        +---+-------+
+        |  1|      2|
+        |  2|      4|
+        |  3|      6|
+        +---+-------+
+        >>>
+        >>> # Use partitionBy and orderBy to control data partitioning and ordering
+        >>> df2 = spark.createDataFrame(
+        ...     [(1, "a"), (1, "b"), (2, "c"), (2, "d")], ["key", "value"]
+        ... )
+        >>>
+        >>> @udtf(returnType="key: int, value: string")
+        ... class ProcessUDTF:
+        ...     def eval(self, row):
+        ...         yield row["key"], row["value"]
+        ...
+        >>> # Partition by 'key' and order by 'value' within each partition
+        >>> result2 = ProcessUDTF(df2.asTable().partitionBy("key").orderBy("value"))
+        >>> result2.show()
+        +---+-----+
+        |key|value|
+        +---+-----+
+        |  1|    a|
+        |  1|    b|
+        |  2|    c|
+        |  2|    d|
+        +---+-----+
+        >>>
+        >>> # Use withSinglePartition to process all data in a single partition
+        >>> result3 = ProcessUDTF(df2.asTable().withSinglePartition().orderBy("value"))
+        >>> result3.show()
+        +---+-----+
+        |key|value|
+        +---+-----+
+        |  1|    a|
+        |  1|    b|
+        |  2|    c|
+        |  2|    d|
+        +---+-----+
+        """
+        ...
+
     def scalar(self) -> Column:
         """
         Return a `Column` object for a SCALAR Subquery containing exactly one row and one column.
@@ -6509,7 +6795,7 @@ class DataFrame:
         >>> from pyspark.sql import functions as sf
         >>> employees.where(
         ...     sf.col("salary") > employees.select(sf.avg("salary")).scalar()
-        ... ).select("name", "salary", "department_id").show()
+        ... ).select("name", "salary", "department_id").orderBy("name").show()
         +-----+------+-------------+
         | name|salary|department_id|
         +-----+------+-------------+
@@ -6522,11 +6808,12 @@ class DataFrame:
         in their department.
 
         >>> from pyspark.sql import functions as sf
-        >>> employees.where(
+        >>> employees.alias("e1").where(
         ...     sf.col("salary")
-        ...     > employees.where(sf.col("department_id") == sf.col("department_id").outer())
-        ...         .select(sf.avg("salary")).scalar()
-        ... ).select("name", "salary", "department_id").show()
+        ...     > employees.alias("e2").where(
+        ...         sf.col("e2.department_id") == sf.col("e1.department_id").outer()
+        ...     ).select(sf.avg("salary")).scalar()
+        ... ).select("name", "salary", "department_id").orderBy("name").show()
         +-----+------+-------------+
         | name|salary|department_id|
         +-----+------+-------------+
@@ -6538,23 +6825,24 @@ class DataFrame:
         department.
 
         >>> from pyspark.sql import functions as sf
-        >>> employees.select(
+        >>> employees.alias("e1").select(
         ...     "name", "salary", "department_id",
         ...     sf.format_number(
         ...         sf.lit(100) * sf.col("salary") /
-        ...             employees.where(sf.col("department_id") == sf.col("department_id").outer())
-        ...             .select(sf.sum("salary")).scalar().alias("avg_salary"),
+        ...             employees.alias("e2").where(
+        ...                 sf.col("e2.department_id") == sf.col("e1.department_id").outer()
+        ...             ).select(sf.sum("salary")).scalar().alias("avg_salary"),
         ...         1
         ...     ).alias("salary_proportion_in_department")
-        ... ).show()
+        ... ).orderBy("name").show()
         +-------+------+-------------+-------------------------------+
         |   name|salary|department_id|salary_proportion_in_department|
         +-------+------+-------------+-------------------------------+
         |  Alice| 45000|          101|                           30.6|
         |    Bob| 54000|          101|                           36.7|
         |Charlie| 29000|          102|                           32.2|
-        |    Eve| 48000|          101|                           32.7|
         |  David| 61000|          102|                           67.8|
+        |    Eve| 48000|          101|                           32.7|
         +-------+------+-------------+-------------------------------+
         """
         ...
@@ -6595,8 +6883,10 @@ class DataFrame:
         Example 1: Filter for customers who have placed at least one order.
 
         >>> from pyspark.sql import functions as sf
-        >>> customers.where(
-        ...     orders.where(sf.col("customer_id") == sf.col("customer_id").outer()).exists()
+        >>> customers.alias("c").where(
+        ...     orders.alias("o").where(
+        ...         sf.col("o.customer_id") == sf.col("c.customer_id").outer()
+        ...     ).exists()
         ... ).orderBy("customer_id").show()
         +-----------+-------------+-------+
         |customer_id|customer_name|country|
@@ -6609,8 +6899,10 @@ class DataFrame:
         Example 2: Filter for customers who have never placed an order.
 
         >>> from pyspark.sql import functions as sf
-        >>> customers.where(
-        ...     ~orders.where(sf.col("customer_id") == sf.col("customer_id").outer()).exists()
+        >>> customers.alias("c").where(
+        ...     ~orders.alias("o").where(
+        ...         sf.col("o.customer_id") == sf.col("c.customer_id").outer()
+        ...     ).exists()
         ... ).orderBy("customer_id").show()
         +-----------+-------------+---------+
         |customer_id|customer_name|  country|
@@ -6621,9 +6913,9 @@ class DataFrame:
         Example 3: Find Orders from Customers in the USA.
 
         >>> from pyspark.sql import functions as sf
-        >>> orders.where(
-        ...     customers.where(
-        ...         (sf.col("customer_id") == sf.col("customer_id").outer())
+        >>> orders.alias("o").where(
+        ...     customers.alias("c").where(
+        ...         (sf.col("c.customer_id") == sf.col("o.customer_id").outer())
         ...         & (sf.col("country") == "USA")
         ...     ).exists()
         ... ).orderBy("order_id").show()
@@ -6665,17 +6957,20 @@ class DataFrame:
     @property
     def plot(self) -> "PySparkPlotAccessor":
         """
-        Returns a :class:`PySparkPlotAccessor` for plotting functions.
+        Returns a :class:`plot.core.PySparkPlotAccessor` for plotting functions.
 
         .. versionadded:: 4.0.0
 
         Returns
         -------
-        :class:`PySparkPlotAccessor`
+        :class:`plot.core.PySparkPlotAccessor`
 
         Notes
         -----
         This API is experimental.
+        It provides two ways to create plots:
+        1. Chaining style (e.g., `df.plot.line(...)`).
+        2. Explicit style (e.g., `df.plot(kind="line", ...)`).
 
         Examples
         --------
@@ -6685,8 +6980,26 @@ class DataFrame:
         >>> type(df.plot)
         <class 'pyspark.sql.plot.core.PySparkPlotAccessor'>
         >>> df.plot.line(x="category", y=["int_val", "float_val"])  # doctest: +SKIP
+        >>> df.plot(kind="line", x="category", y=["int_val", "float_val"])  # doctest: +SKIP
         """
         ...
+
+    def __arrow_c_stream__(self, requested_schema: Optional[object] = None) -> object:
+        """
+        Export to a C PyCapsule stream object.
+
+        Parameters
+        ----------
+        requested_schema : PyCapsule, optional
+            The schema to attempt to use for the output stream. This is a best effort request,
+
+        Returns
+        -------
+        A C PyCapsule stream object.
+        """
+        from pyspark.sql.interchange import SparkArrowCStreamer
+
+        return SparkArrowCStreamer(self).__arrow_c_stream__(requested_schema)
 
 
 class DataFrameNaFunctions:
@@ -6707,26 +7020,22 @@ class DataFrameNaFunctions:
         how: str = "any",
         thresh: Optional[int] = None,
         subset: Optional[Union[str, Tuple[str, ...], List[str]]] = None,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     drop.__doc__ = DataFrame.dropna.__doc__
 
     @overload
-    def fill(self, value: "LiteralType", subset: Optional[List[str]] = ...) -> DataFrame:
-        ...
+    def fill(self, value: "LiteralType", subset: Optional[List[str]] = ...) -> DataFrame: ...
 
     @overload
-    def fill(self, value: Dict[str, "LiteralType"]) -> DataFrame:
-        ...
+    def fill(self, value: Dict[str, "LiteralType"]) -> DataFrame: ...
 
     @dispatch_df_method
     def fill(
         self,
         value: Union["LiteralType", Dict[str, "LiteralType"]],
         subset: Optional[List[str]] = None,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     fill.__doc__ = DataFrame.fillna.__doc__
 
@@ -6736,16 +7045,14 @@ class DataFrameNaFunctions:
         to_replace: List["LiteralType"],
         value: List["OptionalPrimitiveType"],
         subset: Optional[List[str]] = ...,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     @overload
     def replace(
         self,
         to_replace: Dict["LiteralType", "OptionalPrimitiveType"],
         subset: Optional[List[str]] = ...,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     @overload
     def replace(
@@ -6753,8 +7060,7 @@ class DataFrameNaFunctions:
         to_replace: List["LiteralType"],
         value: "OptionalPrimitiveType",
         subset: Optional[List[str]] = ...,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     @dispatch_df_method  # type: ignore[misc]
     def replace(
@@ -6764,8 +7070,7 @@ class DataFrameNaFunctions:
             Union["OptionalPrimitiveType", List["OptionalPrimitiveType"], _NoValueType]
         ] = _NoValue,
         subset: Optional[List[str]] = None,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     replace.__doc__ = DataFrame.replace.__doc__
 
@@ -6788,8 +7093,7 @@ class DataFrameStatFunctions:
         col: str,
         probabilities: Union[List[float], Tuple[float]],
         relativeError: float,
-    ) -> List[float]:
-        ...
+    ) -> List[float]: ...
 
     @overload
     def approxQuantile(
@@ -6797,8 +7101,7 @@ class DataFrameStatFunctions:
         col: Union[List[str], Tuple[str]],
         probabilities: Union[List[float], Tuple[float]],
         relativeError: float,
-    ) -> List[List[float]]:
-        ...
+    ) -> List[List[float]]: ...
 
     @dispatch_df_method
     def approxQuantile(
@@ -6806,39 +7109,33 @@ class DataFrameStatFunctions:
         col: Union[str, List[str], Tuple[str]],
         probabilities: Union[List[float], Tuple[float]],
         relativeError: float,
-    ) -> Union[List[float], List[List[float]]]:
-        ...
+    ) -> Union[List[float], List[List[float]]]: ...
 
     approxQuantile.__doc__ = DataFrame.approxQuantile.__doc__
 
     @dispatch_df_method
-    def corr(self, col1: str, col2: str, method: Optional[str] = None) -> float:
-        ...
+    def corr(self, col1: str, col2: str, method: Optional[str] = None) -> float: ...
 
     corr.__doc__ = DataFrame.corr.__doc__
 
     @dispatch_df_method
-    def cov(self, col1: str, col2: str) -> float:
-        ...
+    def cov(self, col1: str, col2: str) -> float: ...
 
     cov.__doc__ = DataFrame.cov.__doc__
 
     @dispatch_df_method
-    def crosstab(self, col1: str, col2: str) -> DataFrame:
-        ...
+    def crosstab(self, col1: str, col2: str) -> DataFrame: ...
 
     crosstab.__doc__ = DataFrame.crosstab.__doc__
 
     @dispatch_df_method
-    def freqItems(self, cols: List[str], support: Optional[float] = None) -> DataFrame:
-        ...
+    def freqItems(self, cols: List[str], support: Optional[float] = None) -> DataFrame: ...
 
     freqItems.__doc__ = DataFrame.freqItems.__doc__
 
     @dispatch_df_method
     def sampleBy(
         self, col: str, fractions: Dict[Any, float], seed: Optional[int] = None
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     sampleBy.__doc__ = DataFrame.sampleBy.__doc__

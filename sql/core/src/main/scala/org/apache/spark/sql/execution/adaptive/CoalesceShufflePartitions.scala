@@ -33,6 +33,8 @@ import org.apache.spark.util.Utils
  */
 case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleReadRule {
 
+  override def conf: SQLConf = session.sessionState.conf
+
   override val supportedShuffleOrigins: Seq[ShuffleOrigin] =
     Seq(ENSURE_REQUIREMENTS, REPARTITION_BY_COL, REBALANCE_PARTITIONS_BY_NONE,
       REBALANCE_PARTITIONS_BY_COL)
@@ -107,7 +109,8 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
         coalesceGroup.shuffleStages.map(_.partitionSpecs),
         advisoryTargetSize = advisoryTargetSize,
         minNumPartitions = minNumPartitions,
-        minPartitionSize = minPartitionSize)
+        minPartitionSize = minPartitionSize,
+        coalesceGroup.shuffleStages.map(_.shuffleStage.id))
 
       if (newPartitionSpecs.nonEmpty) {
         coalesceGroup.shuffleStages.zip(newPartitionSpecs).map { case (stageInfo, partSpecs) =>

@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.util.StringConcat
  * @param valueType
  *   The data type of map values.
  * @param valueContainsNull
- *   Indicates if map values have `null` values.
+ *   Indicates if map values can have `null` values.
  */
 @Stable
 case class MapType(keyType: DataType, valueType: DataType, valueContainsNull: Boolean)
@@ -88,6 +88,18 @@ case class MapType(keyType: DataType, valueType: DataType, valueContainsNull: Bo
 
   override private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = {
     f(this) || keyType.existsRecursively(f) || valueType.existsRecursively(f)
+  }
+
+  override private[spark] def transformRecursively(
+      f: PartialFunction[DataType, DataType]): DataType = {
+    if (f.isDefinedAt(this)) {
+      f(this)
+    } else {
+      MapType(
+        keyType.transformRecursively(f),
+        valueType.transformRecursively(f),
+        valueContainsNull)
+    }
   }
 }
 

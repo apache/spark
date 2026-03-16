@@ -19,7 +19,7 @@ package org.apache.spark.streaming.kafka010
 
 import org.apache.kafka.common.TopicPartition
 
-import org.apache.spark.SparkConf
+import org.apache.spark.ReadOnlySparkConf
 
 /**
  * Interface for user-supplied configurations that can't otherwise be set via Spark properties,
@@ -37,7 +37,7 @@ abstract class PerPartitionConfig extends Serializable {
 /**
  * Default per-partition configuration
  */
-private class DefaultPerPartitionConfig(conf: SparkConf)
+private class DefaultPerPartitionConfig(conf: ReadOnlySparkConf)
     extends PerPartitionConfig {
   val maxRate = conf.get(MAX_RATE_PER_PARTITION)
   val minRate = conf.get(MIN_RATE_PER_PARTITION)

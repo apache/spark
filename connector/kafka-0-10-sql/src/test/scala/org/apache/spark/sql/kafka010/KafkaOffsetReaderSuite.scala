@@ -22,13 +22,18 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.kafka.clients.CommonClientConfigs
+import org.apache.kafka.clients.admin.Admin
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.{IsolationLevel, TopicPartition}
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{mock, times, verify, when}
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.kafka010.KafkaOffsetRangeLimit.{EARLIEST, LATEST}
+import org.apache.spark.sql.kafka010.KafkaSourceProvider.StrategyOnNoMatchStartingOffset
 import org.apache.spark.sql.test.SharedSparkSession
 
 class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with KafkaTest {
@@ -203,6 +208,47 @@ class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with Kafk
       KafkaOffsetRange(tp2, 0, 3, None)).sortBy(_.topicPartition.toString))
   }
 
+  Seq(2, 4).foreach { numSpecifiedPartitions =>
+    testWithAllOffsetFetchingSQLConf(
+      s"KAFKA_TIMESTAMP_OFFSET_DOES_NOT_MATCH_ASSIGNED error class " +
+        s"- partitions assigned: 3, specified: $numSpecifiedPartitions"
+    ) {
+      val topic = newTopic()
+      testUtils.createTopic(topic, partitions = 3)
+      val reader = createKafkaReader(topic, minPartitions = Some(4))
+
+      // Specify partitions
+      val specifiedPartitions = (0 until numSpecifiedPartitions).map(new TopicPartition(topic, _))
+      val startingOffsets = SpecificTimestampRangeLimit(
+        specifiedPartitions.map(tp => tp -> EARLIEST).toMap,
+        StrategyOnNoMatchStartingOffset.ERROR
+      )
+      val endingOffsets = SpecificTimestampRangeLimit(
+        specifiedPartitions.map(tp => tp -> LATEST).toMap,
+        StrategyOnNoMatchStartingOffset.ERROR
+      )
+
+      val ex = if (reader.isInstanceOf[KafkaOffsetReaderConsumer]) {
+        intercept[SparkException] {
+          reader.getOffsetRangesFromUnresolvedOffsets(startingOffsets, endingOffsets)
+        }.getCause.asInstanceOf[KafkaIllegalStateException]
+      } else {
+        intercept[KafkaIllegalStateException] {
+          reader.getOffsetRangesFromUnresolvedOffsets(startingOffsets, endingOffsets)
+        }
+      }
+
+      checkError(
+        exception = ex,
+        condition = "KAFKA_TIMESTAMP_OFFSET_DOES_NOT_MATCH_ASSIGNED",
+        parameters = Map(
+          "position" -> "start",
+          "specifiedPartitions" -> "Set\\(.*,.*\\)",
+          "assignedPartitions" -> "Set\\(.*,.*,.*\\)"),
+        matchPVals = true)
+    }
+  }
+
   private def testWithAllOffsetFetchingSQLConf(name: String)(func: => Any): Unit = {
     Seq("true", "false").foreach { useDeprecatedOffsetFetching =>
       val testName = s"$name with useDeprecatedOffsetFetching $useDeprecatedOffsetFetching"
@@ -218,6 +264,64 @@ class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with Kafk
       withSQLConf(SQLConf.USE_DEPRECATED_KAFKA_OFFSET_FETCHING.key -> useDeprecatedOffsetFetching) {
         func
       }
+    }
+  }
+
+  private def createReaderWithMockedStrategy(
+      mockStrategy: ConsumerStrategy): KafkaOffsetReaderAdmin = {
+    new KafkaOffsetReaderAdmin(
+      mockStrategy,
+      KafkaSourceProvider.kafkaParamsForDriver(Map(
+        "bootstrap.servers" -> testUtils.brokerAddress
+      )),
+      CaseInsensitiveMap(Map(
+        KafkaSourceProvider.FETCH_OFFSET_NUM_RETRY -> "3",
+        KafkaSourceProvider.FETCH_OFFSET_RETRY_INTERVAL_MS -> "0"
+      )),
+      ""
+    )
+  }
+
+  test("SPARK-55561: fetchPartitionOffsets retries on transient failures") {
+    val tp0 = new TopicPartition("topic", 0)
+    val tp1 = new TopicPartition("topic", 1)
+    val expectedPartitions = Set(tp0, tp1)
+
+    val mockStrategy = mock(classOf[ConsumerStrategy])
+    val mockAdmin = mock(classOf[Admin])
+    when(mockStrategy.createAdmin(any())).thenReturn(mockAdmin)
+    when(mockStrategy.assignedTopicPartitions(any()))
+      .thenThrow(new RuntimeException("Transient error"))
+      .thenThrow(new RuntimeException("Transient error"))
+      .thenReturn(expectedPartitions)
+
+    val reader = createReaderWithMockedStrategy(mockStrategy)
+    try {
+      val result = reader.fetchPartitionOffsets(
+        EarliestOffsetRangeLimit, isStartingOffsets = true)
+      assert(result === expectedPartitions.map(tp => tp -> KafkaOffsetRangeLimit.EARLIEST).toMap)
+      verify(mockStrategy, times(3)).assignedTopicPartitions(any())
+    } finally {
+      reader.close()
+    }
+  }
+
+  test("SPARK-55561: fetchPartitionOffsets throws after all retries exhausted") {
+    val mockStrategy = mock(classOf[ConsumerStrategy])
+    val mockAdmin = mock(classOf[Admin])
+    when(mockStrategy.createAdmin(any())).thenReturn(mockAdmin)
+    when(mockStrategy.assignedTopicPartitions(any()))
+      .thenThrow(new RuntimeException("Persistent error"))
+
+    val reader = createReaderWithMockedStrategy(mockStrategy)
+    try {
+      val ex = intercept[RuntimeException] {
+        reader.fetchPartitionOffsets(EarliestOffsetRangeLimit, isStartingOffsets = true)
+      }
+      assert(ex.getMessage === "Persistent error")
+      verify(mockStrategy, times(3)).assignedTopicPartitions(any())
+    } finally {
+      reader.close()
     }
   }
 }

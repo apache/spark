@@ -33,6 +33,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+
 import builtins
 import collections.abc
 import google.protobuf.any_pb2
@@ -42,6 +43,8 @@ import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
 import pyspark.sql.connect.proto.common_pb2
 import pyspark.sql.connect.proto.expressions_pb2
+import pyspark.sql.connect.proto.ml_pb2
+import pyspark.sql.connect.proto.pipelines_pb2
 import pyspark.sql.connect.proto.relations_pb2
 import sys
 import typing
@@ -104,6 +107,9 @@ class Command(google.protobuf.message.Message):
     CHECKPOINT_COMMAND_FIELD_NUMBER: builtins.int
     REMOVE_CACHED_REMOTE_RELATION_COMMAND_FIELD_NUMBER: builtins.int
     MERGE_INTO_TABLE_COMMAND_FIELD_NUMBER: builtins.int
+    ML_COMMAND_FIELD_NUMBER: builtins.int
+    EXECUTE_EXTERNAL_COMMAND_FIELD_NUMBER: builtins.int
+    PIPELINE_COMMAND_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def register_function(
@@ -146,15 +152,23 @@ class Command(google.protobuf.message.Message):
     @property
     def merge_into_table_command(self) -> global___MergeIntoTableCommand: ...
     @property
+    def ml_command(self) -> pyspark.sql.connect.proto.ml_pb2.MlCommand: ...
+    @property
+    def execute_external_command(self) -> global___ExecuteExternalCommand: ...
+    @property
+    def pipeline_command(self) -> pyspark.sql.connect.proto.pipelines_pb2.PipelineCommand: ...
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         Commands they can add them here. During the planning the correct resolution is done.
         """
+
     def __init__(
         self,
         *,
-        register_function: pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction
-        | None = ...,
+        register_function: (
+            pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction | None
+        ) = ...,
         write_operation: global___WriteOperation | None = ...,
         create_dataframe_view: global___CreateDataFrameViewCommand | None = ...,
         write_operation_v2: global___WriteOperationV2 | None = ...,
@@ -163,17 +177,24 @@ class Command(google.protobuf.message.Message):
         streaming_query_command: global___StreamingQueryCommand | None = ...,
         get_resources_command: global___GetResourcesCommand | None = ...,
         streaming_query_manager_command: global___StreamingQueryManagerCommand | None = ...,
-        register_table_function: pyspark.sql.connect.proto.relations_pb2.CommonInlineUserDefinedTableFunction
-        | None = ...,
-        streaming_query_listener_bus_command: global___StreamingQueryListenerBusCommand
-        | None = ...,
-        register_data_source: pyspark.sql.connect.proto.relations_pb2.CommonInlineUserDefinedDataSource
-        | None = ...,
+        register_table_function: (
+            pyspark.sql.connect.proto.relations_pb2.CommonInlineUserDefinedTableFunction | None
+        ) = ...,
+        streaming_query_listener_bus_command: (
+            global___StreamingQueryListenerBusCommand | None
+        ) = ...,
+        register_data_source: (
+            pyspark.sql.connect.proto.relations_pb2.CommonInlineUserDefinedDataSource | None
+        ) = ...,
         create_resource_profile_command: global___CreateResourceProfileCommand | None = ...,
         checkpoint_command: global___CheckpointCommand | None = ...,
-        remove_cached_remote_relation_command: global___RemoveCachedRemoteRelationCommand
-        | None = ...,
+        remove_cached_remote_relation_command: (
+            global___RemoveCachedRemoteRelationCommand | None
+        ) = ...,
         merge_into_table_command: global___MergeIntoTableCommand | None = ...,
+        ml_command: pyspark.sql.connect.proto.ml_pb2.MlCommand | None = ...,
+        execute_external_command: global___ExecuteExternalCommand | None = ...,
+        pipeline_command: pyspark.sql.connect.proto.pipelines_pb2.PipelineCommand | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -187,12 +208,18 @@ class Command(google.protobuf.message.Message):
             b"create_dataframe_view",
             "create_resource_profile_command",
             b"create_resource_profile_command",
+            "execute_external_command",
+            b"execute_external_command",
             "extension",
             b"extension",
             "get_resources_command",
             b"get_resources_command",
             "merge_into_table_command",
             b"merge_into_table_command",
+            "ml_command",
+            b"ml_command",
+            "pipeline_command",
+            b"pipeline_command",
             "register_data_source",
             b"register_data_source",
             "register_function",
@@ -228,12 +255,18 @@ class Command(google.protobuf.message.Message):
             b"create_dataframe_view",
             "create_resource_profile_command",
             b"create_resource_profile_command",
+            "execute_external_command",
+            b"execute_external_command",
             "extension",
             b"extension",
             "get_resources_command",
             b"get_resources_command",
             "merge_into_table_command",
             b"merge_into_table_command",
+            "ml_command",
+            b"ml_command",
+            "pipeline_command",
+            b"pipeline_command",
             "register_data_source",
             b"register_data_source",
             "register_function",
@@ -278,6 +311,9 @@ class Command(google.protobuf.message.Message):
             "checkpoint_command",
             "remove_cached_remote_relation_command",
             "merge_into_table_command",
+            "ml_command",
+            "execute_external_command",
+            "pipeline_command",
             "extension",
         ]
         | None
@@ -353,6 +389,7 @@ class SqlCommand(google.protobuf.message.Message):
         builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
     ]:
         """(Optional) A map of parameter names to literal expressions."""
+
     @property
     def pos_args(
         self,
@@ -360,6 +397,7 @@ class SqlCommand(google.protobuf.message.Message):
         pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
     ]:
         """(Optional) A sequence of literal expressions for positional parameters in the SQL query text."""
+
     @property
     def named_arguments(
         self,
@@ -369,6 +407,7 @@ class SqlCommand(google.protobuf.message.Message):
         """(Optional) A map of parameter names to expressions.
         It cannot coexist with `pos_arguments`.
         """
+
     @property
     def pos_arguments(
         self,
@@ -378,29 +417,34 @@ class SqlCommand(google.protobuf.message.Message):
         """(Optional) A sequence of expressions for positional parameters in the SQL query text.
         It cannot coexist with `named_arguments`.
         """
+
     @property
     def input(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
         """(Optional) The relation that this SQL command will be built on."""
+
     def __init__(
         self,
         *,
         sql: builtins.str = ...,
-        args: collections.abc.Mapping[
-            builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
-        ]
-        | None = ...,
-        pos_args: collections.abc.Iterable[
-            pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
-        ]
-        | None = ...,
-        named_arguments: collections.abc.Mapping[
-            builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression
-        ]
-        | None = ...,
-        pos_arguments: collections.abc.Iterable[
-            pyspark.sql.connect.proto.expressions_pb2.Expression
-        ]
-        | None = ...,
+        args: (
+            collections.abc.Mapping[
+                builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
+            ]
+            | None
+        ) = ...,
+        pos_args: (
+            collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression.Literal]
+            | None
+        ) = ...,
+        named_arguments: (
+            collections.abc.Mapping[
+                builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression
+            ]
+            | None
+        ) = ...,
+        pos_arguments: (
+            collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression] | None
+        ) = ...,
         input: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
     ) -> None: ...
     def HasField(
@@ -529,7 +573,9 @@ class WriteOperation(google.protobuf.message.Message):
         ):  # noqa: F821
             DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
             TABLE_SAVE_METHOD_UNSPECIFIED: WriteOperation.SaveTable._TableSaveMethod.ValueType  # 0
-            TABLE_SAVE_METHOD_SAVE_AS_TABLE: WriteOperation.SaveTable._TableSaveMethod.ValueType  # 1
+            TABLE_SAVE_METHOD_SAVE_AS_TABLE: (
+                WriteOperation.SaveTable._TableSaveMethod.ValueType
+            )  # 1
             TABLE_SAVE_METHOD_INSERT_INTO: WriteOperation.SaveTable._TableSaveMethod.ValueType  # 2
 
         class TableSaveMethod(_TableSaveMethod, metaclass=_TableSaveMethodEnumTypeWrapper): ...
@@ -604,24 +650,29 @@ class WriteOperation(google.protobuf.message.Message):
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """(Optional) List of columns to sort the output by."""
+
     @property
     def partitioning_columns(
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """(Optional) List of columns for partitioning."""
+
     @property
     def bucket_by(self) -> global___WriteOperation.BucketBy:
         """(Optional) Bucketing specification. Bucketing must set the number of buckets and the columns
         to bucket by.
         """
+
     @property
     def options(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
         """(Optional) A list of configuration options."""
+
     @property
     def clustering_columns(
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """(Optional) Columns used for clustering the table."""
+
     def __init__(
         self,
         *,
@@ -789,9 +840,11 @@ class WriteOperationV2(google.protobuf.message.Message):
         """(Optional) List of columns for partitioning for output table created by `create`,
         `createOrReplace`, or `replace`
         """
+
     @property
     def options(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
         """(Optional) A list of configuration options."""
+
     @property
     def table_properties(
         self,
@@ -802,21 +855,22 @@ class WriteOperationV2(google.protobuf.message.Message):
     @property
     def overwrite_condition(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
         """(Optional) A condition for overwrite saving mode"""
+
     @property
     def clustering_columns(
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """(Optional) Columns used for clustering the table."""
+
     def __init__(
         self,
         *,
         input: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
         table_name: builtins.str = ...,
         provider: builtins.str | None = ...,
-        partitioning_columns: collections.abc.Iterable[
-            pyspark.sql.connect.proto.expressions_pb2.Expression
-        ]
-        | None = ...,
+        partitioning_columns: (
+            collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression] | None
+        ) = ...,
         options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
         table_properties: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
         mode: global___WriteOperationV2.Mode.ValueType = ...,
@@ -899,6 +953,7 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     AVAILABLE_NOW_FIELD_NUMBER: builtins.int
     ONCE_FIELD_NUMBER: builtins.int
     CONTINUOUS_CHECKPOINT_INTERVAL_FIELD_NUMBER: builtins.int
+    REAL_TIME_BATCH_DURATION_FIELD_NUMBER: builtins.int
     OUTPUT_MODE_FIELD_NUMBER: builtins.int
     QUERY_NAME_FIELD_NUMBER: builtins.int
     PATH_FIELD_NUMBER: builtins.int
@@ -925,6 +980,7 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     available_now: builtins.bool
     once: builtins.bool
     continuous_checkpoint_interval: builtins.str
+    real_time_batch_duration: builtins.str
     output_mode: builtins.str
     query_name: builtins.str
     path: builtins.str
@@ -938,6 +994,7 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """(Optional) Columns used for clustering the table."""
+
     def __init__(
         self,
         *,
@@ -949,6 +1006,7 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
         available_now: builtins.bool = ...,
         once: builtins.bool = ...,
         continuous_checkpoint_interval: builtins.str = ...,
+        real_time_batch_duration: builtins.str = ...,
         output_mode: builtins.str = ...,
         query_name: builtins.str = ...,
         path: builtins.str = ...,
@@ -976,6 +1034,8 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
             b"path",
             "processing_time_interval",
             b"processing_time_interval",
+            "real_time_batch_duration",
+            b"real_time_batch_duration",
             "sink_destination",
             b"sink_destination",
             "table_name",
@@ -1015,6 +1075,8 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
             b"processing_time_interval",
             "query_name",
             b"query_name",
+            "real_time_batch_duration",
+            b"real_time_batch_duration",
             "sink_destination",
             b"sink_destination",
             "table_name",
@@ -1028,11 +1090,13 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
         self, oneof_group: typing_extensions.Literal["sink_destination", b"sink_destination"]
     ) -> typing_extensions.Literal["path", "table_name"] | None: ...
     @typing.overload
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["trigger", b"trigger"]
-    ) -> (
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["trigger", b"trigger"]) -> (
         typing_extensions.Literal[
-            "processing_time_interval", "available_now", "once", "continuous_checkpoint_interval"
+            "processing_time_interval",
+            "available_now",
+            "once",
+            "continuous_checkpoint_interval",
+            "real_time_batch_duration",
         ]
         | None
     ): ...
@@ -1245,6 +1309,7 @@ class StreamingQueryCommand(google.protobuf.message.Message):
     @property
     def await_termination(self) -> global___StreamingQueryCommand.AwaitTerminationCommand:
         """awaitTermination() API. Waits for the termination of the query."""
+
     def __init__(
         self,
         *,
@@ -1308,9 +1373,7 @@ class StreamingQueryCommand(google.protobuf.message.Message):
             b"stop",
         ],
     ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["command", b"command"]
-    ) -> (
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["command", b"command"]) -> (
         typing_extensions.Literal[
             "status",
             "last_progress",
@@ -1374,6 +1437,7 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
             """Progress reports as an array of json strings."""
+
         def __init__(
             self,
             *,
@@ -1491,6 +1555,7 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
     @property
     def query_id(self) -> global___StreamingQueryInstanceId:
         """(Required) Query instance id. See `StreamingQueryInstanceId`."""
+
     @property
     def status(self) -> global___StreamingQueryCommandResult.StatusResult: ...
     @property
@@ -1608,8 +1673,9 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
             self,
             *,
             listener_payload: builtins.bytes = ...,
-            python_listener_payload: pyspark.sql.connect.proto.expressions_pb2.PythonUDF
-            | None = ...,
+            python_listener_payload: (
+                pyspark.sql.connect.proto.expressions_pb2.PythonUDF | None
+            ) = ...,
             id: builtins.str = ...,
         ) -> None: ...
         def HasField(
@@ -1662,6 +1728,7 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
     @property
     def add_listener(self) -> global___StreamingQueryManagerCommand.StreamingQueryListenerCommand:
         """addListener API."""
+
     @property
     def remove_listener(
         self,
@@ -1674,13 +1741,16 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
         *,
         active: builtins.bool = ...,
         get_query: builtins.str = ...,
-        await_any_termination: global___StreamingQueryManagerCommand.AwaitAnyTerminationCommand
-        | None = ...,
+        await_any_termination: (
+            global___StreamingQueryManagerCommand.AwaitAnyTerminationCommand | None
+        ) = ...,
         reset_terminated: builtins.bool = ...,
-        add_listener: global___StreamingQueryManagerCommand.StreamingQueryListenerCommand
-        | None = ...,
-        remove_listener: global___StreamingQueryManagerCommand.StreamingQueryListenerCommand
-        | None = ...,
+        add_listener: (
+            global___StreamingQueryManagerCommand.StreamingQueryListenerCommand | None
+        ) = ...,
+        remove_listener: (
+            global___StreamingQueryManagerCommand.StreamingQueryListenerCommand | None
+        ) = ...,
         list_listeners: builtins.bool = ...,
     ) -> None: ...
     def HasField(
@@ -1725,9 +1795,7 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
             b"reset_terminated",
         ],
     ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["command", b"command"]
-    ) -> (
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["command", b"command"]) -> (
         typing_extensions.Literal[
             "active",
             "get_query",
@@ -1760,10 +1828,12 @@ class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
         def __init__(
             self,
             *,
-            active_queries: collections.abc.Iterable[
-                global___StreamingQueryManagerCommandResult.StreamingQueryInstance
-            ]
-            | None = ...,
+            active_queries: (
+                collections.abc.Iterable[
+                    global___StreamingQueryManagerCommandResult.StreamingQueryInstance
+                ]
+                | None
+            ) = ...,
         ) -> None: ...
         def ClearField(
             self, field_name: typing_extensions.Literal["active_queries", b"active_queries"]
@@ -1834,6 +1904,7 @@ class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
             """(Required) Reference IDs of listener instances."""
+
         def __init__(
             self,
             *,
@@ -1870,13 +1941,15 @@ class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
         *,
         active: global___StreamingQueryManagerCommandResult.ActiveResult | None = ...,
         query: global___StreamingQueryManagerCommandResult.StreamingQueryInstance | None = ...,
-        await_any_termination: global___StreamingQueryManagerCommandResult.AwaitAnyTerminationResult
-        | None = ...,
+        await_any_termination: (
+            global___StreamingQueryManagerCommandResult.AwaitAnyTerminationResult | None
+        ) = ...,
         reset_terminated: builtins.bool = ...,
         add_listener: builtins.bool = ...,
         remove_listener: builtins.bool = ...,
-        list_listeners: global___StreamingQueryManagerCommandResult.ListStreamingQueryListenerResult
-        | None = ...,
+        list_listeners: (
+            global___StreamingQueryManagerCommandResult.ListStreamingQueryListenerResult | None
+        ) = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -1920,9 +1993,7 @@ class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
             b"result_type",
         ],
     ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["result_type", b"result_type"]
-    ) -> (
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["result_type", b"result_type"]) -> (
         typing_extensions.Literal[
             "active",
             "query",
@@ -2108,10 +2179,12 @@ class GetResourcesCommandResult(google.protobuf.message.Message):
     def __init__(
         self,
         *,
-        resources: collections.abc.Mapping[
-            builtins.str, pyspark.sql.connect.proto.common_pb2.ResourceInformation
-        ]
-        | None = ...,
+        resources: (
+            collections.abc.Mapping[
+                builtins.str, pyspark.sql.connect.proto.common_pb2.ResourceInformation
+            ]
+            | None
+        ) = ...,
     ) -> None: ...
     def ClearField(
         self, field_name: typing_extensions.Literal["resources", b"resources"]
@@ -2128,6 +2201,7 @@ class CreateResourceProfileCommand(google.protobuf.message.Message):
     @property
     def profile(self) -> pyspark.sql.connect.proto.common_pb2.ResourceProfile:
         """(Required) The ResourceProfile to be built on the server-side."""
+
     def __init__(
         self,
         *,
@@ -2168,6 +2242,7 @@ class RemoveCachedRemoteRelationCommand(google.protobuf.message.Message):
     @property
     def relation(self) -> pyspark.sql.connect.proto.relations_pb2.CachedRemoteRelation:
         """(Required) The remote to be related"""
+
     def __init__(
         self,
         *,
@@ -2201,6 +2276,7 @@ class CheckpointCommand(google.protobuf.message.Message):
     @property
     def storage_level(self) -> pyspark.sql.connect.proto.common_pb2.StorageLevel:
         """(Optional) For local checkpoint, the storage level to use."""
+
     def __init__(
         self,
         *,
@@ -2256,9 +2332,11 @@ class MergeIntoTableCommand(google.protobuf.message.Message):
     @property
     def source_table_plan(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
         """(Required) The relation of the source table."""
+
     @property
     def merge_condition(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
         """(Required) The condition to match the source and target."""
+
     @property
     def match_actions(
         self,
@@ -2266,6 +2344,7 @@ class MergeIntoTableCommand(google.protobuf.message.Message):
         pyspark.sql.connect.proto.expressions_pb2.Expression
     ]:
         """(Optional) The actions to be taken when the condition is matched."""
+
     @property
     def not_matched_actions(
         self,
@@ -2273,6 +2352,7 @@ class MergeIntoTableCommand(google.protobuf.message.Message):
         pyspark.sql.connect.proto.expressions_pb2.Expression
     ]:
         """(Optional) The actions to be taken when the condition is not matched."""
+
     @property
     def not_matched_by_source_actions(
         self,
@@ -2288,18 +2368,15 @@ class MergeIntoTableCommand(google.protobuf.message.Message):
         target_table_name: builtins.str = ...,
         source_table_plan: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
         merge_condition: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
-        match_actions: collections.abc.Iterable[
-            pyspark.sql.connect.proto.expressions_pb2.Expression
-        ]
-        | None = ...,
-        not_matched_actions: collections.abc.Iterable[
-            pyspark.sql.connect.proto.expressions_pb2.Expression
-        ]
-        | None = ...,
-        not_matched_by_source_actions: collections.abc.Iterable[
-            pyspark.sql.connect.proto.expressions_pb2.Expression
-        ]
-        | None = ...,
+        match_actions: (
+            collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression] | None
+        ) = ...,
+        not_matched_actions: (
+            collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression] | None
+        ) = ...,
+        not_matched_by_source_actions: (
+            collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression] | None
+        ) = ...,
         with_schema_evolution: builtins.bool = ...,
     ) -> None: ...
     def HasField(
@@ -2329,3 +2406,52 @@ class MergeIntoTableCommand(google.protobuf.message.Message):
     ) -> None: ...
 
 global___MergeIntoTableCommand = MergeIntoTableCommand
+
+class ExecuteExternalCommand(google.protobuf.message.Message):
+    """Execute an arbitrary string command inside an external execution engine"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class OptionsEntry(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
+        key: builtins.str
+        value: builtins.str
+        def __init__(
+            self,
+            *,
+            key: builtins.str = ...,
+            value: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
+
+    RUNNER_FIELD_NUMBER: builtins.int
+    COMMAND_FIELD_NUMBER: builtins.int
+    OPTIONS_FIELD_NUMBER: builtins.int
+    runner: builtins.str
+    """(Required) The class name of the runner that implements `ExternalCommandRunner`"""
+    command: builtins.str
+    """(Required) The target command to be executed."""
+    @property
+    def options(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
+        """(Optional) The options for the runner."""
+
+    def __init__(
+        self,
+        *,
+        runner: builtins.str = ...,
+        command: builtins.str = ...,
+        options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "command", b"command", "options", b"options", "runner", b"runner"
+        ],
+    ) -> None: ...
+
+global___ExecuteExternalCommand = ExecuteExternalCommand

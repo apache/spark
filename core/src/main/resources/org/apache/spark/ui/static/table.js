@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* global $, d3, collapseTable */
+/* global $ */
 /* eslint-disable no-unused-vars */
 /* Adds background colors to stripe table rows in the summary table (on the stage page). This is
  * necessary (instead of using css or the table striping provided by bootstrap) because the summary
@@ -26,9 +26,9 @@
 function stripeSummaryTable() {
   $("#task-summary-table").find("tr:not(:hidden)").each(function (index) {
     if (index % 2 == 1) {
-      $(this).css("background-color", "#f9f9f9");
+      $(this).css("background-color", "var(--bs-tertiary-bg)");
     } else {
-      $(this).css("background-color", "#ffffff");
+      $(this).css("background-color", "var(--bs-body-bg)");
     }
   });
 }
@@ -82,43 +82,51 @@ function onMouseOverAndOut(threadId) {
 }
 
 function onSearchStringChange() {
-  var searchString = $('#search').val().toLowerCase();
+  const searchString = $('#search').val().toLowerCase();
   //remove the stacktrace
   collapseAllThreadStackTrace(false);
-  if (searchString.length == 0) {
-    $('tr').each(function() {
+  $('tr[id^="thread_"]').each(function() {
+    if (searchString.length === 0) {
       $(this).removeClass('d-none')
-    })
-  } else {
-    $('tr').each(function(){
-      if($(this).attr('id') && $(this).attr('id').match(/thread_[0-9]+_tr/) ) {
-        var children = $(this).children();
-        var found = false;
-        for (var i = 0; i < children.length; i++) {
-          if (children.eq(i).text().toLowerCase().indexOf(searchString) >= 0) {
-            found = true;
-          }
-        }
-        if (found) {
-          $(this).removeClass('d-none')
+    } else {
+      let found = false;
+      const children = $(this).children();
+      let i = 0;
+      while(!found && i < children.length) {
+        if (children.eq(i).text().toLowerCase().indexOf(searchString) >= 0) {
+          found = true;
         } else {
-          $(this).addClass('d-none')
+          i++;
         }
       }
-    });
-  }
+      $(this).toggleClass('d-none', !found);
+    }
+  });
 }
 /* eslint-enable no-unused-vars */
 
-/* eslint-disable no-unused-vars */
-function collapseTableAndButton(thisName, table) {
-  collapseTable(thisName, table);
+// Event delegation for thread dump page (CSP-compliant)
+$(function() {
+  // toggleThreadStackTrace on row click
+  $(document).on("click", "tr.accordion-heading[data-thread-id]", function() {
+    toggleThreadStackTrace($(this).data("thread-id"), false);
+  });
 
-  const t = d3.select("." + table);
-  if (t.classed("collapsed")) {
-    d3.select("." + table + "-button").style("display", "none");
-  } else {
-    d3.select("." + table + "-button").style("display", "flex");
-  }
-}
-/* eslint-enable no-unused-vars */
+  // expandAll / collapseAll
+  $(document).on("click", "[data-action=expandAllThreadStackTrace]", function() {
+    expandAllThreadStackTrace(true);
+  });
+  $(document).on("click", "[data-action=collapseAllThreadStackTrace]", function() {
+    collapseAllThreadStackTrace($(this).data("toggle-button") !== false);
+  });
+
+  // onMouseOverAndOut
+  $(document).on("mouseenter mouseleave", "tr.accordion-heading[data-thread-id]", function() {
+    onMouseOverAndOut($(this).data("thread-id"));
+  });
+
+  // onSearchStringChange
+  $(document).on("input", "[data-search-input]", function() {
+    onSearchStringChange();
+  });
+});

@@ -16,14 +16,13 @@
 #
 import inspect
 import os
-import unittest
 
 from pyspark.sql.tests.test_udf_profiler import (
     UDFProfiler2TestsMixin,
     _do_computation,
-    has_flameprof,
 )
 from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.testing.utils import have_flameprof
 
 
 class UDFProfilerParityTests(UDFProfiler2TestsMixin, ReusedConnectTestCase):
@@ -65,17 +64,11 @@ class UDFProfilerWithoutPlanCacheParityTests(UDFProfilerParityTests):
                 io.getvalue(), f"10.*{os.path.basename(inspect.getfile(_do_computation))}"
             )
 
-            if has_flameprof:
+            if have_flameprof:
                 self.assertIn("svg", self.spark.profile.render(id))
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.connect.test_parity_udf_profiler import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

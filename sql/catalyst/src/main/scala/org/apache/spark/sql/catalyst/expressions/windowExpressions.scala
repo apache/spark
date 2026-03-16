@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.Locale
 
 import org.apache.spark.SparkException
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -28,6 +29,7 @@ import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TernaryLike, U
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_WINDOW_EXPRESSION, WINDOW_EXPRESSION}
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DayTimeIntervalType.DAY
 
 /**
  * The trait of the Window Specification (specified in the OVER clause or WINDOW clause) for
@@ -108,6 +110,7 @@ case class WindowSpecDefinition(
   private def isValidFrameType(ft: DataType): Boolean = (orderSpec.head.dataType, ft) match {
     case (DateType, IntegerType) => true
     case (DateType, _: YearMonthIntervalType) => true
+    case (DateType, DayTimeIntervalType(DAY, DAY)) => true
     case (TimestampType | TimestampNTZType, CalendarIntervalType) => true
     case (TimestampType | TimestampNTZType, _: YearMonthIntervalType) => true
     case (TimestampType | TimestampNTZType, _: DayTimeIntervalType) => true
@@ -398,6 +401,16 @@ object WindowFunctionType {
     // To handle this case, if a window expression doesn't have a regular window function, we
     // consider its type to be SQL as literal(0) is also a SQL expression.
     t.getOrElse(SQL)
+  }
+
+  def pythonEvalType(windowExpression: NamedExpression): Option[Int] = {
+    windowExpression.collectFirst {
+      case udf: PythonUDAF => udf.evalType match {
+        // Infer the eval type of window operation, from the input aggregation type
+        case PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF => PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF
+        case PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF => PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF
+      }
+    }
   }
 }
 

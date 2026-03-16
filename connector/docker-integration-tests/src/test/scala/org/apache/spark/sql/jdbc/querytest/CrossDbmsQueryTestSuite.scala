@@ -14,9 +14,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.jdbc
+package org.apache.spark.sql.jdbc.querytest
 
 import java.io.File
+import java.nio.file.Files
 import java.sql.ResultSet
 
 import scala.collection.mutable.ArrayBuffer
@@ -24,7 +25,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.SQLQueryTestHelper
-import org.apache.spark.sql.catalyst.util.fileToString
+import org.apache.spark.sql.jdbc.DockerJDBCIntegrationSuite
 
 /**
  * This suite builds off of that to allow us to run other DBMS against the SQL test golden files (on
@@ -76,7 +77,7 @@ trait CrossDbmsQueryTestSuite extends DockerJDBCIntegrationSuite with SQLQueryTe
   }
 
   protected def runSqlTestCase(testCase: TestCase, listTestCases: Seq[TestCase]): Unit = {
-    val input = fileToString(new File(testCase.inputFile))
+    val input = Files.readString(new File(testCase.inputFile).toPath)
     val (comments, code) = splitCommentsAndCodes(input)
     val queries = getQueries(code, comments, listTestCases)
 
@@ -143,7 +144,7 @@ trait CrossDbmsQueryTestSuite extends DockerJDBCIntegrationSuite with SQLQueryTe
     // Read back the golden files.
     var curSegment = 0
     val expectedOutputs: Seq[QueryTestOutput] = {
-      val goldenOutput = fileToString(new File(testCase.resultFile))
+      val goldenOutput = Files.readString(new File(testCase.resultFile).toPath)
       val segments = goldenOutput.split("-- !query.*\n")
       outputs.map { output =>
         val result =

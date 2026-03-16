@@ -24,7 +24,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.Failure
 
 import org.apache.spark.ExecutorAllocationClient
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.io.SparkHadoopWriterUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming._

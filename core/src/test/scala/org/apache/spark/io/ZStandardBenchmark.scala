@@ -21,7 +21,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectOutputStream}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
-import org.apache.spark.internal.config.{IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED, IO_COMPRESSION_ZSTD_BUFFERSIZE, IO_COMPRESSION_ZSTD_LEVEL, IO_COMPRESSION_ZSTD_WORKERS}
+import org.apache.spark.internal.config._
 
 
 /**
@@ -50,6 +50,7 @@ object ZStandardBenchmark extends BenchmarkBase {
       decompressionBenchmark(benchmark2, N)
       benchmark2.run()
       parallelCompressionBenchmark()
+      strategyCompressionBenchmark()
     }
   }
 
@@ -115,6 +116,32 @@ object ZStandardBenchmark extends BenchmarkBase {
           .set(IO_COMPRESSION_ZSTD_LEVEL, level)
           .set(IO_COMPRESSION_ZSTD_WORKERS, workers)
         benchmark.addCase(s"Parallel Compression with $workers workers") { _ =>
+          val baos = new ByteArrayOutputStream()
+          val zcos = new ZStdCompressionCodec(conf).compressedOutputStream(baos)
+          val oos = new ObjectOutputStream(zcos)
+          1 to numberOfLargeObjectToWrite foreach { _ =>
+            oos.writeObject(data)
+          }
+          oos.close()
+        }
+      }
+      benchmark.run()
+    }
+  }
+
+  private def strategyCompressionBenchmark(): Unit = {
+    val numberOfLargeObjectToWrite = 128
+    val data: Array[Byte] = (1 until 256 * 1024 * 1024).map(_.toByte).toArray
+
+    Seq(1, 3, 9).foreach { level =>
+      val benchmark = new Benchmark(
+        s"Compression at level $level", numberOfLargeObjectToWrite, output = output)
+      Seq(-1, 1, 3, 5, 7, 9).foreach { strategy =>
+        val conf = new SparkConf(false).set(IO_COMPRESSION_ZSTD_LEVEL, level)
+        if (strategy >= 0) {
+          conf.set(IO_COMPRESSION_ZSTD_STRATEGY, strategy)
+        }
+        benchmark.addCase(s"Compression by strategy $strategy") { _ =>
           val baos = new ByteArrayOutputStream()
           val zcos = new ZStdCompressionCodec(conf).compressedOutputStream(baos)
           val oos = new ObjectOutputStream(zcos)

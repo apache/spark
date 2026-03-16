@@ -24,7 +24,8 @@ import unittest
 from collections import namedtuple
 
 from pyspark import SparkConf, SparkFiles, SparkContext
-from pyspark.testing.utils import ReusedPySparkTestCase, PySparkTestCase, QuietTest, SPARK_HOME
+from pyspark.testing.sqlutils import SPARK_HOME
+from pyspark.testing.utils import ReusedPySparkTestCase, PySparkTestCase, QuietTest
 
 
 class CheckpointTests(ReusedPySparkTestCase):
@@ -335,12 +336,6 @@ class ContextTestsWithResources(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.tests.test_context import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

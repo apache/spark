@@ -70,16 +70,18 @@ class TableOptionsConstantFoldingSuite extends QueryTest with SharedSparkSession
     checkError(
       exception = intercept[AnalysisException](
         sql(s"$prefix ('k' = 1 + 2 + unresolvedAttribute)")),
-      condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map(
-        "objectName" -> "`unresolvedAttribute`"),
+        "objectName" -> "`unresolvedAttribute`",
+        "proposal" -> "`col`"),
       queryContext = Array(ExpectedContext("", "", 60, 78, "unresolvedAttribute")))
     checkError(
       exception = intercept[AnalysisException](
         sql(s"$prefix ('k' = true or false or unresolvedAttribute)")),
-      condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map(
-        "objectName" -> "`unresolvedAttribute`"),
+        "objectName" -> "`unresolvedAttribute`",
+        "proposal" -> "`col`"),
       queryContext = Array(ExpectedContext("", "", 69, 87, "unresolvedAttribute")))
     checkError(
       exception = intercept[AnalysisException](

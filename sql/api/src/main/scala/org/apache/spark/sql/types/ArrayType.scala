@@ -110,4 +110,13 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
   override private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = {
     f(this) || elementType.existsRecursively(f)
   }
+
+  override private[spark] def transformRecursively(
+      f: PartialFunction[DataType, DataType]): DataType = {
+    if (f.isDefinedAt(this)) {
+      f(this)
+    } else {
+      ArrayType(elementType.transformRecursively(f), containsNull)
+    }
+  }
 }

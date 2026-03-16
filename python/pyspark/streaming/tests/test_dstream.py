@@ -403,7 +403,7 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
         self.fail("a failed func should throw an error")
 
-    def test_failed_func_with_reseting_failure(self):
+    def test_failed_func_with_resetting_failure(self):
         input = [self.sc.parallelize([d], 1) for d in range(4)]
         input_stream = self.ssc.queueStream(input)
 
@@ -693,12 +693,6 @@ class CheckpointTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.streaming.tests.test_dstream import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

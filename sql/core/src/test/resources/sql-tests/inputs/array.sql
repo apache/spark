@@ -129,6 +129,14 @@ select get(array(1, 2, 3), 0);
 select get(array(1, 2, 3), 3);
 select get(array(1, 2, 3), null);
 select get(array(1, 2, 3), -1);
+select get(1, 0);
+select get(1, -1);
+select get('1', 0);
+select get('1', -1);
+select get(null, 0);
+select get(null, -1);
+select get(null, null);
+select get(CAST (null AS string), 0);
 
 -- function array_insert()
 select array_insert(array(1, 2, 3), 3, 4);

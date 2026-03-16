@@ -25,7 +25,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.ml.feature._
 import org.apache.spark.ml.stat.Summarizer
 import org.apache.spark.ml.util.TempDirectory
-import org.apache.spark.sql.{SparkSession, SQLImplicits}
+import org.apache.spark.sql.classic.{SparkSession, SQLImplicits}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 

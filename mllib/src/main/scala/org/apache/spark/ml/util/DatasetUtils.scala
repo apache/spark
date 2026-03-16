@@ -18,7 +18,7 @@
 package org.apache.spark.ml.util
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, LABEL_COLUMN, NUM_CLASSES}
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.classification.ClassifierParams

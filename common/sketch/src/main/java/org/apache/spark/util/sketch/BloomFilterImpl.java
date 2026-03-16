@@ -19,71 +19,17 @@ package org.apache.spark.util.sketch;
 
 import java.io.*;
 
-class BloomFilterImpl extends BloomFilter implements Serializable {
-
-  private int numHashFunctions;
-
-  private BitArray bits;
+class BloomFilterImpl extends BloomFilterBase implements Serializable {
 
   BloomFilterImpl(int numHashFunctions, long numBits) {
-    this(new BitArray(numBits), numHashFunctions);
-  }
-
-  private BloomFilterImpl(BitArray bits, int numHashFunctions) {
-    this.bits = bits;
-    this.numHashFunctions = numHashFunctions;
+    super(numHashFunctions, numBits);
   }
 
   private BloomFilterImpl() {}
 
-  @Override
-  public boolean equals(Object other) {
-    if (other == this) {
-      return true;
-    }
-
-    if (!(other instanceof BloomFilterImpl that)) {
-      return false;
-    }
-
-    return this.numHashFunctions == that.numHashFunctions && this.bits.equals(that.bits);
-  }
-
-  @Override
-  public int hashCode() {
-    return bits.hashCode() * 31 + numHashFunctions;
-  }
-
-  @Override
-  public double expectedFpp() {
-    return Math.pow((double) bits.cardinality() / bits.bitSize(), numHashFunctions);
-  }
-
-  @Override
-  public long bitSize() {
-    return bits.bitSize();
-  }
-
-  @Override
-  public boolean put(Object item) {
-    if (item instanceof String str) {
-      return putString(str);
-    } else if (item instanceof byte[] bytes) {
-      return putBinary(bytes);
-    } else {
-      return putLong(Utils.integralToLong(item));
-    }
-  }
-
-  @Override
-  public boolean putString(String item) {
-    return putBinary(Utils.getBytesFromUTF8String(item));
-  }
-
-  @Override
-  public boolean putBinary(byte[] item) {
-    int h1 = Murmur3_x86_32.hashUnsafeBytes(item, Platform.BYTE_ARRAY_OFFSET, item.length, 0);
-    int h2 = Murmur3_x86_32.hashUnsafeBytes(item, Platform.BYTE_ARRAY_OFFSET, item.length, h1);
+  protected boolean scatterHashAndSetAllBits(HiLoHash inputHash) {
+    int h1 = inputHash.hi();
+    int h2 = inputHash.lo();
 
     long bitSize = bits.bitSize();
     boolean bitsChanged = false;
@@ -98,15 +44,9 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
     return bitsChanged;
   }
 
-  @Override
-  public boolean mightContainString(String item) {
-    return mightContainBinary(Utils.getBytesFromUTF8String(item));
-  }
-
-  @Override
-  public boolean mightContainBinary(byte[] item) {
-    int h1 = Murmur3_x86_32.hashUnsafeBytes(item, Platform.BYTE_ARRAY_OFFSET, item.length, 0);
-    int h2 = Murmur3_x86_32.hashUnsafeBytes(item, Platform.BYTE_ARRAY_OFFSET, item.length, h1);
+  protected boolean scatterHashAndGetAllBits(HiLoHash inputHash) {
+    int h1 = inputHash.hi();
+    int h2 = inputHash.lo();
 
     long bitSize = bits.bitSize();
     for (int i = 1; i <= numHashFunctions; i++) {
@@ -122,94 +62,7 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
     return true;
   }
 
-  @Override
-  public boolean putLong(long item) {
-    // Here we first hash the input long element into 2 int hash values, h1 and h2, then produce n
-    // hash values by `h1 + i * h2` with 1 <= i <= numHashFunctions.
-    // Note that `CountMinSketch` use a different strategy, it hash the input long element with
-    // every i to produce n hash values.
-    // TODO: the strategy of `CountMinSketch` looks more advanced, should we follow it here?
-    int h1 = Murmur3_x86_32.hashLong(item, 0);
-    int h2 = Murmur3_x86_32.hashLong(item, h1);
-
-    long bitSize = bits.bitSize();
-    boolean bitsChanged = false;
-    for (int i = 1; i <= numHashFunctions; i++) {
-      int combinedHash = h1 + (i * h2);
-      // Flip all the bits if it's negative (guaranteed positive number)
-      if (combinedHash < 0) {
-        combinedHash = ~combinedHash;
-      }
-      bitsChanged |= bits.set(combinedHash % bitSize);
-    }
-    return bitsChanged;
-  }
-
-  @Override
-  public boolean mightContainLong(long item) {
-    int h1 = Murmur3_x86_32.hashLong(item, 0);
-    int h2 = Murmur3_x86_32.hashLong(item, h1);
-
-    long bitSize = bits.bitSize();
-    for (int i = 1; i <= numHashFunctions; i++) {
-      int combinedHash = h1 + (i * h2);
-      // Flip all the bits if it's negative (guaranteed positive number)
-      if (combinedHash < 0) {
-        combinedHash = ~combinedHash;
-      }
-      if (!bits.get(combinedHash % bitSize)) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  @Override
-  public boolean mightContain(Object item) {
-    if (item instanceof String str) {
-      return mightContainString(str);
-    } else if (item instanceof byte[] bytes) {
-      return mightContainBinary(bytes);
-    } else {
-      return mightContainLong(Utils.integralToLong(item));
-    }
-  }
-
-  @Override
-  public boolean isCompatible(BloomFilter other) {
-    if (other == null) {
-      return false;
-    }
-
-    if (!(other instanceof BloomFilterImpl that)) {
-      return false;
-    }
-
-    return this.bitSize() == that.bitSize() && this.numHashFunctions == that.numHashFunctions;
-  }
-
-  @Override
-  public BloomFilter mergeInPlace(BloomFilter other) throws IncompatibleMergeException {
-    BloomFilterImpl otherImplInstance = checkCompatibilityForMerge(other);
-
-    this.bits.putAll(otherImplInstance.bits);
-    return this;
-  }
-
-  @Override
-  public BloomFilter intersectInPlace(BloomFilter other) throws IncompatibleMergeException {
-    BloomFilterImpl otherImplInstance = checkCompatibilityForMerge(other);
-
-    this.bits.and(otherImplInstance.bits);
-    return this;
-  }
-
-  @Override
-  public long cardinality() {
-    return this.bits.cardinality();
-  }
-
-  private BloomFilterImpl checkCompatibilityForMerge(BloomFilter other)
+  protected BloomFilterImpl checkCompatibilityForMerge(BloomFilter other)
           throws IncompatibleMergeException {
     // Duplicates the logic of `isCompatible` here to provide better error message.
     if (other == null) {
@@ -240,6 +93,7 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
 
     dos.writeInt(Version.V1.getVersionNumber());
     dos.writeInt(numHashFunctions);
+    // ignore seed
     bits.writeTo(dos);
   }
 
@@ -252,6 +106,7 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
     }
 
     this.numHashFunctions = dis.readInt();
+    this.seed = DEFAULT_SEED;
     this.bits = BitArray.readFrom(dis);
   }
 
@@ -261,16 +116,18 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
     return filter;
   }
 
-  public static BloomFilterImpl readFrom(byte[] bytes) throws IOException {
-    try (ByteArrayInputStream bis = new ByteArrayInputStream(bytes)) {
-      return readFrom(bis);
-    }
+  // no longer necessary, but can't remove without triggering MIMA violations
+  @Deprecated
+  public static BloomFilter readFrom(byte[] bytes) throws IOException {
+    return BloomFilter.readFrom(bytes);
   }
 
+  @Serial
   private void writeObject(ObjectOutputStream out) throws IOException {
     writeTo(out);
   }
 
+  @Serial
   private void readObject(ObjectInputStream in) throws IOException {
     readFrom0(in);
   }

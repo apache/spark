@@ -17,7 +17,6 @@
 
 package org.apache.spark.examples.mllib;
 
-import com.google.common.collect.ImmutableMap;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
 
@@ -48,7 +47,7 @@ public class JavaStratifiedSamplingExample {
     JavaPairRDD<Integer, Character> data = jsc.parallelizePairs(list);
 
     // specify the exact fraction desired from each key Map<K, Double>
-    ImmutableMap<Integer, Double> fractions = ImmutableMap.of(1, 0.1, 2, 0.6, 3, 0.3);
+    Map<Integer, Double> fractions = Map.of(1, 0.1, 2, 0.6, 3, 0.3);
 
     // Get an approximate sample from each stratum
     JavaPairRDD<Integer, Character> approxSample = data.sampleByKey(false, fractions);

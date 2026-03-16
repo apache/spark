@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.{JobExecutionStatus, SparkConf}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.CLASS_NAME
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.scheduler._
@@ -35,7 +35,7 @@ import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.metric._
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.status.{ElementTrackingStore, KVUtils, LiveEntity}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{MetricUtils, Utils}
 import org.apache.spark.util.collection.OpenHashMap
 
 class SQLAppStatusListener(
@@ -92,6 +92,7 @@ class SQLAppStatusListener(
           val sqlStoreData = kvstore.read(classOf[SQLExecutionUIData], executionId)
           val executionData = new LiveExecutionData(executionId)
           executionData.rootExecutionId = sqlStoreData.rootExecutionId
+          executionData.queryId = sqlStoreData.queryId
           executionData.description = sqlStoreData.description
           executionData.details = sqlStoreData.details
           executionData.physicalPlanDescription = sqlStoreData.physicalPlanDescription
@@ -235,7 +236,7 @@ class SQLAppStatusListener(
         }
       }.getOrElse(
         // Built-in SQLMetric
-        SQLMetrics.stringValue(m.metricType, _, _)
+        MetricUtils.stringValue(m.metricType, _, _)
       )
       (m.accumulatorId, metricAggMethod)
     }.toMap
@@ -343,7 +344,7 @@ class SQLAppStatusListener(
 
   private def onExecutionStart(event: SparkListenerSQLExecutionStart): Unit = {
     val SparkListenerSQLExecutionStart(executionId, rootExecutionId, description, details,
-      physicalPlanDescription, sparkPlanInfo, time, modifiedConfigs, _, _) = event
+      physicalPlanDescription, sparkPlanInfo, time, modifiedConfigs, _, _, queryId) = event
 
     val planGraph = SparkPlanGraph(sparkPlanInfo)
     val sqlPlanMetrics = planGraph.allNodes.flatMap { node =>
@@ -358,6 +359,7 @@ class SQLAppStatusListener(
 
     val exec = getOrCreateExecution(executionId)
     exec.rootExecutionId = rootExecutionId.getOrElse(executionId)
+    exec.queryId = queryId.orNull
     exec.description = description
     exec.details = details
     exec.physicalPlanDescription = physicalPlanDescription
@@ -397,7 +399,7 @@ class SQLAppStatusListener(
   }
 
   private def onExecutionEnd(event: SparkListenerSQLExecutionEnd): Unit = {
-    val SparkListenerSQLExecutionEnd(executionId, time, errorMessage) = event
+    val SparkListenerSQLExecutionEnd(executionId, time, errorMessage, _) = event
     Option(liveExecutions.get(executionId)).foreach { exec =>
       exec.completionTime = Some(new Date(time))
       exec.errorMessage = errorMessage
@@ -487,6 +489,7 @@ class SQLAppStatusListener(
 private class LiveExecutionData(val executionId: Long) extends LiveEntity {
 
   var rootExecutionId: Long = _
+  var queryId: java.util.UUID = null
   var description: String = null
   var details: String = null
   var physicalPlanDescription: String = null
@@ -525,7 +528,8 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
       errorMessage,
       jobs,
       stages,
-      metricsValues)
+      metricsValues,
+      queryId)
   }
 
   def addMetrics(newMetrics: collection.Seq[SQLPlanMetric]): Unit = {
@@ -554,7 +558,7 @@ private class LiveStageMetrics(
   /**
    * Task metrics values for the stage. Maps the metric ID to the metric values for each
    * index. For each metric ID, there will be the same number of values as the number
-   * of indices. This relies on `SQLMetrics.stringValue` treating 0 as a neutral value,
+   * of indices. This relies on `MetricUtils.stringValue` treating 0 as a neutral value,
    * independent of the actual metric type.
    */
   private val taskMetrics = new ConcurrentHashMap[Long, Array[Long]]()
@@ -601,7 +605,7 @@ private class LiveStageMetrics(
         val metricValues = taskMetrics.computeIfAbsent(acc.id, _ => new Array(numTasks))
         metricValues(taskIdx) = value
 
-        if (SQLMetrics.metricNeedsMax(accumIdsToMetricType(acc.id))) {
+        if (MetricUtils.metricNeedsMax(accumIdsToMetricType(acc.id))) {
           val maxMetricsTaskId = metricsIdToMaxTaskValue.computeIfAbsent(acc.id, _ => Array(value,
             taskId))
 

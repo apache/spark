@@ -14,10 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
-
 import datetime
 import decimal
 import warnings
@@ -25,8 +21,10 @@ import warnings
 from typing import (
     TYPE_CHECKING,
     Any,
+    Callable,
     Union,
     Optional,
+    Tuple,
 )
 
 from pyspark.sql.column import Column as ParentColumn
@@ -34,7 +32,6 @@ from pyspark.errors import (
     PySparkTypeError,
     PySparkAttributeError,
     PySparkValueError,
-    PySparkNotImplementedError,
 )
 from pyspark.sql.types import DataType
 from pyspark.sql.utils import enum_to_value
@@ -47,13 +44,13 @@ from pyspark.sql.connect.expressions import (
     LiteralExpression,
     CaseWhen,
     SortOrder,
+    SubqueryExpression,
     CastExpression,
     WindowExpression,
     WithField,
     DropField,
 )
 from pyspark.errors.utils import with_origin_to_class
-
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
@@ -83,10 +80,11 @@ def _bin_op(
             float,
             int,
             str,
-            datetime.datetime,
             datetime.date,
-            decimal.Decimal,
+            datetime.time,
+            datetime.datetime,
             datetime.timedelta,
+            decimal.Decimal,
         ),
     ):
         other_expr = LiteralExpression._from_value(other)
@@ -109,13 +107,11 @@ def _to_expr(v: Any) -> Expression:
 
 @with_origin_to_class(["to_plan"])
 class Column(ParentColumn):
-    def __new__(
-        cls,
-        expr: "Expression",
-    ) -> "Column":
-        self = object.__new__(cls)
-        self.__init__(expr)  # type: ignore[misc]
-        return self
+    def __new__(cls, *args: Any, **kwargs: Any) -> "Column":
+        return object.__new__(cls)
+
+    def __getnewargs__(self) -> Tuple[Any, ...]:
+        return (self._expr,)
 
     def __init__(self, expr: "Expression") -> None:
         if not isinstance(expr, Expression):
@@ -385,7 +381,17 @@ class Column(ParentColumn):
     def __eq__(self, other: Any) -> ParentColumn:  # type: ignore[override]
         other = enum_to_value(other)
         if other is None or isinstance(
-            other, (bool, float, int, str, datetime.datetime, datetime.date, decimal.Decimal)
+            other,
+            (
+                bool,
+                float,
+                int,
+                str,
+                datetime.date,
+                datetime.time,
+                datetime.datetime,
+                decimal.Decimal,
+            ),
         ):
             other_expr = LiteralExpression._from_value(other)
         else:
@@ -459,14 +465,25 @@ class Column(ParentColumn):
 
         return Column(WindowExpression(windowFunction=self._expr, windowSpec=window))
 
+    def transform(self, f: Callable[[ParentColumn], ParentColumn]) -> ParentColumn:
+        return f(self)
+
     def outer(self) -> ParentColumn:
-        # TODO(SPARK-50134): Implement this method
-        raise PySparkNotImplementedError(
-            errorClass="NOT_IMPLEMENTED",
-            messageParameters={"feature": "outer()"},
-        )
+        return Column(self._expr)
 
     def isin(self, *cols: Any) -> ParentColumn:
+        from pyspark.sql.connect.dataframe import DataFrame
+
+        if len(cols) == 1 and isinstance(cols[0], DataFrame):
+            if isinstance(self._expr, UnresolvedFunction) and self._expr._name == "struct":
+                values = self._expr.children
+            else:
+                values = [self._expr]
+
+            return Column(
+                SubqueryExpression(cols[0]._plan, subquery_type="in", in_subquery_values=values)
+            )
+
         if len(cols) == 1 and isinstance(cols[0], (list, set)):
             _cols = list(cols[0])
         else:
@@ -594,7 +611,7 @@ def _test() -> None:
         .getOrCreate()
     )
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.column,
         globs=globs,
         optionflags=doctest.ELLIPSIS

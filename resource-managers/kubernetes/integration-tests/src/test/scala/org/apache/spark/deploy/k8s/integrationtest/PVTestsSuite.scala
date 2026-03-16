@@ -23,14 +23,20 @@ import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.time.{Milliseconds, Span}
 
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite._
+import org.apache.spark.deploy.k8s.integrationtest.TestConstants._
+import org.apache.spark.deploy.k8s.integrationtest.backend.docker.{DockerForDesktopBackend, RancherDesktopBackend}
 import org.apache.spark.deploy.k8s.integrationtest.backend.minikube.MinikubeTestBackend
 
 private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
   import PVTestsSuite._
 
   private def setupLocalStorage(): Unit = {
-    val storageClassName = if (testBackend == MinikubeTestBackend) "standard" else "hostpath"
-    val hostname = if (testBackend == MinikubeTestBackend) "minikube" else "docker-desktop"
+    val (storageClassName, hostname) = testBackend match {
+      case MinikubeTestBackend => ("standard", BACKEND_MINIKUBE)
+      case DockerForDesktopBackend => ("hostpath", BACKEND_DOCKER_DESKTOP)
+      case RancherDesktopBackend => ("local-path", "lima-rancher-desktop")
+      case _ => ("hostpath", BACKEND_DOCKER_DESKTOP)
+    }
     val pvBuilder = new PersistentVolumeBuilder()
       .withKind("PersistentVolume")
       .withApiVersion("v1")
@@ -71,13 +77,15 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
     kubernetesTestComponents
       .kubernetesClient
       .persistentVolumes()
-      .create(pvBuilder.build())
+      .resource(pvBuilder.build())
+      .create()
 
     kubernetesTestComponents
       .kubernetesClient
       .persistentVolumeClaims()
       .inNamespace(kubernetesTestComponents.namespace)
-      .create(pvcBuilder.build())
+      .resource(pvcBuilder.build())
+      .create()
   }
 
   private def deleteLocalStorage(): Unit = {
@@ -136,7 +144,8 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
     }
   }
 
-  ignore("PVs with local hostpath and storageClass on statefulsets", k8sTestTag, pvTestTag) {
+  ignore("PVs with local hostpath and storageClass on statefulsets", k8sTestTag, pvTestTag,
+      commandTestTag) {
     assume(this.getClass.getSimpleName == "KubernetesSuite")
     sparkAppConf
       .set(s"spark.kubernetes.driver.volumes.persistentVolumeClaim.data.mount.path",
@@ -171,7 +180,7 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
     }
   }
 
-  test("PVs with local storage", k8sTestTag, pvTestTag) {
+  test("PVs with local storage", k8sTestTag, pvTestTag, commandTestTag) {
     assume(this.getClass.getSimpleName == "KubernetesSuite")
     sparkAppConf
       .set(s"spark.kubernetes.driver.volumes.persistentVolumeClaim.data.mount.path",

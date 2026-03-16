@@ -479,7 +479,6 @@ class Catalog:
         """
         if dbName is None:
             dbName = self.currentDatabase()
-        iter = self._jcatalog.listFunctions(dbName).toLocalIterator()
         if pattern is None:
             iter = self._jcatalog.listFunctions(dbName).toLocalIterator()
         else:
@@ -1020,6 +1019,10 @@ class Catalog:
             .. versionchanged:: 3.5.0
                 Allow to specify storage level.
 
+        Notes
+        -----
+        Cached data is shared across all Spark sessions on the cluster.
+
         Examples
         --------
         >>> _ = spark.sql("DROP TABLE IF EXISTS tbl1")
@@ -1062,6 +1065,11 @@ class Catalog:
             .. versionchanged:: 3.4.0
                 Allow ``tableName`` to be qualified with catalog name.
 
+        Notes
+        -----
+        Cached data is shared across all Spark sessions on the cluster, so uncaching it
+        affects all sessions.
+
         Examples
         --------
         >>> _ = spark.sql("DROP TABLE IF EXISTS tbl1")
@@ -1091,6 +1099,11 @@ class Catalog:
         """Removes all cached tables from the in-memory cache.
 
         .. versionadded:: 2.0.0
+
+        Notes
+        -----
+        Cached data is shared across all Spark sessions on the cluster, so clearing
+        the cache affects all sessions.
 
         Examples
         --------
@@ -1252,7 +1265,7 @@ def _test() -> None:
     globs["spark"] = (
         SparkSession.builder.master("local[4]").appName("sql.catalog tests").getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.catalog,
         globs=globs,
         optionflags=doctest.ELLIPSIS

@@ -9,28 +9,28 @@ Project [2016-12-31 00:12:00 AS TIMESTAMP_NTZ '2016-12-31 00:12:00'#x, 2016-12-3
 -- !query
 select to_timestamp_ntz(null), to_timestamp_ntz('2016-12-31 00:12:00'), to_timestamp_ntz('2016-12-31', 'yyyy-MM-dd')
 -- !query analysis
-Project [to_timestamp_ntz(cast(null as string), None, TimestampNTZType, Some(America/Los_Angeles), false) AS to_timestamp_ntz(NULL)#x, to_timestamp_ntz(2016-12-31 00:12:00, None, TimestampNTZType, Some(America/Los_Angeles), false) AS to_timestamp_ntz(2016-12-31 00:12:00)#x, to_timestamp_ntz(2016-12-31, Some(yyyy-MM-dd), TimestampNTZType, Some(America/Los_Angeles), false) AS to_timestamp_ntz(2016-12-31, yyyy-MM-dd)#x]
+Project [to_timestamp_ntz(cast(null as string), None, TimestampNTZType, Some(America/Los_Angeles), true) AS to_timestamp_ntz(NULL)#x, to_timestamp_ntz(2016-12-31 00:12:00, None, TimestampNTZType, Some(America/Los_Angeles), true) AS to_timestamp_ntz(2016-12-31 00:12:00)#x, to_timestamp_ntz(2016-12-31, Some(yyyy-MM-dd), TimestampNTZType, Some(America/Los_Angeles), true) AS to_timestamp_ntz(2016-12-31, yyyy-MM-dd)#x]
 +- OneRowRelation
 
 
 -- !query
 select to_timestamp_ntz(to_date(null)), to_timestamp_ntz(to_date('2016-12-31'))
 -- !query analysis
-Project [to_timestamp_ntz(to_date(cast(null as string), None, Some(America/Los_Angeles), false), None, TimestampNTZType, Some(America/Los_Angeles), false) AS to_timestamp_ntz(to_date(NULL))#x, to_timestamp_ntz(to_date(2016-12-31, None, Some(America/Los_Angeles), false), None, TimestampNTZType, Some(America/Los_Angeles), false) AS to_timestamp_ntz(to_date(2016-12-31))#x]
+Project [to_timestamp_ntz(to_date(cast(null as string), None, Some(America/Los_Angeles), true), None, TimestampNTZType, Some(America/Los_Angeles), true) AS to_timestamp_ntz(to_date(NULL))#x, to_timestamp_ntz(to_date(2016-12-31, None, Some(America/Los_Angeles), true), None, TimestampNTZType, Some(America/Los_Angeles), true) AS to_timestamp_ntz(to_date(2016-12-31))#x]
 +- OneRowRelation
 
 
 -- !query
 select to_timestamp_ntz(to_timestamp_ltz(null)), to_timestamp_ntz(to_timestamp_ltz('2016-12-31 00:12:00'))
 -- !query analysis
-Project [to_timestamp_ntz(to_timestamp_ltz(cast(null as string), None, TimestampType, Some(America/Los_Angeles), false), None, TimestampNTZType, Some(America/Los_Angeles), false) AS to_timestamp_ntz(to_timestamp_ltz(NULL))#x, to_timestamp_ntz(to_timestamp_ltz(2016-12-31 00:12:00, None, TimestampType, Some(America/Los_Angeles), false), None, TimestampNTZType, Some(America/Los_Angeles), false) AS to_timestamp_ntz(to_timestamp_ltz(2016-12-31 00:12:00))#x]
+Project [to_timestamp_ntz(to_timestamp_ltz(cast(null as string), None, TimestampType, Some(America/Los_Angeles), true), None, TimestampNTZType, Some(America/Los_Angeles), true) AS to_timestamp_ntz(to_timestamp_ltz(NULL))#x, to_timestamp_ntz(to_timestamp_ltz(2016-12-31 00:12:00, None, TimestampType, Some(America/Los_Angeles), true), None, TimestampNTZType, Some(America/Los_Angeles), true) AS to_timestamp_ntz(to_timestamp_ltz(2016-12-31 00:12:00))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT make_timestamp_ntz(2021, 07, 11, 6, 30, 45.678)
 -- !query analysis
-Project [make_timestamp_ntz(2021, 7, 11, 6, 30, cast(45.678 as decimal(16,6)), None, Some(America/Los_Angeles), false, TimestampNTZType) AS make_timestamp_ntz(2021, 7, 11, 6, 30, 45.678)#x]
+Project [make_timestamp_ntz(2021, 7, 11, 6, 30, cast(45.678 as decimal(16,6)), None, Some(America/Los_Angeles), true, TimestampNTZType) AS make_timestamp_ntz(2021, 7, 11, 6, 30, 45.678)#x]
 +- OneRowRelation
 
 
@@ -44,7 +44,7 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "actualNum" : "7",
     "docroot" : "https://spark.apache.org/docs/latest",
-    "expectedNum" : "6",
+    "expectedNum" : "[2, 6]",
     "functionName" : "`make_timestamp_ntz`"
   },
   "queryContext" : [ {
@@ -60,8 +60,142 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT make_timestamp_ntz(2021, 07, 11, 6, 30, 60.007)
 -- !query analysis
-Project [make_timestamp_ntz(2021, 7, 11, 6, 30, cast(60.007 as decimal(16,6)), None, Some(America/Los_Angeles), false, TimestampNTZType) AS make_timestamp_ntz(2021, 7, 11, 6, 30, 60.007)#x]
+Project [make_timestamp_ntz(2021, 7, 11, 6, 30, cast(60.007 as decimal(16,6)), None, Some(America/Los_Angeles), true, TimestampNTZType) AS make_timestamp_ntz(2021, 7, 11, 6, 30, 60.007)#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT make_timestamp_ntz(make_date(2021, 07, 11), make_time(6, 30, 45.678))
+-- !query analysis
+Project [make_timestamp_ntz(make_date(2021, 7, 11, true), make_time(6, 30, cast(45.678 as decimal(16,6)))) AS make_timestamp_ntz(make_date(2021, 7, 11), make_time(6, 30, 45.678))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT make_timestamp_ntz(NULL, TIME'00:00:00')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT make_timestamp_ntz(DATE'1970-01-01', NULL)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT make_timestamp_ntz(timestamp_ntz'2018-11-17 13:33:33', TIME'0:0:0')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_NTZ '2018-11-17 13:33:33'\"",
+    "inputType" : "\"TIMESTAMP_NTZ\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"DATE\"",
+    "sqlExpr" : "\"make_timestamp_ntz(TIMESTAMP_NTZ '2018-11-17 13:33:33', TIME '00:00:00')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 74,
+    "fragment" : "make_timestamp_ntz(timestamp_ntz'2018-11-17 13:33:33', TIME'0:0:0')"
+  } ]
+}
+
+
+-- !query
+SELECT make_timestamp_ntz(DATE'2025-06-20', '0:0:0')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"0:0:0\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"TIME\"",
+    "sqlExpr" : "\"make_timestamp_ntz(DATE '2025-06-20', 0:0:0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 52,
+    "fragment" : "make_timestamp_ntz(DATE'2025-06-20', '0:0:0')"
+  } ]
+}
+
+
+-- !query
+SELECT try_make_timestamp_ntz(make_date(2025, 6, 27), make_time(16, 08, 45.123456))
+-- !query analysis
+Project [try_make_timestamp_ntz(make_timestamp_ntz(make_date(2025, 6, 27, true), make_time(16, 8, cast(45.123456 as decimal(16,6))))) AS try_make_timestamp_ntz(make_timestamp_ntz(make_date(2025, 6, 27), make_time(16, 8, 45.123456)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_make_timestamp_ntz(NULL, TIME'23:59:59.00001')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT try_make_timestamp_ntz(DATE'0001-01-01', NULL)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT try_make_timestamp_ntz('2018-11-17 13:33:33', TIME'0:0:0')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"2018-11-17 13:33:33\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"DATE\"",
+    "sqlExpr" : "\"make_timestamp_ntz(2018-11-17 13:33:33, TIME '00:00:00')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 65,
+    "fragment" : "try_make_timestamp_ntz('2018-11-17 13:33:33', TIME'0:0:0')"
+  } ]
+}
+
+
+-- !query
+SELECT try_make_timestamp_ntz(DATE'2025-06-20', 10D)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"10.0\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"TIME\"",
+    "sqlExpr" : "\"make_timestamp_ntz(DATE '2025-06-20', 10.0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 52,
+    "fragment" : "try_make_timestamp_ntz(DATE'2025-06-20', 10D)"
+  } ]
+}
 
 
 -- !query
@@ -137,3 +271,39 @@ select timestamp_ntz'2022-01-01 00:00:00' > timestamp_ltz'2022-01-01 00:00:00'
 select timestamp_ntz'2022-01-01 00:00:00' < timestamp_ltz'2022-01-01 00:00:00'
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+CREATE TABLE a (a timestamp_ntz, b int) using parquet PARTITIONED BY(a)
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`a`, false
+
+
+-- !query
+INSERT INTO a PARTITION(a=timestamp_ntz'2018-11-17 13:33:33') VALUES (1)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/a, [a=2018-11-17 13:33:33], false, [a#x], Parquet, [path=file:[not included in comparison]/{warehouse_dir}/a], Append, `spark_catalog`.`default`.`a`, org.apache.spark.sql.execution.datasources.CatalogFileIndex(file:[not included in comparison]/{warehouse_dir}/a), [b, a]
++- Project [b#x, cast(2018-11-17 13:33:33 as timestamp_ntz) AS a#x]
+   +- Project [col1#x AS b#x]
+      +- LocalRelation [col1#x]
+
+
+-- !query
+DESC FORMATTED a
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`a`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+SELECT * FROM a
+-- !query analysis
+Project [b#x, a#x]
++- SubqueryAlias spark_catalog.default.a
+   +- Relation spark_catalog.default.a[b#x,a#x] parquet
+
+
+-- !query
+DROP TABLE a
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.a

@@ -38,7 +38,6 @@ case class OffHeapValue(override val estimatedSize: Long) extends KnownSizeEstim
 class MemoryStoreSuite
   extends SparkFunSuite
   with PrivateMethodTester
-  with BeforeAndAfterEach
   with ResetSystemProperties {
 
   val conf: SparkConf = new SparkConf(false)
@@ -58,7 +57,7 @@ class MemoryStoreSuite
   def rdd(rddId: Int, splitId: Int): RDDBlockId = RDDBlockId(rddId, splitId)
 
   // Save modified system properties so that we can restore them after tests.
-  val originalArch = System.getProperty("os.arch")
+  val originalArch = Utils.osArch
   val originalCompressedOops = System.getProperty(TEST_USE_COMPRESSED_OOPS_KEY)
 
   def reinitializeSizeEstimator(arch: String, useCompressedOops: String): Unit = {

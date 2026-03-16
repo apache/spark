@@ -19,7 +19,7 @@
 Read data file users.parquet in local Spark distro:
 
 $ cd $SPARK_HOME
-$ export AVRO_PARQUET_JARS=/path/to/parquet-avro-1.5.0.jar
+$ export AVRO_PARQUET_JARS=/path/to/parquet-avro-1.15.2.jar
 $ ./bin/spark-submit --driver-class-path /path/to/example/jar \\
         --jars $AVRO_PARQUET_JARS \\
         ./examples/src/main/python/parquet_inputformat.py \\

@@ -22,7 +22,7 @@ import java.util.concurrent.{ArrayBlockingQueue, TimeUnit}
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.StreamingConf.BLOCK_INTERVAL
@@ -142,7 +142,7 @@ private[streaming] class BlockGenerator(
         state = StoppedAddingData
       } else {
         logWarning(log"Cannot stop BlockGenerator as its not in the Active state " +
-          log"[state = ${MDC(STATUS, state)}]")
+          log"[state = ${MDC(BLOCK_GENERATOR_STATUS, state)}]")
         return
       }
     }

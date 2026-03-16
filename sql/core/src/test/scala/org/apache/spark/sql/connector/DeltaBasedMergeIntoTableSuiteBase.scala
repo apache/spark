@@ -23,6 +23,8 @@ abstract class DeltaBasedMergeIntoTableSuiteBase extends MergeIntoTableSuiteBase
 
   import testImplicits._
 
+  override protected def deltaMerge = true
+
   test("merge into schema pruning with WHEN MATCHED clause (update)") {
     withTempView("source") {
       createAndInitTable("pk INT NOT NULL, salary INT, country STRING, dep STRING",
@@ -210,6 +212,25 @@ abstract class DeltaBasedMergeIntoTableSuiteBase extends MergeIntoTableSuiteBase
         Seq(
           Row(2, 200, "india", "finance"), // update
           Row(3, 300, "china", "software"))) // insert
+    }
+  }
+
+  test("SPARK-51513: Fix RewriteMergeIntoTable rule produces unresolved plan") {
+    val sourceTableName: String = "cat.ns1.test_source"
+    withTable(sourceTableName) {
+      createTable("pk INT NOT NULL, salary INT, dep STRING")
+      sql(s"CREATE TABLE $sourceTableName (PK INT NOT NULL, SALARY INT, DEP VARCHAR(10))")
+      sql(s"INSERT INTO $sourceTableName values " +
+        s"(1, 100, 'hr1'), (2, 200, 'hr2'), (3, 300, 'hr3')")
+      sql(s"""MERGE INTO $tableNameAsString t
+             |USING $sourceTableName s
+             |ON t.pk = s.pk
+             |WHEN NOT MATCHED AND s.pk >= 2 THEN
+             | INSERT *
+             |""".stripMargin)
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(Row(2, 200, "hr2"), Row(3, 300, "hr3")))
     }
   }
 }

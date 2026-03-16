@@ -18,8 +18,9 @@
 package org.apache.spark.network.server;
 
 import java.nio.ByteBuffer;
+import java.util.Objects;
 
-import com.google.common.base.Preconditions;
+import org.apache.spark.network.util.JavaUtils;
 
 /**
  * A special RuntimeException thrown when shuffle service experiences a non-fatal failure
@@ -101,14 +102,12 @@ public class BlockPushNonFatalFailure extends RuntimeException {
 
   public ByteBuffer getResponse() {
     // Ensure we do not invoke this method if response is not set
-    Preconditions.checkNotNull(response);
-    return response;
+    return Objects.requireNonNull(response);
   }
 
   public ReturnCode getReturnCode() {
     // Ensure we do not invoke this method if returnCode is not set
-    Preconditions.checkNotNull(returnCode);
-    return returnCode;
+    return Objects.requireNonNull(returnCode);
   }
 
   public enum ReturnCode {
@@ -171,7 +170,7 @@ public class BlockPushNonFatalFailure extends RuntimeException {
   }
 
   public static String getErrorMsg(String blockId, ReturnCode errorCode) {
-    Preconditions.checkArgument(errorCode != ReturnCode.SUCCESS);
+    JavaUtils.checkArgument(errorCode != ReturnCode.SUCCESS, "errorCode should not be SUCCESS.");
     return "Block " + blockId + errorCode.errorMsgSuffix;
   }
 }

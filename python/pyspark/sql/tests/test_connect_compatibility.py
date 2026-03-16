@@ -64,12 +64,16 @@ if should_test_connect:
 class ConnectCompatibilityTestsMixin:
     def get_public_methods(self, cls):
         """Get public methods of a class."""
-        return {
-            name: method
-            for name, method in inspect.getmembers(cls)
-            if (inspect.isfunction(method) or isinstance(method, functools._lru_cache_wrapper))
-            and not name.startswith("_")
-        }
+        methods = {}
+        for name, method in inspect.getmembers(cls):
+            if (
+                inspect.isfunction(method) or isinstance(method, functools._lru_cache_wrapper)
+            ) and not name.startswith("_"):
+                if getattr(method, "_remote_only", False):
+                    methods[name] = None
+                else:
+                    methods[name] = method
+        return methods
 
     def get_public_properties(self, cls):
         """Get public properties of a class."""
@@ -88,11 +92,15 @@ class ConnectCompatibilityTestsMixin:
         common_methods = set(classic_methods.keys()) & set(connect_methods.keys())
 
         for method in common_methods:
+            # Skip non-callable, Spark Connect-specific methods
+            if classic_methods[method] is None or connect_methods[method] is None:
+                continue
+
             classic_signature = inspect.signature(classic_methods[method])
             connect_signature = inspect.signature(connect_methods[method])
 
             # Cannot support RDD arguments from Spark Connect
-            has_rdd_arguments = ("createDataFrame", "xml", "json")
+            has_rdd_arguments = ("createDataFrame", "xml", "json", "toJSON")
             if method not in has_rdd_arguments:
                 self.assertEqual(
                     classic_signature,
@@ -145,7 +153,11 @@ class ConnectCompatibilityTestsMixin:
         connect_methods = self.get_public_methods(connect_cls)
 
         # Identify missing methods
-        classic_only_methods = set(classic_methods.keys()) - set(connect_methods.keys())
+        classic_only_methods = {
+            name
+            for name, method in classic_methods.items()
+            if name not in connect_methods or method is None
+        }
         connect_only_methods = set(connect_methods.keys()) - set(classic_methods.keys())
 
         # Compare the actual missing methods with the expected ones
@@ -249,8 +261,14 @@ class ConnectCompatibilityTestsMixin:
         """Test SparkSession compatibility between classic and connect."""
         expected_missing_connect_properties = {"sparkContext"}
         expected_missing_classic_properties = {"is_stopped", "session_id"}
-        expected_missing_connect_methods = {"newSession"}
-        expected_missing_classic_methods = set()
+        expected_missing_connect_methods = {
+            "clearProgressHandlers",
+            "copyFromLocalToFs",
+            "newSession",
+            "registerProgressHandler",
+            "removeProgressHandler",
+        }
+        expected_missing_classic_methods = {"cloneSession"}
         self.check_compatibility(
             ClassicSparkSession,
             ConnectSparkSession,
@@ -362,7 +380,7 @@ class ConnectCompatibilityTestsMixin:
         expected_missing_connect_properties = set()
         expected_missing_classic_properties = set()
         expected_missing_connect_methods = set()
-        expected_missing_classic_methods = {"check_dependencies"}
+        expected_missing_classic_methods = set()
         self.check_compatibility(
             ClassicFunctions,
             ConnectFunctions,
@@ -377,7 +395,7 @@ class ConnectCompatibilityTestsMixin:
         """Test Grouping compatibility between classic and connect."""
         expected_missing_connect_properties = set()
         expected_missing_classic_properties = set()
-        expected_missing_connect_methods = {"transformWithStateInPandas"}
+        expected_missing_connect_methods = set()
         expected_missing_classic_methods = set()
         self.check_compatibility(
             ClassicGroupedData,
@@ -400,7 +418,7 @@ class ConnectCompatibilityTestsMixin:
             "cast",
             "get_active_spark_context",
         }
-        expected_missing_classic_methods = {"lit", "check_dependencies"}
+        expected_missing_classic_methods = {"lit"}
         self.check_compatibility(
             ClassicAvro,
             ConnectAvro,
@@ -438,7 +456,7 @@ class ConnectCompatibilityTestsMixin:
             "try_remote_protobuf_functions",
             "get_active_spark_context",
         }
-        expected_missing_classic_methods = {"lit", "check_dependencies"}
+        expected_missing_classic_methods = {"lit"}
         self.check_compatibility(
             ClassicProtobuf,
             ConnectProtobuf,
@@ -504,12 +522,6 @@ class ConnectCompatibilityTests(ConnectCompatibilityTestsMixin, ReusedSQLTestCas
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_connect_compatibility import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

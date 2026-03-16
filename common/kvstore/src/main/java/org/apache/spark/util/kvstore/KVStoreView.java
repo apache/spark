@@ -17,9 +17,10 @@
 
 package org.apache.spark.util.kvstore;
 
-import com.google.common.base.Preconditions;
+import java.util.Objects;
 
 import org.apache.spark.annotation.Private;
+import org.apache.spark.network.util.JavaUtils;
 
 /**
  * A configurable view that allows iterating over values in a {@link KVStore}.
@@ -58,7 +59,7 @@ public abstract class KVStoreView<T> implements Iterable<T> {
    * Iterates according to the given index.
    */
   public KVStoreView<T> index(String name) {
-    this.index = Preconditions.checkNotNull(name);
+    this.index = Objects.requireNonNull(name);
     return this;
   }
 
@@ -96,7 +97,7 @@ public abstract class KVStoreView<T> implements Iterable<T> {
    * Stops iteration after a number of elements has been retrieved.
    */
   public KVStoreView<T> max(long max) {
-    Preconditions.checkArgument(max > 0L, "max must be positive.");
+    JavaUtils.checkArgument(max > 0L, "max must be positive.");
     this.max = max;
     return this;
   }

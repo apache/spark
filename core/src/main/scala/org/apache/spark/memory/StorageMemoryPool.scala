@@ -20,7 +20,7 @@ package org.apache.spark.memory
 import javax.annotation.concurrent.GuardedBy
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.storage.BlockId
 import org.apache.spark.storage.memory.MemoryStore
@@ -36,11 +36,6 @@ private[memory] class StorageMemoryPool(
     lock: Object,
     memoryMode: MemoryMode
   ) extends MemoryPool(lock) with Logging {
-
-  private[this] val poolName: String = memoryMode match {
-    case MemoryMode.ON_HEAP => "on-heap storage"
-    case MemoryMode.OFF_HEAP => "off-heap storage"
-  }
 
   @GuardedBy("lock")
   private[this] var _memoryUsed: Long = 0L

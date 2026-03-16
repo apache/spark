@@ -397,6 +397,32 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+select schema_of_xml(42)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"42\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"STRING\"",
+    "sqlExpr" : "\"schema_of_xml(42)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "schema_of_xml(42)"
+  } ]
+}
+
+
+-- !query
 CREATE TEMPORARY VIEW xmlTable(xmlField, a) AS SELECT * FROM VALUES ('<p><a>1</a><b>"2"</b></p>', 'a')
 -- !query schema
 struct<>
@@ -435,3 +461,195 @@ DROP VIEW IF EXISTS xmlTable
 struct<>
 -- !query output
 
+
+
+-- !query
+select from_xml('<record><time>14:30:45</time></record>', 'time TIME(0)', map('rowTag', 'record'))
+-- !query schema
+struct<from_xml(<record><time>14:30:45</time></record>):struct<time:time(0)>>
+-- !query output
+{"time":14:30:45}
+
+
+-- !query
+select from_xml('<record><time>14:30:45.123</time></record>', 'time TIME(3)', map('rowTag', 'record'))
+-- !query schema
+struct<from_xml(<record><time>14:30:45.123</time></record>):struct<time:time(3)>>
+-- !query output
+{"time":14:30:45.123}
+
+
+-- !query
+select from_xml('<record><time>14:30:45.123456</time></record>', 'time TIME(6)', map('rowTag', 'record'))
+-- !query schema
+struct<from_xml(<record><time>14:30:45.123456</time></record>):struct<time:time(6)>>
+-- !query output
+{"time":14:30:45.123456}
+
+
+-- !query
+select from_xml('<record><time>14-30-45.123456</time></record>', 'time TIME(6)', map('rowTag', 'record', 'timeFormat', 'HH-mm-ss.SSSSSS'))
+-- !query schema
+struct<from_xml(<record><time>14-30-45.123456</time></record>):struct<time:time(6)>>
+-- !query output
+{"time":14:30:45.123456}
+
+
+-- !query
+select from_xml('<record><t1>09:00:00</t1><t2>17:30:00</t2></record>', 't1 TIME, t2 TIME', map('rowTag', 'record'))
+-- !query schema
+struct<from_xml(<record><t1>09:00:00</t1><t2>17:30:00</t2></record>):struct<t1:time(6),t2:time(6)>>
+-- !query output
+{"t1":09:00:00,"t2":17:30:00}
+
+
+-- !query
+select from_xml('<record><time>25:00:00</time></record>', 'time TIME', map('rowTag', 'record'))
+-- !query schema
+struct<from_xml(<record><time>25:00:00</time></record>):struct<time:time(6)>>
+-- !query output
+{"time":null}
+
+
+-- !query
+select from_xml('<record><time>invalid</time></record>', 'time TIME', map('rowTag', 'record'))
+-- !query schema
+struct<from_xml(<record><time>invalid</time></record>):struct<time:time(6)>>
+-- !query output
+{"time":null}
+
+
+-- !query
+select from_xml('<record></record>', 'time TIME', map('rowTag', 'record'))
+-- !query schema
+struct<from_xml(<record></record>):struct<time:time(6)>>
+-- !query output
+{"time":null}
+
+
+-- !query
+select to_xml(named_struct('time', TIME'14:30:45'), map('rowTag', 'record', 'indent', ''))
+-- !query schema
+struct<to_xml(named_struct(time, TIME '14:30:45')):string>
+-- !query output
+<record><time>14:30:45</time></record>
+
+
+-- !query
+select to_xml(named_struct('time', TIME'14:30:45.123456'), map('rowTag', 'record', 'indent', ''))
+-- !query schema
+struct<to_xml(named_struct(time, TIME '14:30:45.123456')):string>
+-- !query output
+<record><time>14:30:45.123456</time></record>
+
+
+-- !query
+select to_xml(named_struct('time', TIME'14:30:45.123456'), map('rowTag', 'record', 'timeFormat', 'HH-mm-ss.SSSSSS', 'indent', ''))
+-- !query schema
+struct<to_xml(named_struct(time, TIME '14:30:45.123456')):string>
+-- !query output
+<record><time>14-30-45.123456</time></record>
+
+
+-- !query
+select from_xml(to_xml(named_struct('time', TIME'14:30:45'), map('rowTag', 'record')), 'time TIME(0)', map('rowTag', 'record'))
+-- !query schema
+struct<from_xml(to_xml(named_struct(time, TIME '14:30:45'))):struct<time:time(0)>>
+-- !query output
+{"time":14:30:45}
+
+
+-- !query
+select from_xml(to_xml(named_struct('time', TIME'14:30:45.1'), map('rowTag', 'record')), 'time TIME(1)', map('rowTag', 'record'))
+-- !query schema
+struct<from_xml(to_xml(named_struct(time, TIME '14:30:45.1'))):struct<time:time(1)>>
+-- !query output
+{"time":14:30:45.1}
+
+
+-- !query
+select from_xml(to_xml(named_struct('time', TIME'14:30:45.12'), map('rowTag', 'record')), 'time TIME(2)', map('rowTag', 'record'))
+-- !query schema
+struct<from_xml(to_xml(named_struct(time, TIME '14:30:45.12'))):struct<time:time(2)>>
+-- !query output
+{"time":14:30:45.12}
+
+
+-- !query
+select from_xml(to_xml(named_struct('time', TIME'14:30:45.123'), map('rowTag', 'record')), 'time TIME(3)', map('rowTag', 'record'))
+-- !query schema
+struct<from_xml(to_xml(named_struct(time, TIME '14:30:45.123'))):struct<time:time(3)>>
+-- !query output
+{"time":14:30:45.123}
+
+
+-- !query
+select from_xml(to_xml(named_struct('time', TIME'14:30:45.1234'), map('rowTag', 'record')), 'time TIME(4)', map('rowTag', 'record'))
+-- !query schema
+struct<from_xml(to_xml(named_struct(time, TIME '14:30:45.1234'))):struct<time:time(4)>>
+-- !query output
+{"time":14:30:45.1234}
+
+
+-- !query
+select from_xml(to_xml(named_struct('time', TIME'14:30:45.12345'), map('rowTag', 'record')), 'time TIME(5)', map('rowTag', 'record'))
+-- !query schema
+struct<from_xml(to_xml(named_struct(time, TIME '14:30:45.12345'))):struct<time:time(5)>>
+-- !query output
+{"time":14:30:45.12345}
+
+
+-- !query
+select from_xml(to_xml(named_struct('time', TIME'14:30:45.123456'), map('rowTag', 'record')), 'time TIME(6)', map('rowTag', 'record'))
+-- !query schema
+struct<from_xml(to_xml(named_struct(time, TIME '14:30:45.123456'))):struct<time:time(6)>>
+-- !query output
+{"time":14:30:45.123456}
+
+
+-- !query
+select to_xml(from_xml('<record><time>14:30:45</time></record>', 'time TIME(0)', map('rowTag', 'record')), map('rowTag', 'record', 'indent', ''))
+-- !query schema
+struct<to_xml(from_xml(<record><time>14:30:45</time></record>)):string>
+-- !query output
+<record><time>14:30:45</time></record>
+
+
+-- !query
+select to_xml(from_xml('<record><time>14:30:45.123</time></record>', 'time TIME(3)', map('rowTag', 'record')), map('rowTag', 'record', 'indent', ''))
+-- !query schema
+struct<to_xml(from_xml(<record><time>14:30:45.123</time></record>)):string>
+-- !query output
+<record><time>14:30:45.123</time></record>
+
+
+-- !query
+select to_xml(from_xml('<record><time>14:30:45.123456</time></record>', 'time TIME(6)', map('rowTag', 'record')), map('rowTag', 'record', 'indent', ''))
+-- !query schema
+struct<to_xml(from_xml(<record><time>14:30:45.123456</time></record>)):string>
+-- !query output
+<record><time>14:30:45.123456</time></record>
+
+
+-- !query
+select schema_of_xml('<record><time>14:30:45</time></record>', map('rowTag', 'record'))
+-- !query schema
+struct<schema_of_xml(<record><time>14:30:45</time></record>):string>
+-- !query output
+STRUCT<time: TIMESTAMP>
+
+
+-- !query
+select schema_of_xml('<record><time>14:30:45.123456</time></record>', map('rowTag', 'record'))
+-- !query schema
+struct<schema_of_xml(<record><time>14:30:45.123456</time></record>):string>
+-- !query output
+STRUCT<time: TIMESTAMP>
+
+
+-- !query
+select from_xml('<record><time>14:30:45</time></record>', 'time TIME', map('rowTag', 'record')) LIMIT 1
+-- !query schema
+struct<from_xml(<record><time>14:30:45</time></record>):struct<time:time(6)>>
+-- !query output
+{"time":14:30:45}

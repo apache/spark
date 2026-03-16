@@ -14,12 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 
 import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
@@ -297,13 +297,17 @@ class SeriesIndexMixin:
         pser = pd.Series([1, 2, 3], index=["x", "y", "z"], name="ser")
         psser = ps.from_pandas(pser)
 
-        self.assert_eq(psser.swapaxes(0, 0), pser.swapaxes(0, 0))
-        self.assert_eq(psser.swapaxes("index", "index"), pser.swapaxes("index", "index"))
-        self.assert_eq((psser + 1).swapaxes(0, 0), (pser + 1).swapaxes(0, 0))
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assert_eq(psser.swapaxes(0, 0), pser.swapaxes(0, 0))
+            self.assert_eq(psser.swapaxes("index", "index"), pser.swapaxes("index", "index"))
+            self.assert_eq((psser + 1).swapaxes(0, 0), (pser + 1).swapaxes(0, 0))
 
-        self.assertRaises(AssertionError, lambda: psser.swapaxes(0, 1, copy=False))
-        self.assertRaises(ValueError, lambda: psser.swapaxes(0, 1))
-        self.assertRaises(ValueError, lambda: psser.swapaxes("index", "columns"))
+            self.assertRaises(AssertionError, lambda: psser.swapaxes(0, 1, copy=False))
+            self.assertRaises(ValueError, lambda: psser.swapaxes(0, 1))
+            self.assertRaises(ValueError, lambda: psser.swapaxes("index", "columns"))
+        else:
+            with self.assertRaises(AttributeError):
+                psser.swapaxes(0, 0)
 
     def test_droplevel(self):
         pser = pd.Series(
@@ -460,12 +464,6 @@ class SeriesIndexTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.series.test_index import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

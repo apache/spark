@@ -33,6 +33,23 @@ import org.apache.spark.sql.types.IntegerType
  */
 class ResolveSetVariable(val catalogManager: CatalogManager) extends Rule[LogicalPlan]
   with ColumnResolutionHelper {
+  private val variableResolution = new VariableResolution(catalogManager.tempVariableManager)
+
+  /**
+   * Checks for duplicate variable names and throws an exception if found.
+   * Names are normalized when the variables are created.
+   * No need for case insensitive comparison here.
+   */
+  private def checkForDuplicateVariables(variables: Seq[VariableReference]): Unit = {
+    // TODO: we need to group by the qualified variable name once other catalogs support it.
+    val dups = variables.groupBy(_.identifier).filter(kv => kv._2.length > 1)
+    if (dups.nonEmpty) {
+      throw new AnalysisException(
+        errorClass = "DUPLICATE_ASSIGNMENTS",
+        messageParameters = Map("nameList" ->
+          dups.keys.map(key => toSQLId(key.name())).mkString(", ")))
+    }
+  }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(COMMAND), ruleId) {
@@ -40,7 +57,9 @@ class ResolveSetVariable(val catalogManager: CatalogManager) extends Rule[Logica
     case setVariable: SetVariable if !setVariable.targetVariables.forall(_.resolved) =>
       val resolvedVars = setVariable.targetVariables.map {
         case u: UnresolvedAttribute =>
-          lookupVariable(u.nameParts) match {
+          variableResolution.lookupVariable(
+            nameParts = u.nameParts
+          ) match {
             case Some(variable) => variable.copy(canFold = false)
             case _ => throw unresolvedVariableError(u.nameParts, Seq("SYSTEM", "SESSION"))
           }
@@ -49,23 +68,17 @@ class ResolveSetVariable(val catalogManager: CatalogManager) extends Rule[Logica
           "Unexpected target variable expression in SetVariable: " + other)
       }
 
-      // Protect against duplicate variable names
-      // Names are normalized when the variables are created.
-      // No need for case insensitive comparison here.
-      // TODO: we need to group by the qualified variable name once other catalogs support it.
-      val dups = resolvedVars.groupBy(_.identifier.name).filter(kv => kv._2.length > 1)
-      if (dups.nonEmpty) {
-        throw new AnalysisException(
-          errorClass = "DUPLICATE_ASSIGNMENTS",
-          messageParameters = Map("nameList" -> dups.keys.map(toSQLId).mkString(", ")))
-      }
-
       setVariable.copy(targetVariables = resolvedVars)
 
     case setVariable: SetVariable
         if setVariable.targetVariables.forall(_.isInstanceOf[VariableReference]) &&
           setVariable.sourceQuery.resolved =>
       val targetVariables = setVariable.targetVariables.map(_.asInstanceOf[VariableReference])
+
+      // Check for duplicate variable names - this handles both regular SET VAR (after resolution)
+      // and EXECUTE IMMEDIATE ... INTO (which comes pre-resolved)
+      checkForDuplicateVariables(targetVariables)
+
       val withCasts = TableOutputResolver.resolveVariableOutputColumns(
         targetVariables, setVariable.sourceQuery, conf)
       val withLimit = if (withCasts.maxRows.exists(_ <= 2)) {

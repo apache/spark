@@ -18,6 +18,7 @@
 """
 Generate 'Supported pandas APIs' documentation file
 """
+
 import warnings
 from enum import Enum, unique
 from inspect import getmembers, isclass, isfunction, signature
@@ -38,7 +39,7 @@ from pyspark.pandas.exceptions import PandasNotImplementedError
 MAX_MISSING_PARAMS_SIZE = 5
 COMMON_PARAMETER_SET = {"kwargs", "args", "cls"}
 MODULE_GROUP_MATCH = [(pd, ps), (pdw, psw), (pdg, psg)]
-PANDAS_LATEST_VERSION = "2.2.3"
+PANDAS_LATEST_VERSION = "2.3.3"
 
 RST_HEADER = """
 =====================
@@ -108,7 +109,9 @@ def _check_pandas_version() -> None:
     """
     Check if the installed pandas version matches the expected version.
     """
-    if LooseVersion(pd.__version__) != LooseVersion(PANDAS_LATEST_VERSION):
+    # Work around pandas version string issue,
+    # see https://github.com/pandas-dev/pandas/issues/61579.
+    if LooseVersion(pd.__version__.split("+")[0]) != LooseVersion(PANDAS_LATEST_VERSION):
         msg = (
             f"Warning: pandas {PANDAS_LATEST_VERSION} is required; your version is {pd.__version__}"
         )
@@ -372,8 +375,10 @@ def _write_table(
         else:
             lines.append("    * - :func:`%s`\n" % func_str)
         lines.append("      - %s\n" % status.implemented)
-        lines.append("      - \n") if not status.missing else lines.append(
-            "      - %s\n" % status.missing
+        (
+            lines.append("      - \n")
+            if not status.missing
+            else lines.append("      - %s\n" % status.missing)
         )
     w_fd.writelines(lines)
 
@@ -395,7 +400,7 @@ def _escape_func_str(func_str: str) -> str:
     # TODO: Take into account that this function can create links incorrectly
     # We can create alias links or links to parent methods
     if func_str.endswith("_"):
-        return func_str[:-1] + "\_"  # noqa: W605
+        return func_str[:-1] + "\\_"
     else:
         return func_str
 
@@ -430,7 +435,7 @@ def _test() -> None:
     import pyspark.pandas.supported_api_gen
 
     globs = pyspark.pandas.supported_api_gen.__dict__.copy()
-    (failure_count, test_count) = doctest.testmod(pyspark.pandas.supported_api_gen, globs=globs)
+    failure_count, test_count = doctest.testmod(pyspark.pandas.supported_api_gen, globs=globs)
     if failure_count:
         sys.exit(-1)
 

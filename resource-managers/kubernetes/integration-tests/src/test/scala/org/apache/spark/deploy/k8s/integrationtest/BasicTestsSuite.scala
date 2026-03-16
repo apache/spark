@@ -53,6 +53,14 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
     runSparkPiAndVerifyCompletion()
   }
 
+  test("SPARK-53944: Run SparkPi without driver service", k8sTestTag) {
+    sparkAppConf.set(
+      "spark.kubernetes.driver.pod.excludedFeatureSteps",
+      "org.apache.spark.deploy.k8s.features.DriverServiceFeatureStep")
+    sparkAppConf.set("spark.kubernetes.executor.useDriverPodIP", "true")
+    runSparkPiAndVerifyCompletion()
+  }
+
   test("Run SparkPi with no resources & statefulset allocation", k8sTestTag) {
     sparkAppConf.set("spark.kubernetes.allocation.pods.allocator", "statefulset")
     runSparkPiAndVerifyCompletion()
@@ -70,7 +78,7 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
   }
 
   test("Run SparkPi with a very long application name.", k8sTestTag) {
-    sparkAppConf.set("spark.app.name", "long" * 40)
+    sparkAppConf.set("spark.app.name", "long".repeat(40))
     runSparkPiAndVerifyCompletion()
   }
 

@@ -23,7 +23,7 @@ import com.univocity.parsers.csv.CsvWriter
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, ToStringBase}
-import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, IntervalStringStyles, IntervalUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, IntervalStringStyles, IntervalUtils, TimeFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -62,6 +62,10 @@ class UnivocityGenerator(
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = false)
+  private val timeFormatter = options.timeFormatInWrite match {
+    case TimeFormatter.defaultPattern => TimeFormatter.getFractionFormatter()
+    case customPattern => TimeFormatter(customPattern, isParsing = false)
+  }
   private val nullAsQuotedEmptyString =
     SQLConf.get.getConf(SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV)
 
@@ -80,6 +84,8 @@ class UnivocityGenerator(
     case TimestampNTZType =>
       (getter, ordinal) =>
         timestampNTZFormatter.format(DateTimeUtils.microsToLocalDateTime(getter.getLong(ordinal)))
+
+    case _: TimeType => (getter, ordinal) => timeFormatter.format(getter.getLong(ordinal))
 
     case YearMonthIntervalType(start, end) =>
       (getter, ordinal) =>

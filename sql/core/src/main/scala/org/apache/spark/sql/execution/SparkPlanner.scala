@@ -17,17 +17,21 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.ExperimentalMethods
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.execution.{SparkStrategy => Strategy}
 import org.apache.spark.sql.execution.adaptive.LogicalQueryStageStrategy
 import org.apache.spark.sql.execution.command.v2.V2CommandStrategy
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, FileSourceStrategy}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Strategy
+import org.apache.spark.sql.internal.SQLConf
 
 class SparkPlanner(val session: SparkSession, val experimentalMethods: ExperimentalMethods)
-  extends SparkStrategies with SQLConfHelper {
+  extends SparkStrategies {
+
+  def conf: SQLConf = session.sessionState.conf
 
   def numPartitions: Int = conf.numShufflePartitions
 
@@ -47,7 +51,10 @@ class SparkPlanner(val session: SparkSession, val experimentalMethods: Experimen
       JoinSelection ::
       InMemoryScans ::
       SparkScripts ::
-      BasicOperators :: Nil)
+      Pipelines ::
+      BasicOperators ::
+      // Need to be here since users can specify withWatermark in stateless streaming query.
+      EventTimeWatermarkStrategy :: Nil)
 
   /**
    * Override to add extra planning strategies to the planner. These strategies are tried after
@@ -89,7 +96,7 @@ class SparkPlanner(val session: SparkSession, val experimentalMethods: Experimen
     val projectSet = AttributeSet(projectList.flatMap(_.references))
     val filterSet = AttributeSet(filterPredicates.flatMap(_.references))
     val filterCondition: Option[Expression] =
-      prunePushedDownFilters(filterPredicates).reduceLeftOption(catalyst.expressions.And)
+      prunePushedDownFilters(filterPredicates).reduceLeftOption(And)
 
     // Right now we still use a projection even if the only evaluation is applying an alias
     // to a column.  Since this is a no-op, it could be avoided. However, using this

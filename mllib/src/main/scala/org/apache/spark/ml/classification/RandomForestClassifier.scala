@@ -182,26 +182,8 @@ class RandomForestClassifier @Since("1.4.0") (
       numFeatures: Int,
       numClasses: Int): RandomForestClassificationModel = {
     val model = copyValues(new RandomForestClassificationModel(uid, trees, numFeatures, numClasses))
-    val weightColName = if (!isDefined(weightCol)) "weightCol" else $(weightCol)
-
-    val (summaryModel, probabilityColName, predictionColName) = model.findSummaryModel()
-    val rfSummary = if (numClasses <= 2) {
-      new BinaryRandomForestClassificationTrainingSummaryImpl(
-        summaryModel.transform(dataset),
-        probabilityColName,
-        predictionColName,
-        $(labelCol),
-        weightColName,
-        Array(0.0))
-    } else {
-      new RandomForestClassificationTrainingSummaryImpl(
-        summaryModel.transform(dataset),
-        predictionColName,
-        $(labelCol),
-        weightColName,
-        Array(0.0))
-    }
-    model.setSummary(Some(rfSummary))
+    model.createSummary(dataset)
+    model
   }
 
   @Since("1.4.1")
@@ -254,6 +236,11 @@ class RandomForestClassificationModel private[ml] (
       numFeatures: Int,
       numClasses: Int) =
     this(Identifiable.randomUID("rfc"), trees, numFeatures, numClasses)
+
+  // For ml connect only
+  private[ml] def this() = this("", Array(new DecisionTreeClassificationModel), -1, -1)
+
+  private[spark] override def estimatedSize: Long = getEstimatedSize()
 
   @Since("1.4.0")
   override def trees: Array[DecisionTreeClassificationModel] = _trees
@@ -388,6 +375,35 @@ class RandomForestClassificationModel private[ml] (
   @Since("2.0.0")
   override def write: MLWriter =
     new RandomForestClassificationModel.RandomForestClassificationModelWriter(this)
+
+  private[spark] def createSummary(dataset: Dataset[_]): Unit = {
+    val weightColName = if (!isDefined(weightCol)) "weightCol" else $(weightCol)
+
+    val (summaryModel, probabilityColName, predictionColName) = findSummaryModel()
+    val rfSummary = if (numClasses <= 2) {
+      new BinaryRandomForestClassificationTrainingSummaryImpl(
+        summaryModel.transform(dataset),
+        probabilityColName,
+        predictionColName,
+        $(labelCol),
+        weightColName,
+        Array(0.0))
+    } else {
+      new RandomForestClassificationTrainingSummaryImpl(
+        summaryModel.transform(dataset),
+        predictionColName,
+        $(labelCol),
+        weightColName,
+        Array(0.0))
+    }
+    setSummary(Some(rfSummary))
+  }
+
+  override private[spark] def saveSummary(path: String): Unit = {}
+
+  override private[spark] def loadSummary(path: String, dataset: DataFrame): Unit = {
+    createSummary(dataset)
+  }
 }
 
 @Since("2.0.0")

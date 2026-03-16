@@ -154,7 +154,7 @@ class ReceiverSuite extends TestSuiteBase with TimeLimits with Serializable {
     val startTimeNs = System.nanoTime()
     blockGenerator.start()
     var count = 0
-    while(System.nanoTime() - startTimeNs < TimeUnit.MILLISECONDS.toNanos(waitTime)) {
+    while (System.nanoTime() - startTimeNs < TimeUnit.MILLISECONDS.toNanos(waitTime)) {
       blockGenerator.addData(count)
       generatedData += count
       count += 1
@@ -389,7 +389,7 @@ class FakeReceiver(sendData: Boolean = false) extends Receiver[Int](StorageLevel
         receiving = true
         try {
           var count = 0
-          while(!isStopped()) {
+          while (!isStopped()) {
             if (sendData) {
               store(count)
               count += 1

@@ -23,7 +23,7 @@ import scala.collection.mutable.{HashMap, Map}
 import scala.concurrent.Future
 
 import org.apache.spark.executor.ExecutorMetrics
-import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.Network
 import org.apache.spark.rpc.{IsolatedThreadSafeRpcEndpoint, RpcCallContext, RpcEnv}

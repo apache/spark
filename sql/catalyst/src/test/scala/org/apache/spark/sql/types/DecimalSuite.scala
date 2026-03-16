@@ -20,6 +20,7 @@ package org.apache.spark.sql.types
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkFunSuite, SparkNumberFormatException}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.Decimal._
@@ -103,6 +104,13 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
         "precision" -> "17",
         "scale" -> "0",
         "config" -> "\"spark.sql.ansi.enabled\""))
+    checkError(
+      exception = intercept[AnalysisException](Decimal(BigDecimal("10"), 2, -5)),
+      condition = "NEGATIVE_SCALE_DISALLOWED",
+      parameters = Map(
+        "scale" -> "-5",
+        "sqlConf" -> "\"spark.sql.legacy.allowNegativeScaleOfDecimal\""
+      ))
   }
 
   test("creating decimals with negative scale under legacy mode") {
@@ -116,15 +124,15 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     }
   }
 
-  test("SPARK-30252: Negative scale is not allowed by default") {
+  test("SPARK-30252, SPARK-51084: Negative scale is not allowed by default") {
     def checkNegativeScaleDecimal(d: => Decimal): Unit = {
       checkError(
-        exception = intercept[SparkException] (d),
-        condition = "INTERNAL_ERROR",
-        parameters = Map("message" -> ("Negative scale is not allowed: -3. " +
-          "Set the config \"spark.sql.legacy.allowNegativeScaleOfDecimal\" " +
-          "to \"true\" to allow it."))
-      )
+        exception = intercept[AnalysisException](d),
+        condition = "NEGATIVE_SCALE_DISALLOWED",
+        parameters = Map(
+          "scale" -> "-3",
+          "sqlConf" -> "\"spark.sql.legacy.allowNegativeScaleOfDecimal\""
+        ))
     }
     checkNegativeScaleDecimal(Decimal(BigDecimal("98765"), 5, -3))
     checkNegativeScaleDecimal(Decimal(BigDecimal("98765").underlying(), 5, -3))
@@ -374,7 +382,8 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
       parameters = Map(
         "expression" -> "'str'",
         "sourceType" -> "\"STRING\"",
-        "targetType" -> "\"DECIMAL(10,0)\""))
+        "targetType" -> "\"DECIMAL(10,0)\"",
+        "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
   }
 
   test("SPARK-35841: Casting string to decimal type doesn't work " +

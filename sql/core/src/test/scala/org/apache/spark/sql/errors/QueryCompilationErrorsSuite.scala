@@ -712,15 +712,21 @@ class QueryCompilationErrorsSuite
     )
   }
 
-  test("IDENTIFIER_TOO_MANY_NAME_PARTS: " +
+  test("TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS: " +
     "create temp view doesn't support identifiers consisting of more than 2 parts") {
+    val sqlText =
+      "CREATE TEMPORARY VIEW db_name.schema_name.view_name AS SELECT '1' as test_column"
     checkError(
       exception = intercept[ParseException] {
-        sql("CREATE TEMPORARY VIEW db_name.schema_name.view_name AS SELECT '1' as test_column")
+        sql(sqlText)
       },
-      condition = "IDENTIFIER_TOO_MANY_NAME_PARTS",
-      sqlState = "42601",
-      parameters = Map("identifier" -> "`db_name`.`schema_name`.`view_name`")
+      condition = "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
+      sqlState = "428EK",
+      parameters = Map("actualName" -> "`db_name`.`schema_name`.`view_name`"),
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = sqlText.length - 1)
     )
   }
 
@@ -741,7 +747,7 @@ class QueryCompilationErrorsSuite
         },
         condition = "IDENTIFIER_TOO_MANY_NAME_PARTS",
         sqlState = "42601",
-        parameters = Map("identifier" -> "`db_name`.`schema_name`.`new_table_name`")
+        parameters = Map("identifier" -> "`db_name`.`schema_name`.`new_table_name`", "limit" -> "2")
       )
     }
   }
@@ -901,6 +907,37 @@ class QueryCompilationErrorsSuite
     }
   }
 
+  test("SPARK-50779: the object level collations feature is unsupported when flag is disabled") {
+    withSQLConf(SQLConf.OBJECT_LEVEL_COLLATIONS_ENABLED.key -> "false") {
+      Seq(
+        "CREATE TABLE t (c STRING) USING parquet DEFAULT COLLATION UNICODE",
+        "REPLACE TABLE t (c STRING) USING parquet DEFAULT COLLATION UNICODE_CI",
+        "ALTER TABLE t DEFAULT COLLATION sr_CI_AI",
+        "CREATE VIEW v DEFAULT COLLATION UNICODE as SELECT * FROM t",
+        "CREATE TEMPORARY VIEW v DEFAULT COLLATION UTF8_LCASE as SELECT * FROM t"
+      ).foreach { sqlText =>
+        checkError(
+          exception = intercept[AnalysisException](sql(sqlText)),
+          condition = "UNSUPPORTED_FEATURE.OBJECT_LEVEL_COLLATIONS"
+        )
+      }
+    }
+  }
+
+  test("SPARK-52219: the schema level collations feature is unsupported") {
+    // TODO: when schema level collations are supported, change this test to set the flag to false
+    Seq(
+      "CREATE SCHEMA test_schema DEFAULT COLLATION UNICODE",
+      "ALTER SCHEMA test_schema DEFAULT COLLATION UNICODE"
+    ).foreach {
+      sqlText =>
+        checkError(
+          exception = intercept[AnalysisException](sql(sqlText)),
+          condition = "UNSUPPORTED_FEATURE.SCHEMA_LEVEL_COLLATIONS"
+        )
+    }
+  }
+
   test("UNSUPPORTED_CALL: call the unsupported method update()") {
     checkError(
       exception = intercept[SparkUnsupportedOperationException] {
@@ -923,7 +960,7 @@ class QueryCompilationErrorsSuite
     }
     checkError(
       exception = intercept[AnalysisException] {
-        converter.convertField(StructField("test", dummyDataType))
+        converter.convertField(StructField("test", dummyDataType), inShredded = false)
       },
       condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "Cannot convert Spark data type \"DUMMY\" to any Parquet type.")
@@ -1033,6 +1070,64 @@ class QueryCompilationErrorsSuite
           sql("SELECT 1,")
         }
       }
+    }
+  }
+
+  test("SPARK-51569: Unorderable types in InSubquery should produce INVALID_ORDERING_TYPE error " +
+    "instead of MAX_ITERATIONS_REACHED or StackOverflow") {
+    val e = intercept[AnalysisException] {
+      sql("select map(1,2) in (select map(1,2))")
+    }
+    checkError(
+      exception = e,
+      condition = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+      parameters = Map(
+        "functionName" -> "`insubquery`",
+        "dataType" -> "\"MAP<INT, INT>\"",
+        "sqlExpr" -> "\"(map(1, 2) IN (listquery()))\""
+      ),
+      context = ExpectedContext(fragment = "in (select map(1,2))", start = 16, stop = 35)
+    )
+  }
+
+  test("SPARK-51580: Throw proper user facing error message when lambda function is out of " +
+    "place in HigherOrderFunction") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("select transform(x -> x + 1, array(1,2,3))")
+      },
+      condition = "INVALID_LAMBDA_FUNCTION_CALL.PARAMETER_DOES_NOT_ACCEPT_LAMBDA_FUNCTION",
+      parameters = Map(),
+      context =
+        ExpectedContext(fragment = "transform(x -> x + 1, array(1,2,3))", start = 7, stop = 41)
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("select aggregate(array(1,2,3), x -> x + 1, 0)")
+      },
+      condition = "INVALID_LAMBDA_FUNCTION_CALL.PARAMETER_DOES_NOT_ACCEPT_LAMBDA_FUNCTION",
+      parameters = Map(),
+      context =
+        ExpectedContext(fragment = "aggregate(array(1,2,3), x -> x + 1, 0)", start = 7, stop = 44)
+    )
+  }
+
+  test("UNABLE_TO_INFER_SCHEMA: empty data source at path") {
+    withTempDir { dir =>
+      // Create _spark_metadata with a valid empty log entry (version header only, no files)
+      val metadataDir = new java.io.File(dir, "_spark_metadata")
+      metadataDir.mkdir()
+      java.nio.file.Files.write(
+        new java.io.File(metadataDir, "0").toPath, "v1".getBytes)
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.read.format("json").load(dir.getCanonicalPath).collect()
+        },
+        condition = "UNABLE_TO_INFER_SCHEMA",
+        parameters = Map("format" -> "JSON")
+      )
     }
   }
 }

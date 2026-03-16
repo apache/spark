@@ -24,8 +24,6 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.*;
 
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
 import org.junit.jupiter.api.*;
 
 import org.apache.spark.api.java.function.MapFunction;
@@ -493,17 +491,10 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     @Override
     public String toString() {
-      return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-          .append("shortField", shortField)
-          .append("intField", intField)
-          .append("longField", longField)
-          .append("floatField", floatField)
-          .append("doubleField", doubleField)
-          .append("stringField", stringField)
-          .append("booleanField", booleanField)
-          .append("timestampField", timestampField)
-          .append("nullIntField", nullIntField)
-          .toString();
+      return "RecordSpark22000[shortField=" + shortField + ",intField=" + intField +
+          ",longField=" + longField + ",floatField=" + floatField + ",doubleField=" + doubleField +
+          ",stringField=" + stringField + ",booleanField=" + booleanField +
+          ",timestampField=" + timestampField + ",nullIntField=" + nullIntField + "]";
     }
   }
 
@@ -680,10 +671,8 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     @Override
     public String toString() {
-      return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-          .append("localDateField", localDateField)
-          .append("instantField", instantField)
-          .toString();
+      return "LocalDateInstantRecord[localDateField=" + localDateField +
+          ",instantField=" + instantField + "]";
     }
 
   }

@@ -53,8 +53,8 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
       catalog: String,
       namespace: String,
       table: String): (String, Map[String, String]) = {
-    ("_LEGACY_ERROR_TEMP_1231",
-      Map("key" -> "id", "tblName" -> s"`$catalog`.`$namespace`.`$table`"))
+    ("PARTITIONS_NOT_FOUND",
+      Map("partitionList" -> "`id`", "tableName" -> s"`$catalog`.`$namespace`.`$table`"))
   }
 
   protected override def namespaceKey: String = "Namespace"

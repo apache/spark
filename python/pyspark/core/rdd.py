@@ -94,7 +94,6 @@ from pyspark.errors import PySparkRuntimeError
 # for backward compatibility references.
 from pyspark.util import PythonEvalType  # noqa: F401
 
-
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
 
@@ -196,7 +195,6 @@ class Partitioner:
 
 
 class RDD(Generic[T_co]):
-
     """
     A Resilient Distributed Dataset (RDD), the basic abstraction in Spark.
     Represents an immutable, partitioned collection of elements that can be
@@ -1205,8 +1203,7 @@ class RDD(Generic[T_co]):
         numPartitions: Optional[int] = ...,
         partitionFunc: Callable[["S"], int] = ...,
         ascending: bool = ...,
-    ) -> "RDD[Tuple[S, V]]":
-        ...
+    ) -> "RDD[Tuple[S, V]]": ...
 
     @overload
     def repartitionAndSortWithinPartitions(
@@ -1215,8 +1212,7 @@ class RDD(Generic[T_co]):
         partitionFunc: Callable[[K], int],
         ascending: bool,
         keyfunc: Callable[[K], "S"],
-    ) -> "RDD[Tuple[K, V]]":
-        ...
+    ) -> "RDD[Tuple[K, V]]": ...
 
     @overload
     def repartitionAndSortWithinPartitions(
@@ -1226,8 +1222,7 @@ class RDD(Generic[T_co]):
         ascending: bool = ...,
         *,
         keyfunc: Callable[[K], "S"],
-    ) -> "RDD[Tuple[K, V]]":
-        ...
+    ) -> "RDD[Tuple[K, V]]": ...
 
     def repartitionAndSortWithinPartitions(
         self: "RDD[Tuple[Any, Any]]",
@@ -1289,8 +1284,7 @@ class RDD(Generic[T_co]):
         self: "RDD[Tuple[S, V]]",
         ascending: bool = ...,
         numPartitions: Optional[int] = ...,
-    ) -> "RDD[Tuple[K, V]]":
-        ...
+    ) -> "RDD[Tuple[K, V]]": ...
 
     @overload
     def sortByKey(
@@ -1298,8 +1292,7 @@ class RDD(Generic[T_co]):
         ascending: bool,
         numPartitions: int,
         keyfunc: Callable[[K], "S"],
-    ) -> "RDD[Tuple[K, V]]":
-        ...
+    ) -> "RDD[Tuple[K, V]]": ...
 
     @overload
     def sortByKey(
@@ -1308,8 +1301,7 @@ class RDD(Generic[T_co]):
         numPartitions: Optional[int] = ...,
         *,
         keyfunc: Callable[[K], "S"],
-    ) -> "RDD[Tuple[K, V]]":
-        ...
+    ) -> "RDD[Tuple[K, V]]": ...
 
     def sortByKey(
         self: "RDD[Tuple[K, V]]",
@@ -1659,9 +1651,16 @@ class RDD(Generic[T_co]):
         """
 
         def func(it: Iterable[T]) -> Iterable[Any]:
-            r = f(it)
+            # Officially, our type hint suggests that f should be a function
+            # that returns None. However, historically, we supported f as
+            # a generator, so it could return an iterator that we need to
+            # go through. We check the common case first, then deal with
+            # the undocumented behavior.
+            r = f(it)  # type: ignore[func-returns-value]
+            if r is None:
+                return iter([])
             try:
-                return iter(r)  # type: ignore[call-overload]
+                return iter(r)
             except TypeError:
                 return iter([])
 
@@ -1698,7 +1697,8 @@ class RDD(Generic[T_co]):
         with SCCallSiteSync(self.context):
             assert self.ctx._jvm is not None
             sock_info = self.ctx._jvm.PythonRDD.collectAndServe(self._jrdd.rdd())
-        return list(_load_from_socket(sock_info, self._jrdd_deserializer))
+        with _load_from_socket(sock_info, self._jrdd_deserializer) as stream:
+            return list(stream)
 
     def collectWithJobGroup(
         self: "RDD[T]", groupId: str, description: str, interruptOnCancel: bool = False
@@ -1741,7 +1741,8 @@ class RDD(Generic[T_co]):
             sock_info = self.ctx._jvm.PythonRDD.collectAndServeWithJobGroup(
                 self._jrdd.rdd(), groupId, description, interruptOnCancel
             )
-        return list(_load_from_socket(sock_info, self._jrdd_deserializer))
+        with _load_from_socket(sock_info, self._jrdd_deserializer) as stream:
+            return list(stream)
 
     def reduce(self: "RDD[T]", f: Callable[[T, T], T]) -> T:
         """
@@ -2055,12 +2056,10 @@ class RDD(Generic[T_co]):
         return partiallyAggregated.reduce(combOp)
 
     @overload
-    def max(self: "RDD[S]") -> "S":
-        ...
+    def max(self: "RDD[S]") -> "S": ...
 
     @overload
-    def max(self: "RDD[T]", key: Callable[[T], "S"]) -> T:
-        ...
+    def max(self: "RDD[T]", key: Callable[[T], "S"]) -> T: ...
 
     def max(self: "RDD[T]", key: Optional[Callable[[T], "S"]] = None) -> T:
         """
@@ -2095,12 +2094,10 @@ class RDD(Generic[T_co]):
         return self.reduce(lambda a, b: max(a, b, key=key))
 
     @overload
-    def min(self: "RDD[S]") -> "S":
-        ...
+    def min(self: "RDD[S]") -> "S": ...
 
     @overload
-    def min(self: "RDD[T]", key: Callable[[T], "S"]) -> T:
-        ...
+    def min(self: "RDD[T]", key: Callable[[T], "S"]) -> T: ...
 
     def min(self: "RDD[T]", key: Optional[Callable[[T], "S"]] = None) -> T:
         """
@@ -2529,12 +2526,10 @@ class RDD(Generic[T_co]):
         return self.mapPartitions(countPartition).reduce(mergeMaps)
 
     @overload
-    def top(self: "RDD[S]", num: int) -> List["S"]:
-        ...
+    def top(self: "RDD[S]", num: int) -> List["S"]: ...
 
     @overload
-    def top(self: "RDD[T]", num: int, key: Callable[[T], "S"]) -> List[T]:
-        ...
+    def top(self: "RDD[T]", num: int, key: Callable[[T], "S"]) -> List[T]: ...
 
     def top(self: "RDD[T]", num: int, key: Optional[Callable[[T], "S"]] = None) -> List[T]:
         """
@@ -2586,12 +2581,10 @@ class RDD(Generic[T_co]):
         return self.mapPartitions(topIterator).reduce(merge)
 
     @overload
-    def takeOrdered(self: "RDD[S]", num: int) -> List["S"]:
-        ...
+    def takeOrdered(self: "RDD[S]", num: int) -> List["S"]: ...
 
     @overload
-    def takeOrdered(self: "RDD[T]", num: int, key: Callable[[T], "S"]) -> List[T]:
-        ...
+    def takeOrdered(self: "RDD[T]", num: int, key: Callable[[T], "S"]) -> List[T]: ...
 
     def takeOrdered(self: "RDD[T]", num: int, key: Optional[Callable[[T], "S"]] = None) -> List[T]:
         """
@@ -3286,7 +3279,9 @@ class RDD(Generic[T_co]):
         assert self.ctx._jvm is not None
 
         if compressionCodecClass:
-            compressionCodec = self.ctx._jvm.java.lang.Class.forName(compressionCodecClass)
+            compressionCodec = getattr(self.ctx._jvm, "java.lang.Class").forName(
+                compressionCodecClass
+            )
             keyed._jrdd.map(self.ctx._jvm.BytesToString()).saveAsTextFile(path, compressionCodec)
         else:
             keyed._jrdd.map(self.ctx._jvm.BytesToString()).saveAsTextFile(path)
@@ -4132,14 +4127,12 @@ class RDD(Generic[T_co]):
     @overload
     def groupWith(
         self: "RDD[Tuple[K, V]]", other: "RDD[Tuple[K, V1]]"
-    ) -> "RDD[Tuple[K, Tuple[ResultIterable[V], ResultIterable[V1]]]]":
-        ...
+    ) -> "RDD[Tuple[K, Tuple[ResultIterable[V], ResultIterable[V1]]]]": ...
 
     @overload
     def groupWith(
         self: "RDD[Tuple[K, V]]", other: "RDD[Tuple[K, V1]]", __o1: "RDD[Tuple[K, V2]]"
-    ) -> "RDD[Tuple[K, Tuple[ResultIterable[V], ResultIterable[V1], ResultIterable[V2]]]]":
-        ...
+    ) -> "RDD[Tuple[K, Tuple[ResultIterable[V], ResultIterable[V1], ResultIterable[V2]]]]": ...
 
     @overload
     def groupWith(
@@ -4157,8 +4150,7 @@ class RDD(Generic[T_co]):
                 ResultIterable[V3],
             ],
         ]
-    ]""":
-        ...
+    ]""": ...
 
     def groupWith(  # type: ignore[misc]
         self: "RDD[Tuple[Any, Any]]", other: "RDD[Tuple[Any, Any]]", *others: "RDD[Tuple[Any, Any]]"
@@ -4998,8 +4990,8 @@ class RDD(Generic[T_co]):
         -----
         For additional information see
 
-        - `SPIP: Barrier Execution Mode <http://jira.apache.org/jira/browse/SPARK-24374>`_
-        - `Design Doc <https://jira.apache.org/jira/browse/SPARK-24582>`_
+        - `SPIP: Barrier Execution Mode <https://issues.apache.org/jira/browse/SPARK-24374>`_
+        - `Design Doc <https://issues.apache.org/jira/browse/SPARK-24582>`_
 
         This API is experimental
         """
@@ -5044,7 +5036,7 @@ class RDD(Generic[T_co]):
         else:
             assert self.ctx._jvm is not None
 
-            builder = self.ctx._jvm.org.apache.spark.resource.ResourceProfileBuilder()
+            builder = getattr(self.ctx._jvm, "org.apache.spark.resource.ResourceProfileBuilder")()
             ereqs = ExecutorResourceRequests(self.ctx._jvm, profile._executor_resource_requests)
             treqs = TaskResourceRequests(self.ctx._jvm, profile._task_resource_requests)
             builder.require(ereqs._java_executor_resource_requests)
@@ -5085,21 +5077,18 @@ class RDD(Generic[T_co]):
         self: "RDD[RowLike]",
         schema: Optional[Union[List[str], Tuple[str, ...]]] = None,
         sampleRatio: Optional[float] = None,
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     @overload
     def toDF(
         self: "RDD[RowLike]", schema: Optional[Union["StructType", str]] = None
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     @overload
     def toDF(
         self: "RDD[AtomicValue]",
         schema: Union["AtomicType", str],
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     def toDF(
         self: "RDD[Any]", schema: Optional[Any] = None, sampleRatio: Optional[float] = None
@@ -5147,7 +5136,6 @@ def _wrap_function(
 
 
 class RDDBarrier(Generic[T]):
-
     """
     Wraps an RDD in a barrier stage, which forces Spark to launch tasks of this stage together.
     :class:`RDDBarrier` instances are created by :meth:`RDD.barrier`.
@@ -5263,7 +5251,6 @@ class RDDBarrier(Generic[T]):
 
 
 class PipelinedRDD(RDD[U], Generic[T, U]):
-
     """
     Examples
     --------
@@ -5378,7 +5365,7 @@ def _test() -> None:
 
         if Version(np.__version__) >= Version("2"):
             # `legacy="1.25"` only available in `nump>=2`
-            np.set_printoptions(legacy="1.25")  # type: ignore[arg-type]
+            np.set_printoptions(legacy="1.25")  # type: ignore[arg-type, unused-ignore]
     except (ModuleNotFoundError, TypeError):
         pass
 
@@ -5388,7 +5375,7 @@ def _test() -> None:
     # even in these small test examples:
     globs["sc"] = SparkContext("local[4]", "PythonTest")
     globs["sc"].setCheckpointDir(tmp_dir.name)
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    failure_count, test_count = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs["sc"].stop()
     tmp_dir.cleanup()
     if failure_count:

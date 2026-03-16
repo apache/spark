@@ -274,7 +274,7 @@ public class ExpressionImplUtils {
           return cipher.doFinal(input, 0, input.length);
         }
       }
-    } catch (GeneralSecurityException e) {
+    } catch (GeneralSecurityException | IllegalArgumentException e) {
       throw QueryExecutionErrors.aesCryptoError(e.getMessage());
     }
   }
@@ -333,5 +333,13 @@ public class ExpressionImplUtils {
       }
     }
     return UTF8String.fromBytes(bytes);
+  }
+
+  public static UTF8String quote(UTF8String str) {
+    final String qtChar = "'";
+    final String qtCharRep = "\\\\'";
+
+    String sp = str.toString().replaceAll(qtChar, qtCharRep);
+    return UTF8String.fromString(qtChar + sp + qtChar);
   }
 }

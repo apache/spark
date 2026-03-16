@@ -17,14 +17,16 @@
 package org.apache.spark.sql.ml
 
 import org.apache.spark.ml.linalg.{SparseVector, Vector, Vectors}
+import org.apache.spark.ml.stat._
 import org.apache.spark.mllib.linalg.{SparseVector => OldSparseVector, Vector => OldVector}
 import org.apache.spark.sql.{SparkSessionExtensions, SparkSessionExtensionsProvider}
+import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.{Expression, StringLiteral}
+import org.apache.spark.sql.classic.UserDefinedFunctionUtils.toScalaUDF
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.expressions.{SparkUserDefinedFunction, UserDefinedFunction}
 import org.apache.spark.sql.functions.udf
-import org.apache.spark.sql.internal.UserDefinedFunctionUtils.toScalaUDF
 
 /**
  * Register a couple ML vector conversion UDFs in the internal function registry.
@@ -40,7 +42,8 @@ object InternalFunctionRegistration {
   }
 
   private def registerFunction(name: String)(builder: Seq[Expression] => Expression): Unit = {
-    FunctionRegistry.internal.createOrReplaceTempFunction(name, builder, "internal")
+    FunctionRegistry.internal.registerFunction(
+      FunctionIdentifier(name), builder, "internal")
   }
 
   private val vectorToArrayUdf = udf { vec: Any =>
@@ -96,6 +99,9 @@ object InternalFunctionRegistration {
     case exprs =>
       throw QueryCompilationErrors.wrongNumArgsError("array_to_vector", "1", exprs.size)
   }
+
+  FunctionRegistry
+    .registerInternalExpression[SummaryBuilderImpl.MetricsAggregate]("aggregate_metrics")
 }
 
 class InternalFunctionRegistration extends SparkSessionExtensionsProvider {

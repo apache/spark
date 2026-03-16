@@ -24,6 +24,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.storage.TestBlockId
 import org.apache.spark.storage.memory.MemoryStore
+import org.apache.spark.util.Utils
 
 class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTester {
   private val dummyBlock = TestBlockId("--")
@@ -340,5 +341,290 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     assert(mm.acquireStorageMemory(dummyBlock, 100L, memoryMode))
     assertEvictBlocksToFreeSpaceCalled(ms, 50)
     assert(mm.storageMemoryUsed === 600L)
+    UnifiedMemoryManager.shutdownUnmanagedMemoryPoller()
+  }
+
+  test("unmanaged memory tracking with memory mode separation") {
+    val maxMemory = 1000L
+    val taskAttemptId = 0L
+    val conf = new SparkConf()
+      .set(MEMORY_FRACTION, 1.0)
+      .set(TEST_MEMORY, maxMemory)
+      .set(MEMORY_OFFHEAP_ENABLED, false)
+      .set(MEMORY_STORAGE_FRACTION, storageFraction)
+      .set(UNMANAGED_MEMORY_POLLING_INTERVAL, 100L) // 100ms polling
+    val mm = UnifiedMemoryManager(conf, numCores = 1)
+    val memoryMode = MemoryMode.ON_HEAP
+
+    // Mock unmanaged memory consumer for ON_HEAP
+    class MockOnHeapMemoryConsumer(var memoryUsed: Long) extends UnmanagedMemoryConsumer {
+      override def unmanagedMemoryConsumerId: UnmanagedMemoryConsumerId =
+        UnmanagedMemoryConsumerId("TestOnHeap", "test-instance")
+      override def memoryMode: MemoryMode = MemoryMode.ON_HEAP
+      override def getMemBytesUsed: Long = memoryUsed
+    }
+
+    // Mock unmanaged memory consumer for OFF_HEAP
+    class MockOffHeapMemoryConsumer(var memoryUsed: Long) extends UnmanagedMemoryConsumer {
+      override def unmanagedMemoryConsumerId: UnmanagedMemoryConsumerId =
+        UnmanagedMemoryConsumerId("TestOffHeap", "test-instance")
+      override def memoryMode: MemoryMode = MemoryMode.OFF_HEAP
+      override def getMemBytesUsed: Long = memoryUsed
+    }
+
+    val onHeapConsumer = new MockOnHeapMemoryConsumer(0L)
+    val offHeapConsumer = new MockOffHeapMemoryConsumer(0L)
+
+    try {
+      // Register both consumers
+      UnifiedMemoryManager.registerUnmanagedMemoryConsumer(onHeapConsumer)
+      UnifiedMemoryManager.registerUnmanagedMemoryConsumer(offHeapConsumer)
+
+      // Initially no unmanaged memory usage
+      assert(UnifiedMemoryManager.getMemoryByComponentType("TestOnHeap") === 0L)
+      assert(UnifiedMemoryManager.getMemoryByComponentType("TestOffHeap") === 0L)
+
+      // Set off-heap memory usage - this should NOT affect on-heap allocations
+      offHeapConsumer.memoryUsed = 200L
+
+      // Wait for polling to pick up the change
+      Thread.sleep(200)
+
+      // Test that off-heap unmanaged memory doesn't affect on-heap execution memory allocation
+      val acquiredMemory = mm.acquireExecutionMemory(1000L, taskAttemptId, memoryMode)
+      // Should get full 1000 bytes since off-heap unmanaged memory doesn't affect on-heap pool
+      assert(acquiredMemory == 1000L)
+
+      // Release execution memory
+      mm.releaseExecutionMemory(acquiredMemory, taskAttemptId, memoryMode)
+
+      // Now set on-heap memory usage - this SHOULD affect on-heap allocations
+      onHeapConsumer.memoryUsed = 200L
+      Thread.sleep(200)
+
+      // Test that on-heap unmanaged memory affects on-heap execution memory allocation
+      val acquiredMemory2 = mm.acquireExecutionMemory(900L, taskAttemptId, memoryMode)
+      // Should only get 800 bytes due to 200 bytes of on-heap unmanaged memory usage
+      assert(acquiredMemory2 == 800L)
+
+      // Release execution memory to test storage allocation
+      mm.releaseExecutionMemory(acquiredMemory2, taskAttemptId, memoryMode)
+
+      // Test storage memory with on-heap unmanaged memory consideration
+      onHeapConsumer.memoryUsed = 300L
+      Thread.sleep(200)
+
+      // Storage should fail when block size + unmanaged memory > max memory
+      assert(!mm.acquireStorageMemory(dummyBlock, 800L, memoryMode))
+
+      // But smaller storage requests should succeed with unmanaged memory factored in
+      // With 300L on-heap unmanaged memory, effective max is 700L
+      assert(mm.acquireStorageMemory(dummyBlock, 600L, memoryMode))
+
+    } finally {
+      UnifiedMemoryManager.shutdownUnmanagedMemoryPoller()
+      UnifiedMemoryManager.clearUnmanagedMemoryUsers()
+    }
+  }
+
+  test("unmanaged memory consumer registration and unregistration") {
+    val conf = new SparkConf()
+      .set(MEMORY_FRACTION, 1.0)
+      .set(TEST_MEMORY, 1000L)
+      .set(MEMORY_OFFHEAP_ENABLED, false)
+      .set(UNMANAGED_MEMORY_POLLING_INTERVAL, 100L)
+
+    val mm = UnifiedMemoryManager(conf, numCores = 1)
+
+    class MockMemoryConsumer(
+        var memoryUsed: Long,
+        instanceId: String,
+        mode: MemoryMode = MemoryMode.ON_HEAP) extends UnmanagedMemoryConsumer {
+      override def unmanagedMemoryConsumerId: UnmanagedMemoryConsumerId =
+        UnmanagedMemoryConsumerId("Test", instanceId)
+      override def memoryMode: MemoryMode = mode
+      override def getMemBytesUsed: Long = memoryUsed
+    }
+
+    val consumer1 = new MockMemoryConsumer(100L, "test-instance-1")
+    val consumer2 = new MockMemoryConsumer(200L, "test-instance-2")
+
+    try {
+      // Register consumers
+      UnifiedMemoryManager.registerUnmanagedMemoryConsumer(consumer1)
+      UnifiedMemoryManager.registerUnmanagedMemoryConsumer(consumer2)
+
+      Thread.sleep(200)
+      assert(UnifiedMemoryManager.getMemoryByComponentType("Test") === 300L)
+
+      // Unregister one consumer
+      UnifiedMemoryManager.unregisterUnmanagedMemoryConsumer(consumer1)
+
+      Thread.sleep(200)
+      assert(UnifiedMemoryManager.getMemoryByComponentType("Test") === 200L)
+
+      // Unregister second consumer
+      UnifiedMemoryManager.unregisterUnmanagedMemoryConsumer(consumer2)
+
+      Thread.sleep(200)
+      assert(UnifiedMemoryManager.getMemoryByComponentType("Test") === 0L)
+
+    } finally {
+      UnifiedMemoryManager.shutdownUnmanagedMemoryPoller()
+      UnifiedMemoryManager.clearUnmanagedMemoryUsers()
+    }
+  }
+
+  test("unmanaged memory consumer auto-removal when returning -1") {
+    val conf = new SparkConf()
+      .set(MEMORY_FRACTION, 1.0)
+      .set(TEST_MEMORY, 1000L)
+      .set(MEMORY_OFFHEAP_ENABLED, false)
+      .set(UNMANAGED_MEMORY_POLLING_INTERVAL, 100L)
+
+    val mm = UnifiedMemoryManager(conf, numCores = 1)
+
+    class MockMemoryConsumer(var memoryUsed: Long) extends UnmanagedMemoryConsumer {
+      override def unmanagedMemoryConsumerId: UnmanagedMemoryConsumerId =
+        UnmanagedMemoryConsumerId("Test", s"test-instance-${this.hashCode()}")
+      override def memoryMode: MemoryMode = MemoryMode.ON_HEAP
+      override def getMemBytesUsed: Long = memoryUsed
+    }
+
+    val consumer1 = new MockMemoryConsumer(100L)
+    val consumer2 = new MockMemoryConsumer(200L)
+
+    try {
+      // Register consumers
+      UnifiedMemoryManager.registerUnmanagedMemoryConsumer(consumer1)
+      UnifiedMemoryManager.registerUnmanagedMemoryConsumer(consumer2)
+
+      Thread.sleep(200)
+      assert(UnifiedMemoryManager.getMemoryByComponentType("Test") === 300L)
+
+      // Mark consumer1 as inactive
+      consumer1.memoryUsed = -1L
+
+      // Wait for polling to detect and remove the inactive consumer
+      Thread.sleep(200)
+      assert(UnifiedMemoryManager.getMemoryByComponentType("Test") === 200L)
+
+      // Mark consumer2 as inactive as well
+      consumer2.memoryUsed = -1L
+
+      Thread.sleep(200)
+      assert(UnifiedMemoryManager.getMemoryByComponentType("Test") === 0L)
+
+    } finally {
+      UnifiedMemoryManager.shutdownUnmanagedMemoryPoller()
+      UnifiedMemoryManager.clearUnmanagedMemoryUsers()
+    }
+  }
+
+  test("unmanaged memory polling disabled when interval is zero") {
+    val conf = new SparkConf()
+      .set(MEMORY_FRACTION, 1.0)
+      .set(TEST_MEMORY, 1000L)
+      .set(MEMORY_OFFHEAP_ENABLED, false)
+      .set(MEMORY_STORAGE_FRACTION, storageFraction)
+      .set(UNMANAGED_MEMORY_POLLING_INTERVAL, 0L) // Disabled
+
+    val mm = UnifiedMemoryManager(conf, numCores = 1)
+
+    // When polling is disabled, unmanaged memory should not affect allocations
+    class MockUnmanagedMemoryConsumer(var memoryUsed: Long) extends UnmanagedMemoryConsumer {
+      override def unmanagedMemoryConsumerId: UnmanagedMemoryConsumerId =
+        UnmanagedMemoryConsumerId("Test", "test-instance")
+      override def memoryMode: MemoryMode = MemoryMode.ON_HEAP
+      override def getMemBytesUsed: Long = memoryUsed
+    }
+
+    val consumer = new MockUnmanagedMemoryConsumer(500L)
+
+    try {
+      UnifiedMemoryManager.registerUnmanagedMemoryConsumer(consumer)
+
+      // Since polling is disabled, should be able to allocate full memory
+      val acquiredMemory = mm.acquireExecutionMemory(1000L, 0L, MemoryMode.ON_HEAP)
+      assert(acquiredMemory === 1000L)
+
+    } finally {
+      UnifiedMemoryManager.shutdownUnmanagedMemoryPoller()
+      UnifiedMemoryManager.clearUnmanagedMemoryUsers()
+    }
+  }
+
+  test("unmanaged memory tracking with off-heap memory enabled") {
+    assume(!Utils.isMacOnAppleSilicon)
+    val maxOnHeapMemory = 1000L
+    val maxOffHeapMemory = 1500L
+    val taskAttemptId = 0L
+    val conf = new SparkConf()
+      .set(MEMORY_FRACTION, 1.0)
+      .set(TEST_MEMORY, maxOnHeapMemory)
+      .set(MEMORY_OFFHEAP_ENABLED, true)
+      .set(MEMORY_OFFHEAP_SIZE, maxOffHeapMemory)
+      .set(MEMORY_STORAGE_FRACTION, storageFraction)
+      .set(UNMANAGED_MEMORY_POLLING_INTERVAL, 100L)
+    val mm = UnifiedMemoryManager(conf, numCores = 1)
+
+    // Mock unmanaged memory consumer
+    class MockUnmanagedMemoryConsumer(var memoryUsed: Long) extends UnmanagedMemoryConsumer {
+      override def unmanagedMemoryConsumerId: UnmanagedMemoryConsumerId =
+        UnmanagedMemoryConsumerId("ExternalLib", "test-instance")
+
+      override def memoryMode: MemoryMode = MemoryMode.OFF_HEAP
+
+      override def getMemBytesUsed: Long = memoryUsed
+    }
+
+    val unmanagedConsumer = new MockUnmanagedMemoryConsumer(0L)
+
+    try {
+      // Register the unmanaged memory consumer
+      UnifiedMemoryManager.registerUnmanagedMemoryConsumer(unmanagedConsumer)
+
+      // Test off-heap memory allocation with unmanaged memory
+      unmanagedConsumer.memoryUsed = 300L
+      Thread.sleep(200)
+
+      // Test off-heap execution memory
+      // With 300 bytes of unmanaged memory, effective off-heap memory should be reduced
+      val offHeapAcquired = mm.acquireExecutionMemory(1400L, taskAttemptId, MemoryMode.OFF_HEAP)
+      assert(offHeapAcquired <= 1200L, "Off-heap memory should be reduced by unmanaged usage")
+      mm.releaseExecutionMemory(offHeapAcquired, taskAttemptId, MemoryMode.OFF_HEAP)
+
+      // Test off-heap storage memory
+      unmanagedConsumer.memoryUsed = 500L
+      Thread.sleep(200)
+
+      // Storage should fail when block size + unmanaged memory > max off-heap memory
+      assert(!mm.acquireStorageMemory(dummyBlock, 1100L, MemoryMode.OFF_HEAP))
+
+      // But smaller off-heap storage requests should succeed
+      assert(mm.acquireStorageMemory(dummyBlock, 900L, MemoryMode.OFF_HEAP))
+      mm.releaseStorageMemory(900L, MemoryMode.OFF_HEAP)
+
+      // Test that on-heap is NOT affected by off-heap unmanaged memory
+      val onHeapAcquired = mm.acquireExecutionMemory(600L, taskAttemptId, MemoryMode.ON_HEAP)
+      assert(onHeapAcquired == 600L,
+        "On-heap memory should not be reduced by off-heap unmanaged usage")
+      mm.releaseExecutionMemory(onHeapAcquired, taskAttemptId, MemoryMode.ON_HEAP)
+
+      // Test with mixed memory modes
+      unmanagedConsumer.memoryUsed = 200L
+      Thread.sleep(200)
+
+      // Allocate some on-heap and off-heap memory
+      val onHeap = mm.acquireExecutionMemory(400L, taskAttemptId, MemoryMode.ON_HEAP)
+      val offHeap = mm.acquireExecutionMemory(1000L, taskAttemptId, MemoryMode.OFF_HEAP)
+
+      assert(onHeap == 400L && offHeap <= 1300L,
+        "Off-heap memory pool should respect unmanaged memory usage, on-heap should not")
+
+    } finally {
+      UnifiedMemoryManager.shutdownUnmanagedMemoryPoller()
+      UnifiedMemoryManager.clearUnmanagedMemoryUsers()
+    }
   }
 }

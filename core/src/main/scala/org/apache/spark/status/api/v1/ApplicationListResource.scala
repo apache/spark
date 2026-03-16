@@ -38,7 +38,7 @@ private[v1] class ApplicationListResource extends ApiRequestContext {
     val includeCompleted = status.isEmpty || status.contains(ApplicationStatus.COMPLETED)
     val includeRunning = status.isEmpty || status.contains(ApplicationStatus.RUNNING)
 
-    uiRoot.getApplicationInfoList.filter { app =>
+    uiRoot.getApplicationInfoList(numApps) { app =>
       val anyRunning = app.attempts.isEmpty || !app.attempts.head.completed
       // if any attempt is still running, we consider the app to also still be running;
       // keep the app if *any* attempts fall in the right time window
@@ -46,7 +46,7 @@ private[v1] class ApplicationListResource extends ApiRequestContext {
       app.attempts.exists { attempt =>
         isAttemptInRange(attempt, minDate, maxDate, minEndDate, maxEndDate, anyRunning)
       }
-    }.take(numApps)
+    }
   }
 
   private def isAttemptInRange(

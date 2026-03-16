@@ -77,11 +77,18 @@ fi
 
 # Add the PySpark classes to the Python path:
 export PYTHONPATH="${SPARK_HOME}/python/:$PYTHONPATH"
-export PYTHONPATH="${SPARK_HOME}/python/lib/py4j-0.10.9.7-src.zip:$PYTHONPATH"
+export PYTHONPATH="${SPARK_HOME}/python/lib/py4j-0.10.9.9-src.zip:$PYTHONPATH"
 
 # Load the PySpark shell.py script when ./pyspark is used interactively:
 export OLD_PYTHONSTARTUP="$PYTHONSTARTUP"
 export PYTHONSTARTUP="${SPARK_HOME}/python/pyspark/shell.py"
+
+export SPARK_CONNECT_MODE=$($PYSPARK_DRIVER_PYTHON -c "from pyspark.util import spark_connect_mode; print(spark_connect_mode())")
+
+if [[ "$SPARK_CONNECT_MODE" != "0" && "$SPARK_CONNECT_MODE" != "1" ]]; then
+  echo "The environment variable SPARK_CONNECT_MODE has unknown value or pyspark.util package is not available: $SPARK_CONNECT_MODE"
+  unset SPARK_CONNECT_MODE
+fi
 
 # For pyspark tests
 if [[ -n "$SPARK_TESTING" ]]; then

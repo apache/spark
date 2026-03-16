@@ -33,6 +33,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+
 import builtins
 import collections.abc
 import google.protobuf.any_pb2
@@ -43,6 +44,7 @@ import google.protobuf.message
 import pyspark.sql.connect.proto.catalog_pb2
 import pyspark.sql.connect.proto.common_pb2
 import pyspark.sql.connect.proto.expressions_pb2
+import pyspark.sql.connect.proto.ml_common_pb2
 import pyspark.sql.connect.proto.types_pb2
 import sys
 import typing
@@ -106,6 +108,8 @@ class Relation(google.protobuf.message.Message):
     WITH_RELATIONS_FIELD_NUMBER: builtins.int
     TRANSPOSE_FIELD_NUMBER: builtins.int
     UNRESOLVED_TABLE_VALUED_FUNCTION_FIELD_NUMBER: builtins.int
+    LATERAL_JOIN_FIELD_NUMBER: builtins.int
+    CHUNKED_CACHED_LOCAL_RELATION_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -118,6 +122,7 @@ class Relation(google.protobuf.message.Message):
     FREQ_ITEMS_FIELD_NUMBER: builtins.int
     SAMPLE_BY_FIELD_NUMBER: builtins.int
     CATALOG_FIELD_NUMBER: builtins.int
+    ML_RELATION_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     UNKNOWN_FIELD_NUMBER: builtins.int
     @property
@@ -211,8 +216,13 @@ class Relation(google.protobuf.message.Message):
     @property
     def unresolved_table_valued_function(self) -> global___UnresolvedTableValuedFunction: ...
     @property
+    def lateral_join(self) -> global___LateralJoin: ...
+    @property
+    def chunked_cached_local_relation(self) -> global___ChunkedCachedLocalRelation: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
+
     @property
     def drop_na(self) -> global___NADrop: ...
     @property
@@ -220,6 +230,7 @@ class Relation(google.protobuf.message.Message):
     @property
     def summary(self) -> global___StatSummary:
         """stat functions"""
+
     @property
     def crosstab(self) -> global___StatCrosstab: ...
     @property
@@ -237,11 +248,17 @@ class Relation(google.protobuf.message.Message):
     @property
     def catalog(self) -> pyspark.sql.connect.proto.catalog_pb2.Catalog:
         """Catalog API (experimental / unstable)"""
+
+    @property
+    def ml_relation(self) -> global___MlRelation:
+        """ML relation"""
+
     @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         relations they can add them here. During the planning the correct resolution is done.
         """
+
     @property
     def unknown(self) -> global___Unknown: ...
     def __init__(
@@ -284,14 +301,18 @@ class Relation(google.protobuf.message.Message):
         html_string: global___HtmlString | None = ...,
         cached_local_relation: global___CachedLocalRelation | None = ...,
         cached_remote_relation: global___CachedRemoteRelation | None = ...,
-        common_inline_user_defined_table_function: global___CommonInlineUserDefinedTableFunction
-        | None = ...,
+        common_inline_user_defined_table_function: (
+            global___CommonInlineUserDefinedTableFunction | None
+        ) = ...,
         as_of_join: global___AsOfJoin | None = ...,
-        common_inline_user_defined_data_source: global___CommonInlineUserDefinedDataSource
-        | None = ...,
+        common_inline_user_defined_data_source: (
+            global___CommonInlineUserDefinedDataSource | None
+        ) = ...,
         with_relations: global___WithRelations | None = ...,
         transpose: global___Transpose | None = ...,
         unresolved_table_valued_function: global___UnresolvedTableValuedFunction | None = ...,
+        lateral_join: global___LateralJoin | None = ...,
+        chunked_cached_local_relation: global___ChunkedCachedLocalRelation | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -304,6 +325,7 @@ class Relation(google.protobuf.message.Message):
         freq_items: global___StatFreqItems | None = ...,
         sample_by: global___StatSampleBy | None = ...,
         catalog: pyspark.sql.connect.proto.catalog_pb2.Catalog | None = ...,
+        ml_relation: global___MlRelation | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
         unknown: global___Unknown | None = ...,
     ) -> None: ...
@@ -324,6 +346,8 @@ class Relation(google.protobuf.message.Message):
             b"cached_remote_relation",
             "catalog",
             b"catalog",
+            "chunked_cached_local_relation",
+            b"chunked_cached_local_relation",
             "co_group_map",
             b"co_group_map",
             "collect_metrics",
@@ -364,12 +388,16 @@ class Relation(google.protobuf.message.Message):
             b"html_string",
             "join",
             b"join",
+            "lateral_join",
+            b"lateral_join",
             "limit",
             b"limit",
             "local_relation",
             b"local_relation",
             "map_partitions",
             b"map_partitions",
+            "ml_relation",
+            b"ml_relation",
             "offset",
             b"offset",
             "parse",
@@ -445,6 +473,8 @@ class Relation(google.protobuf.message.Message):
             b"cached_remote_relation",
             "catalog",
             b"catalog",
+            "chunked_cached_local_relation",
+            b"chunked_cached_local_relation",
             "co_group_map",
             b"co_group_map",
             "collect_metrics",
@@ -485,12 +515,16 @@ class Relation(google.protobuf.message.Message):
             b"html_string",
             "join",
             b"join",
+            "lateral_join",
+            b"lateral_join",
             "limit",
             b"limit",
             "local_relation",
             b"local_relation",
             "map_partitions",
             b"map_partitions",
+            "ml_relation",
+            b"ml_relation",
             "offset",
             b"offset",
             "parse",
@@ -549,9 +583,7 @@ class Relation(google.protobuf.message.Message):
             b"with_watermark",
         ],
     ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["rel_type", b"rel_type"]
-    ) -> (
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["rel_type", b"rel_type"]) -> (
         typing_extensions.Literal[
             "read",
             "project",
@@ -595,6 +627,8 @@ class Relation(google.protobuf.message.Message):
             "with_relations",
             "transpose",
             "unresolved_table_valued_function",
+            "lateral_join",
+            "chunked_cached_local_relation",
             "fill_na",
             "drop_na",
             "replace",
@@ -607,6 +641,7 @@ class Relation(google.protobuf.message.Message):
             "freq_items",
             "sample_by",
             "catalog",
+            "ml_relation",
             "extension",
             "unknown",
         ]
@@ -614,6 +649,235 @@ class Relation(google.protobuf.message.Message):
     ): ...
 
 global___Relation = Relation
+
+class MlRelation(google.protobuf.message.Message):
+    """Relation to represent ML world"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class Transform(google.protobuf.message.Message):
+        """Relation to represent transform(input) of the operator
+        which could be a cached model or a new transformer
+        """
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        OBJ_REF_FIELD_NUMBER: builtins.int
+        TRANSFORMER_FIELD_NUMBER: builtins.int
+        INPUT_FIELD_NUMBER: builtins.int
+        PARAMS_FIELD_NUMBER: builtins.int
+        @property
+        def obj_ref(self) -> pyspark.sql.connect.proto.ml_common_pb2.ObjectRef:
+            """Object reference"""
+
+        @property
+        def transformer(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlOperator:
+            """Could be an ML transformer like VectorAssembler"""
+
+        @property
+        def input(self) -> global___Relation:
+            """the input dataframe"""
+
+        @property
+        def params(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlParams:
+            """the operator specific parameters"""
+
+        def __init__(
+            self,
+            *,
+            obj_ref: pyspark.sql.connect.proto.ml_common_pb2.ObjectRef | None = ...,
+            transformer: pyspark.sql.connect.proto.ml_common_pb2.MlOperator | None = ...,
+            input: global___Relation | None = ...,
+            params: pyspark.sql.connect.proto.ml_common_pb2.MlParams | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "input",
+                b"input",
+                "obj_ref",
+                b"obj_ref",
+                "operator",
+                b"operator",
+                "params",
+                b"params",
+                "transformer",
+                b"transformer",
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "input",
+                b"input",
+                "obj_ref",
+                b"obj_ref",
+                "operator",
+                b"operator",
+                "params",
+                b"params",
+                "transformer",
+                b"transformer",
+            ],
+        ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["operator", b"operator"]
+        ) -> typing_extensions.Literal["obj_ref", "transformer"] | None: ...
+
+    TRANSFORM_FIELD_NUMBER: builtins.int
+    FETCH_FIELD_NUMBER: builtins.int
+    MODEL_SUMMARY_DATASET_FIELD_NUMBER: builtins.int
+    @property
+    def transform(self) -> global___MlRelation.Transform: ...
+    @property
+    def fetch(self) -> global___Fetch: ...
+    @property
+    def model_summary_dataset(self) -> global___Relation:
+        """(Optional) the dataset for restoring the model summary"""
+
+    def __init__(
+        self,
+        *,
+        transform: global___MlRelation.Transform | None = ...,
+        fetch: global___Fetch | None = ...,
+        model_summary_dataset: global___Relation | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_model_summary_dataset",
+            b"_model_summary_dataset",
+            "fetch",
+            b"fetch",
+            "ml_type",
+            b"ml_type",
+            "model_summary_dataset",
+            b"model_summary_dataset",
+            "transform",
+            b"transform",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_model_summary_dataset",
+            b"_model_summary_dataset",
+            "fetch",
+            b"fetch",
+            "ml_type",
+            b"ml_type",
+            "model_summary_dataset",
+            b"model_summary_dataset",
+            "transform",
+            b"transform",
+        ],
+    ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self,
+        oneof_group: typing_extensions.Literal["_model_summary_dataset", b"_model_summary_dataset"],
+    ) -> typing_extensions.Literal["model_summary_dataset"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["ml_type", b"ml_type"]
+    ) -> typing_extensions.Literal["transform", "fetch"] | None: ...
+
+global___MlRelation = MlRelation
+
+class Fetch(google.protobuf.message.Message):
+    """Message for fetching attribute from object on the server side.
+    Fetch can be represented as a Relation or a ML command
+    Command: model.coefficients, model.summary.weightedPrecision which
+    returns the final literal result
+    Relation: model.summary.roc which returns a DataFrame (Relation)
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class Method(google.protobuf.message.Message):
+        """Represents a method with inclusion of method name and its arguments"""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        class Args(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+            PARAM_FIELD_NUMBER: builtins.int
+            INPUT_FIELD_NUMBER: builtins.int
+            @property
+            def param(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression.Literal: ...
+            @property
+            def input(self) -> global___Relation: ...
+            def __init__(
+                self,
+                *,
+                param: pyspark.sql.connect.proto.expressions_pb2.Expression.Literal | None = ...,
+                input: global___Relation | None = ...,
+            ) -> None: ...
+            def HasField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "args_type", b"args_type", "input", b"input", "param", b"param"
+                ],
+            ) -> builtins.bool: ...
+            def ClearField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "args_type", b"args_type", "input", b"input", "param", b"param"
+                ],
+            ) -> None: ...
+            def WhichOneof(
+                self, oneof_group: typing_extensions.Literal["args_type", b"args_type"]
+            ) -> typing_extensions.Literal["param", "input"] | None: ...
+
+        METHOD_FIELD_NUMBER: builtins.int
+        ARGS_FIELD_NUMBER: builtins.int
+        method: builtins.str
+        """(Required) the method name"""
+        @property
+        def args(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            global___Fetch.Method.Args
+        ]:
+            """(Optional) the arguments of the method"""
+
+        def __init__(
+            self,
+            *,
+            method: builtins.str = ...,
+            args: collections.abc.Iterable[global___Fetch.Method.Args] | None = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["args", b"args", "method", b"method"]
+        ) -> None: ...
+
+    OBJ_REF_FIELD_NUMBER: builtins.int
+    METHODS_FIELD_NUMBER: builtins.int
+    @property
+    def obj_ref(self) -> pyspark.sql.connect.proto.ml_common_pb2.ObjectRef:
+        """(Required) reference to the object on the server side"""
+
+    @property
+    def methods(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Fetch.Method]:
+        """(Required) the calling method chains"""
+
+    def __init__(
+        self,
+        *,
+        obj_ref: pyspark.sql.connect.proto.ml_common_pb2.ObjectRef | None = ...,
+        methods: collections.abc.Iterable[global___Fetch.Method] | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["obj_ref", b"obj_ref"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["methods", b"methods", "obj_ref", b"obj_ref"]
+    ) -> None: ...
+
+global___Fetch = Fetch
 
 class Unknown(google.protobuf.message.Message):
     """Used for testing purposes only."""
@@ -641,6 +905,7 @@ class RelationCommon(google.protobuf.message.Message):
     @property
     def origin(self) -> pyspark.sql.connect.proto.common_pb2.Origin:
         """(Optional) Keep the information of the origin for this expression such as stacktrace."""
+
     def __init__(
         self,
         *,
@@ -734,6 +999,7 @@ class SQL(google.protobuf.message.Message):
         builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
     ]:
         """(Optional) A map of parameter names to literal expressions."""
+
     @property
     def pos_args(
         self,
@@ -741,6 +1007,7 @@ class SQL(google.protobuf.message.Message):
         pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
     ]:
         """(Optional) A sequence of literal expressions for positional parameters in the SQL query text."""
+
     @property
     def named_arguments(
         self,
@@ -750,6 +1017,7 @@ class SQL(google.protobuf.message.Message):
         """(Optional) A map of parameter names to expressions.
         It cannot coexist with `pos_arguments`.
         """
+
     @property
     def pos_arguments(
         self,
@@ -759,26 +1027,30 @@ class SQL(google.protobuf.message.Message):
         """(Optional) A sequence of expressions for positional parameters in the SQL query text.
         It cannot coexist with `named_arguments`.
         """
+
     def __init__(
         self,
         *,
         query: builtins.str = ...,
-        args: collections.abc.Mapping[
-            builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
-        ]
-        | None = ...,
-        pos_args: collections.abc.Iterable[
-            pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
-        ]
-        | None = ...,
-        named_arguments: collections.abc.Mapping[
-            builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression
-        ]
-        | None = ...,
-        pos_arguments: collections.abc.Iterable[
-            pyspark.sql.connect.proto.expressions_pb2.Expression
-        ]
-        | None = ...,
+        args: (
+            collections.abc.Mapping[
+                builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
+            ]
+            | None
+        ) = ...,
+        pos_args: (
+            collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression.Literal]
+            | None
+        ) = ...,
+        named_arguments: (
+            collections.abc.Mapping[
+                builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression
+            ]
+            | None
+        ) = ...,
+        pos_arguments: (
+            collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression] | None
+        ) = ...,
     ) -> None: ...
     def ClearField(
         self,
@@ -817,6 +1089,7 @@ class WithRelations(google.protobuf.message.Message):
         """(Required) Plan at the root of the query tree. This plan is expected to contain one or more
         references. Those references get expanded later on by the engine.
         """
+
     @property
     def references(
         self,
@@ -824,6 +1097,7 @@ class WithRelations(google.protobuf.message.Message):
         """(Required) Plans referenced by the root plan. Relations in this list are also allowed to
         contain references to other relations in this list, as long they do not form cycles.
         """
+
     def __init__(
         self,
         *,
@@ -873,6 +1147,7 @@ class Read(google.protobuf.message.Message):
             self,
         ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
             """Options for the named table. The map key is case insensitive."""
+
         def __init__(
             self,
             *,
@@ -911,6 +1186,7 @@ class Read(google.protobuf.message.Message):
         OPTIONS_FIELD_NUMBER: builtins.int
         PATHS_FIELD_NUMBER: builtins.int
         PREDICATES_FIELD_NUMBER: builtins.int
+        SOURCE_NAME_FIELD_NUMBER: builtins.int
         format: builtins.str
         """(Optional) Supported formats include: parquet, orc, text, json, parquet, csv, avro.
 
@@ -929,11 +1205,13 @@ class Read(google.protobuf.message.Message):
             data source format. This options could be empty for valid data source format.
             The map key is case insensitive.
             """
+
         @property
         def paths(
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
             """(Optional) A list of path for file-system backed data sources."""
+
         @property
         def predicates(
             self,
@@ -942,6 +1220,11 @@ class Read(google.protobuf.message.Message):
 
             This is only supported by the JDBC data source.
             """
+        source_name: builtins.str
+        """(Optional) A user-provided name for the streaming source.
+        This name is used in checkpoint metadata and enables stable checkpoint locations
+        for source evolution.
+        """
         def __init__(
             self,
             *,
@@ -950,6 +1233,7 @@ class Read(google.protobuf.message.Message):
             options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
             paths: collections.abc.Iterable[builtins.str] | None = ...,
             predicates: collections.abc.Iterable[builtins.str] | None = ...,
+            source_name: builtins.str | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -958,10 +1242,14 @@ class Read(google.protobuf.message.Message):
                 b"_format",
                 "_schema",
                 b"_schema",
+                "_source_name",
+                b"_source_name",
                 "format",
                 b"format",
                 "schema",
                 b"schema",
+                "source_name",
+                b"source_name",
             ],
         ) -> builtins.bool: ...
         def ClearField(
@@ -971,6 +1259,8 @@ class Read(google.protobuf.message.Message):
                 b"_format",
                 "_schema",
                 b"_schema",
+                "_source_name",
+                b"_source_name",
                 "format",
                 b"format",
                 "options",
@@ -981,6 +1271,8 @@ class Read(google.protobuf.message.Message):
                 b"predicates",
                 "schema",
                 b"schema",
+                "source_name",
+                b"source_name",
             ],
         ) -> None: ...
         @typing.overload
@@ -991,6 +1283,10 @@ class Read(google.protobuf.message.Message):
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_schema", b"_schema"]
         ) -> typing_extensions.Literal["schema"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_source_name", b"_source_name"]
+        ) -> typing_extensions.Literal["source_name"] | None: ...
 
     NAMED_TABLE_FIELD_NUMBER: builtins.int
     DATA_SOURCE_FIELD_NUMBER: builtins.int
@@ -1050,6 +1346,7 @@ class Project(google.protobuf.message.Message):
 
         For example, `SELECT ABS(-1)` is valid plan without an input plan.
         """
+
     @property
     def expressions(
         self,
@@ -1057,12 +1354,14 @@ class Project(google.protobuf.message.Message):
         pyspark.sql.connect.proto.expressions_pb2.Expression
     ]:
         """(Required) A Project requires at least one expression."""
+
     def __init__(
         self,
         *,
         input: global___Relation | None = ...,
-        expressions: collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression]
-        | None = ...,
+        expressions: (
+            collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression] | None
+        ) = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["input", b"input"]
@@ -1086,9 +1385,11 @@ class Filter(google.protobuf.message.Message):
     @property
     def input(self) -> global___Relation:
         """(Required) Input relation for a Filter."""
+
     @property
     def condition(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
         """(Required) A Filter must have a condition expression."""
+
     def __init__(
         self,
         *,
@@ -1171,9 +1472,11 @@ class Join(google.protobuf.message.Message):
     @property
     def left(self) -> global___Relation:
         """(Required) Left input relation for a Join."""
+
     @property
     def right(self) -> global___Relation:
         """(Required) Right input relation for a Join."""
+
     @property
     def join_condition(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
         """(Optional) The join condition. Could be unset when `using_columns` is utilized.
@@ -1192,9 +1495,11 @@ class Join(google.protobuf.message.Message):
 
         This field does not co-exist with join_condition.
         """
+
     @property
     def join_data_type(self) -> global___Join.JoinDataType:
         """(Optional) Only used by joinWith. Set the left and right join data types."""
+
     def __init__(
         self,
         *,
@@ -1281,6 +1586,7 @@ class SetOperation(google.protobuf.message.Message):
     @property
     def left_input(self) -> global___Relation:
         """(Required) Left input relation for a Set operation."""
+
     @property
     def right_input(self) -> global___Relation:
         """(Required) Right input relation for a Set operation."""
@@ -1492,6 +1798,7 @@ class Aggregate(google.protobuf.message.Message):
         @property
         def col(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
             """(Required) The column to pivot"""
+
         @property
         def values(
             self,
@@ -1503,14 +1810,17 @@ class Aggregate(google.protobuf.message.Message):
             Note that if it is empty, the server side will immediately trigger a job to collect
             the distinct values of the column.
             """
+
         def __init__(
             self,
             *,
             col: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
-            values: collections.abc.Iterable[
-                pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
-            ]
-            | None = ...,
+            values: (
+                collections.abc.Iterable[
+                    pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
+                ]
+                | None
+            ) = ...,
         ) -> None: ...
         def HasField(
             self, field_name: typing_extensions.Literal["col", b"col"]
@@ -1530,13 +1840,14 @@ class Aggregate(google.protobuf.message.Message):
             pyspark.sql.connect.proto.expressions_pb2.Expression
         ]:
             """(Required) Individual grouping set"""
+
         def __init__(
             self,
             *,
-            grouping_set: collections.abc.Iterable[
-                pyspark.sql.connect.proto.expressions_pb2.Expression
-            ]
-            | None = ...,
+            grouping_set: (
+                collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression]
+                | None
+            ) = ...,
         ) -> None: ...
         def ClearField(
             self, field_name: typing_extensions.Literal["grouping_set", b"grouping_set"]
@@ -1560,6 +1871,7 @@ class Aggregate(google.protobuf.message.Message):
         pyspark.sql.connect.proto.expressions_pb2.Expression
     ]:
         """(Required) Expressions for grouping keys"""
+
     @property
     def aggregate_expressions(
         self,
@@ -1567,9 +1879,11 @@ class Aggregate(google.protobuf.message.Message):
         pyspark.sql.connect.proto.expressions_pb2.Expression
     ]:
         """(Required) List of values that will be translated to columns in the output DataFrame."""
+
     @property
     def pivot(self) -> global___Aggregate.Pivot:
         """(Optional) Pivots a column of the current `DataFrame` and performs the specified aggregation."""
+
     @property
     def grouping_sets(
         self,
@@ -1577,19 +1891,18 @@ class Aggregate(google.protobuf.message.Message):
         global___Aggregate.GroupingSets
     ]:
         """(Optional) List of values that will be translated to columns in the output DataFrame."""
+
     def __init__(
         self,
         *,
         input: global___Relation | None = ...,
         group_type: global___Aggregate.GroupType.ValueType = ...,
-        grouping_expressions: collections.abc.Iterable[
-            pyspark.sql.connect.proto.expressions_pb2.Expression
-        ]
-        | None = ...,
-        aggregate_expressions: collections.abc.Iterable[
-            pyspark.sql.connect.proto.expressions_pb2.Expression
-        ]
-        | None = ...,
+        grouping_expressions: (
+            collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression] | None
+        ) = ...,
+        aggregate_expressions: (
+            collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression] | None
+        ) = ...,
         pivot: global___Aggregate.Pivot | None = ...,
         grouping_sets: collections.abc.Iterable[global___Aggregate.GroupingSets] | None = ...,
     ) -> None: ...
@@ -1627,6 +1940,7 @@ class Sort(google.protobuf.message.Message):
     @property
     def input(self) -> global___Relation:
         """(Required) Input relation for a Sort."""
+
     @property
     def order(
         self,
@@ -1640,10 +1954,10 @@ class Sort(google.protobuf.message.Message):
         self,
         *,
         input: global___Relation | None = ...,
-        order: collections.abc.Iterable[
-            pyspark.sql.connect.proto.expressions_pb2.Expression.SortOrder
-        ]
-        | None = ...,
+        order: (
+            collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression.SortOrder]
+            | None
+        ) = ...,
         is_global: builtins.bool | None = ...,
     ) -> None: ...
     def HasField(
@@ -1682,6 +1996,7 @@ class Drop(google.protobuf.message.Message):
     @property
     def input(self) -> global___Relation:
         """(Required) The input relation."""
+
     @property
     def columns(
         self,
@@ -1689,17 +2004,20 @@ class Drop(google.protobuf.message.Message):
         pyspark.sql.connect.proto.expressions_pb2.Expression
     ]:
         """(Optional) columns to drop."""
+
     @property
     def column_names(
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """(Optional) names of columns to drop."""
+
     def __init__(
         self,
         *,
         input: global___Relation | None = ...,
-        columns: collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression]
-        | None = ...,
+        columns: (
+            collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression] | None
+        ) = ...,
         column_names: collections.abc.Iterable[builtins.str] | None = ...,
     ) -> None: ...
     def HasField(
@@ -1728,6 +2046,7 @@ class Deduplicate(google.protobuf.message.Message):
     @property
     def input(self) -> global___Relation:
         """(Required) Input relation for a Deduplicate."""
+
     @property
     def column_names(
         self,
@@ -1843,7 +2162,9 @@ class LocalRelation(google.protobuf.message.Message):
 global___LocalRelation = LocalRelation
 
 class CachedLocalRelation(google.protobuf.message.Message):
-    """A local relation that has been cached already."""
+    """A local relation that has been cached already.
+    CachedLocalRelation doesn't support LocalRelations of size over 2GB.
+    """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1858,6 +2179,51 @@ class CachedLocalRelation(google.protobuf.message.Message):
     def ClearField(self, field_name: typing_extensions.Literal["hash", b"hash"]) -> None: ...
 
 global___CachedLocalRelation = CachedLocalRelation
+
+class ChunkedCachedLocalRelation(google.protobuf.message.Message):
+    """A local relation that has been cached already."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    DATAHASHES_FIELD_NUMBER: builtins.int
+    SCHEMAHASH_FIELD_NUMBER: builtins.int
+    @property
+    def dataHashes(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Required) A list of sha-256 hashes for representing LocalRelation.data.
+        Data is serialized in Arrow IPC streaming format, each batch is cached on the server as
+        a separate artifact. Each hash represents one batch stored on the server.
+        Hashes are hex-encoded strings (e.g., "a3b2c1d4...").
+        """
+    schemaHash: builtins.str
+    """(Optional) A sha-256 hash of the serialized LocalRelation.schema.
+    Scala clients always provide the schema, Python clients can omit it.
+    Hash is a hex-encoded string (e.g., "a3b2c1d4...").
+    """
+    def __init__(
+        self,
+        *,
+        dataHashes: collections.abc.Iterable[builtins.str] | None = ...,
+        schemaHash: builtins.str | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_schemaHash", b"_schemaHash", "schemaHash", b"schemaHash"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_schemaHash", b"_schemaHash", "dataHashes", b"dataHashes", "schemaHash", b"schemaHash"
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_schemaHash", b"_schemaHash"]
+    ) -> typing_extensions.Literal["schemaHash"] | None: ...
+
+global___ChunkedCachedLocalRelation = ChunkedCachedLocalRelation
 
 class CachedRemoteRelation(google.protobuf.message.Message):
     """Represents a remote relation that has been cached on server."""
@@ -2051,6 +2417,7 @@ class SubqueryAlias(google.protobuf.message.Message):
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """(Optional) Qualifier of the alias."""
+
     def __init__(
         self,
         *,
@@ -2217,6 +2584,7 @@ class StatSummary(google.protobuf.message.Message):
     @property
     def input(self) -> global___Relation:
         """(Required) The input relation."""
+
     @property
     def statistics(
         self,
@@ -2236,6 +2604,7 @@ class StatSummary(google.protobuf.message.Message):
         If no statistics are given, this function computes 'count', 'mean', 'stddev', 'min',
         'approximate quartiles' (percentiles at 25%, 50%, and 75%), and 'max'.
         """
+
     def __init__(
         self,
         *,
@@ -2264,11 +2633,13 @@ class StatDescribe(google.protobuf.message.Message):
     @property
     def input(self) -> global___Relation:
         """(Required) The input relation."""
+
     @property
     def cols(
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """(Optional) Columns to compute statistics on."""
+
     def __init__(
         self,
         *,
@@ -2433,11 +2804,13 @@ class StatApproxQuantile(google.protobuf.message.Message):
     @property
     def input(self) -> global___Relation:
         """(Required) The input relation."""
+
     @property
     def cols(
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """(Required) The names of the numerical columns."""
+
     @property
     def probabilities(
         self,
@@ -2494,6 +2867,7 @@ class StatFreqItems(google.protobuf.message.Message):
     @property
     def input(self) -> global___Relation:
         """(Required) The input relation."""
+
     @property
     def cols(
         self,
@@ -2568,9 +2942,11 @@ class StatSampleBy(google.protobuf.message.Message):
     @property
     def input(self) -> global___Relation:
         """(Required) The input relation."""
+
     @property
     def col(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
         """(Required) The column that defines strata."""
+
     @property
     def fractions(
         self,
@@ -2641,11 +3017,13 @@ class NAFill(google.protobuf.message.Message):
     @property
     def input(self) -> global___Relation:
         """(Required) The input relation."""
+
     @property
     def cols(
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """(Optional) Optional list of column names to consider."""
+
     @property
     def values(
         self,
@@ -2657,15 +3035,16 @@ class NAFill(google.protobuf.message.Message):
         Should contain at least 1 item.
         Only 4 data types are supported now: bool, long, double, string
         """
+
     def __init__(
         self,
         *,
         input: global___Relation | None = ...,
         cols: collections.abc.Iterable[builtins.str] | None = ...,
-        values: collections.abc.Iterable[
-            pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
-        ]
-        | None = ...,
+        values: (
+            collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression.Literal]
+            | None
+        ) = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["input", b"input"]
@@ -2692,6 +3071,7 @@ class NADrop(google.protobuf.message.Message):
     @property
     def input(self) -> global___Relation:
         """(Required) The input relation."""
+
     @property
     def cols(
         self,
@@ -2766,12 +3146,14 @@ class NAReplace(google.protobuf.message.Message):
 
             Only 4 data types are supported now: null, bool, double, string.
             """
+
         @property
         def new_value(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression.Literal:
             """(Required) The new value.
 
             Should be of the same data type with the old value.
             """
+
         def __init__(
             self,
             *,
@@ -2797,6 +3179,7 @@ class NAReplace(google.protobuf.message.Message):
     @property
     def input(self) -> global___Relation:
         """(Required) The input relation."""
+
     @property
     def cols(
         self,
@@ -2805,6 +3188,7 @@ class NAReplace(google.protobuf.message.Message):
 
         When it is empty, all the type-compatible columns in the input relation will be considered.
         """
+
     @property
     def replacements(
         self,
@@ -2812,6 +3196,7 @@ class NAReplace(google.protobuf.message.Message):
         global___NAReplace.Replacement
     ]:
         """(Optional) The value replacement mapping."""
+
     def __init__(
         self,
         *,
@@ -2841,6 +3226,7 @@ class ToDF(google.protobuf.message.Message):
     @property
     def input(self) -> global___Relation:
         """(Required) The input relation of RenameColumnsBySameLengthNames."""
+
     @property
     def column_names(
         self,
@@ -2850,6 +3236,7 @@ class ToDF(google.protobuf.message.Message):
         The number of columns of the input relation must be equal to the length
         of this field. If this is not true, an exception will be returned.
         """
+
     def __init__(
         self,
         *,
@@ -2916,6 +3303,7 @@ class WithColumnsRenamed(google.protobuf.message.Message):
     @property
     def input(self) -> global___Relation:
         """(Required) The input relation."""
+
     @property
     def rename_columns_map(
         self,
@@ -2927,6 +3315,7 @@ class WithColumnsRenamed(google.protobuf.message.Message):
         does not require that all input relation column names to present as keys.
         duplicated B are not allowed.
         """
+
     @property
     def renames(
         self,
@@ -2962,6 +3351,7 @@ class WithColumns(google.protobuf.message.Message):
     @property
     def input(self) -> global___Relation:
         """(Required) The input relation."""
+
     @property
     def aliases(
         self,
@@ -2978,14 +3368,15 @@ class WithColumns(google.protobuf.message.Message):
 
         An exception is thrown when duplicated names are present in the mapping.
         """
+
     def __init__(
         self,
         *,
         input: global___Relation | None = ...,
-        aliases: collections.abc.Iterable[
-            pyspark.sql.connect.proto.expressions_pb2.Expression.Alias
-        ]
-        | None = ...,
+        aliases: (
+            collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression.Alias]
+            | None
+        ) = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["input", b"input"]
@@ -3053,13 +3444,15 @@ class Hint(google.protobuf.message.Message):
         pyspark.sql.connect.proto.expressions_pb2.Expression
     ]:
         """(Optional) Hint parameters."""
+
     def __init__(
         self,
         *,
         input: global___Relation | None = ...,
         name: builtins.str = ...,
-        parameters: collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression]
-        | None = ...,
+        parameters: (
+            collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression] | None
+        ) = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["input", b"input"]
@@ -3091,8 +3484,10 @@ class Unpivot(google.protobuf.message.Message):
         def __init__(
             self,
             *,
-            values: collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression]
-            | None = ...,
+            values: (
+                collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression]
+                | None
+            ) = ...,
         ) -> None: ...
         def ClearField(
             self, field_name: typing_extensions.Literal["values", b"values"]
@@ -3106,6 +3501,7 @@ class Unpivot(google.protobuf.message.Message):
     @property
     def input(self) -> global___Relation:
         """(Required) The input relation."""
+
     @property
     def ids(
         self,
@@ -3113,6 +3509,7 @@ class Unpivot(google.protobuf.message.Message):
         pyspark.sql.connect.proto.expressions_pb2.Expression
     ]:
         """(Required) Id columns."""
+
     @property
     def values(self) -> global___Unpivot.Values:
         """(Optional) Value columns to unpivot."""
@@ -3124,8 +3521,9 @@ class Unpivot(google.protobuf.message.Message):
         self,
         *,
         input: global___Relation | None = ...,
-        ids: collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression]
-        | None = ...,
+        ids: (
+            collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression] | None
+        ) = ...,
         values: global___Unpivot.Values | None = ...,
         variable_column_name: builtins.str = ...,
         value_column_name: builtins.str = ...,
@@ -3172,6 +3570,7 @@ class Transpose(google.protobuf.message.Message):
     @property
     def input(self) -> global___Relation:
         """(Required) The input relation."""
+
     @property
     def index_columns(
         self,
@@ -3181,14 +3580,14 @@ class Transpose(google.protobuf.message.Message):
         """(Optional) A list of columns that will be treated as the indices.
         Only single column is supported now.
         """
+
     def __init__(
         self,
         *,
         input: global___Relation | None = ...,
-        index_columns: collections.abc.Iterable[
-            pyspark.sql.connect.proto.expressions_pb2.Expression
-        ]
-        | None = ...,
+        index_columns: (
+            collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression] | None
+        ) = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["input", b"input"]
@@ -3214,12 +3613,14 @@ class UnresolvedTableValuedFunction(google.protobuf.message.Message):
         pyspark.sql.connect.proto.expressions_pb2.Expression
     ]:
         """(Optional) Function arguments. Empty arguments are allowed."""
+
     def __init__(
         self,
         *,
         function_name: builtins.str = ...,
-        arguments: collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression]
-        | None = ...,
+        arguments: (
+            collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression] | None
+        ) = ...,
     ) -> None: ...
     def ClearField(
         self,
@@ -3238,12 +3639,14 @@ class ToSchema(google.protobuf.message.Message):
     @property
     def input(self) -> global___Relation:
         """(Required) The input relation."""
+
     @property
     def schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
         """(Required) The user provided schema.
 
         The Sever side will update the dataframe with this schema.
         """
+
     def __init__(
         self,
         *,
@@ -3268,6 +3671,7 @@ class RepartitionByExpression(google.protobuf.message.Message):
     @property
     def input(self) -> global___Relation:
         """(Required) The input relation."""
+
     @property
     def partition_exprs(
         self,
@@ -3281,10 +3685,9 @@ class RepartitionByExpression(google.protobuf.message.Message):
         self,
         *,
         input: global___Relation | None = ...,
-        partition_exprs: collections.abc.Iterable[
-            pyspark.sql.connect.proto.expressions_pb2.Expression
-        ]
-        | None = ...,
+        partition_exprs: (
+            collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression] | None
+        ) = ...,
         num_partitions: builtins.int | None = ...,
     ) -> None: ...
     def HasField(
@@ -3327,6 +3730,7 @@ class MapPartitions(google.protobuf.message.Message):
     @property
     def input(self) -> global___Relation:
         """(Required) Input relation for a mapPartitions-equivalent API: mapInPandas, mapInArrow."""
+
     @property
     def func(self) -> pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction:
         """(Required) Input user-defined function."""
@@ -3338,8 +3742,9 @@ class MapPartitions(google.protobuf.message.Message):
         self,
         *,
         input: global___Relation | None = ...,
-        func: pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction
-        | None = ...,
+        func: (
+            pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction | None
+        ) = ...,
         is_barrier: builtins.bool | None = ...,
         profile_id: builtins.int | None = ...,
     ) -> None: ...
@@ -3400,9 +3805,12 @@ class GroupMap(google.protobuf.message.Message):
     IS_MAP_GROUPS_WITH_STATE_FIELD_NUMBER: builtins.int
     OUTPUT_MODE_FIELD_NUMBER: builtins.int
     TIMEOUT_CONF_FIELD_NUMBER: builtins.int
+    STATE_SCHEMA_FIELD_NUMBER: builtins.int
+    TRANSFORM_WITH_STATE_INFO_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) Input relation for Group Map API: apply, applyInPandas."""
+
     @property
     def grouping_expressions(
         self,
@@ -3410,9 +3818,11 @@ class GroupMap(google.protobuf.message.Message):
         pyspark.sql.connect.proto.expressions_pb2.Expression
     ]:
         """(Required) Expressions for grouping keys."""
+
     @property
     def func(self) -> pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction:
         """(Required) Input user-defined function."""
+
     @property
     def sorting_expressions(
         self,
@@ -3420,11 +3830,13 @@ class GroupMap(google.protobuf.message.Message):
         pyspark.sql.connect.proto.expressions_pb2.Expression
     ]:
         """(Optional) Expressions for sorting. Only used by Scala Sorted Group Map API."""
+
     @property
     def initial_input(self) -> global___Relation:
         """Below fields are only used by (Flat)MapGroupsWithState
         (Optional) Input relation for initial State.
         """
+
     @property
     def initial_grouping_expressions(
         self,
@@ -3438,28 +3850,38 @@ class GroupMap(google.protobuf.message.Message):
     """(Optional) The output mode of the function."""
     timeout_conf: builtins.str
     """(Optional) Timeout configuration for groups that do not receive data for a while."""
+    @property
+    def state_schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+        """(Optional) The schema for the grouped state."""
+
+    @property
+    def transform_with_state_info(self) -> global___TransformWithStateInfo:
+        """Below fields are used by TransformWithState and TransformWithStateInPandas
+        (Optional) TransformWithState related parameters.
+        """
+
     def __init__(
         self,
         *,
         input: global___Relation | None = ...,
-        grouping_expressions: collections.abc.Iterable[
-            pyspark.sql.connect.proto.expressions_pb2.Expression
-        ]
-        | None = ...,
-        func: pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction
-        | None = ...,
-        sorting_expressions: collections.abc.Iterable[
-            pyspark.sql.connect.proto.expressions_pb2.Expression
-        ]
-        | None = ...,
+        grouping_expressions: (
+            collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression] | None
+        ) = ...,
+        func: (
+            pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction | None
+        ) = ...,
+        sorting_expressions: (
+            collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression] | None
+        ) = ...,
         initial_input: global___Relation | None = ...,
-        initial_grouping_expressions: collections.abc.Iterable[
-            pyspark.sql.connect.proto.expressions_pb2.Expression
-        ]
-        | None = ...,
+        initial_grouping_expressions: (
+            collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression] | None
+        ) = ...,
         is_map_groups_with_state: builtins.bool | None = ...,
         output_mode: builtins.str | None = ...,
         timeout_conf: builtins.str | None = ...,
+        state_schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+        transform_with_state_info: global___TransformWithStateInfo | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -3468,8 +3890,12 @@ class GroupMap(google.protobuf.message.Message):
             b"_is_map_groups_with_state",
             "_output_mode",
             b"_output_mode",
+            "_state_schema",
+            b"_state_schema",
             "_timeout_conf",
             b"_timeout_conf",
+            "_transform_with_state_info",
+            b"_transform_with_state_info",
             "func",
             b"func",
             "initial_input",
@@ -3480,8 +3906,12 @@ class GroupMap(google.protobuf.message.Message):
             b"is_map_groups_with_state",
             "output_mode",
             b"output_mode",
+            "state_schema",
+            b"state_schema",
             "timeout_conf",
             b"timeout_conf",
+            "transform_with_state_info",
+            b"transform_with_state_info",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -3491,8 +3921,12 @@ class GroupMap(google.protobuf.message.Message):
             b"_is_map_groups_with_state",
             "_output_mode",
             b"_output_mode",
+            "_state_schema",
+            b"_state_schema",
             "_timeout_conf",
             b"_timeout_conf",
+            "_transform_with_state_info",
+            b"_transform_with_state_info",
             "func",
             b"func",
             "grouping_expressions",
@@ -3509,8 +3943,12 @@ class GroupMap(google.protobuf.message.Message):
             b"output_mode",
             "sorting_expressions",
             b"sorting_expressions",
+            "state_schema",
+            b"state_schema",
             "timeout_conf",
             b"timeout_conf",
+            "transform_with_state_info",
+            b"transform_with_state_info",
         ],
     ) -> None: ...
     @typing.overload
@@ -3526,10 +3964,88 @@ class GroupMap(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["output_mode"] | None: ...
     @typing.overload
     def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_state_schema", b"_state_schema"]
+    ) -> typing_extensions.Literal["state_schema"] | None: ...
+    @typing.overload
+    def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_timeout_conf", b"_timeout_conf"]
     ) -> typing_extensions.Literal["timeout_conf"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self,
+        oneof_group: typing_extensions.Literal[
+            "_transform_with_state_info", b"_transform_with_state_info"
+        ],
+    ) -> typing_extensions.Literal["transform_with_state_info"] | None: ...
 
 global___GroupMap = GroupMap
+
+class TransformWithStateInfo(google.protobuf.message.Message):
+    """Additional input parameters used for TransformWithState operator."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TIME_MODE_FIELD_NUMBER: builtins.int
+    EVENT_TIME_COLUMN_NAME_FIELD_NUMBER: builtins.int
+    OUTPUT_SCHEMA_FIELD_NUMBER: builtins.int
+    time_mode: builtins.str
+    """(Required) Time mode string for transformWithState."""
+    event_time_column_name: builtins.str
+    """(Optional) Event time column name."""
+    @property
+    def output_schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+        """(Optional) Schema for the output DataFrame.
+        Only required used for TransformWithStateInPandas.
+        """
+
+    def __init__(
+        self,
+        *,
+        time_mode: builtins.str = ...,
+        event_time_column_name: builtins.str | None = ...,
+        output_schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_event_time_column_name",
+            b"_event_time_column_name",
+            "_output_schema",
+            b"_output_schema",
+            "event_time_column_name",
+            b"event_time_column_name",
+            "output_schema",
+            b"output_schema",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_event_time_column_name",
+            b"_event_time_column_name",
+            "_output_schema",
+            b"_output_schema",
+            "event_time_column_name",
+            b"event_time_column_name",
+            "output_schema",
+            b"output_schema",
+            "time_mode",
+            b"time_mode",
+        ],
+    ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self,
+        oneof_group: typing_extensions.Literal[
+            "_event_time_column_name", b"_event_time_column_name"
+        ],
+    ) -> typing_extensions.Literal["event_time_column_name"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_output_schema", b"_output_schema"]
+    ) -> typing_extensions.Literal["output_schema"] | None: ...
+
+global___TransformWithStateInfo = TransformWithStateInfo
 
 class CoGroupMap(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -3544,6 +4060,7 @@ class CoGroupMap(google.protobuf.message.Message):
     @property
     def input(self) -> global___Relation:
         """(Required) One input relation for CoGroup Map API - applyInPandas."""
+
     @property
     def input_grouping_expressions(
         self,
@@ -3551,9 +4068,11 @@ class CoGroupMap(google.protobuf.message.Message):
         pyspark.sql.connect.proto.expressions_pb2.Expression
     ]:
         """Expressions for grouping keys of the first input relation."""
+
     @property
     def other(self) -> global___Relation:
         """(Required) The other input relation."""
+
     @property
     def other_grouping_expressions(
         self,
@@ -3561,9 +4080,11 @@ class CoGroupMap(google.protobuf.message.Message):
         pyspark.sql.connect.proto.expressions_pb2.Expression
     ]:
         """Expressions for grouping keys of the other input relation."""
+
     @property
     def func(self) -> pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction:
         """(Required) Input user-defined function."""
+
     @property
     def input_sorting_expressions(
         self,
@@ -3571,6 +4092,7 @@ class CoGroupMap(google.protobuf.message.Message):
         pyspark.sql.connect.proto.expressions_pb2.Expression
     ]:
         """(Optional) Expressions for sorting. Only used by Scala Sorted CoGroup Map API."""
+
     @property
     def other_sorting_expressions(
         self,
@@ -3578,29 +4100,27 @@ class CoGroupMap(google.protobuf.message.Message):
         pyspark.sql.connect.proto.expressions_pb2.Expression
     ]:
         """(Optional) Expressions for sorting. Only used by Scala Sorted CoGroup Map API."""
+
     def __init__(
         self,
         *,
         input: global___Relation | None = ...,
-        input_grouping_expressions: collections.abc.Iterable[
-            pyspark.sql.connect.proto.expressions_pb2.Expression
-        ]
-        | None = ...,
+        input_grouping_expressions: (
+            collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression] | None
+        ) = ...,
         other: global___Relation | None = ...,
-        other_grouping_expressions: collections.abc.Iterable[
-            pyspark.sql.connect.proto.expressions_pb2.Expression
-        ]
-        | None = ...,
-        func: pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction
-        | None = ...,
-        input_sorting_expressions: collections.abc.Iterable[
-            pyspark.sql.connect.proto.expressions_pb2.Expression
-        ]
-        | None = ...,
-        other_sorting_expressions: collections.abc.Iterable[
-            pyspark.sql.connect.proto.expressions_pb2.Expression
-        ]
-        | None = ...,
+        other_grouping_expressions: (
+            collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression] | None
+        ) = ...,
+        func: (
+            pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction | None
+        ) = ...,
+        input_sorting_expressions: (
+            collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression] | None
+        ) = ...,
+        other_sorting_expressions: (
+            collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression] | None
+        ) = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -3643,6 +4163,7 @@ class ApplyInPandasWithState(google.protobuf.message.Message):
     @property
     def input(self) -> global___Relation:
         """(Required) Input relation for applyInPandasWithState."""
+
     @property
     def grouping_expressions(
         self,
@@ -3650,6 +4171,7 @@ class ApplyInPandasWithState(google.protobuf.message.Message):
         pyspark.sql.connect.proto.expressions_pb2.Expression
     ]:
         """(Required) Expressions for grouping keys."""
+
     @property
     def func(self) -> pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction:
         """(Required) Input user-defined function."""
@@ -3665,12 +4187,12 @@ class ApplyInPandasWithState(google.protobuf.message.Message):
         self,
         *,
         input: global___Relation | None = ...,
-        grouping_expressions: collections.abc.Iterable[
-            pyspark.sql.connect.proto.expressions_pb2.Expression
-        ]
-        | None = ...,
-        func: pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction
-        | None = ...,
+        grouping_expressions: (
+            collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression] | None
+        ) = ...,
+        func: (
+            pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction | None
+        ) = ...,
         output_schema: builtins.str = ...,
         state_schema: builtins.str = ...,
         output_mode: builtins.str = ...,
@@ -3719,6 +4241,7 @@ class CommonInlineUserDefinedTableFunction(google.protobuf.message.Message):
         pyspark.sql.connect.proto.expressions_pb2.Expression
     ]:
         """(Optional) Function input arguments. Empty arguments are allowed."""
+
     @property
     def python_udtf(self) -> global___PythonUDTF: ...
     def __init__(
@@ -3726,8 +4249,9 @@ class CommonInlineUserDefinedTableFunction(google.protobuf.message.Message):
         *,
         function_name: builtins.str = ...,
         deterministic: builtins.bool = ...,
-        arguments: collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression]
-        | None = ...,
+        arguments: (
+            collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression] | None
+        ) = ...,
         python_udtf: global___PythonUDTF | None = ...,
     ) -> None: ...
     def HasField(
@@ -3888,13 +4412,15 @@ class CollectMetrics(google.protobuf.message.Message):
         pyspark.sql.connect.proto.expressions_pb2.Expression
     ]:
         """(Required) The metric sequence."""
+
     def __init__(
         self,
         *,
         input: global___Relation | None = ...,
         name: builtins.str = ...,
-        metrics: collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression]
-        | None = ...,
+        metrics: (
+            collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression] | None
+        ) = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["input", b"input"]
@@ -3958,9 +4484,11 @@ class Parse(google.protobuf.message.Message):
     @property
     def schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
         """(Optional) DataType representing the schema. If not set, Spark will infer the schema."""
+
     @property
     def options(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
         """Options for the csv/json parser. The map key is case insensitive."""
+
     def __init__(
         self,
         *,
@@ -4017,21 +4545,26 @@ class AsOfJoin(google.protobuf.message.Message):
     @property
     def left(self) -> global___Relation:
         """(Required) Left input relation for a Join."""
+
     @property
     def right(self) -> global___Relation:
         """(Required) Right input relation for a Join."""
+
     @property
     def left_as_of(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
         """(Required) Field to join on in left DataFrame"""
+
     @property
     def right_as_of(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
         """(Required) Field to join on in right DataFrame"""
+
     @property
     def join_expr(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
         """(Optional) The join condition. Could be unset when `using_columns` is utilized.
 
         This field does not co-exist with using_columns.
         """
+
     @property
     def using_columns(
         self,
@@ -4109,3 +4642,58 @@ class AsOfJoin(google.protobuf.message.Message):
     ) -> None: ...
 
 global___AsOfJoin = AsOfJoin
+
+class LateralJoin(google.protobuf.message.Message):
+    """Relation of type [[LateralJoin]].
+
+    `left` and `right` must be present.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    LEFT_FIELD_NUMBER: builtins.int
+    RIGHT_FIELD_NUMBER: builtins.int
+    JOIN_CONDITION_FIELD_NUMBER: builtins.int
+    JOIN_TYPE_FIELD_NUMBER: builtins.int
+    @property
+    def left(self) -> global___Relation:
+        """(Required) Left input relation for a Join."""
+
+    @property
+    def right(self) -> global___Relation:
+        """(Required) Right input relation for a Join."""
+
+    @property
+    def join_condition(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
+        """(Optional) The join condition."""
+    join_type: global___Join.JoinType.ValueType
+    """(Required) The join type."""
+    def __init__(
+        self,
+        *,
+        left: global___Relation | None = ...,
+        right: global___Relation | None = ...,
+        join_condition: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
+        join_type: global___Join.JoinType.ValueType = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "join_condition", b"join_condition", "left", b"left", "right", b"right"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "join_condition",
+            b"join_condition",
+            "join_type",
+            b"join_type",
+            "left",
+            b"left",
+            "right",
+            b"right",
+        ],
+    ) -> None: ...
+
+global___LateralJoin = LateralJoin

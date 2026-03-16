@@ -16,16 +16,14 @@
  */
 package org.apache.spark.util
 
+import org.apache.spark.network.util.JavaUtils
+
 private[spark] trait SparkEnvUtils {
 
   /**
    * Indicates whether Spark is currently running unit tests.
    */
-  def isTesting: Boolean = {
-    // Scala's `sys.env` creates a ton of garbage by constructing Scala immutable maps, so
-    // we directly use the Java APIs instead.
-    System.getenv("SPARK_TESTING") != null || System.getProperty("spark.testing") != null
-  }
+  def isTesting: Boolean = JavaUtils.isTesting
 
 }
 

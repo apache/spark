@@ -32,25 +32,16 @@ import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., postgres:17.0-alpine):
+ * To run this test suite for a specific version (e.g., postgres:18.2-alpine):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:17.0-alpine
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:18.2-alpine
  *     ./build/sbt -Pdocker-integration-tests
  *     "docker-integration-tests/testOnly org.apache.spark.sql.jdbc.PostgresIntegrationSuite"
  * }}}
  */
 @DockerTest
-class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
-  override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:17.0-alpine")
-    override val env = Map(
-      "POSTGRES_PASSWORD" -> "rootpass"
-    )
-    override val usesIpc = false
-    override val jdbcPort = 5432
-    override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:postgresql://$ip:$port/postgres?user=postgres&password=rootpass"
-  }
+class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
+  override val db = new PostgresDatabaseOnDocker
 
   override def dataPreparation(conn: Connection): Unit = {
     conn.prepareStatement("CREATE DATABASE foo").executeUpdate()
@@ -195,7 +186,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
   }
 
   test("Type mapping for various types") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "bar", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "bar", new Properties)
     val rows = df.collect().sortBy(_.toString())
     assert(rows.length == 2)
     // Test the types, and values using the first row.
@@ -295,11 +286,11 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
   }
 
   test("Basic write test") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "bar", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "bar", new Properties)
     // Test only that it doesn't crash.
     df.write.jdbc(jdbcUrl, "public.barcopy", new Properties)
     // Test that written numeric type has same DataType as input
-    assert(sqlContext.read.jdbc(jdbcUrl, "public.barcopy", new Properties).schema(13).dataType ==
+    assert(spark.read.jdbc(jdbcUrl, "public.barcopy", new Properties).schema(13).dataType ==
       ArrayType(DecimalType(2, 2), true))
     // Test write null values.
     df.select(df.queryExecution.analyzed.output.map { a =>
@@ -308,16 +299,16 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
   }
 
   test("Creating a table with shorts and floats") {
-    sqlContext.createDataFrame(Seq((1.0f, 1.toShort)))
+    spark.createDataFrame(Seq((1.0f, 1.toShort)))
       .write.jdbc(jdbcUrl, "shortfloat", new Properties)
-    val schema = sqlContext.read.jdbc(jdbcUrl, "shortfloat", new Properties).schema
+    val schema = spark.read.jdbc(jdbcUrl, "shortfloat", new Properties).schema
     assert(schema(0).dataType == FloatType)
     assert(schema(1).dataType == ShortType)
   }
 
   test("SPARK-47390: Convert TIMESTAMP/TIME WITH TIME ZONE regardless of preferTimestampNTZ") {
     Seq(true, false).foreach { prefer =>
-      val df = sqlContext.read
+      val df = spark.read
         .option("preferTimestampNTZ", prefer)
         .jdbc(jdbcUrl, "ts_with_timezone", new Properties)
       checkAnswer(df, Row(
@@ -329,7 +320,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
 
   test("SPARK-22291: Conversion error when transforming array types of " +
     "uuid, inet and cidr to StingType in PostgreSQL") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "st_with_array", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "st_with_array", new Properties)
     val rows = df.collect()
     assert(rows(0).getString(0) == "0a532531-cdf1-45e3-963d-5de90b6a30f1")
     assert(rows(0).getString(1) == "172.168.22.1")
@@ -359,8 +350,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows(0).getSeq(21) == Seq("<(500.0,200.0),100.0>"))
     assert(rows(0).getSeq(22) == Seq("16/B374D848"))
     assert(rows(0).getSeq(23) == Seq("101010"))
-    assert(rows(0).getSeq(24) == Seq("0 years 0 mons 1 days 0 hours 0 mins 0.0 secs",
-      "0 years 0 mons 0 days 0 hours 2 mins 0.0 secs"))
+    assert(rows(0).getSeq(24) == Seq("1 days", "2 mins"))
     assert(rows(0).getSeq(25) == Seq("08:00:2b:01:02:03:04:05"))
     assert(rows(0).getSeq(26) == Seq("10:20:10,14,15"))
   }
@@ -391,9 +381,9 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
   }
 
   test("write byte as smallint") {
-    sqlContext.createDataFrame(Seq((1.toByte, 2.toShort)))
+    spark.createDataFrame(Seq((1.toByte, 2.toShort)))
       .write.jdbc(jdbcUrl, "byte_to_smallint_test", new Properties)
-    val df = sqlContext.read.jdbc(jdbcUrl, "byte_to_smallint_test", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "byte_to_smallint_test", new Properties)
     val schema = df.schema
     assert(schema.head.dataType == ShortType)
     assert(schema(1).dataType == ShortType)
@@ -404,18 +394,18 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
   }
 
   test("character type tests") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "char_types", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "char_types", new Properties)
     checkAnswer(df, Row("abcd", "efgh", "ijkl", "mnop", "q", "eason", "c"))
   }
 
   test("SPARK-32576: character array type tests") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "char_array_types", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "char_array_types", new Properties)
     checkAnswer(df, Row(Seq("a   ", "bcd "), Seq("ef  ", "gh  "), Seq("i", "j", "kl"),
       Seq("mnop"), Seq("q", "r"), Seq("Eason", "Ethan")))
   }
 
   test("SPARK-34333: money type tests") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "money_types", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "money_types", new Properties)
     val row = df.collect()
     assert(row.length === 1)
     assert(row(0).length === 1)
@@ -425,7 +415,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
   test("SPARK-43040: timestamp_ntz read test") {
     val prop = new Properties
     prop.setProperty("preferTimestampNTZ", "true")
-    val df = sqlContext.read.jdbc(jdbcUrl, "timestamp_ntz", prop)
+    val df = spark.read.jdbc(jdbcUrl, "timestamp_ntz", prop)
     val row = df.collect()
     assert(row.length === 3)
     assert(row(0).length === 1)
@@ -453,7 +443,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
   }
 
   test("SPARK-43267: user-defined column in array test") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "custom_type", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "custom_type", new Properties)
     val row = df.collect()
     assert(row.length === 1)
     assert(row(0).length === 2)
@@ -462,7 +452,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
   }
 
   test("SPARK-44280: infinity timestamp test") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "infinity_timestamp", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "infinity_timestamp", new Properties)
     val row = df.collect()
 
     assert(row.length == 2)
@@ -479,7 +469,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
   }
 
   test("SPARK-47501: infinity date test") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "infinity_dates", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "infinity_dates", new Properties)
     val row = df.collect()
 
     assert(row.length == 2)
@@ -505,7 +495,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
   }
 
   test("SPARK-47628: Fix reading bit array type") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "test_bit_array", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "test_bit_array", new Properties)
     val expected = Row(Array(true, false), Array(
       Array[Byte](48, 48, 48, 48, 49), Array[Byte](48, 48, 48, 49, 48)))
     checkAnswer(df, expected)

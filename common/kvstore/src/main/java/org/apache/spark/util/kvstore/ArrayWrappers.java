@@ -19,7 +19,7 @@ package org.apache.spark.util.kvstore;
 
 import java.util.Arrays;
 
-import com.google.common.base.Preconditions;
+import org.apache.spark.network.util.JavaUtils;
 
 /**
  * A factory for array wrappers so that arrays can be used as keys in a map, sorted or not.
@@ -38,7 +38,7 @@ class ArrayWrappers {
 
   @SuppressWarnings("unchecked")
   public static Comparable<Object> forArray(Object a) {
-    Preconditions.checkArgument(a.getClass().isArray());
+    JavaUtils.checkArgument(a.getClass().isArray(), "Input should be an array");
     Comparable<?> ret;
     if (a instanceof int[] ia) {
       ret = new ComparableIntArray(ia);
@@ -47,7 +47,8 @@ class ArrayWrappers {
     } else if (a instanceof byte[] ba) {
       ret = new ComparableByteArray(ba);
     } else {
-      Preconditions.checkArgument(!a.getClass().getComponentType().isPrimitive());
+      JavaUtils.checkArgument(!a.getClass().getComponentType().isPrimitive(),
+        "Array element is primitive");
       ret = new ComparableObjectArray((Object[]) a);
     }
     return (Comparable<Object>) ret;
