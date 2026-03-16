@@ -197,5 +197,3 @@ object TimeCast {
    */
   def castTimeToDate(timeMicros: Long): Int = 0
 }
-
-// Made with Bob

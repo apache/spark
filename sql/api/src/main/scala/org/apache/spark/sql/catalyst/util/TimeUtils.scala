@@ -247,5 +247,3 @@ object TimeUtils {
     localTimeToMicros(LocalTime.now(zoneId))
   }
 }
-
-// Made with Bob

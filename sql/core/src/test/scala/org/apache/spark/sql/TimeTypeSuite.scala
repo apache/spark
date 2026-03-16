@@ -399,5 +399,3 @@ class TimeTypeSuite extends QueryTest with SharedSparkSession {
   // Note: Parquet support for TIME type requires additional implementation
   // in ParquetWriteSupport and ParquetReadSupport (optional for basic SQL operations)
 }
-
-// Made with Bob

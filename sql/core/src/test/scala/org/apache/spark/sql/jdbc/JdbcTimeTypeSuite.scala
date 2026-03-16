@@ -226,5 +226,3 @@ class JdbcTimeTypeSuite extends SparkFunSuite {
     }
   }
 }
-
-// Made with Bob

@@ -139,5 +139,3 @@ class TimeUtilsSuite extends SparkFunSuite {
     assert(!TimeUtils.isValidTime(86400000000L))
   }
 }
-
-// Made with Bob

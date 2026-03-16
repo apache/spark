@@ -312,5 +312,3 @@ class TimeCastSuite extends SparkFunSuite {
     }
   }
 }
-
-// Made with Bob

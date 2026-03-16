@@ -125,5 +125,3 @@ class TimeTypeSuite extends SparkFunSuite {
     assert(schema.fields(1).name === "event_time")
   }
 }
-
-// Made with Bob

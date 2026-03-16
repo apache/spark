@@ -197,5 +197,3 @@ case class MakeTime(
       newFourth: Expression): MakeTime =
     copy(hour = newFirst, minute = newSecond, sec = newThird, microsecond = newFourth)
 }
-
-// Made with Bob
