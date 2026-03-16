@@ -111,7 +111,8 @@ trait FunctionRegistryBase[T] {
   /**
    * Remove all cached function entries matching the given namespace.
    * The namespace is a FunctionIdentifier with empty funcName used as a filter:
-   * matches on database (case-insensitive) and, when specified, catalog.
+   * matches on database (case-insensitive) and catalog. The catalog must be specified
+   * (e.g. when dropping a database, the database belongs to a catalog).
    */
   def dropFunctionsInDatabase(namespace: FunctionIdentifier): Unit
 
@@ -273,7 +274,9 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
   override def dropFunctionsInDatabase(namespace: FunctionIdentifier): Unit = synchronized {
     val toRemove = listFunction().filter { f =>
       f.database.exists(d => namespace.database.exists(_.equalsIgnoreCase(d))) &&
-        (namespace.catalog.isEmpty || f.catalog == namespace.catalog)
+        namespace.catalog.isDefined && (
+          f.catalog == namespace.catalog ||
+          (f.catalog.isEmpty && namespace.catalog.contains(CatalogManager.SESSION_CATALOG_NAME)))
     }
     toRemove.foreach(n => functionBuilders.remove(n))
   }

@@ -491,7 +491,8 @@ class SessionCatalog(
         invalidateCachedTable(QualifiedTableName(SESSION_CATALOG_NAME, dbName, t.table))
       }
       // Clear cached functions in this database so the cache stays coherent on drop
-      val namespace = FunctionIdentifier("", Some(dbName), None)
+      val namespace = FunctionIdentifier(
+        "", Some(dbName), Some(CatalogManager.SESSION_CATALOG_NAME))
       functionRegistry.dropFunctionsInDatabase(namespace)
       tableFunctionRegistry.dropFunctionsInDatabase(namespace)
     }
