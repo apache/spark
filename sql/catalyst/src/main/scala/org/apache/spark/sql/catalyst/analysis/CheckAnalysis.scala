@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, PLAN_EXPRESSION, UNRESOLVED_WINDOW_EXPRESSION}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils}
-import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog, SupportsPartitionManagement}
+import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionManagement}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -97,14 +97,16 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
   }
 
   /**
-   * True if the identifier is explicitly qualified as a session (local temp) view:
-   * session.viewName (2-part) or system.session.viewName (3-part).
+   * Returns the first UnresolvedTableOrView in the plan tree, if any.
+   * Used to report table-not-found for DESCRIBE TABLE with full search path when the
+   * relation is wrapped in SubqueryAlias (e.g. by Hive analyzer).
    */
-  private def isSessionQualifiedRelationName(nameParts: Seq[String]): Boolean = {
-    (nameParts.length == 2 && nameParts.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) ||
-    (nameParts.length == 3 &&
-      nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
-      nameParts(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE))
+  private def firstUnresolvedTableOrView(plan: LogicalPlan): Option[UnresolvedTableOrView] = {
+    plan match {
+      case u: UnresolvedTableOrView => Some(u)
+      case s: SubqueryAlias if !s.child.resolved => firstUnresolvedTableOrView(s.child)
+      case _ => None
+    }
   }
 
   protected def hasMapType(dt: DataType): Boolean = {
@@ -345,33 +347,29 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
       case d: DescribeRelation if !d.relation.resolved =>
         // DESCRIBE TABLE / DESC TABLE: full resolution path (same as DESCRIBE FUNCTION and SELECT).
-        d.relation match {
-          case u: UnresolvedTableOrView =>
-            val catalogPath = catalogPathForError
-            u.tableNotFound(u.multipartIdentifier, fullSearchPathForError(catalogPath))
-          case _ =>
+        // Relation may be wrapped in SubqueryAlias after resolution attempt (e.g. Hive analyzer).
+        firstUnresolvedTableOrView(d.relation).foreach { u =>
+          val catalogPath = catalogPathForError
+          u.tableNotFound(u.multipartIdentifier, fullSearchPathForError(catalogPath))
         }
 
       case u: UnresolvedTableOrView =>
-        // Explicit TEMPORARY VIEW (e.g. DROP TEMPORARY VIEW) -> only SYSTEM.SESSION; else DDL path.
         val catalogPath = catalogPathForError
         val searchPath = if (u.commandName.toUpperCase(Locale.ROOT).contains("TEMPORARY VIEW")) {
           tempViewOnlySearchPathForError()
+        } else if (u.commandName.toUpperCase(Locale.ROOT).startsWith("DESCRIBE") ||
+            u.commandName.toUpperCase(Locale.ROOT).startsWith("DESC ")) {
+          // DESCRIBE TABLE / DESC TABLE: full path (same as SELECT).
+          fullSearchPathForError(catalogPath)
         } else {
           ddlSearchPathForError(catalogPath)
         }
         u.tableNotFound(u.multipartIdentifier, searchPath)
 
       case u: UnresolvedRelation =>
-        // Queries/DML: full search path; session-qualified (session.x / system.session.x) only
-        // searched temp views, so show temp-view-only path in error.
+        // Queries/DML: full search path (including session-qualified names).
         val catalogPath = catalogPathForError
-        val searchPath = if (isSessionQualifiedRelationName(u.multipartIdentifier)) {
-          tempViewOnlySearchPathForError()
-        } else {
-          fullSearchPathForError(catalogPath)
-        }
-        u.tableNotFound(u.multipartIdentifier, searchPath)
+        u.tableNotFound(u.multipartIdentifier, fullSearchPathForError(catalogPath))
 
       case u: UnresolvedFunctionName =>
         val catalogPath = catalogPathForError
