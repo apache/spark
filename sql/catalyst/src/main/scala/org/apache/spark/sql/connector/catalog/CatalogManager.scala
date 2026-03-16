@@ -159,8 +159,29 @@ class CatalogManager(
 }
 
 private[sql] object CatalogManager {
+
   val SESSION_CATALOG_NAME: String = "spark_catalog"
   val SYSTEM_CATALOG_NAME = "system"
   val SESSION_NAMESPACE = "session"
   val BUILTIN_NAMESPACE = "builtin"
+
+  /**
+   * For a view identifier's namespace (e.g. from Identifier.namespace()), returns the database
+   * name to use with v1 TableIdentifier when the view is a session temp view.
+   * - system.session (2 parts) -> Some("session") so SessionCatalog finds the local temp view
+   * - session (1 part) -> Some("session")
+   * - other non-empty namespace -> Some(namespace.head)
+   * - empty -> None
+   */
+  def databaseForSessionQualifiedViewIdentifier(namespace: Seq[String]): Option[String] = {
+    if (namespace.isEmpty) {
+      None
+    } else if (namespace.length == 2 &&
+        namespace(0).equalsIgnoreCase(SYSTEM_CATALOG_NAME) &&
+        namespace(1).equalsIgnoreCase(SESSION_NAMESPACE)) {
+      Some(SESSION_NAMESPACE)
+    } else {
+      Some(namespace.head)
+    }
+  }
 }

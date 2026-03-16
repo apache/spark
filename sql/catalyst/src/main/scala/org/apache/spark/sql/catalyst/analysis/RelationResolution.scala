@@ -104,10 +104,10 @@ class RelationResolution(
    * session.viewName (2-part) or system.session.viewName (3-part).
    */
   private def isSessionQualifiedViewName(nameParts: Seq[String]): Boolean = {
-    nameParts.length == 2 && nameParts.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) ||
-    nameParts.length == 3 &&
+    (nameParts.length == 2 && nameParts.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) ||
+    (nameParts.length == 3 &&
       nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
-      nameParts(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
+      nameParts(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE))
   }
 
   /**

@@ -303,18 +303,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     // Temp view resolved by name (e.g. session.v or system.session.v) -> drop by table name,
     // with db = session when session-qualified so SessionCatalog finds the temp view.
     case DropView(ResolvedTempView(ident, _), ifExists) =>
-      val db = if (ident.namespace().nonEmpty) {
-        val ns = ident.namespace().toSeq
-        if (ns.length == 2 &&
-            ns(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
-            ns(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
-          Some(CatalogManager.SESSION_NAMESPACE)
-        } else {
-          Some(ident.namespace().head)
-        }
-      } else {
-        None
-      }
+      val db = CatalogManager.databaseForSessionQualifiedViewIdentifier(ident.namespace().toSeq)
       DropTableCommand(TableIdentifier(ident.name(), db), ifExists, isView = true, purge = false)
 
     case DropView(DropViewInSessionCatalog(ident), ifExists) =>
@@ -763,20 +752,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       case ResolvedTempView(ident, _) =>
         // Global temp views have a namespace (e.g. global_temp); preserve it so ALTER VIEW
         // and DROP VIEW find the view. Local temp views are keyed by table name only.
-        // system.session.viewName (3-part) -> use database "session" so SessionCatalog
-        // resolves it as a temp view.
-        val db = if (ident.namespace().nonEmpty) {
-          val ns = ident.namespace().toSeq
-          if (ns.length == 2 &&
-              ns(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
-              ns(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
-            Some(CatalogManager.SESSION_NAMESPACE)
-          } else {
-            Some(ident.namespace().head)
-          }
-        } else {
-          None
-        }
+        // system.session.viewName -> use database "session" so SessionCatalog resolves as temp view.
+        val db = CatalogManager.databaseForSessionQualifiedViewIdentifier(ident.namespace().toSeq)
         Some(TableIdentifier(ident.name(), db))
 
       case _ => None

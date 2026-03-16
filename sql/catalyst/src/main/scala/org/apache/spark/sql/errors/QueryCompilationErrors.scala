@@ -949,9 +949,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       name: Seq[String],
       searchPath: Seq[String],
       origin: Origin): Throwable = {
-    // Payload is data only: path list or empty string. Template adds "Search path: " label.
+    // Payload is data only: path list or fallback when empty. Template adds "Search path: " label.
     val searchPathValue = if (searchPath.isEmpty) {
-      ""
+      "not available"
     } else {
       searchPath.mkString("[", ", ", "]")
     }
@@ -1610,7 +1610,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def noSuchTableError(nameParts: Seq[String], searchPath: Seq[String]): Throwable = {
     val formattedPath =
-      if (searchPath.isEmpty) "" else "[" + searchPath.map(toSQLId).mkString(".") + "]"
+      if (searchPath.isEmpty) "not available" else "[" + searchPath.map(toSQLId).mkString(".") + "]"
     new NoSuchTableException(
       "TABLE_OR_VIEW_NOT_FOUND",
       Map("relationName" -> toSQLId(nameParts), "searchPath" -> formattedPath),

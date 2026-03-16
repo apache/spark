@@ -546,14 +546,10 @@ class Resolver(
           val formattedPath = searchPathSeq.map(toSQLId).mkString("[", ", ", "]")
           val updatedParams =
             e.getMessageParameters.asScala.toMap.updated("searchPath", formattedPath)
-          val newEx = new AnalysisException(
-            SparkThrowableHelper.getMessage("TABLE_OR_VIEW_NOT_FOUND", updatedParams.asJava),
-            line = None,
-            startPosition = None,
-            cause = None,
-            errorClass = Some("TABLE_OR_VIEW_NOT_FOUND"),
-            messageParameters = updatedParams,
-            context = e.getQueryContext)
+          val newEx = new NoSuchTableException(
+            "TABLE_OR_VIEW_NOT_FOUND",
+            updatedParams,
+            cause = None)
           throw Option(e.origin).fold(newEx)(newEx.withPosition)
       }
     }
