@@ -739,6 +739,8 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
   }
 
   test("duplicate fields") {
+    // Arrow data with [foO, Foo] decoded into [foo]: positional matching binds foo → foO (pos 0),
+    // and the extra Foo column is ignored (over-complete schema is allowed).
     val duplicateSchemaEncoder = toRowEncoder(
       new StructType()
         .add("foO", "string")
@@ -748,13 +750,64 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
         .add("foo", "string"))
     withAllocator { allocator =>
       val arrowBatches = serializeToArrow(Iterator.empty, duplicateSchemaEncoder, allocator)
-      intercept[AnalysisException] {
+      // Should not throw: RowEncoder uses positional binding, so foo binds to foO at position 0.
+      val result = ArrowDeserializers.deserializeFromArrow(
+        arrowBatches,
+        fooSchemaEncoder,
+        allocator,
+        timeZoneId = "UTC")
+      assert(!result.hasNext)
+      result.close()
+    }
+  }
+
+  test("row with duplicate column names") {
+    // Spark DataFrames allow duplicate column names. collect() must round-trip such rows
+    // without throwing AMBIGUOUS_COLUMN_OR_FIELD.
+    val schema = new StructType()
+      .add("channel", "string")
+      .add("channel", "string")
+    val encoder = toRowEncoder(schema)
+    val rows = Seq(Row("a", "b"), Row("c", "d"), Row(null, "e"))
+    val iterator = roundTrip(encoder, rows.iterator)
+    try {
+      compareIterators(rows.iterator, iterator)
+    } finally {
+      iterator.close()
+    }
+  }
+
+  test("row schema validation - column name mismatch") {
+    val serializeEncoder = toRowEncoder(new StructType().add("a", "string").add("b", "string"))
+    val deserializeEncoder = toRowEncoder(new StructType().add("a", "string").add("x", "string"))
+    withAllocator { allocator =>
+      val arrowBatches = serializeToArrow(Iterator.empty, serializeEncoder, allocator)
+      val e = intercept[SparkRuntimeException] {
         ArrowDeserializers.deserializeFromArrow(
           arrowBatches,
-          fooSchemaEncoder,
+          deserializeEncoder,
           allocator,
           timeZoneId = "UTC")
       }
+      assert(e.getCondition == "ARROW_SCHEMA_FIELD_NAME_MISMATCH")
+      arrowBatches.close()
+    }
+  }
+
+  test("row schema validation - encoder has more fields than Arrow data") {
+    val serializeEncoder = toRowEncoder(new StructType().add("a", "string"))
+    val deserializeEncoder =
+      toRowEncoder(new StructType().add("a", "string").add("b", "string"))
+    withAllocator { allocator =>
+      val arrowBatches = serializeToArrow(Iterator.empty, serializeEncoder, allocator)
+      val e = intercept[SparkRuntimeException] {
+        ArrowDeserializers.deserializeFromArrow(
+          arrowBatches,
+          deserializeEncoder,
+          allocator,
+          timeZoneId = "UTC")
+      }
+      assert(e.getCondition == "ARROW_SCHEMA_FIELD_COUNT_MISMATCH")
       arrowBatches.close()
     }
   }
