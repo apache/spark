@@ -7847,15 +7847,9 @@
     },
     "sqlState" : "42809"
   },
-  "UNSUPPORTED_INSERT_REPLACE_ON" : {
+  "UNSUPPORTED_INSERT_REPLACE_ON_OR_USING" : {
     "message" : [
-      "INSERT INTO ... REPLACE ON is not supported for this table format."
-    ],
-    "sqlState" : "0A000"
-  },
-  "UNSUPPORTED_INSERT_REPLACE_USING" : {
-    "message" : [
-      "INSERT INTO ... REPLACE USING is not supported for this table format."
+      "INSERT INTO ... REPLACE ON/USING is unsupported for this table format."
     ],
     "sqlState" : "0A000"
   },
