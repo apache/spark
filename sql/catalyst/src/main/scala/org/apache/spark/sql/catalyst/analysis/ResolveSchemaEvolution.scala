@@ -85,16 +85,7 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
     val oldOutput = write.table.output
     val newOutput = DataTypeUtils.toAttributes(newTable.columns)
     val newRelation = relation.copy(table = newTable, output = newOutput)
-
-    val writeWithNewTargetTable = write match {
-      case m: MergeIntoTable =>
-        val newTarget = m.targetTable.transform {
-          case _: DataSourceV2Relation => newRelation
-        }
-        m.copy(targetTable = newTarget)
-      case w: V2WriteCommand =>
-        w.withNewTable(newRelation)
-    }
+    val writeWithNewTargetTable = write.withNewTable(newRelation)
     rewriteAttrs(writeWithNewTargetTable, oldOutput, newOutput)
   }
 
@@ -124,13 +115,13 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
       isByName)
 
   private def computeSchemaChanges(
-      current: DataType,
+      currentType: DataType,
       newType: DataType,
       originalTarget: StructType,
       originalSource: StructType,
       fieldPath: List[String],
       isByName: Boolean): Array[TableChange] = {
-    (current, newType) match {
+    (currentType, newType) match {
       case (StructType(currentFields), StructType(newFields)) =>
         if (isByName) {
           computeSchemaChangesByName(
@@ -149,18 +140,18 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
           fieldPath :+ "element",
           isByName)
 
-      case (MapType(currentKeyType, currentElementType, _),
-            MapType(updateKeyType, updateElementType, _)) =>
+      case (MapType(currentKeyType, currentValueType, _),
+            MapType(newKeyType, newValueType, _)) =>
         val keyChanges = computeSchemaChanges(
           currentKeyType,
-          updateKeyType,
+          newKeyType,
           originalTarget,
           originalSource,
           fieldPath :+ "key",
           isByName)
         val valueChanges = computeSchemaChanges(
-          currentElementType,
-          updateElementType,
+          currentValueType,
+          newValueType,
           originalTarget,
           originalSource,
           fieldPath :+ "value",

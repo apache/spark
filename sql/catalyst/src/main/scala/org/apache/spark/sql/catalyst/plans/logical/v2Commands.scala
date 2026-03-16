@@ -61,6 +61,8 @@ trait SupportsSchemaEvolution extends LogicalPlan {
   /** The target of the write operation. */
   def table: LogicalPlan
 
+  def withNewTable(newTable: NamedRelation): SupportsSchemaEvolution
+
   /** Whether schema evolution is enabled for the write operation. */
   def withSchemaEvolution: Boolean
 
@@ -964,6 +966,10 @@ case class MergeIntoTable(
     extends BinaryCommand with SupportsSchemaEvolution with SupportsSubquery {
 
   override val table: LogicalPlan = EliminateSubqueryAliases(targetTable)
+
+  override def withNewTable(newTable: NamedRelation): MergeIntoTable = {
+    copy(targetTable = targetTable.transform { case _: NamedRelation => newTable })
+  }
 
   override val writePrivileges: Set[TableWritePrivilege] =
     MergeIntoTable.getWritePrivileges(this)

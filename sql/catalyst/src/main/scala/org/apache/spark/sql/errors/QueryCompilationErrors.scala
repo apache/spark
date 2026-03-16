@@ -3525,8 +3525,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "changes" -> remainingChanges.mkString("; ")))
   }
 
-  def unsupportedAutoSchemaEvolutionError(
-      table: LogicalPlan): Throwable = {
+  def unsupportedAutoSchemaEvolutionError(table: LogicalPlan): Throwable = {
     val name = table match {
       case r: NamedRelation => toSQLId(r.name)
       case _ => table.nodeName
