@@ -72,9 +72,9 @@ RUN apt-get update && apt-get install -y \
 
 # See more in SPARK-39959, roxygen2 < 7.2.1
 RUN Rscript -e "install.packages(c('devtools', 'knitr', 'markdown', 'rmarkdown', 'testthat', 'pak'), repos='https://cloud.r-project.org/')" && \
-    Rscript -e "pak::pak('roxygen2@7.3.3')"
-    Rscript -e "pak::pak('pkgdown@2.2.0')"
-    Rscript -e "pak::pak('preferably@0.4')"
+    Rscript -e "pak::pak('roxygen2@7.2.0')" && \
+    Rscript -e "pak::pak('pkgdown@2.2.0')" && \
+    Rscript -e "devtools::install_version('preferably', version='0.4.1', repos='https://cloud.r-project.org')"
 
 # See more in SPARK-39735
 ENV R_LIBS_SITE="/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
