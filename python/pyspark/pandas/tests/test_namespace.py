@@ -360,17 +360,21 @@ class NamespaceTestsMixin:
             ([psdf, psdf["C"]], [pdf, pdf["C"]]),
             ([psdf["C"], psdf], [pdf["C"], pdf]),
         ]
-        for psdfs, pdfs in series_objs:
-            for ignore_index, join, sort in itertools.product(ignore_indexes, joins, sorts):
-                self.assert_eq(
-                    ps.concat(psdfs, ignore_index=ignore_index, join=join, sort=sort),
-                    pd.concat(pdfs, ignore_index=ignore_index, join=join, sort=sort),
-                )
+
+        for ignore_index, join, sort in itertools.product(ignore_indexes, joins, sorts):
+            for i, (psdfs, pdfs) in enumerate(series_objs):
+                with self.subTest(
+                    ignore_index=ignore_index, join=join, sort=sort, pair=i, index="single"
+                ):
+                    self.assert_eq(
+                        ps.concat(psdfs, ignore_index=ignore_index, join=join, sort=sort),
+                        pd.concat(pdfs, ignore_index=ignore_index, join=join, sort=sort),
+                    )
 
         for ignore_index, join, sort in itertools.product(ignore_indexes, joins, sorts):
             for i, (psdfs, pdfs) in enumerate(objs):
                 with self.subTest(
-                    ignore_index=ignore_index, join=join, sort=sort, pdfs=pdfs, pair=i
+                    ignore_index=ignore_index, join=join, sort=sort, pair=i, index="single"
                 ):
                     self.assert_eq(
                         ps.concat(psdfs, ignore_index=ignore_index, join=join, sort=sort),
@@ -412,7 +416,7 @@ class NamespaceTestsMixin:
         for ignore_index, sort in itertools.product(ignore_indexes, sorts):
             for i, (psdfs, pdfs) in enumerate(objs):
                 with self.subTest(
-                    ignore_index=ignore_index, join="outer", sort=sort, pdfs=pdfs, pair=i
+                    ignore_index=ignore_index, join="outer", sort=sort, pair=i, index="multi"
                 ):
                     self.assert_eq(
                         ps.concat(psdfs, ignore_index=ignore_index, join="outer", sort=sort),
@@ -423,7 +427,7 @@ class NamespaceTestsMixin:
         for ignore_index in ignore_indexes:
             for i, (psdfs, pdfs) in enumerate(objs):
                 with self.subTest(
-                    ignore_index=ignore_index, join="inner", sort=True, pdfs=pdfs, pair=i
+                    ignore_index=ignore_index, join="inner", sort=True, pair=i, index="multi"
                 ):
                     self.assert_eq(
                         ps.concat(psdfs, ignore_index=ignore_index, join="inner", sort=True),
