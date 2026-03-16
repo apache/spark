@@ -752,7 +752,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       case ResolvedTempView(ident, _) =>
         // Global temp views have a namespace (e.g. global_temp); preserve it so ALTER VIEW
         // and DROP VIEW find the view. Local temp views are keyed by table name only.
-        // system.session.viewName -> use database "session" so SessionCatalog resolves as temp view.
+        // system.session.viewName -> use database "session" so SessionCatalog resolves
+        // it as a temp view.
         val db = CatalogManager.databaseForSessionQualifiedViewIdentifier(ident.namespace().toSeq)
         Some(TableIdentifier(ident.name(), db))
 

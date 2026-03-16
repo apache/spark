@@ -22,7 +22,6 @@ import java.util.HashSet
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkException
-import org.apache.spark.SparkThrowableHelper
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{
   withPosition,
@@ -550,7 +549,11 @@ class Resolver(
             "TABLE_OR_VIEW_NOT_FOUND",
             updatedParams,
             cause = None)
-          throw Option(e.origin).fold(newEx)(newEx.withPosition)
+          val toThrow: Throwable = Option(e.origin) match {
+            case Some(origin) => newEx.withPosition(origin)
+            case None => newEx
+          }
+          throw toThrow
       }
     }
   }
