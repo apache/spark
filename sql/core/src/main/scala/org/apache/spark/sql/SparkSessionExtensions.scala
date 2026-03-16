@@ -20,8 +20,8 @@ package org.apache.spark.sql
 import scala.collection.mutable
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Unstable}
-import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.analysis.TableFunctionRegistry.TableFunctionBuilder
@@ -387,7 +387,8 @@ class SparkSessionExtensions {
         // A 2-part identifier with catalog but no database is invalid.
         throw new IllegalArgumentException(
           s"Extension function identifier must be unqualified (funcName), fully qualified " +
-            s"(catalog.database.funcName), or 2-part system (builtin.funcName / session.funcName). " +
+            s"(catalog.database.funcName), or 2-part system " +
+            s"(builtin.funcName / session.funcName). " +
             s"Got invalid partial qualification (catalog without database): $name")
     }
   }
