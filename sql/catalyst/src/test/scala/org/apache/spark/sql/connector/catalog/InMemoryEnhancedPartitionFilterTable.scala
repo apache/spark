@@ -73,7 +73,7 @@ class InMemoryEnhancedPartitionFilterTable(
         InMemoryEnhancedPartitionFilterTable.AcceptDataPredicatesKey, "false")
         .toBoolean
 
-    override def supportsMultiPassFiltering(): Boolean = true
+    override def supportsIterativePushdown(): Boolean = true
 
     override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
       val partNames = InMemoryEnhancedPartitionFilterTable.this.partCols.flatMap(_.toSeq).toSet

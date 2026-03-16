@@ -41,12 +41,12 @@ class PartitionPredicateImpl private (
   def expression: CatalystExpression = catalystExpr
 
   /** Bound predicate, computed once and reused for all partition rows. */
-  private lazy val boundPredicate: InternalRow => Boolean = {
+  @transient private lazy val boundPredicate: InternalRow => Boolean = {
     val boundExpr = catalystExpr.transform {
       case a: AttributeReference =>
         val index = partitionSchema.indexWhere(_.name == a.name)
         require(index >= 0, s"Column ${a.name} not found in partition schema")
-        BoundReference(index, partitionSchema(index).dataType, nullable = true)
+        BoundReference(index, partitionSchema(index).dataType, nullable = a.nullable)
     }
     val predicate = CatalystPredicate.createInterpreted(boundExpr)
     predicate.eval
@@ -59,8 +59,8 @@ class PartitionPredicateImpl private (
         log"${MDC(LogKeys.EXPR, catalystExpr.sql)}: " +
         log"partition value field count " +
         log"(${MDC(LogKeys.COUNT, partitionValues.numFields)}) does not " +
-        log"match schema (${MDC(LogKeys.NUM_PARTITIONS, partitionSchema.length)}), " +
-        log"including partition")
+        log"match schema (${MDC(LogKeys.NUM_PARTITIONS, partitionSchema.length)}). " +
+        log"Including partition in scan result to avoid incorrect filtering.")
       return true
     }
 
@@ -70,19 +70,21 @@ class PartitionPredicateImpl private (
       case e: Exception =>
         logWarning(
           log"Failed to evaluate partition predicate " +
-          log"${MDC(LogKeys.EXPR, catalystExpr.sql)}, including partition",
+          log"${MDC(LogKeys.EXPR, catalystExpr.sql)}. " +
+          log"Including partition in scan result to avoid incorrect filtering.",
           e)
         true
     }
   }
 
-  override def references(): Array[NamedReference] = {
-    val partitionNames = partitionSchema.map(_.name)
-    val ordinals = catalystExpr.references.flatMap { ref =>
-      partitionNames.zipWithIndex.find(_._1 == ref.name).map(_._2)
-    }.toArray.sorted // De-duplicate repeated references and sort by ordinal
-    ordinals.map(ord =>
-      PartitionColumnReferenceImpl(ord, Array(partitionSchema(ord).name)): NamedReference)
+  override def references(): Array[NamedReference] = referencesArray
+
+  private lazy val referencesArray: Array[NamedReference] = {
+    val refNames = catalystExpr.references.map(_.name).toSet
+    partitionSchema.zipWithIndex
+      .filter { case (attr, _) => refNames.contains(attr.name) }
+      .map { case (attr, ordinal) => PartitionColumnReferenceImpl(ordinal, Array(attr.name)) }
+      .toArray
   }
 
   override def equals(obj: Any): Boolean = obj match {
