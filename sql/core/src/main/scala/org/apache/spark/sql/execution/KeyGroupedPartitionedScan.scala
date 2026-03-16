@@ -58,7 +58,8 @@ trait KeyGroupedPartitionedScan[T] {
         }
     }
     basePartitioning.copy(expressions = projectedExpressions, numPartitions = newPartValues.length,
-      partitionValues = newPartValues)
+      partitionValues = newPartValues,
+      isPartiallyClustered = spjParams.applyPartialClustering)
   }
 
   /**
