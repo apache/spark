@@ -21,7 +21,6 @@ import scala.collection.mutable
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Unstable}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.analysis.TableFunctionRegistry.TableFunctionBuilder
@@ -30,6 +29,7 @@ import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.classic.Strategy
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
 
 /**
