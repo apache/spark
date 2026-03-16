@@ -191,21 +191,6 @@ class FunctionResolution(
           case None =>
         }
       }
-      // Last-resort: internal functions (e.g. distributed_sequence_id) may not be in the session
-      // registry; resolve from FunctionRegistry.internal when unqualified name is used.
-      if (unresolvedFunc.nameParts.size == 1) {
-        val funcIdentifier = FunctionIdentifier(unresolvedFunc.nameParts.head)
-        try {
-          val func = FunctionRegistry.internal.lookupFunction(
-            funcIdentifier, unresolvedFunc.arguments)
-          return validateFunction(func, unresolvedFunc.arguments.length, unresolvedFunc)
-        } catch {
-          case _: NoSuchFunctionException =>
-            // Fall through to throw unresolvedRoutineError
-          case e: AnalysisException if e.getCondition == "UNRESOLVED_ROUTINE" =>
-            // Fall through to throw with full search path
-        }
-      }
       val searchPath = SQLConf.get.resolutionSearchPath(currentCatalogPath)
       throw QueryCompilationErrors.unresolvedRoutineError(
         unresolvedFunc.nameParts, searchPath.map(toSQLId), unresolvedFunc.origin)

@@ -835,7 +835,6 @@ object FunctionRegistry {
     expression[InputFileBlockStart]("input_file_block_start"),
     expression[InputFileBlockLength]("input_file_block_length"),
     expression[MonotonicallyIncreasingID]("monotonically_increasing_id"),
-    expression[DistributedSequenceID]("distributed_sequence_id"),
     expression[CurrentDatabase]("current_database"),
     expression[CurrentDatabase]("current_schema", true, Some("3.4.0")),
     expression[CurrentCatalog]("current_catalog"),
@@ -1037,7 +1036,8 @@ object FunctionRegistry {
     } else {
       builder
     }
-    internal.internalRegisterFunction(FunctionIdentifier(name), info, newBuilder)
+    // Use builtin identifier so unqualified lookups (normalized to system.builtin.name) find them
+    internal.internalRegisterFunction(builtinFunctionIdentifier(name), info, newBuilder)
   }
 
   registerInternalExpression[Product]("product")
@@ -1052,7 +1052,7 @@ object FunctionRegistry {
   registerInternalExpression[Hours]("hours")
   registerInternalExpression[UnwrapUDT]("unwrap_udt")
   registerInternalExpression[MonotonicallyIncreasingID]("distributed_id", setAlias = true)
-  // distributed_sequence_id is in the main expressions map (builtin) for session resolution
+  registerInternalExpression[DistributedSequenceID]("distributed_sequence_id")
   registerInternalExpression[PandasProduct]("pandas_product")
   registerInternalExpression[PandasStddev]("pandas_stddev")
   registerInternalExpression[PandasVariance]("pandas_var")
