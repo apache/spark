@@ -51,13 +51,11 @@ else:
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
-@typing.final
 class MlParams(google.protobuf.message.Message):
     """MlParams stores param settings for ML Estimator / Transformer / Evaluator"""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    @typing.final
     class ParamsEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -72,9 +70,11 @@ class MlParams(google.protobuf.message.Message):
             key: builtins.str = ...,
             value: pyspark.sql.connect.proto.expressions_pb2.Expression.Literal | None = ...,
         ) -> None: ...
-        def HasField(self, field_name: typing.Literal["value", b"value"]) -> builtins.bool: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["value", b"value"]
+        ) -> builtins.bool: ...
         def ClearField(
-            self, field_name: typing.Literal["key", b"key", "value", b"value"]
+            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
 
     PARAMS_FIELD_NUMBER: builtins.int
@@ -96,11 +96,10 @@ class MlParams(google.protobuf.message.Message):
             | None
         ) = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["params", b"params"]) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["params", b"params"]) -> None: ...
 
 global___MlParams = MlParams
 
-@typing.final
 class MlOperator(google.protobuf.message.Message):
     """MLOperator represents the ML operators like (Estimator, Transformer or Evaluator)"""
 
@@ -115,7 +114,7 @@ class MlOperator(google.protobuf.message.Message):
             MlOperator._OperatorType.ValueType
         ],
         builtins.type,
-    ):
+    ):  # noqa: F821
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
         OPERATOR_TYPE_UNSPECIFIED: MlOperator._OperatorType.ValueType  # 0
         OPERATOR_TYPE_ESTIMATOR: MlOperator._OperatorType.ValueType  # 1
@@ -155,12 +154,11 @@ class MlOperator(google.protobuf.message.Message):
         type: global___MlOperator.OperatorType.ValueType = ...,
     ) -> None: ...
     def ClearField(
-        self, field_name: typing.Literal["name", b"name", "type", b"type", "uid", b"uid"]
+        self, field_name: typing_extensions.Literal["name", b"name", "type", b"type", "uid", b"uid"]
     ) -> None: ...
 
 global___MlOperator = MlOperator
 
-@typing.final
 class ObjectRef(google.protobuf.message.Message):
     """Represents a reference to the cached object which could be a model
     or summary evaluated by a model
@@ -178,6 +176,6 @@ class ObjectRef(google.protobuf.message.Message):
         *,
         id: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["id", b"id"]) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["id", b"id"]) -> None: ...
 
 global___ObjectRef = ObjectRef
