@@ -2,23 +2,23 @@ OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Array Distinct:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-array_distinct                                      277            361          85          0.0      276524.9       1.0X
+array_distinct                                      736            806          99          0.0      735969.4       1.0X
 
 OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Array Union:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-array_union                                         297            368          67          0.0      297262.3       1.0X
+array_union                                         700            706           7          0.0      699948.5       1.0X
 
 OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Array Except:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-array_except                                        104            126          19          0.0      104153.1       1.0X
+array_except                                        251            257           5          0.0      250521.1       1.0X
 
 OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Array Intersect:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-array_intersect                                      99            120          20          0.0       99423.2       1.0X
+array_intersect                                     244            258          12          0.0      244202.0       1.0X
 
