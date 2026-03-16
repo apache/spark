@@ -2578,9 +2578,7 @@ class SparkConnectFunctionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
         )
 
         # Functions in Spark Connect we do not expect to be available in classic PySpark
-        cf_excluded_fn = {
-            "check_dependencies",  # internal helper function
-        }
+        cf_excluded_fn = set()
 
         self.assertEqual(
             cf_fn - sf_fn,

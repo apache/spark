@@ -155,10 +155,10 @@ object InMemoryTableWithV2Filter {
           } else {
             value == attrVal
           }
-        case p: Predicate if p.name().equals("IS NULL") =>
+        case p: Predicate if p.name().equals("IS_NULL") =>
           val attr = p.children()(0).toString
           null == InMemoryBaseTable.extractValue(attr, partitionNames, partValues)
-        case p: Predicate if p.name().equals("IS NOT NULL") =>
+        case p: Predicate if p.name().equals("IS_NOT_NULL") =>
           val attr = p.children()(0).toString
           null != InMemoryBaseTable.extractValue(attr, partitionNames, partValues)
         case p: Predicate if p.name().equals("ALWAYS_TRUE") => true
@@ -172,8 +172,8 @@ object InMemoryTableWithV2Filter {
     predicates.flatMap(splitAnd).forall {
       case p: Predicate if p.name().equals("=") => true
       case p: Predicate if p.name().equals("<=>") => true
-      case p: Predicate if p.name().equals("IS NULL") => true
-      case p: Predicate if p.name().equals("IS NOT NULL") => true
+      case p: Predicate if p.name().equals("IS_NULL") => true
+      case p: Predicate if p.name().equals("IS_NOT_NULL") => true
       case p: Predicate if p.name().equals("ALWAYS_TRUE") => true
       case _ => false
     }

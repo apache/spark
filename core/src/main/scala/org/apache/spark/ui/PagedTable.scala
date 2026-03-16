@@ -220,8 +220,8 @@ private[spark] trait PagedTable[T] {
 
     <div class="d-flex justify-content-between align-items-center">
       <div class="d-flex align-items-center">
-        <span style="padding-right: 4px;">Page: </span>
-        <ul class="pagination" style="margin-bottom: 0;">
+        <span class="pe-1">Page: </span>
+        <ul class="pagination mb-0">
           {if (currentGroup > firstGroup) {
           <li class="page-item">
             <a href={Unparsed(pageLink(startPage - groupSize))} class="page-link"
@@ -265,10 +265,9 @@ private[spark] trait PagedTable[T] {
         <form id={s"form-$navigationId-page"}
               method="get"
               action={Unparsed(goButtonFormPath)}
-              class="d-flex align-items-center gap-1"
-              style="margin-bottom: 0px;">
+              class="d-flex align-items-center gap-1 mb-0">
           {hiddenFormFields}
-          <label style="white-space: nowrap;">{totalPages} Pages. Jump to</label>
+          <label class="text-nowrap">{totalPages} Pages. Jump to</label>
           <input type="text"
                  name={pageNumberFormField}
                  id={s"form-$navigationId-page-no"}
@@ -276,16 +275,16 @@ private[spark] trait PagedTable[T] {
                  class="form-control form-control-sm"
                  style="width: 60px;" />
 
-          <label style="white-space: nowrap;">. Show </label>
+          <label class="text-nowrap">. Show </label>
           <input type="text"
                  id={s"form-$navigationId-page-size"}
                  name={pageSizeFormField}
                  value={pageSize.toString}
                  class="form-control form-control-sm"
                  style="width: 60px;" />
-          <label style="white-space: nowrap;">items in a page.</label>
+          <label class="text-nowrap">items in a page.</label>
 
-          <button type="submit" class="btn btn-spark btn-sm">Go</button>
+          <button type="submit" class="btn btn-outline-secondary btn-sm">Go</button>
         </form>
       </div>
     </div>
@@ -364,9 +363,9 @@ private[spark] trait PagedTable[T] {
 
           <th>
             <a href={headerLink}>
-              <span data-bs-toggle="tooltip" data-bs-placement="top" title={tooltip.getOrElse("")}>
-                {header}&nbsp;{Unparsed(arrow)}
-              </span>
+              {UIUtils.tooltipSpan(
+                <xml:group>{header}&nbsp;{Unparsed(arrow)}</xml:group>,
+                tooltip.getOrElse(""))}
             </a>
           </th>
         } else {
@@ -379,17 +378,14 @@ private[spark] trait PagedTable[T] {
 
             <th>
               <a href={headerLink}>
-                <span data-bs-toggle="tooltip"
-                  data-bs-placement="top" title={tooltip.getOrElse("")}>
-                  {header}
-                </span>
+                {UIUtils.tooltipSpan(<xml:group>{header}</xml:group>,
+                  tooltip.getOrElse(""))}
               </a>
             </th>
           } else {
             <th>
-              <span data-bs-toggle="tooltip" data-bs-placement="top" title={tooltip.getOrElse("")}>
-                {header}
-              </span>
+              {UIUtils.tooltipSpan(<xml:group>{header}</xml:group>,
+                tooltip.getOrElse(""))}
             </th>
           }
         }

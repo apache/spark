@@ -273,12 +273,12 @@ class NamespaceTestsMixin:
             pd.to_timedelta(np.arange(5), unit="s"),
         )
         self.assert_eq(
-            ps.to_timedelta(ps.Series([1, 2]), unit="d"),
-            pd.to_timedelta(pd.Series([1, 2]), unit="d"),
+            ps.to_timedelta(ps.Series([1, 2]), unit="D"),
+            pd.to_timedelta(pd.Series([1, 2]), unit="D"),
         )
         self.assert_eq(
-            ps.to_timedelta(pd.Series([1, 2]), unit="d"),
-            pd.to_timedelta(pd.Series([1, 2]), unit="d"),
+            ps.to_timedelta(pd.Series([1, 2]), unit="D"),
+            pd.to_timedelta(pd.Series([1, 2]), unit="D"),
         )
 
     def test_timedelta_range(self):

@@ -15,10 +15,6 @@
 # limitations under the License.
 #
 
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
-
 import warnings
 from typing import (
     Dict,

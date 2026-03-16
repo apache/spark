@@ -200,7 +200,7 @@ class MultiIndex(Index):
         Parameters
         ----------
         arrays: list / sequence of array-likes
-            Each array-like gives one level’s value for each data point. len(arrays)
+            Each array-like gives one level's value for each data point. len(arrays)
             is the number of levels.
         sortorder: int or None
             Level of sortedness (must be lexicographically sorted by that level).

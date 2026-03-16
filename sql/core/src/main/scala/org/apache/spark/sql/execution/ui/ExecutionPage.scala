@@ -24,10 +24,10 @@ import org.json4s.JNull
 import org.json4s.JsonAST.{JBool, JString}
 import org.json4s.jackson.JsonMethods.parse
 
-import org.apache.spark.JobExecutionStatus
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.UI.UI_SQL_GROUP_SUB_EXECUTION_ENABLED
 import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.ui.jobs.ApiHelper
 
 class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging {
 
@@ -47,23 +47,6 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
       val currentTime = System.currentTimeMillis()
       val duration = executionUIData.completionTime.map(_.getTime()).getOrElse(currentTime) -
         executionUIData.submissionTime
-
-      def jobLinks(status: JobExecutionStatus, label: String): Seq[Node] = {
-        val jobs = executionUIData.jobs.flatMap { case (jobId, jobStatus) =>
-          if (jobStatus == status) Some(jobId) else None
-        }
-        if (jobs.nonEmpty) {
-          <li class="job-url">
-            <strong>{label} </strong>
-            {jobs.toSeq.sorted.map { jobId =>
-              <a href={jobURL(request, jobId.intValue())}>{jobId.toString}</a><span>&nbsp;</span>
-            }}
-          </li>
-        } else {
-          Nil
-        }
-      }
-
 
       val summary =
         <div>
@@ -107,9 +90,6 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
                 }
               }
             }
-            {jobLinks(JobExecutionStatus.RUNNING, "Running Jobs:")}
-            {jobLinks(JobExecutionStatus.SUCCEEDED, "Succeeded Jobs:")}
-            {jobLinks(JobExecutionStatus.FAILED, "Failed Jobs:")}
           </ul>
           <div id="plan-viz-download-btn-container">
             <select id="plan-viz-format-select">
@@ -130,6 +110,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
       summary ++
         planVisualization(request, metrics, graph) ++
         physicalPlanDescription(executionUIData.physicalPlanDescription) ++
+        jobsTable(request, executionUIData) ++
         modifiedConfigs(configs.filter { case (k, _) => !k.startsWith(pandasOnSparkConfPrefix) }) ++
         modifiedPandasOnSparkConfigs(
           configs.filter { case (k, _) => k.startsWith(pandasOnSparkConfPrefix) }) ++
@@ -168,15 +149,40 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
         </span>
       </div>
 
-      <div id="plan-viz-graph">
-        <div>
-          <input type="checkbox" id="stageId-and-taskId-checkbox"></input>
-          <span>Show the Stage ID and Task ID that corresponds to the max metric</span>
+      <div id="plan-viz-content" class="row">
+        <div id="plan-viz-graph-col" class="col-12">
+          <div id="plan-viz-graph">
+            <div>
+              <input type="checkbox" id="stageId-and-taskId-checkbox"></input>
+              <span>Show the Stage ID and Task ID that corresponds to the max metric</span>
+            </div>
+            <div>
+              <input type="checkbox" id="detailed-labels-checkbox"></input>
+              <span>Show metrics in graph nodes (detailed mode)</span>
+            </div>
+          </div>
+        </div>
+        <div id="plan-viz-details-col" class="col-4 d-none">
+          <div id="plan-viz-details-panel" class="sticky-top" style="top: 4rem; z-index: 1;">
+            <div class="card">
+              <div class="card-header d-flex justify-content-between align-items-center">
+                <span class="fw-bold" id="plan-viz-details-title">Details</span>
+                <button id="plan-viz-panel-close" class="btn btn-sm btn-close"
+                        type="button" title="Close panel"></button>
+              </div>
+              <div class="card-body" id="plan-viz-details-body">
+                <p class="text-muted mb-0">Click a node to view details</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       <div id="plan-viz-metadata" style="display:none">
         <div class="dot-file">
           {graph.makeDotFile(metrics)}
+        </div>
+        <div class="node-details">
+          {graph.makeNodeDetailsJson(metrics)}
         </div>
       </div>
       {planVisualizationResources(request)}
@@ -200,6 +206,94 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
     </div>
   }
 
+  private def jobsTable(
+      request: HttpServletRequest,
+      executionUIData: SQLExecutionUIData): Seq[Node] = {
+    val jobIds = executionUIData.jobs.keys.toSeq.sorted.reverse
+    if (jobIds.isEmpty) return Nil
+
+    val store = parent.parent.store
+    val basePath = UIUtils.prependBaseUri(request, parent.basePath)
+    val rows = jobIds.flatMap { jobId =>
+      try {
+        val job = store.job(jobId)
+        val submissionTimeMs = job.submissionTime.map(_.getTime).getOrElse(-1L)
+        val formattedTime = job.submissionTime.map(UIUtils.formatDate).getOrElse("")
+        val durationMs = (job.submissionTime, job.completionTime) match {
+          case (Some(start), Some(end)) => end.getTime - start.getTime
+          case (Some(start), None) => System.currentTimeMillis() - start.getTime
+          case _ => -1L
+        }
+        val duration = if (durationMs >= 0) UIUtils.formatDuration(durationMs) else ""
+        val (lastStageName, lastStageDesc) =
+          ApiHelper.lastStageNameAndDescription(store, job)
+        val jobDesc = UIUtils.makeDescription(
+          job.description.getOrElse(lastStageDesc), basePath, plainText = false)
+        val detailUrl = s"$basePath/jobs/job/?id=$jobId"
+        val stagesInfo = {
+          val completed = job.numCompletedStages
+          val total = job.stageIds.size - job.numSkippedStages
+          val extra = Seq(
+            if (job.numFailedStages > 0) s"(${job.numFailedStages} failed)" else "",
+            if (job.numSkippedStages > 0) s"(${job.numSkippedStages} skipped)" else ""
+          ).filter(_.nonEmpty).mkString(" ")
+          s"$completed/$total $extra"
+        }
+        Some(
+          <tr id={"job-" + jobId}>
+            <td><a href={jobURL(request, jobId)}>{jobId}</a></td>
+            <td>
+              {jobDesc}
+              <a href={detailUrl} class="name-link">{lastStageName}</a>
+            </td>
+            <td sorttable_customkey={submissionTimeMs.toString}>{formattedTime}</td>
+            <td sorttable_customkey={durationMs.toString}>{duration}</td>
+            <td class="stage-progress-cell">{stagesInfo}</td>
+            <td class="progress-cell">
+              {UIUtils.makeProgressBar(started = job.numActiveTasks,
+              completed = job.numCompletedIndices,
+              failed = job.numFailedTasks, skipped = job.numSkippedTasks,
+              reasonToNumKilled = job.killedTasksSummary,
+              total = job.numTasks - job.numSkippedTasks)}
+            </td>
+          </tr>)
+      } catch {
+        case _: NoSuchElementException => None
+      }
+    }
+
+    // scalastyle:off
+    <div>
+      <span class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#sql-jobs-table"
+            aria-expanded="true" aria-controls="sql-jobs-table"
+            data-collapse-name="collapse-sql-jobs">
+        <h4>
+          <span class="collapse-table-arrow arrow-open"></span>
+          <a>Associated Jobs ({jobIds.size})</a>
+        </h4>
+      </span>
+      <div class="collapsible-table collapse show" id="sql-jobs-table">
+        <div class="table-responsive">
+        <table class="table table-bordered table-hover table-sm sortable">
+          <thead>
+            <tr>
+              <th>Job ID</th>
+              <th>Description</th>
+              <th>Submitted</th>
+              <th>Duration</th>
+              <th class="sorttable_nosort">Stages: Succeeded/Total</th>
+              <th class="sorttable_nosort">Tasks (for all stages): Succeeded/Total</th>
+            </tr>
+          </thead>
+          <tbody>{rows}</tbody>
+        </table>
+        </div>
+      </div>
+    </div>
+    // scalastyle:on
+  }
+
   private def modifiedConfigs(modifiedConfigs: Map[String, String]): Seq[Node] = {
     if (Option(modifiedConfigs).exists(_.isEmpty)) return Nil
 
@@ -211,15 +305,16 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
     )
 
     <div>
-      <span class="collapse-sql-properties collapse-table"
-            data-collapse-name="collapse-sql-properties"
-            data-collapse-table="sql-properties">
+      <span class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#sql-properties"
+            aria-expanded="false" aria-controls="sql-properties"
+            data-collapse-name="collapse-sql-properties">
         <h4>
           <span class="collapse-table-arrow arrow-closed"></span>
           <a>SQL / DataFrame Properties</a>
         </h4>
       </span>
-      <div class="sql-properties collapsible-table collapsed">
+      <div class="collapsible-table collapse" id="sql-properties">
         {configs}
       </div>
     </div>
@@ -251,15 +346,16 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
     )
 
     <div>
-      <span class="collapse-pandas-on-spark-properties collapse-table"
-            data-collapse-name="collapse-pandas-on-spark-properties"
-            data-collapse-table="pandas-on-spark-properties">
+      <span class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#pandas-on-spark-properties"
+            aria-expanded="false" aria-controls="pandas-on-spark-properties"
+            data-collapse-name="collapse-pandas-on-spark-properties">
         <h4>
           <span class="collapse-table-arrow arrow-closed"></span>
           <a>Pandas API Properties</a>
         </h4>
       </span>
-      <div class="pandas-on-spark-properties collapsible-table collapsed">
+      <div class="collapsible-table collapse" id="pandas-on-spark-properties">
         {configs}
       </div>
     </div>

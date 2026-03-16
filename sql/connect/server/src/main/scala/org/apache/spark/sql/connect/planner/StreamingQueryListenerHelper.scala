@@ -23,6 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.api.python.{PythonException, PythonWorkerUtils, SimplePythonFunction, SpecialLengths, StreamingPythonRunner}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.FUNCTION_NAME
+import org.apache.spark.sql.connect.IllegalStateErrors
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.{SessionHolder, SparkConnectService}
 import org.apache.spark.sql.streaming.StreamingQueryListener
@@ -98,9 +99,10 @@ class PythonStreamingQueryListener(listener: SimplePythonFunction, sessionHolder
             errorClass = "PYTHON_EXCEPTION",
             messageParameters = Map("msg" -> msg, "traceback" -> traceback))
         case otherValue =>
-          throw new IllegalStateException(
-            s"Unexpected return value $otherValue from the " +
-              s"Python worker.")
+          throw IllegalStateErrors.streamingQueryUnexpectedReturnValue(
+            sessionHolder.key.toString,
+            otherValue,
+            s"streaming query listener function $functionName")
       }
     } catch {
       case eof: EOFException =>
