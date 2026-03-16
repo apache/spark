@@ -30,7 +30,21 @@ import pandas as pd
 from pandas.api.types import is_list_like, CategoricalDtype
 
 from pyspark.sql import functions as F, Column, Window
-from pyspark.sql.types import LongType, BooleanType, NumericType
+from pyspark.sql.types import (
+    BinaryType,
+    BooleanType,
+    CharType,
+    DataType,
+    DateType,
+    DayTimeIntervalType,
+    LongType,
+    NumericType,
+    StringType,
+    TimestampNTZType,
+    TimestampType,
+    TimeType,
+    VarcharType,
+)
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Axis, Dtype, IndexOpsLike, Label, SeriesOrIndex
 from pyspark.pandas.config import get_option, option_context
@@ -279,6 +293,38 @@ def _exclude_pd_np_operand(other: Any) -> None:
             f"Operand of type {type(other).__module__}.{type(other).__qualname__} "
             f"is not supported for this operation. "
         )
+
+
+def _is_value_type_compatible(value: Any, spark_type: DataType) -> bool:
+    """Check if a Python value's type is compatible with a Spark column type for isin matching.
+
+    Pandas isin() uses strict type matching: an integer 1 never matches a string "1".
+    However, numeric types (int, float, bool) are cross-compatible, matching Python semantics
+    where bool is a subclass of int and int/float compare equal when values match.
+    """
+    import datetime
+    import decimal
+
+    if isinstance(spark_type, NumericType):
+        return isinstance(value, (int, float, bool, decimal.Decimal, np.number))
+    if isinstance(spark_type, BooleanType):
+        return isinstance(value, (bool, np.bool_, int, float, np.number))
+    if isinstance(spark_type, (StringType, CharType, VarcharType)):
+        return isinstance(value, str)
+    if isinstance(spark_type, BinaryType):
+        return isinstance(value, (bytes, bytearray))
+    if isinstance(spark_type, (TimestampType, TimestampNTZType)):
+        return isinstance(value, (datetime.datetime, pd.Timestamp))
+    if isinstance(spark_type, DateType):
+        return isinstance(value, (datetime.date, pd.Timestamp))
+    if isinstance(spark_type, TimeType):
+        return isinstance(value, datetime.time)
+    if isinstance(spark_type, DayTimeIntervalType):
+        return isinstance(value, datetime.timedelta)
+    # For complex types (ArrayType, MapType, StructType) and other exotic types
+    # (VariantType, spatial types, YearMonthIntervalType, CalendarIntervalType),
+    # skip filtering and let Spark handle type resolution.
+    return True
 
 
 class IndexOpsMixin(object, metaclass=ABCMeta):
@@ -930,12 +976,19 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
             cast(np.ndarray, values).tolist() if isinstance(values, np.ndarray) else list(values)
         )
 
-        other = [F.lit(v) for v in values]
-        scol = self.spark.column.isin(other)
+        spark_type = self._internal.data_fields[0].spark_type
+        compatible = [
+            F.lit(v).cast(spark_type) for v in values if _is_value_type_compatible(v, spark_type)
+        ]
+        scol = (
+            F.coalesce(self.spark.column.isin(compatible), F.lit(False))
+            if compatible
+            else F.lit(False)
+        )
         field = self._internal.data_fields[0].copy(
             dtype=np.dtype("bool"), spark_type=BooleanType(), nullable=False
         )
-        return self._with_new_scol(scol=F.coalesce(scol, F.lit(False)), field=field)
+        return self._with_new_scol(scol=scol, field=field)
 
     def isnull(self: IndexOpsLike) -> IndexOpsLike:
         """

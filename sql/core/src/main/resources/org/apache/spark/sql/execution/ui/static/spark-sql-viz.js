@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* global $, d3, dagreD3, graphlibDot */
+/* global $, d3, dagreD3, graphlibDot, uiRoot, appBasePath */
 
 var PlanVizConstants = {
   svgMarginX: 16,
@@ -385,10 +385,19 @@ function buildStatTable(total, min, med, maxVal,
   h += "<td>" + min + "</td><td>" + med +
     "</td><td>" + maxVal + "</td>";
   if (showStageTask) {
-    h += "<td>" + stageId + "</td><td>" + taskId + "</td>";
+    h += "<td>" + stageLink(stageId) + "</td><td>" + taskId + "</td>";
   }
   h += "</tr></tbody></table>";
   return h;
+}
+
+function stageLink(stageId) {
+  if (!stageId) return "";
+  var parts = stageId.split(".");
+  var id = parts[0];
+  var attempt = parts.length > 1 ? parts[1] : "0";
+  var url = uiRoot + appBasePath + "/stages/stage/?id=" + id + "&attempt=" + attempt;
+  return '<a href="' + url + '">' + stageId + '</a>';
 }
 
 /*

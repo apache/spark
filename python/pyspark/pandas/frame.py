@@ -8553,6 +8553,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 % (set(values.keys()).difference(self.columns))
             )
 
+        from pyspark.pandas.base import _is_value_type_compatible
+
         data_spark_columns = []
         if isinstance(values, dict):
             for i, col in enumerate(self.columns):
@@ -8560,10 +8562,20 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     item = values[col]
                     item = item.tolist() if isinstance(item, np.ndarray) else list(item)
 
-                    scol = self._internal.spark_column_for(self._internal.column_labels[i]).isin(
-                        [F.lit(v) for v in item]
+                    label = self._internal.column_labels[i]
+                    col_type = self._internal.spark_type_for(label)
+                    compatible = [
+                        F.lit(v).cast(col_type)
+                        for v in item
+                        if _is_value_type_compatible(v, col_type)
+                    ]
+                    scol = (
+                        F.coalesce(
+                            self._internal.spark_column_for(label).isin(compatible), F.lit(False)
+                        )
+                        if compatible
+                        else F.lit(False)
                     )
-                    scol = F.coalesce(scol, F.lit(False))
                 else:
                     scol = F.lit(False)
                 data_spark_columns.append(scol.alias(self._internal.data_spark_column_names[i]))
@@ -8575,14 +8587,19 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
 
             for label in self._internal.column_labels:
-                if is_ansi_mode_enabled(self._internal.spark_frame.sparkSession):
-                    col_type = self._internal.spark_type_for(label)
-                    scol = self._internal.spark_column_for(label).isin(
-                        [F.lit(v).try_cast(col_type) for v in values]
+                col_type = self._internal.spark_type_for(label)
+                compatible = [
+                    F.lit(v).cast(col_type)
+                    for v in values
+                    if _is_value_type_compatible(v, col_type)
+                ]
+                scol = (
+                    F.coalesce(
+                        self._internal.spark_column_for(label).isin(compatible), F.lit(False)
                     )
-                else:
-                    scol = self._internal.spark_column_for(label).isin([F.lit(v) for v in values])
-                scol = F.coalesce(scol, F.lit(False))
+                    if compatible
+                    else F.lit(False)
+                )
                 data_spark_columns.append(scol.alias(self._internal.spark_column_name_for(label)))
         else:
             raise TypeError("Values should be iterable, Series, DataFrame or dict.")
