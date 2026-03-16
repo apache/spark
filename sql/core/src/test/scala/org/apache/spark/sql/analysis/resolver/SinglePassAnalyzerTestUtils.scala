@@ -15,14 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.analysis.resolver
+package org.apache.spark.sql.analysis.resolver
 
-import java.util.Locale
+import org.apache.spark.SparkConf
+import org.apache.spark.sql.internal.SQLConf
 
-/**
- * The [[IdentifierMap]] is an implementation of a [[KeyTransformingMap]] that uses SQL/DataFrame
- * identifiers as keys. The implementation is case-insensitive for keys.
- */
-class IdentifierMap[V] extends KeyTransformingMap[String, V] {
-  override def mapKey(key: String): String = key.toLowerCase(Locale.ROOT)
+trait SinglePassAnalyzerTestUtils {
+  protected def setTentativeMode(sparkConf: SparkConf): SparkConf = {
+    sparkConf
+      .set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key, "true")
+      .set(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key, "false")
+  }
 }
