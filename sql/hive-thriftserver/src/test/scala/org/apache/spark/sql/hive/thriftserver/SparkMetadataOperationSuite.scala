@@ -221,13 +221,14 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       val sortedExpected = functionNames.sorted
       assert(sortedRows.size === sortedExpected.size,
         s"Expected ${sortedExpected.size} functions but got ${sortedRows.size}")
-      sortedExpected.zip(sortedRows).foreach { case (func, (schem, name, remarks, funcType, specificName)) =>
-        val exprInfo = FunctionRegistry.expressions(func)._1
-        assert(schem === "default")
-        assert(name === exprInfo.getName)
-        assert(remarks === s"Usage: ${exprInfo.getUsage}\nExtended Usage:${exprInfo.getExtended}")
-        assert(funcType === DatabaseMetaData.functionResultUnknown)
-        assert(specificName === exprInfo.getClassName)
+      sortedExpected.zip(sortedRows).foreach {
+        case (func, (schem, name, remarks, funcType, specificName)) =>
+          val exprInfo = FunctionRegistry.expressions(func)._1
+          assert(schem === "default")
+          assert(name === exprInfo.getName)
+          assert(remarks === s"Usage: ${exprInfo.getUsage}\nExtended Usage:${exprInfo.getExtended}")
+          assert(funcType === DatabaseMetaData.functionResultUnknown)
+          assert(specificName === exprInfo.getClassName)
       }
     }
 
