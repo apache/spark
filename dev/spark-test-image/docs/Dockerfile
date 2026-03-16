@@ -71,7 +71,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # See more in SPARK-39959, roxygen2 < 7.2.1
-RUN Rscript -e "install.packages(c('devtools', 'knitr', 'markdown', 'rmarkdown', 'testthat', 'pak'), repos='https://cloud.r-project.org/')" && \
+RUN Rscript -e "install.packages(c('devtools', 'knitr', 'markdown', 'rmarkdown', 'testthat', 'remotes', 'pak'), repos='https://cloud.r-project.org/')" && \
     Rscript -e "pak::pak('roxygen2@7.2.0')" && \
     Rscript -e "pak::pak('pkgdown@2.2.0')" && \
     Rscript -e "devtools::install_version('preferably', version='0.4.1', repos='https://cloud.r-project.org')"
