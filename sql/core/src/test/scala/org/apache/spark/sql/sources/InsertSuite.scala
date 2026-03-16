@@ -1021,7 +1021,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           sql("INSERT INTO test_table AS t REPLACE ON t.i = 1 " +
             "SELECT 1, 'a'")
         },
-        condition = "UNSUPPORTED_INSERT_REPLACE_ON"
+        condition = "UNSUPPORTED_INSERT_REPLACE_ON_OR_USING"
       )
     }
   }
@@ -1050,7 +1050,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           sql("INSERT INTO test_table AS t REPLACE USING (i) " +
             "SELECT 1, 'a'")
         },
-        condition = "UNSUPPORTED_INSERT_REPLACE_USING"
+        condition = "UNSUPPORTED_INSERT_REPLACE_ON_OR_USING"
       )
     }
   }

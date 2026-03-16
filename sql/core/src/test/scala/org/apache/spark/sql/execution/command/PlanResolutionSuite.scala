@@ -1332,7 +1332,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
           "INSERT INTO testcat.tab AS t REPLACE ON t.i = 1 " +
             "SELECT * FROM v2Table")
       },
-      condition = "UNSUPPORTED_INSERT_REPLACE_ON"
+      condition = "UNSUPPORTED_INSERT_REPLACE_ON_OR_USING"
     )
   }
 
@@ -1343,7 +1343,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
           "INSERT INTO testcat.tab AS t REPLACE USING (i) " +
             "SELECT * FROM v2Table")
       },
-      condition = "UNSUPPORTED_INSERT_REPLACE_USING"
+      condition = "UNSUPPORTED_INSERT_REPLACE_ON_OR_USING"
     )
   }
 

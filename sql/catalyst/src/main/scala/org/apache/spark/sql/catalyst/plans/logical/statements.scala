@@ -174,7 +174,7 @@ case class QualifiedColType(
  * @param byName               If true, reorder the data columns to match the column names of the
  *                             target table.
  * @param withSchemaEvolution  If true, enables automatic schema evolution for the operation.
- * @param replaceCriteriaOpt  Optional replace criteria for INSERT REPLACE ON/USING operations.
+ * @param replaceCriteriaOpt   Optional replace criteria for INSERT REPLACE ON/USING operations.
  */
 case class InsertIntoStatement(
     table: LogicalPlan,
@@ -193,6 +193,12 @@ case class InsertIntoStatement(
     "IF NOT EXISTS is only valid with static partitions")
   require(userSpecifiedCols.isEmpty || !byName,
     "BY NAME is only valid without specified cols")
+  require(replaceCriteriaOpt.isEmpty || userSpecifiedCols.isEmpty,
+    "REPLACE ON/USING is not compatible with user specified columns")
+  require(replaceCriteriaOpt.isEmpty || partitionSpec.isEmpty,
+    "REPLACE ON/USING is not compatible with a partition spec")
+  require(replaceCriteriaOpt.isEmpty || overwrite,
+    "REPLACE ON/USING requires overwrite mode")
 
   override def child: LogicalPlan = query
   override protected def withNewChildInternal(newChild: LogicalPlan): InsertIntoStatement =

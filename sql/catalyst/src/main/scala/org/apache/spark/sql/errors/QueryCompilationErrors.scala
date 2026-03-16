@@ -591,15 +591,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
-  def unsupportedInsertReplaceOn(): Throwable = {
+  def unsupportedInsertReplaceOnOrUsing(): Throwable = {
     new AnalysisException(
-      errorClass = "UNSUPPORTED_INSERT_REPLACE_ON",
-      messageParameters = Map.empty)
-  }
-
-  def unsupportedInsertReplaceUsing(): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_INSERT_REPLACE_USING",
+      errorClass = "UNSUPPORTED_INSERT_REPLACE_ON_OR_USING",
       messageParameters = Map.empty)
   }
 

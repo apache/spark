@@ -1,7 +1,7 @@
 {
   "ADD_DEFAULT_UNSUPPORTED" : {
     "message" : [
-      "Failed to execute <statementType> command because DEFAULT values are not supported when adding new columns to previously existing target data source with table provider: \"<dataSource>\"."
+      "Failed to execute <statementType> command because DEFAULT values are unsupported when adding new columns to previously existing target data source with table provider: \"<dataSource>\"."
     ],
     "sqlState" : "42623"
   },
@@ -232,7 +232,7 @@
   },
   "CANNOT_ALTER_PARTITION_COLUMN" : {
     "message" : [
-      "ALTER TABLE (ALTER|CHANGE) COLUMN is not supported for partition columns, but found the partition column <columnName> in the table <tableName>."
+      "ALTER TABLE (ALTER|CHANGE) COLUMN is unsupported for partition columns, but found the partition column <columnName> in the table <tableName>."
     ],
     "sqlState" : "428FR"
   },
@@ -608,7 +608,7 @@
   },
   "CANNOT_USE_MULTI_ALIASES_IN_WATERMARK_CLAUSE" : {
     "message" : [
-      "Multiple aliases are not supported in watermark clause."
+      "Multiple aliases are unsupported in watermark clause."
     ],
     "sqlState" : "42000"
   },
@@ -1832,13 +1832,13 @@
   },
   "DEFAULT_UNSUPPORTED" : {
     "message" : [
-      "Failed to execute <statementType> command because DEFAULT values are not supported for target data source with table provider: \"<dataSource>\"."
+      "Failed to execute <statementType> command because DEFAULT values are unsupported for target data source with table provider: \"<dataSource>\"."
     ],
     "sqlState" : "42623"
   },
   "DEFINE_FLOW_ONCE_OPTION_NOT_SUPPORTED" : {
     "message" : [
-      "Defining a one-time flow <flowName> with the 'once' option is not supported."
+      "Defining a one-time flow <flowName> with the 'once' option is unsupported."
     ],
     "sqlState" : "0A000"
   },
@@ -1851,7 +1851,7 @@
   },
   "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED" : {
     "message" : [
-      "Distinct window functions are not supported: <windowExpr>."
+      "Distinct window functions are unsupported: <windowExpr>."
     ],
     "sqlState" : "0A000"
   },
@@ -2425,7 +2425,7 @@
   },
   "HINT_UNSUPPORTED_FOR_JDBC_DIALECT" : {
     "message" : [
-      "The option `hint` is not supported for <jdbcDialect> in JDBC data source. Supported dialects are `MySQLDialect`, `OracleDialect` and `DatabricksDialect`."
+      "The option `hint` is unsupported for <jdbcDialect> in JDBC data source. Supported dialects are `MySQLDialect`, `OracleDialect` and `DatabricksDialect`."
     ],
     "sqlState" : "42822"
   },
@@ -2513,7 +2513,7 @@
   },
   "IDENTITY_COLUMNS_UNSUPPORTED_DATA_TYPE" : {
     "message" : [
-      "DataType <dataType> is not supported for IDENTITY columns."
+      "DataType <dataType> is unsupported for IDENTITY columns."
     ],
     "sqlState" : "428H2"
   },
@@ -3074,7 +3074,7 @@
   },
   "INVALID_BUCKET_COLUMN_DATA_TYPE" : {
     "message" : [
-      "Cannot use <type> for bucket column. Collated data types are not supported for bucketing."
+      "Cannot use <type> for bucket column. Collated data types are unsupported for bucketing."
     ],
     "sqlState" : "42601"
   },
@@ -4435,7 +4435,7 @@
       },
       "SHOW_FUNCTIONS_INVALID_SCOPE" : {
         "message" : [
-          "SHOW <scope> FUNCTIONS not supported."
+          "SHOW <scope> FUNCTIONS unsupported."
         ]
       },
       "TRANSFORM_WRONG_NUM_ARGS" : {
@@ -4697,7 +4697,7 @@
       },
       "MISMATCH_WITH_DISTINCT_INPUT_UNSAFE_CAST" : {
         "message" : [
-          "The function <funcName> with DISTINCT and WITHIN GROUP (ORDER BY) is not supported for <inputType> input. Explicitly cast the input to <castType> before passing it to both the function argument and ORDER BY expression."
+          "The function <funcName> with DISTINCT and WITHIN GROUP (ORDER BY) is unsupported for <inputType> input. Explicitly cast the input to <castType> before passing it to both the function argument and ORDER BY expression."
         ]
       },
       "WITHIN_GROUP_MISSING" : {
@@ -4816,7 +4816,7 @@
   },
   "LATERAL_JOIN_WITH_ARROW_UDTF_UNSUPPORTED" : {
     "message" : [
-      "LATERAL JOIN with Arrow-optimized user-defined table functions (UDTFs) is not supported. Arrow UDTFs cannot be used on the right-hand side of a lateral join.",
+      "LATERAL JOIN with Arrow-optimized user-defined table functions (UDTFs) is unsupported. Arrow UDTFs cannot be used on the right-hand side of a lateral join.",
       "Please use a regular UDTF instead, or restructure your query to avoid the lateral join."
     ],
     "sqlState" : "0A000"
@@ -5048,7 +5048,7 @@
   },
   "MULTIPART_FLOW_NAME_NOT_SUPPORTED" : {
     "message" : [
-      "Flow with multipart name '<flowName>' is not supported."
+      "Flow with multipart name '<flowName>' is unsupported."
     ],
     "sqlState" : "0A000"
   },
@@ -5078,7 +5078,7 @@
   },
   "MULTI_ALIAS_WITHOUT_GENERATOR" : {
     "message" : [
-      "Multi part aliasing (<names>) is not supported with <expr> as it is not a generator function."
+      "Multi part aliasing (<names>) is unsupported with <expr> as it is not a generator function."
     ],
     "sqlState" : "42K0E"
   },
@@ -5096,7 +5096,7 @@
   },
   "NAMED_PARAMETERS_NOT_SUPPORTED" : {
     "message" : [
-      "Named parameters are not supported for function <functionName>; please retry the query with positional arguments to the function call instead."
+      "Named parameters are unsupported for function <functionName>; please retry the query with positional arguments to the function call instead."
     ],
     "sqlState" : "4274K"
   },
@@ -5134,7 +5134,7 @@
   },
   "NESTED_SEQUENTIAL_STREAMING_UNION" : {
     "message" : [
-      "Nested SequentialStreamingUnion is not supported. <hint>",
+      "Nested SequentialStreamingUnion is unsupported. <hint>",
       "SequentialStreamingUnion can only be used at the top level of a streaming query.",
       "Each source in followedBy() should be a base streaming source or simple transformations,",
       "not another followedBy() result wrapped in other operators."
@@ -5197,7 +5197,7 @@
   },
   "NON_TIME_WINDOW_NOT_SUPPORTED_IN_STREAMING" : {
     "message" : [
-      "Window function is not supported in <windowFunc> (as column <columnName>) on streaming DataFrames/Datasets.",
+      "Window function is unsupported in <windowFunc> (as column <columnName>) on streaming DataFrames/Datasets.",
       "Structured Streaming only supports time-window aggregation using the WINDOW function. (window specification: <windowSpec>)"
     ],
     "sqlState" : "42KDE"
@@ -5314,25 +5314,25 @@
   },
   "NOT_SUPPORTED_CHANGE_COLUMN" : {
     "message" : [
-      "ALTER TABLE ALTER/CHANGE COLUMN is not supported for changing <table>'s column <originName> with type <originType> to <newName> with type <newType>."
+      "ALTER TABLE ALTER/CHANGE COLUMN is unsupported for changing <table>'s column <originName> with type <originType> to <newName> with type <newType>."
     ],
     "sqlState" : "0A000"
   },
   "NOT_SUPPORTED_CHANGE_SAME_COLUMN" : {
     "message" : [
-      "ALTER TABLE ALTER/CHANGE COLUMN is not supported for changing <table>'s column <fieldName> including its nested fields multiple times in the same command."
+      "ALTER TABLE ALTER/CHANGE COLUMN is unsupported for changing <table>'s column <fieldName> including its nested fields multiple times in the same command."
     ],
     "sqlState" : "0A000"
   },
   "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE" : {
     "message" : [
-      "<cmd> is not supported for v2 tables."
+      "<cmd> is unsupported for v2 tables."
     ],
     "sqlState" : "0A000"
   },
   "NOT_SUPPORTED_COMMAND_WITHOUT_HIVE_SUPPORT" : {
     "message" : [
-      "<cmd> is not supported, if you want to enable it, please set \"spark.sql.catalogImplementation\" to \"hive\"."
+      "<cmd> is unsupported, if you want to enable it, please set \"spark.sql.catalogImplementation\" to \"hive\"."
     ],
     "sqlState" : "0A000"
   },
@@ -6059,7 +6059,7 @@
   },
   "STATEFUL_CHILDREN_NOT_SUPPORTED_IN_SEQUENTIAL_STREAMING_UNION" : {
     "message" : [
-      "Stateful operations are not supported as direct children of SequentialStreamingUnion. Please apply stateful operations (aggregations, joins, deduplication, etc.) after the SequentialStreamingUnion.",
+      "Stateful operations are unsupported as direct children of SequentialStreamingUnion. Please apply stateful operations (aggregations, joins, deduplication, etc.) after the SequentialStreamingUnion.",
       "Incorrect: historical.groupBy(\"key\").count().followedBy(live.groupBy(\"key\").count())",
       "Correct: historical.followedBy(live).groupBy(\"key\").count()",
       "This ensures state is preserved across source transitions from historical to live data."
@@ -6157,7 +6157,7 @@
       },
       "UNSUPPORTED_PROVIDER" : {
         "message" : [
-          "<provider> is not supported"
+          "<provider> is unsupported"
         ]
       },
       "UNSUPPORTED_STATEFUL_OPERATOR" : {
@@ -6351,7 +6351,7 @@
   },
   "STATE_STORE_NULL_TYPE_ORDERING_COLS_NOT_SUPPORTED" : {
     "message" : [
-      "Null type ordering column with name=<fieldName> at index=<index> is not supported for range scan encoder."
+      "Null type ordering column with name=<fieldName> at index=<index> is unsupported for range scan encoder."
     ],
     "sqlState" : "42802"
   },
@@ -6398,19 +6398,19 @@
   },
   "STATE_STORE_UNSUPPORTED_OPERATION" : {
     "message" : [
-      "<operationType> operation not supported with <entity>"
+      "<operationType> operation unsupported with <entity>"
     ],
     "sqlState" : "XXKST"
   },
   "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY" : {
     "message" : [
-      "Binary inequality column is not supported with state store. Provided schema: <schema>."
+      "Binary inequality column is unsupported with state store. Provided schema: <schema>."
     ],
     "sqlState" : "XXKST"
   },
   "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY" : {
     "message" : [
-      "State store operation=<operationType> not supported on missing column family=<colFamilyName>."
+      "State store operation=<operationType> unsupported on missing column family=<colFamilyName>."
     ],
     "sqlState" : "42802"
   },
@@ -6446,7 +6446,7 @@
   },
   "STATE_STORE_VARIABLE_SIZE_ORDERING_COLS_NOT_SUPPORTED" : {
     "message" : [
-      "Variable size ordering column with name=<fieldName> at index=<index> is not supported for range scan encoder."
+      "Variable size ordering column with name=<fieldName> at index=<index> is unsupported for range scan encoder."
     ],
     "sqlState" : "42802"
   },
@@ -6515,7 +6515,7 @@
   },
   "STDS_MIXED_CHECKPOINT_FORMAT_VERSIONS_NOT_SUPPORTED" : {
     "message" : [
-      "Reading state across different checkpoint format versions is not supported.",
+      "Reading state across different checkpoint format versions is unsupported.",
       "startBatchId=<startBatchId>, endBatchId=<endBatchId>.",
       "startFormatVersion=<startFormatVersion>, endFormatVersion=<endFormatVersion>."
     ],
@@ -6573,12 +6573,12 @@
       },
       "UNSUPPORTED_DATASOURCE" : {
         "message" : [
-          "This output mode is not supported in Data Source <className>."
+          "This output mode is unsupported in Data Source <className>."
         ]
       },
       "UNSUPPORTED_OPERATION" : {
         "message" : [
-          "This output mode is not supported for <operation> on streaming DataFrames/DataSets."
+          "This output mode is unsupported for <operation> on streaming DataFrames/DataSets."
         ]
       }
     },
@@ -6619,7 +6619,7 @@
       },
       "SOURCE_NAMING_NOT_SUPPORTED" : {
         "message" : [
-          "Streaming source naming is not supported. Source name '<name>' was provided but the feature is disabled. Please enable the feature by setting spark.sql.streaming.queryEvolution.enableSourceEvolution to true."
+          "Streaming source naming is unsupported. Source name '<name>' was provided but the feature is disabled. Please enable the feature by setting spark.sql.streaming.queryEvolution.enableSourceEvolution to true."
         ]
       },
       "UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT" : {
@@ -6637,7 +6637,7 @@
     "subClass" : {
       "ASYNC_PROGRESS_TRACKING_NOT_SUPPORTED" : {
         "message" : [
-          "Async progress tracking is not supported in real-time mode. Set option asyncProgressTrackingEnabled to false and retry your query."
+          "Async progress tracking is unsupported in real-time mode. Set option asyncProgressTrackingEnabled to false and retry your query."
         ]
       },
       "IDENTICAL_SOURCES_IN_UNION_NOT_SUPPORTED" : {
@@ -6647,7 +6647,7 @@
       },
       "INPUT_STREAM_NOT_SUPPORTED" : {
         "message" : [
-          "The input stream <className> is not supported in Real-time Mode."
+          "The input stream <className> is unsupported in Real-time Mode."
         ]
       },
       "OPERATOR_OR_SINK_NOT_IN_ALLOWLIST" : {
@@ -6657,12 +6657,12 @@
       },
       "OUTPUT_MODE_NOT_SUPPORTED" : {
         "message" : [
-          "The output mode <outputMode> is not supported. To work around this limitation, set the output mode to Update. In the future, <outputMode> may be supported."
+          "The output mode <outputMode> is unsupported. To work around this limitation, set the output mode to Update. In the future, <outputMode> may be supported."
         ]
       },
       "SINK_NOT_SUPPORTED" : {
         "message" : [
-          "The <className> sink is currently not supported. See the Real-Time Mode User Guide for a list of supported sinks."
+          "The <className> sink is currently unsupported. See the Real-Time Mode User Guide for a list of supported sinks."
         ]
       }
     },
@@ -6878,19 +6878,19 @@
   },
   "TUPLE_INVALID_SKETCH_MODE" : {
     "message" : [
-      "Invalid call to <function>: mode '<mode>' is not supported. Valid modes are: <validModes>."
+      "Invalid call to <function>: mode '<mode>' is unsupported. Valid modes are: <validModes>."
     ],
     "sqlState" : "22023"
   },
   "TUPLE_IS_EMPTY" : {
     "message" : [
-      "Due to Scala's limited support of tuple, empty tuple is not supported."
+      "Due to Scala's limited support of tuple, empty tuple is unsupported."
     ],
     "sqlState" : "22004"
   },
   "TUPLE_SIZE_EXCEEDS_LIMIT" : {
     "message" : [
-      "Due to Scala's limited support of tuple, tuples with more than 22 elements are not supported."
+      "Due to Scala's limited support of tuple, tuples with more than 22 elements are unsupported."
     ],
     "sqlState" : "54011"
   },
@@ -7159,7 +7159,7 @@
       },
       "LOCAL_DIRECTORY" : {
         "message" : [
-          "The local directory <path> is not supported in a non-local master mode."
+          "The local directory <path> is unsupported in a non-local master mode."
         ]
       }
     },
@@ -7221,7 +7221,7 @@
   },
   "UNSUPPORTED_COLLATION" : {
     "message" : [
-      "Collation <collationName> is not supported for:"
+      "Collation <collationName> is unsupported for:"
     ],
     "subClass" : {
       "FOR_FUNCTION" : {
@@ -7234,7 +7234,7 @@
   },
   "UNSUPPORTED_CONNECT_FEATURE" : {
     "message" : [
-      "Feature is not supported in Spark Connect:"
+      "Feature is unsupported in Spark Connect:"
     ],
     "subClass" : {
       "DATASET_QUERY_EXECUTION" : {
@@ -7282,7 +7282,7 @@
   },
   "UNSUPPORTED_CONSTRAINT_CHARACTERISTIC" : {
     "message" : [
-      "Constraint characteristic '<characteristic>' is not supported for constraint type '<constraintType>'."
+      "Constraint characteristic '<characteristic>' is unsupported for constraint type '<constraintType>'."
     ],
     "sqlState" : "0A000"
   },
@@ -7318,7 +7318,7 @@
   },
   "UNSUPPORTED_DEFAULT_VALUE" : {
     "message" : [
-      "DEFAULT column values is not supported."
+      "DEFAULT column values is unsupported."
     ],
     "subClass" : {
       "WITHOUT_SUGGESTION" : {
@@ -7336,7 +7336,7 @@
   },
   "UNSUPPORTED_DESERIALIZER" : {
     "message" : [
-      "The deserializer is not supported:"
+      "The deserializer is unsupported:"
     ],
     "subClass" : {
       "DATA_TYPE_MISMATCH" : {
@@ -7376,13 +7376,13 @@
   },
   "UNSUPPORTED_EXPR_FOR_WINDOW" : {
     "message" : [
-      "Expression <sqlExpr> not supported within a window function."
+      "Expression <sqlExpr> unsupported within a window function."
     ],
     "sqlState" : "42P20"
   },
   "UNSUPPORTED_FEATURE" : {
     "message" : [
-      "The feature is not supported:"
+      "The feature is unsupported:"
     ],
     "subClass" : {
       "AES_MODE" : {
@@ -7402,7 +7402,7 @@
       },
       "ALTER_TABLE_SERDE_FOR_DATASOURCE_TABLE" : {
         "message" : [
-          "ALTER TABLE SET SERDE is not supported for table <tableName> created with the datasource API. Consider using an external Hive table or updating the table properties with compatible options for your table format."
+          "ALTER TABLE SET SERDE is unsupported for table <tableName> created with the datasource API. Consider using an external Hive table or updating the table properties with compatible options for your table format."
         ]
       },
       "ANALYZE_UNCACHED_TEMP_VIEW" : {
@@ -7457,12 +7457,12 @@
       },
       "CONTINUE_EXCEPTION_HANDLER" : {
         "message" : [
-          "CONTINUE exception handler is not supported. Use EXIT handler."
+          "CONTINUE exception handler is unsupported. Use EXIT handler."
         ]
       },
       "CREATE_FLOW_QUERY_EXECUTION" : {
         "message" : [
-          "Direct execution of a CREATE FLOW statement is not supported. To create a flow, create and execute a pipeline with a SQL file containing your statement attached in the pipeline spec."
+          "Direct execution of a CREATE FLOW statement is unsupported. To create a flow, create and execute a pipeline with a SQL file containing your statement attached in the pipeline spec."
         ]
       },
       "CREATE_PIPELINE_DATASET_QUERY_EXECUTION" : {
@@ -7472,7 +7472,7 @@
       },
       "DESC_TABLE_COLUMN_JSON" : {
         "message" : [
-          "DESC TABLE COLUMN AS JSON not supported for individual columns."
+          "DESC TABLE COLUMN AS JSON unsupported for individual columns."
         ]
       },
       "DESC_TABLE_COLUMN_PARTITION" : {
@@ -7542,7 +7542,7 @@
       },
       "LATERAL_COLUMN_ALIAS_IN_GROUP_BY" : {
         "message" : [
-          "Referencing a lateral column alias via GROUP BY alias/ALL is not supported yet."
+          "Referencing a lateral column alias via GROUP BY alias/ALL is unsupported yet."
         ]
       },
       "LATERAL_COLUMN_ALIAS_IN_WINDOW" : {
@@ -7694,7 +7694,7 @@
       },
       "SQL_CURSOR" : {
         "message" : [
-          "SQL cursor operations (DECLARE CURSOR, OPEN, FETCH, CLOSE) are not supported."
+          "SQL cursor operations (DECLARE CURSOR, OPEN, FETCH, CLOSE) are unsupported."
         ]
       },
       "SQL_SCRIPTING" : {
@@ -7704,32 +7704,32 @@
       },
       "SQL_SCRIPTING_DROP_TEMPORARY_VARIABLE" : {
         "message" : [
-          "DROP TEMPORARY VARIABLE is not supported within SQL scripts. To bypass this, use `EXECUTE IMMEDIATE 'DROP TEMPORARY VARIABLE ...'` ."
+          "DROP TEMPORARY VARIABLE is unsupported within SQL scripts. To bypass this, use `EXECUTE IMMEDIATE 'DROP TEMPORARY VARIABLE ...'` ."
         ]
       },
       "SQL_SCRIPTING_WITH_POSITIONAL_PARAMETERS" : {
         "message" : [
-          "Positional parameters are not supported with SQL Scripting."
+          "Positional parameters are unsupported with SQL Scripting."
         ]
       },
       "STATE_STORE_MULTIPLE_COLUMN_FAMILIES" : {
         "message" : [
-          "Creating multiple column families with <stateStoreProvider> is not supported."
+          "Creating multiple column families with <stateStoreProvider> is unsupported."
         ]
       },
       "STATE_STORE_REMOVING_COLUMN_FAMILIES" : {
         "message" : [
-          "Removing column families with <stateStoreProvider> is not supported."
+          "Removing column families with <stateStoreProvider> is unsupported."
         ]
       },
       "STATE_STORE_TTL" : {
         "message" : [
-          "State TTL with <stateStoreProvider> is not supported. Please use RocksDBStateStoreProvider."
+          "State TTL with <stateStoreProvider> is unsupported. Please use RocksDBStateStoreProvider."
         ]
       },
       "STORE_BACKEND_NOT_SUPPORTED_FOR_TWS" : {
         "message" : [
-          "Store backend <stateStoreProvider> is not supported by TransformWithState operator. Please use RocksDBStateStoreProvider."
+          "Store backend <stateStoreProvider> is unsupported by TransformWithState operator. Please use RocksDBStateStoreProvider."
         ]
       },
       "TABLE_OPERATION" : {
@@ -7782,7 +7782,7 @@
   },
   "UNSUPPORTED_GENERATOR" : {
     "message" : [
-      "The generator is not supported:"
+      "The generator is unsupported:"
     ],
     "subClass" : {
       "MULTI_GENERATOR" : {
@@ -7847,15 +7847,9 @@
     },
     "sqlState" : "42809"
   },
-  "UNSUPPORTED_INSERT_REPLACE_ON" : {
+  "UNSUPPORTED_INSERT_REPLACE_ON_OR_USING" : {
     "message" : [
-      "INSERT INTO ... REPLACE ON is not supported for this table format."
-    ],
-    "sqlState" : "0A000"
-  },
-  "UNSUPPORTED_INSERT_REPLACE_USING" : {
-    "message" : [
-      "INSERT INTO ... REPLACE USING is not supported for this table format."
+      "INSERT INTO ... REPLACE ON/USING is unsupported for this table format."
     ],
     "sqlState" : "0A000"
   },
@@ -7920,13 +7914,13 @@
   },
   "UNSUPPORTED_PIPELINE_SPARK_SQL_COMMAND" : {
     "message" : [
-      "'<command>' is not supported in spark.sql(\"...\") API in Spark Declarative Pipeline."
+      "'<command>' is unsupported in spark.sql(\"...\") API in Spark Declarative Pipeline."
     ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_SAVE_MODE" : {
     "message" : [
-      "The save mode <saveMode> is not supported for:"
+      "The save mode <saveMode> is unsupported for:"
     ],
     "subClass" : {
       "EXISTENT_PATH" : {
@@ -7954,7 +7948,7 @@
       },
       "ON_TEMPORARY_VIEW" : {
         "message" : [
-          "The command is not supported on a temporary view <tableName>."
+          "The command is unsupported on a temporary view <tableName>."
         ]
       },
       "ON_TRANSACTIONAL_HIVE_TABLE" : {
@@ -7987,13 +7981,13 @@
   },
   "UNSUPPORTED_SQL_UDF_USAGE" : {
     "message" : [
-      "Using SQL function <functionName> in <nodeName> is not supported."
+      "Using SQL function <functionName> in <nodeName> is unsupported."
     ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_STREAMING_OPERATOR_WITHOUT_WATERMARK" : {
     "message" : [
-      "<outputMode> output mode not supported for <statefulOperator> on streaming DataFrames/DataSets without watermark."
+      "<outputMode> output mode unsupported for <statefulOperator> on streaming DataFrames/DataSets without watermark."
     ],
     "sqlState" : "0A000"
   },
@@ -8010,7 +8004,7 @@
       },
       "AGGREGATE_FUNCTION_MIXED_OUTER_LOCAL_REFERENCES" : {
         "message" : [
-          "Found an aggregate function in a correlated predicate that has both outer and local references, which is not supported: <function>."
+          "Found an aggregate function in a correlated predicate that has both outer and local references, which is unsupported: <function>."
         ]
       },
       "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE" : {
@@ -8026,12 +8020,12 @@
       },
       "CORRELATED_REFERENCE" : {
         "message" : [
-          "Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses: <sqlExprs>."
+          "Expressions referencing the outer query are unsupported outside of WHERE/HAVING clauses: <sqlExprs>."
         ]
       },
       "HIGHER_ORDER_FUNCTION" : {
         "message" : [
-          "Subquery expressions are not supported within higher-order functions. Please remove all subquery expressions from higher-order functions and then try the query again."
+          "Subquery expressions are unsupported within higher-order functions. Please remove all subquery expressions from higher-order functions and then try the query again."
         ]
       },
       "LATERAL_JOIN_CONDITION_NON_DETERMINISTIC" : {
@@ -8051,7 +8045,7 @@
       },
       "NON_DETERMINISTIC_LATERAL_SUBQUERIES" : {
         "message" : [
-          "Non-deterministic lateral subqueries are not supported when joining with outer relations that produce more than one row:",
+          "Non-deterministic lateral subqueries are unsupported when joining with outer relations that produce more than one row:",
           "<treeNode>"
         ]
       },
@@ -8085,7 +8079,7 @@
       },
       "UNSUPPORTED_TABLE_ARGUMENT" : {
         "message" : [
-          "Table arguments are used in a function where they are not supported:",
+          "Table arguments are used in a function where they are unsupported:",
           "<treeNode>"
         ]
       }
@@ -8094,7 +8088,7 @@
   },
   "UNSUPPORTED_TABLE_CHANGE_IN_JDBC_CATALOG" : {
     "message" : [
-      "The table change <change> is not supported for the JDBC catalog on table <tableName>. Supported changes include: AddColumn, RenameColumn, DeleteColumn, UpdateColumnType, UpdateColumnNullability."
+      "The table change <change> is unsupported for the JDBC catalog on table <tableName>. Supported changes include: AddColumn, RenameColumn, DeleteColumn, UpdateColumnType, UpdateColumnNullability."
     ],
     "sqlState" : "42000"
   },
@@ -8106,13 +8100,13 @@
   },
   "UNSUPPORTED_TIME_TYPE" : {
     "message" : [
-      "The data type TIME is not supported."
+      "The data type TIME is unsupported."
     ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_TYPED_LITERAL" : {
     "message" : [
-      "Literals of the type <unsupportedType> are not supported. Supported types are <supportedTypes>."
+      "Literals of the type <unsupportedType> are unsupported. Supported types are <supportedTypes>."
     ],
     "sqlState" : "0A000"
   },
@@ -8142,7 +8136,7 @@
       },
       "NOT_A_VALID_DEFAULT_EXPRESSION" : {
         "message" : [
-          "The DEFAULT expression of `<functionName>`.`<parameterName>` is not supported because it contains a subquery."
+          "The DEFAULT expression of `<functionName>`.`<parameterName>` is unsupported because it contains a subquery."
         ]
       },
       "NOT_A_VALID_DEFAULT_PARAMETER_POSITION" : {
@@ -8361,7 +8355,7 @@
   },
   "_LEGACY_ERROR_TEMP_0012" : {
     "message" : [
-      "DISTRIBUTE BY is not supported."
+      "DISTRIBUTE BY is unsupported."
     ]
   },
   "_LEGACY_ERROR_TEMP_0014" : {
@@ -8371,7 +8365,7 @@
   },
   "_LEGACY_ERROR_TEMP_0015" : {
     "message" : [
-      "TABLESAMPLE(<msg>) is not supported."
+      "TABLESAMPLE(<msg>) is unsupported."
     ]
   },
   "_LEGACY_ERROR_TEMP_0016" : {
@@ -8421,7 +8415,7 @@
   },
   "_LEGACY_ERROR_TEMP_0034" : {
     "message" : [
-      "<operation> is not supported in Hive-style <command><msg>."
+      "<operation> is unsupported in Hive-style <command><msg>."
     ]
   },
   "_LEGACY_ERROR_TEMP_0035" : {
@@ -8461,7 +8455,7 @@
   },
   "_LEGACY_ERROR_TEMP_0051" : {
     "message" : [
-      "Empty set in <element> grouping sets is not supported."
+      "Empty set in <element> grouping sets is unsupported."
     ]
   },
   "_LEGACY_ERROR_TEMP_0053" : {
@@ -8532,7 +8526,7 @@
   },
   "_LEGACY_ERROR_TEMP_1018" : {
     "message" : [
-      "<quoted> is a permanent view, which is not supported by streaming reading API such as `DataStreamReader.table` yet."
+      "<quoted> is a permanent view, which is unsupported by streaming reading API such as `DataStreamReader.table` yet."
     ]
   },
   "_LEGACY_ERROR_TEMP_1021" : {
@@ -8573,7 +8567,7 @@
   },
   "_LEGACY_ERROR_TEMP_1039" : {
     "message" : [
-      "Multiple time/session window expressions would result in a cartesian product of rows, therefore they are currently not supported."
+      "Multiple time/session window expressions would result in a cartesian product of rows, therefore they are currently unsupported."
     ]
   },
   "_LEGACY_ERROR_TEMP_1040" : {
@@ -8668,7 +8662,7 @@
   },
   "_LEGACY_ERROR_TEMP_1079" : {
     "message" : [
-      "Resource Type '<resourceType>' is not supported."
+      "Resource Type '<resourceType>' is unsupported."
     ]
   },
   "_LEGACY_ERROR_TEMP_1080" : {
@@ -8688,17 +8682,17 @@
   },
   "_LEGACY_ERROR_TEMP_1089" : {
     "message" : [
-      "Column statistics deserialization is not supported for column <name> of data type: <dataType>."
+      "Column statistics deserialization is unsupported for column <name> of data type: <dataType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1090" : {
     "message" : [
-      "Column statistics serialization is not supported for column <colName> of data type: <dataType>."
+      "Column statistics serialization is unsupported for column <colName> of data type: <dataType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1098" : {
     "message" : [
-      "DataType '<x>' is not supported by <className>."
+      "DataType '<x>' is unsupported by <className>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1103" : {
@@ -8718,7 +8712,7 @@
   },
   "_LEGACY_ERROR_TEMP_1108" : {
     "message" : [
-      "Delete by condition with subquery is not supported: <condition>."
+      "Delete by condition with subquery is unsupported: <condition>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1109" : {
@@ -8765,7 +8759,7 @@
   },
   "_LEGACY_ERROR_TEMP_1126" : {
     "message" : [
-      "Nested databases are not supported by v1 session catalog: <catalog>."
+      "Nested databases are unsupported by v1 session catalog: <catalog>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1127" : {
@@ -8921,7 +8915,7 @@
   },
   "_LEGACY_ERROR_TEMP_1181" : {
     "message" : [
-      "Stream-stream join without equality predicate is not supported."
+      "Stream-stream join without equality predicate is unsupported."
     ]
   },
   "_LEGACY_ERROR_TEMP_1182" : {
@@ -8951,7 +8945,7 @@
   },
   "_LEGACY_ERROR_TEMP_1189" : {
     "message" : [
-      "User specified schema not supported with `<operation>`."
+      "User specified schema unsupported with `<operation>`."
     ]
   },
   "_LEGACY_ERROR_TEMP_1190" : {
@@ -8961,7 +8955,7 @@
   },
   "_LEGACY_ERROR_TEMP_1191" : {
     "message" : [
-      "Streaming into views <viewName> is not supported."
+      "Streaming into views <viewName> is unsupported."
     ]
   },
   "_LEGACY_ERROR_TEMP_1192" : {
@@ -8981,7 +8975,7 @@
   },
   "_LEGACY_ERROR_TEMP_1195" : {
     "message" : [
-      "'<source>' is not supported with continuous trigger."
+      "'<source>' is unsupported with continuous trigger."
     ]
   },
   "_LEGACY_ERROR_TEMP_1196" : {
@@ -9099,7 +9093,7 @@
   },
   "_LEGACY_ERROR_TEMP_1239" : {
     "message" : [
-      "Analyzing column statistics is not supported for column <name> of data type: <dataType>."
+      "Analyzing column statistics is unsupported for column <name> of data type: <dataType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1241" : {
@@ -9114,7 +9108,7 @@
   },
   "_LEGACY_ERROR_TEMP_1247" : {
     "message" : [
-      "Operation not allowed: ALTER TABLE SET [SERDE | SERDEPROPERTIES] for a specific partition is not supported for tables created with the datasource API."
+      "Operation not allowed: ALTER TABLE SET [SERDE | SERDEPROPERTIES] for a specific partition is unsupported for tables created with the datasource API."
     ]
   },
   "_LEGACY_ERROR_TEMP_1250" : {
@@ -9154,7 +9148,7 @@
   },
   "_LEGACY_ERROR_TEMP_1261" : {
     "message" : [
-      "LOAD DATA is not supported for datasource tables: <tableIdentWithDB>."
+      "LOAD DATA is unsupported for datasource tables: <tableIdentWithDB>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1262" : {
@@ -9174,7 +9168,7 @@
   },
   "_LEGACY_ERROR_TEMP_1267" : {
     "message" : [
-      "Operation not allowed: TRUNCATE TABLE ... PARTITION is not supported for tables that are not partitioned: <tableIdentWithDB>."
+      "Operation not allowed: TRUNCATE TABLE ... PARTITION is unsupported for tables that are not partitioned: <tableIdentWithDB>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1268" : {
@@ -9319,7 +9313,7 @@
   },
   "_LEGACY_ERROR_TEMP_1327" : {
     "message" : [
-      "Command execution is not supported in runner <runner>."
+      "Command execution is unsupported in runner <runner>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1328" : {
@@ -9469,7 +9463,7 @@
   },
   "_LEGACY_ERROR_TEMP_2053" : {
     "message" : [
-      "buildReader is not supported for <format>."
+      "buildReader is unsupported for <format>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2056" : {
@@ -9776,7 +9770,7 @@
   },
   "_LEGACY_ERROR_TEMP_2168" : {
     "message" : [
-      "Decorrelate inner query through <plan> is not supported."
+      "Decorrelate inner query through <plan> is unsupported."
     ]
   },
   "_LEGACY_ERROR_TEMP_2169" : {
@@ -9820,7 +9814,7 @@
   },
   "_LEGACY_ERROR_TEMP_2181" : {
     "message" : [
-      "inferSchema is not supported for hive data source."
+      "inferSchema is unsupported for hive data source."
     ]
   },
   "_LEGACY_ERROR_TEMP_2182" : {
@@ -10005,7 +9999,7 @@
   },
   "_LEGACY_ERROR_TEMP_2230" : {
     "message" : [
-      "Primitive types are not supported."
+      "Primitive types are unsupported."
     ]
   },
   "_LEGACY_ERROR_TEMP_2233" : {
@@ -10110,7 +10104,7 @@
   },
   "_LEGACY_ERROR_TEMP_2261" : {
     "message" : [
-      "Clean up source files is not supported when reading from the output directory of FileStreamSink."
+      "Clean up source files is unsupported when reading from the output directory of FileStreamSink."
     ]
   },
   "_LEGACY_ERROR_TEMP_2262" : {
@@ -10169,7 +10163,7 @@
   },
   "_LEGACY_ERROR_TEMP_2270" : {
     "message" : [
-      "comment on table is not supported."
+      "comment on table is unsupported."
     ]
   },
   "_LEGACY_ERROR_TEMP_2272" : {
@@ -10209,7 +10203,7 @@
   },
   "_LEGACY_ERROR_TEMP_3002" : {
     "message" : [
-      "Data of type <other> is not supported"
+      "Data of type <other> is unsupported"
     ]
   },
   "_LEGACY_ERROR_TEMP_3003" : {
@@ -10461,7 +10455,7 @@
   },
   "_LEGACY_ERROR_TEMP_3063" : {
     "message" : [
-      "pivot is not supported on a streaming DataFrames/Datasets"
+      "pivot is unsupported on a streaming DataFrames/Datasets"
     ]
   },
   "_LEGACY_ERROR_TEMP_3065" : {
@@ -10476,7 +10470,7 @@
   },
   "_LEGACY_ERROR_TEMP_3068" : {
     "message" : [
-      "Global aggregation with session window in streaming query is not supported."
+      "Global aggregation with session window in streaming query is unsupported."
     ]
   },
   "_LEGACY_ERROR_TEMP_3069" : {
@@ -10541,7 +10535,7 @@
   },
   "_LEGACY_ERROR_TEMP_3082" : {
     "message" : [
-      "Creating bucketed Hive serde table is not supported yet."
+      "Creating bucketed Hive serde table is unsupported yet."
     ]
   },
   "_LEGACY_ERROR_TEMP_3083" : {
@@ -10596,7 +10590,7 @@
   },
   "_LEGACY_ERROR_TEMP_3094" : {
     "message" : [
-      "<dt> is not supported."
+      "<dt> is unsupported."
     ]
   },
   "_LEGACY_ERROR_TEMP_3095" : {
@@ -10731,17 +10725,17 @@
   },
   "_LEGACY_ERROR_TEMP_3137" : {
     "message" : [
-      "<description>: Batch write is not supported"
+      "<description>: Batch write is unsupported"
     ]
   },
   "_LEGACY_ERROR_TEMP_3138" : {
     "message" : [
-      "<description>: Streaming write is not supported"
+      "<description>: Streaming write is unsupported"
     ]
   },
   "_LEGACY_ERROR_TEMP_3139" : {
     "message" : [
-      "<description>: Delta batch write is not supported"
+      "<description>: Delta batch write is unsupported"
     ]
   },
   "_LEGACY_ERROR_TEMP_3140" : {
@@ -10761,32 +10755,32 @@
   },
   "_LEGACY_ERROR_TEMP_3143" : {
     "message" : [
-      "Partition renaming is not supported"
+      "Partition renaming is unsupported"
     ]
   },
   "_LEGACY_ERROR_TEMP_3144" : {
     "message" : [
-      "Partition truncate is not supported"
+      "Partition truncate is unsupported"
     ]
   },
   "_LEGACY_ERROR_TEMP_3145" : {
     "message" : [
-      "Partitions truncate is not supported"
+      "Partitions truncate is unsupported"
     ]
   },
   "_LEGACY_ERROR_TEMP_3147" : {
     "message" : [
-      "<description>: Batch scan are not supported"
+      "<description>: Batch scan are unsupported"
     ]
   },
   "_LEGACY_ERROR_TEMP_3148" : {
     "message" : [
-      "<description>: Micro-batch scan are not supported"
+      "<description>: Micro-batch scan are unsupported"
     ]
   },
   "_LEGACY_ERROR_TEMP_3149" : {
     "message" : [
-      "<description>: Continuous scan are not supported"
+      "<description>: Continuous scan are unsupported"
     ]
   },
   "_LEGACY_ERROR_TEMP_3150" : {
@@ -10796,12 +10790,12 @@
   },
   "_LEGACY_ERROR_TEMP_3152" : {
     "message" : [
-      "Datatype not supported <dataType>"
+      "Datatype unsupported <dataType>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3155" : {
     "message" : [
-      "Datatype not supported <dataType>"
+      "Datatype unsupported <dataType>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3160" : {
@@ -10811,7 +10805,7 @@
   },
   "_LEGACY_ERROR_TEMP_3161" : {
     "message" : [
-      "Uploading artifact file to local file system destination path is not supported."
+      "Uploading artifact file to local file system destination path is unsupported."
     ]
   },
   "_LEGACY_ERROR_TEMP_3162" : {
@@ -10836,12 +10830,12 @@
   },
   "_LEGACY_ERROR_TEMP_3167" : {
     "message" : [
-      "continuous mode is not supported!"
+      "continuous mode is unsupported!"
     ]
   },
   "_LEGACY_ERROR_TEMP_3169" : {
     "message" : [
-      "AcceptsLatestSeenOffset is not supported with DSv1 streaming source: <unsupportedSources>"
+      "AcceptsLatestSeenOffset is unsupported with DSv1 streaming source: <unsupportedSources>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3170" : {
@@ -10866,7 +10860,7 @@
   },
   "_LEGACY_ERROR_TEMP_3175" : {
     "message" : [
-      "Index Type <v> is not supported. The supported Index Types are: <supportedIndexTypeList>"
+      "Index Type <v> is unsupported. The supported Index Types are: <supportedIndexTypeList>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3176" : {
@@ -10886,27 +10880,27 @@
   },
   "_LEGACY_ERROR_TEMP_3179" : {
     "message" : [
-      "createIndex is not supported"
+      "createIndex is unsupported"
     ]
   },
   "_LEGACY_ERROR_TEMP_3180" : {
     "message" : [
-      "indexExists is not supported"
+      "indexExists is unsupported"
     ]
   },
   "_LEGACY_ERROR_TEMP_3181" : {
     "message" : [
-      "dropIndex is not supported"
+      "dropIndex is unsupported"
     ]
   },
   "_LEGACY_ERROR_TEMP_3182" : {
     "message" : [
-      "listIndexes is not supported"
+      "listIndexes is unsupported"
     ]
   },
   "_LEGACY_ERROR_TEMP_3183" : {
     "message" : [
-      "TableSample is not supported by this data source"
+      "TableSample is unsupported by this data source"
     ]
   },
   "_LEGACY_ERROR_TEMP_3184" : {
@@ -10916,12 +10910,12 @@
   },
   "_LEGACY_ERROR_TEMP_3185" : {
     "message" : [
-      "Schema evolution not supported."
+      "Schema evolution unsupported."
     ]
   },
   "_LEGACY_ERROR_TEMP_3186" : {
     "message" : [
-      "Boolean is not supported"
+      "Boolean is unsupported"
     ]
   },
   "_LEGACY_ERROR_TEMP_3187" : {
@@ -10941,7 +10935,7 @@
   },
   "_LEGACY_ERROR_TEMP_3190" : {
     "message" : [
-      "RLE encoding is not supported for values of type: <typeName>"
+      "RLE encoding is unsupported for values of type: <typeName>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3191" : {
@@ -10951,7 +10945,7 @@
   },
   "_LEGACY_ERROR_TEMP_3192" : {
     "message" : [
-      "Datatype not supported <dt>"
+      "Datatype unsupported <dt>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3198" : {
@@ -11076,7 +11070,7 @@
   },
   "_LEGACY_ERROR_TEMP_3231" : {
     "message" : [
-      "Intervals greater than a month is not supported (<interval>)."
+      "Intervals greater than a month is unsupported (<interval>)."
     ]
   },
   "_LEGACY_ERROR_TEMP_3232" : {

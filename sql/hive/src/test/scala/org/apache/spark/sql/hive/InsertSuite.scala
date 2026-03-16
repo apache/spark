@@ -482,7 +482,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
           sql(s"INSERT INTO $tableName AS t REPLACE ON t.a = 1 " +
             s"SELECT 25, 26, 27, 28")
         },
-        condition = "UNSUPPORTED_INSERT_REPLACE_ON"
+        condition = "UNSUPPORTED_INSERT_REPLACE_ON_OR_USING"
       )
   }
 
@@ -493,7 +493,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
           sql(s"INSERT INTO $tableName AS t REPLACE USING (a) " +
             s"SELECT 25, 26, 27, 28")
         },
-        condition = "UNSUPPORTED_INSERT_REPLACE_USING"
+        condition = "UNSUPPORTED_INSERT_REPLACE_ON_OR_USING"
       )
   }
 
