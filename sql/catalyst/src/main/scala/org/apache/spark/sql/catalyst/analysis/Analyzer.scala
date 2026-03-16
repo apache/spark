@@ -1162,6 +1162,7 @@ class Analyzer(
           if i.table.isInstanceOf[DataSourceV2Relation] &&
             i.query.resolved &&
             i.replaceCriteriaOpt.isEmpty =>
+        val r = i.table.asInstanceOf[DataSourceV2Relation]
         // ifPartitionNotExists is append with validation, but validation is not supported
         if (i.ifPartitionNotExists) {
           throw QueryCompilationErrors.unsupportedIfNotExistsError(r.table.name)
