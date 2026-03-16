@@ -973,7 +973,7 @@ class AstBuilder extends DataTypeAstBuilder
         withIdentClause(ctx.identifierReference, Seq(query), (ident, otherPlans) => {
           InsertIntoStatement(
             table = createUnresolvedRelation(ctx.identifierReference, ident, options,
-              Seq(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE), isStreaming = false),
+              Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE), isStreaming = false),
             partitionSpec = Map.empty,
             userSpecifiedCols = Seq.empty,
             query = otherPlans.head,
@@ -993,7 +993,7 @@ class AstBuilder extends DataTypeAstBuilder
           val queryWithAlias = otherPlans.head
           InsertIntoStatement(
             table = createUnresolvedRelation(ctx.identifierReference, ident, options,
-              Seq(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE), isStreaming = false),
+              Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE), isStreaming = false),
             partitionSpec = Map.empty,
             userSpecifiedCols = Seq.empty,
             query = queryWithAlias,
