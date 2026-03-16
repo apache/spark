@@ -50,7 +50,6 @@ from pyspark.sql.types import (
 from pyspark.util import PythonEvalType
 from pyspark.worker import main as worker_main
 
-
 # ---------------------------------------------------------------------------
 # Wire-format helpers
 # ---------------------------------------------------------------------------

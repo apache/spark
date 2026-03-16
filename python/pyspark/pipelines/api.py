@@ -96,8 +96,7 @@ def _validate_stored_dataset_args(
 
 
 @overload
-def table(query_function: QueryFunction) -> None:
-    ...
+def table(query_function: QueryFunction) -> None: ...
 
 
 @overload
@@ -111,8 +110,7 @@ def table(
     partition_cols: Optional[List[str]] = None,
     cluster_by: Optional[List[str]] = None,
     schema: Optional[Union[StructType, str]] = None,
-) -> Callable[[QueryFunction], None]:
-    ...
+) -> Callable[[QueryFunction], None]: ...
 
 
 def table(
@@ -202,8 +200,7 @@ def table(
 
 
 @overload
-def materialized_view(query_function: QueryFunction) -> None:
-    ...
+def materialized_view(query_function: QueryFunction) -> None: ...
 
 
 @overload
@@ -217,8 +214,7 @@ def materialized_view(
     partition_cols: Optional[List[str]] = None,
     cluster_by: Optional[List[str]] = None,
     schema: Optional[Union[StructType, str]] = None,
-) -> Callable[[QueryFunction], None]:
-    ...
+) -> Callable[[QueryFunction], None]: ...
 
 
 def materialized_view(
@@ -310,8 +306,7 @@ def materialized_view(
 @overload
 def temporary_view(
     query_function: QueryFunction,
-) -> None:
-    ...
+) -> None: ...
 
 
 @overload
@@ -321,8 +316,7 @@ def temporary_view(
     name: Optional[str] = None,
     comment: Optional[str] = None,
     spark_conf: Optional[Dict[str, str]] = None,
-) -> Callable[[QueryFunction], None]:
-    ...
+) -> Callable[[QueryFunction], None]: ...
 
 
 def temporary_view(

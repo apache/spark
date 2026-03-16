@@ -17,6 +17,7 @@
 """
 pandas-on-Spark specific features.
 """
+
 import inspect
 from typing import Any, Callable, Optional, Tuple, Union, TYPE_CHECKING, cast, List
 from types import FunctionType
@@ -974,7 +975,7 @@ def _test() -> None:
         .appName("pyspark.pandas.accessors tests")
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.accessors,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

@@ -246,9 +246,11 @@ class Index(IndexOpsMixin):
         internal = self._internal.copy(
             index_spark_columns=[scol.alias(SPARK_DEFAULT_INDEX_NAME)],
             index_fields=[
-                field
-                if field is None or field.struct_field is None
-                else field.copy(name=SPARK_DEFAULT_INDEX_NAME)
+                (
+                    field
+                    if field is None or field.struct_field is None
+                    else field.copy(name=SPARK_DEFAULT_INDEX_NAME)
+                )
             ],
             column_labels=[],
             data_spark_columns=[],
@@ -2253,9 +2255,11 @@ class Index(IndexOpsMixin):
             for left, right in zip(self._internal.index_fields, other._internal.index_fields)
         ):
             return [
-                left.copy(nullable=left.nullable or right.nullable)
-                if left.spark_type == right.spark_type
-                else InternalField(dtype=left.dtype)
+                (
+                    left.copy(nullable=left.nullable or right.nullable)
+                    if left.spark_type == right.spark_type
+                    else InternalField(dtype=left.dtype)
+                )
                 for left, right in zip(self._internal.index_fields, other._internal.index_fields)
             ]
         elif any(
@@ -2671,7 +2675,7 @@ def _test() -> None:
         .appName("pyspark.pandas.indexes.base tests")
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.indexes.base,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

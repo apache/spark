@@ -21,6 +21,7 @@ Implementation of spark-pipelines CLI.
 Example usage:
     $ bin/spark-pipelines run --spec /path/to/pipeline.yaml
 """
+
 from contextlib import contextmanager
 import argparse
 import glob

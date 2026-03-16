@@ -1151,12 +1151,10 @@ class DataFrameTestsMixin:
         ):
             tbl = "testcat.t"
             with self.table(tbl):
-                self.spark.sql(
-                    f"""
+                self.spark.sql(f"""
                     CREATE TABLE {tbl} (index bigint, data string)
                     PARTITIONED BY (bucket(4, index), index)
-                    """
-                )
+                    """)
                 self.spark.sql(f"""INSERT INTO {tbl} VALUES (1, 'a'), (2, 'b'), (3, 'c')""")
 
                 df = self.spark.sql(f"""SELECT * FROM {tbl}""")

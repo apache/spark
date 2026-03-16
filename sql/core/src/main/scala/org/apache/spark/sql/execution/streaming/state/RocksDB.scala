@@ -1589,18 +1589,28 @@ class RocksDB(
       prefix: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): NextIterator[ByteArrayPair] = {
     updateMemoryUsageIfNeeded()
-    val iter = db.newIterator()
     val updatedPrefix = if (useColumnFamilies) {
       encodeStateRowWithPrefix(prefix, cfName)
     } else {
       prefix
     }
 
+    val upperBoundSlice = RocksDB.prefixUpperBound(updatedPrefix).map(new Slice(_))
+    val prefixScanReadOptions = new ReadOptions()
+    upperBoundSlice.foreach(prefixScanReadOptions.setIterateUpperBound)
+
+    val iter = db.newIterator(prefixScanReadOptions)
     iter.seek(updatedPrefix)
+
+    def closeResources(): Unit = {
+      iter.close()
+      prefixScanReadOptions.close()
+      upperBoundSlice.foreach(_.close())
+    }
 
     // Attempt to close this iterator if there is a task failure, or a task interruption.
     Option(TaskContext.get()).foreach { tc =>
-      tc.addTaskCompletionListener[Unit] { _ => iter.close() }
+      tc.addTaskCompletionListener[Unit] { _ => closeResources() }
     }
 
     new NextIterator[ByteArrayPair] {
@@ -1624,12 +1634,12 @@ class RocksDB(
           byteArrayPair
         } else {
           finished = true
-          iter.close()
+          closeResources()
           null
         }
       }
 
-      override protected def close(): Unit = { iter.close() }
+      override protected def close(): Unit = closeResources()
     }
   }
 
@@ -2225,6 +2235,27 @@ class RocksDB(
 }
 
 object RocksDB extends Logging {
+
+  /**
+   * Computes the exclusive upper bound for a prefix byte array by incrementing the prefix.
+   * For example, [0x01, 0x02, 0x03] -> Some([0x01, 0x02, 0x04]).
+   * Returns None if the prefix is all 0xFF bytes (no finite upper bound exists).
+   */
+  def prefixUpperBound(prefix: Array[Byte]): Option[Array[Byte]] = {
+    if (prefix.isEmpty) return None
+
+    var i = prefix.length - 1
+    while (i >= 0) {
+      val incremented = (prefix(i) & 0xFF) + 1
+      if (incremented <= 0xFF) {
+        val upperBound = java.util.Arrays.copyOf(prefix, i + 1)
+        upperBound(i) = incremented.toByte
+        return Some(upperBound)
+      }
+      i -= 1
+    }
+    None
+  }
 
   val mainMemorySources: Seq[String] = Seq(
     "rocksdb.estimate-table-readers-mem",
