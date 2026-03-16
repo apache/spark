@@ -21,6 +21,9 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
+import org.json4s._
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.ResolvedPartitionSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
@@ -40,8 +43,17 @@ case class ShowTablesExtendedExec(
     output: Seq[Attribute],
     catalog: TableCatalog,
     namespace: Seq[String],
-    pattern: String) extends V2CommandExec with LeafExecNode {
+    pattern: String,
+    asJson: Boolean = false) extends V2CommandExec with LeafExecNode {
   override protected def run(): Seq[InternalRow] = {
+    if (asJson) {
+      runAsJson()
+    } else {
+      runAsText()
+    }
+  }
+
+  private def runAsText(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
 
     // fetch tables
@@ -71,6 +83,46 @@ case class ShowTablesExtendedExec(
     }
 
     rows.toSeq
+  }
+
+  private def runAsJson(): Seq[InternalRow] = {
+    val jsonRows = new ArrayBuffer[JObject]()
+
+    // fetch tables
+    val tables = catalog.listTables(namespace.toArray)
+    tables.foreach { tableIdent =>
+      if (StringUtils.filterPattern(Seq(tableIdent.name()), pattern).nonEmpty) {
+        // V2 persistent tables are always TABLE
+        jsonRows += JObject(
+          "catalog" -> JString(catalog.name()),
+          "namespace" -> JArray(tableIdent.namespace().map(JString(_)).toList),
+          "name" -> JString(tableIdent.name()),
+          "type" -> JString("TABLE"),
+          "isTemporary" -> JBool(false)
+        )
+      }
+    }
+
+    // fetch temp views, includes: global temp view, local temp view
+    val sessionCatalog = session.sessionState.catalog
+    val db = namespace match {
+      case Seq(db) => Some(db)
+      case _ => None
+    }
+    val tempViews = sessionCatalog.listTempViews(db.getOrElse(""), pattern)
+    tempViews.foreach { tempView =>
+      jsonRows += JObject(
+        "catalog" -> JString(catalog.name()),
+        "namespace" -> JArray(
+          tempView.identifier.database.map(JString(_)).toList),
+        "name" -> JString(tempView.identifier.table),
+        "type" -> JString("VIEW"),
+        "isTemporary" -> JBool(true)
+      )
+    }
+
+    val jsonOutput = JObject("tables" -> JArray(jsonRows.toList))
+    Seq(toCatalystRow(compact(render(jsonOutput))))
   }
 
   private def getTableDetails(

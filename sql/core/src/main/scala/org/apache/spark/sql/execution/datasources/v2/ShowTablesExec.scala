@@ -19,6 +19,9 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.json4s._
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.StringUtils
@@ -33,18 +36,32 @@ case class ShowTablesExec(
     output: Seq[Attribute],
     catalog: TableCatalog,
     namespace: Seq[String],
-    pattern: Option[String]) extends V2CommandExec with LeafExecNode {
+    pattern: Option[String],
+    asJson: Boolean = false) extends V2CommandExec with LeafExecNode {
   override protected def run(): Seq[InternalRow] = {
-    val rows = new ArrayBuffer[InternalRow]()
-
     val tables = catalog.listTables(namespace.toArray)
-    tables.map { table =>
-      if (pattern.map(StringUtils.filterPattern(Seq(table.name()), _).nonEmpty).getOrElse(true)) {
-        rows += toCatalystRow(table.namespace().quoted, table.name(), isTempView(table, catalog))
-      }
+    val filteredTables = tables.filter { table =>
+      pattern.map(StringUtils.filterPattern(Seq(table.name()), _).nonEmpty).getOrElse(true)
     }
 
-    rows.toSeq
+    if (asJson) {
+      val jsonTables = filteredTables.map { table =>
+        JObject(
+          "name" -> JString(table.name()),
+          "namespace" -> JArray(table.namespace().map(JString(_)).toList),
+          "isTemporary" -> JBool(isTempView(table, catalog))
+        )
+      }.toList
+
+      val jsonOutput = JObject("tables" -> JArray(jsonTables))
+      Seq(toCatalystRow(compact(render(jsonOutput))))
+    } else {
+      val rows = new ArrayBuffer[InternalRow]()
+      filteredTables.foreach { table =>
+        rows += toCatalystRow(table.namespace().quoted, table.name(), isTempView(table, catalog))
+      }
+      rows.toSeq
+    }
   }
 
   private def isTempView(ident: Identifier, catalog: TableCatalog): Boolean = {
