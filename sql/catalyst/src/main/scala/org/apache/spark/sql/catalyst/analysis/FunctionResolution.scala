@@ -88,12 +88,15 @@ class FunctionResolution(
       else parts  // Safety fallback; valid paths yield 2 or 3 parts before this point.
 
     if (nameParts.size == 1) {
+      // Search path entries are 2-part (catalog.database), so path ++ nameParts is always 3-part.
       val searchPath = SQLConf.get.resolutionSearchPath(currentCatalogPath)
-      searchPath.map(_ ++ nameParts).map(ensureThreePart)
+      searchPath.map(_ ++ nameParts)
     } else {
       nameParts.size match {
-        case 2 if FunctionResolution.sessionNamespaceKind(nameParts).isDefined =>
-          // Partially qualified builtin/session: produce both candidates as 3-part (catalog.db.func).
+        case 2
+            if FunctionResolution.sessionNamespaceKind(nameParts).isDefined =>
+          // Partially qualified builtin/session: produce both candidates as 3-part
+          // (catalog.database.func).
           val systemCandidate = CatalogManager.SYSTEM_CATALOG_NAME +: nameParts
           val persistentCandidate = currentCatalogPath.head +: nameParts
           if (SQLConf.get.prioritizeSystemCatalog) {
