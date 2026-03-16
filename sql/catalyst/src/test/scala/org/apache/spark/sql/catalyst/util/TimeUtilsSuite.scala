@@ -165,4 +165,82 @@ class TimeUtilsSuite extends SparkFunSuite {
     // Exactly 24:00:00 should be invalid
     assert(!TimeUtils.isValidTime(86400000000L))
   }
+
+  test("timeToString - invalid micros should throw") {
+    intercept[IllegalArgumentException] {
+      TimeUtils.timeToString(-1L)
+    }
+    intercept[IllegalArgumentException] {
+      TimeUtils.timeToString(86400000000L)
+    }
+  }
+
+  test("microsToLocalTime - invalid range") {
+    intercept[IllegalArgumentException] {
+      TimeUtils.microsToLocalTime(-1L)
+    }
+    intercept[IllegalArgumentException] {
+      TimeUtils.microsToLocalTime(86400000000L)
+    }
+  }
+
+  test("makeTime - valid values") {
+    val micros = TimeUtils.makeTime(12, 30, 45, 123456)
+    assert(micros === 45045123456L)
+  }
+
+  test("extract components from micros") {
+    val micros = 14 * TimeUtils.MICROS_PER_HOUR +
+      30 * TimeUtils.MICROS_PER_MINUTE +
+      45 * TimeUtils.MICROS_PER_SECOND + 123456
+    assert(TimeUtils.getHour(micros) === 14)
+    assert(TimeUtils.getMinute(micros) === 30)
+    assert(TimeUtils.getSecond(micros) === 45)
+    assert(TimeUtils.getMicrosecond(micros) === 123456)
+  }
+
+  test("timeToStringForCast - omit microseconds when zero") {
+    val micros = 45045000000L
+    val result = TimeUtils.timeToStringForCast(micros)
+    assert(result === UTF8String.fromString("12:30:45"))
+  }
+
+  test("timeToStringForCast - include microseconds when non-zero") {
+    val micros = 45045123456L
+    val result = TimeUtils.timeToStringForCast(micros)
+    assert(result === UTF8String.fromString("12:30:45.123456"))
+  }
+
+  test("stringToTimeInternal - throws on invalid input") {
+    intercept[IllegalArgumentException] {
+      TimeUtils.stringToTimeInternal(UTF8String.fromString("invalid"))
+    }
+  }
+
+  test("stringToTime - does not trim input") {
+    val result = TimeUtils.stringToTime(UTF8String.fromString(" 12:30:45 "))
+    assert(result.isEmpty)
+  }
+
+  test("stringToTime - fractional seconds precision") {
+    assert(TimeUtils.stringToTime(UTF8String.fromString("12:30:45.1")).contains(45045100000L))
+    assert(TimeUtils.stringToTime(UTF8String.fromString("12:30:45.000001")).contains(45045000001L))
+  }
+
+  test("stringToTime - boundary parsing") {
+    assert(TimeUtils.stringToTime(UTF8String.fromString("00:00:00.000000")).contains(0L))
+    assert(TimeUtils.stringToTime(UTF8String.fromString("23:59:59.999999")).contains(86399999999L))
+  }
+
+  test("sqlTimeToMicros and microsToSqlTime") {
+    val time = java.sql.Time.valueOf("12:30:45")
+    val micros = TimeUtils.sqlTimeToMicros(time)
+    val result = TimeUtils.microsToSqlTime(micros)
+    assert(result.toLocalTime === time.toLocalTime)
+  }
+
+  test("currentTime - valid range") {
+    val micros = TimeUtils.currentTime(ZoneId.systemDefault())
+    assert(TimeUtils.isValidTime(micros))
+  }
 }

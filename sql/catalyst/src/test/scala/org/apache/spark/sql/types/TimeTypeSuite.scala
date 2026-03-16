@@ -18,6 +18,9 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.expressions.Cast
+import org.apache.spark.sql.catalyst.util.TimeUtils
+import org.apache.spark.unsafe.types.UTF8String
 
 class TimeTypeSuite extends SparkFunSuite {
 
@@ -123,5 +126,52 @@ class TimeTypeSuite extends SparkFunSuite {
     assert(schema.fields.length === 3)
     assert(schema.fields(1).dataType === TimeType)
     assert(schema.fields(1).name === "event_time")
+  }
+
+  test("TimeType - ordering comparison") {
+    val ordering = TimeType.ordering
+
+    assert(ordering.compare(0L, 1L) < 0)
+    assert(ordering.compare(100L, 100L) == 0)
+    assert(ordering.compare(200L, 100L) > 0)
+  }
+
+  test("TimeType - boundary values") {
+    val min = 0L
+    val max = 86399999999L
+
+    assert(TimeUtils.isValidTime(min))
+    assert(TimeUtils.isValidTime(max))
+  }
+
+  test("TimeType - invalid boundary values") {
+    assert(!TimeUtils.isValidTime(-1L))
+    assert(!TimeUtils.isValidTime(86400000000L))
+  }
+
+  test("TimeType - integration with TimeUtils") {
+    val timeStr = "12:30:45"
+    val micros = TimeUtils.stringToTime(UTF8String.fromString(timeStr)).get
+
+    assert(TimeUtils.timeToString(micros).toString.startsWith("12:30:45"))
+  }
+
+  test("TimeType - cast compatibility") {
+    assert(Cast.canCast(TimeType, TimestampType))
+  }
+
+  test("TimeType - null handling") {
+    val schema = StructType(Seq(
+      StructField("t", TimeType, nullable = true)
+    ))
+
+    assert(schema.fields.head.nullable)
+  }
+
+  test("TimeType - comparison expression") {
+    val t1 = 36000000000L // 10:00
+    val t2 = 43200000000L // 12:00
+
+    assert(TimeType.ordering.lt(t1, t2))
   }
 }
