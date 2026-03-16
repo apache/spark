@@ -13070,7 +13070,7 @@ def timestamp_add(unit: str, quantity: "ColumnOrName", ts: "ColumnOrName") -> Co
     """
     Adds the specified number of units to the given timestamp
 
-    versionadded:: 4.0.0
+    ..versionadded:: 4.0.0
 
     Parameters
     ----------
