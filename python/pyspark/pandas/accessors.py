@@ -17,6 +17,7 @@
 """
 pandas-on-Spark specific features.
 """
+
 import inspect
 from typing import Any, Callable, Optional, Tuple, Union, TYPE_CHECKING, cast, List
 from types import FunctionType
@@ -78,7 +79,7 @@ class PandasOnSparkFrameMethods:
 
             - 'distributed-sequence' : a sequence that increases one by one,
               by group-by and group-map approach in a distributed manner.
-            - 'distributed' : a monotonically increasing sequence simply by using PySpark’s
+            - 'distributed' : a monotonically increasing sequence simply by using PySpark's
               monotonically_increasing_id function in a fully distributed manner.
 
         column : string or tuple of string
@@ -579,7 +580,7 @@ class PandasOnSparkFrameMethods:
             return original_func(o, *args, **kwargs)
 
         def apply_func(pdf: pd.DataFrame) -> pd.DataFrame:
-            return new_func(pdf).to_frame()
+            return new_func(pdf).to_frame()  # type: ignore[operator]
 
         def pandas_series_func(
             f: Callable[[pd.DataFrame], pd.DataFrame], return_type: DataType
@@ -974,7 +975,7 @@ def _test() -> None:
         .appName("pyspark.pandas.accessors tests")
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.accessors,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

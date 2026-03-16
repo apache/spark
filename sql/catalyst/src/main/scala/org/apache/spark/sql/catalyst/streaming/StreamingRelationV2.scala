@@ -39,8 +39,10 @@ case class StreamingRelationV2(
     output: Seq[AttributeReference],
     catalog: Option[CatalogPlugin],
     identifier: Option[Identifier],
-    v1Relation: Option[LogicalPlan])
-  extends LeafNode with MultiInstanceRelation with ExposesMetadataColumns {
+    v1Relation: Option[LogicalPlan],
+    sourceIdentifyingName: StreamingSourceIdentifyingName = Unassigned)
+  extends LeafNode with MultiInstanceRelation with ExposesMetadataColumns
+  with HasStreamingSourceIdentifyingName {
   override lazy val resolved = v1Relation.forall(_.resolved)
   override def isStreaming: Boolean = true
   override def toString: String = sourceName
@@ -59,10 +61,14 @@ case class StreamingRelationV2(
     val newMetadata = metadataOutput.filterNot(outputSet.contains)
     if (newMetadata.nonEmpty) {
       StreamingRelationV2(source, sourceName, table, extraOptions,
-        output ++ newMetadata, catalog, identifier, v1Relation)
+        output ++ newMetadata, catalog, identifier, v1Relation, sourceIdentifyingName)
     } else {
       this
     }
+  }
+
+  override def withSourceIdentifyingName(name: StreamingSourceIdentifyingName): LogicalPlan = {
+    copy(sourceIdentifyingName = name)
   }
 
   override def computeStats(): Statistics = Statistics(

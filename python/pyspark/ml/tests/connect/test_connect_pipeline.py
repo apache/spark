@@ -36,7 +36,7 @@ if should_test_connect:
     class PipelineTestsOnConnect(PipelineTestsMixin, ReusedConnectTestCase):
         @classmethod
         def conf(cls):
-            config = super(PipelineTestsOnConnect, cls).conf()
+            config = super().conf()
             config.set("spark.sql.artifact.copyFromLocalToFs.allowDestLocal", "true")
             return config
 
@@ -46,12 +46,6 @@ if should_test_connect:
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.connect.test_connect_pipeline import *  # noqa: F401,F403
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

@@ -20,8 +20,8 @@ import os
 import pydoc
 import shutil
 import tempfile
+import warnings
 import unittest
-from typing import cast
 import io
 from contextlib import redirect_stdout
 
@@ -56,6 +56,8 @@ from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     SPARK_HOME,
+)
+from pyspark.testing.utils import (
     have_pyarrow,
     have_pandas,
     pandas_requirement_message,
@@ -158,6 +160,13 @@ class DataFrameTestsMixin:
         df3 = df1.join(df2, df1.id == df2.id, "right")
         self.assertTrue(df3.columns, ["id", "value", "id", "value"])
         self.assertTrue(df3.count() == 20)
+
+    def test_select_join_keys(self):
+        df1 = self.spark.range(10).withColumn("v1", lit(1))
+        df2 = self.spark.range(10).withColumn("v2", lit(2))
+        for how in ["inner", "left", "right", "full", "cross"]:
+            self.assertTrue(df1.join(df2, "id", how).select(df1["id"]).count() >= 0, how)
+            self.assertTrue(df1.join(df2, "id", how).select(df2["id"]).count() >= 0, how)
 
     def test_lateral_column_alias(self):
         df1 = self.spark.range(10).select(
@@ -678,7 +687,7 @@ class DataFrameTestsMixin:
     def test_cache_table(self):
         spark = self.spark
         tables = ["tab1", "tab2", "tab3"]
-        with self.tempView(*tables):
+        with self.temp_view(*tables):
             for i, tab in enumerate(tables):
                 spark.createDataFrame([(2, i), (3, i)]).createOrReplaceTempView(tab)
                 self.assertFalse(spark.catalog.isCached(tab))
@@ -934,7 +943,7 @@ class DataFrameTestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_pandas_api(self):
         import pandas as pd
@@ -1044,6 +1053,18 @@ class DataFrameTestsMixin:
         df = self.spark.range(10).localCheckpoint(eager=True, storageLevel=StorageLevel.DISK_ONLY)
         df.collect()
 
+    def test_socket_leak(self):
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always", ResourceWarning)
+            df = self.spark.range(10)
+            df.collect()
+
+            df = self.spark.range(10)
+            for _ in df.toLocalIterator():
+                pass
+
+        self.assertEqual(w, [])
+
     def test_transpose(self):
         df = self.spark.createDataFrame([{"a": "x", "b": "y", "c": "z"}])
 
@@ -1130,12 +1151,10 @@ class DataFrameTestsMixin:
         ):
             tbl = "testcat.t"
             with self.table(tbl):
-                self.spark.sql(
-                    f"""
+                self.spark.sql(f"""
                     CREATE TABLE {tbl} (index bigint, data string)
                     PARTITIONED BY (bucket(4, index), index)
-                    """
-                )
+                    """)
                 self.spark.sql(f"""INSERT INTO {tbl} VALUES (1, 'a'), (2, 'b'), (3, 'c')""")
 
                 df = self.spark.sql(f"""SELECT * FROM {tbl}""")
@@ -1170,8 +1189,6 @@ class DataFrameTestsMixin:
             [Row(dt="08/01/2017", month_y=i) for i in range(12)],
         )
 
-
-class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
     def test_query_execution_unsupported_in_classic(self):
         with self.assertRaises(PySparkValueError) as pe:
             self.spark.range(1).executionInfo
@@ -1182,14 +1199,57 @@ class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
             messageParameters={"member": "queryExecution"},
         )
 
+    def test_to_json(self):
+        df = self.spark.range(10)
+
+        with self.sql_conf({"spark.sql.pyspark.toJSON.returnDataFrame": False}):
+            from pyspark import RDD
+
+            rdd = df.toJSON()
+            self.assertIsInstance(rdd, RDD)
+            self.assertEqual(rdd.count(), 10)
+
+        with self.sql_conf({"spark.sql.pyspark.toJSON.returnDataFrame": True}):
+            df = df.toJSON()
+            self.assertIsInstance(df, DataFrame)
+            self.assertEqual(df.select("value").count(), 10)
+
+    def test_zip_with_index(self):
+        df = self.spark.createDataFrame([("a", 1), ("b", 2), ("c", 3)], ["letter", "number"])
+
+        # Default column name "index"
+        result = df.zipWithIndex()
+        self.assertEqual(result.columns, ["letter", "number", "index"])
+        rows = result.collect()
+        self.assertEqual(len(rows), 3)
+        indices = [row["index"] for row in rows]
+        self.assertEqual(sorted(indices), [0, 1, 2])
+
+        # Custom column name
+        result = df.zipWithIndex("row_id")
+        self.assertEqual(result.columns, ["letter", "number", "row_id"])
+        rows = result.collect()
+        indices = [row["row_id"] for row in rows]
+        self.assertEqual(sorted(indices), [0, 1, 2])
+
+        # Duplicate column name causes AMBIGUOUS_REFERENCE on select
+        result = df.zipWithIndex("letter")
+        with self.assertRaises(AnalysisException) as ctx:
+            result.select("letter").collect()
+        self.assertEqual(ctx.exception.getCondition(), "AMBIGUOUS_REFERENCE")
+
+        # Duplicate column name causes COLUMN_ALREADY_EXISTS on write
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(AnalysisException) as ctx:
+                result.write.parquet(d)
+            self.assertEqual(ctx.exception.getCondition(), "COLUMN_ALREADY_EXISTS")
+
+
+class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
+    pass
+
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_dataframe import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

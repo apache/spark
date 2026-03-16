@@ -642,9 +642,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     }
 
     int j = i;
-    while (i < numBytes && c < until) {
-      i += numBytesForFirstByte(getByte(i));
-      c += 1;
+    if (until == Integer.MAX_VALUE) {
+      i = numBytes;
+    } else {
+      while (i < numBytes && c < until) {
+        i += numBytesForFirstByte(getByte(i));
+        c += 1;
+      }
     }
 
     if (i > j) {
@@ -663,9 +667,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     // refers to element i-1 in the sequence. If a start index i is less than 0, it refers
     // to the -ith element before the end of the sequence. If a start index i is 0, it
     // refers to the first element.
-    int len = numChars();
     // `len + pos` does not overflow as `len >= 0`.
-    int start = (pos > 0) ? pos -1 : ((pos < 0) ? len + pos : 0);
+    int start = (pos > 0) ? pos -1 : ((pos < 0) ? numChars() + pos : 0);
 
     int end;
     if ((long) start + length > Integer.MAX_VALUE) {
@@ -1157,9 +1160,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
     int i = 0; // position in byte
     while (i < numBytes) {
-      int len = numBytesForFirstByte(getByte(i));
+      int len = Math.min(numBytesForFirstByte(getByte(i)), numBytes);
+      int targetOffset = Math.max(result.length - i - len, 0);
       copyMemory(this.base, this.offset + i, result,
-        BYTE_ARRAY_OFFSET + result.length - i - len, len);
+        BYTE_ARRAY_OFFSET + targetOffset, len);
 
       i += len;
     }

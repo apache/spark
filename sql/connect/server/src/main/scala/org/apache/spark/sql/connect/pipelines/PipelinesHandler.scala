@@ -17,22 +17,24 @@
 
 package org.apache.spark.sql.connect.pipelines
 
+import scala.collection.Seq
 import scala.jdk.CollectionConverters._
 import scala.util.Using
 
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{ExecutePlanResponse, PipelineCommandResult, Relation}
+import org.apache.spark.connect.proto.{ExecutePlanResponse, PipelineCommandResult, Relation, ResolvedIdentifier}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{Command, CreateNamespace, CreateTable, CreateTableAsSelect, CreateView, DescribeRelation, DropView, InsertIntoStatement, LogicalPlan, RenameTable, ShowColumns, ShowCreateTable, ShowFunctions, ShowTableProperties, ShowTables, ShowViews}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.service.SessionHolder
+import org.apache.spark.sql.execution.command.{ShowCatalogsCommand, ShowNamespacesCommand}
 import org.apache.spark.sql.pipelines.Language.Python
 import org.apache.spark.sql.pipelines.common.RunState.{CANCELED, FAILED}
-import org.apache.spark.sql.pipelines.graph.{AllTables, FlowAnalysis, GraphIdentifierManager, GraphRegistrationContext, IdentifierHelper, NoTables, PipelineUpdateContextImpl, QueryContext, QueryOrigin, QueryOriginType, SomeTables, SqlGraphRegistrationContext, Table, TableFilter, TemporaryView, UnresolvedFlow}
+import org.apache.spark.sql.pipelines.graph.{AllTables, FlowAnalysis, GraphIdentifierManager, GraphRegistrationContext, IdentifierHelper, NoTables, PipelineUpdateContextImpl, QueryContext, QueryOrigin, QueryOriginType, Sink, SinkImpl, SomeTables, SqlGraphRegistrationContext, Table, TableFilter, TemporaryView, UnresolvedFlow}
 import org.apache.spark.sql.pipelines.logging.{PipelineEvent, RunProgress}
 import org.apache.spark.sql.types.StructType
 
@@ -47,8 +49,6 @@ private[connect] object PipelinesHandler extends Logging {
    *   Command to be handled
    * @param responseObserver
    *   The response observer where the response will be sent
-   * @param sparkSession
-   *   The spark session
    * @param transformRelationFunc
    *   Function used to convert a relation to a LogicalPlan. This is used when determining the
    *   LogicalPlan that a flow returns.
@@ -79,14 +79,42 @@ private[connect] object PipelinesHandler extends Logging {
         sessionHolder.dataflowGraphRegistry
           .dropDataflowGraph(cmd.getDropDataflowGraph.getDataflowGraphId)
         defaultResponse
-      case proto.PipelineCommand.CommandTypeCase.DEFINE_DATASET =>
-        logInfo(s"Define pipelines dataset cmd received: $cmd")
-        defineDataset(cmd.getDefineDataset, sessionHolder)
-        defaultResponse
+      case proto.PipelineCommand.CommandTypeCase.DEFINE_OUTPUT =>
+        logInfo(s"Define pipelines output cmd received: $cmd")
+        val resolvedDataset =
+          defineOutput(cmd.getDefineOutput, sessionHolder)
+        val identifierBuilder = ResolvedIdentifier.newBuilder()
+        resolvedDataset.catalog.foreach(identifierBuilder.setCatalogName)
+        resolvedDataset.database.foreach(identifierBuilder.addNamespace)
+        identifierBuilder.setTableName(resolvedDataset.identifier)
+        val identifier = identifierBuilder.build()
+        PipelineCommandResult
+          .newBuilder()
+          .setDefineOutputResult(
+            PipelineCommandResult.DefineOutputResult
+              .newBuilder()
+              .setResolvedIdentifier(identifier)
+              .build())
+          .build()
       case proto.PipelineCommand.CommandTypeCase.DEFINE_FLOW =>
         logInfo(s"Define pipelines flow cmd received: $cmd")
-        defineFlow(cmd.getDefineFlow, transformRelationFunc, sessionHolder)
-        defaultResponse
+        val resolvedFlow =
+          defineFlow(cmd.getDefineFlow, transformRelationFunc, sessionHolder)
+        val identifierBuilder = ResolvedIdentifier.newBuilder()
+        resolvedFlow.catalog.foreach(identifierBuilder.setCatalogName)
+        resolvedFlow.database.foreach { ns =>
+          identifierBuilder.addNamespace(ns)
+        }
+        identifierBuilder.setTableName(resolvedFlow.identifier)
+        val identifier = identifierBuilder.build()
+        PipelineCommandResult
+          .newBuilder()
+          .setDefineFlowResult(
+            PipelineCommandResult.DefineFlowResult
+              .newBuilder()
+              .setResolvedIdentifier(identifier)
+              .build())
+          .build()
       case proto.PipelineCommand.CommandTypeCase.START_RUN =>
         logInfo(s"Start pipeline cmd received: $cmd")
         startRun(cmd.getStartRun, responseObserver, sessionHolder)
@@ -99,24 +127,77 @@ private[connect] object PipelinesHandler extends Logging {
     }
   }
 
+  /**
+   * Block SQL commands that have side effects or modify data.
+   *
+   * Pipeline definitions should be declarative and side-effect free. This prevents users from
+   * inadvertently modifying catalogs, creating tables, or performing other stateful operations
+   * outside the pipeline API boundary during pipeline registration or analysis.
+   *
+   * This is a best-effort approach: we block known problematic commands while allowing a curated
+   * set of read-only operations (e.g., SHOW, DESCRIBE).
+   */
+  def blockUnsupportedSqlCommand(queryPlan: LogicalPlan): Unit = {
+    val allowlistedCommands = Set(
+      classOf[DescribeRelation],
+      classOf[ShowTables],
+      classOf[ShowTableProperties],
+      classOf[ShowNamespacesCommand],
+      classOf[ShowColumns],
+      classOf[ShowFunctions],
+      classOf[ShowViews],
+      classOf[ShowCatalogsCommand],
+      classOf[ShowCreateTable])
+    val isSqlCommandExplicitlyAllowlisted = allowlistedCommands.exists(_.isInstance(queryPlan))
+    val isUnsupportedSqlPlan = if (isSqlCommandExplicitlyAllowlisted) {
+      false
+    } else {
+      // Disable all [[Command]] except the ones that are explicitly allowlisted
+      // in "allowlistedCommands".
+      queryPlan.isInstanceOf[Command] ||
+      // Following commands are not subclasses of [[Command]] but have side effects.
+      queryPlan.isInstanceOf[CreateTableAsSelect] ||
+      queryPlan.isInstanceOf[CreateTable] ||
+      queryPlan.isInstanceOf[CreateView] ||
+      queryPlan.isInstanceOf[InsertIntoStatement] ||
+      queryPlan.isInstanceOf[RenameTable] ||
+      queryPlan.isInstanceOf[CreateNamespace] ||
+      queryPlan.isInstanceOf[DropView]
+    }
+    if (isUnsupportedSqlPlan) {
+      throw new AnalysisException(
+        "UNSUPPORTED_PIPELINE_SPARK_SQL_COMMAND",
+        Map("command" -> queryPlan.getClass.getSimpleName))
+    }
+  }
+
   private def createDataflowGraph(
       cmd: proto.PipelineCommand.CreateDataflowGraph,
       sessionHolder: SessionHolder): String = {
     val defaultCatalog = Option
       .when(cmd.hasDefaultCatalog)(cmd.getDefaultCatalog)
       .getOrElse {
-        logInfo(s"No default catalog was supplied. Falling back to the current catalog.")
-        sessionHolder.session.catalog.currentCatalog()
+        val currentCatalog = sessionHolder.session.catalog.currentCatalog()
+        logInfo(
+          "No default catalog was supplied. " +
+            s"Falling back to the current catalog: $currentCatalog.")
+        currentCatalog
       }
 
     val defaultDatabase = Option
       .when(cmd.hasDefaultDatabase)(cmd.getDefaultDatabase)
       .getOrElse {
-        logInfo(s"No default database was supplied. Falling back to the current database.")
-        sessionHolder.session.catalog.currentDatabase
+        val currentDatabase = sessionHolder.session.catalog.currentDatabase
+        logInfo(
+          "No default database was supplied. " +
+            s"Falling back to the current database: $currentDatabase.")
+        currentDatabase
       }
 
     val defaultSqlConf = cmd.getSqlConfMap.asScala.toMap
+
+    sessionHolder.session.catalog.setCurrentCatalog(defaultCatalog)
+    sessionHolder.session.catalog.setCurrentDatabase(defaultDatabase)
 
     sessionHolder.dataflowGraphRegistry.createDataflowGraph(
       defaultCatalog = defaultCatalog,
@@ -138,94 +219,172 @@ private[connect] object PipelinesHandler extends Logging {
       sessionHolder.session)
   }
 
-  private def defineDataset(
-      dataset: proto.PipelineCommand.DefineDataset,
-      sessionHolder: SessionHolder): Unit = {
-    val dataflowGraphId = dataset.getDataflowGraphId
+  private def defineOutput(
+      output: proto.PipelineCommand.DefineOutput,
+      sessionHolder: SessionHolder): TableIdentifier = {
+    val dataflowGraphId = output.getDataflowGraphId
     val graphElementRegistry =
       sessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
 
-    dataset.getDatasetType match {
-      case proto.DatasetType.MATERIALIZED_VIEW | proto.DatasetType.TABLE =>
-        val tableIdentifier =
-          GraphIdentifierManager.parseTableIdentifier(
-            dataset.getDatasetName,
-            sessionHolder.session)
+    output.getOutputType match {
+      case proto.OutputType.MATERIALIZED_VIEW | proto.OutputType.TABLE =>
+        val qualifiedIdentifier = GraphIdentifierManager
+          .parseAndQualifyTableIdentifier(
+            rawTableIdentifier = GraphIdentifierManager
+              .parseTableIdentifier(output.getOutputName, sessionHolder.session),
+            currentCatalog = Some(graphElementRegistry.defaultCatalog),
+            currentDatabase = Some(graphElementRegistry.defaultDatabase))
+          .identifier
+
+        val tableDetails = output.getTableDetails
         graphElementRegistry.registerTable(
           Table(
-            identifier = tableIdentifier,
-            comment = Option(dataset.getComment),
-            specifiedSchema = Option.when(dataset.hasSchema)(
-              DataTypeProtoConverter
-                .toCatalystType(dataset.getSchema)
-                .asInstanceOf[StructType]),
-            partitionCols = Option(dataset.getPartitionColsList.asScala.toSeq)
+            identifier = qualifiedIdentifier,
+            comment = Option(output.getComment),
+            specifiedSchema = tableDetails.getSchemaCase match {
+              case proto.PipelineCommand.DefineOutput.TableDetails.SchemaCase.SCHEMA_DATA_TYPE =>
+                Some(
+                  DataTypeProtoConverter
+                    .toCatalystType(tableDetails.getSchemaDataType)
+                    .asInstanceOf[StructType])
+              case proto.PipelineCommand.DefineOutput.TableDetails.SchemaCase.SCHEMA_STRING =>
+                Some(StructType.fromDDL(tableDetails.getSchemaString))
+              case proto.PipelineCommand.DefineOutput.TableDetails.SchemaCase.SCHEMA_NOT_SET =>
+                None
+            },
+            partitionCols = Option(tableDetails.getPartitionColsList.asScala.toSeq)
               .filter(_.nonEmpty),
-            properties = dataset.getTablePropertiesMap.asScala.toMap,
-            baseOrigin = QueryOrigin(
+            clusterCols = Option(tableDetails.getClusteringColumnsList.asScala.toSeq)
+              .filter(_.nonEmpty),
+            properties = tableDetails.getTablePropertiesMap.asScala.toMap,
+            origin = QueryOrigin(
+              filePath = Option.when(output.getSourceCodeLocation.hasFileName)(
+                output.getSourceCodeLocation.getFileName),
+              line = Option.when(output.getSourceCodeLocation.hasLineNumber)(
+                output.getSourceCodeLocation.getLineNumber),
               objectType = Option(QueryOriginType.Table.toString),
-              objectName = Option(tableIdentifier.unquotedString),
+              objectName = Option(qualifiedIdentifier.unquotedString),
               language = Option(Python())),
-            format = Option.when(dataset.hasFormat)(dataset.getFormat),
+            format = Option.when(tableDetails.hasFormat)(tableDetails.getFormat),
             normalizedPath = None,
-            isStreamingTable = dataset.getDatasetType == proto.DatasetType.TABLE))
-      case proto.DatasetType.TEMPORARY_VIEW =>
-        val viewIdentifier =
-          GraphIdentifierManager.parseTableIdentifier(
-            dataset.getDatasetName,
-            sessionHolder.session)
-
+            isStreamingTable = output.getOutputType == proto.OutputType.TABLE))
+        qualifiedIdentifier
+      case proto.OutputType.TEMPORARY_VIEW =>
+        val viewIdentifier = GraphIdentifierManager
+          .parseAndValidateTemporaryViewIdentifier(rawViewIdentifier = GraphIdentifierManager
+            .parseTableIdentifier(output.getOutputName, sessionHolder.session))
         graphElementRegistry.registerView(
           TemporaryView(
             identifier = viewIdentifier,
-            comment = Option(dataset.getComment),
+            comment = Option(output.getComment),
             origin = QueryOrigin(
-              objectType = Option(QueryOriginType.View.toString),
+              filePath = Option.when(output.getSourceCodeLocation.hasFileName)(
+                output.getSourceCodeLocation.getFileName),
+              line = Option.when(output.getSourceCodeLocation.hasLineNumber)(
+                output.getSourceCodeLocation.getLineNumber),
+              objectType = Some(QueryOriginType.View.toString),
               objectName = Option(viewIdentifier.unquotedString),
-              language = Option(Python())),
-            properties = Map.empty))
+              language = Some(Python())),
+            properties = Map.empty,
+            sqlText = None))
+        viewIdentifier
+      case proto.OutputType.SINK =>
+        val identifier = GraphIdentifierManager
+          .parseTableIdentifier(output.getOutputName, sessionHolder.session)
+        val sinkDetails = output.getSinkDetails
+        graphElementRegistry.registerSink(
+          SinkImpl(
+            identifier = identifier,
+            format = sinkDetails.getFormat,
+            options = sinkDetails.getOptionsMap.asScala.toMap,
+            origin = QueryOrigin(
+              filePath = Option.when(output.getSourceCodeLocation.hasFileName)(
+                output.getSourceCodeLocation.getFileName),
+              line = Option.when(output.getSourceCodeLocation.hasLineNumber)(
+                output.getSourceCodeLocation.getLineNumber),
+              objectType = Option(QueryOriginType.Sink.toString),
+              objectName = Option(identifier.unquotedString),
+              language = Some(Python()))))
+        identifier
       case _ =>
-        throw new IllegalArgumentException(s"Unknown dataset type: ${dataset.getDatasetType}")
+        throw new IllegalArgumentException(s"Unknown output type: ${output.getOutputType}")
     }
   }
 
   private def defineFlow(
       flow: proto.PipelineCommand.DefineFlow,
       transformRelationFunc: Relation => LogicalPlan,
-      sessionHolder: SessionHolder): Unit = {
+      sessionHolder: SessionHolder): TableIdentifier = {
+    if (flow.hasOnce) {
+      throw new AnalysisException(
+        "DEFINE_FLOW_ONCE_OPTION_NOT_SUPPORTED",
+        Map("flowName" -> flow.getFlowName))
+    }
     val dataflowGraphId = flow.getDataflowGraphId
     val graphElementRegistry =
       sessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
+    val defaultCatalog = graphElementRegistry.defaultCatalog
+    val defaultDatabase = graphElementRegistry.defaultDatabase
 
     val isImplicitFlow = flow.getFlowName == flow.getTargetDatasetName
-
-    val flowIdentifier = GraphIdentifierManager
+    val rawFlowIdentifier = GraphIdentifierManager
       .parseTableIdentifier(name = flow.getFlowName, spark = sessionHolder.session)
 
     // If the flow is not an implicit flow (i.e. one defined as part of dataset creation), then
     // it must be a single-part identifier.
-    if (!isImplicitFlow && !IdentifierHelper.isSinglePartIdentifier(flowIdentifier)) {
+    if (!isImplicitFlow && !IdentifierHelper.isSinglePartIdentifier(rawFlowIdentifier)) {
       throw new AnalysisException(
         "MULTIPART_FLOW_NAME_NOT_SUPPORTED",
         Map("flowName" -> flow.getFlowName))
     }
 
+    val rawDestinationIdentifier = GraphIdentifierManager
+      .parseTableIdentifier(name = flow.getTargetDatasetName, spark = sessionHolder.session)
+    val flowWritesToView =
+      graphElementRegistry.getViews
+        .filter(_.isInstanceOf[TemporaryView])
+        .exists(_.identifier == rawDestinationIdentifier)
+    val flowWritesToSink =
+      graphElementRegistry.getSinks
+        .filter(_.isInstanceOf[Sink])
+        .exists(_.identifier == rawDestinationIdentifier)
+    // If the flow is created implicitly as part of defining a view or that it writes to a sink,
+    // then we do not qualify the flow identifier and the flow destination. This is because
+    // views and sinks are not permitted to have multipart
+    val isImplicitFlowForTempView = isImplicitFlow && flowWritesToView
+    val Seq(flowIdentifier, destinationIdentifier) =
+      Seq(rawFlowIdentifier, rawDestinationIdentifier).map { rawIdentifier =>
+        if (isImplicitFlowForTempView || flowWritesToSink) {
+          rawIdentifier
+        } else {
+          GraphIdentifierManager
+            .parseAndQualifyFlowIdentifier(
+              rawFlowIdentifier = rawIdentifier,
+              currentCatalog = Some(defaultCatalog),
+              currentDatabase = Some(defaultDatabase))
+            .identifier
+        }
+      }
+
+    val relationFlowDetails = flow.getRelationFlowDetails
     graphElementRegistry.registerFlow(
-      new UnresolvedFlow(
+      UnresolvedFlow(
         identifier = flowIdentifier,
-        destinationIdentifier = GraphIdentifierManager
-          .parseTableIdentifier(name = flow.getTargetDatasetName, spark = sessionHolder.session),
-        func =
-          FlowAnalysis.createFlowFunctionFromLogicalPlan(transformRelationFunc(flow.getRelation)),
+        destinationIdentifier = destinationIdentifier,
+        func = FlowAnalysis.createFlowFunctionFromLogicalPlan(
+          transformRelationFunc(relationFlowDetails.getRelation)),
         sqlConf = flow.getSqlConfMap.asScala.toMap,
         once = false,
-        queryContext = QueryContext(
-          Option(graphElementRegistry.defaultCatalog),
-          Option(graphElementRegistry.defaultDatabase)),
+        queryContext = QueryContext(Option(defaultCatalog), Option(defaultDatabase)),
         origin = QueryOrigin(
-          objectType = Option(QueryOriginType.Flow.toString),
+          filePath = Option.when(flow.getSourceCodeLocation.hasFileName)(
+            flow.getSourceCodeLocation.getFileName),
+          line = Option.when(flow.getSourceCodeLocation.hasLineNumber)(
+            flow.getSourceCodeLocation.getLineNumber),
+          objectType = Some(QueryOriginType.Flow.toString),
           objectName = Option(flowIdentifier.unquotedString),
-          language = Option(Python()))))
+          language = Some(Python()))))
+    flowIdentifier
   }
 
   private def startRun(
@@ -260,11 +419,17 @@ private[connect] object PipelinesHandler extends Logging {
         }
       }
 
+      if (cmd.getStorage.isEmpty) {
+        // server-side validation to ensure that storage is always specified
+        throw new IllegalArgumentException("Storage must be specified to start a run.")
+      }
+
       val pipelineUpdateContext = new PipelineUpdateContextImpl(
         graphElementRegistry.toDataflowGraph,
         eventCallback,
         tableFiltersResult.refresh,
-        tableFiltersResult.fullRefresh)
+        tableFiltersResult.fullRefresh,
+        cmd.getStorage)
       sessionHolder.cachePipelineExecution(dataflowGraphId, pipelineUpdateContext)
 
       if (cmd.getDry) {

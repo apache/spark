@@ -25,7 +25,7 @@ import org.apache.hadoop.hive.ql.exec.{UDAF, UDF}
 import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDF, GenericUDTF}
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, InvokeProcedures, ReplaceCharWithVarchar, ResolveDataSource, ResolveSessionCatalog, ResolveTranspose}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, InvokeProcedures, ReplaceCharWithVarchar, ResolveDataSource, ResolveExecuteImmediate, ResolveMetricView, ResolveSessionCatalog, ResolveTranspose}
 import org.apache.spark.sql.catalyst.analysis.resolver.ResolverExtension
 import org.apache.spark.sql.catalyst.catalog.{ExternalCatalogWithListener, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExtractSemiStructuredFields}
@@ -85,7 +85,7 @@ class HiveSessionStateBuilder(
   /**
    * A logical query plan `Analyzer` with rules specific to Hive.
    */
-  override protected def analyzer: Analyzer = new Analyzer(catalogManager) {
+  override protected def analyzer: Analyzer = new Analyzer(catalogManager, sharedRelationCache) {
     override val singlePassResolverExtensions: Seq[ResolverExtension] = Seq(
       new LogicalRelationResolver,
       new HiveTableRelationNoopResolver
@@ -132,7 +132,9 @@ class HiveSessionStateBuilder(
         new EvalSubqueriesForTimeTravel +:
         new DetermineTableStats(session) +:
         new ResolveTranspose(session) +:
+        ResolveMetricView(session) +:
         new InvokeProcedures(session) +:
+        ResolveExecuteImmediate(session, catalogManager) +:
         ExtractSemiStructuredFields +:
         customResolutionRules
 

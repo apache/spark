@@ -21,14 +21,19 @@ import java.util.UUID
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.execution.streaming.StreamingErrors
 import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, OffsetSeqLog}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * An interface for accessing the checkpoint metadata associated with a streaming query.
  * @param sparkSession Spark session
  * @param resolvedCheckpointRoot The resolved checkpoint root path
  */
-class StreamingQueryCheckpointMetadata(sparkSession: SparkSession, resolvedCheckpointRoot: String) {
+class StreamingQueryCheckpointMetadata(
+    sparkSession: SparkSession,
+    resolvedCheckpointRoot: String,
+    readOnly: Boolean = false) {
 
   /**
    * A write-ahead-log that records the offsets that are present in each batch. In order to ensure
@@ -37,7 +42,9 @@ class StreamingQueryCheckpointMetadata(sparkSession: SparkSession, resolvedCheck
    * processed and the N-1th entry indicates which offsets have been durably committed to the sink.
    */
   lazy val offsetLog =
-    new OffsetSeqLog(sparkSession, checkpointFile(StreamingCheckpointConstants.DIR_NAME_OFFSETS))
+    new OffsetSeqLog(sparkSession,
+      checkpointFile(StreamingCheckpointConstants.DIR_NAME_OFFSETS),
+      readOnly)
 
   /**
    * A log that records the batch ids that have completed. This is used to check if a batch was
@@ -45,13 +52,27 @@ class StreamingQueryCheckpointMetadata(sparkSession: SparkSession, resolvedCheck
    * This is used (for instance) during restart, to help identify which batch to run next.
    */
   lazy val commitLog =
-    new CommitLog(sparkSession, checkpointFile(StreamingCheckpointConstants.DIR_NAME_COMMITS))
+    new CommitLog(sparkSession,
+      checkpointFile(StreamingCheckpointConstants.DIR_NAME_COMMITS),
+      readOnly)
 
   /** Metadata associated with the whole query */
   final lazy val streamMetadata: StreamMetadata = {
     val metadataPath = new Path(checkpointFile(StreamingCheckpointConstants.DIR_NAME_METADATA))
     val hadoopConf = sparkSession.sessionState.newHadoopConf()
     StreamMetadata.read(metadataPath, hadoopConf).getOrElse {
+      // Before creating a new metadata file with a new query ID, validate that the checkpoint
+      // is not in an inconsistent state where the metadata file is missing but offset/commit
+      // logs have data. This prevents data duplication when using exactly-once sinks
+      // which rely on the query ID for deduplication.
+      if (sparkSession.conf.get(SQLConf.STREAMING_CHECKPOINT_VERIFY_METADATA_EXISTS)) {
+        val hasOffsetData = offsetLog.getLatestBatchId().isDefined
+        val hasCommitData = commitLog.getLatestBatchId().isDefined
+        if (hasOffsetData || hasCommitData) {
+          throw StreamingErrors
+            .missingMetadataFile(resolvedCheckpointRoot)
+        }
+      }
       val newMetadata = new StreamMetadata(UUID.randomUUID.toString)
       StreamMetadata.write(newMetadata, metadataPath, hadoopConf)
       newMetadata

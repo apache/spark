@@ -24,7 +24,7 @@ import java.util.{Date, Locale}
 
 import scala.reflect.ClassTag
 
-import org.apache.hadoop.conf.{Configurable, Configuration}
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hdfs.BlockMissingException
 import org.apache.hadoop.io.compress.CompressionCodecFactory
 import org.apache.hadoop.mapred._
@@ -214,14 +214,13 @@ class HadoopRDD[K, V](
     }
   }
 
-  protected def getInputFormat(conf: JobConf): InputFormat[K, V] = {
-    val newInputFormat = ReflectionUtils.newInstance(inputFormatClass.asInstanceOf[Class[_]], conf)
+  protected def getInputFormat(conf: JobConf): InputFormat[K, V] = try {
+    ReflectionUtils.newInstance(inputFormatClass.asInstanceOf[Class[_]], conf)
       .asInstanceOf[InputFormat[K, V]]
-    newInputFormat match {
-      case c: Configurable => c.setConf(conf)
-      case _ =>
-    }
-    newInputFormat
+  } catch {
+    case r: RuntimeException
+      if r.getCause != null && r.getCause.isInstanceOf[InstantiationException] =>
+      throw new RuntimeException(s"Failed to instantiate ${inputFormatClass.getName}", r.getCause)
   }
 
   override def getPartitions: Array[Partition] = {

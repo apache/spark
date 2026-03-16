@@ -23,7 +23,7 @@ import javax.xml.stream.XMLInputFactory
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs, DateFormatter, DateTimeUtils, ParseMode, PermissiveMode}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs, DateFormatter, DateTimeUtils, ParseMode, PermissiveMode, TimeFormatter}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 
@@ -32,9 +32,9 @@ import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
  */
 class XmlOptions(
     val parameters: CaseInsensitiveMap[String],
-    defaultTimeZoneId: String,
-    defaultColumnNameOfCorruptRecord: String,
-    rowTagRequired: Boolean)
+    private val defaultTimeZoneId: String,
+    private val defaultColumnNameOfCorruptRecord: String,
+    private val rowTagRequired: Boolean)
   extends FileSourceOptions(parameters) with Logging {
 
   import XmlOptions._
@@ -49,6 +49,25 @@ class XmlOptions(
       defaultTimeZoneId,
       defaultColumnNameOfCorruptRecord,
       rowTagRequired)
+  }
+
+
+  override def equals(obj: Any): Boolean = obj match {
+    case other: XmlOptions =>
+      (parameters == null && other.parameters == null ||
+      parameters != null && parameters == other.parameters) &&
+      defaultTimeZoneId == other.defaultTimeZoneId &&
+      defaultColumnNameOfCorruptRecord == other.defaultColumnNameOfCorruptRecord &&
+      rowTagRequired == other.rowTagRequired
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    var result = Option(parameters).map(_.hashCode()).getOrElse(0)
+    result = 31 * result + defaultTimeZoneId.hashCode()
+    result = 31 * result + defaultColumnNameOfCorruptRecord.hashCode()
+    result = 31 * result + (if (rowTagRequired) 1 else 0)
+    result
   }
 
   private def getBool(paramName: String, default: Boolean = false): Boolean = {
@@ -152,6 +171,9 @@ class XmlOptions(
   val timestampNTZFormatInWrite: String =
     parameters.getOrElse(TIMESTAMP_NTZ_FORMAT, s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS]")
 
+  val timeFormatInRead: Option[String] = parameters.get(TIME_FORMAT)
+  val timeFormatInWrite: String = parameters.getOrElse(TIME_FORMAT, TimeFormatter.defaultPattern)
+
   val timezone = parameters.get("timezone")
 
   val zoneId: ZoneId = DateTimeUtils.getZoneId(
@@ -215,6 +237,7 @@ object XmlOptions extends DataSourceOptions {
   val DATE_FORMAT = newOption("dateFormat")
   val TIMESTAMP_FORMAT = newOption("timestampFormat")
   val TIMESTAMP_NTZ_FORMAT = newOption("timestampNTZFormat")
+  val TIME_FORMAT = newOption("timeFormat")
   val TIME_ZONE = newOption("timeZone")
   val INDENT = newOption("indent")
   val PREFERS_DECIMAL = newOption("prefersDecimal")

@@ -2204,6 +2204,247 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
                           Seq("f1", "key_value", "value", "g2", "list", "element", "h2"))))))))
           ))))))
 
+  // ==============================================================
+  // Tests for BINARY geospatial logical types (Geometry/Geography)
+  // ==============================================================
+
+  /** Parquet to Catalyst conversion for geospatial types. */
+
+  testParquetToCatalyst(
+    "Parquet to Catalyst - BINARY with GEOMETRY logical type annotation",
+    StructType(Seq(StructField("f1", GeometryType("OGC:CRS84")))),
+    """message root {
+      |  optional binary f1 (GEOMETRY);
+      |}
+    """.stripMargin,
+    binaryAsString = false,
+    int96AsTimestamp = true)
+
+  testParquetToCatalyst(
+    "Parquet to Catalyst - BINARY with GEOMETRY logical type annotation (with CRS)",
+    StructType(Seq(StructField("f1", GeometryType("OGC:CRS84")))),
+    """message root {
+      |  optional binary f1 (GEOMETRY(OGC:CRS84));
+      |}
+    """.stripMargin,
+    binaryAsString = false,
+    int96AsTimestamp = true)
+
+  testParquetToCatalyst(
+    "Parquet to Catalyst - BINARY with GEOGRAPHY logical type annotation",
+    StructType(Seq(StructField("f1",
+      GeographyType("OGC:CRS84", EdgeInterpolationAlgorithm.SPHERICAL)))),
+    """message root {
+      |  optional binary f1 (GEOGRAPHY);
+      |}
+    """.stripMargin,
+    binaryAsString = false,
+    int96AsTimestamp = true)
+
+  testParquetToCatalyst(
+    "Parquet to Catalyst - BINARY with GEOGRAPHY logical type annotation (with CRS)",
+    StructType(Seq(StructField("f1",
+      GeographyType("OGC:CRS84", EdgeInterpolationAlgorithm.SPHERICAL)))),
+    """message root {
+      |  optional binary f1 (GEOGRAPHY(OGC:CRS84));
+      |}
+    """.stripMargin,
+    binaryAsString = false,
+    int96AsTimestamp = true)
+
+  testParquetToCatalyst(
+    "Parquet to Catalyst - BINARY with GEOGRAPHY logical type annotation (with CRS and algorithm)",
+    StructType(Seq(StructField("f1",
+      GeographyType("OGC:CRS84", EdgeInterpolationAlgorithm.SPHERICAL)))),
+    """message root {
+      |  optional binary f1 (GEOGRAPHY(OGC:CRS84, SPHERICAL));
+      |}
+    """.stripMargin,
+    binaryAsString = false,
+    int96AsTimestamp = true)
+
+  testParquetToCatalyst(
+    "Parquet to Catalyst - BINARY with GEOMETRY logical type annotation with binaryAsString",
+    StructType(Seq(StructField("f1", GeometryType("OGC:CRS84")))),
+    """message root {
+      |  optional binary f1 (GEOMETRY);
+      |}
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true)
+
+  testParquetToCatalyst(
+    "Parquet to Catalyst - BINARY with GEOGRAPHY logical type annotation with binaryAsString",
+    StructType(Seq(StructField("f1",
+      GeographyType("OGC:CRS84", EdgeInterpolationAlgorithm.SPHERICAL)))),
+    """message root {
+      |  optional binary f1 (GEOGRAPHY);
+      |}
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true)
+
+  /** Catalyst to Parquet conversion for geospatial types. */
+
+  testCatalystToParquet(
+    "Catalyst to Parquet - GeometryType",
+    StructType(Seq(StructField("f1", GeometryType("OGC:CRS84")))),
+    """message root {
+      |  optional binary f1 (GEOMETRY);
+      |}
+    """.stripMargin,
+    writeLegacyParquetFormat = false)
+
+  testCatalystToParquet(
+    "Catalyst to Parquet - GeographyType",
+    StructType(Seq(StructField("f1",
+      GeographyType("OGC:CRS84", EdgeInterpolationAlgorithm.SPHERICAL)))),
+    """message root {
+      |  optional binary f1 (GEOGRAPHY);
+      |}
+    """.stripMargin,
+    writeLegacyParquetFormat = false)
+
+  testCatalystToParquet(
+    "Catalyst to Parquet - GeometryType with non-nullable field",
+    StructType(Seq(StructField("f1", GeometryType("OGC:CRS84"), nullable = false))),
+    """message root {
+      |  required binary f1 (GEOMETRY);
+      |}
+    """.stripMargin,
+    writeLegacyParquetFormat = false)
+
+  testCatalystToParquet(
+    "Catalyst to Parquet - GeographyType with non-nullable field",
+    StructType(Seq(StructField("f1",
+      GeographyType("OGC:CRS84", EdgeInterpolationAlgorithm.SPHERICAL), nullable = false))),
+    """message root {
+      |  required binary f1 (GEOGRAPHY);
+      |}
+    """.stripMargin,
+    writeLegacyParquetFormat = false)
+
+  /** Round trip conversion for geospatial types. */
+
+  testSchema(
+    "Round-trip schema conversion - GeometryType",
+    StructType(Seq(StructField("f1", GeometryType("OGC:CRS84")))),
+    """message root {
+      |  optional binary f1 (GEOMETRY);
+      |}
+    """.stripMargin,
+    binaryAsString = false,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = false)
+
+  testSchema(
+    "Round-trip schema conversion - GeographyType",
+    StructType(Seq(StructField("f1",
+      GeographyType("OGC:CRS84", EdgeInterpolationAlgorithm.SPHERICAL)))),
+    """message root {
+      |  optional binary f1 (GEOGRAPHY);
+      |}
+    """.stripMargin,
+    binaryAsString = false,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = false)
+
+  /** Complex types with geospatial types. */
+
+  testCatalystToParquet(
+    "Complex types with GeometryType - array element",
+    StructType(Seq(
+      StructField("f1", ArrayType(GeometryType("OGC:CRS84"), containsNull = true))
+    )),
+    """message root {
+      |  optional group f1 (LIST) {
+      |    repeated group list {
+      |      optional binary element (GEOMETRY);
+      |    }
+      |  }
+      |}
+    """.stripMargin,
+    writeLegacyParquetFormat = false)
+
+  testCatalystToParquet(
+    "Complex types with GeographyType - array element",
+    StructType(Seq(
+      StructField("f1", ArrayType(
+        GeographyType("OGC:CRS84", EdgeInterpolationAlgorithm.SPHERICAL), containsNull = true))
+    )),
+    """message root {
+      |  optional group f1 (LIST) {
+      |    repeated group list {
+      |      optional binary element (GEOGRAPHY);
+      |    }
+      |  }
+      |}
+    """.stripMargin,
+    writeLegacyParquetFormat = false)
+
+  testCatalystToParquet(
+    "Complex types with GeometryType - nested struct",
+    StructType(Seq(
+      StructField("outer", StructType(Seq(
+        StructField("geom", GeometryType("OGC:CRS84"))
+      )))
+    )),
+    """message root {
+      |  optional group outer {
+      |    optional binary geom (GEOMETRY);
+      |  }
+      |}
+    """.stripMargin,
+    writeLegacyParquetFormat = false)
+
+  testCatalystToParquet(
+    "Complex types with GeographyType - nested struct",
+    StructType(Seq(
+      StructField("outer", StructType(Seq(
+        StructField("geog", GeographyType("OGC:CRS84", EdgeInterpolationAlgorithm.SPHERICAL))
+      )))
+    )),
+    """message root {
+      |  optional group outer {
+      |    optional binary geog (GEOGRAPHY);
+      |  }
+      |}
+    """.stripMargin,
+    writeLegacyParquetFormat = false)
+
+  testCatalystToParquet(
+    "Complex types with GeometryType - map value",
+    StructType(Seq(
+      StructField("f1", MapType(StringType, GeometryType("OGC:CRS84"), valueContainsNull = true))
+    )),
+    """message root {
+      |  optional group f1 (MAP) {
+      |    repeated group key_value {
+      |      required binary key (UTF8);
+      |      optional binary value (GEOMETRY);
+      |    }
+      |  }
+      |}
+    """.stripMargin,
+    writeLegacyParquetFormat = false)
+
+  testCatalystToParquet(
+    "Complex types with GeographyType - map value",
+    StructType(Seq(
+      StructField("f1", MapType(StringType,
+        GeographyType("OGC:CRS84", EdgeInterpolationAlgorithm.SPHERICAL), valueContainsNull = true))
+    )),
+    """message root {
+      |  optional group f1 (MAP) {
+      |    repeated group key_value {
+      |      required binary key (UTF8);
+      |      optional binary value (GEOGRAPHY);
+      |    }
+      |  }
+      |}
+    """.stripMargin,
+    writeLegacyParquetFormat = false)
+
   // =================================
   // Tests for conversion for decimals
   // =================================
@@ -2480,9 +2721,11 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       parquetSchema: String,
       catalystSchema: StructType,
       expectedSchema: String,
-      caseSensitive: Boolean = true): Unit = {
+      caseSensitive: Boolean = true,
+      returnNullStructIfAllFieldsMissing: Boolean = false): Unit = {
     testSchemaClipping(testName, parquetSchema, catalystSchema,
-      MessageTypeParser.parseMessageType(expectedSchema), caseSensitive)
+      MessageTypeParser.parseMessageType(expectedSchema), caseSensitive,
+      returnNullStructIfAllFieldsMissing)
   }
 
   private def testSchemaClipping(
@@ -2490,13 +2733,15 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       parquetSchema: String,
       catalystSchema: StructType,
       expectedSchema: MessageType,
-      caseSensitive: Boolean): Unit = {
+      caseSensitive: Boolean,
+      returnNullStructIfAllFieldsMissing: Boolean): Unit = {
     test(s"Clipping - $testName") {
       val actual = ParquetReadSupport.clipParquetSchema(
         MessageTypeParser.parseMessageType(parquetSchema),
         catalystSchema,
         caseSensitive,
-        useFieldId = false)
+        useFieldId = false,
+        returnNullStructIfAllFieldsMissing)
 
       try {
         expectedSchema.checkContains(actual)
@@ -2857,7 +3102,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
 
     catalystSchema = new StructType(),
 
-    expectedSchema = ParquetSchemaConverter.EMPTY_MESSAGE,
+    expectedSchema = ParquetSchemaConverter.EMPTY_MESSAGE.toString,
     caseSensitive = true)
 
   testSchemaClipping(
@@ -2886,6 +3131,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         |  required group f0 {
         |    optional float f02;
         |    optional double f03;
+        |    required int32 f00;
         |  }
         |}
       """.stripMargin)
@@ -3063,7 +3309,468 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
          MessageTypeParser.parseMessageType(parquetSchema),
           catalystSchema,
           caseSensitive = false,
-          useFieldId = false)
+          useFieldId = false,
+          returnNullStructIfAllFieldsMissing = false)
       }
     }
+
+  testSchemaClipping(
+    s"SPARK-53535: struct in struct missing in requested schema",
+    parquetSchema =
+      """message root {
+        |  required int32 f0;
+        |  required group f1 {
+        |    required group f10 {
+        |      required int32 f100;
+        |      required int32 f101;
+        |    }
+        |  }
+        |}
+      """.stripMargin,
+    catalystSchema = new StructType().add("f0", IntegerType, nullable = true),
+    expectedSchema =
+      """message root {
+        |  required int32 f0;
+        |}
+      """.stripMargin)
+
+  for (returnNullStructIfAllFieldsMissing <- Seq(true, false)) {
+    testSchemaClipping(
+      s"SPARK-53535: struct in struct, with missing field being requested, " +
+        s"returnNullStructIfAllFieldsMissing=$returnNullStructIfAllFieldsMissing",
+      parquetSchema =
+        """message root {
+          |  required group f0 {
+          |    required group f00 {
+          |      required int64 f000;
+          |      required int32 f001;
+          |    }
+          |  }
+          |}
+        """.stripMargin,
+      catalystSchema = new StructType()
+        .add("f0", new StructType()
+          .add("f01", IntegerType, nullable = true), nullable = true),
+      expectedSchema =
+        ("""message root {
+           |  required group f0 {
+           |    optional int32 f01;""" + (if (!returnNullStructIfAllFieldsMissing) {
+         """
+           |    required group f00 {
+           |      required int32 f001;
+           |    }""" } else { "" }) +
+         """
+           |  }
+           |}
+         """).stripMargin,
+      returnNullStructIfAllFieldsMissing = returnNullStructIfAllFieldsMissing)
+
+    testSchemaClipping(
+      s"SPARK-53535: missing struct with complex fields, " +
+        s"returnNullStructIfAllFieldsMissing=$returnNullStructIfAllFieldsMissing",
+      parquetSchema =
+        """message root {
+          |  optional group _1 {
+          |    optional group _1 (LIST) {
+          |      repeated group list {
+          |        optional int32 element;
+          |      }
+          |    }
+          |    optional group _2 {
+          |      optional binary _1 (UTF8);
+          |      optional int32 _2;
+          |    }
+          |    optional group _3 {
+          |      optional group _1 (LIST) {
+          |        repeated group list {
+          |          optional int32 element;
+          |        }
+          |      }
+          |      optional boolean _2;
+          |      optional int32 _3;
+          |    }
+          |    optional group _4 {
+          |      optional int64 _1;
+          |    }
+          |  }
+          |}
+        """.stripMargin,
+      catalystSchema = new StructType()
+        .add("_1", new StructType()
+          .add("_101", IntegerType)
+          .add("_102", LongType)),
+      expectedSchema =
+        ("""message root {
+           |  optional group _1 {
+           |    optional int32 _101;
+           |    optional int64 _102;""" + (if (!returnNullStructIfAllFieldsMissing) {
+         """
+           |    optional group _3 {
+           |      optional boolean _2;
+           |    }""" } else { "" }) +
+         """
+           |  }
+           |}
+         """).stripMargin,
+      returnNullStructIfAllFieldsMissing = returnNullStructIfAllFieldsMissing)
+
+    testSchemaClipping(
+      s"SPARK-53535: missing struct with only map field, " +
+        s"returnNullStructIfAllFieldsMissing=$returnNullStructIfAllFieldsMissing",
+      parquetSchema =
+        """message root {
+          |  optional group _1 {
+          |    optional group _1 (MAP) {
+          |      repeated group key_value {
+          |        required boolean key;
+          |        optional group value {
+          |          optional binary _1;
+          |          optional int32 _2;
+          |        }
+          |      }
+          |    }
+          |  }
+          |}
+        """.stripMargin,
+      catalystSchema = new StructType()
+        .add("_1", new StructType()
+          .add("_101", IntegerType)
+          .add("_102", LongType)),
+      expectedSchema =
+        ("""message root {
+           |  optional group _1 {
+           |    optional int32 _101;
+           |    optional int64 _102;""" + (if (!returnNullStructIfAllFieldsMissing) {
+         """
+           |    optional group _1 (MAP) {
+           |      repeated group key_value {
+           |        required boolean key;
+           |        optional group value {
+           |          optional int32 _2;
+           |        }
+           |      }
+           |    }""" } else { "" }) +
+         """
+           |  }
+           |}
+         """).stripMargin,
+      returnNullStructIfAllFieldsMissing = returnNullStructIfAllFieldsMissing)
+
+    testSchemaClipping(
+      s"SPARK-53535: missing struct with cheap map and more expensive array field, " +
+        s"returnNullStructIfAllFieldsMissing=$returnNullStructIfAllFieldsMissing",
+      parquetSchema =
+        """message root {
+          |  optional group _1 {
+          |    optional group _1 (MAP) {
+          |      repeated group key_value {
+          |        required boolean key;
+          |        optional group value {
+          |          optional binary _1;
+          |          optional int32 _2;
+          |        }
+          |      }
+          |    }
+          |    optional group _2 (LIST) {
+          |      repeated group list {
+          |        optional binary element;
+          |      }
+          |    }
+          |  }
+          |}
+        """.stripMargin,
+      catalystSchema = new StructType()
+        .add("_1", new StructType()
+          .add("_101", IntegerType)
+          .add("_102", LongType)),
+      expectedSchema =
+        ("""message root {
+           |  optional group _1 {
+           |    optional int32 _101;
+           |    optional int64 _102;""" + (if (!returnNullStructIfAllFieldsMissing) {
+         """
+           |    optional group _1 (MAP) {
+           |      repeated group key_value {
+           |        required boolean key;
+           |        optional group value {
+           |          optional int32 _2;
+           |        }
+           |      }
+           |    }""" } else { "" }) +
+         """
+           |  }
+           |}
+         """).stripMargin,
+      returnNullStructIfAllFieldsMissing = returnNullStructIfAllFieldsMissing)
+
+    testSchemaClipping(
+      s"SPARK-53535: missing struct with expensive map with cheap fields and primitive array, " +
+        s"returnNullStructIfAllFieldsMissing=$returnNullStructIfAllFieldsMissing",
+      parquetSchema =
+        """message root {
+          |  optional group _1 {
+          |    optional group _1 (MAP) {
+          |      repeated group key_value {
+          |        required boolean key;
+          |        optional group value {
+          |          optional binary _1;
+          |          optional int32 _2;
+          |        }
+          |      }
+          |    }
+          |    optional group _2 (LIST) {
+          |      repeated group list {
+          |        optional int32 element;
+          |      }
+          |    }
+          |  }
+          |}
+        """.stripMargin,
+      catalystSchema = new StructType()
+        .add("_1", new StructType()
+          .add("_101", IntegerType)
+          .add("_102", LongType)),
+      expectedSchema =
+        ("""message root {
+           |  optional group _1 {
+           |    optional int32 _101;
+           |    optional int64 _102;""" + (if (!returnNullStructIfAllFieldsMissing) {
+         """
+           |    optional group _2 (LIST) {
+           |      repeated group list {
+           |        optional int32 element;
+           |      }
+           |    }""" } else { "" }) +
+         """
+           |  }
+           |}
+         """).stripMargin,
+      returnNullStructIfAllFieldsMissing = returnNullStructIfAllFieldsMissing)
+
+    testSchemaClipping(
+      s"SPARK-53535: missing struct where map is not picked due to max repetition level, " +
+        s"returnNullStructIfAllFieldsMissing=$returnNullStructIfAllFieldsMissing",
+      parquetSchema =
+        """message root {
+          |  optional group _1 {
+          |    optional group _1 (MAP) {
+          |      repeated group key_value {
+          |        optional group key (LIST) {
+          |          repeated group list {
+          |            optional int32 element;
+          |          }
+          |        }
+          |        optional group value (LIST) {
+          |          repeated group list {
+          |            optional group element (LIST) {
+          |              repeated group list {
+          |                optional group element (LIST) {
+          |                  repeated group list {
+          |                    optional int32 element;
+          |                  }
+          |                }
+          |              }
+          |            }
+          |          }
+          |        }
+          |      }
+          |    }
+          |    optional group _2 (LIST) {
+          |      repeated group list {
+          |        optional group element (LIST) {
+          |          repeated group list {
+          |            optional int32 element;
+          |          }
+          |        }
+          |      }
+          |    }
+          |  }
+          |}
+        """.stripMargin,
+      catalystSchema = new StructType()
+        .add("_1", new StructType()
+          .add("_101", IntegerType)
+          .add("_102", LongType)),
+      expectedSchema =
+        ("""message root {
+           |  optional group _1 {
+           |    optional int32 _101;
+           |    optional int64 _102;""" + (if (!returnNullStructIfAllFieldsMissing) {
+         """
+           |    optional group _2 (LIST) {
+           |      repeated group list {
+           |        optional group element (LIST) {
+           |          repeated group list {
+           |            optional int32 element;
+           |          }
+           |        }
+           |      }
+           |    }""" } else { "" }) +
+         """
+           |  }
+           |}
+         """).stripMargin,
+      returnNullStructIfAllFieldsMissing = returnNullStructIfAllFieldsMissing)
+
+    testSchemaClipping(
+      s"SPARK-54220: missing struct with NullType, " +
+        s"returnNullStructIfAllFieldsMissing=$returnNullStructIfAllFieldsMissing",
+      parquetSchema =
+        """message root {
+          |  optional group _1 {
+          |    optional int32 _1;
+          |    optional boolean _2;
+          |    optional group _3 {
+          |      optional int64 _1 (UNKNOWN);
+          |    }
+          |  }
+          |}
+        """.stripMargin,
+      catalystSchema = new StructType()
+        .add("_1", new StructType()
+          .add("_101", IntegerType)
+          .add("_102", LongType)),
+      expectedSchema =
+        ("""message root {
+           |  optional group _1 {
+           |    optional int32 _101;
+           |    optional int64 _102;""" + (if (!returnNullStructIfAllFieldsMissing) {
+         """
+           |    optional group _3 {
+           |      optional int64 _1 (UNKNOWN);
+           |    }
+           |  }""" } else { "" }) +
+         """
+           |  }
+           |}
+         """).stripMargin,
+      returnNullStructIfAllFieldsMissing = returnNullStructIfAllFieldsMissing)
+  }
+
+  testSchemaClipping(
+    s"SPARK-53535: various missing structs, cheapest type selection works as expected",
+    parquetSchema =
+      """message root {
+        |  optional group pickShortestType1 {
+        |    optional int64 long;
+        |    optional int32 int;
+        |    optional double double;
+        |  }
+        |  optional group pickShortestType2 {
+        |    optional int64 long;
+        |    optional int32 int;
+        |    optional boolean boolean;
+        |  }
+        |  optional group dontPickArrayOrMap {
+        |    optional int64 long;
+        |    optional group array (LIST) {
+        |      repeated group list {
+        |        optional boolean element;
+        |      }
+        |    }
+        |    optional group map (MAP) {
+        |      repeated group key_value {
+        |        required boolean key;
+        |        required int32 value;
+        |      }
+        |    }
+        |  }
+        |  optional group pickArrayOverMap {
+        |    optional group arrayOfArray (LIST) {
+        |      repeated group list {
+        |        optional group element (LIST) {
+        |          repeated group list {
+        |            optional boolean element;
+        |          }
+        |        }
+        |      }
+        |    }
+        |    optional group arrayOfLong (LIST) {
+        |      repeated group list {
+        |        optional int64 element;
+        |      }
+        |    }
+        |    optional group map (MAP) {
+        |      repeated group key_value {
+        |        required int32 key;
+        |        required binary value (UTF8);
+        |      }
+        |    }
+        |  }
+        |  optional group pickMapOverArray {
+        |    optional group arrayOfArray (LIST) {
+        |      repeated group list {
+        |        optional group element (LIST) {
+        |          repeated group list {
+        |            optional boolean element;
+        |          }
+        |        }
+        |      }
+        |    }
+        |    optional group map (MAP) {
+        |      repeated group key_value {
+        |        required int32 key;
+        |        required binary value (UTF8);
+        |      }
+        |    }
+        |  }
+        |  optional group structNesting {
+        |    optional int64 long;
+        |    optional group struct {
+        |      optional int32 int;
+        |      optional group struct {
+        |        optional boolean boolean;
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin,
+    catalystSchema = new StructType()
+      .add("pickShortestType1", new StructType().add("missingColumn", IntegerType))
+      .add("pickShortestType2", new StructType().add("missingColumn", IntegerType))
+      .add("dontPickArrayOrMap", new StructType().add("missingColumn", IntegerType))
+      .add("pickArrayOverMap", new StructType().add("missingColumn", IntegerType))
+      .add("pickMapOverArray", new StructType().add("missingColumn", IntegerType))
+      .add("structNesting", new StructType().add("missingColumn", IntegerType)),
+    expectedSchema =
+      """message root {
+        |  optional group pickShortestType1 {
+        |    optional int32 missingColumn;
+        |    optional int32 int;
+        |  }
+        |  optional group pickShortestType2 {
+        |    optional int32 missingColumn;
+        |    optional boolean boolean;
+        |  }
+        |  optional group dontPickArrayOrMap {
+        |    optional int32 missingColumn;
+        |    optional int64 long;
+        |  }
+        |  optional group pickArrayOverMap {
+        |    optional int32 missingColumn;
+        |    optional group arrayOfLong (LIST) {
+        |      repeated group list {
+        |        optional int64 element;
+        |      }
+        |    }
+        |  }
+        |  optional group pickMapOverArray {
+        |    optional int32 missingColumn;
+        |    optional group map (MAP) {
+        |      repeated group key_value {
+        |        required int32 key;
+        |        required binary value (UTF8);
+        |      }
+        |    }
+        |  }
+        |  optional group structNesting {
+        |    optional int32 missingColumn;
+        |    optional group struct {
+        |      optional group struct {
+        |        optional boolean boolean;
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin)
 }

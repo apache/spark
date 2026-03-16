@@ -35,6 +35,10 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
         super().test_apply_schema_to_row()
 
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
+    def test_geospatial_create_dataframe_rdd(self):
+        super().test_geospatial_create_dataframe_rdd()
+
+    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_create_dataframe_schema_mismatch(self):
         super().test_create_dataframe_schema_mismatch()
 
@@ -104,13 +108,6 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.sql.tests.connect.test_parity_types import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

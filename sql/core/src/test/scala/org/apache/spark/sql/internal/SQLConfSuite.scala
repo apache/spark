@@ -236,8 +236,8 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     // static sql configs
     checkError(
       exception = intercept[AnalysisException](sql(s"RESET ${StaticSQLConf.WAREHOUSE_PATH.key}")),
-      condition = "CANNOT_MODIFY_CONFIG",
-      parameters = Map("key" -> "\"spark.sql.warehouse.dir\"", "docroot" -> SPARK_DOC_ROOT))
+      condition = "CANNOT_MODIFY_STATIC_CONFIG",
+      parameters = Map("key" -> "\"spark.sql.warehouse.dir\""))
 
   }
 
@@ -348,13 +348,13 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
   test("cannot set/unset static SQL conf") {
     checkError(
       exception = intercept[AnalysisException](sql(s"SET ${GLOBAL_TEMP_DATABASE.key}=10")),
-      condition = "CANNOT_MODIFY_CONFIG",
-      parameters = Map("key" -> "\"spark.sql.globalTempDatabase\"", "docroot" -> SPARK_DOC_ROOT)
+      condition = "CANNOT_MODIFY_STATIC_CONFIG",
+      parameters = Map("key" -> "\"spark.sql.globalTempDatabase\"")
     )
     checkError(
       exception = intercept[AnalysisException](spark.conf.unset(GLOBAL_TEMP_DATABASE.key)),
-      condition = "CANNOT_MODIFY_CONFIG",
-      parameters = Map("key" -> "\"spark.sql.globalTempDatabase\"", "docroot" -> SPARK_DOC_ROOT)
+      condition = "CANNOT_MODIFY_STATIC_CONFIG",
+      parameters = Map("key" -> "\"spark.sql.globalTempDatabase\"")
     )
   }
 
@@ -558,5 +558,40 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
         "confName" -> SQLConf.LEGACY_TIME_PARSER_POLICY.key,
         "confValue" -> "invalid",
         "confOptions" -> LegacyBehaviorPolicy.values.mkString(", ")))
+  }
+
+  test("[SPARK-54063] STATE_STORE_FORCE_SNAPSHOT_UPLOAD_ON_LAG requires " +
+    "STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG") {
+    // This should work fine - both enabled
+    withSQLConf(
+      SQLConf.STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG.key -> "true",
+      SQLConf.STATE_STORE_FORCE_SNAPSHOT_UPLOAD_ON_LAG.key -> "true") {
+      assert(spark.sessionState.conf.stateStoreForceSnapshotUploadOnLag === true)
+    }
+
+    // This should work fine - both disabled
+    withSQLConf(
+      SQLConf.STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG.key -> "false",
+      SQLConf.STATE_STORE_FORCE_SNAPSHOT_UPLOAD_ON_LAG.key -> "false") {
+      assert(spark.sessionState.conf.stateStoreForceSnapshotUploadOnLag === false)
+    }
+
+    // This should work fine - report enabled, force disabled
+    withSQLConf(
+      SQLConf.STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG.key -> "true",
+      SQLConf.STATE_STORE_FORCE_SNAPSHOT_UPLOAD_ON_LAG.key -> "false") {
+      assert(spark.sessionState.conf.stateStoreForceSnapshotUploadOnLag === false)
+    }
+
+    // This should throw - force enabled but report disabled
+    val e = intercept[IllegalArgumentException] {
+      withSQLConf(
+        SQLConf.STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG.key -> "false",
+        SQLConf.STATE_STORE_FORCE_SNAPSHOT_UPLOAD_ON_LAG.key -> "true") {
+        spark.sessionState.conf.stateStoreForceSnapshotUploadOnLag
+      }
+    }
+    assert(e.getMessage.contains("forceSnapshotUploadOnLag"))
+    assert(e.getMessage.contains("coordinatorReportSnapshotUploadLag"))
   }
 }

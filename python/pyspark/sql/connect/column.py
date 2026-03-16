@@ -14,10 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
-
 import datetime
 import decimal
 import warnings
@@ -25,6 +21,7 @@ import warnings
 from typing import (
     TYPE_CHECKING,
     Any,
+    Callable,
     Union,
     Optional,
     Tuple,
@@ -55,7 +52,6 @@ from pyspark.sql.connect.expressions import (
 )
 from pyspark.errors.utils import with_origin_to_class
 
-
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
         LiteralType,
@@ -84,10 +80,11 @@ def _bin_op(
             float,
             int,
             str,
-            datetime.datetime,
             datetime.date,
-            decimal.Decimal,
+            datetime.time,
+            datetime.datetime,
             datetime.timedelta,
+            decimal.Decimal,
         ),
     ):
         other_expr = LiteralExpression._from_value(other)
@@ -384,7 +381,17 @@ class Column(ParentColumn):
     def __eq__(self, other: Any) -> ParentColumn:  # type: ignore[override]
         other = enum_to_value(other)
         if other is None or isinstance(
-            other, (bool, float, int, str, datetime.datetime, datetime.date, decimal.Decimal)
+            other,
+            (
+                bool,
+                float,
+                int,
+                str,
+                datetime.date,
+                datetime.time,
+                datetime.datetime,
+                decimal.Decimal,
+            ),
         ):
             other_expr = LiteralExpression._from_value(other)
         else:
@@ -457,6 +464,9 @@ class Column(ParentColumn):
             )
 
         return Column(WindowExpression(windowFunction=self._expr, windowSpec=window))
+
+    def transform(self, f: Callable[[ParentColumn], ParentColumn]) -> ParentColumn:
+        return f(self)
 
     def outer(self) -> ParentColumn:
         return Column(self._expr)
@@ -601,7 +611,7 @@ def _test() -> None:
         .getOrCreate()
     )
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.column,
         globs=globs,
         optionflags=doctest.ELLIPSIS

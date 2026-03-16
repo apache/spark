@@ -16,6 +16,8 @@
  */
 package org.apache.spark.deploy.k8s.features
 
+import java.util.Locale
+
 import scala.jdk.CollectionConverters._
 
 import com.google.common.net.InternetDomainName
@@ -26,6 +28,7 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkException, SparkFunSui
 import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, KubernetesTestConf, SecretVolumeUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.KubernetesConf
 import org.apache.spark.deploy.k8s.features.KubernetesFeaturesTestUtils.TestResourceInformation
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config._
@@ -123,7 +126,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   test("SPARK-52933: Verify if the executor cpu request exceeds limit") {
     baseConf.set(KUBERNETES_EXECUTOR_REQUEST_CORES, "2")
     baseConf.set(KUBERNETES_EXECUTOR_LIMIT_CORES, "1")
-    val error = intercept[SparkException] {
+    val error = intercept[IllegalArgumentException] {
       initDefaultProfile(baseConf)
       val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
         defaultProfile)
@@ -266,6 +269,24 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     }
   }
 
+  test("deployment allocator uses restartPolicy Always and lowercase hostnames") {
+    baseConf.set(KUBERNETES_ALLOCATION_PODS_ALLOCATOR, "deployment")
+    initDefaultProfile(baseConf)
+    val executorConf = KubernetesConf.createExecutorConf(
+      sparkConf = baseConf,
+      executorId = "EXECID",
+      appId = KubernetesTestConf.APP_ID,
+      driverPod = Some(DRIVER_POD))
+    val step = new BasicExecutorFeatureStep(executorConf, new SecurityManager(baseConf),
+      defaultProfile)
+    val executor = step.configurePod(SparkPod.initialPod())
+
+    val hostname = executor.pod.getSpec.getHostname
+    assert(hostname === hostname.toLowerCase(Locale.ROOT))
+    assert(InternetDomainName.isValid(hostname))
+    assert(executor.pod.getSpec.getRestartPolicy === "Always")
+  }
+
   test("classpath and extra java options get translated into environment variables") {
     baseConf.set(config.EXECUTOR_JAVA_OPTIONS, "foo=bar")
     baseConf.set(config.EXECUTOR_CLASS_PATH, "bar=baz")
@@ -303,6 +324,20 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     checkEnv(executor, conf, Map(
       ENV_EXECUTOR_ATTRIBUTE_APP_ID -> KubernetesTestConf.APP_ID,
       ENV_EXECUTOR_ATTRIBUTE_EXECUTOR_ID -> KubernetesTestConf.EXECUTOR_ID))
+  }
+
+  test("SPARK-53944: Support spark.kubernetes.executor.useDriverPodIP") {
+    Seq((false, "localhost"), (true, "bindAddress")).foreach {
+      case (flag, address) =>
+        val conf = baseConf.clone()
+          .set(DRIVER_BIND_ADDRESS, "bindAddress")
+          .set(KUBERNETES_EXECUTOR_USE_DRIVER_POD_IP, flag)
+        val kconf = KubernetesTestConf.createExecutorConf(sparkConf = conf)
+        val step = new BasicExecutorFeatureStep(kconf, new SecurityManager(conf), defaultProfile)
+        val executor = step.configurePod(SparkPod.initialPod())
+        checkEnv(executor, conf, Map(
+          ENV_DRIVER_URL -> s"spark://CoarseGrainedScheduler@$address:7098"))
+    }
   }
 
   test("test executor pyspark memory") {
@@ -614,6 +649,45 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     // memory = 1024M  + 150MB (overrides any other overhead calculation)
     assert(amountAndFormat(executor.container.getResources
       .getLimits.get("memory")) === "1174Mi")
+  }
+
+  test("SPARK-55431: executor pod sets resizePolicy to NotRequired for cpu and memory") {
+    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+      defaultProfile)
+    val executor = step.configurePod(SparkPod.initialPod())
+
+    val resizePolicies = executor.container.getResizePolicy.asScala
+    assert(resizePolicies.size === 2)
+
+    val cpuPolicy = resizePolicies.find(_.getResourceName == "cpu")
+    assert(cpuPolicy.isDefined)
+    assert(cpuPolicy.get.getRestartPolicy === "NotRequired")
+
+    val memoryPolicy = resizePolicies.find(_.getResourceName == "memory")
+    assert(memoryPolicy.isDefined)
+    assert(memoryPolicy.get.getRestartPolicy === "NotRequired")
+  }
+
+  test("SPARK-55639: ENV_EXECUTOR_CORES is spark.task.cpus when recoveryMode is enabled") {
+    val rpb = new ResourceProfileBuilder()
+    val ereq = new ExecutorResourceRequests()
+    val treq = new TaskResourceRequests()
+    ereq.cores(4)
+    treq.cpus(2)
+    rpb.require(ereq).require(treq)
+    val rp = rpb.build()
+
+    var step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf), rp)
+    var executor = step.configurePod(SparkPod.initialPod())
+    var cores = executor.container.getEnv.asScala.find(_.getName == ENV_EXECUTOR_CORES).get.getValue
+    assert(cores === "4")
+
+    baseConf.set(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED, true)
+    baseConf.set("spark.task.cpus", "2")
+    step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf), rp)
+    executor = step.configurePod(SparkPod.initialPod())
+    cores = executor.container.getEnv.asScala.find(_.getName == ENV_EXECUTOR_CORES).get.getValue
+    assert(cores === "2")
   }
 
   // There is always exactly one controller reference, and it points to the driver pod.

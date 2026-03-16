@@ -33,6 +33,9 @@ import org.apache.spark.util.Utils
 private[hive] object SparkSQLEnv extends Logging {
   logDebug("Initializing SparkSQLEnv")
 
+  val out = new PrintStream(System.out, true, UTF_8)
+  val err = new PrintStream(System.err, true, UTF_8)
+
   var sparkSession: SparkSession = _
   var sparkContext: SparkContext = _
 
@@ -72,9 +75,9 @@ private[hive] object SparkSQLEnv extends Logging {
       if (!shouldUseInMemoryCatalog) {
         val metadataHive = sparkSession
           .sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
-        metadataHive.setOut(new PrintStream(System.out, true, UTF_8.name()))
-        metadataHive.setInfo(new PrintStream(System.err, true, UTF_8.name()))
-        metadataHive.setError(new PrintStream(System.err, true, UTF_8.name()))
+        metadataHive.setOut(out)
+        metadataHive.setInfo(err)
+        metadataHive.setError(err)
       }
     }
   }

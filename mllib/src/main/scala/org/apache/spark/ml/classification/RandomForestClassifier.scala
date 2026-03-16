@@ -240,7 +240,7 @@ class RandomForestClassificationModel private[ml] (
   // For ml connect only
   private[ml] def this() = this("", Array(new DecisionTreeClassificationModel), -1, -1)
 
-  override def estimatedSize: Long = getEstimatedSize()
+  private[spark] override def estimatedSize: Long = getEstimatedSize()
 
   @Since("1.4.0")
   override def trees: Array[DecisionTreeClassificationModel] = _trees

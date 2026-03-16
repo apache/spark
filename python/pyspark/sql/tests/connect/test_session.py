@@ -18,16 +18,22 @@
 import unittest
 from typing import Optional
 
-from pyspark.sql.connect.client import DefaultChannelBuilder
-from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
+from pyspark.testing.connectutils import (
+    should_test_connect,
+    connect_requirement_message,
+)
+
+if should_test_connect:
+    from pyspark.sql.connect.client import DefaultChannelBuilder
+    from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
+
+    class CustomChannelBuilder(DefaultChannelBuilder):
+        @property
+        def userId(self) -> Optional[str]:
+            return "abc"
 
 
-class CustomChannelBuilder(DefaultChannelBuilder):
-    @property
-    def userId(self) -> Optional[str]:
-        return "abc"
-
-
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
 class SparkSessionTestCase(unittest.TestCase):
     def test_fails_to_create_session_without_remote_and_channel_builder(self):
         with self.assertRaises(ValueError):

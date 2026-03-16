@@ -51,6 +51,27 @@ object PythonUDF {
     // support new types in the future, e.g, N -> N transform.
     e.isInstanceOf[PythonUDAF]
   }
+
+  def correctEvalType(udf: PythonUDF, pythonUDFArrowFallbackOnUDT: Boolean): Int = {
+    if (udf.evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF) {
+      if (pythonUDFArrowFallbackOnUDT &&
+        (containsUDT(udf.dataType) || udf.children.exists(expr => containsUDT(expr.dataType)))) {
+        PythonEvalType.SQL_BATCHED_UDF
+      } else {
+        PythonEvalType.SQL_ARROW_BATCHED_UDF
+      }
+    } else {
+      udf.evalType
+    }
+  }
+
+  private def containsUDT(dataType: DataType): Boolean = dataType match {
+    case _: UserDefinedType[_] => true
+    case ArrayType(elementType, _) => containsUDT(elementType)
+    case StructType(fields) => fields.exists(field => containsUDT(field.dataType))
+    case MapType(keyType, valueType, _) => containsUDT(keyType) || containsUDT(valueType)
+    case _ => false
+  }
 }
 
 

@@ -33,6 +33,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+
 import builtins
 import collections.abc
 import google.protobuf.descriptor
@@ -111,6 +112,7 @@ class ResourceInformation(google.protobuf.message.Message):
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """(Required) An array of strings describing the addresses of the resource."""
+
     def __init__(
         self,
         *,
@@ -273,6 +275,7 @@ class ResourceProfile(google.protobuf.message.Message):
         """(Optional) Resource requests for executors. Mapped from the resource name
         (e.g., cores, memory, CPU) to its specific request.
         """
+
     @property
     def task_resources(
         self,
@@ -280,13 +283,16 @@ class ResourceProfile(google.protobuf.message.Message):
         """(Optional) Resource requests for tasks. Mapped from the resource name
         (e.g., cores, memory, CPU) to its specific request.
         """
+
     def __init__(
         self,
         *,
-        executor_resources: collections.abc.Mapping[builtins.str, global___ExecutorResourceRequest]
-        | None = ...,
-        task_resources: collections.abc.Mapping[builtins.str, global___TaskResourceRequest]
-        | None = ...,
+        executor_resources: (
+            collections.abc.Mapping[builtins.str, global___ExecutorResourceRequest] | None
+        ) = ...,
+        task_resources: (
+            collections.abc.Mapping[builtins.str, global___TaskResourceRequest] | None
+        ) = ...,
     ) -> None: ...
     def ClearField(
         self,
@@ -384,6 +390,7 @@ class JvmOrigin(google.protobuf.message.Message):
         global___StackTraceElement
     ]:
         """(Optional) Stack trace."""
+
     def __init__(
         self,
         *,
@@ -598,6 +605,34 @@ class StackTraceElement(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["module_version"] | None: ...
 
 global___StackTraceElement = StackTraceElement
+
+class ResolvedIdentifier(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CATALOG_NAME_FIELD_NUMBER: builtins.int
+    NAMESPACE_FIELD_NUMBER: builtins.int
+    TABLE_NAME_FIELD_NUMBER: builtins.int
+    catalog_name: builtins.str
+    @property
+    def namespace(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    table_name: builtins.str
+    def __init__(
+        self,
+        *,
+        catalog_name: builtins.str = ...,
+        namespace: collections.abc.Iterable[builtins.str] | None = ...,
+        table_name: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "catalog_name", b"catalog_name", "namespace", b"namespace", "table_name", b"table_name"
+        ],
+    ) -> None: ...
+
+global___ResolvedIdentifier = ResolvedIdentifier
 
 class Bools(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor

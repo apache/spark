@@ -206,9 +206,7 @@ class Traceback:
 
             # noinspection PyBroadException
             try:
-                exec(
-                    code, dict(current.tb_frame.f_globals), dict(current.tb_frame.f_locals)
-                )  # noqa: S102
+                exec(code, dict(current.tb_frame.f_globals), dict(current.tb_frame.f_locals))
             except Exception:
                 next_tb = sys.exc_info()[2].tb_next  # type: ignore
                 if top_tb is None:

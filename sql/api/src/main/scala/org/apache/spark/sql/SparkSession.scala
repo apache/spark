@@ -210,8 +210,14 @@ abstract class SparkSession extends Serializable with Closeable {
    *
    * @since 2.0.0
    */
-  @transient
   def emptyDataFrame: DataFrame
+
+  /**
+   * Returns a `DataFrame` with schema `schema` and no rows.
+   *
+   * @since 4.2.0
+   */
+  def emptyDataFrame(schema: StructType): DataFrame = emptyDataset(Encoders.row(schema))
 
   /**
    * Creates a `DataFrame` from a local Seq of Product.

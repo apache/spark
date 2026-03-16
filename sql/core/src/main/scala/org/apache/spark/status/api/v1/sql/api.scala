@@ -31,7 +31,10 @@ class ExecutionData private[spark] (
     val successJobIds: Seq[Int],
     val failedJobIds: Seq[Int],
     val nodes: collection.Seq[Node],
-    val edges: collection.Seq[SparkPlanGraphEdge])
+    val edges: collection.Seq[SparkPlanGraphEdge],
+    val queryId: String = null,
+    val errorMessage: String = null,
+    val rootExecutionId: Long = -1)
 
 case class Node private[spark](
     nodeId: Long,

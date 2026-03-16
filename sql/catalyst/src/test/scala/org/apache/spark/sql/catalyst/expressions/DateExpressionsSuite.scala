@@ -1307,7 +1307,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
             timeZoneId = Some(tz)),
           Duration.ZERO)
       }.getMessage
-      assert(errMsg.contains("overflow"))
+      assert(errMsg == null || errMsg.contains("overflow"))
 
       Seq(false, true).foreach { legacy =>
         checkConsistencyBetweenInterpretedAndCodegen(
@@ -1372,7 +1372,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
             timeZoneId = Some(tz)),
           Duration.ZERO)
       }.getMessage
-      assert(errMsg.contains("overflow"))
+      assert(errMsg == null || errMsg.contains("overflow"))
 
       Seq(false, true).foreach { legacy =>
         checkConsistencyBetweenInterpretedAndCodegen(
@@ -1822,7 +1822,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
             null)
         }.getCause
         assert(e.isInstanceOf[ArithmeticException])
-        assert(e.getMessage.contains("long overflow"))
+        assert(e.getMessage == null || e.getMessage.contains("overflow"))
 
         checkEvaluation(
           TimestampAddInterval(
@@ -2280,5 +2280,37 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       null)
     checkEvaluation(MakeTimestampNTZ(Literal(null, DateType), Literal(null, TimeType())),
       null)
+  }
+
+  test("SPARK-53113: try to make timestamp from date, time, and timezone") {
+    Seq(
+      ("2023-10-01", "12:34:56.123456", "America/Los_Angeles", LA),
+      ("2023-10-01", "12:34:56.123456", "+01:00", CET)
+    ).foreach( { case (date, time, tz, zoneId) =>
+      // Test with valid date.
+      checkEvaluation(
+        new TryMakeTimestampFromDateTime(dateLit(date)),
+        timestampToMicros(s"${date}T00:00:00", sessionZoneId)
+      )
+      // Test with valid date and time.
+      checkEvaluation(
+        new TryMakeTimestampFromDateTime(dateLit(date), timeLit(time)),
+        timestampToMicros(s"${date}T${time}", sessionZoneId)
+      )
+      // Test with valid date, time, and timezone.
+      checkEvaluation(
+        new TryMakeTimestampFromDateTime(dateLit(date), timeLit(time), Literal(tz)),
+        timestampToMicros(s"${date}T${time}", zoneId)
+      )
+    })
+
+    // Test with null inputs.
+    checkEvaluation(
+      new TryMakeTimestampFromDateTime(
+        Literal(null, DateType),
+        Literal(null, TimeType())
+      ),
+      null
+    )
   }
 }

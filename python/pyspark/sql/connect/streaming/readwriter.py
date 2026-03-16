@@ -14,11 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
-
 import json
+import re
 import sys
 import pickle
 from typing import cast, overload, Callable, Dict, List, Optional, TYPE_CHECKING, Union
@@ -50,6 +47,7 @@ class DataStreamReader(OptionUtils):
         self._schema = ""
         self._client = client
         self._options: Dict[str, str] = {}
+        self._source_name: Optional[str] = None
 
     def _df(self, plan: LogicalPlan) -> "DataFrame":
         from pyspark.sql.connect.dataframe import DataFrame
@@ -89,6 +87,28 @@ class DataStreamReader(OptionUtils):
 
     options.__doc__ = PySparkDataStreamReader.options.__doc__
 
+    def name(self, source_name: str) -> "DataStreamReader":
+        if not isinstance(source_name, str):
+            raise PySparkTypeError(
+                errorClass="NOT_STR",
+                messageParameters={
+                    "arg_name": "source_name",
+                    "arg_type": type(source_name).__name__,
+                },
+            )
+
+        # Validate that source_name contains only ASCII letters, digits, and underscores
+        if not re.match(r"^[a-zA-Z0-9_]+$", source_name):
+            raise PySparkValueError(
+                errorClass="INVALID_STREAMING_SOURCE_NAME",
+                messageParameters={"source_name": source_name},
+            )
+
+        self._source_name = source_name
+        return self
+
+    name.__doc__ = PySparkDataStreamReader.name.__doc__
+
     def load(
         self,
         path: Optional[str] = None,
@@ -113,6 +133,7 @@ class DataStreamReader(OptionUtils):
             options=self._options,
             paths=[path] if path else None,
             is_streaming=True,
+            source_name=self._source_name,
         )
 
         return self._df(plan)
@@ -429,12 +450,10 @@ class DataStreamWriter:
     options.__doc__ = PySparkDataStreamWriter.options.__doc__
 
     @overload
-    def partitionBy(self, *cols: str) -> "DataStreamWriter":
-        ...
+    def partitionBy(self, *cols: str) -> "DataStreamWriter": ...
 
     @overload
-    def partitionBy(self, __cols: List[str]) -> "DataStreamWriter":
-        ...
+    def partitionBy(self, __cols: List[str]) -> "DataStreamWriter": ...
 
     def partitionBy(self, *cols: str) -> "DataStreamWriter":  # type: ignore[misc]
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
@@ -448,12 +467,10 @@ class DataStreamWriter:
     partitionBy.__doc__ = PySparkDataStreamWriter.partitionBy.__doc__
 
     @overload
-    def clusterBy(self, *cols: str) -> "DataStreamWriter":
-        ...
+    def clusterBy(self, *cols: str) -> "DataStreamWriter": ...
 
     @overload
-    def clusterBy(self, __cols: List[str]) -> "DataStreamWriter":
-        ...
+    def clusterBy(self, __cols: List[str]) -> "DataStreamWriter": ...
 
     def clusterBy(self, *cols: str) -> "DataStreamWriter":  # type: ignore[misc]
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
@@ -478,20 +495,19 @@ class DataStreamWriter:
     queryName.__doc__ = PySparkDataStreamWriter.queryName.__doc__
 
     @overload
-    def trigger(self, *, processingTime: str) -> "DataStreamWriter":
-        ...
+    def trigger(self, *, processingTime: str) -> "DataStreamWriter": ...
 
     @overload
-    def trigger(self, *, once: bool) -> "DataStreamWriter":
-        ...
+    def trigger(self, *, once: bool) -> "DataStreamWriter": ...
 
     @overload
-    def trigger(self, *, continuous: str) -> "DataStreamWriter":
-        ...
+    def trigger(self, *, continuous: str) -> "DataStreamWriter": ...
 
     @overload
-    def trigger(self, *, availableNow: bool) -> "DataStreamWriter":
-        ...
+    def trigger(self, *, availableNow: bool) -> "DataStreamWriter": ...
+
+    @overload
+    def trigger(self, *, realTime: str) -> "DataStreamWriter": ...
 
     def trigger(
         self,
@@ -500,15 +516,16 @@ class DataStreamWriter:
         once: Optional[bool] = None,
         continuous: Optional[str] = None,
         availableNow: Optional[bool] = None,
+        realTime: Optional[str] = None,
     ) -> "DataStreamWriter":
-        params = [processingTime, once, continuous, availableNow]
+        params = [processingTime, once, continuous, availableNow, realTime]
 
-        if params.count(None) == 4:
+        if params.count(None) == 5:
             raise PySparkValueError(
                 errorClass="ONLY_ALLOW_SINGLE_TRIGGER",
                 messageParameters={},
             )
-        elif params.count(None) < 3:
+        elif params.count(None) < 4:
             raise PySparkValueError(
                 errorClass="ONLY_ALLOW_SINGLE_TRIGGER",
                 messageParameters={},
@@ -541,6 +558,14 @@ class DataStreamWriter:
                 )
             self._write_proto.continuous_checkpoint_interval = continuous.strip()
 
+        elif realTime is not None:
+            if type(realTime) != str or len(realTime.strip()) == 0:
+                raise PySparkValueError(
+                    errorClass="VALUE_NOT_NON_EMPTY_STR",
+                    messageParameters={"arg_name": "realTime", "arg_value": str(realTime)},
+                )
+            self._write_proto.real_time_batch_duration = realTime.strip()
+
         else:
             if availableNow is not True:
                 raise PySparkValueError(
@@ -554,12 +579,10 @@ class DataStreamWriter:
     trigger.__doc__ = PySparkDataStreamWriter.trigger.__doc__
 
     @overload
-    def foreach(self, f: Callable[[Row], None]) -> "DataStreamWriter":
-        ...
+    def foreach(self, f: Callable[[Row], None]) -> "DataStreamWriter": ...
 
     @overload
-    def foreach(self, f: "SupportsProcess") -> "DataStreamWriter":
-        ...
+    def foreach(self, f: "SupportsProcess") -> "DataStreamWriter": ...
 
     def foreach(self, f: Union[Callable[[Row], None], "SupportsProcess"]) -> "DataStreamWriter":
         from pyspark.serializers import CPickleSerializer, AutoBatchedSerializer
@@ -622,7 +645,7 @@ class DataStreamWriter:
             self._write_proto.table_name = tableName
 
         cmd = self._write_stream.command(self._session.client)
-        (_, properties, _) = self._session.client.execute_command(cmd)
+        _, properties, _ = self._session.client.execute_command(cmd)
 
         start_result = cast(
             pb2.WriteStreamOperationStartResult, properties["write_stream_operation_start_result"]
@@ -702,7 +725,7 @@ def _test() -> None:
         .getOrCreate()
     )
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.connect.streaming.readwriter,
         globs=globs,
         optionflags=doctest.ELLIPSIS

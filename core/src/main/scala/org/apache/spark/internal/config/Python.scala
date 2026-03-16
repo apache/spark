@@ -138,4 +138,16 @@ private[spark] object Python {
       .intConf
       .checkValue(_ > 0, "If set, the idle worker max size must be > 0.")
       .createOptional
+
+  val PYTHON_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE =
+    ConfigBuilder("spark.python.daemon.killWorkerOnFlushFailure")
+      .doc("When enabled, exceptions raised during output flush operations in the Python " +
+        "worker managed under Python daemon are not caught, causing the worker to terminate " +
+        "with the exception. This allows Spark to detect the failure and launch a new worker " +
+        "and retry the task. " +
+        "When disabled, flush exceptions are caught and logged but the worker continues, " +
+        "which could cause the worker to get stuck due to protocol mismatch.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
 }

@@ -215,7 +215,7 @@ private[deploy] class DriverRunner(
       val redactedCommand = Utils.redactCommandLineArgs(conf, builder.command.asScala.toSeq)
         .mkString("\"", "\" \"", "\"")
       val header = "Launch Command: %s\n%s\n\n".format(redactedCommand, "=".repeat(40))
-      Files.writeString(stderr.toPath, header, StandardOpenOption.APPEND)
+      Files.writeString(stderr.toPath, header, StandardOpenOption.CREATE, StandardOpenOption.APPEND)
       CommandUtils.redirectStream(process.getErrorStream, stderr)
     }
     runCommandWithRetry(ProcessBuilderLike(builder), initialize, supervise)

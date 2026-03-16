@@ -161,7 +161,6 @@ class SerializationTestCase(unittest.TestCase):
 
 @unittest.skipIf(not have_scipy, "SciPy not installed")
 class SciPyTests(PySparkTestCase):
-
     """General PySpark tests that depend on scipy"""
 
     def test_serialize(self):
@@ -175,7 +174,6 @@ class SciPyTests(PySparkTestCase):
 
 @unittest.skipIf(not have_numpy, "NumPy not installed")
 class NumPyTests(PySparkTestCase):
-
     """General PySpark tests that depend on numpy"""
 
     def test_statcounter_array(self):
@@ -246,12 +244,6 @@ class SerializersTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.tests.test_serializers import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

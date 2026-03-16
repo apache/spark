@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import unittest
 
 from pyspark.errors import AnalysisException, QueryContextType, SparkRuntimeException
 from pyspark.sql import functions as sf
@@ -95,7 +94,7 @@ class SubqueryTestsMixin:
         )
 
     def test_uncorrelated_scalar_subquery_with_view(self):
-        with self.tempView("subqueryData"):
+        with self.temp_view("subqueryData"):
             df = self.spark.createDataFrame(
                 [(1, "one"), (2, "two"), (3, "three")], ["key", "value"]
             )
@@ -111,11 +110,9 @@ class SubqueryTestsMixin:
                     .scalar()
                     + 1
                 ),
-                self.spark.sql(
-                    """
+                self.spark.sql("""
                     select (select key from subqueryData where key > 2 order by key limit 1) + 1
-                    """
-                ),
+                    """),
             )
 
             assertDataFrameEqual(
@@ -146,18 +143,16 @@ class SubqueryTestsMixin:
                     .select(sf.min("value"))
                     .scalar()
                 ),
-                self.spark.sql(
-                    """
+                self.spark.sql("""
                     select (
                         select min(value) from subqueryData
                         where key = (select max(key) from subqueryData) - 1
                     )
-                    """
-                ),
+                    """),
             )
 
     def test_scalar_subquery_against_local_relations(self):
-        with self.tempView("t1", "t2"):
+        with self.temp_view("t1", "t2"):
             self.spark.createDataFrame([(1, 1), (2, 2)], ["c1", "c2"]).createOrReplaceTempView("t1")
             self.spark.createDataFrame([(1, 1), (2, 2)], ["c1", "c2"]).createOrReplaceTempView("t2")
 
@@ -203,7 +198,7 @@ class SubqueryTestsMixin:
             )
 
     def test_correlated_scalar_subquery(self):
-        with self.tempView("l", "r"):
+        with self.temp_view("l", "r"):
             self.df1.createOrReplaceTempView("l")
             self.df2.createOrReplaceTempView("r")
 
@@ -239,13 +234,11 @@ class SubqueryTestsMixin:
                                 "a",
                                 df2.where(cond).select(sf.sum("b")).scalar().alias("sum_b"),
                             ),
-                            self.spark.sql(
-                                """
+                            self.spark.sql("""
                                 select
                                     a, (select sum(b) from l t2 where t2.a = t1.a) sum_b
                                 from l t1
-                                """
-                            ),
+                                """),
                         )
 
             with self.subTest("without .outer()"):
@@ -279,11 +272,9 @@ class SubqueryTestsMixin:
                             .alias("sum_b")
                         ),
                     ),
-                    self.spark.sql(
-                        """
+                    self.spark.sql("""
                         select a, (select sum(b) from l l2 where l2.a <=> l1.a) sum_b from l l1
-                        """
-                    ),
+                        """),
                 )
 
             with self.subTest("in aggregate"):
@@ -300,11 +291,9 @@ class SubqueryTestsMixin:
                         ),
                     )
                     .agg({}),
-                    self.spark.sql(
-                        """
+                    self.spark.sql("""
                         select a, (select sum(d) from r where a = c) sum_d from l l1 group by 1, 2
-                        """
-                    ),
+                        """),
                 )
 
             with self.subTest("non-aggregated"):
@@ -356,19 +345,17 @@ class SubqueryTestsMixin:
                         > 0
                     )
                     .select("a"),
-                    self.spark.sql(
-                        """
+                    self.spark.sql("""
                         select a
                         from   l
                         where  (select count(*)
                                 from   r
                                 where (a = c and d = 2.0) or (a = c and d = 1.0)) > 0
-                        """
-                    ),
+                        """),
                 )
 
     def test_exists_subquery(self):
-        with self.tempView("l", "r"):
+        with self.temp_view("l", "r"):
             self.df1.createOrReplaceTempView("l")
             self.df2.createOrReplaceTempView("r")
 
@@ -391,11 +378,9 @@ class SubqueryTestsMixin:
                                 self.spark.table("r").where(cond).exists()
                                 & (sf.col("a") <= sf.lit(2))
                             ),
-                            self.spark.sql(
-                                """
+                            self.spark.sql("""
                         select * from l where exists (select * from r where l.a = r.c) and l.a <= 2
-                        """
-                            ),
+                        """),
                         )
 
             with self.subTest("NOT EXISTS"):
@@ -419,12 +404,10 @@ class SubqueryTestsMixin:
                             .exists()
                         )
                     ),
-                    self.spark.sql(
-                        """
+                    self.spark.sql("""
                         select * from l
                             where not exists (select * from r where l.a = r.c and l.b < r.d)
-                        """
-                    ),
+                        """),
                 )
 
             with self.subTest("EXISTS within OR"):
@@ -433,12 +416,10 @@ class SubqueryTestsMixin:
                         self.spark.table("r").where(sf.col("a").outer() == sf.col("c")).exists()
                         | self.spark.table("r").where(sf.col("a").outer() == sf.col("c")).exists()
                     ),
-                    self.spark.sql(
-                        """
+                    self.spark.sql("""
                         select * from l where exists (select * from r where l.a = r.c)
                             or exists (select * from r where l.a = r.c)
-                        """
-                    ),
+                        """),
                 )
 
                 assertDataFrameEqual(
@@ -451,16 +432,14 @@ class SubqueryTestsMixin:
                         .exists()
                         | self.spark.table("r").where(sf.col("a").outer() == sf.col("c")).exists()
                     ),
-                    self.spark.sql(
-                        """
+                    self.spark.sql("""
                         select * from l where exists (select * from r where l.a = r.c and l.b < r.d)
                             or exists (select * from r where l.a = r.c)
-                        """
-                    ),
+                        """),
                 )
 
     def test_in_subquery(self):
-        with self.tempView("l", "r", "t"):
+        with self.temp_view("l", "r", "t"):
             self.df1.createOrReplaceTempView("l")
             self.df2.createOrReplaceTempView("r")
             self.spark.table("r").filter(
@@ -492,15 +471,13 @@ class SubqueryTestsMixin:
                         & (sf.col("l.a") > sf.lit(2))
                         & sf.col("l.b").isNotNull()
                     ),
-                    self.spark.sql(
-                        """
+                    self.spark.sql("""
                         select * from l
                         where l.a in (select c from r) and l.a > 2 and l.b is not null
-                        """
-                    ),
+                        """),
                 )
 
-            with self.subTest("IN with struct"), self.tempView("ll", "rr"):
+            with self.subTest("IN with struct"), self.temp_view("ll", "rr"):
                 self.spark.table("l").select(
                     "*", sf.struct("a", "b").alias("sab")
                 ).createOrReplaceTempView("ll")
@@ -587,12 +564,10 @@ class SubqueryTestsMixin:
                             )
                         )
                     ),
-                    self.spark.sql(
-                        """
+                    self.spark.sql("""
                         select * from l
                         where l.a in (select c from r) or l.a in (select c from r where l.b < r.d)
-                        """
-                    ),
+                        """),
                 )
                 assertDataFrameEqual(
                     self.spark.table("l").where(
@@ -605,13 +580,11 @@ class SubqueryTestsMixin:
                             )
                         )
                     ),
-                    self.spark.sql(
-                        """
+                    self.spark.sql("""
                         select * from l
                         where a not in (select c from r)
                         or a not in (select c from r where c is not null)
-                        """
-                    ),
+                        """),
                 )
 
             with self.subTest("complex IN"):
@@ -632,12 +605,10 @@ class SubqueryTestsMixin:
                         )
                         & ((sf.col("a") + sf.col("b")).isNotNull())
                     ),
-                    self.spark.sql(
-                        """
+                    self.spark.sql("""
                         select * from l
                         where (a, b) not in (select c, d from t) and (a + b) is not null
-                        """
-                    ),
+                        """),
                 )
 
             with self.subTest("same column in subquery"):
@@ -665,7 +636,7 @@ class SubqueryTestsMixin:
                 )
 
     def test_scalar_subquery_with_missing_outer_reference(self):
-        with self.tempView("l", "r"):
+        with self.temp_view("l", "r"):
             self.df1.createOrReplaceTempView("l")
             self.df2.createOrReplaceTempView("r")
 
@@ -706,7 +677,7 @@ class SubqueryTestsMixin:
         return self.spark.table("t3")
 
     def test_lateral_join_with_single_column_select(self):
-        with self.tempView("t1", "t2"):
+        with self.temp_view("t1", "t2"):
             t1 = self.table1()
             t2 = self.table2()
 
@@ -724,7 +695,7 @@ class SubqueryTestsMixin:
             )
 
     def test_lateral_join_with_star_expansion(self):
-        with self.tempView("t1", "t2"):
+        with self.temp_view("t1", "t2"):
             t1 = self.table1()
             t2 = self.table2()
 
@@ -746,7 +717,7 @@ class SubqueryTestsMixin:
             )
 
     def test_lateral_join_with_different_join_types(self):
-        with self.tempView("t1"):
+        with self.temp_view("t1"):
             t1 = self.table1()
 
             assertDataFrameEqual(
@@ -800,7 +771,7 @@ class SubqueryTestsMixin:
             )
 
     def test_lateral_join_with_subquery_alias(self):
-        with self.tempView("t1"):
+        with self.temp_view("t1"):
             t1 = self.table1()
 
             assertDataFrameEqual(
@@ -814,7 +785,7 @@ class SubqueryTestsMixin:
             )
 
     def test_lateral_join_with_correlated_predicates(self):
-        with self.tempView("t1", "t2"):
+        with self.temp_view("t1", "t2"):
             t1 = self.table1()
             t2 = self.table2()
 
@@ -836,7 +807,7 @@ class SubqueryTestsMixin:
             )
 
     def test_lateral_join_with_aggregation_and_correlated_predicates(self):
-        with self.tempView("t1", "t2"):
+        with self.temp_view("t1", "t2"):
             t1 = self.table1()
             t2 = self.table2()
 
@@ -846,15 +817,13 @@ class SubqueryTestsMixin:
                         sf.max(sf.col("c2")).alias("m")
                     )
                 ),
-                self.spark.sql(
-                    """
+                self.spark.sql("""
                     SELECT * FROM t1, LATERAL (SELECT max(c2) AS m FROM t2 WHERE t1.c2 < t2.c2)
-                    """
-                ),
+                    """),
             )
 
     def test_lateral_join_reference_preceding_from_clause_items(self):
-        with self.tempView("t1", "t2"):
+        with self.temp_view("t1", "t2"):
             t1 = self.table1()
             t2 = self.table2()
 
@@ -866,7 +835,7 @@ class SubqueryTestsMixin:
             )
 
     def test_multiple_lateral_joins(self):
-        with self.tempView("t1"):
+        with self.temp_view("t1"):
             t1 = self.table1()
 
             assertDataFrameEqual(
@@ -885,18 +854,16 @@ class SubqueryTestsMixin:
                         (sf.col("a").outer() * sf.col("b").outer()).alias("c")
                     )
                 ),
-                self.spark.sql(
-                    """
+                self.spark.sql("""
                     SELECT * FROM t1,
                     LATERAL (SELECT c1 + c2 AS a),
                     LATERAL (SELECT c1 - c2 AS b),
                     LATERAL (SELECT a * b AS c)
-                    """
-                ),
+                    """),
             )
 
     def test_lateral_join_in_between_regular_joins(self):
-        with self.tempView("t1", "t2"):
+        with self.temp_view("t1", "t2"):
             t1 = self.table1()
             t2 = self.table2()
 
@@ -907,17 +874,15 @@ class SubqueryTestsMixin:
                     .alias("s"),
                     how="left",
                 ).join(t1.alias("t3"), sf.col("s.c2") == sf.col("t3.c2"), how="left"),
-                self.spark.sql(
-                    """
+                self.spark.sql("""
                     SELECT * FROM t1
                     LEFT OUTER JOIN LATERAL (SELECT c2 FROM t2 WHERE t1.c1 = t2.c1) s
                     LEFT OUTER JOIN t1 t3 ON s.c2 = t3.c2
-                    """
-                ),
+                    """),
             )
 
     def test_nested_lateral_joins(self):
-        with self.tempView("t1", "t2"):
+        with self.temp_view("t1", "t2"):
             t1 = self.table1()
             t2 = self.table2()
 
@@ -933,16 +898,14 @@ class SubqueryTestsMixin:
                     .select((sf.col("c1").outer() + sf.lit(1)).alias("c1"))
                     .lateralJoin(self.spark.range(1).select(sf.col("c1").outer()))
                 ),
-                self.spark.sql(
-                    """
+                self.spark.sql("""
                     SELECT * FROM t1,
                     LATERAL (SELECT * FROM (SELECT c1 + 1 AS c1), LATERAL (SELECT c1))
-                    """
-                ),
+                    """),
             )
 
     def test_scalar_subquery_inside_lateral_join(self):
-        with self.tempView("t1", "t2"):
+        with self.temp_view("t1", "t2"):
             t1 = self.table1()
             t2 = self.table2()
 
@@ -966,17 +929,15 @@ class SubqueryTestsMixin:
                         .scalar()
                     )
                 ),
-                self.spark.sql(
-                    """
+                self.spark.sql("""
                     SELECT * FROM t1, LATERAL (
                         SELECT (SELECT SUM(c2) FROM t2 WHERE c1 = a) FROM (SELECT c1 AS a)
                     )
-                    """
-                ),
+                    """),
             )
 
     def test_lateral_join_inside_subquery(self):
-        with self.tempView("t1", "t2"):
+        with self.temp_view("t1", "t2"):
             t1 = self.table1()
             t2 = self.table2()
 
@@ -989,11 +950,9 @@ class SubqueryTestsMixin:
                         .scalar()
                     )
                 ),
-                self.spark.sql(
-                    """
+                self.spark.sql("""
                     SELECT * FROM t1 WHERE c1 = (SELECT MIN(a) FROM t2, LATERAL (SELECT c1 AS a))
-                    """
-                ),
+                    """),
             )
             assertDataFrameEqual(
                 t1.where(
@@ -1005,16 +964,14 @@ class SubqueryTestsMixin:
                         .scalar()
                     )
                 ),
-                self.spark.sql(
-                    """
+                self.spark.sql("""
                     SELECT * FROM t1
                     WHERE c1 = (SELECT MIN(a) FROM t2, LATERAL (SELECT c1 AS a) WHERE c1 = t1.c1)
-                    """
-                ),
+                    """),
             )
 
     def test_lateral_join_with_table_valued_functions(self):
-        with self.tempView("t1", "t3"):
+        with self.temp_view("t1", "t3"):
             t1 = self.table1()
             t3 = self.table3()
 
@@ -1044,7 +1001,7 @@ class SubqueryTestsMixin:
             )
 
     def test_lateral_join_with_table_valued_functions_and_join_conditions(self):
-        with self.tempView("t1", "t3"):
+        with self.temp_view("t1", "t3"):
             t1 = self.table1()
             t3 = self.table3()
 
@@ -1076,7 +1033,7 @@ class SubqueryTestsMixin:
             )
 
     def test_subquery_with_generator_and_tvf(self):
-        with self.tempView("t1"):
+        with self.temp_view("t1"):
             t1 = self.table1()
 
             assertDataFrameEqual(
@@ -1089,7 +1046,7 @@ class SubqueryTestsMixin:
             )
 
     def test_subquery_in_join_condition(self):
-        with self.tempView("t1", "t2"):
+        with self.temp_view("t1", "t2"):
             t1 = self.table1()
             t2 = self.table2()
 
@@ -1102,7 +1059,7 @@ class SubqueryTestsMixin:
         self.check_subquery_in_unpivot(QueryContextType.DataFrame, "exists")
 
     def check_subquery_in_unpivot(self, query_context_type, fragment):
-        with self.tempView("t1", "t2"):
+        with self.temp_view("t1", "t2"):
             t1 = self.table1()
             t2 = self.table2()
 
@@ -1121,7 +1078,7 @@ class SubqueryTestsMixin:
             )
 
     def test_subquery_in_transpose(self):
-        with self.tempView("t1"):
+        with self.temp_view("t1"):
             t1 = self.table1()
 
             with self.assertRaises(AnalysisException) as pe:
@@ -1134,7 +1091,7 @@ class SubqueryTestsMixin:
             )
 
     def test_subquery_in_with_columns(self):
-        with self.tempView("t1"):
+        with self.temp_view("t1"):
             t1 = self.table1()
 
             assertDataFrameEqual(
@@ -1169,7 +1126,7 @@ class SubqueryTestsMixin:
             )
 
     def test_subquery_in_with_columns_renamed(self):
-        with self.tempView("t1"):
+        with self.temp_view("t1"):
             t1 = self.table1()
 
             assertDataFrameEqual(
@@ -1185,13 +1142,13 @@ class SubqueryTestsMixin:
             )
 
     def test_subquery_in_drop(self):
-        with self.tempView("t1"):
+        with self.temp_view("t1"):
             t1 = self.table1()
 
             assertDataFrameEqual(t1.drop(self.spark.range(1).select(sf.lit("c1")).scalar()), t1)
 
     def test_subquery_in_repartition(self):
-        with self.tempView("t1"):
+        with self.temp_view("t1"):
             t1 = self.table1()
 
             assertDataFrameEqual(t1.repartition(self.spark.range(1).select(sf.lit(1)).scalar()), t1)
@@ -1202,12 +1159,6 @@ class SubqueryTests(SubqueryTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_subquery import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

@@ -20,10 +20,10 @@ package org.apache.spark.sql
 import org.apache.spark.{SparkConf, SparkRuntimeException}
 import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, Identifier, InMemoryTableCatalog, TableInfo}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType, StructType}
 
-class RuntimeNullChecksV2Writes extends QueryTest with SQLTestUtils with SharedSparkSession {
+class RuntimeNullChecksV2Writes extends QueryTest with SharedSparkSession {
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 

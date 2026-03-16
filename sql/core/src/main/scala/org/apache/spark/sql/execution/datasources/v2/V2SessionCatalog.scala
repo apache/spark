@@ -24,7 +24,7 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, SQLConfHelper, TableIdentifier}
+import org.apache.spark.sql.catalyst.{QualifiedTableName, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec, SessionCatalog}
 import org.apache.spark.sql.catalyst.util.TypeUtils._
@@ -35,7 +35,6 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -46,6 +45,7 @@ import org.apache.spark.util.Utils
  */
 class V2SessionCatalog(catalog: SessionCatalog)
   extends TableCatalog with FunctionCatalog with SupportsNamespaces with SQLConfHelper {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import V2SessionCatalog._
 
   override val defaultNamespace: Array[String] = Array(conf.defaultDatabase)
@@ -126,7 +126,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
       }
     } catch {
       case _: NoSuchNamespaceException =>
-        throw QueryCompilationErrors.noSuchTableError(ident)
+        throw QueryCompilationErrors.noSuchTableError(name(), ident)
     }
   }
 
@@ -136,6 +136,10 @@ class V2SessionCatalog(catalog: SessionCatalog)
 
   override def loadTable(ident: Identifier, version: String): Table = {
     failTimeTravel(ident, loadTable(ident))
+  }
+
+  override def tableExists(ident: Identifier): Boolean = {
+    catalog.tableExists(ident.asTableIdentifier)
   }
 
   private def failTimeTravel(ident: Identifier, t: Table): Table = {
@@ -284,7 +288,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
       catalog.getTableMetadata(ident.asTableIdentifier)
     } catch {
       case _: NoSuchTableException =>
-        throw QueryCompilationErrors.noSuchTableError(ident)
+        throw QueryCompilationErrors.noSuchTableError(name(), ident)
     }
 
     val properties = CatalogV2Util.applyPropertiesChanges(catalogTable.properties, changes)
@@ -313,7 +317,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
       }
     } catch {
       case _: NoSuchTableException =>
-        throw QueryCompilationErrors.noSuchTableError(ident)
+        throw QueryCompilationErrors.noSuchTableError(name(), ident)
     }
 
     null // Return null to save the `loadTable` call for ALTER TABLE.
@@ -330,7 +334,8 @@ class V2SessionCatalog(catalog: SessionCatalog)
   private def dropTableInternal(ident: Identifier, purge: Boolean = false): Boolean = {
     try {
       loadTable(ident) match {
-        case V1Table(v1Table) if v1Table.tableType == CatalogTableType.VIEW =>
+        case V1Table(v1Table) if v1Table.tableType == CatalogTableType.VIEW &&
+            !SQLConf.get.getConf(SQLConf.DROP_TABLE_VIEW_ENABLED) =>
           throw QueryCompilationErrors.wrongCommandForObjectTypeError(
             operation = "DROP TABLE",
             requiredType = s"${CatalogTableType.EXTERNAL.name} or" +
@@ -361,26 +366,6 @@ class V2SessionCatalog(catalog: SessionCatalog)
     }
 
     catalog.renameTable(oldIdent.asTableIdentifier, newIdent.asTableIdentifier)
-  }
-
-  implicit class TableIdentifierHelper(ident: Identifier) {
-    def asTableIdentifier: TableIdentifier = {
-      ident.namespace match {
-        case Array(db) =>
-          TableIdentifier(ident.name, Some(db))
-        case other =>
-          throw QueryCompilationErrors.requiresSinglePartNamespaceError(other.toImmutableArraySeq)
-      }
-    }
-
-    def asFunctionIdentifier: FunctionIdentifier = {
-      ident.namespace match {
-        case Array(db) =>
-          FunctionIdentifier(ident.name, Some(db))
-        case other =>
-          throw QueryCompilationErrors.requiresSinglePartNamespaceError(other.toImmutableArraySeq)
-      }
-    }
   }
 
   override def namespaceExists(namespace: Array[String]): Boolean = namespace match {
@@ -423,13 +408,10 @@ class V2SessionCatalog(catalog: SessionCatalog)
   override def createNamespace(
       namespace: Array[String],
       metadata: util.Map[String, String]): Unit = namespace match {
-    case Array(db) if !catalog.databaseExists(db) =>
+    case Array(db) =>
       catalog.createDatabase(
         toCatalogDatabase(db, metadata, defaultLocation = Some(catalog.getDefaultDBPath(db))),
         ignoreIfExists = false)
-
-    case Array(_) =>
-      throw QueryCompilationErrors.namespaceAlreadyExistsError(namespace)
 
     case _ =>
       throw QueryExecutionErrors.invalidNamespaceNameError(namespace)
@@ -475,7 +457,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
   }
 
   override def loadFunction(ident: Identifier): UnboundFunction = {
-    V1Function(catalog.lookupPersistentFunction(ident.asFunctionIdentifier))
+    catalog.loadPersistentScalarFunction(ident.asFunctionIdentifier)
   }
 
   override def listFunctions(namespace: Array[String]): Array[Identifier] = {

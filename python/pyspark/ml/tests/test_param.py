@@ -18,7 +18,6 @@
 
 import inspect
 import array as pyarray
-import unittest
 
 import numpy as np
 
@@ -137,7 +136,7 @@ class TestParams(HasMaxIter, HasInputCol, HasSeed):
 
     @keyword_only
     def __init__(self, seed=None):
-        super(TestParams, self).__init__()
+        super().__init__()
         self._setDefault(maxIter=10)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -159,7 +158,7 @@ class OtherTestParams(HasMaxIter, HasInputCol, HasSeed):
 
     @keyword_only
     def __init__(self, seed=None):
-        super(OtherTestParams, self).__init__()
+        super().__init__()
         self._setDefault(maxIter=10)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -176,7 +175,7 @@ class OtherTestParams(HasMaxIter, HasInputCol, HasSeed):
 
 class HasThrowableProperty(Params):
     def __init__(self):
-        super(HasThrowableProperty, self).__init__()
+        super().__init__()
         self.p = Param(self, "none", "empty param")
 
     @property
@@ -430,12 +429,6 @@ class DefaultValuesTests(PySparkTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_param import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

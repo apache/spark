@@ -21,10 +21,11 @@ import scala.collection.mutable
 import scala.reflect.classTag
 
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, CalendarIntervalEncoder, CharEncoder, DateEncoder, DayTimeIntervalEncoder, EncoderField, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, LocalDateTimeEncoder, LocalTimeEncoder, MapEncoder, NullEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, TimestampEncoder, UDTEncoder, VarcharEncoder, VariantEncoder, YearMonthIntervalEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, CalendarIntervalEncoder, CharEncoder, DateEncoder, DayTimeIntervalEncoder, EncoderField, GeographyEncoder, GeometryEncoder, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, LocalDateTimeEncoder, LocalTimeEncoder, MapEncoder, NullEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, TimestampEncoder, UDTEncoder, VarcharEncoder, VariantEncoder, YearMonthIntervalEncoder}
 import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.ops.TypeApiOps
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -70,6 +71,13 @@ object RowEncoder extends DataTypeErrorsBase {
   }
 
   private[sql] def encoderForDataType(dataType: DataType, lenient: Boolean): AgnosticEncoder[_] =
+    TypeApiOps(dataType)
+      .map(_.getEncoder)
+      .getOrElse(encoderForDataTypeDefault(dataType, lenient))
+
+  private def encoderForDataTypeDefault(
+      dataType: DataType,
+      lenient: Boolean): AgnosticEncoder[_] =
     dataType match {
       case NullType => NullEncoder
       case BooleanType => BoxedBooleanEncoder
@@ -81,10 +89,10 @@ object RowEncoder extends DataTypeErrorsBase {
       case DoubleType => BoxedDoubleEncoder
       case dt: DecimalType => JavaDecimalEncoder(dt, lenientSerialization = true)
       case BinaryType => BinaryEncoder
-      case CharType(length) if SqlApiConf.get.preserveCharVarcharTypeInfo =>
-        CharEncoder(length)
-      case VarcharType(length) if SqlApiConf.get.preserveCharVarcharTypeInfo =>
-        VarcharEncoder(length)
+      case c: CharType if SqlApiConf.get.preserveCharVarcharTypeInfo =>
+        CharEncoder(c.length)
+      case v: VarcharType if SqlApiConf.get.preserveCharVarcharTypeInfo =>
+        VarcharEncoder(v.length)
       case s: StringType if StringHelper.isPlainString(s) => StringEncoder
       case TimestampType if SqlApiConf.get.datetimeJava8ApiEnabled => InstantEncoder(lenient)
       case TimestampType => TimestampEncoder(lenient)
@@ -120,6 +128,8 @@ object RowEncoder extends DataTypeErrorsBase {
             field.nullable,
             field.metadata)
         }.toImmutableArraySeq)
+      case g: GeographyType => GeographyEncoder(g)
+      case g: GeometryType => GeometryEncoder(g)
 
       case _ =>
         throw new AnalysisException(

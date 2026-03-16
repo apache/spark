@@ -40,9 +40,10 @@ class DefaultIndexTestsMixin:
             self.assertEqual(len(set(pdf.index)), len(pdf))
 
     def test_index_distributed_sequence_cleanup(self):
-        with ps.option_context(
-            "compute.default_index_type", "distributed-sequence"
-        ), ps.option_context("compute.ops_on_diff_frames", True):
+        with (
+            ps.option_context("compute.default_index_type", "distributed-sequence"),
+            ps.option_context("compute.ops_on_diff_frames", True),
+        ):
             with ps.option_context("compute.default_index_cache", "LOCAL_CHECKPOINT"):
                 cached_rdd_ids = [rdd_id for rdd_id in self._legacy_sc._jsc.getPersistentRDDs()]
 
@@ -99,13 +100,6 @@ class DefaultIndexTests(
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.pandas.tests.indexes.test_default import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

@@ -144,6 +144,7 @@ case class CatalogStorageFormat(
     locationUri: Option[URI],
     inputFormat: Option[String],
     outputFormat: Option[String],
+    serdeName: Option[String],
     serde: Option[String],
     compressed: Boolean,
     properties: Map[String, String]) extends MetadataMapSupport {
@@ -158,6 +159,7 @@ case class CatalogStorageFormat(
     val map = mutable.LinkedHashMap[String, JValue]()
 
     locationUri.foreach(l => map += ("Location" -> JString(CatalogUtils.URIToString(l))))
+    serdeName.foreach(s => map += ("Serde Name" -> JString(s)))
     serde.foreach(s => map += ("Serde Library" -> JString(s)))
     inputFormat.foreach(format => map += ("InputFormat" -> JString(format)))
     outputFormat.foreach(format => map += ("OutputFormat" -> JString(format)))
@@ -178,8 +180,8 @@ case class CatalogStorageFormat(
 
 object CatalogStorageFormat {
   /** Empty storage format for default values and copies. */
-  val empty = CatalogStorageFormat(locationUri = None, inputFormat = None,
-    outputFormat = None, serde = None, compressed = false, properties = Map.empty)
+  val empty = CatalogStorageFormat(locationUri = None, inputFormat = None, outputFormat = None,
+    serdeName = None, serde = None, compressed = false, properties = Map.empty)
 }
 
 /**
@@ -278,7 +280,7 @@ case class ClusterBySpec(columnNames: Seq[NamedReference]) {
 object ClusterBySpec {
   private val mapper = {
     val ret = new ObjectMapper() with ClassTagExtensions
-    ret.setSerializationInclusion(Include.NON_ABSENT)
+    ret.setDefaultPropertyInclusion(Include.NON_ABSENT)
     ret.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
     ret.registerModule(DefaultScalaModule)
     ret
@@ -442,7 +444,8 @@ case class CatalogTable(
     tracksPartitionsInCatalog: Boolean = false,
     schemaPreservesCase: Boolean = true,
     ignoredProperties: Map[String, String] = Map.empty,
-    viewOriginalText: Option[String] = None) extends MetadataMapSupport {
+    viewOriginalText: Option[String] = None)
+  extends MetadataMapSupport {
 
   import CatalogTable._
 
@@ -451,7 +454,15 @@ case class CatalogTable(
    */
   def partitionSchema: StructType = {
     val partitionFields = schema.takeRight(partitionColumnNames.length)
-    assert(partitionFields.map(_.name) == partitionColumnNames)
+    val actualPartitionColumnNames = partitionFields.map(_.name)
+
+    assert(actualPartitionColumnNames == partitionColumnNames,
+      "Corrupted table metadata detected for table " + identifier.quotedString + ". " +
+      "The partition column names in the table schema " +
+      "do not match the declared partition columns. " +
+      "Table schema columns: [" + schema.fieldNames.mkString(", ") + "] " +
+      "Declared partition columns: [" + partitionColumnNames.mkString(", ") + "]. " +
+      "This indicates corrupted table metadata that needs to be repaired.")
 
     StructType(partitionFields)
   }
@@ -605,10 +616,11 @@ case class CatalogTable(
       inputFormat: Option[String] = storage.inputFormat,
       outputFormat: Option[String] = storage.outputFormat,
       compressed: Boolean = false,
+      serdeName: Option[String] = storage.serdeName,
       serde: Option[String] = storage.serde,
       properties: Map[String, String] = storage.properties): CatalogTable = {
     copy(storage = CatalogStorageFormat(
-      locationUri, inputFormat, outputFormat, serde, compressed, properties))
+      locationUri, inputFormat, outputFormat, serdeName, serde, compressed, properties))
   }
 
   def toJsonLinkedHashMap: mutable.LinkedHashMap[String, JValue] = {
@@ -714,6 +726,18 @@ object CatalogTable {
 
   val VIEW_CATALOG_AND_NAMESPACE = VIEW_PREFIX + "catalogAndNamespace.numParts"
   val VIEW_CATALOG_AND_NAMESPACE_PART_PREFIX = VIEW_PREFIX + "catalogAndNamespace.part."
+
+  // Property to indicate that a VIEW is actually a METRIC VIEW
+  val VIEW_WITH_METRICS = VIEW_PREFIX + "viewWithMetrics"
+
+  /**
+   * Check if a CatalogTable is a metric view by looking at its properties.
+   */
+  def isMetricView(table: CatalogTable): Boolean = {
+    table.tableType == CatalogTableType.VIEW &&
+      table.properties.get(VIEW_WITH_METRICS).contains("true")
+  }
+
   // Convert the current catalog and namespace to properties.
   def catalogAndNamespaceToProps(
       currentCatalog: String,
@@ -765,20 +789,15 @@ object CatalogTable {
 
   def readLargeTableProp(props: Map[String, String], key: String): Option[String] = {
     props.get(key).orElse {
-      if (props.exists { case (mapKey, _) => mapKey.startsWith(key) }) {
-        props.get(s"$key.numParts") match {
-          case None => throw QueryCompilationErrors.insufficientTablePropertyError(key)
-          case Some(numParts) =>
-            val parts = (0 until numParts.toInt).map { index =>
-              val keyPart = s"$key.part.$index"
-              props.getOrElse(keyPart, {
-                throw QueryCompilationErrors.insufficientTablePropertyPartError(keyPart, numParts)
-              })
-            }
-            Some(parts.mkString)
+      // only construct the property from parts if numParts exist,
+      props.get(s"$key.numParts").map { numParts =>
+        val parts = (0 until numParts.toInt).map { index =>
+          val keyPart = s"$key.part.$index"
+          props.getOrElse(keyPart, {
+            throw QueryCompilationErrors.insufficientTablePropertyPartError(keyPart, numParts)
+          })
         }
-      } else {
-        None
+        parts.mkString
       }
     }
   }
@@ -1067,7 +1086,9 @@ case class UnresolvedCatalogRelation(
     tableMeta: CatalogTable,
     options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty(),
     override val isStreaming: Boolean = false) extends UnresolvedLeafNode {
-  assert(tableMeta.identifier.database.isDefined)
+  assert(tableMeta.identifier.database.isDefined,
+    "Table identifier " + tableMeta.identifier.quotedString + " is missing database name. " +
+    "UnresolvedCatalogRelation requires a fully qualified table identifier with database.")
 }
 
 /**
@@ -1094,7 +1115,9 @@ case class HiveTableRelation(
     tableStats: Option[Statistics] = None,
     @transient prunedPartitions: Option[Seq[CatalogTablePartition]] = None)
   extends LeafNode with MultiInstanceRelation with NormalizeableRelation {
-  assert(tableMeta.identifier.database.isDefined)
+  assert(tableMeta.identifier.database.isDefined,
+    "Table identifier " + tableMeta.identifier.quotedString + " is missing database name. " +
+    "HiveTableRelation requires a fully qualified table identifier with database.")
   assert(DataTypeUtils.sameType(tableMeta.partitionSchema, partitionCols.toStructType))
   assert(DataTypeUtils.sameType(tableMeta.dataSchema, dataCols.toStructType))
 

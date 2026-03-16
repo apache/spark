@@ -14,12 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
-
 import sys
-from typing import Dict, Optional, TYPE_CHECKING, List, Callable
+from typing import Dict, Optional, TYPE_CHECKING, Callable
 
 from pyspark.sql.connect import proto
 from pyspark.sql.connect.column import Column
@@ -73,9 +69,9 @@ class MergeIntoWriter:
 
         self._callback = callback if callback is not None else lambda _: None
         self._schema_evolution_enabled = False
-        self._matched_actions = list()  # type: List[proto.MergeAction]
-        self._not_matched_actions = list()  # type: List[proto.MergeAction]
-        self._not_matched_by_source_actions = list()  # type: List[proto.MergeAction]
+        self._matched_actions: list[proto.MergeAction] = list()
+        self._not_matched_actions: list[proto.MergeAction] = list()
+        self._not_matched_by_source_actions: list[proto.MergeAction] = list()
 
     def whenMatched(self, condition: Optional[Column] = None) -> "MergeIntoWriter.WhenMatched":
         return self.WhenMatched(self, condition)
@@ -242,7 +238,7 @@ def _test() -> None:
         .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.connect.merge,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,

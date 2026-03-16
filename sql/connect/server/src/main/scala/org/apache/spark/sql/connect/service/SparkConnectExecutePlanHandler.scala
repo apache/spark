@@ -22,6 +22,7 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.SparkSQLException
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.BYTE_SIZE
 
 class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[proto.ExecutePlanResponse])
     extends Logging {
@@ -34,6 +35,14 @@ class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[proto.Exec
     val sessionHolder = SparkConnectService
       .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getSessionId, previousSessionId)
     val executeKey = ExecuteKey(v, sessionHolder)
+
+    // Log compressed sizes from gRPC Context (set by RequestDecompressionInterceptor)
+    val compressedSize = RequestDecompressionContext.getCompressedSize
+    if (compressedSize.isDefined) {
+      logDebug(
+        log"ExecutePlan request received with compressed plan: " +
+          log"compressedSize=${MDC(BYTE_SIZE, compressedSize.get)} bytes")
+    }
 
     SparkConnectService.executionManager.getExecuteHolder(executeKey) match {
       case None =>

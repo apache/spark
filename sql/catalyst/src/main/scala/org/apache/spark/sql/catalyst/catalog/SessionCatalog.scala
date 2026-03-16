@@ -39,6 +39,8 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.analysis.TableFunctionRegistry.TableFunctionBuilder
 import org.apache.spark.sql.catalyst.catalog.SQLFunction.parseDefault
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Cast, Expression, ExpressionInfo, LateralSubquery, NamedArgumentExpression, NamedExpression, OuterReference, ScalarSubquery, UpCast}
+import org.apache.spark.sql.catalyst.expressions.NamedLambdaVariable
+import org.apache.spark.sql.catalyst.expressions.UnresolvedNamedLambdaVariable
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter, LateralJoin, LogicalPlan, NamedParametersSupport, OneRowRelation, Project, SubqueryAlias, View}
@@ -49,6 +51,8 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
+import org.apache.spark.sql.internal.connector.V1Function
+import org.apache.spark.sql.metricview.util.MetricViewPlanner
 import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, PartitioningUtils}
 import org.apache.spark.util.ArrayImplicits._
@@ -56,6 +60,15 @@ import org.apache.spark.util.Utils
 
 object SessionCatalog {
   val DEFAULT_DATABASE = "default"
+
+  /**
+   * Kind of session-scoped function namespace for lookup/resolve.
+   * Used by the kind-based API to avoid separate methods per
+   * (builtin/temp) x (lookup/resolve) x (scalar/table).
+   */
+  sealed trait SessionFunctionKind
+  case object Builtin extends SessionFunctionKind
+  case object Temp extends SessionFunctionKind
 }
 
 /**
@@ -79,6 +92,169 @@ class SessionCatalog(
     defaultDatabase: String = SQLConf.get.defaultDatabase) extends SQLConfHelper with Logging {
   import SessionCatalog._
   import CatalogTypes.TablePartitionSpec
+
+  /**
+   * Database qualifier used to store temporary functions in the function registry.
+   * Temporary functions use composite keys to coexist with builtin functions of the same name:
+   * - Builtin functions (including extensions): FunctionIdentifier(name, None)
+   * - Temp functions: FunctionIdentifier(name, Some(CatalogManager.SESSION_NAMESPACE))
+   */
+  private val TEMP_FUNCTION_DB = CatalogManager.SESSION_NAMESPACE
+
+  /**
+   * Creates a FunctionIdentifier for a temporary function with the TEMP_FUNCTION_DB database
+   * qualifier. This enables temporary functions to coexist with builtin functions of the same name.
+   */
+  private def tempFunctionIdentifier(name: String): FunctionIdentifier =
+    FunctionIdentifier(
+      format(name),
+      Some(TEMP_FUNCTION_DB),
+      Some(CatalogManager.SYSTEM_CATALOG_NAME))
+
+  /**
+   * Checks if a FunctionIdentifier represents a temporary function by checking for the
+   * TEMP_FUNCTION_DB database qualifier.
+   */
+  private def isTempFunctionIdentifier(identifier: FunctionIdentifier): Boolean =
+    identifier.database.contains(TEMP_FUNCTION_DB)
+
+  // --------------------------------
+  // | PATH-Based Resolution        |
+  // --------------------------------
+  // Functions are resolved by searching through an ordered PATH of namespaces.
+  // This provides a unified, data-driven resolution mechanism instead of hardcoded checks.
+
+  /**
+   * Function resolution PATH - ordered list of namespaces to search for unqualified functions.
+   * Each entry is a FunctionIdentifier representing a namespace (catalog + database).
+   * The funcName field is unused (empty string) as these represent namespace templates.
+   *
+   * Resolution order follows the configured path: builtin then session (default "second"),
+   * or session then builtin (legacy "first"), or builtin only ("last" - session tried after
+   * persistent in FunctionResolution).
+   *
+   * When resolving a view, the system.session namespace is included in the path, but
+   * handleViewContext filters to only return temporary functions that were referred to
+   * when the view was created.
+   *
+   * These identifiers are cached for performance since they're accessed frequently.
+   */
+  private val SESSION_NAMESPACE_TEMPLATE = FunctionIdentifier(
+    funcName = "",
+    database = Some(CatalogManager.SESSION_NAMESPACE),
+    catalog = Some(CatalogManager.SYSTEM_CATALOG_NAME))
+
+  private val BUILTIN_NAMESPACE_TEMPLATE = FunctionIdentifier(
+    funcName = "",
+    database = Some(CatalogManager.BUILTIN_NAMESPACE),
+    catalog = Some(CatalogManager.SYSTEM_CATALOG_NAME))
+
+  // The resolution path: builtin -> session (session "second")
+  private val RESOLUTION_PATH = Seq(
+    BUILTIN_NAMESPACE_TEMPLATE,
+    SESSION_NAMESPACE_TEMPLATE
+  )
+
+  // Legacy resolution path: session -> builtin (session "first")
+  private val LEGACY_RESOLUTION_PATH = Seq(
+    SESSION_NAMESPACE_TEMPLATE,
+    BUILTIN_NAMESPACE_TEMPLATE
+  )
+
+  // Session last: only builtin (session tried after persistent in FunctionResolution)
+  private val SESSION_LAST_RESOLUTION_PATH = Seq(BUILTIN_NAMESPACE_TEMPLATE)
+
+  /**
+   * Returns the resolution path for function lookup.
+   * @return Ordered sequence of namespace identifiers.
+   */
+  private def resolutionPath(): Seq[FunctionIdentifier] = {
+    conf.sessionFunctionResolutionOrder match {
+      case "first" => LEGACY_RESOLUTION_PATH
+      case "last" => SESSION_LAST_RESOLUTION_PATH
+      case _ => RESOLUTION_PATH // "second" (default)
+    }
+  }
+
+  /**
+   * Maps a namespace template to an actual storage identifier for a specific function.
+   *
+   * Storage conventions:
+   * - Builtin functions: FunctionIdentifier(name, None, None)
+   * - Temp functions: FunctionIdentifier(name, Some("session"), Some("system"))
+   * - Other: FunctionIdentifier(name, namespace.database, namespace.catalog)
+   */
+  private def namespaceToIdentifier(
+      namespace: FunctionIdentifier,
+      name: String): FunctionIdentifier = {
+    namespace.database match {
+      case Some(CatalogManager.BUILTIN_NAMESPACE) =>
+        FunctionIdentifier(format(name))
+
+      case _ =>
+        namespace.copy(funcName = name)
+    }
+  }
+
+  /**
+   * Checks if a namespace represents temporary functions.
+   */
+  private def isSessionNamespace(namespace: FunctionIdentifier): Boolean = {
+    namespace.database.contains(CatalogManager.SESSION_NAMESPACE)
+  }
+
+  /**
+   * Lookup a function in a specific namespace.
+   *
+   * @param namespace Namespace identifier (catalog + database)
+   * @param name Function name (unqualified)
+   * @param registry The registry to search (FunctionRegistry or TableFunctionRegistry)
+   * @tparam T The registry's type parameter (Expression or LogicalPlan)
+   * @return ExpressionInfo if function found in this namespace
+   */
+  private def lookupInNamespace[T](
+      namespace: FunctionIdentifier,
+      name: String,
+      registry: FunctionRegistryBase[T]): Option[ExpressionInfo] = {
+
+    val identifier = namespaceToIdentifier(namespace, name)
+    val result = registry.lookupFunction(identifier)
+
+    // Apply view context filtering for temp functions
+    if (isSessionNamespace(namespace)) {
+      handleViewContext(name, result)
+    } else {
+      result
+    }
+  }
+
+  /**
+   * Resolve a function in a specific namespace by building it with arguments.
+   *
+   * @param namespace Namespace identifier (catalog + database)
+   * @param name Function name (unqualified)
+   * @param arguments Arguments to pass to the function builder
+   * @param registry The registry to search
+   * @tparam T The registry's type parameter
+   * @return Built function instance if found
+   */
+  private def resolveInNamespace[T](
+      namespace: FunctionIdentifier,
+      name: String,
+      arguments: Seq[Expression],
+      registry: FunctionRegistryBase[T]): Option[T] = {
+
+    val identifier = namespaceToIdentifier(namespace, name)
+
+    if (!registry.functionExists(identifier)) {
+      None
+    } else if (isSessionNamespace(namespace)) {
+      // For temp functions, apply view context handling
+      handleViewContext(name, Option(registry.lookupFunction(identifier, arguments)))
+    } else {
+      Some(registry.lookupFunction(identifier, arguments))
+    }
+  }
 
   // For testing only.
   def this(
@@ -268,7 +444,8 @@ class SessionCatalog(
 
   private def requireTableExists(name: TableIdentifier): Unit = {
     if (!tableExists(name)) {
-      throw new NoSuchTableException(db = name.database.get, table = name.table)
+      throw new NoSuchTableException(
+        Seq(name.catalog.get, name.database.get, name.table))
     }
   }
 
@@ -581,8 +758,7 @@ class SessionCatalog(
     val qualifiedIdent = qualifyIdentifier(name)
     val db = qualifiedIdent.database.get
     val table = qualifiedIdent.table
-    requireDbExists(db)
-    requireTableExists(qualifiedIdent)
+    // Let the external catalog handle all error cases (db not exists, table not exists)
     attachCatalogName(externalCatalog.getTable(db, table))
   }
 
@@ -748,6 +924,13 @@ class SessionCatalog(
   }
 
   /**
+   * Generate a [[View]] operator from the local or global temporary view stored.
+   */
+  def getLocalOrGlobalTempView(name: Seq[String]): Option[View] = {
+    getRawLocalOrGlobalTempView(name).map(getTempViewPlan)
+  }
+
+  /**
    * Return the raw logical plan of a temporary local or global view for the given name.
    */
   def getRawLocalOrGlobalTempView(name: Seq[String]): Option[TemporaryViewRelation] = {
@@ -881,14 +1064,8 @@ class SessionCatalog(
       }
     } else {
       if (name.database.isDefined || !tempViews.contains(table)) {
-        requireDbExists(db)
-        // When ignoreIfNotExists is false, no exception is issued when the table does not exist.
-        // Instead, log it as an error message.
-        if (tableExists(qualifiedIdent)) {
-          externalCatalog.dropTable(db, table, ignoreIfNotExists = true, purge = purge)
-        } else if (!ignoreIfNotExists) {
-          throw new NoSuchTableException(db = db, table = table)
-        }
+        // Let the external catalog handle all error cases (db not exists, table not exists)
+        externalCatalog.dropTable(db, table, ignoreIfNotExists, purge)
       } else {
         tempViews.remove(table)
       }
@@ -935,13 +1112,36 @@ class SessionCatalog(
     val table = qualifiedIdent.table
     val multiParts = Seq(CatalogManager.SESSION_CATALOG_NAME, db, table)
 
-    if (metadata.tableType == CatalogTableType.VIEW) {
+    if (CatalogTable.isMetricView(metadata)) {
+      parseMetricViewDefinition(metadata)
+    } else if (metadata.tableType == CatalogTableType.VIEW) {
       // The relation is a view, so we wrap the relation by:
       // 1. Add a [[View]] operator over the relation to keep track of the view desc;
       // 2. Wrap the logical plan in a [[SubqueryAlias]] which tracks the name of the view.
       SubqueryAlias(multiParts, fromCatalogTable(metadata, isTempView = false))
     } else {
       SubqueryAlias(multiParts, UnresolvedCatalogRelation(metadata, options))
+    }
+  }
+
+  private def parseMetricViewDefinition(metadata: CatalogTable): LogicalPlan = {
+    val viewDefinition = metadata.viewText.getOrElse {
+      throw SparkException.internalError("Invalid view without text.")
+    }
+    val viewConfigs = metadata.viewSQLConfigs
+    val origin = CurrentOrigin.get.copy(
+      objectType = Some("METRIC VIEW"),
+      objectName = Some(metadata.qualifiedName)
+    )
+    SQLConf.withExistingConf(
+      View.effectiveSQLConf(
+        configs = viewConfigs,
+        isTempView = false
+      )
+    ) {
+      CurrentOrigin.withOrigin(origin) {
+        MetricViewPlanner.planRead(metadata, viewDefinition, parser, metadata.schema)
+      }
     }
   }
 
@@ -1023,7 +1223,16 @@ class SessionCatalog(
           // output is the same with the view output.
           metadata.schema.fieldNames.toImmutableArraySeq
         } else {
-          assert(metadata.viewQueryColumnNames.length == metadata.schema.length)
+          assert(metadata.viewQueryColumnNames.length == metadata.schema.length,
+            "Corrupted view metadata detected for view " +
+            metadata.identifier.quotedString + ". " +
+            "The number of view query column names " +
+            metadata.viewQueryColumnNames.length + " " +
+            "does not match the number of columns in the view schema " +
+            metadata.schema.length + ". " +
+            "View query column names: [" + metadata.viewQueryColumnNames.mkString(", ") + "], " +
+            "View schema columns: [" + metadata.schema.fieldNames.mkString(", ") + "]. " +
+            "This indicates corrupted view metadata that needs to be repaired.")
           metadata.viewQueryColumnNames
         }
 
@@ -1508,7 +1717,13 @@ class SessionCatalog(
     val qualifiedIdent = qualifyIdentifier(name)
     val db = qualifiedIdent.database.get
     val funcName = qualifiedIdent.funcName
-    requireDbExists(db)
+    if (!databaseExists(db)) {
+      if (ignoreIfNotExists) {
+        return
+      } else {
+        throw new NoSuchNamespaceException(Seq(CatalogManager.SESSION_CATALOG_NAME, db))
+      }
+    }
     if (functionExists(qualifiedIdent)) {
       if (functionRegistry.functionExists(qualifiedIdent)) {
         // If we have loaded this function into the FunctionRegistry,
@@ -1592,6 +1807,20 @@ class SessionCatalog(
       throw UserDefinedFunctionErrors.notAScalarFunction(function.name.nameParts)
     }
     (input: Seq[Expression]) => {
+      // Check if any input contains a lambda variable
+      val hasLambdaVar = input.exists { expr =>
+        expr.find {
+          case _: NamedLambdaVariable => true
+          case _: UnresolvedNamedLambdaVariable => true
+          case _ => false
+        }.isDefined
+      }
+      if (hasLambdaVar) {
+        throw new AnalysisException(
+          errorClass = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_SQL_UDF",
+          messageParameters = Map(
+            "funcName" -> function.name.unquotedString))
+      }
       val args = rearrangeArguments(function.inputParam, input, function.name.toString)
       val returnType = function.getScalarFuncReturnType
       SQLFunctionExpression(
@@ -1646,7 +1875,9 @@ class SessionCatalog(
         .putString("__funcInputAlias", "true")
         .build()
     }
-    assert(!function.isTableFunc)
+    assert(!function.isTableFunc,
+      "Function '" + function.name + "' is a table function. " +
+      "Use makeSQLTableFunctionPlan() instead of makeSQLFunctionPlan().")
     val funcName = function.name.funcName
 
     // Use captured SQL configs when parsing a SQL function.
@@ -1657,13 +1888,31 @@ class SessionCatalog(
       val inputParam = function.inputParam
       val returnType = function.getScalarFuncReturnType
       val (expression, query) = function.getExpressionAndQuery(parser, isTableFunc = false)
-      assert(expression.isDefined || query.isDefined)
+      assert(expression.isDefined || query.isDefined,
+        "SQL function '" + function.name + "' could not be parsed. " +
+        "Neither expression nor query could be extracted from function body. " +
+        "exprText=" + function.exprText + ", queryText=" + function.queryText + ".")
 
       // Check function arguments
       val paramSize = inputParam.map(_.size).getOrElse(0)
       if (input.size > paramSize) {
         throw QueryCompilationErrors.wrongNumArgsError(
           name, paramSize.toString, input.size)
+      }
+
+      // Check if any input contains a lambda variable
+      val hasLambdaVar = input.exists { expr =>
+        expr.find {
+          case _: NamedLambdaVariable => true
+          case _: UnresolvedNamedLambdaVariable => true
+          case _ => false
+        }.isDefined
+      }
+      if (hasLambdaVar) {
+        throw new AnalysisException(
+          errorClass = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_SQL_UDF",
+          messageParameters = Map(
+            "funcName" -> function.name.unquotedString))
       }
 
       val inputs = inputParam.map { param =>
@@ -1746,12 +1995,17 @@ class SessionCatalog(
       function: SQLFunction,
       input: Seq[Expression],
       outputAttrs: Seq[Attribute]): LogicalPlan = {
-    assert(function.isTableFunc)
+    assert(function.isTableFunc,
+      "Function '" + function.name + "' is a scalar function. " +
+      "Use makeSQLFunctionPlan() instead of makeSQLTableFunctionPlan().")
     val funcName = function.name.funcName
     val inputParam = function.inputParam
     val returnParam = function.getTableFuncReturnCols
     val (_, query) = function.getExpressionAndQuery(parser, isTableFunc = true)
-    assert(query.isDefined)
+    assert(query.isDefined,
+      "SQL table function '" + function.name + "' could not be parsed. " +
+      "Query could not be extracted from function body. " +
+      "queryText=" + function.queryText + ".")
 
     // Check function arguments
     val paramSize = inputParam.map(_.size).getOrElse(0)
@@ -1790,7 +2044,12 @@ class SessionCatalog(
       query.get
     }
 
-    assert(returnParam.length == outputAttrs.length)
+    assert(returnParam.length == outputAttrs.length,
+      "SQL table function '" + function.name + "' has mismatched return columns. " +
+      "Expected " + outputAttrs.length + " output attributes but found " +
+      returnParam.length + " return parameters. " +
+      "Return parameters: [" + returnParam.fieldNames.mkString(", ") + "], " +
+      "Output attributes: [" + outputAttrs.map(_.name).mkString(", ") + "].")
     val output = returnParam.fields.zipWithIndex.map { case (param, i) =>
       // Since we cannot get the output of a unresolved logical plan, we need
       // to reference the output column of the lateral join by its position.
@@ -1857,11 +2116,38 @@ class SessionCatalog(
       registry: FunctionRegistryBase[T],
       functionBuilder: FunctionRegistryBase[T]#FunctionBuilder): Unit = {
     val func = funcDefinition.identifier
-    if (registry.functionExists(func) && !overrideIfExists) {
+
+    // Determine the key to use for registration:
+    // - Temporary functions (unqualified): use composite key with TEMP_FUNCTION_DB database
+    // - Persistent functions (qualified): keep qualification to avoid conflicts
+    val identToRegister = if (func.database.isEmpty) {
+      // Temporary function: use TEMP_FUNCTION_DB.funcName
+      tempFunctionIdentifier(func.funcName)
+    } else {
+      // Persistent function: keep original qualified identifier
+      func
+    }
+
+    // Security check: When legacy mode is enabled, block SQL-created temporary functions
+    // from shadowing builtin functions (to preserve master behavior)
+    // Scala UDFs are still allowed to shadow in legacy mode
+    // We throw ROUTINE_ALREADY_EXISTS to indicate the builtin function already exists
+    val sessionFirst = conf.sessionFunctionResolutionOrder == "first"
+    if (func.database.isEmpty && sessionFirst && !overrideIfExists) {
+      val funcName = func.funcName
+      // Check if function exists in builtin namespace (extensions are stored as builtins)
+      val builtinIdent = FunctionIdentifier(format(funcName))
+      if (functionRegistry.functionExists(builtinIdent) ||
+          tableFunctionRegistry.functionExists(builtinIdent)) {
+        throw QueryCompilationErrors.functionAlreadyExistsError(func)
+      }
+    }
+
+    if (registry.functionExists(identToRegister) && !overrideIfExists) {
       throw QueryCompilationErrors.functionAlreadyExistsError(func)
     }
     val info = makeExprInfoForHiveFunction(funcDefinition)
-    registry.registerFunction(func, info, functionBuilder)
+    registry.registerFunction(identToRegister, info, functionBuilder)
   }
 
   private def makeExprInfoForHiveFunction(func: CatalogFunction): ExpressionInfo = {
@@ -1936,22 +2222,68 @@ class SessionCatalog(
       }
 
     NamedParametersSupport.defaultRearrange(
-      FunctionSignature(paramNames), expressions, functionName)
+      FunctionSignature(paramNames), expressions, functionName, SQLConf.get.resolver)
   }
 
   /**
    * Registers a temporary or permanent SQL function into a session-specific function registry.
+   * For temporary functions, validates that the function name doesn't exist as a different type
+   * (scalar vs. table) to prevent ambiguous DROP operations.
+   * For persistent functions, the metastore already enforces this constraint.
    */
   private def registerUserDefinedFunction[T](
       function: UserDefinedFunction,
       overrideIfExists: Boolean,
       registry: FunctionRegistryBase[T],
       functionBuilder: Seq[Expression] => T): Unit = {
-    if (registry.functionExists(function.name) && !overrideIfExists) {
-      throw QueryCompilationErrors.functionAlreadyExistsError(function.name)
+
+    val isTemporary = function.name.database.isEmpty
+
+    if (isTemporary) {
+      // Use FunctionIdentifier with TEMP_FUNCTION_DB for temporary functions
+      val tempIdentifier = tempFunctionIdentifier(function.name.funcName)
+
+      // Security check: When legacy mode is enabled, block SQL-created temporary functions
+      // from shadowing builtin functions (including extensions) as a safeguard
+      // We throw ROUTINE_ALREADY_EXISTS to indicate the builtin function already exists
+      if ((conf.sessionFunctionResolutionOrder == "first") && !overrideIfExists) {
+        val funcName = function.name.funcName
+        // Check if function exists in builtin namespace (extensions are stored as builtins)
+        val builtinIdent = FunctionIdentifier(format(funcName))
+        if (functionRegistry.functionExists(builtinIdent) ||
+            tableFunctionRegistry.functionExists(builtinIdent)) {
+          throw QueryCompilationErrors.functionAlreadyExistsError(function.name)
+        }
+      }
+
+      // Check if this temp function already exists in the target registry
+      if (registry.functionExists(tempIdentifier) && !overrideIfExists) {
+        throw QueryCompilationErrors.functionAlreadyExistsError(function.name)
+      }
+
+      // Check if function exists in the OTHER registry as a different type.
+      // This prevents having both scalar and table temporary functions with the same name,
+      // which would make DROP TEMPORARY FUNCTION ambiguous (it would drop both).
+      val otherRegistry: FunctionRegistryBase[_] =
+        if (registry eq functionRegistry) tableFunctionRegistry else functionRegistry
+      if (otherRegistry.functionExists(tempIdentifier) && !overrideIfExists) {
+        throw QueryCompilationErrors.functionAlreadyExistsError(function.name)
+      }
+
+      // With OR REPLACE, drop from the other registry first if it exists there
+      if (overrideIfExists) {
+        otherRegistry.dropFunction(tempIdentifier)
+      }
+
+      val info = function.toExpressionInfo
+      registry.registerFunction(tempIdentifier, info, functionBuilder)
+    } else {
+      registerFunction(
+        function.toCatalogFunction,
+        overrideIfExists,
+        registry,
+        functionBuilder)
     }
-    val info = function.toExpressionInfo
-    registry.registerFunction(function.name, info, functionBuilder)
   }
 
   /**
@@ -1959,15 +2291,18 @@ class SessionCatalog(
    * or [[TableFunctionRegistry]]. Return true if function exists.
    */
   def unregisterFunction(name: FunctionIdentifier): Boolean = {
-    functionRegistry.dropFunction(name) || tableFunctionRegistry.dropFunction(name)
+    // If it's an unqualified name, it's a temp function stored with TEMP_FUNCTION_DB database
+    val tempIdent = if (name.database.isEmpty) tempFunctionIdentifier(name.funcName) else name
+    functionRegistry.dropFunction(tempIdent) || tableFunctionRegistry.dropFunction(tempIdent)
   }
 
   /**
    * Drop a temporary function.
    */
   def dropTempFunction(name: String, ignoreIfNotExists: Boolean): Unit = {
-    if (!functionRegistry.dropFunction(FunctionIdentifier(name)) &&
-        !tableFunctionRegistry.dropFunction(FunctionIdentifier(name)) &&
+    val tempIdent = tempFunctionIdentifier(name)
+    if (!functionRegistry.dropFunction(tempIdent) &&
+        !tableFunctionRegistry.dropFunction(tempIdent) &&
         !ignoreIfNotExists) {
       throw new NoSuchTempFunctionException(name)
     }
@@ -1977,9 +2312,15 @@ class SessionCatalog(
    * Returns whether it is a temporary function. If not existed, returns false.
    */
   def isTemporaryFunction(name: FunctionIdentifier): Boolean = {
-    // A temporary function is a function that has been registered in functionRegistry
-    // without a database name, and is neither a built-in function nor a Hive function
-    name.database.isEmpty && isRegisteredFunction(name) && !isBuiltinFunction(name)
+    // A temporary function is stored with database = TEMP_FUNCTION_DB
+    if (name.database.isEmpty) {
+      val tempIdent = tempFunctionIdentifier(name.funcName)
+      functionRegistry.functionExists(tempIdent) ||
+        tableFunctionRegistry.functionExists(tempIdent)
+    } else {
+      isTempFunctionIdentifier(name) &&
+        (functionRegistry.functionExists(name) || tableFunctionRegistry.functionExists(name))
+    }
   }
 
   /**
@@ -1987,7 +2328,25 @@ class SessionCatalog(
    * session. If not existed, return false.
    */
   def isRegisteredFunction(name: FunctionIdentifier): Boolean = {
-    functionRegistry.functionExists(name) || tableFunctionRegistry.functionExists(name)
+    // Check if it exists as temp (with TEMP_FUNCTION_DB db) or builtin (without db) or persistent
+    if (name.database.isEmpty) {
+      val tempIdent = tempFunctionIdentifier(name.funcName)
+      val builtinIdent = FunctionIdentifier(format(name.funcName))
+
+      // Check if temp function exists
+      val hasTemp = functionRegistry.functionExists(tempIdent) ||
+                     tableFunctionRegistry.functionExists(tempIdent)
+
+      // Check if builtin exists - but ONLY if it's actually a builtin, not a cached persistent
+      val hasBuiltin = (FunctionRegistry.functionSet.contains(builtinIdent) ||
+                        TableFunctionRegistry.functionSet.contains(builtinIdent)) &&
+                       (functionRegistry.functionExists(builtinIdent) ||
+                        tableFunctionRegistry.functionExists(builtinIdent))
+
+      hasTemp || hasBuiltin
+    } else {
+      functionRegistry.functionExists(name) || tableFunctionRegistry.functionExists(name)
+    }
   }
 
   /**
@@ -2014,138 +2373,290 @@ class SessionCatalog(
   }
 
   /**
-   * Look up the `ExpressionInfo` of the given function by name if it's a built-in or temp function.
-   * This only supports scalar functions.
+   * Handles view resolution context for temporary functions (both scalar and table-valued).
+   * When resolving a view, only returns the result if the function is explicitly referred
+   * by that view. Otherwise, tracks the function reference for future view creation.
+   *
+   * This generic helper works for both scalar functions (FunctionRegistry) and table-valued
+   * functions (TableFunctionRegistry) due to the type parameter T.
+   *
+   * @param name The function name (unqualified)
+   * @param result The result to wrap with view context handling
+   * @tparam T The result type (ExpressionInfo, Expression, or LogicalPlan)
+   * @return The result if visible in current context, None otherwise
    */
-  def lookupBuiltinOrTempFunction(name: String): Option[ExpressionInfo] = {
-    FunctionRegistry.builtinOperators.get(name.toLowerCase(Locale.ROOT)).orElse {
-      synchronized(lookupTempFuncWithViewContext(
-        name, FunctionRegistry.builtin.functionExists, functionRegistry.lookupFunction))
-    }
-  }
-
-  /**
-   * Look up the `ExpressionInfo` of the given function by name if it's a built-in or
-   * temp table function.
-   */
-  def lookupBuiltinOrTempTableFunction(name: String): Option[ExpressionInfo] = synchronized {
-    lookupTempFuncWithViewContext(
-      name, TableFunctionRegistry.builtin.functionExists, tableFunctionRegistry.lookupFunction)
-  }
-
-  /**
-   * Look up a built-in or temp scalar function by name and resolves it to an Expression if such
-   * a function exists.
-   */
-  def resolveBuiltinOrTempFunction(name: String, arguments: Seq[Expression]): Option[Expression] = {
-    resolveBuiltinOrTempFunctionInternal(
-      name, arguments, FunctionRegistry.builtin.functionExists, functionRegistry)
-  }
-
-  /**
-   * Look up a built-in or temp table function by name and resolves it to a LogicalPlan if such
-   * a function exists.
-   */
-  def resolveBuiltinOrTempTableFunction(
-      name: String, arguments: Seq[Expression]): Option[LogicalPlan] = {
-    resolveBuiltinOrTempFunctionInternal(
-      name, arguments, TableFunctionRegistry.builtin.functionExists, tableFunctionRegistry)
-  }
-
-  private def resolveBuiltinOrTempFunctionInternal[T](
-      name: String,
-      arguments: Seq[Expression],
-      isBuiltin: FunctionIdentifier => Boolean,
-      registry: FunctionRegistryBase[T]): Option[T] = synchronized {
-    val funcIdent = FunctionIdentifier(name)
-    if (!registry.functionExists(funcIdent)) {
-      None
-    } else {
-      lookupTempFuncWithViewContext(
-        name, isBuiltin, ident => Option(registry.lookupFunction(ident, arguments)))
-    }
-  }
-
-  private def lookupTempFuncWithViewContext[T](
-      name: String,
-      isBuiltin: FunctionIdentifier => Boolean,
-      lookupFunc: FunctionIdentifier => Option[T]): Option[T] = {
-    val funcIdent = FunctionIdentifier(name)
-    if (isBuiltin(funcIdent)) {
-      lookupFunc(funcIdent)
-    } else {
+  private def handleViewContext[T](name: String, result: Option[T]): Option[T] =
+    result.filter { _ =>
       val isResolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
       val referredTempFunctionNames = AnalysisContext.get.referredTempFunctionNames
+
       if (isResolvingView) {
         // When resolving a view, only return a temp function if it's referred by this view.
-        if (referredTempFunctionNames.contains(name)) {
-          lookupFunc(funcIdent)
+        referredTempFunctionNames.contains(name)
+      } else {
+        // We are not resolving a view and the function is a temp one, add it to
+        // AnalysisContext so if a view is being created, it can be checked.
+        AnalysisContext.get.referredTempFunctionNames.add(name)
+        true
+      }
+    }
+
+  /**
+   * Looks up functions using PATH-based resolution.
+   * Searches through the configured resolution path with view context handling.
+   *
+   * @param name The function name (unqualified).
+   * @param registry The registry to search (FunctionRegistry or TableFunctionRegistry).
+   * @param checkBuiltinOperators Whether to check built-in operators first (scalar functions only).
+   * @tparam T The registry's type parameter (Expression for FunctionRegistry,
+   *           LogicalPlan for TableFunctionRegistry).
+   * @return ExpressionInfo if function found, None otherwise.
+   */
+  private def lookupFunctionWithShadowing[T](
+      name: String,
+      registry: FunctionRegistryBase[T],
+      checkBuiltinOperators: Boolean): Option[ExpressionInfo] = {
+
+    // Check built-in operators first (only for scalar functions).
+    val operatorResult = if (checkBuiltinOperators) {
+      FunctionRegistry.builtinOperators.get(name.toLowerCase(Locale.ROOT))
+    } else {
+      None
+    }
+
+    operatorResult.orElse {
+      // Use PATH-based resolution: iterate through namespaces until a match is found.
+      val path = resolutionPath()
+
+      // Use iterator for short-circuit evaluation (stops at first match).
+      path.iterator.flatMap { namespace =>
+        lookupInNamespace(namespace, name, registry)
+      }.nextOption()
+    }
+  }
+
+  /**
+   * Builds the FunctionIdentifier for a given session function kind and name.
+   * Used by the kind-based lookup/resolve API.
+   */
+  private def functionIdentifier(
+      kind: SessionCatalog.SessionFunctionKind,
+      name: String): FunctionIdentifier =
+    kind match {
+      case SessionCatalog.Builtin =>
+        FunctionIdentifier(format(name))
+      case SessionCatalog.Temp =>
+        tempFunctionIdentifier(name)
+    }
+
+  /**
+   * Kind-based lookup: one entry point for all
+   * (builtin/temp) x (scalar/table).
+   * Callers that have already determined the kind (e.g. FunctionResolution) use this
+   * instead of separate lookup* methods.
+   */
+  def lookupFunctionInfo(
+      kind: SessionCatalog.SessionFunctionKind,
+      name: String,
+      tableFunction: Boolean): Option[ExpressionInfo] = {
+    val identifier = functionIdentifier(kind, name)
+    val registry = if (tableFunction) tableFunctionRegistry else functionRegistry
+    kind match {
+      case SessionCatalog.Temp =>
+        synchronized {
+          handleViewContext(name, registry.lookupFunction(identifier))
+        }
+      case _ =>
+        registry.lookupFunction(identifier)
+    }
+  }
+
+  /**
+   * Kind-based resolve for scalar functions.
+   */
+  def resolveScalarFunction(
+      kind: SessionCatalog.SessionFunctionKind,
+      name: String,
+      arguments: Seq[Expression]): Option[Expression] = {
+    val identifier = functionIdentifier(kind, name)
+    kind match {
+      case SessionCatalog.Builtin =>
+        if (functionRegistry.functionExists(identifier)) {
+          Option(functionRegistry.lookupFunction(identifier, arguments))
         } else {
           None
         }
-      } else {
-        val result = lookupFunc(funcIdent)
-        if (result.isDefined) {
-          // We are not resolving a view and the function is a temp one, add it to
-          // `AnalysisContext`, so during the view creation, we can save all referred temp
-          // functions to view metadata.
-          AnalysisContext.get.referredTempFunctionNames.add(name)
+      case SessionCatalog.Temp =>
+        synchronized {
+          if (functionRegistry.functionExists(identifier)) {
+            handleViewContext(name, Option(functionRegistry.lookupFunction(identifier, arguments)))
+          } else {
+            None
+          }
         }
-        result
-      }
     }
   }
 
   /**
-   * Look up the `ExpressionInfo` of the given function by name if it's a persistent function.
-   * This supports both scalar and table functions.
+   * Kind-based resolve for table functions.
+   */
+  def resolveTableFunction(
+      kind: SessionCatalog.SessionFunctionKind,
+      name: String,
+      arguments: Seq[Expression]): Option[LogicalPlan] = {
+    val identifier = functionIdentifier(kind, name)
+    kind match {
+      case SessionCatalog.Builtin =>
+        if (tableFunctionRegistry.functionExists(identifier)) {
+          Option(tableFunctionRegistry.lookupFunction(identifier, arguments))
+        } else {
+          None
+        }
+      case SessionCatalog.Temp =>
+        synchronized {
+          if (tableFunctionRegistry.functionExists(identifier)) {
+            handleViewContext(
+              name, Option(tableFunctionRegistry.lookupFunction(identifier, arguments)))
+          } else {
+            None
+          }
+        }
+    }
+  }
+
+  /**
+   * Look up the `ExpressionInfo` of the given function by name.
+   * Resolution order follows the configured path (e.g. builtin then session).
+   * This only supports scalar functions.
+   */
+  def lookupBuiltinOrTempFunction(name: String): Option[ExpressionInfo] = {
+    lookupFunctionWithShadowing(name, functionRegistry, checkBuiltinOperators = true)
+  }
+
+  /**
+   * Look up the `ExpressionInfo` of the given function by name.
+   * Resolution order follows the configured path (e.g. builtin then session).
+   */
+  def lookupBuiltinOrTempTableFunction(name: String): Option[ExpressionInfo] = synchronized {
+    lookupFunctionWithShadowing(name, tableFunctionRegistry, checkBuiltinOperators = false)
+  }
+
+  /**
+   * Look up a scalar function by name and resolve it to an Expression.
+   * Resolution order follows the configured path (e.g. builtin then session).
+   */
+  def resolveBuiltinOrTempFunction(name: String, arguments: Seq[Expression]): Option[Expression] =
+    resolveFunctionWithFallback(name, arguments, functionRegistry)
+
+  /**
+   * Look up a table function by name and resolve it to a LogicalPlan.
+   * Resolution order follows the configured path (e.g. builtin then session);
+   * extension functions are stored in the builtin namespace.
+   *
+   * For unqualified names, use [[resolveBuiltinOrTempTableFunctionRespectingPathOrder]] so that
+   * if a scalar function appears before a table function in the path, the caller can throw
+   * NOT_A_TABLE_FUNCTION (consistent with scalar context where table-first yields NOT_A_SCALAR).
+   */
+  def resolveBuiltinOrTempTableFunction(
+      name: String,
+      arguments: Seq[Expression]): Option[LogicalPlan] =
+    resolveFunctionWithFallback(name, arguments, tableFunctionRegistry)
+
+  /**
+   * Resolves functions using PATH-based resolution.
+   * Searches through the resolution path, returning the first function found.
+   *
+   * @param name The function name (unqualified).
+   * @param arguments The arguments to pass to the function.
+   * @param registry The registry to search (FunctionRegistry or TableFunctionRegistry).
+   * @tparam T The registry's type parameter (Expression for FunctionRegistry,
+   *           LogicalPlan for TableFunctionRegistry).
+   * @return Resolved function if found, None otherwise.
+   */
+  private def resolveFunctionWithFallback[T](
+      name: String,
+      arguments: Seq[Expression],
+      registry: FunctionRegistryBase[T]): Option[T] = {
+
+    // Use PATH-based resolution: iterate through namespaces until a match is found.
+    val path = resolutionPath()
+
+    // Use iterator for short-circuit evaluation (stops at first match).
+    path.iterator.flatMap { namespace =>
+      resolveInNamespace(namespace, name, arguments, registry)
+    }.nextOption()
+  }
+
+  /**
+   * Look up a persistent function's ExpressionInfo by name (for DESCRIBE FUNCTION).
+   * This only fetches metadata without loading resources or creating builders.
    */
   def lookupPersistentFunction(name: FunctionIdentifier): ExpressionInfo = {
     val qualifiedIdent = qualifyIdentifier(name)
-    val db = qualifiedIdent.database.get
-    val funcName = qualifiedIdent.funcName
+    // Check if already cached in either registry
     functionRegistry.lookupFunction(qualifiedIdent)
       .orElse(tableFunctionRegistry.lookupFunction(qualifiedIdent))
       .getOrElse {
-        requireDbExists(db)
-        if (externalCatalog.functionExists(db, funcName)) {
-          val metadata = externalCatalog.getFunction(db, funcName)
-          if (metadata.isUserDefinedFunction) {
-            UserDefinedFunction.fromCatalogFunction(metadata, parser).toExpressionInfo
+        val funcMetadata = fetchCatalogFunction(qualifiedIdent)
+        if (funcMetadata.isUserDefinedFunction) {
+          UserDefinedFunction.fromCatalogFunction(funcMetadata, parser).toExpressionInfo
           } else {
-            makeExprInfoForHiveFunction(metadata.copy(identifier = qualifiedIdent))
-          }
-        } else {
-          failFunctionLookup(name)
+          makeExprInfoForHiveFunction(funcMetadata)
         }
       }
   }
 
   /**
-   * Look up a persistent scalar function by name and resolves it to an Expression.
+   * Load a persistent scalar function by name.
+   * Returns V1Function with:
+   * - Eager info (from cache or catalog fetch, no resource loading)
+   * - Lazy builder (resource loading only on first invoke)
+   *
+   * This matches V1 behavior where DESCRIBE doesn't load resources.
    */
-  def resolvePersistentFunction(
-      name: FunctionIdentifier, arguments: Seq[Expression]): Expression = {
-    resolvePersistentFunctionInternal[Expression](
-      name,
-      arguments,
-      functionRegistry,
-      registerHiveFunc = func =>
-        registerFunction(
-          func,
-          overrideIfExists = false,
-          registry = functionRegistry,
-          functionBuilder = makeFunctionBuilder(func)
-        ),
-      registerUserDefinedFunc = function => {
-        val builder = makeUserDefinedScalarFuncBuilder(function)
-        registerUserDefinedFunction[Expression](
-          function = function,
-          overrideIfExists = false,
-          registry = functionRegistry,
-          functionBuilder = builder)
-      }
-    )
+  def loadPersistentScalarFunction(name: FunctionIdentifier): V1Function = {
+    val qualifiedIdent = qualifyIdentifier(name)
+
+    // Check cache first (no synchronization needed for reads)
+    functionRegistry.lookupFunctionEntry(qualifiedIdent) match {
+      case Some((cachedInfo, cachedBuilder)) =>
+        // Already cached - return with eager builder
+        V1Function(cachedInfo, cachedBuilder)
+
+      case None =>
+        // Fetch metadata eagerly (no resource loading yet)
+        val funcMetadata = fetchCatalogFunction(qualifiedIdent)
+        val info = if (funcMetadata.isUserDefinedFunction) {
+          UserDefinedFunction.fromCatalogFunction(funcMetadata, parser).toExpressionInfo
+        } else {
+          makeExprInfoForHiveFunction(funcMetadata)
+        }
+
+        // Builder factory - loads resources only on first invoke()
+        val builderFactory: () => FunctionBuilder = () => synchronized {
+          // Re-check cache (another thread may have loaded it)
+          functionRegistry.lookupFunctionBuilder(qualifiedIdent).getOrElse {
+            if (funcMetadata.isUserDefinedFunction) {
+              val udf = UserDefinedFunction.fromCatalogFunction(funcMetadata, parser)
+              registerUserDefinedFunction[Expression](
+                udf,
+                overrideIfExists = false,
+                functionRegistry,
+                makeUserDefinedScalarFuncBuilder(udf))
+            } else {
+              loadFunctionResources(funcMetadata.resources)
+              registerFunction(
+                funcMetadata,
+                overrideIfExists = false,
+                functionRegistry,
+                makeFunctionBuilder(funcMetadata))
+            }
+            functionRegistry.lookupFunctionBuilder(qualifiedIdent).get
+          }
+        }
+
+        V1Function(info, builderFactory)
+    }
   }
 
   /**
@@ -2153,66 +2664,45 @@ class SessionCatalog(
    */
   def resolvePersistentTableFunction(
       name: FunctionIdentifier,
-      arguments: Seq[Expression]): LogicalPlan = {
-    resolvePersistentFunctionInternal[LogicalPlan](
-      name,
-      arguments,
-      tableFunctionRegistry,
-      // We don't support persistent Hive table functions yet.
-      registerHiveFunc = (func: CatalogFunction) => failFunctionLookup(name),
-      registerUserDefinedFunc = function => {
-        val builder = makeUserDefinedTableFuncBuilder(function)
-        registerUserDefinedFunction[LogicalPlan](
-          function = function,
-          overrideIfExists = false,
-          registry = tableFunctionRegistry,
-          functionBuilder = builder)
+      arguments: Seq[Expression]): LogicalPlan = synchronized {
+    val qualifiedIdent = qualifyIdentifier(name)
+    if (tableFunctionRegistry.functionExists(qualifiedIdent)) {
+      // Already cached
+      tableFunctionRegistry.lookupFunction(qualifiedIdent, arguments)
+    } else {
+      // Load from catalog
+      val funcMetadata = fetchCatalogFunction(qualifiedIdent)
+      if (!funcMetadata.isUserDefinedFunction) {
+        // Hive table functions are not supported
+        failFunctionLookup(qualifiedIdent)
       }
-    )
+      val udf = UserDefinedFunction.fromCatalogFunction(funcMetadata, parser)
+      registerUserDefinedFunction[LogicalPlan](
+        udf,
+        overrideIfExists = false,
+        tableFunctionRegistry,
+        makeUserDefinedTableFuncBuilder(udf))
+      tableFunctionRegistry.lookupFunction(qualifiedIdent, arguments)
+    }
   }
 
-  private def resolvePersistentFunctionInternal[T](
-      name: FunctionIdentifier,
-      arguments: Seq[Expression],
-      registry: FunctionRegistryBase[T],
-      registerHiveFunc: CatalogFunction => Unit,
-      registerUserDefinedFunc: UserDefinedFunction => Unit): T = {
-    // `synchronized` is used to prevent multiple threads from concurrently resolving the
-    // same function that has not yet been loaded into the function registry. This is needed
-    // because calling `registerFunction` twice with `overrideIfExists = false` can lead to
-    // a FunctionAlreadyExistsException.
-    synchronized {
-      val qualifiedIdent = qualifyIdentifier(name)
-      val db = qualifiedIdent.database.get
-      val funcName = qualifiedIdent.funcName
-      if (registry.functionExists(qualifiedIdent)) {
-        // This function has been already loaded into the function registry.
-        registry.lookupFunction(qualifiedIdent, arguments)
-      } else {
-        // The function has not been loaded to the function registry, which means
-        // that the function is a persistent function (if it actually has been registered
-        // in the metastore). We need to first put the function in the function registry.
-        val catalogFunction = try {
-          externalCatalog.getFunction(db, funcName)
-        } catch {
-          case _: AnalysisException => failFunctionLookup(qualifiedIdent)
-        }
-        // Please note that qualifiedName is provided by the user. However,
-        // catalogFunction.identifier.unquotedString is returned by the underlying
-        // catalog. So, it is possible that qualifiedName is not exactly the same as
-        // catalogFunction.identifier.unquotedString (difference is on case-sensitivity).
-        // At here, we preserve the input from the user.
-        val funcMetadata = catalogFunction.copy(identifier = qualifiedIdent)
-        if (!catalogFunction.isUserDefinedFunction) {
-          loadFunctionResources(catalogFunction.resources)
-          registerHiveFunc(funcMetadata)
-        } else {
-          val function = UserDefinedFunction.fromCatalogFunction(funcMetadata, parser)
-          registerUserDefinedFunc(function)
-        }
-        // Now, we need to create the Expression.
-        registry.lookupFunction(qualifiedIdent, arguments)
-      }
+  /**
+   * Fetch a catalog function from the external catalog.
+   */
+  private def fetchCatalogFunction(qualifiedIdent: FunctionIdentifier): CatalogFunction = {
+    val db = qualifiedIdent.database.get
+    val funcName = qualifiedIdent.funcName
+    requireDbExists(db)
+    try {
+      // Please note that qualifiedIdent is provided by the user. However,
+      // CatalogFunction.identifier is returned by the underlying catalog.
+      // So, it is possible that qualifiedIdent is not exactly the same as
+      // catalogFunction.identifier (difference is on case-sensitivity).
+      // At here, we preserve the input from the user.
+      externalCatalog.getFunction(db, funcName).copy(identifier = qualifiedIdent)
+    } catch {
+      case _: NoSuchPermanentFunctionException | _: NoSuchFunctionException =>
+        failFunctionLookup(qualifiedIdent)
     }
   }
 
@@ -2234,9 +2724,9 @@ class SessionCatalog(
   def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): Expression = {
     if (name.database.isEmpty) {
       resolveBuiltinOrTempFunction(name.funcName, children)
-        .getOrElse(resolvePersistentFunction(name, children))
+        .getOrElse(loadPersistentScalarFunction(name).invoke(children))
     } else {
-      resolvePersistentFunction(name, children)
+      loadPersistentScalarFunction(name).invoke(children)
     }
   }
 
@@ -2254,7 +2744,14 @@ class SessionCatalog(
    */
   private def listBuiltinAndTempFunctions(pattern: String): Seq[FunctionIdentifier] = {
     val functions = (functionRegistry.listFunction() ++ tableFunctionRegistry.listFunction())
-      .filter(_.database.isEmpty)
+      .filter(f =>
+        f.database.isEmpty ||
+        isTempFunctionIdentifier(f))
+      .map(f => if (isTempFunctionIdentifier(f)) {
+        FunctionIdentifier(f.funcName)
+      } else {
+        f
+      })
     StringUtils.filterPattern(functions.map(_.unquotedString), pattern).map { f =>
       // In functionRegistry, function names are stored as an unquoted format.
       Try(parser.parseFunctionIdentifier(f)) match {
@@ -2300,7 +2797,9 @@ class SessionCatalog(
    */
   def listTemporaryFunctions(): Seq[FunctionIdentifier] = {
     (functionRegistry.listFunction() ++ tableFunctionRegistry.listFunction())
-      .filter(isTemporaryFunction)
+      .filter(isTempFunctionIdentifier)
+      // Strip the TEMP_FUNCTION_DB database qualifier
+      .map(ident => FunctionIdentifier(ident.funcName))
   }
 
   // -----------------
@@ -2373,7 +2872,9 @@ class SessionCatalog(
     requireTableNotExists(newName)
     val oldTable = getTableMetadata(oldName)
     if (oldTable.tableType == CatalogTableType.MANAGED) {
-      assert(oldName.database.nonEmpty)
+      assert(oldName.database.nonEmpty,
+        "Table identifier " + oldName.quotedString + " is missing database name. " +
+        "Managed tables must have a database defined.")
       val databaseLocation =
         externalCatalog.getDatabase(oldName.database.get).locationUri
       val newTableLocation = new Path(new Path(databaseLocation), format(newName.table))

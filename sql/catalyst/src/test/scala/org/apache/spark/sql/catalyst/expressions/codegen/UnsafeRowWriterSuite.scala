@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types.Decimal
-import org.apache.spark.unsafe.types.{CalendarInterval, VariantVal}
+import org.apache.spark.unsafe.types._
 
 class UnsafeRowWriterSuite extends SparkFunSuite {
 
@@ -49,6 +49,28 @@ class UnsafeRowWriterSuite extends SparkFunSuite {
     val res2 = unsafeRowWriter2.getRow
     // The two rows should be the equal
     assert(res1 == res2)
+  }
+
+  test("write and get geography through UnsafeRowWriter") {
+    val rowWriter = new UnsafeRowWriter(2)
+    rowWriter.resetRowWriter()
+    rowWriter.setNullAt(0)
+    assert(rowWriter.getRow.isNullAt(0))
+    assert(rowWriter.getRow.getGeography(0) === null)
+    val geography = GeographyVal.fromBytes(Array[Byte](1, 2, 3))
+    rowWriter.write(1, geography)
+    assert(rowWriter.getRow.getGeography(1).getBytes sameElements geography.getBytes)
+  }
+
+  test("write and get geometry through UnsafeRowWriter") {
+    val rowWriter = new UnsafeRowWriter(2)
+    rowWriter.resetRowWriter()
+    rowWriter.setNullAt(0)
+    assert(rowWriter.getRow.isNullAt(0))
+    assert(rowWriter.getRow.getGeometry(0) === null)
+    val geometry = GeometryVal.fromBytes(Array[Byte](1, 2, 3))
+    rowWriter.write(1, geometry)
+    assert(rowWriter.getRow.getGeometry(1).getBytes sameElements geometry.getBytes)
   }
 
   test("write and get calendar intervals through UnsafeRowWriter") {

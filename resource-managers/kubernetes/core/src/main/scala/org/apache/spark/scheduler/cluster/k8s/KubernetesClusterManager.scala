@@ -21,7 +21,7 @@ import java.io.File
 import io.fabric8.kubernetes.client.Config
 import io.fabric8.kubernetes.client.KubernetesClient
 
-import org.apache.spark.{SparkConf, SparkContext, SparkMasterRegex}
+import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkMasterRegex}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkKubernetesClientFactory}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants.DEFAULT_EXECUTOR_CONTAINER_NAME
@@ -35,7 +35,7 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 private[spark] class KubernetesClusterManager extends ExternalClusterManager with Logging {
   import SparkMasterRegex._
 
-  override def canCreate(masterURL: String): Boolean = masterURL.startsWith("k8s")
+  override def canCreate(masterURL: String): Boolean = SparkMasterRegex.isK8s(masterURL)
 
   private def isLocal(conf: SparkConf): Boolean =
     conf.get(KUBERNETES_DRIVER_MASTER_URL).startsWith("local")
@@ -129,12 +129,13 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
         "kubernetes-executor-snapshots-subscribers", 2)
     val snapshotsStore = new ExecutorPodsSnapshotsStoreImpl(subscribersExecutor, conf = sc.conf)
 
-    val executorPodsLifecycleEventHandler = new ExecutorPodsLifecycleManager(
+    val executorPodsLifecycleManager = new ExecutorPodsLifecycleManager(
       sc.conf,
       kubernetesClient,
       snapshotsStore)
 
-    val executorPodsAllocator = makeExecutorPodsAllocator(sc, kubernetesClient, snapshotsStore)
+    val executorPodsAllocator = makeExecutorPodsAllocator(
+      sc, kubernetesClient, snapshotsStore, Some(executorPodsLifecycleManager))
 
     val podsWatchEventSource = new ExecutorPodsWatchSnapshotSource(
       snapshotsStore,
@@ -153,16 +154,29 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       schedulerExecutorService,
       snapshotsStore,
       executorPodsAllocator,
-      executorPodsLifecycleEventHandler,
+      executorPodsLifecycleManager,
       podsWatchEventSource,
       podsPollingEventSource)
   }
 
-  private[k8s] def makeExecutorPodsAllocator(sc: SparkContext, kubernetesClient: KubernetesClient,
-      snapshotsStore: ExecutorPodsSnapshotsStore) = {
-    val executorPodsAllocatorName = sc.conf.get(KUBERNETES_ALLOCATION_PODS_ALLOCATOR) match {
+  private[k8s] def makeExecutorPodsAllocator(
+      sc: SparkContext,
+      kubernetesClient: KubernetesClient,
+      snapshotsStore: ExecutorPodsSnapshotsStore,
+      lifecycleManager: Option[ExecutorPodsLifecycleManager] = None) = {
+    val allocator = sc.conf.get(KUBERNETES_ALLOCATION_PODS_ALLOCATOR)
+    if (allocator == "deployment" && Utils.isDynamicAllocationEnabled(sc.conf) &&
+      sc.conf.get(KUBERNETES_EXECUTOR_POD_DELETION_COST).isEmpty) {
+      throw new SparkException(
+        s"Dynamic allocation with the deployment pods allocator requires " +
+          s"'${KUBERNETES_EXECUTOR_POD_DELETION_COST.key}' to be configured.")
+    }
+
+    val executorPodsAllocatorName = allocator match {
       case "statefulset" =>
         classOf[StatefulSetPodsAllocator].getName
+      case "deployment" =>
+        classOf[DeploymentPodsAllocator].getName
       case "direct" =>
         classOf[ExecutorPodsAllocator].getName
       case fullClass =>
@@ -174,13 +188,20 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       classOf[SparkConf], classOf[org.apache.spark.SecurityManager],
       classOf[KubernetesExecutorBuilder], classOf[KubernetesClient],
       classOf[ExecutorPodsSnapshotsStore], classOf[Clock])
-    cstr.newInstance(
+    val allocatorInstance = cstr.newInstance(
       sc.conf,
       sc.env.securityManager,
       new KubernetesExecutorBuilder(),
       kubernetesClient,
       snapshotsStore,
-      new SystemClock())
+      new SystemClock()).asInstanceOf[AbstractPodsAllocator]
+
+    // Set the lifecycle manager if provided
+    lifecycleManager.foreach { manager =>
+      allocatorInstance.setExecutorPodsLifecycleManager(manager)
+    }
+
+    allocatorInstance
   }
 
   override def initialize(scheduler: TaskScheduler, backend: SchedulerBackend): Unit = {

@@ -342,7 +342,18 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @param connection The connection object
    * @param properties The connection properties.  This is passed through from the relation.
    */
+  @deprecated("Use beforeFetch(Connection, JDBCOptions) instead", "4.2.0")
   def beforeFetch(connection: Connection, properties: Map[String, String]): Unit = {
+  }
+
+  /**
+   * Override connection specific properties to run before a select is made.  This is in place to
+   * allow dialects that need special treatment to optimize behavior.
+   * @param connection The connection object
+   * @param options The JDBC options for the connection.
+   */
+  def beforeFetch(connection: Connection, options: JDBCOptions): Unit = {
+    beforeFetch(connection, options.parameters)
   }
 
   /**
@@ -772,7 +783,9 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   @Since("4.1.0")
-  def isObjectNotFoundException(e: SQLException): Boolean = true
+  def isObjectNotFoundException(e: SQLException): Boolean = {
+    Option(e.getSQLState).exists(_.startsWith("42"))
+  }
 
   /**
    * Gets a dialect exception, classifies it and wraps it by `AnalysisException`.

@@ -76,7 +76,7 @@ class BisectingKMeansModel(JavaModelWrapper):
     """
 
     def __init__(self, java_model: "JavaObject"):
-        super(BisectingKMeansModel, self).__init__(java_model)
+        super().__init__(java_model)
         self.centers = [c.toArray() for c in self.call("clusterCenters")]
 
     @property
@@ -93,12 +93,10 @@ class BisectingKMeansModel(JavaModelWrapper):
         return self.call("k")
 
     @overload
-    def predict(self, x: "VectorLike") -> int:
-        ...
+    def predict(self, x: "VectorLike") -> int: ...
 
     @overload
-    def predict(self, x: RDD["VectorLike"]) -> RDD[int]:
-        ...
+    def predict(self, x: RDD["VectorLike"]) -> RDD[int]: ...
 
     def predict(self, x: Union["VectorLike", RDD["VectorLike"]]) -> Union[int, RDD[int]]:
         """
@@ -221,7 +219,6 @@ class BisectingKMeans:
 
 @inherit_doc
 class KMeansModel(Saveable, Loader["KMeansModel"]):
-
     """A clustering model derived from the k-means method.
 
     .. versionadded:: 0.9.0
@@ -294,12 +291,10 @@ class KMeansModel(Saveable, Loader["KMeansModel"]):
         return len(self.centers)
 
     @overload
-    def predict(self, x: "VectorLike") -> int:
-        ...
+    def predict(self, x: "VectorLike") -> int: ...
 
     @overload
-    def predict(self, x: RDD["VectorLike"]) -> RDD[int]:
-        ...
+    def predict(self, x: RDD["VectorLike"]) -> RDD[int]: ...
 
     def predict(self, x: Union["VectorLike", RDD["VectorLike"]]) -> Union[int, RDD[int]]:
         """
@@ -464,7 +459,6 @@ class KMeans:
 
 @inherit_doc
 class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader["GaussianMixtureModel"]):
-
     """
     A clustering model derived from the Gaussian Mixture Model method.
 
@@ -559,12 +553,10 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader["GaussianM
         return len(self.weights)
 
     @overload
-    def predict(self, x: "VectorLike") -> np.int64:
-        ...
+    def predict(self, x: "VectorLike") -> np.int64: ...
 
     @overload
-    def predict(self, x: RDD["VectorLike"]) -> RDD[int]:
-        ...
+    def predict(self, x: RDD["VectorLike"]) -> RDD[int]: ...
 
     def predict(self, x: Union["VectorLike", RDD["VectorLike"]]) -> Union[np.int64, RDD[int]]:
         """
@@ -592,12 +584,10 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader["GaussianM
             return z.argmax()
 
     @overload
-    def predictSoft(self, x: "VectorLike") -> np.ndarray:
-        ...
+    def predictSoft(self, x: "VectorLike") -> np.ndarray: ...
 
     @overload
-    def predictSoft(self, x: RDD["VectorLike"]) -> RDD[pyarray.array]:
-        ...
+    def predictSoft(self, x: RDD["VectorLike"]) -> RDD[pyarray.array]: ...
 
     def predictSoft(
         self, x: Union["VectorLike", RDD["VectorLike"]]
@@ -724,7 +714,6 @@ class GaussianMixture:
 class PowerIterationClusteringModel(
     JavaModelWrapper, JavaSaveable, JavaLoader["PowerIterationClusteringModel"]
 ):
-
     """
     Model produced by :py:class:`PowerIterationClustering`.
 
@@ -943,7 +932,7 @@ class StreamingKMeansModel(KMeansModel):
     """
 
     def __init__(self, clusterCenters: List["VectorLike"], clusterWeights: "VectorLike"):
-        super(StreamingKMeansModel, self).__init__(centers=clusterCenters)
+        super().__init__(centers=clusterCenters)
         self._clusterWeights = list(clusterWeights)  # type: ignore[arg-type]
 
     @property
@@ -1112,7 +1101,6 @@ class StreamingKMeans:
 
 
 class LDAModel(JavaModelWrapper, JavaSaveable, Loader["LDAModel"]):
-
     """A clustering model derived from the LDA method.
 
     Latent Dirichlet Allocation (LDA), a topic model designed for text documents.
@@ -1308,7 +1296,7 @@ def _test() -> None:
         pass
     globs = pyspark.mllib.clustering.__dict__.copy()
     globs["sc"] = SparkContext("local[4]", "PythonTest", batchSize=2)
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    failure_count, test_count = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs["sc"].stop()
     if failure_count:
         sys.exit(-1)

@@ -33,7 +33,7 @@ class OrderedFilters(filters: Seq[sources.Filter], requiredSchema: StructType)
   extends StructFilters(filters, requiredSchema) {
   /**
    * Converted filters to predicates and grouped by maximum field index
-   * in the read schema. For example, if an filter refers to 2 attributes
+   * in the read schema. For example, if a filter refers to 2 attributes
    * attrA with field index 5 and attrB with field index 10 in the read schema:
    *   0 === $"attrA" or $"attrB" < 100
    * the filter is compiled to a predicate, and placed to the `predicates`
@@ -64,7 +64,7 @@ class OrderedFilters(filters: Seq[sources.Filter], requiredSchema: StructType)
     }
     if (len > 0 && groupedFilters(0).nonEmpty) {
       // We assume that filters w/o refs like `AlwaysTrue` and `AlwaysFalse`
-      // can be evaluated faster that others. We put them in front of others.
+      // can be evaluated faster than others. We put them in front of others.
       val (literals, others) = groupedFilters(0).partition(_.references.isEmpty)
       groupedFilters(0) = literals ++ others
     }
@@ -81,7 +81,7 @@ class OrderedFilters(filters: Seq[sources.Filter], requiredSchema: StructType)
    * @param row The internal row to check.
    * @param index Maximum field index. The function assumes that all fields
    *              from 0 to `index` position are set.
-   * @return false` iff row fields at the position from 0 to `index` pass filters
+   * @return `false` iff row fields at the position from 0 to `index` pass filters
    *         or there are no applicable filters
    *         otherwise `false` if at least one of the filters returns `false`.
    */

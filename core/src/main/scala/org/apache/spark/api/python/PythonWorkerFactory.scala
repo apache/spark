@@ -168,6 +168,22 @@ private[spark] class PythonWorkerFactory(
       } else {
         SocketChannel.open(new InetSocketAddress(daemonHost, daemonPort))
       }
+
+      val serverSelector = Selector.open()
+      try {
+        val timeOutMs = 60 * 1000
+        socketChannel.configureBlocking(false)
+        socketChannel.register(serverSelector, SelectionKey.OP_READ)
+        if (serverSelector.select(timeOutMs) == 0) {
+          throw new SocketTimeoutException(
+            s"Timed out while waiting for the Python worker to connect back after $timeOutMs ms"
+          )
+        }
+      } finally {
+        serverSelector.close()
+      }
+      socketChannel.configureBlocking(true)
+
       // These calls are blocking.
       val pid = new DataInputStream(Channels.newInputStream(socketChannel)).readInt()
       if (pid < 0) {
@@ -194,6 +210,12 @@ private[spark] class PythonWorkerFactory(
         case exc: SocketException =>
           logWarning("Failed to open socket to Python daemon:", exc)
           logWarning("Assuming that daemon unexpectedly quit, attempting to restart")
+          stopDaemon()
+          startDaemon()
+          createWorker()
+        case exc: SocketTimeoutException =>
+          logWarning(exc.toString)
+          logWarning("Lost connection to Python daemon, attempting to restart")
           stopDaemon()
           startDaemon()
           createWorker()
@@ -395,12 +417,16 @@ private[spark] class PythonWorkerFactory(
     }
   }
 
+  private val workerLogCapture =
+    envVars.get("PYSPARK_SPARK_SESSION_UUID").map(new PythonWorkerLogCapture(_))
+
   /**
    * Redirect the given streams to our stderr in separate threads.
    */
   private def redirectStreamsToStderr(stdout: InputStream, stderr: InputStream): Unit = {
     try {
-      new RedirectThread(stdout, System.err, "stdout reader for " + pythonExec).start()
+      new RedirectThread(workerLogCapture.map(_.wrapInputStream(stdout)).getOrElse(stdout),
+        System.err, "stdout reader for " + pythonExec).start()
       new RedirectThread(stderr, System.err, "stderr reader for " + pythonExec).start()
     } catch {
       case e: Exception =>
@@ -460,6 +486,7 @@ private[spark] class PythonWorkerFactory(
   }
 
   def stop(): Unit = {
+    workerLogCapture.foreach(_.closeAllWriters())
     stopDaemon()
   }
 

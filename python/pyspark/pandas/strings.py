@@ -18,6 +18,7 @@
 """
 String functions on pandas-on-Spark Series
 """
+
 from functools import wraps
 from typing import (
     Any,
@@ -33,13 +34,16 @@ from typing import (
 
 import numpy as np
 import pandas as pd
+from pandas.api.extensions import no_default
 
+from pyspark._globals import _NoValue, _NoValueType
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas.utils import ansi_mode_context, is_ansi_mode_enabled
+from pyspark.pandas.typedef.typehints import is_str_dtype, SeriesType
 from pyspark.sql.types import StringType, BinaryType, ArrayType, LongType, MapType
 from pyspark.sql import functions as F
 from pyspark.sql.functions import pandas_udf
 import pyspark.pandas as ps
-
 
 FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
@@ -908,7 +912,7 @@ class StringMethods:
         4    False
         dtype: bool
 
-        Returning ‘house’ or ‘dog’ when either expression occurs in a string.
+        Returning 'house' or 'dog' when either expression occurs in a string.
 
         >>> s1.str.contains('house|dog', regex=True)
         0    False
@@ -941,7 +945,7 @@ class StringMethods:
 
         Ensure pat is a not a literal pattern when regex is set to True.
         Note in the following example one might expect only s2[1] and s2[3]
-        to return True. However, ‘.0’ as a regex matches any character followed
+        to return True. However, '.0' as a regex matches any character followed
         by a 0.
 
         >>> s2 = ps.Series(['40','40.0','41','41.0','35'])
@@ -1116,7 +1120,7 @@ class StringMethods:
         --------
         >>> s = ps.Series(['Lion', 'Monkey', 'Rabbit'])
 
-        The search for the pattern ‘Monkey’ returns one match:
+        The search for the pattern 'Monkey' returns one match:
 
         >>> s.str.findall('Monkey')
         0          []
@@ -1124,7 +1128,7 @@ class StringMethods:
         2          []
         dtype: object
 
-        On the other hand, the search for the pattern ‘MONKEY’ doesn’t return
+        On the other hand, the search for the pattern 'MONKEY' doesn't return
         any match:
 
         >>> s.str.findall('MONKEY')
@@ -1134,7 +1138,7 @@ class StringMethods:
         dtype: object
 
         Flags can be added to the pattern or regular expression. For instance,
-        to find the pattern ‘MONKEY’ ignoring the case:
+        to find the pattern 'MONKEY' ignoring the case:
 
         >>> import re
         >>> s.str.findall('MONKEY', flags=re.IGNORECASE)
@@ -1153,7 +1157,7 @@ class StringMethods:
         dtype: object
 
         Regular expressions are supported too. For instance, the search for all
-        the strings ending with the word ‘on’ is shown next:
+        the strings ending with the word 'on' is shown next:
 
         >>> s.str.findall('on$')
         0    [on]
@@ -1170,13 +1174,18 @@ class StringMethods:
         2    [b, b]
         dtype: object
         """
+        str_dtype = is_str_dtype(self._data.dtype)
 
         # type hint does not support to specify array type yet.
         @pandas_udf(  # type: ignore[call-overload]
             returnType=ArrayType(StringType(), containsNull=True)
         )
         def pudf(s: pd.Series) -> pd.Series:
-            return s.str.findall(pat, flags)
+            ret = s.str.findall(pat, flags)
+            if str_dtype:
+                # ArrayType does not support NaN, so replace with None
+                ret = ret.replace(np.nan, None)
+            return ret
 
         return self._data._with_new_scol(scol=pudf(self._data.spark.column))
 
@@ -1259,18 +1268,19 @@ class StringMethods:
         1           [cat, None, dog]
         dtype: object
 
-        Join all lists using a ‘-‘. The list containing None will produce None.
+        Join all lists using a '-'. The list containing None will produce None.
 
         >>> s.str.join('-')
         0    lion-elephant-zebra
         1                   None
         dtype: object
         """
+        ret_type: SeriesType = SeriesType(self._data.dtype, StringType())
 
-        def pandas_join(s) -> ps.Series[str]:  # type: ignore[no-untyped-def]
+        def pandas_join(s):  # type: ignore[no-untyped-def]
             return s.str.join(sep)
 
-        return self._data.pandas_on_spark.transform_batch(pandas_join)
+        return self._data.pandas_on_spark._transform_batch(pandas_join, ret_type)
 
     def len(self) -> "ps.Series":
         """
@@ -1342,7 +1352,13 @@ class StringMethods:
 
         return self._data.pandas_on_spark.transform_batch(pandas_ljust)
 
-    def match(self, pat: str, case: bool = True, flags: int = 0, na: Any = np.nan) -> "ps.Series":
+    def match(
+        self,
+        pat: str,
+        case: Union[bool, _NoValueType] = _NoValue,
+        flags: Union[int, _NoValueType] = _NoValue,
+        na: Any = _NoValue,
+    ) -> "ps.Series":
         """
         Determine if each string matches a regular expression.
 
@@ -1403,6 +1419,21 @@ class StringMethods:
         dtype: object
         """
 
+        if LooseVersion(pd.__version__) < "3.0.0":
+            if case is _NoValue:
+                case = True
+            if flags is _NoValue:
+                flags = 0
+            if na is _NoValue:
+                na = np.nan
+        else:
+            if case is _NoValue:
+                case = no_default  # type: ignore[assignment]
+            if flags is _NoValue:
+                flags = no_default  # type: ignore[assignment]
+            if na is _NoValue:
+                na = no_default
+
         def pandas_match(s) -> ps.Series[bool]:  # type: ignore[no-untyped-def]
             return s.str.match(pat, case, flags, na)
 
@@ -1417,7 +1448,7 @@ class StringMethods:
 
         Parameters
         ----------
-        form : {‘NFC’, ‘NFKC’, ‘NFD’, ‘NFKD’}
+        form : {'NFC', 'NFKC', 'NFD', 'NFKD'}
             Unicode form.
 
         Returns
@@ -1440,7 +1471,7 @@ class StringMethods:
         width : int
             Minimum width of resulting string; additional characters will be
             filled with character defined in `fillchar`.
-        side : {‘left’, ‘right’, ‘both’}, default ‘left’
+        side : {'left', 'right', 'both'}, default 'left'
             Side from which to fill resulting string.
         fillchar : str, default ' '
             Additional character for filling, default is whitespace.
@@ -2035,9 +2066,15 @@ class StringMethods:
         # type hint does not support to specify array type yet.
         return_type = ArrayType(StringType(), containsNull=True)
 
+        str_dtype = is_str_dtype(self._data.dtype)
+
         @pandas_udf(returnType=return_type)  # type: ignore[call-overload]
         def pudf(s: pd.Series) -> pd.Series:
-            return s.str.split(pat, n=n)
+            ret = s.str.split(pat, n=n)
+            if str_dtype:
+                # ArrayType does not support NaN, so replace with None
+                ret = ret.replace(np.nan, None)
+            return ret
 
         psser = self._data._with_new_scol(
             pudf(self._data.spark.column).alias(self._data._internal.data_spark_column_names[0]),
@@ -2189,9 +2226,15 @@ class StringMethods:
         # type hint does not support to specify array type yet.
         return_type = ArrayType(StringType(), containsNull=True)
 
+        str_dtype = is_str_dtype(self._data.dtype)
+
         @pandas_udf(returnType=return_type)  # type: ignore[call-overload]
         def pudf(s: pd.Series) -> pd.Series:
-            return s.str.rsplit(pat, n=n)
+            ret = s.str.rsplit(pat, n=n)
+            if str_dtype:
+                # ArrayType does not support NaN, so replace with None
+                ret = ret.replace(np.nan, None)
+            return ret
 
         psser = self._data._with_new_scol(
             pudf(self._data.spark.column).alias(self._data._internal.data_spark_column_names[0]),
@@ -2308,20 +2351,20 @@ class StringMethods:
 
     def zfill(self, width: int) -> "ps.Series":
         """
-        Pad strings in the Series by prepending ‘0’ characters.
+        Pad strings in the Series by prepending '0' characters.
 
-        Strings in the Series are padded with ‘0’ characters on the left of the
+        Strings in the Series are padded with '0' characters on the left of the
         string to reach a total string length width. Strings in the Series with
         length greater or equal to width are unchanged.
 
-        Differs from :func:`str.zfill` which has special handling for ‘+’/’-‘
+        Differs from :func:`str.zfill` which has special handling for '+'/'-'
         in the string.
 
         Parameters
         ----------
         width : int
             Minimum length of resulting string; strings with length less than
-            width be prepended with ‘0’ characters.
+            width be prepended with '0' characters.
 
         Returns
         -------
@@ -2380,7 +2423,7 @@ def _test() -> None:
         .appName("pyspark.pandas.strings tests")
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.strings,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

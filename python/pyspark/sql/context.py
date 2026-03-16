@@ -38,11 +38,12 @@ from pyspark.sql.session import _monkey_patch_RDD, SparkSession
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.streaming import DataStreamReader
-from pyspark.sql.udf import UDFRegistration  # noqa: F401
+from pyspark.sql.udf import UDFRegistration
 from pyspark.sql.udtf import UDTFRegistration
 from pyspark.errors.exceptions.captured import install_exception_handler
 from pyspark.sql.types import AtomicType, DataType, StructType
 from pyspark.sql.streaming import StreamingQueryManager
+from pyspark.sql.streaming.query import StreamingCheckpointManager
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
@@ -317,8 +318,7 @@ class SQLContext:
         data: Union["RDD[RowLike]", Iterable["RowLike"]],
         schema: Union[List[str], Tuple[str, ...]] = ...,
         samplingRatio: Optional[float] = ...,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     @overload
     def createDataFrame(
@@ -327,8 +327,7 @@ class SQLContext:
         schema: Union[StructType, str],
         *,
         verifySchema: bool = ...,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     @overload
     def createDataFrame(
@@ -339,14 +338,12 @@ class SQLContext:
         ],
         schema: Union[AtomicType, str],
         verifySchema: bool = ...,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     @overload
     def createDataFrame(
         self, data: Union["PandasDataFrameLike", "pa.Table"], samplingRatio: Optional[float] = ...
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     @overload
     def createDataFrame(
@@ -354,8 +351,7 @@ class SQLContext:
         data: Union["PandasDataFrameLike", "pa.Table"],
         schema: Union[StructType, str],
         verifySchema: bool = ...,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     def createDataFrame(  # type: ignore[misc]
         self,
@@ -471,7 +467,7 @@ class SQLContext:
         >>> sqlContext.createDataFrame(rdd, "boolean").collect() # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
             ...
-        Py4JJavaError: ...
+        pyspark.errors.exceptions.captured.PythonException: ...
         """
         return self.sparkSession.createDataFrame(  # type: ignore[call-overload]
             data, schema, samplingRatio, verifySchema
@@ -699,6 +695,18 @@ class SQLContext:
 
         return StreamingQueryManager(self._ssql_ctx.streams())
 
+    @property
+    def _streamingCheckpointManager(self) -> StreamingCheckpointManager:
+        """Returns a :class:`StreamingCheckpointManager` to manage streaming checkpoints.
+
+        .. versionadded:: 4.2.0
+
+        Notes
+        -----
+        This API is evolving.
+        """
+        return StreamingCheckpointManager(self._ssql_ctx.streamingCheckpointManager())
+
 
 class HiveContext(SQLContext):
     """A variant of Spark SQL that integrates with data stored in Hive.
@@ -802,7 +810,7 @@ def _test() -> None:
     ]
     globs["jsonStrings"] = jsonStrings
     globs["json"] = sc.parallelize(jsonStrings)
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.context,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

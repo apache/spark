@@ -101,7 +101,7 @@ case class ProcessingTimeExecutor(
   /** Called when a batch falls behind */
   def notifyBatchFallingBehind(realElapsedTimeMs: Long): Unit = {
     logWarning(log"Current batch is falling behind. The trigger interval is " +
-      log"${MDC(TRIGGER_INTERVAL, intervalMs)}} milliseconds, but spent " +
+      log"${MDC(TRIGGER_INTERVAL, intervalMs)} milliseconds, but spent " +
       log"${MDC(ELAPSED_TIME, realElapsedTimeMs)} milliseconds")
   }
 

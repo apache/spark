@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{BooleanType, DataType}
+import org.apache.spark.sql.types.{AbstractDataType, BooleanType, DataType}
 
 trait TableConstraint extends Expression with Unevaluable {
   /** Convert to a data source v2 constraint */
@@ -122,8 +122,11 @@ case class CheckConstraint(
     override val tableName: String = null,
     override val userProvidedCharacteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
   extends UnaryExpression
-  with TableConstraint {
+  with TableConstraint
+  with ImplicitCastInputTypes {
 // scalastyle:on line.size.limit
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(BooleanType)
 
   def toV2Constraint: Constraint = {
     val predicate = new V2ExpressionBuilder(child, true).buildPredicate().orNull

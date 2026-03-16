@@ -20,10 +20,9 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CONFIG, CONFIG2, KEY, VALUE}
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, VariableResolution}
+import org.apache.spark.sql.catalyst.analysis.VariableResolution
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.IgnoreCachedData
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.errors.QueryCompilationErrors.toSQLId
@@ -112,8 +111,7 @@ case class SetCommand(kv: Option[(String, Option[String])])
             sparkSession.sessionState.analyzer.catalogManager.tempVariableManager
           )
           val variable = variableResolution.lookupVariable(
-            nameParts = varName,
-            resolvingExecuteImmediate = AnalysisContext.get.isExecuteImmediate
+            nameParts = varName
           )
           if (variable.isDefined) {
             throw new AnalysisException(
@@ -219,7 +217,7 @@ object SetCommand {
  *   reset spark.sql.session.timeZone;
  * }}}
  */
-case class ResetCommand(config: Option[String]) extends LeafRunnableCommand with IgnoreCachedData {
+case class ResetCommand(config: Option[String]) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val globalInitialConfigs = sparkSession.sharedState.conf

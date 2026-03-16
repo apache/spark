@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 
-import org.apache.spark.internal.{LogKeys}
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.pipelines.graph.TriggeredGraphExecution._
 import org.apache.spark.sql.pipelines.util.ExponentialBackoffStrategy
@@ -33,7 +33,7 @@ import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 
 /**
- * Executes all of the flows in the given graph in topological order. Each flow processes
+ * Executes all the flows in the given graph in topological order. Each flow processes
  * all available data before downstream flows are triggered.
  *
  * @param graphForExecution the graph to execute.
@@ -124,7 +124,7 @@ class TriggeredGraphExecution(
       }
     )
     thread.start()
-    topologicalExecutionThread = Option(thread)
+    topologicalExecutionThread = Some(thread)
   }
 
   /** Used to control how many flows are executing at once. */
@@ -211,7 +211,7 @@ class TriggeredGraphExecution(
           }
       }
 
-      // collect flow that are ready to start
+      // collect flows that are ready to start
       val flowsToStart = mutable.ArrayBuffer[ResolvedFlow]()
       while (runnableFlows.nonEmpty && concurrencyLimit.tryAcquire()) {
         val flowIdentifier = runnableFlows.head
@@ -237,8 +237,8 @@ class TriggeredGraphExecution(
               concurrencyLimit.release()
             } else {
               env.flowProgressEventLogger.recordSkipped(flow)
-              concurrencyLimit.release()
               pipelineState.put(flowIdentifier, StreamState.SKIPPED)
+              concurrencyLimit.release()
             }
           }
         } catch {

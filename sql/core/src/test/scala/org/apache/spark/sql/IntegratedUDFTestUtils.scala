@@ -112,9 +112,9 @@ object IntegratedUDFTestUtils extends SQLHelper {
     sparkHome, "python", "lib", PythonUtils.PY4J_ZIP_NAME).toAbsolutePath
   private[spark] lazy val pysparkPythonPath = s"$py4jPath:$sourcePath"
 
-  private lazy val isPythonAvailable: Boolean = TestUtils.testCommandAvailable(pythonExec)
+  private[spark] lazy val isPythonAvailable: Boolean = TestUtils.testCommandAvailable(pythonExec)
 
-  private lazy val isPySparkAvailable: Boolean = isPythonAvailable && Try {
+  private[spark] lazy val isPySparkAvailable: Boolean = isPythonAvailable && Try {
     Process(
       Seq(pythonExec, "-c", "import pyspark"),
       None,
@@ -475,6 +475,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
    * }}}
    */
   case class TestPythonUDF(name: String, returnType: Option[DataType] = None,
+      pythonEvalType: Int = PythonEvalType.SQL_BATCHED_UDF,
       deterministic: Boolean = true) extends TestUDF {
     private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
       name = name,
@@ -487,7 +488,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
         broadcastVars = List.empty[Broadcast[PythonBroadcast]].asJava,
         accumulator = null),
       dataType = StringType,
-      pythonEvalType = PythonEvalType.SQL_BATCHED_UDF,
+      pythonEvalType = pythonEvalType,
       udfDeterministic = deterministic) {
 
       override def builder(e: Seq[Expression]): Expression = {

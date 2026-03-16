@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* global $, Mustache, jQuery, uiRoot */
+/* global $, jQuery, uiRoot */
 
 import {formatDuration, formatTimeMillis, stringAbbreviate} from "./utils.js";
 
@@ -26,6 +26,16 @@ var appLimit = -1;
 /* eslint-disable no-unused-vars */
 function setAppLimit(val) {
   appLimit = val;
+}
+/* escape XSS  */
+function escapeHtml(text) {
+  if (typeof text !== 'string') return text;
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 /* eslint-enable no-unused-vars*/
 
@@ -99,9 +109,11 @@ jQuery.extend( jQuery.fn.dataTableExt.ofnSearch, {
   }
 });
 
-$(document).ajaxStop($.unblockUI);
-$(document).ajaxStart(function(){
-  $.blockUI({ message: '<h3>Loading history summary...</h3>'});
+$(document).ajaxStop(function () {
+  $("#loading-overlay").addClass("d-none");
+});
+$(document).ajaxStart(function () {
+  $("#loading-overlay").removeClass("d-none");
 });
 
 $(document).ready(function() {
@@ -151,7 +163,7 @@ $(document).ready(function() {
         attempt["durationMillisec"] = attempt["duration"];
         attempt["duration"] = formatDuration(attempt["duration"]);
         attempt["id"] = id;
-        attempt["name"] = name;
+        attempt["name"] = escapeHtml(name);
         attempt["version"] = version;
         attempt["attemptUrl"] = uiRoot + "/history/" + id + "/" +
           (attempt.hasOwnProperty("attemptId") ? attempt["attemptId"] + "/" : "") + "jobs/";
@@ -163,21 +175,15 @@ $(document).ready(function() {
       $.fn.dataTable.defaults.paging = false;
     }
 
-    var data = {
-      "uiroot": uiRoot,
-      "applications": array,
-      "hasMultipleAttempts": hasMultipleAttempts,
-      "showCompletedColumns": !requestedIncomplete,
-    };
-
     $.get(uiRoot + "/static/historypage-template.html", function(template) {
       var sibling = historySummary.prev();
       historySummary.detach();
-      var apps = $(Mustache.render($(template).filter("#history-summary-template").html(),data));
+      var apps = $($(template).filter("#history-summary-template").html());
       var attemptIdColumnName = 'attemptId';
       var startedColumnName = 'started';
       var completedColumnName = 'completed';
       var durationColumnName = 'duration';
+      var logPathColumnName = 'logPath';
       var conf = {
         "data": array,
         "columns": [
@@ -194,6 +200,18 @@ $(document).ready(function() {
             render: (name) => stringAbbreviate(name, 60)
           },
           {
+            name: logPathColumnName,
+            data: 'logSourceName',
+            render: (logSourceName, type, row) => {
+              if (logSourceName && row && row.logSourceFullPath) {
+                const safeName = escapeHtml(logSourceName);
+                const safePath = escapeHtml(row.logSourceFullPath);
+                return `<span title="${safePath}">${safeName}</span>`;
+              }
+              return '';
+            }
+          },
+          {
             name: attemptIdColumnName,
             data: 'attemptId',
             render: (attemptId, type, row) => (attemptId ? `<a href="${row.attemptUrl}">${attemptId}</a>` : '')
@@ -206,7 +224,11 @@ $(document).ready(function() {
             data: 'duration',
             render: (id, type, row) => `<span title="${row.durationMillisec}">${row.duration}</span>`
           },
-          {name: 'user', data: 'sparkUser' },
+          {
+            name: 'user',
+            data: 'sparkUser',
+            render: (name) => escapeHtml(name)
+          },
           {name: 'lastUpdated', data: 'lastUpdated' },
           {
             name: 'eventLog',
@@ -216,10 +238,10 @@ $(document).ready(function() {
         ],
         "aoColumnDefs": [
           {
-            aTargets: [0, 1, 2],
+            aTargets: [0, 1, 2, 3],
             fnCreatedCell: (nTd, _ignored_sData, _ignored_oData, _ignored_iRow, _ignored_iCol) => {
               if (hasMultipleAttempts) {
-                $(nTd).css('background-color', '#fff');
+                $(nTd).css('background-color', 'var(--bs-body-bg)');
               }
             }
           },
@@ -232,7 +254,8 @@ $(document).ready(function() {
         conf.rowsGroup = [
           'appId:name',
           'version:name',
-          'appName:name'
+          'appName:name',
+          'logPath:name'
         ];
       } else {
         conf.columns = removeColumnByName(conf.columns, attemptIdColumnName);
@@ -249,8 +272,40 @@ $(document).ready(function() {
         {"searchable": false, "targets": [getColumnIndex(conf.columns, durationColumnName)]}
       ];
       historySummary.append(apps);
-      apps.DataTable(conf);
+      var dataTable = apps.filter("table").DataTable(conf);
       sibling.after(historySummary);
+
+      // Populate log path filter dropdown
+      var logPathNames = new Set();
+      array.forEach(function(row) {
+        if (row.logSourceName) {
+          logPathNames.add(row.logSourceName);
+        }
+      });
+
+      var logPathFilter = $('#log-path-filter');
+      Array.from(logPathNames).sort().forEach(function(name) {
+        logPathFilter.append($('<option></option>').val(name).text(name));
+      });
+
+      // Add custom filter function
+      $.fn.dataTable.ext.search.push(function(settings, data, dataIndex, rowData) {
+        if (settings.nTable.id !== 'history-summary-table') {
+          return true; // Don't filter other tables
+        }
+        var selectedPath = logPathFilter.val();
+        if (!selectedPath) {
+          return true; // Show all if no filter selected
+        }
+        return rowData && typeof rowData.logSourceName === 'string' &&
+               rowData.logSourceName === selectedPath;
+      });
+
+      // Trigger filter on dropdown change
+      logPathFilter.on('change', function() {
+        dataTable.draw();
+      });
+
       $('#history-summary [data-toggle="tooltip"]').tooltip();
     });
   });

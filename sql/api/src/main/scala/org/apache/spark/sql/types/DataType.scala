@@ -127,6 +127,10 @@ object DataType {
   private val CHAR_TYPE = """char\(\s*(\d+)\s*\)""".r
   private val VARCHAR_TYPE = """varchar\(\s*(\d+)\s*\)""".r
   private val STRING_WITH_COLLATION = """string\s+collate\s+(\w+)""".r
+  private val GEOMETRY_TYPE = """geometry\(\s*([\w]+:-?[\w]+)\s*\)""".r
+  private val GEOGRAPHY_TYPE_CRS = """geography\(\s*(\w+:-?\w+)\s*\)""".r
+  private val GEOGRAPHY_TYPE_ALG = """geography\(\s*(\w+)\s*\)""".r
+  private val GEOGRAPHY_TYPE_CRS_ALG = """geography\(\s*(\w+:-?\w+)\s*,\s*(\w+)\s*\)""".r
 
   val COLLATIONS_METADATA_KEY = "__COLLATIONS"
 
@@ -217,6 +221,16 @@ object DataType {
       case CHAR_TYPE(length) => CharType(length.toInt)
       case VARCHAR_TYPE(length) => VarcharType(length.toInt)
       case STRING_WITH_COLLATION(collation) => StringType(collation)
+      // If the coordinate reference system (CRS) value is omitted, Parquet and other storage
+      // formats (Delta, Iceberg) consider "OGC:CRS84" to be the default value of the crs.
+      case "geometry" => GeometryType(GeometryType.GEOMETRY_DEFAULT_CRS)
+      case GEOMETRY_TYPE(crs) => GeometryType(crs)
+      case "geography" => GeographyType(GeographyType.GEOGRAPHY_DEFAULT_CRS)
+      case GEOGRAPHY_TYPE_CRS(crs) =>
+        GeographyType(crs, GeographyType.GEOGRAPHY_DEFAULT_ALGORITHM)
+      case GEOGRAPHY_TYPE_ALG(alg) =>
+        GeographyType(GeographyType.GEOGRAPHY_DEFAULT_CRS, alg)
+      case GEOGRAPHY_TYPE_CRS_ALG(crs, alg) => GeographyType(crs, alg)
       // For backwards compatibility, previously the type name of NullType is "null"
       case "null" => NullType
       case "timestamp_ltz" => TimestampType

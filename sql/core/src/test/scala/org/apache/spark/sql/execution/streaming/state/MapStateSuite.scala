@@ -22,6 +22,7 @@ import java.util.UUID
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.Encoders
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateVariableUtils
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl}
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.ttl.MapStateImplWithTTL
 import org.apache.spark.sql.streaming.{ListState, MapState, TimeMode, TTLConfig, ValueState}
@@ -289,4 +290,35 @@ class MapStateSuite extends StateVariableSuiteBase {
       assert(ttlStateValueIterator.hasNext)
     }
   }
+
+  test("Partition key extraction - MapState without TTL") {
+    testMapStatePartitionKeyExtraction(ttlEnabled = false)
+  }
+
+  test("Partition key extraction - MapState with TTL") {
+    testMapStatePartitionKeyExtraction(ttlEnabled = true)
+  }
+
+  private def testMapStatePartitionKeyExtraction(ttlEnabled: Boolean): Unit = {
+    testPartitionKeyExtraction(
+      addStateFunc = { (handle, ttlConfig, _) =>
+        val testState: MapState[String, Long] =
+          handle.getMapState[String, Long]("testState", ttlConfig)
+        ImplicitGroupingKeyTracker.setImplicitKey("key1")
+        testState.updateValue("userKey1", 100L)
+        testState.updateValue("userKey2", 101L)
+        ImplicitGroupingKeyTracker.setImplicitKey("key2")
+        testState.updateValue("userKey3", 200L)
+      },
+      stateVariableInfo = TransformWithStateVariableUtils.getMapState("testState", ttlEnabled),
+      ttlEnabled = ttlEnabled,
+      expectedNumColFamilies = if (ttlEnabled) 2 else 1,
+      groupingKeyToExpectedCount = Map("key1" -> 2, "key2" -> 1)
+    )
+  }
 }
+
+/**
+ * Test suite that runs all MapStateSuite tests with row checksum enabled.
+ */
+class MapStateSuiteWithRowChecksum extends MapStateSuite with EnableStateStoreRowChecksum

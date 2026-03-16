@@ -7,6 +7,20 @@ DropTable true, false
 
 
 -- !query
+DROP TABLE IF EXISTS hll_binary_test
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.hll_binary_test
+
+
+-- !query
+DROP TABLE IF EXISTS hll_string_test
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.hll_string_test
+
+
+-- !query
 CREATE TABLE t1 USING JSON AS VALUES (0), (1), (2), (2), (2), (3), (4) as tab(col)
 -- !query analysis
 CreateDataSourceTableAsSelectCommand `spark_catalog`.`default`.`t1`, ErrorIfExists, [col]
@@ -15,11 +29,111 @@ CreateDataSourceTableAsSelectCommand `spark_catalog`.`default`.`t1`, ErrorIfExis
 
 
 -- !query
+CREATE TABLE hll_binary_test (bytes BINARY) USING PARQUET
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`hll_binary_test`, false
+
+
+-- !query
+CREATE TABLE hll_string_test (s STRING) USING PARQUET
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`hll_string_test`, false
+
+
+-- !query
+INSERT INTO hll_binary_test VALUES (X''), (CAST('  ' AS BINARY)), (X'e280'), (X'c1'), (X'c120')
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/hll_binary_test, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/hll_binary_test], Append, `spark_catalog`.`default`.`hll_binary_test`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/hll_binary_test), [bytes]
++- Project [col1#x AS bytes#x]
+   +- LocalRelation [col1#x]
+
+
+-- !query
+INSERT INTO hll_string_test VALUES (''), ('  '), (CAST(X'C1' AS STRING)), (CAST(X'80' AS STRING)), ('\uFFFD'), ('Å'), ('å'), ('a\u030A'), ('Å '), ('å  '), ('a\u030A   ')
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/hll_string_test, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/hll_string_test], Append, `spark_catalog`.`default`.`hll_string_test`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/hll_string_test), [s]
++- Project [col1#x AS s#x]
+   +- LocalRelation [col1#x]
+
+
+-- !query
 SELECT hll_sketch_estimate(hll_sketch_agg(col)) AS result FROM t1
 -- !query analysis
 Aggregate [hll_sketch_estimate(hll_sketch_agg(col#x, 12, 0, 0)) AS result#xL]
 +- SubqueryAlias spark_catalog.default.t1
    +- Relation spark_catalog.default.t1[col#x] json
+
+
+-- !query
+SELECT hll_sketch_estimate(hll_sketch_agg(bytes)) FROM hll_binary_test
+-- !query analysis
+Aggregate [hll_sketch_estimate(hll_sketch_agg(bytes#x, 12, 0, 0)) AS hll_sketch_estimate(hll_sketch_agg(bytes, 12))#xL]
++- SubqueryAlias spark_catalog.default.hll_binary_test
+   +- Relation spark_catalog.default.hll_binary_test[bytes#x] parquet
+
+
+-- !query
+SELECT hll_sketch_estimate(hll_sketch_agg(s)) utf8_b FROM hll_string_test
+-- !query analysis
+Aggregate [hll_sketch_estimate(hll_sketch_agg(s#x, 12, 0, 0)) AS utf8_b#xL]
++- SubqueryAlias spark_catalog.default.hll_string_test
+   +- Relation spark_catalog.default.hll_string_test[s#x] parquet
+
+
+-- !query
+SELECT hll_sketch_estimate(hll_sketch_agg(s COLLATE UTF8_LCASE)) utf8_lc FROM hll_string_test
+-- !query analysis
+Aggregate [hll_sketch_estimate(hll_sketch_agg(collate(s#x, UTF8_LCASE), 12, 0, 0)) AS utf8_lc#xL]
++- SubqueryAlias spark_catalog.default.hll_string_test
+   +- Relation spark_catalog.default.hll_string_test[s#x] parquet
+
+
+-- !query
+SELECT hll_sketch_estimate(hll_sketch_agg(s COLLATE UNICODE)) unicode FROM hll_string_test
+-- !query analysis
+Aggregate [hll_sketch_estimate(hll_sketch_agg(collate(s#x, UNICODE), 12, 0, 0)) AS unicode#xL]
++- SubqueryAlias spark_catalog.default.hll_string_test
+   +- Relation spark_catalog.default.hll_string_test[s#x] parquet
+
+
+-- !query
+SELECT hll_sketch_estimate(hll_sketch_agg(s COLLATE UNICODE_CI)) unicode_ci FROM hll_string_test
+-- !query analysis
+Aggregate [hll_sketch_estimate(hll_sketch_agg(collate(s#x, UNICODE_CI), 12, 0, 0)) AS unicode_ci#xL]
++- SubqueryAlias spark_catalog.default.hll_string_test
+   +- Relation spark_catalog.default.hll_string_test[s#x] parquet
+
+
+-- !query
+SELECT hll_sketch_estimate(hll_sketch_agg(s COLLATE UTF8_BINARY_RTRIM)) utf8_b_rt FROM hll_string_test
+-- !query analysis
+Aggregate [hll_sketch_estimate(hll_sketch_agg(collate(s#x, UTF8_BINARY_RTRIM), 12, 0, 0)) AS utf8_b_rt#xL]
++- SubqueryAlias spark_catalog.default.hll_string_test
+   +- Relation spark_catalog.default.hll_string_test[s#x] parquet
+
+
+-- !query
+SELECT hll_sketch_estimate(hll_sketch_agg(s COLLATE UTF8_LCASE_RTRIM)) utf8_lc_rt FROM hll_string_test
+-- !query analysis
+Aggregate [hll_sketch_estimate(hll_sketch_agg(collate(s#x, UTF8_LCASE_RTRIM), 12, 0, 0)) AS utf8_lc_rt#xL]
++- SubqueryAlias spark_catalog.default.hll_string_test
+   +- Relation spark_catalog.default.hll_string_test[s#x] parquet
+
+
+-- !query
+SELECT hll_sketch_estimate(hll_sketch_agg(s COLLATE UNICODE_RTRIM)) unicode_rt FROM hll_string_test
+-- !query analysis
+Aggregate [hll_sketch_estimate(hll_sketch_agg(collate(s#x, UNICODE_RTRIM), 12, 0, 0)) AS unicode_rt#xL]
++- SubqueryAlias spark_catalog.default.hll_string_test
+   +- Relation spark_catalog.default.hll_string_test[s#x] parquet
+
+
+-- !query
+SELECT hll_sketch_estimate(hll_sketch_agg(s COLLATE UNICODE_CI_RTRIM)) unicode_ci_rt FROM hll_string_test
+-- !query analysis
+Aggregate [hll_sketch_estimate(hll_sketch_agg(collate(s#x, UNICODE_CI_RTRIM), 12, 0, 0)) AS unicode_ci_rt#xL]
++- SubqueryAlias spark_catalog.default.hll_string_test
+   +- Relation spark_catalog.default.hll_string_test[s#x] parquet
 
 
 -- !query
@@ -120,6 +234,49 @@ Aggregate [hll_sketch_agg(col#x, 40, 0, 0) AS hll_sketch_agg(col, 40)#x]
 
 
 -- !query
+SELECT hll_sketch_agg(col, CAST(NULL AS INT)) AS k_is_null
+FROM VALUES (15), (16), (17) tab(col)
+-- !query analysis
+Aggregate [hll_sketch_agg(col#x, cast(null as int), 0, 0) AS k_is_null#x]
++- SubqueryAlias tab
+   +- LocalRelation [col#x]
+
+
+-- !query
+SELECT hll_sketch_agg(col, CAST(col AS INT)) AS k_non_constant
+FROM VALUES (15), (16), (17) tab(col)
+-- !query analysis
+Aggregate [hll_sketch_agg(col#x, cast(col#x as int), 0, 0) AS k_non_constant#x]
++- SubqueryAlias tab
+   +- LocalRelation [col#x]
+
+
+-- !query
+SELECT hll_sketch_agg(col, '15')
+FROM VALUES (50), (60), (60) tab(col)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"15\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"INT\"",
+    "sqlExpr" : "\"hll_sketch_agg(col, 15)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "hll_sketch_agg(col, '15')"
+  } ]
+}
+
+
+-- !query
 SELECT hll_union(
     hll_sketch_agg(col1, 12),
     hll_sketch_agg(col2, 13))
@@ -213,3 +370,17 @@ DROP TABLE IF EXISTS t1
 -- !query analysis
 DropTable true, false
 +- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t1
+
+
+-- !query
+DROP TABLE IF EXISTS hll_binary_test
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.hll_binary_test
+
+
+-- !query
+DROP TABLE IF EXISTS hll_string_test
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.hll_string_test

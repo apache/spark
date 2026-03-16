@@ -36,11 +36,11 @@ class AlterTableAddPartitionSuite
           sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
           assert(!statsOn || getTableSize(t) > 0)
 
-          checkHiveClientCalls(expected = 17) {
+          checkHiveClientCalls(expected = 9) {
             sql(s"ALTER TABLE $t ADD PARTITION (part=1)")
           }
           sql(s"CACHE TABLE $t")
-          checkHiveClientCalls(expected = 17) {
+          checkHiveClientCalls(expected = 9) {
             sql(s"ALTER TABLE $t ADD PARTITION (part=2)")
           }
         }

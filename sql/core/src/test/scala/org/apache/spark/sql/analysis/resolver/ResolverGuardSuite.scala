@@ -335,6 +335,7 @@ class ResolverGuardSuite extends QueryTest with SharedSparkSession {
 
         sql("CREATE FUNCTION supermario(x INT) RETURNS INT RETURN x + 3")
 
+        // Qualified names are rejected because UDFs are not supported
         checkResolverGuard("SELECT upper.supermario(2)", shouldPass = false)
       }
     }

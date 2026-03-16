@@ -31,7 +31,7 @@ r"""
     localhost 9999`
 """
 import sys
-from typing import Iterable, Any
+from typing import Iterator, Any
 
 import pandas as pd
 
@@ -95,8 +95,8 @@ if __name__ == "__main__":
     )
 
     def func(
-        key: Any, pdfs: Iterable[pd.DataFrame], state: GroupState
-    ) -> Iterable[pd.DataFrame]:
+        key: Any, pdfs: Iterator[pd.DataFrame], state: GroupState
+    ) -> Iterator[pd.DataFrame]:
         if state.hasTimedOut:
             count, start, end = state.get
             state.remove()

@@ -17,7 +17,7 @@
 from typing import Any, Callable, List, Optional, Union, cast, no_type_check
 
 import pandas as pd
-from pandas.api.types import is_hashable, CategoricalDtype  # type: ignore[attr-defined]
+from pandas.api.types import is_hashable, CategoricalDtype
 
 from pyspark import pandas as ps
 from pyspark.pandas.indexes.base import Index
@@ -654,7 +654,7 @@ def _test() -> None:
         .appName("pyspark.pandas.indexes.category tests")
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.indexes.category,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

@@ -18,18 +18,10 @@ from pyspark.sql.tests.test_python_datasource import BasePythonDataSourceTestsMi
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class PythonDataSourceParityTests(BasePythonDataSourceTestsMixin, ReusedConnectTestCase):
-    ...
+class PythonDataSourceParityTests(BasePythonDataSourceTestsMixin, ReusedConnectTestCase): ...
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.sql.tests.connect.test_parity_python_datasource import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

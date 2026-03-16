@@ -944,6 +944,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           locationUri = None,
           inputFormat = None,
           outputFormat = None,
+          serdeName = None,
           serde = None,
           compressed = false,
           properties = Map.empty),
@@ -957,6 +958,44 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sql("INSERT INTO TABLE test_table SELECT 2, null")
       }
       assert(msg.getCondition == "NOT_NULL_ASSERT_VIOLATION")
+    }
+  }
+
+  test("SPARK-54971: INSERT WITH SCHEMA EVOLUTION is currently unsupported") {
+    withTable("test_table") {
+      val schema = new StructType()
+        .add("i", LongType, false)
+        .add("s", StringType, false)
+      val newTable = CatalogTable(
+        identifier = TableIdentifier("test_table", None),
+        tableType = CatalogTableType.MANAGED,
+        storage = CatalogStorageFormat(
+          locationUri = None,
+          inputFormat = None,
+          outputFormat = None,
+          serdeName = None,
+          serde = None,
+          compressed = false,
+          properties = Map.empty),
+        schema = schema,
+        provider = Some(classOf[SimpleInsertSource].getName))
+
+      spark.sessionState.catalog.createTable(newTable, false)
+
+      sql("INSERT INTO TABLE test_table SELECT 1, 'a'")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT WITH SCHEMA EVOLUTION INTO TABLE test_table SELECT 1, 'a'")
+        },
+        condition = "UNSUPPORTED_INSERT_WITH_SCHEMA_EVOLUTION"
+      )
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT WITH SCHEMA EVOLUTION INTO TABLE test_table SELECT 1, 'a', 2")
+        },
+        condition = "UNSUPPORTED_INSERT_WITH_SCHEMA_EVOLUTION"
+      )
     }
   }
 
@@ -1097,6 +1136,44 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("insert into t select false, default")
       checkAnswer(spark.table("t"), Row(false, 42L))
     }
+    // There is a default value that is a special column name 'current_timestamp'.
+    withTable("t") {
+      sql("create table t(i boolean, s timestamp default current_timestamp) using parquet")
+      sql("insert into t(i) values(false)")
+      val result = spark.table("t").collect()
+      assert(result.length == 1)
+      assert(!result(0).getBoolean(0))
+      assert(result(0).getTimestamp(1) != null)
+    }
+    // There is a default value with special column name 'current_user' but in uppercase.
+    withTable("t") {
+      sql("create table t(i boolean, s string default CURRENT_USER) using parquet")
+      sql("insert into t(i) values(false)")
+      val result = spark.table("t").collect()
+      assert(result.length == 1)
+      assert(!result(0).getBoolean(0))
+      assert(result(0).getString(1) != null)
+    }
+    // There is a default value with special column name same as current column name
+    withTable("t") {
+      sql("create table t(current_timestamp timestamp default current_timestamp, b boolean) " +
+        "using parquet")
+      sql("insert into t(b) values(false)")
+      val result = spark.table("t").collect()
+      assert(result.length == 1)
+      assert(result(0).getTimestamp(0) != null)
+      assert(!result(0).getBoolean(1))
+    }
+    // There is a default value with special column name same as another column name
+    withTable("t") {
+      sql("create table t(current_date boolean, s date default current_date) " +
+        "using parquet")
+      sql("insert into t(current_date) values(false)")
+      val result = spark.table("t").collect()
+      assert(result.length == 1)
+      assert(!result(0).getBoolean(0))
+      assert(result(0).getDate(1) != null)
+    }
     // There is a complex query plan in the SELECT query in the INSERT INTO statement.
     withTable("t") {
       sql("create table t(i boolean default false, s bigint default 42) using parquet")
@@ -1164,29 +1241,27 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SPARK-38336 INSERT INTO statements with tables with default columns: negative tests") {
-    // The default value references columns.
+    // The default value references a non-existing column, which is not a constant.
     withTable("t") {
       checkError(
         exception = intercept[AnalysisException] {
           sql("create table t(i boolean, s bigint default badvalue) using parquet")
         },
-        condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+        condition = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
         parameters = Map(
           "statement" -> "CREATE TABLE",
           "colName" -> "`s`",
           "defaultValue" -> "badvalue"))
     }
     try {
-      // The default value references session variables.
+      // The default value references a session variable, which is not a constant.
       sql("DECLARE test_var INT")
       withTable("t") {
         checkError(
           exception = intercept[AnalysisException] {
             sql("create table t(i boolean, s int default test_var) using parquet")
           },
-          // V1 command still use the fake Analyzer which can't resolve session variables and we
-          // can only report UNRESOLVED_EXPRESSION error.
-          condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+          condition = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
           parameters = Map(
             "statement" -> "CREATE TABLE",
             "colName" -> "`s`",
@@ -1197,8 +1272,6 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql(s"create table t(i int, j int default test_var) using $v2Source")
           },
-          // V2 command uses the actual analyzer and can resolve session variables. We can report
-          // a more accurate NOT_CONSTANT error.
           condition = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
           parameters = Map(
             "statement" -> "CREATE TABLE",
@@ -1633,14 +1706,14 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SPARK-38811 INSERT INTO on columns added with ALTER TABLE ADD COLUMNS: Negative tests") {
-    // The default value fails to analyze.
+    // The default value references a non-existing column, which is not a constant.
     withTable("t") {
       sql("create table t(i boolean) using parquet")
       checkError(
         exception = intercept[AnalysisException] {
           sql("alter table t add column s bigint default badvalue")
         },
-        condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+        condition = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
         parameters = Map(
           "statement" -> "ALTER TABLE ADD COLUMNS",
           "colName" -> "`s`",
@@ -1735,12 +1808,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     val createTable = "create table t(i boolean, s bigint) using parquet"
     withTable("t") {
       sql(createTable)
-      // The default value fails to analyze.
+      // The default value references a non-existing column, which is not a constant.
       checkError(
         exception = intercept[AnalysisException] {
           sql("alter table t alter column s set default badvalue")
         },
-        condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+        condition = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
         parameters = Map(
           "statement" -> "ALTER TABLE ALTER COLUMN",
           "colName" -> "`s`",
@@ -2012,12 +2085,17 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     withSQLConf(SQLConf.JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE.key -> "false",
       SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "true") {
       withTable("t") {
-        sql("create table t (a struct<x: long> default struct(42), b int) using json")
-        sql("insert into t values (cast(null as struct<x: int>), null)")
-        // nulls should not be written for either field
-        checkAnswer(readTableAsText("t"), Row("{}"))
+        sql("""create table t (
+              |    a struct<x: long> default struct(43),
+              |    b int default 17,
+              |    c struct<y: long>)
+              | using json
+              |""".stripMargin)
+        sql("insert into t values (cast(null as struct<x: int>), null, struct(5 as z))")
+        // nulls should not be written for a or b fields
+        checkAnswer(readTableAsText("t"), Row("{\"c\":{\"y\":5}}"))
         // default value is filled in for missing fields.
-        checkAnswer(spark.table("t"), Row(Row(42), null))
+        checkAnswer(spark.table("t"), Row(Row(43), 17, Row(5)))
       }
     }
     // SPARK-52772 Should not pick up JSON DEFAULT from source
@@ -2772,6 +2850,188 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         condition = "UNSUPPORTED_OVERWRITE.TABLE",
         parameters = Map("table" -> s"`spark_catalog`.`default`.`$tableName`")
       )
+    }
+  }
+
+  test("SPARK-55716: V1 INSERT rejects null into NOT NULL column for file sources") {
+    Seq("parquet", "orc", "json").foreach { format =>
+      withSQLConf(SQLConf.FILE_SOURCE_INSERT_ENFORCE_NOT_NULL.key -> "true") {
+        withTable("t") {
+          sql(s"CREATE TABLE t(i INT NOT NULL, s STRING NOT NULL) USING $format")
+          // V1 DataSource writes now enforce NOT NULL constraints via AssertNotNull
+          val e1 = intercept[SparkRuntimeException] {
+            sql("INSERT INTO t VALUES(null, 'a')")
+          }
+          assert(e1.getCondition === "NOT_NULL_ASSERT_VIOLATION")
+          val e2 = intercept[SparkRuntimeException] {
+            sql("INSERT INTO t VALUES(1, null)")
+          }
+          assert(e2.getCondition === "NOT_NULL_ASSERT_VIOLATION")
+          // Valid insert should succeed
+          sql("INSERT INTO t VALUES(1, 'a')")
+          checkAnswer(spark.table("t"), Seq(Row(1, "a")))
+        }
+      }
+    }
+  }
+
+  test("SPARK-55716: V1 INSERT NOT NULL enforcement respects storeAssignmentPolicy") {
+    Seq("parquet", "orc").foreach { format =>
+      // ANSI mode (default): rejects null
+      withSQLConf(
+        SQLConf.FILE_SOURCE_INSERT_ENFORCE_NOT_NULL.key -> "true",
+        SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
+        withTable("t") {
+          sql(s"CREATE TABLE t(i INT NOT NULL) USING $format")
+          val e = intercept[SparkRuntimeException] {
+            sql("INSERT INTO t VALUES(null)")
+          }
+          assert(e.getCondition === "NOT_NULL_ASSERT_VIOLATION")
+        }
+      }
+      // STRICT mode: also rejects null (fails at analysis with type mismatch)
+      withSQLConf(
+        SQLConf.FILE_SOURCE_INSERT_ENFORCE_NOT_NULL.key -> "true",
+        SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.STRICT.toString) {
+        withTable("t") {
+          sql(s"CREATE TABLE t(i INT NOT NULL) USING $format")
+          intercept[AnalysisException] {
+            sql("INSERT INTO t VALUES(null)")
+          }
+        }
+      }
+      // LEGACY mode: allows null (no AssertNotNull injected)
+      withSQLConf(
+        SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.LEGACY.toString) {
+        withTable("t") {
+          sql(s"CREATE TABLE t(i INT NOT NULL) USING $format")
+          sql("INSERT INTO t VALUES(null)")
+          checkAnswer(spark.table("t"), Seq(Row(null)))
+        }
+      }
+      // Legacy config: allows null even in ANSI mode
+      withSQLConf(
+        SQLConf.FILE_SOURCE_INSERT_ENFORCE_NOT_NULL.key -> "false") {
+        withTable("t") {
+          sql(s"CREATE TABLE t(i INT NOT NULL) USING $format")
+          sql("INSERT INTO t VALUES(null)")
+          checkAnswer(spark.table("t"), Seq(Row(null)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-55716: V1 INSERT rejects null with V2 file source path") {
+    Seq("parquet", "orc").foreach { format =>
+      withSQLConf(
+        SQLConf.FILE_SOURCE_INSERT_ENFORCE_NOT_NULL.key -> "true",
+        SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+        withTable("t") {
+          sql(s"CREATE TABLE t(i INT NOT NULL, s STRING NOT NULL) USING $format")
+          val e = intercept[SparkRuntimeException] {
+            sql("INSERT INTO t VALUES(null, 'a')")
+          }
+          assert(e.getCondition === "NOT_NULL_ASSERT_VIOLATION")
+        }
+      }
+    }
+  }
+
+  test("SPARK-55716: V1 INSERT rejects null array element for NOT NULL element type") {
+    Seq("parquet", "orc").foreach { format =>
+      withSQLConf(SQLConf.FILE_SOURCE_INSERT_ENFORCE_NOT_NULL.key -> "true") {
+      withTable("t") {
+        val schema = new StructType()
+          .add("a", ArrayType(IntegerType, containsNull = false))
+        spark.sessionState.catalog.createTable(
+          CatalogTable(
+            identifier = TableIdentifier("t"),
+            tableType = CatalogTableType.MANAGED,
+            storage = CatalogStorageFormat.empty,
+            schema = schema,
+            provider = Some(format)),
+          ignoreIfExists = false)
+        val e = intercept[SparkRuntimeException] {
+          sql("INSERT INTO t SELECT array(1, null, 3)")
+        }
+        assert(e.getCondition === "NOT_NULL_ASSERT_VIOLATION")
+        // Valid insert should succeed
+        sql("INSERT INTO t SELECT array(1, 2, 3)")
+        checkAnswer(spark.table("t"), Seq(Row(Seq(1, 2, 3))))
+      }
+      }
+    }
+  }
+
+  test("SPARK-55716: V1 INSERT rejects null struct field for NOT NULL field") {
+    Seq("parquet", "orc").foreach { format =>
+      withSQLConf(SQLConf.FILE_SOURCE_INSERT_ENFORCE_NOT_NULL.key -> "true") {
+      withTable("t") {
+        val schema = new StructType()
+          .add("s", new StructType()
+            .add("x", IntegerType, nullable = false)
+            .add("y", StringType, nullable = false))
+        spark.sessionState.catalog.createTable(
+          CatalogTable(
+            identifier = TableIdentifier("t"),
+            tableType = CatalogTableType.MANAGED,
+            storage = CatalogStorageFormat.empty,
+            schema = schema,
+            provider = Some(format)),
+          ignoreIfExists = false)
+        val e = intercept[SparkRuntimeException] {
+          sql("INSERT INTO t SELECT named_struct('x', null, 'y', 'hello')")
+        }
+        assert(e.getCondition === "NOT_NULL_ASSERT_VIOLATION")
+        // Valid insert should succeed
+        sql("INSERT INTO t SELECT named_struct('x', 1, 'y', 'hello')")
+        checkAnswer(spark.table("t"), Seq(Row(Row(1, "hello"))))
+      }
+      }
+    }
+  }
+
+  test("SPARK-55716: V1 INSERT rejects null map value for NOT NULL value type") {
+    Seq("parquet", "orc").foreach { format =>
+      withSQLConf(SQLConf.FILE_SOURCE_INSERT_ENFORCE_NOT_NULL.key -> "true") {
+      withTable("t") {
+        val schema = new StructType()
+          .add("m", MapType(StringType, IntegerType, valueContainsNull = false))
+        spark.sessionState.catalog.createTable(
+          CatalogTable(
+            identifier = TableIdentifier("t"),
+            tableType = CatalogTableType.MANAGED,
+            storage = CatalogStorageFormat.empty,
+            schema = schema,
+            provider = Some(format)),
+          ignoreIfExists = false)
+        val e = intercept[SparkRuntimeException] {
+          sql("INSERT INTO t SELECT map('a', 1, 'b', null)")
+        }
+        assert(e.getCondition === "NOT_NULL_ASSERT_VIOLATION")
+        // Valid insert should succeed
+        sql("INSERT INTO t SELECT map('a', 1, 'b', 2)")
+        checkAnswer(spark.table("t"), Seq(Row(Map("a" -> 1, "b" -> 2))))
+      }
+      }
+    }
+  }
+
+  test("SPARK-55716: V1 DataFrame write ignores NOT NULL schema constraint") {
+    Seq("parquet", "orc").foreach { format =>
+      withTempPath { path =>
+        val data = Seq(Row(null, "hello", 1.0), Row(1, null, 2.0), Row(2, "world", null))
+        val df = spark.createDataFrame(
+          spark.sparkContext.parallelize(data),
+          new StructType()
+            .add("id", IntegerType, nullable = true)
+            .add("name", StringType, nullable = true)
+            .add("value", DoubleType, nullable = true))
+        // V1 DataSource writes do not enforce NOT NULL constraints
+        df.write.mode(SaveMode.Overwrite).format(format).save(path.getCanonicalPath)
+        val result = spark.read.format(format).load(path.getCanonicalPath)
+        checkAnswer(result, data)
+      }
     }
   }
 

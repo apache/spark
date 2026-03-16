@@ -35,6 +35,17 @@ trait ParserInterface extends DataTypeParserInterface {
   def parsePlan(sqlText: String): LogicalPlan
 
   /**
+   * Parse a string to a [[LogicalPlan]] with explicit parameter context.
+   * This method avoids thread-local usage for better API design.
+   */
+  @throws[ParseException]("Text cannot be parsed to a LogicalPlan")
+  def parsePlanWithParameters(sqlText: String, parameterContext: ParameterContext): LogicalPlan = {
+    // Default implementation falls back to regular parsePlan
+    // Concrete implementations can override this for parameter support
+    parsePlan(sqlText)
+  }
+
+  /**
    * Parse a string to an [[Expression]].
    */
   @throws[ParseException]("Text cannot be parsed to an Expression")

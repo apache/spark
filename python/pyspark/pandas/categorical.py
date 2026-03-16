@@ -17,7 +17,7 @@
 from typing import Any, Callable, List, Optional, Union, TYPE_CHECKING, cast
 
 import pandas as pd
-from pandas.api.types import (  # type: ignore[attr-defined]
+from pandas.api.types import (
     CategoricalDtype,
     is_dict_like,
     is_list_like,
@@ -784,7 +784,7 @@ def _test() -> None:
         .appName("pyspark.pandas.categorical tests")
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.categorical,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

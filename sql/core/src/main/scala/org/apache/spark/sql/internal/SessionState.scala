@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.classic.{SparkSession, StreamingQueryManager, UDFRegistration}
+import org.apache.spark.sql.classic.{SparkSession, StreamingCheckpointManager, StreamingQueryManager, UDFRegistration}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveRulesHolder
@@ -84,6 +84,7 @@ private[sql] class SessionState(
     optimizerBuilder: () => Optimizer,
     val planner: SparkPlanner,
     val streamingQueryManagerBuilder: () => StreamingQueryManager,
+    val streamingCheckpointManagerBuilder: () => StreamingCheckpointManager,
     val listenerManager: ExecutionListenerManager,
     resourceLoaderBuilder: () => SessionResourceLoader,
     createQueryExecution: (LogicalPlan, CommandExecutionMode.Value) => QueryExecution,
@@ -105,6 +106,9 @@ private[sql] class SessionState(
   // The streamingQueryManager is lazy to avoid creating a StreamingQueryManager for each session
   // when connecting to ThriftServer.
   lazy val streamingQueryManager: StreamingQueryManager = streamingQueryManagerBuilder()
+
+  private[spark] lazy val streamingCheckpointManager: StreamingCheckpointManager =
+    streamingCheckpointManagerBuilder()
 
   lazy val artifactManager: ArtifactManager = artifactManagerBuilder()
 

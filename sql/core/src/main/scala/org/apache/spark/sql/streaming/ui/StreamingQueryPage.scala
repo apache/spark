@@ -47,15 +47,17 @@ private[ui] class StreamingQueryPage(parent: StreamingQueryTab)
     if (activeQueries.nonEmpty) {
       // scalastyle:off
       content ++=
-        <span id="active" class="collapse-aggregated-activeQueries collapse-table"
-            onClick="collapseTable('collapse-aggregated-activeQueries','aggregated-activeQueries')">
+        <span id="active" class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-activeQueries"
+            aria-expanded="true" aria-controls="aggregated-activeQueries"
+            data-collapse-name="collapse-aggregated-activeQueries">
           <h5 id="activequeries">
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Active Streaming Queries ({activeQueries.length})</a>
           </h5>
         </span> ++
-          <div>
-            <ul class="aggregated-activeQueries collapsible-table">
+          <div class="collapsible-table collapse show" id="aggregated-activeQueries">
+            <ul>
               {queryTable(activeQueries, request, "active")}
             </ul>
           </div>
@@ -65,15 +67,18 @@ private[ui] class StreamingQueryPage(parent: StreamingQueryTab)
     if (inactiveQueries.nonEmpty) {
       // scalastyle:off
       content ++=
-        <span id="completed" class="collapse-aggregated-completedQueries collapse-table"
-            onClick="collapseTable('collapse-aggregated-completedQueries','aggregated-completedQueries')">
+        <span id="completed" class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-completedQueries"
+            aria-expanded="true" aria-controls="aggregated-completedQueries"
+            data-collapse-name="collapse-aggregated-completedQueries">
           <h5 id="completedqueries">
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Completed Streaming Queries ({inactiveQueries.length})</a>
           </h5>
         </span> ++
-          <div>
-            <ul class="aggregated-completedQueries collapsible-table">
+          <div class="collapsible-table collapse show"
+              id="aggregated-completedQueries">
+            <ul>
               {queryTable(inactiveQueries, request, "completed")}
             </ul>
           </div>
@@ -100,7 +105,7 @@ private[ui] class StreamingQueryPage(parent: StreamingQueryTab)
       ).table(page)
     } catch {
       case e@(_: IllegalArgumentException | _: IndexOutOfBoundsException) =>
-        <div class="alert alert-error">
+        <div class="alert alert-danger">
           <p>Error while rendering execution table:</p>
           <pre>
             {Utils.exceptionString(e)}

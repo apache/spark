@@ -29,6 +29,7 @@ import org.apache.avro.io.{DecoderFactory, EncoderFactory}
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.avro.{functions => Fns}
+import org.apache.spark.sql.avro.functions.{from_avro, to_avro}
 import org.apache.spark.sql.execution.LocalTableScanExec
 import org.apache.spark.sql.functions.{col, lit, struct}
 import org.apache.spark.sql.internal.SQLConf
@@ -664,5 +665,82 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
         |}""".stripMargin
     checkAnswer(df.select(functions.schema_of_avro(avroMultiType)),
       Row("STRUCT<u: STRUCT<member0: INT, member1: STRING> NOT NULL>"))
+  }
+
+  test("roundtrip in to_avro and from_avro - TIME type with different precisions") {
+    val df = spark.sql("""
+      SELECT
+        TIME'12:34:56' as time_p0,
+        TIME'12:34:56.1' as time_p1,
+        TIME'12:34:56.12' as time_p2,
+        TIME'12:34:56.123' as time_p3,
+        TIME'12:34:56.1234' as time_p4,
+        TIME'12:34:56.12345' as time_p5,
+        TIME'12:34:56.123456' as time_p6
+    """)
+
+    val precisions = Seq(0, 1, 2, 3, 4, 5, 6)
+    precisions.foreach { p =>
+      val fieldName = s"time_p$p"
+      // Generate correct schema for each precision
+      val avroTimeSchema = s"""
+        |{
+        |  "type": "long",
+        |  "logicalType": "time-micros",
+        |  "spark.sql.catalyst.type": "time($p)"
+        |}
+      """.stripMargin
+
+      val avroDF = df.select(to_avro(col(fieldName)).as("avro"))
+      val readBack = avroDF.select(from_avro($"avro", avroTimeSchema).as(fieldName))
+
+      checkAnswer(readBack, df.select(col(fieldName)))
+    }
+  }
+
+  test("roundtrip in to_avro and from_avro - TIME type in struct") {
+    val df = spark.sql("""
+      SELECT
+        struct(
+          TIME'09:00:00.123' as start,
+          TIME'17:30:45.987654' as end,
+          'Morning Shift' as description
+        ) as schedule
+    """)
+
+    val avroStructDF = df.select(to_avro($"schedule").as("avro"))
+
+    val avroStructSchema = """
+      |{
+      |  "type": "record",
+      |  "name": "schedule",
+      |  "fields": [
+      |    {
+      |      "name": "start",
+      |      "type": {
+      |        "type": "long",
+      |        "logicalType": "time-micros",
+      |        "spark.sql.catalyst.type": "time(3)"
+      |      }
+      |    },
+      |    {
+      |      "name": "end",
+      |      "type": {
+      |        "type": "long",
+      |        "logicalType": "time-micros",
+      |        "spark.sql.catalyst.type": "time(6)"
+      |      }
+      |    },
+      |    {
+      |      "name": "description",
+      |      "type": "string"
+      |    }
+      |  ]
+      |}
+    """.stripMargin
+
+    val readBack = avroStructDF.select(
+      from_avro($"avro", avroStructSchema).as("schedule"))
+    checkAnswer(readBack, df)
   }
 }

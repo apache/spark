@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.columnar.compression.ColumnBuilderHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnarArray
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
 
 class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
@@ -163,6 +163,43 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
     (0 until 10).foreach { i =>
       assert(array.get(i, TimestampNTZType) === i)
       assert(arrayCopy.get(i, TimestampNTZType) === i)
+    }
+  }
+
+  testVectors("variant", 3, new StructType().add("v", VariantType)) { structVector =>
+    val variantCol = structVector.getChild(0)
+    val valueChild = variantCol.getChild(0)
+    val metadataChild = variantCol.getChild(1)
+
+    variantCol.putNotNull(0)
+    valueChild.appendByteArray(Array[Byte](1, 2, 3), 0, 3)
+    metadataChild.appendByteArray(Array[Byte](10, 11), 0, 2)
+
+    variantCol.putNotNull(1)
+    valueChild.appendByteArray(Array[Byte](4, 5), 0, 2)
+    metadataChild.appendByteArray(Array[Byte](12, 13, 14), 0, 3)
+
+    variantCol.putNull(2)
+    valueChild.appendNull()
+    metadataChild.appendNull()
+
+    (0 until 3).foreach { i =>
+      val row = structVector.getStruct(i)
+      val rowCopy = row.copy()
+
+      if (i < 2) {
+        assert(!row.isNullAt(0))
+        assert(!rowCopy.isNullAt(0))
+
+        val originalVariant = row.get(0, VariantType).asInstanceOf[VariantVal]
+        val copiedVariant = rowCopy.get(0, VariantType).asInstanceOf[VariantVal]
+
+        assert(java.util.Arrays.equals(originalVariant.getValue, copiedVariant.getValue))
+        assert(java.util.Arrays.equals(originalVariant.getMetadata, copiedVariant.getMetadata))
+      } else {
+        assert(row.isNullAt(0))
+        assert(rowCopy.isNullAt(0))
+      }
     }
   }
 
@@ -949,5 +986,71 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
   testVectors("user defined type in struct type",
     10, StructType(Seq(StructField("year", yearUDT)))) { testVector =>
     assert(testVector.dataType() === StructType(Seq(StructField("year", IntegerType))))
+  }
+
+  testVectors("SPARK-53434: ColumnarRow.get() should handle null", 1, structType) { testVector =>
+    val c1 = testVector.getChild(0)
+    val c2 = testVector.getChild(1)
+    val c3 = testVector.getChild(2)
+
+    // For row 0, set the integer field to null, and other fields to non-null.
+    c1.putNull(0)
+    c2.putDouble(0, 3.45)
+    c3.putLong(0, 1000L)
+
+    val row = testVector.getStruct(0)
+
+    // Verify that get() on the null field returns null.
+    assert(row.isNullAt(0))
+    assert(row.get(0, IntegerType) == null)
+
+    // Verify that other fields can be retrieved correctly.
+    assert(!row.isNullAt(1))
+    assert(row.get(1, DoubleType) === 3.45)
+    assert(!row.isNullAt(2))
+    assert(row.get(2, TimestampNTZType) === 1000L)
+  }
+
+  testVectors("putBooleans(byte)", 96, BooleanType) { testVector =>
+    // Test various bit patterns at aligned offsets
+    val patterns = Seq(
+      0x00.toByte,
+      0xFF.toByte,
+      0xAA.toByte,
+      0x55.toByte,
+      0x80.toByte,
+      0x01.toByte
+    )
+
+    patterns.zipWithIndex.foreach { case (pattern, idx) =>
+      val rowId = idx * 8
+      testVector.putBooleans(rowId, pattern)
+      (0 until 8).foreach { i =>
+        val expected = ((pattern & 0xFF) >>> i & 1) == 1
+        assert(testVector.getBoolean(rowId + i) === expected)
+      }
+    }
+
+    // Verify writes at different offsets don't corrupt adjacent data.
+    // Note: the loop above writes 6 patterns at rowId 0..40, so rowId 48+ is untouched.
+    testVector.putBooleans(48, 0xFF.toByte) // fill slots 48-55 with true
+    testVector.putBooleans(56, 0xAA.toByte) // write at offset 56
+    // Verify slots 48-55 are untouched
+    (0 until 8).foreach { i =>
+      assert(testVector.getBoolean(48 + i) === true,
+        s"slot ${48 + i} should still be true after writing at rowId=56")
+    }
+    // Verify offset-56 write is correct
+    (0 until 8).foreach { i =>
+      val expected = ((0xAA & 0xFF) >>> i & 1) == 1
+      assert(testVector.getBoolean(56 + i) === expected)
+    }
+
+    // Write at capacity boundary (last 8 slots: rowId=88, capacity=96)
+    testVector.putBooleans(88, 0x55.toByte)
+    (0 until 8).foreach { i =>
+      val expected = ((0x55 & 0xFF) >>> i & 1) == 1
+      assert(testVector.getBoolean(88 + i) === expected)
+    }
   }
 }

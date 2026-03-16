@@ -196,6 +196,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     tags(tag) = value
   }
 
+  def containsTag[T](tag: TreeNodeTag[T]): Boolean = {
+    getTagValue[T](tag).isDefined
+  }
+
   def getTagValue[T](tag: TreeNodeTag[T]): Option[T] = {
     if (isTagsEmpty) {
       None
@@ -223,7 +227,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     children.map(_.height).reduceOption(_ max _).getOrElse(0) + 1)
   def height: Int = _height()
 
-  private val _hashCode = new BestEffortLazyVal[Integer](() => MurmurHash3.productHash(this))
+  private val _hashCode = new BestEffortLazyVal[Integer](() => MurmurHash3.caseClassHash(this))
   override def hashCode(): Int = _hashCode()
 
   /**

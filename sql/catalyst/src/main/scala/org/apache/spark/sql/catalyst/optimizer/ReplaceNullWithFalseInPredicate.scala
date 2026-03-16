@@ -149,7 +149,8 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
 
   private def replaceNullWithFalse(mergeActions: Seq[MergeAction]): Seq[MergeAction] = {
     mergeActions.map {
-      case u @ UpdateAction(Some(cond), _) => u.copy(condition = Some(replaceNullWithFalse(cond)))
+      case u @ UpdateAction(Some(cond), _, _) =>
+        u.copy(condition = Some(replaceNullWithFalse(cond)))
       case u @ UpdateStarAction(Some(cond)) => u.copy(condition = Some(replaceNullWithFalse(cond)))
       case d @ DeleteAction(Some(cond)) => d.copy(condition = Some(replaceNullWithFalse(cond)))
       case i @ InsertAction(Some(cond), _) => i.copy(condition = Some(replaceNullWithFalse(cond)))

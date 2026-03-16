@@ -941,7 +941,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
       .select($"key", $"window.end".cast("long"), $"leftValue", $"rightValue")
 
     val useVirtualColumnFamilies =
-      spark.sessionState.conf.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION) == 3
+      spark.sessionState.conf.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION) >= 3
     // Number of shuffle partitions being used is 3
     val numStateStoreInstances = if (useVirtualColumnFamilies) {
       // Only one state store is created per partition if we're using virtual column families
@@ -1609,7 +1609,7 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
   test("SPARK-29438: ensure UNION doesn't lead stream-stream join to use shifted partition IDs") {
     def constructUnionDf(desiredPartitionsForInput1: Int)
         : (MemoryStream[Int], MemoryStream[Int], MemoryStream[Int], DataFrame) = {
-      val input1 = MemoryStream[Int](desiredPartitionsForInput1)
+      val input1 = MemoryStream[Int](spark, desiredPartitionsForInput1)
       val df1 = input1.toDF()
         .select(
           $"value" as "key",

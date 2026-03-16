@@ -612,6 +612,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       provider,
       nullable = true))
       .resolveAndBind()
+    assert(encoder.isInstanceOf[Serializable])
     assert(encoder.schema == new StructType().add("value", BinaryType))
     val toRow = encoder.createSerializer()
     val fromRow = encoder.createDeserializer()
@@ -657,6 +658,22 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     val toRow = encoder.createSerializer()
     val fromRow = encoder.createDeserializer()
     assert(fromRow(toRow(new Wrapper(Row(9L, "x")))) == new Wrapper(Row(9L, "x")))
+  }
+
+  test("SPARK-52614: transforming encoder row encoder in product encoder") {
+    val schema = new StructType().add("a", LongType).add("b", StringType)
+    val wrapperEncoder = TransformingEncoder(
+      classTag[Wrapper[Row]],
+      RowEncoder.encoderFor(schema),
+      new WrapperCodecProvider[Row])
+    val encoder = ExpressionEncoder(ProductEncoder(
+      classTag[V[Wrapper[Row]]],
+      Seq(EncoderField("v", wrapperEncoder, nullable = false, Metadata.empty)),
+      None))
+      .resolveAndBind()
+    val toRow = encoder.createSerializer()
+    val fromRow = encoder.createDeserializer()
+    assert(fromRow(toRow(V(new Wrapper(Row(9L, "x"))))) == V(new Wrapper(Row(9L, "x"))))
   }
 
   // below tests are related to SPARK-49960 and TransformingEncoder usage
@@ -745,6 +762,24 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
           V_OF_INT
         )
       )
+
+    testDataTransformingEnc(enc, data)
+  }
+
+  test("SPARK-52601 TransformingEncoder from primitive to timestamp") {
+    val enc: AgnosticEncoder[Long] =
+      TransformingEncoder[Long, java.sql.Timestamp](
+        classTag,
+        TimestampEncoder(true),
+        () =>
+          new Codec[Long, java.sql.Timestamp] with Serializable {
+            override def encode(in: Long): Timestamp = Timestamp.from(microsToInstant(in))
+            override def decode(out: Timestamp): Long = instantToMicros(out.toInstant)
+        }
+    )
+    val data: Seq[Long] = Seq(0L, 1L, 2L)
+
+    assert(enc.dataType === TimestampType)
 
     testDataTransformingEnc(enc, data)
   }

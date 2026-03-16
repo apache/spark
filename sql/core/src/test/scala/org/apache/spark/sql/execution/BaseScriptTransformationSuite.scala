@@ -24,7 +24,6 @@ import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.Assertions._
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.{SparkException, TaskContext, TestUtils}
@@ -40,8 +39,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.ArrayImplicits._
 
-abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestUtils
-  with BeforeAndAfterEach {
+abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestUtils {
   import testImplicits._
   import ScriptTransformationIOSchema._
 
@@ -111,7 +109,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
 
   test("SPARK-25990: TRANSFORM should handle different data types correctly") {
     assume(TestUtils.testCommandAvailable("python3"))
-    val scriptFilePath = copyAndGetResourceFile("test_script.py", ".py").getAbsoluteFile
+    val scriptFilePath = copyAndGetResourceFile("script.py", ".py").getAbsoluteFile
 
     withTempView("v") {
       val df = Seq(
@@ -492,7 +490,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
 
   test("SPARK-33934: Add SparkFile's root dir to env property PATH") {
     assume(TestUtils.testCommandAvailable("python3"))
-    val scriptFilePath = copyAndGetResourceFile("test_script.py", ".py").getAbsoluteFile
+    val scriptFilePath = copyAndGetResourceFile("script.py", ".py").getAbsoluteFile
     withTempView("v") {
       val df = Seq(
         (1, "1", 1.0, BigDecimal(1.0), new Timestamp(1)),

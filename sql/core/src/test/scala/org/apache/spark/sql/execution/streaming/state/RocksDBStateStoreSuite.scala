@@ -1730,7 +1730,18 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
-  test("validate rocksdb values iterator correctness") {
+  private def testMergeWithOperatorVersions(testName: String)(testFn: Int => Unit): Unit = {
+    RocksDBConf.MERGE_OPERATOR_VALID_VERSIONS.foreach { version =>
+      test(testName + s" - merge operator version $version") {
+        withSQLConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key -> version.toString) {
+          testFn(version)
+        }
+      }
+    }
+  }
+
+  testMergeWithOperatorVersions(
+    "validate rocksdb values iterator correctness - put then merge") { _ =>
     withSQLConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1") {
       tryWithProviderResource(newStoreProvider(useColumnFamilies = true,
         useMultipleValuesPerKey = true)) { provider =>
@@ -1762,6 +1773,103 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
         assert(get(store, "a", 0).isEmpty)
         store.abort()
+      }
+    }
+  }
+
+  test("validate rocksdb values iterator correctness - blind merge with operator version 2") {
+    withSQLConf(
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
+      SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key -> "2") {
+
+      tryWithProviderResource(newStoreProvider(useColumnFamilies = true,
+        useMultipleValuesPerKey = true)) { provider =>
+        val store = provider.getStore(0)
+        // We do blind merge than put against non-existing key.
+        // Note that this is only safe with merge operator version 2.
+        merge(store, "a", 0, 1)
+
+        val iterator0 = store.valuesIterator(dataToKeyRow("a", 0))
+
+        assert(iterator0.hasNext)
+        assert(valueRowToData(iterator0.next()) === 1)
+        assert(!iterator0.hasNext)
+
+        merge(store, "a", 0, 2)
+        merge(store, "a", 0, 3)
+
+        val iterator1 = store.valuesIterator(dataToKeyRow("a", 0))
+
+        (1 to 3).map { i =>
+          assert(iterator1.hasNext)
+          assert(valueRowToData(iterator1.next()) === i)
+        }
+
+        assert(!iterator1.hasNext)
+
+        store.abort()
+      }
+    }
+  }
+
+  testMergeWithOperatorVersions(
+    "validate rocksdb values iterator correctness - fuzzy merge and put"
+  ) { version =>
+    val seed = System.currentTimeMillis()
+    val rand = new Random(seed)
+    logInfo(s"fuzzy merge and put test using seed: $seed")
+
+    withSQLConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1") {
+      tryWithProviderResource(newStoreProvider(useColumnFamilies = true,
+        useMultipleValuesPerKey = true)) { provider =>
+        val store = provider.getStore(0)
+
+        try {
+          val inputValues = scala.collection.mutable.ArrayBuffer[Int]()
+
+          def performPut(value: Int): Unit = {
+            put(store, "a", 0, value)
+            inputValues.clear()
+            inputValues += value.toInt
+          }
+
+          def performMerge(value: Int): Unit = {
+            merge(store, "a", 0, value)
+            inputValues += value.toInt
+          }
+
+          def performRemove(): Unit = {
+            remove(store, _._1 == "a")
+            inputValues.clear()
+          }
+
+          (0 to 100000).foreach { _ =>
+            val op = rand.nextInt(3)
+
+            op match {
+              case 0 =>
+                val value = rand.nextInt(10)
+                performPut(value)
+              case 1 =>
+                val value = rand.nextInt(10)
+                if (inputValues.isEmpty && version == 1) {
+                  // version 1 can't handle blind merge against non-existing key, so we have to
+                  // fall back to put
+                  performPut(value)
+                } else {
+                  performMerge(value)
+                }
+              case 2 =>
+                performRemove()
+            }
+
+            val iterator = store.valuesIterator(dataToKeyRow("a", 0))
+            val valuesInStateStore = iterator.map(valueRowToData).toSeq
+            assert(valuesInStateStore === inputValues)
+          }
+        } finally {
+          store.abort()
+        }
       }
     }
   }
@@ -2401,6 +2509,116 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
+  testWithRocksDBStateStore("deleteRange - bulk deletion of keys in range") {
+    tryWithProviderResource(
+      newStoreProvider(
+        keySchemaWithRangeScan,
+        RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
+        useColumnFamilies = false)) { provider =>
+      val store = provider.getStore(0)
+      try {
+        // Put keys with timestamps that will be ordered
+        // Keys: (1, "a"), (2, "b"), (3, "c"), (4, "d"), (5, "e")
+        store.put(dataToKeyRowWithRangeScan(1L, "a"), dataToValueRow(10))
+        store.put(dataToKeyRowWithRangeScan(2L, "b"), dataToValueRow(20))
+        store.put(dataToKeyRowWithRangeScan(3L, "c"), dataToValueRow(30))
+        store.put(dataToKeyRowWithRangeScan(4L, "d"), dataToValueRow(40))
+        store.put(dataToKeyRowWithRangeScan(5L, "e"), dataToValueRow(50))
+
+        // Verify all keys exist
+        assert(store.iterator().toSeq.length === 5)
+
+        // Delete range [2, 4) - should delete keys with timestamps 2 and 3
+        val beginKey = dataToKeyRowWithRangeScan(2L, "")
+        val endKey = dataToKeyRowWithRangeScan(4L, "")
+        store.deleteRange(beginKey, endKey)
+
+        // Verify remaining keys
+        val remainingKeys = store.iterator().map { kv =>
+          keyRowWithRangeScanToData(kv.key)
+        }.toSeq
+
+        // Keys 1, 4, 5 should remain; keys 2, 3 should be deleted
+        assert(remainingKeys.length === 3)
+        assert(remainingKeys.map(_._1).toSet === Set(1L, 4L, 5L))
+      } finally {
+        if (!store.hasCommitted) store.abort()
+      }
+    }
+  }
+
+  test("deleteRange - changelog checkpointing records and replays range deletions") {
+    // useColumnFamilies = true is required to get changelog writer V2 which supports
+    // DELETE_RANGE_RECORD. V1 (used when useColumnFamilies = false) does not support it.
+    withSQLConf(
+      RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true",
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "100") {
+      val storeId = StateStoreId(newDir(), Random.nextInt(), 0)
+      val keyEncoderSpec = RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0))
+      val cfName = "testColFamily"
+
+      // Create provider and commit version 1 with some data and a deleteRange
+      tryWithProviderResource(
+        newStoreProvider(storeId, keyEncoderSpec,
+          keySchema = keySchemaWithRangeScan,
+          useColumnFamilies = true)) { provider =>
+        val store = provider.getStore(0)
+        store.createColFamilyIfAbsent(cfName,
+          keySchemaWithRangeScan, valueSchema,
+          RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)))
+
+        // Put keys: (1, "a"), (2, "b"), (3, "c"), (4, "d"), (5, "e")
+        store.put(dataToKeyRowWithRangeScan(1L, "a"), dataToValueRow(10), cfName)
+        store.put(dataToKeyRowWithRangeScan(2L, "b"), dataToValueRow(20), cfName)
+        store.put(dataToKeyRowWithRangeScan(3L, "c"), dataToValueRow(30), cfName)
+        store.put(dataToKeyRowWithRangeScan(4L, "d"), dataToValueRow(40), cfName)
+        store.put(dataToKeyRowWithRangeScan(5L, "e"), dataToValueRow(50), cfName)
+        store.commit()
+
+        // Version 2: deleteRange [2, 4) - should delete keys 2 and 3
+        val store2 = provider.getStore(1)
+        store2.createColFamilyIfAbsent(cfName,
+          keySchemaWithRangeScan, valueSchema,
+          RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)))
+        val beginKey = dataToKeyRowWithRangeScan(2L, "")
+        val endKey = dataToKeyRowWithRangeScan(4L, "")
+        store2.deleteRange(beginKey, endKey, cfName)
+        store2.commit()
+      }
+
+      // Reload from a fresh provider (same storeId) to force changelog replay
+      tryWithProviderResource(
+        newStoreProvider(storeId, keyEncoderSpec,
+          keySchema = keySchemaWithRangeScan,
+          useColumnFamilies = true)) { reloadedProvider =>
+        val reloadedStore = reloadedProvider.getStore(2)
+        try {
+          reloadedStore.createColFamilyIfAbsent(cfName,
+            keySchemaWithRangeScan, valueSchema,
+            RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)))
+          val remainingKeys = reloadedStore.iterator(cfName).map { kv =>
+            keyRowWithRangeScanToData(kv.key)
+          }.toSeq
+
+          // Keys 1, 4, 5 should remain; keys 2, 3 should have been deleted via replay
+          assert(remainingKeys.length === 3)
+          assert(remainingKeys.map(_._1).toSet === Set(1L, 4L, 5L))
+        } finally {
+          if (!reloadedStore.hasCommitted) reloadedStore.abort()
+        }
+
+        // Verify that the change data reader throws on DELETE_RANGE_RECORD
+        val reader = reloadedProvider.asInstanceOf[SupportsFineGrainedReplay]
+          .getStateStoreChangeDataReader(2, 2, Some(cfName))
+        val ex = intercept[UnsupportedOperationException] {
+          reader.next()
+        }
+        assert(ex.getMessage.contains("DELETE_RANGE_RECORD"))
+        reader.closeIfNeeded()
+      }
+    }
+  }
+
   test("Rocks DB task completion listener does not double unlock acquireThread") {
     // This test verifies that a thread that locks then unlocks the db and then
     // fires a completion listener (Thread 1) does not unlock the lock validly
@@ -2563,6 +2781,82 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
+  test("SPARK-54389: State store loading fails when TaskContext has failed") {
+    // Timeline of this test (* means thread is active):
+    // STATE | MAIN THREAD            | STATE STORE THREAD          |
+    // ------| ---------------------- | --------------------------- |
+    // 1.    | wait for s2            | *set task context           |
+    //       |                        | *signal s2                  |
+    // ------| ---------------------- | --------------------------- |
+    // 2.    | *mark task failed      | wait for s3                 |
+    //       | *signal s3             |                             |
+    // ------| ---------------------- | --------------------------- |
+    // 3.    | wait thread return     | *call getStore().iterator() |
+    //       |                        | *exception thrown           |
+    // ------| ---------------------- | --------------------------- |
+    // 4.    | *verify exception, END |                             |
+
+    // Create a custom ExecutionContext with 2 threads
+    implicit val ec: ExecutionContext = ExecutionContext.fromExecutor(
+      ThreadUtils.newDaemonFixedThreadPool(2, "pool-thread-executor"))
+    val stateLock = new Object()
+    var state = 1
+    val timeout = 10.seconds
+
+    tryWithProviderResource(newStoreProvider()) { provider =>
+      val taskContext = TaskContext.empty()
+
+      val stateStoreFuture = Future { // STATE STORE THREAD
+        stateLock.synchronized {
+          // -------------------- STATE 1 --------------------
+          // Set the task context for this thread
+          TaskContext.setTaskContext(taskContext)
+
+          // Signal that we have entered state 2
+          state = 2
+          stateLock.notifyAll()
+
+          // -------------------- STATE 3 --------------------
+          // Wait until we have entered state 3 (main thread marked task as failed)
+          while (state != 3) {
+            stateLock.wait()
+          }
+
+          // Try to call getStore().iterator() which should trigger the error handling
+          provider.getStore(0).iterator()
+        }
+      }
+
+      val ex = new IllegalStateException("failure")
+      stateLock.synchronized {
+        // -------------------- STATE 2 --------------------
+        // Wait until we have entered state 2 (state store thread set task context)
+        while (state != 2) {
+          stateLock.wait()
+        }
+
+        // Mark the task as failed
+        taskContext.markTaskFailed(ex)
+
+        // Signal that we have entered state 3
+        state = 3
+        stateLock.notifyAll()
+      }
+
+      // Wait for the future to complete and verify the exception
+      val thrown = intercept[SparkException] {
+        ThreadUtils.awaitResult(stateStoreFuture, timeout)
+      }.getCause.asInstanceOf[SparkException]
+
+      checkError(
+        thrown,
+        condition = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
+        parameters = Map.empty
+      )
+      assert(thrown.getCause == ex)
+    }
+  }
+
   private def verifyStoreOperationUnsupported(
       operationName: String,
       colFamiliesEnabled: Boolean,
@@ -2692,6 +2986,17 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       sqlConf = Some(getDefaultSQLConf(minDeltasForSnapshot, numOfVersToRetainInMemory)))
   }
 
+  override def newStoreProviderWithClonedConf(
+      storeId: StateStoreId): RocksDBStateStoreProvider = {
+    newStoreProvider(
+      storeId,
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      sqlConf = Some(cloneSQLConf()))
+  }
+
+  override def newStoreProviderNoInit(): RocksDBStateStoreProvider =
+    new RocksDBStateStoreProvider
+
   override def getDefaultSQLConf(
     minDeltasForSnapshot: Int,
     numOfVersToRetainInMemory: Int): SQLConf = {
@@ -2742,4 +3047,11 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         s"after load but was $threadId")
   }
 }
+
+/**
+ * Test suite that runs all RocksDBStateStoreSuite tests with row checksum enabled.
+ */
+@ExtendedSQLTest
+class RocksDBStateStoreSuiteWithRowChecksum extends RocksDBStateStoreSuite
+  with EnableStateStoreRowChecksum
 

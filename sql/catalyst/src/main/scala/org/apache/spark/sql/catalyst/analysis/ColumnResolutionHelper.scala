@@ -140,7 +140,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           }
           matched(ordinal)
 
-        case u @ UnresolvedAttribute(nameParts) =>
+        case u @ UnresolvedAttribute(nameParts) if !u.containsTag(LogicalPlan.PLAN_ID_TAG) =>
+          // UnresolvedAttribute with PLAN_ID_TAG should be resolved in resolveDataFrameColumn
           val result = withPosition(u) {
             resolveColumnByName(nameParts)
               .orElse(LiteralFunctionResolution.resolve(nameParts))
@@ -167,13 +168,24 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           }
         }
 
-        case u @ UnresolvedExtractValue(child, fieldName) =>
+        case u @ UnresolvedExtractValue(child, field) =>
           val newChild = innerResolve(child, isTopLevel = false)
-          if (newChild.resolved) {
-            ExtractValue(newChild, fieldName, resolver)
+          val resolvedField = if (conf.getConf(SQLConf.PREFER_COLUMN_OVER_LCA_IN_ARRAY_INDEX)) {
+            innerResolve(field, isTopLevel = false)
           } else {
-            u.copy(child = newChild)
+            field
           }
+          if (newChild.resolved) {
+            ExtractValue(child = newChild, extraction = resolvedField, resolver = resolver)
+          } else {
+            u.copy(child = newChild, extraction = resolvedField)
+          }
+
+        // Default value expression can not reference real columns,
+        // so we only need to resolve special literal columns like CURRENT_DATE.
+        // See {@link LiteralFunctionResolution} for details.
+        case d @ DefaultValueExpression(c: Expression, _, _) =>
+          d.copy(child = resolveLiteralColumns(c))
 
         case _ => e.mapChildren(innerResolve(_, isTopLevel = false))
       }
@@ -192,6 +204,13 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       case ae: AnalysisException if !throws =>
         logDebug(ae.getMessage)
         expr
+    }
+  }
+
+  private def resolveLiteralColumns(e: Expression) = {
+    e.transformWithPruning(_.containsPattern(UNRESOLVED_ATTRIBUTE)) {
+      case u @ UnresolvedAttribute(nameParts) =>
+        LiteralFunctionResolution.resolve(nameParts).getOrElse(u)
     }
   }
 
@@ -241,7 +260,6 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       variableResolution.resolveMultipartName(
         nameParts = nameParts,
         resolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty,
-        resolvingExecuteImmediate = AnalysisContext.get.isExecuteImmediate,
         referredTempVariableNames = AnalysisContext.get.referredTempVariableNames
       ).map(e => Alias(e, nameParts.last)())
     }
@@ -408,7 +426,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
   def resolveExpressionByPlanChildren(
       e: Expression,
       q: LogicalPlan,
-      includeLastResort: Boolean = false): Expression = {
+      includeLastResort: Boolean = false,
+      throws: Boolean = true): Expression = {
     resolveExpression(
       tryResolveDataFrameColumns(e, q.children),
       resolveColumnByName = nameParts => {
@@ -418,7 +437,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         assert(q.children.length == 1)
         q.children.head.output
       },
-      throws = true,
+      throws,
       includeLastResort = includeLastResort)
   }
 
@@ -431,7 +450,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       u: UnresolvedAttribute,
       q: LogicalPlan,
       includeLastResort: Boolean = false): Option[Expression] = {
-    assert(u.getTagValue(LogicalPlan.PLAN_ID_TAG).nonEmpty,
+    assert(u.containsTag(LogicalPlan.PLAN_ID_TAG),
       s"UnresolvedAttribute $u should have a Plan Id tag")
 
     resolveDataFrameColumn(u, q.children).map { r =>
@@ -458,8 +477,14 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     resolveVariables(resolveOuterRef(e))
   }
 
-  def resolveExprInAssignment(expr: Expression, hostPlan: LogicalPlan): Expression = {
-    resolveExpressionByPlanChildren(expr, hostPlan) match {
+  def resolveExprInAssignment(
+      expr: Expression,
+      hostPlan: LogicalPlan,
+      throws: Boolean = true): Expression = {
+    resolveExpressionByPlanChildren(expr,
+      hostPlan,
+      includeLastResort = false,
+      throws = throws) match {
       // Assignment key and value does not need the alias when resolving nested columns.
       case Alias(child: ExtractValue, _) => child
       case other => other
@@ -471,8 +496,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
   //    1. extract the attached plan id from UnresolvedAttribute;
   //    2. top-down traverse the query plan to find the plan node that matches the plan id;
   //    3. if can not find the matching node, fails with 'CANNOT_RESOLVE_DATAFRAME_COLUMN';
-  //    4, if the matching node is found, but can not resolve the column, also fails with
-  //       'CANNOT_RESOLVE_DATAFRAME_COLUMN';
+  //    4, if the matching node is found, but can not resolve the column, return the original one;
   //    5, resolve the expression against the target node, the resolved attribute will be
   //       filtered by the output attributes of nodes in the path (from matching to root node);
   //    6. if more than one resolved attributes are found in the above recursive process,
@@ -499,7 +523,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     val planId = planIdOpt.get
     logDebug(s"Extract plan_id $planId from $u")
 
-    val isMetadataAccess = u.getTagValue(LogicalPlan.IS_METADATA_COL).nonEmpty
+    val isMetadataAccess = u.containsTag(LogicalPlan.IS_METADATA_COL)
 
     val (resolved, matched) = resolveDataFrameColumnByPlanId(
       u, planId, isMetadataAccess, q, 0)
@@ -547,10 +571,9 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       } else {
         None
       }
-      if (resolved.isEmpty) {
-        // The targe plan node is found, but the column cannot be resolved.
-        throw QueryCompilationErrors.cannotResolveDataFrameColumn(u)
-      }
+      // The targe plan node is found, but might still fail to resolve.
+      // In this case, return None to delay the failure, so it is possible to be
+      // resolved in the next iteration.
       (resolved.map(r => (r, currentDepth)), true)
     } else {
       val children = p match {
@@ -593,11 +616,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     // the dataframe column 'df.id' will remain unresolved, and the analyzer
     // will try to resolve 'id' without plan id later.
     val filtered = resolved.filter { r =>
-      if (isMetadataAccess) {
-        r._1.references.subsetOf(AttributeSet(p.output ++ p.metadataOutput))
-      } else {
-        r._1.references.subsetOf(p.outputSet)
-      }
+      // A DataFrame column can be resolved as a metadata column, we should keep it.
+      r._1.references.subsetOf(AttributeSet(p.output ++ p.metadataOutput))
     }
     (filtered, matched)
   }

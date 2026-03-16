@@ -535,7 +535,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       table: String,
       ignoreIfNotExists: Boolean,
       purge: Boolean): Unit = withClient {
-    requireDbExists(db)
     client.dropTable(db, table, ignoreIfNotExists, purge)
   }
 
@@ -598,7 +597,17 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     if (tableDefinition.tableType == VIEW) {
       val newTableProps = tableDefinition.properties ++ tableMetaToTableProps(tableDefinition).toMap
-      val newTable = tableDefinition.copy(properties = newTableProps)
+      val schemaWithNoCollation = removeCollation(tableDefinition.schema)
+      val hiveCompatibleSchema =
+        // Spark-created views do not have to be Hive compatible. If the data type is not
+        // Hive compatible, we can set schema to empty so that Spark can still read this
+        // view as the schema is also encoded in the table properties.
+        if (schemaWithNoCollation.exists(f => !isHiveCompatibleDataType(f.dataType))) {
+          EMPTY_DATA_SCHEMA
+        } else {
+          schemaWithNoCollation
+        }
+      val newTable = tableDefinition.copy(schema = hiveCompatibleSchema, properties = newTableProps)
       try {
         client.alterTable(newTable)
       } catch {

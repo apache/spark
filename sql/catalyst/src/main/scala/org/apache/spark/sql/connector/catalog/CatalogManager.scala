@@ -162,4 +162,5 @@ private[sql] object CatalogManager {
   val SESSION_CATALOG_NAME: String = "spark_catalog"
   val SYSTEM_CATALOG_NAME = "system"
   val SESSION_NAMESPACE = "session"
+  val BUILTIN_NAMESPACE = "builtin"
 }

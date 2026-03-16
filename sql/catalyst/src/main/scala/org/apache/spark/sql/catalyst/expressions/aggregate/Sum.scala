@@ -43,19 +43,19 @@ import org.apache.spark.sql.types._
   since = "1.0.0")
 case class Sum(
     child: Expression,
-    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get))
+    evalContext: NumericEvalContext = NumericEvalContext.fromSQLConf(SQLConf.get))
   extends DeclarativeAggregate
   with ImplicitCastInputTypes
   with UnaryLike[Expression]
   with SupportQueryContext {
 
-  def this(child: Expression) = this(child, EvalMode.fromSQLConf(SQLConf.get))
+  def this(child: Expression) = this(child, NumericEvalContext.fromSQLConf(SQLConf.get))
 
   private def shouldTrackIsEmpty: Boolean = resultType match {
     case _: DecimalType => true
     // For try_sum(), the result of following data types can be null on overflow.
     // Thus we need additional buffer to keep track of whether overflow happens.
-    case _: IntegralType | _: AnsiIntervalType if evalMode == EvalMode.TRY => true
+    case _: IntegralType | _: AnsiIntervalType if evalContext.evalMode == EvalMode.TRY => true
     case _ => false
   }
 
@@ -89,7 +89,7 @@ case class Sum(
 
   private def add(left: Expression, right: Expression): Expression = left.dataType match {
     case _: DecimalType => DecimalAddNoOverflowCheck(left, right, left.dataType)
-    case _ => Add(left, right, evalMode)
+    case _ => Add(left, right, evalContext)
   }
 
   override lazy val aggBufferAttributes = if (shouldTrackIsEmpty) {
@@ -176,7 +176,7 @@ case class Sum(
     resultType match {
       case d: DecimalType =>
         val checkOverflowInSum =
-          CheckOverflowInSum(sum, d, evalMode != EvalMode.ANSI, getContextOrNull())
+          CheckOverflowInSum(sum, d, evalContext.evalMode != EvalMode.ANSI, getContextOrNull())
         If(isEmpty, Literal.create(null, resultType), checkOverflowInSum)
       case _ if shouldTrackIsEmpty =>
         If(isEmpty, Literal.create(null, resultType), sum)
@@ -187,11 +187,12 @@ case class Sum(
   // The flag `evalMode` won't be shown in the `toString` or `toAggString` methods
   override def flatArguments: Iterator[Any] = Iterator(child)
 
-  override def initQueryContext(): Option[QueryContext] = if (evalMode == EvalMode.ANSI) {
-    Some(origin.context)
-  } else {
-    None
-  }
+  override def initQueryContext(): Option[QueryContext] =
+    if (evalContext.evalMode == EvalMode.ANSI) {
+      Some(origin.context)
+    } else {
+      None
+    }
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
@@ -218,7 +219,7 @@ object TrySumExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     val numArgs = expressions.length
     if (numArgs == 1) {
-      Sum(expressions.head, EvalMode.TRY)
+      Sum(expressions.head, NumericEvalContext(EvalMode.TRY))
     } else {
       throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1, 2), numArgs)
     }

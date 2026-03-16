@@ -46,9 +46,11 @@ class BasicInMemoryTableCatalog extends TableCatalog {
   private val invalidatedTables: util.Set[Identifier] = ConcurrentHashMap.newKeySet()
 
   private var _name: Option[String] = None
+  private var copyOnLoad: Boolean = false
 
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
     _name = Some(name)
+    copyOnLoad = options.getBoolean("copyOnLoad", false)
   }
 
   override def name: String = _name.get
@@ -57,10 +59,38 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     tables.keySet.asScala.filter(_.namespace.sameElements(namespace)).toArray
   }
 
+  // load table for scans
   override def loadTable(ident: Identifier): Table = {
+    Option(tables.get(ident)) match {
+      case Some(table: InMemoryTable) if copyOnLoad =>
+        table.copy() // copy to validate logical table equality
+      case Some(table) =>
+        table
+      case _ =>
+        throw new NoSuchTableException(ident.asMultipartIdentifier)
+    }
+  }
+
+  // load table for writes
+  override def loadTable(
+      ident: Identifier,
+      writePrivileges: util.Set[TableWritePrivilege]): Table = {
     Option(tables.get(ident)) match {
       case Some(table) =>
         table
+      case _ =>
+        throw new NoSuchTableException(ident.asMultipartIdentifier)
+    }
+  }
+
+  def pinTable(ident: Identifier, version: String): Unit = {
+    Option(tables.get(ident)) match {
+      case Some(table: InMemoryBaseTable) =>
+        val versionIdent = Identifier.of(ident.namespace, ident.name + version)
+        val versionTable = table.copy()
+        tables.put(versionIdent, versionTable)
+      case Some(table) =>
+        throw new UnsupportedOperationException(s"Can't pin ${table.getClass.getName}")
       case _ =>
         throw new NoSuchTableException(ident.asMultipartIdentifier)
     }
@@ -134,7 +164,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
   }
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
-    val table = loadTable(ident).asInstanceOf[InMemoryTable]
+    val table = loadTable(ident).asInstanceOf[InMemoryBaseTable]
     val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
     val schema = CatalogV2Util.applySchemaChanges(
       table.schema,
@@ -149,16 +179,27 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       throw new IllegalArgumentException(s"Cannot drop all fields")
     }
 
-    table.increaseCurrentVersion()
-    val currentVersion = table.currentVersion()
-    val newTable = new InMemoryTable(
-      name = table.name,
-      columns = CatalogV2Util.structTypeToV2Columns(schema),
-      partitioning = finalPartitioning,
-      properties = properties,
-      constraints = constraints)
-      .withData(table.data)
-    newTable.setCurrentVersion(currentVersion)
+    table.increaseVersion()
+    val currentVersion = table.version()
+    val newTable = table match {
+      case _: InMemoryTable =>
+        new InMemoryTable(
+          name = table.name,
+          columns = CatalogV2Util.structTypeToV2Columns(schema),
+          partitioning = finalPartitioning,
+          properties = properties,
+          constraints = constraints,
+          id = table.id)
+          .alterTableWithData(table.data, schema)
+      case _: InMemoryTableWithV2Filter =>
+        new InMemoryTableWithV2Filter(
+          name = table.name,
+          columns = CatalogV2Util.structTypeToV2Columns(schema),
+          partitioning = finalPartitioning,
+          properties = properties)
+          .alterTableWithData(table.data, schema)
+    }
+    newTable.setVersion(currentVersion)
     changes.foreach {
       case a: TableChange.AddConstraint =>
         newTable.setValidatedVersion(a.validatedTableVersion())
@@ -178,7 +219,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 
     Option(tables.remove(oldIdent)) match {
       case Some(table: InMemoryBaseTable) =>
-        table.increaseCurrentVersion()
+        table.increaseVersion()
         tables.put(newIdent, table)
       case _ =>
         throw new NoSuchTableException(oldIdent.asMultipartIdentifier)

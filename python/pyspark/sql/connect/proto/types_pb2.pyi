@@ -33,6 +33,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+
 import builtins
 import collections.abc
 import google.protobuf.descriptor
@@ -674,6 +675,46 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
+    class Geometry(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        SRID_FIELD_NUMBER: builtins.int
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
+        srid: builtins.int
+        type_variation_reference: builtins.int
+        def __init__(
+            self,
+            *,
+            srid: builtins.int = ...,
+            type_variation_reference: builtins.int = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "srid", b"srid", "type_variation_reference", b"type_variation_reference"
+            ],
+        ) -> None: ...
+
+    class Geography(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        SRID_FIELD_NUMBER: builtins.int
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
+        srid: builtins.int
+        type_variation_reference: builtins.int
+        def __init__(
+            self,
+            *,
+            srid: builtins.int = ...,
+            type_variation_reference: builtins.int = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "srid", b"srid", "type_variation_reference", b"type_variation_reference"
+            ],
+        ) -> None: ...
+
     class Variant(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -709,6 +750,7 @@ class DataType(google.protobuf.message.Message):
         @property
         def sql_type(self) -> global___DataType:
             """Required for Python UDT"""
+
         def __init__(
             self,
             *,
@@ -821,6 +863,8 @@ class DataType(google.protobuf.message.Message):
     MAP_FIELD_NUMBER: builtins.int
     VARIANT_FIELD_NUMBER: builtins.int
     UDT_FIELD_NUMBER: builtins.int
+    GEOMETRY_FIELD_NUMBER: builtins.int
+    GEOGRAPHY_FIELD_NUMBER: builtins.int
     UNPARSED_FIELD_NUMBER: builtins.int
     TIME_FIELD_NUMBER: builtins.int
     @property
@@ -832,6 +876,7 @@ class DataType(google.protobuf.message.Message):
     @property
     def byte(self) -> global___DataType.Byte:
         """Numeric types"""
+
     @property
     def short(self) -> global___DataType.Short: ...
     @property
@@ -847,6 +892,7 @@ class DataType(google.protobuf.message.Message):
     @property
     def string(self) -> global___DataType.String:
         """String types"""
+
     @property
     def char(self) -> global___DataType.Char: ...
     @property
@@ -854,6 +900,7 @@ class DataType(google.protobuf.message.Message):
     @property
     def date(self) -> global___DataType.Date:
         """Datatime types"""
+
     @property
     def timestamp(self) -> global___DataType.Timestamp: ...
     @property
@@ -861,6 +908,7 @@ class DataType(google.protobuf.message.Message):
     @property
     def calendar_interval(self) -> global___DataType.CalendarInterval:
         """Interval types"""
+
     @property
     def year_month_interval(self) -> global___DataType.YearMonthInterval: ...
     @property
@@ -868,6 +916,7 @@ class DataType(google.protobuf.message.Message):
     @property
     def array(self) -> global___DataType.Array:
         """Complex types"""
+
     @property
     def struct(self) -> global___DataType.Struct: ...
     @property
@@ -877,9 +926,17 @@ class DataType(google.protobuf.message.Message):
     @property
     def udt(self) -> global___DataType.UDT:
         """UserDefinedType"""
+
+    @property
+    def geometry(self) -> global___DataType.Geometry:
+        """Geospatial types"""
+
+    @property
+    def geography(self) -> global___DataType.Geography: ...
     @property
     def unparsed(self) -> global___DataType.Unparsed:
         """UnparsedDataType"""
+
     @property
     def time(self) -> global___DataType.Time: ...
     def __init__(
@@ -909,6 +966,8 @@ class DataType(google.protobuf.message.Message):
         map: global___DataType.Map | None = ...,
         variant: global___DataType.Variant | None = ...,
         udt: global___DataType.UDT | None = ...,
+        geometry: global___DataType.Geometry | None = ...,
+        geography: global___DataType.Geography | None = ...,
         unparsed: global___DataType.Unparsed | None = ...,
         time: global___DataType.Time | None = ...,
     ) -> None: ...
@@ -937,6 +996,10 @@ class DataType(google.protobuf.message.Message):
             b"double",
             "float",
             b"float",
+            "geography",
+            b"geography",
+            "geometry",
+            b"geometry",
             "integer",
             b"integer",
             "kind",
@@ -996,6 +1059,10 @@ class DataType(google.protobuf.message.Message):
             b"double",
             "float",
             b"float",
+            "geography",
+            b"geography",
+            "geometry",
+            b"geometry",
             "integer",
             b"integer",
             "kind",
@@ -1030,9 +1097,7 @@ class DataType(google.protobuf.message.Message):
             b"year_month_interval",
         ],
     ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["kind", b"kind"]
-    ) -> (
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["kind", b"kind"]) -> (
         typing_extensions.Literal[
             "null",
             "binary",
@@ -1058,6 +1123,8 @@ class DataType(google.protobuf.message.Message):
             "map",
             "variant",
             "udt",
+            "geometry",
+            "geography",
             "unparsed",
             "time",
         ]

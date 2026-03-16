@@ -172,5 +172,5 @@ SELECT * FROM test, LATERAL explode (ARRAY(3,4)) AS c2;
 ### Related Statements
 
 * [SELECT](sql-ref-syntax-qry-select.html)
-* [LATERAL](sql-ref-syntax-qry-select-lateral-subquery.md)
+* [LATERAL](sql-ref-syntax-qry-select-lateral-subquery.html)
 * [LATERAL VIEW Clause](sql-ref-syntax-qry-select-lateral-view.html)

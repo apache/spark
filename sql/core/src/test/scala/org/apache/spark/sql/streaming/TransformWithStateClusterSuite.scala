@@ -138,7 +138,7 @@ class TransformWithStateClusterSuite extends StreamTest with TransformWithStateC
   testWithAndWithoutImplicitEncoders("streaming with transformWithState - " +
    "without initial state") { (spark, useImplicits) =>
     import spark.implicits._
-    val input = MemoryStream(Encoders.STRING, spark.sqlContext)
+    val input = MemoryStream(Encoders.STRING, spark)
     val agg = input.toDS()
       .groupByKey(x => x)
       .transformWithState(new FruitCountStatefulProcessor(useImplicits),
@@ -180,7 +180,7 @@ class TransformWithStateClusterSuite extends StreamTest with TransformWithStateC
     val fruitCountInitial = fruitCountInitialDS
       .groupByKey(x => x)
 
-    val input = MemoryStream(Encoders.STRING, spark.sqlContext)
+    val input = MemoryStream(Encoders.STRING, spark)
     val agg = input.toDS()
       .groupByKey(x => x)
       .transformWithState(new FruitCountStatefulProcessorWithInitialState(useImplicits),

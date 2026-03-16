@@ -59,23 +59,21 @@ object IntegrationTestUtils {
     s"$connectClientHomeDir/target/$scalaDir/test-classes"
   }
 
-  private[sql] def debugConfigs: Seq[String] = {
+  private[sql] def log4jConfigs: Seq[String] = {
     val log4j2 = s"$connectClientHomeDir/src/test/resources/log4j2.properties"
-    if (isDebug) {
-      Seq(
-        // Enable to see the server plan change log
-        // "--conf",
-        // "spark.sql.planChangeLog.level=WARN",
+    Seq(
+      // Enable to see the server plan change log
+      // "--conf",
+      // "spark.sql.planChangeLog.level=WARN",
 
-        // Enable to see the server grpc received
-        // "--conf",
-        // "spark.connect.grpc.interceptor.classes=" +
-        //  "org.apache.spark.sql.connect.service.LoggingInterceptor",
+      // Enable to see the server grpc received
+      // "--conf",
+      // "spark.connect.grpc.interceptor.classes=" +
+      //  "org.apache.spark.sql.connect.service.LoggingInterceptor",
 
-        // Redirect server log into console
-        "--conf",
-        s"spark.driver.extraJavaOptions=-Dlog4j.configurationFile=$log4j2")
-    } else Seq.empty
+      // Redirect server log into console
+      "--conf",
+      s"spark.driver.extraJavaOptions=-Dlog4j.configurationFile=$log4j2")
   }
 
   // Log server start stop debug info into console

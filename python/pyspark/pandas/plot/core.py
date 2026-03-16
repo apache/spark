@@ -20,7 +20,7 @@ import math
 
 import pandas as pd
 import numpy as np
-from pandas.core.base import PandasObject
+from pandas.core.base import PandasObject  # type: ignore[attr-defined]
 from pandas.core.dtypes.inference import is_integer
 
 from pyspark.sql import functions as F, Column
@@ -573,7 +573,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
         """
         Plot DataFrame/Series as lines.
 
-        This function is useful to plot lines using DataFrame’s values
+        This function is useful to plot lines using DataFrame's values
         as coordinates.
 
         Parameters
@@ -904,12 +904,12 @@ class PandasOnSparkPlotAccessor(PandasObject):
 
     def hist(self, bins=10, **kwds):
         """
-        Draw one histogram of the DataFrame’s columns.
+        Draw one histogram of the DataFrame's columns.
 
         A `histogram`_ is a representation of the distribution of data.
         This function calls :meth:`plotting.backend.plot`,
         on each series in the DataFrame, resulting in one histogram per column.
-        This is useful when the DataFrame’s Series are in a similar scale.
+        This is useful when the DataFrame's Series are in a similar scale.
 
         .. _histogram: https://en.wikipedia.org/wiki/Histogram
 

@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, ChecksumFile}
 import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.execution.streaming.state.MaintenanceTaskType._
@@ -115,6 +116,36 @@ trait ReadStateStore {
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow
 
   /**
+   * Get the values for multiple keys in a single batch operation.
+   * Default implementation throws UnsupportedOperationException.
+   * Providers that support batch retrieval should override this method.
+   *
+   * @param keys          Array of keys to look up
+   * @param colFamilyName The column family name
+   * @return Iterator of values corresponding to the keys (null for keys that don't exist)
+   */
+  def multiGet(keys: Array[UnsafeRow], colFamilyName: String): Iterator[UnsafeRow] = {
+    throw new UnsupportedOperationException("multiGet is not supported by this StateStore")
+  }
+
+  /**
+   * Check if a key exists in the store, with 100% guarantee of a correct result.
+   *
+   * Default implementation calls get() and checks if the result is null.
+   * Implementations backed by RocksDB should override this to use the native
+   * keyExists() method for better performance.
+   *
+   * @param key The key to check
+   * @param colFamilyName The column family name
+   * @return true if the key exists, false if it doesn't exist
+   */
+  def keyExists(
+      key: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Boolean = {
+    get(key, colFamilyName) != null
+  }
+
+  /**
    * Provides an iterator containing all values of a non-null key. If key does not exist,
    * an empty iterator is returned. Implementations should make sure to return an empty
    * iterator if the key does not exist.
@@ -140,8 +171,29 @@ trait ReadStateStore {
       prefixKey: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): StateStoreIterator[UnsafeRowPair]
 
+  /**
+   * Return an iterator containing all the (key, value) pairs which are matched with
+   * the given prefix key.
+   *
+   * It is expected to throw exception if Spark calls this method without proper key encoding spec.
+   * It is also expected to throw exception if Spark calls this method without setting
+   * multipleValuesPerKey as true for the column family.
+   */
+  def prefixScanWithMultiValues(
+      prefixKey: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): StateStoreIterator[UnsafeRowPair]
+
   /** Return an iterator containing all the key-value pairs in the StateStore. */
   def iterator(
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): StateStoreIterator[UnsafeRowPair]
+
+  /**
+   * Return an iterator containing all the key-value pairs in the StateStore.
+   *
+   * It is expected to throw exception if Spark calls this method without setting
+   * multipleValuesPerKey as true for the column family.
+   */
+  def iteratorWithMultiValues(
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): StateStoreIterator[UnsafeRowPair]
 
   /**
@@ -166,6 +218,13 @@ trait ReadStateStore {
    * This method is idempotent and safe to call multiple times.
    */
   def release(): Unit
+
+  /**
+   * Returns all column family names in this state store.
+   *
+   * @return Set of all column family names
+   */
+  def allColumnFamilyNames: Set[String]
 }
 
 /**
@@ -208,11 +267,36 @@ trait StateStore extends ReadStateStore {
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
 
   /**
+   * Put a new list of non-null values for a non-null key. Implementations must be aware that the
+   * UnsafeRows in the params can be reused, and must make copies of the data as needed for
+   * persistence.
+   */
+  def putList(
+      key: UnsafeRow,
+      values: Array[UnsafeRow],
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
+
+  /**
    * Remove a single non-null key.
    */
   def remove(
       key: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
+
+  /**
+   * Delete all keys in the range [beginKey, endKey).
+   * Uses RocksDB's native deleteRange for efficient bulk deletion.
+   *
+   * @param beginKey      The start key of the range (inclusive)
+   * @param endKey        The end key of the range (exclusive)
+   * @param colFamilyName The column family name
+   */
+  def deleteRange(
+      beginKey: UnsafeRow,
+      endKey: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    throw new UnsupportedOperationException("deleteRange is not supported by this StateStore")
+  }
 
   /**
    * Merges the provided value with existing values of a non-null key. If a existing
@@ -222,6 +306,18 @@ trait StateStore extends ReadStateStore {
    * multipleValuesPerKey as true for the column family.
    */
   def merge(key: UnsafeRow, value: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
+
+  /**
+   * Merges the provided list of values with existing values of a non-null key. If a existing
+   * value does not exist, this operation behaves as [[StateStore.putArray()]].
+   *
+   * It is expected to throw exception if Spark calls this method without setting
+   * multipleValuesPerKey as true for the column family.
+   */
+  def mergeList(
+      key: UnsafeRow,
+      values: Array[UnsafeRow],
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
 
   /**
@@ -282,6 +378,16 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
     colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow = store.get(key,
     colFamilyName)
 
+  override def multiGet(keys: Array[UnsafeRow], colFamilyName: String): Iterator[UnsafeRow] = {
+    store.multiGet(keys, colFamilyName)
+  }
+
+  override def keyExists(
+      key: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Boolean = {
+    store.keyExists(key, colFamilyName)
+  }
+
   override def iterator(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)
     : StateStoreIterator[UnsafeRowPair] = store.iterator(colFamilyName)
 
@@ -295,6 +401,19 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
 
   override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
     store.valuesIterator(key, colFamilyName)
+  }
+
+  override def allColumnFamilyNames: Set[String] = store.allColumnFamilyNames
+
+  override def prefixScanWithMultiValues(
+      prefixKey: UnsafeRow,
+      colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+    store.prefixScanWithMultiValues(prefixKey, colFamilyName)
+  }
+
+  override def iteratorWithMultiValues(
+      colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+    store.iteratorWithMultiValues(colFamilyName)
   }
 }
 
@@ -492,6 +611,10 @@ object KeyStateEncoderSpec {
       case "PrefixKeyScanStateEncoderSpec" =>
         val numColsPrefixKey = m("numColsPrefixKey").asInstanceOf[BigInt].toInt
         PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey)
+      case "TimestampAsPostfixKeyStateEncoderSpec" =>
+        TimestampAsPostfixKeyStateEncoderSpec(keySchema)
+      case "TimestampAsPrefixKeyStateEncoderSpec" =>
+        TimestampAsPrefixKeyStateEncoderSpec(keySchema)
     }
   }
 }
@@ -547,6 +670,36 @@ case class RangeKeyScanStateEncoderSpec(
   override def jsonValue: JValue = {
     ("keyStateEncoderType" -> JString("RangeKeyScanStateEncoderSpec")) ~
       ("orderingOrdinals" -> orderingOrdinals.map(JInt(_)))
+  }
+}
+
+/** The encoder specification for [[TimestampAsPrefixKeyStateEncoder]]. */
+case class TimestampAsPrefixKeyStateEncoderSpec(keySchema: StructType)
+  extends KeyStateEncoderSpec {
+
+  override def toEncoder(
+      dataEncoder: RocksDBDataEncoder,
+      useColumnFamilies: Boolean): RocksDBKeyStateEncoder = {
+    new TimestampAsPrefixKeyStateEncoder(dataEncoder, keySchema, useColumnFamilies)
+  }
+
+  override def jsonValue: JValue = {
+    "keyStateEncoderType" -> JString("TimestampAsPrefixKeyStateEncoderSpec")
+  }
+}
+
+/** The encoder specification for [[TimestampAsPostfixKeyStateEncoder]]. */
+case class TimestampAsPostfixKeyStateEncoderSpec(keySchema: StructType)
+  extends KeyStateEncoderSpec {
+
+  override def toEncoder(
+      dataEncoder: RocksDBDataEncoder,
+      useColumnFamilies: Boolean): RocksDBKeyStateEncoder = {
+    new TimestampAsPostfixKeyStateEncoder(dataEncoder, keySchema, useColumnFamilies)
+  }
+
+  override def jsonValue: JValue = {
+    "keyStateEncoderType" -> JString("TimestampAsPostfixKeyStateEncoderSpec")
   }
 }
 
@@ -619,10 +772,13 @@ trait StateStoreProvider {
   /**
    * Return an instance of [[StateStore]] representing state data of the given version.
    * If `stateStoreCkptId` is provided, the instance also needs to match the ID.
+   * If `loadEmpty` is true, creates an empty store at this version without loading previous data.
    * */
   def getStore(
       version: Long,
-      stateStoreCkptId: Option[String] = None): StateStore
+      stateStoreCkptId: Option[String] = None,
+      forceSnapshotOnCommit: Boolean = false,
+      loadEmpty: Boolean = false): StateStore
 
   /**
    * Return an instance of [[ReadStateStore]] representing state data of the given version
@@ -655,7 +811,9 @@ trait StateStoreProvider {
   def upgradeReadStoreToWriteStore(
       readStore: ReadStateStore,
       version: Long,
-      uniqueId: Option[String] = None): StateStore = getStore(version, uniqueId)
+      uniqueId: Option[String] = None,
+      forceSnapshotOnCommit: Boolean = false): StateStore =
+    getStore(version, uniqueId, forceSnapshotOnCommit)
 
 
   /** Optional method for providers to allow for background maintenance (e.g. compactions) */
@@ -747,6 +905,64 @@ object StateStoreProvider extends Logging {
   }
 
   /**
+   * If file checksum is enabled, then when we delete store files, using fm.delete,
+   * then the corresponding checksum file would be deleted too. But there are situations
+   * where we can have orphan checksum files (i.e. the main file no longer exist),
+   * so we need to delete them too:
+   *   1. If the file was created when file checksum was enabled, but then file checksum
+   *      was later disabled. In this case, fm.delete will not delete the checksum file.
+   *      Since we use a specific fm (checksum file manager) when checksum is enabled.
+   *   2. We enable concurrent file deletion for the checksum file manager,
+   *      for perf improvement, hence there is a slight chance deleting the main file was
+   *      successful but the checksum file deletion failed. Hence, we need to clean it up by
+   *      ourselves. If we don't want this behavior we can turn off concurrent deletion
+   *      for the checksum file manager
+   * */
+  private[streaming] def deleteOrphanChecksumFiles(
+      fm: CheckpointFileManager,
+      checksumFiles: Seq[ChecksumFile],
+      deletedStoreFiles: Seq[Path],
+      minVersionToRetain: Long,
+      fileChecksumEnabled: Boolean): Unit = {
+    // Use file name instead since path format might be different
+    // i.e. checksum files might have scheme prefix and the deleted files might not.
+    val deletedStoreFilesSet = deletedStoreFiles.map(_.getName).toSet
+    val oldChecksumFiles = checksumFiles
+      .filter(f => f.baseName.split("_")(0).toLong < minVersionToRetain)
+
+    val orphanChecksumFiles = if (fileChecksumEnabled) {
+      oldChecksumFiles
+        // old checksum files and was not part of the store files deleted
+        .filterNot(f => deletedStoreFilesSet.contains(f.mainFilePath.getName))
+    } else {
+      // all old checksum files, in case file checksum was previously enabled
+      oldChecksumFiles
+    }
+
+    val failedFiles = mutable.ListBuffer[Path]()
+    val (_, dur) = Utils.timeTakenMs {
+      orphanChecksumFiles.foreach { f =>
+        try {
+          fm.delete(f.path)
+        } catch {
+          case NonFatal(e) =>
+            failedFiles += f.path
+            logWarning(log"Failed to delete orphan checksum file " +
+              log"${MDC(LogKeys.FILE_NAME, f.path)}", e)
+        }
+      }
+    }
+
+    if (orphanChecksumFiles.nonEmpty) {
+      logInfo(log"Deleted orphan checksum files older than version " +
+        log"${MDC(LogKeys.FILE_VERSION, minVersionToRetain)} " +
+        log"(timeTakenMs = ${MDC(LogKeys.DURATION, dur)}) - " +
+        log"Orphan files: ${MDC(LogKeys.FILE_NAME, orphanChecksumFiles.mkString(", "))}" +
+        log"Failed to Delete: ${MDC(LogKeys.FILE_NAME, failedFiles.mkString(", "))}")
+    }
+  }
+
+  /**
    * Get the runId from the provided hadoopConf. If it is not found, an error will be thrown.
    *
    * @param hadoopConf Hadoop configuration used by the StateStore to save state data
@@ -799,9 +1015,17 @@ trait SupportsFineGrainedReplay {
    *
    * @param snapshotVersion checkpoint version of the snapshot to start with
    * @param endVersion   checkpoint version to end with
+   * @param readOnly whether the state store should be read-only
+   * @param snapshotVersionStateStoreCkptId state store checkpoint ID of the snapshot version
+   * @param endVersionStateStoreCkptId state store checkpoint ID of the end version
+   * @return An instance of [[StateStore]] representing state data of the given version
    */
   def replayStateFromSnapshot(
-      snapshotVersion: Long, endVersion: Long, readOnly: Boolean = false): StateStore
+      snapshotVersion: Long,
+      endVersion: Long,
+      readOnly: Boolean = false,
+      snapshotVersionStateStoreCkptId: Option[String] = None,
+      endVersionStateStoreCkptId: Option[String] = None): StateStore
 
   /**
    * Return an instance of [[ReadStateStore]] representing state data of the given version.
@@ -812,9 +1036,22 @@ trait SupportsFineGrainedReplay {
    *
    * @param snapshotVersion checkpoint version of the snapshot to start with
    * @param endVersion   checkpoint version to end with
+   * @param snapshotVersionStateStoreCkptId state store checkpoint ID of the snapshot version
+   * @param endVersionStateStoreCkptId state store checkpoint ID of the end version
+   * @return An instance of [[ReadStateStore]] representing state data of the given version
    */
-  def replayReadStateFromSnapshot(snapshotVersion: Long, endVersion: Long): ReadStateStore = {
-    new WrappedReadStateStore(replayStateFromSnapshot(snapshotVersion, endVersion, readOnly = true))
+  def replayReadStateFromSnapshot(
+      snapshotVersion: Long,
+      endVersion: Long,
+      snapshotVersionStateStoreCkptId: Option[String] = None,
+      endVersionStateStoreCkptId: Option[String] = None): ReadStateStore = {
+    new WrappedReadStateStore(
+      replayStateFromSnapshot(
+        snapshotVersion,
+        endVersion,
+        readOnly = true,
+        snapshotVersionStateStoreCkptId,
+        endVersionStateStoreCkptId))
   }
 
   /**
@@ -828,6 +1065,7 @@ trait SupportsFineGrainedReplay {
    * @param startVersion starting changelog version
    * @param endVersion ending changelog version
    * @param colFamilyNameOpt optional column family name to read from
+   * @param endVersionStateStoreCkptId state store checkpoint ID of the end version
    * @return iterator that gives tuple(recordType: [[RecordType.Value]], nested key: [[UnsafeRow]],
    *         nested value: [[UnsafeRow]], batchId: [[Long]])
    */
@@ -907,7 +1145,6 @@ class UnsafeRowPair(var key: UnsafeRow = null, var value: UnsafeRow = null) {
     this
   }
 }
-
 
 /**
  * Companion object to [[StateStore]] that provides helper methods to create and retrieve stores
@@ -999,7 +1236,8 @@ object StateStore extends Logging {
    */
   class MaintenanceThreadPool(
       numThreads: Int,
-      shutdownTimeout: Long) {
+      shutdownTimeout: Long,
+      forceShutdownTimeout: Long) {
     private val threadPool = ThreadUtils.newDaemonFixedThreadPool(
       numThreads, "state-store-maintenance-thread")
 
@@ -1020,7 +1258,7 @@ object StateStore extends Logging {
         threadPool.shutdownNow() // Cancel currently executing tasks
 
         // Wait a while for tasks to respond to being cancelled
-        if (!threadPool.awaitTermination(60, TimeUnit.SECONDS)) {
+        if (!threadPool.awaitTermination(forceShutdownTimeout, TimeUnit.SECONDS)) {
           logError("MaintenanceThreadPool did not terminate")
         }
       }
@@ -1054,7 +1292,7 @@ object StateStore extends Logging {
     if (version < 0) {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
-    val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
+    val (storeProvider, _) = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
       keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
       stateSchemaBroadcast)
     storeProvider.getReadStore(version, stateStoreCkptId)
@@ -1104,10 +1342,11 @@ object StateStore extends Logging {
     if (version < 0) {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
-    val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
-      keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
-      stateSchemaBroadcast)
-    storeProvider.upgradeReadStoreToWriteStore(readStore, version, stateStoreCkptId)
+    val (storeProvider, shouldForceSnapshotUpload) = getStateStoreProvider(storeProviderId,
+      keySchema, valueSchema, keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf,
+      useMultipleValuesPerKey, stateSchemaBroadcast)
+    storeProvider.upgradeReadStoreToWriteStore(readStore, version, stateStoreCkptId,
+      shouldForceSnapshotUpload)
   }
 
   /** Get or create a store associated with the id. */
@@ -1127,13 +1366,18 @@ object StateStore extends Logging {
     if (version < 0) {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
-    val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
-      keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
-      stateSchemaBroadcast)
-    storeProvider.getStore(version, stateStoreCkptId)
+    val (storeProvider, shouldForceSnapshotUpload) = getStateStoreProvider(storeProviderId,
+      keySchema, valueSchema, keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf,
+      useMultipleValuesPerKey, stateSchemaBroadcast)
+    storeProvider.getStore(version, stateStoreCkptId, shouldForceSnapshotUpload)
   }
   // scalastyle:on
 
+  /*
+   * @return (StateStoreProvider, shouldForceSnapshotUpload)
+   *         shouldForceSnapshotUpload is true if the state store provider is lagging
+   *         behind in snapshot uploads and should force a snapshot upload on next commit.
+   */
   private def getStateStoreProvider(
       storeProviderId: StateStoreProviderId,
       keySchema: StructType,
@@ -1143,7 +1387,7 @@ object StateStore extends Logging {
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean,
-      stateSchemaBroadcast: Option[StateSchemaBroadcast]): StateStoreProvider = {
+      stateSchemaBroadcast: Option[StateSchemaBroadcast]): (StateStoreProvider, Boolean) = {
     loadedProviders.synchronized {
       startMaintenanceIfNeeded(storeConf)
 
@@ -1169,13 +1413,13 @@ object StateStore extends Logging {
       // Only tell the state store coordinator we are active if we will remain active
       // after the task. When we unload after committing, there's no need for the coordinator
       // to track which executor has which provider
-      if (!storeConf.unloadOnCommit) {
+      val shouldForceSnapshotUpload = if (!storeConf.unloadOnCommit) {
         val otherProviderIds = loadedProviders.keys.filter(_ != storeProviderId).toSeq
-        val providerIdsToUnload = reportActiveStoreInstance(storeProviderId, otherProviderIds)
+        val providerStatus = reportActiveStoreInstance(storeProviderId, otherProviderIds)
         val taskContextIdLogLine = Option(TaskContext.get()).map { tc =>
           log"taskId=${MDC(LogKeys.TASK_ID, tc.taskAttemptId())}"
         }.getOrElse(log"")
-        providerIdsToUnload.foreach(id => {
+        providerStatus.providerIdsToUnload.foreach(id => {
           loadedProviders.remove(id).foreach( provider => {
             // Trigger maintenance thread to immediately do maintenance on and close the provider.
             // Doing maintenance first allows us to do maintenance for a constantly-moving state
@@ -1187,9 +1431,12 @@ object StateStore extends Logging {
               id, provider, storeConf, MaintenanceTaskType.FromTaskThread)
           })
         })
+        providerStatus.shouldForceSnapshotUpload
+      } else {
+        false
       }
 
-      provider
+      (provider, shouldForceSnapshotUpload)
     }
   }
 
@@ -1276,6 +1523,7 @@ object StateStore extends Logging {
   private def startMaintenanceIfNeeded(storeConf: StateStoreConf): Unit = {
     val numMaintenanceThreads = storeConf.numStateStoreMaintenanceThreads
     val maintenanceShutdownTimeout = storeConf.stateStoreMaintenanceShutdownTimeout
+    val maintenanceForceShutdownTimeout = storeConf.stateStoreMaintenanceForceShutdownTimeout
     loadedProviders.synchronized {
       if (SparkEnv.get != null && !isMaintenanceRunning && !storeConf.unloadOnCommit) {
         maintenanceTask = new MaintenanceTask(
@@ -1283,7 +1531,7 @@ object StateStore extends Logging {
           task = { doMaintenance(storeConf) }
         )
         maintenanceThreadPool = new MaintenanceThreadPool(numMaintenanceThreads,
-          maintenanceShutdownTimeout)
+          maintenanceShutdownTimeout, maintenanceForceShutdownTimeout)
         logInfo("State Store maintenance task started")
       }
     }
@@ -1473,20 +1721,26 @@ object StateStore extends Logging {
 
   private def reportActiveStoreInstance(
       storeProviderId: StateStoreProviderId,
-      otherProviderIds: Seq[StateStoreProviderId]): Seq[StateStoreProviderId] = {
+      otherProviderIds: Seq[StateStoreProviderId]): ReportActiveInstanceResponse = {
     if (SparkEnv.get != null) {
       val host = SparkEnv.get.blockManager.blockManagerId.host
       val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
-      val providerIdsToUnload = coordinatorRef
+      val storeStatus = coordinatorRef
         .map(_.reportActiveInstance(storeProviderId, host, executorId, otherProviderIds))
-        .getOrElse(Seq.empty[StateStoreProviderId])
+        .getOrElse(ReportActiveInstanceResponse(
+          shouldForceSnapshotUpload = false,
+          providerIdsToUnload = Seq.empty[StateStoreProviderId]))
       logInfo(log"Reported that the loaded instance " +
-        log"${MDC(LogKeys.STATE_STORE_PROVIDER_ID, storeProviderId)} is active")
+        log"${MDC(LogKeys.STATE_STORE_PROVIDER_ID, storeProviderId)} is active" +
+        log", shouldForceSnapshotUpload=" +
+        log"${MDC(LogKeys.STREAM_SHOULD_FORCE_SNAPSHOT, storeStatus.shouldForceSnapshotUpload)}")
       logDebug(log"The loaded instances are going to unload: " +
-        log"${MDC(LogKeys.STATE_STORE_PROVIDER_IDS, providerIdsToUnload)}")
-      providerIdsToUnload
+        log"${MDC(LogKeys.STATE_STORE_PROVIDER_IDS, storeStatus.providerIdsToUnload)}")
+      storeStatus
     } else {
-      Seq.empty[StateStoreProviderId]
+      ReportActiveInstanceResponse(
+        shouldForceSnapshotUpload = false,
+        providerIdsToUnload = Seq.empty[StateStoreProviderId])
     }
   }
 
@@ -1523,4 +1777,3 @@ object StateStore extends Logging {
     }
   }
 }
-

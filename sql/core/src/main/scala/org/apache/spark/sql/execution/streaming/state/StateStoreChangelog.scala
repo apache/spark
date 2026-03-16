@@ -30,7 +30,7 @@ import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, ChecksumFSDataInputStream}
 import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager.CancellableFSDataOutputStream
 import org.apache.spark.sql.execution.streaming.state.RecordType.RecordType
 import org.apache.spark.util.NextIterator
@@ -46,6 +46,7 @@ object RecordType extends Enumeration {
   val PUT_RECORD = Value("put_record")
   val DELETE_RECORD = Value("delete_record")
   val MERGE_RECORD = Value("merge_record")
+  val DELETE_RANGE_RECORD = Value("delete_range_record")
 
   // Generate byte representation of each record type
   def getRecordTypeAsByte(recordType: RecordType): Byte = {
@@ -54,6 +55,7 @@ object RecordType extends Enumeration {
       case PUT_RECORD => 0x01.toByte
       case DELETE_RECORD => 0x10.toByte
       case MERGE_RECORD => 0x11.toByte
+      case DELETE_RANGE_RECORD => 0x20.toByte
     }
   }
 
@@ -62,6 +64,7 @@ object RecordType extends Enumeration {
       case PUT_RECORD => "update"
       case DELETE_RECORD => "delete"
       case MERGE_RECORD => "append"
+      case DELETE_RANGE_RECORD => "delete_range"
       case _ => throw StateStoreErrors.unsupportedOperationException(
         "getRecordTypeAsString", recordType.toString)
     }
@@ -74,6 +77,7 @@ object RecordType extends Enumeration {
       case 0x01 => PUT_RECORD
       case 0x10 => DELETE_RECORD
       case 0x11 => MERGE_RECORD
+      case 0x20 => DELETE_RANGE_RECORD
       case _ => throw new RuntimeException(s"Found invalid record type for value=$byte")
     }
   }
@@ -127,6 +131,8 @@ abstract class StateStoreChangelogWriter(
   def delete(key: Array[Byte]): Unit
 
   def merge(key: Array[Byte], value: Array[Byte]): Unit
+
+  def deleteRange(beginKey: Array[Byte], endKey: Array[Byte]): Unit
 
   def abort(): Unit = {
     try {
@@ -189,6 +195,11 @@ class StateStoreChangelogWriterV1(
       "changelog writer v1")
   }
 
+  override def deleteRange(beginKey: Array[Byte], endKey: Array[Byte]): Unit = {
+    throw new UnsupportedOperationException("Operation not supported with state " +
+      "changelog writer v1")
+  }
+
   override def commit(): Unit = {
     try {
       // -1 in the key length field mean EOF.
@@ -242,6 +253,15 @@ class StateStoreChangelogWriterV2(
 
   override def merge(key: Array[Byte], value: Array[Byte]): Unit = {
     writePutOrMergeRecord(key, value, RecordType.MERGE_RECORD)
+  }
+
+  override def deleteRange(beginKey: Array[Byte], endKey: Array[Byte]): Unit = {
+    assert(compressedStream != null)
+    compressedStream.write(RecordType.getRecordTypeAsByte(RecordType.DELETE_RANGE_RECORD))
+    compressedStream.writeInt(beginKey.length)
+    compressedStream.write(beginKey)
+    compressedStream.writeInt(endKey.length)
+    compressedStream.write(endKey)
   }
 
   private def writePutOrMergeRecord(key: Array[Byte],
@@ -394,6 +414,15 @@ class StateStoreChangelogReaderFactory(
       }
     } finally {
       if (input != null) {
+        sourceStream match {
+          case c: ChecksumFSDataInputStream =>
+            // No need to do checksum verification since the reader is still going to read the
+            // entire file. To avoid double verification and since we only read version here.
+            // When input.close() below is called, nothing happens for sourceStream
+            // since it is already closed here.
+            c.closeWithoutChecksumVerification()
+          case _ =>
+        }
         input.close()
         // input is not set to null because it is effectively lazy.
       }
@@ -548,6 +577,11 @@ class StateStoreChangelogReaderV2(
           val valueBuffer = parseBuffer(input)
           (RecordType.MERGE_RECORD, keyBuffer, valueBuffer)
 
+        case RecordType.DELETE_RANGE_RECORD =>
+          val beginKeyBuffer = parseBuffer(input)
+          val endKeyBuffer = parseBuffer(input)
+          (RecordType.DELETE_RANGE_RECORD, beginKeyBuffer, endKeyBuffer)
+
         case _ =>
           throw new IOException("Failed to process unknown record type")
       }
@@ -610,6 +644,7 @@ class StateStoreChangelogReaderV4(
  * store. In each iteration, it will return a tuple of (changeType: [[RecordType]],
  * nested key: [[UnsafeRow]], nested value: [[UnsafeRow]], batchId: [[Long]])
  *
+ * @param storeId id of the state store
  * @param fm checkpoint file manager used to manage streaming query checkpoint
  * @param stateLocation location of the state store
  * @param startVersion start version of the changelog file to read
@@ -618,16 +653,23 @@ class StateStoreChangelogReaderV4(
  * @param colFamilyNameOpt optional column family name to read from
  */
 abstract class StateStoreChangeDataReader(
+    storeId: StateStoreId,
     fm: CheckpointFileManager,
     stateLocation: Path,
     startVersion: Long,
     endVersion: Long,
     compressionCodec: CompressionCodec,
+    storeConf: StateStoreConf,
     colFamilyNameOpt: Option[String] = None)
   extends NextIterator[(RecordType.Value, UnsafeRow, UnsafeRow, Long)] with Logging {
 
   assert(startVersion >= 1)
   assert(endVersion >= startVersion)
+
+  protected val readVerifier: Option[KeyValueIntegrityVerifier] = KeyValueIntegrityVerifier.create(
+    storeId.toString,
+    storeConf.rowChecksumEnabled,
+    storeConf.rowChecksumReadVerificationRatio)
 
   /**
    * Iterator that iterates over the changelog files in the state store.

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.spark.util.Utils
+
 /** Support for interacting with different versions of the HiveMetastoreClient */
 package object client {
   private[hive] sealed abstract class HiveVersion(
@@ -115,8 +117,17 @@ package object client {
       exclusions =
         "org.apache.curator:*" ::
         "org.apache.hive:hive-service-rpc" ::
-        "org.apache.tez:tez-api" ::
-        "org.apache.zookeeper:zookeeper" :: Nil)
+        "org.apache.zookeeper:zookeeper" :: Nil ++
+        {
+          if (!Utils.isTesting) {
+            // HiveClientImpl#runHive which is used for testing refers
+            // `org.apache.hadoop.hive.ql.DriverContext` indirectly and `DriverContext` refers
+            // Tez APIs.
+            Seq("org.apache.tez:tez-api")
+          } else {
+            Seq.empty
+          }
+        })
 
     val allSupportedHiveVersions: Set[HiveVersion] =
       Set(v2_0, v2_1, v2_2, v2_3, v3_0, v3_1, v4_0, v4_1)

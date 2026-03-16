@@ -33,16 +33,53 @@ import com.typesafe.tools.mima.core.*
  */
 object MimaExcludes {
 
+  // Exclude rules for 4.2.x from 4.1.0
+  lazy val v42excludes = v41excludes ++ Seq(
+    // Add DEBUG format to ErrorMessageFormat enum
+    ProblemFilters.exclude[Problem]("org.apache.spark.ErrorMessageFormat*"),
+    // [SPARK-47086][BUILD][CORE][WEBUI] Upgrade Jetty to 12.1.4
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ui.ProxyRedirectHandler$ResponseWrapper"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ui.ProxyRedirectHandler#ResponseWrapper.sendRedirect"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ui.ProxyRedirectHandler#ResponseWrapper.this"),
+    // [SPARK-55228][SQL] Implement Dataset.zipWithIndex in Scala API
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.Dataset.zipWithIndex"),
+    // [SPARK-55793][CORE] Add multiple log directories support to SHS
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo.apply"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo.copy"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo$")
+  )
+
   // Exclude rules for 4.1.x from 4.0.0
   lazy val v41excludes = defaultExcludes ++ Seq(
     // [SPARK-51261][ML][CONNECT] Introduce model size estimation to control ml cache
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.ml.linalg.Vector.getSizeInBytes"),
 
+    // CharType and VarcharType signature change (added collation parameter)
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.CharType.andThen"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.CharType.compose"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.CharType.copy"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.CharType.this"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.types.CharType$"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.VarcharType.andThen"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.VarcharType.compose"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.VarcharType.copy"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.VarcharType.this"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.types.VarcharType$"),
+
     // [SPARK-52221][SQL] Refactor SqlScriptingLocalVariableManager into more generic context manager
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.scripting.SqlScriptingExecution.withLocalVariableManager"),
 
     // [SPARK-53391][CORE] Remove unused PrimitiveKeyOpenHashMap
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.collection.PrimitiveKeyOpenHashMap*")
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.collection.PrimitiveKeyOpenHashMap*"),
+
+    // [SPARK-54041][SQL] Enable Direct Passthrough Partitioning in the DataFrame API
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.Dataset.repartitionById"),
+
+    // [SPARK-54001][CONNECT] Replace block copying with ref-counting in ArtifactManager cloning
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.artifact.ArtifactManager.cachedBlockIdList"),
+
+    // [SPARK-54323][PYTHON] Change the way to access logs to TVF instead of system view
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.TableValuedFunction.python_worker_logs")
   )
 
   // Default exclude rules
@@ -101,6 +138,7 @@ object MimaExcludes {
   )
 
   def excludes(version: String): Seq[Problem => Boolean] = version match {
+    case v if v.startsWith("4.2") => v42excludes
     case v if v.startsWith("4.1") => v41excludes
     case _ => Seq()
   }

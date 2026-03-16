@@ -587,7 +587,7 @@ class Rolling(RollingLike[FrameLike]):
             Value between 0 and 1 providing the quantile to compute.
 
             .. deprecated:: 4.0.0
-                This will be renamed to ‘q’ in a future version.
+                This will be renamed to 'q' in a future version.
 
         accuracy : int, optional
             Default accuracy of approximation. Larger value means better accuracy.
@@ -2691,7 +2691,7 @@ def _test() -> None:
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.window tests").getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.window,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

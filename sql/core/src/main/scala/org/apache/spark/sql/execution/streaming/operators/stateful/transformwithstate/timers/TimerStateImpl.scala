@@ -54,6 +54,22 @@ object TimerStateUtils {
 
     buildTimerStateNames(baseStateName)
   }
+
+  def isTimerCFName(colFamilyName: String): Boolean = {
+    colFamilyName.startsWith(PROC_TIMERS_STATE_NAME) ||
+    colFamilyName.startsWith(EVENT_TIMERS_STATE_NAME)
+  }
+
+  def isTimerSecondaryIndexCF(colFamilyName: String): Boolean = {
+    assert(isTimerCFName(colFamilyName), s"Column family name must be for a timer: $colFamilyName")
+    colFamilyName.endsWith(TIMESTAMP_TO_KEY_CF)
+  }
+
+  def getPrimaryIndexFromSecondaryIndexCF(colFamilyName: String): String = {
+    assert(isTimerSecondaryIndexCF(colFamilyName),
+      s"Column family name must be for a timer secondary index: $colFamilyName")
+    colFamilyName.replace(TIMESTAMP_TO_KEY_CF, KEY_TO_TIMESTAMP_CF)
+  }
 }
 
 /**

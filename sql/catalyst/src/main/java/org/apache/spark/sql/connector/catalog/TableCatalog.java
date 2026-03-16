@@ -27,7 +27,6 @@ import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.StructType;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 
@@ -96,7 +95,7 @@ public interface TableCatalog extends CatalogPlugin {
   /**
    * @return the set of capabilities for this TableCatalog
    */
-  default Set<TableCatalogCapability> capabilities() { return Collections.emptySet(); }
+  default Set<TableCatalogCapability> capabilities() { return Set.of(); }
 
   /**
    * List the tables in a namespace from the catalog.
@@ -182,7 +181,7 @@ public interface TableCatalog extends CatalogPlugin {
    * @throws NoSuchTableException If the table doesn't exist or is a view
    */
   default Table loadTable(Identifier ident, String version) throws NoSuchTableException {
-    throw QueryCompilationErrors.noSuchTableError(ident);
+    throw QueryCompilationErrors.noSuchTableError(name(), ident);
   }
 
   /**
@@ -197,7 +196,7 @@ public interface TableCatalog extends CatalogPlugin {
    * @throws NoSuchTableException If the table doesn't exist or is a view
    */
   default Table loadTable(Identifier ident, long timestamp) throws NoSuchTableException {
-    throw QueryCompilationErrors.noSuchTableError(ident);
+    throw QueryCompilationErrors.noSuchTableError(name(), ident);
   }
 
   /**

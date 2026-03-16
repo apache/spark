@@ -17,7 +17,7 @@
 
 package org.apache.spark.resource
 
-import org.apache.spark.annotation.{Evolving, Since}
+import org.apache.spark.annotation.{Since, Stable}
 
 /**
  * A task resource request. This is used in conjunction with the [[ResourceProfile]] to
@@ -32,7 +32,7 @@ import org.apache.spark.annotation.{Evolving, Since}
  *               lets you configure X number of tasks to run on a single resource,
  *               ie amount equals 0.5 translates into 2 tasks per resource address.
  */
-@Evolving
+@Stable
 @Since("3.1.0")
 class TaskResourceRequest(val resourceName: String, val amount: Double)
   extends Serializable {

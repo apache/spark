@@ -287,3 +287,9 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
     }
   }
 }
+
+/**
+ * Test suite that runs all StatefulProcessorHandleSuite tests with row checksum enabled.
+ */
+class StatefulProcessorHandleSuiteWithRowChecksum extends StatefulProcessorHandleSuite
+  with EnableStateStoreRowChecksum

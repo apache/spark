@@ -37,7 +37,7 @@ import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, Column
  */
 class TransformWithStateInPySparkDeserializer(deserializer: ExpressionEncoder.Deserializer[Row])
   extends Logging {
-  private val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+  private lazy val allocator = ArrowUtils.rootAllocator.newChildAllocator(
         s"stdin reader for transformWithStateInPySpark state socket", 0, Long.MaxValue)
 
   /**
@@ -77,5 +77,9 @@ class TransformWithStateInPySparkDeserializer(deserializer: ExpressionEncoder.De
     }
 
     rows.toSeq
+  }
+
+  def close(): Unit = {
+    allocator.close()
   }
 }

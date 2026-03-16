@@ -163,6 +163,10 @@ object InterpretedUnsafeProjection {
 
         case _: PhysicalStringType => (v, i) => writer.write(i, v.getUTF8String(i))
 
+        case _: PhysicalGeographyType => (v, i) => writer.write(i, v.getGeography(i))
+
+        case _: PhysicalGeometryType => (v, i) => writer.write(i, v.getGeometry(i))
+
         case PhysicalVariantType => (v, i) => writer.write(i, v.getVariant(i))
 
         case PhysicalStructType(fields) =>

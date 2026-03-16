@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import unittest
 import array as pyarray
 
 from numpy import arange, array, array_equal, inf, ones, tile, zeros
@@ -364,6 +363,9 @@ class VectorUDTTests(MLlibTestCase):
         ]
         self.assertEqual(results, expected)
 
+    def test_hashable(self):
+        _ = hash(VectorUDT())
+
 
 class MatrixUDTTests(MLlibTestCase):
     dm1 = DenseMatrix(3, 2, [0, 1, 4, 5, 9, 10])
@@ -394,14 +396,11 @@ class MatrixUDTTests(MLlibTestCase):
             else:
                 raise ValueError("Expected a matrix but got type %r" % type(m))
 
+    def test_hashable(self):
+        _ = hash(MatrixUDT())
+
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_linalg import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

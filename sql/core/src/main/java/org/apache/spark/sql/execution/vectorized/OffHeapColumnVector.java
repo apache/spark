@@ -111,12 +111,14 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putNull(int rowId) {
+    if (isAllNull()) return; // Skip writing nulls to all-null vector.
     Platform.putByte(null, nulls + rowId, (byte) 1);
     ++numNulls;
   }
 
   @Override
   public void putNulls(int rowId, int count) {
+    if (isAllNull()) return; // Skip writing nulls to all-null vector.
     long offset = nulls + rowId;
     for (int i = 0; i < count; ++i, ++offset) {
       Platform.putByte(null, offset, (byte) 1);
@@ -135,7 +137,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public boolean isNullAt(int rowId) {
-    return isAllNull || Platform.getByte(null, nulls + rowId) == 1;
+    return isAllNull() || Platform.getByte(null, nulls + rowId) == 1;
   }
 
   //
@@ -157,14 +159,13 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putBooleans(int rowId, byte src) {
-    Platform.putByte(null, data + rowId, (byte)(src & 1));
-    Platform.putByte(null, data + rowId + 1, (byte)(src >>> 1 & 1));
-    Platform.putByte(null, data + rowId + 2, (byte)(src >>> 2 & 1));
-    Platform.putByte(null, data + rowId + 3, (byte)(src >>> 3 & 1));
-    Platform.putByte(null, data + rowId + 4, (byte)(src >>> 4 & 1));
-    Platform.putByte(null, data + rowId + 5, (byte)(src >>> 5 & 1));
-    Platform.putByte(null, data + rowId + 6, (byte)(src >>> 6 & 1));
-    Platform.putByte(null, data + rowId + 7, (byte)(src >>> 7 & 1));
+    assert rowId + 8 <= capacity :
+      "putBooleans requires 8 slots available at rowId=" + rowId + ", capacity=" + capacity;
+    long expanded = expandBoolByteToLong(src);
+    if (bigEndianPlatform) {
+      expanded = Long.reverseBytes(expanded);
+    }
+    Platform.putLong(null, data + rowId, expanded);
   }
 
   @Override
@@ -263,6 +264,22 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   public void putShorts(int rowId, int count, byte[] src, int srcIndex) {
     Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
       null, data + rowId * 2L, count * 2L);
+  }
+
+  @Override
+  public void putShortsFromIntsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
+    int srcOffset = srcIndex + Platform.BYTE_ARRAY_OFFSET;
+    long dstOffset = data + rowId * 2L;
+    if (bigEndianPlatform) {
+      for (int i = 0; i < count; ++i, srcOffset += 4, dstOffset += 2) {
+        Platform.putShort(null, dstOffset,
+          (short) Integer.reverseBytes(Platform.getInt(src, srcOffset)));
+      }
+    } else {
+      for (int i = 0; i < count; ++i, srcOffset += 4, dstOffset += 2) {
+        Platform.putShort(null, dstOffset, Platform.getShort(src, srcOffset));
+      }
+    }
   }
 
   @Override
@@ -603,6 +620,8 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   // Split out the slow path.
   @Override
   protected void reserveInternal(int newCapacity) {
+    if (isAllNull()) return; // Skip allocation for all-null vector.
+
     int oldCapacity = (nulls == 0L) ? 0 : capacity;
     if (isArray() || type instanceof MapType) {
       this.lengthData =
@@ -633,7 +652,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   }
 
   @Override
-  protected OffHeapColumnVector reserveNewColumn(int capacity, DataType type) {
+  public OffHeapColumnVector reserveNewColumn(int capacity, DataType type) {
     return new OffHeapColumnVector(capacity, type);
   }
 }

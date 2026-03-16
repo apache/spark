@@ -1088,7 +1088,8 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       "SELECT TOP (123) a,b FROM test")
   }
 
-  test("SPARK-42534: DB2Dialect Limit query test") {
+  // TODO(SPARK-55707): Re-enable DB2 JDBC Driver tests
+  ignore("SPARK-42534: DB2Dialect Limit query test") {
     // JDBC url is a required option but is not used in this test.
     val options = new JDBCOptions(Map("url" -> "jdbc:db2://host:port", "dbtable" -> "test"))
     assert(
@@ -1939,17 +1940,20 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     assert(getRowCount(df2) < df3.count())
   }
 
-  test("SPARK-26383 throw IllegalArgumentException if wrong kind of driver to the given url") {
-    val e = intercept[IllegalArgumentException] {
-      val opts = Map(
-        "url" -> "jdbc:mysql://localhost/db",
-        "dbtable" -> "table",
-        "driver" -> "org.postgresql.Driver"
-      )
-      spark.read.format("jdbc").options(opts).load()
-    }.getMessage
-    assert(e.contains("The driver could not open a JDBC connection. " +
-      "Check the URL: jdbc:mysql://localhost/db"))
+  test("SPARK-26383 throw FAILED_JDBC.CONNECTION if wrong kind of driver to the given url") {
+    val url = "jdbc:mysql://localhost/db"
+    checkError(
+      exception = intercept[AnalysisException] {
+        val opts = Map(
+          "url" -> url,
+          "dbtable" -> "table",
+          "driver" -> "org.postgresql.Driver"
+        )
+        spark.read.format("jdbc").options(opts).load()
+      },
+      condition = "FAILED_JDBC.CONNECTION",
+      parameters = Map("url" -> url)
+    )
   }
 
   test("support casting patterns for lower/upper bounds of TimestampType") {
@@ -2258,7 +2262,9 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     }
     // not supported
     Seq(
-      "jdbc:db2://host:port", "jdbc:derby:memory", "jdbc:h2://host:port",
+      // TODO(SPARK-55707): Re-enable DB2 JDBC Driver tests
+      // "jdbc:db2://host:port",
+      "jdbc:derby:memory", "jdbc:h2://host:port",
       "jdbc:sqlserver://host:port", "jdbc:postgresql://host:5432/postgres",
       "jdbc:snowflake://host:443?account=test", "jdbc:teradata://host:port").foreach { url =>
       val options = new JDBCOptions(baseParameters + ("url" -> url))
@@ -2271,6 +2277,36 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
         },
         condition = "HINT_UNSUPPORTED_FOR_JDBC_DIALECT",
         parameters = Map("jdbcDialect" -> dialect.getClass.getSimpleName))
+    }
+  }
+
+  test("FAILED_JDBC.CONNECTION") {
+    val testUrls = Seq(
+      "jdbc:mysql",
+      "jdbc:postgresql",
+      "jdbc:sqlserver",
+      // TODO(SPARK-55707): Re-enable DB2 JDBC Driver tests
+      // "jdbc:db2",
+      "jdbc:h2",
+      "jdbc:teradata",
+      "jdbc:databricks"
+    )
+
+    testUrls.foreach { connectionUrl =>
+      val url = s"$connectionUrl://invalid_url/"
+      val options = new JDBCOptions(Map(
+        "url" -> url,
+        "dbtable" -> "invalid_table"
+      ))
+      checkError(
+        exception = intercept[AnalysisException] {
+          JdbcUtils.withConnection(options) { conn =>
+            conn.getMetaData
+          }
+        },
+        condition = "FAILED_JDBC.CONNECTION",
+        parameters = Map("url" -> url)
+      )
     }
   }
 }

@@ -669,6 +669,7 @@ object WatermarkSupport {
       val eventTimeColsSet = eventTimeCols.map(_.exprId).toSet
       if (eventTimeColsSet.size > 1) {
         throw new AnalysisException(
+          // TODO: [SPARK-55731] Assign error class for _LEGACY_ERROR_TEMP_3077
           errorClass = "_LEGACY_ERROR_TEMP_3077",
           messageParameters = Map("eventTimeCols" -> eventTimeCols.mkString("(", ",", ")")))
       }
@@ -683,6 +684,43 @@ object WatermarkSupport {
     }
     // pick the first element if exists
     eventTimeCols.headOption
+  }
+
+  /**
+   * Find the index of the column which is marked as "event time" column.
+   *
+   * If there are multiple event time columns in given column list, the behavior depends on the
+   * parameter `allowMultipleEventTimeColumns`. If it's set to true, the first occurred column will
+   * be returned. If not, this method will throw an AnalysisException as it is not allowed to have
+   * multiple event time columns.
+   */
+  def findEventTimeColumnIndex(
+      attrs: Seq[Attribute],
+      allowMultipleEventTimeColumns: Boolean): Option[Int] = {
+    val eventTimeCols = attrs.zipWithIndex
+      .filter(_._1.metadata.contains(EventTimeWatermark.delayKey))
+    if (!allowMultipleEventTimeColumns) {
+      // There is a case projection leads the same column (same exprId) to appear more than one
+      // time. Allowing them does not hurt the correctness of state row eviction, hence let's start
+      // with allowing them.
+      val eventTimeColsSet = eventTimeCols.map(_._1.exprId).toSet
+      if (eventTimeColsSet.size > 1) {
+        throw new AnalysisException(
+          // TODO: [SPARK-55731] Assign error class for _LEGACY_ERROR_TEMP_3077
+          errorClass = "_LEGACY_ERROR_TEMP_3077",
+          messageParameters = Map("eventTimeCols" -> eventTimeCols.mkString("(", ",", ")")))
+      }
+
+      // With above check, even there are multiple columns in eventTimeCols, all columns must be
+      // the same.
+    } else {
+      // This is for compatibility with previous behavior - we allow multiple distinct event time
+      // columns and pick up the first occurrence. This is incorrect if non-first occurrence is
+      // not smaller than the first one, but allow this as "escape hatch" in case we break the
+      // existing query.
+    }
+    // pick the first element if exists
+    eventTimeCols.headOption.map(_._2)
   }
 }
 
@@ -946,7 +984,7 @@ case class StateStoreSaveExec(
     }
   }
 
-  override def shortName: String = "stateStoreSave"
+  override def shortName: String = StatefulOperatorsUtils.STATE_STORE_SAVE_EXEC_OP_NAME
 
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
     (outputMode.contains(Append) || outputMode.contains(Update)) &&
@@ -1074,7 +1112,8 @@ case class SessionWindowStateStoreSaveExec(
 
   override def keyExpressions: Seq[Attribute] = keyWithoutSessionExpressions
 
-  override def shortName: String = "sessionWindowStateStoreSaveExec"
+  override def shortName: String =
+    StatefulOperatorsUtils.SESSION_WINDOW_STATE_STORE_SAVE_EXEC_OP_NAME
 
   private val stateManager = StreamingSessionWindowStateManager.createStateManager(
     keyWithoutSessionExpressions, sessionExpression, child.output, stateFormatVersion)
@@ -1317,8 +1356,8 @@ abstract class BaseStreamingDeduplicateExec
       val result = baseIterator.filter { r =>
         val row = r.asInstanceOf[UnsafeRow]
         val key = getKey(row)
-        val value = store.get(key)
-        if (value == null) {
+        val keyExists = store.keyExists(key)
+        if (!keyExists) {
           putDupInfoIntoState(store, row, key, reusedDupInfoRow)
           numUpdatedStateRows += 1
           numOutputRows += 1
@@ -1395,7 +1434,7 @@ case class StreamingDeduplicateExec(
     removeKeysOlderThanWatermark(store)
   }
 
-  override def shortName: String = "dedupe"
+  override def shortName: String = StatefulOperatorsUtils.DEDUPLICATE_EXEC_OP_NAME
 
   override protected def withNewChildInternal(newChild: SparkPlan): StreamingDeduplicateExec =
     copy(child = newChild)
@@ -1415,6 +1454,12 @@ object StreamingDeduplicateExec {
   private val EMPTY_ROW =
     UnsafeProjection.create(Array[DataType](NullType)).apply(InternalRow.apply(null))
 }
+
+/**
+ * For Deduplicate, the state key is the partition key i.e. the dedup key
+ */
+class StreamingDeduplicateStatePartitionKeyExtractor(stateKeySchema: StructType)
+  extends NoopStatePartitionKeyExtractor(stateKeySchema)
 
 case class StreamingDeduplicateWithinWatermarkExec(
     keyExpressions: Seq[Attribute],
@@ -1478,7 +1523,7 @@ case class StreamingDeduplicateWithinWatermarkExec(
     }
   }
 
-  override def shortName: String = "dedupeWithinWatermark"
+  override def shortName: String = StatefulOperatorsUtils.DEDUPLICATE_WITHIN_WATERMARK_EXEC_OP_NAME
 
   override def validateAndMaybeEvolveStateSchema(
       hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
@@ -1493,6 +1538,12 @@ case class StreamingDeduplicateWithinWatermarkExec(
   override protected def withNewChildInternal(
       newChild: SparkPlan): StreamingDeduplicateWithinWatermarkExec = copy(child = newChild)
 }
+
+/**
+ * For DeduplicateWithinWatermark, the state key is the partition key i.e. the dedup key
+ */
+class StreamingDedupWithinWatermarkStatePartitionKeyExtractor(stateKeySchema: StructType)
+  extends NoopStatePartitionKeyExtractor(stateKeySchema)
 
 trait SchemaValidationUtils extends Logging {
 
@@ -1561,4 +1612,14 @@ object StatefulOperatorsUtils {
     TRANSFORM_WITH_STATE_IN_PYSPARK_EXEC_OP_NAME
   )
   val SYMMETRIC_HASH_JOIN_EXEC_OP_NAME = "symmetricHashJoin"
+  val STATE_STORE_SAVE_EXEC_OP_NAME = "stateStoreSave"
+  val DEDUPLICATE_EXEC_OP_NAME = "dedupe"
+  val DEDUPLICATE_WITHIN_WATERMARK_EXEC_OP_NAME = "dedupeWithinWatermark"
+  val SESSION_WINDOW_STATE_STORE_SAVE_EXEC_OP_NAME = "sessionWindowStateStoreSaveExec"
+  val FLAT_MAP_GROUPS_WITH_STATE_EXEC_OP_NAME = "flatMapGroupsWithState"
+  val FLAT_MAP_GROUPS_IN_PANDAS_WITH_STATE_EXEC_OP_NAME = "applyInPandasWithState"
+  val FLAT_MAP_GROUPS_OP_NAMES: Seq[String] = Seq(
+    FLAT_MAP_GROUPS_WITH_STATE_EXEC_OP_NAME,
+    FLAT_MAP_GROUPS_IN_PANDAS_WITH_STATE_EXEC_OP_NAME
+  )
 }

@@ -31,8 +31,7 @@ import org.apache.spark.sql.streaming.Trigger
 class FlowPlanner(
     graph: DataflowGraph,
     updateContext: PipelineUpdateContext,
-    triggerFor: Flow => Trigger
-) {
+    triggerFor: Flow => Trigger) {
 
   /**
    * Turns a [[Flow]] into an executable [[FlowExecution]].
@@ -50,6 +49,7 @@ class FlowPlanner(
           updateContext = updateContext
         )
       case sf: StreamingFlow =>
+        val flowMetadata = FlowSystemMetadata(updateContext, sf, graph)
         output match {
           case o: Table =>
             new StreamingTableWrite(
@@ -60,12 +60,23 @@ class FlowPlanner(
               updateContext = updateContext,
               sqlConf = sf.sqlConf,
               trigger = triggerFor(sf),
-              checkpointPath = output.path
+              checkpointPath = flowMetadata.latestCheckpointLocation
+            )
+          case s: Sink =>
+            new SinkWrite(
+              graph = graph,
+              flow = flow,
+              identifier = sf.identifier,
+              destination = s,
+              updateContext = updateContext,
+              sqlConf = sf.sqlConf,
+              trigger = triggerFor(sf),
+              checkpointPath = flowMetadata.latestCheckpointLocation
             )
           case _ =>
             throw new UnsupportedOperationException(
-              s"Streaming flow ${sf.identifier} cannot write to non-table destination: " +
-              s"${output.getClass.getSimpleName} (${flow.destinationIdentifier})"
+              s"Unsupported destination type: ${output.getClass.getSimpleName} for " +
+              s"streaming flow ${sf.identifier} (${flow.destinationIdentifier})"
             )
         }
       case _ =>

@@ -97,12 +97,12 @@ class SparkConnectServerPageSuite
     assert(html.contains("dummy query"))
 
     // Pagination support
-    assert(html.contains("<label>1 pages. jump to</label>"))
+    assert(html.contains("<label class=\"text-nowrap\">1 pages. jump to</label>"))
 
     // Hiding table support
     assert(
-      html.contains("class=\"collapse-aggregated-sessionstat" +
-        " collapse-table\" onclick=\"collapsetable"))
+      html.contains("class=\"collapse-table\" data-bs-toggle=\"collapse\"" +
+        " data-bs-target=\"#aggregated-sessionstat\""))
   }
 
   test("Spark Connect Server session page should load successfully") {
@@ -124,11 +124,11 @@ class SparkConnectServerPageSuite
     assert(html.contains("jobtag"))
 
     // Pagination support
-    assert(html.contains("<label>1 pages. jump to</label>"))
+    assert(html.contains("<label class=\"text-nowrap\">1 pages. jump to</label>"))
 
     // Hiding table support
     assert(
-      html.contains("collapse-aggregated-sqlsessionstat collapse-table\"" +
-        " onclick=\"collapsetable"))
+      html.contains("collapse-table\" data-bs-toggle=\"collapse\"" +
+        " data-bs-target=\"#aggregated-sqlsessionstat\""))
   }
 }

@@ -175,7 +175,7 @@ private[spark] trait TreeEnsembleModel[M <: DecisionTreeModel] {
     new AttributeGroup(leafCol, attrs = trees.map(_.leafAttr)).toStructField()
   }
 
-  def getEstimatedSize(): Long = {
+  private[ml] def getEstimatedSize(): Long = {
     org.apache.spark.util.SizeEstimator.estimate(trees.map(_.rootNode))
   }
 }

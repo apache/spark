@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: "Build / Python Coverage (master, Python 3.11)"
+name: "Build / Python Coverage (master, Python 3.12)"
 
 on:
   schedule:
@@ -37,13 +37,15 @@ jobs:
       hadoop: hadoop3
       envs: >-
         {
-          "PYSPARK_IMAGE_TO_TEST": "python-311",
-          "PYTHON_TO_TEST": "python3.11",
+          "PYSPARK_IMAGE_TO_TEST": "python-312",
+          "PYTHON_TO_TEST": "python3.12",
           "PYSPARK_CODECOV": "true"
         }
       jobs: >-
         {
-          "pyspark": "true"
+          "pyspark": "true",
+          "pyspark-pandas": "true",
+          "pyspark-install": "true"
         }
     secrets:
       codecov_token: ${{ secrets.CODECOV_TOKEN }}

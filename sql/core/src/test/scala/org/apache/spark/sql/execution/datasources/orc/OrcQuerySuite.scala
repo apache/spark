@@ -899,6 +899,54 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("TIME type support for ORC format") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = spark.sql("""
+        SELECT
+          id,
+          TIME'09:30:00' as morning,
+          TIME'14:45:30.123456' as afternoon,
+          TIME'23:59:59.999999' as end_of_day,
+          TIME'00:00:00' as midnight,
+          CASE WHEN id % 2 = 0 THEN TIME'12:30:00' ELSE NULL END as nullable_time
+        FROM VALUES (1), (2), (3) AS t(id)
+      """)
+
+      df.write.mode("overwrite").orc(path)
+      val result = spark.read.orc(path)
+
+      Seq("morning", "afternoon", "end_of_day", "midnight", "nullable_time").foreach { col =>
+        assert(result.schema(col).dataType == TimeType(6))
+      }
+      checkAnswer(result, df)
+    }
+  }
+
+  test("TIME type with different precisions in ORC") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = spark.sql("""
+        SELECT
+          CAST(TIME'12:34:56' AS TIME(0)) as time_p0,
+          CAST(TIME'12:34:56.1' AS TIME(1)) as time_p1,
+          CAST(TIME'12:34:56.12' AS TIME(2)) as time_p2,
+          CAST(TIME'12:34:56.123' AS TIME(3)) as time_p3,
+          CAST(TIME'12:34:56.1234' AS TIME(4)) as time_p4,
+          CAST(TIME'12:34:56.12345' AS TIME(5)) as time_p5,
+          CAST(TIME'12:34:56.123456' AS TIME(6)) as time_p6
+      """)
+
+      df.write.mode("overwrite").orc(path)
+      val result = spark.read.orc(path)
+
+      (0 to 6).foreach { p =>
+        assert(result.schema(s"time_p$p").dataType == TimeType(p))
+      }
+      checkAnswer(result, df)
+    }
+  }
 }
 
 class OrcV1QuerySuite extends OrcQuerySuite {

@@ -14,10 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
-
 from typing import (
     cast,
     TYPE_CHECKING,
@@ -39,6 +35,7 @@ import numpy as np
 
 from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.types import (
+    _create_row,
     _from_numpy_type,
     DateType,
     ArrayType,
@@ -58,6 +55,8 @@ from pyspark.sql.types import (
     TimestampType,
     TimestampNTZType,
     DayTimeIntervalType,
+    MapType,
+    StructType,
 )
 
 import pyspark.sql.connect.proto as proto
@@ -105,8 +104,7 @@ class Expression:
 
     def to_plan(  # type: ignore[empty-body]
         self, session: "SparkConnectClient"
-    ) -> "proto.Expression":
-        ...
+    ) -> "proto.Expression": ...
 
     def __repr__(self) -> str:  # type: ignore[empty-body]
         ...
@@ -203,7 +201,7 @@ class ColumnAlias(Expression):
             exp.alias.name.append(self._alias[0])
             exp.alias.expr.CopyFrom(self._child.to_plan(session))
 
-            if self._metadata:
+            if self._metadata is not None:
                 exp.alias.metadata = json.dumps(self._metadata)
             return exp
         else:
@@ -295,11 +293,8 @@ class LiteralExpression(Expression):
                 assert isinstance(value, (str, np.str_))
                 value = str(value)
             elif isinstance(dataType, DateType):
-                assert isinstance(value, (datetime.date, datetime.datetime))
-                if isinstance(value, datetime.date):
-                    value = DateType().toInternal(value)
-                else:
-                    value = DateType().toInternal(value.date())
+                assert isinstance(value, datetime.date)
+                value = DateType().toInternal(value)
             elif isinstance(dataType, TimeType):
                 assert isinstance(value, datetime.time)
                 value = TimeType().toInternal(value)
@@ -441,6 +436,29 @@ class LiteralExpression(Expression):
                 assert isinstance(dataType, ArrayType)
                 assert elementType == dataType.elementType
             return [LiteralExpression._to_value(v, elementType) for v in literal.array.elements]
+        elif literal.HasField("map"):
+            keyType = proto_schema_to_pyspark_data_type(literal.map.key_type)
+            valueType = proto_schema_to_pyspark_data_type(literal.map.value_type)
+            if dataType is not None:
+                assert isinstance(dataType, MapType)
+                assert keyType == dataType.keyType
+                assert valueType == dataType.valueType
+            return {
+                LiteralExpression._to_value(k, keyType): LiteralExpression._to_value(v, valueType)
+                for k, v in zip(literal.map.keys, literal.map.values)
+            }
+        elif literal.HasField("struct"):
+            struct_type = cast(
+                StructType, proto_schema_to_pyspark_data_type(literal.struct.struct_type)
+            )
+            if dataType is not None:
+                assert isinstance(dataType, StructType)
+                assert struct_type == dataType
+            values = [
+                LiteralExpression._to_value(v, f.dataType)
+                for v, f in zip(literal.struct.elements, struct_type.fields)
+            ]
+            return _create_row(struct_type.names, values)
 
         raise PySparkTypeError(
             errorClass="UNSUPPORTED_LITERAL",
@@ -1317,3 +1335,24 @@ class SubqueryExpression(Expression):
             repr_parts.append(f"values={self._in_subquery_values}")
 
         return f"SubqueryExpression({', '.join(repr_parts)})"
+
+
+class DirectShufflePartitionID(Expression):
+    """
+    Expression that takes a partition ID value and passes it through directly for use in
+    shuffle partitioning. This is used with RepartitionByExpression to allow users to
+    directly specify target partition IDs.
+    """
+
+    def __init__(self, child: Expression):
+        super().__init__()
+        assert child is not None and isinstance(child, Expression)
+        self._child = child
+
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
+        expr = self._create_proto_expression()
+        expr.direct_shuffle_partition_id.child.CopyFrom(self._child.to_plan(session))
+        return expr
+
+    def __repr__(self) -> str:
+        return f"DirectShufflePartitionID(child={self._child})"

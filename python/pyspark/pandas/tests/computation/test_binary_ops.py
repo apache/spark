@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import unittest
 
 import numpy as np
 import pandas as pd
@@ -69,6 +68,20 @@ class FrameBinaryOpsMixin:
             "cannot join with no overlapping index names",
             lambda: psdf.add(psdf_other),
         )
+
+    def test_mixed_dataframe_ops_dispatch_to_pandas_on_spark(self):
+        pdf = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
+        psdf = ps.from_pandas(pdf)
+
+        with self.assertRaisesRegex(
+            TypeError, "add with a sequence is currently not supported; however, got DataFrame."
+        ):
+            psdf + pdf
+
+        with self.assertRaisesRegex(
+            TypeError, "radd with a sequence is currently not supported; however, got DataFrame."
+        ):
+            pdf + psdf
 
     def test_binary_operator_add(self):
         # Positive
@@ -312,12 +325,6 @@ class FrameBinaryOpsTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.computation.test_binary_ops import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

@@ -41,6 +41,7 @@ import org.apache.spark.sql.execution.python.streaming.ApplyInPandasWithStateWri
 import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.GroupStateImpl
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 
 
@@ -57,8 +58,8 @@ class ApplyInPandasWithStatePythonRunner(
     evalType: Int,
     argOffsets: Array[Array[Int]],
     inputSchema: StructType,
-    _timeZoneId: String,
-    initialWorkerConf: Map[String, String],
+    override protected val timeZoneId: String,
+    initialRunnerConf: Map[String, String],
     stateEncoder: ExpressionEncoder[Row],
     keySchema: StructType,
     outputSchema: StructType,
@@ -69,6 +70,7 @@ class ApplyInPandasWithStatePythonRunner(
     funcs.map(_._1), evalType, argOffsets, jobArtifactUUID, pythonMetrics)
   with PythonArrowInput[InType]
   with PythonArrowOutput[OutType] {
+  ArrowUtils.failDuplicatedFieldNames(inputSchema)
 
   override val pythonExec: String =
     SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
@@ -79,14 +81,12 @@ class ApplyInPandasWithStatePythonRunner(
   override val killOnIdleTimeout: Boolean = SQLConf.get.pythonUDFWorkerKillOnIdleTimeout
   override val tracebackDumpIntervalSeconds: Long =
     SQLConf.get.pythonUDFWorkerTracebackDumpIntervalSeconds
+  override val killWorkerOnFlushFailure: Boolean =
+    SQLConf.get.pythonUDFDaemonKillWorkerOnFlushFailure
 
   private val sqlConf = SQLConf.get
 
-  // Use lazy val to initialize the fields before these are accessed in [[PythonArrowInput]]'s
-  // constructor.
-  override protected lazy val schema: StructType = inputSchema.add("__state", STATE_METADATA_SCHEMA)
-  override protected lazy val timeZoneId: String = _timeZoneId
-  override val errorOnDuplicatedFieldNames: Boolean = true
+  override val schema: StructType = inputSchema.add("__state", STATE_METADATA_SCHEMA)
 
   override val hideTraceback: Boolean = sqlConf.pysparkHideTraceback
   override val simplifiedTraceback: Boolean = sqlConf.pysparkSimplifiedTraceback
@@ -106,29 +106,28 @@ class ApplyInPandasWithStatePythonRunner(
   }
 
   private val arrowMaxRecordsPerBatch = sqlConf.arrowMaxRecordsPerBatch
+  private val arrowMaxBytesPerBatch = sqlConf.arrowMaxBytesPerBatch
 
   // applyInPandasWithState has its own mechanism to construct the Arrow RecordBatch instance.
   // Configurations are both applied to executor and Python worker, set them to the worker conf
   // to let Python worker read the config properly.
-  override protected val workerConf: Map[String, String] = initialWorkerConf +
-    (SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> arrowMaxRecordsPerBatch.toString)
+  override protected def runnerConf: Map[String, String] =
+    super.runnerConf ++ initialRunnerConf ++ Map(
+      SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> arrowMaxRecordsPerBatch.toString,
+      SQLConf.ARROW_EXECUTION_MAX_BYTES_PER_BATCH.key -> arrowMaxBytesPerBatch.toString
+    )
+
+  override protected def evalConf: Map[String, String] =
+    super.evalConf ++ Map(
+      "state_value_schema" -> stateValueSchema.json
+    )
 
   private val stateRowDeserializer = stateEncoder.createDeserializer()
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
-    PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets, None)
+    PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
   }
 
-  /**
-   * This method sends out the additional metadata before sending out actual data.
-   *
-   * Specifically, this class overrides this method to also write the schema for state value.
-   */
-  override protected def handleMetadataBeforeExec(stream: DataOutputStream): Unit = {
-    super.handleMetadataBeforeExec(stream)
-    // Also write the schema for state value
-    PythonRDD.writeUTF(stateValueSchema.json, stream)
-  }
   private var pandasWriter: ApplyInPandasWithStateWriter = _
   /**
    * Read the (key, state, values) from input iterator and construct Arrow RecordBatches, and
@@ -142,7 +141,11 @@ class ApplyInPandasWithStatePythonRunner(
       dataOut: DataOutputStream,
       inputIterator: Iterator[InType]): Boolean = {
     if (pandasWriter == null) {
-      pandasWriter = new ApplyInPandasWithStateWriter(root, writer, arrowMaxRecordsPerBatch)
+      pandasWriter = new ApplyInPandasWithStateWriter(
+        root,
+        writer,
+        arrowMaxRecordsPerBatch,
+        arrowMaxBytesPerBatch)
     }
     if (inputIterator.hasNext) {
       val startData = dataOut.size()

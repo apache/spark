@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-import unittest
+import json
 
 from pyspark.ml.linalg import Vectors
 from pyspark.ml.classification import LinearSVC
@@ -44,8 +44,9 @@ class MLConnectCacheTests(ReusedConnectTestCase):
 
         cache_info = spark.client._get_ml_cache_info()
         self.assertEqual(len(cache_info), 1)
-        self.assertTrue(
-            "obj: class org.apache.spark.ml.classification.LinearSVCModel" in cache_info[0],
+        self.assertEqual(
+            json.loads(cache_info[0])["class"],
+            "org.apache.spark.ml.classification.LinearSVCModel",
             cache_info,
         )
         # the `model._summary` holds another ref to the remote model.
@@ -100,7 +101,7 @@ class MLConnectCacheTests(ReusedConnectTestCase):
         self.assertEqual(len(cache_info), 3)
         self.assertTrue(
             all(
-                "obj: class org.apache.spark.ml.classification.LinearSVCModel" in c
+                json.loads(c)["class"] == "org.apache.spark.ml.classification.LinearSVCModel"
                 for c in cache_info
             ),
             cache_info,
@@ -118,12 +119,6 @@ class MLConnectCacheTests(ReusedConnectTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.connect.test_connect_cache import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

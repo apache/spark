@@ -181,6 +181,7 @@ private[v2] trait V2JDBCTest
   def multiplePartitionAdditionalCheck(
       df: DataFrame,
       partitioningInfo: Option[PartitioningInfo]): Unit = {
+    @scala.annotation.tailrec
     def getJDBCRDD(rdd: RDD[_]): Option[JDBCRDD] = {
       rdd match {
         case jdbcRdd: JDBCRDD => Some(jdbcRdd)

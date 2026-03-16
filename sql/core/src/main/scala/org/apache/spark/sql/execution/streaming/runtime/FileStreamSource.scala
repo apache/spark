@@ -149,8 +149,7 @@ class FileStreamSource(
     var rSize = BigInt(0)
     val lFiles = ArrayBuffer[NewFileEntry]()
     val rFiles = ArrayBuffer[NewFileEntry]()
-    for (i <- files.indices) {
-      val file = files(i)
+    files.zipWithIndex.foreach { case (file, i) =>
       val newSize = lSize + file.size
       if (i == 0 || rFiles.isEmpty && newSize <= Long.MaxValue && newSize <= maxSize) {
         lSize += file.size

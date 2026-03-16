@@ -36,8 +36,8 @@ import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
  */
 class JSONOptions(
     @transient val parameters: CaseInsensitiveMap[String],
-    defaultTimeZoneId: String,
-    defaultColumnNameOfCorruptRecord: String)
+    private val defaultTimeZoneId: String,
+    private val defaultColumnNameOfCorruptRecord: String)
   extends FileSourceOptions(parameters) with Logging  {
 
   import JSONOptions._
@@ -129,6 +129,9 @@ class JSONOptions(
   val timestampNTZFormatInWrite: String =
     parameters.getOrElse(TIMESTAMP_NTZ_FORMAT, s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS]")
 
+  val timeFormatInRead: Option[String] = parameters.get(TIME_FORMAT)
+  val timeFormatInWrite: String = parameters.getOrElse(TIME_FORMAT, TimeFormatter.defaultPattern)
+
   // SPARK-39731: Enables the backward compatible parsing behavior.
   // Generally, this config should be set to false to avoid producing potentially incorrect results
   // which is the current default (see JacksonParser).
@@ -152,6 +155,22 @@ class JSONOptions(
 
   protected def checkedEncoding(enc: String): String =
     CharsetProvider.forName(enc, caller = "JSONOptions").name()
+
+  override def equals(obj: Any): Boolean = obj match {
+    case other: JSONOptions =>
+      (parameters == null && other.parameters == null ||
+      parameters != null && parameters == other.parameters) &&
+      defaultTimeZoneId == other.defaultTimeZoneId &&
+      defaultColumnNameOfCorruptRecord == other.defaultColumnNameOfCorruptRecord
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    var result = Option(parameters).map(_.hashCode()).getOrElse(0)
+    result = 31 * result + defaultTimeZoneId.hashCode()
+    result = 31 * result + defaultColumnNameOfCorruptRecord.hashCode()
+    result
+  }
 
   /**
    * Standard encoding (charset) name. For example UTF-8, UTF-16LE and UTF-32BE.
@@ -279,6 +298,7 @@ object JSONOptions extends DataSourceOptions {
   val DATE_FORMAT = newOption("dateFormat")
   val TIMESTAMP_FORMAT = newOption("timestampFormat")
   val TIMESTAMP_NTZ_FORMAT = newOption("timestampNTZFormat")
+  val TIME_FORMAT = newOption("timeFormat")
   val ENABLE_DATETIME_PARSING_FALLBACK = newOption("enableDateTimeParsingFallback")
   val MULTI_LINE = newOption("multiLine")
   val LINE_SEP = newOption("lineSep")

@@ -29,7 +29,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Observation
 import org.apache.spark.sql.connect.common.ProtoUtils
-import org.apache.spark.sql.connect.config.Connect.CONNECT_EXECUTE_REATTACHABLE_ENABLED
+import org.apache.spark.sql.connect.config.Connect.{CONNECT_EXECUTE_REATTACHABLE_ENABLED, CONNECT_SESSION_RESULT_CHUNKING_MAX_CHUNK_SIZE}
 import org.apache.spark.sql.connect.execution.{ExecuteGrpcResponseSender, ExecuteResponseObserver, ExecuteThreadRunner}
 import org.apache.spark.util.SystemClock
 
@@ -73,6 +73,34 @@ private[connect] class ExecuteHolder(
     SparkEnv.get.conf.get(CONNECT_EXECUTE_REATTACHABLE_ENABLED) &&
     request.getRequestOptionsList.asScala.exists { option =>
       option.hasReattachOptions && option.getReattachOptions.getReattachable == true
+    }
+  }
+
+  /**
+   * If result chunking is enabled, it will split large arrow batches into smaller chunks in
+   * responses.
+   */
+  lazy val resultChunkingEnabled: Boolean = {
+    sessionHolder.session.conf.get(CONNECT_SESSION_RESULT_CHUNKING_MAX_CHUNK_SIZE) > 0 &&
+    request.getRequestOptionsList.asScala.exists { option =>
+      option.hasResultChunkingOptions &&
+      option.getResultChunkingOptions.getAllowArrowBatchChunking == true
+    }
+  }
+
+  /**
+   * The optional preferred arrow chunk size set by the client.
+   */
+  lazy val preferredArrowChunkSize: Option[Int] = {
+    if (resultChunkingEnabled) {
+      request.getRequestOptionsList.asScala.iterator.collectFirst {
+        case option
+            if option.hasResultChunkingOptions &&
+              option.getResultChunkingOptions.hasPreferredArrowChunkSize =>
+          option.getResultChunkingOptions.getPreferredArrowChunkSize.toInt
+      }
+    } else {
+      None
     }
   }
 
@@ -280,6 +308,8 @@ private[connect] class ExecuteHolder(
       responseObserver.removeAll()
       // Post "closed" to UI.
       eventsManager.postClosed()
+      // Update the termination info in the session holder after closure.
+      sessionHolder.closeOperation(this)
     }
   }
 
@@ -303,6 +333,7 @@ private[connect] class ExecuteHolder(
       sparkSessionTags = sparkSessionTags,
       reattachable = reattachable,
       status = eventsManager.status,
+      terminationReason = eventsManager.terminationReason,
       creationTimeNs = creationTimeNs,
       lastAttachedRpcTimeNs = lastAttachedRpcTimeNs,
       closedTimeNs = closedTimeNs)
@@ -313,6 +344,15 @@ private[connect] class ExecuteHolder(
 
   /** Get the operation ID. */
   def operationId: String = key.operationId
+
+  def getTerminationInfo: TerminationInfo = {
+    TerminationInfo(
+      userId = sessionHolder.userId,
+      sessionId = sessionHolder.sessionId,
+      operationId = executeKey.operationId,
+      status = eventsManager.status,
+      terminationReason = eventsManager.terminationReason)
+  }
 }
 
 private object ExecuteHolder {
@@ -378,9 +418,18 @@ case class ExecuteInfo(
     sparkSessionTags: Set[String],
     reattachable: Boolean,
     status: ExecuteStatus,
+    terminationReason: Option[TerminationReason],
     creationTimeNs: Long,
     lastAttachedRpcTimeNs: Option[Long],
     closedTimeNs: Option[Long]) {
 
   def key: ExecuteKey = ExecuteKey(userId, sessionId, operationId)
 }
+
+/** Minimal termination status information for inactive operations. */
+case class TerminationInfo(
+    userId: String,
+    sessionId: String,
+    operationId: String,
+    status: ExecuteStatus,
+    terminationReason: Option[TerminationReason])

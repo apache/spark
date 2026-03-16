@@ -35,7 +35,6 @@ from pyspark.util import is_remote_only
 from pyspark.ml.linalg import DenseVector, Vector, Matrix
 from pyspark.ml.util import Identifiable
 
-
 if TYPE_CHECKING:
     from pyspark.ml._typing import ParamMap
 
@@ -255,7 +254,7 @@ class Params(Identifiable, metaclass=ABCMeta):
     """
 
     def __init__(self) -> None:
-        super(Params, self).__init__()
+        super().__init__()
         #: internal param map for user-supplied values param map
         self._paramMap: "ParamMap" = {}
 
@@ -365,12 +364,10 @@ class Params(Identifiable, metaclass=ABCMeta):
             raise TypeError("hasParam(): paramName must be a string")
 
     @overload
-    def getOrDefault(self, param: str) -> Any:
-        ...
+    def getOrDefault(self, param: str) -> Any: ...
 
     @overload
-    def getOrDefault(self, param: Param[T]) -> T:
-        ...
+    def getOrDefault(self, param: Param[T]) -> T: ...
 
     def getOrDefault(self, param: Union[str, Param[T]]) -> Union[Any, T]:
         """

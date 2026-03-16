@@ -109,8 +109,8 @@ class FrameIOMixin:
 
         def check_style():
             # If the value is negative, the text color will be displayed as red.
-            pdf_style = pdf.style.applymap(style_negative, props="color:red;")
-            psdf_style = psdf.style.applymap(style_negative, props="color:red;")
+            pdf_style = pdf.style.map(style_negative, props="color:red;")
+            psdf_style = psdf.style.map(style_negative, props="color:red;")
 
             # Test whether the same shape as pandas table is created including the color.
             self.assert_eq(pdf_style.to_latex(), psdf_style.to_latex())
@@ -157,12 +157,6 @@ class FrameIOTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.io.test_io import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

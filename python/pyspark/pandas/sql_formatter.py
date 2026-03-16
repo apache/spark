@@ -33,7 +33,6 @@ from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.series import Series
 from pyspark.sql.utils import is_remote
 
-
 __all__ = ["sql"]
 
 
@@ -237,7 +236,7 @@ class PandasSQLStringFormatter(string.Formatter):
         self._ref_sers: List[Tuple[Series, str]] = []
 
     def vformat(self, format_string: str, args: Sequence[Any], kwargs: Mapping[str, Any]) -> str:
-        ret = super(PandasSQLStringFormatter, self).vformat(format_string, args, kwargs)
+        ret = super().vformat(format_string, args, kwargs)
 
         for ref, n in self._ref_sers:
             if not any((ref is v for v in df._pssers.values()) for df, _ in self._temp_views):
@@ -246,7 +245,7 @@ class PandasSQLStringFormatter(string.Formatter):
         return ret
 
     def get_field(self, field_name: str, args: Sequence[Any], kwargs: Mapping[str, Any]) -> Any:
-        obj, first = super(PandasSQLStringFormatter, self).get_field(field_name, args, kwargs)
+        obj, first = super().get_field(field_name, args, kwargs)
         return self._convert_value(obj, field_name), first
 
     def _convert_value(self, val: Any, name: str) -> Optional[str]:
@@ -320,7 +319,7 @@ def _test() -> None:
         .appName("pyspark.pandas.sql_formatter tests")
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.sql_formatter,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

@@ -35,6 +35,17 @@ import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
  * For full functionality tests, see SqlScriptingParserSuite and SqlScriptingInterpreterSuite.
  */
 class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
+
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    conf.setConf(SQLConf.SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED, true)
+  }
+
+  protected override def afterAll(): Unit = {
+    conf.unsetConf(SQLConf.SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED.key)
+    super.afterAll()
+  }
+
   // Helpers
   private def verifySqlScriptResult(
       sqlText: String,
@@ -58,7 +69,6 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
   override protected def sparkConf: SparkConf = {
     super.sparkConf
       .set(SQLConf.ANSI_ENABLED.key, "true")
-      .set(SQLConf.SQL_SCRIPTING_ENABLED.key, "true")
   }
 
   // Tests
@@ -78,7 +88,7 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("Scripting with exception handlers") {
+  test("Scripting with exit exception handlers") {
     val sqlScript =
       """
         |BEGIN
@@ -103,6 +113,36 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
         |END
         |""".stripMargin
     verifySqlScriptResult(sqlScript, Seq(Row(2)))
+  }
+
+  test("Scripting with continue exception handlers") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE flag1 INT = -1;
+        |  DECLARE flag2 INT = -1;
+        |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO
+        |  BEGIN
+        |    SELECT flag1;
+        |    SET flag1 = 1;
+        |  END;
+        |  BEGIN
+        |    DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
+        |    BEGIN
+        |      SELECT flag1;
+        |      SET flag1 = 2;
+        |    END;
+        |    SELECT 5;
+        |    SET flag2 = 1;
+        |    SELECT 1/0;
+        |    SELECT 6;
+        |    SET flag2 = 2;
+        |  END;
+        |  SELECT 7;
+        |  SELECT flag1, flag2;
+        |END
+        |""".stripMargin
+    verifySqlScriptResult(sqlScript, Seq(Row(2, 2)))
   }
 
   test("single select") {
@@ -230,11 +270,69 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         spark.sql(sqlScriptText, args).asInstanceOf[CompoundBody]
       },
-      condition = "UNBOUND_SQL_PARAMETER",
-      parameters = Map("name" -> "_16"),
-      context = ExpectedContext(
-        fragment = "?",
-        start = 16,
-        stop = 16))
+      condition = "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
+      parameters = Map())
+  }
+
+  test("SQL Script labels with identifier") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  IDENTIFIER('loop_label'): LOOP
+        |    SELECT 1;
+        |    LEAVE IDENTIFIER('loop_label');
+        |  END LOOP IDENTIFIER('loop_label');
+        |END""".stripMargin
+    verifySqlScriptResult(sqlScript, Seq(Row(1)))
+  }
+
+  test("SQL Script with labeled BEGIN/END block using identifier") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  IDENTIFIER('block_label'): BEGIN
+        |    DECLARE IDENTIFIER('x') INT DEFAULT 1;
+        |    SELECT x;
+        |  END IDENTIFIER('block_label');
+        |END""".stripMargin
+    verifySqlScriptResult(sqlScript, Seq(Row(1)))
+  }
+
+  test("WHILE loop with identifier label") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE counter INT DEFAULT 0;
+        |  IDENTIFIER('while_label'): WHILE counter < 3 DO
+        |    SET IDENTIFIER('counter') = counter + 1;
+        |  END WHILE IDENTIFIER('while_label');
+        |  SELECT counter;
+        |END""".stripMargin
+    verifySqlScriptResult(sqlScript, Seq(Row(3)))
+  }
+
+  test("REPEAT loop with identifier label") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE cnt INT DEFAULT 0;
+        |  repeat_label: REPEAT
+        |    SET cnt = cnt + 1;
+        |  UNTIL cnt >= 2
+        |  END REPEAT IDENTIFIER('repeat_label');
+        |  SELECT cnt;
+        |END""".stripMargin
+    verifySqlScriptResult(sqlScript, Seq(Row(2)))
+  }
+
+  test("FOR loop with identifier") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  IDENTIFIER('for_label'): FOR IDENTIFIER('row') AS SELECT 1 AS c1 DO
+        |    SELECT row.c1;
+        |  END FOR for_label;
+        |END""".stripMargin
+    verifySqlScriptResult(sqlScript, Seq(Row(1)))
   }
 }

@@ -21,7 +21,6 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate}
@@ -30,7 +29,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, LongType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
-class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
+class DataSourceV2StrategySuite extends SharedSparkSession {
 
   override protected def sparkConf: SparkConf = super.sparkConf
     .set(SQLConf.ANSI_ENABLED, true)
@@ -828,6 +827,20 @@ class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
 
     currentFunctions.foreach { catalystExpr =>
       assert(new V2ExpressionBuilder(catalystExpr).build().isEmpty)
+    }
+  }
+
+  test("SPARK-53474: Check failure when datasourceV2ExprFolding = false") {
+    // when spark.sql.optimizer.datasourceV2ExprFolding = true
+    // expression will first convert to V2 expressions, then fold to constant
+    val expr = Abs(Literal(-5), failOnError = true)
+    checkV2Conversion(expr, LiteralValue(5, IntegerType))
+
+    withSQLConf(SQLConf.DATA_SOURCE_V2_EXPR_FOLDING.key -> "false") {
+      // when spark.sql.optimizer.datasourceV2ExprFolding = false
+      // expression will be converted to V2 expressions, but not folded
+      checkV2Conversion(expr,
+        new GeneralScalarExpression("ABS", Array(LiteralValue(-5, IntegerType))))
     }
   }
 

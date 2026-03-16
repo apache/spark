@@ -282,6 +282,8 @@ case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): CreateMap =
     copy(children = newChildren)
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(CREATE_MAP)
 }
 
 object CreateMap {
@@ -348,6 +350,8 @@ case class MapFromArrays(left: Expression, right: Expression)
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): MapFromArrays =
     copy(left = newLeft, right = newRight)
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(MAP_FROM_ARRAYS)
 }
 
 /**

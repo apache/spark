@@ -443,7 +443,7 @@ class FMRegressor @Since("3.0.0") (
   @Since("3.0.0")
   override def copy(extra: ParamMap): FMRegressor = defaultCopy(extra)
 
-  override def estimateModelSize(dataset: Dataset[_]): Long = {
+  private[spark] override def estimateModelSize(dataset: Dataset[_]): Long = {
     val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
 
     var size = this.estimateMatadataSize
@@ -488,7 +488,7 @@ class FMRegressionModel private[regression] (
     copyValues(new FMRegressionModel(uid, intercept, linear, factors), extra)
   }
 
-  override def estimatedSize: Long = {
+  private[spark] override def estimatedSize: Long = {
     var size = this.estimateMatadataSize
     if (this.linear != null) {
       size += this.linear.getSizeInBytes

@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.encoders.HashableWeakReference
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationAwareUTF8String, CollationFactory, CollationSupport, MapData, SQLOrderingUtil, UnsafeRowUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -1518,6 +1519,8 @@ object CodeGenerator extends Logging {
       classOf[Platform].getName,
       classOf[InternalRow].getName,
       classOf[UnsafeRow].getName,
+      classOf[GeographyVal].getName,
+      classOf[GeometryVal].getName,
       classOf[UTF8String].getName,
       classOf[Decimal].getName,
       classOf[CalendarInterval].getName,
@@ -1682,6 +1685,8 @@ object CodeGenerator extends Logging {
       case _ => PhysicalDataType(dataType) match {
         case _: PhysicalArrayType => s"$input.getArray($ordinal)"
         case PhysicalBinaryType => s"$input.getBinary($ordinal)"
+        case _: PhysicalGeographyType => s"$input.getGeography($ordinal)"
+        case _: PhysicalGeometryType => s"$input.getGeometry($ordinal)"
         case PhysicalCalendarIntervalType => s"$input.getInterval($ordinal)"
         case t: PhysicalDecimalType => s"$input.getDecimal($ordinal, ${t.precision}, ${t.scale})"
         case _: PhysicalMapType => s"$input.getMap($ordinal)"
@@ -1960,6 +1965,8 @@ object CodeGenerator extends Logging {
    * Returns the Java type for a DataType.
    */
   def javaType(dt: DataType): String = dt match {
+    case _: GeographyType => "GeographyVal"
+    case _: GeometryType => "GeometryVal"
     case udt: UserDefinedType[_] => javaType(udt.sqlType)
     case ObjectType(cls) if cls.isArray => s"${javaType(ObjectType(cls.getComponentType))}[]"
     case ObjectType(cls) => cls.getName
@@ -1983,8 +1990,10 @@ object CodeGenerator extends Logging {
     }
   }
 
-  @tailrec
-  def javaClass(dt: DataType): Class[_] = dt match {
+  def javaClass(dt: DataType): Class[_] =
+    TypeOps(dt).map(_.getJavaClass).getOrElse(javaClassDefault(dt))
+
+  private def javaClassDefault(dt: DataType): Class[_] = dt match {
     case BooleanType => java.lang.Boolean.TYPE
     case ByteType => java.lang.Byte.TYPE
     case ShortType => java.lang.Short.TYPE
@@ -1995,6 +2004,8 @@ object CodeGenerator extends Logging {
     case DoubleType => java.lang.Double.TYPE
     case _: DecimalType => classOf[Decimal]
     case BinaryType => classOf[Array[Byte]]
+    case _: GeographyType => classOf[GeographyVal]
+    case _: GeometryType => classOf[GeometryVal]
     case _: StringType => classOf[UTF8String]
     case CalendarIntervalType => classOf[CalendarInterval]
     case _: StructType => classOf[InternalRow]

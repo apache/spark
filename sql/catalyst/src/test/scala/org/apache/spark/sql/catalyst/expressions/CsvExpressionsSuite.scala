@@ -257,4 +257,58 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val expected = range.mkString(",")
     checkEvaluation(StructsToCsv(Map.empty, struct), expected)
   }
+
+  test("from_csv/to_csv with TIME type - all precisions") {
+    import java.time.LocalTime
+
+    val testData = List(
+      (0, LocalTime.of(14, 30, 45), "14:30:45"),
+      (1, LocalTime.of(14, 30, 45, 100000000), "14:30:45.1"),
+      (2, LocalTime.of(14, 30, 45, 120000000), "14:30:45.12"),
+      (3, LocalTime.of(14, 30, 45, 123000000), "14:30:45.123"),
+      (4, LocalTime.of(14, 30, 45, 123400000), "14:30:45.1234"),
+      (5, LocalTime.of(14, 30, 45, 123450000), "14:30:45.12345"),
+      (6, LocalTime.of(14, 30, 45, 123456000), "14:30:45.123456")
+    )
+
+    testData.foreach { case (precision, timeValue, timeStr) =>
+      val schema = StructType(StructField("time", TimeType(precision)) :: Nil)
+      val timeNanos = SparkDateTimeUtils.localTimeToNanos(timeValue)
+
+      checkEvaluation(
+        CsvToStructs(schema, Map.empty, Literal(timeStr), UTC_OPT),
+        InternalRow(timeNanos))
+
+      val struct = Literal.create(create_row(timeNanos), schema)
+      checkEvaluation(StructsToCsv(Map.empty, struct, UTC_OPT), timeStr)
+
+      val csvResult = StructsToCsv(Map.empty, struct, UTC_OPT)
+      checkEvaluation(
+        CsvToStructs(schema, Map.empty, csvResult, UTC_OPT),
+        InternalRow(timeNanos))
+    }
+
+    val customFormat = "HH-mm-ss.SSSSSS"
+    val customTime = LocalTime.of(14, 30, 45, 123456000)
+    val customSchema = StructType(StructField("time", TimeType(6)) :: Nil)
+    val customTimeNanos = SparkDateTimeUtils.localTimeToNanos(customTime)
+
+    checkEvaluation(
+      CsvToStructs(customSchema, Map("timeFormat" -> customFormat),
+        Literal("14-30-45.123456"), UTC_OPT),
+      InternalRow(customTimeNanos))
+
+    val customStruct = Literal.create(create_row(customTimeNanos), customSchema)
+    checkEvaluation(
+      StructsToCsv(Map("timeFormat" -> customFormat), customStruct, UTC_OPT),
+      "14-30-45.123456")
+  }
+
+  test("TIME type with nulls") {
+    val schema = StructType(StructField("time", TimeType(3)) :: Nil)
+
+    checkEvaluation(
+      CsvToStructs(schema, Map.empty, Literal.create(null, StringType), UTC_OPT),
+      null)
+  }
 }

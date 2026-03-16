@@ -185,13 +185,12 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
 
   test("drop table when database/table does not exist") {
     val catalog = newBasicCatalog()
-    // Should always throw exception when the database does not exist
+    // Should throw exception when the database does not exist and ignoreIfNotExists is false
     intercept[AnalysisException] {
       catalog.dropTable("unknown_db", "unknown_table", ignoreIfNotExists = false, purge = false)
     }
-    intercept[AnalysisException] {
-      catalog.dropTable("unknown_db", "unknown_table", ignoreIfNotExists = true, purge = false)
-    }
+    // Should succeed (no-op) when the database does not exist and ignoreIfNotExists is true
+    catalog.dropTable("unknown_db", "unknown_table", ignoreIfNotExists = true, purge = false)
     // Should throw exception when the table does not exist, if ignoreIfNotExists is false
     intercept[AnalysisException] {
       catalog.dropTable("db2", "unknown_table", ignoreIfNotExists = false, purge = false)
@@ -573,7 +572,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
         // then be caught and converted to a RuntimeException with a descriptive message.
         case ex: RuntimeException if ex.getMessage.contains("MetaException") =>
           throw new AnalysisException(
-            errorClass = "_LEGACY_ERROR_TEMP_2193",
+            errorClass = "INTERNAL_ERROR_HIVE_METASTORE_PARTITION_FILTER",
             messageParameters = Map(
               "hiveMetastorePartitionPruningFallbackOnException" ->
                 SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key))
@@ -912,7 +911,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
       tableType = CatalogTableType.EXTERNAL,
       storage = CatalogStorageFormat(
         Some(Utils.createTempDir().toURI),
-        None, None, None, false, Map.empty),
+        None, None, None, None, false, Map.empty),
       schema = new StructType().add("a", "int").add("b", "string"),
       provider = Some(defaultProvider)
     )
@@ -960,7 +959,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
       Map("partCol1" -> "7", "partCol2" -> "8"),
       CatalogStorageFormat(
         Some(tempPath.toURI),
-        None, None, None, false, Map.empty))
+        None, None, None, None, false, Map.empty))
     catalog.createPartitions("db1", "tbl", Seq(partWithExistingDir), ignoreIfExists = false)
 
     tempPath.delete()
@@ -969,7 +968,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
       Map("partCol1" -> "9", "partCol2" -> "10"),
       CatalogStorageFormat(
         Some(tempPath.toURI),
-        None, None, None, false, Map.empty))
+        None, None, None, None, false, Map.empty))
     catalog.createPartitions("db1", "tbl", Seq(partWithNonExistingDir), ignoreIfExists = false)
     assert(tempPath.exists())
   }
@@ -1031,6 +1030,7 @@ abstract class CatalogTestUtils {
     locationUri = None,
     inputFormat = Some(tableInputFormat),
     outputFormat = Some(tableOutputFormat),
+    serdeName = None,
     serde = None,
     compressed = false,
     properties = Map.empty)

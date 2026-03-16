@@ -23,7 +23,7 @@ import org.json4s.jackson.JsonMethods
 import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.types.{DataTypeUtils, PhysicalDataType, UninitializedPhysicalType}
 import org.apache.spark.sql.catalyst.util.{CollationFactory, StringConcat}
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
 
@@ -278,6 +278,26 @@ class DataTypeSuite extends SparkFunSuite {
 
   checkDataTypeFromJson(VarcharType(10))
   checkDataTypeFromDDL(VarcharType(11))
+
+  // GEOMETRY type with default fixed SRID.
+  checkDataTypeFromJson(GeometryType(GeometryType.GEOMETRY_DEFAULT_SRID))
+  checkDataTypeFromDDL(GeometryType(GeometryType.GEOMETRY_DEFAULT_SRID))
+
+  // GEOMETRY type with non-default fixed SRID.
+  checkDataTypeFromJson(GeometryType(3857))
+  checkDataTypeFromDDL(GeometryType(3857))
+
+  // GEOMETRY type with mixed SRID.
+  checkDataTypeFromJson(GeometryType("ANY"))
+  checkDataTypeFromDDL(GeometryType("ANY"))
+
+  // GEOGRAPHY type with default fixed SRID.
+  checkDataTypeFromJson(GeographyType(GeographyType.GEOGRAPHY_DEFAULT_SRID))
+  checkDataTypeFromDDL(GeographyType(GeographyType.GEOGRAPHY_DEFAULT_SRID))
+
+  // GEOGRAPHY type with mixed SRID.
+  checkDataTypeFromJson(GeographyType("ANY"))
+  checkDataTypeFromDDL(GeographyType("ANY"))
 
   dayTimeIntervalTypes.foreach(checkDataTypeFromJson)
   yearMonthIntervalTypes.foreach(checkDataTypeFromJson)
@@ -1426,5 +1446,45 @@ class DataTypeSuite extends SparkFunSuite {
       },
       condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'time'", "hint" -> ""))
+  }
+
+  test("singleton DataType equality after deserialization") {
+    // Singleton DataTypes that use `case object` pattern matching (e.g., `case BinaryType =>`).
+    // If a non-singleton instance is created (e.g., via Kryo deserialization which doesn't call
+    // readResolve), the pattern match would fail without proper equals/hashCode overrides.
+    val singletonTypes: Seq[(DataType, Class[_ <: DataType])] = Seq(
+      (BinaryType, classOf[BinaryType]),
+      (BooleanType, classOf[BooleanType]),
+      (ByteType, classOf[ByteType]),
+      (ShortType, classOf[ShortType]),
+      (IntegerType, classOf[IntegerType]),
+      (LongType, classOf[LongType]),
+      (FloatType, classOf[FloatType]),
+      (DoubleType, classOf[DoubleType]),
+      (DateType, classOf[DateType]),
+      (TimestampType, classOf[TimestampType]),
+      (TimestampNTZType, classOf[TimestampNTZType]),
+      (NullType, classOf[NullType]),
+      (CalendarIntervalType, classOf[CalendarIntervalType]),
+      (VariantType, classOf[VariantType])
+    )
+
+    singletonTypes.foreach { case (singleton, clazz) =>
+      val ctor = clazz.getDeclaredConstructor()
+      ctor.setAccessible(true)
+      val nonSingleton = ctor.newInstance()
+      assert(nonSingleton ne singleton,
+        s"${clazz.getSimpleName}: reflection should create a distinct instance")
+
+      assert(nonSingleton == singleton,
+        s"${clazz.getSimpleName}: non-singleton == singleton should be true")
+      assert(singleton == nonSingleton,
+        s"${clazz.getSimpleName}: singleton == non-singleton should be true")
+      assert(nonSingleton.hashCode == singleton.hashCode,
+        s"${clazz.getSimpleName}: hashCode should be equal")
+
+      assert(PhysicalDataType(nonSingleton) != UninitializedPhysicalType,
+        s"${clazz.getSimpleName}: PhysicalDataType should recognize non-singleton instance")
+    }
   }
 }

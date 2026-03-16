@@ -416,7 +416,7 @@ Project [get(array(1, 2, 3), 3) AS get(array(1, 2, 3), 3)#x]
 -- !query
 select get(array(1, 2, 3), null)
 -- !query analysis
-Project [get(array(1, 2, 3), null) AS get(array(1, 2, 3), NULL)#x]
+Project [get(array(1, 2, 3), cast(null as int)) AS get(array(1, 2, 3), NULL)#x]
 +- OneRowRelation
 
 
@@ -438,8 +438,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"1\"",
     "inputType" : "\"INT\"",
     "paramIndex" : "first",
-    "requiredType" : "(\"ARRAY\")",
-    "sqlExpr" : "\"1[0]\""
+    "requiredType" : "\"ARRAY\"",
+    "sqlExpr" : "\"get(1, 0)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -462,8 +462,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"1\"",
     "inputType" : "\"INT\"",
     "paramIndex" : "first",
-    "requiredType" : "(\"ARRAY\")",
-    "sqlExpr" : "\"1[-1]\""
+    "requiredType" : "\"ARRAY\"",
+    "sqlExpr" : "\"get(1, -1)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -486,8 +486,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"1\"",
     "inputType" : "\"STRING\"",
     "paramIndex" : "first",
-    "requiredType" : "(\"ARRAY\")",
-    "sqlExpr" : "\"1[0]\""
+    "requiredType" : "\"ARRAY\"",
+    "sqlExpr" : "\"get(1, 0)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -510,8 +510,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"1\"",
     "inputType" : "\"STRING\"",
     "paramIndex" : "first",
-    "requiredType" : "(\"ARRAY\")",
-    "sqlExpr" : "\"1[-1]\""
+    "requiredType" : "\"ARRAY\"",
+    "sqlExpr" : "\"get(1, -1)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -534,8 +534,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"NULL\"",
     "inputType" : "\"VOID\"",
     "paramIndex" : "first",
-    "requiredType" : "(\"ARRAY\")",
-    "sqlExpr" : "\"NULL[0]\""
+    "requiredType" : "\"ARRAY\"",
+    "sqlExpr" : "\"get(NULL, 0)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -558,8 +558,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"NULL\"",
     "inputType" : "\"VOID\"",
     "paramIndex" : "first",
-    "requiredType" : "(\"ARRAY\")",
-    "sqlExpr" : "\"NULL[-1]\""
+    "requiredType" : "\"ARRAY\"",
+    "sqlExpr" : "\"get(NULL, -1)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -582,8 +582,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"NULL\"",
     "inputType" : "\"VOID\"",
     "paramIndex" : "first",
-    "requiredType" : "(\"ARRAY\")",
-    "sqlExpr" : "\"NULL[NULL]\""
+    "requiredType" : "\"ARRAY\"",
+    "sqlExpr" : "\"get(NULL, NULL)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -606,8 +606,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(NULL AS STRING)\"",
     "inputType" : "\"STRING\"",
     "paramIndex" : "first",
-    "requiredType" : "(\"ARRAY\")",
-    "sqlExpr" : "\"CAST(NULL AS STRING)[0]\""
+    "requiredType" : "\"ARRAY\"",
+    "sqlExpr" : "\"get(CAST(NULL AS STRING), 0)\""
   },
   "queryContext" : [ {
     "objectType" : "",

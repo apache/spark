@@ -35,6 +35,8 @@ Data Types
     DecimalType
     DoubleType
     FloatType
+    GeographyType
+    GeometryType
     IntegerType
     LongType
     MapType

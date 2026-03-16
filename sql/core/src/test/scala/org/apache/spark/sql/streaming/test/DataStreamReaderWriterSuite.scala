@@ -526,7 +526,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
   }
 
   private def testMemorySinkCheckpointRecovery(chkLoc: String, provideInWriter: Boolean): Unit = {
-    val ms = new MemoryStream[Int](0, sqlContext)
+    val ms = new MemoryStream[Int](0, spark)
     val df = ms.toDF().toDF("a")
     val tableName = "test"
     def startQuery: StreamingQuery = {
@@ -585,7 +585,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
 
   test("append mode memory sink's do not support checkpoint recovery") {
     import testImplicits._
-    val ms = new MemoryStream[Int](0, sqlContext)
+    val ms = new MemoryStream[Int](0, spark)
     val df = ms.toDF().toDF("a")
     val checkpointLoc = newMetadataDir
     val checkpointDir = new File(checkpointLoc, "offsets")

@@ -163,6 +163,20 @@ object Encoders {
   def BINARY: Encoder[Array[Byte]] = BinaryEncoder
 
   /**
+   * An encoder for Geometry data type.
+   *
+   * @since 4.1.0
+   */
+  def GEOMETRY(dt: GeometryType): Encoder[Geometry] = GeometryEncoder(dt)
+
+  /**
+   * An encoder for Geography data type.
+   *
+   * @since 4.1.0
+   */
+  def GEOGRAPHY(dt: GeographyType): Encoder[Geography] = GeographyEncoder(dt)
+
+  /**
    * Creates an encoder that serializes instances of the `java.time.Duration` class to the
    * internal representation of nullable Catalyst's DayTimeIntervalType.
    *
@@ -181,7 +195,7 @@ object Encoders {
   /**
    * Creates an encoder for Java Bean of type T.
    *
-   * T must be publicly accessible.
+   * T must be a concrete class (not an interface), and must be publicly accessible.
    *
    * supported types for java bean field:
    *   - primitive types: boolean, int, double, etc.

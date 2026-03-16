@@ -223,8 +223,11 @@ class VariantInRelation {
         case Some(variants) =>
           variants.get(path) match {
             case Some(fields) =>
+              // Accessing the full variant value
               addField(fields, RequestedVariantField.fullVariant)
             case _ =>
+              // Accessing the struct containing a variant.
+              // This variant is not eligible for push down.
               // Remove non-eligible variants.
               variants.filterInPlace { case (key, _) => !key.startsWith(path) }
           }
@@ -331,6 +334,7 @@ object PushVariantIntoScan extends Rule[LogicalPlan] {
     } else {
       newRelation
     }
+
     val newProjectList = projectList.map { e =>
       val rewritten = variants.rewriteExpr(e, attributeMap)
       rewritten match {
@@ -341,6 +345,7 @@ object PushVariantIntoScan extends Rule[LogicalPlan] {
         case _ => Alias(rewritten, e.name)(e.exprId, e.qualifier)
       }
     }
+
     Project(newProjectList, withFilter)
   }
 }

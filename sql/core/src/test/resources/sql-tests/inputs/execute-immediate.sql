@@ -87,13 +87,20 @@ EXECUTE IMMEDIATE 'SELECT \'invalid_cast_error_expected\'' INTO res_id;
 -- require query when using INTO
 EXECUTE IMMEDIATE 'INSERT INTO x VALUES (?)' INTO res_id USING 1;
 
+-- require query when using INTO with SET VAR command
+DECLARE OR REPLACE testvarA INT;
+EXECUTE IMMEDIATE 'SET VAR testVarA = 1' INTO testVarA;
+
 -- use column in using - should fail as we expect variable here
 EXECUTE IMMEDIATE 'SELECT * FROM tbl_view WHERE ? = id' USING id;
 
 -- either positional or named parameters must be used
-EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where ? = id and :first = name' USING 1, 'name2' as first;
+EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where ? = id and :first = name' USING 1 as x, 'name2' as first;
 
--- all paramerers must be named
+-- all parameters must be named
+EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where :x = id and :first = name' USING 1, 'name2' as first;
+
+-- all parameters must be named
 EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where :first = name' USING 1, 'name2' as first;
 
 -- internal syntax error
@@ -109,8 +116,10 @@ EXECUTE IMMEDIATE b;
 SET VAR sql_string = 'SELECT * from tbl_view where name = :first or id = :second';
 SET VAR a = 'na';
 
--- expressions not supported - feature not supported
+-- constant expressions are supported
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = :first' USING CONCAT(a , "me1") as first;
+
+-- subquery in using not supported
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = :first' USING (SELECT 42) as first, 'name2' as second;
 
 -- INTO variables not matching scalar types
@@ -140,10 +149,151 @@ EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :p' USING p, 'p';
 EXECUTE IMMEDIATE 'SELECT id, data.f1 FROM tbl_view WHERE id = 10' INTO res_id, res_id;
 
 -- nested execute immediate
-EXECUTE IMMEDIATE 'EXECUTE IMMEDIATE \'SELECT id FROM tbl_view WHERE id = ? USING 10\'';
+EXECUTE IMMEDIATE 'EXECUTE IMMEDIATE \'SELECT id FROM tbl_view WHERE id = ?\' USING 10';
 
 -- sqlString is null
 SET VAR sql_string = null;
 EXECUTE IMMEDIATE sql_string;
 
+-- sqlString is not a string
+SET VAR sql_string = 5;
+EXECUTE IMMEDIATE sql_string;
+
+-- sqlString is not a well formed SQL statement.
+SET VAR sql_string = 'hello';
+EXECUTE IMMEDIATE length(sql_string);
+
+-- mixed positional and named parameters in query
+EXECUTE IMMEDIATE 'SELECT 42 where ? = :first' USING 1, 2 as first;
+
+-- non-string variable as sqlString parameter
+DECLARE int_var INT;
+SET VAR int_var = 42;
+EXECUTE IMMEDIATE int_var;
+
+-- null string as sqlString parameter
+DECLARE null_var STRING;
+SET VAR null_var = null;
+EXECUTE IMMEDIATE null_var;
+
+-- unsupported expression for parameter (subquery)
+EXECUTE IMMEDIATE 'SELECT ?' USING (SELECT 1);
+
+-- named query with unnamed parameters
+EXECUTE IMMEDIATE 'SELECT :first' USING 2, 3;
+
+-- Query is not a constant
+EXECUTE IMMEDIATE (SELECT c FROM (VALUES(1)) AS T(c));
+
 DROP TABLE x;
+
+-- Test data type conversion correctness for LiteralToSqlConverter
+-- Each test validates that the parameter is correctly converted to SQL and executed
+
+-- !query
+-- Basic numeric types
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 5 AS p;
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 5L AS p;
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 5S AS p;
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 5Y AS p;
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 3.14F AS p;
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 3.14159D AS p;
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 123.45BD AS p;
+
+-- !query
+-- Boolean type
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING true AS p;
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING false AS p;
+
+-- !query
+-- String types
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 'hello world' AS p;
+
+-- !query
+-- String with single quotes (test escaping)
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 'it''s a test' AS p;
+
+-- !query
+-- Date and timestamp types
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING DATE '2023-12-25' AS p;
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING TIMESTAMP '2023-12-25 10:30:45' AS p;
+
+-- !query
+-- TimestampNTZ type
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING TIMESTAMP_NTZ '2023-12-25 10:30:45' AS p;
+
+-- !query
+-- Null values
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING CAST(NULL AS INT) AS p;
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING CAST(NULL AS STRING) AS p;
+
+-- !query
+-- Binary type
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, hex(:p) as val' USING X'010203FF' AS p;
+
+-- !query
+-- Interval types
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING INTERVAL '3' DAY AS p;
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING INTERVAL '2' YEAR AS p;
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING INTERVAL '1-2' YEAR TO MONTH AS p;
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING INTERVAL '3 4:5:6' DAY TO SECOND AS p;
+
+-- !query
+-- Additional numeric type tests
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 999.999BD AS p;
+
+-- !query
+-- Test multiple parameters with different types
+EXECUTE IMMEDIATE 'SELECT typeof(:p1) as type1, :p1 as val1, typeof(:p2) as type2, :p2 as val2' 
+  USING 42 as p1, 'test string' as p2;
+
+-- !query
+-- Array types (simple)
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING ARRAY(1, 2, 3) AS p;
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING ARRAY('a', 'b', 'c') AS p;
+
+-- !query
+-- Nested array
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING ARRAY(ARRAY(1, 2), ARRAY(3, 4)) AS p;
+
+-- !query
+-- Map types
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING MAP('key1', 'value1', 'key2', 'value2') AS p;
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING MAP(1, 'one', 2, 'two') AS p;
+
+-- !query
+-- Test unbound parameter markers without USING clause
+-- named parameter without USING clause should fail
+EXECUTE IMMEDIATE 'SELECT :param';
+
+-- !query
+-- positional parameter without USING clause should fail
+EXECUTE IMMEDIATE 'SELECT ?';

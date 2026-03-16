@@ -16,7 +16,6 @@
 #
 
 
-import unittest
 import os
 
 import numpy as np
@@ -33,11 +32,11 @@ class ResampleTimezoneMixin:
     def setUpClass(cls):
         cls.timezone = os.environ.get("TZ", None)
         os.environ["TZ"] = "America/New_York"
-        super(ResampleTimezoneMixin, cls).setUpClass()
+        super().setUpClass()
 
     @classmethod
     def tearDownClass(cls):
-        super(ResampleTimezoneMixin, cls).tearDownClass()
+        super().tearDownClass()
         if cls.timezone is not None:
             os.environ["TZ"] = cls.timezone
 
@@ -58,8 +57,8 @@ class ResampleTimezoneMixin:
                 "spark.sql.timestampType": "TIMESTAMP_NTZ",
             }
         ):
-            p_resample = self.pdf.resample(rule="1001H", closed="right", label="right")
-            ps_resample = self.psdf.resample(rule="1001H", closed="right", label="right")
+            p_resample = self.pdf.resample(rule="1001h", closed="right", label="right")
+            ps_resample = self.psdf.resample(rule="1001h", closed="right", label="right")
             self.assert_eq(
                 p_resample.sum().sort_index(),
                 ps_resample.sum().sort_index(),
@@ -72,12 +71,6 @@ class ResampleTimezoneTests(ResampleTimezoneMixin, PandasOnSparkTestCase, TestUt
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.resample.test_timezone import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

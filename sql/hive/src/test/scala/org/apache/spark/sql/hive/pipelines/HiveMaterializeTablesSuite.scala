@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive.pipelines
 
-import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.pipelines.graph.MaterializeTablesSuite
 
@@ -37,6 +36,4 @@ class HiveMaterializeTablesSuite extends MaterializeTablesSuite with TestHiveSin
       super.afterEach()
     }
   }
-
-  override protected implicit def sqlContext: SQLContext = spark.sqlContext
 }

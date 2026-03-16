@@ -300,4 +300,69 @@ class CatalogSuite extends ConnectFunSuite with RemoteSparkSession with SQLHelpe
       }
     }
   }
+
+  test("SPARK-52312: DESCRIBE TABLE result should not change after ALTER TABLE") {
+    val tableName = "test_describe_cache"
+    withTable(tableName) {
+      spark.sql(s"CREATE TABLE $tableName (c1 int, c2 string) USING parquet")
+
+      // Describe the table and cache the result
+      val describeDf = spark.sql(s"DESCRIBE TABLE $tableName")
+      describeDf.cache()
+
+      // Verify initial describe shows original columns
+      val originalColumns = describeDf.select("col_name").collect().map(_.getString(0)).toSet
+      assert(originalColumns.contains("c1"))
+      assert(originalColumns.contains("c2"))
+      assert(!originalColumns.contains("c3"))
+
+      // Alter the table to add a new column
+      spark.sql(s"ALTER TABLE $tableName ADD COLUMN c3 double")
+
+      // The describe result df should still show the original schema (before ALTER)
+      val cachedColumns = describeDf.select("col_name").collect().map(_.getString(0)).toSet
+      assert(cachedColumns.contains("c1"))
+      assert(cachedColumns.contains("c2"))
+      assert(
+        !cachedColumns.contains("c3"),
+        "DESCRIBE column df should not reflect the new column")
+
+      // A fresh DESCRIBE TABLE call should show the new schema (with c3)
+      // because Describe command is not cached
+      val freshDescribeDf = spark.sql(s"DESCRIBE TABLE $tableName")
+      val freshColumns = freshDescribeDf.select("col_name").collect().map(_.getString(0)).toSet
+      assert(freshColumns.contains("c1"))
+      assert(freshColumns.contains("c2"))
+      assert(freshColumns.contains("c3"), "Fresh DESCRIBE should reflect the new column")
+    }
+  }
+
+  test("SPARK-52312: DESCRIBE TABLE cache should be a no-op") {
+    val tableName = "test_describe_cache_noop"
+    withTable(tableName) {
+      spark.sql(s"CREATE TABLE $tableName (c1 int, c2 string) USING parquet")
+
+      // Create describe DataFrame but don't cache yet
+      val describeDf = spark.sql(s"DESCRIBE TABLE $tableName")
+
+      // add column c3
+      spark.sql(s"ALTER TABLE $tableName ADD COLUMN c3 double")
+
+      // Now cache the describe
+      describeDf.cache()
+
+      // Verify describe shows schema at the initialization of describeDf
+      val cachedColumns = describeDf.select("col_name").collect().map(_.getString(0)).toSet
+      assert(cachedColumns.contains("c1"))
+      assert(cachedColumns.contains("c2"))
+      assert(!cachedColumns.contains("c3"), "DESCRIBE should not see c3 added before cache")
+
+      // A fresh DESCRIBE TABLE call should show the latest schema (with c3)
+      val freshDescribeDf = spark.sql(s"DESCRIBE TABLE $tableName")
+      val freshColumns = freshDescribeDf.select("col_name").collect().map(_.getString(0)).toSet
+      assert(freshColumns.contains("c1"))
+      assert(freshColumns.contains("c2"))
+      assert(freshColumns.contains("c3"))
+    }
+  }
 }

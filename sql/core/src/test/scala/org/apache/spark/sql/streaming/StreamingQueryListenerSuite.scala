@@ -21,6 +21,7 @@ import java.util.UUID
 
 import scala.collection.mutable
 
+import org.json4s.jackson.JsonMethods.{compact, parse, render}
 import org.scalactic.{Equality, TolerantNumerics}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
@@ -63,7 +64,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
   private def testSingleListenerBasic(listener: EventCollector): Unit = {
     val clock = new StreamManualClock
-    val inputData = new MemoryStream[Int](0, sqlContext)
+    val inputData = new MemoryStream[Int](0, spark)
     val df = inputData.toDS().as[Long].map { 10 / _ }
 
     case class AssertStreamExecThreadToWaitForClock()
@@ -286,6 +287,12 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     )
   }
 
+  private def removeFieldFromJson(jsonString: String, fieldName: String): String = {
+    val jv = parse(jsonString, useBigDecimalForDouble = true)
+    val removed = jv.removeField { case (name, _) => name == fieldName }
+    compact(render(removed))
+  }
+
   test("QueryProgressEvent serialization") {
     def testSerialization(event: QueryProgressEvent): Unit = {
       import scala.jdk.CollectionConverters._
@@ -294,9 +301,24 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       assert(newEvent.progress.json === event.progress.json)  // json as a proxy for equality
       assert(newEvent.progress.durationMs.asScala === event.progress.durationMs.asScala)
       assert(newEvent.progress.eventTime.asScala === event.progress.eventTime.asScala)
+
+      // Verify we can get the event back from the JSON string, this is important for Spark Connect
+      // and the StreamingQueryListenerBus. This is the method that is used to deserialize the event
+      // in StreamingQueryListenerBus.queryEventHandler
+      val eventFromNewEvent = QueryProgressEvent.fromJson(newEvent.json)
+      // TODO: Remove after SC-206585 is fixed
+      // We remove the observedMetrics field because it is not serialized properly when being
+      // removed from the listener bus, so this test is to verify that everything expect the
+      // observedMetrics field is equal in the JSON string
+      val eventWithoutObservedMetrics = removeFieldFromJson(event.progress.json, "observedMetrics")
+      assert(eventFromNewEvent.progress.json === eventWithoutObservedMetrics)
     }
     testSerialization(new QueryProgressEvent(StreamingQueryStatusAndProgressSuite.testProgress1))
     testSerialization(new QueryProgressEvent(StreamingQueryStatusAndProgressSuite.testProgress2))
+    testSerialization(new QueryProgressEvent(StreamingQueryStatusAndProgressSuite.testProgress3))
+    testSerialization(new QueryProgressEvent(StreamingQueryStatusAndProgressSuite.testProgress4))
+    testSerialization(new QueryProgressEvent(StreamingQueryStatusAndProgressSuite.testProgress5))
+    testSerialization(new QueryProgressEvent(StreamingQueryStatusAndProgressSuite.testProgress6))
   }
 
   test("QueryTerminatedEvent serialization") {
@@ -333,7 +355,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       spark.streams.addListener(listener)
       try {
         var numTriggers = 0
-        val input = new MemoryStream[Int](0, sqlContext) {
+        val input = new MemoryStream[Int](0, spark) {
           override def latestOffset(startOffset: OffsetV2, limit: ReadLimit): OffsetV2 = {
             numTriggers += 1
             super.latestOffset(startOffset, limit)
@@ -375,7 +397,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       collector.reset()
       session.sparkContext.addJobTag(jobTag1)
       session.sparkContext.addJobTag(jobTag2)
-      val mem = MemoryStream[Int](implicitly[Encoder[Int]], session.sqlContext)
+      val mem = MemoryStream[Int](implicitly[Encoder[Int]], session)
       testStream(mem.toDS())(
         AddData(mem, 1, 2, 3),
         CheckAnswer(1, 2, 3)
@@ -400,7 +422,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     def runQuery(session: SparkSession): Unit = {
       collector1.reset()
       collector2.reset()
-      val mem = MemoryStream[Int](implicitly[Encoder[Int]], session.sqlContext)
+      val mem = MemoryStream[Int](implicitly[Encoder[Int]], session)
       testStream(mem.toDS())(
         AddData(mem, 1, 2, 3),
         CheckAnswer(1, 2, 3)
@@ -468,7 +490,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   test("listener propagates observable metrics") {
     import org.apache.spark.sql.functions._
     val clock = new StreamManualClock
-    val inputData = new MemoryStream[Int](0, sqlContext)
+    val inputData = new MemoryStream[Int](0, spark)
     val df = inputData.toDF()
       .observe(
         name = "my_event",
@@ -564,7 +586,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       }
 
       try {
-        val input = new MemoryStream[Int](0, sqlContext)
+        val input = new MemoryStream[Int](0, spark)
         val clock = new StreamManualClock()
         val result = input.toDF().select("value")
         testStream(result)(

@@ -263,7 +263,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
               timeoutNs = Math.min(progressTimeout * NANOS_PER_MILLIS, timeoutNs)
             }
             logTrace(s"Wait for response to become available with timeout=$timeoutNs ns.")
-            executionObserver.responseLock.wait(timeoutNs / NANOS_PER_MILLIS)
+            executionObserver.responseLock.wait(Math.max(1, timeoutNs / NANOS_PER_MILLIS))
             enqueueProgressMessage(force = true)
             logTrace(s"Reacquired executionObserver lock after waiting.")
             sleepEnd = System.nanoTime()
@@ -384,7 +384,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
           val timeoutNs = Math.max(1, deadlineTimeNs - System.nanoTime())
           var sleepStart = System.nanoTime()
           logTrace(s"Wait for grpcCallObserver to become ready with timeout=$timeoutNs ns.")
-          grpcCallObserverReadySignal.wait(timeoutNs / NANOS_PER_MILLIS)
+          grpcCallObserverReadySignal.wait(Math.max(1, timeoutNs / NANOS_PER_MILLIS))
           logTrace(s"Reacquired grpcCallObserverReadySignal lock after waiting.")
           sleepEnd = System.nanoTime()
         }

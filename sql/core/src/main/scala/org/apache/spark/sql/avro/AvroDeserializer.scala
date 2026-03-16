@@ -203,6 +203,14 @@ private[sql] class AvroDeserializer(
           s"Avro logical type $other cannot be converted to SQL type ${TimestampNTZType.sql}.")
       }
 
+      case (LONG, _: TimeType) => avroType.getLogicalType match {
+        case _: LogicalTypes.TimeMicros => (updater, ordinal, value) =>
+          val micros = value.asInstanceOf[Long]
+          updater.setLong(ordinal, micros)
+        case other => throw new IncompatibleSchemaException(errorPrefix +
+          s"Avro logical type $other cannot be converted to SQL type ${TimeType().sql}.")
+      }
+
       // Before we upgrade Avro to 1.8 for logical type support, spark-avro converts Long to Date.
       // For backward compatibility, we still keep this conversion.
       case (LONG, DateType) => (updater, ordinal, value) =>

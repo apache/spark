@@ -26,10 +26,15 @@ import org.apache.spark.sql.types.{DataType, LongType}
  *
  * @note this expression is dedicated for Pandas API on Spark to use.
  */
-case class DistributedSequenceID() extends LeafExpression with Unevaluable with NonSQLExpression {
+case class DistributedSequenceID(cache: Expression)
+  extends LeafExpression with Unevaluable with NonSQLExpression {
+
+  // This argument indicate whether the underlying RDD should be cached
+  // according to PS config "pandas_on_Spark.compute.default_index_cache".
+  def this() = this(Literal(false))
 
   override def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression = {
-    DistributedSequenceID()
+    DistributedSequenceID(cache)
   }
 
   override def nullable: Boolean = false

@@ -93,12 +93,16 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   protected override def doExecute(): RDD[InternalRow] = {
     val evaluatorFactory = new ProjectEvaluatorFactory(projectList, child.output)
     if (conf.usePartitionEvaluator) {
-      child.execute().mapPartitionsWithEvaluator(evaluatorFactory)
+      child.execute().mapPartitionsWithEvaluator(
+        evaluatorFactory, preservesPartitionSizes = true
+      )
     } else {
-      child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
-        val evaluator = evaluatorFactory.createEvaluator()
-        evaluator.eval(index, iter)
-      }
+      child.execute().mapPartitionsWithIndexInternal(
+        f = (index, iter) => {
+          val evaluator = evaluatorFactory.createEvaluator()
+          evaluator.eval(index, iter)
+        }, preservesPartitionSizes = true
+      )
     }
   }
 
@@ -707,9 +711,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
     // Create a map of attributes from the other children to the first child.
     val firstAttrs = children.head.output
     val attributesMap = children.tail.map(_.output).map { otherAttrs =>
-      otherAttrs.zip(firstAttrs).map { case (attr, firstAttr) =>
-        attr -> firstAttr
-      }.toMap
+      AttributeMap(otherAttrs.zip(firstAttrs))
     }
 
     val partitionings = children.map(_.outputPartitioning)
@@ -721,7 +723,8 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
       p match {
         case e: Expression =>
           e.transform {
-            case a: Attribute if attributeMap.contains(a) => attributeMap(a)
+            case a: Attribute if attributeMap.contains(a) =>
+              attributeMap(a)
           }.asInstanceOf[Partitioning]
         case _ => p
       }

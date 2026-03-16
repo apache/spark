@@ -897,8 +897,8 @@ DESCRIBE EXTENDED v
 -- !query schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query output
-c1                  	bigint              	c1 6e               
-c2                  	string              	c2 6e               
+c1                  	bigint              	c1 6d               
+c2                  	string              	c2 6d               
                     	                    	                    
 # Detailed Table Information	                    	                    
 Catalog             	spark_catalog       	                    

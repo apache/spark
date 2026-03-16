@@ -174,6 +174,25 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
     widenTest(FloatType, FloatType, Some(FloatType))
     widenTest(DoubleType, DoubleType, Some(DoubleType))
 
+    // Geography with same fixed SRIDs.
+    widenTest(GeographyType(4326), GeographyType(4326), Some(GeographyType(4326)))
+    // Geography with mixed SRIDs.
+    widenTest(GeographyType("ANY"), GeographyType("ANY"), Some(GeographyType("ANY")))
+    widenTest(GeographyType("ANY"), GeographyType(4326), Some(GeographyType("ANY")))
+    widenTest(GeographyType(4326), GeographyType("ANY"), Some(GeographyType("ANY")))
+    // Geometry with same fixed SRIDs.
+    widenTest(GeometryType(0), GeometryType(0), Some(GeometryType(0)))
+    widenTest(GeometryType(3857), GeometryType(3857), Some(GeometryType(3857)))
+    widenTest(GeometryType(4326), GeometryType(4326), Some(GeometryType(4326)))
+    // Geometry with different fixed SRIDs.
+    widenTest(GeometryType(0), GeometryType(3857), Some(GeometryType("ANY")))
+    widenTest(GeometryType(3857), GeometryType(4326), Some(GeometryType("ANY")))
+    widenTest(GeometryType(4326), GeometryType(0), Some(GeometryType("ANY")))
+    // Geometry with mixed SRIDs.
+    widenTest(GeometryType("ANY"), GeometryType("ANY"), Some(GeometryType("ANY")))
+    widenTest(GeometryType("ANY"), GeometryType(4326), Some(GeometryType("ANY")))
+    widenTest(GeometryType(4326), GeometryType("ANY"), Some(GeometryType("ANY")))
+
     // Integral mixed with floating point.
     widenTest(IntegerType, FloatType, Some(DoubleType))
     widenTest(IntegerType, DoubleType, Some(DoubleType))

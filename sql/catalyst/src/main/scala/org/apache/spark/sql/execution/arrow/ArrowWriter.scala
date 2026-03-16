@@ -24,6 +24,7 @@ import org.apache.arrow.vector.complex._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
+import org.apache.spark.sql.catalyst.util.STUtils
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
@@ -92,6 +93,16 @@ object ArrowWriter {
           createFieldWriter(vector.getChildByOrdinal(ordinal))
         }
         new StructWriter(vector, children.toArray)
+      case (dt: GeometryType, vector: StructVector) =>
+        val children = (0 until vector.size()).map { ordinal =>
+          createFieldWriter(vector.getChildByOrdinal(ordinal))
+        }
+        new GeometryWriter(dt, vector, children.toArray)
+      case (dt: GeographyType, vector: StructVector) =>
+        val children = (0 until vector.size()).map { ordinal =>
+          createFieldWriter(vector.getChildByOrdinal(ordinal))
+        }
+        new GeographyWriter(dt, vector, children.toArray)
       case (dt, _) =>
         throw ExecutionErrors.unsupportedDataTypeError(dt)
     }
@@ -113,9 +124,9 @@ class ArrowWriter(val root: VectorSchemaRoot, fields: Array[ArrowFieldWriter]) {
     count += 1
   }
 
-  def sizeInBytes(): Int = {
+  def sizeInBytes(): Long = {
     var i = 0
-    var bytes = 0
+    var bytes = 0L
     while (i < fields.size) {
       bytes += fields(i).getSizeInBytes()
       i += 1
@@ -443,6 +454,42 @@ private[arrow] class StructWriter(
   override def reset(): Unit = {
     super.reset()
     children.foreach(_.reset())
+  }
+}
+
+private[arrow] class GeographyWriter(
+    dt: GeographyType,
+    valueVector: StructVector,
+    children: Array[ArrowFieldWriter]) extends StructWriter(valueVector, children) {
+
+  override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
+    valueVector.setIndexDefined(count)
+
+    val geom = STUtils.deserializeGeog(input.getGeography(ordinal), dt)
+    val bytes = geom.getBytes
+    val srid = geom.getSrid
+
+    val row = InternalRow(srid, bytes)
+    children(0).write(row, 0)
+    children(1).write(row, 1)
+  }
+}
+
+private[arrow] class GeometryWriter(
+    dt: GeometryType,
+    valueVector: StructVector,
+    children: Array[ArrowFieldWriter]) extends StructWriter(valueVector, children) {
+
+  override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
+    valueVector.setIndexDefined(count)
+
+    val geom = STUtils.deserializeGeom(input.getGeometry(ordinal), dt)
+    val bytes = geom.getBytes
+    val srid = geom.getSrid
+
+    val row = InternalRow(srid, bytes)
+    children(0).write(row, 0)
+    children(1).write(row, 1)
   }
 }
 

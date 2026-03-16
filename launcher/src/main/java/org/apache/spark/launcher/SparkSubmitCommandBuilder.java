@@ -251,6 +251,13 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       args.add(propertiesFile);
     }
 
+    if (extraPropertiesFiles != null) {
+      for (String file : extraPropertiesFiles) {
+        args.add(parser.EXTRA_PROPERTIES_FILE);
+        args.add(file);
+      }
+    }
+
     if (loadSparkDefaults) {
       args.add(parser.LOAD_SPARK_DEFAULTS);
     }
@@ -554,6 +561,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         }
         case DEPLOY_MODE -> deployMode = value;
         case PROPERTIES_FILE -> propertiesFile = value;
+        case EXTRA_PROPERTIES_FILE -> extraPropertiesFiles.add(value);
         case LOAD_SPARK_DEFAULTS -> loadSparkDefaults = true;
         case DRIVER_MEMORY -> conf.put(SparkLauncher.DRIVER_MEMORY, value);
         case DRIVER_JAVA_OPTIONS -> conf.put(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, value);

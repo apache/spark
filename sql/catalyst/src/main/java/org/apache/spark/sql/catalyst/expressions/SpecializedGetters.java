@@ -25,6 +25,8 @@ import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.types.VariantVal;
+import org.apache.spark.unsafe.types.GeographyVal;
+import org.apache.spark.unsafe.types.GeometryVal;
 
 public interface SpecializedGetters {
 
@@ -49,6 +51,10 @@ public interface SpecializedGetters {
   UTF8String getUTF8String(int ordinal);
 
   byte[] getBinary(int ordinal);
+
+  GeographyVal getGeography(int ordinal);
+
+  GeometryVal getGeometry(int ordinal);
 
   CalendarInterval getInterval(int ordinal);
 

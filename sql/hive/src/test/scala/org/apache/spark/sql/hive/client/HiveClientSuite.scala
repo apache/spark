@@ -82,6 +82,7 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
         locationUri = None,
         inputFormat = Some(classOf[TextInputFormat].getName),
         outputFormat = Some(classOf[HiveIgnoreKeyTextOutputFormat[_, _]].getName),
+        serdeName = None,
         serde = Some(classOf[LazySimpleSerDe].getName),
         compressed = false,
         properties = Map.empty
@@ -369,6 +370,7 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
     locationUri = None,
     inputFormat = None,
     outputFormat = None,
+    serdeName = None,
     serde = None,
     compressed = false,
     properties = Map.empty)
@@ -383,6 +385,7 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
         locationUri = None,
         inputFormat = Some(classOf[TextInputFormat].getName),
         outputFormat = Some(classOf[HiveIgnoreKeyTextOutputFormat[_, _]].getName),
+        serdeName = None,
         serde = Some(classOf[LazySimpleSerDe].getName),
         compressed = false,
         properties = Map.empty
@@ -609,6 +612,16 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
     }
   }
 
+  test("read table written by Hive") {
+    // Hive 3.0 and 3.1 don't work with JDK 11+ (HIVE-22097)
+    if (ver != hive.v3_0 && ver != hive.v3_1) {
+      withTable("test_tbl") {
+        client.runSqlHive("CREATE TABLE test_tbl AS SELECT 1")
+        assert(versionSpark.sql("SELECT * from test_tbl").collect() === Array(Row(1)))
+      }
+    }
+  }
+
   ///////////////////////////////////////////////////////////////////////////
   // Miscellaneous API
   ///////////////////////////////////////////////////////////////////////////
@@ -816,7 +829,7 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
   test("Decimal support of Avro Hive serde") {
     val tableName = "tab1"
     // TODO: add the other logical types. For details, see the link:
-    // https://avro.apache.org/docs/1.12.0/specification/#logical-types
+    // https://avro.apache.org/docs/1.12.1/specification/#logical-types
     val avroSchema =
     """{
       |  "name": "test_record",

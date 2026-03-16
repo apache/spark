@@ -20,6 +20,7 @@ import random
 import time
 import unittest
 import datetime
+import logging
 from decimal import Decimal
 from typing import Iterator, Tuple
 
@@ -46,11 +47,15 @@ from pyspark.sql.types import (
     YearMonthIntervalType,
 )
 from pyspark.errors import AnalysisException, PythonException
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.utils import (
+    have_numpy,
+    numpy_requirement_message,
     have_pyarrow,
     pyarrow_requirement_message,
+    assertDataFrameEqual,
 )
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.util import is_remote_only
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -79,12 +84,12 @@ class ScalarArrowUDFTestsMixin:
         return random_udf.asNondeterministic()
 
     def test_arrow_udf_tokenize(self):
-        import pyarrow as pa
+        import pyarrow.compute as pc
 
         df = self.spark.createDataFrame([("hi boo",), ("bye boo",)], ["vals"])
 
         tokenize = arrow_udf(
-            lambda s: pa.compute.ascii_split_whitespace(s),
+            lambda s: pc.ascii_split_whitespace(s),
             ArrayType(StringType()),
         )
 
@@ -94,11 +99,12 @@ class ScalarArrowUDFTestsMixin:
 
     def test_arrow_udf_output_nested_arrays(self):
         import pyarrow as pa
+        import pyarrow.compute as pc
 
         df = self.spark.createDataFrame([("hi boo",), ("bye boo",)], ["vals"])
 
         tokenize = arrow_udf(
-            lambda s: pa.array([[v] for v in pa.compute.ascii_split_whitespace(s).to_pylist()]),
+            lambda s: pa.array([[v] for v in pc.ascii_split_whitespace(s).to_pylist()]),
             ArrayType(ArrayType(StringType())),
         )
 
@@ -147,15 +153,13 @@ class ScalarArrowUDFTestsMixin:
         # |    |    |-- x: struct (nullable = false)
         # |    |    |    |-- c: integer (nullable = false)
         # |    |    |    |-- d: integer (nullable = false)
-        df = self.spark.sql(
-            """
+        df = self.spark.sql("""
             SELECT STRUCT(a, STRUCT(b, STRUCT(c, d) AS x) AS y) AS s
             FROM VALUES
             (1, 2, 3, 4),
             (-1, -2, -3, -4)
             AS tab(a, b, c, d)
-        """
-        )
+        """)
 
         schema = StructType(
             [
@@ -226,11 +230,9 @@ class ScalarArrowUDFTestsMixin:
         # |-- a: array (nullable = false)
         # |    |-- element: array (containsNull = false)
         # |    |    |-- element: integer (containsNull = true)
-        df = self.spark.sql(
-            """
+        df = self.spark.sql("""
             SELECT ARRAY(ARRAY(1,2,3),ARRAY(4,NULL),ARRAY(5,6,NULL)) AS arr
-            """
-        )
+            """)
 
         str_repr = arrow_udf(lambda s: pa.array(str(x.as_py()) for x in s), StringType())
         result = df.select(str_repr("arr").alias("s"))
@@ -266,15 +268,13 @@ class ScalarArrowUDFTestsMixin:
     def test_arrow_udf_input_dates(self):
         import pyarrow as pa
 
-        df = self.spark.sql(
-            """
+        df = self.spark.sql("""
             SELECT * FROM VALUES
             (1, DATE('2022-02-22')),
             (2, DATE('2023-02-22')),
             (3, DATE('2024-02-22'))
             AS tab(i, date)
-            """
-        )
+            """)
 
         @arrow_udf("int")
         def extract_year(d):
@@ -291,15 +291,13 @@ class ScalarArrowUDFTestsMixin:
     def test_arrow_udf_output_dates(self):
         import pyarrow as pa
 
-        df = self.spark.sql(
-            """
+        df = self.spark.sql("""
             SELECT * FROM VALUES
             (2022, 1, 5),
             (2023, 2, 6),
             (2024, 3, 7)
             AS tab(y, m, d)
-            """
-        )
+            """)
 
         @arrow_udf("date")
         def build_date(y, m, d):
@@ -323,15 +321,13 @@ class ScalarArrowUDFTestsMixin:
     def test_arrow_udf_input_timestamps(self):
         import pyarrow as pa
 
-        df = self.spark.sql(
-            """
+        df = self.spark.sql("""
             SELECT * FROM VALUES
             (1, TIMESTAMP('2019-04-12 15:50:01')),
             (2, TIMESTAMP('2020-04-12 15:50:02')),
             (3, TIMESTAMP('2021-04-12 15:50:03'))
             AS tab(i, ts)
-            """
-        )
+            """)
 
         @arrow_udf("int")
         def extract_second(d):
@@ -346,17 +342,18 @@ class ScalarArrowUDFTestsMixin:
         )
 
     def test_arrow_udf_output_timestamps_ltz(self):
+        from zoneinfo import ZoneInfo
         import pyarrow as pa
 
-        df = self.spark.sql(
-            """
+        tz = self.spark.conf.get("spark.sql.session.timeZone")
+
+        df = self.spark.sql("""
             SELECT * FROM VALUES
             (2022, 1, 5, 15, 0, 1),
             (2023, 2, 6, 16, 1, 2),
             (2024, 3, 7, 17, 2, 3)
             AS tab(y, m, d, h, mi, s)
-            """
-        )
+            """)
 
         @arrow_udf("timestamp")
         def build_ts(y, m, d, h, mi, s):
@@ -369,18 +366,18 @@ class ScalarArrowUDFTestsMixin:
                     int(h[i].as_py()),
                     int(mi[i].as_py()),
                     int(s[i].as_py()),
-                    tzinfo=datetime.timezone.utc,
+                    tzinfo=ZoneInfo(tz),
                 )
                 for i in range(len(y))
             ]
-            return pa.array(dates, pa.timestamp("us", "UTC"))
+            return pa.array(dates)
 
         result = df.select(build_ts("y", "m", "d", "h", "mi", "s").alias("ts"))
         self.assertEqual(
             [
-                Row(ts=datetime.datetime(2022, 1, 5, 7, 0, 1)),
-                Row(ts=datetime.datetime(2023, 2, 6, 8, 1, 2)),
-                Row(ts=datetime.datetime(2024, 3, 7, 9, 2, 3)),
+                Row(ts=datetime.datetime(2022, 1, 5, 15, 0, 1)),
+                Row(ts=datetime.datetime(2023, 2, 6, 16, 1, 2)),
+                Row(ts=datetime.datetime(2024, 3, 7, 17, 2, 3)),
             ],
             result.collect(),
         )
@@ -388,15 +385,13 @@ class ScalarArrowUDFTestsMixin:
     def test_arrow_udf_output_timestamps_ntz(self):
         import pyarrow as pa
 
-        df = self.spark.sql(
-            """
+        df = self.spark.sql("""
             SELECT * FROM VALUES
             (2022, 1, 5, 15, 0, 1),
             (2023, 2, 6, 16, 1, 2),
             (2024, 3, 7, 17, 2, 3)
             AS tab(y, m, d, h, mi, s)
-            """
-        )
+            """)
 
         @arrow_udf("timestamp_ntz")
         def build_ts(y, m, d, h, mi, s):
@@ -427,15 +422,13 @@ class ScalarArrowUDFTestsMixin:
     def test_arrow_udf_input_times(self):
         import pyarrow as pa
 
-        df = self.spark.sql(
-            """
+        df = self.spark.sql("""
             SELECT * FROM VALUES
             (1, TIME '12:34:56'),
             (2, TIME '1:2:3'),
             (3, TIME '0:58:59')
             AS tab(i, ts)
-            """
-        )
+            """)
 
         @arrow_udf("int")
         def extract_second(v):
@@ -456,15 +449,13 @@ class ScalarArrowUDFTestsMixin:
     def test_arrow_udf_output_times(self):
         import pyarrow as pa
 
-        df = self.spark.sql(
-            """
+        df = self.spark.sql("""
             SELECT * FROM VALUES
             (12, 34, 56),
             (1, 2, 3),
             (0, 58, 59)
             AS tab(h, mi, s)
-            """
-        )
+            """)
 
         @arrow_udf("time")
         def build_time(h, mi, s):
@@ -491,6 +482,7 @@ class ScalarArrowUDFTestsMixin:
 
     def test_arrow_udf_input_variant(self):
         import pyarrow as pa
+        import pyarrow.compute as pc
 
         @arrow_udf("int")
         def scalar_f(v: pa.Array) -> pa.Array:
@@ -498,7 +490,7 @@ class ScalarArrowUDFTestsMixin:
             assert isinstance(v, pa.StructArray)
             assert isinstance(v.field("metadata"), pa.BinaryArray)
             assert isinstance(v.field("value"), pa.BinaryArray)
-            return pa.compute.binary_length(v.field("value"))
+            return pc.binary_length(v.field("value"))
 
         @arrow_udf("int")
         def iter_f(it: Iterator[pa.Array]) -> Iterator[pa.Array]:
@@ -507,7 +499,7 @@ class ScalarArrowUDFTestsMixin:
                 assert isinstance(v, pa.StructArray)
                 assert isinstance(v.field("metadata"), pa.BinaryArray)
                 assert isinstance(v.field("value"), pa.BinaryArray)
-                yield pa.compute.binary_length(v.field("value"))
+                yield pc.binary_length(v.field("value"))
 
         df = self.spark.range(0, 10).selectExpr("parse_json(cast(id as string)) v")
         expected = [Row(l=2) for i in range(10)]
@@ -695,136 +687,139 @@ class ScalarArrowUDFTestsMixin:
 
     def test_udf_register_arrow_udf_basic(self):
         import pyarrow as pa
+        import pyarrow.compute as pc
 
-        scalar_original_add = arrow_udf(
-            lambda x, y: pa.compute.add(x, y).cast(pa.int32()), IntegerType()
-        )
+        scalar_original_add = arrow_udf(lambda x, y: pc.add(x, y).cast(pa.int32()), IntegerType())
         self.assertEqual(scalar_original_add.evalType, PythonEvalType.SQL_SCALAR_ARROW_UDF)
         self.assertEqual(scalar_original_add.deterministic, True)
 
-        self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS add1")
-        new_add = self.spark.udf.register("add1", scalar_original_add)
+        with self.temp_func("add1"):
+            new_add = self.spark.udf.register("add1", scalar_original_add)
 
-        self.assertEqual(new_add.deterministic, True)
-        self.assertEqual(new_add.evalType, PythonEvalType.SQL_SCALAR_ARROW_UDF)
+            self.assertEqual(new_add.deterministic, True)
+            self.assertEqual(new_add.evalType, PythonEvalType.SQL_SCALAR_ARROW_UDF)
 
-        df = self.spark.range(10).select(
-            F.col("id").cast("int").alias("a"), F.col("id").cast("int").alias("b")
-        )
-        res1 = df.select(new_add(F.col("a"), F.col("b")))
-        res2 = self.spark.sql(
-            "SELECT add1(t.a, t.b) FROM (SELECT id as a, id as b FROM range(10)) t"
-        )
-        expected = df.select(F.expr("a + b"))
-        self.assertEqual(expected.collect(), res1.collect())
-        self.assertEqual(expected.collect(), res2.collect())
+            df = self.spark.range(10).select(
+                F.col("id").cast("int").alias("a"), F.col("id").cast("int").alias("b")
+            )
+            res1 = df.select(new_add(F.col("a"), F.col("b")))
+            res2 = self.spark.sql(
+                "SELECT add1(t.a, t.b) FROM (SELECT id as a, id as b FROM range(10)) t"
+            )
+            expected = df.select(F.expr("a + b"))
+            self.assertEqual(expected.collect(), res1.collect())
+            self.assertEqual(expected.collect(), res2.collect())
 
         @arrow_udf(LongType())
         def scalar_iter_add(it: Iterator[Tuple[pa.Array, pa.Array]]) -> Iterator[pa.Array]:
             for a, b in it:
-                yield pa.compute.add(a, b)
+                yield pc.add(a, b)
 
-        self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS add1")
-        new_add = self.spark.udf.register("add1", scalar_iter_add)
+        with self.temp_func("add1"):
+            new_add = self.spark.udf.register("add1", scalar_iter_add)
 
-        res3 = df.select(new_add(F.col("a"), F.col("b")))
-        res4 = self.spark.sql(
-            "SELECT add1(t.a, t.b) FROM (SELECT id as a, id as b FROM range(10)) t"
-        )
-        expected = df.select(F.expr("a + b"))
-        self.assertEqual(expected.collect(), res3.collect())
-        self.assertEqual(expected.collect(), res4.collect())
+            res3 = df.select(new_add(F.col("a"), F.col("b")))
+            res4 = self.spark.sql(
+                "SELECT add1(t.a, t.b) FROM (SELECT id as a, id as b FROM range(10)) t"
+            )
+            expected = df.select(F.expr("a + b"))
+            self.assertEqual(expected.collect(), res3.collect())
+            self.assertEqual(expected.collect(), res4.collect())
 
     def test_catalog_register_arrow_udf_basic(self):
         import pyarrow as pa
+        import pyarrow.compute as pc
 
-        scalar_original_add = arrow_udf(
-            lambda x, y: pa.compute.add(x, y).cast(pa.int32()), IntegerType()
-        )
+        scalar_original_add = arrow_udf(lambda x, y: pc.add(x, y).cast(pa.int32()), IntegerType())
         self.assertEqual(scalar_original_add.evalType, PythonEvalType.SQL_SCALAR_ARROW_UDF)
         self.assertEqual(scalar_original_add.deterministic, True)
 
-        self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS add1")
-        new_add = self.spark.catalog.registerFunction("add1", scalar_original_add)
+        with self.temp_func("add1"):
+            new_add = self.spark.catalog.registerFunction("add1", scalar_original_add)
 
-        self.assertEqual(new_add.deterministic, True)
-        self.assertEqual(new_add.evalType, PythonEvalType.SQL_SCALAR_ARROW_UDF)
+            self.assertEqual(new_add.deterministic, True)
+            self.assertEqual(new_add.evalType, PythonEvalType.SQL_SCALAR_ARROW_UDF)
 
-        df = self.spark.range(10).select(
-            F.col("id").cast("int").alias("a"), F.col("id").cast("int").alias("b")
-        )
-        res1 = df.select(new_add(F.col("a"), F.col("b")))
-        res2 = self.spark.sql(
-            "SELECT add1(t.a, t.b) FROM (SELECT id as a, id as b FROM range(10)) t"
-        )
-        expected = df.select(F.expr("a + b"))
-        self.assertEqual(expected.collect(), res1.collect())
-        self.assertEqual(expected.collect(), res2.collect())
+            df = self.spark.range(10).select(
+                F.col("id").cast("int").alias("a"), F.col("id").cast("int").alias("b")
+            )
+            res1 = df.select(new_add(F.col("a"), F.col("b")))
+            res2 = self.spark.sql(
+                "SELECT add1(t.a, t.b) FROM (SELECT id as a, id as b FROM range(10)) t"
+            )
+            expected = df.select(F.expr("a + b"))
+            self.assertEqual(expected.collect(), res1.collect())
+            self.assertEqual(expected.collect(), res2.collect())
 
         @arrow_udf(LongType())
         def scalar_iter_add(it: Iterator[Tuple[pa.Array, pa.Array]]) -> Iterator[pa.Array]:
             for a, b in it:
-                yield pa.compute.add(a, b)
+                yield pc.add(a, b)
 
-        self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS add1")
-        new_add = self.spark.catalog.registerFunction("add1", scalar_iter_add)
+        with self.temp_func("add1"):
+            new_add = self.spark.catalog.registerFunction("add1", scalar_iter_add)
 
-        res3 = df.select(new_add(F.col("a"), F.col("b")))
-        res4 = self.spark.sql(
-            "SELECT add1(t.a, t.b) FROM (SELECT id as a, id as b FROM range(10)) t"
-        )
-        expected = df.select(F.expr("a + b"))
-        self.assertEqual(expected.collect(), res3.collect())
-        self.assertEqual(expected.collect(), res4.collect())
+            res3 = df.select(new_add(F.col("a"), F.col("b")))
+            res4 = self.spark.sql(
+                "SELECT add1(t.a, t.b) FROM (SELECT id as a, id as b FROM range(10)) t"
+            )
+            expected = df.select(F.expr("a + b"))
+            self.assertEqual(expected.collect(), res3.collect())
+            self.assertEqual(expected.collect(), res4.collect())
 
     def test_udf_register_nondeterministic_arrow_udf(self):
-        import pyarrow as pa
+        import pyarrow.compute as pc
 
         random_arrow_udf = arrow_udf(
-            lambda x: pa.compute.add(x, random.randint(6, 6)), LongType()
+            lambda x: pc.add(x, random.randint(6, 6)), LongType()
         ).asNondeterministic()
         self.assertEqual(random_arrow_udf.deterministic, False)
         self.assertEqual(random_arrow_udf.evalType, PythonEvalType.SQL_SCALAR_ARROW_UDF)
 
-        self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS randomArrowUDF")
-        nondeterministic_arrow_udf = self.spark.udf.register("randomArrowUDF", random_arrow_udf)
+        with self.temp_func("randomArrowUDF"):
+            nondeterministic_arrow_udf = self.spark.udf.register("randomArrowUDF", random_arrow_udf)
 
-        self.assertEqual(nondeterministic_arrow_udf.deterministic, False)
-        self.assertEqual(nondeterministic_arrow_udf.evalType, PythonEvalType.SQL_SCALAR_ARROW_UDF)
-        [row] = self.spark.sql("SELECT randomArrowUDF(1)").collect()
-        self.assertEqual(row[0], 7)
+            self.assertEqual(nondeterministic_arrow_udf.deterministic, False)
+            self.assertEqual(
+                nondeterministic_arrow_udf.evalType, PythonEvalType.SQL_SCALAR_ARROW_UDF
+            )
+            [row] = self.spark.sql("SELECT randomArrowUDF(1)").collect()
+            self.assertEqual(row[0], 7)
 
     def test_catalog_register_nondeterministic_arrow_udf(self):
-        import pyarrow as pa
+        import pyarrow.compute as pc
 
         random_arrow_udf = arrow_udf(
-            lambda x: pa.compute.add(x, random.randint(6, 6)), LongType()
+            lambda x: pc.add(x, random.randint(6, 6)), LongType()
         ).asNondeterministic()
         self.assertEqual(random_arrow_udf.deterministic, False)
         self.assertEqual(random_arrow_udf.evalType, PythonEvalType.SQL_SCALAR_ARROW_UDF)
 
-        self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS randomArrowUDF")
-        nondeterministic_arrow_udf = self.spark.catalog.registerFunction(
-            "randomArrowUDF", random_arrow_udf
-        )
+        with self.temp_func("randomArrowUDF"):
+            nondeterministic_arrow_udf = self.spark.catalog.registerFunction(
+                "randomArrowUDF", random_arrow_udf
+            )
 
-        self.assertEqual(nondeterministic_arrow_udf.deterministic, False)
-        self.assertEqual(nondeterministic_arrow_udf.evalType, PythonEvalType.SQL_SCALAR_ARROW_UDF)
-        [row] = self.spark.sql("SELECT randomArrowUDF(1)").collect()
-        self.assertEqual(row[0], 7)
+            self.assertEqual(nondeterministic_arrow_udf.deterministic, False)
+            self.assertEqual(
+                nondeterministic_arrow_udf.evalType, PythonEvalType.SQL_SCALAR_ARROW_UDF
+            )
+            [row] = self.spark.sql("SELECT randomArrowUDF(1)").collect()
+            self.assertEqual(row[0], 7)
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_nondeterministic_arrow_udf(self):
-        import pyarrow as pa
+        import pyarrow.compute as pc
 
         # Test that nondeterministic UDFs are evaluated only once in chained UDF evaluations
         @arrow_udf("double")
         def scalar_plus_ten(v):
-            return pa.compute.add(v, 10)
+            return pc.add(v, 10)
 
         @arrow_udf("double", ArrowUDFType.SCALAR_ITER)
         def iter_plus_ten(it):
             for v in it:
-                yield pa.compute.add(v, 10)
+                yield pc.add(v, 10)
 
         for plus_ten in [scalar_plus_ten, iter_plus_ten]:
             random_udf = self.nondeterministic_arrow_udf
@@ -835,6 +830,7 @@ class ScalarArrowUDFTestsMixin:
             self.assertEqual(random_udf.deterministic, False)
             self.assertTrue(result1["plus_ten(rand)"].equals(result1["rand"] + 10))
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_nondeterministic_arrow_udf_in_aggregate(self):
         with self.quiet():
             df = self.spark.range(10)
@@ -902,18 +898,19 @@ class ScalarArrowUDFTestsMixin:
 
     def test_arrow_udf_chained_iii(self):
         import pyarrow as pa
+        import pyarrow.compute as pc
 
-        scalar_f = arrow_udf(lambda x: pa.compute.add(x, 1), LongType())
-        scalar_g = arrow_udf(lambda x: pa.compute.subtract(x, 1), LongType())
-        scalar_m = arrow_udf(lambda x, y: pa.compute.multiply(x, y), LongType())
+        scalar_f = arrow_udf(lambda x: pc.add(x, 1), LongType())
+        scalar_g = arrow_udf(lambda x: pc.subtract(x, 1), LongType())
+        scalar_m = arrow_udf(lambda x, y: pc.multiply(x, y), LongType())
 
         iter_f = arrow_udf(
-            lambda it: map(lambda x: pa.compute.add(x, 1), it),
+            lambda it: map(lambda x: pc.add(x, 1), it),
             LongType(),
             ArrowUDFType.SCALAR_ITER,
         )
         iter_g = arrow_udf(
-            lambda it: map(lambda x: pa.compute.subtract(x, 1), it),
+            lambda it: map(lambda x: pc.subtract(x, 1), it),
             LongType(),
             ArrowUDFType.SCALAR_ITER,
         )
@@ -921,7 +918,7 @@ class ScalarArrowUDFTestsMixin:
         @arrow_udf(LongType())
         def iter_m(it: Iterator[Tuple[pa.Array, pa.Array]]) -> Iterator[pa.Array]:
             for a, b in it:
-                yield pa.compute.multiply(a, b)
+                yield pc.multiply(a, b)
 
         df = self.spark.range(10)
         expected = df.select(((F.col("id") + 1) * (F.col("id") - 1)).alias("res")).collect()
@@ -969,119 +966,124 @@ class ScalarArrowUDFTestsMixin:
 
     def test_arrow_udf_named_arguments(self):
         import pyarrow as pa
+        import pyarrow.compute as pc
 
         @arrow_udf("int")
         def test_udf(a, b):
-            return pa.compute.add(a, pa.compute.multiply(b, 10)).cast(pa.int32())
+            return pc.add(a, pc.multiply(b, 10)).cast(pa.int32())
 
-        self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS test_udf")
-        self.spark.udf.register("test_udf", test_udf)
+        with self.temp_func("test_udf"):
+            self.spark.udf.register("test_udf", test_udf)
 
-        expected = [Row(0), Row(101)]
-        for i, df in enumerate(
-            [
-                self.spark.range(2).select(test_udf(F.col("id"), b=F.col("id") * 10)),
-                self.spark.range(2).select(test_udf(a=F.col("id"), b=F.col("id") * 10)),
-                self.spark.range(2).select(test_udf(b=F.col("id") * 10, a=F.col("id"))),
-                self.spark.sql("SELECT test_udf(id, b => id * 10) FROM range(2)"),
-                self.spark.sql("SELECT test_udf(a => id, b => id * 10) FROM range(2)"),
-                self.spark.sql("SELECT test_udf(b => id * 10, a => id) FROM range(2)"),
-            ]
-        ):
-            with self.subTest(query_no=i):
-                self.assertEqual(expected, df.collect())
+            expected = [Row(0), Row(101)]
+            for i, df in enumerate(
+                [
+                    self.spark.range(2).select(test_udf(F.col("id"), b=F.col("id") * 10)),
+                    self.spark.range(2).select(test_udf(a=F.col("id"), b=F.col("id") * 10)),
+                    self.spark.range(2).select(test_udf(b=F.col("id") * 10, a=F.col("id"))),
+                    self.spark.sql("SELECT test_udf(id, b => id * 10) FROM range(2)"),
+                    self.spark.sql("SELECT test_udf(a => id, b => id * 10) FROM range(2)"),
+                    self.spark.sql("SELECT test_udf(b => id * 10, a => id) FROM range(2)"),
+                ]
+            ):
+                with self.subTest(query_no=i):
+                    self.assertEqual(expected, df.collect())
 
     def test_arrow_udf_named_arguments_negative(self):
         import pyarrow as pa
+        import pyarrow.compute as pc
 
         @arrow_udf("int")
         def test_udf(a, b):
-            return pa.compute.add(a, b).cast(pa.int32())
+            return pc.add(a, b).cast(pa.int32())
 
-        self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS test_udf")
-        self.spark.udf.register("test_udf", test_udf)
+        with self.temp_func("test_udf"):
+            self.spark.udf.register("test_udf", test_udf)
 
-        with self.assertRaisesRegex(
-            AnalysisException,
-            "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
-        ):
-            self.spark.sql("SELECT test_udf(a => id, a => id * 10) FROM range(2)").show()
+            with self.assertRaisesRegex(
+                AnalysisException,
+                "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
+            ):
+                self.spark.sql("SELECT test_udf(a => id, a => id * 10) FROM range(2)").show()
 
-        with self.assertRaisesRegex(AnalysisException, "UNEXPECTED_POSITIONAL_ARGUMENT"):
-            self.spark.sql("SELECT test_udf(a => id, id * 10) FROM range(2)").show()
+            with self.assertRaisesRegex(AnalysisException, "UNEXPECTED_POSITIONAL_ARGUMENT"):
+                self.spark.sql("SELECT test_udf(a => id, id * 10) FROM range(2)").show()
 
-        with self.assertRaisesRegex(
-            PythonException, r"test_udf\(\) got an unexpected keyword argument 'c'"
-        ):
-            self.spark.sql("SELECT test_udf(c => 'x') FROM range(2)").show()
+            with self.assertRaisesRegex(
+                PythonException, r"test_udf\(\) got an unexpected keyword argument 'c'"
+            ):
+                self.spark.sql("SELECT test_udf(c => 'x') FROM range(2)").show()
 
     def test_arrow_udf_named_arguments_and_defaults(self):
         import pyarrow as pa
+        import pyarrow.compute as pc
 
         @arrow_udf("int")
         def test_udf(a, b=0):
-            return pa.compute.add(a, pa.compute.multiply(b, 10)).cast(pa.int32())
+            return pc.add(a, pc.multiply(b, 10)).cast(pa.int32())
 
-        self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS test_udf")
-        self.spark.udf.register("test_udf", test_udf)
+        with self.temp_func("test_udf"):
+            self.spark.udf.register("test_udf", test_udf)
 
-        # without "b"
-        expected = [Row(0), Row(1)]
-        for i, df in enumerate(
-            [
-                self.spark.range(2).select(test_udf(F.col("id"))),
-                self.spark.range(2).select(test_udf(a=F.col("id"))),
-                self.spark.sql("SELECT test_udf(id) FROM range(2)"),
-                self.spark.sql("SELECT test_udf(a => id) FROM range(2)"),
-            ]
-        ):
-            with self.subTest(with_b=False, query_no=i):
-                self.assertEqual(expected, df.collect())
+            # without "b"
+            expected = [Row(0), Row(1)]
+            for i, df in enumerate(
+                [
+                    self.spark.range(2).select(test_udf(F.col("id"))),
+                    self.spark.range(2).select(test_udf(a=F.col("id"))),
+                    self.spark.sql("SELECT test_udf(id) FROM range(2)"),
+                    self.spark.sql("SELECT test_udf(a => id) FROM range(2)"),
+                ]
+            ):
+                with self.subTest(with_b=False, query_no=i):
+                    self.assertEqual(expected, df.collect())
 
-        # with "b"
-        expected = [Row(0), Row(101)]
-        for i, df in enumerate(
-            [
-                self.spark.range(2).select(test_udf(F.col("id"), b=F.col("id") * 10)),
-                self.spark.range(2).select(test_udf(a=F.col("id"), b=F.col("id") * 10)),
-                self.spark.range(2).select(test_udf(b=F.col("id") * 10, a=F.col("id"))),
-                self.spark.sql("SELECT test_udf(id, b => id * 10) FROM range(2)"),
-                self.spark.sql("SELECT test_udf(a => id, b => id * 10) FROM range(2)"),
-                self.spark.sql("SELECT test_udf(b => id * 10, a => id) FROM range(2)"),
-            ]
-        ):
-            with self.subTest(with_b=True, query_no=i):
-                self.assertEqual(expected, df.collect())
+            # with "b"
+            expected = [Row(0), Row(101)]
+            for i, df in enumerate(
+                [
+                    self.spark.range(2).select(test_udf(F.col("id"), b=F.col("id") * 10)),
+                    self.spark.range(2).select(test_udf(a=F.col("id"), b=F.col("id") * 10)),
+                    self.spark.range(2).select(test_udf(b=F.col("id") * 10, a=F.col("id"))),
+                    self.spark.sql("SELECT test_udf(id, b => id * 10) FROM range(2)"),
+                    self.spark.sql("SELECT test_udf(a => id, b => id * 10) FROM range(2)"),
+                    self.spark.sql("SELECT test_udf(b => id * 10, a => id) FROM range(2)"),
+                ]
+            ):
+                with self.subTest(with_b=True, query_no=i):
+                    self.assertEqual(expected, df.collect())
 
     def test_arrow_udf_kwargs(self):
         import pyarrow as pa
+        import pyarrow.compute as pc
 
         @arrow_udf("int")
         def test_udf(a, **kwargs):
-            return pa.compute.add(a, pa.compute.multiply(kwargs["b"], 10)).cast(pa.int32())
+            return pc.add(a, pc.multiply(kwargs["b"], 10)).cast(pa.int32())
 
-        self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS test_udf")
-        self.spark.udf.register("test_udf", test_udf)
+        with self.temp_func("test_udf"):
+            self.spark.udf.register("test_udf", test_udf)
 
-        expected = [Row(0), Row(101)]
-        for i, df in enumerate(
-            [
-                self.spark.range(2).select(test_udf(a=F.col("id"), b=F.col("id") * 10)),
-                self.spark.range(2).select(test_udf(b=F.col("id") * 10, a=F.col("id"))),
-                self.spark.sql("SELECT test_udf(a => id, b => id * 10) FROM range(2)"),
-                self.spark.sql("SELECT test_udf(b => id * 10, a => id) FROM range(2)"),
-            ]
-        ):
-            with self.subTest(query_no=i):
-                self.assertEqual(expected, df.collect())
+            expected = [Row(0), Row(101)]
+            for i, df in enumerate(
+                [
+                    self.spark.range(2).select(test_udf(a=F.col("id"), b=F.col("id") * 10)),
+                    self.spark.range(2).select(test_udf(b=F.col("id") * 10, a=F.col("id"))),
+                    self.spark.sql("SELECT test_udf(a => id, b => id * 10) FROM range(2)"),
+                    self.spark.sql("SELECT test_udf(b => id * 10, a => id) FROM range(2)"),
+                ]
+            ):
+                with self.subTest(query_no=i):
+                    self.assertEqual(expected, df.collect())
 
     def test_arrow_iter_udf_single_column(self):
         import pyarrow as pa
+        import pyarrow.compute as pc
 
         @arrow_udf(LongType())
         def add_one(it: Iterator[pa.Array]) -> Iterator[pa.Array]:
             for s in it:
-                yield pa.compute.add(s, 1)
+                yield pc.add(s, 1)
 
         df = self.spark.range(10)
         expected = df.select((F.col("id") + 1).alias("res")).collect()
@@ -1091,11 +1093,12 @@ class ScalarArrowUDFTestsMixin:
 
     def test_arrow_iter_udf_two_columns(self):
         import pyarrow as pa
+        import pyarrow.compute as pc
 
         @arrow_udf(LongType())
         def multiple(it: Iterator[Tuple[pa.Array, pa.Array]]) -> Iterator[pa.Array]:
             for a, b in it:
-                yield pa.compute.multiply(a, b)
+                yield pc.multiply(a, b)
 
         df = self.spark.range(10).select(
             F.col("id").alias("a"),
@@ -1109,11 +1112,12 @@ class ScalarArrowUDFTestsMixin:
 
     def test_arrow_iter_udf_three_columns(self):
         import pyarrow as pa
+        import pyarrow.compute as pc
 
         @arrow_udf(LongType())
         def multiple(it: Iterator[Tuple[pa.Array, pa.Array, pa.Array]]) -> Iterator[pa.Array]:
             for a, b, c in it:
-                yield pa.compute.multiply(pa.compute.multiply(a, b), c)
+                yield pc.multiply(pc.multiply(a, b), c)
 
         df = self.spark.range(10).select(
             F.col("id").alias("a"),
@@ -1127,21 +1131,21 @@ class ScalarArrowUDFTestsMixin:
         self.assertEqual(expected, result.collect())
 
     def test_return_type_coercion(self):
-        import pyarrow as pa
+        import pyarrow.compute as pc
 
         df = self.spark.range(10)
 
-        scalar_long = arrow_udf(lambda x: pa.compute.add(x, 1), LongType())
+        scalar_long = arrow_udf(lambda x: pc.add(x, 1), LongType())
         result1 = df.select(scalar_long("id").alias("res"))
         self.assertEqual(10, len(result1.collect()))
 
         # long -> int coercion
-        scalar_int1 = arrow_udf(lambda x: pa.compute.add(x, 1), IntegerType())
+        scalar_int1 = arrow_udf(lambda x: pc.add(x, 1), IntegerType())
         result2 = df.select(scalar_int1("id").alias("res"))
         self.assertEqual(10, len(result2.collect()))
 
         # long -> int coercion, overflow
-        scalar_int2 = arrow_udf(lambda x: pa.compute.add(x, 2147483647), IntegerType())
+        scalar_int2 = arrow_udf(lambda x: pc.add(x, 2147483647), IntegerType())
         result3 = df.select(scalar_int2("id").alias("res"))
         with self.assertRaises(Exception):
             # pyarrow.lib.ArrowInvalid:
@@ -1168,6 +1172,101 @@ class ScalarArrowUDFTestsMixin:
                     def func_a(a: pa.Array) -> pa.Array:
                         return a
 
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_scalar_arrow_udf_with_logging(self):
+        import pyarrow as pa
+
+        @arrow_udf("string")
+        def my_scalar_arrow_udf(x):
+            assert isinstance(x, pa.Array)
+            logger = logging.getLogger("test_scalar_arrow")
+            logger.warning(f"scalar arrow udf: {x.to_pylist()}")
+            return pa.array(["scalar_arrow_" + str(val.as_py()) for val in x])
+
+        with self.sql_conf({"spark.sql.pyspark.worker.logging.enabled": "true"}):
+            assertDataFrameEqual(
+                self.spark.range(3, numPartitions=2).select(
+                    my_scalar_arrow_udf("id").alias("result")
+                ),
+                [Row(result=f"scalar_arrow_{i}") for i in range(3)],
+            )
+
+            logs = self.spark.tvf.python_worker_logs()
+
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg=f"scalar arrow udf: {lst}",
+                        context={"func_name": my_scalar_arrow_udf.__name__},
+                        logger="test_scalar_arrow",
+                    )
+                    for lst in [[0], [1, 2]]
+                ],
+            )
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_scalar_iter_arrow_udf_with_logging(self):
+        import pyarrow as pa
+
+        @arrow_udf("string", ArrowUDFType.SCALAR_ITER)
+        def my_scalar_iter_arrow_udf(it):
+            logger = logging.getLogger("test_scalar_iter_arrow")
+            for x in it:
+                assert isinstance(x, pa.Array)
+                logger.warning(f"scalar iter arrow udf: {x.to_pylist()}")
+                yield pa.array(["scalar_iter_arrow_" + str(val.as_py()) for val in x])
+
+        with self.sql_conf(
+            {
+                "spark.sql.execution.arrow.maxRecordsPerBatch": "3",
+                "spark.sql.pyspark.worker.logging.enabled": "true",
+            }
+        ):
+            assertDataFrameEqual(
+                self.spark.range(9, numPartitions=2).select(
+                    my_scalar_iter_arrow_udf("id").alias("result")
+                ),
+                [Row(result=f"scalar_iter_arrow_{i}") for i in range(9)],
+            )
+
+            logs = self.spark.tvf.python_worker_logs()
+
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg=f"scalar iter arrow udf: {lst}",
+                        context={"func_name": my_scalar_iter_arrow_udf.__name__},
+                        logger="test_scalar_iter_arrow",
+                    )
+                    for lst in [[0, 1, 2], [3], [4, 5, 6], [7, 8]]
+                ],
+            )
+
+    def test_scalar_iter_arrow_udf_with_single_output_batch(self):
+        import pyarrow as pa
+
+        @arrow_udf("long", ArrowUDFType.SCALAR_ITER)
+        def return_one(iterator):
+            rows = 0
+            batches = 0
+            for s in iterator:
+                rows += len(s)
+                batches += 1
+
+            assert rows == 1000, rows
+            assert batches == 200, batches
+            yield pa.array([1] * rows)
+
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 5}):
+            df = self.spark.range(0, 1000, 1, 1)
+            expected = [Row(one=1) for i in range(1000)]
+            result = df.select(return_one("id").alias("one")).collect()
+            self.assertEqual(expected, result)
+
 
 class ScalarArrowUDFTests(ScalarArrowUDFTestsMixin, ReusedSQLTestCase):
     @classmethod
@@ -1193,12 +1292,6 @@ class ScalarArrowUDFTests(ScalarArrowUDFTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.arrow.test_arrow_udf_scalar import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

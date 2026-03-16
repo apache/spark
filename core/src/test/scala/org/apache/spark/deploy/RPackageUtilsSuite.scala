@@ -26,8 +26,6 @@ import java.util.zip.ZipFile
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
-import org.scalatest.BeforeAndAfterEach
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.util.{IvyTestUtils, ResetSystemProperties, Utils}
@@ -35,7 +33,6 @@ import org.apache.spark.util.MavenUtils.MavenCoordinate
 
 class RPackageUtilsSuite
   extends SparkFunSuite
-  with BeforeAndAfterEach
   with ResetSystemProperties {
 
   private val main = MavenCoordinate("a", "b", "c")

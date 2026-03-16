@@ -72,7 +72,7 @@ class CatalogTestsMixin:
         with self.database("some_db"):
             spark.sql("CREATE DATABASE some_db")
             with self.table("tab1", "some_db.tab2", "tab3_via_catalog"):
-                with self.tempView("temp_tab"):
+                with self.temp_view("temp_tab"):
                     self.assertEqual(spark.catalog.listTables(), [])
                     self.assertEqual(spark.catalog.listTables("some_db"), [])
                     spark.createDataFrame([(1, 1)]).createOrReplaceTempView("temp_tab")
@@ -502,13 +502,6 @@ class CatalogTests(CatalogTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.sql.tests.test_catalog import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

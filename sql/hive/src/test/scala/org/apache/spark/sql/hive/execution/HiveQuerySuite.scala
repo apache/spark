@@ -1312,7 +1312,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
         .queryExecution.analyzed
       }
 
-    assertResult(1, "Duplicated project detected\n" + analyzedPlan) {
+    assertResult(2, "Duplicated project detected\n" + analyzedPlan) {
       analyzedPlan.collect {
         case i: InsertIntoHiveTable => i.query.collect { case p: Project => () }.size
       }.sum

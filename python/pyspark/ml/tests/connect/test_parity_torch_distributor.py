@@ -64,7 +64,7 @@ if not is_remote_only() and should_test_connect:
     ):
         @classmethod
         def setUpClass(cls):
-            (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()
+            cls.gpu_discovery_script_file_name, cls.mnist_dir_path = set_up_test_dirs()
             builder = SparkSession.builder.appName(cls.__name__)
             for k, v in get_local_mode_conf().items():
                 builder = builder.config(k, v)
@@ -97,7 +97,7 @@ if not is_remote_only() and should_test_connect:
     ):
         @classmethod
         def setUpClass(cls):
-            (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()
+            cls.gpu_discovery_script_file_name, cls.mnist_dir_path = set_up_test_dirs()
             builder = SparkSession.builder.appName(cls.__name__)
             for k, v in get_local_mode_conf().items():
                 builder = builder.config(k, v)
@@ -131,7 +131,7 @@ if not is_remote_only() and should_test_connect:
     ):
         @classmethod
         def setUpClass(cls):
-            (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()
+            cls.gpu_discovery_script_file_name, cls.mnist_dir_path = set_up_test_dirs()
             builder = SparkSession.builder.appName(cls.__name__)
             for k, v in get_distributed_mode_conf().items():
                 builder = builder.config(k, v)
@@ -156,12 +156,6 @@ if not is_remote_only() and should_test_connect:
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.connect.test_parity_torch_distributor import *  # noqa: F401,F403
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

@@ -594,14 +594,19 @@ object IntervalUtils extends SparkIntervalUtils {
       interval: CalendarInterval,
       targetUnit: TimeUnit,
       daysPerMonth: Int = 31): Long = {
-    val monthsDuration = Math.multiplyExact(
-      daysPerMonth * MICROS_PER_DAY,
-      interval.months)
-    val daysDuration = Math.multiplyExact(
-      MICROS_PER_DAY,
-      interval.days)
-    val result = Math.addExact(interval.microseconds, Math.addExact(daysDuration, monthsDuration))
-    targetUnit.convert(result, TimeUnit.MICROSECONDS)
+    try {
+      val monthsDuration = Math.multiplyExact(
+        daysPerMonth * MICROS_PER_DAY,
+        interval.months)
+      val daysDuration = Math.multiplyExact(
+        MICROS_PER_DAY,
+        interval.days)
+      val result = Math.addExact(interval.microseconds, Math.addExact(daysDuration, monthsDuration))
+      targetUnit.convert(result, TimeUnit.MICROSECONDS)
+    } catch {
+      case _: ArithmeticException =>
+        throw QueryExecutionErrors.withoutSuggestionIntervalArithmeticOverflowError(context = null)
+    }
   }
 
   /**

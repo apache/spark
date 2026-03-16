@@ -307,13 +307,17 @@ object FailureInjectionRocksDBStateStoreProvider {
           localTempDir: File,
           hadoopConf: Configuration,
           codecName: String,
-          loggingId: String): RocksDBFileManager = {
+          loggingId: String,
+          storeConf: StateStoreConf): RocksDBFileManager = {
         new RocksDBFileManager(
           dfsRootDir,
           localTempDir,
           hadoopConf,
           codecName,
-          loggingId = loggingId) {
+          loggingId = loggingId,
+          fileChecksumEnabled = this.conf.fileChecksumEnabled,
+          fileChecksumThreadPoolSize = this.fileChecksumThreadPoolSize,
+          storeConf = this.conf.stateStoreConf) {
           override def getFileSystem(
               myDfsRootDir: String,
               myHadoopConf: Configuration): FileSystem = {

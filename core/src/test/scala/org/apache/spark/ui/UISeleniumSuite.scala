@@ -362,7 +362,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
       eventually(timeout(5.seconds), interval(50.milliseconds)) {
         goToUi(sc, "/jobs")
         find(cssSelector(".stage-progress-cell")).get.text should be ("2/2 (1 failed)")
-        find(cssSelector(".progress-cell .progress")).get.text should be ("2/2 (1 failed)")
+        find(cssSelector(".progress-cell .progress-stacked")).get.text should be ("2/2 (1 failed)")
       }
       val jobJson = getJson(sc.ui.get, "jobs")
       (jobJson \\ "numTasks").extract[Int]should be (2)
@@ -417,7 +417,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
         // Instead, it's safer to check that each row contains a link to a stage details page.
         findAll(cssSelector("tbody tr")).foreach { row =>
           val link = row.underlying.findElement(By.xpath("./td/div/a"))
-          link.getAttribute("href") should include ("stage")
+          link.getDomProperty("href") should include ("stage")
         }
       }
     }
@@ -473,7 +473,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
         // Instead, it's safer to check that each row contains a link to a stage details page.
         findAll(cssSelector("tbody tr")).foreach { row =>
           val link = row.underlying.findElement(By.xpath(".//a"))
-          link.getAttribute("href") should include ("stage")
+          link.getDomProperty("href") should include ("stage")
         }
       }
     }

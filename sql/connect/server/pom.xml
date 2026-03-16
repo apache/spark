@@ -22,7 +22,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.13</artifactId>
-    <version>4.1.0-SNAPSHOT</version>
+    <version>4.2.0-SNAPSHOT</version>
     <relativePath>../../../pom.xml</relativePath>
   </parent>
 
@@ -183,13 +183,11 @@
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
-      <version>${connect.guava.version}</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>failureaccess</artifactId>
-      <version>${guava.failureaccess.version}</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
@@ -240,12 +238,6 @@
       <version>${netty.version}</version>
       <scope>provided</scope>
     </dependency>
-    <dependency> <!-- necessary for Java 9+ -->
-      <groupId>org.apache.tomcat</groupId>
-      <artifactId>annotations-api</artifactId>
-      <version>${tomcat.annotations.api.version}</version>
-      <scope>provided</scope>
-    </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
       <artifactId>scalacheck_${scala.binary.version}</artifactId>
@@ -292,7 +284,6 @@
           <shadedArtifactAttached>false</shadedArtifactAttached>
           <artifactSet>
             <includes>
-              <include>com.google.guava:*</include>
               <include>io.grpc:*:</include>
               <include>com.google.protobuf:*</include>
 
@@ -304,28 +295,24 @@
               <include>com.google.api.grpc:proto-google-common-protos</include>
               <include>io.perfmark:perfmark-api</include>
               <include>org.codehaus.mojo:animal-sniffer-annotations</include>
-              <include>com.google.errorprone:error_prone_annotations</include>
-              <include>com.google.j2objc:j2objc-annotations</include>
-              <include>org.checkerframework:checker-qual</include>
               <include>com.google.code.gson:gson</include>
               <include>org.apache.spark:spark-connect-common_${scala.binary.version}</include>
             </includes>
           </artifactSet>
           <relocations>
+            <!--
+              Keep the Guava classes relocation rules consistent with other modules to ensure
+              correct runtime linkage to Guava classes included in spark-network-common jar.
+              -->
             <relocation>
               <pattern>com.google.common</pattern>
-              <shadedPattern>${spark.shade.packageName}.connect.guava</shadedPattern>
-              <includes>
-                <include>com.google.common.**</include>
-              </includes>
+              <shadedPattern>${spark.shade.packageName}.guava</shadedPattern>
             </relocation>
             <relocation>
               <pattern>com.google.thirdparty</pattern>
-              <shadedPattern>${spark.shade.packageName}.connect.guava</shadedPattern>
-              <includes>
-                <include>com.google.thirdparty.**</include>
-              </includes>
+              <shadedPattern>${spark.shade.packageName}.guava.thirdparty</shadedPattern>
             </relocation>
+
             <relocation>
               <pattern>com.google.protobuf</pattern>
               <shadedPattern>${spark.shade.packageName}.connect.protobuf</shadedPattern>
@@ -351,18 +338,6 @@
               <shadedPattern>${spark.shade.packageName}.connect.animal_sniffer</shadedPattern>
             </relocation>
             <relocation>
-              <pattern>com.google.j2objc.annotations</pattern>
-              <shadedPattern>${spark.shade.packageName}.connect.j2objc_annotations</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>com.google.errorprone.annotations</pattern>
-              <shadedPattern>${spark.shade.packageName}.connect.errorprone_annotations</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>org.checkerframework</pattern>
-              <shadedPattern>${spark.shade.packageName}.connect.checkerframework</shadedPattern>
-            </relocation>
-            <relocation>
               <pattern>com.google.gson</pattern>
               <shadedPattern>${spark.shade.packageName}.connect.gson</shadedPattern>
             </relocation>
@@ -375,6 +350,10 @@
             <relocation>
               <pattern>com.google.api</pattern>
               <shadedPattern>${spark.shade.packageName}.connect.google_protos.api</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.apps</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.google_protos.apps</shadedPattern>
             </relocation>
             <relocation>
               <pattern>com.google.cloud</pattern>
@@ -395,6 +374,10 @@
             <relocation>
               <pattern>com.google.rpc</pattern>
               <shadedPattern>${spark.shade.packageName}.connect.google_protos.rpc</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.shopping</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.google_protos.shopping</shadedPattern>
             </relocation>
             <relocation>
               <pattern>com.google.type</pattern>
