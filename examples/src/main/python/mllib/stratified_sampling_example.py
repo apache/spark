@@ -22,7 +22,7 @@ if __name__ == "__main__":
 
     # $example on$
     # an RDD of any key value pairs
-    data = sc.parallelize([(1, "a"), (1, "b"), (2, "c"), (2, "d"), (2, "e"), (3, "f")])
+    data = sc.parallelize([(1, 'a'), (1, 'b'), (2, 'c'), (2, 'd'), (2, 'e'), (3, 'f')])
 
     # specify the exact fraction desired from each key as a dictionary
     fractions = {1: 0.1, 2: 0.6, 3: 0.3}

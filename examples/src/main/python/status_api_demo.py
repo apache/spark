@@ -27,7 +27,6 @@ def delayed(seconds: int) -> Callable[[Any], Any]:
     def f(x: int) -> int:
         time.sleep(seconds)
         return x
-
     return f
 
 
@@ -60,10 +59,8 @@ def main() -> None:
             for sid in job.stageIds:
                 info = status.getStageInfo(sid)
                 if info:
-                    print(
-                        "Stage %d: %d tasks total (%d active, %d complete)"
-                        % (sid, info.numTasks, info.numActiveTasks, info.numCompletedTasks)
-                    )
+                    print("Stage %d: %d tasks total (%d active, %d complete)" %
+                          (sid, info.numTasks, info.numActiveTasks, info.numCompletedTasks))
         time.sleep(1)
 
     print("Job results are:", result.get())

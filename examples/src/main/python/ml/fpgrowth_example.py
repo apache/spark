@@ -20,18 +20,23 @@ An example demonstrating FPGrowth.
 Run with:
   bin/spark-submit examples/src/main/python/ml/fpgrowth_example.py
 """
-
 # $example on$
 from pyspark.ml.fpm import FPGrowth
-
 # $example off$
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("FPGrowthExample").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("FPGrowthExample")\
+        .getOrCreate()
 
     # $example on$
-    df = spark.createDataFrame([(0, [1, 2, 5]), (1, [1, 2, 3, 5]), (2, [1, 2])], ["id", "items"])
+    df = spark.createDataFrame([
+        (0, [1, 2, 5]),
+        (1, [1, 2, 3, 5]),
+        (2, [1, 2])
+    ], ["id", "items"])
 
     fpGrowth = FPGrowth(itemsCol="items", minSupport=0.5, minConfidence=0.6)
     model = fpGrowth.fit(df)

@@ -16,21 +16,20 @@
 #
 
 r"""
-Split lines into words, group by words and use the state per key to track session of each key.
-Each session window sets a 10 seconds processing time timeout.
-After 10 seconds of idle period, the session summary will be finalized and output to sink.
-Usage: structured_network_wordcount_windowed.py <hostname> <port>
-<hostname> and <port> describe the TCP server that Structured Streaming
-would connect to receive data.
+ Split lines into words, group by words and use the state per key to track session of each key.
+ Each session window sets a 10 seconds processing time timeout.
+ After 10 seconds of idle period, the session summary will be finalized and output to sink.
+ Usage: structured_network_wordcount_windowed.py <hostname> <port>
+ <hostname> and <port> describe the TCP server that Structured Streaming
+ would connect to receive data.
 
-To run this on your local machine, you need to first run a Netcat server
-   `$ nc -lk 9999`
-and then run the example
-   `$ bin/spark-submit
-   examples/src/main/python/sql/streaming/structured_network_wordcount_session_window.py
-   localhost 9999`
+ To run this on your local machine, you need to first run a Netcat server
+    `$ nc -lk 9999`
+ and then run the example
+    `$ bin/spark-submit
+    examples/src/main/python/sql/streaming/structured_network_wordcount_session_window.py
+    localhost 9999`
 """
-
 import sys
 from typing import Iterator, Any
 
@@ -57,7 +56,9 @@ if __name__ == "__main__":
     host = sys.argv[1]
     port = int(sys.argv[2])
 
-    spark = SparkSession.builder.appName("StructuredNetworkWordCountSessionWindow").getOrCreate()
+    spark = SparkSession.builder.appName(
+        "StructuredNetworkWordCountSessionWindow"
+    ).getOrCreate()
 
     # Create DataFrame representing the stream of input lines from connection to host:port
     lines = (
@@ -93,7 +94,9 @@ if __name__ == "__main__":
         ]
     )
 
-    def func(key: Any, pdfs: Iterator[pd.DataFrame], state: GroupState) -> Iterator[pd.DataFrame]:
+    def func(
+        key: Any, pdfs: Iterator[pd.DataFrame], state: GroupState
+    ) -> Iterator[pd.DataFrame]:
         if state.hasTimedOut:
             count, start, end = state.get
             state.remove()

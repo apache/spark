@@ -16,7 +16,6 @@
 #
 
 from pyspark import SparkContext
-
 # $example on$
 from pyspark.mllib.linalg import Matrices, Vectors
 from pyspark.mllib.regression import LabeledPoint
@@ -47,11 +46,9 @@ if __name__ == "__main__":
     print("%s\n" % independenceTestResult)
 
     obs = sc.parallelize(
-        [
-            LabeledPoint(1.0, [1.0, 0.0, 3.0]),
-            LabeledPoint(1.0, [1.0, 2.0, 0.0]),
-            LabeledPoint(1.0, [-1.0, 0.0, -0.5]),
-        ]
+        [LabeledPoint(1.0, [1.0, 0.0, 3.0]),
+         LabeledPoint(1.0, [1.0, 2.0, 0.0]),
+         LabeledPoint(1.0, [-1.0, 0.0, -0.5])]
     )  # LabeledPoint(label, feature)
 
     # The contingency table is constructed from an RDD of LabeledPoint and used to conduct

@@ -20,7 +20,6 @@ A K-means clustering program using MLlib.
 
 This example requires NumPy (http://www.numpy.org/).
 """
-
 import sys
 
 import numpy as np
@@ -29,7 +28,7 @@ from pyspark.mllib.clustering import KMeans
 
 
 def parseVector(line):
-    return np.array([float(x) for x in line.split(" ")])
+    return np.array([float(x) for x in line.split(' ')])
 
 
 if __name__ == "__main__":

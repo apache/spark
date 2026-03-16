@@ -315,7 +315,7 @@ ruff checks failed."
         echo
     fi
 
-    RUFF_REPORT=$( ($RUFF_BUILD format --diff) 2>&1)
+    RUFF_REPORT=$( ($RUFF_BUILD format --diff python/pyspark dev python/packaging python/benchmarks) 2>&1)
     RUFF_STATUS=$?
 
     if [ "$RUFF_STATUS" -ne 0 ]; then

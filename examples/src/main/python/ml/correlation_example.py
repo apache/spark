@@ -20,24 +20,23 @@ An example for computing correlation matrix.
 Run with:
   bin/spark-submit examples/src/main/python/ml/correlation_example.py
 """
-
 # $example on$
 from pyspark.ml.linalg import Vectors
 from pyspark.ml.stat import Correlation
-
 # $example off$
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("CorrelationExample").getOrCreate()
+    spark = SparkSession \
+        .builder \
+        .appName("CorrelationExample") \
+        .getOrCreate()
 
     # $example on$
-    data = [
-        (Vectors.sparse(4, [(0, 1.0), (3, -2.0)]),),
-        (Vectors.dense([4.0, 5.0, 0.0, 3.0]),),
-        (Vectors.dense([6.0, 7.0, 0.0, 8.0]),),
-        (Vectors.sparse(4, [(0, 9.0), (3, 1.0)]),),
-    ]
+    data = [(Vectors.sparse(4, [(0, 1.0), (3, -2.0)]),),
+            (Vectors.dense([4.0, 5.0, 0.0, 3.0]),),
+            (Vectors.dense([6.0, 7.0, 0.0, 8.0]),),
+            (Vectors.sparse(4, [(0, 9.0), (3, 1.0)]),)]
     df = spark.createDataFrame(data, ["features"])
 
     r1 = Correlation.corr(df, "features").head()

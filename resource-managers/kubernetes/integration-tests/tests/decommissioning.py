@@ -26,7 +26,10 @@ if __name__ == "__main__":
         Usage: decommissioning
     """
     print("Starting decom test")
-    spark = SparkSession.builder.appName("DecomTest").getOrCreate()
+    spark = SparkSession \
+        .builder \
+        .appName("DecomTest") \
+        .getOrCreate()
     sc = spark._sc
     acc = sc.accumulator(0)
 

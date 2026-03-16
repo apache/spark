@@ -18,28 +18,25 @@
 """
 Estimator Transformer Param Example.
 """
-
 # $example on$
 from pyspark.ml.linalg import Vectors
 from pyspark.ml.classification import LogisticRegression
-
 # $example off$
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("EstimatorTransformerParamExample").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("EstimatorTransformerParamExample")\
+        .getOrCreate()
 
     # $example on$
     # Prepare training data from a list of (label, features) tuples.
-    training = spark.createDataFrame(
-        [
-            (1.0, Vectors.dense([0.0, 1.1, 0.1])),
-            (0.0, Vectors.dense([2.0, 1.0, -1.0])),
-            (0.0, Vectors.dense([2.0, 1.3, 1.0])),
-            (1.0, Vectors.dense([0.0, 1.2, -0.5])),
-        ],
-        ["label", "features"],
-    )
+    training = spark.createDataFrame([
+        (1.0, Vectors.dense([0.0, 1.1, 0.1])),
+        (0.0, Vectors.dense([2.0, 1.0, -1.0])),
+        (0.0, Vectors.dense([2.0, 1.3, 1.0])),
+        (1.0, Vectors.dense([0.0, 1.2, -0.5]))], ["label", "features"])
 
     # Create a LogisticRegression instance. This instance is an Estimator.
     lr = LogisticRegression(maxIter=10, regParam=0.01)
@@ -75,27 +72,22 @@ if __name__ == "__main__":
     print(model2.extractParamMap())
 
     # Prepare test data
-    test = spark.createDataFrame(
-        [
-            (1.0, Vectors.dense([-1.0, 1.5, 1.3])),
-            (0.0, Vectors.dense([3.0, 2.0, -0.1])),
-            (1.0, Vectors.dense([0.0, 2.2, -1.5])),
-        ],
-        ["label", "features"],
-    )
+    test = spark.createDataFrame([
+        (1.0, Vectors.dense([-1.0, 1.5, 1.3])),
+        (0.0, Vectors.dense([3.0, 2.0, -0.1])),
+        (1.0, Vectors.dense([0.0, 2.2, -1.5]))], ["label", "features"])
 
     # Make predictions on test data using the Transformer.transform() method.
     # LogisticRegression.transform will only use the 'features' column.
     # Note that model2.transform() outputs a "myProbability" column instead of the usual
     # 'probability' column since we renamed the lr.probabilityCol parameter previously.
     prediction = model2.transform(test)
-    result = prediction.select("features", "label", "myProbability", "prediction").collect()
+    result = prediction.select("features", "label", "myProbability", "prediction") \
+        .collect()
 
     for row in result:
-        print(
-            "features=%s, label=%s -> prob=%s, prediction=%s"
-            % (row.features, row.label, row.myProbability, row.prediction)
-        )
+        print("features=%s, label=%s -> prob=%s, prediction=%s"
+              % (row.features, row.label, row.myProbability, row.prediction))
     # $example off$
 
     spark.stop()

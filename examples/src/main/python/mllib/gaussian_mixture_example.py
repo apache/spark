@@ -20,7 +20,6 @@ from numpy import array
 # $example off$
 
 from pyspark import SparkContext
-
 # $example on$
 from pyspark.mllib.clustering import GaussianMixture, GaussianMixtureModel
 # $example off$
@@ -31,27 +30,20 @@ if __name__ == "__main__":
     # $example on$
     # Load and parse the data
     data = sc.textFile("data/mllib/gmm_data.txt")
-    parsedData = data.map(lambda line: array([float(x) for x in line.strip().split(" ")]))
+    parsedData = data.map(lambda line: array([float(x) for x in line.strip().split(' ')]))
 
     # Build the model (cluster the data)
     gmm = GaussianMixture.train(parsedData, 2)
 
     # Save and load model
     gmm.save(sc, "target/org/apache/spark/PythonGaussianMixtureExample/GaussianMixtureModel")
-    sameModel = GaussianMixtureModel.load(
-        sc, "target/org/apache/spark/PythonGaussianMixtureExample/GaussianMixtureModel"
-    )
+    sameModel = GaussianMixtureModel\
+        .load(sc, "target/org/apache/spark/PythonGaussianMixtureExample/GaussianMixtureModel")
 
     # output parameters of model
     for i in range(2):
-        print(
-            "weight = ",
-            gmm.weights[i],
-            "mu = ",
-            gmm.gaussians[i].mu,
-            "sigma = ",
-            gmm.gaussians[i].sigma.toArray(),
-        )
+        print("weight = ", gmm.weights[i], "mu = ", gmm.gaussians[i].mu,
+              "sigma = ", gmm.gaussians[i].sigma.toArray())
     # $example off$
 
     sc.stop()

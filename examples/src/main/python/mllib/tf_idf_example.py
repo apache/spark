@@ -16,7 +16,6 @@
 #
 
 from pyspark import SparkContext
-
 # $example on$
 from pyspark.mllib.feature import HashingTF, IDF
 # $example off$

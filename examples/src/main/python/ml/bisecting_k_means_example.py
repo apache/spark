@@ -20,16 +20,17 @@ An example demonstrating bisecting k-means clustering.
 Run with:
   bin/spark-submit examples/src/main/python/ml/bisecting_k_means_example.py
 """
-
 # $example on$
 from pyspark.ml.clustering import BisectingKMeans
 from pyspark.ml.evaluation import ClusteringEvaluator
-
 # $example off$
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("BisectingKMeansExample").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("BisectingKMeansExample")\
+        .getOrCreate()
 
     # $example on$
     # Loads data.

@@ -18,18 +18,19 @@
 """
 FMClassifier Example.
 """
-
 # $example on$
 from pyspark.ml import Pipeline
 from pyspark.ml.classification import FMClassifier
 from pyspark.ml.feature import MinMaxScaler, StringIndexer
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator
-
 # $example off$
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("FMClassifierExample").getOrCreate()
+    spark = SparkSession \
+        .builder \
+        .appName("FMClassifierExample") \
+        .getOrCreate()
 
     # $example on$
     # Load and parse the data file, converting it to a DataFrame.
@@ -61,8 +62,7 @@ if __name__ == "__main__":
 
     # Select (prediction, true label) and compute test accuracy
     evaluator = MulticlassClassificationEvaluator(
-        labelCol="indexedLabel", predictionCol="prediction", metricName="accuracy"
-    )
+        labelCol="indexedLabel", predictionCol="prediction", metricName="accuracy")
     accuracy = evaluator.evaluate(predictions)
     print("Test set accuracy = %g" % accuracy)
 

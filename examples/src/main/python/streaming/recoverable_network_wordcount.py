@@ -35,7 +35,6 @@
  checkpoint data exists in ~/checkpoint/, then it will create StreamingContext from
  the checkpoint data.
 """
-
 import datetime
 import os
 import sys
@@ -47,16 +46,16 @@ from pyspark.streaming import StreamingContext
 
 # Get or register a Broadcast variable
 def getWordExcludeList(sparkContext: SparkContext) -> Broadcast[List[str]]:
-    if "wordExcludeList" not in globals():
-        globals()["wordExcludeList"] = sparkContext.broadcast(["a", "b", "c"])
-    return globals()["wordExcludeList"]
+    if ('wordExcludeList' not in globals()):
+        globals()['wordExcludeList'] = sparkContext.broadcast(["a", "b", "c"])
+    return globals()['wordExcludeList']
 
 
 # Get or register an Accumulator
 def getDroppedWordsCounter(sparkContext: SparkContext) -> Accumulator[int]:
-    if "droppedWordsCounter" not in globals():
-        globals()["droppedWordsCounter"] = sparkContext.accumulator(0)
-    return globals()["droppedWordsCounter"]
+    if ('droppedWordsCounter' not in globals()):
+        globals()['droppedWordsCounter'] = sparkContext.accumulator(0)
+    return globals()['droppedWordsCounter']
 
 
 def createContext(host: str, port: int, outputPath: str) -> StreamingContext:
@@ -92,7 +91,7 @@ def createContext(host: str, port: int, outputPath: str) -> StreamingContext:
         print(counts)
         print("Dropped %d word(s) totally" % droppedWordsCounter.value)
         print("Appending to " + os.path.abspath(outputPath))
-        with open(outputPath, "a") as f:
+        with open(outputPath, 'a') as f:
             f.write(counts + "\n")
 
     wordCounts.foreachRDD(echo)
@@ -101,13 +100,11 @@ def createContext(host: str, port: int, outputPath: str) -> StreamingContext:
 
 if __name__ == "__main__":
     if len(sys.argv) != 5:
-        print(
-            "Usage: recoverable_network_wordcount.py <hostname> <port> "
-            "<checkpoint-directory> <output-file>",
-            file=sys.stderr,
-        )
+        print("Usage: recoverable_network_wordcount.py <hostname> <port> "
+              "<checkpoint-directory> <output-file>", file=sys.stderr)
         sys.exit(-1)
     host, port, checkpoint, output = sys.argv[1:]
-    ssc = StreamingContext.getOrCreate(checkpoint, lambda: createContext(host, int(port), output))
+    ssc = StreamingContext.getOrCreate(checkpoint,
+                                       lambda: createContext(host, int(port), output))
     ssc.start()
     ssc.awaitTermination()

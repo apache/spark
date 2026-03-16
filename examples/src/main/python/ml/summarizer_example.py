@@ -20,9 +20,7 @@ An example for summarizer.
 Run with:
   bin/spark-submit examples/src/main/python/ml/summarizer_example.py
 """
-
 from pyspark.sql import SparkSession
-
 # $example on$
 from pyspark.ml.stat import Summarizer
 from pyspark.sql import Row
@@ -30,16 +28,15 @@ from pyspark.ml.linalg import Vectors
 # $example off$
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("SummarizerExample").getOrCreate()
+    spark = SparkSession \
+        .builder \
+        .appName("SummarizerExample") \
+        .getOrCreate()
     sc = spark.sparkContext
 
     # $example on$
-    df = sc.parallelize(
-        [
-            Row(weight=1.0, features=Vectors.dense(1.0, 1.0, 1.0)),
-            Row(weight=0.0, features=Vectors.dense(1.0, 2.0, 3.0)),
-        ]
-    ).toDF()
+    df = sc.parallelize([Row(weight=1.0, features=Vectors.dense(1.0, 1.0, 1.0)),
+                         Row(weight=0.0, features=Vectors.dense(1.0, 2.0, 3.0))]).toDF()
 
     # create summarizer for multiple metrics "mean" and "count"
     summarizer = Summarizer.metrics("mean", "count")

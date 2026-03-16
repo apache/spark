@@ -22,7 +22,6 @@ Please refer to PageRank implementation provided by graphx
 Example Usage:
 bin/spark-submit examples/src/main/python/pagerank.py data/mllib/pagerank_data.txt 10
 """
-
 import re
 import sys
 from operator import add
@@ -41,7 +40,7 @@ def computeContribs(urls: ResultIterable[str], rank: float) -> Iterable[Tuple[st
 
 def parseNeighbors(urls: str) -> Tuple[str, str]:
     """Parses a urls pair string into urls pair."""
-    parts = re.split(r"\s+", urls)
+    parts = re.split(r'\s+', urls)
     return parts[0], parts[1]
 
 
@@ -50,14 +49,15 @@ if __name__ == "__main__":
         print("Usage: pagerank <file> <iterations>", file=sys.stderr)
         sys.exit(-1)
 
-    print(
-        "WARN: This is a naive implementation of PageRank and is given as an example!\n"
-        + "Please refer to PageRank implementation provided by graphx",
-        file=sys.stderr,
-    )
+    print("WARN: This is a naive implementation of PageRank and is given as an example!\n" +
+          "Please refer to PageRank implementation provided by graphx",
+          file=sys.stderr)
 
     # Initialize the spark context.
-    spark = SparkSession.builder.appName("PythonPageRank").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("PythonPageRank")\
+        .getOrCreate()
 
     # Loads in input file. It should be in format of:
     #     URL         neighbor URL
@@ -75,18 +75,15 @@ if __name__ == "__main__":
     # Calculates and updates URL ranks continuously using PageRank algorithm.
     for iteration in range(int(sys.argv[2])):
         # Calculates URL contributions to the rank of other URLs.
-        contribs = links.join(ranks).flatMap(
-            lambda url_urls_rank: computeContribs(
-                url_urls_rank[1][0],
-                url_urls_rank[1][1],  # type: ignore[arg-type]
-            )
-        )
+        contribs = links.join(ranks).flatMap(lambda url_urls_rank: computeContribs(
+            url_urls_rank[1][0], url_urls_rank[1][1]  # type: ignore[arg-type]
+        ))
 
         # Re-calculates URL ranks based on neighbor contributions.
         ranks = contribs.reduceByKey(add).mapValues(lambda rank: rank * 0.85 + 0.15)
 
     # Collects all URL ranks and dump them to console.
-    for link, rank in ranks.collect():
+    for (link, rank) in ranks.collect():
         print("%s has rank: %s." % (link, rank))
 
     spark.stop()

@@ -17,25 +17,24 @@
 
 # $example on$
 from pyspark.ml.feature import Interaction, VectorAssembler
-
 # $example off$
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("InteractionExample").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("InteractionExample")\
+        .getOrCreate()
 
     # $example on$
     df = spark.createDataFrame(
-        [
-            (1, 1, 2, 3, 8, 4, 5),
-            (2, 4, 3, 8, 7, 9, 8),
-            (3, 6, 1, 9, 2, 3, 6),
-            (4, 10, 8, 6, 9, 4, 5),
-            (5, 9, 2, 7, 10, 7, 3),
-            (6, 1, 1, 4, 2, 8, 4),
-        ],
-        ["id1", "id2", "id3", "id4", "id5", "id6", "id7"],
-    )
+        [(1, 1, 2, 3, 8, 4, 5),
+         (2, 4, 3, 8, 7, 9, 8),
+         (3, 6, 1, 9, 2, 3, 6),
+         (4, 10, 8, 6, 9, 4, 5),
+         (5, 9, 2, 7, 10, 7, 3),
+         (6, 1, 1, 4, 2, 8, 4)],
+        ["id1", "id2", "id3", "id4", "id5", "id6", "id7"])
 
     assembler1 = VectorAssembler(inputCols=["id2", "id3", "id4"], outputCol="vec1")
 

@@ -17,23 +17,20 @@
 
 # $example on$
 from pyspark.ml.feature import RobustScaler
-
 # $example off$
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("RobustScalerExample").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("RobustScalerExample")\
+        .getOrCreate()
 
     # $example on$
     dataFrame = spark.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
-    scaler = RobustScaler(
-        inputCol="features",
-        outputCol="scaledFeatures",
-        withScaling=True,
-        withCentering=False,
-        lower=0.25,
-        upper=0.75,
-    )
+    scaler = RobustScaler(inputCol="features", outputCol="scaledFeatures",
+                          withScaling=True, withCentering=False,
+                          lower=0.25, upper=0.75)
 
     # Compute summary statistics by fitting the RobustScaler
     scalerModel = scaler.fit(dataFrame)

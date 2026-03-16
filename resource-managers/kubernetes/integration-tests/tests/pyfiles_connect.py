@@ -24,17 +24,18 @@ if __name__ == "__main__":
     """
         Usage: pyfiles
     """
-    spark = (
-        SparkSession.builder.appName("PyFilesTest")
-        .config("spark.api.mode", "connect")
-        .master(sys.argv[1])
+    spark = SparkSession \
+        .builder \
+        .appName("PyFilesTest") \
+        .config("spark.api.mode", "connect") \
+        .master(sys.argv[1]) \
         .getOrCreate()
-    )
 
     assert "connect" in str(spark)
 
     # Check python executable at executors
-    spark.udf.register("get_sys_ver", lambda: "%d.%d" % sys.version_info[:2], StringType())
+    spark.udf.register("get_sys_ver",
+                       lambda: "%d.%d" % sys.version_info[:2], StringType())
     [row] = spark.sql("SELECT get_sys_ver()").collect()
     driver_version = "%d.%d" % sys.version_info[:2]
     print("Python runtime version check for executor is: " + str(row[0] == driver_version))

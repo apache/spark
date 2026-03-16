@@ -16,7 +16,6 @@
 #
 
 from pyspark import SparkContext
-
 # $example on$
 from pyspark.mllib.clustering import LDA, LDAModel
 from pyspark.mllib.linalg import Vectors
@@ -28,7 +27,7 @@ if __name__ == "__main__":
     # $example on$
     # Load and parse the data
     data = sc.textFile("data/mllib/sample_lda_data.txt")
-    parsedData = data.map(lambda line: Vectors.dense([float(x) for x in line.strip().split(" ")]))
+    parsedData = data.map(lambda line: Vectors.dense([float(x) for x in line.strip().split(' ')]))
     # Index documents with unique IDs
     corpus = parsedData.zipWithIndex().map(lambda x: [x[1], x[0]]).cache()
 
@@ -36,9 +35,8 @@ if __name__ == "__main__":
     ldaModel = LDA.train(corpus, k=3)
 
     # Output topics. Each is a distribution over words (matching word count vectors)
-    print(
-        "Learned topics (as distributions over vocab of " + str(ldaModel.vocabSize()) + " words):"
-    )
+    print("Learned topics (as distributions over vocab of " + str(ldaModel.vocabSize())
+          + " words):")
     topics = ldaModel.topicsMatrix()
     for topic in range(3):
         print("Topic " + str(topic) + ":")
@@ -47,9 +45,8 @@ if __name__ == "__main__":
 
     # Save and load model
     ldaModel.save(sc, "target/org/apache/spark/PythonLatentDirichletAllocationExample/LDAModel")
-    sameModel = LDAModel.load(
-        sc, "target/org/apache/spark/PythonLatentDirichletAllocationExample/LDAModel"
-    )
+    sameModel = LDAModel\
+        .load(sc, "target/org/apache/spark/PythonLatentDirichletAllocationExample/LDAModel")
     # $example off$
 
     sc.stop()

@@ -17,12 +17,14 @@
 
 # $example on$
 from pyspark.ml.classification import LogisticRegression
-
 # $example off$
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("LogisticRegressionWithElasticNet").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("LogisticRegressionWithElasticNet")\
+        .getOrCreate()
 
     # $example on$
     # Load training data

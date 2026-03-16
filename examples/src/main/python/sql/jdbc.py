@@ -20,7 +20,6 @@ A simple example demonstrating Spark SQL JDBC integration.
 Run with:
   ./bin/spark-submit examples/src/main/python/sql/jdbc.py [jdbc_url]
 """
-
 import sys
 from pyspark.sql import SparkSession
 
@@ -31,7 +30,10 @@ if __name__ == "__main__":
         sys.exit(-1)
     url = sys.argv[1]
 
-    spark = SparkSession.builder.appName("Python Spark SQL JDBC integration example").getOrCreate()
+    spark = SparkSession \
+        .builder \
+        .appName("Python Spark SQL JDBC integration example") \
+        .getOrCreate()
 
     # 1. Create a DataFrame
     df = spark.createDataFrame([(1, "foo"), (2, "bar")], ["id", "name"])

@@ -16,7 +16,6 @@
 #
 
 from pyspark import SparkContext
-
 # $example on$
 import numpy as np
 

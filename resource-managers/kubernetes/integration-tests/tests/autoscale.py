@@ -26,7 +26,10 @@ if __name__ == "__main__":
         Usage: autoscale
     """
     print("Starting autoscale test")
-    spark = SparkSession.builder.appName("AutoScale").getOrCreate()
+    spark = SparkSession \
+        .builder \
+        .appName("AutoScale") \
+        .getOrCreate()
     sc = spark._sc
 
     initialRdd = sc.parallelize(range(100), 5)

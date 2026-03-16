@@ -20,9 +20,7 @@ A simple example demonstrating Spark SQL data sources.
 Run with:
   ./bin/spark-submit examples/src/main/python/sql/datasource.py
 """
-
 from pyspark.sql import SparkSession
-
 # $example on:schema_merging$
 from pyspark.sql import Row
 # $example off:schema_merging$
@@ -32,9 +30,9 @@ def generic_file_source_options_example(spark: SparkSession) -> None:
     # $example on:ignore_corrupt_files$
     # enable ignore corrupt files via the data source option
     # dir1/file3.json is corrupt from parquet's view
-    test_corrupt_df0 = spark.read.option("ignoreCorruptFiles", "true").parquet(
-        "examples/src/main/resources/dir1/", "examples/src/main/resources/dir1/dir2/"
-    )
+    test_corrupt_df0 = spark.read.option("ignoreCorruptFiles", "true")\
+        .parquet("examples/src/main/resources/dir1/",
+                 "examples/src/main/resources/dir1/dir2/")
     test_corrupt_df0.show()
     # +-------------+
     # |         file|
@@ -46,9 +44,8 @@ def generic_file_source_options_example(spark: SparkSession) -> None:
     # enable ignore corrupt files via the configuration
     spark.sql("set spark.sql.files.ignoreCorruptFiles=true")
     # dir1/file3.json is corrupt from parquet's view
-    test_corrupt_df1 = spark.read.parquet(
-        "examples/src/main/resources/dir1/", "examples/src/main/resources/dir1/dir2/"
-    )
+    test_corrupt_df1 = spark.read.parquet("examples/src/main/resources/dir1/",
+                                          "examples/src/main/resources/dir1/dir2/")
     test_corrupt_df1.show()
     # +-------------+
     # |         file|
@@ -59,11 +56,9 @@ def generic_file_source_options_example(spark: SparkSession) -> None:
     # $example off:ignore_corrupt_files$
 
     # $example on:recursive_file_lookup$
-    recursive_loaded_df = (
-        spark.read.format("parquet")
-        .option("recursiveFileLookup", "true")
+    recursive_loaded_df = spark.read.format("parquet")\
+        .option("recursiveFileLookup", "true")\
         .load("examples/src/main/resources/dir1")
-    )
     recursive_loaded_df.show()
     # +-------------+
     # |         file|
@@ -75,9 +70,8 @@ def generic_file_source_options_example(spark: SparkSession) -> None:
     spark.sql("set spark.sql.files.ignoreCorruptFiles=false")
 
     # $example on:load_with_path_glob_filter$
-    df = spark.read.load(
-        "examples/src/main/resources/dir1", format="parquet", pathGlobFilter="*.parquet"
-    )
+    df = spark.read.load("examples/src/main/resources/dir1",
+                         format="parquet", pathGlobFilter="*.parquet")
     df.show()
     # +-------------+
     # |         file|
@@ -88,9 +82,8 @@ def generic_file_source_options_example(spark: SparkSession) -> None:
 
     # $example on:load_with_modified_time_filter$
     # Only load files modified before 07/1/2050 @ 08:30:00
-    df = spark.read.load(
-        "examples/src/main/resources/dir1", format="parquet", modifiedBefore="2050-07-01T08:30:00"
-    )
+    df = spark.read.load("examples/src/main/resources/dir1",
+                         format="parquet", modifiedBefore="2050-07-01T08:30:00")
     df.show()
     # +-------------+
     # |         file|
@@ -98,9 +91,8 @@ def generic_file_source_options_example(spark: SparkSession) -> None:
     # |file1.parquet|
     # +-------------+
     # Only load files modified after 06/01/2050 @ 08:30:00
-    df = spark.read.load(
-        "examples/src/main/resources/dir1", format="parquet", modifiedAfter="2050-06-01T08:30:00"
-    )
+    df = spark.read.load("examples/src/main/resources/dir1",
+                         format="parquet", modifiedAfter="2050-06-01T08:30:00")
     df.show()
     # +-------------+
     # |         file|
@@ -122,11 +114,10 @@ def basic_datasource_example(spark: SparkSession) -> None:
 
     # $example on:write_partition_and_bucket$
     users_df = spark.read.parquet("examples/src/main/resources/users.parquet")
-    (
-        users_df.write.partitionBy("favorite_color")
+    (users_df.write
+        .partitionBy("favorite_color")
         .bucketBy(42, "name")
-        .saveAsTable("users_partitioned_bucketed")
-    )
+        .saveAsTable("users_partitioned_bucketed"))
     # $example off:write_partition_and_bucket$
 
     # $example on:manual_load_options$
@@ -140,31 +131,27 @@ def basic_datasource_example(spark: SparkSession) -> None:
         format="csv",
         sep=";",
         inferSchema="true",
-        header="true",
+        header="true"
     )
     # $example off:manual_load_options_csv$
 
     # $example on:manual_save_options_orc$
     users_df = spark.read.orc("examples/src/main/resources/users.orc")
-    (
-        users_df.write.format("orc")
+    (users_df.write.format("orc")
         .option("orc.bloom.filter.columns", "favorite_color")
         .option("orc.dictionary.key.threshold", "1.0")
         .option("orc.column.encoding.direct", "name")
-        .save("users_with_options.orc")
-    )
+        .save("users_with_options.orc"))
     # $example off:manual_save_options_orc$
 
     # $example on:manual_save_options_parquet$
     users_df = spark.read.parquet("examples/src/main/resources/users.parquet")
-    (
-        users_df.write.format("parquet")
+    (users_df.write.format("parquet")
         .option("parquet.bloom.filter.enabled#favorite_color", "true")
         .option("parquet.bloom.filter.expected.ndv#favorite_color", "1000000")
         .option("parquet.enable.dictionary", "true")
         .option("parquet.page.write-checksum.enabled", "false")
-        .save("users_with_options.parquet")
-    )
+        .save("users_with_options.parquet"))
     # $example off:manual_save_options_parquet$
 
     # $example on:write_sorting_and_bucketing$
@@ -210,16 +197,14 @@ def parquet_schema_merging_example(spark: SparkSession) -> None:
     # Create a simple DataFrame, stored into a partition directory
     sc = spark.sparkContext
 
-    squaresDF = spark.createDataFrame(
-        sc.parallelize(range(1, 6)).map(lambda i: Row(single=i, double=i**2))
-    )
+    squaresDF = spark.createDataFrame(sc.parallelize(range(1, 6))
+                                      .map(lambda i: Row(single=i, double=i ** 2)))
     squaresDF.write.parquet("data/test_table/key=1")
 
     # Create another DataFrame in a new partition directory,
     # adding a new column and dropping an existing column
-    cubesDF = spark.createDataFrame(
-        sc.parallelize(range(6, 11)).map(lambda i: Row(single=i, triple=i**3))
-    )
+    cubesDF = spark.createDataFrame(sc.parallelize(range(6, 11))
+                                    .map(lambda i: Row(single=i, triple=i ** 3)))
     cubesDF.write.parquet("data/test_table/key=2")
 
     # Read the partitioned table
@@ -396,49 +381,46 @@ def jdbc_dataset_example(spark: SparkSession) -> None:
     # $example on:jdbc_dataset$
     # Note: JDBC loading and saving can be achieved via either the load/save or jdbc methods
     # Loading data from a JDBC source
-    jdbcDF = (
-        spark.read.format("jdbc")
-        .option("url", "jdbc:postgresql:dbserver")
-        .option("dbtable", "schema.tablename")
-        .option("user", "username")
-        .option("password", "password")
+    jdbcDF = spark.read \
+        .format("jdbc") \
+        .option("url", "jdbc:postgresql:dbserver") \
+        .option("dbtable", "schema.tablename") \
+        .option("user", "username") \
+        .option("password", "password") \
         .load()
-    )
 
-    jdbcDF2 = spark.read.jdbc(
-        "jdbc:postgresql:dbserver",
-        "schema.tablename",
-        properties={"user": "username", "password": "password"},
-    )
+    jdbcDF2 = spark.read \
+        .jdbc("jdbc:postgresql:dbserver", "schema.tablename",
+              properties={"user": "username", "password": "password"})
 
     # Specifying dataframe column data types on read
-    jdbcDF3 = (
-        spark.read.format("jdbc")
-        .option("url", "jdbc:postgresql:dbserver")
-        .option("dbtable", "schema.tablename")
-        .option("user", "username")
-        .option("password", "password")
-        .option("customSchema", "id DECIMAL(38, 0), name STRING")
+    jdbcDF3 = spark.read \
+        .format("jdbc") \
+        .option("url", "jdbc:postgresql:dbserver") \
+        .option("dbtable", "schema.tablename") \
+        .option("user", "username") \
+        .option("password", "password") \
+        .option("customSchema", "id DECIMAL(38, 0), name STRING") \
         .load()
-    )
 
     # Saving data to a JDBC source
-    jdbcDF.write.format("jdbc").option("url", "jdbc:postgresql:dbserver").option(
-        "dbtable", "schema.tablename"
-    ).option("user", "username").option("password", "password").save()
+    jdbcDF.write \
+        .format("jdbc") \
+        .option("url", "jdbc:postgresql:dbserver") \
+        .option("dbtable", "schema.tablename") \
+        .option("user", "username") \
+        .option("password", "password") \
+        .save()
 
-    jdbcDF2.write.jdbc(
-        "jdbc:postgresql:dbserver",
-        "schema.tablename",
-        properties={"user": "username", "password": "password"},
-    )
+    jdbcDF2.write \
+        .jdbc("jdbc:postgresql:dbserver", "schema.tablename",
+              properties={"user": "username", "password": "password"})
 
     # Specifying create table column data types on write
-    jdbcDF.write.option("createTableColumnTypes", "name CHAR(64), comments VARCHAR(1024)").jdbc(
-        "jdbc:postgresql:dbserver",
-        "schema.tablename",
-        properties={"user": "username", "password": "password"},
-    )
+    jdbcDF.write \
+        .option("createTableColumnTypes", "name CHAR(64), comments VARCHAR(1024)") \
+        .jdbc("jdbc:postgresql:dbserver", "schema.tablename",
+              properties={"user": "username", "password": "password"})
     # $example off:jdbc_dataset$
 
 
@@ -470,17 +452,17 @@ def xml_dataset_example(spark: SparkSession) -> None:
     # +------+
 
     # Alternatively, a DataFrame can be created for an XML dataset represented by a Dataset[String]
-    xmlStrings = [
-        """
+    xmlStrings = ["""
           <person>
               <name>laglangyue</name>
               <job>Developer</job>
               <age>28</age>
           </person>
-        """
-    ]
+        """]
     xmlRDD = spark.sparkContext.parallelize(xmlStrings)
-    otherPeople = spark.read.option("rowTag", "person").xml(xmlRDD)
+    otherPeople = spark.read \
+        .option("rowTag", "person") \
+        .xml(xmlRDD)
     otherPeople.show()
     # +---+---------+----------+
     # |age|      job|      name|
@@ -491,7 +473,10 @@ def xml_dataset_example(spark: SparkSession) -> None:
 
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("Python Spark SQL data source example").getOrCreate()
+    spark = SparkSession \
+        .builder \
+        .appName("Python Spark SQL data source example") \
+        .getOrCreate()
 
     basic_datasource_example(spark)
     generic_file_source_options_example(spark)

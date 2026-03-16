@@ -18,9 +18,7 @@
 """
 Gradient Boosted Trees Classification Example.
 """
-
 from pyspark import SparkContext
-
 # $example on$
 from pyspark.mllib.tree import GradientBoostedTrees, GradientBoostedTreesModel
 from pyspark.mllib.util import MLUtils
@@ -37,23 +35,20 @@ if __name__ == "__main__":
     # Train a GradientBoostedTrees model.
     #  Notes: (a) Empty categoricalFeaturesInfo indicates all features are continuous.
     #         (b) Use more iterations in practice.
-    model = GradientBoostedTrees.trainClassifier(
-        trainingData, categoricalFeaturesInfo={}, numIterations=3
-    )
+    model = GradientBoostedTrees.trainClassifier(trainingData,
+                                                 categoricalFeaturesInfo={}, numIterations=3)
 
     # Evaluate model on test instances and compute test error
     predictions = model.predict(testData.map(lambda x: x.features))
     labelsAndPredictions = testData.map(lambda lp: lp.label).zip(predictions)
-    testErr = labelsAndPredictions.filter(lambda lp: lp[0] != lp[1]).count() / float(
-        testData.count()
-    )
-    print("Test Error = " + str(testErr))
-    print("Learned classification GBT model:")
+    testErr = labelsAndPredictions.filter(
+        lambda lp: lp[0] != lp[1]).count() / float(testData.count())
+    print('Test Error = ' + str(testErr))
+    print('Learned classification GBT model:')
     print(model.toDebugString())
 
     # Save and load model
     model.save(sc, "target/tmp/myGradientBoostingClassificationModel")
-    sameModel = GradientBoostedTreesModel.load(
-        sc, "target/tmp/myGradientBoostingClassificationModel"
-    )
+    sameModel = GradientBoostedTreesModel.load(sc,
+                                               "target/tmp/myGradientBoostingClassificationModel")
     # $example off$

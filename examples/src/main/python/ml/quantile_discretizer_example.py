@@ -17,12 +17,14 @@
 
 # $example on$
 from pyspark.ml.feature import QuantileDiscretizer
-
 # $example off$
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("QuantileDiscretizerExample").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("QuantileDiscretizerExample")\
+        .getOrCreate()
 
     # $example on$
     data = [(0, 18.0), (1, 19.0), (2, 8.0), (3, 5.0), (4, 2.2)]

@@ -18,22 +18,20 @@
 # $example on$
 from pyspark.ml.feature import DCT
 from pyspark.ml.linalg import Vectors
-
 # $example off$
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("DCTExample").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("DCTExample")\
+        .getOrCreate()
 
     # $example on$
-    df = spark.createDataFrame(
-        [
-            (Vectors.dense([0.0, 1.0, -2.0, 3.0]),),
-            (Vectors.dense([-1.0, 2.0, 4.0, -7.0]),),
-            (Vectors.dense([14.0, -2.0, -5.0, 1.0]),),
-        ],
-        ["features"],
-    )
+    df = spark.createDataFrame([
+        (Vectors.dense([0.0, 1.0, -2.0, 3.0]),),
+        (Vectors.dense([-1.0, 2.0, 4.0, -7.0]),),
+        (Vectors.dense([14.0, -2.0, -5.0, 1.0]),)], ["features"])
 
     dct = DCT(inverse=False, inputCol="features", outputCol="featuresDCT")
 

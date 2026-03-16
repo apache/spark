@@ -43,7 +43,7 @@ if __name__ == "__main__":
         inputCols=["categoryIndex1", "categoryIndex2"],
         outputCols=["categoryIndex1Target", "categoryIndex2Target"],
         labelCol="binaryLabel",
-        targetType="binary",
+        targetType="binary"
     )
     model = encoder.fit(df)
     encoded = model.transform(df)
@@ -54,7 +54,7 @@ if __name__ == "__main__":
         inputCols=["categoryIndex1", "categoryIndex2"],
         outputCols=["categoryIndex1Target", "categoryIndex2Target"],
         labelCol="continuousLabel",
-        targetType="continuous",
+        targetType="continuous"
     )
 
     model = encoder.fit(df)

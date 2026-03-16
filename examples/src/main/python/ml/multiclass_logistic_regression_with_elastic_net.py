@@ -17,18 +17,21 @@
 
 # $example on$
 from pyspark.ml.classification import LogisticRegression
-
 # $example off$
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("MulticlassLogisticRegressionWithElasticNet").getOrCreate()
+    spark = SparkSession \
+        .builder \
+        .appName("MulticlassLogisticRegressionWithElasticNet") \
+        .getOrCreate()
 
     # $example on$
     # Load training data
-    training = spark.read.format("libsvm").load(
-        "data/mllib/sample_multiclass_classification_data.txt"
-    )
+    training = spark \
+        .read \
+        .format("libsvm") \
+        .load("data/mllib/sample_multiclass_classification_data.txt")
 
     lr = LogisticRegression(maxIter=10, regParam=0.3, elasticNetParam=0.8)
 
@@ -74,10 +77,8 @@ if __name__ == "__main__":
     fMeasure = trainingSummary.weightedFMeasure()
     precision = trainingSummary.weightedPrecision
     recall = trainingSummary.weightedRecall
-    print(
-        "Accuracy: %s\nFPR: %s\nTPR: %s\nF-measure: %s\nPrecision: %s\nRecall: %s"
-        % (accuracy, falsePositiveRate, truePositiveRate, fMeasure, precision, recall)
-    )
+    print("Accuracy: %s\nFPR: %s\nTPR: %s\nF-measure: %s\nPrecision: %s\nRecall: %s"
+          % (accuracy, falsePositiveRate, truePositiveRate, fMeasure, precision, recall))
     # $example off$
 
     spark.stop()

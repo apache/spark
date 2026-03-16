@@ -16,19 +16,19 @@
 #
 
 """
-Create a queue of RDDs that will be mapped/reduced one at a time in
-1 second intervals.
+ Create a queue of RDDs that will be mapped/reduced one at a time in
+ 1 second intervals.
 
-To run this example use
-   `$ bin/spark-submit examples/src/main/python/streaming/queue_stream.py
+ To run this example use
+    `$ bin/spark-submit examples/src/main/python/streaming/queue_stream.py
 """
-
 import time
 
 from pyspark import SparkContext
 from pyspark.streaming import StreamingContext
 
 if __name__ == "__main__":
+
     sc = SparkContext(appName="PythonStreamingQueueStream")
     ssc = StreamingContext(sc, 1)
 

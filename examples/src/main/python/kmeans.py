@@ -22,7 +22,6 @@ examples/src/main/python/ml/kmeans_example.py.
 
 This example requires NumPy (http://www.numpy.org/).
 """
-
 import sys
 from typing import List
 
@@ -31,7 +30,7 @@ from pyspark.sql import SparkSession
 
 
 def parseVector(line: str) -> np.ndarray:
-    return np.array([float(x) for x in line.split(" ")])
+    return np.array([float(x) for x in line.split(' ')])
 
 
 def closestPoint(p: np.ndarray, centers: List[np.ndarray]) -> int:
@@ -46,18 +45,19 @@ def closestPoint(p: np.ndarray, centers: List[np.ndarray]) -> int:
 
 
 if __name__ == "__main__":
+
     if len(sys.argv) != 4:
         print("Usage: kmeans <file> <k> <convergeDist>", file=sys.stderr)
         sys.exit(-1)
 
-    print(
-        """WARN: This is a naive implementation of KMeans Clustering and is given
+    print("""WARN: This is a naive implementation of KMeans Clustering and is given
        as an example! Please refer to examples/src/main/python/ml/kmeans_example.py for an
-       example on how to use ML's KMeans implementation.""",
-        file=sys.stderr,
-    )
+       example on how to use ML's KMeans implementation.""", file=sys.stderr)
 
-    spark = SparkSession.builder.appName("PythonKMeans").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("PythonKMeans")\
+        .getOrCreate()
 
     lines = spark.read.text(sys.argv[1]).rdd.map(lambda r: r[0])
     data = lines.map(parseVector).cache()
@@ -68,15 +68,16 @@ if __name__ == "__main__":
     tempDist = 1.0
 
     while tempDist > convergeDist:
-        closest = data.map(lambda p: (closestPoint(p, kPoints), (p, 1)))
+        closest = data.map(
+            lambda p: (closestPoint(p, kPoints), (p, 1)))
         pointStats = closest.reduceByKey(
-            lambda p1_c1, p2_c2: (p1_c1[0] + p2_c2[0], p1_c1[1] + p2_c2[1])
-        )
-        newPoints = pointStats.map(lambda st: (st[0], st[1][0] / st[1][1])).collect()
+            lambda p1_c1, p2_c2: (p1_c1[0] + p2_c2[0], p1_c1[1] + p2_c2[1]))
+        newPoints = pointStats.map(
+            lambda st: (st[0], st[1][0] / st[1][1])).collect()
 
         tempDist = sum(np.sum((kPoints[iK] - p) ** 2) for (iK, p) in newPoints)
 
-        for iK, p in newPoints:
+        for (iK, p) in newPoints:
             kPoints[iK] = p
 
     print("Final centers: " + str(kPoints))

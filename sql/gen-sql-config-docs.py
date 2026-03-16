@@ -27,7 +27,8 @@ from mkdocs.structure.pages import markdown
 from pyspark.java_gateway import launch_gateway
 
 
-SQLConfEntry = namedtuple("SQLConfEntry", ["name", "default", "description", "version"])
+SQLConfEntry = namedtuple(
+    "SQLConfEntry", ["name", "default", "description", "version"])
 
 
 def get_sql_configs(jvm, group):
@@ -40,7 +41,7 @@ def get_sql_configs(jvm, group):
             name=_sql_config._1(),
             default=_sql_config._2(),
             description=_sql_config._3(),
-            version=_sql_config._4(),
+            version=_sql_config._4()
         )
         for _sql_config in config_set
     ]
@@ -72,15 +73,13 @@ def generate_sql_configs_table_html(sql_configs, path):
     """
     value_reference_pattern = re.compile(r"^<value of (\S*)>$")
 
-    with open(path, "w") as f:
-        f.write(
-            dedent(
-                """
+    with open(path, 'w') as f:
+        f.write(dedent(
+            """
             <table class="spark-config">
             <tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
             """
-            )
-        )
+        ))
         for config in sorted(sql_configs, key=lambda x: x.name):
             if config.name == "spark.sql.session.timeZone":
                 default = "(value of local timezone)"
@@ -97,7 +96,8 @@ def generate_sql_configs_table_html(sql_configs, path):
             if default.startswith("<"):
                 raise RuntimeError(
                     "Unhandled reference in SQL config docs. Config '{name}' "
-                    "has default '{default}' that looks like an HTML tag.".format(
+                    "has default '{default}' that looks like an HTML tag."
+                    .format(
                         name=config.name,
                         default=config.default,
                     )
@@ -106,31 +106,27 @@ def generate_sql_configs_table_html(sql_configs, path):
             if config.name == "spark.sql.files.ignoreInvalidPartitionPaths":
                 description = config.description.replace("<", "&lt;").replace(">", "&gt;")
             elif config.name == "spark.sql.hive.quoteHiveStructFieldName":
-                description = (
-                    config.description.replace("<", "&lt;")
-                    .replace(">", "&gt;")
-                    .replace("`", "&#96;")
-                )
+                description = config.description.replace(
+                    "<", "&lt;").replace(">", "&gt;").replace("`", "&#96;")
             else:
                 description = config.description
 
-            f.write(
-                dedent(
-                    """
+            f.write(dedent(
+                """
                 <tr>
                     <td><code>{name}</code></td>
                     <td>{default}</td>
                     <td>{description}</td>
                     <td>{version}</td>
                 </tr>
-                """.format(
-                        name=config.name,
-                        default=default,
-                        description=markdown.markdown(description),
-                        version=config.version,
-                    )
+                """
+                .format(
+                    name=config.name,
+                    default=default,
+                    description=markdown.markdown(description),
+                    version=config.version
                 )
-            )
+            ))
         f.write("</table>\n")
 
 

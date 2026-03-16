@@ -19,22 +19,21 @@
 from pyspark.ml.feature import Tokenizer, RegexTokenizer
 from pyspark.sql.functions import col, udf
 from pyspark.sql.types import IntegerType
-
 # $example off$
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("TokenizerExample").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("TokenizerExample")\
+        .getOrCreate()
 
     # $example on$
-    sentenceDataFrame = spark.createDataFrame(
-        [
-            (0, "Hi I heard about Spark"),
-            (1, "I wish Java could use case classes"),
-            (2, "Logistic,regression,models,are,neat"),
-        ],
-        ["id", "sentence"],
-    )
+    sentenceDataFrame = spark.createDataFrame([
+        (0, "Hi I heard about Spark"),
+        (1, "I wish Java could use case classes"),
+        (2, "Logistic,regression,models,are,neat")
+    ], ["id", "sentence"])
 
     tokenizer = Tokenizer(inputCol="sentence", outputCol="words")
 
@@ -44,14 +43,12 @@ if __name__ == "__main__":
     countTokens = udf(lambda words: len(words), IntegerType())
 
     tokenized = tokenizer.transform(sentenceDataFrame)
-    tokenized.select("sentence", "words").withColumn("tokens", countTokens(col("words"))).show(
-        truncate=False
-    )
+    tokenized.select("sentence", "words")\
+        .withColumn("tokens", countTokens(col("words"))).show(truncate=False)
 
     regexTokenized = regexTokenizer.transform(sentenceDataFrame)
-    regexTokenized.select("sentence", "words").withColumn("tokens", countTokens(col("words"))).show(
-        truncate=False
-    )
+    regexTokenized.select("sentence", "words") \
+        .withColumn("tokens", countTokens(col("words"))).show(truncate=False)
     # $example off$
 
     spark.stop()

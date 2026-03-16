@@ -21,7 +21,6 @@ from math import sqrt
 # $example off$
 
 from pyspark import SparkContext
-
 # $example on$
 from pyspark.mllib.clustering import KMeans, KMeansModel
 # $example off$
@@ -32,7 +31,7 @@ if __name__ == "__main__":
     # $example on$
     # Load and parse the data
     data = sc.textFile("data/mllib/kmeans_data.txt")
-    parsedData = data.map(lambda line: array([float(x) for x in line.split(" ")]))
+    parsedData = data.map(lambda line: array([float(x) for x in line.split(' ')]))
 
     # Build the model (cluster the data)
     clusters = KMeans.train(parsedData, 2, maxIterations=10, initializationMode="random")
