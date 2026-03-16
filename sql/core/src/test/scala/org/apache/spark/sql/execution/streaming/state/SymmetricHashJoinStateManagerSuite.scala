@@ -593,38 +593,6 @@ class SymmetricHashJoinStateManagerEventTimeInKeySuite
 
   // V1 excluded: V1 converter does not persist matched flags (SPARK-26154)
   versionsInTest.filter(_ >= 2).foreach { ver =>
-    test(s"StreamingJoinStateManager V$ver - " +
-        "getJoinedRows with excludeRowsAlreadyMatched") {
-      withJoinStateManager(
-        inputValueAttributes, joinKeyExpressions, stateFormatVersion = ver) { manager =>
-        implicit val mgr = manager
-
-        append(20, 2)
-        append(20, 3)
-        append(20, 4)
-
-        val dummyRow = new GenericInternalRow(0)
-        val firstPass = manager.getJoinedRows(
-          toJoinKeyRow(20),
-          row => new JoinedRow(row, dummyRow),
-          // intentionally exclude 4, which should be only returned in next pass
-          jr => jr.getInt(1) < 4
-        ).toSeq
-        assert(firstPass.size == 2)
-
-        val secondPass = manager.getJoinedRows(
-          toJoinKeyRow(20),
-          row => new JoinedRow(row, dummyRow),
-          _ => true,
-          excludeRowsAlreadyMatched = true
-        ).map(_.getInt(1)).toSeq
-        assert(secondPass === Seq(4))
-      }
-    }
-  }
-
-  // V1 excluded: V1 converter does not persist matched flags (SPARK-26154)
-  versionsInTest.filter(_ >= 2).foreach { ver =>
     test(s"StreamingJoinStateManager V$ver - getJoinedRowsAndRemoveMatched partial") {
       withJoinStateManager(
         inputValueAttributes, joinKeyExpressions, stateFormatVersion = ver) { manager =>
@@ -941,36 +909,6 @@ class SymmetricHashJoinStateManagerEventTimeInValueSuite
 
           mgr.commit()
         }
-      }
-    }
-  }
-
-  // V1 excluded: V1 converter does not persist matched flags (SPARK-26154)
-  versionsInTest.filter(_ >= 2).foreach { ver =>
-    test(s"StreamingJoinStateManager V$ver - " +
-        "getJoinedRows with excludeRowsAlreadyMatched") {
-      withJoinStateManager(
-        inputValueAttributes, joinKeyExpressions, stateFormatVersion = ver) { manager =>
-        implicit val mgr = manager
-
-        appendAndTest(40, 100, 200, 300)
-
-        val dummyRow = new GenericInternalRow(0)
-        val firstPass = manager.getJoinedRows(
-          toJoinKeyRow(40),
-          row => new JoinedRow(row, dummyRow),
-          // intentionally exclude 300, which should be only returned in next pass
-          jr => jr.getInt(1) < 300
-        ).toSeq
-        assert(firstPass.size == 2)
-
-        val secondPass = manager.getJoinedRows(
-          toJoinKeyRow(40),
-          row => new JoinedRow(row, dummyRow),
-          _ => true,
-          excludeRowsAlreadyMatched = true
-        ).map(_.getInt(1)).toSeq
-        assert(secondPass === Seq(300))
       }
     }
   }
