@@ -42,24 +42,26 @@ object StringUtils extends Logging {
    * @return the equivalent Java regular expression of the pattern
    */
   def escapeLikeRegex(pattern: String, escapeChar: Char): String = {
-    val in = pattern.iterator
+    val in = pattern.codePoints().iterator()
     val out = new StringBuilder()
 
     while (in.hasNext) {
-      in.next match {
+      in.nextInt() match {
         case c1 if c1 == escapeChar && in.hasNext =>
-          val c = in.next
+          val c = in.nextInt()
           c match {
-            case '_' | '%' => out ++= Pattern.quote(Character.toString(c))
-            case c if c == escapeChar => out ++= Pattern.quote(Character.toString(c))
+            case '_' | '%' =>
+              out ++= Pattern.quote(new String(Character.toChars(c)))
+            case c if c == escapeChar =>
+              out ++= Pattern.quote(new String(Character.toChars(c)))
             case _ => throw QueryCompilationErrors.escapeCharacterInTheMiddleError(
-              pattern, Character.toString(c))
+              pattern, new String(Character.toChars(c)))
           }
         case c if c == escapeChar =>
           throw QueryCompilationErrors.escapeCharacterAtTheEndError(pattern)
         case '_' => out ++= "."
         case '%' => out ++= ".*"
-        case c => out ++= Pattern.quote(Character.toString(c))
+        case c => out ++= Pattern.quote(new String(Character.toChars(c)))
       }
     }
     "(?s)" + out.result() // (?s) enables dotall mode, causing "." to match new lines

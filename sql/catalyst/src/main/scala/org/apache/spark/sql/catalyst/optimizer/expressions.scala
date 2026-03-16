@@ -737,8 +737,11 @@ object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
         // 'a%a' pattern is basically same with 'a%' && '%a'.
         // However, the additional `Length` condition is required to prevent 'a' match 'a%a'.
         case startsAndEndsWith(prefix, postfix) =>
-          Some(And(GreaterThanOrEqual(Length(input), Literal(prefix.length + postfix.length)),
-            And(StartsWith(input, Literal(prefix)), EndsWith(input, Literal(postfix)))))
+          Some(And(GreaterThanOrEqual(Length(input),
+            Literal.create(prefix.codePointCount(0, prefix.length)
+              + postfix.codePointCount(0, postfix.length))),
+          And(StartsWith(input, Literal.create(prefix, input.dataType)),
+            EndsWith(input, Literal.create(postfix, input.dataType)))))
         case contains(infix) =>
           Some(Contains(input, Literal(infix)))
         case equalTo(str) =>
