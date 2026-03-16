@@ -41,6 +41,33 @@ class TimeUtilsSuite extends SparkFunSuite {
     assert(TimeUtils.stringToTime(UTF8String.fromString("invalid")).isEmpty)
     assert(TimeUtils.stringToTime(UTF8String.fromString("12:30")).isEmpty)
     assert(TimeUtils.stringToTime(null).isEmpty)
+
+    // Additional negative cases
+    // definitely invalid
+    assert(TimeUtils.stringToTime(UTF8String.fromString("abc:def:ghi")).isEmpty)
+    assert(TimeUtils.stringToTime(UTF8String.fromString("12:30:45.")).isEmpty)
+    assert(TimeUtils.stringToTime(UTF8String.fromString("12:30:45.abc")).isEmpty)
+    // padding not allowed by default
+    assert(TimeUtils.stringToTime(UTF8String.fromString(" 12:30:45 ")).isEmpty)
+    assert(TimeUtils.stringToTime(UTF8String.fromString("-01:00:00")).isEmpty)
+  }
+
+  test("makeTime - negative cases") {
+    // Hour out of range
+    intercept[IllegalArgumentException](TimeUtils.makeTime(24, 0, 0, 0))
+    intercept[IllegalArgumentException](TimeUtils.makeTime(-1, 0, 0, 0))
+
+    // Minute out of range
+    intercept[IllegalArgumentException](TimeUtils.makeTime(12, 60, 0, 0))
+    intercept[IllegalArgumentException](TimeUtils.makeTime(12, -1, 0, 0))
+
+    // Second out of range
+    intercept[IllegalArgumentException](TimeUtils.makeTime(12, 30, 60, 0))
+    intercept[IllegalArgumentException](TimeUtils.makeTime(12, 30, -1, 0))
+
+    // Microsecond out of range
+    intercept[IllegalArgumentException](TimeUtils.makeTime(12, 30, 45, 1000000))
+    intercept[IllegalArgumentException](TimeUtils.makeTime(12, 30, 45, -1))
   }
 
   test("timeToString - valid time values") {

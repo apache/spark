@@ -71,6 +71,10 @@ class TimeCastSuite extends SparkFunSuite {
 
     // Empty string
     assert(TimeCast.stringToTime(UTF8String.fromString("")) === None)
+
+    // Format with timezone - should be rejected as TIME type doesn't support timezones
+    assert(TimeCast.stringToTime(UTF8String.fromString("12:00:00Z")) === None)
+    assert(TimeCast.stringToTime(UTF8String.fromString("12:00:00+08:00")) === None)
   }
 
   test("Cast TIME to TIMESTAMP") {

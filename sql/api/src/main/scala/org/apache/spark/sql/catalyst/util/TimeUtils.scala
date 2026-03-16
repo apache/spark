@@ -46,38 +46,27 @@ object TimeUtils {
    * @return microseconds since midnight, or None if parsing fails
    */
   def stringToTime(s: UTF8String): Option[Long] = {
+    // Unique comment to force recompilation: 12345
     if (s == null) return None
 
-    val str = s.toString.trim
+    val str = s.toString
     if (str.isEmpty) return None
 
-    // Reject hour >= 24
-    if (str.startsWith("24:") || str.startsWith("25:") || str.startsWith("26:") ||
-        str.startsWith("27:") || str.startsWith("28:") || str.startsWith("29:")) {
-      return None
-    }
-
-    // Require at least HH:mm:ss format (must have 2 colons)
-    if (str.count(_ == ':') < 2) {
+    // Regex check for HH:mm:ss[.SSSSSS]
+    // HH: 00-23
+    // mm: 00-59
+    // ss: 00-59
+    // .SSSSSS: optional, 1 to 6 digits
+    val timeRegex = """^([0-1][0-9]|2[0-3]):([0-5][0-9]):([0-5][0-9])(\.[0-9]{1,6})?$""".r
+    if (timeRegex.findFirstIn(str).isEmpty) {
       return None
     }
 
     try {
-      // Parse using LocalTime which handles validation
       val localTime = LocalTime.parse(str)
-
-      // Additional validation: LocalTime.parse accepts 24:00:00 and wraps to 00:00:00
-      // We need to reject values >= 24:00:00
-      val parts = str.split(':')
-      if (parts.length >= 1) {
-        val hour = parts(0).toInt
-        if (hour >= 24) return None
-      }
-
       Some(localTimeToMicros(localTime))
     } catch {
       case _: DateTimeException => None
-      case _: NumberFormatException => None
     }
   }
 

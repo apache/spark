@@ -370,6 +370,7 @@ object Cast extends QueryErrorsBase {
     case (DateType, TimestampType) => false
     case (DateType, _) => true
     case (_, CalendarIntervalType) => true
+    case (_, TimeType) => true
 
     case (_, to: DecimalType) if !canNullSafeCastToDecimal(from, to) => true
     case (_: FractionalType, _: IntegralType) => true  // NaN, infinity

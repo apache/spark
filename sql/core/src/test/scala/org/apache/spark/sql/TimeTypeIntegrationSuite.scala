@@ -169,4 +169,41 @@ class TimeTypeIntegrationSuite extends QueryTest with SharedSparkSession {
     assert(result.get(0) === LocalTime.of(8, 15))
     assert(result.get(1) === LocalTime.of(14, 0))
   }
+
+  test("Integration: Negative tests - invalid string casting") {
+    val df = Seq("invalid", "25:00:00", "12:60:00").toDF("t_str")
+    val casted = df.select($"t_str".cast(TimeType).as("t"))
+    val results = casted.collect().map(_.get(0))
+    // Non-ANSI mode should return null for invalid casts
+    assert(results.forall(_ == null))
+  }
+
+  test("Integration: Negative tests - invalid numeric casting") {
+    val df = Seq(-1L, 86400000000L).toDF("t_num")
+    val casted = df.select($"t_num".cast(TimeType).as("t"))
+    val results = casted.collect().map(_.get(0))
+    // Non-ANSI mode should return null for out of range numeric values
+    assert(results.forall(_ == null))
+  }
+
+  test("Integration: Negative tests - invalid format in JSON/CSV") {
+    withTempPath { path =>
+      val jsonPath = path.getCanonicalPath + "/json"
+      val csvPath = path.getCanonicalPath + "/csv"
+
+      // Write invalid data as strings
+      Seq("{\"t\": \"invalid\"}", "{\"t\": \"25:00:00\"}").toDS().write.text(jsonPath)
+      Seq("t", "invalid", "12:60:00").toDS().write.text(csvPath)
+
+      val schema = new org.apache.spark.sql.types.StructType().add("t", TimeType)
+
+      // JSON reading
+      val loadedJson = spark.read.schema(schema).json(jsonPath)
+      assert(loadedJson.collect().forall(_.get(0) == null))
+
+      // CSV reading
+      val loadedCsv = spark.read.option("header", "true").schema(schema).csv(csvPath)
+      assert(loadedCsv.collect().forall(_.get(0) == null))
+    }
+  }
 }
