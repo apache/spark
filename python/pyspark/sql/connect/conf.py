@@ -146,7 +146,7 @@ def _test() -> None:
         .getOrCreate()
     )
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.connect.conf,
         globs=globs,
         optionflags=doctest.ELLIPSIS

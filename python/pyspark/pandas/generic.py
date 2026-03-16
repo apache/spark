@@ -18,6 +18,7 @@
 """
 A base class of DataFrame/Column to behave like pandas DataFrame/Series.
 """
+
 from abc import ABCMeta, abstractmethod
 from functools import reduce
 from typing import (
@@ -3681,7 +3682,7 @@ def _test() -> None:
     path = tempfile.mkdtemp()
     globs["path"] = path
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.generic,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

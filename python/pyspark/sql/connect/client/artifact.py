@@ -36,7 +36,6 @@ import grpc
 import pyspark.sql.connect.proto as proto
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 
-
 JAR_PREFIX: str = "jars"
 PYFILE_PREFIX: str = "pyfiles"
 ARCHIVE_PREFIX: str = "archives"

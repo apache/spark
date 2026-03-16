@@ -33,6 +33,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+
 import builtins
 import collections.abc
 import google.protobuf.descriptor
@@ -749,6 +750,7 @@ class DataType(google.protobuf.message.Message):
         @property
         def sql_type(self) -> global___DataType:
             """Required for Python UDT"""
+
         def __init__(
             self,
             *,
@@ -874,6 +876,7 @@ class DataType(google.protobuf.message.Message):
     @property
     def byte(self) -> global___DataType.Byte:
         """Numeric types"""
+
     @property
     def short(self) -> global___DataType.Short: ...
     @property
@@ -889,6 +892,7 @@ class DataType(google.protobuf.message.Message):
     @property
     def string(self) -> global___DataType.String:
         """String types"""
+
     @property
     def char(self) -> global___DataType.Char: ...
     @property
@@ -896,6 +900,7 @@ class DataType(google.protobuf.message.Message):
     @property
     def date(self) -> global___DataType.Date:
         """Datatime types"""
+
     @property
     def timestamp(self) -> global___DataType.Timestamp: ...
     @property
@@ -903,6 +908,7 @@ class DataType(google.protobuf.message.Message):
     @property
     def calendar_interval(self) -> global___DataType.CalendarInterval:
         """Interval types"""
+
     @property
     def year_month_interval(self) -> global___DataType.YearMonthInterval: ...
     @property
@@ -910,6 +916,7 @@ class DataType(google.protobuf.message.Message):
     @property
     def array(self) -> global___DataType.Array:
         """Complex types"""
+
     @property
     def struct(self) -> global___DataType.Struct: ...
     @property
@@ -919,14 +926,17 @@ class DataType(google.protobuf.message.Message):
     @property
     def udt(self) -> global___DataType.UDT:
         """UserDefinedType"""
+
     @property
     def geometry(self) -> global___DataType.Geometry:
         """Geospatial types"""
+
     @property
     def geography(self) -> global___DataType.Geography: ...
     @property
     def unparsed(self) -> global___DataType.Unparsed:
         """UnparsedDataType"""
+
     @property
     def time(self) -> global___DataType.Time: ...
     def __init__(
@@ -1087,9 +1097,7 @@ class DataType(google.protobuf.message.Message):
             b"year_month_interval",
         ],
     ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["kind", b"kind"]
-    ) -> (
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["kind", b"kind"]) -> (
         typing_extensions.Literal[
             "null",
             "binary",

@@ -123,7 +123,7 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
             limit, ReadAllAvailable
         ), "simple stream reader does not support read limit"
 
-        (iter, end) = self.simple_reader.read(start)
+        iter, end = self.simple_reader.read(start)
         self.add_result_to_cache(start, end, iter)
         return end
 

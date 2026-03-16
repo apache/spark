@@ -450,12 +450,10 @@ class DataStreamWriter:
     options.__doc__ = PySparkDataStreamWriter.options.__doc__
 
     @overload
-    def partitionBy(self, *cols: str) -> "DataStreamWriter":
-        ...
+    def partitionBy(self, *cols: str) -> "DataStreamWriter": ...
 
     @overload
-    def partitionBy(self, __cols: List[str]) -> "DataStreamWriter":
-        ...
+    def partitionBy(self, __cols: List[str]) -> "DataStreamWriter": ...
 
     def partitionBy(self, *cols: str) -> "DataStreamWriter":  # type: ignore[misc]
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
@@ -469,12 +467,10 @@ class DataStreamWriter:
     partitionBy.__doc__ = PySparkDataStreamWriter.partitionBy.__doc__
 
     @overload
-    def clusterBy(self, *cols: str) -> "DataStreamWriter":
-        ...
+    def clusterBy(self, *cols: str) -> "DataStreamWriter": ...
 
     @overload
-    def clusterBy(self, __cols: List[str]) -> "DataStreamWriter":
-        ...
+    def clusterBy(self, __cols: List[str]) -> "DataStreamWriter": ...
 
     def clusterBy(self, *cols: str) -> "DataStreamWriter":  # type: ignore[misc]
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
@@ -499,24 +495,19 @@ class DataStreamWriter:
     queryName.__doc__ = PySparkDataStreamWriter.queryName.__doc__
 
     @overload
-    def trigger(self, *, processingTime: str) -> "DataStreamWriter":
-        ...
+    def trigger(self, *, processingTime: str) -> "DataStreamWriter": ...
 
     @overload
-    def trigger(self, *, once: bool) -> "DataStreamWriter":
-        ...
+    def trigger(self, *, once: bool) -> "DataStreamWriter": ...
 
     @overload
-    def trigger(self, *, continuous: str) -> "DataStreamWriter":
-        ...
+    def trigger(self, *, continuous: str) -> "DataStreamWriter": ...
 
     @overload
-    def trigger(self, *, availableNow: bool) -> "DataStreamWriter":
-        ...
+    def trigger(self, *, availableNow: bool) -> "DataStreamWriter": ...
 
     @overload
-    def trigger(self, *, realTime: str) -> "DataStreamWriter":
-        ...
+    def trigger(self, *, realTime: str) -> "DataStreamWriter": ...
 
     def trigger(
         self,
@@ -588,12 +579,10 @@ class DataStreamWriter:
     trigger.__doc__ = PySparkDataStreamWriter.trigger.__doc__
 
     @overload
-    def foreach(self, f: Callable[[Row], None]) -> "DataStreamWriter":
-        ...
+    def foreach(self, f: Callable[[Row], None]) -> "DataStreamWriter": ...
 
     @overload
-    def foreach(self, f: "SupportsProcess") -> "DataStreamWriter":
-        ...
+    def foreach(self, f: "SupportsProcess") -> "DataStreamWriter": ...
 
     def foreach(self, f: Union[Callable[[Row], None], "SupportsProcess"]) -> "DataStreamWriter":
         from pyspark.serializers import CPickleSerializer, AutoBatchedSerializer
@@ -656,7 +645,7 @@ class DataStreamWriter:
             self._write_proto.table_name = tableName
 
         cmd = self._write_stream.command(self._session.client)
-        (_, properties, _) = self._session.client.execute_command(cmd)
+        _, properties, _ = self._session.client.execute_command(cmd)
 
         start_result = cast(
             pb2.WriteStreamOperationStartResult, properties["write_stream_operation_start_result"]
@@ -736,7 +725,7 @@ def _test() -> None:
         .getOrCreate()
     )
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.connect.streaming.readwriter,
         globs=globs,
         optionflags=doctest.ELLIPSIS

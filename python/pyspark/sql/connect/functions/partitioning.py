@@ -22,7 +22,6 @@ from pyspark.sql.column import Column
 from pyspark.sql.connect.functions.builtin import _to_col, _invoke_function_over_columns
 from pyspark.sql.connect.functions.builtin import lit, _invoke_function
 
-
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName
 
@@ -90,7 +89,7 @@ def _test() -> None:
         .getOrCreate()
     )
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.connect.functions.partitioning,
         globs=globs,
         optionflags=doctest.ELLIPSIS
