@@ -807,8 +807,6 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
     }
   } // End of foreach loop for changelog checkpointing dimension
 
-  // TODO: Add a V4 stream-stream join test similar to "SPARK-54419: stream-stream joinV3".
-
   test("internalOnlyReadAllColumnFamilies should fail with HDFS-backed state store") {
     withTempDir { tempDir =>
       withSQLConf(
