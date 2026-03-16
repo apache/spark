@@ -57,7 +57,7 @@ class _HandleState:
 class _HandleStateEnumTypeWrapper(
     google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_HandleState.ValueType],
     builtins.type,
-):  # noqa: F821
+):
     DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
     PRE_INIT: _HandleState.ValueType  # 0
     CREATED: _HandleState.ValueType  # 1
@@ -76,6 +76,7 @@ TIMER_PROCESSED: HandleState.ValueType  # 4
 CLOSED: HandleState.ValueType  # 5
 global___HandleState = HandleState
 
+@typing.final
 class StateRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -108,7 +109,7 @@ class StateRequest(google.protobuf.message.Message):
     ) -> None: ...
     def HasField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "implicitGroupingKeyRequest",
             b"implicitGroupingKeyRequest",
             "method",
@@ -125,7 +126,7 @@ class StateRequest(google.protobuf.message.Message):
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "implicitGroupingKeyRequest",
             b"implicitGroupingKeyRequest",
             "method",
@@ -142,8 +143,8 @@ class StateRequest(google.protobuf.message.Message):
             b"version",
         ],
     ) -> None: ...
-    def WhichOneof(self, oneof_group: typing_extensions.Literal["method", b"method"]) -> (
-        typing_extensions.Literal[
+    def WhichOneof(self, oneof_group: typing.Literal["method", b"method"]) -> (
+        typing.Literal[
             "statefulProcessorCall",
             "stateVariableRequest",
             "implicitGroupingKeyRequest",
@@ -155,6 +156,7 @@ class StateRequest(google.protobuf.message.Message):
 
 global___StateRequest = StateRequest
 
+@typing.final
 class StateResponse(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -173,13 +175,14 @@ class StateResponse(google.protobuf.message.Message):
     ) -> None: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "errorMessage", b"errorMessage", "statusCode", b"statusCode", "value", b"value"
         ],
     ) -> None: ...
 
 global___StateResponse = StateResponse
 
+@typing.final
 class StateResponseWithLongTypeVal(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -198,13 +201,14 @@ class StateResponseWithLongTypeVal(google.protobuf.message.Message):
     ) -> None: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "errorMessage", b"errorMessage", "statusCode", b"statusCode", "value", b"value"
         ],
     ) -> None: ...
 
 global___StateResponseWithLongTypeVal = StateResponseWithLongTypeVal
 
+@typing.final
 class StateResponseWithStringTypeVal(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -223,13 +227,14 @@ class StateResponseWithStringTypeVal(google.protobuf.message.Message):
     ) -> None: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "errorMessage", b"errorMessage", "statusCode", b"statusCode", "value", b"value"
         ],
     ) -> None: ...
 
 global___StateResponseWithStringTypeVal = StateResponseWithStringTypeVal
 
+@typing.final
 class StateResponseWithListGet(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -239,11 +244,11 @@ class StateResponseWithListGet(google.protobuf.message.Message):
     REQUIRENEXTFETCH_FIELD_NUMBER: builtins.int
     statusCode: builtins.int
     errorMessage: builtins.str
+    requireNextFetch: builtins.bool
     @property
     def value(
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]: ...
-    requireNextFetch: builtins.bool
     def __init__(
         self,
         *,
@@ -254,7 +259,7 @@ class StateResponseWithListGet(google.protobuf.message.Message):
     ) -> None: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "errorMessage",
             b"errorMessage",
             "requireNextFetch",
@@ -268,6 +273,7 @@ class StateResponseWithListGet(google.protobuf.message.Message):
 
 global___StateResponseWithListGet = StateResponseWithListGet
 
+@typing.final
 class StateResponseWithMapKeysOrValues(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -277,11 +283,11 @@ class StateResponseWithMapKeysOrValues(google.protobuf.message.Message):
     REQUIRENEXTFETCH_FIELD_NUMBER: builtins.int
     statusCode: builtins.int
     errorMessage: builtins.str
+    requireNextFetch: builtins.bool
     @property
     def value(
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]: ...
-    requireNextFetch: builtins.bool
     def __init__(
         self,
         *,
@@ -292,7 +298,7 @@ class StateResponseWithMapKeysOrValues(google.protobuf.message.Message):
     ) -> None: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "errorMessage",
             b"errorMessage",
             "requireNextFetch",
@@ -306,6 +312,7 @@ class StateResponseWithMapKeysOrValues(google.protobuf.message.Message):
 
 global___StateResponseWithMapKeysOrValues = StateResponseWithMapKeysOrValues
 
+@typing.final
 class KeyAndValuePair(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -319,12 +326,11 @@ class KeyAndValuePair(google.protobuf.message.Message):
         key: builtins.bytes = ...,
         value: builtins.bytes = ...,
     ) -> None: ...
-    def ClearField(
-        self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
-    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["key", b"key", "value", b"value"]) -> None: ...
 
 global___KeyAndValuePair = KeyAndValuePair
 
+@typing.final
 class StateResponseWithMapIterator(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -334,13 +340,13 @@ class StateResponseWithMapIterator(google.protobuf.message.Message):
     REQUIRENEXTFETCH_FIELD_NUMBER: builtins.int
     statusCode: builtins.int
     errorMessage: builtins.str
+    requireNextFetch: builtins.bool
     @property
     def kvPair(
         self,
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
         global___KeyAndValuePair
     ]: ...
-    requireNextFetch: builtins.bool
     def __init__(
         self,
         *,
@@ -351,7 +357,7 @@ class StateResponseWithMapIterator(google.protobuf.message.Message):
     ) -> None: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "errorMessage",
             b"errorMessage",
             "kvPair",
@@ -365,6 +371,7 @@ class StateResponseWithMapIterator(google.protobuf.message.Message):
 
 global___StateResponseWithMapIterator = StateResponseWithMapIterator
 
+@typing.final
 class TimerInfo(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -379,20 +386,19 @@ class TimerInfo(google.protobuf.message.Message):
         timestampMs: builtins.int = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing_extensions.Literal["_key", b"_key", "key", b"key"]
+        self, field_name: typing.Literal["_key", b"_key", "key", b"key"]
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal[
-            "_key", b"_key", "key", b"key", "timestampMs", b"timestampMs"
-        ],
+        field_name: typing.Literal["_key", b"_key", "key", b"key", "timestampMs", b"timestampMs"],
     ) -> None: ...
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_key", b"_key"]
-    ) -> typing_extensions.Literal["key"] | None: ...
+        self, oneof_group: typing.Literal["_key", b"_key"]
+    ) -> typing.Literal["key"] | None: ...
 
 global___TimerInfo = TimerInfo
 
+@typing.final
 class StateResponseWithTimer(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -402,13 +408,13 @@ class StateResponseWithTimer(google.protobuf.message.Message):
     REQUIRENEXTFETCH_FIELD_NUMBER: builtins.int
     statusCode: builtins.int
     errorMessage: builtins.str
+    requireNextFetch: builtins.bool
     @property
     def timer(
         self,
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
         global___TimerInfo
     ]: ...
-    requireNextFetch: builtins.bool
     def __init__(
         self,
         *,
@@ -419,7 +425,7 @@ class StateResponseWithTimer(google.protobuf.message.Message):
     ) -> None: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "errorMessage",
             b"errorMessage",
             "requireNextFetch",
@@ -433,6 +439,7 @@ class StateResponseWithTimer(google.protobuf.message.Message):
 
 global___StateResponseWithTimer = StateResponseWithTimer
 
+@typing.final
 class StatefulProcessorCall(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -466,7 +473,7 @@ class StatefulProcessorCall(google.protobuf.message.Message):
     ) -> None: ...
     def HasField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "deleteIfExists",
             b"deleteIfExists",
             "getListState",
@@ -485,7 +492,7 @@ class StatefulProcessorCall(google.protobuf.message.Message):
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "deleteIfExists",
             b"deleteIfExists",
             "getListState",
@@ -502,8 +509,8 @@ class StatefulProcessorCall(google.protobuf.message.Message):
             b"timerStateCall",
         ],
     ) -> None: ...
-    def WhichOneof(self, oneof_group: typing_extensions.Literal["method", b"method"]) -> (
-        typing_extensions.Literal[
+    def WhichOneof(self, oneof_group: typing.Literal["method", b"method"]) -> (
+        typing.Literal[
             "setHandleState",
             "getValueState",
             "getListState",
@@ -516,6 +523,7 @@ class StatefulProcessorCall(google.protobuf.message.Message):
 
 global___StatefulProcessorCall = StatefulProcessorCall
 
+@typing.final
 class StateVariableRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -537,7 +545,7 @@ class StateVariableRequest(google.protobuf.message.Message):
     ) -> None: ...
     def HasField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "listStateCall",
             b"listStateCall",
             "mapStateCall",
@@ -550,7 +558,7 @@ class StateVariableRequest(google.protobuf.message.Message):
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "listStateCall",
             b"listStateCall",
             "mapStateCall",
@@ -562,11 +570,12 @@ class StateVariableRequest(google.protobuf.message.Message):
         ],
     ) -> None: ...
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["method", b"method"]
-    ) -> typing_extensions.Literal["valueStateCall", "listStateCall", "mapStateCall"] | None: ...
+        self, oneof_group: typing.Literal["method", b"method"]
+    ) -> typing.Literal["valueStateCall", "listStateCall", "mapStateCall"] | None: ...
 
 global___StateVariableRequest = StateVariableRequest
 
+@typing.final
 class ImplicitGroupingKeyRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -584,7 +593,7 @@ class ImplicitGroupingKeyRequest(google.protobuf.message.Message):
     ) -> None: ...
     def HasField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "method",
             b"method",
             "removeImplicitKey",
@@ -595,7 +604,7 @@ class ImplicitGroupingKeyRequest(google.protobuf.message.Message):
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "method",
             b"method",
             "removeImplicitKey",
@@ -605,11 +614,12 @@ class ImplicitGroupingKeyRequest(google.protobuf.message.Message):
         ],
     ) -> None: ...
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["method", b"method"]
-    ) -> typing_extensions.Literal["setImplicitKey", "removeImplicitKey"] | None: ...
+        self, oneof_group: typing.Literal["method", b"method"]
+    ) -> typing.Literal["setImplicitKey", "removeImplicitKey"] | None: ...
 
 global___ImplicitGroupingKeyRequest = ImplicitGroupingKeyRequest
 
+@typing.final
 class TimerRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -627,7 +637,7 @@ class TimerRequest(google.protobuf.message.Message):
     ) -> None: ...
     def HasField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "expiryTimerRequest",
             b"expiryTimerRequest",
             "method",
@@ -638,7 +648,7 @@ class TimerRequest(google.protobuf.message.Message):
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "expiryTimerRequest",
             b"expiryTimerRequest",
             "method",
@@ -648,11 +658,12 @@ class TimerRequest(google.protobuf.message.Message):
         ],
     ) -> None: ...
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["method", b"method"]
-    ) -> typing_extensions.Literal["timerValueRequest", "expiryTimerRequest"] | None: ...
+        self, oneof_group: typing.Literal["method", b"method"]
+    ) -> typing.Literal["timerValueRequest", "expiryTimerRequest"] | None: ...
 
 global___TimerRequest = TimerRequest
 
+@typing.final
 class TimerValueRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -670,7 +681,7 @@ class TimerValueRequest(google.protobuf.message.Message):
     ) -> None: ...
     def HasField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "getProcessingTimer",
             b"getProcessingTimer",
             "getWatermark",
@@ -681,7 +692,7 @@ class TimerValueRequest(google.protobuf.message.Message):
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "getProcessingTimer",
             b"getProcessingTimer",
             "getWatermark",
@@ -691,11 +702,12 @@ class TimerValueRequest(google.protobuf.message.Message):
         ],
     ) -> None: ...
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["method", b"method"]
-    ) -> typing_extensions.Literal["getProcessingTimer", "getWatermark"] | None: ...
+        self, oneof_group: typing.Literal["method", b"method"]
+    ) -> typing.Literal["getProcessingTimer", "getWatermark"] | None: ...
 
 global___TimerValueRequest = TimerValueRequest
 
+@typing.final
 class ExpiryTimerRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -711,13 +723,14 @@ class ExpiryTimerRequest(google.protobuf.message.Message):
     ) -> None: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "expiryTimestampMs", b"expiryTimestampMs", "iteratorId", b"iteratorId"
         ],
     ) -> None: ...
 
 global___ExpiryTimerRequest = ExpiryTimerRequest
 
+@typing.final
 class GetProcessingTime(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -727,6 +740,7 @@ class GetProcessingTime(google.protobuf.message.Message):
 
 global___GetProcessingTime = GetProcessingTime
 
+@typing.final
 class GetWatermark(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -736,6 +750,7 @@ class GetWatermark(google.protobuf.message.Message):
 
 global___GetWatermark = GetWatermark
 
+@typing.final
 class UtilsRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -749,22 +764,19 @@ class UtilsRequest(google.protobuf.message.Message):
     ) -> None: ...
     def HasField(
         self,
-        field_name: typing_extensions.Literal[
-            "method", b"method", "parseStringSchema", b"parseStringSchema"
-        ],
+        field_name: typing.Literal["method", b"method", "parseStringSchema", b"parseStringSchema"],
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal[
-            "method", b"method", "parseStringSchema", b"parseStringSchema"
-        ],
+        field_name: typing.Literal["method", b"method", "parseStringSchema", b"parseStringSchema"],
     ) -> None: ...
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["method", b"method"]
-    ) -> typing_extensions.Literal["parseStringSchema"] | None: ...
+        self, oneof_group: typing.Literal["method", b"method"]
+    ) -> typing.Literal["parseStringSchema"] | None: ...
 
 global___UtilsRequest = UtilsRequest
 
+@typing.final
 class ParseStringSchema(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -775,10 +787,11 @@ class ParseStringSchema(google.protobuf.message.Message):
         *,
         schema: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["schema", b"schema"]) -> None: ...
+    def ClearField(self, field_name: typing.Literal["schema", b"schema"]) -> None: ...
 
 global___ParseStringSchema = ParseStringSchema
 
+@typing.final
 class StateCallCommand(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -799,10 +812,10 @@ class StateCallCommand(google.protobuf.message.Message):
         mapStateValueSchema: builtins.str = ...,
         ttl: global___TTLConfig | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing_extensions.Literal["ttl", b"ttl"]) -> builtins.bool: ...
+    def HasField(self, field_name: typing.Literal["ttl", b"ttl"]) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "mapStateValueSchema",
             b"mapStateValueSchema",
             "schema",
@@ -816,6 +829,7 @@ class StateCallCommand(google.protobuf.message.Message):
 
 global___StateCallCommand = StateCallCommand
 
+@typing.final
 class TimerStateCallCommand(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -837,22 +851,23 @@ class TimerStateCallCommand(google.protobuf.message.Message):
     ) -> None: ...
     def HasField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "delete", b"delete", "list", b"list", "method", b"method", "register", b"register"
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "delete", b"delete", "list", b"list", "method", b"method", "register", b"register"
         ],
     ) -> None: ...
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["method", b"method"]
-    ) -> typing_extensions.Literal["register", "delete", "list"] | None: ...
+        self, oneof_group: typing.Literal["method", b"method"]
+    ) -> typing.Literal["register", "delete", "list"] | None: ...
 
 global___TimerStateCallCommand = TimerStateCallCommand
 
+@typing.final
 class ValueStateCall(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -881,7 +896,7 @@ class ValueStateCall(google.protobuf.message.Message):
     ) -> None: ...
     def HasField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "clear",
             b"clear",
             "exists",
@@ -896,7 +911,7 @@ class ValueStateCall(google.protobuf.message.Message):
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "clear",
             b"clear",
             "exists",
@@ -912,11 +927,12 @@ class ValueStateCall(google.protobuf.message.Message):
         ],
     ) -> None: ...
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["method", b"method"]
-    ) -> typing_extensions.Literal["exists", "get", "valueStateUpdate", "clear"] | None: ...
+        self, oneof_group: typing.Literal["method", b"method"]
+    ) -> typing.Literal["exists", "get", "valueStateUpdate", "clear"] | None: ...
 
 global___ValueStateCall = ValueStateCall
 
+@typing.final
 class ListStateCall(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -953,7 +969,7 @@ class ListStateCall(google.protobuf.message.Message):
     ) -> None: ...
     def HasField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "appendList",
             b"appendList",
             "appendValue",
@@ -972,7 +988,7 @@ class ListStateCall(google.protobuf.message.Message):
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "appendList",
             b"appendList",
             "appendValue",
@@ -992,9 +1008,9 @@ class ListStateCall(google.protobuf.message.Message):
         ],
     ) -> None: ...
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["method", b"method"]
+        self, oneof_group: typing.Literal["method", b"method"]
     ) -> (
-        typing_extensions.Literal[
+        typing.Literal[
             "exists", "listStateGet", "listStatePut", "appendValue", "appendList", "clear"
         ]
         | None
@@ -1002,6 +1018,7 @@ class ListStateCall(google.protobuf.message.Message):
 
 global___ListStateCall = ListStateCall
 
+@typing.final
 class MapStateCall(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1050,7 +1067,7 @@ class MapStateCall(google.protobuf.message.Message):
     ) -> None: ...
     def HasField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "clear",
             b"clear",
             "containsKey",
@@ -1075,7 +1092,7 @@ class MapStateCall(google.protobuf.message.Message):
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "clear",
             b"clear",
             "containsKey",
@@ -1100,8 +1117,8 @@ class MapStateCall(google.protobuf.message.Message):
             b"values",
         ],
     ) -> None: ...
-    def WhichOneof(self, oneof_group: typing_extensions.Literal["method", b"method"]) -> (
-        typing_extensions.Literal[
+    def WhichOneof(self, oneof_group: typing.Literal["method", b"method"]) -> (
+        typing.Literal[
             "exists",
             "getValue",
             "containsKey",
@@ -1117,6 +1134,7 @@ class MapStateCall(google.protobuf.message.Message):
 
 global___MapStateCall = MapStateCall
 
+@typing.final
 class SetImplicitKey(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1127,10 +1145,11 @@ class SetImplicitKey(google.protobuf.message.Message):
         *,
         key: builtins.bytes = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["key", b"key"]) -> None: ...
+    def ClearField(self, field_name: typing.Literal["key", b"key"]) -> None: ...
 
 global___SetImplicitKey = SetImplicitKey
 
+@typing.final
 class RemoveImplicitKey(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1140,6 +1159,7 @@ class RemoveImplicitKey(google.protobuf.message.Message):
 
 global___RemoveImplicitKey = RemoveImplicitKey
 
+@typing.final
 class Exists(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1149,6 +1169,7 @@ class Exists(google.protobuf.message.Message):
 
 global___Exists = Exists
 
+@typing.final
 class Get(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1158,6 +1179,7 @@ class Get(google.protobuf.message.Message):
 
 global___Get = Get
 
+@typing.final
 class RegisterTimer(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1169,11 +1191,12 @@ class RegisterTimer(google.protobuf.message.Message):
         expiryTimestampMs: builtins.int = ...,
     ) -> None: ...
     def ClearField(
-        self, field_name: typing_extensions.Literal["expiryTimestampMs", b"expiryTimestampMs"]
+        self, field_name: typing.Literal["expiryTimestampMs", b"expiryTimestampMs"]
     ) -> None: ...
 
 global___RegisterTimer = RegisterTimer
 
+@typing.final
 class DeleteTimer(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1185,11 +1208,12 @@ class DeleteTimer(google.protobuf.message.Message):
         expiryTimestampMs: builtins.int = ...,
     ) -> None: ...
     def ClearField(
-        self, field_name: typing_extensions.Literal["expiryTimestampMs", b"expiryTimestampMs"]
+        self, field_name: typing.Literal["expiryTimestampMs", b"expiryTimestampMs"]
     ) -> None: ...
 
 global___DeleteTimer = DeleteTimer
 
+@typing.final
 class ListTimers(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1200,12 +1224,11 @@ class ListTimers(google.protobuf.message.Message):
         *,
         iteratorId: builtins.str = ...,
     ) -> None: ...
-    def ClearField(
-        self, field_name: typing_extensions.Literal["iteratorId", b"iteratorId"]
-    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["iteratorId", b"iteratorId"]) -> None: ...
 
 global___ListTimers = ListTimers
 
+@typing.final
 class ValueStateUpdate(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1216,10 +1239,11 @@ class ValueStateUpdate(google.protobuf.message.Message):
         *,
         value: builtins.bytes = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["value", b"value"]) -> None: ...
+    def ClearField(self, field_name: typing.Literal["value", b"value"]) -> None: ...
 
 global___ValueStateUpdate = ValueStateUpdate
 
+@typing.final
 class Clear(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1229,6 +1253,7 @@ class Clear(google.protobuf.message.Message):
 
 global___Clear = Clear
 
+@typing.final
 class ListStateGet(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1239,22 +1264,21 @@ class ListStateGet(google.protobuf.message.Message):
         *,
         iteratorId: builtins.str = ...,
     ) -> None: ...
-    def ClearField(
-        self, field_name: typing_extensions.Literal["iteratorId", b"iteratorId"]
-    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["iteratorId", b"iteratorId"]) -> None: ...
 
 global___ListStateGet = ListStateGet
 
+@typing.final
 class ListStatePut(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     VALUE_FIELD_NUMBER: builtins.int
     FETCHWITHARROW_FIELD_NUMBER: builtins.int
+    fetchWithArrow: builtins.bool
     @property
     def value(
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]: ...
-    fetchWithArrow: builtins.bool
     def __init__(
         self,
         *,
@@ -1262,14 +1286,12 @@ class ListStatePut(google.protobuf.message.Message):
         fetchWithArrow: builtins.bool = ...,
     ) -> None: ...
     def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "fetchWithArrow", b"fetchWithArrow", "value", b"value"
-        ],
+        self, field_name: typing.Literal["fetchWithArrow", b"fetchWithArrow", "value", b"value"]
     ) -> None: ...
 
 global___ListStatePut = ListStatePut
 
+@typing.final
 class AppendValue(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1280,20 +1302,21 @@ class AppendValue(google.protobuf.message.Message):
         *,
         value: builtins.bytes = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["value", b"value"]) -> None: ...
+    def ClearField(self, field_name: typing.Literal["value", b"value"]) -> None: ...
 
 global___AppendValue = AppendValue
 
+@typing.final
 class AppendList(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     VALUE_FIELD_NUMBER: builtins.int
     FETCHWITHARROW_FIELD_NUMBER: builtins.int
+    fetchWithArrow: builtins.bool
     @property
     def value(
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]: ...
-    fetchWithArrow: builtins.bool
     def __init__(
         self,
         *,
@@ -1301,14 +1324,12 @@ class AppendList(google.protobuf.message.Message):
         fetchWithArrow: builtins.bool = ...,
     ) -> None: ...
     def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "fetchWithArrow", b"fetchWithArrow", "value", b"value"
-        ],
+        self, field_name: typing.Literal["fetchWithArrow", b"fetchWithArrow", "value", b"value"]
     ) -> None: ...
 
 global___AppendList = AppendList
 
+@typing.final
 class GetValue(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1319,10 +1340,11 @@ class GetValue(google.protobuf.message.Message):
         *,
         userKey: builtins.bytes = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["userKey", b"userKey"]) -> None: ...
+    def ClearField(self, field_name: typing.Literal["userKey", b"userKey"]) -> None: ...
 
 global___GetValue = GetValue
 
+@typing.final
 class ContainsKey(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1333,10 +1355,11 @@ class ContainsKey(google.protobuf.message.Message):
         *,
         userKey: builtins.bytes = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["userKey", b"userKey"]) -> None: ...
+    def ClearField(self, field_name: typing.Literal["userKey", b"userKey"]) -> None: ...
 
 global___ContainsKey = ContainsKey
 
+@typing.final
 class UpdateValue(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1351,11 +1374,12 @@ class UpdateValue(google.protobuf.message.Message):
         value: builtins.bytes = ...,
     ) -> None: ...
     def ClearField(
-        self, field_name: typing_extensions.Literal["userKey", b"userKey", "value", b"value"]
+        self, field_name: typing.Literal["userKey", b"userKey", "value", b"value"]
     ) -> None: ...
 
 global___UpdateValue = UpdateValue
 
+@typing.final
 class Iterator(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1366,12 +1390,11 @@ class Iterator(google.protobuf.message.Message):
         *,
         iteratorId: builtins.str = ...,
     ) -> None: ...
-    def ClearField(
-        self, field_name: typing_extensions.Literal["iteratorId", b"iteratorId"]
-    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["iteratorId", b"iteratorId"]) -> None: ...
 
 global___Iterator = Iterator
 
+@typing.final
 class Keys(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1382,12 +1405,11 @@ class Keys(google.protobuf.message.Message):
         *,
         iteratorId: builtins.str = ...,
     ) -> None: ...
-    def ClearField(
-        self, field_name: typing_extensions.Literal["iteratorId", b"iteratorId"]
-    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["iteratorId", b"iteratorId"]) -> None: ...
 
 global___Keys = Keys
 
+@typing.final
 class Values(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1398,12 +1420,11 @@ class Values(google.protobuf.message.Message):
         *,
         iteratorId: builtins.str = ...,
     ) -> None: ...
-    def ClearField(
-        self, field_name: typing_extensions.Literal["iteratorId", b"iteratorId"]
-    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["iteratorId", b"iteratorId"]) -> None: ...
 
 global___Values = Values
 
+@typing.final
 class RemoveKey(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1414,10 +1435,11 @@ class RemoveKey(google.protobuf.message.Message):
         *,
         userKey: builtins.bytes = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["userKey", b"userKey"]) -> None: ...
+    def ClearField(self, field_name: typing.Literal["userKey", b"userKey"]) -> None: ...
 
 global___RemoveKey = RemoveKey
 
+@typing.final
 class SetHandleState(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1428,10 +1450,11 @@ class SetHandleState(google.protobuf.message.Message):
         *,
         state: global___HandleState.ValueType = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["state", b"state"]) -> None: ...
+    def ClearField(self, field_name: typing.Literal["state", b"state"]) -> None: ...
 
 global___SetHandleState = SetHandleState
 
+@typing.final
 class TTLConfig(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1442,8 +1465,6 @@ class TTLConfig(google.protobuf.message.Message):
         *,
         durationMs: builtins.int = ...,
     ) -> None: ...
-    def ClearField(
-        self, field_name: typing_extensions.Literal["durationMs", b"durationMs"]
-    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["durationMs", b"durationMs"]) -> None: ...
 
 global___TTLConfig = TTLConfig
