@@ -227,7 +227,8 @@ private[spark] class TypedConfigBuilder[T](
         val transformedDefault = converter(stringConverter(default))
         val entry = new ConfigEntryWithDefault[T](parent.key, parent._prependedKey,
           parent._prependSeparator, parent._alternatives, transformedDefault, converter,
-          stringConverter, parent._doc, parent._public, parent._version, parent._bindingPolicy)
+          stringConverter, parent._doc, parent._public, parent._version,
+          parent._bindingPolicy)
         parent._onCreate.foreach(_ (entry))
         entry
     }

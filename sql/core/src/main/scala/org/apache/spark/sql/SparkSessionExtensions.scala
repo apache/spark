@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import scala.collection.mutable
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Unstable}
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
@@ -363,14 +364,37 @@ class SparkSessionExtensions {
 
   private[this] val injectedTableFunctions = mutable.Buffer.empty[TableFunctionDescription]
 
+  /**
+   * Normalize an extension function identifier to a fully qualified one for registration.
+   * Accepts: unqualified (1-part), fully qualified (3-part), or 2-part system names
+   * (builtin.func, session.func). Rejects other partially qualified names.
+   */
+  private def fullyQualifiedFunctionIdentifier(name: FunctionIdentifier): FunctionIdentifier = {
+    (name.catalog.isEmpty, name.database.isEmpty) match {
+      case (true, true) =>
+        // Unqualified: register in system.builtin
+        FunctionRegistry.builtinFunctionIdentifier(name.funcName)
+      case (false, false) =>
+        // Fully qualified: use as-is
+        name
+      case (true, false) =>
+        // 2-part (e.g. builtin.func or session.func): qualify with system catalog
+        new FunctionIdentifier(
+          name.funcName,
+          name.database,
+          Some(CatalogManager.SYSTEM_CATALOG_NAME))
+      case (false, true) =>
+        // 2-part with catalog but no database: invalid
+        throw new IllegalArgumentException(
+          s"Extension function identifier must be unqualified (funcName), fully qualified " +
+            s"(catalog.database.funcName), or 2-part system (builtin.funcName / session.funcName). " +
+            s"Got invalid partial qualification (catalog without database): $name")
+    }
+  }
+
   private[sql] def registerFunctions(functionRegistry: FunctionRegistry) = {
     for ((name, expressionInfo, function) <- injectedFunctions) {
-      // Extension functions with unqualified name are in the builtin namespace (3-part key)
-      val ident = if (name.database.isEmpty && name.catalog.isEmpty) {
-        FunctionRegistry.builtinFunctionIdentifier(name.funcName)
-      } else {
-        name
-      }
+      val ident = fullyQualifiedFunctionIdentifier(name)
       functionRegistry.registerFunction(ident, expressionInfo, function)
     }
     functionRegistry
@@ -378,11 +402,7 @@ class SparkSessionExtensions {
 
   private[sql] def registerTableFunctions(tableFunctionRegistry: TableFunctionRegistry) = {
     for ((name, expressionInfo, function) <- injectedTableFunctions) {
-      val ident = if (name.database.isEmpty && name.catalog.isEmpty) {
-        FunctionRegistry.builtinFunctionIdentifier(name.funcName)
-      } else {
-        name
-      }
+      val ident = fullyQualifiedFunctionIdentifier(name)
       tableFunctionRegistry.registerFunction(ident, expressionInfo, function)
     }
     tableFunctionRegistry
