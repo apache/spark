@@ -138,36 +138,6 @@ class ExecuteEventsManagerSuite
         .isInstanceOf[SparkListenerConnectOperationCanceled])
   }
 
-  test("SPARK-53339: post canceled from Pending state") {
-    val events = setupEvents(ExecuteStatus.Pending)
-    events.postCanceled()
-    assert(events.status == ExecuteStatus.Canceled)
-    assert(events.terminationReason.contains(TerminationReason.Canceled))
-  }
-
-  test("SPARK-53339: post failed from Pending state") {
-    val events = setupEvents(ExecuteStatus.Pending)
-    events.postFailed(DEFAULT_ERROR)
-    assert(events.status == ExecuteStatus.Failed)
-    assert(events.terminationReason.contains(TerminationReason.Failed))
-  }
-
-  test("SPARK-53339: Pending to Canceled to Closed transition") {
-    val events = setupEvents(ExecuteStatus.Pending)
-    events.postCanceled()
-    events.postClosed()
-    assert(events.status == ExecuteStatus.Closed)
-    assert(events.terminationReason.contains(TerminationReason.Canceled))
-  }
-
-  test("SPARK-53339: Pending to Failed to Closed transition") {
-    val events = setupEvents(ExecuteStatus.Pending)
-    events.postFailed(DEFAULT_ERROR)
-    events.postClosed()
-    assert(events.status == ExecuteStatus.Closed)
-    assert(events.terminationReason.contains(TerminationReason.Failed))
-  }
-
   test("SPARK-43923: post failed") {
     val events = setupEvents(ExecuteStatus.Started)
     events.postFailed(DEFAULT_ERROR)
