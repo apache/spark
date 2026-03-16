@@ -86,9 +86,7 @@ class BlockPartition(InputPartition):
         self.end_block = end_block
 
 
-class BlockchainStreamReader(
-    DataSourceStreamReader, SupportsTriggerAvailableNow
-):
+class BlockchainStreamReader(DataSourceStreamReader, SupportsTriggerAvailableNow):
     """
     A streaming reader that simulates reading blockchain blocks.
 
@@ -172,10 +170,7 @@ class BlockchainStreamReader(
         # For demo, we simulate having 20 blocks to process at query start
         self._trigger_available_now_target = 20
         target = self._trigger_available_now_target
-        print(
-            f"[prepareForTriggerAvailableNow] Captured target offset: "
-            f"block {target}"
-        )
+        print(f"[prepareForTriggerAvailableNow] Captured target offset: " f"block {target}")
         print(
             f"[prepareForTriggerAvailableNow] Will stop at block {target}, "
             f"even if chain grows beyond it"
@@ -209,9 +204,7 @@ class BlockchainStreamReader(
 
         for block_num in range(partition.start_block, partition.end_block):
             # Generate deterministic "hash" for reproducibility
-            block_hash = hashlib.sha256(
-                str(block_num).encode()
-            ).hexdigest()[:16]
+            block_hash = hashlib.sha256(str(block_num).encode()).hexdigest()[:16]
             # Simulated timestamp (increasing with block number)
             timestamp = 1700000000 + (block_num * 12)
             # Simulated transaction count
@@ -228,10 +221,7 @@ class BlockchainDataSource(DataSource):
         return "blockchain_example"
 
     def schema(self) -> str:
-        return (
-            "block_number INT, block_hash STRING, "
-            "timestamp LONG, transaction_count INT"
-        )
+        return "block_number INT, block_hash STRING, " "timestamp LONG, transaction_count INT"
 
     def streamReader(self, schema: StructType) -> DataSourceStreamReader:
         return BlockchainStreamReader()
@@ -296,15 +286,9 @@ def run_with_trigger_available_now(spark: SparkSession) -> None:
     print("\n" + "=" * 70)
     print("EXAMPLE 2: TRIGGER.AVAILABLENOW with SupportsTriggerAvailableNow")
     print("=" * 70)
-    print(
-        "Expected: prepareForTriggerAvailableNow() "
-        "captures block 20 as target"
-    )
+    print("Expected: prepareForTriggerAvailableNow() " "captures block 20 as target")
     print("          Process all blocks up to block 20, then stop")
-    print(
-        "          Ignore blocks beyond 20 even though "
-        "chain has 100 blocks"
-    )
+    print("          Ignore blocks beyond 20 even though " "chain has 100 blocks")
     print()
 
     df = spark.readStream.format("blockchain_example").load()
@@ -332,10 +316,7 @@ def run_with_trigger_available_now(spark: SparkSession) -> None:
 
     # Trigger.AvailableNow - will call prepareForTriggerAvailableNow()
     print("Starting query with Trigger.AvailableNow...")
-    query = df.writeStream \
-        .trigger(availableNow=True) \
-        .foreachBatch(process_batch) \
-        .start()
+    query = df.writeStream.trigger(availableNow=True).foreachBatch(process_batch).start()
 
     # Wait for completion - stops automatically
     query.awaitTermination()
@@ -346,22 +327,14 @@ def run_with_trigger_available_now(spark: SparkSession) -> None:
         first = blocks_processed[0]["block_number"]
         last = blocks_processed[-1]["block_number"]
         print(f"Block range: {first} to {last}")
-        print(
-            f"\n✓ Stopped at block {last} "
-            f"(target from prepareForTriggerAvailableNow)"
-        )
-        print(
-            f"✓ Did NOT process blocks beyond {last}, "
-            f"even though chain has 100 blocks"
-        )
+        print(f"\n✓ Stopped at block {last} " f"(target from prepareForTriggerAvailableNow)")
+        print(f"✓ Did NOT process blocks beyond {last}, " f"even though chain has 100 blocks")
         print("✓ Demonstrates deterministic catch-up processing")
 
 
 def main() -> None:
     """Run blockchain streaming examples with both trigger types."""
-    spark: SparkSession = SparkSession.builder \
-        .appName("BlockchainAdmissionControl") \
-        .getOrCreate()
+    spark: SparkSession = SparkSession.builder.appName("BlockchainAdmissionControl").getOrCreate()
 
     # Register custom data source
     spark.dataSource.register(BlockchainDataSource)
@@ -373,10 +346,7 @@ def main() -> None:
     print("deterministic batch processing of blockchain data.")
     print("\nData Source: Simulated blockchain with 100 blocks")
     print("Default Read Limit: ReadMaxRows(2)")
-    print(
-        "AvailableNow Target: First 20 blocks "
-        "(set in prepareForTriggerAvailableNow)"
-    )
+    print("AvailableNow Target: First 20 blocks " "(set in prepareForTriggerAvailableNow)")
 
     # Run both examples
     run_with_default_trigger(spark)
@@ -386,14 +356,8 @@ def main() -> None:
     print("KEY TAKEAWAYS")
     print("=" * 70)
     print("1. DEFAULT TRIGGER: Processes 2 blocks/batch continuously")
-    print(
-        "2. TRIGGER.AVAILABLENOW: Calls "
-        "prepareForTriggerAvailableNow() at start"
-    )
-    print(
-        "3. Target offset (block 20) captured and enforced in "
-        "latestOffset()"
-    )
+    print("2. TRIGGER.AVAILABLENOW: Calls " "prepareForTriggerAvailableNow() at start")
+    print("3. Target offset (block 20) captured and enforced in " "latestOffset()")
     print("4. Query stops at block 20, ignoring blocks 21-100")
     print("5. Useful for catch-up processing with deterministic boundaries")
     print("=" * 70)
