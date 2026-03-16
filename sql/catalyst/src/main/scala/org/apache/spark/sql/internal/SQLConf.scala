@@ -2841,7 +2841,7 @@ object SQLConf {
       )
       .version("4.2.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val STATEFUL_SHUFFLE_PARTITIONS_INTERNAL =
     buildConf("spark.sql.streaming.internal.stateStore.partitions")
