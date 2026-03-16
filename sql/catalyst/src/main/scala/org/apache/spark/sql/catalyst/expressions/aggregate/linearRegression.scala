@@ -143,7 +143,7 @@ case class RegrAvgY(
   group = "agg_funcs",
   since = "3.3.0")
 // scalastyle:on line.size.limit
-case class RegrR2(y: Expression, x: Expression) extends PearsonCorrelation(y, x, true) {
+case class RegrR2(y: Expression, x: Expression) extends PearsonCorrelation(x, y, true) {
   override def prettyName: String = "regr_r2"
   override val evaluateExpression: Expression = {
     val corr = ck / sqrt(xMk * yMk)
