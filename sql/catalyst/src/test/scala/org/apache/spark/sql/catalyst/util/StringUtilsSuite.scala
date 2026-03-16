@@ -53,6 +53,12 @@ class StringUtilsSuite extends SparkFunSuite with SQLHelper {
     assert(escapeLikeRegex("a_b", '\\') === expectedEscapedStrSeven)
     assert(escapeLikeRegex("a_b", '/') === expectedEscapedStrSeven)
     assert(escapeLikeRegex("a_b", '\"') === expectedEscapedStrSeven)
+
+    // scalastyle:off nonascii
+    assert(escapeLikeRegex("😀", '\\') === "(?s)\\Q😀\\E")
+    assert(escapeLikeRegex("_😀%", '\\') === "(?s).\\Q😀\\E.*")
+    assert(escapeLikeRegex("😀😇🥑", '\\') === "(?s)\\Q😀\\E\\Q😇\\E\\Q🥑\\E")
+    // scalastyle:on nonascii
   }
 
   test("filter pattern") {
