@@ -36,45 +36,49 @@ object ArraySetLikeBenchmark extends SqlBasedBenchmark {
   private val N = 1000L
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    val arrayDistinctBenchmark = new Benchmark("Array Distinct", 1000, output = output)
+    val range1 = lit((1 to 20000).map(x => Array(x, x)).toArray)
+    val range2 = lit((10001 to 30000).map(x => Array(x, x)).toArray)
+
+
+    val arrayDistinctBenchmark = new Benchmark("Array Distinct", N, output = output)
     arrayDistinctBenchmark.addCase("array_distinct") { _ =>
       spark.range(N)
-        .select(concat(sequence(lit(1), lit(10000)), sequence(lit(1), lit(10000))).alias("arr"))
+        .select(concat(range1, range2).alias("arr"))
         .select(array_distinct(col("arr")))
-        .collect()
+        .noop()
     }
     arrayDistinctBenchmark.run()
 
-    val arrayUnionBenchmark = new Benchmark("Array Union", 1000, output = output)
+    val arrayUnionBenchmark = new Benchmark("Array Union", N, output = output)
     arrayUnionBenchmark.addCase("array_union") { _ =>
       spark.range(N)
         .select(
-          sequence(lit(1), lit(10000)).alias("arr1"),
-          sequence(lit(5001), lit(15000)).alias("arr2"))
+          range1.alias("arr1"),
+          range2.alias("arr2"))
         .select(array_union(col("arr1"), col("arr2")))
-        .collect()
+        .noop()
     }
     arrayUnionBenchmark.run()
 
-    val arrayExceptBenchmark = new Benchmark("Array Except", 1000, output = output)
+    val arrayExceptBenchmark = new Benchmark("Array Except", N, output = output)
     arrayExceptBenchmark.addCase("array_except") { _ =>
       spark.range(N)
         .select(
-          sequence(lit(1), lit(10000)).alias("arr1"),
-          sequence(lit(5001), lit(15000)).alias("arr2"))
+          range1.alias("arr1"),
+          range2.alias("arr2"))
         .select(array_except(col("arr1"), col("arr2")))
-        .collect()
+        .noop()
     }
     arrayExceptBenchmark.run()
 
-    val arrayIntersectBenchmark = new Benchmark("Array Intersect", 1000, output = output)
+    val arrayIntersectBenchmark = new Benchmark("Array Intersect", N, output = output)
     arrayIntersectBenchmark.addCase("array_intersect") { _ =>
       spark.range(N)
         .select(
-          sequence(lit(1), lit(10000)).alias("arr1"),
-          sequence(lit(5001), lit(15000)).alias("arr2"))
+          range1.alias("arr1"),
+          range2.alias("arr2"))
         .select(array_intersect(col("arr1"), col("arr2")))
-        .collect()
+        .noop()
     }
     arrayIntersectBenchmark.run()
   }
