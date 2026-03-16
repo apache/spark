@@ -210,11 +210,11 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
   protected val functionBuilders =
     new mutable.HashMap[FunctionIdentifier, (ExpressionInfo, FunctionBuilder)]
 
-  // Resolution of the function name is always case insensitive; database and catalog
-  // are preserved so system.session.foo and spark_catalog.session.foo do not collide.
-  // Unqualified (1-part) lookups resolve to the builtin 3-part key so callers using
-  // FunctionIdentifier("time") find functions registered as system.builtin.time.
-  // 2-part session.func (database=session, no catalog) resolves to the temp 3-part key.
+  // Function name resolution is case-insensitive; database and catalog are preserved so
+  // system.session.foo and spark_catalog.session.foo do not collide. Unqualified (1-part)
+  // lookups resolve to the builtin 3-part key so that callers using FunctionIdentifier("time")
+  // find functions registered as system.builtin.time. A 2-part name with database=session
+  // and no catalog resolves to the temp 3-part key.
   private def normalizeFuncName(name: FunctionIdentifier): FunctionIdentifier = {
     if (name.database.isEmpty && name.catalog.isEmpty) {
       FunctionRegistry.builtinFunctionIdentifier(name.funcName)
@@ -346,7 +346,7 @@ object FunctionRegistry {
 
   type FunctionBuilder = Seq[Expression] => Expression
 
-  /** 3-part identifier for a builtin function: system.builtin.funcName */
+  /** Returns the 3-part identifier for a builtin function: system.builtin.funcName. */
   private[sql] def builtinFunctionIdentifier(name: String): FunctionIdentifier =
     new FunctionIdentifier(
       name.toLowerCase(Locale.ROOT),
@@ -1036,7 +1036,8 @@ object FunctionRegistry {
     } else {
       builder
     }
-    // Use builtin identifier so unqualified lookups (normalized to system.builtin.name) find them
+    // Internal functions are registered with the builtin identifier so that unqualified
+    // lookups, which normalize to system.builtin.name, find them.
     internal.internalRegisterFunction(builtinFunctionIdentifier(name), info, newBuilder)
   }
 

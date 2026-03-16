@@ -365,26 +365,26 @@ class SparkSessionExtensions {
   private[this] val injectedTableFunctions = mutable.Buffer.empty[TableFunctionDescription]
 
   /**
-   * Normalize an extension function identifier to a fully qualified one for registration.
-   * Accepts: unqualified (1-part), fully qualified (3-part), or 2-part system names
-   * (builtin.func, session.func). Rejects other partially qualified names.
+   * Normalizes an extension function identifier to a fully qualified one for registration.
+   * Accepts unqualified (1-part), fully qualified (3-part), or 2-part system names
+   * (builtin.func, session.func). It rejects other partially qualified names.
    */
   private def fullyQualifiedFunctionIdentifier(name: FunctionIdentifier): FunctionIdentifier = {
     (name.catalog.isEmpty, name.database.isEmpty) match {
       case (true, true) =>
-        // Unqualified: register in system.builtin
+        // Unqualified names are registered in system.builtin.
         FunctionRegistry.builtinFunctionIdentifier(name.funcName)
       case (false, false) =>
-        // Fully qualified: use as-is
+        // Fully qualified names are used as-is.
         name
       case (true, false) =>
-        // 2-part (e.g. builtin.func or session.func): qualify with system catalog
-        new FunctionIdentifier(
+        // 2-part names (e.g. builtin.func or session.func) are qualified with the system catalog.
+        FunctionIdentifier(
           name.funcName,
           name.database,
           Some(CatalogManager.SYSTEM_CATALOG_NAME))
       case (false, true) =>
-        // 2-part with catalog but no database: invalid
+        // A 2-part identifier with catalog but no database is invalid.
         throw new IllegalArgumentException(
           s"Extension function identifier must be unqualified (funcName), fully qualified " +
             s"(catalog.database.funcName), or 2-part system (builtin.funcName / session.funcName). " +
@@ -409,9 +409,9 @@ class SparkSessionExtensions {
   }
 
   /**
-  * Injects a custom function into the [[org.apache.spark.sql.catalyst.analysis.FunctionRegistry]]
-  * at runtime for all sessions.
-  */
+   * Injects a custom function into the [[org.apache.spark.sql.catalyst.analysis.FunctionRegistry]]
+   * at runtime for all sessions.
+   */
   def injectFunction(functionDescription: FunctionDescription): Unit = {
     injectedFunctions += functionDescription
   }

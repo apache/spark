@@ -2328,7 +2328,7 @@ class SessionCatalog(
    * session. If not existed, return false.
    */
   def isRegisteredFunction(name: FunctionIdentifier): Boolean = {
-    // Check if it exists as temp (with TEMP_FUNCTION_DB db) or builtin (3-part key) or persistent
+    // Check if the function exists as temp (TEMP_FUNCTION_DB), builtin (3-part key), or persistent.
     if (name.database.isEmpty) {
       val tempIdent = tempFunctionIdentifier(name.funcName)
       val builtinIdent = FunctionRegistry.builtinFunctionIdentifier(name.funcName)
@@ -2345,7 +2345,7 @@ class SessionCatalog(
 
       hasTemp || hasBuiltin
     } else {
-      // Persistent functions are registered with qualified ident (catalog set)
+      // Persistent functions are registered with a qualified identifier (catalog set).
       val qualifiedIdent = qualifyIdentifier(name)
       functionRegistry.functionExists(qualifiedIdent) ||
         tableFunctionRegistry.functionExists(qualifiedIdent)
@@ -2440,9 +2440,9 @@ class SessionCatalog(
   }
 
   /**
-   * Converts 2- or 3-part name parts (system catalog) to a FunctionIdentifier.
-   * Single entry point for resolution: 2-part (builtin.func, session.func) or
-   * 3-part (system.builtin.func, system.session.func).
+   * Converts 2- or 3-part system catalog name parts to a FunctionIdentifier.
+   * This is the single entry point for system resolution: 2-part (builtin.func, session.func)
+   * or 3-part (system.builtin.func, system.session.func).
    */
   private[sql] def identifierFromSystemNameParts(
       nameParts: Seq[String]): Option[FunctionIdentifier] = {
@@ -2467,7 +2467,8 @@ class SessionCatalog(
   }
 
   /**
-   * Look up function metadata by identifier (system catalog). Applies view context for temp.
+   * Looks up function metadata by identifier in the system catalog.
+   * Applies view context for temporary functions.
    */
   def lookupFunctionInfoByIdentifier(
       ident: FunctionIdentifier,
@@ -2482,7 +2483,8 @@ class SessionCatalog(
   }
 
   /**
-   * Resolve scalar function by identifier (system catalog). Applies view context for temp.
+   * Resolves a scalar function by identifier in the system catalog.
+   * Applies view context for temporary functions.
    */
   def resolveScalarFunctionByIdentifier(
       ident: FunctionIdentifier,
@@ -2499,7 +2501,8 @@ class SessionCatalog(
   }
 
   /**
-   * Resolve table function by identifier (system catalog). Applies view context for temp.
+   * Resolves a table function by identifier in the system catalog.
+   * Applies view context for temporary functions.
    */
   def resolveTableFunctionByIdentifier(
       ident: FunctionIdentifier,
@@ -2733,9 +2736,9 @@ class SessionCatalog(
   }
 
   /**
-   * List all built-in and temporary functions with the given pattern.
+   * Lists all built-in and temporary functions matching the given pattern.
    * Builtins are keyed as (funcName, builtin, system); temp as (funcName, session, system).
-   * Pattern is matched against the display name (simple funcName for system catalog) for
+   * The pattern is matched against the display name (simple funcName for system catalog) for
    * backward compatibility with SHOW FUNCTIONS LIKE 'abs'.
    */
   private def listBuiltinAndTempFunctions(pattern: String): Seq[FunctionIdentifier] = {

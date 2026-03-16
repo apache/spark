@@ -85,7 +85,7 @@ class FunctionResolution(
     def ensureThreePart(parts: Seq[String]): Seq[String] =
       if (parts.length == 3) parts
       else if (parts.length == 2) currentCatalogPath.head +: parts
-      else parts  // Safety fallback; valid paths yield 2 or 3 parts before this
+      else parts  // Safety fallback; valid paths yield 2 or 3 parts before this point.
 
     if (nameParts.size == 1) {
       val searchPath = SQLConf.get.resolutionSearchPath(currentCatalogPath)
@@ -93,7 +93,7 @@ class FunctionResolution(
     } else {
       nameParts.size match {
         case 2 if FunctionResolution.sessionNamespaceKind(nameParts).isDefined =>
-          // Partially qualified builtin/session: both candidates as 3-part (catalog.db.func)
+          // Partially qualified builtin/session: produce both candidates as 3-part (catalog.db.func).
           val systemCandidate = CatalogManager.SYSTEM_CATALOG_NAME +: nameParts
           val persistentCandidate = currentCatalogPath.head +: nameParts
           if (SQLConf.get.prioritizeSystemCatalog) {
@@ -102,15 +102,15 @@ class FunctionResolution(
             Seq(persistentCandidate, systemCandidate)
           }
         case 2 if catalogManager.isCatalogRegistered(nameParts(0)) =>
-          // Partially qualified catalog.func: use catalog's default namespace, or empty for
-          // catalogs that register functions at catalog level (e.g. JDBC).
+          // Partially qualified catalog.func: use the catalog's default namespace, or 2-part
+          // for catalogs that register functions at catalog level (e.g. JDBC).
           try {
             val cat = catalogManager.catalog(nameParts(0))
             val defaultNs = cat.defaultNamespace()
             if (defaultNs != null && defaultNs.nonEmpty) {
               Seq(Seq(nameParts(0), defaultNs(0), nameParts(1)))
             } else {
-              // No default namespace: use 2-part so ident has empty namespace
+              // No default namespace; use 2-part so the identifier has an empty namespace.
               Seq(nameParts)
             }
           } catch {
@@ -169,7 +169,8 @@ class FunctionResolution(
 
   def resolveFunction(unresolvedFunc: UnresolvedFunction): Expression = {
     withPosition(unresolvedFunc) {
-      // Internal functions are special; they have precedence if the parser flagged them.
+      // Internal functions resolve via the internal registry when the parser marks them as
+      // internal; they are not resolved via the search path.
       if (unresolvedFunc.isInternal && unresolvedFunc.nameParts.size == 1) {
         val funcIdentifier = FunctionIdentifier(unresolvedFunc.nameParts.head)
         try {
@@ -178,9 +179,10 @@ class FunctionResolution(
           return validateFunction(func, unresolvedFunc.arguments.length, unresolvedFunc)
         } catch {
           case _: NoSuchFunctionException =>
-            // Ignore and try standard resolution
+            // Ignore and try standard resolution.
           case e: AnalysisException if e.getCondition == "UNRESOLVED_ROUTINE" =>
-            // Internal registry throws AnalysisException when function not found; fall through
+            // The internal registry throws AnalysisException when the function is not found;
+            // fall through to standard resolution.
         }
       }
 
