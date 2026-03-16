@@ -21,6 +21,7 @@ import inspect
 import pandas as pd
 import numpy as np
 
+from pyspark.loose_version import LooseVersion
 from pyspark import pandas as ps
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.namespace import _get_index_map, read_delta
@@ -579,7 +580,13 @@ class NamespaceTestsMixin:
         # "coerce", "ignore" and "raise" with non-Series.
         data = ["1", "2", None, "4", "hello"]
         self.assert_eq(pd.to_numeric(data, errors="coerce"), ps.to_numeric(data, errors="coerce"))
-        self.assert_eq(pd.to_numeric(data, errors="ignore"), ps.to_numeric(data, errors="ignore"))
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assert_eq(
+                pd.to_numeric(data, errors="ignore"), ps.to_numeric(data, errors="ignore")
+            )
+        else:
+            with self.assertRaisesRegex(ValueError, "invalid error value specified"):
+                ps.to_numeric(data, errors="ignore")
 
         self.assertRaisesRegex(
             ValueError,
