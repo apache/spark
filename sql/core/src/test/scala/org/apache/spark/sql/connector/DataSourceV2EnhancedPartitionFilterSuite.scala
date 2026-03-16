@@ -22,7 +22,7 @@ import java.util.Locale
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
-import org.apache.spark.sql.catalyst.expressions.{PredicateHelper, ScalaUDF}
+import org.apache.spark.sql.catalyst.expressions.{Expression, In, PredicateHelper, ScalaUDF}
 import org.apache.spark.sql.connector.catalog.BufferedRows
 import org.apache.spark.sql.connector.catalog.InMemoryEnhancedPartitionFilterTable
 import org.apache.spark.sql.connector.catalog.InMemoryTableEnhancedPartitionFilterCatalog
@@ -340,17 +340,19 @@ class DataSourceV2EnhancedPartitionFilterSuite
     }.headOption.getOrElse(fail("Expected a post-scan FilterExec above BatchScanExec"))
 
     val predicates = splitConjunctivePredicates(postScanFilterExec.condition)
-    val udfIndices = predicates.indices.filter(i =>
-      predicates(i).collect { case _: ScalaUDF => true }.nonEmpty)
-    val translatableIndices = predicates.indices.filter(i =>
-      predicates(i).collect { case _: ScalaUDF => true }.isEmpty)
+    // Untranslatable: UDFs and predicates that may be rejected by the scan (e.g. IN)
+    def isUntranslatable(pred: Expression): Boolean =
+      pred.exists(_.isInstanceOf[ScalaUDF]) || pred.exists(_.isInstanceOf[In])
+    val untranslatableIndices = predicates.indices.filter(i => isUntranslatable(predicates(i)))
+    val translatableIndices = predicates.indices.filter(i => !isUntranslatable(predicates(i)))
 
     assert(
-      udfIndices.isEmpty || translatableIndices.isEmpty ||
-        translatableIndices.max < udfIndices.min,
-      s"Translatable filters must appear before untranslatable (UDF) filters in post-scan " +
+      untranslatableIndices.isEmpty || translatableIndices.isEmpty ||
+        translatableIndices.max < untranslatableIndices.min,
+      s"Translatable filters must appear before untranslatable filters in post-scan " +
         s"condition; predicates: ${predicates.mkString(", ")}; " +
-        s"UDF indices: $udfIndices, translatable indices: $translatableIndices")
+        s"untranslatable indices: $untranslatableIndices, translatable indices: " +
+        s"$translatableIndices")
   }
 
   /**
