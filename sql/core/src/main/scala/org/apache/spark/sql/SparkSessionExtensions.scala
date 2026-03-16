@@ -378,7 +378,16 @@ class SparkSessionExtensions {
         // Fully qualified names are used as-is.
         name
       case (true, false) =>
-        // 2-part names (e.g. builtin.func or session.func) are qualified with the system catalog.
+        // 2-part system names (builtin.func, session.func) only; others are invalid.
+        val db = name.database.get
+        if (!db.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE) &&
+            !db.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
+          throw new IllegalArgumentException(
+            s"Extension function identifier must be unqualified (funcName), fully qualified " +
+              s"(catalog.database.funcName), or 2-part system " +
+              s"(builtin.funcName / session.funcName). " +
+              s"Got 2-part with non-system database: $name")
+        }
         FunctionIdentifier(
           name.funcName,
           name.database,

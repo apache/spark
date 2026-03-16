@@ -200,6 +200,7 @@ case class ShowFunctionsCommand(
           case (f, "USER") if showUserFunctions => f.displayNameForShowFunctions
           case (f, "SYSTEM") if showSystemFunctions => f.displayNameForShowFunctions
         }
+        .distinct
     // Hard code "<>", "!=", "between", "case", and "||"
     // for now as there is no corresponding functions.
     // "<>", "!=", "between", "case", and "||" is SystemFunctions,

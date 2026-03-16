@@ -74,12 +74,13 @@ class FunctionResolution(
   }
 
   /**
-   * Produces the ordered list of fully qualified candidate names for resolution.
-   * Every candidate is 3-part (catalog.database.function), assuming search path
-   * entries are catalog.database (2-part).
+   * Produces the ordered list of candidate names for resolution.
+   * Candidates are normally 3-part (catalog.database.function), assuming search path
+   * entries are catalog.database (2-part). A 2-part candidate is returned when a
+   * V2 catalog has no default namespace (handled by downstream expandIdentifier).
    *
    * @param nameParts The function name parts.
-   * @return A sequence of fully qualified 3-part names to attempt resolution with.
+   * @return A sequence of candidate names (usually 3-part) to attempt resolution with.
    */
   private def resolutionCandidates(nameParts: Seq[String]): Seq[Seq[String]] = {
     def ensureThreePart(parts: Seq[String]): Seq[String] =
@@ -103,21 +104,6 @@ class FunctionResolution(
             Seq(systemCandidate, persistentCandidate)
           } else {
             Seq(persistentCandidate, systemCandidate)
-          }
-        case 2 if catalogManager.isCatalogRegistered(nameParts(0)) =>
-          // Partially qualified catalog.func: use the catalog's default namespace, or 2-part
-          // for catalogs that register functions at catalog level (e.g. JDBC).
-          try {
-            val cat = catalogManager.catalog(nameParts(0))
-            val defaultNs = cat.defaultNamespace()
-            if (defaultNs != null && defaultNs.nonEmpty) {
-              Seq(Seq(nameParts(0), defaultNs(0), nameParts(1)))
-            } else {
-              // No default namespace; use 2-part so the identifier has an empty namespace.
-              Seq(nameParts)
-            }
-          } catch {
-            case _: CatalogNotFoundException => Seq(ensureThreePart(nameParts))
           }
         case _ =>
           Seq(ensureThreePart(nameParts))
