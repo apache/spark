@@ -292,7 +292,7 @@ case class EnsureRequirements(
 
   private def ensureOrdering(plan: SparkPlan, distribution: Distribution) = {
     (plan.outputPartitioning, distribution) match {
-      case (p @ KeyGroupedPartitioning(expressions, _, partitionValues, _),
+      case (p @ KeyGroupedPartitioning(expressions, _, partitionValues, _, _),
         d @ OrderedDistribution(ordering)) if p.satisfies(d) =>
         val attrs = expressions.flatMap(_.collectLeaves()).map(_.asInstanceOf[Attribute])
         val partitionOrdering: Ordering[InternalRow] = {
@@ -325,12 +325,12 @@ case class EnsureRequirements(
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, rightExpressions, rightKeys)
           .orElse(reorderJoinKeysRecursively(
             leftKeys, rightKeys, leftPartitioning, None))
-      case (Some(KeyGroupedPartitioning(clustering, _, _, _)), _) =>
+      case (Some(KeyGroupedPartitioning(clustering, _, _, _, _)), _) =>
         val leafExprs = clustering.flatMap(_.collectLeaves())
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, leafExprs, leftKeys)
             .orElse(reorderJoinKeysRecursively(
               leftKeys, rightKeys, None, rightPartitioning))
-      case (_, Some(KeyGroupedPartitioning(clustering, _, _, _))) =>
+      case (_, Some(KeyGroupedPartitioning(clustering, _, _, _, _))) =>
         val leafExprs = clustering.flatMap(_.collectLeaves())
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, leafExprs, rightKeys)
             .orElse(reorderJoinKeysRecursively(

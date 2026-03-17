@@ -142,7 +142,8 @@ case class BatchScanExec(
             }
         }
         k.copy(expressions = projectedExpressions, numPartitions = newPartValues.length,
-          partitionValues = newPartValues)
+          partitionValues = newPartValues,
+          isPartiallyClustered = spjParams.applyPartialClustering)
       case p => p
     }
   }
