@@ -30,6 +30,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.{PartitionPredicateImpl, SupportsPushDownCatalystFilters}
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 import org.apache.spark.util.collection.Utils
 
 object PushDownUtils {
@@ -80,8 +81,8 @@ object PushDownUtils {
         // Normally translated filters (postScanFilters) are simple filters that can be evaluated
         // faster, while the untranslated filters are complicated filters that take more time to
         // evaluate, so we want to evaluate the postScanFilters filters first.
-        (Left(r.pushedFilters().toSeq),
-          (postScanFilters ++ untranslatableExprs).toSeq)
+        (Left(r.pushedFilters().toImmutableArraySeq),
+          (postScanFilters ++ untranslatableExprs).toImmutableArraySeq)
 
       case r: SupportsPushDownV2Filters =>
         // Divide the filters into those translatable and untranslatable to data source filters.
@@ -104,26 +105,37 @@ object PushDownUtils {
         }
 
         val rejectedFilters = r.pushPredicates(translatedFilters.toArray).map { predicate =>
-            DataSourceV2Strategy.rebuildExpressionFromFilter(predicate, translatedFilterToExpr)
+          DataSourceV2Strategy.rebuildExpressionFromFilter(predicate, translatedFilterToExpr)
         }
 
         val remainingFilters = (rejectedFilters ++ untranslatableExprs).toSeq
-        val postScanFilters = if (partitionSchema.isEmpty || !r.supportsIterativePushdown()) {
+        val postScanFilters = if (partitionSchema.isEmpty || !r.supportsIterativePushdown) {
           remainingFilters
         } else {
           pushPartitionPredicates(r, partitionSchema.get, remainingFilters)
         }
 
-        // Normally translated filters (postScanFilters) are simple filters that can be
-        // evaluated faster, while the untranslated filters are complicated filters that take
-        // more time to evaluate, so we want to evaluate the translatable filters first.
-        postScanFilters.sortBy(ExpressionSet(untranslatableExprs).contains)
-        (Right(r.pushedPredicates.toSeq), postScanFilters)
+        val orderedPostScanFilters = prioritizeFilters(postScanFilters,
+          ExpressionSet(untranslatableExprs))
+        (Right(r.pushedPredicates.toSeq), orderedPostScanFilters)
       case r: SupportsPushDownCatalystFilters =>
         val postScanFilters = r.pushFilters(filters)
-        (Right(r.pushedFilters.toSeq), postScanFilters)
+        (Right(r.pushedFilters.toImmutableArraySeq), postScanFilters)
       case _ => (Left(Nil), filters)
     }
+  }
+
+  /**
+   * Normally translated filters (postScanFilters) are simple filters that can be
+   * evaluated faster, while the untranslated filters are complicated filters
+   * that take more time to evaluate, so we want to evaluate the translatable
+   * filters first.
+   */
+  private def prioritizeFilters(
+      filters: Seq[Expression],
+      untranslatableFilterSet: ExpressionSet): Seq[Expression] = {
+    val (translatable, untranslatable) = filters.partition(!untranslatableFilterSet.contains(_))
+    translatable ++ untranslatable
   }
 
   /**
@@ -131,27 +143,28 @@ object PushDownUtils {
    * PartitionPredicates (see SPARK-55596) and push them down in another pass.
    */
   private def pushPartitionPredicates(
-      r: SupportsPushDownV2Filters,
-      structType: StructType,
+      scanBuilder: SupportsPushDownV2Filters,
+      partitionSchema: StructType,
       remainingFilters: Seq[Expression]): Seq[Expression] = {
     val (partitionFilters, nonPartitionFilters) =
-      DataSourceUtils.getPartitionFiltersAndDataFilters(structType, remainingFilters)
+      DataSourceUtils.getPartitionFiltersAndDataFilters(partitionSchema, remainingFilters)
     val (pushable, nonPushable) = partitionFilters.partition(isPushablePartitionFilter)
-    val partitionSchema = toAttributes(structType)
-    val partitionPredicates = pushable.map(expr => PartitionPredicateImpl(expr, partitionSchema))
-    val rejectedPartitionFilters = r.pushPredicates(partitionPredicates.toArray).map {
+    val partitionAttrs = toAttributes(partitionSchema)
+    val partitionPredicates = pushable.map(expr => PartitionPredicateImpl(expr, partitionAttrs))
+    val rejectedPartitionFilters = scanBuilder.pushPredicates(partitionPredicates.toArray).map {
       predicate => predicate.asInstanceOf[PartitionPredicateImpl].expression
     }
     nonPartitionFilters ++ nonPushable ++ rejectedPartitionFilters
   }
 
   /**
-   * Returns a table's partitioning expression schema as a StructType.
-   * Currently only returned when all partitioning expressions are identity transforms on simple
+   * Returns a table's partitioning expression schema as a StructType, if creation of a
+   * PartitionPredicate is supported for the schema.
+   * Currently only supported if all partitioning expressions are identity transforms on simple
    * (single-name, non-nested) field references.
    *
-   * @return Some(StructType) representing partition transform expression types, if supported.
-   *         None if not supported.
+   * @return Some(StructType) representing partition transform expression types, if schema
+   *         is supported for PartitionPredicate. None if not supported.
    */
   def getPartitionPredicateSchema(relation: DataSourceV2Relation): Option[StructType] = {
     val transforms = relation.table.partitioning
@@ -161,7 +174,7 @@ object PushDownUtils {
 
   /**
    * Returns a StructField for the given partition transform if it is
-   * supported for iterative partition predicate pushdown.
+   * supported for iterative partition predicate push down.
    */
   private def toSupportedPartitionField(
       transform: Transform,

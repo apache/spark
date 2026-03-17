@@ -55,11 +55,9 @@ class PartitionPredicateImpl private (
   override def eval(partitionValues: InternalRow): Boolean = {
     if (partitionValues.numFields != partitionSchema.length) {
       logWarning(
-        log"Cannot evaluate partition predicate " +
-        log"${MDC(LogKeys.EXPR, catalystExpr.sql)}: " +
-        log"partition value field count " +
-        log"(${MDC(LogKeys.COUNT, partitionValues.numFields)}) does not " +
-        log"match schema (${MDC(LogKeys.NUM_PARTITIONS, partitionSchema.length)}). " +
+        log"Cannot evaluate partition predicate ${MDC(LogKeys.EXPR, catalystExpr.sql)}: " +
+        log"partition value field count (${MDC(LogKeys.COUNT, partitionValues.numFields)}) " +
+        log"does not match schema (${MDC(LogKeys.NUM_PARTITIONS, partitionSchema.length)}). " +
         log"Including partition in scan result to avoid incorrect filtering.")
       return true
     }
@@ -69,17 +67,14 @@ class PartitionPredicateImpl private (
     } catch {
       case e: Exception =>
         logWarning(
-          log"Failed to evaluate partition predicate " +
-          log"${MDC(LogKeys.EXPR, catalystExpr.sql)}. " +
+          log"Failed to evaluate partition predicate ${MDC(LogKeys.EXPR, catalystExpr.sql)}. " +
           log"Including partition in scan result to avoid incorrect filtering.",
           e)
         true
     }
   }
 
-  override def references(): Array[NamedReference] = referencesArray
-
-  private lazy val referencesArray: Array[NamedReference] = {
+  @transient override lazy val references: Array[NamedReference] = {
     val refNames = catalystExpr.references.map(_.name).toSet
     partitionSchema.zipWithIndex
       .filter { case (attr, _) => refNames.contains(attr.name) }

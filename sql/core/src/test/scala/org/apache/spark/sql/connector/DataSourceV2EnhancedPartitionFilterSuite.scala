@@ -254,7 +254,7 @@ class DataSourceV2EnhancedPartitionFilterSuite
     }
   }
 
-  test("eferenced partition column ordinals: two non-first partition columns in second-pass") {
+  test("referenced partition column ordinals: two non-first partition columns in second-pass") {
     withTable(partFilterTableName) {
       sql(s"CREATE TABLE $partFilterTableName (p0 string, p1 string, p2 string, data string) " +
         s"USING $v2Source PARTITIONED BY (p0, p1, p2)")

@@ -53,8 +53,8 @@ class PartitionPredicateImplSuite extends SparkFunSuite {
     assert(deserialized.eval(InternalRow(5)) === false)
 
     val expectedRefsWithOrdinals = Seq(("p", 0))
-    assert(refsWithOrdinals(predicate.references().toSeq) === expectedRefsWithOrdinals)
-    assert(refsWithOrdinals(deserialized.references().toSeq) === expectedRefsWithOrdinals)
+    assert(refsWithOrdinals(predicate.references.toSeq) === expectedRefsWithOrdinals)
+    assert(refsWithOrdinals(deserialized.references.toSeq) === expectedRefsWithOrdinals)
 
     assert(deserialized.equals(predicate))
   }
