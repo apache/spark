@@ -3232,7 +3232,8 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
       val df = sql(
         s"""
-           |SELECT *
+           |${selectWithMergeJoinHint("i", "p")}
+           |*
            |FROM testcat.ns.$items i
            |JOIN testcat.ns.$purchases p ON p.item_id = i.id
            |""".stripMargin)
@@ -3241,7 +3242,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     }
   }
 
-  test("SPARK-55992: GroupPartitions extended explain summary") {
+  test("SPARK-55992: GroupPartitions verbose string (Spark UI)") {
     val items_partitions = Array(bucket(4, "id"), years("arrive_time"))
     createTable(items, itemsColumns, items_partitions)
     sql(s"INSERT INTO testcat.ns.$items VALUES (1, 'aa', 10.0, cast('2021-01-01' as timestamp))")
@@ -3254,14 +3255,26 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
       val df = sql(
         s"""
-           |SELECT *
+           |${selectWithMergeJoinHint("i", "p")}
+           |*
            |FROM testcat.ns.$items i
            |JOIN testcat.ns.$purchases p ON p.item_id = i.id
            |""".stripMargin)
-      checkKeywordsExistsInExplain(df, ExtendedMode, keywords =
-        "GroupPartitions JoinKeyPositions: [0] ExpectedPartitionKeys: 2 " +
-        "Reducers: [BucketReducer(2)] DistributePartitions: false")
-      checkKeywordsNotExistsInExplain(df, ExtendedMode, "InternalRowComparableWrapper")
+      val groupPartitions = collectAllGroupPartitions(df.queryExecution.executedPlan)
+      assert(groupPartitions.nonEmpty, "plan should contain GroupPartitionsExec")
+      groupPartitions.foreach { node =>
+        val verboseStr = node.verboseStringWithOperatorId()
+        assert(verboseStr.contains("Arguments:"),
+          s"verbose string (Spark UI) should contain Arguments: line: $verboseStr")
+        assert(
+          verboseStr.contains("JoinKeyPositions:") &&
+          verboseStr.contains("ExpectedPartitionKeys:") &&
+          verboseStr.contains("Reducers:") &&
+          verboseStr.contains("DistributePartitions:"),
+          s"verbose string should contain summary fields: $verboseStr")
+        assert(!verboseStr.contains("InternalRowComparableWrapper"),
+          s"verbose string should not dump InternalRow: $verboseStr")
+      }
     }
   }
 }
