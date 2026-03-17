@@ -2619,7 +2619,6 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       parameters = Map("errorMessage" -> "hello"))
   }
 
-
   test("SPARK-34677: negate/add/subtract year-month and day-time intervals") {
     import testImplicits._
     val df = Seq((Period.ofMonths(10), Duration.ofDays(10), Period.ofMonths(1), Duration.ofDays(1)))
