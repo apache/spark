@@ -34,6 +34,12 @@ function formatDateSql(dateStr) {
   if (!dateStr) return "";
   try { return new Date(dateStr).toLocaleString(); } catch (e) { return dateStr; }
 }
+function escapeHtml(str) {
+  if (!str) return str;
+  var div = document.createElement("div");
+  div.appendChild(document.createTextNode(str));
+  return div.innerHTML;
+}
 /* eslint-enable no-unused-vars */
 
 function createRESTEndPointForSQLTab(appId) {
@@ -44,6 +50,8 @@ function createRESTEndPointForSQLTab(appId) {
     appId = words[ind + 1];
     newBaseURI = words.slice(0, ind + 2).join("/");
     return newBaseURI + "/api/v1/applications/" + appId +
+      // Fetch up to 10000 executions; DataTables handles client-side pagination
+      // and deferRender:true avoids rendering all rows at once.
       "/sql/?details=false&planDescription=false&offset=0&length=10000";
   }
   ind = words.indexOf("history");
@@ -84,11 +92,11 @@ function descriptionHtml(exec) {
   var basePath = uiRoot + appBasePath;
   var url = basePath + "/SQL/execution/?id=" + exec.id;
   if (desc.length > 100) {
-    var short = desc.substring(0, 100) + "...";
-    return '<a href="' + url + '" title="' + desc.replace(/"/g, "&quot;") + '">' +
+    var short = escapeHtml(desc.substring(0, 100)) + "...";
+    return '<a href="' + url + '" title="' + escapeHtml(desc) + '">' +
       short + '</a>';
   }
-  return '<a href="' + url + '">' + (desc || exec.id) + '</a>';
+  return '<a href="' + url + '">' + (escapeHtml(desc) || exec.id) + '</a>';
 }
 
 $.fn.dataTable.ext.search.push(function (settings, data) {
@@ -101,9 +109,11 @@ $(document).ready(function () {
   var appId = "";
   var endPoint = createRESTEndPointForSQLTab(appId);
 
-
-
-
+  var groupSubExecEnabled = true;
+  var configEl = document.getElementById("group-sub-exec-config");
+  if (configEl) {
+    groupSubExecEnabled = configEl.getAttribute("data-value") === "true";
+  }
 
   $.getJSON(endPoint, function (response) {
     var tableData = response.map(function (exec) {
@@ -122,30 +132,32 @@ $(document).ready(function () {
       ];
     });
 
-    // Group sub-executions under their root execution
+    // Group sub-executions under their root execution (when enabled)
     var subExecMap = {};
     var rootRows = [];
-    tableData.forEach(function (row) {
-      var id = row[0];
-      var rootId = row[10];
-      if (rootId !== id && subExecMap[rootId] !== undefined) {
-        // This is a sub-execution — add to parent's children
-        subExecMap[rootId].push(row);
-      } else {
-        // Root execution
-        subExecMap[id] = [];
-        rootRows.push(row);
-      }
-    });
-    // Second pass: attach orphaned sub-executions that appeared before their root
-    tableData.forEach(function (row) {
-      var id = row[0];
-      var rootId = row[10];
-      if (rootId !== id && subExecMap[rootId] !== undefined
-          && subExecMap[rootId].indexOf(row) === -1) {
-        subExecMap[rootId].push(row);
-      }
-    });
+    if (groupSubExecEnabled) {
+      tableData.forEach(function (row) {
+        var id = row[0];
+        var rootId = row[10];
+        if (rootId !== id && subExecMap[rootId] !== undefined) {
+          subExecMap[rootId].push(row);
+        } else {
+          subExecMap[id] = [];
+          rootRows.push(row);
+        }
+      });
+      // Second pass: attach orphaned sub-executions that appeared before their root
+      tableData.forEach(function (row) {
+        var id = row[0];
+        var rootId = row[10];
+        if (rootId !== id && subExecMap[rootId] !== undefined
+            && subExecMap[rootId].indexOf(row) === -1) {
+          subExecMap[rootId].push(row);
+        }
+      });
+    } else {
+      rootRows = tableData;
+    }
 
     var container = document.getElementById("sql-executions-table");
     container.innerHTML =
@@ -159,9 +171,7 @@ $(document).ready(function () {
       '<table id="sql-table" class="table table-striped compact cell-border" ' +
       'style="width:100%"></table>';
 
-    var table = $("#sql-table").DataTable({
-      data: rootRows,
-      columns: [
+    var columns = [
         {
           title: "ID",
           render: function (data, type) {
@@ -235,13 +245,16 @@ $(document).ready(function () {
           render: function (data, type) {
             if (type !== "display" || !data) return data;
             if (data.length > 100) {
-              return '<span title="' + data.replace(/"/g, "&quot;") + '">' +
-                data.substring(0, 100) + '...</span>';
+              return '<span title="' + escapeHtml(data) + '">' +
+                escapeHtml(data.substring(0, 100)) + '...</span>';
             }
-            return data;
+            return escapeHtml(data);
           }
-        },
-        {
+        }
+      ];
+
+    if (groupSubExecEnabled) {
+      columns.push({
           title: "Sub Executions",
           orderable: false,
           render: function (_data, type, row) {
@@ -250,8 +263,12 @@ $(document).ready(function () {
             return '<a href="#" class="toggle-sub-exec">' +
               '+' + children.length + ' sub</a>';
           }
-        }
-      ],
+        });
+    }
+
+    var table = $("#sql-table").DataTable({
+      data: rootRows,
+      columns: columns,
       order: [[0, "desc"]],
       pageLength: 20,
       deferRender: true,
@@ -277,7 +294,7 @@ $(document).ready(function () {
           html += '<tr><td><a href="' + basePath + '/SQL/execution/?id=' + child[0] +
             '">' + child[0] + '</a></td>';
           html += '<td>' + statusBadge(child[2]) + '</td>';
-          html += '<td>' + (child[3] || '') + '</td>';
+          html += '<td>' + escapeHtml(child[3] || '') + '</td>';
           html += '<td>' + formatDurationSql(child[5]) + '</td>';
           html += '<td>' + jobIdLinks(child[7]) + '</td></tr>';
         });

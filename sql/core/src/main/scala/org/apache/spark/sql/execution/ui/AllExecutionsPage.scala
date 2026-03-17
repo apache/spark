@@ -21,6 +21,7 @@ import scala.xml.Node
 
 import jakarta.servlet.http.HttpServletRequest
 
+import org.apache.spark.internal.config.UI.UI_SQL_GROUP_SUB_EXECUTION_ENABLED
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") {
@@ -33,8 +34,11 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") {
     </div>
 
   override def render(request: HttpServletRequest): Seq[Node] = {
+    val groupSubExec = parent.conf.get(UI_SQL_GROUP_SUB_EXECUTION_ENABLED)
     val content =
       <span>
+        <div id="group-sub-exec-config" style="display:none"
+             data-value={groupSubExec.toString}></div>
         <div id="sql-executions-table">
           {spinner}
         </div>

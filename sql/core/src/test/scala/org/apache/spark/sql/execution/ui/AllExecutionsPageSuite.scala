@@ -47,7 +47,7 @@ abstract class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndA
     }
   }
 
-  test("render skeleton page with DataTables and script includes") {
+  test("SPARK-55875: render skeleton page with DataTables and script includes") {
     val statusStore = createStatusStore
     val tab = mock(classOf[SQLTab], RETURNS_SMART_NULLS)
     when(tab.sqlStore).thenReturn(statusStore)
