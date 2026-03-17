@@ -117,7 +117,7 @@ object PushDownUtils {
 
         val orderedPostScanFilters = prioritizeFilters(postScanFilters,
           ExpressionSet(untranslatableExprs))
-        (Right(r.pushedPredicates.toSeq), orderedPostScanFilters)
+        (Right(r.pushedPredicates.toImmutableArraySeq), orderedPostScanFilters)
       case r: SupportsPushDownCatalystFilters =>
         val postScanFilters = r.pushFilters(filters)
         (Right(r.pushedFilters.toImmutableArraySeq), postScanFilters)
