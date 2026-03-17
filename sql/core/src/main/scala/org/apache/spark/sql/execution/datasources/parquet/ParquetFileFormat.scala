@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.io.Closeable
+import java.io.{Closeable, FileNotFoundException}
 import java.time.ZoneId
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -25,6 +25,7 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Try}
 
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapred.FileSplit
@@ -502,11 +503,14 @@ object ParquetFileFormat extends Logging {
    * Reads Parquet footers in multi-threaded manner.
    * If the config "spark.sql.files.ignoreCorruptFiles" is set to true, we will ignore the corrupted
    * files when reading footers.
+   * If the config "spark.sql.files.ignoreMissingFiles" is set to true, we will ignore the missing
+   * files when reading footers.
    */
   private[parquet] def readParquetFootersInParallel(
       conf: Configuration,
       partFiles: Seq[FileStatus],
-      ignoreCorruptFiles: Boolean): Seq[Footer] = {
+      ignoreCorruptFiles: Boolean,
+      ignoreMissingFiles: Boolean = false): Seq[Footer] = {
     ThreadUtils.parmap(partFiles, "readingParquetFooters", 8) { currentFile =>
       try {
         // Skips row group information since we only need the schema.
@@ -515,13 +519,16 @@ object ParquetFileFormat extends Logging {
         Some(new Footer(currentFile.getPath,
           ParquetFooterReader.readFooter(
             HadoopInputFile.fromStatus(currentFile, conf), SKIP_ROW_GROUPS)))
-      } catch { case e: RuntimeException =>
-        if (ignoreCorruptFiles) {
+      } catch {
+        case e: Exception if ignoreMissingFiles &&
+            ExceptionUtils.getThrowables(e).exists(_.isInstanceOf[FileNotFoundException]) =>
+          logWarning(log"Skipped missing file: ${MDC(PATH, currentFile)}", e)
+          None
+        case e: RuntimeException if ignoreCorruptFiles =>
           logWarning(log"Skipped the footer in the corrupted file: ${MDC(PATH, currentFile)}", e)
           None
-        } else {
+        case e: Exception =>
           throw QueryExecutionErrors.cannotReadFooterForFileError(currentFile.getPath, e)
-        }
       }
     }.flatten
   }
@@ -550,7 +557,8 @@ object ParquetFileFormat extends Logging {
     val inferTimestampNTZ = sqlConf.parquetInferTimestampNTZEnabled
     val nanosAsLong = sqlConf.legacyParquetNanosAsLong
 
-    val reader = (files: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean) => {
+    val reader = (files: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean,
+        ignoreMissingFiles: Boolean) => {
       // Converter used to convert Parquet `MessageType` to Spark SQL `StructType`
       val converter = new ParquetToSparkSchemaConverter(
         assumeBinaryIsString = assumeBinaryIsString,
@@ -558,7 +566,7 @@ object ParquetFileFormat extends Logging {
         inferTimestampNTZ = inferTimestampNTZ,
         nanosAsLong = nanosAsLong)
 
-      readParquetFootersInParallel(conf, files, ignoreCorruptFiles)
+      readParquetFootersInParallel(conf, files, ignoreCorruptFiles, ignoreMissingFiles)
         .map(ParquetFileFormat.readSchemaFromFooter(_, converter))
     }
 
