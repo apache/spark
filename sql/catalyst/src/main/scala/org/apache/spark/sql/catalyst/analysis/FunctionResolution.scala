@@ -106,7 +106,9 @@ class FunctionResolution(
             Seq(persistentCandidate, systemCandidate)
           }
         case _ =>
-          Seq(ensureThreePart(nameParts))
+          // 2-part (catalog.func) passes through for expandIdentifier; 3-part uses ensureThreePart.
+          if (nameParts.length == 2) Seq(nameParts)
+          else Seq(ensureThreePart(nameParts))
       }
     }
   }
