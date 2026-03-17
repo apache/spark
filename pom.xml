@@ -664,7 +664,7 @@
       <dependency>
         <groupId>org.glassfish.jaxb</groupId>
         <artifactId>jaxb-runtime</artifactId>
-        <version>4.0.5</version>
+        <version>4.0.6</version>
         <scope>compile</scope>
         <exclusions>
           <exclusion>
@@ -680,7 +680,7 @@
       <dependency>
         <groupId>jakarta.xml.bind</groupId>
         <artifactId>jakarta.xml.bind-api</artifactId>
-        <version>4.0.2</version>
+        <version>4.0.5</version>
       </dependency>
       <dependency>
         <groupId>org.apache.commons</groupId>
