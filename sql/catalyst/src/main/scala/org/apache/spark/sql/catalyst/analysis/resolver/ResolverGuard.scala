@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
+import java.util.Locale
+
 import org.apache.spark.sql.catalyst.{
   FunctionIdentifier,
   QueryPlanningTracker,
-  SQLConfHelper,
-  SqlScriptingContextManager
+  SQLConfHelper
 }
 import org.apache.spark.sql.catalyst.analysis.{
   FunctionRegistry,
