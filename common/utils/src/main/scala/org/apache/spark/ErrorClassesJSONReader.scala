@@ -112,7 +112,7 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
       mainErrorClass,
       throw SparkException.internalError(s"Cannot find main error class '$errorClass'"))
     // When main-only (no subcondition), use main message template even if the condition has
-    // subconditions in JSON (optional subconditions: SPARK-56029).
+    // subconditions in JSON.
     if (subErrorClass.isEmpty) {
       errorInfo.messageTemplate
     } else {
