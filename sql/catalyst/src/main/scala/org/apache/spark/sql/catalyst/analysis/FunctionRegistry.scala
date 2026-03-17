@@ -273,10 +273,7 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
 
   override def dropFunctionsInDatabase(namespace: FunctionIdentifier): Unit = synchronized {
     val toRemove = listFunction().filter { f =>
-      f.database.exists(d => namespace.database.exists(_.equalsIgnoreCase(d))) &&
-        namespace.catalog.isDefined && (
-          f.catalog == namespace.catalog ||
-          (f.catalog.isEmpty && namespace.catalog.contains(CatalogManager.SESSION_CATALOG_NAME)))
+      f.copy(name = "") == namespace
     }
     toRemove.foreach(n => functionBuilders.remove(n))
   }
