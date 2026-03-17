@@ -662,7 +662,8 @@ private[spark] class IndexShuffleBlockResolver(
   override def getBlocksForShuffle(shuffleId: Int, mapId: Long): Seq[BlockId] = {
     Seq(
       ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID),
-      ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
+      ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID),
+      ShuffleChecksumBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
     )
   }
 
