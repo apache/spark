@@ -723,7 +723,8 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
   test("create table like") {
     // Helper to extract fields from the new CreateTableLike unresolved plan.
     // The parser now emits CreateTableLike (v2 logical plan) instead of
-    // CreateTableLikeCommand, so both name and source are unresolved identifiers.
+    // CreateTableLikeCommand; the name is an UnresolvedIdentifier and the source is
+    // an UnresolvedTableOrView.
     def extract(sql: String): (Seq[String], Seq[String],
         org.apache.spark.sql.catalyst.catalog.CatalogStorageFormat,
         Option[String], Map[String, String], Boolean) =

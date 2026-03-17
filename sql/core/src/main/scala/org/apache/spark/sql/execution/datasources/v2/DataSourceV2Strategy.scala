@@ -242,30 +242,17 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     // CREATE TABLE ... LIKE ... for a v2 catalog target.
     // Source is an already-resolved Table object; no extra catalog round-trip is needed.
+    // Views are wrapped in V1Table so the exec can extract schema and provider uniformly.
     case CreateTableLike(
-        ResolvedIdentifier(catalog, ident),
-        ResolvedTable(_, _, table, _),
+        ResolvedIdentifier(catalog, ident), source,
         fileFormat: CatalogStorageFormat, provider, properties, ifNotExists) =>
-      CreateTableLikeExec(
-        catalog.asTableCatalog, ident, table, fileFormat, provider, properties, ifNotExists) :: Nil
-
-    // Source is a persistent or temporary view; wrap its CatalogTable in V1Table so the
-    // exec can extract schema and provider uniformly.
-    case CreateTableLike(
-        ResolvedIdentifier(catalog, ident),
-        ResolvedPersistentView(_, _, meta),
-        fileFormat: CatalogStorageFormat, provider, properties, ifNotExists) =>
-      CreateTableLikeExec(
-        catalog.asTableCatalog, ident, V1Table(meta),
-        fileFormat, provider, properties, ifNotExists) :: Nil
-
-    case CreateTableLike(
-        ResolvedIdentifier(catalog, ident),
-        ResolvedTempView(_, meta),
-        fileFormat: CatalogStorageFormat, provider, properties, ifNotExists) =>
-      CreateTableLikeExec(
-        catalog.asTableCatalog, ident, V1Table(meta),
-        fileFormat, provider, properties, ifNotExists) :: Nil
+      val table = source match {
+        case ResolvedTable(_, _, t, _) => t
+        case ResolvedPersistentView(_, _, meta) => V1Table(meta)
+        case ResolvedTempView(_, meta) => V1Table(meta)
+      }
+      CreateTableLikeExec(catalog.asTableCatalog, ident, table,
+        fileFormat.locationUri, provider, properties, ifNotExists) :: Nil
 
     case RefreshTable(r: ResolvedTable) =>
       RefreshTableExec(r.catalog, r.identifier, recacheTable(r, includeTimeTravel = true)) :: Nil

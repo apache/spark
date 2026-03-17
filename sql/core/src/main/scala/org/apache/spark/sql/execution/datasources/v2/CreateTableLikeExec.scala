@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.net.URI
+
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.internal.LogKeys.TABLE_NAME
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTableType, CatalogUtils}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, Table, TableCatalog, TableInfo, V1Table}
@@ -42,7 +44,7 @@ case class CreateTableLikeExec(
     targetCatalog: TableCatalog,
     targetIdent: Identifier,
     sourceTable: Table,
-    fileFormat: CatalogStorageFormat,
+    location: Option[URI],
     provider: Option[String],
     properties: Map[String, String],
     ifNotExists: Boolean) extends LeafV2CommandExec {
@@ -66,6 +68,9 @@ case class CreateTableLikeExec(
       val partitioning = sourceTable.partitioning
 
       // 3. Resolve provider: USING clause overrides, else copy from source.
+      //    The source provider is inherited so that the target table uses the same format,
+      //    matching V1 CreateTableLikeCommand behavior. Whether the target catalog validates
+      //    or uses this property is catalog-specific (e.g. V2SessionCatalog validates it).
       val resolvedProvider = provider.orElse {
         sourceTable match {
           case v1: V1Table if v1.catalogTable.tableType == CatalogTableType.VIEW =>
@@ -80,33 +85,22 @@ case class CreateTableLikeExec(
       }
 
       // 4. Build final properties. User-specified TBLPROPERTIES are used as-is; source table
-      //    properties are NOT copied. Provider and location are added if determined above.
+      //    properties are NOT copied. Provider, location, and owner are added if applicable.
       val locationProp: Option[(String, String)] =
-        fileFormat.locationUri.map(uri =>
-          TableCatalog.PROP_LOCATION -> CatalogUtils.URIToString(uri))
+        location.map(uri => TableCatalog.PROP_LOCATION -> CatalogUtils.URIToString(uri))
 
-      val finalProps = properties ++
-        resolvedProvider.map(TableCatalog.PROP_PROVIDER -> _) ++
-        locationProp
+      val finalProps = CatalogV2Util.withDefaultOwnership(
+        properties ++
+          resolvedProvider.map(TableCatalog.PROP_PROVIDER -> _) ++
+          locationProp)
 
       try {
-        // Constraints from the source table are intentionally NOT copied for several reasons:
-        //   1. V1 tables (CatalogTable) have no constraint objects — CHECK, PRIMARY KEY,
-        //      UNIQUE and FOREIGN KEY are V2-only concepts (introduced in Spark 4.1.0).
-        //      CreateTableLikeCommand had nothing to copy, so not copying here preserves
-        //      behavioral parity with the V1 path.
-        //   2. ForeignKey constraints carry a refTable Identifier bound to the source catalog;
-        //      copying them to a different catalog creates dangling cross-catalog references.
-        //   3. Constraint names must be unique within a namespace; blindly copying them risks
-        //      collisions with existing constraints in the target namespace.
-        //   4. Validation status (VALID/INVALID/UNVALIDATED) is tied to the source table's
-        //      existing data and is meaningless on a newly created empty target table.
-        //   5. NOT NULL is already captured in Column.nullable() and copied via withColumns.
-        //   6. Consistent with PostgreSQL semantics: CREATE TABLE LIKE does not include
-        //      constraints by default; users must explicitly opt in via INCLUDING CONSTRAINTS.
-        //   If constraint copying is desired, use ALTER TABLE ADD CONSTRAINT after creation.
-        //   If we wanted to support them in the future, the right approach would be to add an
-        //   INCLUDING CONSTRAINTS clause (as PostgreSQL does) rather than copying blindly.
+        // Constraints are intentionally NOT copied: V1 tables have no constraint objects
+        // (CHECK/PRIMARY KEY/UNIQUE/FOREIGN KEY are V2-only, added in Spark 4.1.0);
+        // ForeignKey carries a catalog-specific Identifier that becomes stale cross-catalog;
+        // constraint names risk collisions in the target namespace; and NOT NULL is already
+        // captured in Column.nullable(). Use ALTER TABLE ADD CONSTRAINT after creation, or
+        // add an INCLUDING CONSTRAINTS clause in the future (following PostgreSQL semantics).
         val tableInfo = new TableInfo.Builder()
           .withColumns(columns)
           .withPartitions(partitioning)
