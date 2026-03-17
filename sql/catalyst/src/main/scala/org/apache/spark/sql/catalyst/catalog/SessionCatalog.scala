@@ -2102,8 +2102,8 @@ class SessionCatalog(
       // Temporary function: use session namespace.funcName
       tempFunctionIdentifier(func.funcName)
     } else {
-      // Persistent function: keep original qualified identifier
-      func
+      // Persistent function: use 3-part identifier for registry (catalog.database.funcName)
+      qualifyIdentifier(func)
     }
 
     // Security check: When legacy mode is enabled, block SQL-created temporary functions
@@ -2732,10 +2732,16 @@ class SessionCatalog(
     val loadedFunctions = listBuiltinAndTempFunctions(pattern)
     val functions = dbFunctions ++ loadedFunctions
     // The session catalog caches some persistent functions in the FunctionRegistry
-    // so there can be duplicates.
+    // so there can be duplicates. Return 1-part identifiers for SYSTEM (builtin) and
+    // for temp (user-defined but session-scoped) to preserve backward compatibility.
+    // Temp functions are tagged "USER" since they are user-defined, not system-builtin.
     functions.map {
-      case f if FunctionRegistry.functionSet.contains(f) => (f, "SYSTEM")
-      case f if TableFunctionRegistry.functionSet.contains(f) => (f, "SYSTEM")
+      case f if FunctionRegistry.functionSet.contains(f) =>
+        (FunctionIdentifier(f.funcName), "SYSTEM")
+      case f if TableFunctionRegistry.functionSet.contains(f) =>
+        (FunctionIdentifier(f.funcName), "SYSTEM")
+      case f if isTempFunctionIdentifier(f) =>
+        (FunctionIdentifier(f.funcName), "USER")
       case f if f.database.isDefined => (qualifyIdentifier(f), "USER")
       case f => (f, "USER")
     }.distinct
