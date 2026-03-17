@@ -97,10 +97,12 @@ abstract class ParquetFileFormatSuite
     }
 
     testReadFooters(true)
+    // With preserveSparkThrowable=true, the structured error class is thrown directly
+    // without being wrapped in a generic SparkException by awaitResult.
     checkErrorMatchPVals(
       exception = intercept[SparkException] {
         testReadFooters(false)
-      }.getCause.asInstanceOf[SparkException],
+      },
       condition = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
       parameters = Map("path" -> "file:.*")
     )
