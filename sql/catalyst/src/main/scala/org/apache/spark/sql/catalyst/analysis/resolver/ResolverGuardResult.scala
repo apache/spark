@@ -17,12 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import java.util.Locale
-
 /**
- * The [[IdentifierMap]] is an implementation of a [[KeyTransformingMap]] that uses SQL/DataFrame
- * identifiers as keys. The implementation is case-insensitive for keys.
+ * Result of the [[ResolverGuard]] check. Contains information about whether the plan is supported
+ * and, if not, the reason why it is unsupported.
  */
-class IdentifierMap[V] extends KeyTransformingMap[String, V] {
-  override def mapKey(key: String): String = key.toLowerCase(Locale.ROOT)
+case class ResolverGuardResult(planUnsupportedReason: Option[String]) {
+  def planSupported: Boolean = planUnsupportedReason.isEmpty
 }

@@ -17,12 +17,22 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import java.util.Locale
-
 /**
- * The [[IdentifierMap]] is an implementation of a [[KeyTransformingMap]] that uses SQL/DataFrame
- * identifiers as keys. The implementation is case-insensitive for keys.
+ * Represents the kind of alias being processed. This is used by [[AliasResolver]] to inform
+ * the [[LateralColumnAliasRegistry]] whether an alias was explicitly written by the user
+ * (e.g., `SELECT a AS b`) or implicitly generated during resolution of an [[UnresolvedAlias]],
+ * so that the registry can apply the correct scoping rules for lateral column alias references.
  */
-class IdentifierMap[V] extends KeyTransformingMap[String, V] {
-  override def mapKey(key: String): String = key.toLowerCase(Locale.ROOT)
+object AliasKind extends Enumeration {
+  type AliasKind = Value
+
+  /**
+   * Explicit alias created by the user (e.g., SELECT a AS b).
+   */
+  val Explicit: Value = Value
+
+  /**
+   * Implicit alias generated automatically (e.g., from UnresolvedAlias).
+   */
+  val Implicit: Value = Value
 }

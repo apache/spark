@@ -4413,6 +4413,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
+  def singlePassFailedFixedPointSucceeded(
+      fixedPointResult: LogicalPlan,
+      singlePassException: Throwable): Throwable = {
+    new ExtendedAnalysisException(
+      new AnalysisException(
+        errorClass = "HYBRID_ANALYZER_EXCEPTION.SINGLE_PASS_FAILED_FIXED_POINT_SUCCEEDED",
+        messageParameters = Map("fixedPointOutput" -> fixedPointResult.toString),
+        cause = Some(singlePassException)
+      ),
+      plan = fixedPointResult
+    )
+  }
+
   def hybridAnalyzerOutputSchemaComparisonMismatch(
       fixedPointOutputSchema: StructType,
       singlePassOutputSchema: StructType): Throwable = {
