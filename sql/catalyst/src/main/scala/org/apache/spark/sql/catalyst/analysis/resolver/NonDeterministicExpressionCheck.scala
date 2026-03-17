@@ -28,18 +28,7 @@ object NonDeterministicExpressionCheck extends (LogicalPlan => Unit) {
   def apply(plan: LogicalPlan): Unit = {
     plan.foreachUp { operator =>
       if (nonDeterministic(operator.expressions) &&
-        !operatorAllowsNonDeterministicExpressions(operator) &&
-        !operator.isInstanceOf[Project] &&
-        !operator.isInstanceOf[CollectMetrics] &&
-        !operator.isInstanceOf[Filter] &&
-        !operator.isInstanceOf[Aggregate] &&
-        !operator.isInstanceOf[Window] &&
-        !operator.isInstanceOf[Expand] &&
-        !operator.isInstanceOf[CreateVariable] &&
-        !operator.isInstanceOf[MapInPandas] &&
-        !operator.isInstanceOf[MapInArrow] &&
-        !operator.isInstanceOf[LateralJoin] &&
-        !operator.isInstanceOf[Generate]) {
+        !operatorAllowsNonDeterministicExpressions(operator)) {
         operator.failAnalysis(
           errorClass = "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
           messageParameters = Map(
@@ -60,11 +49,15 @@ object NonDeterministicExpressionCheck extends (LogicalPlan => Unit) {
   /**
    * Checks whether the operator allows non-deterministic expressions.
    */
-  private def operatorAllowsNonDeterministicExpressions(plan: LogicalPlan): Boolean = {
-    plan match {
-      case supportsNonDeterministicExpression: SupportsNonDeterministicExpression =>
-        supportsNonDeterministicExpression.allowNonDeterministicExpression
-      case _ => false
+  private def operatorAllowsNonDeterministicExpressions(operator: LogicalPlan): Boolean = {
+    operator match {
+      case s: SupportsNonDeterministicExpression => s.allowNonDeterministicExpression
+      case _: Project | _: CollectMetrics | _: Filter | _: Aggregate | _: Window |
+           _: Expand | _: CreateVariable | _: MapInPandas | _: MapInArrow |
+           _: LateralJoin | _: Generate =>
+        true
+      case _ =>
+        false
     }
   }
 }

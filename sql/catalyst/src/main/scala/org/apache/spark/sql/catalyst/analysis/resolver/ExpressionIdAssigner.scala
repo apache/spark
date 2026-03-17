@@ -582,9 +582,10 @@ class ExpressionIdAssigner {
       prioritizeOldDuplicateAliasId: Boolean = false): NamedExpressionType = {
     if (mappingStack.peek().mapping.isEmpty) {
       throw SparkException.internalError(
-        "Expression ID mapping doesn't exist. Please first call " +
-        "createMappingForLeafOperator(...) for leaf nodes or createMappingFromChildMappings(...) " +
-        s"for multi-child nodes. Original expression: $originalExpression"
+        s"""Expression ID mapping doesn't exist. Please first call
+           |createMappingForLeafOperator(...) for leaf nodes or
+           |createMappingFromChildMappings(...) for multi-child nodes.
+           |Original expression: $originalExpression""".stripMargin
       )
     }
 
@@ -738,10 +739,10 @@ class ExpressionIdAssigner {
       alwaysUpdateExpressionId: Boolean = false): SubqueryExpressionType = {
     if (mappingStack.peek().mapping.isEmpty) {
       throw SparkException.internalError(
-        "Expression ID mapping doesn't exist. Please first call " +
-          "createMappingForLeafOperator(...) for leaf nodes or " +
-          "createMappingFromChildMappings(...) " +
-          s"for multi-child nodes. Original expression: $SubqueryExpression"
+        s"""Expression ID mapping doesn't exist. Please first call
+           |createMappingForLeafOperator(...) for leaf nodes or
+           |createMappingFromChildMappings(...) for multi-child nodes.
+           |Original expression: $SubqueryExpression""".stripMargin
       )
     }
 
@@ -784,10 +785,10 @@ class ExpressionIdAssigner {
       originalAttribute: AttributeReference): AttributeReference = {
     if (mappingStack.peek().mapping.isEmpty) {
       throw SparkException.internalError(
-        "Expression ID mapping doesn't exist. Please first call " +
-          "createMappingForLeafOperator(...) for leaf nodes or" +
-          " createMappingFromChildMappings(...) " +
-          s"for multi-child nodes. Original expression: $originalAttribute"
+        s"""Expression ID mapping doesn't exist. Please first call
+           |createMappingForLeafOperator(...) for leaf nodes or
+           |createMappingFromChildMappings(...) for multi-child nodes.
+           |Original expression: $originalAttribute""".stripMargin
       )
     }
 

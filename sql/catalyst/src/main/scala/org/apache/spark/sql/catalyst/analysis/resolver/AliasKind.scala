@@ -18,7 +18,10 @@
 package org.apache.spark.sql.catalyst.analysis.resolver
 
 /**
- * Represents the kind of alias being processed.
+ * Represents the kind of alias being processed. This is used by [[AliasResolver]] to inform
+ * the [[LateralColumnAliasRegistry]] whether an alias was explicitly written by the user
+ * (e.g., `SELECT a AS b`) or implicitly generated during resolution of an [[UnresolvedAlias]],
+ * so that the registry can apply the correct scoping rules for lateral column alias references.
  */
 object AliasKind extends Enumeration {
   type AliasKind = Value

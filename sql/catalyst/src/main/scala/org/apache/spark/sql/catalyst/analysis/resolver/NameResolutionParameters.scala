@@ -20,7 +20,11 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 import org.apache.spark.sql.catalyst.expressions.Expression
 
 /**
- * Parameters for name resolution in [[NameScope]] and [[NameScopeStack]].
+ * Parameters for name resolution in [[NameScope]] and [[NameScopeStack]]. This is constructed
+ * by [[ExpressionResolver]] when resolving multi-part names and passed to
+ * [[NameScope.resolveMultipartName]] to control which resolution features are enabled (e.g.,
+ * lateral column aliases, hidden output, aggregate expression alias lookup) based on the
+ * current resolution context.
  *
  * @param canLaterallyReferenceColumn Whether lateral column references are allowed.
  * @param canReferenceAggregateExpressionAliases Whether aggregate expression aliases can be
