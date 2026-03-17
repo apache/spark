@@ -201,7 +201,6 @@ class UserContext(google.protobuf.message.Message):
         messages into this message. Extensions are stored as a `repeated` type to be able to
         handle multiple active extensions.
         """
-
     def __init__(
         self,
         *,
@@ -230,7 +229,6 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         @property
         def plan(self) -> global___Plan:
             """(Required) The logical plan to be analyzed."""
-
         def __init__(
             self,
             *,
@@ -354,7 +352,6 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         @property
         def plan(self) -> global___Plan:
             """(Required) The logical plan to be analyzed."""
-
         def __init__(
             self,
             *,
@@ -372,7 +369,6 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         @property
         def plan(self) -> global___Plan:
             """(Required) The logical plan to be analyzed."""
-
         def __init__(
             self,
             *,
@@ -390,7 +386,6 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         @property
         def plan(self) -> global___Plan:
             """(Required) The logical plan to be analyzed."""
-
         def __init__(
             self,
             *,
@@ -433,11 +428,9 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         @property
         def target_plan(self) -> global___Plan:
             """(Required) The plan to be compared."""
-
         @property
         def other_plan(self) -> global___Plan:
             """(Required) The other plan to be compared."""
-
         def __init__(
             self,
             *,
@@ -464,7 +457,6 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         @property
         def plan(self) -> global___Plan:
             """(Required) The logical plan to get a hashCode."""
-
         def __init__(
             self,
             *,
@@ -483,11 +475,9 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         @property
         def relation(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
             """(Required) The logical plan to persist."""
-
         @property
         def storage_level(self) -> pyspark.sql.connect.proto.common_pb2.StorageLevel:
             """(Optional) The storage level."""
-
         def __init__(
             self,
             *,
@@ -559,7 +549,6 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         @property
         def relation(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
             """(Required) The logical plan to get the storage level."""
-
         def __init__(
             self,
             *,
@@ -781,7 +770,9 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         self, oneof_group: typing_extensions.Literal["_client_type", b"_client_type"]
     ) -> typing_extensions.Literal["client_type"] | None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing_extensions.Literal["analyze", b"analyze"]) -> (
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["analyze", b"analyze"]
+    ) -> (
         typing_extensions.Literal[
             "schema",
             "explain",
@@ -894,7 +885,6 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
             """A best-effort snapshot of the files that compose this Dataset"""
-
         def __init__(
             self,
             *,
@@ -983,7 +973,6 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         @property
         def storage_level(self) -> pyspark.sql.connect.proto.common_pb2.StorageLevel:
             """(Required) The StorageLevel as a result of get_storage_level request."""
-
         def __init__(
             self,
             *,
@@ -1153,7 +1142,9 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             b"unpersist",
         ],
     ) -> None: ...
-    def WhichOneof(self, oneof_group: typing_extensions.Literal["result", b"result"]) -> (
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["result", b"result"]
+    ) -> (
         typing_extensions.Literal[
             "schema",
             "explain",
@@ -1193,7 +1184,6 @@ class ExecutePlanRequest(google.protobuf.message.Message):
         @property
         def extension(self) -> google.protobuf.any_pb2.Any:
             """Extension type for request options"""
-
         def __init__(
             self,
             *,
@@ -1286,7 +1276,6 @@ class ExecutePlanRequest(google.protobuf.message.Message):
         """Repeated element for options that can be passed to the request. This element is currently
         unused but allows to pass in an extension value used for arbitrary options.
         """
-
     @property
     def tags(
         self,
@@ -1295,7 +1284,6 @@ class ExecutePlanRequest(google.protobuf.message.Message):
         Tags cannot contain ',' character and cannot be empty strings.
         Used by Interrupt with interrupt.tag.
         """
-
     def __init__(
         self,
         *,
@@ -1305,9 +1293,8 @@ class ExecutePlanRequest(google.protobuf.message.Message):
         operation_id: builtins.str | None = ...,
         plan: global___Plan | None = ...,
         client_type: builtins.str | None = ...,
-        request_options: (
-            collections.abc.Iterable[global___ExecutePlanRequest.RequestOption] | None
-        ) = ...,
+        request_options: collections.abc.Iterable[global___ExecutePlanRequest.RequestOption]
+        | None = ...,
         tags: collections.abc.Iterable[builtins.str] | None = ...,
     ) -> None: ...
     def HasField(
@@ -1536,12 +1523,10 @@ class ExecutePlanResponse(google.protobuf.message.Message):
                 name: builtins.str = ...,
                 plan_id: builtins.int = ...,
                 parent: builtins.int = ...,
-                execution_metrics: (
-                    collections.abc.Mapping[
-                        builtins.str, global___ExecutePlanResponse.Metrics.MetricValue
-                    ]
-                    | None
-                ) = ...,
+                execution_metrics: collections.abc.Mapping[
+                    builtins.str, global___ExecutePlanResponse.Metrics.MetricValue
+                ]
+                | None = ...,
             ) -> None: ...
             def ClearField(
                 self,
@@ -1590,9 +1575,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         def __init__(
             self,
             *,
-            metrics: (
-                collections.abc.Iterable[global___ExecutePlanResponse.Metrics.MetricObject] | None
-            ) = ...,
+            metrics: collections.abc.Iterable[global___ExecutePlanResponse.Metrics.MetricObject]
+            | None = ...,
         ) -> None: ...
         def ClearField(
             self, field_name: typing_extensions.Literal["metrics", b"metrics"]
@@ -1632,17 +1616,14 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             """A list of errors that occurred while collecting the observed metrics.
             If the length is 0, it means no errors occurred.
             """
-
         def __init__(
             self,
             *,
             name: builtins.str = ...,
-            values: (
-                collections.abc.Iterable[
-                    pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
-                ]
-                | None
-            ) = ...,
+            values: collections.abc.Iterable[
+                pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
+            ]
+            | None = ...,
             keys: collections.abc.Iterable[builtins.str] | None = ...,
             plan_id: builtins.int = ...,
             root_error_idx: builtins.int | None = ...,
@@ -1746,10 +1727,10 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         def __init__(
             self,
             *,
-            stages: (
-                collections.abc.Iterable[global___ExecutePlanResponse.ExecutionProgress.StageInfo]
-                | None
-            ) = ...,
+            stages: collections.abc.Iterable[
+                global___ExecutePlanResponse.ExecutionProgress.StageInfo
+            ]
+            | None = ...,
             num_inflight_tasks: builtins.int = ...,
         ) -> None: ...
         def ClearField(
@@ -1802,69 +1783,56 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     @property
     def sql_command_result(self) -> global___ExecutePlanResponse.SqlCommandResult:
         """Special case for executing SQL commands."""
-
     @property
     def write_stream_operation_start_result(
         self,
     ) -> pyspark.sql.connect.proto.commands_pb2.WriteStreamOperationStartResult:
         """Response for a streaming query."""
-
     @property
     def streaming_query_command_result(
         self,
     ) -> pyspark.sql.connect.proto.commands_pb2.StreamingQueryCommandResult:
         """Response for commands on a streaming query."""
-
     @property
     def get_resources_command_result(
         self,
     ) -> pyspark.sql.connect.proto.commands_pb2.GetResourcesCommandResult:
         """Response for 'SparkContext.resources'."""
-
     @property
     def streaming_query_manager_command_result(
         self,
     ) -> pyspark.sql.connect.proto.commands_pb2.StreamingQueryManagerCommandResult:
         """Response for commands on the streaming query manager."""
-
     @property
     def streaming_query_listener_events_result(
         self,
     ) -> pyspark.sql.connect.proto.commands_pb2.StreamingQueryListenerEventsResult:
         """Response for commands on the client side streaming query listener."""
-
     @property
     def result_complete(self) -> global___ExecutePlanResponse.ResultComplete:
         """Response type informing if the stream is complete in reattachable execution."""
-
     @property
     def create_resource_profile_command_result(
         self,
     ) -> pyspark.sql.connect.proto.commands_pb2.CreateResourceProfileCommandResult:
         """Response for command that creates ResourceProfile."""
-
     @property
     def execution_progress(self) -> global___ExecutePlanResponse.ExecutionProgress:
         """(Optional) Intermediate query progress reports."""
-
     @property
     def checkpoint_command_result(self) -> global___CheckpointCommandResult:
         """Response for command that checkpoints a DataFrame."""
-
     @property
     def ml_command_result(self) -> pyspark.sql.connect.proto.ml_pb2.MlCommandResult:
         """ML command response"""
-
     @property
     def pipeline_event_result(self) -> pyspark.sql.connect.proto.pipelines_pb2.PipelineEventResult:
         """Response containing pipeline event that is streamed back to the client during a pipeline run"""
-
     @property
     def pipeline_command_result(
         self,
     ) -> pyspark.sql.connect.proto.pipelines_pb2.PipelineCommandResult:
         """Pipeline command response"""
-
     @property
     def pipeline_query_function_execution_signal(
         self,
@@ -1872,17 +1840,14 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         """A signal from the server to the client to execute the query function for a flow, and to
         register its result with the server.
         """
-
     @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """Support arbitrary result objects."""
-
     @property
     def metrics(self) -> global___ExecutePlanResponse.Metrics:
         """Metrics for the query execution. Typically, this field is only present in the last
         batch of results and then represent the overall state of the query execution.
         """
-
     @property
     def observed_metrics(
         self,
@@ -1890,11 +1855,9 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         global___ExecutePlanResponse.ObservedMetrics
     ]:
         """The metrics observed during the execution of the query plan."""
-
     @property
     def schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
         """(Optional) The Spark schema. This field is available when `collect` is called."""
-
     def __init__(
         self,
         *,
@@ -1904,42 +1867,32 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         response_id: builtins.str = ...,
         arrow_batch: global___ExecutePlanResponse.ArrowBatch | None = ...,
         sql_command_result: global___ExecutePlanResponse.SqlCommandResult | None = ...,
-        write_stream_operation_start_result: (
-            pyspark.sql.connect.proto.commands_pb2.WriteStreamOperationStartResult | None
-        ) = ...,
-        streaming_query_command_result: (
-            pyspark.sql.connect.proto.commands_pb2.StreamingQueryCommandResult | None
-        ) = ...,
-        get_resources_command_result: (
-            pyspark.sql.connect.proto.commands_pb2.GetResourcesCommandResult | None
-        ) = ...,
-        streaming_query_manager_command_result: (
-            pyspark.sql.connect.proto.commands_pb2.StreamingQueryManagerCommandResult | None
-        ) = ...,
-        streaming_query_listener_events_result: (
-            pyspark.sql.connect.proto.commands_pb2.StreamingQueryListenerEventsResult | None
-        ) = ...,
+        write_stream_operation_start_result: pyspark.sql.connect.proto.commands_pb2.WriteStreamOperationStartResult
+        | None = ...,
+        streaming_query_command_result: pyspark.sql.connect.proto.commands_pb2.StreamingQueryCommandResult
+        | None = ...,
+        get_resources_command_result: pyspark.sql.connect.proto.commands_pb2.GetResourcesCommandResult
+        | None = ...,
+        streaming_query_manager_command_result: pyspark.sql.connect.proto.commands_pb2.StreamingQueryManagerCommandResult
+        | None = ...,
+        streaming_query_listener_events_result: pyspark.sql.connect.proto.commands_pb2.StreamingQueryListenerEventsResult
+        | None = ...,
         result_complete: global___ExecutePlanResponse.ResultComplete | None = ...,
-        create_resource_profile_command_result: (
-            pyspark.sql.connect.proto.commands_pb2.CreateResourceProfileCommandResult | None
-        ) = ...,
+        create_resource_profile_command_result: pyspark.sql.connect.proto.commands_pb2.CreateResourceProfileCommandResult
+        | None = ...,
         execution_progress: global___ExecutePlanResponse.ExecutionProgress | None = ...,
         checkpoint_command_result: global___CheckpointCommandResult | None = ...,
         ml_command_result: pyspark.sql.connect.proto.ml_pb2.MlCommandResult | None = ...,
-        pipeline_event_result: (
-            pyspark.sql.connect.proto.pipelines_pb2.PipelineEventResult | None
-        ) = ...,
-        pipeline_command_result: (
-            pyspark.sql.connect.proto.pipelines_pb2.PipelineCommandResult | None
-        ) = ...,
-        pipeline_query_function_execution_signal: (
-            pyspark.sql.connect.proto.pipelines_pb2.PipelineQueryFunctionExecutionSignal | None
-        ) = ...,
+        pipeline_event_result: pyspark.sql.connect.proto.pipelines_pb2.PipelineEventResult
+        | None = ...,
+        pipeline_command_result: pyspark.sql.connect.proto.pipelines_pb2.PipelineCommandResult
+        | None = ...,
+        pipeline_query_function_execution_signal: pyspark.sql.connect.proto.pipelines_pb2.PipelineQueryFunctionExecutionSignal
+        | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
         metrics: global___ExecutePlanResponse.Metrics | None = ...,
-        observed_metrics: (
-            collections.abc.Iterable[global___ExecutePlanResponse.ObservedMetrics] | None
-        ) = ...,
+        observed_metrics: collections.abc.Iterable[global___ExecutePlanResponse.ObservedMetrics]
+        | None = ...,
         schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
     ) -> None: ...
     def HasField(
@@ -2227,7 +2180,6 @@ class ConfigRequest(google.protobuf.message.Message):
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
             """(Required) The config keys to get."""
-
         def __init__(
             self,
             *,
@@ -2244,7 +2196,6 @@ class ConfigRequest(google.protobuf.message.Message):
             self,
         ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___KeyValue]:
             """(Required) The config key-value pairs to get. The value will be used as the default value."""
-
         def __init__(
             self,
             *,
@@ -2261,7 +2212,6 @@ class ConfigRequest(google.protobuf.message.Message):
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
             """(Required) The config keys to get optionally."""
-
         def __init__(
             self,
             *,
@@ -2299,7 +2249,6 @@ class ConfigRequest(google.protobuf.message.Message):
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
             """(Required) The config keys to unset."""
-
         def __init__(
             self,
             *,
@@ -2316,7 +2265,6 @@ class ConfigRequest(google.protobuf.message.Message):
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
             """(Required) The config keys to check the config is modifiable."""
-
         def __init__(
             self,
             *,
@@ -2346,7 +2294,6 @@ class ConfigRequest(google.protobuf.message.Message):
     @property
     def user_context(self) -> global___UserContext:
         """(Required) User context"""
-
     @property
     def operation(self) -> global___ConfigRequest.Operation:
         """(Required) The operation for the config."""
@@ -2439,7 +2386,6 @@ class ConfigResponse(google.protobuf.message.Message):
         Available when the operation is 'Get', 'GetWithDefault', 'GetOption', 'GetAll'.
         Also available for the operation 'IsModifiable' with boolean string "true" and "false".
         """
-
     @property
     def warnings(
         self,
@@ -2448,7 +2394,6 @@ class ConfigResponse(google.protobuf.message.Message):
 
         Warning messages for deprecated or unsupported configurations.
         """
-
     def __init__(
         self,
         *,
@@ -2519,7 +2464,6 @@ class AddArtifactsRequest(google.protobuf.message.Message):
         @property
         def data(self) -> global___AddArtifactsRequest.ArtifactChunk:
             """A single data chunk."""
-
         def __init__(
             self,
             *,
@@ -2548,9 +2492,8 @@ class AddArtifactsRequest(google.protobuf.message.Message):
         def __init__(
             self,
             *,
-            artifacts: (
-                collections.abc.Iterable[global___AddArtifactsRequest.SingleChunkArtifact] | None
-            ) = ...,
+            artifacts: collections.abc.Iterable[global___AddArtifactsRequest.SingleChunkArtifact]
+            | None = ...,
         ) -> None: ...
         def ClearField(
             self, field_name: typing_extensions.Literal["artifacts", b"artifacts"]
@@ -2581,7 +2524,6 @@ class AddArtifactsRequest(google.protobuf.message.Message):
         @property
         def initial_chunk(self) -> global___AddArtifactsRequest.ArtifactChunk:
             """The first/initial chunk."""
-
         def __init__(
             self,
             *,
@@ -2644,13 +2586,11 @@ class AddArtifactsRequest(google.protobuf.message.Message):
         The server side is notified about the total size of the large artifact as well as the
         number of chunks to expect.
         """
-
     @property
     def chunk(self) -> global___AddArtifactsRequest.ArtifactChunk:
         """A chunk of an artifact excluding metadata. This can be any chunk of a large artifact
         excluding the first chunk (which is included in `BeginChunkedArtifact`).
         """
-
     def __init__(
         self,
         *,
@@ -2778,15 +2718,13 @@ class AddArtifactsResponse(google.protobuf.message.Message):
         global___AddArtifactsResponse.ArtifactSummary
     ]:
         """The list of artifact(s) seen by the server."""
-
     def __init__(
         self,
         *,
         session_id: builtins.str = ...,
         server_side_session_id: builtins.str = ...,
-        artifacts: (
-            collections.abc.Iterable[global___AddArtifactsResponse.ArtifactSummary] | None
-        ) = ...,
+        artifacts: collections.abc.Iterable[global___AddArtifactsResponse.ArtifactSummary]
+        | None = ...,
     ) -> None: ...
     def ClearField(
         self,
@@ -2845,7 +2783,6 @@ class ArtifactStatusesRequest(google.protobuf.message.Message):
         The relative path of the file on the server's filesystem will be the same as the name of
         the provided artifact)
         """
-
     def __init__(
         self,
         *,
@@ -2962,16 +2899,15 @@ class ArtifactStatusesResponse(google.protobuf.message.Message):
         builtins.str, global___ArtifactStatusesResponse.ArtifactStatus
     ]:
         """A map of artifact names to their statuses."""
-
     def __init__(
         self,
         *,
         session_id: builtins.str = ...,
         server_side_session_id: builtins.str = ...,
-        statuses: (
-            collections.abc.Mapping[builtins.str, global___ArtifactStatusesResponse.ArtifactStatus]
-            | None
-        ) = ...,
+        statuses: collections.abc.Mapping[
+            builtins.str, global___ArtifactStatusesResponse.ArtifactStatus
+        ]
+        | None = ...,
     ) -> None: ...
     def ClearField(
         self,
@@ -3147,7 +3083,6 @@ class InterruptResponse(google.protobuf.message.Message):
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """Operation ids of the executions which were interrupted."""
-
     def __init__(
         self,
         *,
@@ -3941,7 +3876,6 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
             self,
         ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
             """The message parameters for the error framework."""
-
         @property
         def query_contexts(
             self,
@@ -3956,19 +3890,18 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         @property
         def breaking_change_info(self) -> global___FetchErrorDetailsResponse.BreakingChangeInfo:
             """Additional information if the error was caused by a breaking change."""
-
         def __init__(
             self,
             *,
             error_class: builtins.str | None = ...,
             message_parameters: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
-            query_contexts: (
-                collections.abc.Iterable[global___FetchErrorDetailsResponse.QueryContext] | None
-            ) = ...,
+            query_contexts: collections.abc.Iterable[
+                global___FetchErrorDetailsResponse.QueryContext
+            ]
+            | None = ...,
             sql_state: builtins.str | None = ...,
-            breaking_change_info: (
-                global___FetchErrorDetailsResponse.BreakingChangeInfo | None
-            ) = ...,
+            breaking_change_info: global___FetchErrorDetailsResponse.BreakingChangeInfo
+            | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -4039,7 +3972,6 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
             """A message explaining how the user can migrate their job to work
             with the breaking change.
             """
-
         @property
         def mitigation_config(self) -> global___FetchErrorDetailsResponse.MitigationConfig:
             """A spark config flag that can be used to mitigate the breaking change."""
@@ -4144,16 +4076,15 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         @property
         def spark_throwable(self) -> global___FetchErrorDetailsResponse.SparkThrowable:
             """The structured data of a SparkThrowable exception."""
-
         def __init__(
             self,
             *,
             error_type_hierarchy: collections.abc.Iterable[builtins.str] | None = ...,
             message: builtins.str = ...,
-            stack_trace: (
-                collections.abc.Iterable[global___FetchErrorDetailsResponse.StackTraceElement]
-                | None
-            ) = ...,
+            stack_trace: collections.abc.Iterable[
+                global___FetchErrorDetailsResponse.StackTraceElement
+            ]
+            | None = ...,
             cause_idx: builtins.int | None = ...,
             spark_throwable: global___FetchErrorDetailsResponse.SparkThrowable | None = ...,
         ) -> None: ...
@@ -4216,7 +4147,6 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         global___FetchErrorDetailsResponse.Error
     ]:
         """A list of errors."""
-
     def __init__(
         self,
         *,
@@ -4259,7 +4189,6 @@ class CheckpointCommandResult(google.protobuf.message.Message):
     @property
     def relation(self) -> pyspark.sql.connect.proto.relations_pb2.CachedRemoteRelation:
         """(Required) The logical plan checkpointed."""
-
     def __init__(
         self,
         *,
@@ -4440,7 +4369,6 @@ class GetStatusRequest(google.protobuf.message.Message):
             """Get status of operations with these operation_ids.
             If unset or empty, returns status of all operations in the session.
             """
-
         @property
         def extensions(
             self,
@@ -4448,7 +4376,6 @@ class GetStatusRequest(google.protobuf.message.Message):
             google.protobuf.any_pb2.Any
         ]:
             """Extension point for custom operation-level status requests."""
-
         def __init__(
             self,
             *,
@@ -4500,7 +4427,6 @@ class GetStatusRequest(google.protobuf.message.Message):
 
         Get status of operations in the session.
         """
-
     @property
     def extensions(
         self,
@@ -4508,7 +4434,6 @@ class GetStatusRequest(google.protobuf.message.Message):
         google.protobuf.any_pb2.Any
     ]:
         """Extension point for custom status request types."""
-
     def __init__(
         self,
         *,
@@ -4643,7 +4568,6 @@ class GetStatusResponse(google.protobuf.message.Message):
             google.protobuf.any_pb2.Any
         ]:
             """Extension point for custom operation-level status fields."""
-
         def __init__(
             self,
             *,
@@ -4675,7 +4599,6 @@ class GetStatusResponse(google.protobuf.message.Message):
         global___GetStatusResponse.OperationStatus
     ]:
         """Status information about requested operations."""
-
     @property
     def extensions(
         self,
@@ -4683,15 +4606,13 @@ class GetStatusResponse(google.protobuf.message.Message):
         google.protobuf.any_pb2.Any
     ]:
         """Extension point for custom status response types."""
-
     def __init__(
         self,
         *,
         session_id: builtins.str = ...,
         server_side_session_id: builtins.str = ...,
-        operation_statuses: (
-            collections.abc.Iterable[global___GetStatusResponse.OperationStatus] | None
-        ) = ...,
+        operation_statuses: collections.abc.Iterable[global___GetStatusResponse.OperationStatus]
+        | None = ...,
         extensions: collections.abc.Iterable[google.protobuf.any_pb2.Any] | None = ...,
     ) -> None: ...
     def ClearField(
