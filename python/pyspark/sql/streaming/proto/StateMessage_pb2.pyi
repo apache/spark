@@ -33,6 +33,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+
 import builtins
 import collections.abc
 import google.protobuf.descriptor
@@ -141,9 +142,7 @@ class StateRequest(google.protobuf.message.Message):
             b"version",
         ],
     ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["method", b"method"]
-    ) -> (
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["method", b"method"]) -> (
         typing_extensions.Literal[
             "statefulProcessorCall",
             "stateVariableRequest",
@@ -503,9 +502,7 @@ class StatefulProcessorCall(google.protobuf.message.Message):
             b"timerStateCall",
         ],
     ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["method", b"method"]
-    ) -> (
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["method", b"method"]) -> (
         typing_extensions.Literal[
             "setHandleState",
             "getValueState",
@@ -1103,9 +1100,7 @@ class MapStateCall(google.protobuf.message.Message):
             b"values",
         ],
     ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["method", b"method"]
-    ) -> (
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["method", b"method"]) -> (
         typing_extensions.Literal[
             "exists",
             "getValue",

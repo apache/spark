@@ -33,7 +33,6 @@ from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.series import Series
 from pyspark.sql.utils import is_remote
 
-
 __all__ = ["sql"]
 
 
@@ -320,7 +319,7 @@ def _test() -> None:
         .appName("pyspark.pandas.sql_formatter tests")
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.sql_formatter,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
