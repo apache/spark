@@ -327,7 +327,6 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitSetPath(ctx: SetPathContext): LogicalPlan = withOrigin(ctx) {
-    import org.apache.spark.sql.execution.command.{PathElement, SetPathCommand}
     val elements = (0 until ctx.pathElement().size()).map { i =>
       val pe = ctx.pathElement(i)
       if (pe.DEFAULT_PATH() != null) PathElement.DefaultPath
