@@ -302,8 +302,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
         }
         // evaluateSubExprEliminationState must be called after predicate code generation;
         // it emits the pre-computation code and marks states as consumed.
-        (inputVarsEvalCode,
-         ctx.evaluateSubExprEliminationState(subExprs.states.values), predCode)
+        (inputVarsEvalCode, ctx.evaluateSubExprEliminationState(subExprs.states.values), predCode)
       } else {
         // CSE disabled or no other predicates: fall back to original codegen path
         // with no overhead.
