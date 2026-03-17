@@ -241,7 +241,7 @@ def write_read_func_and_partitions(
     if not is_streaming:
         # The partitioning of python batch source read is determined before query execution.
         try:
-            partitions = reader.partitions()  # type: ignore[call-overload]
+            partitions = reader.partitions()  # type: ignore[call-arg]
         except NotImplementedError:
             # Backward compatibility for data sources that raise NotImplementedError for partitions
             # Our old base class did this so an old client may still be using it.
