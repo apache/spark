@@ -198,6 +198,9 @@ class BasicInMemoryTableCatalog extends TableCatalog {
           partitioning = finalPartitioning,
           properties = properties)
           .alterTableWithData(table.data, schema)
+      case other =>
+        throw new UnsupportedOperationException(
+          s"Unsupported InMemoryBaseTable subclass: ${other.getClass.getName}")
     }
     newTable.setVersion(currentVersion)
     changes.foreach {

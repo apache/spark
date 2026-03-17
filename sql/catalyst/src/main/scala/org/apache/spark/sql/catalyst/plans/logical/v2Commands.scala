@@ -57,11 +57,11 @@ trait KeepAnalyzedQuery extends Command {
 /**
  * Trait that gathers schema evolution logic shared by V2 write commands and MERGE INTO.
  */
-trait SupportsSchemaEvolution extends LogicalPlan {
+trait WriteSupportsSchemaEvolution extends LogicalPlan {
   /** The target of the write operation. */
   def table: LogicalPlan
 
-  def withNewTable(newTable: NamedRelation): SupportsSchemaEvolution
+  def withNewTable(newTable: NamedRelation): WriteSupportsSchemaEvolution
 
   /** Whether schema evolution is enabled for the write operation. */
   def withSchemaEvolution: Boolean
@@ -98,7 +98,7 @@ trait V2WriteCommand
     extends UnaryCommand
     with KeepAnalyzedQuery
     with CTEInChildren
-    with SupportsSchemaEvolution {
+    with WriteSupportsSchemaEvolution {
   def table: NamedRelation
   def query: LogicalPlan
   def isByName: Boolean
@@ -130,7 +130,7 @@ trait V2WriteCommand
 
   override lazy val pendingSchemaChanges: Seq[TableChange] = {
     if (schemaEvolutionEnabled && schemaEvolutionReady) {
-      ResolveSchemaEvolution.computeSchemaChanges(table.schema, query.schema, isByName).toSeq
+      ResolveSchemaEvolution.computeSupportedSchemaChanges(table, query.schema, isByName).toSeq
     } else {
       Seq.empty
     }
@@ -963,7 +963,7 @@ case class MergeIntoTable(
     notMatchedActions: Seq[MergeAction],
     notMatchedBySourceActions: Seq[MergeAction],
     withSchemaEvolution: Boolean)
-    extends BinaryCommand with SupportsSchemaEvolution with SupportsSubquery {
+    extends BinaryCommand with WriteSupportsSchemaEvolution with SupportsSubquery {
 
   override val table: LogicalPlan = EliminateSubqueryAliases(targetTable)
 
@@ -1007,8 +1007,8 @@ case class MergeIntoTable(
   override lazy val pendingSchemaChanges: Seq[TableChange] = {
     if (schemaEvolutionEnabled && schemaEvolutionReady) {
       val referencedSourceSchema = MergeIntoTable.sourceSchemaForSchemaEvolution(this)
-      ResolveSchemaEvolution.computeSchemaChanges(
-        targetTable.schema, referencedSourceSchema, isByName = true).toSeq
+      ResolveSchemaEvolution.computeSupportedSchemaChanges(
+        table, referencedSourceSchema, isByName = true).toSeq
     } else {
       Seq.empty
     }
