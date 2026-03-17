@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
-import java.io.File
+import java.io.{File, FileNotFoundException}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Period}
@@ -197,7 +197,7 @@ abstract class OrcSuite
 
   protected def testMergeSchemasInParallel(
       ignoreCorruptFiles: Boolean,
-      schemaReader: (Seq[FileStatus], Configuration, Boolean) => Seq[StructType]): Unit = {
+      schemaReader: (Seq[FileStatus], Configuration, Boolean, Boolean) => Seq[StructType]): Unit = {
     withSQLConf(
       SQLConf.IGNORE_CORRUPT_FILES.key -> ignoreCorruptFiles.toString,
       SQLConf.ORC_IMPLEMENTATION.key -> orcImp) {
@@ -228,7 +228,7 @@ abstract class OrcSuite
   }
 
   protected def testMergeSchemasInParallel(
-      schemaReader: (Seq[FileStatus], Configuration, Boolean) => Seq[StructType]): Unit = {
+      schemaReader: (Seq[FileStatus], Configuration, Boolean, Boolean) => Seq[StructType]): Unit = {
     testMergeSchemasInParallel(true, schemaReader)
     checkErrorMatchPVals(
       exception = intercept[SparkException] {
@@ -457,6 +457,42 @@ abstract class OrcSuite
       // it is ok if no schema merging
       withSQLConf(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key -> "false") {
         assert(spark.read.orc(basePath).columns.length === 2)
+      }
+    }
+  }
+
+  test("SPARK-55857: test schema merging with missing files") {
+    withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> orcImp) {
+      withTempDir { dir =>
+        val fs = FileSystem.get(spark.sessionState.newHadoopConf())
+        val basePath = dir.getCanonicalPath
+        val path1 = new Path(basePath, "first")
+        val path2 = new Path(basePath, "second")
+        spark.range(0, 10).toDF("a").coalesce(1).write.orc(path1.toString)
+        spark.range(0, 10).toDF("b").coalesce(1).write.orc(path2.toString)
+
+        // Collect FileStatuses before deleting, to simulate the race condition where a file
+        // is listed for schema inference but then disappears before it can be read.
+        // Filter to actual ORC data files (exclude _SUCCESS and directories).
+        val allStatuses = Seq(fs.listStatus(path1), fs.listStatus(path2)).flatten
+        val fileStatuses = allStatuses.filter(s => s.isFile && !s.getPath.getName.startsWith("_"))
+        val deletedFile = fileStatuses.head
+        fs.delete(deletedFile.getPath, false)
+
+        val hadoopConf = spark.sessionState.newHadoopConf()
+
+        // ignoreMissingFiles=true: skips the missing file, returns schema from remaining files
+        val schemas = OrcUtils.readOrcSchemasInParallel(
+          fileStatuses, hadoopConf, ignoreCorruptFiles = false, ignoreMissingFiles = true)
+        assert(schemas.nonEmpty)
+
+        // ignoreMissingFiles=false: the FileNotFoundException propagates uncaught.
+        // ThreadUtils.parmap wraps it in a SparkException; unwrap to verify the cause.
+        val ex = intercept[SparkException] {
+          OrcUtils.readOrcSchemasInParallel(
+            fileStatuses, hadoopConf, ignoreCorruptFiles = false, ignoreMissingFiles = false)
+        }
+        assert(ex.getCause.isInstanceOf[FileNotFoundException])
       }
     }
   }

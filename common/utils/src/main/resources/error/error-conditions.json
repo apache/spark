@@ -2476,6 +2476,13 @@
           "Single-pass analyzer output schema:",
           "<singlePassOutputSchema>"
         ]
+      },
+      "SINGLE_PASS_FAILED_FIXED_POINT_SUCCEEDED" : {
+        "message" : [
+          "Single-pass resolution failed, but fixed-point resolution succeeded.",
+          "Fixed-point analyzer output:",
+          "<fixedPointOutput>"
+        ]
       }
     },
     "sqlState" : "XX000"
