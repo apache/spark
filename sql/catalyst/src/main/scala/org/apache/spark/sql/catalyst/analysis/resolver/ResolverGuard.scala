@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
+import java.util.Locale
+
 import org.apache.spark.sql.catalyst.{
   FunctionIdentifier,
   QueryPlanningTracker,
@@ -475,18 +477,8 @@ class ResolverGuard(
   private def checkUnresolvedFunction(unresolvedFunction: UnresolvedFunction) = {
     val nameParts = unresolvedFunction.nameParts
     val funcName = nameParts.last.toLowerCase(Locale.ROOT)
-    if (nameParts.size != 1) {
-      // Reject only when builtin-qualified and unsupported; allow session/catalog qualified (PATH).
-      if (FunctionResolution.sessionNamespaceKind(nameParts).contains(SessionCatalog.Builtin)) {
-        if (ResolverGuard.UNSUPPORTED_FUNCTION_NAMES.contains(funcName)) {
-          Some(s"unsupported function $funcName")
-        } else {
-          None
-        }
-      } else {
-        None
-      }
-    } else {
+    if (nameParts.size == 1) {
+      // Unqualified: reject if unsupported list or not in registry, else same as parent
       val shouldReject = ResolverGuard.UNSUPPORTED_FUNCTION_NAMES.contains(funcName) ||
         !FunctionRegistry.functionSet.contains(
           FunctionRegistry.builtinFunctionIdentifier(nameParts.last))
@@ -499,6 +491,19 @@ class ResolverGuard(
       } else {
         unresolvedFunction.children.collectFirst { case CheckExpression(reason) => reason }
       }
+    } else if (FunctionResolution.sessionNamespaceKind(nameParts)
+        .contains(SessionCatalog.Builtin)) {
+      // Explicitly builtin-qualified: reject if unsupported, else check children
+      if (ResolverGuard.UNSUPPORTED_FUNCTION_NAMES.contains(funcName)) {
+        Some(s"unsupported function ${funcName}")
+      } else {
+        unresolvedFunction.children.collectFirst { case CheckExpression(reason) => reason }
+      }
+    } else if (FunctionResolution.sessionNamespaceKind(nameParts).isDefined) {
+      // Session-qualified: allow through (PATH + system-first)
+      unresolvedFunction.children.collectFirst { case CheckExpression(reason) => reason }
+    } else {
+      Some("multi-part function name")
     }
   }
 

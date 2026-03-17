@@ -217,7 +217,10 @@ class FunctionResolution(
     }
   }
 
-  /** On table-function lookup failure, throw a clearer error if the name exists as a non-table function. */
+  /**
+   * On table-function lookup failure, throw a clearer error if the name exists
+   * as a non-table function.
+   */
   private def tryRethrowNotTableFunction(catalog: CatalogPlugin, ident: Identifier): Unit = {
     try {
       if (CatalogV2Util.isSessionCatalog(catalog)) {
