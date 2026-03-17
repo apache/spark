@@ -81,45 +81,35 @@ class FunctionResolution(
       nameParts.head.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME)
 
   /**
-   * Produces the ordered list of candidate names for resolution.
-   * Candidates are normally 3-part (catalog.database.function), assuming search path
-   * entries are catalog.database (2-part). A 2-part candidate is returned when a
-   * V2 catalog has no default namespace (handled by downstream expandIdentifier).
+   * Produces the ordered list of candidate names for resolution. Expansion happens in two cases:
    *
-   * @param nameParts The function name parts.
-   * @return A sequence of candidate names (usually 3-part) to attempt resolution with.
+   * 1. Single-part names: expanded via the search path, where each search path entry is
+   *    fully qualified so appending the name produces fully qualified candidates.
+   * 2. `builtin.name` or `session.name`: prepending `system` creates a fully qualified
+   *    system catalog candidate. The original 2-part name is also kept as a persistent
+   *    catalog candidate (qualified downstream). Order is controlled by
+   *    the `persistentCatalogFirst` config.
+   *
+   * All other multi-part names are returned as-is for downstream resolution.
    */
   private def resolutionCandidates(nameParts: Seq[String]): Seq[Seq[String]] = {
-    def ensureThreePart(parts: Seq[String]): Seq[String] =
-      if (parts.length == 3) parts
-      else if (parts.length == 2) currentCatalogPath.head +: parts
-      else parts  // Safety fallback; valid paths yield 2 or 3 parts before this point.
-
-    val n = nameParts.length
-    if (n == 1) {
-      // Search path entries are 2-part (catalog.database), so path ++ nameParts is always 3-part.
+    if (nameParts.size == 1) {
       val searchPath = SQLConf.get.resolutionSearchPath(currentCatalogPath)
       searchPath.map(_ ++ nameParts)
-    } else if (n == 2 && FunctionResolution.sessionNamespaceKind(nameParts).isDefined) {
-      // Partially qualified builtin/session: produce both candidates as 3-part
-      // (catalog.database.func).
+    } else if (nameParts.size == 2 &&
+        FunctionResolution.sessionNamespaceKind(nameParts).isDefined) {
       val systemCandidate = CatalogManager.SYSTEM_CATALOG_NAME +: nameParts
-      val persistentCandidate = currentCatalogPath.head +: nameParts
       if (SQLConf.get.prioritizeSystemCatalog) {
-        Seq(systemCandidate, persistentCandidate)
+        Seq(systemCandidate, nameParts)
       } else {
-        Seq(persistentCandidate, systemCandidate)
+        Seq(nameParts, systemCandidate)
       }
-    } else if (n == 2) {
-      // 2-part catalog.func: pass through for expandIdentifier (V2 catalog, no default namespace).
-      Seq(nameParts)
     } else {
-      // 3-part or other: use as-is or prepend current catalog to form 3-part.
-      Seq(ensureThreePart(nameParts))
+      Seq(nameParts)
     }
   }
 
-  private def resolveQualifiedFunction(
+  private def resolveFunctionCandidate(
       nameParts: Seq[String],
       unresolvedFunc: UnresolvedFunction): Option[Expression] = {
     if (isSystemCatalogQualified(nameParts)) {
@@ -163,11 +153,10 @@ class FunctionResolution(
     withPosition(unresolvedFunc) {
       // Internal functions resolve via the internal registry when the parser marks them as
       // internal; they are not resolved via the search path.
-      if (unresolvedFunc.isInternal && unresolvedFunc.nameParts.length == 1) {
-        val funcIdentifier = FunctionIdentifier(unresolvedFunc.nameParts.head)
+      if (unresolvedFunc.isInternal && unresolvedFunc.nameParts.size == 1) {
         try {
           val func = FunctionRegistry.internal.lookupFunction(
-            funcIdentifier, unresolvedFunc.arguments)
+            FunctionIdentifier(unresolvedFunc.nameParts.head), unresolvedFunc.arguments)
           return validateFunction(func, unresolvedFunc.arguments.length, unresolvedFunc)
         } catch {
           case _: NoSuchFunctionException =>
@@ -180,7 +169,7 @@ class FunctionResolution(
 
       val candidates = resolutionCandidates(unresolvedFunc.nameParts)
       for (nameParts <- candidates) {
-        resolveQualifiedFunction(nameParts, unresolvedFunc) match {
+        resolveFunctionCandidate(nameParts, unresolvedFunc) match {
           case Some(expr) => return expr
           case None =>
         }
@@ -191,7 +180,7 @@ class FunctionResolution(
     }
   }
 
-  private def resolveQualifiedTableFunction(
+  private def resolveTableFunctionCandidate(
       nameParts: Seq[String],
       arguments: Seq[Expression]): Option[LogicalPlan] = {
     if (isSystemCatalogQualified(nameParts)) {
@@ -250,7 +239,7 @@ class FunctionResolution(
       arguments: Seq[Expression]): Option[LogicalPlan] = {
     val candidates = resolutionCandidates(nameParts)
     for (nameParts <- candidates) {
-      resolveQualifiedTableFunction(nameParts, arguments) match {
+      resolveTableFunctionCandidate(nameParts, arguments) match {
         case Some(plan) => return Some(plan)
         case None =>
       }

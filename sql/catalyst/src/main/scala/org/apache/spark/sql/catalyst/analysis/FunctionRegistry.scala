@@ -210,26 +210,15 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
   protected val functionBuilders =
     new mutable.HashMap[FunctionIdentifier, (ExpressionInfo, FunctionBuilder)]
 
-  // Function name resolution is case-insensitive; database and catalog are preserved so
-  // system.session.foo and spark_catalog.session.foo do not collide. Unqualified (1-part)
-  // lookups resolve to the builtin 3-part key so that callers using FunctionIdentifier("time")
-  // find functions registered as system.builtin.time. A 2-part name with database=session
-  // and no catalog resolves to the temp 3-part key.
-  private def normalizeFuncName(name: FunctionIdentifier): FunctionIdentifier = {
-    if (name.database.isEmpty && name.catalog.isEmpty) {
-      FunctionRegistry.builtinFunctionIdentifier(name.funcName)
-    } else if (name.database.exists(_.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) &&
-        name.catalog.isEmpty) {
-      new FunctionIdentifier(
-        name.funcName.toLowerCase(Locale.ROOT),
-        Some(CatalogManager.SESSION_NAMESPACE),
-        Some(CatalogManager.SYSTEM_CATALOG_NAME))
-    } else {
-      new FunctionIdentifier(
-        name.funcName.toLowerCase(Locale.ROOT),
-        name.database,
-        name.catalog)
-    }
+  // All function identifiers must be fully qualified (3-part: catalog.database.funcName).
+  // Normalization lowercases all parts for case-insensitive lookup.
+  protected def normalizeFuncName(name: FunctionIdentifier): FunctionIdentifier = {
+    assert(name.database.isDefined && name.catalog.isDefined,
+      s"Function identifier must be fully qualified (3-part): $name")
+    new FunctionIdentifier(
+      name.funcName.toLowerCase(Locale.ROOT),
+      name.database.map(_.toLowerCase(Locale.ROOT)),
+      name.catalog.map(_.toLowerCase(Locale.ROOT)))
   }
 
   override def registerFunction(
@@ -333,6 +322,16 @@ class SimpleFunctionRegistry
     }
     registry
   }
+}
+
+/**
+ * A mixin for builtin-only registries that accepts any identifier and normalizes
+ * it to the builtin 3-part key (system.builtin.funcName). This allows callers to
+ * look up builtins by simple name without constructing a fully qualified identifier.
+ */
+trait BuiltinRegistryMixin[T] extends SimpleFunctionRegistryBase[T] {
+  override protected def normalizeFuncName(name: FunctionIdentifier): FunctionIdentifier =
+    super.normalizeFuncName(FunctionRegistry.builtinFunctionIdentifier(name.funcName))
 }
 
 object EmptyFunctionRegistry
@@ -1009,11 +1008,12 @@ object FunctionRegistry {
     expression[ToProtobuf]("to_protobuf")
   )
 
+  // BuiltinRegistryMixin normalizes any name to the builtin 3-part key (system.builtin.name).
   val builtin: SimpleFunctionRegistry = {
-    val fr = new SimpleFunctionRegistry
+    val fr = new SimpleFunctionRegistry with BuiltinRegistryMixin[Expression]
     expressions.foreach {
       case (name, (info, builder)) =>
-        fr.internalRegisterFunction(builtinFunctionIdentifier(name), info, builder)
+        fr.registerFunction(FunctionIdentifier(name), info, builder)
     }
     fr
   }
@@ -1021,7 +1021,8 @@ object FunctionRegistry {
   val functionSet: Set[FunctionIdentifier] = builtin.listFunction().toSet
 
   /** Registry for internal functions used by Connect and the Column API. */
-  private[sql] val internal: SimpleFunctionRegistry = new SimpleFunctionRegistry
+  private[sql] val internal: SimpleFunctionRegistry =
+    new SimpleFunctionRegistry with BuiltinRegistryMixin[Expression]
 
   private[spark] def registerInternalExpression[T <: Expression : ClassTag](
       name: String,
@@ -1036,9 +1037,8 @@ object FunctionRegistry {
     } else {
       builder
     }
-    // Internal functions are registered with the builtin identifier so that unqualified
-    // lookups, which normalize to system.builtin.name, find them.
-    internal.internalRegisterFunction(builtinFunctionIdentifier(name), info, newBuilder)
+    // BuiltinRegistryMixin normalizes to the builtin 3-part key (system.builtin.name).
+    internal.registerFunction(FunctionIdentifier(name), info, newBuilder)
   }
 
   registerInternalExpression[Product]("product")
@@ -1309,11 +1309,12 @@ object TableFunctionRegistry {
     PythonWorkerLogs.functionBuilder
   )
 
+  // BuiltinRegistryMixin normalizes any name to the builtin 3-part key (system.builtin.name).
   val builtin: SimpleTableFunctionRegistry = {
-    val fr = new SimpleTableFunctionRegistry
+    val fr = new SimpleTableFunctionRegistry with BuiltinRegistryMixin[LogicalPlan]
     logicalPlans.foreach {
       case (name, (info, builder)) =>
-        fr.internalRegisterFunction(FunctionRegistry.builtinFunctionIdentifier(name), info, builder)
+        fr.registerFunction(FunctionIdentifier(name), info, builder)
     }
     fr
   }

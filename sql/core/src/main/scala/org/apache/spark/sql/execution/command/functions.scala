@@ -158,9 +158,8 @@ case class DropFunctionCommand(
 
       // Check if temp function exists first - if it does, allow dropping it even if a builtin
       // with the same name exists (shadowing case)
-      val unqualifiedIdent = FunctionIdentifier(funcName)
-      if (!catalog.isTemporaryFunction(unqualifiedIdent) &&
-          catalog.isBuiltinFunction(unqualifiedIdent)) {
+      if (!catalog.isTemporaryFunction(FunctionIdentifier(funcName)) &&
+          catalog.isBuiltinFunction(funcName)) {
         throw QueryCompilationErrors.cannotDropBuiltinFuncError(funcName)
       }
       catalog.dropTempFunction(funcName, ifExists)

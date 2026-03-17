@@ -93,30 +93,19 @@ class SessionCatalog(
   import CatalogTypes.TablePartitionSpec
 
   /**
-   * Database qualifier used to store temporary functions in the function registry.
-   * Temporary functions use composite keys to coexist with builtin functions of the same name.
-   * Storage convention (see namespaceToIdentifier): builtins are stored as
-   * FunctionIdentifier(name, Some("builtin"), Some("system")); temp functions as
-   * FunctionIdentifier(name, Some("session"), Some("system")).
-   */
-  private val TEMP_FUNCTION_DB = CatalogManager.SESSION_NAMESPACE
-
-  /**
-   * Creates a FunctionIdentifier for a temporary function with the TEMP_FUNCTION_DB database
-   * qualifier. This enables temporary functions to coexist with builtin functions of the same name.
+   * Creates a FunctionIdentifier for a temporary function using SESSION_NAMESPACE_TEMPLATE.
+   * Temporary functions are stored with the session namespace (system.session) to coexist
+   * with builtin functions of the same name.
    */
   private def tempFunctionIdentifier(name: String): FunctionIdentifier =
-    FunctionIdentifier(
-      format(name),
-      Some(TEMP_FUNCTION_DB),
-      Some(CatalogManager.SYSTEM_CATALOG_NAME))
+    SESSION_NAMESPACE_TEMPLATE.copy(funcName = name)
 
   /**
-   * Checks if a FunctionIdentifier represents a temporary function by checking for the
-   * TEMP_FUNCTION_DB database qualifier.
+   * Checks if a FunctionIdentifier represents a temporary function by comparing
+   * its namespace (catalog + database) against SESSION_NAMESPACE_TEMPLATE.
    */
   private def isTempFunctionIdentifier(identifier: FunctionIdentifier): Boolean =
-    identifier.database.contains(TEMP_FUNCTION_DB)
+    identifier.copy(funcName = "") == SESSION_NAMESPACE_TEMPLATE
 
   // --------------------------------
   // | PATH-Based Resolution        |
@@ -176,25 +165,7 @@ class SessionCatalog(
     }
   }
 
-  /**
-   * Maps a namespace template to an actual storage identifier for a specific function.
-   *
-   * Storage conventions:
-   * - Builtin functions: FunctionIdentifier(name, Some("builtin"), Some("system"))
-   * - Temp functions: FunctionIdentifier(name, Some("session"), Some("system"))
-   * - Other: FunctionIdentifier(name, namespace.database, namespace.catalog)
-   */
-  private def namespaceToIdentifier(
-      namespace: FunctionIdentifier,
-      name: String): FunctionIdentifier = {
-    namespace.database match {
-      case Some(CatalogManager.BUILTIN_NAMESPACE) =>
-        FunctionRegistry.builtinFunctionIdentifier(name)
 
-      case _ =>
-        namespace.copy(funcName = name)
-    }
-  }
 
   /**
    * Checks if a namespace represents temporary functions.
@@ -217,7 +188,7 @@ class SessionCatalog(
       name: String,
       registry: FunctionRegistryBase[T]): Option[ExpressionInfo] = {
 
-    val identifier = namespaceToIdentifier(namespace, name)
+    val identifier = namespace.copy(funcName = name)
     val result = registry.lookupFunction(identifier)
 
     // Apply view context filtering for temp functions
@@ -244,7 +215,7 @@ class SessionCatalog(
       arguments: Seq[Expression],
       registry: FunctionRegistryBase[T]): Option[T] = {
 
-    val identifier = namespaceToIdentifier(namespace, name)
+    val identifier = namespace.copy(funcName = name)
 
     if (!registry.functionExists(identifier)) {
       None
@@ -2118,10 +2089,10 @@ class SessionCatalog(
     val func = funcDefinition.identifier
 
     // Determine the key to use for registration:
-    // - Temporary functions (unqualified): use composite key with TEMP_FUNCTION_DB database
+    // - Temporary functions (unqualified): use composite key with session namespace database
     // - Persistent functions (qualified): keep qualification to avoid conflicts
     val identToRegister = if (func.database.isEmpty) {
-      // Temporary function: use TEMP_FUNCTION_DB.funcName
+      // Temporary function: use session namespace.funcName
       tempFunctionIdentifier(func.funcName)
     } else {
       // Persistent function: keep original qualified identifier
@@ -2240,7 +2211,7 @@ class SessionCatalog(
     val isTemporary = function.name.database.isEmpty
 
     if (isTemporary) {
-      // Use FunctionIdentifier with TEMP_FUNCTION_DB for temporary functions
+      // Use FunctionIdentifier with session namespace for temporary functions
       val tempIdentifier = tempFunctionIdentifier(function.name.funcName)
 
       // Security check: When legacy mode is enabled, block SQL-created temporary functions
@@ -2291,7 +2262,7 @@ class SessionCatalog(
    * or [[TableFunctionRegistry]]. Return true if function exists.
    */
   def unregisterFunction(name: FunctionIdentifier): Boolean = {
-    // If it's an unqualified name, it's a temp function stored with TEMP_FUNCTION_DB database
+    // If it's an unqualified name, it's a temp function stored with session namespace database
     val tempIdent = if (name.database.isEmpty) tempFunctionIdentifier(name.funcName) else name
     functionRegistry.dropFunction(tempIdent) || tableFunctionRegistry.dropFunction(tempIdent)
   }
@@ -2312,7 +2283,7 @@ class SessionCatalog(
    * Returns whether it is a temporary function. If not existed, returns false.
    */
   def isTemporaryFunction(name: FunctionIdentifier): Boolean = {
-    // A temporary function is stored with database = TEMP_FUNCTION_DB
+    // A temporary function is stored with database = session namespace
     if (name.database.isEmpty) {
       val tempIdent = tempFunctionIdentifier(name.funcName)
       functionRegistry.functionExists(tempIdent) ||
@@ -2328,7 +2299,7 @@ class SessionCatalog(
    * session. If not existed, return false.
    */
   def isRegisteredFunction(name: FunctionIdentifier): Boolean = {
-    // Check if the function exists as temp (TEMP_FUNCTION_DB), builtin (3-part key), or persistent.
+    // Check if the function exists as temp, builtin (3-part key), or persistent.
     if (name.database.isEmpty) {
       val tempIdent = tempFunctionIdentifier(name.funcName)
       val builtinIdent = FunctionRegistry.builtinFunctionIdentifier(name.funcName)
@@ -2365,10 +2336,9 @@ class SessionCatalog(
   /**
    * Returns whether it is a built-in function.
    */
-  def isBuiltinFunction(name: FunctionIdentifier): Boolean = {
-    val builtinIdent = FunctionRegistry.builtinFunctionIdentifier(name.funcName)
-    FunctionRegistry.builtin.functionExists(builtinIdent) ||
-      TableFunctionRegistry.builtin.functionExists(builtinIdent)
+  def isBuiltinFunction(name: String): Boolean = {
+    FunctionRegistry.builtin.functionExists(FunctionIdentifier(name)) ||
+      TableFunctionRegistry.builtin.functionExists(FunctionIdentifier(name))
   }
 
   protected[sql] def failFunctionLookup(name: FunctionIdentifier): Nothing = {
@@ -2446,23 +2416,11 @@ class SessionCatalog(
    */
   private[sql] def identifierFromSystemNameParts(
       nameParts: Seq[String]): Option[FunctionIdentifier] = {
-    val threePart = nameParts.size match {
-      case 2 if nameParts.head.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE) ||
-                  nameParts.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) =>
-        Some(CatalogManager.SYSTEM_CATALOG_NAME +: nameParts)
-      case 3 if nameParts.head.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) =>
-        Some(nameParts)
-      case _ =>
-        None
-    }
-    threePart.flatMap { p =>
-      if (p(1).equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)) {
-        Some(FunctionRegistry.builtinFunctionIdentifier(p(2)))
-      } else if (p(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
-        Some(tempFunctionIdentifier(p(2)))
-      } else {
-        None
-      }
+    FunctionResolution.sessionNamespaceKind(nameParts).map {
+      case SessionCatalog.Builtin =>
+        FunctionRegistry.builtinFunctionIdentifier(nameParts.last)
+      case SessionCatalog.Temp =>
+        tempFunctionIdentifier(nameParts.last)
     }
   }
 
@@ -2737,24 +2695,14 @@ class SessionCatalog(
 
   /**
    * Lists all built-in and temporary functions matching the given pattern.
-   * Builtins are keyed as (funcName, builtin, system); temp as (funcName, session, system).
-   * The pattern is matched against the display name (simple funcName for system catalog) for
-   * backward compatibility with SHOW FUNCTIONS LIKE 'abs'.
+   * All system catalog functions (builtin and temp) are 3-part identifiers with
+   * catalog = system. The pattern is matched against funcName for backward compatibility.
    */
   private def listBuiltinAndTempFunctions(pattern: String): Seq[FunctionIdentifier] = {
     val functions = (functionRegistry.listFunction() ++ tableFunctionRegistry.listFunction())
-      .filter(f =>
-        isTempFunctionIdentifier(f) ||
-        (f.database.contains(CatalogManager.BUILTIN_NAMESPACE) &&
-          f.catalog.contains(CatalogManager.SYSTEM_CATALOG_NAME)))
-      .map(f => if (isTempFunctionIdentifier(f)) {
-        FunctionIdentifier(f.funcName)
-      } else {
-        f
-      })
-    val namesToFilter = functions.map(_.displayNameForShowFunctions)
-    val matchedNames = StringUtils.filterPattern(namesToFilter, pattern).toSet
-    functions.zip(namesToFilter).filter { case (_, name) => matchedNames.contains(name) }.map(_._1)
+      .filter(_.catalog.exists(_.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME)))
+    val matched = StringUtils.filterPattern(functions.map(_.funcName), pattern).toSet
+    functions.filter(f => matched.contains(f.funcName))
   }
 
   /**
@@ -2792,7 +2740,7 @@ class SessionCatalog(
   def listTemporaryFunctions(): Seq[FunctionIdentifier] = {
     (functionRegistry.listFunction() ++ tableFunctionRegistry.listFunction())
       .filter(isTempFunctionIdentifier)
-      // Strip the TEMP_FUNCTION_DB database qualifier
+      // Strip the session namespace database qualifier
       .map(ident => FunctionIdentifier(ident.funcName))
   }
 
