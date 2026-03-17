@@ -17,12 +17,21 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import java.util.Locale
+import org.apache.spark.sql.catalyst.analysis.UnresolvedOrdinal
+import org.apache.spark.sql.catalyst.expressions.{Expression, IntegerLiteral}
 
 /**
- * The [[IdentifierMap]] is an implementation of a [[KeyTransformingMap]] that uses SQL/DataFrame
- * identifiers as keys. The implementation is case-insensitive for keys.
+ * Try to extract ordinal from an expression. Return `Some(ordinal)` if the type of the expression
+ * is [[IntegerLitera]], `None` otherwise.
+ *
+ * This logic is only relevant for the legacy ordinal replacement behavior.
  */
-class IdentifierMap[V] extends KeyTransformingMap[String, V] {
-  override def mapKey(key: String): String = key.toLowerCase(Locale.ROOT)
+object TryExtractOrdinal {
+  def apply(expression: Expression): Option[UnresolvedOrdinal] = {
+    expression match {
+      case IntegerLiteral(literal) =>
+        Some(UnresolvedOrdinal(literal))
+      case other => None
+    }
+  }
 }
