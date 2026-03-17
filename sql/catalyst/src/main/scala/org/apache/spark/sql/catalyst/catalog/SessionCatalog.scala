@@ -490,9 +490,9 @@ class SessionCatalog(
       listTables(dbName).foreach { t =>
         invalidateCachedTable(QualifiedTableName(SESSION_CATALOG_NAME, dbName, t.table))
       }
-      // Clear cached functions in this database so the cache stays coherent on drop
-      val namespace = FunctionIdentifier(
-        "", Some(dbName), Some(CatalogManager.SESSION_CATALOG_NAME))
+      // Clear cached functions in this database so the cache stays coherent on drop.
+      // normalizeFuncName stores entries with catalog=None, so the filter must match that.
+      val namespace = FunctionIdentifier("", Some(dbName), None)
       functionRegistry.dropFunctionsInDatabase(namespace)
       tableFunctionRegistry.dropFunctionsInDatabase(namespace)
     }
