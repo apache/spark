@@ -1,0 +1,103 @@
+================================================================================================
+transform on primitive (int) array
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+transform int array:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+transform int array wholestage off                  111            116           7          9.5         105.6       1.0X
+transform int array wholestage on                    86             90           4         12.3          81.6       1.3X
+
+
+================================================================================================
+transform with index variable
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+transform with index:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+transform with index wholestage off                  90             91           2         11.7          85.4       1.0X
+transform with index wholestage on                   82             86           3         12.7          78.6       1.1X
+
+
+================================================================================================
+transform on string array
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+transform string array:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+transform string array wholestage off               580            580           1          1.8         552.7       1.0X
+transform string array wholestage on                564            572           5          1.9         538.2       1.0X
+
+
+================================================================================================
+transform on struct array
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+transform struct array:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+transform struct array wholestage off               737            740           3          1.4         703.1       1.0X
+transform struct array wholestage on                708            716           5          1.5         675.1       1.0X
+
+
+================================================================================================
+transform on nullable element array
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+transform nullable array:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+transform nullable array wholestage off             150            151           1          7.0         143.3       1.0X
+transform nullable array wholestage on              101            103           2         10.4          95.9       1.5X
+
+
+================================================================================================
+nested transform
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+nested transform:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+nested transform wholestage off                     102            106           6         10.3          97.0       1.0X
+nested transform wholestage on                       95            100           4         11.0          90.8       1.1X
+
+
+================================================================================================
+transform with CodegenFallback body (filter)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+transform + filter (mixed codegen/fallback):                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------
+transform + filter (mixed codegen/fallback) wholestage off           9008           9025          23          0.1        8591.0       1.0X
+transform + filter (mixed codegen/fallback) wholestage on            9026           9051          20          0.1        8607.5       1.0X
+
+
+================================================================================================
+filter (CodegenFallback) vs transform (codegen)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+filter array (CodegenFallback):                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------
+filter array (CodegenFallback) wholestage off            296            313          24          3.5         282.2       1.0X
+filter array (CodegenFallback) wholestage on             309            314           5          3.4         294.5       1.0X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+transform array (codegen):                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+transform array (codegen) wholestage off             81             83           2         12.9          77.5       1.0X
+transform array (codegen) wholestage on              69             72           3         15.1          66.2       1.2X
+
+
