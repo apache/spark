@@ -1345,10 +1345,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
     // Delete driver log file entries that exceed the configured max age and
     // may have been deleted on filesystem externally.
-    val stale = KVUtils.viewToSeq(listing.view(classOf[LogInfo])
-      .index("lastProcessed")
-      .reverse()
-      .first(maxTime), Int.MaxValue) { l => l.logType != null && l.logType == LogType.DriverLogs }
+    val stale = listing.synchronized {
+      KVUtils.viewToSeq(listing.view(classOf[LogInfo])
+        .index("lastProcessed")
+        .reverse()
+        .first(maxTime), Int.MaxValue) { l =>
+          l.logType != null && l.logType == LogType.DriverLogs
+        }
+    }
     stale.filterNot(isProcessing).foreach { log =>
       logInfo(log"Deleting invalid driver log ${MDC(PATH, log.logPath)}")
       listing.synchronized {
