@@ -36,7 +36,7 @@ The terms error class, state, and condition come from the SQL standard.
     * Error sub-condition: `TOLERANCE_IS_UNFOLDABLE`
     * Error sub-condition: `UNSUPPORTED_DIRECTION`
 
-### Optional subconditions (SPARK-56029)
+### Optional subconditions
 
 Subconditions are **optional**: you may raise or check an error at the main condition level even when the condition has subconditions in `error-conditions.json`.
 
