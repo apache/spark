@@ -443,21 +443,19 @@ class PySparkErrorTestUtils:
         if match_exact_condition_and_parameters:
             condition_matches = actual_condition == expected
         else:
-            condition_matches = (
-                actual_condition == expected
-                or (expected and actual_condition.startswith(expected + "."))
+            condition_matches = actual_condition == expected or (
+                expected and actual_condition.startswith(expected + ".")
             )
         self.assertTrue(
             condition_matches,
-            f"Expected error class was '{expected}' (match_exact={match_exact_condition_and_parameters}), "
-            f"got '{actual_condition}'.",
+            f"Expected error class was '{expected}' "
+            f"(match_exact={match_exact_condition_and_parameters}), got '{actual_condition}'.",
         )
 
         # Test message parameters
         actual_params = exception.getMessageParameters() or {}
-        is_prefix_match = (
-            not match_exact_condition_and_parameters
-            and actual_condition.startswith(expected + ".")
+        is_prefix_match = not match_exact_condition_and_parameters and actual_condition.startswith(
+            expected + "."
         )
         if is_prefix_match:
             # When matching by main condition only, only require that passed parameters match.
@@ -472,13 +470,15 @@ class PySparkErrorTestUtils:
                         self.assertRegex(
                             actual_params[key],
                             value,
-                            f"Parameter '{key}' value '{actual_params[key]}' does not match pattern '{value}'",
+                            f"Parameter '{key}' value '{actual_params[key]}' "
+                            f"does not match pattern '{value}'",
                         )
                     else:
                         self.assertEqual(
                             actual_params[key],
                             value,
-                            f"Parameter '{key}': expected '{value}', got '{actual_params[key]}'",
+                            f"Parameter '{key}': expected '{value}', "
+                            f"got '{actual_params[key]}'",
                         )
         else:
             expected_params = messageParameters if messageParameters is not None else {}
@@ -486,8 +486,8 @@ class PySparkErrorTestUtils:
                 self.assertEqual(
                     len(expected_params),
                     len(actual_params),
-                    "Expected message parameters count does not match actual message parameters count"
-                    f": {len(expected_params)}, {len(actual_params)}.",
+                    "Expected message parameters count does not match actual message "
+                    f"parameters count: {len(expected_params)}, {len(actual_params)}.",
                 )
                 for key, value in expected_params.items():
                     self.assertIn(
@@ -499,13 +499,14 @@ class PySparkErrorTestUtils:
                     self.assertRegex(
                         actual_params[key],
                         value,
-                        f"Expected message parameter value '{value}' does not match actual message "
-                        f"parameter value '{actual_params[key]}'.",
+                        f"Expected message parameter value '{value}' does not match "
+                        f"actual message parameter value '{actual_params[key]}'.",
                     )
             else:
                 self.assertEqual(
-                    expected_params, actual_params,
-                    f"Expected message parameters was '{expected_params}', got '{actual_params}'"
+                    expected_params,
+                    actual_params,
+                    f"Expected message parameters was '{expected_params}', got '{actual_params}'",
                 )
 
         # Test query context

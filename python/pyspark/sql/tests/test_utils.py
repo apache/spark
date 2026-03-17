@@ -1806,7 +1806,9 @@ class UtilsTestsMixin:
         )
         self.check_error(ex, "CANNOT_LOAD_STATE_STORE", messageParameters={})
         self.check_error(
-            ex, "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED", messageParameters={}
+            ex,
+            "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
+            messageParameters={},
         )
 
     def test_check_error_match_exact_condition_spark_56029(self):
