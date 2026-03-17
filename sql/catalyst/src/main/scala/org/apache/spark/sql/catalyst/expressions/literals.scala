@@ -39,7 +39,7 @@ import scala.util.Try
 
 import org.json4s.JsonAST._
 
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, FunctionIdentifier, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.variant.VariantExpressionEvalUtils
@@ -289,7 +289,7 @@ object Literal {
         assert(u.orderingWithinGroup.isEmpty)
         assert(!u.isInternal)
         FunctionRegistry.builtin.lookupFunction(
-          FunctionRegistry.builtinFunctionIdentifier(u.nameParts.head), u.arguments)
+          FunctionIdentifier(u.nameParts.head), u.arguments)
     }
   }
 }
