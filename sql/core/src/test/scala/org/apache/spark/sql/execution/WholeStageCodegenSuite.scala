@@ -946,7 +946,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     }
   }
 
-  test("SPARK-50767: subexpression elimination in FilterExec codegen") {
+  test("SPARK-56032: subexpression elimination in FilterExec codegen") {
     // Verify that common subexpressions in filter predicates are evaluated only once
     // in whole-stage codegen. This was the root cause of the from_json codegen revert:
     // without CSE in FilterExec.doConsume, expensive shared expressions (like from_json)
@@ -989,7 +989,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
         s"vs $noCseAddCount times without")
   }
 
-  test("SPARK-50767: FilterExec CSE with notNullPreds sharing input variables") {
+  test("SPARK-56032: FilterExec CSE with notNullPreds sharing input variables") {
     // Regression test for a bug in CodeGenerator.subexpressionEliminationForWholeStageCodegen:
     // In the non-split path, getLocalInputVariableValues clears ctx.currentVars[i].code for
     // input variables referenced by common subexpressions (side effect), but the saved
