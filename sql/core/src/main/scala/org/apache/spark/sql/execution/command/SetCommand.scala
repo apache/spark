@@ -119,6 +119,11 @@ case class SetCommand(kv: Option[(String, Option[String])])
               messageParameters = Map("variableName" -> toSQLId(varName)))
           }
         }
+        if (key == SQLConf.SESSION_PATH.key) {
+          throw new AnalysisException(
+            errorClass = "UNSUPPORTED_FEATURE.SET_PATH_VIA_SET",
+            messageParameters = Map.empty)
+        }
         if (sparkSession.conf.get(CATALOG_IMPLEMENTATION.key).equals("hive") &&
             key.startsWith("hive.")) {
           logWarning(log"'SET ${MDC(KEY, key)}=${MDC(VALUE, value)}' might not work, since Spark " +

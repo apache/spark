@@ -1893,6 +1893,12 @@
     ],
     "sqlState" : "42614"
   },
+  "DUPLICATE_PATH_ENTRY" : {
+    "message" : [
+      "Duplicate path entry <pathEntry>. The session path cannot contain the same catalog.schema more than once (including after expanding shortcuts like DEFAULT_PATH or SYSTEM_PATH)."
+    ],
+    "sqlState" : "42P10"
+  },
   "DUPLICATE_CONDITION_IN_SCOPE" : {
     "message" : [
       "Found duplicate condition <condition> in the scope. Please, remove one of them."
@@ -7621,6 +7627,11 @@
       "SET_VARIABLE_USING_SET" : {
         "message" : [
           "<variableName> is a VARIABLE and cannot be updated using the SET statement. Use SET VARIABLE <variableName> = ... instead."
+        ]
+      },
+      "SET_PATH_VIA_SET" : {
+        "message" : [
+          "The session path cannot be set using the SET statement. Use SET PATH = ... instead."
         ]
       },
       "SQL_CURSOR" : {

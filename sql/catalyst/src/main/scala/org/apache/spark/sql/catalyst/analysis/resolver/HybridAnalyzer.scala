@@ -307,7 +307,8 @@ object HybridAnalyzer {
         sharedRelationCache = legacyAnalyzer.sharedRelationCache,
         extensions = legacyAnalyzer.singlePassResolverExtensions,
         metadataResolverExtensions = legacyAnalyzer.singlePassMetadataResolverExtensions,
-        externalRelationResolution = Some(legacyAnalyzer.getRelationResolution)
+        externalRelationResolution = Some(legacyAnalyzer.getRelationResolution),
+        conf = legacyAnalyzer.resolutionConf
       ),
       tracker = tracker,
       extendedResolutionChecks = legacyAnalyzer.singlePassExtendedResolutionChecks,

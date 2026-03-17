@@ -368,7 +368,9 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
         val catalogPath =
           (Seq(currentCatalog()) ++
             sparkSession.sessionState.catalogManager.currentNamespace).toSeq
-        val searchPath = sparkSession.sessionState.conf.resolutionSearchPath(catalogPath)
+        val pathEntries = sparkSession.sessionState.conf.effectivePathEntries
+          .getOrElse(Seq(catalogPath))
+        val searchPath = sparkSession.sessionState.conf.resolutionSearchPath(pathEntries)
         throw QueryCompilationErrors.unresolvedRoutineError(
           ident,
           searchPath.map(_.quoted),

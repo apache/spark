@@ -2375,6 +2375,55 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PATH_ENABLED =
+    buildConf("spark.sql.path.enabled")
+      .version("4.2.0")
+      .doc("When true, enables the SQL Standard PATH feature: SET PATH, path-based routine " +
+        "resolution, and CURRENT_PATH(). When false, SET PATH has no effect and resolution uses " +
+        "the default path only.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val SESSION_PATH =
+    buildConf("spark.sql.session.path")
+      .internal()
+      .version("4.2.0")
+      .doc("Session search path for routine resolution (catalog-qualified schema list). " +
+        "Only settable via SET PATH statement; direct SET of this config is ignored.")
+      .stringConf
+      .createOptional
+
+  /**
+   * Separator between path entries in serialized session path
+   * (catalog.namespace,catalog.namespace).
+   */
+  private[sql] val SESSION_PATH_ENTRY_SEPARATOR = ","
+
+  /**
+   * Parses a session path string into a list of path entries.
+   * Format: "catalog1.namespace1,catalog2.namespace2"
+   * (comma-separated, each entry catalog.namespace).
+   */
+  private[sql] def parseSessionPath(pathStr: String): Seq[Seq[String]] = {
+    if (pathStr == null || pathStr.trim.isEmpty) return Seq.empty
+    pathStr.split(SESSION_PATH_ENTRY_SEPARATOR).map { entry =>
+      val trimmed = entry.trim
+      val dot = trimmed.indexOf('.')
+      if (dot <= 0 || dot == trimmed.length - 1) {
+        Seq(trimmed) // single part, treat as namespace only (caller may qualify)
+      } else {
+        Seq(trimmed.substring(0, dot).trim, trimmed.substring(dot + 1).trim)
+      }
+    }.toSeq.filter(_.nonEmpty)
+  }
+
+  /**
+   * Formats path entries to session path string.
+   * Each entry is catalog.namespace; entries separated by comma.
+   */
+  private[sql] def formatSessionPath(pathEntries: Seq[Seq[String]]): String =
+    pathEntries.map(_.mkString(".")).mkString(SESSION_PATH_ENTRY_SEPARATOR)
+
   // Whether to retain group by columns or not in GroupedData.agg.
   val DATAFRAME_RETAIN_GROUP_COLUMNS = buildConf("spark.sql.retainGroupColumns")
     .version("1.4.0")
@@ -8203,26 +8252,55 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
    */
   def prioritizeSystemCatalog: Boolean = !getConf(SQLConf.PERSISTENT_CATALOG_FIRST)
 
+  def pathEnabled: Boolean = getConf(SQLConf.PATH_ENABLED)
+
+  def sessionPath: Option[String] = getConf(SQLConf.SESSION_PATH)
+
+  /**
+   * Returns the session path as path entries when PATH is enabled and set; None otherwise.
+   * Callers should use effectivePathEntries().getOrElse(Seq(currentCatalogPath)).
+   */
+  def effectivePathEntries: Option[Seq[Seq[String]]] =
+    if (pathEnabled) sessionPath.map(SQLConf.parseSessionPath).filter(_.nonEmpty)
+    else None
+
+  /**
+   * Returns the current path as a comma-separated string of qualified schema names
+   * (catalog.schema). Used by CURRENT_PATH(). When PATH is disabled, returns default path.
+   */
+  def currentPathString(currentCatalog: String, currentNamespace: Seq[String]): String = {
+    val defaultEntry =
+      if (currentNamespace.isEmpty) Seq(currentCatalog) else currentCatalog +: currentNamespace
+    val pathEntries = effectivePathEntries.getOrElse(Seq(defaultEntry))
+    val fullPath = resolutionSearchPath(pathEntries)
+    SQLConf.formatSessionPath(fullPath)
+  }
+
   /**
    * Returns the resolution search path for error messages and resolution order.
    * This is the single source of truth for the search path used for functions, tables, and views.
    * Uses [[sessionFunctionResolutionOrder]]: "first" (session first), "second" (session second),
-   * "last" (session last). When catalogPath is empty, returns only system namespaces.
+   * "last" (session last). When pathEntries is empty, returns only system namespaces.
+   *
+   * @param pathEntries Ordered list of persistent path entries (each entry is catalog + namespace,
+   *                    e.g. Seq("system", "builtin") or Seq("spark_catalog", "default")).
+   *                    When PATH feature is disabled or not set, callers pass
+   *                    Seq(currentCatalogPath).
    */
-  def resolutionSearchPath(catalogPath: Seq[String]): Seq[Seq[String]] = {
+  def resolutionSearchPath(pathEntries: Seq[Seq[String]]): Seq[Seq[String]] = {
     val order = sessionFunctionResolutionOrder
     val session = Seq("system", "session")
     val builtin = Seq("system", "builtin")
     order match {
       case "first" =>
-        if (catalogPath.isEmpty) Seq(session, builtin)
-        else Seq(session, builtin, catalogPath)
+        if (pathEntries.isEmpty) Seq(session, builtin)
+        else Seq(session, builtin) ++ pathEntries
       case "last" =>
-        if (catalogPath.isEmpty) Seq(builtin, session)
-        else Seq(builtin, catalogPath, session)
+        if (pathEntries.isEmpty) Seq(builtin, session)
+        else pathEntries ++ Seq(builtin, session)
       case _ => // "second"
-        if (catalogPath.isEmpty) Seq(builtin, session)
-        else Seq(builtin, session, catalogPath)
+        if (pathEntries.isEmpty) Seq(builtin, session)
+        else Seq(builtin, session) ++ pathEntries
     }
   }
 

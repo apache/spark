@@ -56,13 +56,13 @@ import org.apache.spark.sql.connector.catalog.functions.{
   UnboundFunction
 }
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types._
 
 class FunctionResolution(
     override val catalogManager: CatalogManager,
-    relationResolution: RelationResolution)
+    relationResolution: RelationResolution,
+    conf: org.apache.spark.sql.internal.SQLConf)
     extends DataTypeErrorsBase with LookupCatalog with Logging {
   private val v1SessionCatalog = catalogManager.v1SessionCatalog
 
@@ -94,12 +94,13 @@ class FunctionResolution(
    */
   private def resolutionCandidates(nameParts: Seq[String]): Seq[Seq[String]] = {
     if (nameParts.size == 1) {
-      val searchPath = SQLConf.get.resolutionSearchPath(currentCatalogPath)
+      val pathEntries = conf.effectivePathEntries.getOrElse(Seq(currentCatalogPath))
+      val searchPath = conf.resolutionSearchPath(pathEntries)
       searchPath.map(_ ++ nameParts)
     } else if (nameParts.size == 2 &&
         FunctionResolution.sessionNamespaceKind(nameParts).isDefined) {
       val systemCandidate = CatalogManager.SYSTEM_CATALOG_NAME +: nameParts
-      if (SQLConf.get.prioritizeSystemCatalog) {
+      if (conf.prioritizeSystemCatalog) {
         Seq(systemCandidate, nameParts)
       } else {
         Seq(nameParts, systemCandidate)
@@ -174,7 +175,8 @@ class FunctionResolution(
           case None =>
         }
       }
-      val searchPath = SQLConf.get.resolutionSearchPath(currentCatalogPath)
+      val pathEntries = conf.effectivePathEntries.getOrElse(Seq(currentCatalogPath))
+      val searchPath = conf.resolutionSearchPath(pathEntries)
       throw QueryCompilationErrors.unresolvedRoutineError(
         unresolvedFunc.nameParts, searchPath.map(toSQLId), unresolvedFunc.origin)
     }

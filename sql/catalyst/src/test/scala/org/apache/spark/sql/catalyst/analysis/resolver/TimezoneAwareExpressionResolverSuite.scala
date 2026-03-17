@@ -37,7 +37,10 @@ class TimezoneAwareExpressionResolverSuite extends SparkFunSuite {
       extends ExpressionResolver(
         resolver = new Resolver(catalogManager),
         functionResolution =
-          new FunctionResolution(catalogManager, Resolver.createRelationResolution(catalogManager)),
+          new FunctionResolution(
+            catalogManager,
+            Resolver.createRelationResolution(catalogManager),
+            org.apache.spark.sql.internal.SQLConf.get),
         planLogger = new PlanLogger
       ) {
     override def resolve(expression: Expression): Expression = resolvedExpression

@@ -813,6 +813,12 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
     sql("DROP TEMPORARY FUNCTION current_user")
   }
 
+  test("SECTION 11e: current_path() is a builtin and returns path string") {
+    val pathStr = sql("SELECT current_path()").collect().head.getString(0)
+    assert(pathStr.nonEmpty && pathStr.contains("."),
+      s"current_path() should return a non-empty path with qualified schemas, got: $pathStr")
+  }
+
   test("SECTION 12d: Extension - SHOW FUNCTIONS includes extension functions") {
     val functions = sql("SHOW FUNCTIONS").collect().map(_.getString(0))
     assert(functions.contains("test_ext_func"),
@@ -992,7 +998,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
         condition = "UNRESOLVED_ROUTINE",
         parameters = Map(
           "routineName" -> "`no_such_func_xyz`",
-          "searchPath" -> "[`system`.`builtin`, `spark_catalog`.`default`, `system`.`session`]"
+          "searchPath" -> "[`spark_catalog`.`default`, `system`.`builtin`, `system`.`session`]"
         ),
         context = ExpectedContext(
           fragment = "no_such_func_xyz()",

@@ -43,6 +43,11 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
   protected def isView(nameParts: Seq[String]): Boolean
 
+  protected def conf: org.apache.spark.sql.internal.SQLConf
+
+  /** Conf for routine resolution/errors; override in Analyzer to use session conf. */
+  protected def confForRoutineResolution: SQLConf = conf
+
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   /**
@@ -304,7 +309,9 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
       case u: UnresolvedFunctionName =>
         val catalogPath = currentCatalog.name +: catalogManager.currentNamespace
-        val searchPath = SQLConf.get.resolutionSearchPath(catalogPath.toSeq)
+        val pathEntries = confForRoutineResolution.effectivePathEntries
+          .getOrElse(Seq(catalogPath.toSeq))
+        val searchPath = confForRoutineResolution.resolutionSearchPath(pathEntries)
           .map(_.quoted)
         throw QueryCompilationErrors.unresolvedRoutineError(
           u.multipartIdentifier,

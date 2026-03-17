@@ -854,6 +854,7 @@ object FunctionRegistry {
     expression[CurrentDatabase]("current_database"),
     expression[CurrentDatabase]("current_schema", true, Some("3.4.0")),
     expression[CurrentCatalog]("current_catalog"),
+    expression[CurrentPath]("current_path", true, Some("4.2.0")),
     expression[CurrentUser]("current_user"),
     expression[CurrentUser]("user", true, Some("3.4.0")),
     expression[CurrentUser]("session_user", true, Some("4.0.0")),

@@ -46,6 +46,7 @@ import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.EvaluateUnresolvedInlineTable
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * The Resolver implements a single-pass bottom-up analysis algorithm in the Catalyst.
@@ -75,7 +76,8 @@ class Resolver(
     sharedRelationCache: RelationCache = RelationCache.empty,
     override val extensions: Seq[ResolverExtension] = Seq.empty,
     metadataResolverExtensions: Seq[ResolverExtension] = Seq.empty,
-    externalRelationResolution: Option[RelationResolution] = None)
+    externalRelationResolution: Option[RelationResolution] = None,
+    conf: SQLConf = SQLConf.get)
     extends LogicalPlanResolver
     with DelegatesResolutionToExtensions {
   private val planLogger = new PlanLogger
@@ -86,7 +88,7 @@ class Resolver(
   private val relationResolution = externalRelationResolution.getOrElse {
     Resolver.createRelationResolution(catalogManager, sharedRelationCache)
   }
-  private val functionResolution = new FunctionResolution(catalogManager, relationResolution)
+  private val functionResolution = new FunctionResolution(catalogManager, relationResolution, conf)
   private val expressionResolver = new ExpressionResolver(this, functionResolution, planLogger)
   private val aggregateResolver = new AggregateResolver(this, expressionResolver)
   private val expressionIdAssigner = expressionResolver.getExpressionIdAssigner

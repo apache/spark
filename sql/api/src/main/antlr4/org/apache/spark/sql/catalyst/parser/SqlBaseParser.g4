@@ -446,6 +446,7 @@ setResetStatement
     | SET TIME ZONE interval                                           #setTimeZone
     | SET TIME ZONE timezone                                           #setTimeZone
     | SET TIME ZONE .*?                                                #setTimeZone
+    | SET PATH EQ pathElement (COMMA pathElement)*                      #setPath
     | SET variable assignmentList                                      #setVariable
     | SET variable LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
         LEFT_PAREN query RIGHT_PAREN                                   #setVariable
@@ -455,6 +456,14 @@ setResetStatement
     | SET .*?                                                          #setConfiguration
     | RESET configKey                                                  #resetQuotedConfiguration
     | RESET .*?                                                        #resetConfiguration
+    ;
+
+pathElement
+    : DEFAULT_PATH
+    | SYSTEM_PATH
+    | CURRENT_SCHEMA (LEFT_PAREN RIGHT_PAREN)?
+    | PATH
+    | multipartIdentifier
     ;
 
 executeImmediate
@@ -1276,7 +1285,7 @@ datetimeUnit
     ;
 
 primaryExpression
-    : name=(CURRENT_DATE | CURRENT_TIMESTAMP | CURRENT_USER | USER | SESSION_USER | CURRENT_TIME)             #currentLike
+    : name=(CURRENT_DATE | CURRENT_TIMESTAMP | CURRENT_USER | USER | SESSION_USER | CURRENT_TIME | CURRENT_SCHEMA) (LEFT_PAREN RIGHT_PAREN)?             #currentLike
     | name=(TIMESTAMPADD | DATEADD | DATE_ADD) LEFT_PAREN (unit=datetimeUnit | invalidUnit=stringLit) COMMA unitsAmount=valueExpression COMMA timestamp=valueExpression RIGHT_PAREN             #timestampadd
     | name=(TIMESTAMPDIFF | DATEDIFF | DATE_DIFF | TIMEDIFF) LEFT_PAREN (unit=datetimeUnit | invalidUnit=stringLit) COMMA startTimestamp=valueExpression COMMA endTimestamp=valueExpression RIGHT_PAREN    #timestampdiff
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
@@ -1939,6 +1948,7 @@ ansiNonReserved
     | CURSOR
     | CUBE
     | CURRENT
+    | CURRENT_SCHEMA
     | DATA
     | DATABASE
     | DATABASES
@@ -1957,6 +1967,7 @@ ansiNonReserved
     | DEFAULT
     | DEFINED
     | DEFINER
+    | DEFAULT_PATH
     | DELAY
     | DELETE
     | DELIMITED
@@ -2088,6 +2099,7 @@ ansiNonReserved
     | PARTITION
     | PARTITIONED
     | PARTITIONS
+    | PATH
     | PERCENTLIT
     | PIVOT
     | PLACING
@@ -2163,6 +2175,7 @@ ansiNonReserved
     | SUBSTR
     | SUBSTRING
     | SYNC
+    | SYSTEM_PATH
     | SYSTEM_TIME
     | SYSTEM_VERSION
     | TABLES
@@ -2317,6 +2330,7 @@ nonReserved
     | CURRENT
     | CURSOR
     | CURRENT_DATE
+    | CURRENT_SCHEMA
     | CURRENT_TIME
     | CURRENT_TIMESTAMP
     | CURRENT_USER
@@ -2336,6 +2350,7 @@ nonReserved
     | DECIMAL
     | DECLARE
     | DEFAULT
+    | DEFAULT_PATH
     | DEFINED
     | DEFINER
     | DELAY
@@ -2507,6 +2522,7 @@ nonReserved
     | PROCEDURES
     | PROPERTIES
     | PURGE
+    | PATH
     | QUARTER
     | QUERY
     | RANGE
@@ -2576,6 +2592,7 @@ nonReserved
     | SUBSTR
     | SUBSTRING
     | SYNC
+    | SYSTEM_PATH
     | SYSTEM_TIME
     | SYSTEM_VERSION
     | TABLE

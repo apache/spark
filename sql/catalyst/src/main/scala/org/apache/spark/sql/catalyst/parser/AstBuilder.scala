@@ -3080,22 +3080,28 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   override def visitCurrentLike(ctx: CurrentLikeContext): Expression = withOrigin(ctx) {
-    if (conf.enforceReservedKeywords) {
-      ctx.name.getType match {
-        case SqlBaseParser.CURRENT_DATE =>
-          CurrentDate()
-        case SqlBaseParser.CURRENT_TIMESTAMP =>
-          CurrentTimestamp()
-        case SqlBaseParser.CURRENT_TIME =>
-          CurrentTime()
-        case SqlBaseParser.CURRENT_USER | SqlBaseParser.USER | SqlBaseParser.SESSION_USER =>
-          CurrentUser()
-      }
-    } else {
-      // If the parser is not in ansi mode, we should return `UnresolvedAttribute`, in case there
-      // are columns named `CURRENT_DATE` or `CURRENT_TIMESTAMP` or `CURRENT_TIME`.
-      // ctx.name is a token, not an identifier context.
-      UnresolvedAttribute.quoted(ctx.name.getText)
+    ctx.name.getType match {
+      case SqlBaseParser.CURRENT_SCHEMA =>
+        // CURRENT_SCHEMA() is always the same as current_database(); resolve as function.
+        CurrentDatabase()
+      case _ =>
+        if (conf.enforceReservedKeywords) {
+          ctx.name.getType match {
+            case SqlBaseParser.CURRENT_DATE =>
+              CurrentDate()
+            case SqlBaseParser.CURRENT_TIMESTAMP =>
+              CurrentTimestamp()
+            case SqlBaseParser.CURRENT_TIME =>
+              CurrentTime()
+            case SqlBaseParser.CURRENT_USER | SqlBaseParser.USER | SqlBaseParser.SESSION_USER =>
+              CurrentUser()
+            case _ =>
+              UnresolvedAttribute.quoted(ctx.name.getText)
+          }
+        } else {
+          // If not in ansi mode, return UnresolvedAttribute for column-like resolution.
+          UnresolvedAttribute.quoted(ctx.name.getText)
+        }
     }
   }
 

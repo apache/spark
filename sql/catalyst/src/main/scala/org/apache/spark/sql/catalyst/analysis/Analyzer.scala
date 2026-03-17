@@ -290,13 +290,20 @@ object Analyzer {
  */
 class Analyzer(
     override val catalogManager: CatalogManager,
-    private[sql] val sharedRelationCache: RelationCache = RelationCache.empty)
+    private[sql] val sharedRelationCache: RelationCache = RelationCache.empty,
+    private[sql] val sessionConf: Option[SQLConf] = None)
   extends RuleExecutor[LogicalPlan]
   with CheckAnalysis with AliasHelper with SQLConfHelper with ColumnResolutionHelper {
 
+  /** Conf to use for path-based resolution and error messages; uses session conf when available. */
+  private[sql] def resolutionConf: SQLConf = sessionConf.getOrElse(SQLConf.get)
+
+  override protected def confForRoutineResolution: SQLConf = resolutionConf
+
   private val v1SessionCatalog: SessionCatalog = catalogManager.v1SessionCatalog
   private val relationResolution = new RelationResolution(catalogManager, sharedRelationCache)
-  private val functionResolution = new FunctionResolution(catalogManager, relationResolution)
+  private val functionResolution = new FunctionResolution(catalogManager, relationResolution,
+    resolutionConf)
 
   override protected def validatePlanChanges(
       previousPlan: LogicalPlan,
@@ -317,20 +324,22 @@ class Analyzer(
     if (plan.analyzed) {
       plan
     } else {
+      def runAnalysis(): LogicalPlan = HybridAnalyzer.fromLegacyAnalyzer(
+        legacyAnalyzer = this, tracker = tracker).apply(plan)
+      def runWithConf(): LogicalPlan = sessionConf match {
+        case Some(c) => SQLConf.withExistingConf(c) { runAnalysis() }
+        case None => runAnalysis()
+      }
       if (AnalysisContext.get.isDefault) {
         AnalysisContext.reset()
         try {
-          AnalysisHelper.markInAnalyzer {
-            HybridAnalyzer.fromLegacyAnalyzer(legacyAnalyzer = this, tracker = tracker).apply(plan)
-          }
+          AnalysisHelper.markInAnalyzer { runWithConf() }
         } finally {
           AnalysisContext.reset()
         }
       } else {
         AnalysisContext.withNewAnalysisContext {
-          AnalysisHelper.markInAnalyzer {
-            HybridAnalyzer.fromLegacyAnalyzer(legacyAnalyzer = this, tracker = tracker).apply(plan)
-          }
+          AnalysisHelper.markInAnalyzer { runWithConf() }
         }
       }
     }
@@ -2063,7 +2072,9 @@ class Analyzer(
                 case FunctionType.NotFound =>
                   val catalogPath =
                     catalogManager.currentCatalog.name +: catalogManager.currentNamespace
-                  val searchPath = SQLConf.get.resolutionSearchPath(catalogPath.toSeq)
+                  val pathEntries = resolutionConf.effectivePathEntries
+                    .getOrElse(Seq(catalogPath.toSeq))
+                  val searchPath = resolutionConf.resolutionSearchPath(pathEntries)
                     .map(_.quoted)
                   throw QueryCompilationErrors.unresolvedRoutineError(
                     nameParts,
