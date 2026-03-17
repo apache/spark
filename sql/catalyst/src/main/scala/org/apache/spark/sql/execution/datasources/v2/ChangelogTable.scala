@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.util.{Collections, Set => JSet}
+import java.util.{EnumSet => JEnumSet, Set => JSet}
 
 import org.apache.spark.sql.connector.catalog.{Changelog, ChangelogInfo, Column, SupportsRead, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, MICRO_BATCH_READ}
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -30,20 +31,17 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * This class is NOT part of the connector API. Connectors implement [[Changelog]]; Spark
  * wraps it in [[ChangelogTable]] during analysis.
  */
-class ChangelogTable(
-    val changelog: Changelog,
-    val changelogInfo: ChangelogInfo) extends Table with SupportsRead {
+case class ChangelogTable(
+    changelog: Changelog,
+    changelogInfo: ChangelogInfo) extends Table with SupportsRead {
 
-  override def name(): String = changelog.name()
+  override def name: String = changelog.name
 
-  override def columns(): Array[Column] = changelog.columns()
+  override def columns: Array[Column] = changelog.columns
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     changelog.newScanBuilder(options)
   }
 
-  override def capabilities(): JSet[TableCapability] = {
-    Collections.unmodifiableSet(
-      JSet.of(TableCapability.BATCH_READ, TableCapability.MICRO_BATCH_READ))
-  }
+  override def capabilities: JSet[TableCapability] = JEnumSet.of(BATCH_READ, MICRO_BATCH_READ)
 }

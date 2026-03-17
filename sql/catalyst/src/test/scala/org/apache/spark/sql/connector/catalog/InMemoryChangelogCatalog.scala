@@ -27,8 +27,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
- * An [[InMemoryTableCatalog]] that declares [[TableCatalogCapability.SUPPORT_CHANGELOG]]
- * and implements [[TableCatalog.loadChangelog()]].
+ * An [[InMemoryTableCatalog]] that implements [[TableCatalog.loadChangelog()]].
  *
  * Change rows can be pre-populated via [[addChangeRows()]] before querying.
  */
@@ -37,12 +36,6 @@ class InMemoryChangelogCatalog extends InMemoryTableCatalog {
   // tableName -> list of change rows (each row: Array[Any] matching changelog schema)
   private val changeData: mutable.Map[String, mutable.ArrayBuffer[InternalRow]] =
     mutable.Map.empty
-
-  override def capabilities: java.util.Set[TableCatalogCapability] = {
-    val caps = new java.util.HashSet(super.capabilities)
-    caps.add(TableCatalogCapability.SUPPORT_CHANGELOG)
-    caps
-  }
 
   override def loadChangelog(
       ident: Identifier,

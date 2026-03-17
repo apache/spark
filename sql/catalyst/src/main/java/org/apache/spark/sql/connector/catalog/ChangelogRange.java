@@ -28,14 +28,14 @@ import org.apache.spark.annotation.Evolving;
  * <ul>
  *   <li>{@link VersionRange} — range defined by version identifiers</li>
  *   <li>{@link TimestampRange} — range defined by timestamps</li>
- *   <li>{@link Unbounded} — no boundaries (used by streaming queries)</li>
+ *   <li>{@link UnboundedRange} — no boundaries (used by streaming queries)</li>
  * </ul>
  *
  * @since 4.2.0
  */
 @Evolving
 public sealed interface ChangelogRange
-    permits ChangelogRange.VersionRange, ChangelogRange.TimestampRange, ChangelogRange.Unbounded {
+    permits ChangelogRange.VersionRange, ChangelogRange.TimestampRange, ChangelogRange.UnboundedRange {
 
   /** Whether the starting bound is inclusive. */
   boolean startingBoundInclusive();
@@ -75,14 +75,12 @@ public sealed interface ChangelogRange
    * An unbounded changelog range with no starting or ending boundaries.
    * Used by streaming queries where the connector determines the starting point.
    */
-  record Unbounded() implements ChangelogRange {
+  record UnboundedRange() implements ChangelogRange {
     @Override public boolean startingBoundInclusive() {
-      throw new UnsupportedOperationException(
-          "Unbounded range has no starting bound.");
+      throw new UnsupportedOperationException("Unbounded range has no starting bound.");
     }
     @Override public boolean endingBoundInclusive() {
-      throw new UnsupportedOperationException(
-          "Unbounded range has no ending bound.");
+      throw new UnsupportedOperationException("Unbounded range has no ending bound.");
     }
   }
 }

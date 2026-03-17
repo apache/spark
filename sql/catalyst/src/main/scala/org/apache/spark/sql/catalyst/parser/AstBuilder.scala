@@ -46,7 +46,8 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, DateTimeUtils, EvaluateUnresolvedInlineTable, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTime, stringToTimestamp, stringToTimestampWithoutTimeZone}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, ChangelogInfo, ChangelogRange, SupportsNamespaces, TableCatalog, TableWritePrivilege}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, ChangelogInfo, SupportsNamespaces, TableCatalog, TableWritePrivilege}
+import org.apache.spark.sql.connector.catalog.ChangelogRange.{TimestampRange, UnboundedRange, VersionRange}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryParsingErrors, SqlScriptingErrors}
@@ -2397,7 +2398,7 @@ class AstBuilder extends DataTypeAstBuilder
       // Version-based range
       val startVersion = visitVersion(ctx.startingVersion).get
       val endVersion = visitVersion(ctx.endingVersion)
-      new ChangelogRange.VersionRange(
+      new VersionRange(
         startVersion,
         java.util.Optional.ofNullable(endVersion.orNull),
         startInclusive,
@@ -2416,7 +2417,7 @@ class AstBuilder extends DataTypeAstBuilder
       }
       val startTsValue = resolveTimestampForChanges(startTs)
       val endTsValue = endTs.map(resolveTimestampForChanges)
-      new ChangelogRange.TimestampRange(
+      new TimestampRange(
         startTsValue,
         endTsValue.map(java.lang.Long.valueOf)
           .map(java.util.Optional.of[java.lang.Long])
@@ -2441,7 +2442,7 @@ class AstBuilder extends DataTypeAstBuilder
 
     val range = if (ctx.startingVersion != null) {
       val startVersion = visitVersion(ctx.startingVersion).get
-      new ChangelogRange.VersionRange(
+      new VersionRange(
         startVersion,
         java.util.Optional.empty(),
         startInclusive,
@@ -2453,13 +2454,13 @@ class AstBuilder extends DataTypeAstBuilder
           "timestamp expression cannot refer to any columns", ctx.startingTimestamp)
       }
       val startTsValue = resolveTimestampForChanges(startTs)
-      new ChangelogRange.TimestampRange(
+      new TimestampRange(
         startTsValue,
         java.util.Optional.empty(),
         startInclusive,
         true)
     } else {
-      new ChangelogRange.Unbounded()
+      new UnboundedRange()
     }
 
     val (deduplicationMode, computeUpdates) = resolveChangelogOptions(options)
@@ -2474,15 +2475,13 @@ class AstBuilder extends DataTypeAstBuilder
       options: CaseInsensitiveStringMap)
       : (ChangelogInfo.DeduplicationMode, Boolean) = {
     val deduplicationModeStr = Option(options.get("deduplicationMode"))
-      .getOrElse("dropCarryovers").toLowerCase(java.util.Locale.ROOT)
+      .getOrElse("dropCarryovers").toLowerCase(Locale.ROOT)
     val deduplicationMode = deduplicationModeStr match {
       case "none" => ChangelogInfo.DeduplicationMode.NONE
       case "dropcarryovers" => ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS
       case "netchanges" => ChangelogInfo.DeduplicationMode.NET_CHANGES
       case other =>
-        throw new AnalysisException(
-          "INVALID_CDC_OPTION.INVALID_DEDUPLICATION_MODE",
-          Map("mode" -> other))
+        throw QueryCompilationErrors.invalidCdcOptionInvalidDeduplicationMode(other)
     }
     val computeUpdates = options.getBoolean("computeUpdates", false)
     (deduplicationMode, computeUpdates)

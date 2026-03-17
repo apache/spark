@@ -39,7 +39,7 @@ public class ChangelogInfo {
     NONE,
     /** Remove identical insert/delete pairs from copy-on-write file rewrites (default). */
     DROP_CARRYOVERS,
-    /** Collapse to one net change per row identity. */
+    /** Collapse to one net change per row identity across the entire changelog range. */
     NET_CHANGES
   }
 

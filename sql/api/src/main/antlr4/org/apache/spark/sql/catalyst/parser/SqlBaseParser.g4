@@ -902,23 +902,17 @@ temporalClause
     ;
 
 changesClause
-    : CHANGES FROM (SYSTEM_VERSION | VERSION) startingVersion=version
-        (INCLUSIVE | startExclusive=EXCLUSIVE)?
-        (TO (SYSTEM_VERSION | VERSION) endingVersion=version
-            (INCLUSIVE | endExclusive=EXCLUSIVE)?)?
-    | CHANGES FROM (SYSTEM_TIME | TIMESTAMP) startingTimestamp=valueExpression
-        (INCLUSIVE | startExclusive=EXCLUSIVE)?
-        (TO (SYSTEM_TIME | TIMESTAMP) endingTimestamp=valueExpression
-            (INCLUSIVE | endExclusive=EXCLUSIVE)?)?
+    : CHANGES FROM (SYSTEM_VERSION | VERSION) startingVersion=version (INCLUSIVE | startExclusive=EXCLUSIVE)?
+        (TO (SYSTEM_VERSION | VERSION) endingVersion=version (INCLUSIVE | endExclusive=EXCLUSIVE)?)?
+    | CHANGES FROM (SYSTEM_TIME | TIMESTAMP) startingTimestamp=valueExpression (INCLUSIVE | startExclusive=EXCLUSIVE)?
+        (TO (SYSTEM_TIME | TIMESTAMP) endingTimestamp=valueExpression (INCLUSIVE | endExclusive=EXCLUSIVE)?)?
     ;
 
 // Like changesClause but startingVersion/startingTimestamp is optional (streaming can start
 // without an explicit starting point) and there is no ending bound (streaming is open-ended).
 streamChangesClause
-    : CHANGES (FROM (SYSTEM_VERSION | VERSION) startingVersion=version
-        (INCLUSIVE | startExclusive=EXCLUSIVE)?)?
-    | CHANGES (FROM (SYSTEM_TIME | TIMESTAMP) startingTimestamp=valueExpression
-        (INCLUSIVE | startExclusive=EXCLUSIVE)?)?
+    : CHANGES (FROM (SYSTEM_VERSION | VERSION) startingVersion=version (INCLUSIVE | startExclusive=EXCLUSIVE)?)?
+    | CHANGES (FROM (SYSTEM_TIME | TIMESTAMP) startingTimestamp=valueExpression (INCLUSIVE | startExclusive=EXCLUSIVE)?)?
     ;
 
 aggregationClause

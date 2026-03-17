@@ -91,7 +91,7 @@ class ChangelogResolutionSuite extends QueryTest with SharedSparkSession {
     assert(changelogTable.name().endsWith("test_table_changelog"))
   }
 
-  test("CHANGES clause - catalog without SUPPORT_CHANGELOG throws") {
+  test("CHANGES clause - catalog without loadChangelog throws") {
     checkError(
       intercept[AnalysisException] {
         sql(s"SELECT * FROM $noCdcCatalogName.test_table CHANGES FROM VERSION 1 TO VERSION 5")

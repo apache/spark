@@ -99,7 +99,7 @@ class ChangelogInfoUtilsSuite extends SparkFunSuite with SQLHelper {
 
   test("unbounded range when no version or timestamp specified") {
     val info = ChangelogInfoUtils.fromOptions(makeOptions(), testTimeZone)
-    assert(info.range().isInstanceOf[ChangelogRange.Unbounded])
+    assert(info.range().isInstanceOf[ChangelogRange.UnboundedRange])
   }
 
   test("deduplication mode - none") {

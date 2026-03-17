@@ -66,12 +66,12 @@ public interface Changelog {
 
   /**
    * Whether the raw change data may contain multiple intermediate states per row identity
-   * within a single commit version.
+   * within the requested changelog range (across all commit versions in the range).
    * <p>
    * When {@code true} and the CDC query's {@code deduplicationMode} is {@code netChanges},
    * Spark will collapse multiple changes per row identity into the net effect.
-   * If {@code false}, the connector guarantees at most one change per row identity per
-   * commit version in the raw change data, and Spark will skip net change computation.
+   * If {@code false}, the connector guarantees at most one change per row identity across
+   * the entire changelog range, and Spark will skip net change computation.
    */
   boolean containsIntermediateChanges();
 
@@ -98,21 +98,21 @@ public interface Changelog {
    * Returns the columns that uniquely identify a row, used for update detection and
    * net change computation.
    * <p>
-   * The default implementation returns an empty array, which means row identity is not
-   * available and update detection / net changes cannot be performed.
+   * The default implementation throws {@link UnsupportedOperationException}. Connectors
+   * that support update detection or net change computation must override this method.
    */
   default NamedReference[] rowId() {
-    return new NamedReference[0];
+    throw new UnsupportedOperationException("rowId is not supported.");
   }
 
   /**
    * Returns the column used for ordering changes within the same row identity, used for
    * update detection.
    * <p>
-   * The default implementation returns {@code null}, which means no ordering column is
-   * available.
+   * The default implementation throws {@link UnsupportedOperationException}. Connectors
+   * that support update detection must override this method.
    */
   default NamedReference rowVersion() {
-    return null;
+    throw new UnsupportedOperationException("rowVersion is not supported.");
   }
 }

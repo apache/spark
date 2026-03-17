@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.util.Optional
+import java.util.{Locale, Optional}
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
-import org.apache.spark.sql.connector.catalog.{ChangelogInfo, ChangelogRange}
+import org.apache.spark.sql.connector.catalog.ChangelogInfo
+import org.apache.spark.sql.connector.catalog.ChangelogRange.{TimestampRange, UnboundedRange, VersionRange}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.TimestampType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -30,6 +31,15 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  */
 object ChangelogInfoUtils {
 
+  private val STARTING_VERSION = "startingVersion"
+  private val ENDING_VERSION = "endingVersion"
+  private val STARTING_TIMESTAMP = "startingTimestamp"
+  private val ENDING_TIMESTAMP = "endingTimestamp"
+  private val STARTING_BOUND_INCLUSIVE = "startingBoundInclusive"
+  private val ENDING_BOUND_INCLUSIVE = "endingBoundInclusive"
+  private val DEDUPLICATION_MODE = "deduplicationMode"
+  private val COMPUTE_UPDATES = "computeUpdates"
+
   /**
    * Build a [[ChangelogInfo]] from the options specified via `.option()` calls on
    * `DataFrameReader` or `DataStreamReader`.
@@ -37,62 +47,54 @@ object ChangelogInfoUtils {
   def fromOptions(
       options: CaseInsensitiveStringMap,
       sessionLocalTimeZone: String): ChangelogInfo = {
-    val startVersion = Option(options.get("startingVersion"))
-    val endVersion = Option(options.get("endingVersion"))
-    val startTimestamp = Option(options.get("startingTimestamp"))
-    val endTimestamp = Option(options.get("endingTimestamp"))
+    val startVersion = Option(options.get(STARTING_VERSION))
+    val endVersion = Option(options.get(ENDING_VERSION))
+    val startTimestamp = Option(options.get(STARTING_TIMESTAMP))
+    val endTimestamp = Option(options.get(ENDING_TIMESTAMP))
 
-    val startInclusive = options.getBoolean("startingBoundInclusive", true)
-    val endInclusive = options.getBoolean("endingBoundInclusive", true)
+    val startInclusive = options.getBoolean(STARTING_BOUND_INCLUSIVE, true)
+    val endInclusive = options.getBoolean(ENDING_BOUND_INCLUSIVE, true)
 
-    val deduplicationModeStr = Option(options.get("deduplicationMode"))
-      .getOrElse("dropCarryovers").toLowerCase(java.util.Locale.ROOT)
+    val deduplicationModeStr = Option(options.get(DEDUPLICATION_MODE))
+      .getOrElse("dropCarryovers").toLowerCase(Locale.ROOT)
     val deduplicationMode = deduplicationModeStr match {
       case "none" => ChangelogInfo.DeduplicationMode.NONE
       case "dropcarryovers" => ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS
       case "netchanges" => ChangelogInfo.DeduplicationMode.NET_CHANGES
       case other =>
-        throw new AnalysisException(
-          "INVALID_CDC_OPTION.INVALID_DEDUPLICATION_MODE",
-          Map("mode" -> other))
+        throw QueryCompilationErrors.invalidCdcOptionInvalidDeduplicationMode(other)
     }
-    val computeUpdates = options.getBoolean("computeUpdates", false)
+    val computeUpdates = options.getBoolean(COMPUTE_UPDATES, false)
 
     // Determine range from options
     val hasVersionRange = startVersion.isDefined || endVersion.isDefined
     val hasTimestampRange = startTimestamp.isDefined || endTimestamp.isDefined
 
     if (hasVersionRange && hasTimestampRange) {
-      throw new AnalysisException(
-        "INVALID_CDC_OPTION.CONFLICTING_RANGE_TYPES",
-        Map.empty[String, String])
+      throw QueryCompilationErrors.invalidCdcOptionConflictingRangeTypes()
     }
 
     val range = if (hasVersionRange) {
       val sv = startVersion.getOrElse(
-        throw new AnalysisException(
-          "INVALID_CDC_OPTION.MISSING_STARTING_VERSION",
-          Map.empty[String, String]))
-      new ChangelogRange.VersionRange(
+        throw QueryCompilationErrors.invalidCdcOptionMissingStartingVersion())
+      new VersionRange(
         sv,
         endVersion.map(Optional.of[String]).getOrElse(Optional.empty[String]),
         startInclusive,
         endInclusive)
     } else if (hasTimestampRange) {
       val startTsValue = startTimestamp.map(parseTimestamp(_, sessionLocalTimeZone)).getOrElse(
-        throw new AnalysisException(
-          "INVALID_CDC_OPTION.MISSING_STARTING_TIMESTAMP",
-          Map.empty[String, String]))
+        throw QueryCompilationErrors.invalidCdcOptionMissingStartingTimestamp())
       val endTsValue = endTimestamp.map(ts =>
         java.lang.Long.valueOf(parseTimestamp(ts, sessionLocalTimeZone)))
-      new ChangelogRange.TimestampRange(
+      new TimestampRange(
         startTsValue,
         endTsValue.map(Optional.of[java.lang.Long]).getOrElse(Optional.empty[java.lang.Long]),
         startInclusive,
         endInclusive)
     } else {
       // No range specified — unbounded (streaming use case)
-      new ChangelogRange.Unbounded()
+      new UnboundedRange()
     }
 
     new ChangelogInfo(range, deduplicationMode, computeUpdates)
@@ -106,9 +108,7 @@ object ChangelogInfoUtils {
       ansiEnabled = false
     ).eval()
     if (value == null) {
-      throw new AnalysisException(
-        "INVALID_CDC_OPTION.INVALID_TIMESTAMP",
-        Map("timestamp" -> timestampStr))
+      throw QueryCompilationErrors.invalidCdcOptionInvalidTimestamp(timestampStr)
     }
     value.asInstanceOf[Long]
   }
