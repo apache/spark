@@ -192,8 +192,13 @@ case class GroupPartitionsExec(
     }
   }
 
-  /** Summary parts for plan string representation. */
-  private def planSummaryParts(joinKeyMaxFields: Int): Seq[String] = {
+  override def simpleString(maxFields: Int): String = {
+    s"$nodeName${planSummaryParts(maxFields).map(" " + _).mkString("")}"
+  }
+
+  override protected def stringArgs: Iterator[Any] = planSummaryParts(Int.MaxValue)
+
+  private def planSummaryParts(joinKeyMaxFields: Int): Iterator[String] = {
     val joinKeyStr = joinKeyPositions.map { p =>
       s"JoinKeyPositions: ${truncatedString(p, "[", ",", "]", joinKeyMaxFields)}"
     }.getOrElse("")
@@ -204,15 +209,8 @@ case class GroupPartitionsExec(
       s"Reducers: ${truncatedString(names, "[", ", ", "]", joinKeyMaxFields)}"
     }.getOrElse("")
     Seq(joinKeyStr, expectedStr, reducersStr, s"DistributePartitions: $distributePartitions")
-  }
-
-  override def simpleString(maxFields: Int): String = {
-    val parts = planSummaryParts(maxFields)
-    s"$nodeName${parts.filter(_.nonEmpty).map(" " + _).mkString("")}"
-  }
-
-  override protected def stringArgs: Iterator[Any] = {
-    Iterator(child) ++ planSummaryParts(Int.MaxValue).filter(_.nonEmpty).iterator
+      .iterator
+      .filter(_.nonEmpty)
   }
 }
 
