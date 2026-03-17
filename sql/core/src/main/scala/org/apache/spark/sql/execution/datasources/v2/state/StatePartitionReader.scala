@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorsUtils, StatePartitionKeyExtractorFactory}
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.SymmetricHashJoinStateManager
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.{StateStoreColumnFamilySchemaUtils, StateVariableType, TransformWithStateVariableInfo}
 import org.apache.spark.sql.execution.streaming.state._
@@ -138,6 +139,10 @@ abstract class StatePartitionReaderBase(
     getStoreUniqueId(partition.sourceOptions.endOperatorStateUniqueIds)
   }
 
+  protected val isJoinV4MultiValuedCF: Boolean = joinColFamilyOpt.exists { cfName =>
+    SymmetricHashJoinStateManager.allStateStoreNamesV4(LeftSide, RightSide).contains(cfName)
+  }
+
   protected lazy val provider: StateStoreProvider = {
     val stateStoreId = StateStoreId(partition.sourceOptions.stateCheckpointLocation.toString,
       partition.sourceOptions.operatorId, partition.partition, partition.sourceOptions.storeName)
@@ -146,7 +151,7 @@ abstract class StatePartitionReaderBase(
     val useColFamilies = stateVariableInfoOpt.isDefined || joinColFamilyOpt.isDefined
 
     val useMultipleValuesPerKey = SchemaUtil.checkVariableType(stateVariableInfoOpt,
-      StateVariableType.ListState)
+      StateVariableType.ListState) || isJoinV4MultiValuedCF
 
     val provider = StateStoreProvider.createAndInit(
       stateStoreProviderId, keySchema, valueSchema, keyStateEncoderSpec,
@@ -249,6 +254,12 @@ class StatePartitionReader(
       val stateVarType = stateVariableInfo.stateVariableType
       SchemaUtil.processStateEntries(stateVarType, colFamilyName, store,
         keySchema, partition.partition, partition.sourceOptions)
+    } else if (isJoinV4MultiValuedCF) {
+      store
+        .iteratorWithMultiValues(colFamilyName)
+        .map { pair =>
+          SchemaUtil.unifyStateRowPair((pair.key, pair.value), partition.partition)
+        }
     } else {
       store
         .iterator(colFamilyName)
@@ -333,6 +344,13 @@ class StatePartitionAllColumnFamiliesReader(
       StateVariableType.ListState)
   }
 
+  private val v4JoinCFNames: Set[String] =
+    SymmetricHashJoinStateManager.allStateStoreNamesV4(LeftSide, RightSide).toSet
+
+  private def isMultiValuedCF(colFamilyName: String): Boolean = {
+    isListType(colFamilyName) || v4JoinCFNames.contains(colFamilyName)
+  }
+
   override protected lazy val provider: StateStoreProvider = {
     val stateStoreId = StateStoreId(partition.sourceOptions.stateCheckpointLocation.toString,
       partition.sourceOptions.operatorId, partition.partition, partition.sourceOptions.storeName)
@@ -386,7 +404,7 @@ class StatePartitionAllColumnFamiliesReader(
           case _ =>
             val isInternal =
               StateStoreColumnFamilySchemaUtils.isInternalColFamily(cfSchema.colFamilyName)
-            val useMultipleValuesPerKey = isListType(cfSchema.colFamilyName)
+            val useMultipleValuesPerKey = isMultiValuedCF(cfSchema.colFamilyName)
             require(cfSchema.keyStateEncoderSpec.isDefined,
               s"keyStateEncoderSpec must be defined for column family ${cfSchema.colFamilyName}")
             stateStore.createColFamilyIfAbsent(
@@ -410,15 +428,11 @@ class StatePartitionAllColumnFamiliesReader(
       .filter(schema => !isDefaultColFamilyInTWS(operatorName, schema.colFamilyName))
       .flatMap { cfSchema =>
         val extractor = cfPartitionKeyExtractors(cfSchema.colFamilyName)
-        if (isListType(cfSchema.colFamilyName)) {
-          store.iterator(cfSchema.colFamilyName).flatMap(
-            pair =>
-              store.valuesIterator(pair.key, cfSchema.colFamilyName).map {
-                value =>
-                  SchemaUtil.unifyStateRowPairAsRawBytes(
-                    (pair.key, value), cfSchema.colFamilyName, extractor)
-              }
-          )
+        if (isMultiValuedCF(cfSchema.colFamilyName)) {
+          store.iteratorWithMultiValues(cfSchema.colFamilyName).map { pair =>
+            SchemaUtil.unifyStateRowPairAsRawBytes(
+              (pair.key, pair.value), cfSchema.colFamilyName, extractor)
+          }
         } else {
           store.iterator(cfSchema.colFamilyName).map { pair =>
             SchemaUtil.unifyStateRowPairAsRawBytes(

@@ -276,7 +276,13 @@ class SymmetricHashJoinStateManagerV4(
   // V4 uses a single store with VCFs (not separate keyToNumValues/keyWithIndexToValue stores).
   // Use the keyToNumValues checkpoint ID for loading the correct committed version.
   private val stateStoreCkptId: Option[String] = keyToNumValuesStateStoreCkptId
-  private val handlerSnapshotOptions: Option[HandlerSnapshotOptions] = None
+  private val handlerSnapshotOptions: Option[HandlerSnapshotOptions] = snapshotOptions.map { opts =>
+    HandlerSnapshotOptions(
+      snapshotVersion = opts.snapshotVersion,
+      endVersion = opts.endVersion,
+      startStateStoreCkptId = opts.startKeyToNumValuesStateStoreCkptId,
+      endStateStoreCkptId = opts.endKeyToNumValuesStateStoreCkptId)
+  }
 
   private var stateStoreProvider: StateStoreProvider = _
 
