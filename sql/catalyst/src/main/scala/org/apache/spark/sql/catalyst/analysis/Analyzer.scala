@@ -450,7 +450,7 @@ class Analyzer(
       AddMetadataColumns ::
       DeduplicateRelations ::
       ResolveCollationName ::
-      ResolveMergeIntoSchemaEvolution ::
+      ResolveSchemaEvolution ::
       ValidateEventTimeWatermarkColumn ::
       new ResolveReferences(catalogManager) ::
       // Please do not insert any other rules in between. See the TODO comments in rule
@@ -1167,9 +1167,6 @@ class Analyzer(
         val partCols = partitionColumnNames(r.table)
         validatePartitionSpec(partCols, i.partitionSpec)
 
-        val schemaEvolutionWriteOption: Map[String, String] =
-          if (i.withSchemaEvolution) Map("mergeSchema" -> "true") else Map.empty
-
         val staticPartitions = i.partitionSpec.filter(_._2.isDefined).transform((_, v) => v.get)
         val query = addStaticPartitionColumns(r, projectByName.getOrElse(i.query), staticPartitions,
           isByName)
@@ -1179,24 +1176,24 @@ class Analyzer(
             AppendData.byName(
               r,
               query,
-              writeOptions = schemaEvolutionWriteOption)
+              withSchemaEvolution = i.withSchemaEvolution)
           } else {
             AppendData.byPosition(
               r,
               query,
-              writeOptions = schemaEvolutionWriteOption)
+              withSchemaEvolution = i.withSchemaEvolution)
           }
         } else if (conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC) {
           if (isByName) {
             OverwritePartitionsDynamic.byName(
               r,
               query,
-              writeOptions = schemaEvolutionWriteOption)
+              withSchemaEvolution = i.withSchemaEvolution)
           } else {
             OverwritePartitionsDynamic.byPosition(
               r,
               query,
-              writeOptions = schemaEvolutionWriteOption)
+              withSchemaEvolution = i.withSchemaEvolution)
           }
         } else {
           if (isByName) {
@@ -1204,13 +1201,13 @@ class Analyzer(
               table = r,
               df = query,
               deleteExpr = staticDeleteExpression(r, staticPartitions),
-              writeOptions = schemaEvolutionWriteOption)
+              withSchemaEvolution = i.withSchemaEvolution)
           } else {
             OverwriteByExpression.byPosition(
               table = r,
               query = query,
               deleteExpr = staticDeleteExpression(r, staticPartitions),
-              writeOptions = schemaEvolutionWriteOption)
+              withSchemaEvolution = i.withSchemaEvolution)
           }
         }
     }
@@ -3637,7 +3634,8 @@ class Analyzer(
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(COMMAND), ruleId) {
       case v2Write: V2WriteCommand
-          if v2Write.table.resolved && v2Write.query.resolved && !v2Write.outputResolved =>
+          if v2Write.table.resolved && v2Write.query.resolved && !v2Write.outputResolved &&
+            v2Write.pendingSchemaChanges.isEmpty =>
         validateStoreAssignmentPolicy()
         TableOutputResolver.suitableForByNameCheck(v2Write.isByName,
           expected = v2Write.table.output, queryOutput = v2Write.query.output)

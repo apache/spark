@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* global $, d3, dagreD3, graphlibDot */
+/* global $, d3, dagreD3, graphlibDot, uiRoot, appBasePath, sorttable */
 
 var PlanVizConstants = {
   svgMarginX: 16,
@@ -385,10 +385,19 @@ function buildStatTable(total, min, med, maxVal,
   h += "<td>" + min + "</td><td>" + med +
     "</td><td>" + maxVal + "</td>";
   if (showStageTask) {
-    h += "<td>" + stageId + "</td><td>" + taskId + "</td>";
+    h += "<td>" + stageLink(stageId) + "</td><td>" + taskId + "</td>";
   }
   h += "</tr></tbody></table>";
   return h;
+}
+
+function stageLink(stageId) {
+  if (!stageId) return "";
+  var parts = stageId.split(".");
+  var id = parts[0];
+  var attempt = parts.length > 1 ? parts[1] : "0";
+  var url = uiRoot + appBasePath + "/stages/stage/?id=" + id + "&attempt=" + attempt;
+  return '<a href="' + url + '">' + stageId + '</a>';
 }
 
 /*
@@ -432,7 +441,7 @@ function updateDetailsPanel(nodeId, nodeDetails) {
 
   var html = "";
   if (details.metrics && details.metrics.length > 0) {
-    html += buildMetricsTable(details.metrics, showStageTask);
+    html += buildMetricsTable(details.metrics, showStageTask, true);
   } else if (!details.children) {
     html += '<p class="text-muted mb-0">No metrics</p>';
   }
@@ -444,7 +453,7 @@ function updateDetailsPanel(nodeId, nodeDetails) {
       if (child) {
         html += '<h6 class="mt-2 mb-1 fw-bold">' + htmlEscape(child.name) + '</h6>';
         if (child.metrics && child.metrics.length > 0) {
-          html += buildMetricsTable(child.metrics, showStageTask);
+          html += buildMetricsTable(child.metrics, showStageTask, true);
         } else {
           html += '<p class="text-muted mb-0">No metrics</p>';
         }
@@ -452,6 +461,13 @@ function updateDetailsPanel(nodeId, nodeDetails) {
     });
   }
   bodyEl.innerHTML = html;
+
+  // Initialize sorttable on dynamically injected metrics tables
+  if (typeof sorttable !== "undefined") {
+    bodyEl.querySelectorAll("table.sortable").forEach(function (table) {
+      sorttable.makeSortable(table);
+    });
+  }
 }
 
 function htmlEscape(str) {
@@ -462,8 +478,9 @@ function htmlEscape(str) {
 /*
  * Build an HTML metrics table from a metrics array.
  */
-function buildMetricsTable(metrics, showStageTask) {
-  var html = '<table class="table table-sm table-bordered mb-0">';
+function buildMetricsTable(metrics, showStageTask, enableSort) {
+  var cls = "table table-sm table-bordered mb-0" + (enableSort ? " sortable" : "");
+  var html = '<table class="' + cls + '">';
   html += "<thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>";
   metrics.forEach(function (m) {
     var name = htmlEscape(m.name);
@@ -634,7 +651,7 @@ function rerenderWithDetailedLabels() {
         if (details.metrics && details.metrics.length > 0) {
           var html = '<div style="padding:4px;text-align:left;font-size:10px;">';
           html += '<strong>' + htmlEscape(details.name) + '</strong>';
-          html += buildMetricsTable(details.metrics, showStageTask);
+          html += buildMetricsTable(details.metrics, showStageTask, false);
           html += '</div>';
           node.labelType = "html";
           node.label = html;

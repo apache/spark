@@ -332,8 +332,7 @@ class BaseUDTFTestsMixin:
     def test_udtf_with_invalid_return_value_in_terminate(self):
         @udtf(returnType="x: int")
         class TestUDTF:
-            def eval(self, a):
-                ...
+            def eval(self, a): ...
 
             def terminate(self):
                 return 1
@@ -344,8 +343,7 @@ class BaseUDTFTestsMixin:
     def test_udtf_eval_with_no_return(self):
         @udtf(returnType="a: int")
         class TestUDTF:
-            def eval(self, a: int):
-                ...
+            def eval(self, a: int): ...
 
         assertDataFrameEqual(TestUDTF(lit(1)), [])
 
@@ -436,8 +434,7 @@ class BaseUDTFTestsMixin:
     def test_udtf_init_with_additional_args(self):
         @udtf(returnType="x int")
         class TestUDTF:
-            def __init__(self, a: int):
-                ...
+            def __init__(self, a: int): ...
 
             def eval(self, a: int):
                 yield a,
@@ -451,8 +448,7 @@ class BaseUDTFTestsMixin:
             def eval(self, a: int):
                 yield a,
 
-            def terminate(self, a: int):
-                ...
+            def terminate(self, a: int): ...
 
         with self.assertRaisesRegex(
             PythonException, r"terminate\(\) missing 1 required positional argument: 'a'"
@@ -1179,8 +1175,7 @@ class BaseUDTFTestsMixin:
             },
         )
 
-        class TestUDTF:
-            ...
+        class TestUDTF: ...
 
         with self.assertRaises(PySparkTypeError) as e:
             self.spark.udtf.register("test_udtf", TestUDTF)
@@ -1441,16 +1436,14 @@ class BaseUDTFTestsMixin:
         func = self.udtf_for_table_argument()
         self.spark.udtf.register("test_udtf", func)
         assertDataFrameEqual(
-            self.spark.sql(
-                """
+            self.spark.sql("""
                 SELECT * FROM test_udtf(TABLE (
                   WITH t AS (
                     SELECT id FROM range(0, 8)
                   )
                   SELECT * FROM t
                 ))
-                """
-            ),
+                """),
             [Row(a=6), Row(a=7)],
         )
 
@@ -1458,26 +1451,22 @@ class BaseUDTFTestsMixin:
         func = self.udtf_for_table_argument()
         self.spark.udtf.register("test_udtf", func)
         assertDataFrameEqual(
-            self.spark.sql(
-                """
+            self.spark.sql("""
                 WITH t AS (
                   SELECT id FROM range(0, 8)
                 )
                 SELECT * FROM test_udtf(TABLE (SELECT id FROM t))
-                """
-            ),
+                """),
             [Row(a=6), Row(a=7)],
         )
 
         assertDataFrameEqual(
-            self.spark.sql(
-                """
+            self.spark.sql("""
                 WITH t AS (
                   SELECT id FROM range(0, 8)
                 )
                 SELECT * FROM test_udtf(TABLE (t))
-                """
-            ),
+                """),
             [Row(a=6), Row(a=7)],
         )
 
@@ -1487,13 +1476,11 @@ class BaseUDTFTestsMixin:
         func = self.udtf_for_table_argument()
         self.spark.udtf.register("test_udtf", func)
         assertDataFrameEqual(
-            self.spark.sql(
-                """
+            self.spark.sql("""
                 SELECT * FROM
                   range(0, 8) AS t,
                   LATERAL test_udtf(TABLE (t))
-                """
-            ),
+                """),
             [Row(a=6), Row(a=7)],
         )
 
@@ -1830,18 +1817,17 @@ class BaseUDTFTestsMixin:
                 "SELECT * FROM test_udtf(0, TABLE (SELECT id FROM range(0, 4)))"
             ).collect()
 
-        with self.sql_conf(
-            {"spark.sql.tvf.allowMultipleTableArguments.enabled": True}
-        ), self.assertRaisesRegex(
-            AnalysisException, "The first argument must be a scalar integer between 1 and 10"
+        with (
+            self.sql_conf({"spark.sql.tvf.allowMultipleTableArguments.enabled": True}),
+            self.assertRaisesRegex(
+                AnalysisException, "The first argument must be a scalar integer between 1 and 10"
+            ),
         ):
-            self.spark.sql(
-                """
+            self.spark.sql("""
                 SELECT * FROM test_udtf(
                   TABLE (SELECT id FROM range(0, 1)),
                   TABLE (SELECT id FROM range(0, 4)))
-                """
-            ).collect()
+                """).collect()
 
         with self.assertRaisesRegex(
             AnalysisException, "The second argument must be a table argument"
@@ -2962,15 +2948,13 @@ class BaseUDTFTestsMixin:
         self.spark.udtf.register("test_udtf", TestUDTF)
 
         assertDataFrameEqual(
-            self.spark.sql(
-                """
+            self.spark.sql("""
                 WITH t AS (
                   SELECT id FROM range(1, 21)
                 )
                 SELECT total, buffer
                 FROM test_udtf("abc", TABLE(t))
-                """
-            ),
+                """),
             [Row(count=20, buffer="abc")],
         )
 
@@ -2995,15 +2979,13 @@ class BaseUDTFTestsMixin:
         # Run a test case including WITH SINGLE PARTITION on the UDTF call. The
         # SkipRestOfInputTableException stops scanning rows after the fourth input row is consumed.
         assertDataFrameEqual(
-            self.spark.sql(
-                """
+            self.spark.sql("""
                 WITH t AS (
                   SELECT id FROM range(1, 21)
                 )
                 SELECT current, total
                 FROM test_udtf(TABLE(t) WITH SINGLE PARTITION ORDER BY id)
-                """
-            ),
+                """),
             [Row(current=4, total=4)],
         )
 
@@ -3011,16 +2993,14 @@ class BaseUDTFTestsMixin:
         # SkipRestOfInputTableException stops scanning rows for each of the two partitions
         # separately.
         assertDataFrameEqual(
-            self.spark.sql(
-                """
+            self.spark.sql("""
                 WITH t AS (
                   SELECT id FROM range(1, 21)
                 )
                 SELECT current, total
                 FROM test_udtf(TABLE(t) PARTITION BY floor(id / 10) ORDER BY id)
                 ORDER BY ALL
-                """
-            ),
+                """),
             [Row(current=4, total=4), Row(current=13, total=4), Row(current=20, total=1)],
         )
 
@@ -3138,8 +3118,9 @@ class BaseUDTFTestsMixin:
             (True, "Segmentation fault"),
             (False, "Consider setting .* for the better Python traceback."),
         ]:
-            with self.subTest(enabled=enabled), self.sql_conf(
-                {"spark.sql.execution.pyspark.udf.faulthandler.enabled": enabled}
+            with (
+                self.subTest(enabled=enabled),
+                self.sql_conf({"spark.sql.execution.pyspark.udf.faulthandler.enabled": enabled}),
             ):
                 with self.subTest(method="eval"):
 

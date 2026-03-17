@@ -158,7 +158,7 @@ class LogicalPlan:
 
     @staticmethod
     def _collect_references(
-        cols_or_exprs: Sequence[Union[Column, Expression]]
+        cols_or_exprs: Sequence[Union[Column, Expression]],
     ) -> Sequence["LogicalPlan"]:
         references: List[LogicalPlan] = []
 
@@ -1017,9 +1017,7 @@ class Join(LogicalPlan):
             self._collect_references(
                 []
                 if on is None or isinstance(on, str)
-                else [on]
-                if isinstance(on, Column)
-                else [c for c in on if isinstance(c, Column)]
+                else [on] if isinstance(on, Column) else [c for c in on if isinstance(c, Column)]
             ),
         )
         self.left = cast(LogicalPlan, left)
@@ -1140,9 +1138,9 @@ class AsOfJoin(LogicalPlan):
                 + (
                     []
                     if on is None or isinstance(on, str)
-                    else [on]
-                    if isinstance(on, Column)
-                    else [c for c in on if isinstance(c, Column)]
+                    else (
+                        [on] if isinstance(on, Column) else [c for c in on if isinstance(c, Column)]
+                    )
                 )
                 + ([tolerance] if tolerance is not None else [])
             ),
@@ -2717,9 +2715,7 @@ class PythonUDTF:
         self._return_type: Optional[DataType] = (
             None
             if return_type is None
-            else UnparsedDataType(return_type)
-            if isinstance(return_type, str)
-            else return_type
+            else UnparsedDataType(return_type) if isinstance(return_type, str) else return_type
         )
         self._eval_type = eval_type
         self._python_ver = python_ver
@@ -2844,7 +2840,7 @@ class CommonInlineUserDefinedDataSource(LogicalPlan):
 
 class CachedRelation(LogicalPlan):
     def __init__(self, plan: proto.Relation) -> None:
-        super(CachedRelation, self).__init__(None)
+        super().__init__(None)
         self._plan = plan
         # Update the plan ID based on the incremented counter.
         self._plan.common.plan_id = self._plan_id

@@ -18,6 +18,7 @@
 """
 A wrapper for GroupedData to behave like pandas GroupBy.
 """
+
 from abc import ABCMeta, abstractmethod
 import inspect
 from collections import defaultdict, namedtuple
@@ -4248,7 +4249,7 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
                 F.col(f"{auxiliary_col_name}.{CORRELATION_CORR_OUTPUT_COLUMN}"),
             )
 
-        sdf = sdf.orderBy(groupkey_names + [index_1_col_name])  # type: ignore[arg-type]
+        sdf = sdf.orderBy(groupkey_names + [index_1_col_name])
 
         sdf = sdf.select(
             *[F.col(col) for col in groupkey_names + numeric_col_names],
@@ -4731,7 +4732,7 @@ def _test() -> None:
         .appName("pyspark.pandas.groupby tests")
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.groupby,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

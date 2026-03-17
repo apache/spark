@@ -60,7 +60,6 @@ from pyspark.worker_util import (
     utf8_deserializer,
 )
 
-
 INITIAL_OFFSET_FUNC_ID = 884
 LATEST_OFFSET_FUNC_ID = 885
 PARTITIONS_FUNC_ID = 886
