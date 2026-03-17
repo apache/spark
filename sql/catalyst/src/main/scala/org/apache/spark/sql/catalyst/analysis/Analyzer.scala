@@ -466,6 +466,7 @@ class Analyzer(
       ResolveOrdinalInOrderByAndGroupBy ::
       ExtractGenerator ::
       ResolveGenerate ::
+      ResolveCustomPredicates ::
       ResolveFunctions ::
       ResolveProcedures ::
       BindProcedures ::
@@ -2016,6 +2017,8 @@ class Analyzer(
   object LookupFunctions extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = {
       val externalFunctionNameSet = new mutable.HashSet[Seq[String]]()
+      // Collect custom predicate names from DSv2 tables so we don't reject them.
+      val customPredNames = collectCustomPredicateNames(plan)
 
       plan.resolveExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
         case f @ UnresolvedFunction(nameParts, _, _, _, _, _, _) =>
@@ -2061,17 +2064,76 @@ class Analyzer(
                   throw QueryCompilationErrors.notAScalarFunctionError(nameParts.mkString("."), f)
 
                 case FunctionType.NotFound =>
-                  val catalogPath =
-                    catalogManager.currentCatalog.name +: catalogManager.currentNamespace
-                  val searchPath = SQLConf.get.resolutionSearchPath(catalogPath.toSeq)
-                    .map(_.quoted)
-                  throw QueryCompilationErrors.unresolvedRoutineError(
-                    nameParts,
-                    searchPath,
-                    f.origin)
+                  // Check if this could be a custom predicate from a DSv2 table.
+                  // ResolveCustomPredicates will handle resolution in the Resolution batch.
+                  if (nameParts.length == 1 && customPredNames.contains(
+                      nameParts.head.toUpperCase(Locale.ROOT))) {
+                    f
+                  } else {
+                    val catalogPath =
+                      catalogManager.currentCatalog.name +: catalogManager.currentNamespace
+                    val searchPath = SQLConf.get.resolutionSearchPath(catalogPath.toSeq)
+                      .map(_.quoted)
+                    throw QueryCompilationErrors.unresolvedRoutineError(
+                      nameParts,
+                      searchPath,
+                      f.origin)
+                  }
               }
             }
           }
+      }
+    }
+
+    /**
+     * Collects custom predicate SQL names from DSv2 tables referenced in the plan.
+     * Checks temp views (via catalog lookup) and already-resolved DataSourceV2Relations.
+     * Returns an empty set quickly when the feature is disabled or no DSv2 relations exist.
+     *
+     * Note: This is called once per LookupFunctions invocation on a partially resolved
+     * plan. If relations are resolved in later iterations, new custom predicate names
+     * will be picked up on the next LookupFunctions pass (the Resolution batch is
+     * fixed-point, so this converges).
+     */
+    private def collectCustomPredicateNames(plan: LogicalPlan): Set[String] = {
+      if (!conf.extendedPredicatePushdownEnabled) return Set.empty
+      // Quick check: skip traversal if no unresolved relations or DSv2 relations exist
+      val hasRelevantNodes = plan.exists {
+        case _: UnresolvedRelation => true
+        case _: DataSourceV2Relation => true
+        case _ => false
+      }
+      if (!hasRelevantNodes) return Set.empty
+
+      val names = mutable.Set.empty[String]
+      plan.foreach {
+        case u: UnresolvedRelation =>
+          relationResolution.lookupTempView(u.multipartIdentifier).foreach { tvr =>
+            tvr.plan.foreach(collectFromPlan(_, names))
+          }
+        case r: DataSourceV2Relation =>
+          collectFromTable(r.table, names)
+        case _ =>
+      }
+      names.toSet
+    }
+
+    private def collectFromPlan(
+        plan: LogicalPlan, names: mutable.Set[String]): Unit = {
+      plan.foreach {
+        case r: DataSourceV2Relation => collectFromTable(r.table, names)
+        case _ =>
+      }
+    }
+
+    private def collectFromTable(
+        table: Table, names: mutable.Set[String]): Unit = {
+      table match {
+        case t: SupportsCustomPredicates =>
+          t.customPredicates().foreach { d =>
+            names += d.sqlName().toUpperCase(Locale.ROOT)
+          }
+        case _ =>
       }
     }
 

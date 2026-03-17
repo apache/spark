@@ -1969,6 +1969,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DATA_SOURCE_EXTENDED_PREDICATE_PUSHDOWN_ENABLED =
+    buildConf("spark.sql.dataSource.extendedPredicatePushdown.enabled")
+      .doc("When true, enables extended predicate pushdown for DataSource V2. " +
+        "This includes capability-gated builtin predicates (LIKE, RLIKE, ILIKE, IS_NAN, " +
+        "ARRAY_CONTAINS, MAP_CONTAINS_KEY, ARRAYS_OVERLAP, LIKE_ALL, LIKE_ANY, " +
+        "NOT_LIKE_ALL, NOT_LIKE_ANY) and custom predicate functions declared " +
+        "by tables via SupportsCustomPredicates.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val DATA_SOURCE_V2_JOIN_PUSHDOWN =
     buildConf("spark.sql.optimizer.datasourceV2JoinPushdown")
       .internal()
@@ -7169,6 +7180,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def geospatialEnabled: Boolean = getConf(GEOSPATIAL_ENABLED)
 
   def typesFrameworkEnabled: Boolean = getConf(TYPES_FRAMEWORK_ENABLED)
+
+  def extendedPredicatePushdownEnabled: Boolean =
+    getConf(DATA_SOURCE_EXTENDED_PREDICATE_PUSHDOWN_ENABLED)
 
   def dataSourceV2JoinPushdown: Boolean = getConf(DATA_SOURCE_V2_JOIN_PUSHDOWN)
 
