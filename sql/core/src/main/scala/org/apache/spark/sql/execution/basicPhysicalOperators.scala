@@ -253,8 +253,63 @@ case class FilterExec(condition: Expression, child: SparkPlan)
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")
 
-    val predicateCode = generatePredicateCode(
-      ctx, child.output, input, output, notNullPreds, otherPreds, notNullAttributes)
+    // Subexpression elimination for filter predicates in whole-stage codegen.
+    // Only collect otherPreds for CSE -- notNullPreds are simple IsNotNull checks
+    // (guaranteed by the partition logic in FilterExec's constructor) with no CSE value,
+    // including them would interfere with equivalence analysis.
+    //
+    // Note: CSE evaluation code is placed BEFORE predicate short-circuit checks.
+    // This means common subexpressions are evaluated unconditionally even if an earlier
+    // notNull check would have short-circuited. This is an intentional tradeoff:
+    // for expensive shared expressions (e.g., from_json appearing in 500 predicates),
+    // the benefit of evaluating once vs N times far outweighs the cost of losing
+    // short-circuit on the CSE portion. When there are no common subexpressions,
+    // subExprsCode is empty and this path has zero overhead.
+    // This is safe because Spark SQL expressions handle null inputs gracefully (returning
+    // null rather than throwing), so evaluating them before notNull guards does not
+    // introduce new exceptions.
+    val (inputVarsCode, subExprsCode, predicateCode) =
+      if (conf.subexpressionEliminationEnabled && otherPreds.nonEmpty) {
+        val boundOtherPreds = otherPreds.map(
+          BindReferences.bindReference(_, output))
+        // Pre-evaluate input variables referenced by otherPreds before CSE analysis.
+        // FilterExec sets usedInputs = AttributeSet.empty to defer input evaluation
+        // for short-circuit optimization. However, subexpressionEliminationForWholeStageCodegen's
+        // internal getLocalInputVariableValues has a side effect: it clears
+        // ctx.currentVars[i].code for input variables referenced by common subexpressions.
+        // In the non-split path, the cleared codes are baked into the subexpression eval code,
+        // and exprCodesNeedEvaluate is not returned. If notNullPreds reference the same input
+        // variables, generatePredicateCode's evaluateRequiredVariables would find empty code
+        // and skip their declarations, causing "is not an rvalue" compilation errors.
+        // By pre-evaluating here, we ensure input variable codes are already EmptyBlock before
+        // CSE analysis runs, avoiding the conflict.
+        val otherPredInputAttrs = AttributeSet(otherPreds.flatMap(_.references))
+        val inputVarsEvalCode = evaluateRequiredVariables(
+          child.output, input, otherPredInputAttrs)
+
+        val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundOtherPreds)
+        // withSubExprEliminationExprs requires Seq[ExprCode] return type, but we need
+        // the String result from generatePredicateCode. Use var + side-effect capture
+        // as a workaround for this API constraint.
+        val predCode: String = {
+          var code = ""
+          ctx.withSubExprEliminationExprs(subExprs.states) {
+            code = generatePredicateCode(
+              ctx, child.output, input, output, notNullPreds, otherPreds, notNullAttributes)
+            Seq.empty
+          }
+          code
+        }
+        // evaluateSubExprEliminationState must be called after predicate code generation;
+        // it emits the pre-computation code and marks states as consumed.
+        (inputVarsEvalCode,
+         ctx.evaluateSubExprEliminationState(subExprs.states.values), predCode)
+      } else {
+        // CSE disabled or no other predicates: fall back to original codegen path
+        // with no overhead.
+        ("", "", generatePredicateCode(
+          ctx, child.output, input, output, notNullPreds, otherPreds, notNullAttributes))
+      }
 
     // Reset the isNull to false for the not-null columns, then the followed operators could
     // generate better code (remove dead branches).
@@ -268,6 +323,8 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // Note: wrap in "do { } while (false);", so the generated checks can jump out with "continue;"
     s"""
        |do {
+       |  $inputVarsCode
+       |  $subExprsCode
        |  $predicateCode
        |  $numOutput.add(1);
        |  ${consume(ctx, resultVars)}

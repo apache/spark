@@ -25,11 +25,12 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAnd
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
+import org.apache.spark.sql.execution.debug.codegenString
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 // Disable AQE because the WholeStageCodegenExec is added when running QueryStageExec
 class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
@@ -942,6 +943,94 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
         // Execute and validate that the executor side still yields the correct result.
         checkAnswer(df, Seq(Row(0, 0), Row(1, 1), Row(2, 2)))
       }
+    }
+  }
+
+  test("SPARK-50767: subexpression elimination in FilterExec codegen") {
+    // Verify that common subexpressions in filter predicates are evaluated only once
+    // in whole-stage codegen. This was the root cause of the from_json codegen revert:
+    // without CSE in FilterExec.doConsume, expensive shared expressions (like from_json)
+    // were inlined N times, causing code bloat and performance regression.
+    def testFilterCSE(cseEnabled: Boolean): (Seq[Row], String) = {
+      withSQLConf(
+        SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> cseEnabled.toString,
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        // Use a low split threshold to exercise the split code path in CSE, where common
+        // subexpressions are extracted into separate helper functions.
+        SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") {
+        val df = spark.range(10).selectExpr("id", "id as a", "id as b")
+        // (a + b) is the common subexpression shared across three predicates
+        val filtered = df.where("(a + b) > 3 AND (a + b) < 17 AND (a + b) != 10")
+        val plan = filtered.queryExecution.executedPlan
+        assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+          "Filter should be in whole-stage codegen")
+        (filtered.collect().toSeq, codegenString(plan))
+      }
+    }
+
+    val (cseResult, cseCode) = testFilterCSE(cseEnabled = true)
+    val (noCseResult, noCseCode) = testFilterCSE(cseEnabled = false)
+
+    // Functional correctness: both modes must produce the same result
+    val expected = (2L to 8L).filter(_ * 2 != 10).map(i => Row(i, i, i))
+    assert(cseResult === expected)
+    assert(noCseResult === expected)
+
+    // CSE semantic check: count how many times the addition (a + b) is computed.
+    // The generated code uses MathUtils.addExact for long addition with overflow check.
+    // With CSE enabled, (a + b) should be computed once and reused across all three
+    // predicates; without CSE, it is inlined separately in each predicate.
+    val addExactPattern = "addExact".r
+    val cseAddCount = addExactPattern.findAllIn(cseCode).length
+    val noCseAddCount = addExactPattern.findAllIn(noCseCode).length
+    assert(cseAddCount < noCseAddCount,
+      s"CSE should reduce repeated evaluation: addExact appears $cseAddCount times with CSE " +
+        s"vs $noCseAddCount times without")
+  }
+
+  test("SPARK-50767: FilterExec CSE with notNullPreds sharing input variables") {
+    // Regression test for a bug in CodeGenerator.subexpressionEliminationForWholeStageCodegen:
+    // In the non-split path, getLocalInputVariableValues clears ctx.currentVars[i].code for
+    // input variables referenced by common subexpressions (side effect), but the saved
+    // exprCodesNeedEvaluate was discarded (returned Seq.empty). When FilterExec's
+    // generatePredicateCode later processed notNullPreds referencing the same input variables,
+    // evaluateRequiredVariables found empty code and skipped variable declarations, causing
+    // "is not an rvalue" compilation errors (e.g., TPC-DS q85).
+    withSQLConf(
+      SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      // Create nullable columns so that IsNotNull predicates are meaningful and
+      // not optimized away.
+      val schema = StructType(Seq(
+        StructField("a", IntegerType, nullable = true),
+        StructField("b", IntegerType, nullable = true)))
+      val data = spark.sparkContext.parallelize(Seq(
+        Row(1, 5), Row(null, 3), Row(4, null), Row(5, 6), Row(7, 8), Row(2, 3)))
+      val df = spark.createDataFrame(data, schema)
+
+      // Filter condition produces:
+      // - notNullPreds: IsNotNull(a), IsNotNull(b) (inferred by optimizer)
+      // - otherPreds: (a + b) > 3, (a + b) < 15 (common subexpression: a + b)
+      // The common subexpression (a + b) references input variables a and b, which are
+      // also referenced by the notNullPreds -- this is the exact scenario that triggers
+      // the bug.
+      val result = df.where("a IS NOT NULL AND (a + b) > 3 AND (a + b) < 15")
+
+      val plan = result.queryExecution.executedPlan
+      assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+        "Filter should be in whole-stage codegen")
+
+      // Verify generated code compiles successfully. Before the fix, this would fail
+      // with "Expression ... is not an rvalue" because input variable declarations
+      // were lost when CSE cleared ctx.currentVars but discarded exprCodesNeedEvaluate.
+      val codeGenStr = codegenString(plan)
+      assert(codeGenStr.nonEmpty, "Should generate valid code")
+
+      // Row(1,5): a+b=6, passes | Row(null,3): excluded | Row(4,null): excluded
+      // Row(5,6): a+b=11, passes | Row(7,8): a+b=15, excluded | Row(2,3): a+b=5, passes
+      checkAnswer(result, Seq(Row(1, 5), Row(5, 6), Row(2, 3)))
     }
   }
 }
