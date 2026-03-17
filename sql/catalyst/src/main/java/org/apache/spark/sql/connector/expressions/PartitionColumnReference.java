@@ -23,10 +23,9 @@ import org.apache.spark.sql.connector.catalog.Table;
 /**
  * A reference to a partition column in {@link Table#partitioning()}.
  * <p>
- * This extends {@link NamedReference} so that partition predicates can participate in the same
- * reference framework as other expressions. {@link #fieldNames()} returns the partition column
- * name (or names) as reported by the table's partition schema at this ordinal. {@link #ordinal()}
- * returns the 0-based position in {@link Table#partitioning()}.
+ * {@link #fieldNames()} returns the partition column name (or names) as reported by
+ * the table's partition schema.
+ * {@link #ordinal()} returns the 0-based position in {@link Table#partitioning()}.
  *
  * @since 4.2.0
  */

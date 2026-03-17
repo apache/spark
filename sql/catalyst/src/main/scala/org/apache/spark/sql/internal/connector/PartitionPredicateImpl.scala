@@ -27,10 +27,6 @@ import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
 /**
  * An implementation for [[PartitionPredicate]] that wraps a Catalyst Expression representing a
  * partition filter.
- * <p>
- * Supporting data sources receive these via
- * [[org.apache.spark.sql.connector.read.SupportsPushDownV2Filters#pushPredicates]]
- * and may use them for additional partition filtering.
  */
 class PartitionPredicateImpl private (
     private val catalystExpr: CatalystExpression,
