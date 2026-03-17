@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExprUtils}
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -115,7 +115,7 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
    *
    *  - If the [[Aggregate]] contains lateral column references, delegate the resolution to
    *    [[LateralColumnAliasResolver.handleLcaInAggregate]];
-   *  - Otherwise, validate the result [[Aggregate]] using [[ExprUtils.assertValidAggregation]];
+   *  - Otherwise, validate the result [[Aggregate]] using [[AggregationValidator]];
    *
    *  Note: Recursive CTE self references are disallowed before entering this method by the
    *  pre-scan in [[resolve]].
@@ -142,9 +142,7 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
           )
       (aggregateWithLcaResolutionResult.resolvedOperator, projectList)
     } else {
-      // TODO: This validation function does a post-traversal. This is discouraged in
-      // single-pass Analyzer.
-      ExprUtils.assertValidAggregation(aggregate)
+      AggregationValidator(aggregate)
 
       val resolvedAggregateList = resolvedProjectList.copy(
         aggregateListAliases = scopes.current.aggregateListAliases,
