@@ -414,7 +414,17 @@ class PySparkErrorTestUtils:
         query_context_type: Optional[QueryContextType] = None,
         fragment: Optional[str] = None,
         matchPVals: bool = False,
+        match_exact_condition_and_parameters: bool = False,
     ):
+        """
+        Check that the exception has the expected error condition and (optionally) parameters.
+
+        By default, condition matches if the exception's condition equals the expected condition
+        or is a subcondition (e.g. CONDITION.SUBCONDITION when expecting CONDITION). When
+        passing only the main condition, message parameters are not required to be full (subset
+        check). Use match_exact_condition_and_parameters=True when a test must require the
+        exact condition with no subcondition and exact parameters.
+        """
         query_context = exception.getQueryContext()
         assert bool(query_context) == (query_context_type is not None), (
             "`query_context_type` is required when QueryContext exists. "
@@ -427,40 +437,76 @@ class PySparkErrorTestUtils:
             f"checkError requires 'PySparkException', got '{exception.__class__.__name__}'.",
         )
 
-        # Test error class
+        # Test error class (exact or prefix match by default)
         expected = errorClass
-        actual = exception.getCondition()
-        self.assertEqual(
-            expected, actual, f"Expected error class was '{expected}', got '{actual}'."
+        actual_condition = exception.getCondition() or ""
+        if match_exact_condition_and_parameters:
+            condition_matches = actual_condition == expected
+        else:
+            condition_matches = (
+                actual_condition == expected
+                or (expected and actual_condition.startswith(expected + "."))
+            )
+        self.assertTrue(
+            condition_matches,
+            f"Expected error class was '{expected}' (match_exact={match_exact_condition_and_parameters}), "
+            f"got '{actual_condition}'.",
         )
 
         # Test message parameters
-        expected = messageParameters
-        actual = exception.getMessageParameters()
-        if matchPVals:
-            self.assertEqual(
-                len(expected),
-                len(actual),
-                "Expected message parameters count does not match actual message parameters count"
-                f": {len(expected)}, {len(actual)}.",
-            )
-            for key, value in expected.items():
-                self.assertIn(
-                    key,
-                    actual,
-                    f"Expected message parameter key '{key}' was not found "
-                    "in actual message parameters.",
-                )
-                self.assertRegex(
-                    actual[key],
-                    value,
-                    f"Expected message parameter value '{value}' does not match actual message "
-                    f"parameter value '{actual[key]}'.",
-                ),
+        actual_params = exception.getMessageParameters() or {}
+        is_prefix_match = (
+            not match_exact_condition_and_parameters
+            and actual_condition.startswith(expected + ".")
+        )
+        if is_prefix_match:
+            # When matching by main condition only, only require that passed parameters match.
+            if messageParameters:
+                for key, value in messageParameters.items():
+                    self.assertIn(
+                        key,
+                        actual_params,
+                        f"Expected message parameter key '{key}' not found in {actual_params}",
+                    )
+                    if matchPVals:
+                        self.assertRegex(
+                            actual_params[key],
+                            value,
+                            f"Parameter '{key}' value '{actual_params[key]}' does not match pattern '{value}'",
+                        )
+                    else:
+                        self.assertEqual(
+                            actual_params[key],
+                            value,
+                            f"Parameter '{key}': expected '{value}', got '{actual_params[key]}'",
+                        )
         else:
-            self.assertEqual(
-                expected, actual, f"Expected message parameters was '{expected}', got '{actual}'"
-            )
+            expected_params = messageParameters if messageParameters is not None else {}
+            if matchPVals:
+                self.assertEqual(
+                    len(expected_params),
+                    len(actual_params),
+                    "Expected message parameters count does not match actual message parameters count"
+                    f": {len(expected_params)}, {len(actual_params)}.",
+                )
+                for key, value in expected_params.items():
+                    self.assertIn(
+                        key,
+                        actual_params,
+                        f"Expected message parameter key '{key}' was not found "
+                        "in actual message parameters.",
+                    )
+                    self.assertRegex(
+                        actual_params[key],
+                        value,
+                        f"Expected message parameter value '{value}' does not match actual message "
+                        f"parameter value '{actual_params[key]}'.",
+                    )
+            else:
+                self.assertEqual(
+                    expected_params, actual_params,
+                    f"Expected message parameters was '{expected_params}', got '{actual_params}'"
+                )
 
         # Test query context
         if query_context:

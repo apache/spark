@@ -36,6 +36,13 @@ The terms error class, state, and condition come from the SQL standard.
     * Error sub-condition: `TOLERANCE_IS_UNFOLDABLE`
     * Error sub-condition: `UNSUPPORTED_DIRECTION`
 
+### Optional subconditions (SPARK-56029)
+
+Subconditions are **optional**: you may raise or check an error at the main condition level even when the condition has subconditions in `error-conditions.json`.
+
+* **Raising:** You may throw using only the main condition (e.g. `CANNOT_LOAD_STATE_STORE`) when that condition has a `subClass` in the JSON. In that case you do not provide any subcondition name or subcondition-specific message parameters; the main condition's message template is used.
+* **Checking (tests):** In tests, `checkError` (Scala) and `check_error` (PySpark) match by condition by default: passing the main condition matches both the main condition and any of its subconditions, and you do not have to assert subcondition parameters. This allows evolving a condition from having no subconditions to having subconditions without breaking existing tests. When a test must assert the exact subcondition and exact parameters, use the strict option (`matchExactConditionAndParameters` in Scala, `match_exact_condition_and_parameters` in PySpark).
+
 ### Inconsistent Use of the Term "Error Class"
 
 Unfortunately, we have historically used the term "error class" inconsistently to refer both to a proper error class like `42` and also to an error condition like `DATATYPE_MISSING_SIZE`.

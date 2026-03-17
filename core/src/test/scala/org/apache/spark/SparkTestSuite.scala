@@ -276,6 +276,11 @@ trait SparkTestSuite
 
   /**
    * Checks an exception with an error condition against expected results.
+   * By default, condition matches if the exception's condition equals the expected condition
+   * or is a subcondition (e.g. CONDITION.SUBCONDITION when expecting CONDITION). When passing
+   * only the main condition, parameters are not required to be full (subset check). Use
+   * matchExactConditionAndParameters when a test must require the exact condition with no
+   * subcondition and exact parameters.
    * @param exception     The exception to check
    * @param condition     The expected error condition identifying the error
    * @param sqlState      Optional the expected SQLSTATE, not verified if not supplied
@@ -283,6 +288,9 @@ trait SparkTestSuite
    *                      in the error-classes file.
    * @param matchPVals    Optionally treat the parameters value as regular expression pattern.
    *                      false if not supplied.
+   * @param matchExactConditionAndParameters When true, require exact condition match (no prefix
+   *                      match) and full parameter equality. When false (default), condition
+   *                      may be main or subcondition; param check is subset when prefix match.
    */
   protected def checkError(
       exception: SparkThrowable,
@@ -290,24 +298,52 @@ trait SparkTestSuite
       sqlState: Option[String] = None,
       parameters: Map[String, String] = Map.empty,
       matchPVals: Boolean = false,
-      queryContext: Array[ExpectedContext] = Array.empty): Unit = {
-    assert(exception.getCondition === condition)
-    sqlState.foreach(state => assert(exception.getSqlState === state))
-    val expectedParameters = exception.getMessageParameters.asScala
-    if (matchPVals) {
-      assert(expectedParameters.size === parameters.size)
-      expectedParameters.foreach(
-        exp => {
-          val parm = parameters.getOrElse(exp._1,
-            throw new IllegalArgumentException("Missing parameter" + exp._1))
-          if (!exp._2.matches(parm)) {
-            throw new IllegalArgumentException("For parameter '" + exp._1 + "' value '" + exp._2 +
-              "' does not match: " + parm)
-          }
-        }
-      )
+      queryContext: Array[ExpectedContext] = Array.empty,
+      matchExactConditionAndParameters: Boolean = false): Unit = {
+    val actualCondition = exception.getCondition
+    val conditionMatches = if (matchExactConditionAndParameters) {
+      actualCondition === condition
     } else {
-      assert(expectedParameters === parameters)
+      actualCondition === condition || (condition.nonEmpty && actualCondition != null &&
+        actualCondition.startsWith(condition + "."))
+    }
+    assert(conditionMatches,
+      s"Expected condition '$condition' (matchExact=$matchExactConditionAndParameters), " +
+        s"got '$actualCondition'")
+    sqlState.foreach(state => assert(exception.getSqlState === state))
+    val expectedParameters = exception.getMessageParameters.asScala.toMap
+    val isPrefixMatch = !matchExactConditionAndParameters && actualCondition != null &&
+      actualCondition.startsWith(condition + ".")
+    if (isPrefixMatch) {
+      // When matching by main condition only, only require that passed parameters match (subset).
+      parameters.foreach { case (key, value) =>
+        assert(expectedParameters.contains(key),
+          s"Expected parameter '$key' not found in: $expectedParameters")
+        if (matchPVals) {
+          assert(value != null && expectedParameters(key).matches(value),
+            s"For parameter '$key' value '${expectedParameters(key)}' does not match: $value")
+        } else {
+          assert(expectedParameters(key) === value,
+            s"Expected parameter '$key' = '$value', got '${expectedParameters(key)}'")
+        }
+      }
+    } else {
+      // Exact condition match: full parameter equality as before.
+      if (matchPVals) {
+        assert(expectedParameters.size === parameters.size)
+        expectedParameters.foreach(
+          exp => {
+            val parm = parameters.getOrElse(exp._1,
+              throw new IllegalArgumentException("Missing parameter" + exp._1))
+            if (!exp._2.matches(parm)) {
+              throw new IllegalArgumentException("For parameter '" + exp._1 + "' value '" + exp._2 +
+                "' does not match: " + parm)
+            }
+          }
+        )
+      } else {
+        assert(expectedParameters === parameters)
+      }
     }
     val actualQueryContext = exception.getQueryContext()
     assert(actualQueryContext.length === queryContext.length, "Invalid length of the query context")

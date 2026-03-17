@@ -200,6 +200,53 @@ class SparkThrowableSuite extends SparkFunSuite {
     assert(e.getMessageParameters().get("message").contains("Undefined error message parameter"))
   }
 
+  test("SPARK-56029: Optional subconditions - main-only condition when JSON has subClass") {
+    // CANNOT_LOAD_STATE_STORE has subconditions in JSON; we can use main-only (no subcondition).
+    val mainOnlyTemplate = errorReader.getMessageTemplate("CANNOT_LOAD_STATE_STORE")
+    assert(mainOnlyTemplate === "An error occurred during loading state.")
+    val mainOnlyParams = errorReader.getMessageParameters("CANNOT_LOAD_STATE_STORE")
+    assert(mainOnlyParams.isEmpty)
+    // Raising with main-only and empty params should work.
+    val ex = new SparkRuntimeException("CANNOT_LOAD_STATE_STORE", Map.empty[String, String])
+    assert(ex.getCondition === "CANNOT_LOAD_STATE_STORE")
+    assert(ex.getMessage.startsWith(
+      "[CANNOT_LOAD_STATE_STORE] An error occurred during loading state."))
+    assert(ex.getMessageParameters.asScala.isEmpty)
+  }
+
+  test("SPARK-56029: checkError default matches condition or subcondition (prefix match)") {
+    val exWithSubcondition = new SparkRuntimeException(
+      "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
+      Map.empty[String, String])
+    checkError(exWithSubcondition, "CANNOT_LOAD_STATE_STORE", parameters = Map.empty)
+    checkError(exWithSubcondition, "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED", parameters = Map.empty)
+  }
+
+  test("SPARK-56029: checkError with matchExactConditionAndParameters requires exact condition") {
+    val exWithSubcondition = new SparkRuntimeException(
+      "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
+      Map.empty[String, String])
+    checkError(
+      exWithSubcondition,
+      "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
+      parameters = Map.empty,
+      matchExactConditionAndParameters = true)
+    val exMainOnly = new SparkRuntimeException("CANNOT_LOAD_STATE_STORE", Map.empty[String, String])
+    checkError(
+      exMainOnly,
+      "CANNOT_LOAD_STATE_STORE",
+      parameters = Map.empty,
+      matchExactConditionAndParameters = true)
+    val ex = intercept[org.scalatest.exceptions.TestFailedException] {
+      checkError(
+        exWithSubcondition,
+        "CANNOT_LOAD_STATE_STORE",
+        parameters = Map.empty,
+        matchExactConditionAndParameters = true)
+    }
+    assert(ex.getMessage.contains("matchExact"))
+  }
+
   test("Error message is formatted") {
     assert(
       getMessage(

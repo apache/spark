@@ -24,6 +24,7 @@ from pyspark.errors import (
     AnalysisException,
     ParseException,
     PySparkAssertionError,
+    PySparkException,
     PySparkValueError,
     IllegalArgumentException,
     SparkUpgradeException,
@@ -1796,6 +1797,47 @@ class UtilsTestsMixin:
         # This should fail
         with self.assertRaises(PySparkAssertionError):
             assertSchemaEqual(s1, s2)
+
+    def test_check_error_optional_subconditions_spark_56029(self):
+        """SPARK-56029: check_error default matches condition or subcondition (prefix match)."""
+        ex = PySparkException(
+            errorClass="CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
+            messageParameters={},
+        )
+        self.check_error(ex, "CANNOT_LOAD_STATE_STORE", messageParameters={})
+        self.check_error(
+            ex, "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED", messageParameters={}
+        )
+
+    def test_check_error_match_exact_condition_spark_56029(self):
+        """SPARK-56029: check_error with match_exact_condition_and_parameters."""
+        ex_sub = PySparkException(
+            errorClass="CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
+            messageParameters={},
+        )
+        self.check_error(
+            ex_sub,
+            "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
+            messageParameters={},
+            match_exact_condition_and_parameters=True,
+        )
+        ex_main = PySparkException(
+            errorClass="CANNOT_LOAD_STATE_STORE",
+            messageParameters={},
+        )
+        self.check_error(
+            ex_main,
+            "CANNOT_LOAD_STATE_STORE",
+            messageParameters={},
+            match_exact_condition_and_parameters=True,
+        )
+        with self.assertRaises(AssertionError):
+            self.check_error(
+                ex_sub,
+                "CANNOT_LOAD_STATE_STORE",
+                messageParameters={},
+                match_exact_condition_and_parameters=True,
+            )
 
 
 class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):

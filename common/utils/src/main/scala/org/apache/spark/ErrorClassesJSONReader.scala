@@ -111,8 +111,8 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
     val errorInfo = errorInfoMap.getOrElse(
       mainErrorClass,
       throw SparkException.internalError(s"Cannot find main error class '$errorClass'"))
-    assert(errorInfo.subClass.isDefined == subErrorClass.isDefined)
-
+    // When main-only (no subcondition), use main message template even if the condition has
+    // subconditions in JSON (optional subconditions: SPARK-56029).
     if (subErrorClass.isEmpty) {
       errorInfo.messageTemplate
     } else {
