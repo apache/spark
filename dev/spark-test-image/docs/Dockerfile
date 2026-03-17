@@ -70,15 +70,6 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# See more in SPARK-39959, roxygen2 < 7.2.1
-RUN Rscript -e "install.packages(c('devtools', 'knitr', 'markdown', 'rmarkdown', 'testthat', 'remotes'), repos='https://cloud.r-project.org/')" && \
-    Rscript -e "devtools::install_version('roxygen2', version='7.2.0', repos='https://cloud.r-project.org')" && \
-    Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')" && \
-    Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
-
-# See more in SPARK-39735
-ENV R_LIBS_SITE="/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
-
 # Setup virtual environment
 ENV VIRTUAL_ENV=/opt/spark-venv
 RUN python3.12 -m venv $VIRTUAL_ENV
