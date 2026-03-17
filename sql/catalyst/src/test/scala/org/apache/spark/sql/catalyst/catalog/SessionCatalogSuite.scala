@@ -306,7 +306,8 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     val registry = new SimpleFunctionRegistry()
     val catalog = new SessionCatalog(extCatalog, registry)
     try {
-      val ident = FunctionIdentifier("cached_func", Some("cache_coherence_db"))
+      val ident = FunctionIdentifier(
+        "cached_func", Some("cache_coherence_db"), Some(CatalogManager.SESSION_CATALOG_NAME))
       val info = new ExpressionInfo(
         "test.Example",
         "cache_coherence_db",
@@ -337,7 +338,9 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     val tableRegistry = new SimpleTableFunctionRegistry()
     val catalog = new SessionCatalog(extCatalog, scalarRegistry, tableRegistry)
     try {
-      val ident = FunctionIdentifier("cached_table_func", Some("cache_coherence_db2"))
+      val ident = FunctionIdentifier(
+        "cached_table_func", Some("cache_coherence_db2"),
+        Some(CatalogManager.SESSION_CATALOG_NAME))
       val info = new ExpressionInfo(
         "test.Example",
         "cache_coherence_db2",
@@ -370,8 +373,10 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     val registry = new SimpleFunctionRegistry()
     val catalog = new SessionCatalog(extCatalog, registry)
     try {
-      val dropIdent = FunctionIdentifier("func_drop", Some("drop_me"))
-      val keepIdent = FunctionIdentifier("func_keep", Some("keep_me"))
+      val dropIdent = FunctionIdentifier(
+        "func_drop", Some("drop_me"), Some(CatalogManager.SESSION_CATALOG_NAME))
+      val keepIdent = FunctionIdentifier(
+        "func_keep", Some("keep_me"), Some(CatalogManager.SESSION_CATALOG_NAME))
       val builder = (e: Seq[Expression]) => e.head
       val makeInfo = (db: String, name: String) => new ExpressionInfo(
         "test.Example", db, name, "usage", "arguments",
