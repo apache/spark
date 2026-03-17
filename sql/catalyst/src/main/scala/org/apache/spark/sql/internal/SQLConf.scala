@@ -2381,6 +2381,7 @@ object SQLConf {
       .doc("When true, enables the SQL Standard PATH feature: SET PATH, path-based routine " +
         "resolution, and CURRENT_PATH(). When false, SET PATH has no effect and resolution uses " +
         "the default path only.")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
@@ -2390,6 +2391,7 @@ object SQLConf {
       .version("4.2.0")
       .doc("Session search path for routine resolution (catalog-qualified schema list). " +
         "Only settable via SET PATH statement; direct SET of this config is ignored.")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .stringConf
       .createOptional
 

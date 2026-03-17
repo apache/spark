@@ -72,6 +72,7 @@ CREATE	false
 CROSS	false
 CUBE	false
 CURRENT	false
+CURRENT_SCHEMA	false
 CURRENT_DATE	false
 CURRENT_TIME	false
 CURRENT_TIMESTAMP	false
@@ -95,6 +96,7 @@ DECLARE	false
 DEFAULT	false
 DEFINED	false
 DEFINER	false
+DEFAULT_PATH	false
 DELAY	false
 DELETE	false
 DELIMITED	false
@@ -262,6 +264,7 @@ OVERWRITE	false
 PARTITION	false
 PARTITIONED	false
 PARTITIONS	false
+PATH	false
 PERCENT	false
 PIVOT	false
 PLACING	false
@@ -343,6 +346,7 @@ STRUCT	false
 SUBSTR	false
 SUBSTRING	false
 SYNC	false
+SYSTEM_PATH	false
 SYSTEM_TIME	false
 SYSTEM_VERSION	false
 TABLE	false
