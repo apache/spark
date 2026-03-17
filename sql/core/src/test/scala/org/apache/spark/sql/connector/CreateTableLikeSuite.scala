@@ -285,6 +285,41 @@ class CreateTableLikeSuite extends DatasourceV2SQLBase {
   }
 
   // -------------------------------------------------------------------------
+  // CatalogExtension (Iceberg-style session catalog override) scenario
+  // -------------------------------------------------------------------------
+
+  test("CatalogExtension session catalog override: source is native V2 table, uses V2 exec path") {
+    // In this suite the session catalog is already overridden with InMemoryTableSessionCatalog,
+    // which implements CatalogExtension — the same pattern used by Iceberg's SparkSessionCatalog.
+    //
+    // When the source is a native V2 InMemoryTable (from testcat, not a V1Table):
+    //   - supportsV1Command returns true (CatalogExtension catalog)
+    //   - but ResolvedV1TableOrViewIdentifier does NOT match a non-V1Table source
+    //   - so CreateTableLikeExec (V2 exec path) is used instead of CreateTableLikeCommand
+    //   - CreateTableLikeExec calls InMemoryTableSessionCatalog.createTable which stores
+    //     the target as a native InMemoryTable in the extension catalog
+    withTable("testcat.src", "dst") {
+      sql("CREATE TABLE testcat.src (id bigint, data string) USING parquet")
+      sql("CREATE TABLE dst LIKE testcat.src")
+
+      // The target should exist and have the correct schema
+      assert(spark.catalog.tableExists("dst"))
+      val schema = spark.table("dst").schema
+      assert(schema.fieldNames === Array("id", "data"))
+
+      // The target was created through the CatalogExtension catalog; verify it is an
+      // InMemoryTable (the native V2 type used by InMemoryTableSessionCatalog) rather than
+      // a V1Table backed by the Hive metastore.
+      val extCatalog = spark.sessionState.catalogManager
+        .catalog("spark_catalog")
+        .asInstanceOf[InMemoryTableSessionCatalog]
+      val dst = extCatalog.loadTable(Identifier.of(Array("default"), "dst"))
+      assert(dst.isInstanceOf[org.apache.spark.sql.connector.catalog.InMemoryTable],
+        "Target table should be a native V2 InMemoryTable in the CatalogExtension catalog")
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // V1 fallback regression
   // -------------------------------------------------------------------------
 
