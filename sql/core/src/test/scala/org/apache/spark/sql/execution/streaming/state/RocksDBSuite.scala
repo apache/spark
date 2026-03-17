@@ -4493,6 +4493,82 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     assert(provider.rocksDB.localRootDir.getParent() == System.getProperty("java.io.tmpdir"))
   }
 
+  test("prefixUpperBound computes correct exclusive upper bound") {
+    def assertBound(input: Array[Byte], expected: Option[Seq[Byte]]): Unit = {
+      assert(RocksDB.prefixUpperBound(input).map(_.toSeq) === expected)
+    }
+
+    // Normal increment
+    assertBound(Array(0x01, 0x02, 0x03), Some(Seq(0x01, 0x02, 0x04)))
+
+    // Single byte
+    assertBound(Array(0x05), Some(Seq(0x06)))
+
+    // Carry: last byte is 0xFF, so it's dropped and previous byte is incremented
+    assertBound(Array(0x01, 0xFF.toByte), Some(Seq(0x02)))
+
+    // Carry: trailing bytes after the incremented position are removed
+    assertBound(Array(0x01, 0x02, 0xFF.toByte), Some(Seq(0x01, 0x03)))
+
+    // Multiple carry
+    assertBound(Array(0x01, 0xFF.toByte, 0xFF.toByte), Some(Seq(0x02)))
+
+    // All 0xFF: no finite upper bound
+    assertBound(Array(0xFF.toByte, 0xFF.toByte), None)
+
+    // Single 0xFF
+    assertBound(Array(0xFF.toByte), None)
+
+    // Empty prefix
+    assertBound(Array.empty[Byte], None)
+
+    // Zero byte
+    assertBound(Array(0x00.toByte), Some(Seq(0x01)))
+  }
+
+  testWithColumnFamilies(
+    "prefixScan returns only keys matching the prefix",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    val remoteDir = Utils.createTempDir().getAbsolutePath
+
+    withDB(remoteDir, useColumnFamilies = colFamiliesEnabled) { db =>
+      val cfName = if (colFamiliesEnabled) {
+        val cf = "testCF"
+        db.createColFamilyIfAbsent(cf, isInternal = false)
+        cf
+      } else {
+        StateStore.DEFAULT_COL_FAMILY_NAME
+      }
+
+      db.put("aa1", "v1", cfName)
+      db.put("aa2", "v2", cfName)
+      db.put("ab1", "v3", cfName)
+      db.put("bb1", "v4", cfName)
+      db.commit()
+
+      db.load(1)
+
+      val resultAA = db.prefixScan("aa".getBytes, cfName).map(toStr).toSeq
+      assert(resultAA.map(_._1).toSet === Set("aa1", "aa2"))
+      assert(resultAA.size === 2)
+
+      val resultAB = db.prefixScan("ab".getBytes, cfName).map(toStr).toSeq
+      assert(resultAB.map(_._1).toSet === Set("ab1"))
+      assert(resultAB.size === 1)
+
+      val resultBB = db.prefixScan("bb".getBytes, cfName).map(toStr).toSeq
+      assert(resultBB.map(_._1).toSet === Set("bb1"))
+      assert(resultBB.size === 1)
+
+      val resultCC = db.prefixScan("cc".getBytes, cfName).map(toStr).toSeq
+      assert(resultCC.isEmpty)
+
+      val resultA = db.prefixScan("a".getBytes, cfName).map(toStr).toSeq
+      assert(resultA.map(_._1).toSet === Set("aa1", "aa2", "ab1"))
+      assert(resultA.size === 3)
+    }
+  }
+
   private def dbConf = RocksDBConf(StateStoreConf(SQLConf.get.clone()))
 
   class RocksDBCheckpointFormatV2(
