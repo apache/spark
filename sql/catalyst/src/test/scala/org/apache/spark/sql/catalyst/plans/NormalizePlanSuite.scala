@@ -117,6 +117,22 @@ class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
     assert(NormalizePlan(baselinePlan) == NormalizePlan(testPlan))
   }
 
+  test("Normalize ordering in a project list of an inner Project under Project and Filter") {
+    val baselinePlan =
+      LocalRelation($"col1".int, $"col2".string)
+        .select($"col1", $"col2")
+        .where($"col1" === 1)
+        .select($"col1")
+    val testPlan =
+      LocalRelation($"col1".int, $"col2".string)
+        .select($"col2", $"col1")
+        .where($"col1" === 1)
+        .select($"col1")
+
+    assert(baselinePlan != testPlan)
+    assert(NormalizePlan(baselinePlan) == NormalizePlan(testPlan))
+  }
+
   test("Normalize InheritAnalysisRules expressions") {
     val castWithoutTimezone =
       Cast(child = Literal(1), dataType = BooleanType, ansiEnabled = conf.ansiEnabled)

@@ -169,6 +169,9 @@ object NormalizePlan extends PredicateHelper {
       case project @ Project(_, innerAggregate: Aggregate) =>
         project.copy(child = normalizeAggregateListOrder(innerAggregate))
 
+      case project @ Project(_, filter @ Filter(_, innerProject: Project)) =>
+        project.copy(child = filter.copy(child = normalizeProjectListOrder(innerProject)))
+
       /**
        * ORDER BY covered by an output-retaining project on top of GROUP BY
        */
