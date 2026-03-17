@@ -82,10 +82,9 @@ class LowLatencyMemoryStream[A: Encoder](
   override def addData(data: IterableOnce[A]): Offset = synchronized {
     // Distribute data evenly among partition lists.
     val timestamp = clock.getTimeMillis()
-    data.iterator.to(Seq).zipWithIndex.map {
-      case (item, index) =>
-        val partitionId = index % numPartitions
-        records(partitionId) += ((toRow(item).copy().asInstanceOf[UnsafeRow], timestamp))
+    data.iterator.foreach { item =>
+      val partitionId = records.size % numPartitions
+      records(partitionId) += ((toRow(item).copy().asInstanceOf[UnsafeRow], timestamp))
     }
 
     // The new target offset is the offset where all records in all partitions have been processed.
