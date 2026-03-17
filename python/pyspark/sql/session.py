@@ -1237,16 +1237,32 @@ class SparkSession(SparkConversionMixin):
         Create an RDD for DataFrame from a list or pandas.DataFrame, returns
         the RDD and schema.
         """
-        # make sure data could consumed multiple times
-        if not isinstance(data, list):
-            data = list(data)
+        import itertools
 
-        if any(isinstance(d, VariantVal) for d in data):
-            raise PySparkValueError("Rows cannot be of type VariantVal")
+        # Check the first element for VariantVal without exhausting the generator
+        data, peek_data = itertools.tee(data)
+        first_row = next(peek_data, None)
+        if first_row is not None and isinstance(first_row, VariantVal):
+            raise PySparkValueError(
+                errorClass="CANNOT_INFER_EMPTY_SCHEMA",
+                messageParameters={},
+            )
 
         tupled_data: Iterable[Tuple]
         if schema is None or isinstance(schema, (list, tuple)):
-            struct = self._inferSchemaFromList(data, names=schema)
+            if not isinstance(data, list):
+                data = list(data)
+
+            if len(data) == 0:
+                if schema is None:
+                    raise PySparkValueError(
+                        errorClass="CANNOT_INFER_EMPTY_SCHEMA",
+                        messageParameters={},
+                    )
+                struct = self._inferSchemaFromList([(None,) * len(schema)], names=schema)
+            else:
+                struct = self._inferSchemaFromList(data, names=schema)
+
             converter = _create_converter(struct)
             tupled_data = map(converter, data)
             if isinstance(schema, (list, tuple)):
@@ -1268,8 +1284,8 @@ class SparkSession(SparkConversionMixin):
                 },
             )
 
-        # convert python objects to sql data
-        internal_data = [struct.toInternal(row) for row in tupled_data]
+        # Use map to keep data lazy and avoid OutOfMemoryError
+        internal_data = map(struct.toInternal, tupled_data)
         return self._sc.parallelize(internal_data), struct
 
     @staticmethod
