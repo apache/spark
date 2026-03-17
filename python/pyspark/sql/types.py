@@ -2062,7 +2062,11 @@ class VariantVal:
     def parseJson(cls, json_str: str) -> "VariantVal":
         """
         Parse a JSON string and construct a VariantVal.
-        return: VariantVal representing the parsed Variant value.
+        
+        Returns
+        -------
+        VariantVal
+            A VariantVal representing the parsed Variant value.
         """
         (value, metadata) = VariantUtils.parse_json(json_str)
         return VariantVal(value, metadata)
