@@ -356,25 +356,30 @@ case class CoalescedHashPartitioning(from: HashPartitioning, partitions: Seq[Coa
 case class KeyGroupedPartitioning(
     expressions: Seq[Expression],
     numPartitions: Int,
-    partitionValues: Seq[InternalRow] = Seq.empty) extends Partitioning {
+    partitionValues: Seq[InternalRow] = Seq.empty,
+    isPartiallyClustered: Boolean = false) extends Partitioning {
 
+  // See SPARK-55848. We must check ClusteredDistribution BEFORE delegating to
+  // super.satisfies0(), because the default satisfies0() also matches
+  // ClusteredDistribution and returns true, which would short-circuit the
+  // isPartiallyClustered guard.
   override def satisfies0(required: Distribution): Boolean = {
-    super.satisfies0(required) || {
-      required match {
-        case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _) =>
-          if (requireAllClusterKeys) {
-            // Checks whether this partitioning is partitioned on exactly same clustering keys of
-            // `ClusteredDistribution`.
-            c.areAllClusterKeysMatched(expressions)
-          } else {
-            // We'll need to find leaf attributes from the partition expressions first.
-            val attributes = expressions.flatMap(_.collectLeaves())
-            attributes.forall(x => requiredClustering.exists(_.semanticEquals(x)))
-          }
-
-        case _ =>
+    required match {
+      case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _) =>
+        if (isPartiallyClustered) {
           false
-      }
+        } else if (requireAllClusterKeys) {
+          // Checks whether this partitioning is partitioned on exactly same clustering keys of
+          // `ClusteredDistribution`.
+          c.areAllClusterKeysMatched(expressions)
+        } else {
+          // We'll need to find leaf attributes from the partition expressions first.
+          val attributes = expressions.flatMap(_.collectLeaves())
+          attributes.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+        }
+
+      case _ =>
+        super.satisfies0(required)
     }
   }
 
@@ -744,7 +749,10 @@ case class KeyGroupedShuffleSpec(
     //        transform functions.
     //  4. the partition values from both sides are following the same order.
     case otherSpec @ KeyGroupedShuffleSpec(otherPartitioning, otherDistribution) =>
-      distribution.clustering.length == otherDistribution.clustering.length &&
+      // SPARK-55848: partially-clustered partitioning is not compatible for SPJ
+      !partitioning.isPartiallyClustered &&
+        !otherPartitioning.isPartiallyClustered &&
+        distribution.clustering.length == otherDistribution.clustering.length &&
         numPartitions == other.numPartitions && areKeysCompatible(otherSpec) &&
           partitioning.partitionValues.zip(otherPartitioning.partitionValues).forall {
             case (left, right) =>

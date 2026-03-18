@@ -121,7 +121,8 @@ case class BatchScanExec(
         val newPartValues = spjParams.commonPartitionValues.get.flatMap {
           case (partValue, numSplits) => Seq.fill(numSplits)(partValue)
         }
-        k.copy(numPartitions = newPartValues.length, partitionValues = newPartValues)
+        k.copy(numPartitions = newPartValues.length, partitionValues = newPartValues,
+          isPartiallyClustered = spjParams.applyPartialClustering)
       case p => p
     }
   }
