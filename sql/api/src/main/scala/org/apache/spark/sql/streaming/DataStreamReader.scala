@@ -121,7 +121,7 @@ abstract class DataStreamReader {
 
   /**
    * Returns the row-level changes (Change Data Capture) from the specified table as a streaming
-   * `DataFrame`. The table's catalog must support CDC via the `SUPPORT_CHANGELOG` capability.
+   * `DataFrame`. The table's catalog must implement `TableCatalog.loadChangelog()`.
    *
    * Use `.option()` to specify the starting version/timestamp and processing options:
    * {{{
