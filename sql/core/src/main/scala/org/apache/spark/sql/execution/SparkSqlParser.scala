@@ -331,8 +331,9 @@ class SparkSqlAstBuilder extends AstBuilder {
       val pe = ctx.pathElement(i)
       if (pe.DEFAULT_PATH() != null) PathElement.DefaultPath
       else if (pe.SYSTEM_PATH() != null) PathElement.SystemPath
-      else if (pe.CURRENT_SCHEMA() != null) PathElement.CurrentSchema
       else if (pe.PATH() != null) PathElement.PathRef
+      else if (pe.CURRENT_DATABASE() != null) PathElement.CurrentDatabase
+      else if (pe.CURRENT_SCHEMA() != null) PathElement.CurrentSchema
       else PathElement.SchemaInPath(visitMultipartIdentifier(pe.multipartIdentifier()))
     }
     SetPathCommand(elements.toSeq)

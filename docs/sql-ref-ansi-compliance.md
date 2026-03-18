@@ -477,8 +477,10 @@ Below is a list of all the keywords in Spark SQL.
 |CROSS|reserved|strict-non-reserved|reserved|
 |CUBE|non-reserved|non-reserved|reserved|
 |CURRENT|non-reserved|non-reserved|reserved|
-|CURRENT_SCHEMA|non-reserved|non-reserved|not a keyword|
+|CURRENT_DATABASE|non-reserved|non-reserved|non-reserved|
 |CURRENT_DATE|reserved|non-reserved|reserved|
+|CURRENT_PATH|non-reserved|non-reserved|reserved|
+|CURRENT_SCHEMA|non-reserved|non-reserved|non-reserved|
 |CURRENT_TIME|reserved|non-reserved|reserved|
 |CURRENT_TIMESTAMP|reserved|non-reserved|reserved|
 |CURRENT_USER|reserved|non-reserved|reserved|

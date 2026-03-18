@@ -461,8 +461,9 @@ setResetStatement
 pathElement
     : DEFAULT_PATH
     | SYSTEM_PATH
-    | CURRENT_SCHEMA (LEFT_PAREN RIGHT_PAREN)?
     | PATH
+    | CURRENT_DATABASE (LEFT_PAREN RIGHT_PAREN)?
+    | CURRENT_SCHEMA (LEFT_PAREN RIGHT_PAREN)?
     | multipartIdentifier
     ;
 
@@ -1285,7 +1286,7 @@ datetimeUnit
     ;
 
 primaryExpression
-    : name=(CURRENT_DATE | CURRENT_TIMESTAMP | CURRENT_USER | USER | SESSION_USER | CURRENT_TIME | CURRENT_SCHEMA) (LEFT_PAREN RIGHT_PAREN)?             #currentLike
+    : name=(CURRENT_DATE | CURRENT_TIMESTAMP | CURRENT_PATH | CURRENT_DATABASE | CURRENT_SCHEMA | CURRENT_USER | USER | SESSION_USER | CURRENT_TIME) (LEFT_PAREN RIGHT_PAREN)?             #currentLike
     | name=(TIMESTAMPADD | DATEADD | DATE_ADD) LEFT_PAREN (unit=datetimeUnit | invalidUnit=stringLit) COMMA unitsAmount=valueExpression COMMA timestamp=valueExpression RIGHT_PAREN             #timestampadd
     | name=(TIMESTAMPDIFF | DATEDIFF | DATE_DIFF | TIMEDIFF) LEFT_PAREN (unit=datetimeUnit | invalidUnit=stringLit) COMMA startTimestamp=valueExpression COMMA endTimestamp=valueExpression RIGHT_PAREN    #timestampdiff
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
@@ -1948,6 +1949,8 @@ ansiNonReserved
     | CURSOR
     | CUBE
     | CURRENT
+    | CURRENT_DATABASE
+    | CURRENT_PATH
     | CURRENT_SCHEMA
     | DATA
     | DATABASE
@@ -2329,7 +2332,9 @@ nonReserved
     | CUBE
     | CURRENT
     | CURSOR
+    | CURRENT_DATABASE
     | CURRENT_DATE
+    | CURRENT_PATH
     | CURRENT_SCHEMA
     | CURRENT_TIME
     | CURRENT_TIMESTAMP

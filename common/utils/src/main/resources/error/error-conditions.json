@@ -7626,6 +7626,11 @@
           "set PROPERTIES and DBPROPERTIES at the same time."
         ]
       },
+      "SET_PATH_VIA_SET" : {
+        "message" : [
+          "The session path cannot be set using the SET statement. Use SET PATH = ... instead."
+        ]
+      },
       "SET_TABLE_PROPERTY" : {
         "message" : [
           "<property> is a reserved table property, <msg>."
@@ -7634,11 +7639,6 @@
       "SET_VARIABLE_USING_SET" : {
         "message" : [
           "<variableName> is a VARIABLE and cannot be updated using the SET statement. Use SET VARIABLE <variableName> = ... instead."
-        ]
-      },
-      "SET_PATH_VIA_SET" : {
-        "message" : [
-          "The session path cannot be set using the SET statement. Use SET PATH = ... instead."
         ]
       },
       "SQL_CURSOR" : {

@@ -31,8 +31,10 @@ sealed trait PathElement
 object PathElement {
   case object DefaultPath extends PathElement
   case object SystemPath extends PathElement
-  case object CurrentSchema extends PathElement
   case object PathRef extends PathElement
+  /** Current database/schema (same in Spark); expands to current catalog + current namespace. */
+  case object CurrentDatabase extends PathElement
+  case object CurrentSchema extends PathElement
   /** Schema name parts (1 = unqualified namespace, 2+ = catalog.namespace...). Qualified at run. */
   case class SchemaInPath(parts: Seq[String]) extends PathElement
 }
@@ -91,7 +93,7 @@ case class SetPathCommand(elements: Seq[PathElement]) extends LeafRunnableComman
         defaultPathEntries(conf, systemCatalog, builtin, session, currentCatalog, currentNamespace)
       case PathElement.SystemPath =>
         Seq(Seq(systemCatalog, builtin), Seq(systemCatalog, session))
-      case PathElement.CurrentSchema =>
+      case PathElement.CurrentDatabase | PathElement.CurrentSchema =>
         if (currentNamespace.isEmpty) Seq(Seq(currentCatalog))
         else Seq(currentCatalog +: currentNamespace)
       case PathElement.PathRef =>
