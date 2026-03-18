@@ -143,12 +143,14 @@ case class RegrAvgY(
   group = "agg_funcs",
   since = "3.3.0")
 // scalastyle:on line.size.limit
-case class RegrR2(y: Expression, x: Expression) extends PearsonCorrelation(x, y, true) {
+case class RegrR2(y: Expression, x: Expression) extends PearsonCorrelation(y, x, true) {
   override def prettyName: String = "regr_r2"
   override val evaluateExpression: Expression = {
     val corr = ck / sqrt(xMk * yMk)
-    If(xMk === 0.0, Literal.create(null, DoubleType),
-      If(yMk === 0.0, Literal.create(1.0, DoubleType), corr * corr))
+    // In PearsonCorrelation, x and y are swapped, so here xMk refers to the dependent variable
+    // and yMk to the independent variable
+    If(yMk === 0.0, Literal.create(null, DoubleType),
+      If(xMk === 0.0, Literal.create(1.0, DoubleType), corr * corr))
   }
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): RegrR2 =
