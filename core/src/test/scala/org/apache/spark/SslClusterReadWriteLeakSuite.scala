@@ -19,8 +19,8 @@ package org.apache.spark
 
 import java.util.concurrent.atomic.AtomicInteger
 
-import io.netty.buffer.UnpooledByteBufAllocator
-import io.netty.util.{ResourceLeakDetector, ResourceLeakDetectorFactory}
+import _root_.io.netty.buffer.UnpooledByteBufAllocator
+import _root_.io.netty.util.{ResourceLeakDetector, ResourceLeakDetectorFactory}
 
 import org.apache.spark.util.SslTestUtils
 
