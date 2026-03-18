@@ -96,9 +96,9 @@ DEC	false
 DECIMAL	false
 DECLARE	false
 DEFAULT	false
+DEFAULT_PATH	false
 DEFINED	false
 DEFINER	false
-DEFAULT_PATH	false
 DELAY	false
 DELETE	false
 DELIMITED	false
