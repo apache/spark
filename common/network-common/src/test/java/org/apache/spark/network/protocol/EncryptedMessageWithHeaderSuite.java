@@ -141,14 +141,43 @@ public class EncryptedMessageWithHeaderSuite {
     assertEquals(0, header.refCnt());
   }
 
+  // Tests the case where the body is a ByteBuf and that we manage the refcounts of the
+  // header, body, and managed buffer properly
   @Test
-  public void testByteBufIsNotSupported() throws Exception {
-    // Validate that ByteBufs are not supported. This test can be updated
-    // when we add support for them
+  public void testByteBufBodyFromManagedBuffer() throws Exception {
+    byte[] randomData = new byte[128];
+    new Random().nextBytes(randomData);
+    ByteBuf sourceBuffer = Unpooled.copiedBuffer(randomData);
+    // convertToNettyForSsl() returns buf.duplicate().retain(), simulate that here
+    ByteBuf body = sourceBuffer.duplicate().retain();
     ByteBuf header = Unpooled.copyLong(42);
-    assertThrows(IllegalArgumentException.class, () -> {
-      EncryptedMessageWithHeader msg = new EncryptedMessageWithHeader(
-        null, header, header, 4);
-    });
+
+    long expectedHeaderValue = header.getLong(header.readerIndex());
+    assertEquals(1, header.refCnt());
+    assertEquals(2, sourceBuffer.refCnt()); // original + duplicate retain
+    ManagedBuffer managedBuf = new NettyManagedBuffer(sourceBuffer);
+
+    EncryptedMessageWithHeader msg = new EncryptedMessageWithHeader(
+      managedBuf, header, body, managedBuf.size());
+    ByteBufAllocator allocator = ByteBufAllocator.DEFAULT;
+
+    assertFalse(msg.isEndOfInput());
+
+    // Single read should return header + body as a composite buffer
+    ByteBuf result = msg.readChunk(allocator);
+    assertEquals(header.capacity() + randomData.length, result.readableBytes());
+    assertEquals(expectedHeaderValue, result.readLong());
+    for (int i = 0; i < randomData.length; i++) {
+      assertEquals(randomData[i], result.readByte());
+    }
+    assertTrue(msg.isEndOfInput());
+
+    // Release the chunk (simulates Netty writing it out)
+    result.release();
+
+    // Closing the message should release the source buffer via managedBuffer.release()
+    msg.close();
+    assertEquals(0, sourceBuffer.refCnt());
+    assertEquals(0, header.refCnt());
   }
 }
