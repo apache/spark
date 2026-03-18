@@ -50,7 +50,6 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object PushDownJoinThroughUnion
   extends Rule[LogicalPlan]
-  with PredicateHelper
   with JoinSelectionHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
