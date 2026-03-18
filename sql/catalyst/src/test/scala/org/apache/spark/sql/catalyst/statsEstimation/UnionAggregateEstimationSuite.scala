@@ -61,7 +61,7 @@ class UnionAggregateEstimationSuite extends StatsEstimationTestBase {
     )
   }
 
-  test("Aggregate directly on a single child retains CBO distinctCount") {
+  test("SPARK-56047: Aggregate directly on a single child retains CBO distinctCount") {
     // Aggregate(child) -- no Union involved, CBO should work fine
     val child = makeChild(colKey, colVal, rows = 1000000, distinctKeys = 100)
     val agg = child.groupBy(child.output.head)(count(child.output(1)).as("cnt"))
@@ -73,7 +73,7 @@ class UnionAggregateEstimationSuite extends StatsEstimationTestBase {
       s"Expected rowCount=100, got ${aggStats.rowCount.get}")
   }
 
-  test("Union propagates distinctCount, enabling AggregateEstimation CBO") {
+  test("SPARK-56047: Union propagates distinctCount, enabling AggregateEstimation CBO") {
     val key1 = AttributeReference("key1", IntegerType)()
     val val1 = AttributeReference("val1", IntegerType)()
     val key2 = AttributeReference("key2", IntegerType)()
@@ -113,7 +113,7 @@ class UnionAggregateEstimationSuite extends StatsEstimationTestBase {
       s"With CBO, aggregate sizeInBytes should be small, got ${aggStats.sizeInBytes}")
   }
 
-  test("Same Aggregate without Union retains accurate CBO estimate") {
+  test("SPARK-56047: Same Aggregate without Union retains accurate CBO estimate") {
     // Control group: same data volume but as a single child, no Union
     val child = makeChild(colKey, colVal, rows = 1000000, distinctKeys = 100)
     val agg = child.groupBy(child.output.head)(count(child.output(1)).as("cnt"))

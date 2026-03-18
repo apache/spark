@@ -264,7 +264,7 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
     assert(union.stats === expectedStats)
   }
 
-  test("distinctCount propagated as max across children") {
+  test("SPARK-56047: distinctCount propagated as max across children") {
     val sz = Some(BigInt(1024))
     val attrInt = AttributeReference("cint", IntegerType)()
     val columnInfo = AttributeMap(Seq(
@@ -288,7 +288,7 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
       "distinctCount should be max(100, 200) = 200")
   }
 
-  test("distinctCount omitted when one child lacks it") {
+  test("SPARK-56047: distinctCount omitted when one child lacks it") {
     val sz = Some(BigInt(1024))
     val attrInt = AttributeReference("cint", IntegerType)()
     val columnInfo = AttributeMap(Seq(
@@ -313,7 +313,7 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
       "distinctCount should be None when one child lacks it")
   }
 
-  test("distinctCount capped by rowCount") {
+  test("SPARK-56047: distinctCount capped by rowCount") {
     val sz = Some(BigInt(1024))
     val attrInt = AttributeReference("cint", IntegerType)()
     // distinctCount (500) > rowCount of union (6)
@@ -339,7 +339,7 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
       "distinctCount should be capped at rowCount=6, not max(500,300)=500")
   }
 
-  test("hasCountStats is true when both distinctCount and nullCount propagated") {
+  test("SPARK-56047: hasCountStats is true when both distinctCount and nullCount propagated") {
     val sz = Some(BigInt(1024))
     val attrInt = AttributeReference("cint", IntegerType)()
     val columnInfo = AttributeMap(Seq(
