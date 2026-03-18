@@ -83,7 +83,7 @@ class LowLatencyMemoryStream[A: Encoder](
     // Distribute data evenly among partition lists.
     val timestamp = clock.getTimeMillis()
     data.iterator.foreach { item =>
-      val partitionId = records.size % numPartitions
+      val partitionId = records.map(_.size).sum % numPartitions
       records(partitionId) += ((toRow(item).copy().asInstanceOf[UnsafeRow], timestamp))
     }
 
