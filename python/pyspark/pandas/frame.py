@@ -10162,7 +10162,18 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             # For timestamp type columns, we should cast the column type to string.
             for key, spark_data_type in zip(column_name_stats_kv, spark_data_types):
                 if isinstance(spark_data_type, (TimestampType, TimestampNTZType)):
-                    column_name_stats_kv[key] = [str(value) for value in column_name_stats_kv[key]]
+                    if LooseVersion(pd.__version__) < "3.0.0":
+                        # In pandas 2, use str(value) for all values, including None
+                        column_name_stats_kv[key] = [
+                            str(value) for value in column_name_stats_kv[key]
+                        ]
+                    else:
+                        # In pandas 3, preserve None to match empty timestamp describe() results
+                        # after string conversion in pandas-based expectations.
+                        column_name_stats_kv[key] = [
+                            str(value) if value is not None else None
+                            for value in column_name_stats_kv[key]
+                        ]
 
             result: DataFrame = DataFrame(  # type: ignore[no-redef]
                 data=column_name_stats_kv,
