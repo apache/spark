@@ -1624,7 +1624,6 @@ object SQLConf {
         "inference and infers NullType. When disabled, ignores the UNKNOWN annotation " +
         "and uses the physical type instead.")
       .version("4.1.2")
-      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
