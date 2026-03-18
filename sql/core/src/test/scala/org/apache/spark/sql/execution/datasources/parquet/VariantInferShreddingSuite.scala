@@ -162,6 +162,57 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
     }
   }
 
+  testWithTempDir("infer shredding nested array of arrays") { dir =>
+    // Array-of-arrays [[1,2],[3,4]] in all rows. Verifies that nested arrays are
+    // correctly inferred and shredded using the FieldNode tree (arrayElementNode chain).
+    val df = spark.sql(
+      """
+        | select parse_json('[[1, 2], [3, 4]]') as v
+        | from range(0, 100, 1, 1)
+      """.stripMargin)
+    df.write.mode("overwrite").parquet(dir.getAbsolutePath)
+    val expected = DataType.fromDDL("array<array<long>>")
+    checkFileSchema(expected, dir)
+    checkAnswer(spark.read.parquet(dir.getAbsolutePath), df.collect())
+  }
+
+  test("infer shredding does not infer rare nested arrays") {
+    // Similar to "infer shredding does not infer rare rows" but for nested arrays.
+    // Demonstrates row-level gating for nested arrays.
+    Seq(2, 9, 10, 11, 19, 20, 21, 100).foreach { inverseFreq =>
+      withTempDir { dir =>
+        val df = spark.sql(
+          s"""
+             | select case when id % $inverseFreq = 0 then
+             |  parse_json('{"a": ' || id ||
+             |  ', "nestedArr": [[1, 2], [3, 4]]' ||
+             |  ', "nestedArr2": [[1, 2], [3, 4]]' ||
+             |  ', "b": "' || id || '"}')
+             |  else
+             |  parse_json('{"a": ' || id ||
+             |  ', "nestedArr2": []' ||
+             |  ', "b": "' || id || '"}')
+             |  end as v
+             |  from range(0, 10000, 1, 1)
+             |""".stripMargin)
+        df.write.mode("overwrite").parquet(dir.getAbsolutePath)
+        // "a" and "b" appear in all rows. nestedArr: only in 1/inverseFreq rows (like rareArray).
+        // nestedArr2: always present, inner arrays only in 1/inverseFreq rows (like rareArray2).
+        val expected = if (inverseFreq > 10) {
+          // nestedArr dropped. nestedArr2: array<variant> (inner array in < 10% rows)
+          DataType.fromDDL("struct<a long, b string, nestedArr2 array<variant>>")
+        } else {
+          // Both nested arrays in >= 10% of rows -> array<array<long>>
+          DataType.fromDDL(
+            "struct<a long, b string, " +
+            "nestedArr array<array<long>>, nestedArr2 array<array<long>>>")
+        }
+        checkFileSchema(expected, dir)
+        checkStringAndSchema(dir, df)
+      }
+    }
+  }
+
   test("infer shredding does not infer wide schemas") {
     Seq(50, 60, 70).foreach { topLevelFields =>
       // If this changes, we should change the test, or set it explicitly.
