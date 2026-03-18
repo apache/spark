@@ -185,6 +185,14 @@
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-cos</artifactId>
         </exclusion>
+        <!--
+          SPARK-55657: `hadoop-tos`is not a dependency of `hadoop-cloud-storage` 3.4.3,
+          manually exclude it to avoid recurring issues similar to HADOOP-18159 in Spark.
+        -->
+        <exclusion>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-tos</artifactId>
+        </exclusion>
         <exclusion>
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-huaweicloud</artifactId>
