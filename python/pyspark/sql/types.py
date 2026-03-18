@@ -2062,7 +2062,7 @@ class VariantVal:
     def parseJson(cls, json_str: str) -> "VariantVal":
         """
         Parse a JSON string and construct a VariantVal.
-        
+
         Returns
         -------
         VariantVal
