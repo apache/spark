@@ -108,13 +108,6 @@ from pyspark.worker_util import (
 )
 from pyspark.logger.worker_io import capture_outputs
 
-try:
-    import memory_profiler  # noqa: F401
-
-    has_memory_profiler = True
-except Exception:
-    has_memory_profiler = False
-
 
 class RunnerConf(Conf):
     @property
@@ -1317,7 +1310,9 @@ def wrap_perf_profiler(f, eval_type, result_id):
 def wrap_memory_profiler(f, eval_type, result_id):
     from pyspark.sql.profiler import ProfileResultsParam, WorkerMemoryProfiler
 
-    if not has_memory_profiler:
+    import pyspark.memory_profiler_ext
+
+    if not pyspark.memory_profiler_ext.has_memory_profiler:
         return f
 
     accumulator = _deserialize_accumulator(
