@@ -739,6 +739,9 @@ case class StreamingSymmetricHashJoinExec(
         // the case of inner join).
         if (preJoinFilter(thisRow)) {
           val key = keyGenerator(thisRow)
+          // If the join type is Left Semi and this is the right side, we can remove the matched
+          // row from the other (left) side's state, since the row won't be produced anymore for
+          // the following input rows.
           val joinedRowIter: Iterator[JoinedRow] = if (removeMatchedFromOtherSideState) {
             otherSideJoiner.joinStateManager.getJoinedRowsAndRemoveMatched(
               key,
