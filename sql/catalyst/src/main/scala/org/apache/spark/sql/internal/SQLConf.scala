@@ -35,7 +35,7 @@ import org.slf4j.event.Level
 
 import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkContext, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.{ConfigBindingPolicy, _}
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network.util.ByteUnit
@@ -2363,6 +2363,17 @@ object SQLConf {
       .stringConf
       .checkValues(Set("first", "second", "last"))
       .createWithDefault("second")
+
+  val PERSISTENT_CATALOG_FIRST =
+    buildConf("spark.sql.legacy.persistentCatalogFirst")
+      .internal()
+      .version("4.2.0")
+      .doc("When true (legacy), partially qualified function names like 'builtin.func' or " +
+        "'session.func' resolve to the persistent catalog first. When false (default), the " +
+        "system catalog is prioritized (system.builtin.func or system.session.func).")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
 
   // Whether to retain group by columns or not in GroupedData.agg.
   val DATAFRAME_RETAIN_GROUP_COLUMNS = buildConf("spark.sql.retainGroupColumns")
@@ -8185,6 +8196,12 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def sessionFunctionResolutionOrder: String =
     getConf(SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER)
+
+  /**
+   * Returns true when the system catalog is prioritized for 2-part builtin/session resolution.
+   * This is the inverse of [[SQLConf.PERSISTENT_CATALOG_FIRST]].
+   */
+  def prioritizeSystemCatalog: Boolean = !getConf(SQLConf.PERSISTENT_CATALOG_FIRST)
 
   /**
    * Returns the resolution search path for error messages and resolution order.

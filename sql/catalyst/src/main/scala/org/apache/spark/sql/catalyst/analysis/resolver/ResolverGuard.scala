@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 import java.util.Locale
 
 import org.apache.spark.sql.catalyst.{
-  FunctionIdentifier,
   QueryPlanningTracker,
   SQLConfHelper
 }
@@ -474,15 +473,10 @@ class ResolverGuard(
    */
   private def checkUnresolvedFunction(unresolvedFunction: UnresolvedFunction) = {
     val nameParts = unresolvedFunction.nameParts
+    val funcName = nameParts.last.toLowerCase(Locale.ROOT)
 
-    if (nameParts.size != 1) {
-      if (FunctionResolution.sessionNamespaceKind(nameParts).isDefined) {
-        Some("qualified builtin/session function name")
-      } else {
-        Some("multi-part function name")
-      }
-    } else {
-      val funcName = nameParts.last.toLowerCase(Locale.ROOT)
+    if (nameParts.length == 1) {
+      // Unqualified: same as master (unsupported, non-builtin, or check children)
       if (isUnsupportedFunction(funcName)) {
         Some(s"unsupported function ${funcName}")
       } else if (!isBuiltinFunction(funcName)) {
@@ -490,6 +484,19 @@ class ResolverGuard(
       } else {
         unresolvedFunction.children.collectFirst { case CheckExpression(reason) => reason }
       }
+    } else if (FunctionResolution.sessionNamespaceKind(nameParts)
+        .contains(org.apache.spark.sql.catalyst.catalog.SessionCatalog.Builtin)) {
+      // Explicitly builtin-qualified: reject if unsupported, else check children
+      if (ResolverGuard.UNSUPPORTED_FUNCTION_NAMES.contains(funcName)) {
+        Some(s"unsupported function ${funcName}")
+      } else {
+        unresolvedFunction.children.collectFirst { case CheckExpression(reason) => reason }
+      }
+    } else if (FunctionResolution.sessionNamespaceKind(nameParts).isDefined) {
+      // Session-qualified: allow through (system-first behavior)
+      unresolvedFunction.children.collectFirst { case CheckExpression(reason) => reason }
+    } else {
+      Some("multi-part function name")
     }
   }
 
@@ -637,7 +644,8 @@ class ResolverGuard(
   }
 
   private def isBuiltinFunction(singlePartName: String) = {
-    FunctionRegistry.functionSet.contains(FunctionIdentifier(singlePartName)) && v1SessionCatalog
+    FunctionRegistry.functionSet.contains(
+      FunctionRegistry.builtinFunctionIdentifier(singlePartName)) && v1SessionCatalog
       .lookupBuiltinOrTempFunction(singlePartName)
       .exists(info => info.getSource == "built-in")
   }
