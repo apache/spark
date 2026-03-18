@@ -158,8 +158,9 @@ class NameParameterizedQueryResolver(
       parameterValues: Seq[Expression]): Unit = {
     if (parameterNames.length != parameterValues.length) {
       throw SparkException.internalError(
-        s"The number of argument names ${parameterNames.length} " +
-        s"must be equal to the number of argument values ${parameterValues.length}."
+        s"""The number of argument names ${parameterNames.length}
+           |must be equal to the number of argument values ${parameterValues.length}."""
+          .stripMargin
       )
     }
   }

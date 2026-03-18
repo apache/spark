@@ -75,30 +75,27 @@ object LogicalPlanDifference {
       )
     }
 
+    def appendLine(result: StringBuilder, planString: String, position: LinePosition): Unit = {
+      result.append(planString, position.start, position.end).append('\n')
+    }
+
     if (!mismatchFound) {
       ("", "")
     } else {
       val lhsResult = new StringBuilder()
       val rhsResult = new StringBuilder()
 
-      lhsBuffer.foreach { position =>
-        lhsResult.append(lhsPlanString, position.start, position.end).append('\n')
-      }
-      rhsBuffer.foreach { position =>
-        rhsResult.append(rhsPlanString, position.start, position.end).append('\n')
-      }
+      lhsBuffer.foreach(appendLine(lhsResult, lhsPlanString, _))
+      rhsBuffer.foreach(appendLine(rhsResult, rhsPlanString, _))
 
       var linesAfter = 0
       while (linesAfter < contextSize && (lhsIterator.hasNext || rhsIterator.hasNext)) {
         if (lhsIterator.hasNext) {
-          val position = lhsIterator.next()
-          lhsResult.append(lhsPlanString, position.start, position.end).append('\n')
+          appendLine(lhsResult, lhsPlanString, lhsIterator.next())
         }
         if (rhsIterator.hasNext) {
-          val position = rhsIterator.next()
-          rhsResult.append(rhsPlanString, position.start, position.end).append('\n')
+          appendLine(rhsResult, rhsPlanString, rhsIterator.next())
         }
-
         linesAfter += 1
       }
 

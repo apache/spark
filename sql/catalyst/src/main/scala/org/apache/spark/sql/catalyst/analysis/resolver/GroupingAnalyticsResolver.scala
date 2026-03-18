@@ -119,13 +119,14 @@ class GroupingAnalyticsResolver(resolver: Resolver, expressionResolver: Expressi
   def handleSortOrderExpressionsWithGroupingAnalytics(
       orderExpressions: Seq[SortOrder],
       sort: Sort): Seq[SortOrder] = {
-    val groupingExpressions = if (scopes.current.baseAggregate.isDefined) {
+    if (!scopes.current.baseAggregate.isDefined) {
+      throw QueryCompilationErrors.groupingMustWithGroupingSetsOrCubeOrRollupError()
+    }
+
+    val groupingExpressions =
       GroupingAnalyticsTransformer.collectGroupingExpressions(
         scopes.current.baseAggregate.get
       )
-    } else {
-      throw QueryCompilationErrors.groupingMustWithGroupingSetsOrCubeOrRollupError()
-    }
 
     val groupingId = VirtualColumn.groupingIdAttribute
     val resolvedGroupingId = expressionResolver

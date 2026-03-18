@@ -33,6 +33,12 @@ class LogicalPlanDifferenceSuite extends SparkFunSuite with SQLConfHelper {
   private val nameAttr = AttributeReference("name", StringType)()
   private val ageAttr = AttributeReference("age", IntegerType)()
 
+  private val GLOBAL_LIMIT = "GlobalLimit"
+  private val LOCAL_LIMIT = "LocalLimit"
+  private val LOCAL_RELATION = "LocalRelation"
+  private val FILTER = "Filter"
+  private val PROJECT = "Project"
+
   test("identical plans should return empty strings") {
     val plan1 = LocalRelation(idAttr, nameAttr)
     val plan2 = LocalRelation(idAttr, nameAttr)
@@ -70,8 +76,8 @@ class LogicalPlanDifferenceSuite extends SparkFunSuite with SQLConfHelper {
     assert(result2.contains("20"))
 
     // Should contain the mismatch line (Filter with id comparison)
-    assert(result1.contains("Filter"))
-    assert(result2.contains("Filter"))
+    assert(result1.contains(FILTER))
+    assert(result2.contains(FILTER))
 
     // Should contain the second filter (Alice) as context after the mismatch
     assert(result1.contains("Alice"))
@@ -108,22 +114,22 @@ class LogicalPlanDifferenceSuite extends SparkFunSuite with SQLConfHelper {
     val (result1, result2) = LogicalPlanDifference(plan1, plan2, 2)
 
     // Should show the first line (GlobalLimit) and context after
-    assert(result1.contains("GlobalLimit"))
-    assert(result2.contains("GlobalLimit"))
+    assert(result1.contains(GLOBAL_LIMIT))
+    assert(result2.contains(GLOBAL_LIMIT))
 
     // Should show the mismatch in the Project
-    assert(result1.contains("Project"))
-    assert(result2.contains("Project"))
+    assert(result1.contains(PROJECT))
+    assert(result2.contains(PROJECT))
     assert(result1.contains("name"))
     assert(result2.contains("age"))
 
     // Should show some context after (first Filter)
-    assert(result1.contains("Filter"))
-    assert(result2.contains("Filter"))
+    assert(result1.contains(FILTER))
+    assert(result2.contains(FILTER))
 
     // Should NOT show the bottom LocalRelation (too far)
-    assert(!result1.contains("LocalRelation"))
-    assert(!result2.contains("LocalRelation"))
+    assert(!result1.contains(LOCAL_RELATION))
+    assert(!result2.contains(LOCAL_RELATION))
   }
 
   test("plans differing at last line") {
@@ -149,8 +155,8 @@ class LogicalPlanDifferenceSuite extends SparkFunSuite with SQLConfHelper {
     // because the filter references different attributes
 
     // Should show some Filter operations (the first mismatch will be in one of them)
-    assert(result1.contains("Filter"))
-    assert(result2.contains("Filter"))
+    assert(result1.contains(FILTER))
+    assert(result2.contains(FILTER))
 
     // Both should have truncated output
     val lines1 = result1.split("\n").filter(_.nonEmpty).length
@@ -192,14 +198,14 @@ class LogicalPlanDifferenceSuite extends SparkFunSuite with SQLConfHelper {
     assert(lines2.length == 1, s"Expected 1 line, got ${lines2.length}: ${lines2.mkString("; ")}")
 
     // Should contain the filter with the different values
-    assert(result1.contains("Filter") && result1.contains("10"))
-    assert(result2.contains("Filter") && result2.contains("99"))
+    assert(result1.contains(FILTER) && result1.contains("10"))
+    assert(result2.contains(FILTER) && result2.contains("99"))
 
     // Should NOT contain other parts of the plan
     assert(!result1.contains("David"))
     assert(!result2.contains("David"))
-    assert(!result1.contains("GlobalLimit"))
-    assert(!result2.contains("GlobalLimit"))
+    assert(!result1.contains(GLOBAL_LIMIT))
+    assert(!result2.contains(GLOBAL_LIMIT))
   }
 
   test("custom context size - 5 lines") {
@@ -252,8 +258,8 @@ class LogicalPlanDifferenceSuite extends SparkFunSuite with SQLConfHelper {
     assert(result2.contains("% 2"))
 
     // Should still be truncated (not showing LocalRelation at bottom or GlobalLimit at top)
-    assert(!result1.contains("LocalRelation"))
-    assert(!result2.contains("LocalRelation"))
+    assert(!result1.contains(LOCAL_RELATION))
+    assert(!result2.contains(LOCAL_RELATION))
   }
 
   test("plans with different number of lines") {
@@ -282,12 +288,12 @@ class LogicalPlanDifferenceSuite extends SparkFunSuite with SQLConfHelper {
     assert(lines2.length >= 1, s"Plan2 should have at least 1 line, got ${lines2.length}")
 
     // Both should show their top-level operations
-    assert(result1.contains("Project"))
-    assert(result2.contains("GlobalLimit") || result2.contains("LocalLimit"))
+    assert(result1.contains(PROJECT))
+    assert(result2.contains(GLOBAL_LIMIT) || result2.contains(LOCAL_LIMIT))
 
     // Should show some context
-    assert(result1.contains("Filter") && result1.contains("100"))
-    assert(result2.contains("Project") || result2.contains("Filter"))
+    assert(result1.contains(FILTER) && result1.contains("100"))
+    assert(result2.contains(PROJECT) || result2.contains(FILTER))
   }
 
   test("plans where second plan is shorter") {
@@ -315,14 +321,14 @@ class LogicalPlanDifferenceSuite extends SparkFunSuite with SQLConfHelper {
     assert(lines2.length >= 1, s"Plan2 should have at least 1 line")
 
     // Should show the top-level difference
-    assert(result1.contains("GlobalLimit") || result1.contains("LocalLimit"))
-    assert(result2.contains("Project"))
+    assert(result1.contains(GLOBAL_LIMIT) || result1.contains(LOCAL_LIMIT))
+    assert(result2.contains(PROJECT))
 
     // Plan1 should show some of its filters as context
-    assert(result1.contains("Project") || result1.contains("Filter"))
+    assert(result1.contains(PROJECT) || result1.contains(FILTER))
 
     // Plan2 should show its simpler structure
-    assert(result2.contains("Filter") && result2.contains("5"))
+    assert(result2.contains(FILTER) && result2.contains("5"))
   }
 
   test("complex nested plans") {
@@ -358,8 +364,8 @@ class LogicalPlanDifferenceSuite extends SparkFunSuite with SQLConfHelper {
     assert(result2.contains("10"))
 
     // Should show filter operations around the mismatch
-    assert(result1.contains("Filter"))
-    assert(result2.contains("Filter"))
+    assert(result1.contains(FILTER))
+    assert(result2.contains(FILTER))
 
     // Verify the outputs are different
     assert(result1 != result2, "Plans should produce different output strings")
@@ -452,8 +458,8 @@ class LogicalPlanDifferenceSuite extends SparkFunSuite with SQLConfHelper {
     )
 
     // Should contain the mismatch (age filter)
-    assert(result1.contains("Filter") && result1.contains("10"))
-    assert(result2.contains("Filter") && result2.contains("25"))
+    assert(result1.contains(FILTER) && result1.contains("10"))
+    assert(result2.contains(FILTER) && result2.contains("25"))
 
     // Should contain 1 line of context before (name filter)
     assert(result1.contains("name") || result1.contains("\"\""))
@@ -464,9 +470,9 @@ class LogicalPlanDifferenceSuite extends SparkFunSuite with SQLConfHelper {
     assert(result2.contains("10000"))
 
     // Should NOT contain operations too far away
-    assert(!result1.contains("GlobalLimit"))
-    assert(!result2.contains("GlobalLimit"))
-    assert(!result1.contains("LocalRelation"))
-    assert(!result2.contains("LocalRelation"))
+    assert(!result1.contains(GLOBAL_LIMIT))
+    assert(!result2.contains(GLOBAL_LIMIT))
+    assert(!result1.contains(LOCAL_RELATION))
+    assert(!result2.contains(LOCAL_RELATION))
   }
 }
