@@ -490,7 +490,7 @@ class ResolverGuard(
         unresolvedFunction.children.collectFirst { case CheckExpression(reason) => reason }
       }
     } else if (FunctionResolution.sessionNamespaceKind(nameParts)
-        .contains(SessionCatalog.Builtin)) {
+        .contains(org.apache.spark.sql.catalyst.catalog.SessionCatalog.Builtin)) {
       // Explicitly builtin-qualified: reject if unsupported, else check children
       if (ResolverGuard.UNSUPPORTED_FUNCTION_NAMES.contains(funcName)) {
         Some(s"unsupported function ${funcName}")

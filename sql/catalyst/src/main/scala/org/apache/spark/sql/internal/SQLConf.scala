@@ -1670,6 +1670,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION =
+    buildConf("spark.sql.parquet.reader.respectUnknownTypeAnnotation.enabled")
+      .internal()
+      .doc("When enabled, respects the UNKNOWN type annotation in Parquet files during schema " +
+        "inference and infers NullType. When disabled, ignores the UNKNOWN annotation " +
+        "and uses the physical type instead.")
+      .version("4.1.2")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val PARQUET_FIELD_ID_READ_ENABLED =
     buildConf("spark.sql.parquet.fieldId.read.enabled")
       .doc("Field ID is a native field of the Parquet schema spec. When enabled, Parquet readers " +
@@ -2779,7 +2790,7 @@ object SQLConf {
       .version("4.1.0")
       .intConf
       .checkValue(k => k > 0, "Must allow at least 1 change file replay")
-      .createWithDefault(50)
+      .createWithDefault(500)
 
   val STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT =
     buildConf("spark.sql.streaming.stateStore.numStateStoreInstanceMetricsToReport")
@@ -8199,6 +8210,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def parquetAnnotateVariantLogicalType: Boolean = getConf(PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE)
 
   def parquetIgnoreVariantAnnotation: Boolean = getConf(SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION)
+
+  def parquetReaderRespectUnknownTypeAnnotation: Boolean =
+    getConf(SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION)
 
   def ignoreMissingParquetFieldId: Boolean = getConf(SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID)
 
