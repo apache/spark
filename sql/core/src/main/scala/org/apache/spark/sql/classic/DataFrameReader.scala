@@ -323,6 +323,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
 
   /** @inheritdoc */
   def changes(tableName: String): DataFrame = {
+    require(tableName != null, "The table name can't be null")
     assertNoSpecifiedSchema("changes")
     val multipartIdentifier =
       sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)

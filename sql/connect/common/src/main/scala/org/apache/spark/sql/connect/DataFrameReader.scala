@@ -198,6 +198,7 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends sql.Data
 
   /** @inheritdoc */
   def changes(tableName: String): DataFrame = {
+    require(tableName != null, "The table name can't be null")
     assertNoSpecifiedSchema("changes")
     sparkSession.newDataFrame { builder =>
       val changesBuilder = builder.getReadChangesBuilder
