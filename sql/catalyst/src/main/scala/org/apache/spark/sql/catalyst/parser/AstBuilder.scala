@@ -73,10 +73,16 @@ class AstBuilder extends DataTypeAstBuilder
       builder: Seq[String] => LogicalPlan): LogicalPlan = {
     val exprCtx = ctx.expression
     if (exprCtx != null) {
-      PlanWithUnresolvedIdentifier(withOrigin(exprCtx) { expression(exprCtx) }, Nil,
-        (ident, _) => builder(ident))
+      expression(exprCtx) match {
+        case Literal(value, _: StringType) if value != null =>
+          val parts = parseMultipartIdentifier(value.toString)
+          withOrigin(ctx) { builder(parts) }
+        case expr =>
+          PlanWithUnresolvedIdentifier(withOrigin(exprCtx) { expr }, Nil,
+            (ident, _) => builder(ident))
+      }
     } else {
-      builder.apply(visitMultipartIdentifier(ctx.multipartIdentifier))
+      withOrigin(ctx) { builder.apply(visitMultipartIdentifier(ctx.multipartIdentifier)) }
     }
   }
 
