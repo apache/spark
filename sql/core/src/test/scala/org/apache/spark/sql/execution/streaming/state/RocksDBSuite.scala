@@ -2920,10 +2920,10 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
 
         val m1 = db.metricsOpt.get
         assert(m1.loadMetrics("load") > 0)
-        assert(m1.loadMetrics("numCloudLoads") === 1)
         // since we called load, loadFromSnapshot should not be populated
         assert(!m1.loadMetrics.contains("loadFromSnapshot"))
 
+        assert(m1.loadedFromDfs === 1)
         if (conf.enableChangelogCheckpointing) {
           assert(m1.loadMetrics("replayChangelog") > 0)
           assert(m1.loadMetrics("numReplayChangeLogFiles") == 1)
@@ -2931,6 +2931,12 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           assert(!m1.loadMetrics.contains("replayChangelog"))
           assert(!m1.loadMetrics.contains("numReplayChangeLogFiles"))
         }
+
+        // A reload of the same version is served from local cache - no DFS fetch
+        db.load(2)
+        db.put("c", "1")
+        db.commit()
+        assert(db.metricsOpt.get.loadedFromDfs === 0)
       }
     }
   }
@@ -2957,7 +2963,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.refreshRecordedMetricsForTest()
         val m1 = db.metricsOpt.get
         assert(m1.loadMetrics("loadFromSnapshot") > 0)
-        assert(m1.loadMetrics("numCloudLoads") === 1)
+        assert(m1.loadedFromDfs === 1)
         // since we called loadFromSnapshot, load should not be populated
         assert(!m1.loadMetrics.contains("load"))
         assert(m1.loadMetrics("replayChangelog") > 0)
@@ -4139,8 +4145,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
             db.put("e", "4")
             db.commit() // a new snapshot (5.zip) will be created since previous one is corrupt
             assert(db.metricsOpt.get.numSnapshotsAutoRepaired == 1)
-            // 4.zip was tried and failed (1 load), then 2.zip succeeded (2 loads)
-            assert(db.metricsOpt.get.loadMetrics("numCloudLoads") === 2)
+            assert(db.metricsOpt.get.loadedFromDfs === 1)
             db.doMaintenance() // upload snapshot 5.zip
           }
 
@@ -4153,8 +4158,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
             assert(toStr(db.get("b")) == "1")
             db.commit()
             assert(db.metricsOpt.get.numSnapshotsAutoRepaired == 1)
-            // 5.zip failed (1), 4.zip failed (2), 2.zip failed (3), then version 0 succeeded (4)
-            assert(db.metricsOpt.get.loadMetrics("numCloudLoads") === 4)
+            // All snapshots were corrupt; fallback to version 0 base and replay changelogs from DFS
+            assert(db.metricsOpt.get.loadedFromDfs === 1)
           }
         }
       }
