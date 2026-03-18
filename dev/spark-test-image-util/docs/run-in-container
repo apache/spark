@@ -16,7 +16,9 @@
 #
 
 # 1.Set env variable.
-export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64
+set -ex
+(ls /usr/lib/jvm/java-17-openjdk-arm64 && ln -s /usr/lib/jvm/java-17-openjdk-arm64 /usr/lib/jvm/java-17-openjdk) || (ls /usr/lib/jvm/java-17-openjdk-amd64 && ln -s /usr/lib/jvm/java-17-openjdk-amd64 /usr/lib/jvm/java-17-openjdk)
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk
 export PATH=$JAVA_HOME/bin:$PATH
 export SPARK_DOCS_IS_BUILT_ON_HOST=1
 # We expect to compile the R document on the host.
@@ -28,8 +30,8 @@ cd /__w/spark/spark/docs
 bundle install
 
 # 3.Build docs, includes: `error docs`, `scala doc`, `python doc`, `sql doc`, excludes: `r doc`.
-# We need this link to make sure `python3` points to `python3.11` which contains the prerequisite packages.
-ln -s "$(which python3.11)" "/usr/local/bin/python3"
+# We need this link to make sure `python3` points to `python3.12` which contains the prerequisite packages.
+ln -s "$(which python3.12)" "/usr/local/bin/python3"
 
 # Build docs first with SKIP_API to ensure they are buildable without requiring any
 # language docs to be built beforehand.

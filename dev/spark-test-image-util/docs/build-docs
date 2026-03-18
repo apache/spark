@@ -17,6 +17,8 @@
 # limitations under the License.
 #
 
+set -e
+
 if ! [ -x "$(command -v docker)" ]; then
   echo "Error: Docker is not installed." >&2
   exit 1
@@ -41,10 +43,12 @@ build/sbt -Phive -Pkinesis-asl clean unidoc package
 docker buildx build \
   --cache-from type=registry,ref="${DOCKER_CACHE_IMG}" \
   --tag "${IMG_URL}" "${FWDIR}" \
-  --file "${SPARK_HOME}/dev/spark-test-image/docs/Dockerfile"
+  --file "${SPARK_HOME}/dev/spark-test-image/docs/Dockerfile" \
+  --load
 
 # 3.Build docs on container: `error docs`, `scala doc`, `python doc`, `sql doc`.
 docker run \
+  --user "$(id -u):$(id -g)" \
   --mount type=bind,source="${SPARK_HOME}",target="${DOCKER_MOUNT_SPARK_HOME}" \
   --interactive --tty "${IMG_URL}" \
   /bin/bash -c "sh ${BUILD_DOCS_SCRIPT_PATH}"
@@ -58,6 +62,7 @@ if [[ "$SKIP_RDOC" != "1" ]]; then
   # and when writing to subsequent files, will throw an error as:
   # `! [EACCES] Failed to copy '/usr/local/lib/R/site-library/pkgdown/BS5/assets/katex-auto.js'
   # to '/__w/spark/spark/R/pkg/docs/katex-auto.js': permission denied`
+  echo "Building final docs *OUTSIDE* of container."
   export SKIP_ERRORDOC=1
   export SKIP_SCALADOC=1
   export SKIP_PYTHONDOC=1
