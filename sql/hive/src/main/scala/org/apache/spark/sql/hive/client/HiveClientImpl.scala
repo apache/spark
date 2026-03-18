@@ -1202,7 +1202,7 @@ private[hive] object HiveClientImpl extends Logging {
       hiveTable.getTTable.getSd.setLocation(loc)}
     table.storage.inputFormat.map(toInputFormat).foreach(hiveTable.setInputFormatClass)
     table.storage.outputFormat.map(toOutputFormat).foreach(hiveTable.setOutputFormatClass)
-    table.storage.serdeName.foreach(hiveTable.getSd.getSerdeInfo.setName)
+    table.storage.serdeName.foreach(hiveTable.getTTable.getSd.getSerdeInfo.setName)
     hiveTable.setSerializationLib(
       table.storage.serde.getOrElse("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
     table.storage.properties.foreach { case (k, v) => hiveTable.setSerdeParam(k, v) }
