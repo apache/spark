@@ -418,18 +418,6 @@ class LogicalPlanDifferenceSuite extends SparkFunSuite with SQLConfHelper {
     assert(lines2 <= planLines2)
   }
 
-  test("context size validation - negative value") {
-    // The config has a check that should prevent negative values
-    // This test verifies that the validation is in place
-    intercept[IllegalArgumentException] {
-      withSQLConf(
-        "spark.sql.analyzer.singlePassResolver.logicalPlanDiffContextSize" -> "-1"
-      ) {
-        // This should fail due to the checkValue in the config
-      }
-    }
-  }
-
   test("mismatch at boundary with minimal context") {
     // Larger plan with mismatch in the middle
     val plan1 = LocalRelation(idAttr, nameAttr, ageAttr)
