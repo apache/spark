@@ -40,6 +40,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.internal.{LogEntry, Logging, LogKeys}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.streaming.checkpointing.ChecksumCheckpointFileManager
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.{NextIterator, Utils}
 
@@ -157,9 +158,11 @@ class RocksDB(
   // 2 * 2 = 4 threads. A value of 0 disables the thread pool (sequential execution).
   protected val fileChecksumThreadPoolSize: Option[Int] = {
     val size = conf.fileChecksumThreadPoolSize
-    if (size < 4) {
-      logWarning(s"fileChecksumThreadPoolSize is set to $size, which is below the " +
-        "recommended default of 4. This may have performance impact.")
+    if (size < ChecksumCheckpointFileManager.DEFAULT_THREAD_POOL_SIZE) {
+      logWarning(s"fileChecksumThreadPoolSize for the state store file checksum thread pool " +
+        s"is set to $size, which is below the recommended default of " +
+        s"${ChecksumCheckpointFileManager.DEFAULT_THREAD_POOL_SIZE}. " +
+        "This may have performance impact.")
     }
     Some(size)
   }

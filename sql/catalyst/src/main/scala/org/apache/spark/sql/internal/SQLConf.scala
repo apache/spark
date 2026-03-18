@@ -3749,6 +3749,7 @@ object SQLConf {
         "the calling thread. WARNING: Reducing below the default value of 4 may have " +
         "performance impact.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .intConf
       .checkValue(x => x >= 0, "Must be a non-negative integer (0 to disable thread pool)")
       .createWithDefault(4)

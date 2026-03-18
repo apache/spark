@@ -533,9 +533,11 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       // file). Since this fm is used by both query task and maintenance thread, the recommended
       // default is 2 * 2 = 4 threads. A value of 0 disables the thread pool (sequential mode).
       val numThreads = storeConf.fileChecksumThreadPoolSize
-      if (numThreads < 4) {
-        logWarning(s"fileChecksumThreadPoolSize is set to $numThreads, which is below the " +
-          "recommended default of 4. This may have performance impact.")
+      if (numThreads < ChecksumCheckpointFileManager.DEFAULT_THREAD_POOL_SIZE) {
+        logWarning(s"fileChecksumThreadPoolSize for the state store file checksum thread pool " +
+          s"is set to $numThreads, which is below the recommended default of " +
+          s"${ChecksumCheckpointFileManager.DEFAULT_THREAD_POOL_SIZE}. " +
+          "This may have performance impact.")
       }
       new ChecksumCheckpointFileManager(
         mgr,

@@ -158,9 +158,12 @@ class ChecksumCheckpointFileManager(
 
   // This allows us to concurrently read/write the main file and checksum file
   private val threadPoolOpt: Option[ExecutionContextExecutorService] =
-    if (numThreads == 0) None
-    else Some(ExecutionContext.fromExecutorService(
-      ThreadUtils.newDaemonFixedThreadPool(numThreads, s"${this.getClass.getSimpleName}-Thread")))
+    if (numThreads == 0) {
+      None
+    } else {
+      Some(ExecutionContext.fromExecutorService(
+        ThreadUtils.newDaemonFixedThreadPool(numThreads, s"${this.getClass.getSimpleName}-Thread")))
+    }
 
   // ExecutionContext used for I/O operations on ChecksumFSDataInputStream and
   // ChecksumCancellableFSDataOutputStream: uses the thread pool when numThreads > 0, or
@@ -314,6 +317,7 @@ class ChecksumCheckpointFileManager(
 
 private[streaming] object ChecksumCheckpointFileManager {
   val CHECKSUM_FILE_SUFFIX = ".crc"
+  val DEFAULT_THREAD_POOL_SIZE = 4
 
   def awaitResult[T](future: Future[T], atMost: Duration): T = {
     try {
