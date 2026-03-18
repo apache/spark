@@ -392,11 +392,16 @@ case class KeyGroupedPartitioning(
         if (isPartiallyClustered) {
           false
         } else if (requireAllClusterKeys) {
+          // Checks whether this partitioning is partitioned on exactly same clustering keys of
+          // `ClusteredDistribution`.
           c.areAllClusterKeysMatched(expressions)
         } else {
+          // We'll need to find leaf attributes from the partition expressions first.
           val attributes = expressions.flatMap(_.collectLeaves())
 
           if (SQLConf.get.v2BucketingAllowJoinKeysSubsetOfPartitionKeys) {
+            // check that join keys (required clustering keys)
+            // overlap with partition keys (KeyGroupedPartitioning attributes)
             requiredClustering.exists(x => attributes.exists(_.semanticEquals(x))) &&
                 expressions.forall(_.collectLeaves().size == 1)
           } else {
