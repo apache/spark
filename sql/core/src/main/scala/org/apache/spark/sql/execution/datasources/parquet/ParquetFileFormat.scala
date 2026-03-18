@@ -148,6 +148,9 @@ class ParquetFileFormat
     hadoopConf.setBoolean(
       SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key,
       sqlConf.legacyParquetNanosAsLong)
+    hadoopConf.setBoolean(
+      SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION.key,
+      sqlConf.parquetReaderRespectUnknownTypeAnnotation)
   }
 
   /**
@@ -446,7 +449,9 @@ object ParquetFileFormat extends Logging {
       sqlConf.isParquetBinaryAsString,
       sqlConf.isParquetINT96AsTimestamp,
       inferTimestampNTZ = sqlConf.parquetInferTimestampNTZEnabled,
-      nanosAsLong = sqlConf.legacyParquetNanosAsLong)
+      nanosAsLong = sqlConf.legacyParquetNanosAsLong,
+      respectUnknownTypeAnnotation =
+        sqlConf.parquetReaderRespectUnknownTypeAnnotation)
 
     val seen = mutable.HashSet[String]()
     val finalSchemas: Seq[StructType] = footers.flatMap { footer =>
@@ -545,6 +550,8 @@ object ParquetFileFormat extends Logging {
     val assumeInt96IsTimestamp = sqlConf.isParquetINT96AsTimestamp
     val inferTimestampNTZ = sqlConf.parquetInferTimestampNTZEnabled
     val nanosAsLong = sqlConf.legacyParquetNanosAsLong
+    val respectUnknownTypeAnnotation =
+      sqlConf.parquetReaderRespectUnknownTypeAnnotation
 
     val reader = (files: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean) => {
       // Converter used to convert Parquet `MessageType` to Spark SQL `StructType`
@@ -552,7 +559,8 @@ object ParquetFileFormat extends Logging {
         assumeBinaryIsString = assumeBinaryIsString,
         assumeInt96IsTimestamp = assumeInt96IsTimestamp,
         inferTimestampNTZ = inferTimestampNTZ,
-        nanosAsLong = nanosAsLong)
+        nanosAsLong = nanosAsLong,
+        respectUnknownTypeAnnotation = respectUnknownTypeAnnotation)
 
       readParquetFootersInParallel(conf, files, ignoreCorruptFiles)
         .map(ParquetFileFormat.readSchemaFromFooter(_, converter))
