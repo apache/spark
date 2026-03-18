@@ -109,4 +109,18 @@ class PathResolutionSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("PATH enabled: SET PATH = current_schema / current_database (keywords, no parens)") {
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      sql("USE spark_catalog.default")
+      sql("SET PATH = current_schema")
+      val pathStr = sql("SELECT current_path()").collect().head.getString(0)
+      assert(pathStr.contains("spark_catalog") && pathStr.contains("default"),
+        s"SET PATH = current_schema should expand to current schema, got: $pathStr")
+      sql("SET PATH = current_database")
+      val pathStr2 = sql("SELECT current_path()").collect().head.getString(0)
+      assert(pathStr2.contains("spark_catalog") && pathStr2.contains("default"),
+        s"SET PATH = current_database should expand to current schema, got: $pathStr2")
+    }
+  }
 }
