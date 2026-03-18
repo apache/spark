@@ -1009,4 +1009,48 @@ class SymmetricHashJoinStateManagerEventTimeInValueSuite
       }
     }
   }
+
+  private def getJoinedRowTimestamps(
+      key: Int,
+      range: Option[(Long, Long)])(implicit manager: SymmetricHashJoinStateManager): Seq[Int] = {
+    val dummyRow = new GenericInternalRow(0)
+    manager.getJoinedRows(
+      toJoinKeyRow(key),
+      row => new JoinedRow(row, dummyRow),
+      _ => true,
+      timestampRange = range
+    ).map(_.getInt(1)).toSeq.sorted
+  }
+
+  test("StreamingJoinStateManager V4 - getJoinedRows with timestampRange") {
+    withJoinStateManager(
+      inputValueAttributes, joinKeyExpressions, stateFormatVersion = 4) { manager =>
+      implicit val mgr = manager
+
+      Seq(10, 20, 30, 40, 50).foreach(append(40, _))
+
+      assert(getJoinedRowTimestamps(40, Some((20L, 40L))) === Seq(20, 30, 40))
+      assert(getJoinedRowTimestamps(40, Some((20L, 20L))) === Seq(20))
+      assert(getJoinedRowTimestamps(40, Some((25L, 35L))) === Seq(30))
+      assert(getJoinedRowTimestamps(40, Some((0L, 100L))) === Seq(10, 20, 30, 40, 50))
+      assert(getJoinedRowTimestamps(40, Some((10L, 30L))) === Seq(10, 20, 30))
+      assert(getJoinedRowTimestamps(40, Some((50L, 100L))) === Seq(50))
+      assert(getJoinedRowTimestamps(40, Some((60L, 100L))) === Seq.empty)
+      assert(getJoinedRowTimestamps(40, Some((0L, 5L))) === Seq.empty)
+      assert(getJoinedRowTimestamps(40, None) === Seq(10, 20, 30, 40, 50))
+    }
+  }
+
+  test("StreamingJoinStateManager V4 - timestampRange with multiple values per timestamp") {
+    withJoinStateManager(
+      inputValueAttributes, joinKeyExpressions, stateFormatVersion = 4) { manager =>
+      implicit val mgr = manager
+
+      append(40, 20)
+      append(40, 20) // same timestamp bucket
+      append(40, 30)
+
+      assert(getJoinedRowTimestamps(40, Some((20L, 20L))) === Seq(20, 20))
+    }
+  }
 }

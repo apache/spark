@@ -67,11 +67,15 @@ trait SymmetricHashJoinStateManager {
    * required to do so.
    *
    * It is caller's responsibility to consume the whole iterator.
+   *
+   * For V4 time-interval joins, timestampRange may be provided to skip/stop-early during
+   * prefix scan. Ignored by V1-V3.
    */
   def getJoinedRows(
       key: UnsafeRow,
       generateJoinedRow: InternalRow => JoinedRow,
-      predicate: JoinedRow => Boolean): Iterator[JoinedRow]
+      predicate: JoinedRow => Boolean,
+      timestampRange: Option[(Long, Long)] = None): Iterator[JoinedRow]
 
   /**
    * Retrieve all joined rows for the given key and remove the matched rows from state. The joined
@@ -343,9 +347,8 @@ class SymmetricHashJoinStateManagerV4(
   override def getJoinedRows(
       key: UnsafeRow,
       generateJoinedRow: InternalRow => JoinedRow,
-      predicate: JoinedRow => Boolean): Iterator[JoinedRow] = {
-    // TODO: [SPARK-55147] We could improve this method to get the scope of timestamp and scan keys
-    //  more efficiently. For now, we just get all values for the key.
+      predicate: JoinedRow => Boolean,
+      timestampRange: Option[(Long, Long)] = None): Iterator[JoinedRow] = {
     def getJoinedRowsFromTsAndValues(
         ts: Long,
         valuesAndMatched: Array[ValueAndMatchPair]): Iterator[JoinedRow] = {
@@ -399,7 +402,8 @@ class SymmetricHashJoinStateManagerV4(
         getJoinedRowsFromTsAndValues(ts, valuesAndMatchedIter.toArray)
 
       case _ =>
-        keyWithTsToValues.getValues(key).flatMap { result =>
+        val (minTs, maxTs) = timestampRange.getOrElse((Long.MinValue, Long.MaxValue))
+        keyWithTsToValues.getValuesInRange(key, minTs, maxTs).flatMap { result =>
           val ts = result.timestamp
           val valuesAndMatched = result.values.toArray
           getJoinedRowsFromTsAndValues(ts, valuesAndMatched)
@@ -626,67 +630,86 @@ class SymmetricHashJoinStateManagerV4(
 
     // NOTE: This assumes we consume the whole iterator to trigger completion.
     def getValues(key: UnsafeRow): Iterator[GetValuesResult] = {
+      getValuesInRange(key, Long.MinValue, Long.MaxValue)
+    }
+
+    /**
+     * Returns entries where minTs <= timestamp <= maxTs, grouped by timestamp.
+     * Filters out entries before minTs and stops iterating past maxTs (timestamps are sorted).
+     */
+    def getValuesInRange(
+        key: UnsafeRow, minTs: Long, maxTs: Long): Iterator[GetValuesResult] = {
       val reusableGetValuesResult = new GetValuesResult()
 
       new NextIterator[GetValuesResult] {
         private val iter = stateStore.prefixScanWithMultiValues(key, colFamilyName)
 
         private var currentTs = -1L
+        private var currentTsInRange = false
+        private var pastUpperBound = false
         private val valueAndMatchPairs = scala.collection.mutable.ArrayBuffer[ValueAndMatchPair]()
+
+        private def flushIfInRange(): GetValuesResult = {
+          if (currentTsInRange && valueAndMatchPairs.nonEmpty) {
+            val result = reusableGetValuesResult.withNew(
+              currentTs, valueAndMatchPairs.toList)
+            currentTs = -1L
+            currentTsInRange = false
+            valueAndMatchPairs.clear()
+            result
+          } else {
+            finished = true
+            null
+          }
+        }
 
         @tailrec
         override protected def getNext(): GetValuesResult = {
-          if (iter.hasNext) {
+          if (pastUpperBound) {
+            flushIfInRange()
+          } else if (iter.hasNext) {
             val unsafeRowPair = iter.next()
-
             val ts = TimestampKeyStateEncoder.extractTimestamp(unsafeRowPair.key)
 
-            if (currentTs == -1L) {
-              // First time
+            if (ts > maxTs) {
+              pastUpperBound = true
+              getNext()
+            } else if (currentTs == -1L) {
               currentTs = ts
-            }
+              currentTsInRange = ts >= minTs
+              if (currentTsInRange) {
+                valueAndMatchPairs += valueRowConverter.convertValue(unsafeRowPair.value)
+              }
+              getNext()
+            } else if (currentTs != ts) {
+              // Timestamp changed -- capture previous batch before resetting
+              val prevTs = currentTs
+              val prevValues = if (currentTsInRange && valueAndMatchPairs.nonEmpty) {
+                valueAndMatchPairs.toList
+              } else {
+                null
+              }
 
-            if (currentTs != ts) {
-              assert(valueAndMatchPairs.nonEmpty,
-                "timestamp has changed but no values collected from previous timestamp! " +
-                s"This should not happen. currentTs: $currentTs, new ts: $ts")
-
-              // Return previous batch
-              val result = reusableGetValuesResult.withNew(
-                currentTs, valueAndMatchPairs.toSeq)
-
-              // Reset for new timestamp
               currentTs = ts
+              currentTsInRange = ts >= minTs
               valueAndMatchPairs.clear()
+              if (currentTsInRange) {
+                valueAndMatchPairs += valueRowConverter.convertValue(unsafeRowPair.value)
+              }
 
-              // Add current value
-              val value = valueRowConverter.convertValue(unsafeRowPair.value)
-              valueAndMatchPairs += value
-              result
+              if (prevValues != null) {
+                reusableGetValuesResult.withNew(prevTs, prevValues)
+              } else {
+                getNext()
+              }
             } else {
-              // Same timestamp, accumulate values
-              val value = valueRowConverter.convertValue(unsafeRowPair.value)
-              valueAndMatchPairs += value
-
-              // Continue to next
+              if (currentTsInRange) {
+                valueAndMatchPairs += valueRowConverter.convertValue(unsafeRowPair.value)
+              }
               getNext()
             }
           } else {
-            if (currentTs != -1L) {
-              assert(valueAndMatchPairs.nonEmpty)
-
-              // Return last batch
-              val result = reusableGetValuesResult.withNew(
-                currentTs, valueAndMatchPairs.toSeq)
-
-              // Mark as finished
-              currentTs = -1L
-              valueAndMatchPairs.clear()
-              result
-            } else {
-              finished = true
-              null
-            }
+            flushIfInRange()
           }
         }
 
@@ -1051,7 +1074,8 @@ abstract class SymmetricHashJoinStateManagerBase(
   def getJoinedRows(
       key: UnsafeRow,
       generateJoinedRow: InternalRow => JoinedRow,
-      predicate: JoinedRow => Boolean): Iterator[JoinedRow] = {
+      predicate: JoinedRow => Boolean,
+      timestampRange: Option[(Long, Long)] = None): Iterator[JoinedRow] = {
     val numValues = keyToNumValues.get(key)
     keyWithIndexToValue.getAll(key, numValues).map { keyIdxToValue =>
       val joinedRow = generateJoinedRow(keyIdxToValue.value)
