@@ -44,7 +44,7 @@ abstract class ParquetFileFormatSuite
 
   private def checkCannotReadFooterError(body: => Unit): Unit = {
     checkErrorMatchPVals(
-      exception = intercept[SparkException] { body }.getCause.asInstanceOf[SparkException],
+      exception = intercept[SparkException] { body },
       condition = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
       parameters = Map("path" -> "file:.*")
     )
@@ -145,7 +145,7 @@ abstract class ParquetFileFormatSuite
       exception = intercept[SparkException] {
         ParquetFileFormat.readParquetFootersInParallel(
           conf, Seq(fakeStatus), ignoreCorruptFiles = false, ignoreMissingFiles = false)
-      }.getCause.asInstanceOf[SparkException],
+      },
       condition = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
       parameters = Map("path" -> s"${WrappingFNFLocalFileSystem.scheme}:.*")
     )
