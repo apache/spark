@@ -43,6 +43,7 @@ CAST	true
 CATALOG	false
 CATALOGS	false
 CHANGE	false
+CHANGES	false
 CHAR	false
 CHARACTER	false
 CHECK	true
@@ -120,6 +121,7 @@ EVOLUTION	false
 EXCEPT	true
 EXCHANGE	false
 EXCLUDE	false
+EXCLUSIVE	false
 EXECUTE	true
 EXISTS	false
 EXIT	false
@@ -168,6 +170,7 @@ IMMEDIATE	false
 IMPORT	false
 IN	true
 INCLUDE	false
+INCLUSIVE	false
 INCREMENT	false
 INDEX	false
 INDEXES	false
