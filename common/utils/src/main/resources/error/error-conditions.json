@@ -2773,6 +2773,11 @@
           "The timestamp '<timestamp>' cannot be cast to TIMESTAMP type for CDC queries."
         ]
       },
+      "INVALID_TIMESTAMP_EXPR" : {
+        "message" : [
+          "The timestamp expression for CDC queries must not contain subqueries."
+        ]
+      },
       "MISSING_STARTING_TIMESTAMP" : {
         "message" : [
           "`startingTimestamp` is required when `endingTimestamp` is specified for CDC queries."

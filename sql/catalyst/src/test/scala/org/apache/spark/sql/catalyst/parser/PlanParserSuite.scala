@@ -2050,6 +2050,25 @@ class PlanParserSuite extends AnalysisTest {
     assert(e.getMessage.contains("timestamp expression cannot refer to any columns"))
   }
 
+  test("CHANGES clause - error: subquery in starting timestamp") {
+    checkError(
+      intercept[AnalysisException] {
+        parsePlan(
+          "SELECT * FROM t CHANGES FROM TIMESTAMP (SELECT MAX(ts) FROM other_table)")
+      },
+      condition = "INVALID_CDC_OPTION.INVALID_TIMESTAMP_EXPR")
+  }
+
+  test("CHANGES clause - error: subquery in ending timestamp") {
+    checkError(
+      intercept[AnalysisException] {
+        parsePlan(
+          "SELECT * FROM t CHANGES FROM TIMESTAMP '2026-01-01' " +
+            "TO TIMESTAMP (SELECT MAX(ts) FROM other_table)")
+      },
+      condition = "INVALID_CDC_OPTION.INVALID_TIMESTAMP_EXPR")
+  }
+
   test("PERCENTILE_CONT & PERCENTILE_DISC") {
     def assertPercentilePlans(inputSQL: String, expectedExpression: Expression): Unit = {
       comparePlans(

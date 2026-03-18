@@ -2410,10 +2410,16 @@ class AstBuilder extends DataTypeAstBuilder
         throw QueryParsingErrors.invalidTimeTravelSpec(
           "timestamp expression cannot refer to any columns", ctx.startingTimestamp)
       }
+      if (SubqueryExpression.hasSubquery(startTs)) {
+        throw QueryCompilationErrors.invalidCdcOptionInvalidTimestampExpr()
+      }
       val endTs = Option(ctx.endingTimestamp).map(expression)
       if (endTs.exists(_.references.nonEmpty)) {
         throw QueryParsingErrors.invalidTimeTravelSpec(
           "timestamp expression cannot refer to any columns", ctx.endingTimestamp)
+      }
+      if (endTs.exists(SubqueryExpression.hasSubquery)) {
+        throw QueryCompilationErrors.invalidCdcOptionInvalidTimestampExpr()
       }
       val startTsValue = resolveTimestampForChanges(startTs)
       val endTsValue = endTs.map(resolveTimestampForChanges)
@@ -2452,6 +2458,9 @@ class AstBuilder extends DataTypeAstBuilder
       if (startTs.references.nonEmpty) {
         throw QueryParsingErrors.invalidTimeTravelSpec(
           "timestamp expression cannot refer to any columns", ctx.startingTimestamp)
+      }
+      if (SubqueryExpression.hasSubquery(startTs)) {
+        throw QueryCompilationErrors.invalidCdcOptionInvalidTimestampExpr()
       }
       val startTsValue = resolveTimestampForChanges(startTs)
       new TimestampRange(

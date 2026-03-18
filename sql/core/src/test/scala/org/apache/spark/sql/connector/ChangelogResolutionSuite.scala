@@ -22,6 +22,7 @@ import java.util
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+import org.apache.spark.sql.connector.catalog.ChangelogRange
 import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StringType}
@@ -127,5 +128,17 @@ class ChangelogResolutionSuite extends QueryTest with SharedSparkSession {
       condition = "UNSUPPORTED_FEATURE.CHANGE_DATA_CAPTURE_ON_RELATION",
       sqlState = None,
       parameters = Map("relationId" -> "`x`"))
+  }
+
+  test("CHANGES clause passes changelogInfo to catalog") {
+    sql(s"SELECT * FROM $cdcCatalogName.test_table CHANGES FROM VERSION 1 TO VERSION 5")
+    val cat = spark.sessionState.catalogManager
+      .catalog(cdcCatalogName)
+      .asInstanceOf[InMemoryChangelogCatalog]
+    val info = cat.lastChangelogInfo
+    assert(info.isDefined)
+    val range = info.get.range().asInstanceOf[ChangelogRange.VersionRange]
+    assert(range.startingVersion() == "1")
+    assert(range.endingVersion().get() == "5")
   }
 }

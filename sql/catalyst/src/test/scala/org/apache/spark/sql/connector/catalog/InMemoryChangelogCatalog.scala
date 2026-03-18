@@ -22,7 +22,9 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+import org.apache.spark.sql.connector.catalog.ChangelogRange.{TimestampRange, UnboundedRange, VersionRange}
 import org.apache.spark.sql.connector.read._
+import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -37,17 +39,59 @@ class InMemoryChangelogCatalog extends InMemoryTableCatalog {
   private val changeData: mutable.Map[String, mutable.ArrayBuffer[InternalRow]] =
     mutable.Map.empty
 
+  // Stores the most recent ChangelogInfo passed to loadChangelog(), so tests can verify
+  // that the parser/DataFrame API correctly constructed and forwarded it.
+  private var _lastChangelogInfo: Option[ChangelogInfo] = None
+  def lastChangelogInfo: Option[ChangelogInfo] = _lastChangelogInfo
+
   override def loadChangelog(
       ident: Identifier,
       changelogInfo: ChangelogInfo): Changelog = {
+    _lastChangelogInfo = Some(changelogInfo)
     if (!tableExists(ident)) {
       throw new NoSuchTableException(ident.asMultipartIdentifier)
     }
     val table = loadTable(ident)
-    val rows = changeData.getOrElse(
+    val allRows = changeData.getOrElse(
       ident.toString, mutable.ArrayBuffer.empty)
+    val numDataCols = table.columns.length
+    // _commit_version is at index numDataCols + 1 (after _change_type)
+    val commitVersionIdx = numDataCols + 1
+    val filtered = filterByRange(allRows.toSeq, commitVersionIdx, changelogInfo.range())
     new InMemoryChangelog(
-      table.name + "_changelog", table.columns, rows.toSeq)
+      table.name + "_changelog", table.columns, filtered)
+  }
+
+  /**
+   * Filter rows by the requested [[ChangelogRange]]. For [[VersionRange]], compares
+   * the `_commit_version` (Long) against the start/end versions (parsed as Long).
+   * For [[UnboundedRange]], returns all rows.
+   */
+  private def filterByRange(
+      rows: Seq[InternalRow],
+      commitVersionIdx: Int,
+      range: ChangelogRange): Seq[InternalRow] = range match {
+    case vr: VersionRange =>
+      val startVer = vr.startingVersion().toLong
+      val startInc = vr.startingBoundInclusive()
+      val endVerOpt = if (vr.endingVersion().isPresent) {
+        Some(vr.endingVersion().get().toLong)
+      } else None
+      val endInc = vr.endingBoundInclusive()
+      rows.filter { row =>
+        val ver = row.getLong(commitVersionIdx)
+        val aboveStart = if (startInc) ver >= startVer else ver > startVer
+        val belowEnd = endVerOpt match {
+          case Some(endVer) => if (endInc) ver <= endVer else ver < endVer
+          case None => true
+        }
+        aboveStart && belowEnd
+      }
+    case _: TimestampRange =>
+      // Timestamp filtering not implemented in test catalog
+      rows
+    case _: UnboundedRange =>
+      rows
   }
 
   /**
@@ -115,6 +159,10 @@ private class InMemoryChangelogScan(
 
   override def toBatch: Batch = this
 
+  override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
+    new InMemoryChangelogMicroBatchStream(schema, rows)
+  }
+
   override def planInputPartitions(): Array[InputPartition] = {
     Array(InMemoryChangelogPartition(rows))
   }
@@ -151,4 +199,43 @@ private class InMemoryChangelogReader(
   override def get(): InternalRow = rows(index)
 
   override def close(): Unit = {}
+}
+
+/**
+ * A simple offset for [[InMemoryChangelogMicroBatchStream]].
+ * The offset value represents the number of rows consumed so far.
+ */
+private class InMemoryChangelogOffset(val offset: Long) extends Offset {
+  override def json(): String = offset.toString
+}
+
+/**
+ * A [[MicroBatchStream]] that serves pre-populated change rows in a single batch.
+ */
+private class InMemoryChangelogMicroBatchStream(
+    schema: StructType,
+    rows: Seq[InternalRow]) extends MicroBatchStream {
+
+  override def initialOffset(): Offset = new InMemoryChangelogOffset(-1)
+
+  override def latestOffset(): Offset = new InMemoryChangelogOffset(rows.size - 1)
+
+  override def planInputPartitions(start: Offset, end: Offset): Array[InputPartition] = {
+    val startIdx = start.asInstanceOf[InMemoryChangelogOffset].offset.toInt + 1
+    val endIdx = end.asInstanceOf[InMemoryChangelogOffset].offset.toInt + 1
+    val slice = rows.slice(startIdx, endIdx)
+    Array(InMemoryChangelogPartition(slice))
+  }
+
+  override def createReaderFactory(): PartitionReaderFactory = {
+    new InMemoryChangelogReaderFactory()
+  }
+
+  override def deserializeOffset(json: String): Offset = {
+    new InMemoryChangelogOffset(json.toLong)
+  }
+
+  override def commit(end: Offset): Unit = {}
+
+  override def stop(): Unit = {}
 }

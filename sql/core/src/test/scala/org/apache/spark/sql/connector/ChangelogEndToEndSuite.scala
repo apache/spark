@@ -147,4 +147,54 @@ class ChangelogEndToEndSuite extends QueryTest with SharedSparkSession {
     val colNames = df.schema.fieldNames
     assert(colNames.contains("_change_type"))
   }
+
+  test("streaming CDC reads change data via STREAM CHANGES") {
+    catalog.addChangeRows(ident, Seq(
+      makeChangeRow(1L, "a", "insert", 1L, 1000000L),
+      makeChangeRow(2L, "b", "insert", 1L, 1000000L),
+      makeChangeRow(1L, "a", "delete", 2L, 2000000L)))
+
+    val streamDf = sql(
+      s"SELECT * FROM STREAM $fullTableName CHANGES FROM VERSION 1")
+
+    val queryName = "cdc_streaming_test"
+    val query = streamDf.writeStream
+      .format("memory")
+      .queryName(queryName)
+      .start()
+    try {
+      query.processAllAvailable()
+      val result = spark.sql(s"SELECT * FROM $queryName")
+      checkAnswer(result, Seq(
+        Row(1L, "a", "insert", 1L, new Timestamp(1000L)),
+        Row(2L, "b", "insert", 1L, new Timestamp(1000L)),
+        Row(1L, "a", "delete", 2L, new Timestamp(2000L))))
+    } finally {
+      query.stop()
+    }
+  }
+
+  test("streaming CDC reads change data via STREAM CHANGES FROM VERSION 2") {
+    catalog.addChangeRows(ident, Seq(
+      makeChangeRow(1L, "a", "insert", 1L, 1000000L),
+      makeChangeRow(2L, "b", "insert", 1L, 1000000L),
+      makeChangeRow(1L, "a", "delete", 2L, 2000000L)))
+
+    val streamDf = sql(
+      s"SELECT * FROM STREAM $fullTableName CHANGES FROM VERSION 2")
+
+    val queryName = "cdc_streaming_test_v2"
+    val query = streamDf.writeStream
+      .format("memory")
+      .queryName(queryName)
+      .start()
+    try {
+      query.processAllAvailable()
+      val result = spark.sql(s"SELECT * FROM $queryName")
+      checkAnswer(result, Seq(
+        Row(1L, "a", "delete", 2L, new Timestamp(2000L))))
+    } finally {
+      query.stop()
+    }
+  }
 }
