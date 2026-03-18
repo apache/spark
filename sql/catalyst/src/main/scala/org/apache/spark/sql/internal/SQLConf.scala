@@ -2124,7 +2124,7 @@ object SQLConf {
   val V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS =
     buildConf("spark.sql.sources.v2.bucketing.allowCompatibleTransforms.enabled")
       .doc("Whether to allow storage-partition join in the case where the partition transforms " +
-        "are compatible but not identical.  This config requires both " +
+        "are compatible but not identical. This config requires both " +
         s"${V2_BUCKETING_ENABLED.key} and ${V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key} to be " +
         s"enabled and ${V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key} " +
         "to be disabled."
@@ -2134,10 +2134,13 @@ object SQLConf {
       .createWithDefault(false)
 
   val V2_BUCKETING_ALLOW_INCOMPATIBLE_TRANSFORM_TYPES =
-    buildConf("spark.sql.legacy.allowIncompatibleTransformTypes.enabled")
-      .doc("Whether to allow storage-partition join where the partition transforms produce " +
-        "incompatible reduced types and use the left partition key type for comparison.")
+    buildConf("spark.sql.sources.v2.bucketing.allowIncompatibleTransformTypes.enabled")
+      .doc("Whether to allow storage-partition join where the left and right partition " +
+        "transforms are reduced to differing logical types and in that case use the left reduced " +
+        "logical types for comparison. This config requires " +
+        s"${V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key} to be enabled.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
