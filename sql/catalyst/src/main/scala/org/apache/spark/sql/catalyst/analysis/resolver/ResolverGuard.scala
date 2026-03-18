@@ -22,8 +22,7 @@ import java.util.Locale
 import org.apache.spark.sql.catalyst.{
   FunctionIdentifier,
   QueryPlanningTracker,
-  SQLConfHelper,
-  SqlScriptingContextManager
+  SQLConfHelper
 }
 import org.apache.spark.sql.catalyst.analysis.{
   FunctionRegistry,
@@ -45,6 +44,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   UnresolvedStarExceptOrReplace,
   UnresolvedSubqueryColumnAliases
 }
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.NamePlaceholder
 import org.apache.spark.sql.catalyst.expressions.aggregate.{
@@ -53,7 +53,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{
   First,
   Last
 }
-import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
