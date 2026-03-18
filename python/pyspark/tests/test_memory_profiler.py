@@ -27,7 +27,7 @@ from typing import Iterator
 from unittest import mock
 
 from pyspark import SparkConf
-from pyspark.profiler import has_memory_profiler
+from pyspark.memory_profiler_ext import has_memory_profiler
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, pandas_udf, udf
 from pyspark.sql.window import Window
