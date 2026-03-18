@@ -35,7 +35,8 @@ import org.apache.spark.annotation.Evolving;
  */
 @Evolving
 public sealed interface ChangelogRange
-    permits ChangelogRange.VersionRange, ChangelogRange.TimestampRange, ChangelogRange.UnboundedRange {
+    permits ChangelogRange.VersionRange, ChangelogRange.TimestampRange,
+        ChangelogRange.UnboundedRange {
 
   /** Whether the starting bound is inclusive. */
   boolean startingBoundInclusive();

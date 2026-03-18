@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.util.{Locale, Optional}
+import java.lang.{Long => JLong}
+import java.util.{Locale, Optional => JOptional}
 
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.connector.catalog.ChangelogInfo
@@ -79,17 +80,17 @@ object ChangelogInfoUtils {
         throw QueryCompilationErrors.invalidCdcOptionMissingStartingVersion())
       new VersionRange(
         sv,
-        endVersion.map(Optional.of[String]).getOrElse(Optional.empty[String]),
+        endVersion.map(JOptional.of[String]).getOrElse(JOptional.empty[String]),
         startInclusive,
         endInclusive)
     } else if (hasTimestampRange) {
       val startTsValue = startTimestamp.map(parseTimestamp(_, sessionLocalTimeZone)).getOrElse(
         throw QueryCompilationErrors.invalidCdcOptionMissingStartingTimestamp())
       val endTsValue = endTimestamp.map(ts =>
-        java.lang.Long.valueOf(parseTimestamp(ts, sessionLocalTimeZone)))
+        JLong.valueOf(parseTimestamp(ts, sessionLocalTimeZone)))
       new TimestampRange(
         startTsValue,
-        endTsValue.map(Optional.of[java.lang.Long]).getOrElse(Optional.empty[java.lang.Long]),
+        endTsValue.map(JOptional.of[JLong]).getOrElse(JOptional.empty[JLong]),
         startInclusive,
         endInclusive)
     } else {
