@@ -250,6 +250,7 @@ class SingleEventLogFileWriter(
    * ".inprogress" suffix.
    */
   override def stop(): Unit = {
+    logInfo(log"Stopping event writer for ${MDC(PATH, logPath)}")
     closeWriter()
     renameFile(new Path(inProgressPath), new Path(logPath), shouldOverwrite)
   }
@@ -367,6 +368,7 @@ class RollingEventLogFilesWriter(
   }
 
   override def stop(): Unit = {
+    logInfo(log"Stopping event writer for ${MDC(PATH, logPath)}")
     closeWriter()
     val appStatusPathIncomplete = getAppStatusFilePath(logDirForAppPath, appId, appAttemptId,
       inProgress = true)

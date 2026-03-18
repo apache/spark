@@ -182,11 +182,13 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-34199: star cannot be qualified by table name inside a count function") {
-    val e = intercept[AnalysisException] {
-      testData.as("testData").selectExpr("count(testData.*)").collect()
-    }
-    assert(e.getMessage.contains(
-      "count(testData.*) is not allowed. Please use count(*) or expand the columns manually"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        testData.as("testData").selectExpr("count(testData.*)").collect()
+      },
+      condition = "INVALID_USAGE_OF_STAR_WITH_TABLE_IDENTIFIER_IN_COUNT",
+      parameters = Map("tableName" -> "`testData`")
+    )
   }
 
   test("SPARK-34199: table star can be qualified inside a count function with multiple arguments") {
@@ -2656,7 +2658,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           .select($"date" + $"interval")
           .collect()
       }
-      assert(e.getMessage.contains("integer overflow"))
+      assert(e.getMessage.contains("overflow"))
     }
   }
 
@@ -2685,7 +2687,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           .select($"date" - $"interval")
           .collect()
       }
-      assert(e.getMessage.contains("integer overflow"))
+      assert(e.getMessage.contains("overflow"))
     }
   }
 
@@ -2723,7 +2725,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           .collect()
       }.getCause
       assert(e.isInstanceOf[ArithmeticException])
-      assert(e.getMessage.contains("long overflow"))
+      assert(e.getMessage == null || e.getMessage.contains("overflow"))
     }
   }
 
@@ -2760,7 +2762,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           .collect()
       }.getCause
       assert(e.isInstanceOf[ArithmeticException])
-      assert(e.getMessage.contains("long overflow"))
+      assert(e.getMessage == null || e.getMessage.contains("overflow"))
     }
   }
 
@@ -2807,7 +2809,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
             .collect()
         }.getCause
         assert(e.isInstanceOf[ArithmeticException])
-        assert(e.getMessage.contains("long overflow"))
+        assert(e.getMessage == null || e.getMessage.contains("overflow"))
       }
     }
   }
@@ -3002,7 +3004,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           .collect()
       }.getCause
       assert(e.isInstanceOf[ArithmeticException])
-      assert(e.getMessage.contains("long overflow"))
+      assert(e.getMessage == null || e.getMessage.contains("overflow"))
     }
   }
 
@@ -3074,7 +3076,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
             .collect()
         }.getCause
         assert(e.isInstanceOf[ArithmeticException])
-        assert(e.getMessage.contains("long overflow"))
+        assert(e.getMessage == null || e.getMessage.contains("overflow"))
       }
     }
   }

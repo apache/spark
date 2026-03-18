@@ -19,6 +19,7 @@ unittest-xml-reporting
 openpyxl
 
 # PySpark test dependencies (optional)
+asv
 coverage
 tabulate
 
@@ -58,7 +59,7 @@ jira>=3.5.2
 PyGithub
 
 # pandas API on Spark Code formatter.
-black==23.12.1
+black==26.3.1
 py
 
 # Spark Connect (required)

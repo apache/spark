@@ -134,7 +134,18 @@ class SeriesMissingDataMixin:
         pser = pd.Series([10, 20, 15, 30, np.nan], name="x")
         psser = ps.from_pandas(pser)
 
-        self.assert_eq(psser.replace(), pser.replace())
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assert_eq(psser.replace(), pser.replace())
+        else:
+            msg = (
+                "Series.replace must specify either 'value', a dict-like "
+                "'to_replace', or dict-like 'regex'."
+            )
+            with self.assertRaisesRegex(ValueError, msg):
+                psser.replace()
+            with self.assertRaisesRegex(ValueError, msg):
+                pser.replace()
+
         self.assert_eq(psser.replace({}), pser.replace({}))
 
         self.assert_eq(psser.replace(np.nan, 45), pser.replace(np.nan, 45))

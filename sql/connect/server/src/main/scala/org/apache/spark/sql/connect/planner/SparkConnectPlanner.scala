@@ -59,7 +59,7 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.classic.{Catalog, DataFrameWriter, Dataset, MergeIntoWriter, RelationalGroupedDataset, SparkSession, TypedAggUtils, UserDefinedFunctionUtils}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.ml.MLHandler
 import org.apache.spark.sql.connect.pipelines.PipelinesHandler
@@ -1332,7 +1332,7 @@ class SparkConnectPlanner(
   private def transformCachedLocalRelation(rel: proto.CachedLocalRelation): LogicalPlan = {
     val blockManager = session.sparkContext.env.blockManager
     val blockId = session.artifactManager.getCachedBlockId(rel.getHash).getOrElse {
-      throw InvalidPlanInput(s"Cannot find a cached local relation for hash: ${rel.getHash}")
+      throw InvalidInputErrors.cannotFindCachedLocalRelation(rel.getHash)
     }
     val bytes = blockManager.getLocalBytes(blockId)
     bytes
@@ -1445,7 +1445,8 @@ class SparkConnectPlanner(
         // so we call filter instead of find.
         val cols = allColumns.filter(col => resolver(col.name, colName))
         if (cols.isEmpty) {
-          throw InvalidInputErrors.invalidDeduplicateColumn(colName)
+          val fieldNames = allColumns.map(_.name).mkString(", ")
+          throw InvalidInputErrors.invalidDeduplicateColumn(colName, fieldNames)
         }
         cols
       }

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.adaptive
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
-import org.apache.spark.sql.execution.joins.ShuffledJoin
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledJoin}
 
 /**
  * A simple implementation of [[Cost]], which takes a number of [[Long]] as the cost value.
@@ -48,6 +48,7 @@ case class SimpleCostEvaluator(forceOptimizeSkewedJoin: Boolean) extends CostEva
     if (forceOptimizeSkewedJoin) {
       val numSkewJoins = plan.collect {
         case j: ShuffledJoin if j.isSkewJoin => j
+        case j: BroadcastHashJoinExec if j.isSkewJoin => j
       }.size
       // We put `-numSkewJoins` in the first 32 bits of the long value, so that it's compared first
       // when comparing the cost, and larger `numSkewJoins` means lower cost.

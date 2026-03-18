@@ -17,6 +17,7 @@
 """
 User-defined function related classes and functions
 """
+
 import functools
 import inspect
 import sys
@@ -477,7 +478,7 @@ class UserDefinedFunction:
             else:  # memory_profiler_enabled
                 f = self.func
                 memory_profiler = sc.profiler_collector.new_memory_profiler(sc)
-                (sub_lines, start_line) = inspect.getsourcelines(f.__code__)
+                sub_lines, start_line = inspect.getsourcelines(f.__code__)
 
                 @functools.wraps(f)
                 def func(*args: Any, **kwargs: Any) -> Any:
@@ -809,7 +810,7 @@ def _test() -> None:
 
     spark = SparkSession.builder.master("local[4]").appName("sql.udf tests").getOrCreate()
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.udf, globs=globs, optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE
     )
     spark.stop()

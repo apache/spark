@@ -17,7 +17,6 @@
 package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.IOException;
-import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
@@ -73,9 +72,23 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
       c.putBooleans(rowId, i, currentByte, bitOffset);
       bitOffset = (bitOffset + i) & 7;
     }
-    for (; i + 7 < total; i += 8) {
-      updateCurrentByte();
-      c.putBooleans(rowId + i, currentByte);
+    // Batch-read all full bytes in a single getBuffer call instead of per-byte in.read().
+    // getBuffer returns a slice with position=0 and remaining=fullBytes.
+    int fullBytes = (total - i) / 8;
+    if (fullBytes > 0) {
+      ByteBuffer buffer = getBuffer(fullBytes);
+      if (buffer.hasArray()) {
+        byte[] array = buffer.array();
+        int offset = buffer.arrayOffset() + buffer.position();
+        for (int j = 0; j < fullBytes; j++) {
+          c.putBooleans(rowId + i + j * 8, array[offset + j]);
+        }
+      } else {
+        for (int j = 0; j < fullBytes; j++) {
+          c.putBooleans(rowId + i + j * 8, buffer.get());
+        }
+      }
+      i += fullBytes * 8;
     }
     if (i < total) {
       updateCurrentByte();
@@ -199,10 +212,90 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   public final void readUnsignedLongs(int total, WritableColumnVector c, int rowId) {
     int requiredBytes = total * 8;
     ByteBuffer buffer = getBuffer(requiredBytes);
-    for (int i = 0; i < total; i += 1) {
-      c.putByteArray(
-        rowId + i, new BigInteger(Long.toUnsignedString(buffer.getLong())).toByteArray());
+    // scratch buffer: max 9 bytes (0x00 sign byte + 8 value bytes), reused per batch
+    byte[] scratch = new byte[9];
+    if (buffer.hasArray()) {
+      byte[] src = buffer.array();
+      int offset = buffer.arrayOffset() + buffer.position();
+      for (int i = 0; i < total; i++, rowId++, offset += 8) {
+        putLittleEndianBytesAsBigInteger(c, rowId, src, offset, scratch);
+      }
+    } else {
+      // direct buffer fallback: copy 8 bytes per value
+      byte[] data = new byte[8];
+      for (int i = 0; i < total; i++, rowId++) {
+        buffer.get(data);
+        putLittleEndianBytesAsBigInteger(c, rowId, data, 0, scratch);
+      }
     }
+  }
+
+  /**
+   * Writes 8 little-endian bytes from {@code src[offset..offset+7]} into {@code c} at
+   * {@code rowId} as a big-endian byte array compatible with {@link java.math.BigInteger}
+   * two's-complement encoding.
+   *
+   * <p>The output matches the semantics of {@link java.math.BigInteger#toByteArray()}:
+   * <ul>
+   *   <li>Big-endian byte order</li>
+   *   <li>Minimal encoding: no unnecessary leading zero bytes</li>
+   *   <li>A {@code 0x00} sign byte is prepended if the most significant byte has bit 7
+   *       set, ensuring the value is interpreted as positive by {@code BigInteger}</li>
+   *   <li>Zero is encoded as {@code [0x00]} (1 byte), not an empty array, because
+   *       {@code new BigInteger(new byte[0])} throws {@link NumberFormatException}</li>
+   * </ul>
+   *
+   * <p>This is used by {@link #readUnsignedLongs} to store Parquet {@code UINT_64} values
+   * into a {@code DecimalType(20, 0)} column vector, where each value is stored as a
+   * byte array in {@code arrayData()} and later reconstructed via
+   * {@code new BigInteger(bytes)}.
+   *
+   * @param c      the target column vector; must be of {@code DecimalType(20, 0)}
+   * @param rowId  the row index to write into
+   * @param src    the source byte array containing little-endian encoded data
+   * @param offset the starting position in {@code src}; reads bytes
+   *               {@code src[offset..offset+7]}
+   * @param scratch a caller-provided reusable buffer of at least 9 bytes; its contents
+   *                after this call are undefined
+   */
+  private static void putLittleEndianBytesAsBigInteger(
+     WritableColumnVector c, int rowId, byte[] src, int offset, byte[] scratch) {
+    // src is little-endian; the most significant byte is at src[offset + 7].
+    // Scan from the most significant end to find the first non-zero byte,
+    // which determines the minimal number of bytes needed for encoding.
+    int msbIndex = offset + 7;
+    while (msbIndex > offset && src[msbIndex] == 0) {
+      msbIndex--;
+    }
+
+    // Zero value: must write [0x00] rather than an empty array.
+    // BigInteger.ZERO.toByteArray() returns [0x00], and new BigInteger(new byte[0])
+    // throws NumberFormatException("Zero length BigInteger").
+    if (msbIndex == offset && src[offset] == 0) {
+      scratch[0] = 0x00;
+      // putByteArray copies the bytes into arrayData(), so scratch can be safely reused
+      c.putByteArray(rowId, scratch, 0, 1);
+      return;
+    }
+
+    // Prepend a 0x00 sign byte if the most significant byte has bit 7 set.
+    // This matches BigInteger.toByteArray() behavior: positive values whose highest
+    // magnitude byte has the MSB set are prefixed with 0x00 to distinguish them
+    // from negative values in two's-complement encoding.
+    boolean needSignByte = (src[msbIndex] & 0x80) != 0;
+    int valueLen = msbIndex - offset + 1;
+    int totalLen = needSignByte ? valueLen + 1 : valueLen;
+
+    int scratchOffset = 0;
+    if (needSignByte) {
+      scratch[scratchOffset++] = 0x00;
+    }
+    // Reverse byte order: little-endian src → big-endian dest
+    for (int i = msbIndex; i >= offset; i--) {
+      scratch[scratchOffset++] = src[i];
+    }
+    // putByteArray copies the bytes into arrayData(), so scratch can be safely reused
+    c.putByteArray(rowId, scratch, 0, totalLen);
   }
 
   // A fork of `readLongs` to rebase the timestamp values. For performance reasons, this method
@@ -315,8 +408,13 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     int requiredBytes = total * 4;
     ByteBuffer buffer = getBuffer(requiredBytes);
 
-    for (int i = 0; i < total; i += 1) {
-      c.putShort(rowId + i, (short) buffer.getInt());
+    if (buffer.hasArray()) {
+      int offset = buffer.arrayOffset() + buffer.position();
+      c.putShortsFromIntsLittleEndian(rowId, total, buffer.array(), offset);
+    } else {
+      for (int i = 0; i < total; i += 1) {
+        c.putShort(rowId + i, (short) buffer.getInt());
+      }
     }
   }
 

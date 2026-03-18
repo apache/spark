@@ -365,9 +365,14 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
           isTemporary = true)
 
       case _ =>
-        val catalogPath = (currentCatalog() +:
-          sparkSession.sessionState.catalogManager.currentNamespace).mkString(".")
-        throw QueryCompilationErrors.unresolvedRoutineError(ident, Seq(catalogPath), plan.origin)
+        val catalogPath =
+          (Seq(currentCatalog()) ++
+            sparkSession.sessionState.catalogManager.currentNamespace).toSeq
+        val searchPath = sparkSession.sessionState.conf.resolutionSearchPath(catalogPath)
+        throw QueryCompilationErrors.unresolvedRoutineError(
+          ident,
+          searchPath.map(_.quoted),
+          plan.origin)
     }
   }
 
@@ -974,7 +979,8 @@ private[sql] object Catalog {
 
     val ERROR_HANDLING_RULES: Map[String, ErrorHandlingAction] = Map(
       "UNSUPPORTED_FEATURE.HIVE_TABLE_TYPE" -> ReturnPartialResults,
-      "TABLE_OR_VIEW_NOT_FOUND" -> Skip
+      "TABLE_OR_VIEW_NOT_FOUND" -> Skip,
+      "DATA_SOURCE_NOT_FOUND" -> ReturnPartialResults
     )
   }
 }

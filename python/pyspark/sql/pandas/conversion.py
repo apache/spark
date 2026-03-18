@@ -575,14 +575,12 @@ class SparkConversionMixin:
     @overload
     def createDataFrame(
         self, data: "PandasDataFrameLike", samplingRatio: Optional[float] = ...
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     @overload
     def createDataFrame(
         self, data: "pa.Table", samplingRatio: Optional[float] = ...
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     @overload
     def createDataFrame(
@@ -590,8 +588,7 @@ class SparkConversionMixin:
         data: "PandasDataFrameLike",
         schema: Union[StructType, str],
         verifySchema: bool = ...,
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     @overload
     def createDataFrame(
@@ -599,8 +596,7 @@ class SparkConversionMixin:
         data: "pa.Table",
         schema: Union[StructType, str],
         verifySchema: bool = ...,
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     def createDataFrame(  # type: ignore[misc]
         self,
@@ -861,6 +857,12 @@ class SparkConversionMixin:
                         ser.dt.to_pytimedelta(), index=ser.index, dtype="object", name=ser.name
                     )
 
+        # Handle the 0-column case separately to preserve row count
+        if len(pdf.columns) == 0:
+            from pyspark.sql import Row
+
+            return [Row()] * len(pdf)
+
         # Convert pandas.DataFrame to list of numpy records
         np_records = pdf.set_axis(
             [f"col_{i}" for i in range(len(pdf.columns))], axis="columns"
@@ -987,9 +989,11 @@ class SparkConversionMixin:
         else:
             # Any timestamps must be coerced to be compatible with Spark
             spark_types = [
-                TimestampType()
-                if is_datetime64_dtype(t) or isinstance(t, pd.DatetimeTZDtype)
-                else None
+                (
+                    TimestampType()
+                    if is_datetime64_dtype(t) or isinstance(t, pd.DatetimeTZDtype)
+                    else None
+                )
                 for t in pdf.dtypes
             ]
 
@@ -998,16 +1002,21 @@ class SparkConversionMixin:
         step = step if step > 0 else len(pdf)
         pdf_slices = (pdf.iloc[start : start + step] for start in range(0, len(pdf), step))
 
-        # Create Arrow batches directly using the standalone function
-        arrow_batches = [
-            create_arrow_batch_from_pandas(
-                [(c, t) for (_, c), t in zip(pdf_slice.items(), spark_types)],
-                timezone=timezone,
-                safecheck=safecheck,
-                prefers_large_types=prefers_large_var_types,
-            )
-            for pdf_slice in pdf_slices
-        ]
+        # Handle the 0-column case separately to preserve row count.
+        # pa.RecordBatch.from_pandas preserves num_rows via pandas index metadata.
+        if len(pdf.columns) == 0:
+            arrow_batches = [pa.RecordBatch.from_pandas(pdf_slice) for pdf_slice in pdf_slices]
+        else:
+            # Create Arrow batches directly using the standalone function
+            arrow_batches = [
+                create_arrow_batch_from_pandas(
+                    [(c, t) for (_, c), t in zip(pdf_slice.items(), spark_types)],
+                    timezone=timezone,
+                    safecheck=safecheck,
+                    prefers_large_types=prefers_large_var_types,
+                )
+                for pdf_slice in pdf_slices
+            ]
 
         jsparkSession = self._jsparkSession
 
@@ -1074,14 +1083,16 @@ class SparkConversionMixin:
         if not isinstance(schema, StructType):
             schema = from_arrow_schema(table.schema, prefer_timestamp_ntz=prefer_timestamp_ntz)
 
-        table = _check_arrow_table_timestamps_localize(table, schema, True, timezone).cast(
-            to_arrow_schema(
-                schema,
-                error_on_duplicated_field_names_in_struct=True,
-                timezone="UTC",
-                prefers_large_types=prefers_large_var_types,
+        # Skip cast for 0-column tables as it loses row count
+        if len(schema.fields) > 0:
+            table = _check_arrow_table_timestamps_localize(table, schema, True, timezone).cast(
+                to_arrow_schema(
+                    schema,
+                    error_on_duplicated_field_names_in_struct=True,
+                    timezone="UTC",
+                    prefers_large_types=prefers_large_var_types,
+                )
             )
-        )
 
         # Chunk the Arrow Table into RecordBatches
         chunk_size = arrow_batch_size
@@ -1118,7 +1129,7 @@ def _test() -> None:
         SparkSession.builder.master("local[4]").appName("sql.pandas.conversion tests").getOrCreate()
     )
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.pandas.conversion,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,

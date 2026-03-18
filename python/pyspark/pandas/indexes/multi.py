@@ -200,7 +200,7 @@ class MultiIndex(Index):
         Parameters
         ----------
         arrays: list / sequence of array-likes
-            Each array-like gives one level’s value for each data point. len(arrays)
+            Each array-like gives one level's value for each data point. len(arrays)
             is the number of levels.
         sortorder: int or None
             Level of sortedness (must be lexicographically sorted by that level).
@@ -1279,7 +1279,7 @@ def _test() -> None:
         .appName("pyspark.pandas.indexes.multi tests")
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.indexes.multi,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

@@ -18,6 +18,7 @@
 """
 A collections of builtin functions
 """
+
 import inspect
 import decimal
 import sys
@@ -6969,7 +6970,7 @@ def first(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     col : :class:`~pyspark.sql.Column` or column name
         column to fetch first value for.
     ignorenulls : bool
-        if first value is null then look for first non-null value. ``False``` by default.
+        if first value is null then look for first non-null value. ``False`` by default.
 
     Returns
     -------
@@ -7311,7 +7312,7 @@ def last(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     col : :class:`~pyspark.sql.Column` or column name
         column to fetch last value for.
     ignorenulls : bool
-        if last value is null then look for non-null value. ``False``` by default.
+        if last value is null then look for non-null value. ``False`` by default.
 
     Returns
     -------
@@ -8107,13 +8108,11 @@ def expr(str: str) -> Column:
 
 
 @overload
-def struct(*cols: "ColumnOrName") -> Column:
-    ...
+def struct(*cols: "ColumnOrName") -> Column: ...
 
 
 @overload
-def struct(__cols: Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]) -> Column:
-    ...
+def struct(__cols: Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]) -> Column: ...
 
 
 @_try_remote_functions
@@ -8343,13 +8342,11 @@ def when(condition: Column, value: Any) -> Column:
 
 
 @overload
-def log(arg1: "ColumnOrName") -> Column:
-    ...
+def log(arg1: "ColumnOrName") -> Column: ...
 
 
 @overload
-def log(arg1: float, arg2: "ColumnOrName") -> Column:
-    ...
+def log(arg1: float, arg2: "ColumnOrName") -> Column: ...
 
 
 @_try_remote_functions
@@ -9288,13 +9285,11 @@ def current_timezone() -> Column:
 
 
 @overload
-def current_time() -> Column:
-    ...
+def current_time() -> Column: ...
 
 
 @overload
-def current_time(precision: int) -> Column:
-    ...
+def current_time(precision: int) -> Column: ...
 
 
 @_try_remote_functions
@@ -11701,13 +11696,11 @@ def unix_seconds(col: "ColumnOrName") -> Column:
 
 
 @overload
-def to_time(str: "ColumnOrName") -> Column:
-    ...
+def to_time(str: "ColumnOrName") -> Column: ...
 
 
 @overload
-def to_time(str: "ColumnOrName", format: "ColumnOrName") -> Column:
-    ...
+def to_time(str: "ColumnOrName", format: "ColumnOrName") -> Column: ...
 
 
 @_try_remote_functions
@@ -11769,13 +11762,11 @@ def to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Col
 
 
 @overload
-def to_timestamp(col: "ColumnOrName") -> Column:
-    ...
+def to_timestamp(col: "ColumnOrName") -> Column: ...
 
 
 @overload
-def to_timestamp(col: "ColumnOrName", format: str) -> Column:
-    ...
+def to_timestamp(col: "ColumnOrName", format: str) -> Column: ...
 
 
 @_try_remote_functions
@@ -11847,13 +11838,11 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 
 
 @overload
-def try_to_time(str: "ColumnOrName") -> Column:
-    ...
+def try_to_time(str: "ColumnOrName") -> Column: ...
 
 
 @overload
-def try_to_time(str: "ColumnOrName", format: "ColumnOrName") -> Column:
-    ...
+def try_to_time(str: "ColumnOrName", format: "ColumnOrName") -> Column: ...
 
 
 @_try_remote_functions
@@ -12563,13 +12552,11 @@ def from_unixtime(timestamp: "ColumnOrName", format: str = "yyyy-MM-dd HH:mm:ss"
 
 
 @overload
-def unix_timestamp(timestamp: "ColumnOrName", format: str = ...) -> Column:
-    ...
+def unix_timestamp(timestamp: "ColumnOrName", format: str = ...) -> Column: ...
 
 
 @overload
-def unix_timestamp() -> Column:
-    ...
+def unix_timestamp() -> Column: ...
 
 
 @_try_remote_functions
@@ -13068,15 +13055,14 @@ def timestamp_diff(unit: str, start: "ColumnOrName", end: "ColumnOrName") -> Col
 @_try_remote_functions
 def timestamp_add(unit: str, quantity: "ColumnOrName", ts: "ColumnOrName") -> Column:
     """
-    Gets the difference between the timestamps in the specified units by truncating
-    the fraction part.
+    Adds the specified number of units to the given timestamp
 
     .. versionadded:: 4.0.0
 
     Parameters
     ----------
     unit : literal string
-        This indicates the units of the difference between the given timestamps.
+        This indicates the units of datetime that you want to add.
         Supported options are (case insensitive): "YEAR", "QUARTER", "MONTH", "WEEK",
         "DAY", "HOUR", "MINUTE", "SECOND", "MILLISECOND" and "MICROSECOND".
     quantity : :class:`~pyspark.sql.Column` or column name
@@ -13087,7 +13073,7 @@ def timestamp_add(unit: str, quantity: "ColumnOrName", ts: "ColumnOrName") -> Co
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        the difference between the timestamps.
+        the resulting timestamp after adding the specified number of units.
 
     See Also
     --------
@@ -16673,7 +16659,7 @@ def octet_length(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([('cat',), ( '\U0001F408',)], ['cat'])
+    >>> df = spark.createDataFrame([('cat',), ( '\U0001f408',)], ['cat'])
     >>> df.select('*', sf.octet_length('cat')).show()
     +---+-----------------+
     |cat|octet_length(cat)|
@@ -16708,7 +16694,7 @@ def bit_length(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([('cat',), ( '\U0001F408',)], ['cat'])
+    >>> df = spark.createDataFrame([('cat',), ( '\U0001f408',)], ['cat'])
     >>> df.select('*', sf.bit_length('cat')).show()
     +---+---------------+
     |cat|bit_length(cat)|
@@ -18324,13 +18310,11 @@ def quote(col: "ColumnOrName") -> Column:
 
 
 @overload
-def create_map(*cols: "ColumnOrName") -> Column:
-    ...
+def create_map(*cols: "ColumnOrName") -> Column: ...
 
 
 @overload
-def create_map(__cols: Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]) -> Column:
-    ...
+def create_map(__cols: Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]) -> Column: ...
 
 
 @_try_remote_functions
@@ -18491,13 +18475,11 @@ def map_from_arrays(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
 
 @overload
-def array(*cols: "ColumnOrName") -> Column:
-    ...
+def array(*cols: "ColumnOrName") -> Column: ...
 
 
 @overload
-def array(__cols: Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]) -> Column:
-    ...
+def array(__cols: Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]) -> Column: ...
 
 
 @_try_remote_functions
@@ -23114,13 +23096,11 @@ def arrays_zip(*cols: "ColumnOrName") -> Column:
 
 
 @overload
-def map_concat(*cols: "ColumnOrName") -> Column:
-    ...
+def map_concat(*cols: "ColumnOrName") -> Column: ...
 
 
 @overload
-def map_concat(__cols: Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]) -> Column:
-    ...
+def map_concat(__cols: Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]) -> Column: ...
 
 
 @_try_remote_functions
@@ -23503,13 +23483,11 @@ def _invoke_higher_order_function(
 
 
 @overload
-def transform(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
-    ...
+def transform(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column: ...
 
 
 @overload
-def transform(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Column:
-    ...
+def transform(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Column: ...
 
 
 @_try_remote_functions
@@ -23657,13 +23635,11 @@ def forall(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
 
 
 @overload
-def filter(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
-    ...
+def filter(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column: ...
 
 
 @overload
-def filter(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Column:
-    ...
+def filter(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Column: ...
 
 
 @_try_remote_functions
@@ -25125,8 +25101,7 @@ def make_timestamp(
     hours: "ColumnOrName",
     mins: "ColumnOrName",
     secs: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @overload
@@ -25138,20 +25113,17 @@ def make_timestamp(
     mins: "ColumnOrName",
     secs: "ColumnOrName",
     timezone: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @overload
-def make_timestamp(*, date: "ColumnOrName", time: "ColumnOrName") -> Column:
-    ...
+def make_timestamp(*, date: "ColumnOrName", time: "ColumnOrName") -> Column: ...
 
 
 @overload
 def make_timestamp(
     *, date: "ColumnOrName", time: "ColumnOrName", timezone: "ColumnOrName"
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @_try_remote_functions
@@ -25355,8 +25327,7 @@ def try_make_timestamp(
     hours: "ColumnOrName",
     mins: "ColumnOrName",
     secs: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @overload
@@ -25368,20 +25339,17 @@ def try_make_timestamp(
     mins: "ColumnOrName",
     secs: "ColumnOrName",
     timezone: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @overload
-def try_make_timestamp(*, date: "ColumnOrName", time: "ColumnOrName") -> Column:
-    ...
+def try_make_timestamp(*, date: "ColumnOrName", time: "ColumnOrName") -> Column: ...
 
 
 @overload
 def try_make_timestamp(
     *, date: "ColumnOrName", time: "ColumnOrName", timezone: "ColumnOrName"
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @_try_remote_functions
@@ -25806,8 +25774,7 @@ def make_timestamp_ntz(
     hours: "ColumnOrName",
     mins: "ColumnOrName",
     secs: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @overload
@@ -25815,8 +25782,7 @@ def make_timestamp_ntz(
     *,
     date: "ColumnOrName",
     time: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @_try_remote_functions
@@ -25963,8 +25929,7 @@ def try_make_timestamp_ntz(
     hours: "ColumnOrName",
     mins: "ColumnOrName",
     secs: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @overload
@@ -25972,8 +25937,7 @@ def try_make_timestamp_ntz(
     *,
     date: "ColumnOrName",
     time: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @_try_remote_functions
@@ -28718,6 +28682,318 @@ def tuple_difference_integer(col1: "ColumnOrName", col2: "ColumnOrName") -> Colu
     return _invoke_function_over_columns("tuple_difference_integer", col1, col2)
 
 
+@_try_remote_functions
+def tuple_difference_theta_double(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    """
+    Subtracts a Datasketches ThetaSketch from a TupleSketch with double summaries
+    (elements in TupleSketch but not in ThetaSketch).
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or column name
+        The TupleSketch column with double summaries
+    col2 : :class:`~pyspark.sql.Column` or column name
+        The ThetaSketch column
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the difference TupleSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tuple_sketch_agg_double`
+    :meth:`pyspark.sql.functions.theta_sketch_agg`
+    :meth:`pyspark.sql.functions.tuple_union_theta_double`
+    :meth:`pyspark.sql.functions.tuple_intersection_theta_double`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(5, 5.0, 4), (1, 1.0, 4), (2, 2.0, 5), (3, 3.0, 1)], ["key1", "v1", "key2"])  # noqa
+    >>> df = df.agg(
+    ...     sf.tuple_sketch_agg_double("key1", "v1").alias("sketch1"),
+    ...     sf.theta_sketch_agg("key2").alias("sketch2")
+    ... )
+    >>> df.select(sf.tuple_sketch_estimate_double(sf.tuple_difference_theta_double(df.sketch1, "sketch2"))).show()  # noqa
+    +-----------------------------------------------------------------------------+
+    |tuple_sketch_estimate_double(tuple_difference_theta_double(sketch1, sketch2))|
+    +-----------------------------------------------------------------------------+
+    |                                                                          2.0|
+    +-----------------------------------------------------------------------------+
+    """
+    return _invoke_function_over_columns("tuple_difference_theta_double", col1, col2)
+
+
+@_try_remote_functions
+def tuple_difference_theta_integer(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    """
+    Subtracts a Datasketches ThetaSketch from a TupleSketch with integer summaries
+    (elements in TupleSketch but not in ThetaSketch).
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or column name
+        The TupleSketch column with integer summaries
+    col2 : :class:`~pyspark.sql.Column` or column name
+        The ThetaSketch column
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the difference TupleSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tuple_sketch_agg_integer`
+    :meth:`pyspark.sql.functions.theta_sketch_agg`
+    :meth:`pyspark.sql.functions.tuple_union_theta_integer`
+    :meth:`pyspark.sql.functions.tuple_intersection_theta_integer`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(5, 5, 4), (1, 1, 4), (2, 2, 5), (3, 3, 1)], ["key1", "v1", "key2"])  # noqa
+    >>> df = df.agg(
+    ...     sf.tuple_sketch_agg_integer("key1", "v1").alias("sketch1"),
+    ...     sf.theta_sketch_agg("key2").alias("sketch2")
+    ... )
+    >>> df.select(sf.tuple_sketch_estimate_integer(sf.tuple_difference_theta_integer(df.sketch1, "sketch2"))).show()  # noqa
+    +-------------------------------------------------------------------------------+
+    |tuple_sketch_estimate_integer(tuple_difference_theta_integer(sketch1, sketch2))|
+    +-------------------------------------------------------------------------------+
+    |                                                                            2.0|
+    +-------------------------------------------------------------------------------+
+    """
+    return _invoke_function_over_columns("tuple_difference_theta_integer", col1, col2)
+
+
+@_try_remote_functions
+def tuple_intersection_theta_double(
+    col1: "ColumnOrName",
+    col2: "ColumnOrName",
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    """
+    Intersects a Datasketches TupleSketch with double summaries with a ThetaSketch.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or column name
+        The TupleSketch column with double summaries
+    col2 : :class:`~pyspark.sql.Column` or column name
+        The ThetaSketch column
+    mode : :class:`~pyspark.sql.Column` or str, optional
+        The summary mode: "sum" (default), "min", "max", or "alwaysone"
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the intersected TupleSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tuple_sketch_agg_double`
+    :meth:`pyspark.sql.functions.theta_sketch_agg`
+    :meth:`pyspark.sql.functions.tuple_union_theta_double`
+    :meth:`pyspark.sql.functions.tuple_intersection_agg_double`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, 1.0, 1), (2, 2.0, 2), (3, 3.0, 4)], ["key1", "v1", "key2"])  # noqa
+    >>> df = df.agg(
+    ...     sf.tuple_sketch_agg_double("key1", "v1").alias("sketch1"),
+    ...     sf.theta_sketch_agg("key2").alias("sketch2")
+    ... )
+    >>> df.select(sf.tuple_sketch_estimate_double(sf.tuple_intersection_theta_double(df.sketch1, "sketch2"))).show()  # noqa
+    +------------------------------------------------------------------------------------+
+    |tuple_sketch_estimate_double(tuple_intersection_theta_double(sketch1, sketch2, sum))|
+    +------------------------------------------------------------------------------------+
+    |                                                                                 2.0|
+    +------------------------------------------------------------------------------------+
+    """
+    fn = "tuple_intersection_theta_double"
+    if mode is None:
+        return _invoke_function_over_columns(fn, col1, col2)
+    else:
+        return _invoke_function_over_columns(fn, col1, col2, lit(mode))
+
+
+@_try_remote_functions
+def tuple_intersection_theta_integer(
+    col1: "ColumnOrName",
+    col2: "ColumnOrName",
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    """
+    Intersects a Datasketches TupleSketch with integer summaries with a ThetaSketch.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or column name
+        The TupleSketch column with integer summaries
+    col2 : :class:`~pyspark.sql.Column` or column name
+        The ThetaSketch column
+    mode : :class:`~pyspark.sql.Column` or str, optional
+        The summary mode: "sum" (default), "min", "max", or "alwaysone"
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the intersected TupleSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tuple_sketch_agg_integer`
+    :meth:`pyspark.sql.functions.theta_sketch_agg`
+    :meth:`pyspark.sql.functions.tuple_union_theta_integer`
+    :meth:`pyspark.sql.functions.tuple_intersection_agg_integer`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, 1, 1), (2, 2, 2), (3, 3, 4)], ["key1", "v1", "key2"])  # noqa
+    >>> df = df.agg(
+    ...     sf.tuple_sketch_agg_integer("key1", "v1").alias("sketch1"),
+    ...     sf.theta_sketch_agg("key2").alias("sketch2")
+    ... )
+    >>> df.select(sf.tuple_sketch_estimate_integer(sf.tuple_intersection_theta_integer(df.sketch1, "sketch2"))).show()  # noqa
+    +--------------------------------------------------------------------------------------+
+    |tuple_sketch_estimate_integer(tuple_intersection_theta_integer(sketch1, sketch2, sum))|
+    +--------------------------------------------------------------------------------------+
+    |                                                                                   2.0|
+    +--------------------------------------------------------------------------------------+
+    """
+    fn = "tuple_intersection_theta_integer"
+    if mode is None:
+        return _invoke_function_over_columns(fn, col1, col2)
+    else:
+        return _invoke_function_over_columns(fn, col1, col2, lit(mode))
+
+
+@_try_remote_functions
+def tuple_union_theta_double(
+    col1: "ColumnOrName",
+    col2: "ColumnOrName",
+    lgNomEntries: Optional[Union[int, Column]] = None,
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    """
+    Merges a Datasketches TupleSketch with double summaries with a ThetaSketch.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or column name
+        The TupleSketch column with double summaries
+    col2 : :class:`~pyspark.sql.Column` or column name
+        The ThetaSketch column
+    lgNomEntries : :class:`~pyspark.sql.Column` or int, optional
+        The log-base-2 of nominal entries (must be between 4 and 26, defaults to 12)
+    mode : :class:`~pyspark.sql.Column` or str, optional
+        The summary mode: "sum" (default), "min", "max", or "alwaysone"
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the merged TupleSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tuple_sketch_agg_double`
+    :meth:`pyspark.sql.functions.theta_sketch_agg`
+    :meth:`pyspark.sql.functions.tuple_union_agg_double`
+    :meth:`pyspark.sql.functions.tuple_intersection_theta_double`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, 10.0, 3), (2, 20.0, 4)], ["key1", "v1", "key2"])  # noqa
+    >>> df = df.agg(
+    ...     sf.tuple_sketch_agg_double("key1", "v1").alias("sketch1"),
+    ...     sf.theta_sketch_agg("key2").alias("sketch2")
+    ... )
+    >>> df.select(sf.tuple_sketch_estimate_double(sf.tuple_union_theta_double(df.sketch1, "sketch2"))).show()  # noqa
+    +---------------------------------------------------------------------------------+
+    |tuple_sketch_estimate_double(tuple_union_theta_double(sketch1, sketch2, 12, sum))|
+    +---------------------------------------------------------------------------------+
+    |                                                                              4.0|
+    +---------------------------------------------------------------------------------+
+    """
+    fn = "tuple_union_theta_double"
+    _lgNomEntries = lit(12) if lgNomEntries is None else lit(lgNomEntries)
+    _mode = lit("sum") if mode is None else lit(mode)
+
+    return _invoke_function_over_columns(fn, col1, col2, _lgNomEntries, _mode)
+
+
+@_try_remote_functions
+def tuple_union_theta_integer(
+    col1: "ColumnOrName",
+    col2: "ColumnOrName",
+    lgNomEntries: Optional[Union[int, Column]] = None,
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    """
+    Merges a Datasketches TupleSketch with integer summaries with a ThetaSketch.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or column name
+        The TupleSketch column with integer summaries
+    col2 : :class:`~pyspark.sql.Column` or column name
+        The ThetaSketch column
+    lgNomEntries : :class:`~pyspark.sql.Column` or int, optional
+        The log-base-2 of nominal entries (must be between 4 and 26, defaults to 12)
+    mode : :class:`~pyspark.sql.Column` or str, optional
+        The summary mode: "sum" (default), "min", "max", or "alwaysone"
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the merged TupleSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tuple_sketch_agg_integer`
+    :meth:`pyspark.sql.functions.theta_sketch_agg`
+    :meth:`pyspark.sql.functions.tuple_union_agg_integer`
+    :meth:`pyspark.sql.functions.tuple_intersection_theta_integer`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, 10, 3), (2, 20, 4)], ["key1", "v1", "key2"])  # noqa
+    >>> df = df.agg(
+    ...     sf.tuple_sketch_agg_integer("key1", "v1").alias("sketch1"),
+    ...     sf.theta_sketch_agg("key2").alias("sketch2")
+    ... )
+    >>> df.select(sf.tuple_sketch_estimate_integer(sf.tuple_union_theta_integer(df.sketch1, "sketch2"))).show()  # noqa
+    +-----------------------------------------------------------------------------------+
+    |tuple_sketch_estimate_integer(tuple_union_theta_integer(sketch1, sketch2, 12, sum))|
+    +-----------------------------------------------------------------------------------+
+    |                                                                                4.0|
+    +-----------------------------------------------------------------------------------+
+    """
+    fn = "tuple_union_theta_integer"
+    _lgNomEntries = lit(12) if lgNomEntries is None else lit(lgNomEntries)
+    _mode = lit("sum") if mode is None else lit(mode)
+
+    return _invoke_function_over_columns(fn, col1, col2, _lgNomEntries, _mode)
+
+
 # ---------------------- Predicates functions ------------------------------
 
 
@@ -29949,8 +30225,7 @@ def udf(
     returnType: "DataTypeOrString" = StringType(),
     *,
     useArrow: Optional[bool] = None,
-) -> "UserDefinedFunctionLike":
-    ...
+) -> "UserDefinedFunctionLike": ...
 
 
 @overload
@@ -29958,8 +30233,7 @@ def udf(
     f: Optional["DataTypeOrString"] = None,
     *,
     useArrow: Optional[bool] = None,
-) -> Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]:
-    ...
+) -> Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]: ...
 
 
 @overload
@@ -29967,8 +30241,7 @@ def udf(
     *,
     returnType: "DataTypeOrString" = StringType(),
     useArrow: Optional[bool] = None,
-) -> Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]:
-    ...
+) -> Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]: ...
 
 
 @_try_remote_functions
@@ -30413,7 +30686,7 @@ def _test() -> None:
     sc = spark.sparkContext
     globs["sc"] = sc
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.functions.builtin,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

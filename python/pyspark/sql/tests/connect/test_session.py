@@ -27,11 +27,10 @@ if should_test_connect:
     from pyspark.sql.connect.client import DefaultChannelBuilder
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
 
-
-class CustomChannelBuilder(DefaultChannelBuilder):
-    @property
-    def userId(self) -> Optional[str]:
-        return "abc"
+    class CustomChannelBuilder(DefaultChannelBuilder):
+        @property
+        def userId(self) -> Optional[str]:
+            return "abc"
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)

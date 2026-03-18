@@ -108,7 +108,7 @@ class VariableResolution(tempVariableManager: TempVariableManager) extends SQLCo
 
     SqlScriptingContextManager
       .get()
-      .map(_.getVariableManager)
+      .flatMap(_.getVariableManager)
       // If variable name is qualified with session.<varName> treat it as a session variable.
       .filterNot(
         _ =>

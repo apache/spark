@@ -21,12 +21,13 @@ import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
 
+import org.scalatest.Ignore
+
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ByteType, ShortType, StructType}
-import org.apache.spark.tags.DockerTest
 
 /**
  * To run this test suite for a specific version (e.g., icr.io/db2_community/db2:11.5.9.0):
@@ -36,7 +37,7 @@ import org.apache.spark.tags.DockerTest
  *     "docker-integration-tests/testOnly org.apache.spark.sql.jdbc.DB2IntegrationSuite"
  * }}}
  */
-@DockerTest
+@Ignore // TODO(SPARK-55707): Re-enable DB2 JDBC Driver tests
 class DB2IntegrationSuite extends SharedJDBCIntegrationSuite {
   override val db = new DB2DatabaseOnDocker
 

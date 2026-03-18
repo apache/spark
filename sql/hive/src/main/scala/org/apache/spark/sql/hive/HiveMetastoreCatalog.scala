@@ -178,19 +178,22 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING).toString)
       storage.copy(
         serde = None,
-        properties = options
+        properties = options,
+        serdeName = None
       )
     } else {
       val options = storage.properties
       if (SQLConf.get.getConf(SQLConf.ORC_IMPLEMENTATION) == "native") {
         storage.copy(
           serde = None,
-          properties = options
+          properties = options,
+          serdeName = None
         )
       } else {
         storage.copy(
           serde = None,
-          properties = options
+          properties = options,
+          serdeName = None
         )
       }
     }

@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import os
 import functools
 import pyarrow as pa
 from itertools import islice, chain
@@ -44,8 +43,8 @@ from pyspark.sql.types import (
     StructType,
 )
 from pyspark.sql.worker.utils import worker_run
-from pyspark.util import local_connect_and_auth
 from pyspark.worker_util import (
+    get_sock_file_to_executor,
     read_command,
     pickleSer,
     utf8_deserializer,
@@ -101,6 +100,17 @@ def records_to_arrow_batches(
                         "actual": str(first_element.schema.names),
                     },
                 )
+        # Validate that the Arrow schema types match the expected output schema.
+        # This prevents cryptic errors from Arrow's VectorLoader when the batch
+        # buffer layout doesn't match what the JVM expects (e.g., SPARK-55583).
+        if not pa_schema.equals(first_element.schema):
+            raise PySparkRuntimeError(
+                errorClass="DATA_SOURCE_RETURN_SCHEMA_MISMATCH",
+                messageParameters={
+                    "expected": str(pa_schema),
+                    "actual": str(first_element.schema),
+                },
+            )
 
         yield first_element
         for element in output_iter:
@@ -200,12 +210,12 @@ def write_read_func_and_partitions(
         # Deserialize the partition value.
         partition = pickleSer.loads(partition_bytes)
 
-        assert partition is None or isinstance(partition, InputPartition), (
+        assert isinstance(partition, InputPartition), (
             "Expected the partition value to be of type 'InputPartition', "
             f"but found '{type(partition).__name__}'."
         )
 
-        output_iter = reader.read(partition)  # type: ignore[arg-type]
+        output_iter = reader.read(partition)
 
         # Validate the output iterator.
         if not isinstance(output_iter, Iterator):
@@ -220,6 +230,11 @@ def write_read_func_and_partitions(
 
         return records_to_arrow_batches(output_iter, max_arrow_batch_size, return_type, data_source)
 
+    # Set the module name so UDF worker can recognize that this is a data source function.
+    # This is needed when simple worker is used because the __module__ will be set to
+    # __main__, which confuses the profiler logic.
+    data_source_read_func.__module__ = "pyspark.sql.worker.plan_data_source_read"
+
     command = (data_source_read_func, return_type)
     pickleSer._write_with_length(command, outfile)
 
@@ -227,27 +242,29 @@ def write_read_func_and_partitions(
         # The partitioning of python batch source read is determined before query execution.
         try:
             partitions = reader.partitions()  # type: ignore[call-arg]
-            if not isinstance(partitions, list):
-                raise PySparkRuntimeError(
-                    errorClass="DATA_SOURCE_TYPE_MISMATCH",
-                    messageParameters={
-                        "expected": "'partitions' to return a list",
-                        "actual": f"'{type(partitions).__name__}'",
-                    },
-                )
-            if not all(isinstance(p, InputPartition) for p in partitions):
-                partition_types = ", ".join([f"'{type(p).__name__}'" for p in partitions])
-                raise PySparkRuntimeError(
-                    errorClass="DATA_SOURCE_TYPE_MISMATCH",
-                    messageParameters={
-                        "expected": "elements in 'partitions' to be of type 'InputPartition'",
-                        "actual": partition_types,
-                    },
-                )
-            if len(partitions) == 0:
-                partitions = [None]  # type: ignore[list-item]
         except NotImplementedError:
-            partitions = [None]  # type: ignore[list-item]
+            # Backward compatibility for data sources that raise NotImplementedError for partitions
+            # Our old base class did this so an old client may still be using it.
+            partitions = [InputPartition(None)]
+        if not isinstance(partitions, list):
+            raise PySparkRuntimeError(
+                errorClass="DATA_SOURCE_TYPE_MISMATCH",
+                messageParameters={
+                    "expected": "'partitions' to return a list",
+                    "actual": f"'{type(partitions).__name__}'",
+                },
+            )
+        if not all(isinstance(p, InputPartition) for p in partitions):
+            partition_types = ", ".join([f"'{type(p).__name__}'" for p in partitions])
+            raise PySparkRuntimeError(
+                errorClass="DATA_SOURCE_TYPE_MISMATCH",
+                messageParameters={
+                    "expected": "elements in 'partitions' to be of type 'InputPartition'",
+                    "actual": partition_types,
+                },
+            )
+        if len(partitions) == 0:
+            partitions = [InputPartition(None)]
 
         # Return the serialized partition values.
         write_int(len(partitions), outfile)
@@ -376,12 +393,5 @@ def main(infile: IO, outfile: IO) -> None:
 
 
 if __name__ == "__main__":
-    # Read information about how to connect back to the JVM from the environment.
-    conn_info = os.environ.get(
-        "PYTHON_WORKER_FACTORY_SOCK_PATH", int(os.environ.get("PYTHON_WORKER_FACTORY_PORT", -1))
-    )
-    auth_secret = os.environ.get("PYTHON_WORKER_FACTORY_SECRET")
-    (sock_file, _) = local_connect_and_auth(conn_info, auth_secret)
-    write_int(os.getpid(), sock_file)
-    sock_file.flush()
-    main(sock_file, sock_file)
+    with get_sock_file_to_executor() as sock_file:
+        main(sock_file, sock_file)

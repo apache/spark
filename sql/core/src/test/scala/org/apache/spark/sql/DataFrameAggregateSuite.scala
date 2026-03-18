@@ -709,6 +709,31 @@ class DataFrameAggregateSuite extends QueryTest
     )
   }
 
+  test("SPARK-55501: listagg with DISTINCT and ORDER BY") {
+    val df = Seq(1, 2, 10, 1, 9).toDF("a")
+
+    withSQLConf(SQLConf.LISTAGG_ALLOW_DISTINCT_CAST_WITH_ORDER.key -> "true") {
+      checkAnswer(
+        df.selectExpr("listagg(distinct a, ', ') within group (order by a)"),
+        Seq(Row("1, 2, 9, 10"))
+      )
+    }
+
+    withSQLConf(SQLConf.LISTAGG_ALLOW_DISTINCT_CAST_WITH_ORDER.key -> "false") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.selectExpr("listagg(distinct a) within group (order by a)")
+        },
+        condition = "INVALID_WITHIN_GROUP_EXPRESSION.MISMATCH_WITH_DISTINCT_INPUT",
+        parameters = Map(
+          "funcName" -> "`listagg`",
+          "funcArg" -> "\"a\"",
+          "orderingExpr" -> "\"a\""
+        )
+      )
+    }
+  }
+
   test("SPARK-31500: collect_set() of BinaryType returns duplicate elements") {
     val bytesTest1 = "test1".getBytes
     val bytesTest2 = "test2".getBytes
@@ -1383,8 +1408,12 @@ class DataFrameAggregateSuite extends QueryTest
       val error = intercept[Exception] {
         sql(s"SELECT $fn(x, y, 'two') FROM VALUES (('a', 10)) AS tab(x, y)").collect()
       }
-      assert(error.getMessage.contains("CAST_INVALID_INPUT") ||
-        error.getMessage.contains("cannot be cast"))
+      if (conf.ansiEnabled) {
+        assert(error.getMessage.contains("CAST_INVALID_INPUT") ||
+          error.getMessage.contains("cannot be cast"))
+      } else {
+        assert(error.getMessage.contains("VALUE_OUT_OF_RANGE"))
+      }
     }
 
     // Error: k must be positive
@@ -4203,6 +4232,257 @@ class DataFrameAggregateSuite extends QueryTest
       .select(tuple_sketch_estimate_integer(tuple_difference_integer($"sketch", $"sketch2")))
       .collect()(0)(0)
     assert(estimate == 1.0)
+  }
+
+  test("SPARK-55558: tuple_difference_theta_double basic functionality") {
+    val df1 = Seq((1, 1.5), (2, 2.5), (3, 3.5), (5, 5.5)).toDF("key", "summary")
+    val df2 = Seq(1, 2, 4).toDF("value")
+
+    val tupleSketchDf = df1.agg(tuple_sketch_agg_double($"key", $"summary").alias("tuple_sketch"))
+    val thetaSketchDf = df2.agg(theta_sketch_agg($"value").alias("theta_sketch"))
+
+    val joined = tupleSketchDf.crossJoin(thetaSketchDf)
+
+    // Test difference (keys in tuple_sketch but not in theta_sketch: 3 and 5)
+    val difference = joined
+      .select(tuple_difference_theta_double($"tuple_sketch", $"theta_sketch"))
+      .collect()(0)(0)
+    assert(difference != null)
+    assert(difference.asInstanceOf[Array[Byte]].length > 0)
+
+    // Test with column names
+    val difference2 = joined
+      .select(tuple_difference_theta_double("tuple_sketch", "theta_sketch"))
+      .collect()(0)(0)
+    assert(difference2 != null)
+
+    // Verify estimate from difference (keys 3 and 5 remain)
+    val estimate = joined
+      .select(tuple_sketch_estimate_double(
+        tuple_difference_theta_double($"tuple_sketch", $"theta_sketch")))
+      .collect()(0)(0)
+    assert(estimate == 2.0)
+
+    // Verify summary value from difference (3.5 + 5.5 = 9.0)
+    val summary = joined
+      .select(tuple_sketch_summary_double(
+        tuple_difference_theta_double($"tuple_sketch", $"theta_sketch")))
+      .collect()(0)(0)
+    assert(summary == 9.0)
+  }
+
+  test("SPARK-55558: tuple_difference_theta_integer basic functionality") {
+    val df1 = Seq((1, 10), (2, 20), (3, 30), (5, 50)).toDF("key", "summary")
+    val df2 = Seq(1, 2, 4).toDF("value")
+
+    val tupleSketchDf = df1.agg(tuple_sketch_agg_integer($"key", $"summary").alias("tuple_sketch"))
+    val thetaSketchDf = df2.agg(theta_sketch_agg($"value").alias("theta_sketch"))
+
+    val joined = tupleSketchDf.crossJoin(thetaSketchDf)
+
+    // Test difference (keys in tuple_sketch but not in theta_sketch: 3 and 5)
+    val difference = joined
+      .select(tuple_difference_theta_integer($"tuple_sketch", $"theta_sketch"))
+      .collect()(0)(0)
+    assert(difference != null)
+
+    // Test with column names
+    val difference2 = joined
+      .select(tuple_difference_theta_integer("tuple_sketch", "theta_sketch"))
+      .collect()(0)(0)
+    assert(difference2 != null)
+
+    // Verify estimate from difference (keys 3 and 5 remain)
+    val estimate = joined
+      .select(tuple_sketch_estimate_integer(
+        tuple_difference_theta_integer($"tuple_sketch", $"theta_sketch")))
+      .collect()(0)(0)
+    assert(estimate == 2.0)
+
+    // Verify summary value from difference (30 + 50 = 80)
+    val summary = joined
+      .select(tuple_sketch_summary_integer(
+        tuple_difference_theta_integer($"tuple_sketch", $"theta_sketch")))
+      .collect()(0)(0)
+    assert(summary == 80)
+  }
+
+  test("SPARK-55558: tuple_intersection_theta_double basic functionality") {
+    val df1 = Seq((1, 1.5), (2, 2.5), (3, 3.5)).toDF("key", "summary")
+    val df2 = Seq(2, 3, 4).toDF("value")
+
+    val tupleSketchDf = df1.agg(tuple_sketch_agg_double($"key", $"summary").alias("tuple_sketch"))
+    val thetaSketchDf = df2.agg(theta_sketch_agg($"value").alias("theta_sketch"))
+
+    val joined = tupleSketchDf.crossJoin(thetaSketchDf)
+
+    // Test intersection with default mode
+    val intersection1 = joined
+      .select(tuple_intersection_theta_double($"tuple_sketch", $"theta_sketch"))
+      .collect()(0)(0)
+    assert(intersection1 != null)
+    assert(intersection1.asInstanceOf[Array[Byte]].length > 0)
+
+    // Test intersection with mode
+    val intersection2 = joined
+      .select(tuple_intersection_theta_double($"tuple_sketch", $"theta_sketch", "sum"))
+      .collect()(0)(0)
+    assert(intersection2 != null)
+
+    // Test with column names and min mode
+    val intersection3 = joined
+      .select(tuple_intersection_theta_double("tuple_sketch", "theta_sketch", "min"))
+      .collect()(0)(0)
+    assert(intersection3 != null)
+
+    // Verify estimate from intersection (keys 2 and 3 are common)
+    val estimate = joined
+      .select(tuple_sketch_estimate_double(
+        tuple_intersection_theta_double($"tuple_sketch", $"theta_sketch")))
+      .collect()(0)(0)
+    assert(estimate == 2.0)
+
+    // Verify summary value from intersection (2.5 + 3.5 = 6.0)
+    val summary = joined
+      .select(tuple_sketch_summary_double(
+        tuple_intersection_theta_double($"tuple_sketch", $"theta_sketch")))
+      .collect()(0)(0)
+    assert(summary == 6.0)
+  }
+
+  test("SPARK-55558: tuple_intersection_theta_integer basic functionality") {
+    val df1 = Seq((1, 10), (2, 20), (3, 30)).toDF("key", "summary")
+    val df2 = Seq(2, 3, 4).toDF("value")
+
+    val tupleSketchDf = df1.agg(tuple_sketch_agg_integer($"key", $"summary").alias("tuple_sketch"))
+    val thetaSketchDf = df2.agg(theta_sketch_agg($"value").alias("theta_sketch"))
+
+    val joined = tupleSketchDf.crossJoin(thetaSketchDf)
+
+    // Test intersection with default mode
+    val intersection1 = joined
+      .select(tuple_intersection_theta_integer($"tuple_sketch", $"theta_sketch"))
+      .collect()(0)(0)
+    assert(intersection1 != null)
+
+    // Test intersection with mode
+    val intersection2 = joined
+      .select(tuple_intersection_theta_integer($"tuple_sketch", $"theta_sketch", "max"))
+      .collect()(0)(0)
+    assert(intersection2 != null)
+
+    // Test with column names
+    val intersection3 = joined
+      .select(tuple_intersection_theta_integer("tuple_sketch", "theta_sketch"))
+      .collect()(0)(0)
+    assert(intersection3 != null)
+
+    // Verify estimate from intersection (keys 2 and 3 are common)
+    val estimate = joined
+      .select(tuple_sketch_estimate_integer(
+        tuple_intersection_theta_integer($"tuple_sketch", $"theta_sketch")))
+      .collect()(0)(0)
+    assert(estimate == 2.0)
+
+    // Verify summary value from intersection (20 + 30 = 50)
+    val summary = joined
+      .select(tuple_sketch_summary_integer(
+        tuple_intersection_theta_integer($"tuple_sketch", $"theta_sketch")))
+      .collect()(0)(0)
+    assert(summary == 50)
+  }
+
+  test("SPARK-55558: tuple_union_theta_double basic functionality") {
+    val df1 = Seq((1, 1.5), (2, 2.5)).toDF("key", "summary")
+    val df2 = Seq(3, 4).toDF("value")
+
+    val tupleSketchDf = df1.agg(tuple_sketch_agg_double($"key", $"summary").alias("tuple_sketch"))
+    val thetaSketchDf = df2.agg(theta_sketch_agg($"value").alias("theta_sketch"))
+
+    val joined = tupleSketchDf.crossJoin(thetaSketchDf)
+
+    // Test union with default parameters
+    val union1 = joined
+      .select(tuple_union_theta_double($"tuple_sketch", $"theta_sketch"))
+      .collect()(0)(0)
+    assert(union1 != null)
+    assert(union1.asInstanceOf[Array[Byte]].length > 0)
+
+    // Test union with lgNomEntries
+    val union2 = joined
+      .select(tuple_union_theta_double($"tuple_sketch", $"theta_sketch", 10))
+      .collect()(0)(0)
+    assert(union2 != null)
+
+    // Test union with lgNomEntries and mode
+    val union3 = joined
+      .select(tuple_union_theta_double($"tuple_sketch", $"theta_sketch", 10, "sum"))
+      .collect()(0)(0)
+    assert(union3 != null)
+
+    // Test with column names
+    val union4 = joined
+      .select(tuple_union_theta_double("tuple_sketch", "theta_sketch"))
+      .collect()(0)(0)
+    assert(union4 != null)
+
+    // Verify estimate from union (all 4 keys: 1, 2, 3, 4)
+    val estimate = joined
+      .select(tuple_sketch_estimate_double(
+        tuple_union_theta_double($"tuple_sketch", $"theta_sketch")))
+      .collect()(0)(0)
+    assert(estimate == 4.0)
+
+    // Verify summary value from union (1.5 + 2.5 + 0.0 + 0.0 = 4.0)
+    // Theta sketch entries (3, 4) get default value 0.0 for sum mode
+    val summary = joined
+      .select(tuple_sketch_summary_double(
+        tuple_union_theta_double($"tuple_sketch", $"theta_sketch")))
+      .collect()(0)(0)
+    assert(summary == 4.0)
+  }
+
+  test("SPARK-55558: tuple_union_theta_integer basic functionality") {
+    val df1 = Seq((1, 10), (2, 20)).toDF("key", "summary")
+    val df2 = Seq(3, 4).toDF("value")
+
+    val tupleSketchDf = df1.agg(tuple_sketch_agg_integer($"key", $"summary").alias("tuple_sketch"))
+    val thetaSketchDf = df2.agg(theta_sketch_agg($"value").alias("theta_sketch"))
+
+    val joined = tupleSketchDf.crossJoin(thetaSketchDf)
+
+    // Test union with default parameters
+    val union1 = joined
+      .select(tuple_union_theta_integer($"tuple_sketch", $"theta_sketch"))
+      .collect()(0)(0)
+    assert(union1 != null)
+
+    // Test union with lgNomEntries and mode
+    val union2 = joined
+      .select(tuple_union_theta_integer($"tuple_sketch", $"theta_sketch", 10, "max"))
+      .collect()(0)(0)
+    assert(union2 != null)
+
+    // Test with column names and lgNomEntries
+    val union3 = joined
+      .select(tuple_union_theta_integer("tuple_sketch", "theta_sketch", 10))
+      .collect()(0)(0)
+    assert(union3 != null)
+
+    // Verify estimate from union (all 4 keys: 1, 2, 3, 4)
+    val estimate = joined
+      .select(tuple_sketch_estimate_integer(
+        tuple_union_theta_integer($"tuple_sketch", $"theta_sketch")))
+      .collect()(0)(0)
+    assert(estimate == 4.0)
+
+    // Verify summary value from union (10 + 20 + 0 + 0 = 30)
+    // Theta sketch entries (3, 4) get default value 0 for sum mode
+    val summary = joined
+      .select(tuple_sketch_summary_integer(
+        tuple_union_theta_integer($"tuple_sketch", $"theta_sketch")))
+      .collect()(0)(0)
+    assert(summary == 30)
   }
 
   test("SPARK-54179: tuple_union_agg_double basic functionality") {
