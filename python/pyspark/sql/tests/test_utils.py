@@ -1806,9 +1806,7 @@ class UtilsTestsMixin:
             errorClass="SESSION_MUTATION_IN_DECLARATIVE_PIPELINE.SET_RUNTIME_CONF",
             messageParameters=params,
         )
-        self.check_error(
-            ex, "SESSION_MUTATION_IN_DECLARATIVE_PIPELINE", messageParameters=params
-        )
+        self.check_error(ex, "SESSION_MUTATION_IN_DECLARATIVE_PIPELINE", messageParameters=params)
         self.check_error(
             ex,
             "SESSION_MUTATION_IN_DECLARATIVE_PIPELINE.SET_RUNTIME_CONF",
