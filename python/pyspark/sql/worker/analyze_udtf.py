@@ -41,8 +41,7 @@ from pyspark.worker_util import (
 
 class UDTFHandler(Protocol):
     @staticmethod
-    def analyze(*args: Any, **kwargs: Any) -> AnalyzeResult:
-        ...
+    def analyze(*args: Any, **kwargs: Any) -> AnalyzeResult: ...
 
 
 def read_udtf(infile: IO) -> type[UDTFHandler]:
