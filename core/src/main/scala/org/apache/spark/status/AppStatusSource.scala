@@ -82,8 +82,6 @@ private[spark] class AppStatusSource extends Source {
 
   val SNAPSHOT_WRITE_FAILURES = getCounter("historySnapshot", "writeFailures")
 
-  val SNAPSHOT_WRITE_BYTES = getCounter("historySnapshot", "writeBytes")
-
   val SNAPSHOT_WRITE_TIME: Timer = metricRegistry.timer(
     MetricRegistry.name("historySnapshot", "writeTime"))
 

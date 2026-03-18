@@ -117,6 +117,7 @@ private[spark] object History {
     .doc("Whether Spark should write a protobuf history snapshot for completed applications " +
       "and allow the History Server to load that snapshot instead of replaying the event log.")
     .version("4.1.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .booleanConf
     .createWithDefault(false)
 
@@ -124,16 +125,9 @@ private[spark] object History {
     .doc("Shared filesystem or object store path where Spark writes protobuf history snapshots " +
       "for completed applications and the History Server reads them from.")
     .version("4.1.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .stringConf
     .createOptional
-
-  val SNAPSHOT_INCLUDE_TASKS = ConfigBuilder("spark.history.snapshot.includeTasks")
-    .doc("Whether history snapshots should include task rows. Keeping this disabled makes " +
-      "snapshots much smaller, but task-detail pages will not be available from snapshot-backed " +
-      "applications unless the History Server falls back to event-log replay.")
-    .version("4.1.0")
-    .booleanConf
-    .createWithDefault(false)
 
   val MAX_LOCAL_DISK_USAGE = ConfigBuilder("spark.history.store.maxDiskUsage")
     .version("2.3.0")

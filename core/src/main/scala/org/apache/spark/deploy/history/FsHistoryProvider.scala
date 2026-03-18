@@ -92,6 +92,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   import FsHistoryProvider._
 
+  private case class InvalidHistorySnapshotException(snapshot: Path, cause: Throwable)
+    extends IOException(s"History snapshot $snapshot is invalid.", cause)
+
   // Interval between safemode checks.
   private val SAFEMODE_CHECK_INTERVAL_S = conf.get(History.SAFEMODE_CHECK_INTERVAL_S)
 
@@ -1502,6 +1505,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       try {
         return createDiskStoreFromSnapshot(dm, appId, attempt, metadata, snapshot)
       } catch {
+        case e: InvalidHistorySnapshotException =>
+          logInfo(s"Failed to import invalid snapshot for $appId/${attempt.info.attemptId}.", e)
+          HistorySnapshotStore.invalidateSnapshot(conf, appId, snapshot)
         case e: Exception =>
           logInfo(s"Failed to import snapshot for $appId/${attempt.info.attemptId}.", e)
       }
@@ -1651,20 +1657,29 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       metadata: AppStatusStoreMetadata,
       manifestPath: Path): KVStore = {
     var newStorePath: File = null
-    val snapshotSize = HistorySnapshotStore.snapshotSize(conf, manifestPath)
+    val snapshotSize = try {
+      HistorySnapshotStore.snapshotSize(conf, manifestPath)
+    } catch {
+      case e: Exception =>
+        throw InvalidHistorySnapshotException(manifestPath, e)
+    }
     while (newStorePath == null) {
       val lease = dm.leaseExact(snapshotSize)
       val startNs = System.nanoTime()
       try {
         Utils.tryWithResource(KVUtils.open(lease.tmpPath, metadata, conf, live = false)) { store =>
-          HistorySnapshotStore.restoreSnapshot(conf, store, manifestPath)
+          try {
+            HistorySnapshotStore.restoreSnapshot(conf, store, manifestPath)
+          } catch {
+            case e: Exception =>
+              throw InvalidHistorySnapshotException(manifestPath, e)
+          }
         }
         newStorePath = lease.commit(appId, attempt.info.attemptId)
         val durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs)
         logInfo(
-          s"Restored history snapshot $manifestPath for $appId/${attempt.info.attemptId} " +
-            s"into disk store in ${durationMs} ms " +
-            s"(${Utils.bytesToString(snapshotSize)})")
+          s"Restored history snapshot $manifestPath for appId: $appId " +
+            s"into disk store in ${durationMs} ms")
       } catch {
         case e: Exception =>
           lease.rollback()
@@ -1683,21 +1698,17 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       try {
         HistorySnapshotStore.restoreSnapshot(conf, store, snapshot)
         val durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs)
-        val sizeString = try {
-          Utils.bytesToString(HistorySnapshotStore.snapshotSize(conf, snapshot))
-        } catch {
-          case NonFatal(e) =>
-            logWarning(s"Failed to measure history snapshot size at $snapshot.", e)
-            "unknown size"
-        }
         logInfo(
-          s"Restored history snapshot $snapshot for $appId/${attempt.info.attemptId} " +
-            s"into in-memory store in ${durationMs} ms ($sizeString)")
+          s"Restored history snapshot $snapshot for appId: $appId " +
+            s"into in-memory store in ${durationMs} ms")
         return store
       } catch {
         case e: Exception =>
-          logInfo(s"Failed to import snapshot for $appId/${attempt.info.attemptId}.", e)
-          store.close()
+          logInfo(s"Failed to import history snapshot $snapshot for appId: $appId.", e)
+          Utils.tryLogNonFatalError {
+            store.close()
+          }
+          HistorySnapshotStore.invalidateSnapshot(conf, appId, snapshot)
       }
     }
 

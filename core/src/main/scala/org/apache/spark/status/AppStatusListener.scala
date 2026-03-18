@@ -63,6 +63,7 @@ private[spark] class AppStatusListener(
   // meaning only the last write will happen. For live applications, this avoids a few
   // operations that we can live without when rapidly processing incoming task events.
   private val liveUpdatePeriodNs = if (live) conf.get(LIVE_ENTITY_UPDATE_PERIOD) else -1L
+  private val historySnapshotEnabled = live && HistorySnapshotStore.isEnabled(conf)
 
   /**
    * Minimum time elapsed before stale UI data is flushed. This avoids UI staleness when incoming
@@ -105,8 +106,16 @@ private[spark] class AppStatusListener(
   }
 
   kvstore.onFlush {
-    val now = System.nanoTime()
-    flush(update(_, now))
+    if (!live || historySnapshotEnabled) {
+      val now = System.nanoTime()
+      flush(update(_, now))
+    }
+  }
+
+  if (historySnapshotEnabled) {
+    kvstore.onClose {
+      writeHistorySnapshot()
+    }
   }
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
@@ -213,52 +222,6 @@ private[spark] class AppStatusListener(
       Seq(attempt))
     kvstore.write(new ApplicationInfoWrapper(appInfo))
     flush(update(_, System.nanoTime()))
-  }
-
-  private[spark] def writeSnapshotIfNeeded(): Unit = {
-    if (live && appInfo != null && appInfo.attempts.lastOption.exists(_.completed)) {
-      val attemptId = appInfo.attempts.lastOption.flatMap(_.attemptId)
-      val targetManifestPath = HistorySnapshotStore.manifestPath(conf, appInfo.id, attemptId)
-      val startNs = System.nanoTime()
-      try {
-        HistorySnapshotStore.writeSnapshot(conf, kvstore, appInfo.id, attemptId).foreach {
-          manifestPath =>
-            val durationNs = System.nanoTime() - startNs
-            val snapshotBytes = try {
-              Some(HistorySnapshotStore.snapshotSize(conf, manifestPath))
-            } catch {
-              case NonFatal(e) =>
-                logWarning(
-                  s"Failed to measure history snapshot size for ${appInfo.id}/" +
-                    s"${attemptId.getOrElse("")} at $manifestPath.",
-                  e)
-                None
-            }
-            appStatusSource.foreach { source =>
-              source.SNAPSHOT_WRITES.inc()
-              snapshotBytes.foreach(source.SNAPSHOT_WRITE_BYTES.inc)
-              source.SNAPSHOT_WRITE_TIME.update(durationNs, TimeUnit.NANOSECONDS)
-            }
-            val durationMs = TimeUnit.NANOSECONDS.toMillis(durationNs)
-            val sizeString = snapshotBytes.map(Utils.bytesToString).getOrElse("unknown size")
-            logInfo(
-              s"Wrote history snapshot for ${appInfo.id}/${attemptId.getOrElse("")} to " +
-                s"$manifestPath in ${Utils.msDurationToString(durationMs)} " +
-                s"($sizeString).")
-        }
-      } catch {
-        case NonFatal(e) =>
-          val durationNs = System.nanoTime() - startNs
-          appStatusSource.foreach { source =>
-            source.SNAPSHOT_WRITE_FAILURES.inc()
-            source.SNAPSHOT_WRITE_TIME.update(durationNs, TimeUnit.NANOSECONDS)
-          }
-          logWarning(
-            s"Failed to write history snapshot for ${appInfo.id}/${attemptId.getOrElse("")}" +
-              targetManifestPath.map(path => s" to $path").getOrElse("."),
-            e)
-      }
-    }
   }
 
   override def onExecutorAdded(event: SparkListenerExecutorAdded): Unit = {
@@ -1479,6 +1442,41 @@ private[spark] class AppStatusListener(
       math.max(retainedSize / 10L, dataSize - retainedSize)
     } else {
       0L
+    }
+  }
+
+  /** Writes the final history snapshot once the application store is closed. */
+  private def writeHistorySnapshot(): Unit = {
+    if (!HistorySnapshotStore.shouldWriteSnapshot(appInfo)) {
+      return
+    }
+
+    val appId = appInfo.id
+    val attemptId = appInfo.attempts.lastOption.flatMap(_.attemptId)
+    val targetManifestPath = HistorySnapshotStore.manifestPath(conf, appId, attemptId)
+    val startNs = System.nanoTime()
+
+    try {
+      HistorySnapshotStore.writeSnapshot(conf, kvstore, appId, attemptId).foreach { manifestPath =>
+        val durationNs = System.nanoTime() - startNs
+        appStatusSource.foreach(_.SNAPSHOT_WRITES.inc())
+        appStatusSource.foreach(_.SNAPSHOT_WRITE_TIME.update(durationNs, TimeUnit.NANOSECONDS))
+
+        val durationMs = TimeUnit.NANOSECONDS.toMillis(durationNs)
+        logInfo(
+          s"Wrote history snapshot to $manifestPath for appId: $appId " +
+            s"in ${Utils.msDurationToString(durationMs)}.")
+      }
+    } catch {
+      case NonFatal(e) =>
+        val durationNs = System.nanoTime() - startNs
+        appStatusSource.foreach(_.SNAPSHOT_WRITE_FAILURES.inc())
+        appStatusSource.foreach(_.SNAPSHOT_WRITE_TIME.update(durationNs, TimeUnit.NANOSECONDS))
+        logWarning(
+          s"Failed to write history snapshot" +
+            targetManifestPath.map(path => s" to $path").getOrElse("") +
+            s" for appId: $appId.",
+          e)
     }
   }
 

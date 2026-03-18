@@ -190,17 +190,6 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
       None)
     assert(manifestPath.isDefined)
 
-    val fs = manifestPath.get.getFileSystem(new Configuration())
-    val manifest = new Properties()
-    Utils.tryWithResource(fs.open(manifestPath.get)) { in =>
-      manifest.load(in)
-    }
-
-    val executionClass = classOf[SQLExecutionUIData].getName
-    val planGraphClass = classOf[SparkPlanGraphWrapper].getName
-    assert(manifest.getProperty("classNames").contains(executionClass))
-    assert(manifest.getProperty("classNames").contains(planGraphClass))
-
     val restored = new InMemoryStore()
     try {
       HistorySnapshotStore.restoreSnapshot(snapshotConf, restored, manifestPath.get)

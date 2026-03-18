@@ -711,10 +711,7 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
   }
 
   test("writes history snapshot and records metrics when application store closes") {
-    val snapshotDir = Utils.createTempDir(testDir.getAbsolutePath, "history-snapshot")
-    val snapshotConf = conf.clone()
-      .set(SNAPSHOT_ENABLED, true)
-      .set(SNAPSHOT_PATH, snapshotDir.getAbsolutePath)
+    val snapshotConf = newSnapshotConf()
     val appStatusSource = new AppStatusSource()
     val liveStore = AppStatusStore.createLiveStore(snapshotConf, Some(appStatusSource))
     val listener = liveStore.listener.get
@@ -742,20 +739,17 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
     assert(manifest.isDefined)
     assert(appStatusSource.SNAPSHOT_WRITES.getCount === 1L)
     assert(appStatusSource.SNAPSHOT_WRITE_FAILURES.getCount === 0L)
-    assert(appStatusSource.SNAPSHOT_WRITE_BYTES.getCount > 0L)
     assert(appStatusSource.SNAPSHOT_WRITE_TIME.getCount === 1L)
   }
 
   test("history snapshot includes events posted after application end once store closes") {
-    val snapshotDir = Utils.createTempDir(testDir.getAbsolutePath, "history-snapshot")
-    val snapshotConf = conf.clone()
-      .set(SNAPSHOT_ENABLED, true)
-      .set(SNAPSHOT_PATH, snapshotDir.getAbsolutePath)
+    val snapshotConf = newSnapshotConf()
     val liveStore = AppStatusStore.createLiveStore(snapshotConf)
     val listener = liveStore.listener.get
 
     val stage = new StageInfo(1, 0, "stage", 1, Nil, Nil, "details",
       resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    val task = createTasks(1, Array("1")).head
 
     try {
       listener.onApplicationStart(SparkListenerApplicationStart(
@@ -766,7 +760,11 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
         Some("attempt-1"),
         None))
       listener.onJobStart(SparkListenerJobStart(1, 2L, Seq(stage), null))
+      listener.onTaskStart(SparkListenerTaskStart(stage.stageId, stage.attemptNumber(), task))
       listener.onApplicationEnd(SparkListenerApplicationEnd(3L))
+      task.markFinished(TaskState.FINISHED, 4L)
+      listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptNumber(), "taskType",
+        Success, task, new ExecutorMetrics, null))
       listener.onJobEnd(SparkListenerJobEnd(1, 4L, JobSucceeded))
     } finally {
       liveStore.close()
@@ -780,7 +778,9 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
     restored.setMetadata(AppStatusStoreMetadata(AppStatusStore.CURRENT_VERSION))
     try {
       HistorySnapshotStore.restoreSnapshot(snapshotConf, restored, manifest.get)
-      assert(new AppStatusStore(restored).job(1).status === JobExecutionStatus.SUCCEEDED)
+      val restoredStatusStore = new AppStatusStore(restored)
+      assert(restoredStatusStore.job(1).status === JobExecutionStatus.SUCCEEDED)
+      assert(restoredStatusStore.taskCount(stage.stageId, stage.attemptNumber()) === 1L)
     } finally {
       restored.close()
     }
@@ -2031,6 +2031,11 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
         TaskLocality.PROCESS_LOCAL, id % 2 == 0)
     }
   }
+
+  private def newSnapshotConf(): SparkConf = conf.clone()
+    .set(SNAPSHOT_ENABLED, true)
+    .set(SNAPSHOT_PATH,
+      Utils.createTempDir(testDir.getAbsolutePath, "history-snapshot").getAbsolutePath)
 
   private def nextTaskId(): Long = {
     taskIdTracker += 1

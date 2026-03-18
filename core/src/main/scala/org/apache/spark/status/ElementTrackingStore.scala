@@ -41,8 +41,8 @@ import org.apache.spark.util.kvstore._
  *
  * - a generic worker thread that can be used to run expensive tasks asynchronously; the tasks can
  *   be configured to run on the calling thread when more determinism is desired (e.g. unit tests).
- * - a generic flush mechanism so that listeners can be notified about when they should flush
- *   internal state to the store (e.g. after the SHS finishes parsing an event log).
+ * - generic flush / close hooks so listeners can flush internal state before close and run
+ *   additional teardown work while the parent store is still open.
  *
  * The configured triggers are run on a separate thread by default; they can be forced to run on
  * the calling thread by setting the `ASYNC_TRACKING_ENABLED` configuration to `false`.
@@ -71,6 +71,7 @@ private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) exten
 
   private val triggers = new HashMap[Class[_], LatchedTriggers]()
   private val flushTriggers = new ListBuffer[() => Unit]()
+  private val closeTriggers = new ListBuffer[() => Unit]()
   private val executor: ExecutorService = if (conf.get(ASYNC_TRACKING_ENABLED)) {
     ThreadUtils.newDaemonSingleThreadExecutor("element-tracking-store-worker")
   } else {
@@ -107,6 +108,17 @@ private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) exten
    */
   def onFlush(action: => Unit): Unit = {
     flushTriggers += { () => action }
+  }
+
+  /**
+   * Adds a trigger to be executed after flush triggers complete but before the parent store
+   * closes. This is useful for work that depends on flushed state still being available in the
+   * underlying store.
+   *
+   * Close triggers are called synchronously in the same thread that is closing the store.
+   */
+  def onClose(action: => Unit): Unit = {
+    closeTriggers += { () => action }
   }
 
   /**
@@ -172,15 +184,7 @@ private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) exten
   }
 
   /** A close() method that optionally leaves the parent store open. */
-  def close(closeParent: Boolean): Unit = {
-    close(closeParent, ())
-  }
-
-  /**
-   * A close() method that optionally leaves the parent store open and allows callers to run
-   * additional logic after all flush triggers have completed but before the parent store closes.
-   */
-  def close(closeParent: Boolean, postFlushAction: => Unit): Unit = synchronized {
+  def close(closeParent: Boolean): Unit = synchronized {
     if (stopped) {
       return
     }
@@ -192,7 +196,9 @@ private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) exten
       Utils.tryLog(trigger())
     }
 
-    Utils.tryLog(postFlushAction)
+    closeTriggers.foreach { trigger =>
+      Utils.tryLog(trigger())
+    }
 
     if (closeParent) {
       store.close()
