@@ -42,8 +42,11 @@ public interface Reducer<I, O> {
   O reduce(I arg);
 
   /**
-   * Returns the {@link DataType data type} of values produced by this function.
-   * It can return null to signal it doesn't change the input type.
+   * Returns the {@link DataType data type} of values produced by this reducer.
+   *
+   * As a reducer doesn't know the result {@link DataType data type} of the reduced transform
+   * function, for compatibility reasons it can return null to signal it doesn't change the type of
+   * partition keys when the keys are reduced.
    *
    * @return a data type for values produced by this function.
    */
