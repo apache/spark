@@ -26,6 +26,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Random, Success, Try}
 
 import org.apache.spark.{SparkException, SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.internal.config.ConfigBindingPolicy
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.resolver.{
@@ -216,6 +217,12 @@ object AnalysisContext {
     try f finally { set(originContext) }
   }
 
+  def withAnalysisContext[A](function: SQLFunction)(f: => A): A = {
+    val originContext = value.get()
+    val context = originContext.copy(collation = function.collation)
+    set(context)
+    try f finally { set(originContext) }
+  }
 
   def withNewAnalysisContext[A](f: => A): A = {
     val originContext = value.get()
@@ -233,29 +240,23 @@ object AnalysisContext {
 }
 
 object Analyzer {
-  // List of configurations that should be passed on when resolving views and SQL UDF.
-  private val RETAINED_ANALYSIS_FLAGS = Seq(
-    "spark.sql.view.schemaEvolution.preserveUserComments",
-    // retainedHiveConfigs
-    // TODO: remove these Hive-related configs after the `RelationConversions` is moved to
-    // optimization phase.
-    "spark.sql.hive.convertMetastoreParquet",
-    "spark.sql.hive.convertMetastoreOrc",
-    "spark.sql.hive.convertInsertingPartitionedTable",
-    "spark.sql.hive.convertInsertingUnpartitionedTable",
-    "spark.sql.hive.convertMetastoreCtas",
-    // retainedLoggingConfigs
-    "spark.sql.planChangeLog.level",
-    "spark.sql.expressionTreeChangeLog.level"
-  )
-
+  // Configs with bindingPolicy SESSION or NOT_APPLICABLE are retained when resolving views and
+  // SQL UDFs, so that their values propagate from the active session rather than falling back to
+  // Spark defaults. Note: configs defined in lazily-loaded modules (e.g., sql/hive) will only
+  // be included if their holding Scala object has been initialized before this set is computed.
   def retainResolutionConfigsForAnalysis(
       newConf: SQLConf,
       existingConf: SQLConf,
       createSparkVersion: String = ""): Unit = {
+    val retainedConfigKeys = SQLConf.getConfigEntries().asScala
+      .filter(entry =>
+        entry.bindingPolicy.contains(ConfigBindingPolicy.SESSION) ||
+        entry.bindingPolicy.contains(ConfigBindingPolicy.NOT_APPLICABLE))
+      .map(_.key)
+      .toSet
+
     val retainedConfigs = existingConf.getAllConfs.filter { case (key, _) =>
-      // Also apply catalog configs
-      RETAINED_ANALYSIS_FLAGS.contains(key) || key.startsWith("spark.sql.catalog.")
+      retainedConfigKeys.contains(key) || key.startsWith("spark.sql.catalog.")
     }
 
     retainedConfigs.foreach { case (k, v) =>
@@ -449,7 +450,7 @@ class Analyzer(
       AddMetadataColumns ::
       DeduplicateRelations ::
       ResolveCollationName ::
-      ResolveMergeIntoSchemaEvolution ::
+      ResolveSchemaEvolution ::
       ValidateEventTimeWatermarkColumn ::
       new ResolveReferences(catalogManager) ::
       // Please do not insert any other rules in between. See the TODO comments in rule
@@ -1166,9 +1167,6 @@ class Analyzer(
         val partCols = partitionColumnNames(r.table)
         validatePartitionSpec(partCols, i.partitionSpec)
 
-        val schemaEvolutionWriteOption: Map[String, String] =
-          if (i.withSchemaEvolution) Map("mergeSchema" -> "true") else Map.empty
-
         val staticPartitions = i.partitionSpec.filter(_._2.isDefined).transform((_, v) => v.get)
         val query = addStaticPartitionColumns(r, projectByName.getOrElse(i.query), staticPartitions,
           isByName)
@@ -1178,24 +1176,24 @@ class Analyzer(
             AppendData.byName(
               r,
               query,
-              writeOptions = schemaEvolutionWriteOption)
+              withSchemaEvolution = i.withSchemaEvolution)
           } else {
             AppendData.byPosition(
               r,
               query,
-              writeOptions = schemaEvolutionWriteOption)
+              withSchemaEvolution = i.withSchemaEvolution)
           }
         } else if (conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC) {
           if (isByName) {
             OverwritePartitionsDynamic.byName(
               r,
               query,
-              writeOptions = schemaEvolutionWriteOption)
+              withSchemaEvolution = i.withSchemaEvolution)
           } else {
             OverwritePartitionsDynamic.byPosition(
               r,
               query,
-              writeOptions = schemaEvolutionWriteOption)
+              withSchemaEvolution = i.withSchemaEvolution)
           }
         } else {
           if (isByName) {
@@ -1203,13 +1201,13 @@ class Analyzer(
               table = r,
               df = query,
               deleteExpr = staticDeleteExpression(r, staticPartitions),
-              writeOptions = schemaEvolutionWriteOption)
+              withSchemaEvolution = i.withSchemaEvolution)
           } else {
             OverwriteByExpression.byPosition(
               table = r,
               query = query,
               deleteExpr = staticDeleteExpression(r, staticPartitions),
-              writeOptions = schemaEvolutionWriteOption)
+              withSchemaEvolution = i.withSchemaEvolution)
           }
         }
     }
@@ -1559,8 +1557,7 @@ class Analyzer(
                 UpdateAction(
                   resolvedUpdateCondition,
                   // The update value can access columns from both target and source tables.
-                  resolveAssignments(assignments, m, MergeResolvePolicy.BOTH,
-                    throws = throws),
+                  resolveAssignments(assignments, m, MergeResolvePolicy.BOTH, throws),
                   fromStar)
               case UpdateStarAction(updateCondition) =>
                 // Expand star to top level source columns.  If source has less columns than target,
@@ -1581,8 +1578,7 @@ class Analyzer(
                 UpdateAction(
                   updateCondition.map(resolveExpressionByPlanChildren(_, m)),
                   // For UPDATE *, the value must be from source table.
-                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE,
-                    throws = throws),
+                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE, throws),
                   fromStar = true)
               case o => o
             }
@@ -1594,8 +1590,7 @@ class Analyzer(
                   resolveExpressionByPlanOutput(_, m.sourceTable))
                 InsertAction(
                   resolvedInsertCondition,
-                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE,
-                    throws = throws))
+                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE, throws))
               case InsertStarAction(insertCondition) =>
                 // The insert action is used when not matched, so its condition and value can only
                 // access columns from the source table.
@@ -1618,8 +1613,7 @@ class Analyzer(
                 }
                 InsertAction(
                   resolvedInsertCondition,
-                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE,
-                    throws = throws))
+                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE, throws))
               case o => o
             }
             val newNotMatchedBySourceActions = m.notMatchedBySourceActions.map {
@@ -1633,8 +1627,7 @@ class Analyzer(
                 UpdateAction(
                   resolvedUpdateCondition,
                   // The update value can access columns from the target table only.
-                  resolveAssignments(assignments, m, MergeResolvePolicy.TARGET,
-                    throws = throws),
+                  resolveAssignments(assignments, m, MergeResolvePolicy.TARGET, throws),
                   fromStar)
               case o => o
             }
@@ -2340,8 +2333,10 @@ class Analyzer(
         e: SubqueryExpression,
         outer: LogicalPlan)(
         f: (LogicalPlan, Seq[Expression]) => SubqueryExpression): SubqueryExpression = {
-      val newSubqueryPlan = AnalysisContext.withOuterPlan(outer) {
-        executeSameContext(e.plan)
+      val newSubqueryPlan = SQLFunctionContext.withNewContext {
+        AnalysisContext.withOuterPlan(outer) {
+          executeSameContext(e.plan)
+        }
       }
 
       // If the subquery plan is fully resolved, pull the outer references and record
@@ -2486,7 +2481,9 @@ class Analyzer(
           Analyzer.retainResolutionConfigsForAnalysis(newConf = newConf, existingConf = conf)
         }
         SQLConf.withExistingConf(newConf) {
-          executeSameContext(plan)
+          AnalysisContext.withAnalysisContext(f.function) {
+            executeSameContext(plan)
+          }
         }
       }
       // Fail the analysis eagerly if a SQL function cannot be resolved using its input.
@@ -2785,7 +2782,9 @@ class Analyzer(
         val resolved = SQLConf.withExistingConf(newConf) {
           val plan = v1SessionCatalog.makeSQLTableFunctionPlan(name, function, inputs, output)
           SQLFunctionContext.withSQLFunction {
-            executeSameContext(plan)
+            AnalysisContext.withAnalysisContext(function) {
+              executeSameContext(plan)
+            }
           }
         }
         // Remove unnecessary lateral joins that are used to resolve the SQL function.
@@ -3635,7 +3634,8 @@ class Analyzer(
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(COMMAND), ruleId) {
       case v2Write: V2WriteCommand
-          if v2Write.table.resolved && v2Write.query.resolved && !v2Write.outputResolved =>
+          if v2Write.table.resolved && v2Write.query.resolved && !v2Write.outputResolved &&
+            v2Write.pendingSchemaChanges.isEmpty =>
         validateStoreAssignmentPolicy()
         TableOutputResolver.suitableForByNameCheck(v2Write.isByName,
           expected = v2Write.table.output, queryOutput = v2Write.query.output)
@@ -4070,27 +4070,28 @@ object CleanupAliases extends Rule[LogicalPlan] with AliasHelper {
  */
 object ValidateEventTimeWatermarkColumn extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    if (!conf.getConf(SQLConf.STREAMING_VALIDATE_EVENT_TIME_WATERMARK_COLUMN)) {
-      return plan
-    }
-    plan.resolveOperatorsWithPruning(
-      _.containsPattern(EVENT_TIME_WATERMARK)) {
-      case etw: EventTimeWatermark =>
-        etw.eventTime match {
-          case u: UnresolvedAttribute if u.nameParts.length > 1 =>
-            // Try to resolve the multi-part name against the child output.
-            // An alias-qualified column (e.g. "a.eventTime") resolves to an Attribute,
-            // while a nested struct field (e.g. "struct_col.field") resolves to an
-            // Alias(ExtractValue(...)) which is not an Attribute.
-            etw.child.resolve(u.nameParts, conf.resolver) match {
-              case Some(_: Attribute) => etw
-              case _ =>
-                etw.failAnalysis(
-                  errorClass = "EVENT_TIME_MUST_BE_TOP_LEVEL_COLUMN",
-                  messageParameters = Map("eventExpr" -> u.sql))
-            }
-          case _ => etw
-        }
+    if (conf.getConf(SQLConf.STREAMING_VALIDATE_EVENT_TIME_WATERMARK_COLUMN)) {
+      plan.resolveOperatorsWithPruning(_.containsPattern(EVENT_TIME_WATERMARK)) {
+        case etw: EventTimeWatermark =>
+          etw.eventTime match {
+            case u: UnresolvedAttribute if u.nameParts.length > 1 =>
+              // Try to resolve the multi-part name against the child output.
+              // An alias-qualified column (e.g. "a.eventTime") resolves to an Attribute,
+              // while a nested struct field (e.g. "struct_col.field") resolves to an
+              // Alias(ExtractValue(...)) which is not an Attribute.
+              etw.child.resolve(u.nameParts, conf.resolver) match {
+                case Some(_: Attribute) => etw
+                case _ =>
+                  etw.failAnalysis(
+                    errorClass = "EVENT_TIME_MUST_BE_TOP_LEVEL_COLUMN",
+                    messageParameters = Map("eventExpr" -> u.sql)
+                  )
+              }
+            case _ => etw
+          }
+      }
+    } else {
+      plan
     }
   }
 }

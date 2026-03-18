@@ -18,6 +18,7 @@
 """
 A base class of DataFrame/Column to behave like pandas DataFrame/Series.
 """
+
 from abc import ABCMeta, abstractmethod
 from functools import reduce
 from typing import (
@@ -867,8 +868,8 @@ class Frame(object, metaclass=ABCMeta):
             File path. If not specified, the result is returned as
             a string.
         lines: bool, default True
-            If ‘orient’ is ‘records’ write out line delimited JSON format.
-            Will throw ValueError if incorrect ‘orient’ since others are not
+            If 'orient' is 'records' write out line delimited JSON format.
+            Will throw ValueError if incorrect 'orient' since others are not
             list like. It should be always True for now.
         orient: str, default 'records'
              It should be always 'records' for now.
@@ -1590,7 +1591,7 @@ class Frame(object, metaclass=ABCMeta):
         self, axis: Optional[Axis] = None, skipna: bool = True, numeric_only: bool = None
     ) -> Union[Scalar, "Series"]:
         """
-        Return unbiased kurtosis using Fisher’s definition of kurtosis (kurtosis of normal == 0.0).
+        Return unbiased kurtosis using Fisher's definition of kurtosis (kurtosis of normal == 0.0).
         Normalized by N-1.
 
         Parameters
@@ -1795,8 +1796,8 @@ class Frame(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        axis: {0 or ‘index’, 1 or ‘columns’}, default 0
-            If 0 or ‘index’ counts are generated for each column. If 1 or ‘columns’ counts are
+        axis: {0 or 'index', 1 or 'columns'}, default 0
+            If 0 or 'index' counts are generated for each column. If 1 or 'columns' counts are
             generated for each row.
         numeric_only: bool, default False
             If True, include only float, int, boolean columns. This parameter is mainly for
@@ -3681,7 +3682,7 @@ def _test() -> None:
     path = tempfile.mkdtemp()
     globs["path"] = path
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.generic,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

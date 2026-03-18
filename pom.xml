@@ -120,7 +120,7 @@
     <java.version>17</java.version>
     <java.minimum.version>17.0.11</java.minimum.version>
     <maven.compiler.release>${java.version}</maven.compiler.release>
-    <maven.version>3.9.12</maven.version>
+    <maven.version>3.9.14</maven.version>
     <exec-maven-plugin.version>3.6.1</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
     <asm.version>9.9.1</asm.version>
@@ -131,20 +131,20 @@
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
     <protobuf.version>4.33.5</protobuf.version>
     <protoc-jar-maven-plugin.version>3.11.4</protoc-jar-maven-plugin.version>
-    <zookeeper.version>3.9.4</zookeeper.version>
+    <zookeeper.version>3.9.5</zookeeper.version>
     <curator.version>5.9.0</curator.version>
     <hive.group>org.apache.hive</hive.group>
     <hive.classifier>core</hive.classifier>
     <!-- Version used in Maven Hive dependency -->
     <hive.version>2.3.10</hive.version>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
-    <kafka.version>3.9.1</kafka.version>
+    <kafka.version>3.9.2</kafka.version>
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
     <parquet.version>1.17.0</parquet.version>
-    <orc.version>2.2.2</orc.version>
+    <orc.version>2.3.0</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
-    <jetty.version>12.1.5</jetty.version>
+    <jetty.version>12.1.7</jetty.version>
     <jakartaservlet.version>6.0.0</jakartaservlet.version>
     <!-- SPARK-46938: Required by Hive / LibThrift libs -->
     <javaxservlet.version>4.0.1</javaxservlet.version>
@@ -183,7 +183,7 @@
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
     <!-- Should be consistent with SparkBuild.scala and docs -->
-    <fasterxml.jackson.version>2.21.0</fasterxml.jackson.version>
+    <fasterxml.jackson.version>2.21.1</fasterxml.jackson.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
     <snappy.version>1.1.10.8</snappy.version>
     <netlib.ludovic.dev.version>3.1.1</netlib.ludovic.dev.version>
@@ -214,10 +214,10 @@
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.11.0</commons-cli.version>
     <bouncycastle.version>1.83</bouncycastle.version>
-    <tink.version>1.19.0</tink.version>
+    <tink.version>1.20.0</tink.version>
     <datasketches.version>6.2.0</datasketches.version>
     <netty.version>4.2.10.Final</netty.version>
-    <netty-tcnative.version>2.0.74.Final</netty-tcnative.version>
+    <netty-tcnative.version>2.0.75.Final</netty-tcnative.version>
     <icu4j.version>78.2</icu4j.version>
     <junit.version>6.0.1</junit.version>
     <jline.version>2.14.6</jline.version>
@@ -231,13 +231,13 @@
     ./python/pyspark/sql/pandas/utils.py, ./python/packaging/classic/setup.py,
     ./python/packaging/client/setup.py, and ./python/packaging/connect/setup.py too.
     -->
-    <arrow.version>18.3.0</arrow.version>
+    <arrow.version>19.0.0</arrow.version>
     <ammonite.version>3.0.8</ammonite.version>
     <jjwt.version>0.13.0</jjwt.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>7.5.2</kubernetes-client.version>
+    <kubernetes-client.version>7.6.1</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -331,7 +331,6 @@
       --add-opens=java.base/sun.nio.cs=ALL-UNNAMED
       --add-opens=java.base/sun.security.action=ALL-UNNAMED
       --add-opens=java.base/sun.util.calendar=ALL-UNNAMED
-      -Djdk.reflect.useDirectMethodHandle=false
       -Dio.netty.tryReflectionSetAccessible=true
       -Dio.netty.allocator.type=pooled
       -Dio.netty.handler.ssl.defaultEndpointVerificationAlgorithm=NONE
@@ -345,7 +344,7 @@
     <mssql.jdbc.version>13.2.1.jre11</mssql.jdbc.version>
     <ojdbc17.version>23.6.0.24.10</ojdbc17.version>
     <databricks.jdbc.version>2.7.1</databricks.jdbc.version>
-    <snowflake.jdbc.version>3.26.1</snowflake.jdbc.version>
+    <snowflake.jdbc.version>4.0.2</snowflake.jdbc.version>
     <terajdbc.version>20.00.00.39</terajdbc.version>
     <!-- Used for SBT build to retrieve the Spark version -->
     <spark.version>${project.version}</spark.version>
@@ -888,7 +887,7 @@
       <dependency>
         <groupId>at.yawk.lz4</groupId>
         <artifactId>lz4-java</artifactId>
-        <version>1.10.3</version>
+        <version>1.10.4</version>
       </dependency>
       <dependency>
         <groupId>com.github.luben</groupId>
@@ -960,6 +959,26 @@
           </exclusion>
           <exclusion>
             <groupId>io.netty</groupId>
+            <artifactId>netty-codec-http3</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-marshalling</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-classes-quic</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-native-quic</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-protobuf</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
             <artifactId>netty-resolver-dns-classes-macos</artifactId>
           </exclusion>
           <exclusion>
@@ -977,6 +996,14 @@
           <exclusion>
             <groupId>io.netty</groupId>
             <artifactId>netty-transport-udt</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-transport-classes-io_uring</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-transport-native-io_uring</artifactId>
           </exclusion>
           <exclusion>
             <groupId>io.netty</groupId>
@@ -1574,7 +1601,7 @@
       <dependency>
         <groupId>org.tukaani</groupId>
         <artifactId>xz</artifactId>
-        <version>1.10</version>
+        <version>1.12</version>
       </dependency>
       <dependency>
         <groupId>org.apache.zookeeper</groupId>

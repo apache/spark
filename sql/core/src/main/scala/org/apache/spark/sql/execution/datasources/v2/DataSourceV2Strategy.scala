@@ -45,7 +45,6 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, SparkPlan, SparkStrategy => Strategy}
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelationWithTable, PushableColumnAndNestedColumn}
-import org.apache.spark.sql.execution.joins.StoragePartitionJoinParams
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
@@ -161,8 +160,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         case _ => false
       }
       val batchExec = BatchScanExec(relation.output, relation.scan, runtimeFilters,
-        relation.ordering, relation.relation.table,
-        StoragePartitionJoinParams(relation.keyGroupedPartitioning))
+        relation.ordering, relation.relation.table, relation.keyGroupedPartitioning)
       DataSourceV2Strategy.withProjectAndFilter(
         project, postScanFilters, batchExec, !batchExec.supportsColumnar) :: Nil
 
@@ -292,7 +290,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case AppendData(r @ ExtractV2Table(v1: SupportsWrite), _, _,
-        _, Some(write), analyzedQuery) if v1.supports(TableCapability.V1_BATCH_WRITE) =>
+        _, _, Some(write), analyzedQuery) if v1.supports(TableCapability.V1_BATCH_WRITE) =>
       write match {
         case v1Write: V1Write =>
           assert(analyzedQuery.isDefined)
@@ -302,11 +300,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             v1, v2Write.getClass.getName, classOf[V1Write].getName)
       }
 
-    case AppendData(r: DataSourceV2Relation, query, _, _, Some(write), _) =>
+    case AppendData(r: DataSourceV2Relation, query, _, _, _, Some(write), _) =>
       AppendDataExec(planLater(query), refreshCache(r), write) :: Nil
 
     case OverwriteByExpression(r @ ExtractV2Table(v1: SupportsWrite), _, _,
-        _, _, Some(write), analyzedQuery) if v1.supports(TableCapability.V1_BATCH_WRITE) =>
+        _, _, _, Some(write), analyzedQuery) if v1.supports(TableCapability.V1_BATCH_WRITE) =>
       write match {
         case v1Write: V1Write =>
           assert(analyzedQuery.isDefined)
@@ -317,10 +315,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case OverwriteByExpression(
-        r: DataSourceV2Relation, _, query, _, _, Some(write), _) =>
+        r: DataSourceV2Relation, _, query, _, _, _, Some(write), _) =>
       OverwriteByExpressionExec(planLater(query), refreshCache(r), write) :: Nil
 
-    case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, _, _, Some(write)) =>
+    case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, _, _, _, Some(write)) =>
       OverwritePartitionsDynamicExec(planLater(query), refreshCache(r), write) :: Nil
 
     case DeleteFromTableWithFilters(r: DataSourceV2Relation, filters) =>

@@ -18,6 +18,7 @@
 """
 A loc indexer for pandas-on-Spark DataFrame/Series.
 """
+
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterable
 from functools import reduce
@@ -278,9 +279,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
         else:
             return self._select_rows_else(rows_sel)
 
-    def _select_cols(
-        self, cols_sel: Any, missing_keys: Optional[List[Name]] = None
-    ) -> Tuple[
+    def _select_cols(self, cols_sel: Any, missing_keys: Optional[List[Name]] = None) -> Tuple[
         List[Label],
         Optional[List[PySparkColumn]],
         Optional[List[InternalField]],
@@ -396,9 +395,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def _select_cols_by_slice(
-        self, cols_sel: slice, missing_keys: Optional[List[Name]]
-    ) -> Tuple[
+    def _select_cols_by_slice(self, cols_sel: slice, missing_keys: Optional[List[Name]]) -> Tuple[
         List[Label],
         Optional[List[PySparkColumn]],
         Optional[List[InternalField]],
@@ -422,9 +419,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def _select_cols_else(
-        self, cols_sel: Any, missing_keys: Optional[List[Name]]
-    ) -> Tuple[
+    def _select_cols_else(self, cols_sel: Any, missing_keys: Optional[List[Name]]) -> Tuple[
         List[Label],
         Optional[List[PySparkColumn]],
         Optional[List[InternalField]],
@@ -776,7 +771,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                         if label in selected_column_labels_set
                     ]
                     if selected_column_labels != selected_labels_in_internal_order:
-                        # If requested columns are in different order than the DataFrame’s internal order,
+                        # If requested columns are in different order than the DataFrame's internal order,
                         # it returns early (no-op), matching pandas 3 behavior for that edge case.
                         return
                 value = F.lit(value)
@@ -1317,9 +1312,7 @@ class LocIndexer(LocIndexerLike):
         data_spark_columns = [cols_sel]
         return column_labels, data_spark_columns, None, True, None
 
-    def _select_cols_by_slice(
-        self, cols_sel: slice, missing_keys: Optional[List[Name]]
-    ) -> Tuple[
+    def _select_cols_by_slice(self, cols_sel: slice, missing_keys: Optional[List[Name]]) -> Tuple[
         List[Label],
         Optional[List[PySparkColumn]],
         Optional[List[InternalField]],
@@ -1425,9 +1418,7 @@ class LocIndexer(LocIndexerLike):
 
         return column_labels, data_spark_columns, data_fields, False, None
 
-    def _select_cols_else(
-        self, cols_sel: Any, missing_keys: Optional[List[Name]]
-    ) -> Tuple[
+    def _select_cols_else(self, cols_sel: Any, missing_keys: Optional[List[Name]]) -> Tuple[
         List[Label],
         Optional[List[PySparkColumn]],
         Optional[List[InternalField]],
@@ -1776,9 +1767,7 @@ class iLocIndexer(LocIndexerLike):
             "listlike of integers, boolean array] types, got {}".format(cols_sel)
         )
 
-    def _select_cols_by_slice(
-        self, cols_sel: slice, missing_keys: Optional[List[Name]]
-    ) -> Tuple[
+    def _select_cols_by_slice(self, cols_sel: slice, missing_keys: Optional[List[Name]]) -> Tuple[
         List[Label],
         Optional[List[PySparkColumn]],
         Optional[List[InternalField]],
@@ -1796,9 +1785,7 @@ class iLocIndexer(LocIndexerLike):
             not_none = (
                 cols_sel.start
                 if cols_sel.start is not None
-                else cols_sel.stop
-                if cols_sel.stop is not None
-                else cols_sel.step
+                else cols_sel.stop if cols_sel.stop is not None else cols_sel.step
             )
             raise TypeError(
                 "cannot do slice indexing with these indexers {} of {}".format(
@@ -1825,9 +1812,7 @@ class iLocIndexer(LocIndexerLike):
         else:
             raise TypeError("cannot perform reduce with flexible type")
 
-    def _select_cols_else(
-        self, cols_sel: Any, missing_keys: Optional[List[Name]]
-    ) -> Tuple[
+    def _select_cols_else(self, cols_sel: Any, missing_keys: Optional[List[Name]]) -> Tuple[
         List[Label],
         Optional[List[PySparkColumn]],
         Optional[List[InternalField]],
@@ -1901,7 +1886,7 @@ def _test() -> None:
         .appName("pyspark.pandas.indexing tests")
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.indexing,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

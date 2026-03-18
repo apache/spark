@@ -100,58 +100,66 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
       </div>
       <div class="row"> <!-- Executors and Drivers -->
         <div class="col-12">
-          <span class="collapse-aggregated-runningExecutors collapse-table"
-              data-collapse-name="collapse-aggregated-runningExecutors"
-              data-collapse-table="aggregated-runningExecutors">
+          <span class="collapse-table" data-bs-toggle="collapse"
+              data-bs-target="#aggregated-runningExecutors"
+              aria-expanded="true" aria-controls="aggregated-runningExecutors"
+              data-collapse-name="collapse-aggregated-runningExecutors">
             <h4>
               <span class="collapse-table-arrow arrow-open"></span>
               <a>Running Executors ({runningExecutors.size})</a>
             </h4>
           </span>
-          <div class="aggregated-runningExecutors collapsible-table">
+          <div class="collapsible-table collapse show" id="aggregated-runningExecutors">
             {runningExecutorTable}
           </div>
           {
             if (runningDrivers.nonEmpty) {
-              <span class="collapse-aggregated-runningDrivers collapse-table"
-                  data-collapse-name="collapse-aggregated-runningDrivers"
-                  data-collapse-table="aggregated-runningDrivers">
+              <span class="collapse-table" data-bs-toggle="collapse"
+                  data-bs-target="#aggregated-runningDrivers"
+                  aria-expanded="true" aria-controls="aggregated-runningDrivers"
+                  data-collapse-name="collapse-aggregated-runningDrivers">
                 <h4>
                   <span class="collapse-table-arrow arrow-open"></span>
                   <a>Running Drivers ({runningDrivers.size})</a>
                 </h4>
               </span> ++
-              <div class="aggregated-runningDrivers collapsible-table">
+              <div class="collapsible-table collapse show"
+                  id="aggregated-runningDrivers">
                 {runningDriverTable}
               </div>
             }
           }
           {
             if (finishedExecutors.nonEmpty) {
-              <span class="collapse-aggregated-finishedExecutors collapse-table"
-                  data-collapse-name="collapse-aggregated-finishedExecutors"
-                  data-collapse-table="aggregated-finishedExecutors">
+              <span class="collapse-table" data-bs-toggle="collapse"
+                  data-bs-target="#aggregated-finishedExecutors"
+                  aria-expanded="true"
+                  aria-controls="aggregated-finishedExecutors"
+                  data-collapse-name="collapse-aggregated-finishedExecutors">
                 <h4>
                   <span class="collapse-table-arrow arrow-open"></span>
                   <a>Finished Executors ({finishedExecutors.size})</a>
                 </h4>
               </span> ++
-              <div class="aggregated-finishedExecutors collapsible-table">
+              <div class="collapsible-table collapse show"
+                  id="aggregated-finishedExecutors">
                 {finishedExecutorTable}
               </div>
             }
           }
           {
             if (finishedDrivers.nonEmpty) {
-              <span class="collapse-aggregated-finishedDrivers collapse-table"
-                  data-collapse-name="collapse-aggregated-finishedDrivers"
-                  data-collapse-table="aggregated-finishedDrivers">
+              <span class="collapse-table" data-bs-toggle="collapse"
+                  data-bs-target="#aggregated-finishedDrivers"
+                  aria-expanded="true" aria-controls="aggregated-finishedDrivers"
+                  data-collapse-name="collapse-aggregated-finishedDrivers">
                 <h4>
                   <span class="collapse-table-arrow arrow-open"></span>
                   <a>Finished Drivers ({finishedDrivers.size})</a>
                 </h4>
               </span> ++
-              <div class="aggregated-finishedDrivers collapsible-table">
+              <div class="collapsible-table collapse show"
+                  id="aggregated-finishedDrivers">
                 {finishedDriverTable}
               </div>
             }

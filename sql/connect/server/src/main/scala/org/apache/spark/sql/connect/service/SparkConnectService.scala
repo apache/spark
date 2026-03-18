@@ -40,6 +40,7 @@ import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerEvent}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.classic.ClassicConversions._
+import org.apache.spark.sql.connect.IllegalStateErrors
 import org.apache.spark.sql.connect.config.Connect.{getAuthenticateToken, CONNECT_GRPC_BINDING_ADDRESS, CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE, CONNECT_GRPC_PORT_MAX_RETRIES}
 import org.apache.spark.sql.connect.execution.ConnectProgressExecutionListener
 import org.apache.spark.sql.connect.ui.{SparkConnectServerAppStatusStore, SparkConnectServerListener, SparkConnectServerTab}
@@ -468,8 +469,7 @@ object SparkConnectService extends Logging {
     }
 
     if (!started) {
-      throw new IllegalStateException(
-        "Attempting to stop the Spark Connect service that has not been started.")
+      throw IllegalStateErrors.serviceNotStarted()
     }
 
     if (server != null) {

@@ -27,7 +27,6 @@ from pyspark.testing.utils import (
     pyarrow_requirement_message,
 )
 
-
 # Test PYARROW_IGNORE_TIMEZONE introduced in PyArrow 2.0,
 # https://arrow.apache.org/blog/2020/10/22/2.0.0-release/
 # Conversion of timezone aware datetimes to and/from pyarrow arrays including pandas

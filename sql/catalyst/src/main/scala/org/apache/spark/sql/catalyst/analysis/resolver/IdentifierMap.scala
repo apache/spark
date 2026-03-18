@@ -23,6 +23,6 @@ import java.util.Locale
  * The [[IdentifierMap]] is an implementation of a [[KeyTransformingMap]] that uses SQL/DataFrame
  * identifiers as keys. The implementation is case-insensitive for keys.
  */
-private class IdentifierMap[V] extends KeyTransformingMap[String, V] {
+class IdentifierMap[V] extends KeyTransformingMap[String, V] {
   override def mapKey(key: String): String = key.toLowerCase(Locale.ROOT)
 }

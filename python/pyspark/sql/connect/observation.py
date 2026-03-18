@@ -14,10 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
-
 from typing import Any, Dict, Optional
 import uuid
 
@@ -31,7 +27,6 @@ from pyspark.sql.column import Column
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.observation import Observation as PySparkObservation
 import pyspark.sql.connect.plan as plan
-
 
 __all__ = ["Observation"]
 
@@ -106,7 +101,7 @@ def _test() -> None:
         .getOrCreate()
     )
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.connect.observation,
         globs=globs,
         optionflags=doctest.ELLIPSIS

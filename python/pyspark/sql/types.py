@@ -443,12 +443,6 @@ class TimeType(AnyTimeType):
 class TimestampType(DatetimeType, metaclass=DataTypeSingleton):
     """Timestamp (datetime.datetime) data type."""
 
-    # We need to cache the timezone info for datetime.datetime.fromtimestamp
-    # otherwise the forked process will be extremely slow to convert the timestamp.
-    # This is probably a glibc issue - the forked process will have a bad cache/lock
-    # status for the timezone info.
-    tz_info = None
-
     def needConversion(self) -> bool:
         return True
 
@@ -462,12 +456,7 @@ class TimestampType(DatetimeType, metaclass=DataTypeSingleton):
     def fromInternal(self, ts: int) -> datetime.datetime:
         if ts is not None:
             # using int to avoid precision loss in float
-            # If TimestampType.tz_info is not None, we need to use it to convert the timestamp.
-            # Otherwise, we need to use the default timezone.
-            # We need to replace the tzinfo to None to keep backward compatibility
-            return datetime.datetime.fromtimestamp(ts // 1000000, self.tz_info).replace(
-                microsecond=ts % 1000000, tzinfo=None
-            )
+            return datetime.datetime.fromtimestamp(ts // 1000000).replace(microsecond=ts % 1000000)
 
 
 class TimestampNTZType(DatetimeType, metaclass=DataTypeSingleton):
@@ -1494,12 +1483,10 @@ class StructType(DataType):
         data_type: Union[str, DataType],
         nullable: bool = True,
         metadata: Optional[Dict[str, Any]] = None,
-    ) -> "StructType":
-        ...
+    ) -> "StructType": ...
 
     @overload
-    def add(self, field: StructField) -> "StructType":
-        ...
+    def add(self, field: StructField) -> "StructType": ...
 
     def add(
         self,
@@ -2075,7 +2062,7 @@ class VariantVal:
         Convert the VariantVal to a nested Python object of Python data types.
         :return: Python representation of the Variant nested structure
         """
-        (value, metadata) = VariantUtils.parse_json(json_str)
+        value, metadata = VariantUtils.parse_json(json_str)
         return VariantVal(value, metadata)
 
 
@@ -2885,23 +2872,19 @@ def _has_type(dt: DataType, dts: Union[type, Tuple[type, ...]]) -> bool:
 
 
 @overload
-def _merge_type(a: StructType, b: StructType, name: Optional[str] = None) -> StructType:
-    ...
+def _merge_type(a: StructType, b: StructType, name: Optional[str] = None) -> StructType: ...
 
 
 @overload
-def _merge_type(a: ArrayType, b: ArrayType, name: Optional[str] = None) -> ArrayType:
-    ...
+def _merge_type(a: ArrayType, b: ArrayType, name: Optional[str] = None) -> ArrayType: ...
 
 
 @overload
-def _merge_type(a: MapType, b: MapType, name: Optional[str] = None) -> MapType:
-    ...
+def _merge_type(a: MapType, b: MapType, name: Optional[str] = None) -> MapType: ...
 
 
 @overload
-def _merge_type(a: DataType, b: DataType, name: Optional[str] = None) -> DataType:
-    ...
+def _merge_type(a: DataType, b: DataType, name: Optional[str] = None) -> DataType: ...
 
 
 def _merge_type(
@@ -3009,10 +2992,8 @@ def _create_converter(dataType: DataType) -> Callable:
     elif isinstance(dataType, MapType):
         kconv = _create_converter(dataType.keyType)
         vconv = _create_converter(dataType.valueType)
-        return (
-            lambda row: dict((kconv(k), vconv(v)) for k, v in row.items())
-            if row is not None
-            else None
+        return lambda row: (
+            dict((kconv(k), vconv(v)) for k, v in row.items()) if row is not None else None
         )
 
     elif isinstance(dataType, NullType):
@@ -3490,7 +3471,6 @@ def _create_row(
 
 
 class Row(tuple):
-
     """
     A row in :class:`DataFrame`.
     The fields in it can be accessed:
@@ -3547,12 +3527,10 @@ class Row(tuple):
     """
 
     @overload
-    def __new__(cls, *args: str) -> "Row":
-        ...
+    def __new__(cls, *args: str) -> "Row": ...
 
     @overload
-    def __new__(cls, **kwargs: Any) -> "Row":
-        ...
+    def __new__(cls, **kwargs: Any) -> "Row": ...
 
     def __new__(cls, *args: Optional[str], **kwargs: Optional[Any]) -> "Row":
         if args and kwargs:
@@ -3865,7 +3843,7 @@ def _test() -> None:
 
     globs = globals()
     globs["spark"] = SparkSession.builder.getOrCreate()
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         globs=globs, optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE
     )
     if failure_count:

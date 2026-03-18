@@ -104,6 +104,27 @@ jobs:
             sparkr=`./dev/is-changed.py -m sparkr`
             tpcds=`./dev/is-changed.py -m sql`
             docker=`./dev/is-changed.py -m docker-integration-tests`
+            # Skip PySpark, SparkR, TPC-DS when only static UI resources (JS/CSS/HTML) changed.
+            # These tests are unaffected by UI static resource modifications.
+            changed_files=$(git diff --name-only "$APACHE_SPARK_REF" HEAD 2>/dev/null)
+            if [ -n "$changed_files" ]; then
+              static_only=true
+              for f in $changed_files; do
+                case "$f" in
+                  */resources/*/static/*) ;;
+                  *) static_only=false; break ;;
+                esac
+              done
+            else
+              static_only=false
+            fi
+            if [ "$static_only" = "true" ]; then
+              pyspark=false
+              pandas=false
+              sparkr=false
+              tpcds=false
+              docker=false
+            fi
             buf=true
             ui=true
             docs=true
@@ -821,7 +842,7 @@ jobs:
         python-version: '3.12'
     - name: Install dependencies for Python CodeGen check
       run: |
-        python3.12 -m pip install 'black==23.12.1' 'protobuf==6.33.5' 'mypy==1.8.0' 'mypy-protobuf==3.3.0'
+        python3.12 -m pip install 'black==26.3.1' 'protobuf==6.33.5' 'mypy==1.8.0' 'mypy-protobuf==3.3.0'
         python3.12 -m pip list
     - name: Python CodeGen check for branch-3.5
       if: inputs.branch == 'branch-3.5'
@@ -923,7 +944,7 @@ jobs:
       run: |
         # SPARK-45212: Copy from https://github.com/apache/spark/blob/555c8def51e5951c7bf5165a332795e9e330ec9d/.github/workflows/build_and_test.yml#L631-L638
         # Should delete this section after SPARK 3.5 EOL.
-        python3.9 -m pip install 'flake8==3.9.0' pydata_sphinx_theme 'mypy==0.982' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' numpydoc 'jinja2<3.0.0' 'black==22.6.0'
+        python3.9 -m pip install 'flake8==3.9.0' pydata_sphinx_theme 'mypy==0.982' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' numpydoc 'jinja2<3.0.0' 'black==26.3.1'
         python3.9 -m pip install 'pandas-stubs==1.2.0.53' ipython 'grpcio==1.56.0' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0'
     - name: List Python packages
       shell: 'script -q -e -c "bash {0}"'

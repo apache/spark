@@ -239,13 +239,16 @@ private[sql] class SparkResult[T](
             throw new IllegalStateException(
               s"Expected $expectedNumRows rows in arrow batch but got $numRecordsInBatch.")
           }
+          val messagesInBatch = messages.result()
           // Skip the entire result if it is empty.
           if (numRecordsInBatch > 0) {
             numRecords += numRecordsInBatch
-            resultMap.put(nextResultIndex, (reader.bytesRead, messages.result()))
+            resultMap.put(nextResultIndex, (reader.bytesRead, messagesInBatch))
             nextResultIndex += 1
             nonEmpty |= true
             stop |= stopOnFirstNonEmptyResponse
+          } else {
+            messagesInBatch.foreach(_.close())
           }
         }
       }

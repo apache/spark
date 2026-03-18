@@ -20,6 +20,8 @@ import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, Literal}
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
+import org.apache.spark.sql.connector.catalog.CatalogV2Util
+import org.apache.spark.sql.connector.catalog.Column
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy.{ANSI, STRICT}
@@ -236,6 +238,10 @@ object DataTypeUtils {
    */
   def toAttributes(schema: StructType): Seq[AttributeReference] = {
     schema.map(toAttribute)
+  }
+
+  def toAttributes(columns: Array[Column]): Seq[AttributeReference] = {
+    toAttributes(CatalogV2Util.v2ColumnsToStructType(columns))
   }
 
   def fromAttributes(attributes: Seq[Attribute]): StructType =

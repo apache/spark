@@ -15,9 +15,6 @@
 # limitations under the License.
 #
 import uuid
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
 
 import json
 import threading
@@ -132,12 +129,10 @@ class SparkSession:
             self._hook_factories: list["Callable[[SparkSession], SparkSession.Hook]"] = []
 
         @overload
-        def config(self, key: str, value: Any) -> "SparkSession.Builder":
-            ...
+        def config(self, key: str, value: Any) -> "SparkSession.Builder": ...
 
         @overload
-        def config(self, *, map: Dict[str, "OptionalPrimitiveType"]) -> "SparkSession.Builder":
-            ...
+        def config(self, *, map: Dict[str, "OptionalPrimitiveType"]) -> "SparkSession.Builder": ...
 
         def config(
             self,
@@ -611,11 +606,11 @@ class SparkSession:
             else:
                 # Any timestamps must be coerced to be compatible with Spark
                 spark_types = [
-                    TimestampType()
-                    if is_datetime64_dtype(t) or isinstance(t, pd.DatetimeTZDtype)
-                    else DayTimeIntervalType()
-                    if is_timedelta64_dtype(t)
-                    else None
+                    (
+                        TimestampType()
+                        if is_datetime64_dtype(t) or isinstance(t, pd.DatetimeTZDtype)
+                        else DayTimeIntervalType() if is_timedelta64_dtype(t) else None
+                    )
                     for t in data.dtypes
                 ]
 
@@ -1330,7 +1325,7 @@ def _test() -> None:
     pyspark.sql.connect.session.SparkSession.__doc__ = None
     del pyspark.sql.connect.session.SparkSession.Builder.master.__doc__
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.connect.session,
         globs=globs,
         optionflags=doctest.ELLIPSIS
