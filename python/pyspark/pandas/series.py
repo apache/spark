@@ -2555,6 +2555,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         columns: Optional[Union[Name, List[Name]]] = None,
         level: Optional[int] = None,
         inplace: bool = False,
+        errors: str = "raise",
     ) -> "Series":
         """
         Return Series with specified index labels removed.
@@ -2578,6 +2579,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             If True, do operation inplace and return None
 
             .. versionadded:: 3.4.0
+        errors : {{'ignore', 'raise'}}, default 'raise'
+            If 'ignore', suppress error and only existing labels are dropped.
+
+            .. versionadded:: 4.1.0
 
         Returns
         -------
@@ -2686,6 +2691,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 length      0.3
         dtype: float64
         """
+        if errors not in ("raise", "ignore"):
+            raise ValueError("errors must be either 'raise' or 'ignore'")
         dropped = self._drop(
             labels=labels, index=index, level=level, inplace=inplace, columns=columns
         )
