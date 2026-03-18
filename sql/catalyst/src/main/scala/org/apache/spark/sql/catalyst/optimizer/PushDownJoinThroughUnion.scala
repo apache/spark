@@ -59,8 +59,7 @@ object PushDownJoinThroughUnion
     case join @ Join(u: Union, right, joinType, joinCond, hint)
       if conf.getConf(SQLConf.PUSH_DOWN_JOIN_THROUGH_UNION_ENABLED) &&
         (joinType == Inner || joinType == LeftOuter) &&
-        joinCond.isDefined &&
-        isBroadcastable(joinType, right, hint) &&
+        canPlanAsBroadcastHashJoin(join, conf) &&
         // Conservatively exclude any right subtree containing subqueries,
         // as DeduplicateRelations may not correctly handle correlated references.
         // Non-correlated subqueries are safe in theory but excluded for simplicity.
@@ -92,23 +91,6 @@ object PushDownJoinThroughUnion
         Join(child, newRight, joinType, newCond, hint)
       }
       u.withNewChildren(newChildren)
-  }
-
-  /**
-   * Checks whether the right side of the join is small enough to broadcast,
-   * based on size statistics or explicit BROADCAST hints.
-   *
-   * For Inner joins, a BROADCAST hint on either side qualifies, because
-   * the physical planner can choose either side as the build side.
-   * For LeftOuter joins, only a right-side hint qualifies.
-   */
-  private def isBroadcastable(
-      joinType: JoinType,
-      right: LogicalPlan,
-      hint: JoinHint): Boolean = {
-    canBroadcastBySize(right, conf) ||
-      hint.rightHint.exists(_.strategy.contains(BROADCAST)) ||
-      (joinType == Inner && hint.leftHint.exists(_.strategy.contains(BROADCAST)))
   }
 
   /**
