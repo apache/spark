@@ -1800,44 +1800,49 @@ class UtilsTestsMixin:
 
     def test_check_error_optional_subconditions_spark_56029(self):
         """SPARK-56029: check_error default matches condition or subcondition (prefix match)."""
+        # Use an error class that exists in Python error-conditions.json and has sub_class
+        params = {"method": "setRuntimeConf"}
         ex = PySparkException(
-            errorClass="CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
-            messageParameters={},
+            errorClass="SESSION_MUTATION_IN_DECLARATIVE_PIPELINE.SET_RUNTIME_CONF",
+            messageParameters=params,
         )
-        self.check_error(ex, "CANNOT_LOAD_STATE_STORE", messageParameters={})
+        self.check_error(
+            ex, "SESSION_MUTATION_IN_DECLARATIVE_PIPELINE", messageParameters=params
+        )
         self.check_error(
             ex,
-            "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
-            messageParameters={},
+            "SESSION_MUTATION_IN_DECLARATIVE_PIPELINE.SET_RUNTIME_CONF",
+            messageParameters=params,
         )
 
     def test_check_error_match_exact_condition_spark_56029(self):
         """SPARK-56029: check_error with match_exact_condition_and_parameters."""
+        params = {"method": "setRuntimeConf"}
         ex_sub = PySparkException(
-            errorClass="CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
-            messageParameters={},
+            errorClass="SESSION_MUTATION_IN_DECLARATIVE_PIPELINE.SET_RUNTIME_CONF",
+            messageParameters=params,
         )
         self.check_error(
             ex_sub,
-            "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
-            messageParameters={},
+            "SESSION_MUTATION_IN_DECLARATIVE_PIPELINE.SET_RUNTIME_CONF",
+            messageParameters=params,
             match_exact_condition_and_parameters=True,
         )
         ex_main = PySparkException(
-            errorClass="CANNOT_LOAD_STATE_STORE",
-            messageParameters={},
+            errorClass="SESSION_MUTATION_IN_DECLARATIVE_PIPELINE",
+            messageParameters=params,
         )
         self.check_error(
             ex_main,
-            "CANNOT_LOAD_STATE_STORE",
-            messageParameters={},
+            "SESSION_MUTATION_IN_DECLARATIVE_PIPELINE",
+            messageParameters=params,
             match_exact_condition_and_parameters=True,
         )
         with self.assertRaises(AssertionError):
             self.check_error(
                 ex_sub,
-                "CANNOT_LOAD_STATE_STORE",
-                messageParameters={},
+                "SESSION_MUTATION_IN_DECLARATIVE_PIPELINE",
+                messageParameters=params,
                 match_exact_condition_and_parameters=True,
             )
 
