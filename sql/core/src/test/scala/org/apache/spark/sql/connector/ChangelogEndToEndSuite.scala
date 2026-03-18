@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import java.sql.Timestamp
 import java.util
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.test.SharedSparkSession
@@ -227,5 +227,127 @@ class ChangelogEndToEndSuite extends QueryTest with SharedSparkSession {
     } finally {
       query.stop()
     }
+  }
+
+  test("DataFrame API - streaming changes() returns change data") {
+    catalog.addChangeRows(ident, Seq(
+      makeChangeRow(1L, "a", "insert", 1L, 1000000L),
+      makeChangeRow(2L, "b", "insert", 1L, 1000000L),
+      makeChangeRow(1L, "a", "delete", 2L, 2000000L)))
+
+    val streamDf = spark.readStream
+      .option("startingVersion", "1")
+      .changes(fullTableName)
+
+    val queryName = "cdc_df_streaming_test"
+    val query = streamDf.writeStream
+      .format("memory")
+      .queryName(queryName)
+      .start()
+    try {
+      query.processAllAvailable()
+      val result = spark.sql(s"SELECT * FROM $queryName")
+      checkAnswer(result, Seq(
+        Row(1L, "a", "insert", 1L, new Timestamp(1000L)),
+        Row(2L, "b", "insert", 1L, new Timestamp(1000L)),
+        Row(1L, "a", "delete", 2L, new Timestamp(2000L))))
+    } finally {
+      query.stop()
+    }
+  }
+
+  test("DataFrame API - streaming changes() with startingVersion filters data") {
+    catalog.addChangeRows(ident, Seq(
+      makeChangeRow(1L, "a", "insert", 1L, 1000000L),
+      makeChangeRow(2L, "b", "insert", 1L, 1000000L),
+      makeChangeRow(1L, "a", "delete", 2L, 2000000L)))
+
+    val streamDf = spark.readStream
+      .option("startingVersion", "2")
+      .changes(fullTableName)
+
+    val queryName = "cdc_df_streaming_test_v2"
+    val query = streamDf.writeStream
+      .format("memory")
+      .queryName(queryName)
+      .start()
+    try {
+      query.processAllAvailable()
+      val result = spark.sql(s"SELECT * FROM $queryName")
+      checkAnswer(result, Seq(
+        Row(1L, "a", "delete", 2L, new Timestamp(2000L))))
+    } finally {
+      query.stop()
+    }
+  }
+
+  test("DataFrame API - streaming changes() with projection and filter") {
+    catalog.addChangeRows(ident, Seq(
+      makeChangeRow(1L, "a", "insert", 1L, 1000000L),
+      makeChangeRow(2L, "b", "insert", 1L, 1000000L),
+      makeChangeRow(3L, "c", "insert", 2L, 2000000L)))
+
+    val streamDf = spark.readStream
+      .option("startingVersion", "1")
+      .changes(fullTableName)
+      .filter("_commit_version = 1")
+      .select("id", "data")
+
+    val queryName = "cdc_df_streaming_proj"
+    val query = streamDf.writeStream
+      .format("memory")
+      .queryName(queryName)
+      .start()
+    try {
+      query.processAllAvailable()
+      val result = spark.sql(s"SELECT * FROM $queryName")
+      checkAnswer(result, Seq(
+        Row(1L, "a"),
+        Row(2L, "b")))
+    } finally {
+      query.stop()
+    }
+  }
+
+  test("DataFrame API - changes() with exclusive bounds") {
+    catalog.addChangeRows(ident, Seq(
+      makeChangeRow(1L, "a", "insert", 1L, 1000000L),
+      makeChangeRow(2L, "b", "insert", 2L, 2000000L),
+      makeChangeRow(3L, "c", "insert", 3L, 3000000L)))
+
+    val df = spark.read
+      .option("startingVersion", "1")
+      .option("endingVersion", "3")
+      .option("startingBoundInclusive", "false")
+      .option("endingBoundInclusive", "false")
+      .changes(fullTableName)
+    checkAnswer(df, Seq(
+      Row(2L, "b", "insert", 2L, new Timestamp(2000L))))
+  }
+
+  test("DataFrame API - changes() passes deduplicationMode and computeUpdates to catalog") {
+    catalog.addChangeRows(ident, Seq(
+      makeChangeRow(1L, "a", "insert", 1L, 1000000L)))
+
+    spark.read
+      .option("startingVersion", "1")
+      .option("deduplicationMode", "netChanges")
+      .option("computeUpdates", "true")
+      .changes(fullTableName)
+      .collect()
+
+    val info = catalog.lastChangelogInfo.get
+    assert(info.deduplicationMode() === ChangelogInfo.DeduplicationMode.NET_CHANGES)
+    assert(info.computeUpdates() === true)
+  }
+
+  test("DataFrame API - changes() rejects user-specified schema") {
+    val e = intercept[AnalysisException] {
+      spark.read
+        .schema("id LONG, data STRING")
+        .option("startingVersion", "1")
+        .changes(fullTableName)
+    }
+    assert(e.getMessage.contains("changes"))
   }
 }
