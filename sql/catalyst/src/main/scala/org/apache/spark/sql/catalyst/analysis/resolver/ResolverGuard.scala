@@ -43,7 +43,6 @@ import org.apache.spark.sql.catalyst.analysis.{
   UnresolvedStarExceptOrReplace,
   UnresolvedSubqueryColumnAliases
 }
-import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.NamePlaceholder
 import org.apache.spark.sql.catalyst.expressions.aggregate.{
@@ -476,13 +475,9 @@ class ResolverGuard(
     val nameParts = unresolvedFunction.nameParts
     val funcName = nameParts.last.toLowerCase(Locale.ROOT)
     if (nameParts.size == 1) {
-      // Unqualified: reject if unsupported list or not in registry, else same as parent
-      val shouldReject = ResolverGuard.UNSUPPORTED_FUNCTION_NAMES.contains(funcName) ||
-        !FunctionRegistry.functionSet.contains(
-          FunctionRegistry.builtinFunctionIdentifier(nameParts.last))
-      if (shouldReject) {
-        Some(s"unsupported function $funcName")
-      } else if (isUnsupportedFunction(funcName)) {
+      // Unqualified: reject if unsupported, else non-builtin or check children (same as master)
+      if (ResolverGuard.UNSUPPORTED_FUNCTION_NAMES.contains(funcName) ||
+          isUnsupportedFunction(funcName)) {
         Some(s"unsupported function ${funcName}")
       } else if (!isBuiltinFunction(funcName)) {
         Some("non-builtin function")
