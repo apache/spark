@@ -464,11 +464,15 @@ case class KeyedPartitioning(
     KeyedPartitioning.projectKeys(partitionKeys, expressionDataTypes, positions)
 
   /**
-   * Reduces this partitioning's partition keys by applying the given reducers.
+   * Reduces this partitioning's partition keys by applying the given reducers and use the provided
+   * types for comparison.
    * Returns the distinct reduced keys.
    */
-  def reduceKeys(reducers: Seq[Option[Reducer[_, _]]]): Seq[InternalRowComparableWrapper] =
-    KeyedPartitioning.reduceKeys(partitionKeys, expressionDataTypes, reducers).distinct
+  def reduceKeys(
+      reducers: Seq[Option[Reducer[_, _]]],
+      reducedDataTypes: Seq[DataType]): Seq[InternalRowComparableWrapper] =
+    KeyedPartitioning.reduceKeys(partitionKeys, expressionDataTypes, reducers, reducedDataTypes)
+      .distinct
 
   override def satisfies0(required: Distribution): Boolean = {
     nonGroupedSatisfies(required) || groupedSatisfies(required)
@@ -581,14 +585,28 @@ object KeyedPartitioning {
   }
 
   /**
-   * Reduces a sequence of partition keys by applying reducers to each position.
+   * Reduces a sequence of data types by applying reducers to each position.
+   */
+  def reduceTypes(
+      dataTypes: Seq[DataType],
+      reducers: Seq[Option[Reducer[_, _]]]): Seq[DataType] = {
+    dataTypes.zip(reducers).map {
+      case (t, Some(reducer: Reducer[Any, Any])) => Option(reducer.resultType()).getOrElse(t)
+      case (t, _) => t
+    }
+  }
+
+  /**
+   * Reduces a sequence of partition keys by applying reducers to each position and using the
+   * provided types for comparison.
    */
   def reduceKeys(
       keys: Seq[InternalRowComparableWrapper],
       dataTypes: Seq[DataType],
-      reducers: Seq[Option[Reducer[_, _]]]): Seq[InternalRowComparableWrapper] = {
+      reducers: Seq[Option[Reducer[_, _]]],
+      reducedDataTypes: Seq[DataType]): Seq[InternalRowComparableWrapper] = {
     val comparableKeyWrapperFactory =
-      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(dataTypes)
+      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(reducedDataTypes)
     keys.map { key =>
       val keyValues = key.row.toSeq(dataTypes)
       val reducedKey = keyValues.zip(reducers).map {

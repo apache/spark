@@ -17,6 +17,7 @@
 package org.apache.spark.sql.connector.catalog.functions;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.types.DataType;
 
 /**
  * A 'reducer' for output of user-defined functions.
@@ -39,4 +40,12 @@ import org.apache.spark.annotation.Evolving;
 @Evolving
 public interface Reducer<I, O> {
   O reduce(I arg);
+
+  /**
+   * Returns the {@link DataType data type} of values produced by this function.
+   * It can return null to signal it doesn't change the input type.
+   *
+   * @return a data type for values produced by this function.
+   */
+  default DataType resultType() { return null; }
 }

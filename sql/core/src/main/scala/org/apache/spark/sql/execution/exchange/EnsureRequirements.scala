@@ -20,17 +20,20 @@ package org.apache.spark.sql.execution.exchange
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.v2.GroupPartitionsExec
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.DataType
 
 /**
  * Ensures that the [[org.apache.spark.sql.catalyst.plans.physical.Partitioning Partitioning]]
@@ -509,11 +512,27 @@ case class EnsureRequirements(
         // in case of compatible but not identical partition expressions, we apply 'reduce'
         // transforms to group one side's partitions as well as the common partition values
         val leftReducers = leftSpec.reducers(rightSpec)
-        val leftReducedKeys =
-          leftReducers.fold(leftPartitioning.partitionKeys)(leftPartitioning.reduceKeys)
         val rightReducers = rightSpec.reducers(leftSpec)
-        val rightReducedKeys =
-          rightReducers.fold(rightPartitioning.partitionKeys)(rightPartitioning.reduceKeys)
+        val leftReducedDataTypes = leftReducers.fold(leftPartitioning.expressionDataTypes)(
+          KeyedPartitioning.reduceTypes(leftPartitioning.expressionDataTypes, _))
+        val rightReducedDataTypes = rightReducers.fold(rightPartitioning.expressionDataTypes)(
+          KeyedPartitioning.reduceTypes(rightPartitioning.expressionDataTypes, _))
+        if (leftReducedDataTypes != rightReducedDataTypes && (
+            !conf.v2BucketingAllowIncompatibleTransformTypes ||
+              leftReducedDataTypes.map(PhysicalDataType(_)) !=
+                rightReducedDataTypes.map(PhysicalDataType(_)))) {
+            throw new SparkException("Storage-partition join partition transforms produced " +
+              s"incompatible reduced types, left: $leftReducedDataTypes, right: " +
+              s"$rightReducedDataTypes")
+        }
+        val commonDataTypes = leftReducedDataTypes
+        val leftReducedKeys = leftReducers.fold(leftPartitioning.partitionKeys)(
+          leftPartitioning.reduceKeys(_, commonDataTypes))
+        // As we use left side reduced types as common types for comparison, the right side
+        // partitions keys might need a new comparable wrapper (depending on the legacy flag)
+        val rightReducedKeys = rightReducers.fold(
+          rewrapKeys(rightPartitioning.partitionKeys, rightReducedDataTypes, commonDataTypes))(
+          rightPartitioning.reduceKeys(_, commonDataTypes))
 
         // merge values on both sides
         var mergedPartitionKeys =
@@ -628,10 +647,17 @@ case class EnsureRequirements(
           }
         }
 
+        val leftMergedPartitionKeys = mergedPartitionKeys
+        // As we used left side reduced types as common types for comparison, the merged partition
+        // keys that we push doww to the right side might need a new comparable wrapper (depending
+        // on the legacy flag)
+        val rightMergedPartitionKeys =
+          rewrapKeyMap(mergedPartitionKeys, commonDataTypes, rightReducedDataTypes)
+
         // Now we need to push-down the common partition information to the `GroupPartitionsExec`s.
-        newLeft = applyGroupPartitions(left, leftSpec.joinKeyPositions, mergedPartitionKeys,
+        newLeft = applyGroupPartitions(left, leftSpec.joinKeyPositions, leftMergedPartitionKeys,
           leftReducers, distributePartitions = applyPartialClustering && !replicateLeftSide)
-        newRight = applyGroupPartitions(right, rightSpec.joinKeyPositions, mergedPartitionKeys,
+        newRight = applyGroupPartitions(right, rightSpec.joinKeyPositions, rightMergedPartitionKeys,
           rightReducers, distributePartitions = applyPartialClustering && !replicateRightSide)
       }
     }
@@ -653,6 +679,32 @@ case class EnsureRequirements(
         leftSpec.isCompatibleWith(rightSpec)
       case _ =>
         false
+    }
+  }
+
+  private def rewrapKeys(
+      keys: Seq[InternalRowComparableWrapper],
+      currentDataTypes: Seq[DataType],
+      expectedDataType: Seq[DataType]) = {
+    if (currentDataTypes != expectedDataType) {
+      val comparableKeyWrapperFactory =
+        InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(expectedDataType)
+      keys.map(key => comparableKeyWrapperFactory(key.row))
+    } else {
+      keys
+     }
+  }
+
+  private def rewrapKeyMap(
+      keyMap: Seq[(InternalRowComparableWrapper, Int)],
+      currentDataTypes: Seq[DataType],
+      expectedDataType: Seq[DataType]) = {
+    if (currentDataTypes != expectedDataType) {
+      val comparableKeyWrapperFactory =
+        InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(expectedDataType)
+      keyMap.map { case (key, numParts) => (comparableKeyWrapperFactory(key.row), numParts) }
+    } else {
+      keyMap
     }
   }
 

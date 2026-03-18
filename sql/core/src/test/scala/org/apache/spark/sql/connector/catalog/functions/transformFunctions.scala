@@ -40,42 +40,137 @@ object UnboundYearsFunction extends UnboundFunction {
   override def name(): String = "years"
 }
 
-object YearsFunction extends ScalarFunction[Long] {
+object YearsFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
   override def inputTypes(): Array[DataType] = Array(TimestampType)
-  override def resultType(): DataType = LongType
+  override def resultType(): DataType = IntegerType
   override def name(): String = "years"
   override def canonicalName(): String = name()
 
   val UTC: ZoneId = ZoneId.of("UTC")
   val EPOCH_LOCAL_DATE: LocalDate = Instant.EPOCH.atZone(UTC).toLocalDate
 
-  def invoke(ts: Long): Long = {
+  def invoke(ts: Long): Int = {
     val localDate = DateTimeUtils.microsToInstant(ts).atZone(UTC).toLocalDate
-    ChronoUnit.YEARS.between(EPOCH_LOCAL_DATE, localDate)
-  }
-}
-
-object DaysFunction extends BoundFunction {
-  override def inputTypes(): Array[DataType] = Array(TimestampType)
-  override def resultType(): DataType = LongType
-  override def name(): String = "days"
-  override def canonicalName(): String = name()
-}
-
-object UnboundDaysFunction extends UnboundFunction {
-  override def bind(inputType: StructType): BoundFunction = {
-    if (inputType.size == 1 && isValidType(inputType.head.dataType)) DaysFunction
-    else throw new UnsupportedOperationException(
-      "'days' only take date or timestamp as input type")
+    ChronoUnit.YEARS.between(EPOCH_LOCAL_DATE, localDate).toInt
   }
 
-  private def isValidType(dt: DataType): Boolean = dt match {
+  override def reducer(otherFunction: ReducibleFunction[_, _]): Reducer[Int, Int] = null
+}
+
+abstract class UnboundDaysFunctionBase extends UnboundFunction {
+  protected def isValidType(dt: DataType): Boolean = dt match {
     case DateType | TimestampType => true
     case _ => false
   }
 
   override def description(): String = name()
   override def name(): String = "days"
+}
+
+object UnboundDaysFunction extends UnboundDaysFunctionBase {
+  override def bind(inputType: StructType): BoundFunction = {
+    if (inputType.size == 1 && isValidType(inputType.head.dataType)) DaysFunction
+    else throw new UnsupportedOperationException(
+      "'days' only take date or timestamp as input type")
+  }
+}
+
+object UnboundDaysFunctionWithCompatiblePhysicalTypeReducer extends UnboundDaysFunctionBase {
+  override def bind(inputType: StructType): BoundFunction = {
+    if (inputType.size == 1 && isValidType(inputType.head.dataType)) {
+      DaysFunctionWithCompatiblePhysicalTypeReducer
+    } else throw new UnsupportedOperationException(
+      "'days' only take date or timestamp as input type")
+  }
+}
+
+object UnboundDaysFunctionWithIncompatiblePhysicalTypeReducer extends UnboundDaysFunctionBase {
+  override def bind(inputType: StructType): BoundFunction = {
+    if (inputType.size == 1 && isValidType(inputType.head.dataType)) {
+      DaysFunctionWithIncompatiblePhysicalTypeReducer
+    } else throw new UnsupportedOperationException(
+      "'days' only take date or timestamp as input type")
+  }
+}
+
+abstract class DaysFunctionBase extends ScalarFunction[Int] {
+  override def inputTypes(): Array[DataType] = Array(TimestampType)
+  override def resultType(): DataType = DateType
+  override def name(): String = "days"
+  override def canonicalName(): String = name()
+}
+
+// This `days` function reduces `DateType` partitions keys to `IntegerType` partitions keys when
+// partitions are reduced to partitions of a `years` function, which produces `IntegerType` keys.
+object DaysFunction extends DaysFunctionBase with ReducibleFunction[Int, Int] {
+  override def reducer(otherFunc: ReducibleFunction[_, _]): Reducer[Int, Int] = {
+    if (otherFunc == YearsFunction) {
+      DaysToYearsReducer()
+    } else {
+      null
+    }
+  }
+}
+
+// This `days` function reduces `DateType` partitions keys to `DateType` partitions keys when
+// partitions are reduced to partitions of a `years` function, which produces `IntegerType` keys.
+// `DateType` and `IntegerType` share the same `PhysicalDataType`.
+object DaysFunctionWithCompatiblePhysicalTypeReducer
+    extends DaysFunctionBase with ReducibleFunction[Int, Int] {
+  override def reducer(otherFunc: ReducibleFunction[_, _]): Reducer[Int, Int] = {
+    if (otherFunc == YearsFunction) {
+      DaysToYearsReducerWithCompatiblePhysicalType()
+    } else {
+      null
+    }
+  }
+}
+
+// This `days` function reduces `DateType` partitions keys to `LongType` partitions keys when
+// partitions are reduced to partitions of a `years` function, which produces `IntegerType` keys.
+// `LongType` and `IntegerType` have different `PhysicalDataType`s.
+object DaysFunctionWithIncompatiblePhysicalTypeReducer
+  extends DaysFunctionBase with ReducibleFunction[Int, Long] {
+  override def reducer(otherFunc: ReducibleFunction[_, _]): Reducer[Int, Long] = {
+    if (otherFunc == YearsFunction) {
+      DaysToYearsReducerWithIncompablePhysicalType()
+    } else {
+      null
+    }
+  }
+}
+
+abstract class DaysToYearsReducerBase {
+  val UTC: ZoneId = ZoneId.of("UTC")
+  val EPOCH_LOCAL_DATE: LocalDate = Instant.EPOCH.atZone(UTC).toLocalDate
+}
+
+case class DaysToYearsReducer() extends DaysToYearsReducerBase with Reducer[Int, Int] {
+  override def reduce(days: Int): Int = {
+    val localDate = EPOCH_LOCAL_DATE.plusDays(days)
+    ChronoUnit.YEARS.between(EPOCH_LOCAL_DATE, localDate).toInt
+  }
+
+  override def resultType(): DataType = IntegerType
+}
+
+// No `resultType()` override means that the reduced type is the original `DateType`.
+case class DaysToYearsReducerWithCompatiblePhysicalType()
+    extends DaysToYearsReducerBase with Reducer[Int, Int] {
+  override def reduce(days: Int): Int = {
+    val localDate = EPOCH_LOCAL_DATE.plusDays(days)
+    ChronoUnit.YEARS.between(EPOCH_LOCAL_DATE, localDate).toInt
+  }
+}
+
+case class DaysToYearsReducerWithIncompablePhysicalType()
+    extends DaysToYearsReducerBase with Reducer[Int, Long] {
+  override def reduce(days: Int): Long = {
+    val localDate = EPOCH_LOCAL_DATE.plusDays(days)
+    ChronoUnit.YEARS.between(EPOCH_LOCAL_DATE, localDate)
+  }
+
+  override def resultType(): DataType = LongType
 }
 
 object UnboundBucketFunction extends UnboundFunction {
