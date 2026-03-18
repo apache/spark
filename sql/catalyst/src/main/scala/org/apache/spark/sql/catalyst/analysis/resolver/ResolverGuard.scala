@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 import java.util.Locale
 
 import org.apache.spark.sql.catalyst.{
-  FunctionIdentifier,
   QueryPlanningTracker,
   SQLConfHelper
 }
@@ -650,7 +649,8 @@ class ResolverGuard(
   }
 
   private def isBuiltinFunction(singlePartName: String) = {
-    FunctionRegistry.functionSet.contains(FunctionIdentifier(singlePartName)) && v1SessionCatalog
+    FunctionRegistry.functionSet.contains(
+      FunctionRegistry.builtinFunctionIdentifier(singlePartName)) && v1SessionCatalog
       .lookupBuiltinOrTempFunction(singlePartName)
       .exists(info => info.getSource == "built-in")
   }
