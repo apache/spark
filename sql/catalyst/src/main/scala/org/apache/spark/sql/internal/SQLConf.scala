@@ -8313,7 +8313,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
         else Seq(session, builtin) ++ pathEntries
       case "last" =>
         if (pathEntries.isEmpty) Seq(builtin, session)
-        else pathEntries ++ Seq(builtin, session)
+        else Seq(builtin) ++ pathEntries ++ Seq(session)
       case _ => // "second"
         if (pathEntries.isEmpty) Seq(builtin, session)
         else Seq(builtin, session) ++ pathEntries

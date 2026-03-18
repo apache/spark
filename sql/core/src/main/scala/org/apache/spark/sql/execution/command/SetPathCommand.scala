@@ -90,7 +90,8 @@ case class SetPathCommand(elements: Seq[PathElement]) extends LeafRunnableComman
 
     elements.flatMap {
       case PathElement.DefaultPath =>
-        defaultPathEntries(conf, systemCatalog, builtin, session, currentCatalog, currentNamespace)
+        // Default path = session order (first/second/last). Clear path; use at resolution time.
+        Seq.empty
       case PathElement.SystemPath =>
         Seq(Seq(systemCatalog, builtin), Seq(systemCatalog, session))
       case PathElement.CurrentDatabase | PathElement.CurrentSchema =>
@@ -99,9 +100,7 @@ case class SetPathCommand(elements: Seq[PathElement]) extends LeafRunnableComman
       case PathElement.PathRef =>
         conf.sessionPath match {
           case Some(s) => SQLConf.parseSessionPath(s)
-          case None =>
-            defaultPathEntries(
-              conf, systemCatalog, builtin, session, currentCatalog, currentNamespace)
+          case None => Seq.empty
         }
       case PathElement.SchemaInPath(parts) =>
         qualifySchemaParts(parts, systemCatalog, currentCatalog)
@@ -129,22 +128,4 @@ case class SetPathCommand(elements: Seq[PathElement]) extends LeafRunnableComman
     }
   }
 
-  private def defaultPathEntries(
-      conf: SQLConf,
-      systemCatalog: String,
-      builtin: String,
-      session: String,
-      currentCatalog: String,
-      currentNamespace: Seq[String]): Seq[Seq[String]] = {
-    val order = conf.sessionFunctionResolutionOrder
-    val sessionNs = Seq(systemCatalog, session)
-    val builtinNs = Seq(systemCatalog, builtin)
-    val currentNs =
-      if (currentNamespace.isEmpty) Seq(currentCatalog) else currentCatalog +: currentNamespace
-    order match {
-      case "first" => Seq(sessionNs, builtinNs, currentNs)
-      case "last" => Seq(builtinNs, currentNs, sessionNs)
-      case _ => Seq(builtinNs, sessionNs, currentNs)
-    }
-  }
 }

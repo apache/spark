@@ -998,7 +998,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
         condition = "UNRESOLVED_ROUTINE",
         parameters = Map(
           "routineName" -> "`no_such_func_xyz`",
-          "searchPath" -> "[`spark_catalog`.`default`, `system`.`builtin`, `system`.`session`]"
+          "searchPath" -> "[`system`.`builtin`, `spark_catalog`.`default`, `system`.`session`]"
         ),
         context = ExpectedContext(
           fragment = "no_such_func_xyz()",
