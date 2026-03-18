@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.arrow
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, FileInputStream, OutputStream}
 import java.nio.channels.{Channels, ReadableByteChannel}
-import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -140,11 +139,8 @@ private[sql] object ArrowConverters extends Logging {
         }
         arrowWriter.finish()
         val batch = unloader.getRecordBatch()
-        try {
-          bytes = serializeBatch(batch)
-        } finally {
-          batch.close()
-        }
+        bytes = serializeBatch(batch)
+        batch.close()
       } {
         arrowWriter.reset()
       }
@@ -152,9 +148,9 @@ private[sql] object ArrowConverters extends Logging {
       bytes
     }
 
-    private val closed = new AtomicBoolean(false)
-    override def close(): Unit = if (closed.compareAndSet(false, true)) {
-      try root.close() finally allocator.close()
+    override def close(): Unit = {
+        root.close()
+        allocator.close()
     }
   }
 
@@ -216,13 +212,12 @@ private[sql] object ArrowConverters extends Logging {
         }
         arrowWriter.finish()
         val batch = unloader.getRecordBatch()
-        try {
-          MessageSerializer.serialize(writeChannel, batch)
-          // Always write the Ipc options at the end.
-          ArrowStreamWriter.writeEndOfStream(writeChannel, IpcOption.DEFAULT)
-        } finally {
-          batch.close()
-        }
+        MessageSerializer.serialize(writeChannel, batch)
+
+        // Always write the Ipc options at the end.
+        ArrowStreamWriter.writeEndOfStream(writeChannel, IpcOption.DEFAULT)
+
+        batch.close()
       } {
         arrowWriter.reset()
       }
