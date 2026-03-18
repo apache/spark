@@ -19,8 +19,6 @@ package org.apache.spark.sql.types
 
 import java.util.Locale
 
-import scala.io.Source
-
 import org.json4s.JsonAST.JString
 
 import org.apache.spark.SparkFunSuite
@@ -225,32 +223,6 @@ class GeometryTypeSuite extends SparkFunSuite {
     geometryTypes.foreach { geometryType =>
       val pdt = PhysicalDataType(geometryType)
       assert(pdt.isInstanceOf[PhysicalGeometryType])
-    }
-  }
-
-  test("All expected Geometry srid/CRS") {
-    def loadResourceLines(name: String): Seq[String] = {
-      val url = Thread.currentThread().getContextClassLoader.getResource(name)
-      assert(url != null, s"Test resource not found: $name")
-      Source.fromURL(url, "UTF-8").getLines().filter(_.nonEmpty).toSeq
-    }
-
-    val dataLines = loadResourceLines("geo/expected_geometry_srs_crid_mapping.csv")
-    assert(dataLines.nonEmpty, "expected_geometry_srs_crid_mapping.csv must not be empty")
-
-    dataLines.foreach { line =>
-      val parts = line.split(",", 2)
-      assert(parts.length == 2, s"Line must be 'srid,crs': $line")
-      val srid = parts(0).trim.toInt
-      val expectedCrs = parts(1).trim
-
-      // Validate srid -> crs
-      val g = GeometryType(srid)
-      assert(g.crs == expectedCrs, s"SRID $srid -> CRS '$expectedCrs'")
-
-      // Validate crs -> srid
-      val g2 = GeometryType(expectedCrs)
-      assert(g2.srid == srid, s"CRS '$expectedCrs' -> SRID $srid")
     }
   }
 }

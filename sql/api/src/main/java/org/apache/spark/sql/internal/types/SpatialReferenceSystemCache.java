@@ -17,13 +17,17 @@
 
 package org.apache.spark.sql.internal.types;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import org.apache.spark.annotation.Unstable;
 
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Class for maintaining the mappings between supported SRID/CRS values and the corresponding SRS.
@@ -151,5 +155,21 @@ public class SpatialReferenceSystemCache {
   // Returns the SRS corresponding to the input string ID. If not supported, returns `null`.
   public SpatialReferenceSystemInformation getSrsInfo(String stringId) {
     return stringIdToSrs.getOrDefault(stringId, null);
+  }
+
+  /**
+   * Returns an unmodifiable view of the SRID-to-SRS map.
+   */
+  @VisibleForTesting
+  public Map<Integer, SpatialReferenceSystemInformation> getSridToSrs() {
+    return Collections.unmodifiableMap(sridToSrs);
+  }
+
+  /**
+   * Returns an unmodifiable view of the string CRS ID-to-SRS map.
+   */
+  @VisibleForTesting
+  public Map<String, SpatialReferenceSystemInformation> getStringIdToSrs() {
+    return Collections.unmodifiableMap(stringIdToSrs);
   }
 }

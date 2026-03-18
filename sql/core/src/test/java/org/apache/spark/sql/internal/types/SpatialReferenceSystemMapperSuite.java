@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 public class SpatialReferenceSystemMapperSuite {
 
@@ -102,5 +103,83 @@ public class SpatialReferenceSystemMapperSuite {
     Assertions.assertNull(GeographicSpatialReferenceSystemMapper.getSrid("EPSG:999999"));
     Assertions.assertNull(GeographicSpatialReferenceSystemMapper.getSrid("SRID:0"));
     Assertions.assertNull(GeographicSpatialReferenceSystemMapper.getSrid("EPSG:3857"));
+  }
+
+  /**
+   * Validates expected registry scale: geographic SRID count and CRS string-id counts by authority
+   * prefix (empty authority for {@code SRID:0}, plus OGC, EPSG, ESRI).
+   */
+  @Test
+  public void testSpatialReferenceSystemContents() {
+    SpatialReferenceSystemCache cache = SpatialReferenceSystemCache.getInstance();
+    Map<Integer, SpatialReferenceSystemInformation> sridToSrs = cache.getSridToSrs();
+    Map<String, SpatialReferenceSystemInformation> stringIdToSrs = cache.getStringIdToSrs();
+
+    int emptyAuthoritySrid0 = 0;
+    int ogc = 0;
+    int epsg = 0;
+    int esri = 0;
+    for (String stringId : stringIdToSrs.keySet()) {
+      if ("SRID:0".equals(stringId)) {
+        emptyAuthoritySrid0++;
+      } else if (stringId.startsWith("OGC:")) {
+        ogc++;
+      } else if (stringId.startsWith("EPSG:")) {
+        epsg++;
+      } else if (stringId.startsWith("ESRI:")) {
+        esri++;
+      }
+    }
+    Assertions.assertEquals(1, emptyAuthoritySrid0, "SRID:0 (empty authority)");
+    Assertions.assertEquals(3, ogc, "OGC CRS string IDs");
+    Assertions.assertEquals(7723, epsg, "EPSG CRS string IDs");
+    Assertions.assertEquals(2919, esri, "ESRI CRS string IDs");
+    Assertions.assertEquals(
+        10646,
+        stringIdToSrs.size(),
+        "total CRS string-id entries (SRID:0 + OGC + EPSG + ESRI)");
+  }
+
+  /**
+   * The SRID map and CRS string-id map must be consistent inverses: canonical string ID from an
+   * SRID entry resolves back to that entry, and every CRS key resolves to the canonical entry for
+   * its SRID.
+   */
+  @Test
+  public void testMapValidity() {
+    SpatialReferenceSystemCache cache = SpatialReferenceSystemCache.getInstance();
+    Map<Integer, SpatialReferenceSystemInformation> sridToSrs = cache.getSridToSrs();
+    Map<String, SpatialReferenceSystemInformation> stringIdToSrs = cache.getStringIdToSrs();
+
+    for (Map.Entry<Integer, SpatialReferenceSystemInformation> e : sridToSrs.entrySet()) {
+      int srid = e.getKey();
+      SpatialReferenceSystemInformation bySrid = e.getValue();
+      Assertions.assertEquals(
+          srid,
+          bySrid.srid(),
+          "sridToSrs key must match SpatialReferenceSystemInformation.srid()");
+      SpatialReferenceSystemInformation byCanonicalCrs =
+          stringIdToSrs.get(bySrid.stringId());
+      Assertions.assertNotNull(
+          byCanonicalCrs,
+          "Canonical CRS string ID must exist in stringIdToSrs: srid=" + srid);
+      Assertions.assertSame(
+          bySrid,
+          byCanonicalCrs,
+          "sridToSrs entry must match stringIdToSrs for canonical string ID");
+    }
+
+    for (Map.Entry<String, SpatialReferenceSystemInformation> e : stringIdToSrs.entrySet()) {
+      String crsKey = e.getKey();
+      SpatialReferenceSystemInformation byCrs = e.getValue();
+      SpatialReferenceSystemInformation bySrid = sridToSrs.get(byCrs.srid());
+      Assertions.assertNotNull(
+          bySrid,
+          "CRS key must refer to a known SRID: crsKey=" + crsKey);
+      Assertions.assertSame(
+          bySrid,
+          byCrs,
+          "stringIdToSrs entry must match sridToSrs for that SRID (crsKey=" + crsKey + ")");
+    }
   }
 }
