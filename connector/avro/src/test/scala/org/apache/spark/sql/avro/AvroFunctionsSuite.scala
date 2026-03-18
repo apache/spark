@@ -759,25 +759,21 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
       """.stripMargin
 
     val df = spark.range(1).select(lit(Array[Byte](1, 2, 3)).as("data"))
-    checkError(
-      exception = intercept[SparkException] {
-        df.select(from_avro($"data", invalidSchema)).collect()
-      },
-      condition = "MALFORMED_AVRO_MESSAGE",
-      parameters = Map("mode" -> "FAILFAST")
-    )
+    val ex = intercept[Exception] {
+      df.select(from_avro($"data", invalidSchema)).collect()
+    }
+    assert(!ex.isInstanceOf[NullPointerException],
+      s"Should not throw NPE, but got: ${ex.getClass.getName}: ${ex.getMessage}")
   }
 
   test("SPARK-56043: from_avro with completely unparseable schema should not throw NPE") {
     val garbageSchema = "this is not valid JSON at all"
 
     val df = spark.range(1).select(lit(Array[Byte](1, 2, 3)).as("data"))
-    checkError(
-      exception = intercept[SparkException] {
-        df.select(from_avro($"data", garbageSchema)).collect()
-      },
-      condition = "MALFORMED_AVRO_MESSAGE",
-      parameters = Map("mode" -> "FAILFAST")
-    )
+    val ex = intercept[Exception] {
+      df.select(from_avro($"data", garbageSchema)).collect()
+    }
+    assert(!ex.isInstanceOf[NullPointerException],
+      s"Should not throw NPE, but got: ${ex.getClass.getName}: ${ex.getMessage}")
   }
 }

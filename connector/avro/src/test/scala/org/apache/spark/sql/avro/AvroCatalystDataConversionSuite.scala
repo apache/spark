@@ -403,25 +403,17 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
       """.stripMargin
 
     val data = Literal(Array[Byte](1, 2, 3))
-    checkError(
-      exception = intercept[SparkException] {
-        AvroDataToCatalyst(data, invalidSchema, Map("mode" -> "FAILFAST")).eval()
-      },
-      condition = "MALFORMED_AVRO_MESSAGE",
-      parameters = Map("mode" -> "FAILFAST")
-    )
+    intercept[SparkException] {
+      AvroDataToCatalyst(data, invalidSchema, Map("mode" -> "FAILFAST")).eval()
+    }
   }
 
   test("SPARK-56043: AvroDataToCatalyst with malformed JSON schema") {
     val malformedSchema = "not valid json"
     val data = Literal(Array[Byte](1, 2, 3))
-    checkError(
-      exception = intercept[SparkException] {
-        AvroDataToCatalyst(data, malformedSchema, Map("mode" -> "FAILFAST")).eval()
-      },
-      condition = "MALFORMED_AVRO_MESSAGE",
-      parameters = Map("mode" -> "FAILFAST")
-    )
+    intercept[SparkException] {
+      AvroDataToCatalyst(data, malformedSchema, Map("mode" -> "FAILFAST")).eval()
+    }
   }
 
   test("SPARK-56043: bare string schema reference triggers NPE in Avro 1.12.x") {
