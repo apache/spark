@@ -204,7 +204,11 @@ class SeriesIndexMixin:
         psser = ps.Series(pser)
 
         self.assertEqual(psser.idxmax(), pser.idxmax())
-        self.assertEqual(repr(psser.idxmax(skipna=False)), repr(pser.idxmax(skipna=False)))
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assertEqual(repr(psser.idxmax(skipna=False)), repr(pser.idxmax(skipna=False)))
+        else:
+            with self.assertRaisesRegex(ValueError, "Encountered an NA value with skipna=False"):
+                psser.idxmax(skipna=False)
 
     def test_idxmin(self):
         pser = pd.Series(data=[1, 4, 5], index=["A", "B", "C"])
@@ -230,7 +234,11 @@ class SeriesIndexMixin:
         psser = ps.Series(pser)
 
         self.assertEqual(psser.idxmin(), pser.idxmin())
-        self.assertEqual(repr(psser.idxmin(skipna=False)), repr(pser.idxmin(skipna=False)))
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assertEqual(repr(psser.idxmin(skipna=False)), repr(pser.idxmin(skipna=False)))
+        else:
+            with self.assertRaisesRegex(ValueError, "Encountered an NA value with skipna=False"):
+                psser.idxmin(skipna=False)
 
     def test_index(self):
         # to check setting name of Index properly.

@@ -12576,6 +12576,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             result = F.when(max_value == float("-inf"), F.lit(None)).otherwise(result)
 
+            if LooseVersion(pd.__version__) >= "3.0.0":
+                result = F.when(
+                    result.isNull(), F.raise_error("Encountered all NA values")
+                ).otherwise(result)
+
             internal = self._internal.with_new_columns(
                 [result.alias(SPARK_DEFAULT_SERIES_NAME)],
                 column_labels=[None],
@@ -12705,6 +12710,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 )
 
             result = F.when(min_value == float("inf"), F.lit(None)).otherwise(result)
+
+            if LooseVersion(pd.__version__) >= "3.0.0":
+                result = F.when(
+                    result.isNull(), F.raise_error("Encountered all NA values")
+                ).otherwise(result)
 
             internal = self._internal.with_new_columns(
                 [result.alias(SPARK_DEFAULT_SERIES_NAME)],
