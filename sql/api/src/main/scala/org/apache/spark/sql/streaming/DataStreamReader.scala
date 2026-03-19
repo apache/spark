@@ -131,7 +131,8 @@ abstract class DataStreamReader {
    *     .changes("my_table")
    * }}}
    *
-   * @param tableName is either a qualified or unqualified name that designates a table.
+   * @param tableName
+   *   a qualified or unqualified name that designates a table.
    * @since 4.2.0
    */
   def changes(tableName: String): DataFrame
