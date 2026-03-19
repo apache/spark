@@ -32,6 +32,7 @@ import org.apache.spark.sql.types.DataType;
  *   <li> More generally, there exists reducer functions r1(x) and r2(x) such that
  *        r1(f_source(x)) = r2(f_target(x)) for all input x. </li>
  * </ul>
+ * where = means both value and data type match.
  *
  * <p>If the reducer changes the logical Spark {@link DataType data type} of the values it produces,
  * implement {@link TypedReducer} instead.

@@ -3329,33 +3329,33 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
           s"testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.time = i.arrive_time",
           s"testcat.ns.$purchases p JOIN testcat.ns.$items i ON i.arrive_time = p.time"
         ).foreach { joinSting =>
-          val df = sql(
-            s"""
-               |${selectWithMergeJoinHint("i", "p")} id, item_id
-               |FROM $joinSting
-               |ORDER BY id, item_id
-               |""".stripMargin)
+          val e = intercept[SparkException] {
+            val df = sql(
+              s"""
+                 |${selectWithMergeJoinHint("i", "p")} id, item_id
+                 |FROM $joinSting
+                 |ORDER BY id, item_id
+                 |""".stripMargin)
 
-          val shuffles = collectShuffles(df.queryExecution.executedPlan)
-          assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
-          val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
-          assert(groupPartitions.forall(_.outputPartitioning.numPartitions == 2))
+            df.collect()
+          }
+          assert(e.getMessage.startsWith(
+            "Storage-partition join partition transforms produced incompatible reduced types"))
 
-          checkAnswer(df, Seq(Row(0, 1), Row(1, 1)))
+          withSQLConf(SQLConf.V2_BUCKETING_ALLOW_INCOMPATIBLE_TRANSFORM_TYPES.key -> "true") {
+            val df = sql(
+              s"""
+                 |${selectWithMergeJoinHint("i", "p")} id, item_id
+                 |FROM $joinSting
+                 |ORDER BY id, item_id
+                 |""".stripMargin)
 
-          withSQLConf(SQLConf.V2_BUCKETING_ALLOW_INCOMPATIBLE_TRANSFORM_TYPES.key -> "false") {
-            val e = intercept[SparkException] {
-              val df = sql(
-                s"""
-                   |${selectWithMergeJoinHint("i", "p")} id, item_id
-                   |FROM $joinSting
-                   |ORDER BY id, item_id
-                   |""".stripMargin)
+            val shuffles = collectShuffles(df.queryExecution.executedPlan)
+            assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
+            val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+            assert(groupPartitions.forall(_.outputPartitioning.numPartitions == 2))
 
-              df.collect()
-            }
-            assert(e.getMessage.startsWith(
-              "Storage-partition join partition transforms produced incompatible reduced types"))
+            checkAnswer(df, Seq(Row(0, 1), Row(1, 1)))
           }
         }
       }
