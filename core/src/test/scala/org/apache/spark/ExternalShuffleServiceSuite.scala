@@ -245,6 +245,10 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with Eventually {
         .set(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED, true)
         .set(config.SHUFFLE_SERVICE_REMOVE_SHUFFLE_ENABLED, enabled)
         .set(config.EXECUTOR_REMOVE_DELAY.key, "0s")
+        .set(config.EXECUTOR_INSTANCES, 1)
+        .set(config.EXECUTOR_CORES, 1)
+//        .set("spark.executor.extraJavaOptions",
+//          "-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=5005")
       sc = new SparkContext("local-cluster[1,1,1024]", "test", confWithLocalDiskReading)
       sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
       sc.env.blockManager.blockStoreClient.getClass should equal(classOf[ExternalBlockStoreClient])
@@ -274,8 +278,11 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with Eventually {
                   ShuffleChecksumBlockId(shuffleBlockId.shuffleId, shuffleBlockId.mapId,
                     shuffleBlockId.reduceId).name
                 ).map { blockId =>
-                  new File(ExecutorDiskUtils.getFilePath(dirs,
+                  val f = new File(ExecutorDiskUtils.getFilePath(dirs,
                     sc.env.blockManager.subDirsPerLocalDir, blockId))
+                  println(s"shuffle file: ${f.getAbsolutePath}, exists: ${f.exists()}, " +
+                    s"file length: ${if (f.exists()) f.length() else "N/A"}")
+                  f
                 }
               }
               promise.success(files)
@@ -285,6 +292,7 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with Eventually {
           promise.future
         }
         val filesToCheck = promises.flatMap(p => ThreadUtils.awaitResult(p, Duration(2, "sec")))
+        println(s"files to check: ${filesToCheck.map(_.getAbsolutePath).mkString(", ")}")
         assert(filesToCheck.length == 6)
         assert(filesToCheck.forall(_.exists()))
 
@@ -309,6 +317,8 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with Eventually {
         sc.cleaner.foreach(_.doCleanupShuffle(0, true))
 
         if (enabled) {
+          println(s"checking files after cleanup: ${filesToCheck.filter(_.exists()).
+            map(f => s"${f.getAbsolutePath}: exists=${f.exists()}").mkString(", ")}")
           assert(filesToCheck.forall(!_.exists()))
         } else {
           assert(filesToCheck.forall(_.exists()))

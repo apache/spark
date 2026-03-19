@@ -200,6 +200,7 @@ private[spark] class IndexShuffleBlockResolver(
 
     if (checksumEnabled) {
       file = getChecksumFile(shuffleId, mapId, algorithm)
+      println("Deleting checksum file: " + file.getPath)
       if (file.exists() && !file.delete()) {
         logWarning(log"Error deleting checksum ${MDC(PATH, file.getPath())}")
       }
