@@ -209,6 +209,7 @@ object BucketFunction extends ScalarFunction[Int] with ReducibleFunction[Int, In
 
 case class BucketReducer(divisor: Int) extends Reducer[Int, Int] {
   override def reduce(bucket: Int): Int = bucket % divisor
+  override def displayName(): String = toString
 }
 
 object UnboundStringSelfFunction extends UnboundFunction {

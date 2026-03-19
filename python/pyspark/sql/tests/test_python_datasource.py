@@ -28,7 +28,7 @@ from decimal import Decimal
 from typing import Callable, Iterable, List, Union, Iterator, Tuple
 
 from pyspark.errors import AnalysisException, PythonException
-from pyspark.profiler import has_memory_profiler
+from pyspark.memory_profiler_ext import has_memory_profiler
 from pyspark.sql.datasource import (
     CaseInsensitiveDict,
     DataSource,

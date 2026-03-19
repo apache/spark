@@ -365,22 +365,30 @@ class SparkSessionExtensions {
 
   private[sql] def registerFunctions(functionRegistry: FunctionRegistry) = {
     for ((name, expressionInfo, function) <- injectedFunctions) {
-      functionRegistry.registerFunction(name, expressionInfo, function)
+      // Only unqualified (1-part) names are supported — they are registered as builtins.
+      // Multi-part names were silently unreachable before and are ignored for compatibility.
+      if (name.database.isEmpty && name.catalog.isEmpty) {
+        functionRegistry.registerFunction(
+          FunctionRegistry.builtinFunctionIdentifier(name.funcName), expressionInfo, function)
+      }
     }
     functionRegistry
   }
 
   private[sql] def registerTableFunctions(tableFunctionRegistry: TableFunctionRegistry) = {
     for ((name, expressionInfo, function) <- injectedTableFunctions) {
-      tableFunctionRegistry.registerFunction(name, expressionInfo, function)
+      if (name.database.isEmpty && name.catalog.isEmpty) {
+        tableFunctionRegistry.registerFunction(
+          FunctionRegistry.builtinFunctionIdentifier(name.funcName), expressionInfo, function)
+      }
     }
     tableFunctionRegistry
   }
 
   /**
-  * Injects a custom function into the [[org.apache.spark.sql.catalyst.analysis.FunctionRegistry]]
-  * at runtime for all sessions.
-  */
+   * Injects a custom function into the [[org.apache.spark.sql.catalyst.analysis.FunctionRegistry]]
+   * at runtime for all sessions.
+   */
   def injectFunction(functionDescription: FunctionDescription): Unit = {
     injectedFunctions += functionDescription
   }

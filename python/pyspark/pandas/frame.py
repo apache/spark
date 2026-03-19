@@ -7592,6 +7592,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         axis: Optional[Axis] = 0,
         index: Union[Name, List[Name]] = None,
         columns: Union[Name, List[Name]] = None,
+        errors: str = "raise",
     ) -> "DataFrame":
         """
         Drop specified labels from columns.
@@ -7617,6 +7618,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         columns : single label or list-like
             Alternative to specifying axis (``labels, axis=1``
             is equivalent to ``columns=labels``).
+        errors : {{'ignore', 'raise'}}, default 'raise'
+            If 'ignore', suppress error and only existing labels are dropped.
+
+            .. versionadded:: 4.1.0
 
         Returns
         -------
@@ -7680,14 +7685,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         -----
         Currently, dropping rows of a MultiIndex DataFrame is not supported yet.
         """
+        if errors not in ("raise", "ignore"):
+            raise ValueError("errors must be either 'raise' or 'ignore'")
         if labels is not None:
             if index is not None or columns is not None:
                 raise ValueError("Cannot specify both 'labels' and 'index'/'columns'")
             axis = validate_axis(axis)
             if axis == 1:
-                return self.drop(index=index, columns=labels)
+                return self.drop(index=index, columns=labels, errors=errors)
             else:
-                return self.drop(index=labels, columns=columns)
+                return self.drop(index=labels, columns=columns, errors=errors)
         else:
             if index is None and columns is None:
                 raise ValueError("Need to specify at least one of 'labels' or 'columns' or 'index'")
@@ -7740,8 +7747,17 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         for col in columns
                         if label[: len(col)] == col
                     )
+                    if errors == "raise":
+                        missing = [
+                            col
+                            for col in columns
+                            if not any(label[: len(col)] == col for label in internal.column_labels)
+                        ]
+                        if missing:
+                            raise KeyError(missing)
+
                     if len(drop_column_labels) == 0:
-                        raise KeyError(columns)
+                        return DataFrame(internal)
 
                     keep_columns_and_labels = [
                         (column, label)
@@ -10162,7 +10178,18 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             # For timestamp type columns, we should cast the column type to string.
             for key, spark_data_type in zip(column_name_stats_kv, spark_data_types):
                 if isinstance(spark_data_type, (TimestampType, TimestampNTZType)):
-                    column_name_stats_kv[key] = [str(value) for value in column_name_stats_kv[key]]
+                    if LooseVersion(pd.__version__) < "3.0.0":
+                        # In pandas 2, use str(value) for all values, including None
+                        column_name_stats_kv[key] = [
+                            str(value) for value in column_name_stats_kv[key]
+                        ]
+                    else:
+                        # In pandas 3, preserve None to match empty timestamp describe() results
+                        # after string conversion in pandas-based expectations.
+                        column_name_stats_kv[key] = [
+                            str(value) if value is not None else None
+                            for value in column_name_stats_kv[key]
+                        ]
 
             result: DataFrame = DataFrame(  # type: ignore[no-redef]
                 data=column_name_stats_kv,

@@ -29,7 +29,7 @@ import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.distributions.Distributions
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.expressions.Expressions._
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{ExtendedMode, FormattedMode, SimpleMode, SparkPlan}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec}
 import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
@@ -3231,29 +3231,33 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     }
   }
 
-  test("SPARK-55992: GroupPartitions textual representatin in plans") {
+  test("SPARK-55992: GroupPartitions string in simple and extended explain") {
     val items_partitions = Array(bucket(4, "id"), years("arrive_time"))
     createTable(items, itemsColumns, items_partitions)
-
     sql(s"INSERT INTO testcat.ns.$items VALUES (1, 'aa', 10.0, cast('2021-01-01' as timestamp))")
-
     val purchases_partitions = Array(bucket(6, "item_id"), years("time"))
     createTable(purchases, purchasesColumns, purchases_partitions)
-
     sql(s"INSERT INTO testcat.ns.$purchases VALUES (2, 10.0, cast('2021-01-01' as timestamp))")
-
     withSQLConf(
       SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
       SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
       SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
       val df = sql(
         s"""
-           |SELECT *
+           |${selectWithMergeJoinHint("i", "p")}
+           |*
            |FROM testcat.ns.$items i
            |JOIN testcat.ns.$purchases p ON p.item_id = i.id
            |""".stripMargin)
-      checkKeywordsExistsInExplain(df, keywords = "GroupPartitions JoinKeyPositions: [0] " +
-        "ExpectedPartitionKeys: 2 Reducers: 1 DistributePartitions: false")
+      val simpleAndExtendedKeyword =
+        "GroupPartitions JoinKeyPositions: [0] ExpectedPartitionKeys: 2 " +
+        "Reducers: [BucketReducer(2)] DistributePartitions: false"
+      val formattedKeyword =
+        "Arguments: JoinKeyPositions: [0], ExpectedPartitionKeys: 2, " +
+        "Reducers: [BucketReducer(2)], DistributePartitions: false"
+      checkKeywordsExistsInExplain(df, SimpleMode, simpleAndExtendedKeyword)
+      checkKeywordsExistsInExplain(df, ExtendedMode, simpleAndExtendedKeyword)
+      checkKeywordsExistsInExplain(df, FormattedMode, formattedKeyword)
     }
   }
 

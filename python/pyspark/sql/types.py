@@ -2059,8 +2059,12 @@ class VariantVal:
     @classmethod
     def parseJson(cls, json_str: str) -> "VariantVal":
         """
-        Convert the VariantVal to a nested Python object of Python data types.
-        :return: Python representation of the Variant nested structure
+        Parse a JSON string and construct a VariantVal.
+
+        Returns
+        -------
+        VariantVal
+            A VariantVal representing the parsed Variant value.
         """
         value, metadata = VariantUtils.parse_json(json_str)
         return VariantVal(value, metadata)

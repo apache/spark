@@ -42,6 +42,14 @@ public interface Reducer<I, O> {
   O reduce(I arg);
 
   /**
+   * Returns a short string representation for plan display (e.g. explain output).
+   * Defaults to the unqualified class name; implementations may override for a richer description.
+   */
+  default String displayName() {
+    return getClass().getSimpleName();
+  }
+
+  /**
    * Returns the {@link DataType data type} of values produced by this reducer.
    *
    * As a reducer doesn't know the result {@link DataType data type} of the reduced transform
