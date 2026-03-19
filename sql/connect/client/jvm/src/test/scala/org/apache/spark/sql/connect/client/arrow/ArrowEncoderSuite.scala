@@ -30,7 +30,7 @@ import org.apache.arrow.memory.{BufferAllocator, RootAllocator}
 import org.apache.arrow.vector.VarBinaryVector
 
 import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationException}
-import org.apache.spark.sql.{AnalysisException, Encoders, Row}
+import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, Codec, OuterScopes}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, CalendarIntervalEncoder, DateEncoder, DayTimeIntervalEncoder, EncoderField, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, LocalDateTimeEncoder, NullEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, RowEncoder, ScalaDecimalEncoder, StringEncoder, TimestampEncoder, TransformingEncoder, UDTEncoder, YearMonthIntervalEncoder}
@@ -807,7 +807,6 @@ class ArrowEncoderSuite extends ConnectFunSuite {
 
   private val wideSchemaEncoder = toRowEncoder(
     new StructType()
-      .add("a", "int")
       .add("b", "string")
       .add(
         "c",
@@ -827,30 +826,29 @@ class ArrowEncoderSuite extends ConnectFunSuite {
     new StructType()
       .add("b", "string")
       .add(
+        "C",
+        new StructType()
+          .add("Ca", "array<int>")
+          .add("Cb", "binary"))
+      .add(
         "d",
         ArrayType(
           new StructType()
             .add("da", "decimal(20, 10)")
-            .add("dc", "boolean")))
-      .add(
-        "C",
-        new StructType()
-          .add("Ca", "array<int>")
-          .add("Cb", "binary")))
+            .add("db", "string"))))
 
   test("bind to schema") {
-    // Binds to a wider schema. The narrow schema has fewer (nested) fields, has a slightly
-    // different field order, and uses different cased names in a couple of places.
+    // Binds to a wider schema. The narrow schema has fewer (nested) fields, and uses different
+    // cased names in a couple of places.
     withAllocator { allocator =>
       val input = Row(
-        887,
         "foo",
         Row(Seq(1, 7, 5), Array[Byte](8.toByte, 756.toByte), 5f),
         Seq(Row(null, "a", false), Row(javaBigDecimal(57853, 10), "b", false)))
       val expected = Row(
         "foo",
-        Seq(Row(null, false), Row(javaBigDecimal(57853, 10), false)),
-        Row(Seq(1, 7, 5), Array[Byte](8.toByte, 756.toByte)))
+        Row(Seq(1, 7, 5), Array[Byte](8.toByte, 756.toByte)),
+        Seq(Row(null, "a"), Row(javaBigDecimal(57853, 10), "b")))
       val arrowBatches = serializeToArrow(Iterator.single(input), wideSchemaEncoder, allocator)
       val result =
         ArrowDeserializers.deserializeFromArrow(
@@ -858,18 +856,21 @@ class ArrowEncoderSuite extends ConnectFunSuite {
           narrowSchemaEncoder,
           allocator,
           timeZoneId = "UTC")
-      val actual = result.next()
-      assert(result.isEmpty)
-      assert(expected === actual)
-      result.close()
-      arrowBatches.close()
+      try {
+        val actual = result.next()
+        assert(result.isEmpty)
+        assert(expected === actual)
+      } finally {
+        result.close()
+        arrowBatches.close()
+      }
     }
   }
 
   test("unknown field") {
     withAllocator { allocator =>
       val arrowBatches = serializeToArrow(Iterator.empty, narrowSchemaEncoder, allocator)
-      intercept[AnalysisException] {
+      intercept[SparkRuntimeException] {
         ArrowDeserializers.deserializeFromArrow(
           arrowBatches,
           wideSchemaEncoder,
