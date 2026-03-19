@@ -20,35 +20,26 @@ import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.types.DataType;
 
 /**
- * A 'reducer' for output of user-defined functions.
+ * A {@link Reducer} that changes the {@link DataType data type} of the values it produces.
  *
- * @see ReducibleFunction
- *
- * A user defined function f_source(x) is 'reducible' on another user_defined function
- * f_target(x) if
- * <ul>
- *   <li> There exists a reducer function r(x) such that r(f_source(x)) = f_target(x) for
- *        all input x, or </li>
- *   <li> More generally, there exists reducer functions r1(x) and r2(x) such that
- *        r1(f_source(x)) = r2(f_target(x)) for all input x. </li>
- * </ul>
- *
- * <p>If the reducer changes the logical Spark {@link DataType data type} of the values it produces,
- * implement {@link TypedReducer} instead.
+ * <p>Implement this interface instead of {@link Reducer} when the reducer produces values of a
+ * different logical Spark {@link DataType data type} than its input. If a {@link ReducibleFunction}
+ * returns a {@code TypedReducer} from its {@code reducer()} method, the output type is taken from
+ * {@link #resultType()}. If it returns a plain {@link Reducer}, the output type is assumed to be
+ * unchanged.
  *
  * @param <I> the physical Java type of the input
  * @param <O> the physical Java type of the output
- * @since 4.0.0
+ * @see Reducer
+ * @see ReducibleFunction
+ * @since 4.2.0
  */
 @Evolving
-public interface Reducer<I, O> {
-  O reduce(I arg);
-
+public interface TypedReducer<I, O> extends Reducer<I, O> {
   /**
-   * Returns a short string representation for plan display (e.g. explain output).
-   * Defaults to the unqualified class name; implementations may override for a richer description.
+   * Returns the logical Spark {@link DataType data type} of values produced by this reducer.
+   *
+   * @return the data type of values produced by this reducer.
    */
-  default String displayName() {
-    return getClass().getSimpleName();
-  }
+  DataType resultType();
 }

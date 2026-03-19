@@ -24,7 +24,7 @@ import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
-import org.apache.spark.sql.connector.catalog.functions.Reducer
+import org.apache.spark.sql.connector.catalog.functions.{Reducer, TypedReducer}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
@@ -591,7 +591,7 @@ object KeyedPartitioning {
       dataTypes: Seq[DataType],
       reducers: Seq[Option[Reducer[_, _]]]): Seq[DataType] = {
     dataTypes.zip(reducers).map {
-      case (t, Some(reducer: Reducer[Any, Any])) => Option(reducer.resultType()).getOrElse(t)
+      case (t, Some(reducer: TypedReducer[Any, Any])) => reducer.resultType()
       case (t, _) => t
     }
   }

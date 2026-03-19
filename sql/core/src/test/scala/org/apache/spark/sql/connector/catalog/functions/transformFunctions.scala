@@ -145,7 +145,7 @@ abstract class DaysToYearsReducerBase {
   val EPOCH_LOCAL_DATE: LocalDate = Instant.EPOCH.atZone(UTC).toLocalDate
 }
 
-case class DaysToYearsReducer() extends DaysToYearsReducerBase with Reducer[Int, Int] {
+case class DaysToYearsReducer() extends DaysToYearsReducerBase with TypedReducer[Int, Int] {
   override def reduce(days: Int): Int = {
     val localDate = EPOCH_LOCAL_DATE.plusDays(days)
     ChronoUnit.YEARS.between(EPOCH_LOCAL_DATE, localDate).toInt
@@ -154,7 +154,7 @@ case class DaysToYearsReducer() extends DaysToYearsReducerBase with Reducer[Int,
   override def resultType(): DataType = IntegerType
 }
 
-// No `resultType()` override means that the reduced type is the original `DateType`.
+// Not a `TypedReducer`, so the reduced type is the original `DateType`.
 case class DaysToYearsReducerWithCompatiblePhysicalType()
     extends DaysToYearsReducerBase with Reducer[Int, Int] {
   override def reduce(days: Int): Int = {
@@ -164,7 +164,7 @@ case class DaysToYearsReducerWithCompatiblePhysicalType()
 }
 
 case class DaysToYearsReducerWithIncompablePhysicalType()
-    extends DaysToYearsReducerBase with Reducer[Int, Long] {
+    extends DaysToYearsReducerBase with TypedReducer[Int, Long] {
   override def reduce(days: Int): Long = {
     val localDate = EPOCH_LOCAL_DATE.plusDays(days)
     ChronoUnit.YEARS.between(EPOCH_LOCAL_DATE, localDate)
