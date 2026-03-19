@@ -877,9 +877,9 @@ case class AdaptiveSparkPlanExec(
       }
 
       val result = if (disableBroadcastJoin) {
-        // Use a cloned session to preserve SessionState planner customizations while keeping
-        // fallback conf changes isolated from the original shared session.
-        val fallbackSession = context.session.newSession()
+        // Use cloneSession to preserve current session state (e.g. runtime SQLConf and planner
+        // customizations) while keeping fallback conf changes isolated from the original session.
+        val fallbackSession = context.session.cloneSession()
         val fallbackConf = fallbackSession.sessionState.conf
         fallbackConf.setConfString(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
         fallbackConf.setConfString(SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
