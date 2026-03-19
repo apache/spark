@@ -5,8 +5,8 @@
   "relationChanges": {
     "unparsedIdentifier": "myTable",
     "options": {
-      "startingversion": "1",
-      "endingversion": "5"
+      "startingVersion": "1",
+      "endingVersion": "5"
     }
   }
 }
