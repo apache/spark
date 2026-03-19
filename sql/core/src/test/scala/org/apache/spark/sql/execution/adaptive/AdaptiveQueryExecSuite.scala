@@ -884,6 +884,40 @@ class AdaptiveQueryExecSuite
     assert(filtered.exists(_.eq(otherStage)))
   }
 
+  test("Fallback to shuffled join should remove failed broadcast logical query stages") {
+    val qe = sql("SELECT key FROM testData").queryExecution
+    val adaptivePlan = AdaptiveSparkPlanExec(
+      qe.sparkPlan,
+      AdaptiveExecutionContext(spark, qe),
+      Seq.empty,
+      isSubquery = false)
+    val removeFailedBroadcastStagesFromLogicalPlan =
+      PrivateMethod[LogicalPlan](Symbol("removeFailedBroadcastStagesFromLogicalPlan"))
+
+    val failedLogical = sql("SELECT a FROM testData2").queryExecution.optimizedPlan
+    val failedExchange = BroadcastExchangeExec(
+      IdentityBroadcastMode, sql("SELECT a FROM testData2").queryExecution.sparkPlan)
+    val failedStage = BroadcastQueryStageExec(0, failedExchange, failedExchange.canonicalized)
+    val failedLogicalStage = LogicalQueryStage(failedLogical, failedStage)
+
+    val otherLogical = sql("SELECT key FROM testData").queryExecution.optimizedPlan
+    val otherExchange = BroadcastExchangeExec(
+      IdentityBroadcastMode, sql("SELECT key FROM testData").queryExecution.sparkPlan)
+    val otherStage = BroadcastQueryStageExec(1, otherExchange, otherExchange.canonicalized)
+    val otherLogicalStage = LogicalQueryStage(otherLogical, otherStage)
+
+    val logicalPlan =
+      org.apache.spark.sql.catalyst.plans.logical.Union(Seq(failedLogicalStage, otherLogicalStage))
+    val updated = adaptivePlan.invokePrivate(
+      removeFailedBroadcastStagesFromLogicalPlan(logicalPlan, Seq(failedStage)))
+    val remainingLogicalStages = updated.collect {
+      case stage: LogicalQueryStage => stage
+    }
+
+    assert(remainingLogicalStages.size == 1)
+    assert(remainingLogicalStages.head.physicalPlan.eq(otherStage))
+  }
+
   test("Union/Except/Intersect queries") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       runAdaptiveAndVerifyResult(
