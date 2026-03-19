@@ -6556,13 +6556,19 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             max_value = results[0]
             # If the maximum is achieved in multiple locations, the first row position is returned.
             if max_value[0] is None:
-                warnings.warn(
-                    "The behavior of Series.argmax/argmin "
-                    "with skipna=False and NAs, or with all-NAs is deprecated. "
-                    "In a future version this will raise ValueError.",
-                    FutureWarning,
-                )
-                return -1
+                if LooseVersion(pd.__version__) < "3.0.0":
+                    warnings.warn(
+                        "The behavior of Series.argmax/argmin "
+                        "with skipna=False and NAs, or with all-NAs is deprecated. "
+                        "In a future version this will raise ValueError.",
+                        FutureWarning,
+                    )
+                    return -1
+                else:
+                    if skipna:
+                        raise ValueError("Encountered all NA values")
+                    else:
+                        raise ValueError("Encountered an NA value with skipna=False")
             else:
                 return max_value[1]
 
@@ -6625,13 +6631,19 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             min_value = results[0]
             # If the maximum is achieved in multiple locations, the first row position is returned.
             if min_value[0] is None:
-                warnings.warn(
-                    "The behavior of Series.argmax/argmin "
-                    "with skipna=False and NAs, or with all-NAs is deprecated. "
-                    "In a future version this will raise ValueError.",
-                    FutureWarning,
-                )
-                return -1
+                if LooseVersion(pd.__version__) < "3.0.0":
+                    warnings.warn(
+                        "The behavior of Series.argmax/argmin "
+                        "with skipna=False and NAs, or with all-NAs is deprecated. "
+                        "In a future version this will raise ValueError.",
+                        FutureWarning,
+                    )
+                    return -1
+                else:
+                    if skipna:
+                        raise ValueError("Encountered all NA values")
+                    else:
+                        raise ValueError("Encountered an NA value with skipna=False")
             else:
                 return min_value[1]
 
