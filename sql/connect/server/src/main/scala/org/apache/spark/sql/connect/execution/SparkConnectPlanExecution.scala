@@ -143,7 +143,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     val isResultChunkingEnabled = executePlan.resultChunkingEnabled
 
     // mkBatches creates an ArrowBatchWithSchemaIterator (AutoCloseable). It is used directly
-    // in the LocalTableScanExec branch so that we can close it in a finally block — the
+    // in the LocalTableScanExec branch so that we can close it in a finally block. The
     // converter wrapper below returns a plain Scala-mapped iterator that is NOT AutoCloseable,
     // so if sendBatch throws (e.g., client disconnect) the underlying iterator would leak
     // 131072 bytes into ArrowUtils.rootAllocator.
