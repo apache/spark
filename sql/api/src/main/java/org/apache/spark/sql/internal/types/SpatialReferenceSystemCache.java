@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.internal.types;
 
-import com.google.common.annotations.VisibleForTesting;
-
 import org.apache.spark.annotation.Unstable;
 
 import java.io.BufferedReader;
@@ -160,7 +158,6 @@ public class SpatialReferenceSystemCache {
   /**
    * Returns an unmodifiable view of the SRID-to-SRS map.
    */
-  @VisibleForTesting
   public Map<Integer, SpatialReferenceSystemInformation> getSridToSrs() {
     return Collections.unmodifiableMap(sridToSrs);
   }
@@ -168,7 +165,6 @@ public class SpatialReferenceSystemCache {
   /**
    * Returns an unmodifiable view of the string CRS ID-to-SRS map.
    */
-  @VisibleForTesting
   public Map<String, SpatialReferenceSystemInformation> getStringIdToSrs() {
     return Collections.unmodifiableMap(stringIdToSrs);
   }
