@@ -275,12 +275,10 @@ trait SparkTestSuite
   }
 
   /**
-   * Parameters that may be omitted from the expected map in checkError() for specific
-   * error conditions. When a parameter name is in this set for the given condition and
-   * absent from the expected parameters, it is stripped from the actual exception
-   * parameters before comparison. Use this to allow tests to ignore extra parameters
-   * (e.g. added in a later PR) without updating every call site.
-   * Override in test suites to add or change ignorable parameters per condition.
+   * Parameter keys that are omitted from comparison when absent from the expected map.
+   * For each error condition, the set lists keys that are removed from the actual
+   * exception parameters before comparison with the expected map.
+   * Test suites may override this to add or change ignorable parameters per condition.
    */
   protected def checkErrorIgnorableParameters: Map[String, Set[String]] = Map(
     "TABLE_OR_VIEW_NOT_FOUND" -> Set("searchPath")
@@ -459,7 +457,8 @@ trait SparkTestSuite
       queryContext = Array(queryContext))
 
   /**
-   * TABLE_OR_VIEW_NOT_FOUND without asserting searchPath (relies on checkErrorIgnorableParameters).
+   * Asserts TABLE_OR_VIEW_NOT_FOUND with the given relation name.
+   * The searchPath parameter is not asserted; it is ignored during comparison.
    */
   protected def checkErrorTableNotFoundOmitSearchPath(
       exception: SparkThrowable,
@@ -469,7 +468,8 @@ trait SparkTestSuite
       parameters = Map("relationName" -> tableName))
 
   /**
-   * TABLE_OR_VIEW_NOT_FOUND without asserting searchPath (relies on checkErrorIgnorableParameters).
+   * Asserts TABLE_OR_VIEW_NOT_FOUND with the given relation name and query context.
+   * The searchPath parameter is not asserted; it is ignored during comparison.
    */
   protected def checkErrorTableNotFoundOmitSearchPath(
       exception: SparkThrowable,

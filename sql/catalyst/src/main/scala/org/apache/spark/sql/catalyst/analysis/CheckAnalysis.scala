@@ -69,28 +69,29 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
   }
 
   /**
-   * Search path for DDL and DESCRIBE errors: system.session and current catalog only.
-   * Not stored in SQLConf; computed for error messages.
+   * Search path shown in TABLE_OR_VIEW_NOT_FOUND for DDL (e.g. ALTER TABLE, COMMENT ON TABLE).
+   * Contains system.session and the current catalog namespace only. Not from SQLConf.
    */
   private def ddlSearchPathForError(catalogPath: Seq[String]): Seq[String] = {
     Seq(toSQLId(Seq("system", "session")), toSQLId(catalogPath))
   }
 
   /**
-   * Full resolution search path for error messages (queries/DML, DESCRIBE TABLE).
-   * Same order as used for resolution; from SQLConf.resolutionSearchPath(catalogPath).
+   * Full resolution search path for TABLE_OR_VIEW_NOT_FOUND (queries, DML, DESCRIBE TABLE).
+   * Uses the same order as resolution via SQLConf.resolutionSearchPath(catalogPath).
    */
   private def fullSearchPathForError(catalogPath: Seq[String]): Seq[String] = {
     SQLConf.get.resolutionSearchPath(catalogPath).map(toSQLId)
   }
 
-  /** Current catalog + namespace as a path, used when computing search path for errors. */
+  /** Current catalog name and namespace as a path, used when computing search path for errors. */
   private def catalogPathForError: Seq[String] = {
     (currentCatalog.name +: catalogManager.currentNamespace).toSeq
   }
 
   /**
-   * Search path for statements that explicitly specify TEMPORARY VIEW: system.session only.
+   * Search path for TABLE_OR_VIEW_NOT_FOUND when the command targets only temp views
+   * (e.g. DROP TEMPORARY VIEW). Contains system.session only.
    */
   private def tempViewOnlySearchPathForError(): Seq[String] = {
     Seq(toSQLId(Seq("system", "session")))

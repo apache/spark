@@ -169,15 +169,15 @@ class RelationQualificationSuite extends QueryTest with SharedSparkSession {
 
   test("SECTION 10: Unresolved table error includes search path for unqualified name") {
     val sqlText = "SELECT * FROM no_such_table_xyz"
-      checkError(
-        exception = intercept[AnalysisException] { sql(sqlText) },
-        condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map(
-          "relationName" -> "`no_such_table_xyz`",
-          "searchPath" -> (
-            "[`system`.`builtin`, `system`.`session`, " +
-            "`spark_catalog`.`default`]")),
-        context = ExpectedContext(fragment = "no_such_table_xyz", start = 14, stop = 30))
+    checkError(
+      exception = intercept[AnalysisException] { sql(sqlText) },
+      condition = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map(
+        "relationName" -> "`no_such_table_xyz`",
+        "searchPath" -> (
+          "[`system`.`builtin`, `system`.`session`, " +
+          "`spark_catalog`.`default`]")),
+      context = ExpectedContext(fragment = "no_such_table_xyz", start = 14, stop = 30))
   }
 
   test("SECTION 11: Relation resolution search path reflects sessionOrder config") {
