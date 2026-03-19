@@ -141,9 +141,6 @@ private[v2] trait V2JDBCTest
     )
   }
 
-  // DDL (ALTER TABLE, etc.) uses search path: system.session + current catalog namespace.
-  protected val ddlSearchPathForTests: String = "[`system`.`session`, `spark_catalog`.`default`]"
-
   case class PartitioningInfo(
       numPartitions: String,
       lowerBound: String,

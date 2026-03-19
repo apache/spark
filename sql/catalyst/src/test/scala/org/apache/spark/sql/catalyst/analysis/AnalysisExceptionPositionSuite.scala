@@ -58,45 +58,39 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
   }
 
   test("SPARK-34139: UnresolvedRelation should retain sql text position") {
-    verifyTableOrViewPositionWithQueryPath("CACHE TABLE unknown", "unknown")
-    verifyTableOrViewPositionWithQueryPath("UNCACHE TABLE unknown", "unknown")
-    verifyTableOrViewPositionWithQueryPath("DELETE FROM unknown", "unknown")
-    verifyTableOrViewPositionWithQueryPath("UPDATE unknown SET name='abc'", "unknown")
-    verifyTableOrViewPositionWithQueryPath(
+    verifyTableOrViewPosition("CACHE TABLE unknown", "unknown")
+    verifyTableOrViewPosition("UNCACHE TABLE unknown", "unknown")
+    verifyTableOrViewPosition("DELETE FROM unknown", "unknown")
+    verifyTableOrViewPosition("UPDATE unknown SET name='abc'", "unknown")
+    verifyTableOrViewPosition(
       "MERGE INTO unknownTarget AS target USING TaBlE AS source " +
         "ON target.col = source.col WHEN MATCHED THEN DELETE",
       "unknownTarget")
-    verifyTableOrViewPositionWithQueryPath(
+    verifyTableOrViewPosition(
       "MERGE INTO TaBlE AS target USING unknownSource AS source " +
         "ON target.col = source.col WHEN MATCHED THEN DELETE",
       "unknownSource")
-    verifyTableOrViewPositionWithQueryPath("INSERT INTO TABLE unknown SELECT 1", "unknown")
-    verifyTableOrViewPositionWithQueryPath(
-      "INSERT OVERWRITE TABLE unknown VALUES (1, 'a')",
-      "unknown")
+    verifyTablePosition("INSERT INTO TABLE unknown SELECT 1", "unknown")
+    verifyTablePosition("INSERT OVERWRITE TABLE unknown VALUES (1, 'a')", "unknown")
   }
 
   private def verifyTablePosition(sql: String, table: String): Unit = {
-    verifyPosition(sql, table, useQueryPath = false)
+    verifyPosition(sql, table)
   }
 
   private def verifyViewPosition(sql: String, table: String): Unit = {
-    verifyPosition(sql, table, useQueryPath = false)
+    verifyPosition(sql, table)
   }
 
   private def verifyTableOrViewPosition(sql: String, table: String): Unit = {
-    verifyPosition(sql, table, useQueryPath = false)
-  }
-
-  private def verifyTableOrViewPositionWithQueryPath(sql: String, table: String): Unit = {
-    verifyPosition(sql, table, useQueryPath = true)
+    verifyPosition(sql, table)
   }
 
   private def verifyTableOrPermanentViewPosition(sql: String, table: String): Unit = {
-    verifyPosition(sql, table, useQueryPath = false)
+    verifyPosition(sql, table)
   }
 
-  private def verifyPosition(sql: String, table: String, useQueryPath: Boolean = false): Unit = {
+  private def verifyPosition(sql: String, table: String): Unit = {
     val startPos = sql.indexOf(table)
     assert(startPos != -1)
     assertAnalysisErrorCondition(
