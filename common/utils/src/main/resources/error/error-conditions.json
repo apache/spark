@@ -2476,6 +2476,13 @@
           "Single-pass analyzer output schema:",
           "<singlePassOutputSchema>"
         ]
+      },
+      "SINGLE_PASS_FAILED_FIXED_POINT_SUCCEEDED" : {
+        "message" : [
+          "Single-pass resolution failed, but fixed-point resolution succeeded.",
+          "Fixed-point analyzer output:",
+          "<fixedPointOutput>"
+        ]
       }
     },
     "sqlState" : "XX000"
@@ -7126,6 +7133,11 @@
       "PARTIAL_EVOLUTION" : {
         "message" : [
           "The catalog did not support or only partially applied the following changes: <changes>."
+        ]
+      },
+      "TABLE_NOT_SUPPORTED" : {
+        "message" : [
+          "The write target does not support automatic schema evolution."
         ]
       }
     },

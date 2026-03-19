@@ -91,7 +91,6 @@ from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
 from pyspark.sql.pandas.functions import _validate_vectorized_udf  # type: ignore[attr-defined]
 from pyspark.sql.table_arg import TableArg
 
-
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
         ColumnOrName,
@@ -279,12 +278,12 @@ class DataFrame(ParentDataFrame):
         return len(self.select().take(1)) == 0
 
     @overload
-    def select(self, *cols: "ColumnOrName") -> ParentDataFrame:
-        ...
+    def select(self, *cols: "ColumnOrName") -> ParentDataFrame: ...
 
     @overload
-    def select(self, __cols: Union[Sequence["ColumnOrName"], "ColumnOrName"]) -> ParentDataFrame:
-        ...
+    def select(
+        self, __cols: Union[Sequence["ColumnOrName"], "ColumnOrName"]
+    ) -> ParentDataFrame: ...
 
     def select(self, *cols: Union[Sequence["ColumnOrName"], "ColumnOrName"]) -> ParentDataFrame:
         return DataFrame(
@@ -591,12 +590,10 @@ class DataFrame(ParentDataFrame):
         return self.head()
 
     @overload
-    def groupBy(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
-        ...
+    def groupBy(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData": ...
 
     @overload
-    def groupBy(self, __cols: Sequence["ColumnOrNameOrOrdinal"]) -> "GroupedData":
-        ...
+    def groupBy(self, __cols: Sequence["ColumnOrNameOrOrdinal"]) -> "GroupedData": ...
 
     def groupBy(
         self, *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"]
@@ -608,12 +605,10 @@ class DataFrame(ParentDataFrame):
     groupby = groupBy  # type: ignore[assignment]
 
     @overload
-    def rollup(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
-        ...
+    def rollup(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData": ...
 
     @overload
-    def rollup(self, __cols: Sequence["ColumnOrNameOrOrdinal"]) -> "GroupedData":
-        ...
+    def rollup(self, __cols: Sequence["ColumnOrNameOrOrdinal"]) -> "GroupedData": ...
 
     def rollup(
         self, *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"]
@@ -623,12 +618,10 @@ class DataFrame(ParentDataFrame):
         )
 
     @overload
-    def cube(self, *cols: "ColumnOrName") -> "GroupedData":
-        ...
+    def cube(self, *cols: "ColumnOrName") -> "GroupedData": ...
 
     @overload
-    def cube(self, __cols: Sequence["ColumnOrNameOrOrdinal"]) -> "GroupedData":
-        ...
+    def cube(self, __cols: Sequence["ColumnOrNameOrOrdinal"]) -> "GroupedData": ...
 
     def cube(
         self, *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"]
@@ -654,12 +647,10 @@ class DataFrame(ParentDataFrame):
         )
 
     @overload
-    def head(self) -> Optional[Row]:
-        ...
+    def head(self) -> Optional[Row]: ...
 
     @overload
-    def head(self, n: int) -> List[Row]:
-        ...
+    def head(self, n: int) -> List[Row]: ...
 
     def head(self, n: Optional[int] = None) -> Union[Optional[Row], List[Row]]:
         if n is None:
@@ -923,7 +914,7 @@ class DataFrame(ParentDataFrame):
         assert ids is not None, "ids must not be None"
 
         def _convert_cols(
-            cols: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]]
+            cols: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
         ) -> List[Column]:
             if cols is None:
                 return []
@@ -1699,12 +1690,10 @@ class DataFrame(ParentDataFrame):
         return self._col(name)
 
     @overload
-    def __getitem__(self, item: Union[int, str]) -> Column:
-        ...
+    def __getitem__(self, item: Union[int, str]) -> Column: ...
 
     @overload
-    def __getitem__(self, item: Union[Column, List, Tuple]) -> ParentDataFrame:
-        ...
+    def __getitem__(self, item: Union[Column, List, Tuple]) -> ParentDataFrame: ...
 
     def __getitem__(
         self, item: Union[int, str, Column, List, Tuple]
@@ -2334,7 +2323,7 @@ def _test() -> None:
         .getOrCreate()
     )
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.dataframe,
         globs=globs,
         optionflags=doctest.ELLIPSIS

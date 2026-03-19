@@ -1670,6 +1670,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION =
+    buildConf("spark.sql.parquet.reader.respectUnknownTypeAnnotation.enabled")
+      .internal()
+      .doc("When enabled, respects the UNKNOWN type annotation in Parquet files during schema " +
+        "inference and infers NullType. When disabled, ignores the UNKNOWN annotation " +
+        "and uses the physical type instead.")
+      .version("4.1.2")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val PARQUET_FIELD_ID_READ_ENABLED =
     buildConf("spark.sql.parquet.fieldId.read.enabled")
       .doc("Field ID is a native field of the Parquet schema spec. When enabled, Parquet readers " +
@@ -2364,6 +2375,17 @@ object SQLConf {
       .checkValues(Set("first", "second", "last"))
       .createWithDefault("second")
 
+  val PERSISTENT_CATALOG_FIRST =
+    buildConf("spark.sql.legacy.persistentCatalogFirst")
+      .internal()
+      .version("4.2.0")
+      .doc("When true (legacy), partially qualified function names like 'builtin.func' or " +
+        "'session.func' resolve to the persistent catalog first. When false (default), the " +
+        "system catalog is prioritized (system.builtin.func or system.session.func).")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   // Whether to retain group by columns or not in GroupedData.agg.
   val DATAFRAME_RETAIN_GROUP_COLUMNS = buildConf("spark.sql.retainGroupColumns")
     .version("1.4.0")
@@ -2717,7 +2739,7 @@ object SQLConf {
       .version("4.1.0")
       .intConf
       .checkValue(k => k > 0, "Must allow at least 1 change file replay")
-      .createWithDefault(50)
+      .createWithDefault(500)
 
   val STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT =
     buildConf("spark.sql.streaming.stateStore.numStateStoreInstanceMetricsToReport")
@@ -5633,16 +5655,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val PERSISTENT_CATALOG_FIRST = buildConf("spark.sql.legacy.persistentCatalogFirst")
-    .internal()
-    .doc("When false (default), unqualified names like builtin.func or session.func resolve " +
-      "to the system catalog (system.builtin, system.session). When true (legacy), a " +
-      "persistent database named builtin or session wins over the system namespaces.")
-    .version("4.0.0")
-    .withBindingPolicy(ConfigBindingPolicy.SESSION)
-    .booleanConf
-    .createWithDefault(false)
-
   val LEGACY_CTE_DUPLICATE_ATTRIBUTE_NAMES =
     buildConf("spark.sql.legacy.cteDuplicateAttributeNames")
       .internal()
@@ -8148,6 +8160,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def parquetIgnoreVariantAnnotation: Boolean = getConf(SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION)
 
+  def parquetReaderRespectUnknownTypeAnnotation: Boolean =
+    getConf(SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION)
+
   def ignoreMissingParquetFieldId: Boolean = getConf(SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID)
 
   def legacyParquetNanosAsLong: Boolean = getConf(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG)
@@ -8195,6 +8210,12 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def sessionFunctionResolutionOrder: String =
     getConf(SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER)
+
+  /**
+   * Returns true when the system catalog is prioritized for 2-part builtin/session resolution.
+   * This is the inverse of [[SQLConf.PERSISTENT_CATALOG_FIRST]].
+   */
+  def prioritizeSystemCatalog: Boolean = !getConf(SQLConf.PERSISTENT_CATALOG_FIRST)
 
   /**
    * Returns the resolution search path for error messages and resolution order.

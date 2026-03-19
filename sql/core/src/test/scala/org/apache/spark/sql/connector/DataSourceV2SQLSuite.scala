@@ -56,7 +56,7 @@ import org.apache.spark.unsafe.types.UTF8String
 abstract class DataSourceV2SQLSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true)
   with DeleteFromTests with DatasourceV2SQLBase with StatsEstimationTestBase
-  with AdaptiveSparkPlanHelper {
+  with AdaptiveSparkPlanHelper with InsertIntoSchemaEvolutionTests {
 
   override protected def sparkConf: SparkConf =
     super.sparkConf.set(SQLConf.ANSI_ENABLED, true)
@@ -70,6 +70,28 @@ abstract class DataSourceV2SQLSuite
       insert.createOrReplaceTempView(tmpView)
       val overwrite = if (mode == SaveMode.Overwrite) "OVERWRITE" else "INTO"
       sql(s"INSERT $overwrite TABLE $tableName SELECT * FROM $tmpView")
+    }
+  }
+
+  protected def doInsertWithSchemaEvolution(
+      tableName: String,
+      insert: DataFrame,
+      mode: SaveMode = SaveMode.Append,
+      byName: Boolean = false,
+      replaceWhere: Option[String] = None): Unit = {
+    val tmpView = "tmp_view"
+    withTempView(tmpView) {
+      insert.createOrReplaceTempView(tmpView)
+      val byNameClause = if (byName) " BY NAME" else ""
+      replaceWhere match {
+        case Some(predicate) =>
+          sql(s"INSERT WITH SCHEMA EVOLUTION INTO TABLE $tableName$byNameClause" +
+            s" REPLACE WHERE $predicate SELECT * FROM $tmpView")
+        case None =>
+          val overwrite = if (mode == SaveMode.Overwrite) "OVERWRITE" else "INTO"
+          sql(s"INSERT WITH SCHEMA EVOLUTION $overwrite TABLE $tableName$byNameClause" +
+            s" SELECT * FROM $tmpView")
+      }
     }
   }
 

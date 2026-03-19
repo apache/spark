@@ -164,7 +164,7 @@ def _test() -> None:
     sc = SparkContext("local[4]", "PythonTest")
     globs["spark"] = SparkSession(sc)
 
-    (failure_count, test_count) = doctest.testmod(pyspark.sql.observation, globs=globs)
+    failure_count, test_count = doctest.testmod(pyspark.sql.observation, globs=globs)
     sc.stop()
     if failure_count:
         sys.exit(-1)

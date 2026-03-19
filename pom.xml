@@ -120,7 +120,7 @@
     <java.version>17</java.version>
     <java.minimum.version>17.0.11</java.minimum.version>
     <maven.compiler.release>${java.version}</maven.compiler.release>
-    <maven.version>3.9.13</maven.version>
+    <maven.version>3.9.14</maven.version>
     <exec-maven-plugin.version>3.6.1</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
     <asm.version>9.9.1</asm.version>
@@ -214,10 +214,10 @@
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.11.0</commons-cli.version>
     <bouncycastle.version>1.83</bouncycastle.version>
-    <tink.version>1.19.0</tink.version>
+    <tink.version>1.20.0</tink.version>
     <datasketches.version>6.2.0</datasketches.version>
     <netty.version>4.2.10.Final</netty.version>
-    <netty-tcnative.version>2.0.74.Final</netty-tcnative.version>
+    <netty-tcnative.version>2.0.75.Final</netty-tcnative.version>
     <icu4j.version>78.2</icu4j.version>
     <junit.version>6.0.1</junit.version>
     <jline.version>2.14.6</jline.version>
@@ -231,7 +231,7 @@
     ./python/pyspark/sql/pandas/utils.py, ./python/packaging/classic/setup.py,
     ./python/packaging/client/setup.py, and ./python/packaging/connect/setup.py too.
     -->
-    <arrow.version>18.3.0</arrow.version>
+    <arrow.version>19.0.0</arrow.version>
     <ammonite.version>3.0.8</ammonite.version>
     <jjwt.version>0.13.0</jjwt.version>
 
@@ -331,7 +331,6 @@
       --add-opens=java.base/sun.nio.cs=ALL-UNNAMED
       --add-opens=java.base/sun.security.action=ALL-UNNAMED
       --add-opens=java.base/sun.util.calendar=ALL-UNNAMED
-      -Djdk.reflect.useDirectMethodHandle=false
       -Dio.netty.tryReflectionSetAccessible=true
       -Dio.netty.allocator.type=pooled
       -Dio.netty.handler.ssl.defaultEndpointVerificationAlgorithm=NONE
@@ -345,7 +344,7 @@
     <mssql.jdbc.version>13.2.1.jre11</mssql.jdbc.version>
     <ojdbc17.version>23.6.0.24.10</ojdbc17.version>
     <databricks.jdbc.version>2.7.1</databricks.jdbc.version>
-    <snowflake.jdbc.version>3.26.1</snowflake.jdbc.version>
+    <snowflake.jdbc.version>4.0.2</snowflake.jdbc.version>
     <terajdbc.version>20.00.00.39</terajdbc.version>
     <!-- Used for SBT build to retrieve the Spark version -->
     <spark.version>${project.version}</spark.version>
@@ -1602,7 +1601,7 @@
       <dependency>
         <groupId>org.tukaani</groupId>
         <artifactId>xz</artifactId>
-        <version>1.10</version>
+        <version>1.12</version>
       </dependency>
       <dependency>
         <groupId>org.apache.zookeeper</groupId>

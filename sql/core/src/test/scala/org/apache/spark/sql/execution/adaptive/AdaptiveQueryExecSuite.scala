@@ -3452,6 +3452,68 @@ class AdaptiveQueryExecSuite
       }
     }
   }
+
+  test("SPARK-44065: Optimize BroadcastHashJoin skew") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000",
+      SQLConf.LOCAL_SHUFFLE_READER_ENABLED.key -> "false",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "10",
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "600",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "600") {
+      withTempView("skewData", "smallData") {
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("if(id >= 5, 5, id) as key1", "id as value1")
+          .createOrReplaceTempView("skewData1")
+        spark
+          .range(0, 5, 1, 10)
+          .selectExpr("id key2", "id as value2")
+          .createOrReplaceTempView("smallData")
+
+        Seq(true, false).foreach { localShuffleReader =>
+          withSQLConf(SQLConf.LOCAL_SHUFFLE_READER_ENABLED.key -> localShuffleReader.toString) {
+            val sqlText =
+              s"""
+                 |select * from skewData1 a join smallData b on a.key1 = b.key2
+                 |""".stripMargin
+            val (_, plan) = runAdaptiveAndVerifyResult(sqlText)
+            val bhjs = findTopLevelBroadcastHashJoin(plan)
+            assert(bhjs.nonEmpty)
+
+            if (localShuffleReader) {
+              val localShuffleReaders = collect(plan) {
+                case c: AQEShuffleReadExec if c.isLocalRead => c
+              }
+              assert(localShuffleReaders.nonEmpty)
+            } else {
+              val skewedShuffleReaders = collect(plan) {
+                case c: AQEShuffleReadExec if c.hasSkewedPartition => c
+              }
+              assert(skewedShuffleReaders.nonEmpty)
+            }
+          }
+        }
+
+        withSQLConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN.key -> "true") {
+          val sqlText =
+            s"""
+               |select a.key1, count(*) from skewData1 a join smallData b
+               | on a.key1 = b.key2 group by a.key1
+               |""".stripMargin
+          val (_, plan) = runAdaptiveAndVerifyResult(sqlText)
+          val bhjs = findTopLevelBroadcastHashJoin(plan)
+          assert(bhjs.nonEmpty)
+
+          val skewedBroadcastHashJoins = collect(plan) {
+            case c: BroadcastHashJoinExec if c.isSkewJoin => c
+          }
+          assert(skewedBroadcastHashJoins.nonEmpty)
+        }
+      }
+    }
+  }
 }
 
 /**

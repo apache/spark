@@ -1436,8 +1436,8 @@ nonTrivialPrimitiveType
     | INTERVAL
         (fromYearMonth=(YEAR | MONTH) (TO to=MONTH)? |
          fromDayTime=(DAY | HOUR | MINUTE | SECOND) (TO to=(HOUR | MINUTE | SECOND))?)?
-    | TIMESTAMP (WITHOUT TIME ZONE)?
-    | TIME (LEFT_PAREN precision=integerValue RIGHT_PAREN)? (WITHOUT TIME ZONE)?
+    | TIMESTAMP (withLocalTimeZone | withoutTimeZone)?
+    | TIME (LEFT_PAREN precision=integerValue RIGHT_PAREN)? (withoutTimeZone)?
     | GEOGRAPHY LEFT_PAREN (srid=integerValue | any=ANY) RIGHT_PAREN
     | GEOMETRY LEFT_PAREN (srid=integerValue | any=ANY) RIGHT_PAREN
     ;
@@ -1455,6 +1455,14 @@ trivialPrimitiveType
     | BINARY
     | VOID
     | VARIANT
+    ;
+
+withLocalTimeZone
+    : WITH LOCAL TIME ZONE
+    ;
+
+withoutTimeZone
+    : WITHOUT TIME ZONE
     ;
 
 primitiveType

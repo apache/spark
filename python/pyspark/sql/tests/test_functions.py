@@ -941,13 +941,13 @@ class FunctionsTestsMixin:
 
     def test_octet_length_function(self):
         # SPARK-36751: add octet length api for python
-        df = self.spark.createDataFrame([("cat",), ("\U0001F408",)], ["cat"])
+        df = self.spark.createDataFrame([("cat",), ("\U0001f408",)], ["cat"])
         actual = df.select(F.octet_length("cat"))
         assertDataFrameEqual([Row(3), Row(4)], actual)
 
     def test_bit_length_function(self):
         # SPARK-36751: add bit length api for python
-        df = self.spark.createDataFrame([("cat",), ("\U0001F408",)], ["cat"])
+        df = self.spark.createDataFrame([("cat",), ("\U0001f408",)], ["cat"])
         actual = df.select(F.bit_length("cat"))
         assertDataFrameEqual([Row(24), Row(32)], actual)
 
