@@ -559,6 +559,188 @@ def _make_grouped_batches(
     return groups, return_type
 
 
+# -- SQL_GROUPED_AGG_ARROW_UDF ------------------------------------------------
+# UDF receives pa.Array columns per group, returns scalar.
+
+
+def _grouped_agg_arrow_sum(col):
+    """Sum a single Arrow column."""
+    import pyarrow.compute as pc
+
+    return pc.sum(col).as_py()
+
+
+def _grouped_agg_arrow_mean_multi(col0, col1):
+    """Mean of two Arrow columns combined."""
+    import pyarrow.compute as pc
+
+    return (pc.mean(col0).as_py() or 0) + (pc.mean(col1).as_py() or 0)
+
+
+_GROUPED_AGG_ARROW_UDFS = {
+    "sum_udf": _grouped_agg_arrow_sum,
+    "mean_multi_udf": _grouped_agg_arrow_mean_multi,
+}
+
+
+# -- SQL_GROUPED_AGG_ARROW_ITER_UDF ------------------------------------------
+# UDF receives Iterator[pa.Array] (or Iterator[Tuple[pa.Array, ...]]) per group,
+# returns scalar.
+
+
+def _grouped_agg_arrow_iter_sum(batch_iter):
+    """Sum across batches via iterator."""
+    import pyarrow.compute as pc
+
+    total = 0
+    for col in batch_iter:
+        total += pc.sum(col).as_py() or 0
+    return total
+
+
+def _grouped_agg_arrow_iter_mean_multi(batch_iter):
+    """Mean across batches of tuples via iterator."""
+    import pyarrow.compute as pc
+
+    total = 0.0
+    for col0, col1 in batch_iter:
+        total += (pc.mean(col0).as_py() or 0) + (pc.mean(col1).as_py() or 0)
+    return total
+
+
+_GROUPED_AGG_ARROW_ITER_UDFS = {
+    "sum_udf": _grouped_agg_arrow_iter_sum,
+    "mean_multi_udf": _grouped_agg_arrow_iter_mean_multi,
+}
+
+
+def _make_agg_arrow_groups(
+    num_groups: int,
+    rows_per_group: int,
+    n_cols: int,
+) -> list[tuple[pa.RecordBatch, ...]]:
+    """Create grouped data for agg Arrow UDFs (plain batches, not struct-wrapped)."""
+    type_cycle = [
+        lambda r: pa.array(np.random.randint(0, 1000, r, dtype=np.int64)),
+        lambda r: pa.array(np.random.rand(r)),
+        lambda r: pa.array(np.random.randint(0, 100, r, dtype=np.int64)),
+        lambda r: pa.array(np.random.rand(r)),
+    ]
+
+    groups = []
+    for _ in range(num_groups):
+        arrays = [type_cycle[i % len(type_cycle)](rows_per_group) for i in range(n_cols)]
+        names = [f"col_{i}" for i in range(n_cols)]
+        batch = pa.RecordBatch.from_arrays(arrays, names=names)
+        groups.append((batch,))
+
+    return groups
+
+
+def _build_grouped_agg_arrow_scenarios():
+    """Build scenarios for SQL_GROUPED_AGG_ARROW_UDF / AGG_ARROW_ITER_UDF.
+
+    Returns dict mapping name to (groups, n_cols, arg_offsets_map) where
+    arg_offsets_map provides offsets per UDF name.
+    """
+    scenarios = {}
+
+    for name, (num_groups, rows_per_group, n_cols) in {
+        "few_groups_sm": (50, 5_000, 5),
+        "few_groups_lg": (50, 50_000, 5),
+        "many_groups_sm": (2_000, 500, 5),
+        "many_groups_lg": (500, 10_000, 5),
+        "wide_cols": (200, 5_000, 20),
+    }.items():
+        groups = _make_agg_arrow_groups(num_groups, rows_per_group, n_cols)
+        scenarios[name] = (groups, n_cols)
+
+    return scenarios
+
+
+_GROUPED_AGG_ARROW_SCENARIOS = _build_grouped_agg_arrow_scenarios()
+
+
+class _GroupedAggArrowBenchMixin:
+    """Provides _write_scenario for SQL_GROUPED_AGG_ARROW_UDF."""
+
+    def _write_scenario(self, scenario, udf_name, buf):
+        groups, n_cols = self._scenarios[scenario]
+        udf_func = self._udfs[udf_name]
+
+        # sum_udf uses 1 arg, mean_multi_udf uses 2 args
+        if "multi" in udf_name:
+            arg_offsets = [0, 1]
+        else:
+            arg_offsets = [0]
+
+        return_type = DoubleType()
+
+        def write_command(b):
+            _build_udf_payload(udf_func, return_type, arg_offsets, b)
+
+        _write_worker_input(
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
+            write_command,
+            lambda b: _write_grouped_arrow_data(groups, num_dfs=1, buf=b),
+            buf,
+        )
+
+
+class GroupedAggArrowUDFTimeBench(_GroupedAggArrowBenchMixin, _TimeBenchBase):
+    _scenarios = _GROUPED_AGG_ARROW_SCENARIOS
+    _udfs = _GROUPED_AGG_ARROW_UDFS
+    params = [list(_GROUPED_AGG_ARROW_SCENARIOS), list(_GROUPED_AGG_ARROW_UDFS)]
+    param_names = ["scenario", "udf"]
+
+
+class GroupedAggArrowUDFPeakmemBench(_GroupedAggArrowBenchMixin, _PeakmemBenchBase):
+    _scenarios = _GROUPED_AGG_ARROW_SCENARIOS
+    _udfs = _GROUPED_AGG_ARROW_UDFS
+    params = [list(_GROUPED_AGG_ARROW_SCENARIOS), list(_GROUPED_AGG_ARROW_UDFS)]
+    param_names = ["scenario", "udf"]
+
+
+class _GroupedAggArrowIterBenchMixin:
+    """Provides _write_scenario for SQL_GROUPED_AGG_ARROW_ITER_UDF."""
+
+    def _write_scenario(self, scenario, udf_name, buf):
+        groups, n_cols = self._scenarios[scenario]
+        udf_func = self._udfs[udf_name]
+
+        # sum_udf uses 1 arg, mean_multi_udf uses 2 args
+        if "multi" in udf_name:
+            arg_offsets = [0, 1]
+        else:
+            arg_offsets = [0]
+
+        return_type = DoubleType()
+
+        def write_command(b):
+            _build_udf_payload(udf_func, return_type, arg_offsets, b)
+
+        _write_worker_input(
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
+            write_command,
+            lambda b: _write_grouped_arrow_data(groups, num_dfs=1, buf=b),
+            buf,
+        )
+
+
+class GroupedAggArrowIterUDFTimeBench(_GroupedAggArrowIterBenchMixin, _TimeBenchBase):
+    _scenarios = _GROUPED_AGG_ARROW_SCENARIOS
+    _udfs = _GROUPED_AGG_ARROW_ITER_UDFS
+    params = [list(_GROUPED_AGG_ARROW_SCENARIOS), list(_GROUPED_AGG_ARROW_ITER_UDFS)]
+    param_names = ["scenario", "udf"]
+
+
+class GroupedAggArrowIterUDFPeakmemBench(_GroupedAggArrowIterBenchMixin, _PeakmemBenchBase):
+    _scenarios = _GROUPED_AGG_ARROW_SCENARIOS
+    _udfs = _GROUPED_AGG_ARROW_ITER_UDFS
+    params = [list(_GROUPED_AGG_ARROW_SCENARIOS), list(_GROUPED_AGG_ARROW_ITER_UDFS)]
+    param_names = ["scenario", "udf"]
+
+
 # -- SQL_GROUPED_MAP_ARROW_UDF ------------------------------------------------
 # UDF receives (key: pa.RecordBatch, values: Iterator[pa.RecordBatch]),
 # returns Iterator[pa.RecordBatch].
