@@ -1,6 +1,6 @@
 # Apache Spark
 
-Apache Spark is a multi-language engine for large-scale data processing and analytics, primarily written in Scala and Java. It provides SQL and DataFrame APIs for both batch and streaming workloads, with Spark Connect as an optional server-client protocol.
+Apache Spark is a multi-language engine for large-scale data processing and analytics, primarily written in Scala and Java. It supports both batch and streaming workloads, with Spark Connect as an optional server-client protocol.
 
 ## Before Making Changes
 
