@@ -42,7 +42,10 @@ private[sql] class SparkArrowFileWriter(schema: Schema, path: Path) extends Auto
   private var fileWriterClosed = false
 
   override def close(): Unit = {
-    if (!fileWriterClosed) fileWriter.close()
+    if (!fileWriterClosed) {
+      fileWriter.close()
+      fileWriterClosed = true
+    }
     root.close()
     allocator.close()
   }
