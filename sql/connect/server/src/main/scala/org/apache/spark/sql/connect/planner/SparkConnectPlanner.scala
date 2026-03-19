@@ -148,8 +148,8 @@ class SparkConnectPlanner(
         case proto.Relation.RelTypeCase.SHOW_STRING => transformShowString(rel.getShowString)
         case proto.Relation.RelTypeCase.HTML_STRING => transformHtmlString(rel.getHtmlString)
         case proto.Relation.RelTypeCase.READ => transformReadRel(rel.getRead)
-        case proto.Relation.RelTypeCase.READ_CHANGES =>
-          transformReadChanges(rel.getReadChanges)
+        case proto.Relation.RelTypeCase.RELATION_CHANGES =>
+          transformRelationChanges(rel.getRelationChanges)
         case proto.Relation.RelTypeCase.PROJECT => transformProject(rel.getProject)
         case proto.Relation.RelTypeCase.FILTER => transformFilter(rel.getFilter)
         case proto.Relation.RelTypeCase.LIMIT => transformLimit(rel.getLimit)
@@ -1717,7 +1717,7 @@ class SparkConnectPlanner(
     }
   }
 
-  private def transformReadChanges(rel: proto.ReadChanges): LogicalPlan = {
+  private def transformRelationChanges(rel: proto.RelationChanges): LogicalPlan = {
     val tableName = rel.getUnparsedIdentifier
     val options = new CaseInsensitiveStringMap(rel.getOptionsMap)
     val changelogInfo = ChangelogInfoUtils.fromOptions(

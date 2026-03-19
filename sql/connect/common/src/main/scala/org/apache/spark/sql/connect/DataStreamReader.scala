@@ -123,7 +123,7 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession)
     require(tableName != null, "The table name can't be null")
     assertNoSpecifiedSchema("changes")
     sparkSession.newDataFrame { builder =>
-      val changesBuilder = builder.getReadChangesBuilder
+      val changesBuilder = builder.getRelationChangesBuilder
         .setUnparsedIdentifier(tableName)
         .setIsStreaming(true)
       sourceBuilder.getOptionsMap.forEach { (k, v) =>

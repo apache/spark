@@ -81,7 +81,7 @@ message Relation {
     UnresolvedTableValuedFunction unresolved_table_valued_function = 43;
     LateralJoin lateral_join = 44;
     ChunkedCachedLocalRelation chunked_cached_local_relation = 45;
-    ReadChanges read_changes = 46;
+    RelationChanges relation_changes = 46;
 
     // NA functions
     NAFill fill_na = 90;
@@ -270,7 +270,7 @@ message Read {
 // This corresponds to the `DataFrameReader.changes()` or `DataStreamReader.changes()` API.
 // CDC-specific options (startingVersion, endingVersion, startingTimestamp, endingTimestamp,
 // deduplicationMode, computeUpdates, etc.) are passed in the options map.
-message ReadChanges {
+message RelationChanges {
   // (Required) Unparsed identifier for the table.
   string unparsed_identifier = 1;
 

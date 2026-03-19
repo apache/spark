@@ -121,7 +121,8 @@ abstract class DataStreamReader {
 
   /**
    * Returns the row-level changes (Change Data Capture) from the specified table as a streaming
-   * `DataFrame`. The table's catalog must implement `TableCatalog.loadChangelog()`.
+   * `DataFrame`. Currently this API is only supported for Data Source V2 tables whose catalog
+   * implements `TableCatalog.loadChangelog()`.
    *
    * Use `.option()` to specify the starting version/timestamp and processing options:
    * {{{

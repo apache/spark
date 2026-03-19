@@ -2,7 +2,7 @@
   "common": {
     "planId": "0"
   },
-  "readChanges": {
+  "relationChanges": {
     "unparsedIdentifier": "tempdb.myStreamingTable",
     "options": {
       "startingVersion": "1",

@@ -2,7 +2,7 @@
   "common": {
     "planId": "0"
   },
-  "readChanges": {
+  "relationChanges": {
     "unparsedIdentifier": "myTable",
     "options": {
       "startingtimestamp": "2026-01-01",
