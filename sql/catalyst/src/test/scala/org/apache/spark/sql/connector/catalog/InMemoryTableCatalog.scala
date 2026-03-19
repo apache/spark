@@ -238,6 +238,18 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamespaces
   with ProcedureCatalog {
 
+  override def createTableLike(
+      ident: Identifier,
+      tableInfo: TableInfo,
+      sourceTable: Table): Table = {
+    // Format-specific behavior: merge source properties with user overrides, with user overrides
+    // taking precedence. Copy source constraints from sourceTable directly. This demonstrates
+    // how a connector uses sourceTable to access source-format-specific metadata.
+    val mergedProps = (sourceTable.properties().asScala ++ tableInfo.properties().asScala).asJava
+    createTable(ident, tableInfo.columns(), tableInfo.partitions(), mergedProps,
+      Distributions.unspecified(), Array.empty, None, None, sourceTable.constraints())
+  }
+
   override def capabilities: java.util.Set[TableCatalogCapability] = {
     Set(
       TableCatalogCapability.SUPPORT_COLUMN_DEFAULT_VALUE,

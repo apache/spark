@@ -142,14 +142,28 @@ class CreateTableLikeSuite extends DatasourceV2SQLBase {
   // Property / provider behavior
   // -------------------------------------------------------------------------
 
-  test("source TBLPROPERTIES are NOT copied to target") {
+  test("source TBLPROPERTIES are copied to target when connector implements createTableLike") {
+    // InMemoryTableCatalog overrides createTableLike to merge source properties into the target,
+    // demonstrating connector-specific copy semantics. Connectors that do not override
+    // createTableLike fall back to createTable and do not copy source properties.
     withTable("src", "testcat.dst") {
-      sql("CREATE TABLE src (id bigint) USING parquet TBLPROPERTIES ('secret_key' = 'secret')")
+      sql("CREATE TABLE src (id bigint) USING parquet TBLPROPERTIES ('source_key' = 'source')")
       sql("CREATE TABLE testcat.dst LIKE src")
 
       val dst = testCatalog.loadTable(Identifier.of(Array(), "dst"))
-      assert(!dst.properties.containsKey("secret_key"),
-        "Source TBLPROPERTIES should not be copied to target")
+      assert(dst.properties.containsKey("source_key"),
+        "Connector-implemented createTableLike copies source TBLPROPERTIES to target")
+    }
+  }
+
+  test("user-specified TBLPROPERTIES override source TBLPROPERTIES in createTableLike") {
+    withTable("src", "testcat.dst") {
+      sql("CREATE TABLE src (id bigint) USING parquet TBLPROPERTIES ('key' = 'source_value')")
+      sql("CREATE TABLE testcat.dst LIKE src TBLPROPERTIES ('key' = 'user_value')")
+
+      val dst = testCatalog.loadTable(Identifier.of(Array(), "dst"))
+      assert(dst.properties.get("key") == "user_value",
+        "User-specified TBLPROPERTIES should override source TBLPROPERTIES")
     }
   }
 
