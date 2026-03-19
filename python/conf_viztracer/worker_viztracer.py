@@ -1,4 +1,3 @@
-#
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
 # this work for additional information regarding copyright ownership.
@@ -15,8 +14,19 @@
 # limitations under the License.
 #
 
-# Default system properties included when running spark-submit.
-# This is useful for setting default environmental settings.
 
-spark.python.daemon.module=daemon_viztracer
-spark.python.worker.module=worker_viztracer
+import os
+import sys
+
+from viztracer.main import main
+
+
+if __name__ == "__main__":
+
+    if os.getenv("SPARK_VIZTRACER_OUTPUT_DIR") is not None:
+        output_dir = os.getenv("SPARK_VIZTRACER_OUTPUT_DIR")
+    else:
+        output_dir = "./"
+
+    sys.argv[:] = ["viztracer", "-m", "pyspark.worker", "--quiet", "-u", "--output_dir", output_dir]
+    main()
