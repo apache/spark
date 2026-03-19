@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* global $, d3, dagreD3, graphlibDot, uiRoot, appBasePath, sorttable */
+/* global $, d3, dagreD3, graphlibDot, uiRoot, appBasePath, sorttable, showToast */
 
 var PlanVizConstants = {
   svgMarginX: 16,
@@ -698,6 +698,32 @@ function rerenderWithDetailedLabels() {
 document.addEventListener("DOMContentLoaded", function () {
   if (shouldRenderPlanViz()) {
     renderPlanViz();
+  }
+
+  // Copy physical plan text to clipboard
+  var copyPlanBtn = document.getElementById("copy-plan-btn");
+  if (copyPlanBtn) {
+    copyPlanBtn.addEventListener("click", function () {
+      var planEl = document.getElementById("physical-plan-details");
+      var text = planEl ? planEl.textContent : "";
+      navigator.clipboard.writeText(text.trim()).then(function () {
+        if (typeof showToast === "function") {
+          showToast("Plan copied to clipboard", "success");
+        }
+      });
+    });
+  }
+
+  // Copy shareable link to clipboard
+  var copyLinkBtn = document.getElementById("copy-link-btn");
+  if (copyLinkBtn) {
+    copyLinkBtn.addEventListener("click", function () {
+      navigator.clipboard.writeText(window.location.href).then(function () {
+        if (typeof showToast === "function") {
+          showToast("Link copied to clipboard", "success");
+        }
+      });
+    });
   }
 });
 

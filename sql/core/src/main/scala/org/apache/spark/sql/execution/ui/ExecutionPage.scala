@@ -100,6 +100,12 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
             <label for="plan-viz-format-select">
               <a id="plan-viz-download-btn" class="downloadbutton">Download</a>
             </label>
+            <button id="copy-plan-btn" class="btn btn-sm btn-outline-secondary ms-2"
+                    type="button" title="Copy physical plan to clipboard">
+              &#x1f4cb; Copy Plan</button>
+            <button id="copy-link-btn" class="btn btn-sm btn-outline-secondary ms-1"
+                    type="button" title="Copy shareable link to this execution">
+              &#x1f517; Copy Link</button>
           </div>
         </div>
 
