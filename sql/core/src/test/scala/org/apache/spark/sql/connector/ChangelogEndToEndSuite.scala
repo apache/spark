@@ -22,7 +22,10 @@ import java.util
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.NamedStreamingRelation
+import org.apache.spark.sql.catalyst.streaming.UserProvided
 import org.apache.spark.sql.connector.catalog._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -620,6 +623,40 @@ class ChangelogEndToEndSuite extends QueryTest with SharedSparkSession {
       assert(info2.computeUpdates() === true)
     } finally {
       q2.stop()
+    }
+  }
+
+  // ---------- Streaming: .name() API ----------
+
+  test("streaming changes() supports .name() API with source evolution enabled") {
+    catalog.addChangeRows(ident, Seq(
+      makeChangeRow(1L, "a", "insert", 1L, 1000000L)))
+
+    val expected = Seq(
+      Row(1L, "a", "insert", 1L, new Timestamp(1000L)))
+
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+      val stream = spark.readStream
+        .name("my_cdc_source")
+        .option("startingVersion", "1")
+        .changes(fullTableName)
+
+      // Verify the logical plan contains NamedStreamingRelation with the user-provided name
+      val plan = stream.queryExecution.logical
+      val namedRelations = plan.collect {
+        case n: NamedStreamingRelation => n
+      }
+      assert(namedRelations.size === 1)
+      assert(namedRelations.head.sourceIdentifyingName === UserProvided("my_cdc_source"))
+
+      val q = stream.writeStream
+        .format("memory").queryName("cdc_stream_named").start()
+      try {
+        q.processAllAvailable()
+        checkAnswer(spark.sql("SELECT * FROM cdc_stream_named"), expected)
+      } finally {
+        q.stop()
+      }
     }
   }
 

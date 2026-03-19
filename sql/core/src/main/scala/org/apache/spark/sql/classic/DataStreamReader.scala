@@ -127,7 +127,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession)
       options, sparkSession.sessionState.conf.sessionLocalTimeZone)
     val unresolved = UnresolvedRelation(identifier, options, isStreaming = true)
     val changes = RelationChanges(unresolved, changelogInfo)
-    Dataset.ofRows(sparkSession, changes)
+    val plan = NamedStreamingRelation.withUserProvidedName(changes, userProvidedSourceName)
+    Dataset.ofRows(sparkSession, plan)
   }
 
   override protected def assertNoSpecifiedSchema(operation: String): Unit = {
