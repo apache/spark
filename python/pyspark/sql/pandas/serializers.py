@@ -222,7 +222,7 @@ class ArrowStreamSerializer(Serializer):
         write_int(SpecialLengths.START_ARROW_STREAM, stream)
         yield from itertools.chain([first], batch_iterator)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "ArrowStreamSerializer(write_start_stream=%s, num_dfs=%d)" % (
             self._write_start_stream,
             self._num_dfs,
