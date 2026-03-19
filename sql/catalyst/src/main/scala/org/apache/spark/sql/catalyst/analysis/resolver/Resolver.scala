@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.analysis.{
   CleanupAliases,
   FunctionResolution,
   MultiInstanceRelation,
-  NoSuchTableException,
   PullOutNondeterministic,
   RelationCache,
   RelationResolution,
@@ -571,49 +570,26 @@ class Resolver(
    */
   private def resolveRelation(unresolvedRelation: UnresolvedRelation): LogicalPlan = {
     viewResolver.withSourceUnresolvedRelation(unresolvedRelation) {
-      try {
-        val maybeResolvedRelation =
-          relationMetadataProvider.getRelationWithResolvedMetadata(unresolvedRelation)
+      val maybeResolvedRelation =
+        relationMetadataProvider.getRelationWithResolvedMetadata(unresolvedRelation)
 
-        val resolvedRelation = maybeResolvedRelation match {
-          case Some(relationsWithResolvedMetadata) =>
-            planLogger.logPlanResolutionEvent(
-              relationsWithResolvedMetadata,
-              "Relation metadata retrieved"
-            )
+      val resolvedRelation = maybeResolvedRelation match {
+        case Some(relationsWithResolvedMetadata) =>
+          planLogger.logPlanResolutionEvent(
+            relationsWithResolvedMetadata,
+            "Relation metadata retrieved"
+          )
 
-            relationsWithResolvedMetadata
-          case None =>
-            val multipartId = unresolvedRelation.multipartIdentifier
-            val catalogPath = (catalogManager.currentCatalog.name() +:
-              catalogManager.currentNamespace).toSeq
-            val searchPath = SQLConf.get.resolutionSearchPath(catalogPath).map(toSQLId)
-            unresolvedRelation.tableNotFound(multipartId, searchPath)
-        }
-
-        resolve(resolvedRelation)
-      } catch {
-        case e: NoSuchTableException
-            if e.getCondition == "TABLE_OR_VIEW_NOT_FOUND" &&
-              Option(e.getMessageParameters.get("searchPath")).contains("") =>
-          // NoSuchTableException from some code paths does not set searchPath; replace with
-          // the current resolution search path so the user sees the path that was used.
+          relationsWithResolvedMetadata
+        case None =>
+          val multipartId = unresolvedRelation.multipartIdentifier
           val catalogPath = (catalogManager.currentCatalog.name() +:
             catalogManager.currentNamespace).toSeq
-          val searchPathSeq = SQLConf.get.resolutionSearchPath(catalogPath)
-          val formattedPath = searchPathSeq.map(toSQLId).mkString("[", ", ", "]")
-          val updatedParams =
-            e.getMessageParameters.asScala.toMap.updated("searchPath", formattedPath)
-          val newEx = new NoSuchTableException(
-            "TABLE_OR_VIEW_NOT_FOUND",
-            updatedParams,
-            cause = None)
-          val toThrow: Throwable = Option(e.origin) match {
-            case Some(origin) => newEx.withPosition(origin)
-            case None => newEx
-          }
-          throw toThrow
+          val searchPath = SQLConf.get.resolutionSearchPath(catalogPath).map(toSQLId)
+          unresolvedRelation.tableNotFound(multipartId, searchPath)
       }
+
+      resolve(resolvedRelation)
     }
   }
 

@@ -142,6 +142,15 @@ class RelationResolution(
   }
 
   /**
+   * Resolution search path formatted for TABLE_OR_VIEW_NOT_FOUND error messages.
+   * Same order as relationResolutionSearchPath; each entry is quoted (e.g. "`system`.`session`").
+   */
+  def resolutionSearchPathForError: Seq[String] = {
+    val catalogPath = (currentCatalog.name +: catalogManager.currentNamespace).toSeq
+    conf.resolutionSearchPath(catalogPath).map(toSQLId)
+  }
+
+  /**
    * Resolve relation `u` to v1 relation if it's a v1 table from the session catalog, or to v2
    * relation. This is for resolving DML commands and SELECT queries.
    */
