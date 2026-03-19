@@ -353,9 +353,7 @@ class DataFrame(ParentDataFrame):
         return self._session
 
     def count(self) -> int:
-        table, _ = self.agg(
-            F._invoke_function("count", F.lit(1))
-        )._to_table()  # type: ignore[operator]
+        table, _ = self.agg(F._invoke_function("count", F.lit(1)))._to_table()  # type: ignore[operator]
         return table[0][0].as_py()
 
     def crossJoin(self, other: ParentDataFrame) -> ParentDataFrame:
@@ -1892,9 +1890,9 @@ class DataFrame(ParentDataFrame):
         self, func: Callable[..., ParentDataFrame], *args: Any, **kwargs: Any
     ) -> ParentDataFrame:
         result = func(self, *args, **kwargs)
-        assert isinstance(
-            result, DataFrame
-        ), "Func returned an instance of type [%s], " "should have been DataFrame." % type(result)
+        assert isinstance(result, DataFrame), (
+            "Func returned an instance of type [%s], should have been DataFrame." % type(result)
+        )
         return result
 
     def _explain_string(
@@ -2170,7 +2168,11 @@ class DataFrame(ParentDataFrame):
             self._execution_info = ei
 
         return MergeIntoWriter(
-            self._plan, self._session, table, condition, cb  # type: ignore[arg-type]
+            self._plan,
+            self._session,
+            table,
+            condition,  # type: ignore[arg-type]
+            cb,
         )
 
     def offset(self, num: int) -> ParentDataFrame:

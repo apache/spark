@@ -1037,9 +1037,9 @@ class ArrowTableToRowsConversion:
                 dataType.elementType, none_on_identity=True, binary_as_bytes=binary_as_bytes
             )
 
-            assert (
-                element_conv is not None
-            ), f"_need_converter() returned True for ArrayType of {dataType.elementType}"
+            assert element_conv is not None, (
+                f"_need_converter() returned True for ArrayType of {dataType.elementType}"
+            )
 
             def convert_array(value: Any) -> Any:
                 if value is None:

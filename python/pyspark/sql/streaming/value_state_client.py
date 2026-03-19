@@ -53,9 +53,7 @@ class ValueStateClient:
             return False
         else:
             # TODO(SPARK-49233): Classify user facing errors.
-            raise PySparkRuntimeError(
-                f"Error checking value state exists: " f"{response_message[1]}"
-            )
+            raise PySparkRuntimeError(f"Error checking value state exists: {response_message[1]}")
 
     def get(self, state_name: str) -> Optional[Tuple]:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
@@ -75,7 +73,7 @@ class ValueStateClient:
             return tuple(data)
         else:
             # TODO(SPARK-49233): Classify user facing errors.
-            raise PySparkRuntimeError(f"Error getting value state: " f"{response_message[1]}")
+            raise PySparkRuntimeError(f"Error getting value state: {response_message[1]}")
 
     def update(self, state_name: str, value: Tuple) -> None:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
@@ -93,7 +91,7 @@ class ValueStateClient:
         status = response_message[0]
         if status != 0:
             # TODO(SPARK-49233): Classify user facing errors.
-            raise PySparkRuntimeError(f"Error updating value state: " f"{response_message[1]}")
+            raise PySparkRuntimeError(f"Error updating value state: {response_message[1]}")
 
     def clear(self, state_name: str) -> None:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
@@ -108,4 +106,4 @@ class ValueStateClient:
         status = response_message[0]
         if status != 0:
             # TODO(SPARK-49233): Classify user facing errors.
-            raise PySparkRuntimeError(f"Error clearing value state: " f"{response_message[1]}")
+            raise PySparkRuntimeError(f"Error clearing value state: {response_message[1]}")

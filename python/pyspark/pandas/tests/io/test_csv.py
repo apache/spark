@@ -61,14 +61,17 @@ class CsvTestsMixin:
 
     @property
     def csv_text_with_comments(self):
-        return normalize_text("""
+        return normalize_text(
+            """
             # header
             %s
             # comment
             Alice,400
             Edith,600
             # footer
-            """ % self.csv_text)
+            """
+            % self.csv_text
+        )
 
     @property
     def tab_delimited_csv_text(self):

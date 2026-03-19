@@ -283,7 +283,7 @@ class MapStateClient:
         status = response_message[0]
         if status != 0:
             # TODO(SPARK-49233): Classify user facing errors.
-            raise PySparkRuntimeError(f"Error clearing map state: " f"{response_message[1]}")
+            raise PySparkRuntimeError(f"Error clearing map state: {response_message[1]}")
 
 
 class MapStateIterator:

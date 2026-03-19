@@ -90,7 +90,7 @@ class BaseUDTFTestsMixin:
     def test_udtf_yield_single_row_col(self):
         class TestUDTF:
             def eval(self, a: int):
-                yield a,
+                yield (a,)
 
         func = udtf(TestUDTF, returnType="a: int")
         assertDataFrameEqual(func(lit(1)), [Row(a=1)])
@@ -106,8 +106,8 @@ class BaseUDTFTestsMixin:
     def test_udtf_yield_multi_rows(self):
         class TestUDTF:
             def eval(self, a: int):
-                yield a,
-                yield a + 1,
+                yield (a,)
+                yield (a + 1,)
 
         func = udtf(TestUDTF, returnType="a: int")
         assertDataFrameEqual(func(lit(1)), [Row(a=1), Row(a=2)])
@@ -199,8 +199,8 @@ class BaseUDTFTestsMixin:
         @udtf(returnType="a: int")
         class TestUDTF:
             def eval(self):
-                yield 1,
-                yield 2,
+                yield (1,)
+                yield (2,)
 
         assertDataFrameEqual(
             self.spark.range(3, numPartitions=1).lateralJoin(TestUDTF()),
@@ -218,7 +218,7 @@ class BaseUDTFTestsMixin:
         class TestUDTF:
             def eval(self, i: int):
                 for n in range(i):
-                    yield n,
+                    yield (n,)
 
         assertDataFrameEqual(
             self.spark.range(3, numPartitions=1).lateralJoin(TestUDTF(col("id").outer())),
@@ -275,7 +275,7 @@ class BaseUDTFTestsMixin:
         @udtf(returnType="a: struct<b: int, c: int>")
         class TestUDTF:
             def eval(self, a: int):
-                yield (a, a + 1),
+                yield ((a, a + 1),)
 
         assertDataFrameEqual(TestUDTF(lit(1)), [Row(a=Row(b=1, c=2))])
 
@@ -291,7 +291,7 @@ class BaseUDTFTestsMixin:
         @udtf(returnType=StructType().add("point", ExamplePointUDT()))
         class TestUDTF:
             def eval(self, x: float, y: float):
-                yield ExamplePoint(x=x * 10, y=y * 10),
+                yield (ExamplePoint(x=x * 10, y=y * 10),)
 
         assertDataFrameEqual(
             TestUDTF(lit(1.0), lit(2.0)), [Row(point=ExamplePoint(x=10.0, y=20.0))]
@@ -358,7 +358,7 @@ class BaseUDTFTestsMixin:
         class TestUDTF:
             def eval(self, a: int):
                 if a > 5:
-                    yield a,
+                    yield (a,)
 
         func = udtf(TestUDTF, returnType="a: int")
         self.spark.udtf.register("test_udtf", func)
@@ -372,7 +372,7 @@ class BaseUDTFTestsMixin:
         class TestUDTF:
             def eval(self, a: int):
                 if a > 5:
-                    yield a,
+                    yield (a,)
 
         self.spark.udtf.register("test_udtf", TestUDTF)
 
@@ -393,8 +393,8 @@ class BaseUDTFTestsMixin:
         @udtf(returnType="a: int")
         class TestUDTF:
             def eval(self, a: int):
-                yield a,
-                yield None,
+                yield (a,)
+                yield (None,)
 
         assertDataFrameEqual(TestUDTF(lit(1)), [Row(a=1), Row(a=None)])
         df = self.spark.createDataFrame([(0, 1), (1, 2)], schema=["a", "b"])
@@ -407,7 +407,7 @@ class BaseUDTFTestsMixin:
         @udtf(returnType="a: int")
         class TestUDTF:
             def eval(self, a: int):
-                yield a,
+                yield (a,)
 
         assertDataFrameEqual(TestUDTF(lit(None)), [Row(a=None)])
         self.spark.udtf.register("testUDTF", TestUDTF)
@@ -437,7 +437,7 @@ class BaseUDTFTestsMixin:
             def __init__(self, a: int): ...
 
             def eval(self, a: int):
-                yield a,
+                yield (a,)
 
         with self.assertRaisesRegex(PythonException, r".*constructor has more than one argument.*"):
             TestUDTF(lit(1)).show()
@@ -446,7 +446,7 @@ class BaseUDTFTestsMixin:
         @udtf(returnType="x int")
         class TestUDTF:
             def eval(self, a: int):
-                yield a,
+                yield (a,)
 
             def terminate(self, a: int): ...
 
@@ -460,7 +460,7 @@ class BaseUDTFTestsMixin:
         @udtf(returnType="a: int, b: int")
         class TestUDTF:
             def eval(self, a: int):
-                yield a,
+                yield (a,)
 
         with self.assertRaisesRegex(PythonException, "UDTF_RETURN_SCHEMA_MISMATCH"):
             TestUDTF(lit(1)).collect()
@@ -478,7 +478,7 @@ class BaseUDTFTestsMixin:
         @udtf(returnType=StructType())
         class TestUDTF:
             def eval(self):
-                yield 1,
+                yield (1,)
 
         with self.assertRaisesRegex(PythonException, "UDTF_RETURN_SCHEMA_MISMATCH"):
             TestUDTF().collect()
@@ -605,7 +605,7 @@ class BaseUDTFTestsMixin:
                 raise Exception("error")
 
             def eval(self):
-                yield 1,
+                yield (1,)
 
         with self.assertRaisesRegex(
             PythonException,
@@ -661,7 +661,7 @@ class BaseUDTFTestsMixin:
                 yield a, a + 1
 
             def terminate(self):
-                yield 1,
+                yield (1,)
 
         with self.assertRaisesRegex(PythonException, "UDTF_RETURN_SCHEMA_MISMATCH"):
             TestUDTF(lit(1)).show()
@@ -669,7 +669,7 @@ class BaseUDTFTestsMixin:
     def test_udtf_determinism(self):
         class TestUDTF:
             def eval(self, a: int):
-                yield a,
+                yield (a,)
 
         func = udtf(TestUDTF, returnType="x: int")
         # The UDTF is marked as non-deterministic by default.
@@ -682,7 +682,7 @@ class BaseUDTFTestsMixin:
 
         class RandomUDTF:
             def eval(self, a: int):
-                yield a + int(random.random()),
+                yield (a + int(random.random()),)
 
         random_udtf = udtf(RandomUDTF, returnType="x: int")
         assertDataFrameEqual(random_udtf(lit(1)), [Row(x=1)])
@@ -695,7 +695,7 @@ class BaseUDTFTestsMixin:
         @udtf(returnType="x: int")
         class TestUDTF:
             def eval(self, a: int):
-                yield 1 if a > 100 else 0,
+                yield (1 if a > 100 else 0,)
 
         assertDataFrameEqual(TestUDTF(rand(0) * 100), [Row(x=0)])
 
@@ -703,7 +703,7 @@ class BaseUDTFTestsMixin:
         @udtf(returnType="int")
         class TestUDTF:
             def eval(self, a: int):
-                yield a + 1,
+                yield (a + 1,)
 
         with self.assertRaises(PySparkTypeError) as e:
             TestUDTF(lit(1)).collect()
@@ -717,7 +717,7 @@ class BaseUDTFTestsMixin:
         @udtf(returnType=MapType(StringType(), IntegerType()))
         class TestUDTF:
             def eval(self, a: int):
-                yield a + 1,
+                yield (a + 1,)
 
         with self.assertRaises(PySparkTypeError) as e:
             TestUDTF(lit(1)).collect()
@@ -735,7 +735,7 @@ class BaseUDTFTestsMixin:
         @udtf(returnType="x: string")
         class TestUDTF:
             def eval(self, person):
-                yield f"{person.name}: {person.age}",
+                yield (f"{person.name}: {person.age}",)
 
         self.spark.udtf.register("test_udtf", TestUDTF)
         assertDataFrameEqual(
@@ -747,7 +747,7 @@ class BaseUDTFTestsMixin:
         @udtf(returnType="x: string")
         class TestUDTF:
             def eval(self, args):
-                yield str(args),
+                yield (str(args),)
 
         self.spark.udtf.register("test_udtf", TestUDTF)
         self.assertIn(
@@ -759,7 +759,7 @@ class BaseUDTFTestsMixin:
         @udtf(returnType="x: string")
         class TestUDTF:
             def eval(self, m):
-                yield str(m),
+                yield (str(m),)
 
         self.spark.udtf.register("test_udtf", TestUDTF)
         assertDataFrameEqual(
@@ -771,7 +771,7 @@ class BaseUDTFTestsMixin:
         @udtf(returnType="x: struct<a:int,b:int>")
         class TestUDTF:
             def eval(self, x: int):
-                yield {"a": x, "b": x + 1},
+                yield ({"a": x, "b": x + 1},)
 
         assertDataFrameEqual(TestUDTF(lit(1)), [Row(x=Row(a=1, b=2))])
 
@@ -779,7 +779,7 @@ class BaseUDTFTestsMixin:
         @udtf(returnType="x: array<int>")
         class TestUDTF:
             def eval(self, x: int):
-                yield [x, x + 1, x + 2],
+                yield ([x, x + 1, x + 2],)
 
         assertDataFrameEqual(TestUDTF(lit(1)), [Row(x=[1, 2, 3])])
 
@@ -787,7 +787,7 @@ class BaseUDTFTestsMixin:
         @udtf(returnType="x: map<int,string>")
         class TestUDTF:
             def eval(self, x: int):
-                yield {x: str(x)},
+                yield ({x: str(x)},)
 
         assertDataFrameEqual(TestUDTF(lit(1)), [Row(x={1: "1"})])
 
@@ -917,7 +917,7 @@ class BaseUDTFTestsMixin:
     def test_numeric_output_type_casting(self):
         class TestUDTF:
             def eval(self):
-                yield 1,
+                yield (1,)
 
         for i, (ret_type, expected) in enumerate(
             [
@@ -951,7 +951,7 @@ class BaseUDTFTestsMixin:
     def test_numeric_string_output_type_casting(self):
         class TestUDTF:
             def eval(self):
-                yield "1",
+                yield ("1",)
 
         for ret_type, expected in [
             ("x: boolean", [Row(x=None)]),
@@ -977,7 +977,7 @@ class BaseUDTFTestsMixin:
     def test_string_output_type_casting(self):
         class TestUDTF:
             def eval(self):
-                yield "hello",
+                yield ("hello",)
 
         for ret_type, expected in [
             ("x: boolean", [Row(x=None)]),
@@ -1003,7 +1003,7 @@ class BaseUDTFTestsMixin:
     def test_array_output_type_casting(self):
         class TestUDTF:
             def eval(self):
-                yield [0, 1.1, 2],
+                yield ([0, 1.1, 2],)
 
         for ret_type, expected in [
             ("x: boolean", [Row(x=None)]),
@@ -1033,7 +1033,7 @@ class BaseUDTFTestsMixin:
     def test_map_output_type_casting(self):
         class TestUDTF:
             def eval(self):
-                yield {"a": 0, "b": 1.1, "c": 2},
+                yield ({"a": 0, "b": 1.1, "c": 2},)
 
         for ret_type, expected in [
             ("x: boolean", [Row(x=None)]),
@@ -1063,7 +1063,7 @@ class BaseUDTFTestsMixin:
     def test_struct_output_type_casting_dict(self):
         class TestUDTF:
             def eval(self):
-                yield {"a": 0, "b": 1.1, "c": 2},
+                yield ({"a": 0, "b": 1.1, "c": 2},)
 
         for ret_type, expected in [
             ("x: boolean", [Row(x=None)]),
@@ -1096,7 +1096,7 @@ class BaseUDTFTestsMixin:
     def check_struct_output_type_casting_row(self, error_type):
         class TestUDTF:
             def eval(self):
-                yield Row(a=0, b=1.1, c=2),
+                yield (Row(a=0, b=1.1, c=2),)
 
         err = ("PickleException", error_type)
 
@@ -1131,8 +1131,8 @@ class BaseUDTFTestsMixin:
     def test_inconsistent_output_types(self):
         class TestUDTF:
             def eval(self):
-                yield 1,
-                yield [1, 2],
+                yield (1,)
+                yield ([1, 2],)
 
         for ret_type, expected in [
             ("x: int", [Row(x=1), Row(x=None)]),
@@ -1197,7 +1197,7 @@ class BaseUDTFTestsMixin:
             class TestUDTF:
                 def eval(self):
                     file_obj
-                    yield 1,
+                    yield (1,)
 
             with self.assertRaisesRegex(PySparkPicklingError, "UDTF_SERIALIZATION_ERROR"):
                 TestUDTF().collect()
@@ -1209,7 +1209,7 @@ class BaseUDTFTestsMixin:
         class TestUDTF:
             def eval(self):
                 df.collect()
-                yield 1,
+                yield (1,)
 
         with self.assertRaisesRegex(PySparkPicklingError, "UDTF_SERIALIZATION_ERROR"):
             TestUDTF().collect()
@@ -1233,7 +1233,7 @@ class BaseUDTFTestsMixin:
 
             @udtf(returnType="a: int")
             def test_udtf(a: int):
-                yield a,
+                yield (a,)
 
         self.check_error(
             exception=e.exception,
@@ -1271,7 +1271,7 @@ class BaseUDTFTestsMixin:
         class TestUDTF:
             def eval(self, row: Row):
                 if row["id"] > 5:
-                    yield row["id"],
+                    yield (row["id"],)
 
         func = udtf(TestUDTF, returnType="a: int")
         return func
@@ -1382,7 +1382,7 @@ class BaseUDTFTestsMixin:
         class TestUDTF:
             def eval(self, i: int, row: Row):
                 if row["id"] > i:
-                    yield row["id"],
+                    yield (row["id"],)
 
         func = udtf(TestUDTF, returnType="a: int")
         self.spark.udtf.register("test_udtf", func)
@@ -1406,7 +1406,7 @@ class BaseUDTFTestsMixin:
         class TestUDTF:
             def eval(self, i: int, row: Row):
                 if row["id"] > i:
-                    yield row["id"],
+                    yield (row["id"],)
 
         func = udtf(TestUDTF, returnType="a: int")
         self.spark.udtf.register("test_udtf", func)
@@ -1532,7 +1532,7 @@ class BaseUDTFTestsMixin:
 
             def eval(self, x: int):
                 """Evaluate the input row."""
-                yield x + 1,
+                yield (x + 1,)
 
             def terminate(self):
                 """Terminate the UDTF."""
@@ -1573,7 +1573,7 @@ class BaseUDTFTestsMixin:
                 return AnalyzeResult(StructType().add("a", a.dataType))
 
             def eval(self, a):
-                yield a,
+                yield (a,)
 
         func = udtf(TestUDTF)
         self.spark.udtf.register("test_udtf", func)
@@ -1728,7 +1728,7 @@ class BaseUDTFTestsMixin:
 
             def eval(self, a: Row):
                 if a["id"] > 5:
-                    yield a["id"],
+                    yield (a["id"],)
 
         func = udtf(TestUDTF)
         self.spark.udtf.register("test_udtf", func)
@@ -1845,7 +1845,7 @@ class BaseUDTFTestsMixin:
 
             def eval(self, row: Row):
                 assert "value" not in row
-                yield row["id"],
+                yield (row["id"],)
 
         df = self.spark.createDataFrame([(1, "a"), (2, "b"), (3, "c")], ["id", "value"])
         assertDataFrameEqual(
@@ -2001,7 +2001,7 @@ class BaseUDTFTestsMixin:
                 return AnalyzeResult(StructType().add("a", a.dataType))
 
             def eval(self, a):
-                yield a,
+                yield (a,)
 
         func = udtf(TestUDTF)
 
@@ -2064,11 +2064,11 @@ class BaseUDTFTestsMixin:
 
             def eval(self, a):
                 assert colname.value == "col1"
-                yield a,
+                yield (a,)
 
             def terminate(self):
                 assert colname.value == "col1"
-                yield 100,
+                yield (100,)
 
         self.spark.udtf.register("test_udtf", TestUDTF)
 
@@ -2089,11 +2089,11 @@ class BaseUDTFTestsMixin:
 
             def eval(self, a):
                 test_accum.add(10)
-                yield a,
+                yield (a,)
 
             def terminate(self):
                 test_accum.add(100)
-                yield 100,
+                yield (100,)
 
         self.spark.udtf.register("test_udtf", TestUDTF)
 
@@ -2128,11 +2128,11 @@ class BaseUDTFTestsMixin:
 
                 def eval(self, a):
                     assert TestUDTF.call_my_func() == "col1"
-                    yield a,
+                    yield (a,)
 
                 def terminate(self):
                     assert TestUDTF.call_my_func() == "col1"
-                    yield 100,
+                    yield (100,)
 
             test_udtf = udtf(TestUDTF)
             self.spark.udtf.register("test_udtf", test_udtf)
@@ -2168,11 +2168,11 @@ class BaseUDTFTestsMixin:
 
                 def eval(self, a):
                     assert TestUDTF.call_my_func() == "col1"
-                    yield a,
+                    yield (a,)
 
                 def terminate(self):
                     assert TestUDTF.call_my_func() == "col1"
-                    yield 100,
+                    yield (100,)
 
             test_udtf = udtf(TestUDTF)
             self.spark.udtf.register("test_udtf", test_udtf)
@@ -2218,11 +2218,11 @@ class BaseUDTFTestsMixin:
 
                 def eval(self, a):
                     assert TestUDTF.read_my_archive() == "col1"
-                    yield a,
+                    yield (a,)
 
                 def terminate(self):
                     assert TestUDTF.read_my_archive() == "col1"
-                    yield 100,
+                    yield (100,)
 
             test_udtf = udtf(TestUDTF)
             self.spark.udtf.register("test_udtf", test_udtf)
@@ -2262,11 +2262,11 @@ class BaseUDTFTestsMixin:
 
                 def eval(self, a):
                     assert TestUDTF.read_my_file() == "col1"
-                    yield a,
+                    yield (a,)
 
                 def terminate(self):
                     assert TestUDTF.read_my_file() == "col1"
-                    yield 100,
+                    yield (100,)
 
             test_udtf = udtf(TestUDTF)
             self.spark.udtf.register("test_udtf", test_udtf)
@@ -2282,7 +2282,7 @@ class BaseUDTFTestsMixin:
         @udtf(returnType="a: int")
         class TestUDTF:
             def eval(self, a, b):
-                yield a,
+                yield (a,)
 
         self.spark.udtf.register("test_udtf", TestUDTF)
 
@@ -2301,7 +2301,7 @@ class BaseUDTFTestsMixin:
         @udtf(returnType="a: int")
         class TestUDTF:
             def eval(self, a, b):
-                yield a.id,
+                yield (a.id,)
 
         self.spark.udtf.register("test_udtf", TestUDTF)
 
@@ -2320,7 +2320,7 @@ class BaseUDTFTestsMixin:
         @udtf(returnType="a: int")
         class TestUDTF:
             def eval(self, a, b):
-                yield a,
+                yield (a,)
 
         self.spark.udtf.register("test_udtf", TestUDTF)
 
@@ -2461,7 +2461,7 @@ class BaseUDTFTestsMixin:
                 return AnalyzeResult(StructType().add("a", a.dataType))
 
             def eval(self, a, b):
-                yield a,
+                yield (a,)
 
         self.spark.udtf.register("test_udtf", TestUDTF)
 
@@ -2899,7 +2899,7 @@ class BaseUDTFTestsMixin:
                     )
 
                 def eval(self, row: Row):
-                    yield row["id"],
+                    yield (row["id"],)
 
             df = self.spark.createDataFrame([(1,), (None,)], ["id"])
             assertDataFrameEqual(
@@ -3074,9 +3074,14 @@ class BaseUDTFTestsMixin:
             # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
             def eval(self, n):
                 for i in range(n):
-                    yield i, {
-                        "v1": VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97]))
-                    }
+                    yield (
+                        i,
+                        {
+                            "v1": VariantVal(
+                                bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97])
+                            )
+                        },
+                    )
 
         self.spark.udtf.register("test_udtf_struct", TestUDTFStruct)
         res = self.spark.sql("select i, to_json(v.v1) from test_udtf_struct(8)")
@@ -3088,9 +3093,10 @@ class BaseUDTFTestsMixin:
             # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
             def eval(self, n):
                 for i in range(n):
-                    yield i, [
-                        VariantVal(bytes([2, 1, 0, 0, 2, 5, 98 + i]), bytes([1, 1, 0, 1, 97]))
-                    ]
+                    yield (
+                        i,
+                        [VariantVal(bytes([2, 1, 0, 0, 2, 5, 98 + i]), bytes([1, 1, 0, 1, 97]))],
+                    )
 
         self.spark.udtf.register("test_udtf_array", TestUDTFArray)
         res = self.spark.sql("select i, to_json(v[0]) from test_udtf_array(8)")
@@ -3102,9 +3108,14 @@ class BaseUDTFTestsMixin:
             # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
             def eval(self, n):
                 for i in range(n):
-                    yield i, {
-                        "v1": VariantVal(bytes([2, 1, 0, 0, 2, 5, 99 + i]), bytes([1, 1, 0, 1, 97]))
-                    }
+                    yield (
+                        i,
+                        {
+                            "v1": VariantVal(
+                                bytes([2, 1, 0, 0, 2, 5, 99 + i]), bytes([1, 1, 0, 1, 97])
+                            )
+                        },
+                    )
 
         self.spark.udtf.register("test_udtf_struct", TestUDTFStruct)
         res = self.spark.sql("select i, to_json(v['v1']) from test_udtf_struct(8)")
@@ -3128,7 +3139,7 @@ class BaseUDTFTestsMixin:
                         def eval(self):
                             import ctypes
 
-                            yield ctypes.string_at(0),
+                            yield (ctypes.string_at(0),)
 
                     self._check_result_or_exception(
                         TestUDTF, "x: string", expected, err_type=Exception
@@ -3145,7 +3156,7 @@ class BaseUDTFTestsMixin:
                             return AnalyzeResult(StructType().add("x", StringType()))
 
                         def eval(self):
-                            yield "x",
+                            yield ("x",)
 
                     self._check_result_or_exception(
                         TestUDTFWithAnalyze, None, expected, err_type=Exception
@@ -3181,7 +3192,7 @@ class BaseUDTFTestsMixin:
                         return AnalyzeResult(StructType().add("x", StringType()))
 
                     def eval(self):
-                        yield "x",
+                        yield ("x",)
 
                 self._check_result_or_exception(
                     TestUDTFWithAnalyze,
@@ -3411,7 +3422,7 @@ class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
     def test_udtf_arrow_sql_conf(self):
         class TestUDTF:
             def eval(self):
-                yield 1,
+                yield (1,)
 
         old_value = self.spark.conf.get("spark.sql.execution.pythonUDTF.arrow.enabled")
         try:
@@ -3473,7 +3484,7 @@ class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
     def test_numeric_output_type_casting(self):
         class TestUDTF:
             def eval(self):
-                yield 1,
+                yield (1,)
 
         err = "Exception thrown when converting pandas.Series"
 
@@ -3500,7 +3511,7 @@ class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
     def test_numeric_string_output_type_casting(self):
         class TestUDTF:
             def eval(self):
-                yield "1",
+                yield ("1",)
 
         err = "Exception thrown when converting pandas.Series"
 
@@ -3529,7 +3540,7 @@ class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
     def test_string_output_type_casting(self):
         class TestUDTF:
             def eval(self):
-                yield "hello",
+                yield ("hello",)
 
         err = "Exception thrown when converting pandas.Series"
 
@@ -3558,7 +3569,7 @@ class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
     def test_array_output_type_casting(self):
         class TestUDTF:
             def eval(self):
-                yield [0, 1.1, 2],
+                yield ([0, 1.1, 2],)
 
         err = "Exception thrown when converting pandas.Series"
 
@@ -3591,7 +3602,7 @@ class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
     def test_map_output_type_casting(self):
         class TestUDTF:
             def eval(self):
-                yield {"a": 0, "b": 1.1, "c": 2},
+                yield ({"a": 0, "b": 1.1, "c": 2},)
 
         err = "Exception thrown when converting pandas.Series"
 
@@ -3623,7 +3634,7 @@ class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
     def test_struct_output_type_casting_dict(self):
         class TestUDTF:
             def eval(self):
-                yield {"a": 0, "b": 1.1, "c": 2},
+                yield ({"a": 0, "b": 1.1, "c": 2},)
 
         err = "Exception thrown when converting pandas.Series"
 
@@ -3654,7 +3665,7 @@ class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
     def test_struct_output_type_casting_row(self):
         class TestUDTF:
             def eval(self):
-                yield Row(a=0, b=1.1, c=2),
+                yield (Row(a=0, b=1.1, c=2),)
 
         err = "Exception thrown when converting pandas.Series"
 
@@ -3685,8 +3696,8 @@ class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
     def test_inconsistent_output_types(self):
         class TestUDTF:
             def eval(self):
-                yield 1,
-                yield [1, 2],
+                yield (1,)
+                yield ([1, 2],)
 
         for ret_type in [
             "x: int",
@@ -3726,7 +3737,7 @@ class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
     def test_numeric_output_type_casting(self):
         class TestUDTF:
             def eval(self):
-                yield 1,
+                yield (1,)
 
         err = "UDTF_ARROW_DATA_CONVERSION_ERROR"
 
@@ -3753,7 +3764,7 @@ class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
     def test_numeric_string_output_type_casting(self):
         class TestUDTF:
             def eval(self):
-                yield "1",
+                yield ("1",)
 
         err = "UDTF_ARROW_DATA_CONVERSION_ERROR"
 
@@ -3782,7 +3793,7 @@ class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
     def test_string_output_type_casting(self):
         class TestUDTF:
             def eval(self):
-                yield "hello",
+                yield ("hello",)
 
         err = "UDTF_ARROW_DATA_CONVERSION_ERROR"
         for ret_type, expected in [
@@ -3810,7 +3821,7 @@ class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
     def test_array_output_type_casting(self):
         class TestUDTF:
             def eval(self):
-                yield [0, 1.1, 2],
+                yield ([0, 1.1, 2],)
 
         err = "UDTF_ARROW_DATA_CONVERSION_ERROR"
         for ret_type, expected in [
@@ -3842,7 +3853,7 @@ class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
     def test_map_output_type_casting(self):
         class TestUDTF:
             def eval(self):
-                yield {"a": 0, "b": 1.1, "c": 2},
+                yield ({"a": 0, "b": 1.1, "c": 2},)
 
         err = "UDTF_ARROW_DATA_CONVERSION_ERROR"
         for ret_type, expected in [
@@ -3873,7 +3884,7 @@ class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
     def test_struct_output_type_casting_dict(self):
         class TestUDTF:
             def eval(self):
-                yield {"a": 0, "b": 1.1, "c": 2},
+                yield ({"a": 0, "b": 1.1, "c": 2},)
 
         err = "UDTF_ARROW_DATA_CONVERSION_ERROR"
         for ret_type, expected in [
@@ -3903,7 +3914,7 @@ class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
     def test_struct_output_type_casting_row(self):
         class TestUDTF:
             def eval(self):
-                yield Row(a=0, b=1.1, c=2),
+                yield (Row(a=0, b=1.1, c=2),)
 
         err = "UDTF_ARROW_DATA_CONVERSION_ERROR"
         for ret_type, expected in [
@@ -3933,8 +3944,8 @@ class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
     def test_inconsistent_output_types(self):
         class TestUDTF:
             def eval(self):
-                yield 1,
-                yield [1, 2],
+                yield (1,)
+                yield ([1, 2],)
 
         for ret_type in [
             "x: int",

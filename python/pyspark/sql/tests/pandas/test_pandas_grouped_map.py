@@ -1009,7 +1009,7 @@ class ApplyInPandasTestsMixin:
                 [
                     Row(
                         level="WARNING",
-                        msg=f"pandas grouped map: {dict(id=lst, value=[v*10 for v in lst])}",
+                        msg=f"pandas grouped map: {dict(id=lst, value=[v * 10 for v in lst])}",
                         context={"func_name": func_with_logging.__name__},
                         logger="test_pandas_grouped_map",
                     )
