@@ -22,7 +22,7 @@ import unittest
 from io import StringIO
 
 from pyspark import SparkConf, SparkContext, BasicProfiler
-from pyspark.profiler import has_memory_profiler
+from pyspark.memory_profiler_ext import has_memory_profiler
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import udf
 from pyspark.errors import PythonException, PySparkRuntimeError
