@@ -19,6 +19,7 @@ import sys
 
 from typing import Callable, List, Optional, TYPE_CHECKING, overload, Dict, Union, cast, Tuple
 
+from pyspark.errors import PySparkValueError
 from pyspark.sql.column import Column
 from pyspark.sql.session import SparkSession
 from pyspark.sql.dataframe import DataFrame
@@ -85,7 +86,11 @@ class GroupedData(PandasGroupedOpsMixin):
     @overload
     def agg(self, __exprs: Dict[str, str]) -> "DataFrame": ...
 
-    def agg(self, *exprs: Union[Column, Dict[str, str]]) -> "DataFrame":
+    @overload
+    def agg(self, **kwargs: str) -> "DataFrame":
+        ...
+
+    def agg(self, *exprs: Union[Column, Dict[str, str]], **kwargs: str) -> "DataFrame":
         """Compute aggregates and returns the result as a :class:`DataFrame`.
 
         The available aggregate functions can be:
@@ -116,6 +121,10 @@ class GroupedData(PandasGroupedOpsMixin):
         exprs : dict
             a dict mapping from column name (string) to aggregate functions (string),
             or a list of :class:`Column`.
+        **kwargs : str
+            keyword arguments mapping column names to aggregate function names.
+
+            .. versionadded:: 4.2.0
 
         Notes
         -----
@@ -151,6 +160,16 @@ class GroupedData(PandasGroupedOpsMixin):
         |  Bob|       2|
         +-----+--------+
 
+        Group-by name us`ing keyword arguments.
+
+        >>> df.groupBy(df.name).agg(age="min").sort("name").show()
+        +-----+--------+
+        | name|min(age)|
+        +-----+--------+
+        |Alice|       2|
+        |  Bob|       5|
+        +-----+--------+
+
         Group-by name, and calculate the minimum age.
 
         >>> df.groupBy(df.name).agg(sf.min(df.age)).sort("name").show()
@@ -177,6 +196,13 @@ class GroupedData(PandasGroupedOpsMixin):
         +-----+------------+
         """
         from pyspark.sql.classic.column import _to_seq
+
+        if kwargs:
+            if exprs:
+                raise PySparkValueError(
+                    "Cannot use both positional arguments and keyword arguments"
+                )
+            exprs = (kwargs,)
 
         assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):
