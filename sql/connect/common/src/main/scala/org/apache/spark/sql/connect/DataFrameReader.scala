@@ -201,11 +201,9 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends sql.Data
     require(tableName != null, "The table name can't be null")
     assertNoSpecifiedSchema("changes")
     sparkSession.newDataFrame { builder =>
-      val changesBuilder = builder.getRelationChangesBuilder
+      builder.getRelationChangesBuilder
         .setUnparsedIdentifier(tableName)
-      extraOptions.foreach { case (k, v) =>
-        changesBuilder.putOptions(k, v)
-      }
+        .putAllOptions(extraOptions.toMap.asJava)
     }
   }
 

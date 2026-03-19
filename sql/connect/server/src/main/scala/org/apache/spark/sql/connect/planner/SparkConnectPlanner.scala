@@ -1720,11 +1720,10 @@ class SparkConnectPlanner(
   private def transformRelationChanges(rel: proto.RelationChanges): LogicalPlan = {
     val tableName = rel.getUnparsedIdentifier
     val options = new CaseInsensitiveStringMap(rel.getOptionsMap)
-    val changelogInfo = ChangelogInfoUtils.fromOptions(
-      options, session.sessionState.conf.sessionLocalTimeZone)
-    val identifier = parser.parseMultipartIdentifier(tableName)
-    val relation = UnresolvedRelation(
-      identifier, options, isStreaming = rel.getIsStreaming)
+    val timeZone = session.sessionState.conf.sessionLocalTimeZone
+    val changelogInfo = ChangelogInfoUtils.fromOptions(options, timeZone)
+    val ident = parser.parseMultipartIdentifier(tableName)
+    val relation = UnresolvedRelation(ident, options, isStreaming = rel.getIsStreaming)
     RelationChanges(relation, changelogInfo)
   }
 
