@@ -4533,14 +4533,20 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if len(results) == 0:
             raise ValueError("attempt to get idxmin of an empty sequence")
         if results[0][0] is None:
-            # This will only happen when skipna is False because we will
-            # place nulls first.
-            warnings.warn(
-                "The behavior of Series.idxmax with all-NA values, or any-NA and skipna=False, "
-                "is deprecated. In a future version this will raise ValueError",
-                FutureWarning,
-            )
-            return np.nan
+            if LooseVersion(pd.__version__) < "3.0.0":
+                # This will only happen when skipna is False because we will
+                # place nulls first.
+                warnings.warn(
+                    "The behavior of Series.idxmax with all-NA values, or any-NA and skipna=False, "
+                    "is deprecated. In a future version this will raise ValueError",
+                    FutureWarning,
+                )
+                return np.nan
+            else:
+                if skipna:
+                    raise ValueError("Encountered all NA values")
+                else:
+                    raise ValueError("Encountered an NA value with skipna=False")
         values = list(results[0][1:])
         if len(values) == 1:
             return values[0]
@@ -4646,14 +4652,20 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if len(results) == 0:
             raise ValueError("attempt to get idxmin of an empty sequence")
         if results[0][0] is None:
-            # This will only happen when skipna is False because we will
-            # place nulls first.
-            warnings.warn(
-                "The behavior of Series.idxmin with all-NA values, or any-NA and skipna=False, "
-                "is deprecated. In a future version this will raise ValueError",
-                FutureWarning,
-            )
-            return np.nan
+            if LooseVersion(pd.__version__) < "3.0.0":
+                # This will only happen when skipna is False because we will
+                # place nulls first.
+                warnings.warn(
+                    "The behavior of Series.idxmin with all-NA values, or any-NA and skipna=False, "
+                    "is deprecated. In a future version this will raise ValueError",
+                    FutureWarning,
+                )
+                return np.nan
+            else:
+                if skipna:
+                    raise ValueError("Encountered all NA values")
+                else:
+                    raise ValueError("Encountered an NA value with skipna=False")
         values = list(results[0][1:])
         if len(values) == 1:
             return values[0]
