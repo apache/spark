@@ -146,7 +146,7 @@ class ChangelogResolutionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("DataStreamReader - changes() rejects user-specified schema") {
-    val e = intercept[Exception] {
+    val e = intercept[AnalysisException] {
       import org.apache.spark.sql.types.StructType
       spark.readStream
         .schema(new StructType().add("id", LongType))
