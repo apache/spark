@@ -24,10 +24,11 @@ import scala.concurrent.duration.Duration
 
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 
-import org.apache.spark.{SparkIllegalArgumentException, SparkIllegalStateException}
+import org.apache.spark.{SparkIllegalArgumentException, SparkIllegalStateException, TaskContext}
 import org.apache.spark.sql.execution.streaming.{LowLatencyMemoryStream, RealTimeTrigger}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.sources.ContinuousMemorySink
+import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.internal.SQLConf
 
 class StreamRealTimeModeSuite extends StreamRealTimeModeSuiteBase {
@@ -202,6 +203,26 @@ class StreamRealTimeModeSuite extends StreamRealTimeModeSuiteBase {
           matchPVals = true
         )
       }
+    )
+  }
+
+  test("LowLatencyMemoryStream load balance among all partitions") {
+    val numPartitions = 3
+    val inputData = LowLatencyMemoryStream[Int](numPartitions)
+
+    val getPartitionId = udf(() => TaskContext.getPartitionId())
+
+    val mapped = inputData.toDS().select($"value", getPartitionId()).as[(Int, Int)]
+
+    testStream(mapped, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+      StartStream(),
+      // 6 items round-robin across 3 partitions: item i goes to partition (i-1) % 3
+      AddData(inputData, 1, 2, 3),
+      AddData(inputData, 4),
+      AddData(inputData, 5),
+      AddData(inputData, 6),
+      CheckAnswerWithTimeout(10000, (1, 0), (2, 1), (3, 2), (4, 0), (5, 1), (6, 2)),
+      StopStream
     )
   }
 }
