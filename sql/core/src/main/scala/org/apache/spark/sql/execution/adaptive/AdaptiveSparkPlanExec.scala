@@ -363,6 +363,9 @@ case class AdaptiveSparkPlanExec(
         // They are intentionally invalidated and must be rebuilt by replanning.
         if (fallbackStages.nonEmpty) {
           stagesToReplace = filterStagesToReplaceForFallback(stagesToReplace, fallbackStages.toSeq)
+          currentLogicalPlan = removeFailedBroadcastStagesFromLogicalPlan(
+            currentLogicalPlan,
+            failedBroadcastStages.toSeq)
         }
 
         // In case of errors, we cancel all running stages and throw exception.
@@ -975,6 +978,34 @@ case class AdaptiveSparkPlanExec(
     }
   }
 
+  // Remove failed broadcast query-stage wrappers that may have been embedded in prior adopted
+  // logical plans, so fallback replanning does not keep retrying the same failed relation.
+  private def removeFailedBroadcastStagesFromLogicalPlan(
+      plan: LogicalPlan,
+      failedBroadcastStages: Seq[BroadcastQueryStageExec]): LogicalPlan = {
+    if (failedBroadcastStages.isEmpty) {
+      plan
+    } else {
+      plan.transformDown {
+        case stage: LogicalQueryStage
+            if hasFailedBroadcastRelation(stage.physicalPlan, failedBroadcastStages) =>
+          stage.logicalPlan
+      }
+    }
+  }
+
+  private def hasFailedBroadcastRelation(
+      plan: SparkPlan,
+      failedBroadcastStages: Seq[BroadcastQueryStageExec]): Boolean = {
+    failedBroadcastStages.nonEmpty && plan.exists { p =>
+      broadcastChildPlan(p).exists { child =>
+        failedBroadcastStages.exists { failed =>
+          sameBroadcastRelation(child, failed.broadcast.child)
+        }
+      }
+    }
+  }
+
   // Track failed broadcast relations using semantic equality so equivalent stages
   // in later AQE replans are treated as the same failed relation.
   private def registerFailedBroadcastStage(
@@ -1031,13 +1062,7 @@ case class AdaptiveSparkPlanExec(
   private def shouldRejectBroadcastPlanInFallback(
       newPlan: SparkPlan,
       failedBroadcastStages: Seq[BroadcastQueryStageExec]): Boolean = {
-    failedBroadcastStages.nonEmpty && newPlan.exists { p =>
-      broadcastChildPlan(p).exists { child =>
-        failedBroadcastStages.exists { failed =>
-          sameBroadcastRelation(child, failed.broadcast.child)
-        }
-      }
-    }
+    hasFailedBroadcastRelation(newPlan, failedBroadcastStages)
   }
 
   // Strip BROADCAST join hints before fallback replanning to avoid forcing broadcast joins.
