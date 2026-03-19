@@ -48,10 +48,9 @@ PySpark tests require building Spark with Hive support first:
 
     build/sbt -Phive package
 
-Set up and activate a virtual environment (Python 3.10+):
+Set up and activate a virtual environment:
 
     if [ ! -d .venv ]; then
-        python3 -c "import sys; assert sys.version_info >= (3, 10)" || { echo "Python 3.10+ required. Ask the user to install a compatible version."; exit 1; }
         python3 -m venv .venv
         source .venv/bin/activate
         pip install -r dev/requirements.txt
@@ -71,7 +70,7 @@ Run a single test case:
 
 ### PR Title
 
-Format: `[SPARK-xxxx][COMPONENT] Title` or `[MINOR] Title` for trivial changes.
+Format: `[SPARK-xxxx][COMPONENT] Title`.
 For follow-up fixes: `[SPARK-xxxx][COMPONENT][FOLLOWUP] Title`.
 
 ### PR Description
