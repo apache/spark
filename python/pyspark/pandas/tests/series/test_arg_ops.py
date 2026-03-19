@@ -161,6 +161,9 @@ class SeriesArgOpsMixin:
             self.assert_eq(pd.Series([np.nan]).argmin(), ps.Series([np.nan]).argmin())
             self.assert_eq(pd.Series([np.nan]).argmax(), ps.Series([np.nan]).argmax())
             self.assert_eq(
+                pd.Series([np.nan]).argmin(skipna=False), ps.Series([np.nan]).argmin(skipna=False)
+            )
+            self.assert_eq(
                 pd.Series([np.nan]).argmax(skipna=False), ps.Series([np.nan]).argmax(skipna=False)
             )
         else:
@@ -170,12 +173,16 @@ class SeriesArgOpsMixin:
                 psser2.argmax(skipna=False)
 
             # Null Series
-            with self.assertRaisesRegex(ValueError, "Encountered an NA value with skipna=False"):
+            with self.assertRaisesRegex(ValueError, "Encountered all NA values$"):
                 ps.Series([np.nan]).argmin()
-            with self.assertRaisesRegex(ValueError, "Encountered an NA value with skipna=False"):
+            with self.assertRaisesRegex(ValueError, "Encountered all NA values$"):
                 ps.Series([np.nan]).argmax()
             with self.assertRaisesRegex(ValueError, "Encountered an NA value with skipna=False"):
-                ps.Series([np.nan]).argmax(skipna=False)
+                ps.Series([np.nan]).argmin(skipna=False)
+                with self.assertRaisesRegex(
+                    ValueError, "Encountered an NA value with skipna=False"
+                ):
+                    ps.Series([np.nan]).argmax(skipna=False)
 
         with self.assertRaisesRegex(ValueError, "attempt to get argmin of an empty sequence"):
             ps.Series([]).argmin()

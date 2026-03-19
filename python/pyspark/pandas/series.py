@@ -6544,7 +6544,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                     )
                     return -1
                 else:
-                    raise ValueError("Encountered an NA value with skipna=False")
+                    if skipna:
+                        raise ValueError("Encountered all NA values")
+                    else:
+                        raise ValueError("Encountered an NA value with skipna=False")
             else:
                 return max_value[1]
 
@@ -6616,7 +6619,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                     )
                     return -1
                 else:
-                    raise ValueError("Encountered an NA value with skipna=False")
+                    if skipna:
+                        raise ValueError("Encountered all NA values")
+                    else:
+                        raise ValueError("Encountered an NA value with skipna=False")
             else:
                 return min_value[1]
 
