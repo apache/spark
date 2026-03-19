@@ -60,6 +60,7 @@ object SparkConnectServerUtils {
     ConnectCommon.CONNECT_GRPC_BINDING_PORT + util.Random.nextInt(1000)
 
   @volatile private var stopped = false
+  @volatile private var stoppingFromShutdownHook = false
 
   private var consoleOut: OutputStream = _
   private val serverStopCommand = "q"
@@ -100,7 +101,10 @@ object SparkConnectServerUtils {
     consoleOut = process.getOutputStream
 
     // Adding JVM shutdown hook
-    sys.addShutdownHook(stop())
+    sys.addShutdownHook {
+      stoppingFromShutdownHook = true
+      stop()
+    }
     process
   }
 
@@ -160,9 +164,14 @@ object SparkConnectServerUtils {
       val code = sparkConnect.exitValue()
       debug(s"Spark Connect Server is stopped with exit code: $code")
       if (code == ArrowLeakExitCode) {
-        // Arrow leak detected in server JVM. halt() is the only way to propagate
-        // failure from inside a JVM shutdown hook.
-        Runtime.getRuntime.halt(code)
+        val msg = s"Arrow allocator memory leak detected in Spark Connect server (exit code $code)"
+        if (stoppingFromShutdownHook) {
+          // halt() is the only way to propagate failure from inside a JVM shutdown hook;
+          // exit() would deadlock since we're already in the shutdown sequence.
+          Runtime.getRuntime.halt(code)
+        } else {
+          throw new RuntimeException(msg)
+        }
       }
       code
     } catch {
