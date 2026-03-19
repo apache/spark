@@ -50,9 +50,7 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
     assertAnalysisErrorCondition(
       parsePlan("SHOW COLUMNS FROM unknown IN db"),
       "TABLE_OR_VIEW_NOT_FOUND",
-      Map(
-        "relationName" -> "`db`.`unknown`",
-        "searchPath" -> ("[`system`.`session`, `spark_catalog`.`default`]")),
+      Map("relationName" -> "`db`.`unknown`"),
       Array(ExpectedContext("unknown", 18, 24))
     )
     verifyTableOrViewPosition("ALTER TABLE unknown RENAME TO t", "unknown")
@@ -101,15 +99,10 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
   private def verifyPosition(sql: String, table: String, useQueryPath: Boolean = false): Unit = {
     val startPos = sql.indexOf(table)
     assert(startPos != -1)
-    val ddlPath = "[`system`.`session`, `spark_catalog`.`default`]"
-    val fullPath = "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
-    val expectedPath = if (useQueryPath) fullPath else ddlPath
     assertAnalysisErrorCondition(
       parsePlan(sql),
       "TABLE_OR_VIEW_NOT_FOUND",
-      Map(
-        "relationName" -> s"`$table`",
-        "searchPath" -> expectedPath),
+      Map("relationName" -> s"`$table`"),
       Array(ExpectedContext(table, startPos, startPos + table.length - 1))
     )
   }

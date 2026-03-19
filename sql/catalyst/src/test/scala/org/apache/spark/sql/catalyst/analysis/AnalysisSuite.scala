@@ -859,11 +859,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     // Unqualified name "test" is resolved using the search path; error includes search path.
     assertAnalysisErrorCondition(parsePlan("INSERT INTO test VALUES (1)"),
       "TABLE_OR_VIEW_NOT_FOUND",
-      Map(
-        "relationName" -> "`test`",
-        "searchPath" -> (
-          "[`system`.`builtin`, `system`.`session`, " +
-          "`spark_catalog`.`default`]")),
+      Map("relationName" -> "`test`"),
       Array(ExpectedContext("test", 12, 15)))
   }
 
@@ -1485,11 +1481,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
          |JOIN t2 ON t1.user_id = t2.user_id
          |WHERE t1.dt >= DATE_SUB('2020-12-27', 90)""".stripMargin),
       "TABLE_OR_VIEW_NOT_FOUND",
-      Map(
-        "relationName" -> "`t2`",
-        "searchPath" -> (
-          "[`system`.`builtin`, `system`.`session`, " +
-          "`spark_catalog`.`default`]")),
+      Map("relationName" -> "`t2`"),
       Array(ExpectedContext("t2", 84, 85)))
   }
 

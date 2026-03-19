@@ -1222,9 +1222,7 @@ private[v2] trait V2JDBCTest
           sql(sqlStatement).collect()
         },
         condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map(
-          "relationName" -> s"`$catalogName`.`tbl1`",
-          "searchPath" -> defaultSearchPathForTests),
+        parameters = Map("relationName" -> s"`$catalogName`.`tbl1`"),
         context = ExpectedContext(tbl, startPos, startPos + tbl.length - 1)
       )
     }
