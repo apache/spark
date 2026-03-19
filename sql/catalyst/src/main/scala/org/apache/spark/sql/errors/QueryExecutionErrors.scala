@@ -458,7 +458,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def customCollectionClsNotResolvedError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_2017")
+    new SparkUnsupportedOperationException(
+      errorClass = "UNRESOLVED_COLLECTION_CLS",
+      messageParameters = Map.empty[String, String])
   }
 
   def classUnsupportedByMapObjectsError(cls: Class[_]): SparkRuntimeException = {

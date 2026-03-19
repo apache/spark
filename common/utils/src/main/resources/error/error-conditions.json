@@ -7004,6 +7004,12 @@
     ],
     "sqlState" : "42803"
   },
+  "UNRESOLVED_COLLECTION_CLS" : {
+    "message" : [
+      "Custom collection class is not resolved. Ensure the class is accessible and properly defined before analysis."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNRESOLVED_COLUMN" : {
     "message" : [
       "A column, variable, or function parameter with name <objectName> cannot be resolved."
@@ -9274,11 +9280,6 @@
   "_LEGACY_ERROR_TEMP_2003" : {
     "message" : [
       "Unsuccessful try to zip maps with <size> unique keys due to exceeding the array size limit <maxRoundedArrayLength>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2017" : {
-    "message" : [
-      "not resolved."
     ]
   },
   "_LEGACY_ERROR_TEMP_2026" : {
