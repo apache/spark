@@ -216,27 +216,9 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       case LocalTableScanExec(_, rows, _) =>
         executePlan.eventsManager.postFinished(Some(rows.length))
         var offset = 0L
-        // Use ArrowBatchWithSchemaIterator directly (not via the converter wrapper) so we
-        // can close it in a finally block. The converter wrapper returns a mapped iterator
-        // which is not AutoCloseable; if sendBatch throws (e.g., client disconnect) the
-        // underlying ArrowBatchWithSchemaIterator would leak 131072 bytes into rootAllocator.
-        val batches = ArrowConverters.toBatchWithSchemaIterator(
-          rows.iterator,
-          schema,
-          maxRecordsPerBatch,
-          maxBatchSize,
-          timeZoneId,
-          errorOnDuplicatedFieldNames = false,
-          largeVarTypes = largeVarTypes)
-        try {
-          while (batches.hasNext) {
-            val batchBytes = batches.next()
-            val count = batches.rowCountInLastBatch
-            sendBatch(batchBytes, count, offset)
-            offset += count
-          }
-        } finally {
-          batches.close()
+        converter(rows.iterator).foreach { case (bytes, count) =>
+          sendBatch(bytes, count, offset)
+          offset += count
         }
       case collectLimit: CollectLimitExec =>
         SQLExecution.withNewExecutionId(dataframe.queryExecution, Some("collectLimitArrow")) {
