@@ -17,7 +17,6 @@
 
 package org.apache.spark.util
 
-import java.lang.management.ManagementFactory
 import java.lang.reflect.{Field, Modifier}
 import java.util.{IdentityHashMap, Random}
 
@@ -142,7 +141,7 @@ object SizeEstimator extends Logging {
       return false
     }
 
-    getHotSpotVMOption("UseCompactObjectHeaders").exists(_.contains("true"))
+    Utils.getVMOptionValue("UseCompactObjectHeaders").contains("true")
   }
 
   private def getIsCompressedOops: Boolean = {
@@ -158,38 +157,14 @@ object SizeEstimator extends Logging {
       return System.getProperty("java.vm.info").contains("Compressed Ref")
     }
 
-    getHotSpotVMOption("UseCompressedOops") match {
-      case Some(value) => value.contains("true")
+    Utils.getVMOptionValue("UseCompressedOops") match {
+      case Some(value) => value == "true"
       case None =>
         // Guess whether they've enabled UseCompressedOops based on whether maxMemory < 32 GB
         val guess = Runtime.getRuntime.maxMemory < (32L*1024*1024*1024)
         logWarning(log"Failed to check whether UseCompressedOops is set; " +
           log"assuming " + (if (guess) log"yes" else log"not"))
         guess
-    }
-  }
-
-  /**
-   * Retrieves the string representation of a HotSpot VM option via the HotSpotDiagnosticMXBean.
-   * Returns [[Some]] with the option's string value on success, or [[None]] if the option cannot
-   * be read (e.g. on non-HotSpot JVMs or when the option does not exist).
-   */
-  private def getHotSpotVMOption(option: String): Option[String] = {
-    try {
-      val hotSpotMBeanName = "com.sun.management:type=HotSpotDiagnostic"
-      val server = ManagementFactory.getPlatformMBeanServer
-
-      // NOTE: This should throw an exception in non-Sun JVMs
-      // scalastyle:off classforname
-      val hotSpotMBeanClass = Class.forName("com.sun.management.HotSpotDiagnosticMXBean")
-      val getVMMethod = hotSpotMBeanClass.getDeclaredMethod("getVMOption", classOf[String])
-      // scalastyle:on classforname
-
-      val bean = ManagementFactory.newPlatformMXBeanProxy(server,
-        hotSpotMBeanName, hotSpotMBeanClass)
-      Some(getVMMethod.invoke(bean, option).toString)
-    } catch {
-      case _: Exception => None
     }
   }
 

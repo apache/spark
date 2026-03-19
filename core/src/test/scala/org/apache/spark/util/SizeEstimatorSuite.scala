@@ -251,7 +251,7 @@ class SizeEstimatorSuite
   // Tests for JEP 450/519: Compact Object Headers
   // With Compact Object Headers, the object header is 8 bytes (vs. 12 with Compressed Oops,
   // or 16 without) because the class pointer is encoded inside the mark word.
-  // Object references pointers are 4 bytes with Compressed Oops, or 8 bytes without.
+  // Object reference pointers are 4 bytes with Compressed Oops, or 8 bytes without.
 
   test("64-bit arch with compact object headers: simple classes") {
     reinitializeSizeEstimator("amd64", "true", "true")
@@ -297,7 +297,7 @@ class SizeEstimatorSuite
 
   test("64-bit arch with compact object headers: strings") {
     reinitializeSizeEstimator("amd64", "true", "true")
-    // DummyString has: pointer(arr,4) + Int(hashCode,4) + Int(hash32,4) = 12 fields
+    // DummyString has: pointer(arr,4) + Int(hashCode,4) + Int(hash32,4) = 12 bytes of fields
     // objectSize=8, fields=12 => shellSize=20, aligned to 24
     // DummyString("") => DummyString(24) + Array[Char](0)(16) = 40
     assertResult(40)(SizeEstimator.estimate(DummyString("")))
@@ -358,7 +358,7 @@ class SizeEstimatorSuite
     assertResult(96)(SizeEstimator.estimate(new Array[Long](10)))
 
     // Strings (DummyString)
-    // DummyString has: pointer(arr,8) + Int(hashCode,4) + Int(hash32,4) = 16 fields
+    // DummyString has: pointer(arr,8) + Int(hashCode,4) + Int(hash32,4) = 16 bytes of fields
     // objectSize=8, fields=16 => shellSize=24, aligned to 24
     // DummyString("") => DummyString(24) + Array[Char](0)(16) = 40
     assertResult(40)(SizeEstimator.estimate(DummyString("")))
