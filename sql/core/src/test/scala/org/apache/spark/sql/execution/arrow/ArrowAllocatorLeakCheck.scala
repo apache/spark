@@ -40,8 +40,11 @@ import org.apache.spark.sql.util.ArrowUtils
  */
 trait ArrowAllocatorLeakCheck extends Suite with BeforeAndAfterAll {
   abstract override def afterAll(): Unit = {
-    super.afterAll()
-    val leaked = ArrowUtils.rootAllocator.getAllocatedMemory
-    assert(leaked == 0, s"Arrow rootAllocator memory leak: $leaked bytes still allocated")
+    try {
+      super.afterAll()
+    } finally {
+      val leaked = ArrowUtils.rootAllocator.getAllocatedMemory
+      assert(leaked == 0, s"Arrow rootAllocator memory leak: $leaked bytes still allocated")
+    }
   }
 }

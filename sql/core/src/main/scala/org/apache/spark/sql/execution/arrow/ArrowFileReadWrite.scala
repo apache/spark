@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.arrow
 
 import java.nio.channels.Channels
 import java.nio.file.{Files, Path}
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.jdk.CollectionConverters._
 
@@ -39,15 +40,18 @@ private[sql] class SparkArrowFileWriter(schema: Schema, path: Path) extends Auto
   protected val fileWriter =
     new ArrowFileWriter(root, null, Channels.newChannel(Files.newOutputStream(path)))
 
-  private var fileWriterClosed = false
+  // AtomicBoolean ensures close() is safe to call concurrently and from multiple code paths
+  // (write()'s finally block and the outer save() finally block). ArrowFileWriter.close() is
+  // NOT idempotent, so we must guard it; root/allocator are closed unconditionally via
+  // try/finally so they are always released even if fileWriter.close() throws.
+  private val fileWriterClosed = new AtomicBoolean(false)
 
   override def close(): Unit = {
-    if (!fileWriterClosed) {
-      fileWriter.close()
-      fileWriterClosed = true
+    try {
+      if (fileWriterClosed.compareAndSet(false, true)) fileWriter.close()
+    } finally {
+      try { root.close() } finally { allocator.close() }
     }
-    root.close()
-    allocator.close()
   }
 
   def write(batchBytesIter: Iterator[Array[Byte]]): Unit = {
@@ -64,8 +68,9 @@ private[sql] class SparkArrowFileWriter(schema: Schema, path: Path) extends Auto
         }
       }
     } finally {
-      fileWriter.close()
-      fileWriterClosed = true
+      // close() uses compareAndSet so this is safe even if the outer save() finally also calls
+      // writer.close()
+      if (fileWriterClosed.compareAndSet(false, true)) fileWriter.close()
     }
   }
 }
