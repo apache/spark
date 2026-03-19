@@ -1,13 +1,13 @@
 # Apache Spark
 
-Apache Spark is a multi-language engine for large-scale data processing and analytics, primarily written in Scala and Java. It supports both batch and streaming workloads, with Spark Connect as an optional server-client protocol.
-
 ## Before Making Changes
 
-Before the first edit in a session, check the git state:
-1. If there are uncommitted changes, ask the user whether to continue editing or stash/commit first.
-2. If the branch is `master`, or has new commits compared to `master` (check with `git log master..HEAD`), create a new branch from `master` before editing. Inform the user of the new branch name.
-3. Otherwise, proceed on the current branch.
+Before the first edit in a session, ensure a clean working environment:
+
+1. Run `git remote -v` to identify the personal fork and upstream (`apache/spark`). If unclear, ask the user to configure their remotes following the standard convention (`origin` for the fork, `upstream` for `apache/spark`).
+2. If the latest commit on `<upstream>/master` is more than a day old (check with `git log -1 --format="%ci" <upstream>/master`), run `git fetch <upstream> master`.
+3. If the current branch has uncommitted changes or commits not in upstream `master` (check with `git log <upstream>/master..HEAD`), suggest creating a new git worktree from `<upstream>/master` (recommended), or ask the user to clean up by creating a new branch from `<upstream>/master` or stashing changes.
+4. Otherwise, proceed on the current branch.
 
 ## Development Notes
 
@@ -17,29 +17,29 @@ Spark Connect protocol is defined in proto files under `sql/connect/common/src/m
 
 ## Build and Test
 
-Prefer SBT over Maven for day-to-day development (faster incremental compilation). Replace `sql` below with the target module (e.g., `core`, `catalyst`, `connect`).
+Prefer SBT over Maven for faster incremental compilation. Module names are defined in `project/SparkBuild.scala`.
 
 Compile a single module:
 
-    build/sbt sql/compile
+    build/sbt <module>/compile
 
 Compile test code for a single module:
 
-    build/sbt sql/Test/compile
+    build/sbt <module>/Test/compile
 
 Run test suites by wildcard or full class name:
 
-    build/sbt "sql/testOnly *MySuite"
-    build/sbt "sql/testOnly org.apache.spark.sql.MySuite"
+    build/sbt '<module>/testOnly *MySuite'
+    build/sbt '<module>/testOnly org.apache.spark.sql.MySuite'
 
 Run test cases matching a substring:
 
-    build/sbt "sql/testOnly *MySuite -- -z \"test name\""
+    build/sbt '<module>/testOnly *MySuite -- -z "test name"'
 
 For faster iteration, keep SBT open in interactive mode:
 
     build/sbt
-    > project sql
+    > project <module>
     > testOnly *MySuite
 
 ### PySpark Tests
@@ -48,15 +48,15 @@ PySpark tests require building Spark with Hive support first:
 
     build/sbt -Phive package
 
-Set up and activate a virtual environment:
+Activate the virtual environment specified by the user, or default to `~/.virtualenvs/pyspark`:
 
-    if [ ! -d .venv ]; then
-        python3 -m venv .venv
-        source .venv/bin/activate
-        pip install -r dev/requirements.txt
-    else
-        source .venv/bin/activate
-    fi
+    source <venv>/bin/activate
+
+If the default venv does not exist, create it:
+
+    python3 -m venv ~/.virtualenvs/pyspark
+    source ~/.virtualenvs/pyspark/bin/activate
+    pip install -r dev/requirements.txt
 
 Run a single test suite:
 
@@ -68,17 +68,8 @@ Run a single test case:
 
 ## Pull Request Workflow
 
-### PR Title
+PR title requires a JIRA ticket ID (e.g., `[SPARK-xxxx][SQL] Title`). Ask the user to create a new ticket or provide an existing one if not given. Follow the template in `.github/PULL_REQUEST_TEMPLATE` for the PR description.
 
-Format: `[SPARK-xxxx][COMPONENT] Title` where `SPARK-xxxx` is the JIRA ticket ID. Ask the user to create a new ticket or provide an existing one if not given.
-For follow-up fixes: `[SPARK-xxxx][COMPONENT][FOLLOWUP] Title`.
+Contributors push their feature branch to their personal fork and open PRs against `master` on the upstream Apache Spark repo.
 
-### PR Description
-
-Follow the template in `.github/PULL_REQUEST_TEMPLATE`.
-
-### GitHub Workflow
-
-Contributors push their feature branch to their personal fork and open PRs against `master` on the upstream Apache Spark repo. Run `git remote -v` to identify which remote is the fork and which is upstream (`apache/spark`). If the remotes are unclear, ask the user to set them up following the standard convention (`origin` for the fork, `upstream` for `apache/spark`).
-
-Always get user approval before pushing commits or creating PRs. Use `gh pr create` to open PRs. If `gh` is not installed, generate the GitHub PR URL for the user and recommend installing the GitHub CLI.
+Always get user approval before external operations such as pushing commits, creating PRs, or posting comments. Use `gh pr create` to open PRs. If `gh` is not installed, generate the GitHub PR URL for the user and recommend installing the GitHub CLI.
