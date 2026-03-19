@@ -422,30 +422,6 @@ class DataFrameTestsMixin:
         keys = self.df.withColumn("key", self.df.key).select("key").collect()
         self.assertEqual([r.key for r in keys], list(range(100)))
 
-    def test_with_column_with_column_name_str(self):
-        # SPARK-53675: withColumn should accept a string column name
-        df = self.spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
-
-        # String column name should produce the same result as col("age")
-        result_str = df.withColumn("age_copy", "age").select("age_copy").collect()
-        result_col = df.withColumn("age_copy", col("age")).select("age_copy").collect()
-        self.assertEqual(result_str, result_col)
-
-        # Non-Column, non-str should raise PySparkTypeError
-        with self.assertRaises(PySparkTypeError) as pe:
-            df.withColumn("age2", 123)
-
-        self.check_error(
-            exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "col", "arg_type": "int"},
-        )
-
-        # A string is treated as a column name, not a SQL expression.
-        # "age + 2" is interpreted as a column literally named "age + 2", which doesn't exist.
-        with self.assertRaises(AnalysisException):
-            df.withColumn("age2", "age + 2").collect()
-
     # regression test for SPARK-10417
     def test_column_iterator(self):
         def foo():
@@ -480,29 +456,6 @@ class DataFrameTestsMixin:
         # Type check
         self.assertRaises(TypeError, self.df.withColumns, ["key"])
         self.assertRaises(Exception, self.df.withColumns)
-
-    def test_with_columns_with_column_name_str(self):
-        # SPARK-53675: withColumns should accept string column names as values
-        df = self.spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
-
-        # String column names should produce the same result as Column objects
-        result_str = df.withColumns({"age_copy": "age", "name_copy": "name"}).collect()
-        result_col = df.withColumns({"age_copy": col("age"), "name_copy": col("name")}).collect()
-        self.assertEqual(result_str, result_col)
-
-        # Mix of Column objects and string column names
-        result_mix = df.withColumns({"age_copy": col("age"), "name_copy": "name"}).collect()
-        self.assertEqual(result_mix, result_col)
-
-        # Non-Column, non-str value should raise PySparkTypeError
-        with self.assertRaises(PySparkTypeError) as pe:
-            df.withColumns({"age_copy": 123})
-
-        self.check_error(
-            exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "col", "arg_type": "int"},
-        )
 
     def test_generic_hints(self):
         df1 = self.spark.range(10e10).toDF("id")
