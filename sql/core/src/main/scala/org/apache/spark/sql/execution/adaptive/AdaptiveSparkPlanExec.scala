@@ -877,20 +877,17 @@ case class AdaptiveSparkPlanExec(
       }
 
       val result = if (disableBroadcastJoin) {
-        val fallbackConf = context.session.sessionState.conf.clone()
+        // Use a cloned session to preserve SessionState planner customizations while keeping
+        // fallback conf changes isolated from the original shared session.
+        val fallbackSession = context.session.newSession()
+        val fallbackConf = fallbackSession.sessionState.conf
         fallbackConf.setConfString(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
         fallbackConf.setConfString(SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
-        val sessionPlanner = context.session.sessionState.planner
-        val fallbackPlanner = new SparkPlanner(
-          context.session,
-          context.session.sessionState.experimentalMethods) {
-          override def conf: SQLConf = fallbackConf
-          override def extraPlanningStrategies = sessionPlanner.extraPlanningStrategies
-        }
+        val fallbackPlanner = fallbackSession.sessionState.planner
         SQLConf.withExistingConf(fallbackConf) {
           val optimizerToUse = new AQEOptimizer(
             fallbackConf,
-            context.session.sessionState.adaptiveRulesHolder.runtimeOptimizerRules)
+            fallbackSession.sessionState.adaptiveRulesHolder.runtimeOptimizerRules)
           planFn(optimizerToUse, fallbackPlanner)
         }
       } else {
