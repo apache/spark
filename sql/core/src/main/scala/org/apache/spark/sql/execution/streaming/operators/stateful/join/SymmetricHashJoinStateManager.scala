@@ -68,8 +68,9 @@ trait SymmetricHashJoinStateManager {
    *
    * It is caller's responsibility to consume the whole iterator.
    *
-   * For V4 time-interval joins, timestampRange may be provided to skip/stop-early during
-   * prefix scan. Ignored by V1-V3.
+   * @param timestampRange Optional optimization hint as (minTimestamp, maxTimestamp), both
+   *   inclusive. Derived classes may use it to reduce scan scope but are free to ignore it.
+   *   The predicate must produce correct output regardless of whether this hint is leveraged.
    */
   def getJoinedRows(
       key: UnsafeRow,
@@ -634,8 +635,8 @@ class SymmetricHashJoinStateManagerV4(
     }
 
     /**
-     * Returns entries where minTs <= timestamp <= maxTs, grouped by timestamp.
-     * Filters out entries before minTs and stops iterating past maxTs (timestamps are sorted).
+     * Returns entries where minTs <= timestamp <= maxTs (both inclusive), grouped by timestamp.
+     * Skips entries before minTs and stops iterating past maxTs (timestamps are sorted).
      */
     def getValuesInRange(
         key: UnsafeRow, minTs: Long, maxTs: Long): Iterator[GetValuesResult] = {
@@ -645,16 +646,14 @@ class SymmetricHashJoinStateManagerV4(
         private val iter = stateStore.prefixScanWithMultiValues(key, colFamilyName)
 
         private var currentTs = -1L
-        private var currentTsInRange = false
         private var pastUpperBound = false
         private val valueAndMatchPairs = scala.collection.mutable.ArrayBuffer[ValueAndMatchPair]()
 
-        private def flushIfInRange(): GetValuesResult = {
-          if (currentTsInRange && valueAndMatchPairs.nonEmpty) {
+        private def flushAccumulated(): GetValuesResult = {
+          if (valueAndMatchPairs.nonEmpty) {
             val result = reusableGetValuesResult.withNew(
               currentTs, valueAndMatchPairs.toList)
             currentTs = -1L
-            currentTsInRange = false
             valueAndMatchPairs.clear()
             result
           } else {
@@ -665,51 +664,32 @@ class SymmetricHashJoinStateManagerV4(
 
         @tailrec
         override protected def getNext(): GetValuesResult = {
-          if (pastUpperBound) {
-            flushIfInRange()
-          } else if (iter.hasNext) {
+          if (pastUpperBound || !iter.hasNext) {
+            flushAccumulated()
+          } else {
             val unsafeRowPair = iter.next()
             val ts = TimestampKeyStateEncoder.extractTimestamp(unsafeRowPair.key)
 
             if (ts > maxTs) {
               pastUpperBound = true
               getNext()
-            } else if (currentTs == -1L) {
-              currentTs = ts
-              currentTsInRange = ts >= minTs
-              if (currentTsInRange) {
-                valueAndMatchPairs += valueRowConverter.convertValue(unsafeRowPair.value)
-              }
+            } else if (ts < minTs) {
               getNext()
-            } else if (currentTs != ts) {
-              // Timestamp changed -- capture previous batch before resetting
-              val prevTs = currentTs
-              val prevValues = if (currentTsInRange && valueAndMatchPairs.nonEmpty) {
-                valueAndMatchPairs.toList
-              } else {
-                null
-              }
-
+            } else if (currentTs == -1L || currentTs == ts) {
               currentTs = ts
-              currentTsInRange = ts >= minTs
-              valueAndMatchPairs.clear()
-              if (currentTsInRange) {
-                valueAndMatchPairs += valueRowConverter.convertValue(unsafeRowPair.value)
-              }
-
-              if (prevValues != null) {
-                reusableGetValuesResult.withNew(prevTs, prevValues)
-              } else {
-                getNext()
-              }
+              valueAndMatchPairs += valueRowConverter.convertValue(unsafeRowPair.value)
+              getNext()
             } else {
-              if (currentTsInRange) {
-                valueAndMatchPairs += valueRowConverter.convertValue(unsafeRowPair.value)
-              }
-              getNext()
+              // Timestamp changed -- flush previous group before starting new one
+              val prevTs = currentTs
+              val prevValues = valueAndMatchPairs.toList
+
+              currentTs = ts
+              valueAndMatchPairs.clear()
+              valueAndMatchPairs += valueRowConverter.convertValue(unsafeRowPair.value)
+
+              reusableGetValuesResult.withNew(prevTs, prevValues)
             }
-          } else {
-            flushIfInRange()
           }
         }
 

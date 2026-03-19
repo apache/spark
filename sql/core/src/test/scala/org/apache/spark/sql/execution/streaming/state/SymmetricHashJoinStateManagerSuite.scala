@@ -1010,6 +1010,8 @@ class SymmetricHashJoinStateManagerEventTimeInValueSuite
     }
   }
 
+  // NOTE: In practice, the predicate should contain the condition matching timestampRange.
+  // Here we intentionally use a pass-all predicate to test timestampRange filtering directly.
   private def getJoinedRowTimestamps(
       key: Int,
       range: Option[(Long, Long)])(implicit manager: SymmetricHashJoinStateManager): Seq[Int] = {
@@ -1046,11 +1048,16 @@ class SymmetricHashJoinStateManagerEventTimeInValueSuite
       inputValueAttributes, joinKeyExpressions, stateFormatVersion = 4) { manager =>
       implicit val mgr = manager
 
+      append(40, 10)
+      append(40, 10)
       append(40, 20)
-      append(40, 20) // same timestamp bucket
+      append(40, 20)
+      append(40, 20)
       append(40, 30)
 
-      assert(getJoinedRowTimestamps(40, Some((20L, 20L))) === Seq(20, 20))
+      assert(getJoinedRowTimestamps(40, Some((20L, 20L))) === Seq(20, 20, 20))
+      assert(getJoinedRowTimestamps(40, Some((10L, 20L))) === Seq(10, 10, 20, 20, 20))
+      assert(getJoinedRowTimestamps(40, Some((10L, 30L))) === Seq(10, 10, 20, 20, 20, 30))
     }
   }
 }
