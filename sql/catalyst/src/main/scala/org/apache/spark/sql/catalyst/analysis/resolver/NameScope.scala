@@ -219,6 +219,12 @@ class NameScope(
   private lazy val hiddenAttributesById: HashMap[ExprId, Attribute] =
     createAttributeIds(hiddenOutput)
 
+  /**
+   * Whether the scope can resolve names by hidden output. This is set to `true` by
+   * [[markScopeForHiddenOutputResolution]].
+   */
+  private var canResolveNameByHiddenOutput: Boolean = false
+
   lazy val lcaRegistry: LateralColumnAliasRegistry =
     if (conf.getConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED)) {
       new LateralColumnAliasRegistryImpl
@@ -233,6 +239,14 @@ class NameScope(
    */
   private lazy val topAggregateExpressionsByAliasName: IdentifierMap[ArrayList[Alias]] =
     new IdentifierMap[ArrayList[Alias]]
+
+  /**
+   * Sets `canResolveNameByHiddenOutput` to `true`, enabling hidden output resolution for this
+   * scope.
+   */
+  def markScopeForHiddenOutputResolution(): Unit = {
+    canResolveNameByHiddenOutput = true
+  }
 
   /**
    * Returns new [[NameScope]] which preserves all the immutable [[NameScope]] properties but
