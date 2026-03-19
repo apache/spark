@@ -170,98 +170,98 @@ $(document).ready(function () {
       'style="width:100%"></table>';
 
     var columns = [
-        {
-          title: "ID",
-          render: function (data, type) {
-            if (type !== "display") return data;
-            var basePath = uiRoot + appBasePath;
-            return '<a href="' + basePath + '/SQL/execution/?id=' + data + '">' +
+      {
+        title: "ID",
+        render: function (data, type) {
+          if (type !== "display") return data;
+          var basePath = uiRoot + appBasePath;
+          return '<a href="' + basePath + '/SQL/execution/?id=' + data + '">' +
               data + '</a>';
-          }
-        },
-        {
-          title: "Query ID",
-          render: function (data, type) {
-            if (type !== "display" || !data) return data;
-            return '<span title="' + data + '">' + data.substring(0, 8) + '...</span>';
-          }
-        },
-        {
-          title: "Status",
-          render: function (data, type) {
-            if (type !== "display") return data;
-            return statusBadge(data);
-          }
-        },
-        {
-          title: "Description",
-          render: function (data, type, row) {
-            if (type !== "display") return data;
-            return descriptionHtml({ id: row[0], description: data });
-          }
-        },
-        {
-          title: "Submitted",
-          render: function (data, type) {
-            if (type !== "display") return data;
-            return formatDateSql(data);
-          }
-        },
-        {
-          title: "Duration",
-          render: function (data, type) {
-            if (type !== "display") return data;
-            return formatDurationSql(data);
-          }
-        },
-        {
-          title: "Running Jobs",
-          orderable: false,
-          render: function (data, type) {
-            if (type !== "display") return data.join(",");
-            return jobIdLinks(data);
-          }
-        },
-        {
-          title: "Succeeded Jobs",
-          orderable: false,
-          render: function (data, type) {
-            if (type !== "display") return data.join(",");
-            return jobIdLinks(data);
-          }
-        },
-        {
-          title: "Failed Jobs",
-          orderable: false,
-          render: function (data, type) {
-            if (type !== "display") return data.join(",");
-            return jobIdLinks(data);
-          }
-        },
-        {
-          title: "Error Message",
-          render: function (data, type) {
-            if (type !== "display" || !data) return data;
-            if (data.length > 100) {
-              return '<span title="' + escapeHtml(data) + '">' +
-                escapeHtml(data.substring(0, 100)) + '...</span>';
-            }
-            return escapeHtml(data);
-          }
         }
-      ];
+      },
+      {
+        title: "Query ID",
+        render: function (data, type) {
+          if (type !== "display" || !data) return data;
+          return '<span title="' + data + '">' + data.substring(0, 8) + '...</span>';
+        }
+      },
+      {
+        title: "Status",
+        render: function (data, type) {
+          if (type !== "display") return data;
+          return statusBadge(data);
+        }
+      },
+      {
+        title: "Description",
+        render: function (data, type, row) {
+          if (type !== "display") return data;
+          return descriptionHtml({ id: row[0], description: data });
+        }
+      },
+      {
+        title: "Submitted",
+        render: function (data, type) {
+          if (type !== "display") return data;
+          return formatDateSql(data);
+        }
+      },
+      {
+        title: "Duration",
+        render: function (data, type) {
+          if (type !== "display") return data;
+          return formatDurationSql(data);
+        }
+      },
+      {
+        title: "Running Jobs",
+        orderable: false,
+        render: function (data, type) {
+          if (type !== "display") return data.join(",");
+          return jobIdLinks(data);
+        }
+      },
+      {
+        title: "Succeeded Jobs",
+        orderable: false,
+        render: function (data, type) {
+          if (type !== "display") return data.join(",");
+          return jobIdLinks(data);
+        }
+      },
+      {
+        title: "Failed Jobs",
+        orderable: false,
+        render: function (data, type) {
+          if (type !== "display") return data.join(",");
+          return jobIdLinks(data);
+        }
+      },
+      {
+        title: "Error Message",
+        render: function (data, type) {
+          if (type !== "display" || !data) return data;
+          if (data.length > 100) {
+            return '<span title="' + escapeHtml(data) + '">' +
+                escapeHtml(data.substring(0, 100)) + '...</span>';
+          }
+          return escapeHtml(data);
+        }
+      }
+    ];
 
     if (groupSubExecEnabled) {
       columns.push({
-          title: "Sub Executions",
-          orderable: false,
-          render: function (_data, type, row) {
-            var children = subExecMap[row[0]] || [];
-            if (type !== "display" || children.length === 0) return children.length || "";
-            return '<a href="#" class="toggle-sub-exec">' +
+        title: "Sub Executions",
+        orderable: false,
+        render: function (_data, type, row) {
+          var children = subExecMap[row[0]] || [];
+          if (type !== "display" || children.length === 0) return children.length || "";
+          return '<a href="#" class="toggle-sub-exec">' +
               '+' + children.length + ' sub</a>';
-          }
-        });
+        }
+      });
     }
 
     var table = $("#sql-table").DataTable({
