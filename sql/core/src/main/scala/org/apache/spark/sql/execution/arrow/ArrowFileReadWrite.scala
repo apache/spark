@@ -53,9 +53,12 @@ private[sql] class SparkArrowFileWriter(schema: Schema, path: Path) extends Auto
       while (batchBytesIter.hasNext) {
         val batchBytes = batchBytesIter.next()
         val batch = ArrowConverters.loadBatch(batchBytes, allocator)
-        loader.load(batch)
-        fileWriter.writeBatch()
-        batch.close()
+        try {
+          loader.load(batch)
+          fileWriter.writeBatch()
+        } finally {
+          batch.close()
+        }
       }
     } finally {
       fileWriter.close()
