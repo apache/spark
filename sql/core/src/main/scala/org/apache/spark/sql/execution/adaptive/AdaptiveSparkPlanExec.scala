@@ -1050,10 +1050,23 @@ case class AdaptiveSparkPlanExec(
     left.sameResult(right)
   }
 
+  private def rootBroadcastStage(plan: SparkPlan): Option[BroadcastQueryStageExec] = plan match {
+    case stage: BroadcastQueryStageExec => Some(stage)
+    case resultStage: ResultQueryStageExec => rootBroadcastStage(resultStage.plan)
+    case _ => None
+  }
+
   // Root broadcast stages must be preserved (e.g. broadcast subquery output contract).
+  // Only exempt the actual root broadcast stage instance, not semantically equivalent relations.
   private def isRequiredRootBroadcastStage(stage: QueryStageExec): Boolean = {
-    broadcastChildPlan(inputPlan).exists { rootBroadcastChild =>
-      broadcastChildPlan(stage).exists(sameBroadcastRelation(_, rootBroadcastChild))
+    if (!inputPlan.isInstanceOf[BroadcastExchangeLike]) {
+      false
+    } else {
+      stage match {
+        case broadcastStage: BroadcastQueryStageExec =>
+          rootBroadcastStage(currentPhysicalPlan).exists(_.eq(broadcastStage))
+        case _ => false
+      }
     }
   }
 
