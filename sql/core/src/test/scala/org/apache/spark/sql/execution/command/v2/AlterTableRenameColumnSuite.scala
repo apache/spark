@@ -41,13 +41,12 @@ class AlterTableRenameColumnSuite
   test("table does not exist") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (col1 int, col2 string, a int, b int) $defaultUsing")
-      checkErrorTableNotFoundWithSearchPath(
-        exception = intercept[AnalysisException] {
+      checkErrorTableNotFoundOmitSearchPath(
+        intercept[AnalysisException] {
           sql("ALTER TABLE does_not_exist RENAME COLUMN col1 TO col3")
         },
         "`does_not_exist`",
-        ExpectedContext(fragment = "does_not_exist", start = 12, stop = 25),
-        "[`system`.`session`, `spark_catalog`.`default`]")
+        ExpectedContext(fragment = "does_not_exist", start = 12, stop = 25))
     }
   }
 

@@ -90,9 +90,8 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
       val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $t ADD IF NOT EXISTS PARTITION (a='4', b='9')")
       }
-      checkErrorTableNotFoundWithSearchPath(e, parsed,
-        ExpectedContext(t, 12, 11 + t.length),
-        "[`system`.`session`, `spark_catalog`.`default`]")
+      checkErrorTableNotFoundOmitSearchPath(e, parsed,
+        ExpectedContext(t, 12, 11 + t.length))
     }
   }
 

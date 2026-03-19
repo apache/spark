@@ -94,20 +94,18 @@ class ViewResolverSuite extends QueryTest with SharedSparkSession {
 
             spark.sql("DROP TABLE table1;")
 
-            checkErrorTableNotFoundWithSearchPath(
-              exception = intercept[AnalysisException] {
+            checkErrorTableNotFoundOmitSearchPath(
+              intercept[AnalysisException] {
                 checkViewResolution("SELECT * FROM view3")
               },
-              tableName = "`table1`",
-              queryContext = ExpectedContext(
+              "`table1`",
+              ExpectedContext(
                 objectType = "VIEW",
                 objectName = s"$catalogName.default.view1",
                 startIndex = 23,
                 stopIndex = 28,
                 fragment = "table1"
-              ),
-              searchPath = defaultSearchPathForTests
-            )
+              ))
           }
         }
       }

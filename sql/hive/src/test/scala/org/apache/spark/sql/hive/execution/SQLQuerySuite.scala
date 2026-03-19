@@ -89,10 +89,9 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     val e = intercept[AnalysisException] {
       spark.sql(s"select * from ${global_temp_db}.nonexistentview")
     }
-    checkErrorTableNotFoundWithSearchPath(e, s"`${global_temp_db}`.`nonexistentview`",
+    checkErrorTableNotFoundOmitSearchPath(e, s"`${global_temp_db}`.`nonexistentview`",
       ExpectedContext(s"${global_temp_db}.nonexistentview", 14,
-        13 + s"${global_temp_db}.nonexistentview".length),
-      defaultSearchPathForTests)
+        13 + s"${global_temp_db}.nonexistentview".length))
   }
 
   test("script") {

@@ -318,9 +318,8 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
           val e = intercept[AnalysisException] {
             sql(s"SELECT * FROM $viewName").collect()
           }
-          checkErrorTableNotFoundWithSearchPath(e, "`t`",
-            ExpectedContext("VIEW", tableIdentifier("testview").unquotedString, 14, 14, "t"),
-            defaultSearchPathForTests)
+          checkErrorTableNotFoundOmitSearchPath(e, "`t`",
+            ExpectedContext("VIEW", tableIdentifier("testview").unquotedString, 14, 14, "t"))
         }
       }
     }
@@ -394,7 +393,7 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
       val tableName = toSQLId(viewName.split("\\.").toSeq)
       val context = ExpectedContext(s"$viewName", 14, 13 + viewName.length)
       if (e.getCondition == "TABLE_OR_VIEW_NOT_FOUND") {
-        checkErrorTableNotFoundWithSearchPath(e, tableName, context, defaultSearchPathForTests)
+        checkErrorTableNotFoundOmitSearchPath(e, tableName, context)
       } else {
         checkErrorTableNotFound(e, tableName, context)
       }

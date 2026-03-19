@@ -937,8 +937,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         },
         condition = "TABLE_OR_VIEW_NOT_FOUND",
         parameters = Map("relationName" ->
-          s"`${CatalogManager.SESSION_CATALOG_NAME}`.`default`.`view1`",
-          "searchPath" -> "[`spark_catalog`.`default`]")
+          s"`${CatalogManager.SESSION_CATALOG_NAME}`.`default`.`view1`")
       )
       checkError(
         exception = intercept[NoSuchTableException] {
@@ -946,8 +945,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         },
         condition = "TABLE_OR_VIEW_NOT_FOUND",
         parameters = Map("relationName" ->
-          s"`${CatalogManager.SESSION_CATALOG_NAME}`.`default`.`view1`",
-          "searchPath" -> "[`spark_catalog`.`default`]")
+          s"`${CatalogManager.SESSION_CATALOG_NAME}`.`default`.`view1`")
       )
 
       createTempView(catalog, "view1", tempTable, overrideIfExists = false)
@@ -962,8 +960,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         },
         condition = "TABLE_OR_VIEW_NOT_FOUND",
         parameters = Map("relationName" ->
-          s"`${CatalogManager.SESSION_CATALOG_NAME}`.`default`.`view1`",
-          "searchPath" -> "[`spark_catalog`.`default`]")
+          s"`${CatalogManager.SESSION_CATALOG_NAME}`.`default`.`view1`")
       )
     }
   }

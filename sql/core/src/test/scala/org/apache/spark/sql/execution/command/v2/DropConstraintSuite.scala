@@ -54,9 +54,7 @@ class DropConstraintSuite extends QueryTest with CommandSuiteBase with DDLComman
         exception = e,
         condition = "TABLE_OR_VIEW_NOT_FOUND",
         sqlState = "42P01",
-        parameters = Map(
-          "relationName" -> "`test_catalog`.`ns`.`tbl`",
-          "searchPath" -> "[`system`.`session`, `spark_catalog`.`default`]"),
+        parameters = Map("relationName" -> "`test_catalog`.`ns`.`tbl`"),
         context = ExpectedContext(
           fragment = "test_catalog.ns.tbl",
           start = 12,

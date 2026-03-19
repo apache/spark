@@ -1380,9 +1380,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
             sql("select * from test_b")
           },
           condition = "TABLE_OR_VIEW_NOT_FOUND",
-          parameters = Map(
-            "relationName" -> "`test_b`",
-            "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`a`]"),
+          parameters = Map("relationName" -> "`test_b`"),
           context = ExpectedContext(
             fragment = "test_b",
             start = 14,
@@ -1396,9 +1394,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
             s2.sql("select * from test_a")
           },
           condition = "TABLE_OR_VIEW_NOT_FOUND",
-          parameters = Map(
-            "relationName" -> "`test_a`",
-            "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`b`]"),
+          parameters = Map("relationName" -> "`test_a`"),
           context = ExpectedContext(
             fragment = "test_a",
             start = 14,

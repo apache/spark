@@ -105,7 +105,7 @@ class DescribeTableParserSuite extends SharedSparkSession with AnalysisTest {
     assertAnalysisErrorCondition(
       parsePlan(sqlStatement),
       "TABLE_OR_VIEW_NOT_FOUND",
-      Map("relationName" -> s"`$tbl`", "searchPath" -> fullSearchPath),
+      Map("relationName" -> s"`$tbl`"),
       Array(ExpectedContext(tbl, startPos, startPos + tbl.length - 1))
     )
   }

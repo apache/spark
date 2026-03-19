@@ -1003,9 +1003,8 @@ class CachedTableSuite extends QueryTest
           if (!storeAnalyzed) {
             // t2 should become invalid after t1 is dropped
             val e = intercept[AnalysisException](spark.catalog.isCached("t2"))
-            checkErrorTableNotFoundWithSearchPath(e, "`t1`",
-              ExpectedContext("VIEW", "t2", 14, 15, "t1"),
-              defaultSearchPathForTests)
+            checkErrorTableNotFoundOmitSearchPath(e, "`t1`",
+              ExpectedContext("VIEW", "t2", 14, 15, "t1"))
           }
         }
       }
@@ -1036,9 +1035,8 @@ class CachedTableSuite extends QueryTest
               if (!storeAnalyzed) {
                 // t2 should become invalid after t1 is dropped
                 val e = intercept[AnalysisException](spark.catalog.isCached("t2"))
-                checkErrorTableNotFoundWithSearchPath(e, "`t1`",
-                  ExpectedContext("VIEW", "t2", 14, 15, "t1"),
-                  defaultSearchPathForTests)
+                checkErrorTableNotFoundOmitSearchPath(e, "`t1`",
+                  ExpectedContext("VIEW", "t2", 14, 15, "t1"))
               }
             }
           }
@@ -1476,9 +1474,8 @@ class CachedTableSuite extends QueryTest
       checkAnswer(sql("SELECT * FROM v"), Row(1) :: Nil)
       sql(s"DROP TABLE $t")
       val e = intercept[AnalysisException](sql("SELECT * FROM v"))
-      checkErrorTableNotFoundWithSearchPath(e, s"`$t`",
-        ExpectedContext("VIEW", "v", 14, 13 + t.length, t),
-        defaultSearchPathForTests)
+      checkErrorTableNotFoundOmitSearchPath(e, s"`$t`",
+        ExpectedContext("VIEW", "v", 14, 13 + t.length, t))
     }
   }
 
@@ -2562,15 +2559,14 @@ class CachedTableSuite extends QueryTest
     sql("USE spark_catalog")
     sql("USE default")
 
-    checkErrorTableNotFoundWithSearchPath(
+    checkErrorTableNotFoundOmitSearchPath(
       intercept[AnalysisException] { spark.catalog.uncacheTable("non_existent") },
       "`non_existent`")
 
-    checkErrorTableNotFoundWithSearchPath(
+    checkErrorTableNotFoundOmitSearchPath(
       intercept[AnalysisException] { sql("UNCACHE TABLE non_existent") },
       "`non_existent`",
-      ExpectedContext("non_existent", 14, 25),
-      defaultSearchPathForTests)
+      ExpectedContext("non_existent", 14, 25))
   }
 
   test("SPARK-54022: caching table via CACHE TABLE should pin table state") {

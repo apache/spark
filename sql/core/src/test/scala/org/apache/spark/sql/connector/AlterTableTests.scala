@@ -86,15 +86,13 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       }
 
       if (catalogAndNamespace.isEmpty) {
-        checkErrorTableNotFoundWithSearchPath(exc, quoted,
+        checkErrorTableNotFoundOmitSearchPath(exc, quoted,
           ExpectedContext(s"${catalogAndNamespace}table_name", 12,
-            11 + s"${catalogAndNamespace}table_name".length),
-          "[`system`.`session`, `spark_catalog`.`default`]")
+            11 + s"${catalogAndNamespace}table_name".length))
       } else {
-        checkErrorTableNotFoundWithSearchPath(exc, quoted,
+        checkErrorTableNotFoundOmitSearchPath(exc, quoted,
           ExpectedContext(s"${catalogAndNamespace}table_name", 12,
-            11 + s"${catalogAndNamespace}table_name".length),
-          "[`system`.`session`, `spark_catalog`.`default`]")
+            11 + s"${catalogAndNamespace}table_name".length))
       }
     }
   }

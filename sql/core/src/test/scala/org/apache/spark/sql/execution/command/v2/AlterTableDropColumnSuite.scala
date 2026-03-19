@@ -41,13 +41,12 @@ class AlterTableDropColumnSuite
   test("table does not exist") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id int) $defaultUsing")
-      checkErrorTableNotFoundWithSearchPath(
-        exception = intercept[AnalysisException] {
+      checkErrorTableNotFoundOmitSearchPath(
+        intercept[AnalysisException] {
           sql("ALTER TABLE does_not_exist DROP COLUMN id")
         },
         "`does_not_exist`",
-        ExpectedContext(fragment = "does_not_exist", start = 12, stop = 25),
-        "[`system`.`session`, `spark_catalog`.`default`]")
+        ExpectedContext(fragment = "does_not_exist", start = 12, stop = 25))
     }
   }
 

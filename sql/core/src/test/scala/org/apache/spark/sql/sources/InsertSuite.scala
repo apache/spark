@@ -1351,9 +1351,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           sql("insert into t values(false, default)")
         },
         condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map(
-          "relationName" -> "`t`",
-          "searchPath" -> defaultSearchPathForTests
+        parameters = Map("relationName" -> "`t`"
         ),
         context = ExpectedContext("t", 12, 12)
       )

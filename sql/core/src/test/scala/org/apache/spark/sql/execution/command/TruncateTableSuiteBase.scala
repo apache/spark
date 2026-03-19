@@ -44,9 +44,8 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       val e = intercept[AnalysisException] {
         sql(s"TRUNCATE TABLE $t")
       }
-      checkErrorTableNotFoundWithSearchPath(e, parsed,
-        ExpectedContext(t, 15, 14 + t.length),
-        "[`system`.`session`, `spark_catalog`.`default`]")
+      checkErrorTableNotFoundOmitSearchPath(e, parsed,
+        ExpectedContext(t, 15, 14 + t.length))
     }
   }
 

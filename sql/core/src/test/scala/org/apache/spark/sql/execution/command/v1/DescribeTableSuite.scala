@@ -99,9 +99,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
       checkError(
         exception = error,
         condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map(
-          "relationName" -> s"`$tbl`",
-          "searchPath" -> defaultSearchPathForTests),
+        parameters = Map("relationName" -> s"`$tbl`"),
         context = ExpectedContext(tbl, startPos, startPos + tbl.length - 1)
       )
     }

@@ -2035,9 +2035,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       exception = exception,
       condition = "TABLE_OR_VIEW_NOT_FOUND",
       sqlState = Some("42P01"),
-      parameters = Map(
-        "relationName" -> toSQLId("test_table_non_existing"),
-        "searchPath" -> defaultSearchPathForTests
+      parameters = Map("relationName" -> toSQLId("test_table_non_existing")
       ),
       queryContext = Array(ExpectedContext(
         fragment = "test_table_non_existing",
@@ -2062,9 +2060,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       exception = exception,
       condition = "TABLE_OR_VIEW_NOT_FOUND",
       sqlState = Some("42P01"),
-      parameters = Map(
-        "relationName" -> toSQLId("test_table_non_existing"),
-        "searchPath" -> defaultSearchPathForTests
+      parameters = Map("relationName" -> toSQLId("test_table_non_existing")
       ),
       queryContext = Array(ExpectedContext(
         fragment = "test_table_non_existing",

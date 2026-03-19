@@ -80,7 +80,7 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
     val e = intercept[AnalysisException] {
       spark.readStream.table("non_exist_table")
     }
-    checkErrorTableNotFoundWithSearchPath(e, "`non_exist_table`")
+    checkErrorTableNotFoundOmitSearchPath(e, "`non_exist_table`")
   }
 
   test("read: stream table API with temp view") {

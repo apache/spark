@@ -262,11 +262,11 @@ trait InsertIntoSQLOnlyTests
           sql(s"INSERT INTO $t2 VALUES (2L, 'dummy')")
         }
         if (catalogAndNamespace.isEmpty) {
-          checkErrorTableNotFoundWithSearchPath(e, parsed,
-            ExpectedContext(t2, 12, 11 + t2.length), defaultSearchPathForTests)
+          checkErrorTableNotFoundOmitSearchPath(e, parsed,
+            ExpectedContext(t2, 12, 11 + t2.length))
         } else {
-          checkErrorTableNotFoundWithSearchPath(e, parsed,
-            ExpectedContext(t2, 12, 11 + t2.length), defaultSearchPathForTests)
+          checkErrorTableNotFoundOmitSearchPath(e, parsed,
+            ExpectedContext(t2, 12, 11 + t2.length))
         }
       }
     }

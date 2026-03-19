@@ -114,9 +114,8 @@ trait AlterTableSetLocationSuiteBase extends command.AlterTableSetLocationSuiteB
     val e = intercept[AnalysisException] {
       sql("ALTER TABLE ns.does_not_exist SET LOCATION '/mister/spark'")
     }
-    checkErrorTableNotFoundWithSearchPath(e, "`ns`.`does_not_exist`",
-      ExpectedContext("ns.does_not_exist", 12, 11 + "ns.does_not_exist".length),
-      "[`system`.`session`, `spark_catalog`.`ns`]")
+    checkErrorTableNotFoundOmitSearchPath(e, "`ns`.`does_not_exist`",
+      ExpectedContext("ns.does_not_exist", 12, 11 + "ns.does_not_exist".length))
   }
 
   test("partition to alter set location does not exist") {

@@ -2177,9 +2177,8 @@ class DataFrameSuite extends QueryTest
     val e = intercept[AnalysisException] {
       sql("WITH t AS (SELECT 1 FROM nonexist.t) SELECT * FROM t")
     }
-    checkErrorTableNotFoundWithSearchPath(e, "`nonexist`.`t`",
-      ExpectedContext("nonexist.t", 25, 34),
-      defaultSearchPathForTests)
+    checkErrorTableNotFoundOmitSearchPath(e, "`nonexist`.`t`",
+      ExpectedContext("nonexist.t", 25, 34))
   }
 
   test("SPARK-32680: Don't analyze CTAS with unresolved query") {
@@ -2187,10 +2186,9 @@ class DataFrameSuite extends QueryTest
     val e = intercept[AnalysisException] {
       sql(s"CREATE TABLE t USING $v2Source AS SELECT * from nonexist")
     }
-    checkErrorTableNotFoundWithSearchPath(e, "`nonexist`",
+    checkErrorTableNotFoundOmitSearchPath(e, "`nonexist`",
       ExpectedContext("nonexist", s"CREATE TABLE t USING $v2Source AS SELECT * from ".length,
-        s"CREATE TABLE t USING $v2Source AS SELECT * from nonexist".length - 1),
-      defaultSearchPathForTests)
+        s"CREATE TABLE t USING $v2Source AS SELECT * from nonexist".length - 1))
   }
 
   test("CalendarInterval reflection support") {

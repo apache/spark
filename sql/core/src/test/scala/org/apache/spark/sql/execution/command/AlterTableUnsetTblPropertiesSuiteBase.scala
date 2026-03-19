@@ -53,9 +53,7 @@ trait AlterTableUnsetTblPropertiesSuiteBase extends QueryTest with DDLCommandTes
           sql(sqlText)
         },
         condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map(
-          "relationName" -> toSQLId(t),
-          "searchPath" -> "[`system`.`session`, `spark_catalog`.`default`]"),
+        parameters = Map("relationName" -> toSQLId(t)),
         context = ExpectedContext(
           fragment = t,
           start = 12,
