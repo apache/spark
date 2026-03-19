@@ -1015,14 +1015,11 @@ case class AdaptiveSparkPlanExec(
     case _ => None
   }
 
-  // Compare broadcast inputs by semantic plan equivalence, with a schema-level fallback.
+  // Compare broadcast inputs by semantic plan equivalence.
+  // Do not fall back to output-attribute equality: different plans can share
+  // output schemas while producing different relations.
   private def sameBroadcastRelation(left: SparkPlan, right: SparkPlan): Boolean = {
-    left.sameResult(right) || {
-      left.output.length == right.output.length &&
-        left.output.zip(right.output).forall { case (leftAttr, rightAttr) =>
-          leftAttr.semanticEquals(rightAttr)
-        }
-    }
+    left.sameResult(right)
   }
 
   // Root broadcast stages must be preserved (e.g. broadcast subquery output contract).

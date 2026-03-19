@@ -800,6 +800,8 @@ class AdaptiveQueryExecSuite
     val sameExchange = BroadcastExchangeExec(
       IdentityBroadcastMode, sql("SELECT a FROM testData2").queryExecution.sparkPlan)
     val reusedSameExchange = ReusedExchangeExec(sameExchange.output, sameExchange)
+    val sameOutputDifferentRelation = BroadcastExchangeExec(
+      IdentityBroadcastMode, sql("SELECT a FROM testData2 WHERE a > 1").queryExecution.sparkPlan)
     val otherExchange = BroadcastExchangeExec(
       IdentityBroadcastMode, sql("SELECT key FROM testData").queryExecution.sparkPlan)
 
@@ -807,6 +809,8 @@ class AdaptiveQueryExecSuite
       shouldRejectBroadcastPlanInFallback(sameExchange, Seq(failedStage))))
     assert(adaptivePlan.invokePrivate(
       shouldRejectBroadcastPlanInFallback(reusedSameExchange, Seq(failedStage))))
+    assert(!adaptivePlan.invokePrivate(
+      shouldRejectBroadcastPlanInFallback(sameOutputDifferentRelation, Seq(failedStage))))
     assert(!adaptivePlan.invokePrivate(
       shouldRejectBroadcastPlanInFallback(otherExchange, Seq(failedStage))))
     assert(!adaptivePlan.invokePrivate(
