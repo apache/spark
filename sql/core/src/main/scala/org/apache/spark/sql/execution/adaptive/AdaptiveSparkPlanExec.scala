@@ -846,10 +846,12 @@ case class AdaptiveSparkPlanExec(
       } else {
         logicalPlan
       }
-      def planFn(optimizerToUse: AQEOptimizer): (SparkPlan, LogicalPlan) = {
+      def planFn(
+          optimizerToUse: AQEOptimizer,
+          plannerToUse: SparkPlanner): (SparkPlan, LogicalPlan) = {
         optimizedLogicalPlan.invalidateStatsCache()
         val optimized = optimizerToUse.execute(optimizedLogicalPlan)
-        val sparkPlan = context.session.sessionState.planner.plan(ReturnAnswer(optimized)).next()
+        val sparkPlan = plannerToUse.plan(ReturnAnswer(optimized)).next()
         val newPlan = applyPhysicalRules(
           applyQueryPostPlannerStrategyRules(sparkPlan),
           preprocessingRules ++ queryStagePreparationRules,
@@ -875,28 +877,24 @@ case class AdaptiveSparkPlanExec(
       }
 
       val result = if (disableBroadcastJoin) {
-        val sessionConf = context.session.sessionState.conf
-        val confKeys = Seq(
-          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key,
-          SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key)
-        val confBackup = confKeys.map(k => k -> sessionConf.getAllConfs.get(k)).toMap
-        sessionConf.setConfString(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
-        sessionConf.setConfString(SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
-        try {
-          SQLConf.withExistingConf(sessionConf) {
-            val optimizerToUse = new AQEOptimizer(
-              sessionConf,
-              context.session.sessionState.adaptiveRulesHolder.runtimeOptimizerRules)
-            planFn(optimizerToUse)
-          }
-        } finally {
-          confBackup.foreach {
-            case (key, Some(value)) => sessionConf.setConfString(key, value)
-            case (key, None) => sessionConf.unsetConf(key)
-          }
+        val fallbackConf = context.session.sessionState.conf.clone()
+        fallbackConf.setConfString(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
+        fallbackConf.setConfString(SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
+        val sessionPlanner = context.session.sessionState.planner
+        val fallbackPlanner = new SparkPlanner(
+          context.session,
+          context.session.sessionState.experimentalMethods) {
+          override def conf: SQLConf = fallbackConf
+          override def extraPlanningStrategies = sessionPlanner.extraPlanningStrategies
+        }
+        SQLConf.withExistingConf(fallbackConf) {
+          val optimizerToUse = new AQEOptimizer(
+            fallbackConf,
+            context.session.sessionState.adaptiveRulesHolder.runtimeOptimizerRules)
+          planFn(optimizerToUse, fallbackPlanner)
         }
       } else {
-        planFn(optimizer)
+        planFn(optimizer, context.session.sessionState.planner)
       }
       Some(result)
     } catch {
