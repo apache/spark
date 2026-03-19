@@ -1626,7 +1626,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         """
         return self.columns
 
-    def withColumns(self, *colsMap: Dict[str, "ColumnOrName"]) -> ParentDataFrame:
+    def withColumns(self, *colsMap: Dict[str, Column]) -> ParentDataFrame:
         # Below code is to help enable kwargs in future.
         assert len(colsMap) == 1
         colsMap = colsMap[0]  # type: ignore[assignment]
@@ -1645,8 +1645,13 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             self.sparkSession,
         )
 
-    def withColumn(self, colName: str, col: "ColumnOrName") -> ParentDataFrame:
-        return DataFrame(self._jdf.withColumn(colName, _to_java_column(col)), self.sparkSession)
+    def withColumn(self, colName: str, col: Column) -> ParentDataFrame:
+        if not isinstance(col, Column):
+            raise PySparkTypeError(
+                errorClass="NOT_COLUMN",
+                messageParameters={"arg_name": "col", "arg_type": type(col).__name__},
+            )
+        return DataFrame(self._jdf.withColumn(colName, col._jc), self.sparkSession)
 
     def withColumnRenamed(self, existing: str, new: str) -> ParentDataFrame:
         return DataFrame(self._jdf.withColumnRenamed(existing, new), self.sparkSession)
