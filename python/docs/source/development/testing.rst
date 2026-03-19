@@ -36,6 +36,13 @@ After that, the PySpark test cases can be run via using ``python/run-tests``. Fo
 
     python/run-tests --python-executable=python3
 
+You can run individual tests by using ``--testnames`` option. For example,
+
+.. code-block:: bash
+
+    python/run-tests --testnames pyspark.sql.tests.test_dataframe
+    python/run-tests --testnames pyspark.sql.tests.test_dataframe.DataFrameTests.test_range
+
 Note that you may set ``OBJC_DISABLE_INITIALIZE_FORK_SAFETY`` environment variable to ``YES`` if you are running tests on Mac OS.
 
 Please see the guidance on how to |building_spark|_,
