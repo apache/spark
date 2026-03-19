@@ -23,7 +23,8 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, GenericInternalRow, JoinedRow, Literal, Predicate, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, GenericInternalRow, JoinedRow, Literal, Predicate, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -682,6 +683,50 @@ case class StreamingSymmetricHashJoinExec(
     private[this] val allowMultipleStatefulOperators: Boolean =
       conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)
 
+    // V4 range scan for time-interval joins (SPARK-55147). Extracts constant interval
+    // offsets from the join condition using getStateValueWatermark(eventWatermark=0).
+    // The -1 eviction adjustment widens range by ~1ms/side; postJoinFilter handles exact bounds.
+    private[this] val scanRangeOffsets: Option[(Long, Long)] = {
+      val isV4TimeIntervalJoin = stateFormatVersion >= 4 && (stateWatermarkPredicate match {
+        case Some(_: JoinStateValueWatermarkPredicate) => true
+        case _ => false
+      })
+
+      if (!isV4TimeIntervalJoin) {
+        None
+      } else {
+        val (thisSideAttrs, otherSideAttrs) = joinSide match {
+          case LeftSide => (left.output, right.output)
+          case RightSide => (right.output, left.output)
+        }
+
+        val lowerBoundMs = StreamingJoinHelper.getStateValueWatermark(
+          AttributeSet(otherSideAttrs), AttributeSet(thisSideAttrs), condition.full, Some(0L))
+        val upperBoundMs = StreamingJoinHelper.getStateValueWatermark(
+          AttributeSet(thisSideAttrs), AttributeSet(otherSideAttrs), condition.full, Some(0L))
+
+        (lowerBoundMs, upperBoundMs) match {
+          case (Some(lower), Some(upper)) =>
+            Some((lower * 1000L, -upper * 1000L)) // ms -> us
+          case _ => None
+        }
+      }
+    }
+
+    private[this] val eventTimeIdxForRangeScan: Int = scanRangeOffsets.map { _ =>
+      WatermarkSupport.findEventTimeColumnIndex(
+        inputAttributes, !allowMultipleStatefulOperators).getOrElse(-1)
+    }.getOrElse(-1)
+
+    private def computeTimestampRange(thisRow: UnsafeRow): Option[(Long, Long)] = {
+      scanRangeOffsets match {
+        case Some((lowerOffset, upperOffset)) if eventTimeIdxForRangeScan >= 0 =>
+          val eventTimeUs = thisRow.getLong(eventTimeIdxForRangeScan)
+          Some((eventTimeUs + lowerOffset, eventTimeUs + upperOffset))
+        case _ => None
+      }
+    }
+
     /**
      * Generate joined rows by consuming input from this side, and matching it with the buffered
      * rows (i.e. state) of the other side.
@@ -758,7 +803,8 @@ case class StreamingSymmetricHashJoinExec(
             otherSideJoiner.joinStateManager.getJoinedRows(
               key,
               thatRow => generateJoinedRow(thisRow, thatRow),
-              postJoinFilter)
+              postJoinFilter,
+              timestampRange = computeTimestampRange(thisRow))
           }
           val outputIter = generateOutputIter(thisRow, joinedRowIter)
           new AddingProcessedRowToStateCompletionIterator(key, thisRow, outputIter)
