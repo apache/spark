@@ -70,7 +70,7 @@ Run a single test case:
 
 ### PR Title
 
-Format: `[SPARK-xxxx][COMPONENT] Title`.
+Format: `[SPARK-xxxx][COMPONENT] Title` where `SPARK-xxxx` is the JIRA ticket ID. Ask the user for the ticket ID if not provided.
 For follow-up fixes: `[SPARK-xxxx][COMPONENT][FOLLOWUP] Title`.
 
 ### PR Description
