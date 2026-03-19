@@ -275,6 +275,18 @@ trait SparkTestSuite
   }
 
   /**
+   * Parameters that may be omitted from the expected map in checkError() for specific
+   * error conditions. When a parameter name is in this set for the given condition and
+   * absent from the expected parameters, it is stripped from the actual exception
+   * parameters before comparison. Use this to allow tests to ignore extra parameters
+   * (e.g. added in a later PR) without updating every call site.
+   * Override in test suites to add or change ignorable parameters per condition.
+   */
+  protected def checkErrorIgnorableParameters: Map[String, Set[String]] = Map(
+    "TABLE_OR_VIEW_NOT_FOUND" -> Set("searchPath")
+  )
+
+  /**
    * Checks an exception with an error condition against expected results.
    * @param exception     The exception to check
    * @param condition     The expected error condition identifying the error
@@ -293,10 +305,14 @@ trait SparkTestSuite
       queryContext: Array[ExpectedContext] = Array.empty): Unit = {
     assert(exception.getCondition === condition)
     sqlState.foreach(state => assert(exception.getSqlState === state))
-    val expectedParameters = exception.getMessageParameters.asScala
+    val actualParameters = exception.getMessageParameters.asScala
+    val ignorable = checkErrorIgnorableParameters.getOrElse(condition, Set.empty[String])
+    val actualParametersToCompare = actualParameters.filter { case (k, _) =>
+      !ignorable.contains(k) || parameters.contains(k)
+    }
     if (matchPVals) {
-      assert(expectedParameters.size === parameters.size)
-      expectedParameters.foreach(
+      assert(actualParametersToCompare.size === parameters.size)
+      actualParametersToCompare.foreach(
         exp => {
           val parm = parameters.getOrElse(exp._1,
             throw new IllegalArgumentException("Missing parameter" + exp._1))
@@ -307,7 +323,7 @@ trait SparkTestSuite
         }
       )
     } else {
-      assert(expectedParameters === parameters)
+      assert(actualParametersToCompare === parameters)
     }
     val actualQueryContext = exception.getQueryContext()
     assert(actualQueryContext.length === queryContext.length, "Invalid length of the query context")
