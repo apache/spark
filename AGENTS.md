@@ -70,7 +70,7 @@ Run a single test case:
 
 ### PR Title
 
-Format: `[SPARK-xxxx][COMPONENT] Title` where `SPARK-xxxx` is the JIRA ticket ID. Ask the user for the ticket ID if not provided.
+Format: `[SPARK-xxxx][COMPONENT] Title` where `SPARK-xxxx` is the JIRA ticket ID. Ask the user to create a new ticket or provide an existing one if not given.
 For follow-up fixes: `[SPARK-xxxx][COMPONENT][FOLLOWUP] Title`.
 
 ### PR Description
@@ -81,4 +81,4 @@ Follow the template in `.github/PULL_REQUEST_TEMPLATE`.
 
 Contributors push their feature branch to their personal fork and open PRs against `master` on the upstream Apache Spark repo. Run `git remote -v` to identify which remote is the fork and which is upstream (`apache/spark`). If the remotes are unclear, ask the user to set them up following the standard convention (`origin` for the fork, `upstream` for `apache/spark`).
 
-Use `gh pr create` to open PRs. If `gh` is not installed, generate the GitHub PR URL for the user and recommend installing the GitHub CLI.
+Always get user approval before pushing commits or creating PRs. Use `gh pr create` to open PRs. If `gh` is not installed, generate the GitHub PR URL for the user and recommend installing the GitHub CLI.
