@@ -1069,6 +1069,9 @@ class SparkConnectServiceSuite
         assert(done)
       }
 
+      // Wait for listener bus to process all events
+      spark.sparkContext.listenerBus.waitUntilEmpty()
+
       // Verify result
       assert(responses.exists(_.hasArrowBatch))
 
@@ -1148,6 +1151,9 @@ class SparkConnectServiceSuite
       Eventually.eventually(timeout(10.seconds)) {
         assert(done)
       }
+
+      // Wait for listener bus to process all events
+      spark.sparkContext.listenerBus.waitUntilEmpty()
 
       // Verify result
       assert(responses.exists(_.hasArrowBatch))
