@@ -49,6 +49,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType, NoopDialect}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.ops.ClientTypeOps
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
@@ -166,6 +167,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       case DateType => Option(JdbcType("DATE", java.sql.Types.DATE))
       case t: DecimalType => Option(
         JdbcType(s"DECIMAL(${t.precision},${t.scale})", java.sql.Types.DECIMAL))
+      case dt if ClientTypeOps(dt).isDefined =>
+        Option(JdbcType(ClientTypeOps(dt).get.jdbcTypeName, ClientTypeOps(dt).get.getJdbcType))
       case _ => None
     }
   }

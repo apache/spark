@@ -19,11 +19,15 @@ package org.apache.spark.sql.catalyst.types.ops
 
 import java.time.LocalTime
 
+import org.apache.arrow.vector.{TimeNanoVector, ValueVector}
+
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Literal, MutableLong, MutableValue}
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, MutableLong, MutableValue}
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalLongType}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.types.TimeType
+import org.apache.spark.sql.execution.arrow.{ArrowFieldWriter, TimeWriter}
+import org.apache.spark.sql.types.{ObjectType, TimeType}
 import org.apache.spark.sql.types.ops.TimeTypeApiOps
 
 /**
@@ -38,6 +42,10 @@ import org.apache.spark.sql.types.ops.TimeTypeApiOps
  *   - String formatting (FractionTimeFormatter)
  *   - Row encoding (LocalTimeEncoder)
  *
+ * Additionally, it implements CatalystTypeOps for:
+ *   - Serializer/deserializer expression building (SerializerBuildHelper, DeserializerBuildHelper)
+ *   - Arrow field writer creation (ArrowWriter)
+ *
  * INTERNAL REPRESENTATION:
  *   - Values stored as Long nanoseconds since midnight
  *   - Range: 0 to 86,399,999,999,999
@@ -48,7 +56,8 @@ import org.apache.spark.sql.types.ops.TimeTypeApiOps
  *   The TimeType with precision information
  * @since 4.2.0
  */
-case class TimeTypeOps(override val t: TimeType) extends TimeTypeApiOps(t) with TypeOps {
+case class TimeTypeOps(override val t: TimeType)
+    extends TimeTypeApiOps(t) with TypeOps with CatalystTypeOps {
 
   // ==================== Physical Type Representation ====================
 
@@ -80,5 +89,29 @@ case class TimeTypeOps(override val t: TimeType) extends TimeTypeApiOps(t) with 
 
   override def toScalaImpl(row: InternalRow, column: Int): Any = {
     DateTimeUtils.nanosToLocalTime(row.getLong(column))
+  }
+
+  // ==================== Catalyst Type Operations (CatalystTypeOps) ====================
+
+  override def createSerializer(input: Expression): Expression = {
+    StaticInvoke(
+      DateTimeUtils.getClass,
+      t,
+      "localTimeToNanos",
+      input :: Nil,
+      returnNullable = false)
+  }
+
+  override def createDeserializer(path: Expression): Expression = {
+    StaticInvoke(
+      DateTimeUtils.getClass,
+      ObjectType(classOf[java.time.LocalTime]),
+      "nanosToLocalTime",
+      path :: Nil,
+      returnNullable = false)
+  }
+
+  override def createArrowFieldWriter(vector: ValueVector): ArrowFieldWriter = {
+    new TimeWriter(vector.asInstanceOf[TimeNanoVector])
   }
 }

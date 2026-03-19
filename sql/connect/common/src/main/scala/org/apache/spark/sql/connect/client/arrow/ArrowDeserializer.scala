@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.connect.common.types.ops.ConnectArrowTypeOps
 import org.apache.spark.sql.errors.{CompilationErrors, ExecutionErrors}
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.sql.util.{CloseableIterator, ConcatenatingArrowStreamReader, MessageIterator}
@@ -200,6 +201,9 @@ object ArrowDeserializers {
         new LeafFieldDeserializer[LocalDateTime](encoder, v, timeZoneId) {
           override def value(i: Int): LocalDateTime = reader.getLocalDateTime(i)
         }
+      case (enc, v: FieldVector) if ConnectArrowTypeOps(enc).isDefined =>
+        ConnectArrowTypeOps(enc).get
+          .createArrowDeserializer(enc, v, timeZoneId).asInstanceOf[Deserializer[Any]]
       case (LocalTimeEncoder, v: FieldVector) =>
         new LeafFieldDeserializer[LocalTime](encoder, v, timeZoneId) {
           override def value(i: Int): LocalTime = reader.getLocalTime(i)

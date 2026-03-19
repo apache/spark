@@ -21,6 +21,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.connect.common.types.ops.ProtoTypeOps
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkClassUtils
@@ -53,6 +54,8 @@ object DataTypeProtoConverter {
       case proto.DataType.KindCase.DATE => DateType
       case proto.DataType.KindCase.TIMESTAMP => TimestampType
       case proto.DataType.KindCase.TIMESTAMP_NTZ => TimestampNTZType
+      case kindCase if ProtoTypeOps.toCatalystType(t).isDefined =>
+        ProtoTypeOps.toCatalystType(t).get
       case proto.DataType.KindCase.TIME =>
         if (t.getTime.hasPrecision) {
           TimeType(t.getTime.getPrecision)
@@ -232,6 +235,8 @@ object DataTypeProtoConverter {
 
       case TimestampNTZType => ProtoDataTypes.TimestampNTZType
 
+      case dt if ProtoTypeOps(dt).isDefined =>
+        ProtoTypeOps(dt).get.toConnectProtoType
       case TimeType(precision) =>
         proto.DataType
           .newBuilder()
