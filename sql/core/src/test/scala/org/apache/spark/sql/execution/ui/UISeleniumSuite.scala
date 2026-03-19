@@ -49,15 +49,6 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser {
     getWebClient.setCssErrorHandler(new SparkUICssErrorHandler)
   }
 
-  private def goToSQLPage(): Unit = {
-    val webUrl = spark.sparkContext.uiWebUrl
-    assert(webUrl.isDefined, "please turn on spark.ui.enabled")
-    go to s"${webUrl.get}/SQL"
-    eventually(timeout(10.seconds), interval(1.second)) {
-      assert(find(cssSelector("#sql-executions-table")).isDefined)
-    }
-  }
-
   private def findErrorMessageViaAPI(): List[String] = {
     val webUrl = spark.sparkContext.uiWebUrl.get
     val url = s"$webUrl/api/v1/applications/${spark.sparkContext.applicationId}" +
@@ -65,7 +56,6 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser {
     val json = Utils.tryWithResource(scala.io.Source.fromURL(url))(_.mkString)
     val mapper = new com.fasterxml.jackson.databind.ObjectMapper()
     val executions = mapper.readTree(json)
-    import scala.jdk.CollectionConverters._
     executions.elements().asScala.toList
       .filter(e => e.has("errorMessage") && !e.get("errorMessage").isNull)
       .map(_.get("errorMessage").asText)
@@ -78,7 +68,6 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser {
     val json = Utils.tryWithResource(scala.io.Source.fromURL(url))(_.mkString)
     val mapper = new com.fasterxml.jackson.databind.ObjectMapper()
     val executions = mapper.readTree(json)
-    import scala.jdk.CollectionConverters._
     executions.elements().asScala.toList
       .filter(e => e.has("errorMessage") && !e.get("errorMessage").isNull)
       .head.get("id").asInt
