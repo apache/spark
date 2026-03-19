@@ -39,8 +39,10 @@ private[sql] class SparkArrowFileWriter(schema: Schema, path: Path) extends Auto
   protected val fileWriter =
     new ArrowFileWriter(root, null, Channels.newChannel(Files.newOutputStream(path)))
 
+  private var fileWriterClosed = false
+
   override def close(): Unit = {
-    fileWriter.close()
+    if (!fileWriterClosed) fileWriter.close()
     root.close()
     allocator.close()
   }
@@ -57,6 +59,7 @@ private[sql] class SparkArrowFileWriter(schema: Schema, path: Path) extends Auto
       }
     } finally {
       fileWriter.close()
+      fileWriterClosed = true
     }
   }
 }
