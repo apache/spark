@@ -4538,7 +4538,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 )
                 return np.nan
             else:
-                raise ValueError("Encountered an NA value with skipna=False")
+                if skipna:
+                    raise ValueError("Encountered all NA values")
+                else:
+                    raise ValueError("Encountered an NA value with skipna=False")
         values = list(results[0][1:])
         if len(values) == 1:
             return values[0]
@@ -4654,7 +4657,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 )
                 return np.nan
             else:
-                raise ValueError("Encountered an NA value with skipna=False")
+                if skipna:
+                    raise ValueError("Encountered all NA values")
+                else:
+                    raise ValueError("Encountered an NA value with skipna=False")
         values = list(results[0][1:])
         if len(values) == 1:
             return values[0]
