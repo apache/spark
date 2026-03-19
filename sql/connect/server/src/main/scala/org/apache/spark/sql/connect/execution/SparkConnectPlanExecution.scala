@@ -38,7 +38,7 @@ import org.apache.spark.sql.connect.planner.{InvalidInputErrors, SparkConnectPla
 import org.apache.spark.sql.connect.service.ExecuteHolder
 import org.apache.spark.sql.connect.utils.{ErrorUtils, MetricGenerator, PipelineAnalysisContextUtils}
 import org.apache.spark.sql.execution.{CollectLimitExec, CollectTailExec, DoNotCleanup, LocalTableScanExec, QueryExecution, RemoveShuffleFiles, SkipMigration, SQLExecution}
-import org.apache.spark.sql.execution.arrow.{ArrowBatchWithSchemaIterator, ArrowConverters}
+import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.ThreadUtils
@@ -147,7 +147,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     // converter wrapper below returns a plain Scala-mapped iterator that is NOT AutoCloseable,
     // so if sendBatch throws (e.g., client disconnect) the underlying iterator would leak
     // 131072 bytes into ArrowUtils.rootAllocator.
-    val mkBatches: Iterator[InternalRow] => ArrowBatchWithSchemaIterator = rows =>
+    val mkBatches = (rows: Iterator[InternalRow]) =>
       ArrowConverters.toBatchWithSchemaIterator(
         rows,
         schema,
