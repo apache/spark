@@ -638,12 +638,6 @@
     ],
     "sqlState": "42K09"
   },
-  "NOT_BOOL_OR_LIST": {
-    "message": [
-      "Argument `<arg_name>` should be a bool or list, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
   "NOT_BOOL_OR_STR": {
     "message": [
       "Argument `<arg_name>` should be a bool or str, got <arg_type>."
@@ -689,12 +683,6 @@
   "NOT_COLUMN_OR_INT_OR_STR": {
     "message": [
       "Argument `<arg_name>` should be a Column, int or str, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_COLUMN_OR_LIST_OR_STR": {
-    "message": [
-      "Argument `<arg_name>` should be a Column, list or str, got <arg_type>."
     ],
     "sqlState": "42K09"
   },
