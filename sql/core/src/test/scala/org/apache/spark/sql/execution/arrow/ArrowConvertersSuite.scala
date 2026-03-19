@@ -1526,8 +1526,8 @@ class ArrowConvertersSuite extends SharedSparkSession with ArrowAllocatorLeakChe
     val batchIter2 = ArrowConverters.toBatchWithSchemaIterator(
       inputRows2.iterator, schema2, 5, 1024 * 1024, null, true, false)
 
-    val arr1 = try { batchIter1.toArray } finally { batchIter1.close() }
-    val arr2 = try { batchIter2.toArray } finally { batchIter2.close() }
+    val arr1 = batchIter1.toArray  // hasNext auto-closes on exhaustion
+    val arr2 = batchIter2.toArray  // same
     val iter = arr1 ++ arr2
 
     val ctx = TaskContext.empty()
