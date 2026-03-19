@@ -227,9 +227,9 @@ class BasePythonStreamingDataSourceTestsMixin:
                 if isinstance(limit, ReadAllAvailable):
                     end_offset = start_idx + 10
                 else:
-                    assert isinstance(
-                        limit, ReadMaxRows
-                    ), "Expected ReadMaxRows read limit but got " + str(type(limit))
+                    assert isinstance(limit, ReadMaxRows), (
+                        "Expected ReadMaxRows read limit but got " + str(type(limit))
+                    )
                     end_offset = start_idx + limit.max_rows
                 return {"partition-1": end_offset}
 
@@ -266,9 +266,9 @@ class BasePythonStreamingDataSourceTestsMixin:
                 if isinstance(limit, ReadAllAvailable):
                     end_offset = start_idx + 10
                 else:
-                    assert isinstance(
-                        limit, ReadMaxRows
-                    ), "Expected ReadMaxRows read limit but got " + str(type(limit))
+                    assert isinstance(limit, ReadMaxRows), (
+                        "Expected ReadMaxRows read limit but got " + str(type(limit))
+                    )
                     end_offset = min(
                         start_idx + limit.max_rows, self.desired_end_offset["partition-1"]
                     )

@@ -414,9 +414,9 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
         session = f
 
         def outer(ff: Callable) -> Callable:
-            assert isinstance(
-                session, RemoteSparkSession
-            ), "f is expected to be SparkSession for spark connect"
+            assert isinstance(session, RemoteSparkSession), (
+                "f is expected to be SparkSession for spark connect"
+            )
             thread_local = session.client.thread_local
             session_client_thread_local_attrs = [
                 (attr, copy.deepcopy(value))
@@ -429,9 +429,9 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
             @functools.wraps(ff)
             def inner(*args: Any, **kwargs: Any) -> Any:
                 # Propagates the active remote spark session to the current thread.
-                assert isinstance(
-                    session, RemoteSparkSession
-                ), "f is expected to be SparkSession for spark connect"
+                assert isinstance(session, RemoteSparkSession), (
+                    "f is expected to be SparkSession for spark connect"
+                )
 
                 RemoteSparkSession._set_default_and_active_session(session)
                 # Set thread locals in child thread.
@@ -605,7 +605,9 @@ class InheritableThread(threading.Thread):
                     return target(*a, **k)
 
                 super().__init__(
-                    target=copy_local_properties, *args, **kwargs  # type: ignore[misc]
+                    target=copy_local_properties,
+                    *args,
+                    **kwargs,  # type: ignore[misc]
                 )
             else:
                 super().__init__(target=target, *args, **kwargs)  # type: ignore[misc]
@@ -665,13 +667,9 @@ class PythonEvalType:
     SQL_GROUPED_MAP_ARROW_UDF: "ArrowGroupedMapUDFType" = 209
     SQL_COGROUPED_MAP_ARROW_UDF: "ArrowCogroupedMapUDFType" = 210
     SQL_TRANSFORM_WITH_STATE_PANDAS_UDF: "PandasGroupedMapUDFTransformWithStateType" = 211
-    SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF: (
-        "PandasGroupedMapUDFTransformWithStateInitStateType"
-    ) = 212
+    SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF: "PandasGroupedMapUDFTransformWithStateInitStateType" = 212
     SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF: "GroupedMapUDFTransformWithStateType" = 213
-    SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF: (
-        "GroupedMapUDFTransformWithStateInitStateType"
-    ) = 214
+    SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF: "GroupedMapUDFTransformWithStateInitStateType" = 214
     SQL_GROUPED_MAP_ARROW_ITER_UDF: "ArrowGroupedMapIterUDFType" = 215
     SQL_GROUPED_MAP_PANDAS_ITER_UDF: "PandasGroupedMapIterUDFType" = 216
     SQL_GROUPED_AGG_PANDAS_ITER_UDF: "PandasGroupedAggIterUDFType" = 217

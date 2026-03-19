@@ -161,9 +161,7 @@ class SeriesComputeMixin:
         msg = "func must be a string or list of strings"
         with self.assertRaisesRegex(TypeError, msg):
             psser.aggregate({"x": ["min", "max"]})
-        msg = (
-            "If the given function is a list, it " "should only contains function names as strings."
-        )
+        msg = "If the given function is a list, it should only contains function names as strings."
         with self.assertRaisesRegex(ValueError, msg):
             psser.aggregate(["min", max])
 
@@ -517,7 +515,7 @@ class SeriesComputeMixin:
             psser.between(1, 4, inclusive="right"), pser.between(1, 4, inclusive="right")
         )
         expected_err_msg = (
-            "Inclusive has to be either string of 'both'," "'left', 'right', or 'neither'"
+            "Inclusive has to be either string of 'both','left', 'right', or 'neither'"
         )
         with self.assertRaisesRegex(ValueError, expected_err_msg):
             psser.between(1, 4, inclusive="middle")

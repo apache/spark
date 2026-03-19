@@ -296,9 +296,9 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
 
         def apply_type_coercion():
             for batch, arrow_return_type in iterator:
-                assert isinstance(
-                    arrow_return_type, pa.StructType
-                ), f"Expected pa.StructType, got {type(arrow_return_type)}"
+                assert isinstance(arrow_return_type, pa.StructType), (
+                    f"Expected pa.StructType, got {type(arrow_return_type)}"
+                )
 
                 # Handle empty struct case specially
                 if batch.num_columns == 0:

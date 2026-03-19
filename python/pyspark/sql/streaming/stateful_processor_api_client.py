@@ -113,7 +113,7 @@ class StatefulProcessorApiClient:
             self.handle_state = state
         else:
             # TODO(SPARK-49233): Classify errors thrown by internal methods.
-            raise PySparkRuntimeError(f"Error setting handle state: " f"{response_message[1]}")
+            raise PySparkRuntimeError(f"Error setting handle state: {response_message[1]}")
 
     def set_implicit_key(self, key: Tuple) -> None:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
@@ -128,7 +128,7 @@ class StatefulProcessorApiClient:
         status = response_message[0]
         if status != 0:
             # TODO(SPARK-49233): Classify errors thrown by internal methods.
-            raise PySparkRuntimeError(f"Error setting implicit key: " f"{response_message[1]}")
+            raise PySparkRuntimeError(f"Error setting implicit key: {response_message[1]}")
 
     def remove_implicit_key(self) -> None:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
@@ -142,7 +142,7 @@ class StatefulProcessorApiClient:
         status = response_message[0]
         if status != 0:
             # TODO(SPARK-49233): Classify errors thrown by internal methods.
-            raise PySparkRuntimeError(f"Error removing implicit key: " f"{response_message[1]}")
+            raise PySparkRuntimeError(f"Error removing implicit key: {response_message[1]}")
 
     def get_value_state(
         self, state_name: str, schema: Union[StructType, str], ttl_duration_ms: Optional[int]
@@ -165,7 +165,7 @@ class StatefulProcessorApiClient:
         status = response_message[0]
         if status != 0:
             # TODO(SPARK-49233): Classify user facing errors.
-            raise PySparkRuntimeError(f"Error initializing value state: " f"{response_message[1]}")
+            raise PySparkRuntimeError(f"Error initializing value state: {response_message[1]}")
 
     def get_list_state(
         self, state_name: str, schema: Union[StructType, str], ttl_duration_ms: Optional[int]
@@ -188,7 +188,7 @@ class StatefulProcessorApiClient:
         status = response_message[0]
         if status != 0:
             # TODO(SPARK-49233): Classify user facing errors.
-            raise PySparkRuntimeError(f"Error initializing list state: " f"{response_message[1]}")
+            raise PySparkRuntimeError(f"Error initializing list state: {response_message[1]}")
 
     def register_timer(self, expiry_time_stamp_ms: int) -> None:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
@@ -203,7 +203,7 @@ class StatefulProcessorApiClient:
         status = response_message[0]
         if status != 0:
             # TODO(SPARK-49233): Classify user facing errors.
-            raise PySparkRuntimeError(f"Error register timer: " f"{response_message[1]}")
+            raise PySparkRuntimeError(f"Error register timer: {response_message[1]}")
 
     def delete_timer(self, expiry_time_stamp_ms: int) -> None:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
@@ -218,7 +218,7 @@ class StatefulProcessorApiClient:
         status = response_message[0]
         if status != 0:
             # TODO(SPARK-49233): Classify user facing errors.
-            raise PySparkRuntimeError(f"Error deleting timer: " f"{response_message[1]}")
+            raise PySparkRuntimeError(f"Error deleting timer: {response_message[1]}")
 
     def get_list_timer_row(self, iterator_id: str) -> Tuple[int, bool]:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
@@ -346,7 +346,7 @@ class StatefulProcessorApiClient:
         status = response_message[0]
         if status != 0:
             # TODO(SPARK-49233): Classify user facing errors.
-            raise PySparkRuntimeError(f"Error initializing map state: " f"{response_message[1]}")
+            raise PySparkRuntimeError(f"Error initializing map state: {response_message[1]}")
 
     def delete_if_exists(self, state_name: str) -> None:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
@@ -361,7 +361,7 @@ class StatefulProcessorApiClient:
         status = response_message[0]
         if status != 0:
             # TODO(SPARK-49233): Classify user facing errors.
-            raise PySparkRuntimeError(f"Error deleting state: " f"{response_message[1]}")
+            raise PySparkRuntimeError(f"Error deleting state: {response_message[1]}")
 
     def _get_batch_timestamp(self) -> int:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
@@ -378,9 +378,7 @@ class StatefulProcessorApiClient:
         status = response_message[0]
         if status != 0:
             # TODO(SPARK-49233): Classify user facing errors.
-            raise PySparkRuntimeError(
-                f"Error getting processing timestamp: " f"{response_message[1]}"
-            )
+            raise PySparkRuntimeError(f"Error getting processing timestamp: {response_message[1]}")
         else:
             timestamp = response_message[2]
             return timestamp
@@ -398,9 +396,7 @@ class StatefulProcessorApiClient:
         status = response_message[0]
         if status != 0:
             # TODO(SPARK-49233): Classify user facing errors.
-            raise PySparkRuntimeError(
-                f"Error getting eventtime timestamp: " f"{response_message[1]}"
-            )
+            raise PySparkRuntimeError(f"Error getting eventtime timestamp: {response_message[1]}")
         else:
             timestamp = response_message[2]
             return timestamp
@@ -581,7 +577,7 @@ class StatefulProcessorApiClient:
         status = response_message[0]
         if status != 0:
             # TODO(SPARK-49233): Classify user facing errors.
-            raise PySparkRuntimeError(f"Error parsing string schema: " f"{response_message[1]}")
+            raise PySparkRuntimeError(f"Error parsing string schema: {response_message[1]}")
         else:
             return StructType.fromJson(json.loads(response_message[2]))
 

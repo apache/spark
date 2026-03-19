@@ -2369,12 +2369,8 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf):
                         raise PySparkRuntimeError(
                             errorClass="UDTF_RETURN_SCHEMA_MISMATCH",
                             messageParameters={
-                                "expected": e.getMessageParameters()[
-                                    "expected_length"
-                                ],  # type: ignore[index]
-                                "actual": e.getMessageParameters()[
-                                    "actual_length"
-                                ],  # type: ignore[index]
+                                "expected": e.getMessageParameters()["expected_length"],  # type: ignore[index]
+                                "actual": e.getMessageParameters()["actual_length"],  # type: ignore[index]
                                 "func": f.__name__,
                             },
                         ) from e

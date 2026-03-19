@@ -383,9 +383,7 @@ def _start_update_server(
             os.remove(socket_path)
         server = AccumulatorUnixServer(socket_path, UpdateRequestHandler)
     else:
-        server = AccumulatorTCPServer(
-            ("localhost", 0), UpdateRequestHandler, auth_token
-        )  # type: ignore[assignment]
+        server = AccumulatorTCPServer(("localhost", 0), UpdateRequestHandler, auth_token)  # type: ignore[assignment]
 
     thread = threading.Thread(target=server.serve_forever)
     thread.daemon = True
