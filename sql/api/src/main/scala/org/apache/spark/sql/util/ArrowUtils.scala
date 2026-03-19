@@ -29,6 +29,7 @@ import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType, Schema}
 import org.apache.spark.SparkException
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.ops.ClientTypeOps
 import org.apache.spark.util.ArrayImplicits._
 
 private[sql] object ArrowUtils {
@@ -58,6 +59,7 @@ private[sql] object ArrowUtils {
       case TimestampType => new ArrowType.Timestamp(TimeUnit.MICROSECOND, timeZoneId)
       case TimestampNTZType =>
         new ArrowType.Timestamp(TimeUnit.MICROSECOND, null)
+      case dt if ClientTypeOps(dt).isDefined => ClientTypeOps(dt).get.toArrowType(timeZoneId)
       case _: TimeType => new ArrowType.Time(TimeUnit.NANOSECOND, 8 * 8)
       case NullType => ArrowType.Null.INSTANCE
       case _: YearMonthIntervalType => new ArrowType.Interval(IntervalUnit.YEAR_MONTH)
@@ -89,6 +91,7 @@ private[sql] object ArrowUtils {
         if ts.getUnit == TimeUnit.MICROSECOND && ts.getTimezone == null =>
       TimestampNTZType
     case ts: ArrowType.Timestamp if ts.getUnit == TimeUnit.MICROSECOND => TimestampType
+    case at if ClientTypeOps.fromArrowType(at).isDefined => ClientTypeOps.fromArrowType(at).get
     case t: ArrowType.Time if t.getUnit == TimeUnit.NANOSECOND && t.getBitWidth == 8 * 8 =>
       TimeType(TimeType.MICROS_PRECISION)
     case ArrowType.Null.INSTANCE => NullType

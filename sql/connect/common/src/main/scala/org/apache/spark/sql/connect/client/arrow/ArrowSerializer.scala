@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.DefinedByConstructorParams
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, Codec}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.util.{SparkDateTimeUtils, SparkIntervalUtils}
+import org.apache.spark.sql.connect.common.types.ops.ConnectArrowTypeOps
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.sql.util.{ArrowUtils, CloseableIterator}
@@ -391,6 +392,8 @@ object ArrowSerializer {
           override def set(index: Int, value: LocalDateTime): Unit =
             vector.setSafe(index, SparkDateTimeUtils.localDateTimeToMicros(value))
         }
+      case (enc, v) if ConnectArrowTypeOps(enc).isDefined =>
+        ConnectArrowTypeOps(enc).get.createArrowSerializer(v).asInstanceOf[Serializer]
       case (LocalTimeEncoder, v: TimeNanoVector) =>
         new FieldSerializer[LocalTime, TimeNanoVector](v) {
           override def set(index: Int, value: LocalTime): Unit =

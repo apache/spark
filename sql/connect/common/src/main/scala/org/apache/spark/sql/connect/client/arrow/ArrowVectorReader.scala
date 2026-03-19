@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.util.{DateFormatter, SparkIntervalUtils, Ti
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils._
+import org.apache.spark.sql.connect.common.types.ops.ConnectArrowTypeOps
 import org.apache.spark.sql.types.{DataType, DayTimeIntervalType, Decimal, UpCastRule, YearMonthIntervalType}
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.util.SparkStringUtils
@@ -92,6 +93,9 @@ object ArrowVectorReader {
       case v: DateDayVector => new DateDayVectorReader(v, timeZoneId)
       case v: TimeStampMicroTZVector => new TimeStampMicroTZVectorReader(v)
       case v: TimeStampMicroVector => new TimeStampMicroVectorReader(v, timeZoneId)
+      case v if ConnectArrowTypeOps(targetDataType).isDefined =>
+        ConnectArrowTypeOps(targetDataType).get
+          .createArrowVectorReader(v).asInstanceOf[ArrowVectorReader]
       case v: TimeNanoVector => new TimeVectorReader(v)
       case _: NullVector => NullVectorReader
       case _ => throw new RuntimeException("Unsupported Vector Type: " + vector.getClass)

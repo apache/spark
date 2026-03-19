@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.util.{SparkDateTimeUtils, SparkIntervalUtils}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter._
+import org.apache.spark.sql.connect.common.types.ops.ProtoTypeOps
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -109,6 +110,8 @@ object LiteralValueProtoConverter {
       case v: Date => builder.setDate(SparkDateTimeUtils.fromJavaDate(v))
       case v: Duration => builder.setDayTimeInterval(SparkIntervalUtils.durationToMicros(v))
       case v: Period => builder.setYearMonthInterval(SparkIntervalUtils.periodToMonths(v))
+      case v: LocalTime if ProtoTypeOps(TimeType()).isDefined =>
+        ProtoTypeOps(TimeType()).get.toLiteralProto(v, builder)
       case v: LocalTime =>
         builder.setTime(
           builder.getTimeBuilder
@@ -216,6 +219,8 @@ object LiteralValueProtoConverter {
         builder.setMap(mapBuilder(v, keyType, valueType))
       case (v, structType: StructType) =>
         builder.setStruct(structBuilder(v, structType))
+      case (v, dt) if ProtoTypeOps(dt).isDefined =>
+        ProtoTypeOps(dt).get.toLiteralProtoWithType(v, dt, builder)
       case (v: LocalTime, timeType: TimeType) =>
         builder.setTime(
           builder.getTimeBuilder
@@ -410,6 +415,8 @@ object LiteralValueProtoConverter {
         v => SparkIntervalUtils.microsToDuration(v.getDayTimeInterval)
       case proto.DataType.KindCase.YEAR_MONTH_INTERVAL =>
         v => SparkIntervalUtils.monthsToPeriod(v.getYearMonthInterval)
+      case kindCase if ProtoTypeOps.getScalaConverterForKind(kindCase).isDefined =>
+        ProtoTypeOps.getScalaConverterForKind(kindCase).get
       case proto.DataType.KindCase.TIME =>
         v => SparkDateTimeUtils.nanosToLocalTime(v.getTime.getNano)
       case proto.DataType.KindCase.DECIMAL => v => Decimal(v.getDecimal.getValue)
@@ -548,6 +555,8 @@ object LiteralValueProtoConverter {
             builder.setYearMonthInterval(proto.DataType.YearMonthInterval.newBuilder().build())
           case proto.Expression.Literal.LiteralTypeCase.DAY_TIME_INTERVAL =>
             builder.setDayTimeInterval(proto.DataType.DayTimeInterval.newBuilder().build())
+          case litCase if ProtoTypeOps.buildProtoDataTypeForLiteral(literal, builder) =>
+            // Framework handled
           case proto.Expression.Literal.LiteralTypeCase.TIME =>
             val timeBuilder = proto.DataType.Time.newBuilder()
             if (literal.getTime.hasPrecision) {

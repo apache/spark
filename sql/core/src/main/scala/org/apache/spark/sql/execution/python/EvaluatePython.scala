@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData, STUtils}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.ops.ClientTypeOps
 import org.apache.spark.unsafe.types.{GeographyVal, GeometryVal, UTF8String, VariantVal}
 
 object EvaluatePython {
@@ -42,6 +43,7 @@ object EvaluatePython {
   private[python] class BytesWrapper(val data: Array[Byte])
 
   def needConversionInPython(dt: DataType): Boolean = dt match {
+    case dt if ClientTypeOps(dt).exists(_.needConversionInPython) => true
     case DateType | TimestampType | TimestampNTZType | VariantType | _: DayTimeIntervalType
          | _: TimeType | _: GeometryType | _: GeographyType => true
     case _: StructType => true
@@ -161,6 +163,8 @@ object EvaluatePython {
     case DateType => (obj: Any) => nullSafeConvert(obj) {
       case c: Int => c
     }
+
+    case dt if ClientTypeOps(dt).isDefined => ClientTypeOps(dt).get.makeFromJava
 
     case TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType => (obj: Any) =>
       nullSafeConvert(obj) {

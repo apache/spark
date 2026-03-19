@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
 import org.apache.spark.sql.internal.{SQLConf, VariableSubstitution}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.ops.ClientTypeOps
 import org.apache.spark.util.{Utils => SparkUtils}
 
 private[hive] class SparkExecuteStatementOperation(
@@ -342,6 +343,8 @@ object SparkExecuteStatementOperation {
     case _: StringType => TTypeId.STRING_TYPE
     case _: DecimalType => TTypeId.DECIMAL_TYPE
     case DateType => TTypeId.DATE_TYPE
+    case dt if ClientTypeOps(dt).isDefined =>
+      TTypeId.valueOf(ClientTypeOps(dt).get.thriftTypeName)
     case _: TimeType => TTypeId.STRING_TYPE
     // TODO: Shall use TIMESTAMPLOCALTZ_TYPE, keep AS-IS now for
     // unnecessary behavior change
