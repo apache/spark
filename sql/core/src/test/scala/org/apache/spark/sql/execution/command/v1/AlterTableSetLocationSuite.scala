@@ -114,7 +114,7 @@ trait AlterTableSetLocationSuiteBase extends command.AlterTableSetLocationSuiteB
     val e = intercept[AnalysisException] {
       sql("ALTER TABLE ns.does_not_exist SET LOCATION '/mister/spark'")
     }
-    checkErrorTableNotFoundOmitSearchPath(e, "`ns`.`does_not_exist`",
+    checkErrorTableNotFound(e, "`ns`.`does_not_exist`",
       ExpectedContext("ns.does_not_exist", 12, 11 + "ns.does_not_exist".length))
   }
 

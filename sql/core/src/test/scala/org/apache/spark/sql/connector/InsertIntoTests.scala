@@ -261,13 +261,8 @@ trait InsertIntoSQLOnlyTests
         val e = intercept[AnalysisException] {
           sql(s"INSERT INTO $t2 VALUES (2L, 'dummy')")
         }
-        if (catalogAndNamespace.isEmpty) {
-          checkErrorTableNotFoundOmitSearchPath(e, parsed,
-            ExpectedContext(t2, 12, 11 + t2.length))
-        } else {
-          checkErrorTableNotFoundOmitSearchPath(e, parsed,
-            ExpectedContext(t2, 12, 11 + t2.length))
-        }
+        checkErrorTableNotFound(e, parsed,
+          ExpectedContext(t2, 12, 11 + t2.length))
       }
     }
 

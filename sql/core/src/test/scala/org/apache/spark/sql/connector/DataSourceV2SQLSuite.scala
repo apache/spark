@@ -2316,10 +2316,11 @@ class DataSourceV2SQLSuiteV1Filter
          """.stripMargin)
 
       // UPDATE non-existing table
-      checkErrorTableNotFoundOmitSearchPath(
+      checkError(
         exception = analysisException("UPDATE dummy SET name='abc'"),
-        "`dummy`",
-        ExpectedContext(
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> "`dummy`"),
+        context = ExpectedContext(
           fragment = "dummy",
           start = 7,
           stop = 11))
@@ -2481,7 +2482,7 @@ class DataSourceV2SQLSuiteV1Filter
 
   test("AlterTable: renaming views are not supported") {
     val e = analysisException(s"ALTER VIEW testcat.ns.tbl RENAME TO ns.view")
-    checkErrorTableNotFoundOmitSearchPath(e, "`testcat`.`ns`.`tbl`",
+    checkErrorTableNotFound(e, "`testcat`.`ns`.`tbl`",
       ExpectedContext("testcat.ns.tbl", 11, 10 + "testcat.ns.tbl".length))
   }
 
@@ -2537,7 +2538,7 @@ class DataSourceV2SQLSuiteV1Filter
 
     // Test a scenario where a table does not exist.
     val e = analysisException(s"UNCACHE TABLE $t")
-    checkErrorTableNotFoundOmitSearchPath(e, "`testcat`.`ns1`.`ns2`.`tbl`",
+    checkErrorTableNotFound(e, "`testcat`.`ns1`.`ns2`.`tbl`",
       ExpectedContext(t, 14, 13 + t.length))
 
     // If "IF EXISTS" is set, UNCACHE TABLE will not throw an exception.
@@ -2806,10 +2807,11 @@ class DataSourceV2SQLSuiteV1Filter
       checkTableComment("t", "NULL")
     }
     val sql1 = "COMMENT ON TABLE abc IS NULL"
-    checkErrorTableNotFoundOmitSearchPath(
-      analysisException(sql1),
-      "`abc`",
-      ExpectedContext(fragment = "abc", start = 17, stop = 19))
+    checkError(
+      exception = analysisException(sql1),
+      condition = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map("relationName" -> "`abc`"),
+      context = ExpectedContext(fragment = "abc", start = 17, stop = 19))
 
     // V2 non-session catalog is used.
     withTable("testcat.ns1.ns2.t") {
@@ -3449,14 +3451,15 @@ class DataSourceV2SQLSuiteV1Filter
       val res11 = sql("SELECT * FROM t TIMESTAMP AS OF (SELECT MIN(ts) FROM t)").collect()
       assert(res11 === Array(Row(5), Row(6)))
 
-      checkErrorTableNotFoundOmitSearchPath(
-        intercept[AnalysisException] {
+      checkError(
+        exception = intercept[AnalysisException] {
           // `current_date()` is a valid expression for time travel timestamp, but the test uses
           // a fake time travel implementation that only supports two hardcoded timestamp values.
           sql("SELECT * FROM t TIMESTAMP AS OF current_date()").collect()
         },
-        "`t`",
-        ExpectedContext(
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> "`t`"),
+        context = ExpectedContext(
           fragment = "t",
           start = 14,
           stop = 14))
@@ -3532,26 +3535,29 @@ class DataSourceV2SQLSuiteV1Filter
         sqlState = None,
         parameters = Map("relationId" -> "`x`"))
 
-      checkErrorTableNotFoundOmitSearchPath(
-        analysisException("SELECT * FROM non_exist VERSION AS OF 1"),
-        "`non_exist`",
-        ExpectedContext(
+      checkError(
+        exception = analysisException("SELECT * FROM non_exist VERSION AS OF 1"),
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> "`non_exist`"),
+        context = ExpectedContext(
           fragment = "non_exist",
           start = 14,
           stop = 22))
 
       val subquery1 = "SELECT 1 FROM non_exist"
-      checkErrorTableNotFoundOmitSearchPath(
-        analysisException(s"SELECT * FROM t TIMESTAMP AS OF ($subquery1)"),
-        "`non_exist`",
+      checkError(
+        exception = analysisException(s"SELECT * FROM t TIMESTAMP AS OF ($subquery1)"),
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> "`non_exist`"),
         ExpectedContext(
           fragment = "non_exist",
           start = 47,
           stop = 55))
       // Nested subquery should also report error correctly.
-      checkErrorTableNotFoundOmitSearchPath(
-        analysisException(s"SELECT * FROM t TIMESTAMP AS OF (SELECT ($subquery1))"),
-        "`non_exist`",
+      checkError(
+        exception = analysisException(s"SELECT * FROM t TIMESTAMP AS OF (SELECT ($subquery1))"),
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> "`non_exist`"),
         ExpectedContext(
           fragment = "non_exist",
           start = 55,

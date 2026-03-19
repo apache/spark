@@ -63,7 +63,7 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
       val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $catalog.ns.no_tbl PARTITION (id=1) RENAME TO PARTITION (id=2)")
       }
-      checkErrorTableNotFoundOmitSearchPath(e, s"`$catalog`.`ns`.`no_tbl`",
+      checkErrorTableNotFound(e, s"`$catalog`.`ns`.`no_tbl`",
         ExpectedContext(s"$catalog.ns.no_tbl", 12, 11 + s"$catalog.ns.no_tbl".length))
     }
   }

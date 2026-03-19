@@ -1003,7 +1003,7 @@ class CachedTableSuite extends QueryTest
           if (!storeAnalyzed) {
             // t2 should become invalid after t1 is dropped
             val e = intercept[AnalysisException](spark.catalog.isCached("t2"))
-            checkErrorTableNotFoundOmitSearchPath(e, "`t1`",
+            checkErrorTableNotFound(e, "`t1`",
               ExpectedContext("VIEW", "t2", 14, 15, "t1"))
           }
         }
@@ -1035,7 +1035,7 @@ class CachedTableSuite extends QueryTest
               if (!storeAnalyzed) {
                 // t2 should become invalid after t1 is dropped
                 val e = intercept[AnalysisException](spark.catalog.isCached("t2"))
-                checkErrorTableNotFoundOmitSearchPath(e, "`t1`",
+                checkErrorTableNotFound(e, "`t1`",
                   ExpectedContext("VIEW", "t2", 14, 15, "t1"))
               }
             }
@@ -1474,7 +1474,7 @@ class CachedTableSuite extends QueryTest
       checkAnswer(sql("SELECT * FROM v"), Row(1) :: Nil)
       sql(s"DROP TABLE $t")
       val e = intercept[AnalysisException](sql("SELECT * FROM v"))
-      checkErrorTableNotFoundOmitSearchPath(e, s"`$t`",
+      checkErrorTableNotFound(e, s"`$t`",
         ExpectedContext("VIEW", "v", 14, 13 + t.length, t))
     }
   }
@@ -2554,19 +2554,16 @@ class CachedTableSuite extends QueryTest
   }
 
   test("uncache non-existent table") {
-    // Reset to default catalog/namespace so search path in error is predictable (not affected
-    // by a previous test that may have run USE testcat.ns1.ns2).
-    sql("USE spark_catalog")
-    sql("USE default")
+    checkError(
+      exception = intercept[AnalysisException] { spark.catalog.uncacheTable("non_existent") },
+      condition = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map("relationName" -> "`non_existent`"))
 
-    checkErrorTableNotFoundOmitSearchPath(
-      intercept[AnalysisException] { spark.catalog.uncacheTable("non_existent") },
-      "`non_existent`")
-
-    checkErrorTableNotFoundOmitSearchPath(
-      intercept[AnalysisException] { sql("UNCACHE TABLE non_existent") },
-      "`non_existent`",
-      ExpectedContext("non_existent", 14, 25))
+    checkError(
+      exception = intercept[AnalysisException] { sql("UNCACHE TABLE non_existent") },
+      condition = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map("relationName" -> "`non_existent`"),
+      context = ExpectedContext("non_existent", 14, 25))
   }
 
   test("SPARK-54022: caching table via CACHE TABLE should pin table state") {

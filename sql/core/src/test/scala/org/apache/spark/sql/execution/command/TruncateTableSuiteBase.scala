@@ -44,8 +44,7 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       val e = intercept[AnalysisException] {
         sql(s"TRUNCATE TABLE $t")
       }
-      checkErrorTableNotFoundOmitSearchPath(e, parsed,
-        ExpectedContext(t, 15, 14 + t.length))
+      checkErrorTableNotFound(e, parsed, ExpectedContext(t, 15, 14 + t.length))
     }
   }
 

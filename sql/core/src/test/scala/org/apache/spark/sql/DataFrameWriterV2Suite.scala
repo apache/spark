@@ -160,7 +160,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       spark.table("source").writeTo("testcat.table_name").append()
     }
 
-    checkErrorTableNotFoundOmitSearchPath(exc, "`testcat`.`table_name`")
+    checkErrorTableNotFound(exc, "`testcat`.`table_name`")
   }
 
   test("Append: fail if it writes to a temp view that is not v2 relation") {
@@ -270,7 +270,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       spark.table("source").writeTo("testcat.table_name").overwrite(lit(true))
     }
 
-    checkErrorTableNotFoundOmitSearchPath(exc, "`testcat`.`table_name`")
+    checkErrorTableNotFound(exc, "`testcat`.`table_name`")
   }
 
   test("Overwrite: fail if it writes to a temp view that is not v2 relation") {
@@ -380,8 +380,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       spark.table("source").writeTo("testcat.table_name").overwritePartitions()
     }
 
-    checkErrorTableNotFoundOmitSearchPath(exc, "`testcat`.`table_name`")
-  }
+    checkErrorTableNotFound(exc, "`testcat`.`table_name`")
+   }
 
   test("OverwritePartitions: fail if it writes to a temp view that is not v2 relation") {
     spark.range(10).createOrReplaceTempView("temp_view")

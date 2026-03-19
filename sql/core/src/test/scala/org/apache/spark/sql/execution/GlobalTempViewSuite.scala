@@ -42,9 +42,9 @@ class GlobalTempViewSuite extends QueryTest with SharedSparkSession {
 
       // If there is no database in table name, we should try local temp view first, if not found,
       // try table/view in current database, which is "default" in this case. So we expect
-      // table not found with search path.
+      // NoSuchTableException here.
       var e = intercept[AnalysisException](spark.table("src"))
-      checkErrorTableNotFoundOmitSearchPath(e, "`src`")
+      checkErrorTableNotFound(e, "`src`")
 
       // Use qualified name to refer to the global temp view explicitly.
       checkAnswer(spark.table(s"$globalTempDB.src"), Row(1, "a"))
@@ -56,7 +56,7 @@ class GlobalTempViewSuite extends QueryTest with SharedSparkSession {
       sql(s"DROP VIEW $globalTempDB.src")
       // The global temp view should be dropped successfully.
       e = intercept[AnalysisException](spark.table(s"$globalTempDB.src"))
-      checkErrorTableNotFoundOmitSearchPath(e, "`global_temp`.`src`")
+      checkErrorTableNotFound(e, "`global_temp`.`src`")
 
       // We can also use Dataset API to create global temp view
       Seq(1 -> "a").toDF("i", "j").createGlobalTempView("src")
@@ -65,7 +65,7 @@ class GlobalTempViewSuite extends QueryTest with SharedSparkSession {
       // Use qualified name to rename a global temp view.
       sql(s"ALTER VIEW $globalTempDB.src RENAME TO src2")
       e = intercept[AnalysisException](spark.table(s"$globalTempDB.src"))
-      checkErrorTableNotFoundOmitSearchPath(e, "`global_temp`.`src`")
+      checkErrorTableNotFound(e, "`global_temp`.`src`")
       checkAnswer(spark.table(s"$globalTempDB.src2"), Row(1, "a"))
 
       // Use qualified name to alter a global temp view.
@@ -75,7 +75,7 @@ class GlobalTempViewSuite extends QueryTest with SharedSparkSession {
       // We can also use Catalog API to drop global temp view
       spark.catalog.dropGlobalTempView("src2")
       e = intercept[AnalysisException](spark.table(s"$globalTempDB.src2"))
-      checkErrorTableNotFoundOmitSearchPath(e, "`global_temp`.`src2`")
+      checkErrorTableNotFound(e, "`global_temp`.`src2`")
 
       // We can also use Dataset API to replace global temp view
       Seq(2 -> "b").toDF("i", "j").createOrReplaceGlobalTempView("src")

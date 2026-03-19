@@ -85,15 +85,9 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
         sql(s"ALTER TABLE ${catalogAndNamespace}table_name DROP COLUMN id")
       }
 
-      if (catalogAndNamespace.isEmpty) {
-        checkErrorTableNotFoundOmitSearchPath(exc, quoted,
-          ExpectedContext(s"${catalogAndNamespace}table_name", 12,
-            11 + s"${catalogAndNamespace}table_name".length))
-      } else {
-        checkErrorTableNotFoundOmitSearchPath(exc, quoted,
-          ExpectedContext(s"${catalogAndNamespace}table_name", 12,
-            11 + s"${catalogAndNamespace}table_name".length))
-      }
+      checkErrorTableNotFound(exc, quoted,
+        ExpectedContext(s"${catalogAndNamespace}table_name", 12,
+          11 + s"${catalogAndNamespace}table_name".length))
     }
   }
 

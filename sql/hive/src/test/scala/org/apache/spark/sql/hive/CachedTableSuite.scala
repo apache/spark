@@ -106,15 +106,15 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   test("uncache of nonexistent tables") {
     // make sure table doesn't exist
     var e = intercept[AnalysisException](spark.table("nonexistentTable"))
-    checkErrorTableNotFoundOmitSearchPath(e, "`nonexistentTable`")
+    checkErrorTableNotFound(e, "`nonexistentTable`")
     e = intercept[AnalysisException] {
       uncacheTable("nonexistentTable")
     }
-    checkErrorTableNotFoundOmitSearchPath(e, "`nonexistentTable`")
+    checkErrorTableNotFound(e, "`nonexistentTable`")
      e = intercept[AnalysisException] {
       sql("UNCACHE TABLE nonexistentTable")
     }
-    checkErrorTableNotFoundOmitSearchPath(e, "`nonexistentTable`",
+    checkErrorTableNotFound(e, "`nonexistentTable`",
       ExpectedContext("nonexistentTable", 14, 13 + "nonexistentTable".length))
     sql("UNCACHE TABLE IF EXISTS nonexistentTable")
   }

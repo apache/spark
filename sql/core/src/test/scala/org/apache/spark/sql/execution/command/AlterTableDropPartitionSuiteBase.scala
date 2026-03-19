@@ -95,7 +95,7 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
       val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $t DROP PARTITION (a='4', b='9')")
       }
-      checkErrorTableNotFoundOmitSearchPath(e, parsed,
+      checkErrorTableNotFound(e, parsed,
         ExpectedContext(t, 12, 11 + t.length))
     }
   }

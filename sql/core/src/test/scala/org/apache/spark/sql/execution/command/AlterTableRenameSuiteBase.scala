@@ -50,7 +50,7 @@ trait AlterTableRenameSuiteBase extends QueryTest with DDLCommandTestUtils {
     val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalog.dbx.does_not_exist RENAME TO dbx.tab2")
     }
-    checkErrorTableNotFoundOmitSearchPath(e, s"`$catalog`.`dbx`.`does_not_exist`",
+    checkErrorTableNotFound(e, s"`$catalog`.`dbx`.`does_not_exist`",
       ExpectedContext(s"$catalog.dbx.does_not_exist", 12,
         11 + s"$catalog.dbx.does_not_exist".length))
   }
