@@ -34,11 +34,15 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 /**
  * Physical plan node for CREATE TABLE ... LIKE ... targeting a v2 catalog.
  *
- * Copies schema (columns) and partitioning from `sourceTable`. The following properties of the
- * source table are intentionally NOT copied (matching v1 behavior):
- *   - Table-level comments
- *   - Source table's TBLPROPERTIES (user-specified `properties` are used instead)
- *   - Statistics, owner, create time
+ * Calls [[TableCatalog.createTableLike]] so that connectors can implement format-specific copy
+ * semantics (e.g. Delta protocol inheritance, Iceberg sort order and format version). Connectors
+ * that do not override [[TableCatalog.createTableLike]] fall back to [[TableCatalog.createTable]]
+ * with only the schema and partitioning extracted from `sourceTable` by Spark.
+ *
+ * The [[TableInfo]] passed to [[TableCatalog.createTableLike]] contains user-specified overrides
+ * (TBLPROPERTIES, LOCATION), the resolved provider, and the current user as owner. Source
+ * TBLPROPERTIES and constraints are NOT bulk-copied; connectors can read them directly from
+ * [[sourceTable]].
  */
 case class CreateTableLikeExec(
     targetCatalog: TableCatalog,
@@ -95,18 +99,17 @@ case class CreateTableLikeExec(
           locationProp)
 
       try {
-        // Constraints are intentionally NOT copied: V1 tables have no constraint objects
-        // (CHECK/PRIMARY KEY/UNIQUE/FOREIGN KEY are V2-only, added in Spark 4.1.0);
-        // ForeignKey carries a catalog-specific Identifier that becomes stale cross-catalog;
-        // constraint names risk collisions in the target namespace; and NOT NULL is already
-        // captured in Column.nullable(). Use ALTER TABLE ADD CONSTRAINT after creation, or
-        // add an INCLUDING CONSTRAINTS clause in the future (following PostgreSQL semantics).
+        // The TableInfo passed to createTableLike contains user-specified overrides
+        // (TBLPROPERTIES, LOCATION), the resolved provider (from USING clause if specified,
+        // otherwise inherited from the source), and the current user as owner. Source
+        // TBLPROPERTIES are NOT bulk-copied; connectors that override createTableLike can
+        // read source metadata, including properties and constraints, directly from sourceTable.
         val tableInfo = new TableInfo.Builder()
           .withColumns(columns)
           .withPartitions(partitioning)
           .withProperties(finalProps.asJava)
           .build()
-        targetCatalog.createTable(targetIdent, tableInfo)
+        targetCatalog.createTableLike(targetIdent, tableInfo, sourceTable)
       } catch {
         case _: TableAlreadyExistsException if ifNotExists =>
           logWarning(

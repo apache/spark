@@ -296,6 +296,36 @@ public interface TableCatalog extends CatalogPlugin {
   }
 
   /**
+   * Create a table in the catalog by copying metadata from an existing source table.
+   * <p>
+   * This method is called for {@code CREATE TABLE ... LIKE ...} statements targeting this catalog.
+   * The {@code tableInfo} parameter contains only the explicit overrides provided by the user
+   * (TBLPROPERTIES, LOCATION, USING clause) — it does NOT contain properties copied from the
+   * source table. Connectors that want to copy source-format-specific metadata (e.g. Delta
+   * protocol version, Iceberg sort order, format version) should read it directly from
+   * {@code sourceTable}.
+   * <p>
+   * The default implementation falls back to {@link #createTable(Identifier, TableInfo)}, which
+   * creates a new table using only the schema and partitioning extracted from {@code sourceTable}
+   * by Spark, plus the user-specified overrides in {@code tableInfo}. Connectors with
+   * format-specific copy semantics should override this method.
+   *
+   * @param ident a table identifier for the new table
+   * @param tableInfo user-specified overrides (TBLPROPERTIES, LOCATION), resolved provider, and
+   *                  current user as owner; source TBLPROPERTIES are NOT bulk-copied
+   * @param sourceTable the resolved source table whose metadata is being copied
+   * @return metadata for the new table
+   *
+   * @throws TableAlreadyExistsException If a table or view already exists for the identifier
+   * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
+   * @since 4.2.0
+   */
+  default Table createTableLike(Identifier ident, TableInfo tableInfo, Table sourceTable)
+      throws TableAlreadyExistsException, NoSuchNamespaceException {
+    return createTable(ident, tableInfo);
+  }
+
+  /**
    * If true, mark all the fields of the query schema as nullable when executing
    * CREATE/REPLACE TABLE ... AS SELECT ... and creating the table.
    */
