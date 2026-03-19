@@ -36,7 +36,6 @@ import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.client.StreamCallbackWithID
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.{ExecutorDiskUtils, MergedBlockMeta}
-import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper
 import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID
 import org.apache.spark.storage._
@@ -200,7 +199,6 @@ private[spark] class IndexShuffleBlockResolver(
 
     if (checksumEnabled) {
       file = getChecksumFile(shuffleId, mapId, algorithm)
-      println("Deleting checksum file: " + file.getPath)
       if (file.exists() && !file.delete()) {
         logWarning(log"Error deleting checksum ${MDC(PATH, file.getPath())}")
       }
@@ -607,7 +605,7 @@ private[spark] class IndexShuffleBlockResolver(
       algorithm: String,
       dirs: Option[Array[String]] = None): File = {
     val blockId = ShuffleChecksumBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
-    val fileName = ShuffleChecksumHelper.getChecksumFileName(blockId.name, algorithm)
+    val fileName = blockId.name
     dirs
       .map(d =>
         new File(ExecutorDiskUtils.getFilePath(d, blockManager.subDirsPerLocalDir, fileName)))
