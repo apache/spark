@@ -220,6 +220,9 @@ Depending on your memory requirements, you can choose the format that best suits
 ### Reading state changes over microbatches
 
 If we want to understand the change of state store over microbatches instead of the whole state store at a particular microbatch, 'readChangeFeed' is the option to use.
+
+**Note:** Not all stateful operations are supported in the change feed. Certain operations, such as range deletions, cannot be represented as individual key-value change records and will result in an error. Refer to the error message for guidance on which operation is unsupported.
+
 For example, this is the code to read the change of state from batch 2 to the latest committed batch.
 
 <div class="codetabs">
@@ -277,7 +280,7 @@ The output schema will also be different from the normal output.
 <tr>
   <td>change_type</td>
   <td>string</td>
-  <td>There are two possible values: 'update' and 'delete'. Update represents either inserting a non-existing key-value pair or updating an existing key with new value. The 'value' field will be null for delete records. Note that range deletion operations (deleteRange) are not supported in the change feed and will throw an UnsupportedOperationException if encountered.</td>
+  <td>There are two possible values: 'update' and 'delete'. Update represents either inserting a non-existing key-value pair or updating an existing key with new value. The 'value' field will be null for delete records.</td>
 </tr>
 <tr>
   <td>key</td>
