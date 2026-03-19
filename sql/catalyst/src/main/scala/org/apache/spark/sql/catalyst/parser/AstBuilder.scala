@@ -76,13 +76,13 @@ class AstBuilder extends DataTypeAstBuilder
       expression(exprCtx) match {
         case Literal(value, _: StringType) if value != null =>
           val parts = parseMultipartIdentifier(value.toString)
-          withOrigin(ctx) { builder(parts) }
+          builder(parts)
         case expr =>
           PlanWithUnresolvedIdentifier(withOrigin(exprCtx) { expr }, Nil,
             (ident, _) => builder(ident))
       }
     } else {
-      withOrigin(ctx) { builder.apply(visitMultipartIdentifier(ctx.multipartIdentifier)) }
+      builder.apply(visitMultipartIdentifier(ctx.multipartIdentifier))
     }
   }
 
