@@ -108,7 +108,8 @@ private[spark] object ArrowFileReadWrite {
     val reader = new SparkArrowFileReader(path)
     try {
       val schema = ArrowUtils.fromArrowSchema(reader.schema)
-      ArrowConverters.toDataFrame(reader.read(), schema, spark, "UTC", true, false)
+      val batches = reader.read().toArray // materialize before reader.close() in finally
+      ArrowConverters.toDataFrame(batches.iterator, schema, spark, "UTC", true, false)
     } finally {
       reader.close()
     }
