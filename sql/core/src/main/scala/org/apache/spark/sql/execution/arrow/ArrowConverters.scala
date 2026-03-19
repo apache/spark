@@ -361,13 +361,8 @@ private[sql] object ArrowConverters extends Logging {
       rowIterator.next()
     }
 
-    private var closed = false
-
     override def close(): Unit = {
-      if (!closed) {
-        closed = true
-        closeAll(reader, allocator)
-      }
+      closeAll(reader, allocator)
     }
   }
 
