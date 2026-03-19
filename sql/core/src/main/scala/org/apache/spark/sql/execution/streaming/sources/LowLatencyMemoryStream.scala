@@ -75,7 +75,7 @@ class LowLatencyMemoryStream[A: Encoder](
   @GuardedBy("this")
   private val records =
     Seq.fill(numPartitions)(new ListBuffer[(UnsafeRow, Long)]())
-  
+
   @GuardedBy("this")
   private var numRecords: Long = 0L
 
