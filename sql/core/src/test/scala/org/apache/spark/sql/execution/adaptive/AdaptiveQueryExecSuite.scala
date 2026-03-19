@@ -709,6 +709,10 @@ class AdaptiveQueryExecSuite
           sql("SELECT a FROM testData2").queryExecution.sparkPlan)
       val innerStage =
         BroadcastQueryStageExec(1, innerBroadcastPlan, innerBroadcastPlan.canonicalized)
+      val equivalentInnerBroadcastPlan =
+        BroadcastExchangeExec(IdentityBroadcastMode, qe.sparkPlan)
+      val equivalentInnerStage = BroadcastQueryStageExec(
+        2, equivalentInnerBroadcastPlan, equivalentInnerBroadcastPlan.canonicalized)
       val shouldFallbackToShuffleJoin =
         PrivateMethod[Boolean](Symbol("shouldFallbackToShuffleJoin"))
 
@@ -724,10 +728,12 @@ class AdaptiveQueryExecSuite
       assert(regularSubqueryAdaptivePlan.invokePrivate(shouldFallbackToShuffleJoin(
         stage,
         QueryExecutionErrors.cannotBroadcastTableOverMaxTableRowsError(1, 2))))
-      assert(!broadcastSubqueryAdaptivePlan.invokePrivate(shouldFallbackToShuffleJoin(
+      // `stage` is a synthetic stage instance, not the stage currently at the plan root.
+      // Only the actual root stage instance is exempt from fallback.
+      assert(broadcastSubqueryAdaptivePlan.invokePrivate(shouldFallbackToShuffleJoin(
         stage,
         QueryExecutionErrors.cannotBroadcastTableOverMaxTableBytesError(1, 2))))
-      assert(!broadcastSubqueryAdaptivePlan.invokePrivate(shouldFallbackToShuffleJoin(
+      assert(broadcastSubqueryAdaptivePlan.invokePrivate(shouldFallbackToShuffleJoin(
         stage,
         QueryExecutionErrors.cannotBroadcastTableOverMaxTableRowsError(1, 2))))
       assert(broadcastSubqueryAdaptivePlan.invokePrivate(shouldFallbackToShuffleJoin(
@@ -735,6 +741,12 @@ class AdaptiveQueryExecSuite
         QueryExecutionErrors.cannotBroadcastTableOverMaxTableBytesError(1, 2))))
       assert(broadcastSubqueryAdaptivePlan.invokePrivate(shouldFallbackToShuffleJoin(
         innerStage,
+        QueryExecutionErrors.cannotBroadcastTableOverMaxTableRowsError(1, 2))))
+      assert(broadcastSubqueryAdaptivePlan.invokePrivate(shouldFallbackToShuffleJoin(
+        equivalentInnerStage,
+        QueryExecutionErrors.cannotBroadcastTableOverMaxTableBytesError(1, 2))))
+      assert(broadcastSubqueryAdaptivePlan.invokePrivate(shouldFallbackToShuffleJoin(
+        equivalentInnerStage,
         QueryExecutionErrors.cannotBroadcastTableOverMaxTableRowsError(1, 2))))
     }
   }
