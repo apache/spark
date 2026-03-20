@@ -1389,11 +1389,9 @@ class CatalogSuite extends SparkFunSuite {
     catalog.createTable(srcIdent, columns, emptyTrans, srcProps)
     val sourceTable = catalog.loadTable(srcIdent)
 
-    // tableInfo contains only user overrides
+    // tableInfo contains only user overrides; schema and partitioning come from sourceTable
     val overrides = Map("user.key" -> "user.value").asJava
     val tableInfo = new TableInfo.Builder()
-      .withColumns(columns)
-      .withPartitions(emptyTrans)
       .withProperties(overrides)
       .build()
     catalog.createTableLike(dstIdent, tableInfo, sourceTable)
@@ -1412,10 +1410,8 @@ class CatalogSuite extends SparkFunSuite {
     catalog.createTable(srcIdent, columns, emptyTrans, srcProps)
     val sourceTable = catalog.loadTable(srcIdent)
 
-    // tableInfo contains no overrides; connector should copy from sourceTable
+    // tableInfo contains no overrides; connector reads schema and properties from sourceTable
     val tableInfo = new TableInfo.Builder()
-      .withColumns(columns)
-      .withPartitions(emptyTrans)
       .withProperties(emptyProps)
       .build()
     catalog.createTableLike(dstIdent, tableInfo, sourceTable)
@@ -1439,8 +1435,6 @@ class CatalogSuite extends SparkFunSuite {
     // user explicitly overrides format.version
     val overrides = Map("format.version" -> "2").asJava
     val tableInfo = new TableInfo.Builder()
-      .withColumns(columns)
-      .withPartitions(emptyTrans)
       .withProperties(overrides)
       .build()
     catalog.createTableLike(dstIdent, tableInfo, sourceTable)
@@ -1467,8 +1461,6 @@ class CatalogSuite extends SparkFunSuite {
     val sourceTable = catalog.loadTable(srcIdent)
 
     val tableInfo = new TableInfo.Builder()
-      .withColumns(columns)
-      .withPartitions(emptyTrans)
       .withProperties(emptyProps)
       .build()
     catalog.createTableLike(dstIdent, tableInfo, sourceTable)
@@ -1478,31 +1470,29 @@ class CatalogSuite extends SparkFunSuite {
       "connector should copy source constraints from sourceTable.constraints()")
   }
 
-  test("createTableLike: default implementation falls back to createTable with tableInfo only") {
-    // BasicInMemoryTableCatalog does not override createTableLike, so it uses the default
-    // implementation which calls createTable(ident, tableInfo); source properties are NOT copied.
+  test("createTableLike: catalog without createTableLike override throws " +
+      "UnsupportedOperationException") {
+    // BasicInMemoryTableCatalog does not override createTableLike. The default implementation
+    // throws UnsupportedOperationException to signal that connectors must explicitly implement
+    // CREATE TABLE LIKE support.
     val catalog = new BasicInMemoryTableCatalog
     catalog.initialize("basic", CaseInsensitiveStringMap.empty())
 
     val srcIdent = Identifier.of(Array("ns"), "src")
     val dstIdent = Identifier.of(Array("ns"), "dst")
 
-    val srcProps = Map("source.key" -> "source.value").asJava
-    catalog.createTable(srcIdent, columns, emptyTrans, srcProps)
+    catalog.createTable(srcIdent, columns, emptyTrans, Map.empty[String, String].asJava)
     val sourceTable = catalog.loadTable(srcIdent)
 
-    val overrides = Map("user.key" -> "user.value").asJava
     val tableInfo = new TableInfo.Builder()
-      .withColumns(columns)
-      .withPartitions(emptyTrans)
-      .withProperties(overrides)
+      .withProperties(Map.empty[String, String].asJava)
       .build()
-    catalog.createTableLike(dstIdent, tableInfo, sourceTable)
-
-    val dst = catalog.loadTable(dstIdent)
-    assert(dst.properties.asScala("user.key") == "user.value",
-      "user-specified properties should be present")
-    assert(!dst.properties.containsKey("source.key"),
-      "default createTableLike does not copy source properties; connector must override to do so")
+    val ex = intercept[UnsupportedOperationException] {
+      catalog.createTableLike(dstIdent, tableInfo, sourceTable)
+    }
+    assert(ex.getMessage.contains("basic"),
+      "Exception should mention the catalog name")
+    assert(ex.getMessage.contains("CREATE TABLE LIKE"),
+      "Exception should mention the unsupported operation")
   }
 }

@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, Table, TableCatalog, TableInfo, V1Table}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -36,13 +35,13 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  *
  * Calls [[TableCatalog.createTableLike]] so that connectors can implement format-specific copy
  * semantics (e.g. Delta protocol inheritance, Iceberg sort order and format version). Connectors
- * that do not override [[TableCatalog.createTableLike]] fall back to [[TableCatalog.createTable]]
- * with only the schema and partitioning extracted from `sourceTable` by Spark.
+ * must override [[TableCatalog.createTableLike]]; the default implementation throws
+ * [[UnsupportedOperationException]].
  *
- * The [[TableInfo]] passed to [[TableCatalog.createTableLike]] contains user-specified overrides
- * (TBLPROPERTIES, LOCATION), the resolved provider, and the current user as owner. Source
- * TBLPROPERTIES and constraints are NOT bulk-copied; connectors can read them directly from
- * [[sourceTable]].
+ * The [[TableInfo]] passed to [[TableCatalog.createTableLike]] contains only user-specified
+ * overrides (TBLPROPERTIES, LOCATION), the resolved provider, and the current user as owner.
+ * Schema, partitioning, source TBLPROPERTIES, and constraints are NOT pre-populated; connectors
+ * read all source metadata directly from [[sourceTable]].
  */
 case class CreateTableLikeExec(
     targetCatalog: TableCatalog,
@@ -57,24 +56,10 @@ case class CreateTableLikeExec(
 
   override protected def run(): Seq[InternalRow] = {
     if (!targetCatalog.tableExists(targetIdent)) {
-      // 1. Extract columns from source. For V1Table sources use the raw schema so that
-      //    CHAR/VARCHAR types are preserved as declared (without internal metadata expansion).
-      val columns = sourceTable match {
-        case v1: V1Table =>
-          val rawSchema = CharVarcharUtils.getRawSchema(v1.catalogTable.schema)
-          CatalogV2Util.structTypeToV2Columns(rawSchema)
-        case _ =>
-          sourceTable.columns()
-      }
-
-      // 2. Extract partitioning from source (includes both partition columns and bucket spec
-      //    for V1Table, as V1Table.partitioning encodes both).
-      val partitioning = sourceTable.partitioning
-
-      // 3. Resolve provider: USING clause overrides, else copy from source.
-      //    The source provider is inherited so that the target table uses the same format,
-      //    matching V1 CreateTableLikeCommand behavior. Whether the target catalog validates
-      //    or uses this property is catalog-specific (e.g. V2SessionCatalog validates it).
+      // Resolve provider: USING clause overrides, else inherit from source.
+      // The source provider is inherited so that the target uses the same format,
+      // matching V1 CreateTableLikeCommand behavior. Whether the target catalog validates
+      // or uses this property is catalog-specific (e.g. V2SessionCatalog validates it).
       val resolvedProvider = provider.orElse {
         sourceTable match {
           case v1: V1Table if v1.catalogTable.tableType == CatalogTableType.VIEW =>
@@ -88,8 +73,9 @@ case class CreateTableLikeExec(
         }
       }
 
-      // 4. Build final properties. User-specified TBLPROPERTIES are used as-is; source table
-      //    properties are NOT copied. Provider, location, and owner are added if applicable.
+      // Build overrides-only properties: user TBLPROPERTIES, resolved provider, location, owner.
+      // Schema, partitioning, source TBLPROPERTIES, and constraints are NOT included here;
+      // connectors read them directly from sourceTable.
       val locationProp: Option[(String, String)] =
         location.map(uri => TableCatalog.PROP_LOCATION -> CatalogUtils.URIToString(uri))
 
@@ -99,14 +85,7 @@ case class CreateTableLikeExec(
           locationProp)
 
       try {
-        // The TableInfo passed to createTableLike contains user-specified overrides
-        // (TBLPROPERTIES, LOCATION), the resolved provider (from USING clause if specified,
-        // otherwise inherited from the source), and the current user as owner. Source
-        // TBLPROPERTIES are NOT bulk-copied; connectors that override createTableLike can
-        // read source metadata, including properties and constraints, directly from sourceTable.
         val tableInfo = new TableInfo.Builder()
-          .withColumns(columns)
-          .withPartitions(partitioning)
           .withProperties(finalProps.asJava)
           .build()
         targetCatalog.createTableLike(targetIdent, tableInfo, sourceTable)

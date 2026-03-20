@@ -242,11 +242,11 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
       ident: Identifier,
       tableInfo: TableInfo,
       sourceTable: Table): Table = {
-    // Format-specific behavior: merge source properties with user overrides, with user overrides
-    // taking precedence. Copy source constraints from sourceTable directly. This demonstrates
-    // how a connector uses sourceTable to access source-format-specific metadata.
+    // Format-specific behavior: read schema and partitioning from sourceTable, merge source
+    // properties with user overrides (user overrides win), and copy source constraints.
+    // This demonstrates how a connector accesses all source metadata from sourceTable.
     val mergedProps = (sourceTable.properties().asScala ++ tableInfo.properties().asScala).asJava
-    createTable(ident, tableInfo.columns(), tableInfo.partitions(), mergedProps,
+    createTable(ident, sourceTable.columns(), sourceTable.partitioning(), mergedProps,
       Distributions.unspecified(), Array.empty, None, None, sourceTable.constraints())
   }
 

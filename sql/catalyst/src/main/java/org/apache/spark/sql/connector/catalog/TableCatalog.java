@@ -300,29 +300,32 @@ public interface TableCatalog extends CatalogPlugin {
    * <p>
    * This method is called for {@code CREATE TABLE ... LIKE ...} statements targeting this catalog.
    * The {@code tableInfo} parameter contains only the explicit overrides provided by the user
-   * (TBLPROPERTIES, LOCATION, USING clause) — it does NOT contain properties copied from the
-   * source table. Connectors that want to copy source-format-specific metadata (e.g. Delta
-   * protocol version, Iceberg sort order, format version) should read it directly from
-   * {@code sourceTable}.
+   * (TBLPROPERTIES, LOCATION, USING clause), the resolved provider, and the current user as owner.
+   * It does NOT contain schema, partitioning, properties, or constraints from the source table.
+   * Connectors must read all source metadata directly from {@code sourceTable}, including
+   * columns ({@link Table#columns()}), partitioning ({@link Table#partitioning()}),
+   * constraints ({@link Table#constraints()}), and format-specific properties
+   * ({@link Table#properties()}).
    * <p>
-   * The default implementation falls back to {@link #createTable(Identifier, TableInfo)}, which
-   * creates a new table using only the schema and partitioning extracted from {@code sourceTable}
-   * by Spark, plus the user-specified overrides in {@code tableInfo}. Connectors with
-   * format-specific copy semantics should override this method.
+   * There is no default implementation. Connectors that support {@code CREATE TABLE ... LIKE ...}
+   * must override this method. Connectors that do not override it will throw
+   * {@link UnsupportedOperationException} when the command is issued against their catalog.
    *
    * @param ident a table identifier for the new table
-   * @param tableInfo user-specified overrides (TBLPROPERTIES, LOCATION), resolved provider, and
-   *                  current user as owner; source TBLPROPERTIES are NOT bulk-copied
-   * @param sourceTable the resolved source table whose metadata is being copied
+   * @param tableInfo user-specified overrides only: TBLPROPERTIES, LOCATION, resolved provider,
+   *                  and owner; source schema, partitioning, and constraints are NOT included
+   * @param sourceTable the resolved source table; connectors read schema, partitioning,
+   *                    constraints, properties, and any format-specific metadata from this object
    * @return metadata for the new table
    *
    * @throws TableAlreadyExistsException If a table or view already exists for the identifier
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
+   * @throws UnsupportedOperationException If the catalog does not support CREATE TABLE LIKE
    * @since 4.2.0
    */
   default Table createTableLike(Identifier ident, TableInfo tableInfo, Table sourceTable)
       throws TableAlreadyExistsException, NoSuchNamespaceException {
-    return createTable(ident, tableInfo);
+    throw new UnsupportedOperationException(name() + " does not support CREATE TABLE LIKE");
   }
 
   /**
