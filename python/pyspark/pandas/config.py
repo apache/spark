@@ -18,6 +18,7 @@
 """
 Infrastructure of options for pandas-on-Spark.
 """
+
 from contextlib import contextmanager
 import json
 from typing import Any, Callable, Dict, Iterator, List, Tuple, Union, Optional
@@ -25,7 +26,6 @@ from typing import Any, Callable, Dict, Iterator, List, Tuple, Union, Optional
 from pyspark._globals import _NoValue, _NoValueType
 from pyspark.sql.session import SparkSession
 from pyspark.pandas.utils import default_session
-
 
 __all__ = ["get_option", "set_option", "reset_option", "options", "option_context"]
 
@@ -571,7 +571,7 @@ def _test() -> None:
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.config tests").getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.config,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

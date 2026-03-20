@@ -266,7 +266,7 @@ def context_provider() -> dict[str, str]:
 
 @contextmanager
 def capture_outputs(
-    context_provider: Callable[[], dict[str, str]] = context_provider
+    context_provider: Callable[[], dict[str, str]] = context_provider,
 ) -> Generator[None, None, None]:
     if "PYSPARK_SPARK_SESSION_UUID" in os.environ:
         marker: str = "PYTHON_WORKER_LOGGING"

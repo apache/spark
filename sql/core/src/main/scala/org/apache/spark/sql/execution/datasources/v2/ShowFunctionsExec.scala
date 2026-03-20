@@ -46,14 +46,15 @@ case class ShowFunctionsExec(
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
     val systemFunctions = if (systemScope) {
-      // All built-in functions, and operators such as "<>", "||"
+      // All built-in functions (display as simple names for backward compatibility), and operators
       val builtinFunctions = FunctionRegistry.functionSet ++ TableFunctionRegistry.functionSet
-      applyPattern(builtinFunctions.map(_.unquotedString).toSeq ++
+      applyPattern(builtinFunctions.map(_.displayNameForShowFunctions).toSeq ++
         FunctionRegistry.builtinOperators.keys.toSeq)
     } else Seq.empty
     val userFunctions = if (userScope) {
-      // List all temporary functions in the session catalog
-      applyPattern(session.sessionState.catalog.listTemporaryFunctions().map(_.unquotedString)) ++
+      // List all temporary functions in the session catalog (display as simple names)
+      applyPattern(session.sessionState.catalog.listTemporaryFunctions()
+        .map(_.displayNameForShowFunctions)) ++
         // List all functions registered in the given namespace of the catalog
         applyPattern(catalog.listFunctions(namespace.toArray).map(_.name()).toImmutableArraySeq)
           .map { funcName =>

@@ -611,6 +611,10 @@ object KeyStateEncoderSpec {
       case "PrefixKeyScanStateEncoderSpec" =>
         val numColsPrefixKey = m("numColsPrefixKey").asInstanceOf[BigInt].toInt
         PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey)
+      case "TimestampAsPostfixKeyStateEncoderSpec" =>
+        TimestampAsPostfixKeyStateEncoderSpec(keySchema)
+      case "TimestampAsPrefixKeyStateEncoderSpec" =>
+        TimestampAsPrefixKeyStateEncoderSpec(keySchema)
     }
   }
 }
@@ -669,7 +673,10 @@ case class RangeKeyScanStateEncoderSpec(
   }
 }
 
-/** The encoder specification for [[TimestampAsPrefixKeyStateEncoder]]. */
+/**
+ * The encoder specification for [[TimestampAsPrefixKeyStateEncoder]].
+ * The encoder expects the provided key schema to have [original key fields..., timestamp field].
+ */
 case class TimestampAsPrefixKeyStateEncoderSpec(keySchema: StructType)
   extends KeyStateEncoderSpec {
 
@@ -684,7 +691,10 @@ case class TimestampAsPrefixKeyStateEncoderSpec(keySchema: StructType)
   }
 }
 
-/** The encoder specification for [[TimestampAsPostfixKeyStateEncoder]]. */
+/**
+ * The encoder specification for [[TimestampAsPostfixKeyStateEncoder]].
+ * The encoder expects the provided key schema to have [original key fields..., timestamp field].
+ */
 case class TimestampAsPostfixKeyStateEncoderSpec(keySchema: StructType)
   extends KeyStateEncoderSpec {
 

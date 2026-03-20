@@ -51,8 +51,11 @@ import org.apache.spark.sql.execution.streaming.runtime.SerializedOffset
  *   1:{3}     // sourceId:offset
  *   ...
  */
-class OffsetSeqLog(sparkSession: SparkSession, path: String)
-  extends HDFSMetadataLog[OffsetSeqBase](sparkSession, path) {
+class OffsetSeqLog(
+    sparkSession: SparkSession,
+    path: String,
+    readOnly: Boolean = false)
+  extends HDFSMetadataLog[OffsetSeqBase](sparkSession, path, readOnly) {
 
   override protected def deserialize(in: InputStream): OffsetSeqBase = {
     // called inside a try-finally where the underlying stream is closed in the caller

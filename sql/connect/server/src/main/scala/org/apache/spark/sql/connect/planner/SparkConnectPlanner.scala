@@ -43,7 +43,7 @@ import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{AnalysisException, Column, Encoders, ForeachWriter, Row}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, InternalRow, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedOrdinal, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
+import org.apache.spark.sql.catalyst.analysis.{ChangelogInfoUtils, FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, RelationChanges, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedOrdinal, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.expressions._
@@ -148,6 +148,8 @@ class SparkConnectPlanner(
         case proto.Relation.RelTypeCase.SHOW_STRING => transformShowString(rel.getShowString)
         case proto.Relation.RelTypeCase.HTML_STRING => transformHtmlString(rel.getHtmlString)
         case proto.Relation.RelTypeCase.READ => transformReadRel(rel.getRead)
+        case proto.Relation.RelTypeCase.RELATION_CHANGES =>
+          transformRelationChanges(rel.getRelationChanges)
         case proto.Relation.RelTypeCase.PROJECT => transformProject(rel.getProject)
         case proto.Relation.RelTypeCase.FILTER => transformFilter(rel.getFilter)
         case proto.Relation.RelTypeCase.LIMIT => transformLimit(rel.getLimit)
@@ -1713,6 +1715,16 @@ class SparkConnectPlanner(
       case other =>
         throw InvalidInputErrors.invalidOneOfField(other, rel.getDescriptorForType)
     }
+  }
+
+  private def transformRelationChanges(rel: proto.RelationChanges): LogicalPlan = {
+    val tableName = rel.getUnparsedIdentifier
+    val options = new CaseInsensitiveStringMap(rel.getOptionsMap)
+    val timeZone = session.sessionState.conf.sessionLocalTimeZone
+    val changelogInfo = ChangelogInfoUtils.fromOptions(options, timeZone)
+    val ident = parser.parseMultipartIdentifier(tableName)
+    val relation = UnresolvedRelation(ident, options, isStreaming = rel.getIsStreaming)
+    RelationChanges(relation, changelogInfo)
   }
 
   private def transformParse(rel: proto.Parse): LogicalPlan = {
