@@ -365,6 +365,32 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       Row(Row(1, "haa")) :: Nil)
   }
 
+  test("from_json with NULL in options map values") {
+    val df = Seq("""{"str": "World"}""").toDS()
+    val schema = "str STRING"
+
+    checkAnswer(
+      df.selectExpr(
+        s"from_json(value, '$schema', map('key', 'value', 'mode', NULL))"
+      ),
+      Row(Row("World")) :: Nil
+    )
+  }
+
+  test("from_json with NULL in options map key") {
+    val df = Seq("""{"str": "World"}""").toDS()
+    val schema = "str STRING"
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        df.selectExpr(
+          s"from_json(value, '$schema', map('mode', 'PERMISSIVE', NULL, 'value'))"
+        ).show()
+      },
+      condition = "NULL_MAP_KEY"
+    )
+  }
+
   test("to_json - struct") {
     val df = Seq(Tuple1(Tuple1(1))).toDF("a")
 

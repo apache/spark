@@ -1585,7 +1585,7 @@ class RandomForestRegressor(
         return self._set(minWeightFractionPerNode=value)
 
 
-class RandomForestRegressionModel(
+class RandomForestRegressionModel(  # type: ignore[misc]
     _JavaRegressionModel[Vector],
     _TreeEnsembleModel,
     _RandomForestRegressorParams,
@@ -2180,7 +2180,7 @@ class AFTSurvivalRegression(
             0.9,
             0.95,
             0.99,
-        ],  # noqa: B005
+        ],
         quantilesCol: Optional[str] = None,
         aggregationDepth: int = 2,
         maxBlockSizeInMB: float = 0.0,
@@ -2220,7 +2220,7 @@ class AFTSurvivalRegression(
             0.9,
             0.95,
             0.99,
-        ],  # noqa: B005
+        ],
         quantilesCol: Optional[str] = None,
         aggregationDepth: int = 2,
         maxBlockSizeInMB: float = 0.0,
@@ -3329,7 +3329,7 @@ if __name__ == "__main__":
     temp_path = tempfile.mkdtemp()
     globs["temp_path"] = temp_path
     try:
-        (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+        failure_count, test_count = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
         spark.stop()
     finally:
         from shutil import rmtree

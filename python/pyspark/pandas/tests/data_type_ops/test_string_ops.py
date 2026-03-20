@@ -241,7 +241,7 @@ class StringOpsTests(
 @unittest.skipIf(
     not extension_object_dtypes_available, "pandas extension object dtypes are not available"
 )
-class StringExtensionOpsTest(StringOpsTests):
+class StringExtensionOpsTestsMixin:
     @property
     def pser(self):
         return pd.Series(["x", "y", "z", None], dtype="string")
@@ -340,6 +340,14 @@ class StringExtensionOpsTest(StringOpsTests):
                 self.pser >= self.other_pser, (self.psser >= self.other_psser).sort_index()
             )
             self.check_extension(self.pser >= self.pser, (self.psser >= self.psser).sort_index())
+
+
+class StringExtensionOpsTests(
+    StringExtensionOpsTestsMixin,
+    OpsTestBase,
+    PandasOnSparkTestCase,
+):
+    pass
 
 
 if __name__ == "__main__":

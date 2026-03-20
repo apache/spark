@@ -37,8 +37,8 @@ jobs:
       hadoop: hadoop3
       envs: >-
         {
-          "PYSPARK_IMAGE_TO_TEST": "python-311",
-          "PYTHON_TO_TEST": "python3.11",
+          "PYSPARK_IMAGE_TO_TEST": "python-312",
+          "PYTHON_TO_TEST": "python3.12",
           "PYSPARK_UDS_MODE": "true",
         }
       jobs: >-

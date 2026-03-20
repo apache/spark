@@ -19,8 +19,6 @@ package org.apache.spark.util
 
 import java.io.NotSerializableException
 
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.{SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.serializer.SerializerInstance
 
@@ -28,7 +26,7 @@ import org.apache.spark.serializer.SerializerInstance
  * Another test suite for the closure cleaner that is finer-grained.
  * For tests involving end-to-end Spark jobs, see {{ClosureCleanerSuite}}.
  */
-class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll {
+class ClosureCleanerSuite2 extends SparkFunSuite {
 
   // Start a SparkContext so that the closure serializer is accessible
   // We do not actually use this explicitly otherwise
@@ -96,13 +94,14 @@ class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll {
     // If the resulting closure is not serializable even after
     // cleaning, we expect ClosureCleaner to throw a SparkException
     if (serializableAfter) {
-      SparkClosureCleaner.clean(closure, checkSerializable = true, transitive)
+      val cleanedClosure = SparkClosureCleaner.clean(closure, checkSerializable = true, transitive)
+      assertSerializable(cleanedClosure, serializableAfter)
     } else {
       intercept[SparkException] {
         SparkClosureCleaner.clean(closure, checkSerializable = true, transitive)
       }
+      assertSerializable(closure, serializableAfter)
     }
-    assertSerializable(closure, serializableAfter)
   }
 
   test("clean basic serializable closures") {

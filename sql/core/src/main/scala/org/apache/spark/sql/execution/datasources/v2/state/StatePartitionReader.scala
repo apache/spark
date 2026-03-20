@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
+import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorsUtils, StatePartitionKeyExtractorFactory}
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.SymmetricHashJoinStateManager
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.{StateStoreColumnFamilySchemaUtils, StateVariableType, TransformWithStateVariableInfo}
 import org.apache.spark.sql.execution.streaming.state._
@@ -38,7 +39,9 @@ import org.apache.spark.util.{NextIterator, SerializableConfiguration}
  */
 case class AllColumnFamiliesReaderInfo(
     colFamilySchemas: Set[StateStoreColFamilySchema] = Set.empty,
-    stateVariableInfos: List[TransformWithStateVariableInfo] = List.empty)
+    stateVariableInfos: List[TransformWithStateVariableInfo] = List.empty,
+    operatorName: String,
+    stateFormatVersion: Option[Int] = None)
 
 /**
  * An implementation of [[PartitionReaderFactory]] for State data source. This is used to support
@@ -285,6 +288,44 @@ class StatePartitionAllColumnFamiliesReader(
 
   private val stateStoreColFamilySchemas = allColumnFamiliesReaderInfo.colFamilySchemas
   private val stateVariableInfos = allColumnFamiliesReaderInfo.stateVariableInfos
+  private val operatorName = allColumnFamiliesReaderInfo.operatorName
+  private val stateFormatVersion = allColumnFamiliesReaderInfo.stateFormatVersion
+
+  private def isTWSOperator(operatorName: String): Boolean = {
+    StatefulOperatorsUtils.TRANSFORM_WITH_STATE_OP_NAMES.contains(operatorName)
+  }
+
+  private def isDefaultColFamilyInTWS(operatorName: String, colFamilyName: String): Boolean = {
+    isTWSOperator(operatorName) && colFamilyName == StateStore.DEFAULT_COL_FAMILY_NAME
+  }
+
+  // Using the heuristic that all operators that enable column families
+  // have a non-default column family
+  private lazy val useColumnFamilies: Boolean = {
+    stateStoreColFamilySchemas.exists(_.colFamilyName != StateStore.DEFAULT_COL_FAMILY_NAME)
+  }
+
+  // Create extractors for each column family - each column family may have different key schema
+  private lazy val cfPartitionKeyExtractors: Map[String, StatePartitionKeyExtractor] = {
+
+    stateStoreColFamilySchemas
+      // Filter out default column family for TWS operators because they are not in use
+      // and will not have a key extractor
+      .filter(schema => !isDefaultColFamilyInTWS(operatorName, schema.colFamilyName))
+      .map { cfSchema =>
+        val stateVariableInfoOpt = stateVariableInfos.find(
+          _.stateName == StateStoreColumnFamilySchemaUtils.getBaseStateName(
+            cfSchema.colFamilyName))
+        val extractor = StatePartitionKeyExtractorFactory.create(
+          operatorName,
+          cfSchema.keySchema,
+          partition.sourceOptions.storeName,
+          cfSchema.colFamilyName,
+          stateFormatVersion,
+          stateVariableInfoOpt)
+        cfSchema.colFamilyName -> extractor
+      }.toMap
+  }
 
   private def isListType(colFamilyName: String): Boolean = {
     SchemaUtil.checkVariableType(
@@ -296,7 +337,6 @@ class StatePartitionAllColumnFamiliesReader(
     val stateStoreId = StateStoreId(partition.sourceOptions.stateCheckpointLocation.toString,
       partition.sourceOptions.operatorId, partition.partition, partition.sourceOptions.storeName)
     val stateStoreProviderId = StateStoreProviderId(stateStoreId, partition.queryId)
-    val useColumnFamilies = stateStoreColFamilySchemas.size > 1
     StateStoreProvider.createAndInit(
       stateStoreProviderId, keySchema, valueSchema, keyStateEncoderSpec,
       useColumnFamilies, storeConf, hadoopConf.value,
@@ -338,7 +378,7 @@ class StatePartitionAllColumnFamiliesReader(
     )
 
     // Register all column families from the schema
-    if (stateStoreColFamilySchemas.size > 1) {
+    if (useColumnFamilies) {
       checkAllColFamiliesExist(stateStoreColFamilySchemas.map(_.colFamilyName).toList, stateStore)
       stateStoreColFamilySchemas.foreach { cfSchema =>
         cfSchema.colFamilyName match {
@@ -364,21 +404,27 @@ class StatePartitionAllColumnFamiliesReader(
 
   override lazy val iter: Iterator[InternalRow] = {
     // Iterate all column families and concatenate results
-    stateStoreColFamilySchemas.iterator.flatMap { cfSchema =>
-      if (isListType(cfSchema.colFamilyName)) {
-        store.iterator(cfSchema.colFamilyName).flatMap(
-          pair =>
-            store.valuesIterator(pair.key, cfSchema.colFamilyName).map {
-              value =>
-                SchemaUtil.unifyStateRowPairAsRawBytes((pair.key, value), cfSchema.colFamilyName)
-            }
-        )
-      } else {
-        store.iterator(cfSchema.colFamilyName).map { pair =>
-          SchemaUtil.unifyStateRowPairAsRawBytes(
-            (pair.key, pair.value), cfSchema.colFamilyName)
+    stateStoreColFamilySchemas.iterator
+      // Filter out default column family for TWS operators because they are not in use
+      // and will not have data
+      .filter(schema => !isDefaultColFamilyInTWS(operatorName, schema.colFamilyName))
+      .flatMap { cfSchema =>
+        val extractor = cfPartitionKeyExtractors(cfSchema.colFamilyName)
+        if (isListType(cfSchema.colFamilyName)) {
+          store.iterator(cfSchema.colFamilyName).flatMap(
+            pair =>
+              store.valuesIterator(pair.key, cfSchema.colFamilyName).map {
+                value =>
+                  SchemaUtil.unifyStateRowPairAsRawBytes(
+                    (pair.key, value), cfSchema.colFamilyName, extractor)
+              }
+          )
+        } else {
+          store.iterator(cfSchema.colFamilyName).map { pair =>
+            SchemaUtil.unifyStateRowPairAsRawBytes(
+              (pair.key, pair.value), cfSchema.colFamilyName, extractor)
+          }
         }
-      }
     }
   }
 

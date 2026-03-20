@@ -112,47 +112,36 @@ class ContinuousMemoryStream[A : Encoder](
   override def commit(end: Offset): Unit = {}
 }
 
-object ContinuousMemoryStream extends LowPriorityContinuousMemoryStreamImplicits {
+object ContinuousMemoryStream {
   protected val memoryStreamId = new AtomicInteger(0)
 
-  def apply[A : Encoder](implicit sparkSession: SparkSession): ContinuousMemoryStream[A] =
-    new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession)
-
-  def apply[A : Encoder](numPartitions: Int)(implicit sparkSession: SparkSession):
-  ContinuousMemoryStream[A] =
-    new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession, numPartitions)
-
-  def singlePartition[A : Encoder](implicit sparkSession: SparkSession): ContinuousMemoryStream[A] =
-    new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession, 1)
-}
-
-/**
- * Provides lower-priority implicits for ContinuousMemoryStream to prevent ambiguity when both
- * SparkSession and SQLContext are in scope. The implicits in the companion object,
- * which use SparkSession, take higher precedence.
- */
-trait LowPriorityContinuousMemoryStreamImplicits {
-  this: ContinuousMemoryStream.type =>
-
-  // Deprecated: Used when an implicit SQLContext is in scope
-  @deprecated("Use ContinuousMemoryStream with an implicit SparkSession " +
-    "instead of SQLContext", "4.1.0")
-  def apply[A: Encoder]()(implicit sqlContext: SQLContext): ContinuousMemoryStream[A] =
+  /** Creates a ContinuousMemoryStream with an implicit SQLContext (backward compatible). */
+  def apply[A: Encoder](implicit sqlContext: SQLContext): ContinuousMemoryStream[A] =
     new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext.sparkSession)
 
-  @deprecated("Use ContinuousMemoryStream with an implicit SparkSession " +
-    "instead of SQLContext", "4.1.0")
-  def apply[A: Encoder](numPartitions: Int)(implicit sqlContext: SQLContext):
-  ContinuousMemoryStream[A] =
+  /** Creates a ContinuousMemoryStream with specified partitions (SQLContext). */
+  def apply[A: Encoder](numPartitions: Int)(
+      implicit sqlContext: SQLContext): ContinuousMemoryStream[A] =
     new ContinuousMemoryStream[A](
       memoryStreamId.getAndIncrement(),
       sqlContext.sparkSession,
       numPartitions)
 
-  @deprecated("Use ContinuousMemoryStream.singlePartition with an implicit SparkSession " +
-    "instead of SQLContext", "4.1.0")
-  def singlePartition[A: Encoder]()(implicit sqlContext: SQLContext): ContinuousMemoryStream[A] =
+  /** Creates a ContinuousMemoryStream with explicit SparkSession. */
+  def apply[A: Encoder](sparkSession: SparkSession): ContinuousMemoryStream[A] =
+    new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession)
+
+  /** Creates a ContinuousMemoryStream with specified partitions (SparkSession). */
+  def apply[A: Encoder](sparkSession: SparkSession, numPartitions: Int): ContinuousMemoryStream[A] =
+    new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession, numPartitions)
+
+  /** Creates a single partition ContinuousMemoryStream (SQLContext). */
+  def singlePartition[A: Encoder](implicit sqlContext: SQLContext): ContinuousMemoryStream[A] =
     new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext.sparkSession, 1)
+
+  /** Creates a single partition ContinuousMemoryStream (SparkSession). */
+  def singlePartition[A: Encoder](sparkSession: SparkSession): ContinuousMemoryStream[A] =
+    new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession, 1)
 }
 
 /**

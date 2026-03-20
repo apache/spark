@@ -15,7 +15,10 @@
 # limitations under the License.
 #
 
-from pyspark.pandas.tests.data_type_ops.test_string_ops import StringOpsTestsMixin
+from pyspark.pandas.tests.data_type_ops.test_string_ops import (
+    StringOpsTestsMixin,
+    StringExtensionOpsTestsMixin,
+)
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 from pyspark.testing.connectutils import ReusedConnectTestCase
@@ -23,6 +26,15 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 class StringOpsParityTests(
     StringOpsTestsMixin,
+    PandasOnSparkTestUtils,
+    OpsTestBase,
+    ReusedConnectTestCase,
+):
+    pass
+
+
+class StringExtensionOpsParityTests(
+    StringExtensionOpsTestsMixin,
     PandasOnSparkTestUtils,
     OpsTestBase,
     ReusedConnectTestCase,

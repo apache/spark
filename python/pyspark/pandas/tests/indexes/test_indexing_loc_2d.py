@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.pandas.exceptions import SparkPandasIndexingError, SparkPandasNotImplementedError
+from pyspark.pandas.exceptions import SparkPandasIndexingError
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
@@ -134,15 +134,16 @@ class IndexingLoc2DMixin:
         self.assert_eq(psdf.loc["B":"B", ["bar"]], pdf.loc["B":"B", ["bar"]])
 
         self.assert_eq(psdf.loc[:, "bar":"bar"], pdf.loc[:, "bar":"bar"])
-        self.assert_eq(psdf.loc[:, "bar":("baz", "one")], pdf.loc[:, "bar":("baz", "one")])
+        self.assert_eq(psdf.loc[:, "bar" : ("baz", "one")], pdf.loc[:, "bar" : ("baz", "one")])
         self.assert_eq(
-            psdf.loc[:, ("bar", "two"):("baz", "one")], pdf.loc[:, ("bar", "two"):("baz", "one")]
+            psdf.loc[:, ("bar", "two") : ("baz", "one")],
+            pdf.loc[:, ("bar", "two") : ("baz", "one")],
         )
-        self.assert_eq(psdf.loc[:, ("bar", "two"):"bar"], pdf.loc[:, ("bar", "two"):"bar"])
+        self.assert_eq(psdf.loc[:, ("bar", "two") : "bar"], pdf.loc[:, ("bar", "two") : "bar"])
         self.assert_eq(psdf.loc[:, "a":"bax"], pdf.loc[:, "a":"bax"])
         self.assert_eq(
-            psdf.loc[:, ("bar", "x"):("baz", "a")],
-            pdf.loc[:, ("bar", "x"):("baz", "a")],
+            psdf.loc[:, ("bar", "x") : ("baz", "a")],
+            pdf.loc[:, ("bar", "x") : ("baz", "a")],
             almost=True,
         )
 
@@ -157,8 +158,8 @@ class IndexingLoc2DMixin:
 
         self.assert_eq(psdf.loc[:, "bar":"baz"], pdf.loc[:, "bar":"baz"])
 
-        self.assertRaises(KeyError, lambda: psdf.loc[:, "bar":("baz", "one")])
-        self.assertRaises(KeyError, lambda: psdf.loc[:, ("bar", "two"):"bar"])
+        self.assertRaises(KeyError, lambda: psdf.loc[:, "bar" : ("baz", "one")])
+        self.assertRaises(KeyError, lambda: psdf.loc[:, ("bar", "two") : "bar"])
 
         # bool list-like column select
         bool_list = [True, False, True, False]
@@ -180,9 +181,9 @@ class IndexingLoc2DMixin:
         self.assert_eq(psdf.loc["B":"B", 0], pdf.loc["B":"B", 0])
         self.assert_eq(psdf.loc["B":"B", [0]], pdf.loc["B":"B", [0]])
         self.assert_eq(psdf.loc[:, 0:0], pdf.loc[:, 0:0])
-        self.assert_eq(psdf.loc[:, 0:(1, 1)], pdf.loc[:, 0:(1, 1)])
-        self.assert_eq(psdf.loc[:, (0, 2):(1, 1)], pdf.loc[:, (0, 2):(1, 1)])
-        self.assert_eq(psdf.loc[:, (0, 2):0], pdf.loc[:, (0, 2):0])
+        self.assert_eq(psdf.loc[:, 0 : (1, 1)], pdf.loc[:, 0 : (1, 1)])
+        self.assert_eq(psdf.loc[:, (0, 2) : (1, 1)], pdf.loc[:, (0, 2) : (1, 1)])
+        self.assert_eq(psdf.loc[:, (0, 2) : 0], pdf.loc[:, (0, 2) : 0])
         self.assert_eq(psdf.loc[:, -1:2], pdf.loc[:, -1:2])
 
     def test_loc2d_with_known_divisions(self):

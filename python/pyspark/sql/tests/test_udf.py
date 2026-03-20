@@ -561,7 +561,7 @@ class BaseUDFTestsMixin(object):
                 df.select(add_four("id").alias("plus_four")).collect(),
             )
 
-    @unittest.skipIf(not test_compiled, test_not_compiled_message)  # type: ignore
+    @unittest.skipIf(not test_compiled, test_not_compiled_message)
     def test_register_java_function(self):
         with self.temp_func("javaStringLength", "javaStringLength2", "javaStringLength3"):
             self.spark.udf.registerJavaFunction(
@@ -582,7 +582,7 @@ class BaseUDFTestsMixin(object):
             [value] = self.spark.sql("SELECT javaStringLength3('test')").first()
             self.assertEqual(value, 4)
 
-    @unittest.skipIf(not test_compiled, test_not_compiled_message)  # type: ignore
+    @unittest.skipIf(not test_compiled, test_not_compiled_message)
     def test_register_java_udaf(self):
         with self.temp_func("javaUDAF"):
             self.spark.udf.registerJavaUDAF("javaUDAF", "test.org.apache.spark.sql.MyDoubleAvg")
@@ -831,7 +831,7 @@ class BaseUDFTestsMixin(object):
         self.assertEqual(rows, [Row(_1=1, _2=2, a="const_str")])
 
     # SPARK-24721
-    @unittest.skipIf(not test_compiled, test_not_compiled_message)  # type: ignore
+    @unittest.skipIf(not test_compiled, test_not_compiled_message)
     def test_datasource_with_udf(self):
         from pyspark.sql.functions import lit, col
 
@@ -1433,12 +1433,12 @@ class BaseUDFTestsMixin(object):
             self.assertEqual(result_type, StringType("fr"))
 
     def test_udf_with_char_varchar_return_type(self):
-        (char_type, char_value) = ("char(10)", "a")
-        (varchar_type, varchar_value) = ("varchar(8)", "a")
-        (array_with_char_type, array_with_char_type_value) = ("array<char(5)>", ["a", "b"])
-        (array_with_varchar_type, array_with_varchar_value) = ("array<varchar(12)>", ["a", "b"])
-        (map_type, map_value) = (f"map<{char_type}, {varchar_type}>", {"a": "b"})
-        (struct_type, struct_value) = (
+        char_type, char_value = ("char(10)", "a")
+        varchar_type, varchar_value = ("varchar(8)", "a")
+        array_with_char_type, array_with_char_type_value = ("array<char(5)>", ["a", "b"])
+        array_with_varchar_type, array_with_varchar_value = ("array<varchar(12)>", ["a", "b"])
+        map_type, map_value = (f"map<{char_type}, {varchar_type}>", {"a": "b"})
+        struct_type, struct_value = (
             f"struct<f1: {char_type}, f2: {varchar_type}>",
             {"f1": "a", "f2": "b"},
         )

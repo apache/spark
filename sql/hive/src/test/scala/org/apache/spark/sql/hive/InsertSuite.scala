@@ -351,8 +351,8 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       exception = intercept[AnalysisException] {
         Seq((1, 2, 3, 4)).toDF("a", "b", "c", "d").write.partitionBy("b", "c").insertInto(tableName)
       },
-      condition = "_LEGACY_ERROR_TEMP_1309",
-      parameters = Map.empty
+      condition = "PARTITION_BY_NOT_ALLOWED_WITH_INSERT_INTO",
+      parameters = Map("tableName" -> tableName)
     )
   }
 
@@ -449,6 +449,30 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
             Row(25, 26, 27, 28) :: Nil
         )
       }
+  }
+
+  testPartitionedTable("SPARK-54971: INSERT WITH SCHEMA EVOLUTION is currently unsupported") {
+    tableName =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT WITH SCHEMA EVOLUTION INTO TABLE $tableName SELECT 25, 26, 27, 28")
+        },
+        condition = "UNSUPPORTED_INSERT_WITH_SCHEMA_EVOLUTION"
+      )
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT WITH SCHEMA EVOLUTION INTO TABLE $tableName SELECT 25, 26, 27, 28, 29")
+        },
+        condition = "UNSUPPORTED_INSERT_WITH_SCHEMA_EVOLUTION"
+      )
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT WITH SCHEMA EVOLUTION INTO TABLE $tableName SELECT 25, 26, 27, (28, 29)")
+        },
+        condition = "UNSUPPORTED_INSERT_WITH_SCHEMA_EVOLUTION"
+      )
   }
 
   testPartitionedTable("insertInto() should match columns by position and ignore column names") {

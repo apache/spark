@@ -159,14 +159,13 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putBooleans(int rowId, byte src) {
-    Platform.putByte(null, data + rowId, (byte)(src & 1));
-    Platform.putByte(null, data + rowId + 1, (byte)(src >>> 1 & 1));
-    Platform.putByte(null, data + rowId + 2, (byte)(src >>> 2 & 1));
-    Platform.putByte(null, data + rowId + 3, (byte)(src >>> 3 & 1));
-    Platform.putByte(null, data + rowId + 4, (byte)(src >>> 4 & 1));
-    Platform.putByte(null, data + rowId + 5, (byte)(src >>> 5 & 1));
-    Platform.putByte(null, data + rowId + 6, (byte)(src >>> 6 & 1));
-    Platform.putByte(null, data + rowId + 7, (byte)(src >>> 7 & 1));
+    assert rowId + 8 <= capacity :
+      "putBooleans requires 8 slots available at rowId=" + rowId + ", capacity=" + capacity;
+    long expanded = expandBoolByteToLong(src);
+    if (bigEndianPlatform) {
+      expanded = Long.reverseBytes(expanded);
+    }
+    Platform.putLong(null, data + rowId, expanded);
   }
 
   @Override
@@ -265,6 +264,22 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   public void putShorts(int rowId, int count, byte[] src, int srcIndex) {
     Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
       null, data + rowId * 2L, count * 2L);
+  }
+
+  @Override
+  public void putShortsFromIntsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
+    int srcOffset = srcIndex + Platform.BYTE_ARRAY_OFFSET;
+    long dstOffset = data + rowId * 2L;
+    if (bigEndianPlatform) {
+      for (int i = 0; i < count; ++i, srcOffset += 4, dstOffset += 2) {
+        Platform.putShort(null, dstOffset,
+          (short) Integer.reverseBytes(Platform.getInt(src, srcOffset)));
+      }
+    } else {
+      for (int i = 0; i < count; ++i, srcOffset += 4, dstOffset += 2) {
+        Platform.putShort(null, dstOffset, Platform.getShort(src, srcOffset));
+      }
+    }
   }
 
   @Override

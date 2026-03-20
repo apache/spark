@@ -19,13 +19,16 @@
 Type-specific codes between pandas and PyArrow. Also contains some utils to correct
 pandas instances during the type conversion.
 """
+
 import datetime
 import itertools
 import functools
+import json
 from decimal import Decimal
-from typing import Any, Callable, Iterable, List, Optional, Union, TYPE_CHECKING
+from typing import Any, Callable, Dict, Iterable, List, Optional, Union, TYPE_CHECKING
 
 from pyspark.errors import PySparkTypeError, UnsupportedOperationException, PySparkValueError
+from pyspark.loose_version import LooseVersion
 from pyspark.sql.types import (
     cast,
     BooleanType,
@@ -67,6 +70,24 @@ if TYPE_CHECKING:
 
     from pyspark.sql.pandas._typing import SeriesLike as PandasSeriesLike
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
+
+
+# Should keep in line with org.apache.spark.sql.util.ArrowUtils.metadataKey
+metadata_key = b"SPARK::metadata::json"
+
+
+def to_arrow_metadata(metadata: Optional[Dict[str, Any]] = None) -> Optional[Dict[bytes, bytes]]:
+    if metadata is not None and len(metadata) > 0:
+        return {metadata_key: json.dumps(metadata).encode("utf-8")}
+    else:
+        return None
+
+
+def from_arrow_metadata(metadata: Optional[Dict[bytes, bytes]]) -> Optional[Dict[str, Any]]:
+    if metadata is not None and metadata_key in metadata:
+        return json.loads(metadata[metadata_key].decode("utf-8"))
+    else:
+        return None
 
 
 def to_arrow_type(
@@ -177,6 +198,7 @@ def to_arrow_type(
                     prefers_large_types=prefers_large_types,
                 ),
                 nullable=field.nullable,
+                metadata=to_arrow_metadata(field.metadata),
             )
             for field in dt
         ]
@@ -264,6 +286,7 @@ def to_arrow_schema(
                 prefers_large_types=prefers_large_types,
             ),
             nullable=field.nullable,
+            metadata=to_arrow_metadata(field.metadata),
         )
         for field in schema
     ]
@@ -296,6 +319,7 @@ def is_geometry(at: "pa.DataType") -> bool:
     return any(
         (
             field.name == "wkb"
+            and field.metadata is not None
             and b"geometry" in field.metadata
             and field.metadata[b"geometry"] == b"true"
         )
@@ -312,6 +336,7 @@ def is_geography(at: "pa.DataType") -> bool:
     return any(
         (
             field.name == "wkb"
+            and field.metadata is not None
             and b"geography" in field.metadata
             and field.metadata[b"geography"] == b"true"
         )
@@ -319,8 +344,32 @@ def is_geography(at: "pa.DataType") -> bool:
     ) and any(field.name == "srid" for field in at)
 
 
-def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> DataType:
-    """Convert pyarrow type to Spark data type."""
+def from_arrow_type(
+    at: "pa.DataType",
+    prefer_timestamp_ntz: bool = True,
+) -> DataType:
+    """Convert pyarrow type to Spark data type.
+
+    Parameters
+    ----------
+    at : :class:`pyarrow.DataType`
+        pyarrow data type
+    prefer_timestamp_ntz: bool, default True
+        When the input timezone is None, whether to convert it to timezone-naive TimestampNTZType.
+        The to_arrow_type always convert timezone-naive TimestampNTZType to pa.timestamp
+        without timezone. The default value is True, so that
+        from_arrow_type(to_arrow_type(TimestampNTZType)) returns TimestampNTZType.
+        It only makes sense to explicitly set it in case like creating dataframe
+        from arrow/pandas data according to config `spark.sql.timestampType`.
+
+    Notes
+    -----
+    Different from JVM side ArrowUtils.fromArrowType, the unit ('ns'/'us'/etc) in types
+    pa.timestamp/pa.duration/pa.time64 is ignored in this function.
+    That is because this function is also used in data type inference in creating dataframe
+    from arrow/pandas data, in which the input data may use a different unit.
+    """
+
     import pyarrow.types as types
 
     spark_type: DataType
@@ -354,10 +403,11 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
         spark_type = DateType()
     elif types.is_time64(at):
         spark_type = TimeType()
-    elif types.is_timestamp(at) and prefer_timestamp_ntz and at.tz is None:
-        spark_type = TimestampNTZType()
     elif types.is_timestamp(at):
-        spark_type = TimestampType()
+        if at.tz is None and prefer_timestamp_ntz:
+            spark_type = TimestampNTZType()
+        else:
+            spark_type = TimestampType()
     elif types.is_duration(at):
         spark_type = DayTimeIntervalType()
     elif types.is_list(at):
@@ -402,6 +452,7 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
                     field.name,
                     from_arrow_type(field.type, prefer_timestamp_ntz),
                     nullable=field.nullable,
+                    metadata=from_arrow_metadata(field.metadata),
                 )
                 for field in at
             ]
@@ -418,7 +469,10 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
     return spark_type
 
 
-def from_arrow_schema(arrow_schema: "pa.Schema", prefer_timestamp_ntz: bool = False) -> StructType:
+def from_arrow_schema(
+    arrow_schema: "pa.Schema",
+    prefer_timestamp_ntz: bool = True,
+) -> StructType:
     """Convert schema from Arrow to Spark."""
     return StructType(
         [
@@ -426,6 +480,7 @@ def from_arrow_schema(arrow_schema: "pa.Schema", prefer_timestamp_ntz: bool = Fa
                 field.name,
                 from_arrow_type(field.type, prefer_timestamp_ntz),
                 nullable=field.nullable,
+                metadata=from_arrow_metadata(field.metadata),
             )
             for field in arrow_schema
         ]
@@ -657,9 +712,7 @@ def _check_series_convert_timestamps_internal(
     require_minimum_pandas_version()
 
     import pandas as pd
-    from pandas.api.types import (  # type: ignore[attr-defined]
-        is_datetime64_dtype,
-    )
+    from pandas.api.types import is_datetime64_dtype
 
     # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
     if is_datetime64_dtype(s.dtype):
@@ -725,9 +778,7 @@ def _check_series_convert_timestamps_localize(
     require_minimum_pandas_version()
 
     import pandas as pd
-    from pandas.api.types import (  # type: ignore[attr-defined]
-        is_datetime64_dtype,
-    )
+    from pandas.api.types import is_datetime64_dtype
 
     from_tz = from_timezone or _get_local_timezone()
     to_tz = to_timezone or _get_local_timezone()
@@ -736,15 +787,12 @@ def _check_series_convert_timestamps_localize(
         return s.dt.tz_convert(to_tz).dt.tz_localize(None)
     elif is_datetime64_dtype(s.dtype) and from_tz != to_tz:
         # `s.dt.tz_localize('tzlocal()')` doesn't work properly when including NaT.
-        return cast(
-            "PandasSeriesLike",
-            s.apply(
-                lambda ts: ts.tz_localize(from_tz, ambiguous=False)
-                .tz_convert(to_tz)
-                .tz_localize(None)
+        return s.apply(
+            lambda ts: (  # type: ignore[arg-type]
+                ts.tz_localize(from_tz, ambiguous=False).tz_convert(to_tz).tz_localize(None)  # type: ignore[return-value]
                 if ts is not pd.NaT
                 else pd.NaT
-            ),
+            )
         )
     else:
         return s
@@ -797,7 +845,7 @@ def _convert_map_items_to_dict(s: "PandasSeriesLike") -> "PandasSeriesLike":
     :param s: pandas.Series of lists of (key, value) pairs
     :return: pandas.Series of dictionaries
     """
-    return cast("PandasSeriesLike", s.apply(lambda m: None if m is None else {k: v for k, v in m}))
+    return s.apply(lambda m: None if m is None else {k: v for k, v in m})
 
 
 def _convert_dict_to_map_items(s: "PandasSeriesLike") -> "PandasSeriesLike":
@@ -807,7 +855,7 @@ def _convert_dict_to_map_items(s: "PandasSeriesLike") -> "PandasSeriesLike":
     :param s: pandas.Series of dictionaries
     :return: pandas.Series of lists of (key, value) pairs
     """
-    return cast("PandasSeriesLike", s.apply(lambda d: list(d.items()) if d is not None else None))
+    return s.apply(lambda d: list(d.items()) if d is not None else None)
 
 
 def _to_corrected_pandas_type(dt: DataType) -> Optional[Any]:
@@ -817,6 +865,7 @@ def _to_corrected_pandas_type(dt: DataType) -> Optional[Any]:
     inferred incorrectly.
     """
     import numpy as np
+    import pandas as pd
 
     if type(dt) == ByteType:
         return np.int8
@@ -833,11 +882,46 @@ def _to_corrected_pandas_type(dt: DataType) -> Optional[Any]:
     elif type(dt) == BooleanType:
         return bool
     elif type(dt) == TimestampType:
-        return np.dtype("datetime64[ns]")
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return np.dtype("datetime64[ns]")
+        else:
+            return np.dtype("datetime64[us]")
     elif type(dt) == TimestampNTZType:
-        return np.dtype("datetime64[ns]")
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return np.dtype("datetime64[ns]")
+        else:
+            return np.dtype("datetime64[us]")
     elif type(dt) == DayTimeIntervalType:
-        return np.dtype("timedelta64[ns]")
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return np.dtype("timedelta64[ns]")
+        else:
+            return np.dtype("timedelta64[us]")
+    else:
+        return None
+
+
+def _to_corrected_pandas_ext_type(dt: DataType) -> Optional[Any]:
+    """
+    Convert spark datatype to a Pandas extension type which support nullable data.
+    """
+    import pandas as pd
+
+    if isinstance(dt, ByteType):
+        return pd.Int8Dtype()
+    elif isinstance(dt, ShortType):
+        return pd.Int16Dtype()
+    elif isinstance(dt, IntegerType):
+        return pd.Int32Dtype()
+    elif isinstance(dt, LongType):
+        return pd.Int64Dtype()
+    elif isinstance(dt, FloatType):
+        return pd.Float32Dtype()
+    elif isinstance(dt, DoubleType):
+        return pd.Float64Dtype()
+    elif isinstance(dt, BooleanType):
+        return pd.BooleanDtype()
+    elif isinstance(dt, StringType):
+        return pd.StringDtype()
     else:
         return None
 
@@ -852,6 +936,7 @@ def _create_converter_to_pandas(
     error_on_duplicated_field_names: bool = True,
     timestamp_utc_localized: bool = True,
     ndarray_as_list: bool = False,
+    integer_object_nulls: bool = False,
 ) -> Callable[["pd.Series"], "pd.Series"]:
     """
     Create a converter of pandas Series that is created from Spark's Python objects,
@@ -880,6 +965,9 @@ def _create_converter_to_pandas(
         whereas the ones from `df.collect()` are localized to the local timezone.
     ndarray_as_list : bool, optional
         Whether `np.ndarray` is converted to a list or not (default ``False``).
+    integer_object_nulls : bool, optional
+        When True, means input series containing integers with nulls is cast to
+        objects. It is usually generated by pa.Array.to_pandas(integer_object_nulls=Ture).
 
     Returns
     -------
@@ -891,16 +979,17 @@ def _create_converter_to_pandas(
     pandas_type = _to_corrected_pandas_type(data_type)
 
     if pandas_type is not None:
-        # SPARK-21766: if an integer field is nullable and has null values, it can be
-        # inferred by pandas as a float column. If we convert the column with NaN back
-        # to integer type e.g., np.int16, we will hit an exception. So we use the
-        # pandas-inferred float type, rather than the corrected type from the schema
-        # in this case.
         if isinstance(data_type, IntegralType) and nullable:
+            if integer_object_nulls:
+                # pandas_type like np.int64 doesn't support nullable data
+                # use Pandas extension type instead
+                nullable_type = _to_corrected_pandas_ext_type(data_type)
+            else:
+                nullable_type = np.float64
 
             def correct_dtype(pser: pd.Series) -> pd.Series:
                 if pser.isnull().any():
-                    return pser.astype(np.float64, copy=False)
+                    return pser.astype(nullable_type, copy=False)  # type: ignore[arg-type]
                 else:
                     return pser.astype(pandas_type, copy=False)
 
@@ -1197,9 +1286,7 @@ def _create_converter_to_pandas(
 
     conv = _converter(data_type, struct_in_pandas, ndarray_as_list)
     if conv is not None:
-        return lambda pser: pser.apply(  # type: ignore[return-value]
-            lambda x: conv(x) if x is not None else None
-        )
+        return lambda pser: pser.apply(lambda x: conv(x) if x is not None else None)
     else:
         return lambda pser: pser
 
@@ -1262,10 +1349,8 @@ def _create_converter_from_pandas(
             #     lambda x: Decimal(x))).cast(pa.decimal128(1))
 
             def convert_int_to_decimal(pser: pd.Series) -> pd.Series:
-                if pd.api.types.is_integer_dtype(pser):  # type: ignore[attr-defined]
-                    return pser.apply(  # type: ignore[return-value]
-                        lambda x: Decimal(x) if pd.notna(x) else None
-                    )
+                if pd.api.types.is_integer_dtype(pser):
+                    return pser.apply(lambda x: Decimal(x) if pd.notna(x) else None)
                 else:
                     return pser
 
@@ -1331,9 +1416,11 @@ def _create_converter_from_pandas(
                             return [
                                 (
                                     _key_conv(k) if _key_conv is not None and k is not None else k,
-                                    _value_conv(v)
-                                    if _value_conv is not None and v is not None
-                                    else v,
+                                    (
+                                        _value_conv(v)
+                                        if _value_conv is not None and v is not None
+                                        else v
+                                    ),
                                 )
                                 for k, v in value.items()
                             ]
@@ -1499,9 +1586,7 @@ def _create_converter_from_pandas(
 
     conv = _converter(data_type)
     if conv is not None:
-        return lambda pser: pser.apply(  # type: ignore[return-value]
-            lambda x: conv(x) if x is not None else None
-        )
+        return lambda pser: pser.apply(lambda x: conv(x) if x is not None else None)
     else:
         return lambda pser: pser
 
@@ -1595,5 +1680,5 @@ def convert_pandas_using_numpy_type(
             ),
         ):
             np_type = _to_numpy_type(field.dataType)
-            df[field.name] = df[field.name].astype(np_type)
+            df[field.name] = df[field.name].astype(np_type)  # type: ignore[arg-type]
     return df

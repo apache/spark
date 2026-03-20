@@ -24,7 +24,8 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionInfo}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.StringUtils
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 
@@ -139,11 +140,29 @@ case class DropFunctionCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     if (isTemp) {
-      assert(identifier.database.isEmpty)
-      if (FunctionRegistry.builtin.functionExists(identifier)) {
-        throw QueryCompilationErrors.cannotDropBuiltinFuncError(identifier.funcName)
+      val funcName = if (identifier.database.isDefined) {
+        val db = identifier.database.get
+        if (!db.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
+          throw QueryExecutionErrors.invalidNamespaceNameError(
+            Array(CatalogManager.SYSTEM_CATALOG_NAME, db))
+        }
+        if (identifier.catalog.exists(
+            !_.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME))) {
+          throw QueryExecutionErrors.invalidNamespaceNameError(
+            Array(identifier.catalog.get, db))
+        }
+        identifier.funcName
+      } else {
+        identifier.funcName
       }
-      catalog.dropTempFunction(identifier.funcName, ifExists)
+
+      // Check if temp function exists first - if it does, allow dropping it even if a builtin
+      // with the same name exists (shadowing case)
+      if (!catalog.isTemporaryFunction(FunctionIdentifier(funcName)) &&
+          catalog.isBuiltinFunction(funcName)) {
+        throw QueryCompilationErrors.cannotDropBuiltinFuncError(funcName)
+      }
+      catalog.dropTempFunction(funcName, ifExists)
     } else {
       // We are dropping a permanent function.
       catalog.dropFunction(identifier, ignoreIfNotExists = ifExists)
@@ -177,9 +196,10 @@ case class ShowFunctionsCommand(
       sparkSession.sessionState.catalog
         .listFunctions(db, pattern.getOrElse("*"))
         .collect {
-          case (f, "USER") if showUserFunctions => f.unquotedString
-          case (f, "SYSTEM") if showSystemFunctions => f.unquotedString
+          case (f, "USER") if showUserFunctions => f.displayNameForShowFunctions
+          case (f, "SYSTEM") if showSystemFunctions => f.displayNameForShowFunctions
         }
+        .distinct
     // Hard code "<>", "!=", "between", "case", and "||"
     // for now as there is no corresponding functions.
     // "<>", "!=", "between", "case", and "||" is SystemFunctions,
@@ -204,31 +224,19 @@ case class ShowFunctionsCommand(
  *    REFRESH FUNCTION functionName
  * }}}
  */
-case class RefreshFunctionCommand(
-    databaseName: Option[String],
-    functionName: String)
-  extends LeafRunnableCommand {
+case class RefreshFunctionCommand(identifier: FunctionIdentifier) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val ident = FunctionIdentifier(functionName, databaseName)
-    if (FunctionRegistry.builtin.functionExists(ident)) {
-      throw QueryCompilationErrors.cannotRefreshBuiltInFuncError(functionName)
-    }
-    if (catalog.isTemporaryFunction(ident)) {
-      throw QueryCompilationErrors.cannotRefreshTempFuncError(functionName)
-    }
-
-    val qualified = catalog.qualifyIdentifier(ident)
     // we only refresh the permanent function.
-    if (catalog.isPersistentFunction(qualified)) {
+    if (catalog.isPersistentFunction(identifier)) {
       // register overwrite function.
-      val func = catalog.getFunctionMetadata(qualified)
+      val func = catalog.getFunctionMetadata(identifier)
       catalog.registerFunction(func, true)
     } else {
       // clear cached function and throw exception
-      catalog.unregisterFunction(qualified)
-      throw QueryCompilationErrors.noSuchFunctionError(qualified)
+      catalog.unregisterFunction(identifier)
+      throw QueryCompilationErrors.noSuchFunctionError(identifier)
     }
 
     Seq.empty[Row]

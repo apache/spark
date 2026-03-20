@@ -1790,6 +1790,90 @@ class DDLParserSuite extends AnalysisTest {
           Literal(5))))
   }
 
+  for {
+    isByName <- Seq(true, false)
+    userSpecifiedCols <- if (!isByName) {
+      Seq(Seq("a", "b"), Seq.empty)
+    } else {
+      Seq(Seq.empty)
+    }
+  } {
+    val byNameClause = if (isByName) "BY NAME " else ""
+    val sourceQuery = "SELECT * FROM source"
+    val userSpecifiedColsClause =
+      if (userSpecifiedCols.isEmpty) "" else userSpecifiedCols.mkString("(", ", ", ")")
+    val testMsg = s"isByName=$isByName, userSpecifiedColsClause=$userSpecifiedColsClause"
+
+    test(s"INSERT INTO with WITH SCHEMA EVOLUTION - $testMsg") {
+      val table = "testcat.ns1.ns2.tbl"
+      val insertSQLStmt = s"INSERT WITH SCHEMA EVOLUTION INTO $table " +
+        s"${userSpecifiedColsClause}${byNameClause}${sourceQuery}"
+
+      parseCompare(
+        sql = insertSQLStmt,
+        expected = InsertIntoStatement(
+          table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+          partitionSpec = Map.empty,
+          userSpecifiedCols = userSpecifiedCols,
+          query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+          overwrite = false,
+          ifPartitionNotExists = false,
+          byName = isByName,
+          withSchemaEvolution = true)
+      )
+    }
+
+    test(s"INSERT OVERWRITE (static) with WITH SCHEMA EVOLUTION - $testMsg") {
+      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key ->
+        SQLConf.PartitionOverwriteMode.STATIC.toString) {
+        val table = "testcat.ns1.ns2.tbl"
+        val insertSQLStmt = s"INSERT WITH SCHEMA EVOLUTION OVERWRITE $table " +
+          s"${userSpecifiedColsClause}${byNameClause}${sourceQuery}"
+
+        parseCompare(
+          sql = insertSQLStmt,
+          expected = InsertIntoStatement(
+            table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+            partitionSpec = Map.empty,
+            userSpecifiedCols = userSpecifiedCols,
+            query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+            overwrite = true,
+            ifPartitionNotExists = false,
+            byName = isByName,
+            withSchemaEvolution = true)
+        )
+      }
+    }
+  }
+
+  for (isByName <- Seq(true, false)) {
+    val byNameClause = if (isByName) "BY NAME " else ""
+    val sourceQuery = "SELECT * FROM source"
+    val testMsg = s"isByName=$isByName"
+
+    test(s"INSERT OVERWRITE (dynamic) with WITH SCHEMA EVOLUTION - $testMsg") {
+      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key ->
+        SQLConf.PartitionOverwriteMode.DYNAMIC.toString) {
+        val table = "testcat.ns1.ns2.tbl"
+        val insertSQLStmt = s"INSERT WITH SCHEMA EVOLUTION OVERWRITE $table " +
+          s"${byNameClause}${sourceQuery}"
+
+        parseCompare(
+          sql = insertSQLStmt,
+          expected = InsertIntoStatement(
+            table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+            partitionSpec = Map.empty,
+            userSpecifiedCols = Seq.empty,
+            query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+            overwrite = true,
+            ifPartitionNotExists = false,
+            byName = isByName,
+            withSchemaEvolution = true)
+        )
+      }
+    }
+  }
+
   test("delete from table: delete all") {
     parseCompare("DELETE FROM testcat.ns1.ns2.tbl",
       DeleteFromTable(
@@ -2205,6 +2289,21 @@ class DDLParserSuite extends AnalysisTest {
         stop = 106))
   }
 
+  test("merge into table: inserted value count must match field count") {
+    val sqlText =
+      """MERGE INTO t1 USING t2 ON t1.id = t2.id
+        |WHEN NOT MATCHED THEN INSERT (col1, col2) VALUES (1)""".stripMargin
+    checkError(
+      exception = parseException(sqlText),
+      condition = "MERGE_INSERT_VALUE_COUNT_MISMATCH",
+      sqlState = "21S01",
+      parameters = Map("expectedCount" -> "2", "actualCount" -> "1"),
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = sqlText.length - 1))
+  }
+
   test("show views") {
     comparePlans(
       parsePlan("SHOW VIEWS"),
@@ -2511,7 +2610,7 @@ class DDLParserSuite extends AnalysisTest {
 
   test("DESCRIBE FUNCTION") {
     def createFuncPlan(name: Seq[String]): UnresolvedFunctionName = {
-      UnresolvedFunctionName(name, "DESCRIBE FUNCTION", false, None)
+      UnresolvedFunctionName(name, "DESCRIBE FUNCTION")
     }
     comparePlans(
       parsePlan("DESC FUNCTION a"),
@@ -2528,15 +2627,12 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("REFRESH FUNCTION") {
-    def createFuncPlan(name: Seq[String]): UnresolvedFunctionName = {
-      UnresolvedFunctionName(name, "REFRESH FUNCTION", true, None)
-    }
     parseCompare("REFRESH FUNCTION c",
-      RefreshFunction(createFuncPlan(Seq("c"))))
+      RefreshFunction(UnresolvedIdentifier(Seq("c"))))
     parseCompare("REFRESH FUNCTION b.c",
-      RefreshFunction(createFuncPlan(Seq("b", "c"))))
+      RefreshFunction(UnresolvedIdentifier(Seq("b", "c"))))
     parseCompare("REFRESH FUNCTION a.b.c",
-      RefreshFunction(createFuncPlan(Seq("a", "b", "c"))))
+      RefreshFunction(UnresolvedIdentifier(Seq("a", "b", "c"))))
   }
 
   test("CREATE INDEX") {

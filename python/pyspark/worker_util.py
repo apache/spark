@@ -18,12 +18,19 @@
 """
 Util functions for workers.
 """
+
+from contextlib import contextmanager
 import importlib
 from inspect import currentframe, getframeinfo
 import os
 import sys
-from typing import Any, IO
+from typing import Any, Generator, IO, Optional
 import warnings
+
+if "SPARK_TESTING" in os.environ:
+    assert os.environ.get("SPARK_PYTHON_RUNTIME") == "PYTHON_WORKER", (
+        "This module can only be imported in python woker"
+    )
 
 # 'resource' is a Unix specific module.
 has_resource_module = True
@@ -95,7 +102,7 @@ def setup_memory_limits(memory_limit_mb: int) -> None:
     if memory_limit_mb > 0 and has_resource_module:
         total_memory = resource.RLIMIT_AS
         try:
-            (soft_limit, hard_limit) = resource.getrlimit(total_memory)
+            soft_limit, hard_limit = resource.getrlimit(total_memory)
             msg = "Current mem limits: {0} of max {1}\n".format(soft_limit, hard_limit)
             print(msg, file=sys.stderr)
 
@@ -165,7 +172,7 @@ def setup_broadcasts(infile: IO) -> None:
             conn_info = utf8_deserializer.loads(infile)
         else:
             auth_secret = utf8_deserializer.loads(infile)
-        (broadcast_sock_file, _) = local_connect_and_auth(conn_info, auth_secret)
+        broadcast_sock_file, _ = local_connect_and_auth(conn_info, auth_secret)
 
     for _ in range(num_broadcast_variables):
         bid = read_long(infile)
@@ -187,6 +194,25 @@ def setup_broadcasts(infile: IO) -> None:
         broadcast_sock_file.close()
 
 
+@contextmanager
+def get_sock_file_to_executor(timeout: Optional[int] = -1) -> Generator[IO, None, None]:
+    # Read information about how to connect back to the JVM from the environment.
+    conn_info = os.environ.get(
+        "PYTHON_WORKER_FACTORY_SOCK_PATH", int(os.environ.get("PYTHON_WORKER_FACTORY_PORT", -1))
+    )
+    auth_secret = os.environ.get("PYTHON_WORKER_FACTORY_SECRET")
+    sock_file, sock = local_connect_and_auth(conn_info, auth_secret)
+    if timeout is None or timeout > 0:
+        sock.settimeout(timeout)
+    # TODO: Remove the following two lines and use `Process.pid()` when we drop JDK 8.
+    write_int(os.getpid(), sock_file)
+    sock_file.flush()
+    try:
+        yield sock_file
+    finally:
+        sock_file.close()
+
+
 def send_accumulator_updates(outfile: IO) -> None:
     """
     Send the accumulator updates back to JVM.
@@ -194,3 +220,35 @@ def send_accumulator_updates(outfile: IO) -> None:
     write_int(len(_accumulatorRegistry), outfile)
     for aid, accum in _accumulatorRegistry.items():
         pickleSer._write_with_length((aid, accum._value), outfile)
+
+
+class Conf:
+    def __init__(self, infile: Optional[IO] = None) -> None:
+        self._conf: dict[str, Any] = {}
+        if infile is not None:
+            self.load(infile)
+
+    def load(self, infile: IO) -> None:
+        num_conf = read_int(infile)
+        # We do a sanity check here to reduce the possibility to stuck indefinitely
+        # due to an invalid messsage. If the numer of configurations is obviously
+        # wrong, we just raise an error directly.
+        # We hand-pick the configurations to send to the worker so the number should
+        # be very small (less than 100).
+        if num_conf < 0 or num_conf > 10000:
+            raise PySparkRuntimeError(
+                errorClass="PROTOCOL_ERROR",
+                messageParameters={
+                    "failure": f"Invalid number of configurations: {num_conf}",
+                },
+            )
+        for _ in range(num_conf):
+            k = utf8_deserializer.loads(infile)
+            v = utf8_deserializer.loads(infile)
+            self._conf[k] = v
+
+    def get(self, key: str, default: Any = "", *, lower_str: bool = True) -> Any:
+        val = self._conf.get(key, default)
+        if isinstance(val, str) and lower_str:
+            return val.lower()
+        return val

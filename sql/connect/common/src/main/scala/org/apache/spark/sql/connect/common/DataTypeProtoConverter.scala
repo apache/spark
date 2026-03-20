@@ -89,7 +89,9 @@ object DataTypeProtoConverter {
       case proto.DataType.KindCase.UDT => toCatalystUDT(t.getUdt)
 
       case _ =>
-        throw InvalidPlanInput(s"Does not support convert ${t.getKindCase} to catalyst types.")
+        throw InvalidPlanInput(
+          "CONNECT_INVALID_PLAN.DATA_TYPE_UNSUPPORTED_PROTO_TO_CATALYST",
+          Map("kindCase" -> t.getKindCase.toString))
     }
   }
 
@@ -102,7 +104,7 @@ object DataTypeProtoConverter {
   }
 
   private def toCatalystStringType(t: proto.DataType.String): StringType =
-    StringType(if (t.getCollation.nonEmpty) t.getCollation else "UTF8_BINARY")
+    if (t.getCollation.nonEmpty) StringType(t.getCollation) else StringType
 
   private def toCatalystYearMonthIntervalType(t: proto.DataType.YearMonthInterval) = {
     (t.hasStartField, t.hasEndField) match {
@@ -147,7 +149,8 @@ object DataTypeProtoConverter {
   private def toCatalystUDT(t: proto.DataType.UDT): UserDefinedType[_] = {
     if (t.getType != "udt") {
       throw InvalidPlanInput(
-        s"""UserDefinedType requires the 'type' field to be 'udt', but got '${t.getType}'.""")
+        "CONNECT_INVALID_PLAN.UDT_TYPE_FIELD_INVALID",
+        Map("udtType" -> t.getType))
     }
 
     if (t.hasJvmClass) {
@@ -157,9 +160,7 @@ object DataTypeProtoConverter {
         .newInstance()
     } else {
       if (!t.hasPythonClass || !t.hasSerializedPythonClass || !t.hasSqlType) {
-        throw InvalidPlanInput(
-          "PythonUserDefinedType requires all the three fields: " +
-            "python_class, serialized_python_class and sql_type.")
+        throw InvalidPlanInput("CONNECT_INVALID_PLAN.PYTHON_UDT_MISSING_FIELDS", Map.empty)
       }
 
       new PythonUserDefinedType(
@@ -200,27 +201,29 @@ object DataTypeProtoConverter {
             proto.DataType.Decimal.newBuilder().setPrecision(precision).setScale(scale).build())
           .build()
 
-      case CharType(length) =>
+      case c: CharType =>
         proto.DataType
           .newBuilder()
-          .setChar(proto.DataType.Char.newBuilder().setLength(length).build())
+          .setChar(proto.DataType.Char.newBuilder().setLength(c.length).build())
           .build()
 
-      case VarcharType(length) =>
+      case v: VarcharType =>
         proto.DataType
           .newBuilder()
-          .setVarChar(proto.DataType.VarChar.newBuilder().setLength(length).build())
+          .setVarChar(proto.DataType.VarChar.newBuilder().setLength(v.length).build())
           .build()
 
       // StringType must be matched after CharType and VarcharType
       case s: StringType =>
+        val stringBuilder = proto.DataType.String.newBuilder()
+        // Send collation only for explicit collations (including explicit UTF8_BINARY).
+        // Default STRING (case object) has no explicit collation and should omit it.
+        if (!s.eq(StringType)) {
+          stringBuilder.setCollation(CollationFactory.fetchCollation(s.collationId).collationName)
+        }
         proto.DataType
           .newBuilder()
-          .setString(
-            proto.DataType.String
-              .newBuilder()
-              .setCollation(CollationFactory.fetchCollation(s.collationId).collationName)
-              .build())
+          .setString(stringBuilder.build())
           .build()
 
       case DateType => ProtoDataTypes.DateType
@@ -387,7 +390,9 @@ object DataTypeProtoConverter {
         }
 
       case _ =>
-        throw InvalidPlanInput(s"Does not support convert ${t.typeName} to connect proto types.")
+        throw InvalidPlanInput(
+          "CONNECT_INVALID_PLAN.DATA_TYPE_UNSUPPORTED_CATALYST_TO_PROTO",
+          Map("typeName" -> t.typeName))
     }
   }
 }

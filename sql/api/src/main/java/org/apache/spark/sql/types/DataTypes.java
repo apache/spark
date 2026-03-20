@@ -302,7 +302,7 @@ public class DataTypes {
    * @since 4.0.0
    */
   public static CharType createCharType(int length) {
-    return new CharType(length);
+    return CharType$.MODULE$.apply(length);
   }
 
   /**
@@ -311,6 +311,6 @@ public class DataTypes {
    * @since 4.0.0
    */
   public static VarcharType createVarcharType(int length) {
-    return new VarcharType(length);
+    return VarcharType$.MODULE$.apply(length);
   }
 }

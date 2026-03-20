@@ -69,6 +69,19 @@ class SparkConnectCreationTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
                 messageParameters={},
             )
 
+    def test_from_pandas_dataframe_with_zero_columns(self):
+        """SPARK-55350: Test that row count is preserved when creating DataFrame from
+        pandas with 0 columns but with explicit schema in Spark Connect."""
+        # Create a pandas DataFrame with 5 rows but 0 columns
+        pdf = pd.DataFrame(index=range(5))
+        schema = StructType([])
+
+        cdf = self.connect.createDataFrame(pdf, schema=schema)
+
+        self.assertEqual(cdf.schema, schema)
+        self.assertEqual(cdf.count(), 5)
+        self.assertEqual(len(cdf.collect()), 5)
+
     def test_with_local_ndarray(self):
         """SPARK-41446: Test creating a dataframe using local list"""
         data = np.array([[1, 2, 3, 4], [5, 6, 7, 8]])

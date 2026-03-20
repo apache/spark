@@ -345,7 +345,7 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
         # In this case, if the PR is committed to the master branch and the release branch, we
         # only consider the release branch to be the fix version. E.g. it is not valid to have
         # both 1.1.0 and 1.0.0 as fix versions.
-        (major, minor, patch) = v.split(".")
+        major, minor, patch = v.split(".")
         if patch == "0":
             previous = "%s.%s.%s" % (major, int(minor) - 1, 0)
             if previous in default_fix_versions:
@@ -573,7 +573,7 @@ def initialize_jira():
         print_error("ERROR finding jira library. Run 'pip3 install jira' to install.")
         continue_maybe("Continue without jira?")
     elif JIRA_ACCESS_TOKEN:
-        client = jira.client.JIRA(jira_server, token_auth=JIRA_ACCESS_TOKEN)
+        client = jira.client.JIRA(jira_server, token_auth=JIRA_ACCESS_TOKEN, timeout=(3.05, 30))
         try:
             # Eagerly check if the token is valid to align with the behavior of username/password
             # authn
@@ -592,7 +592,9 @@ def initialize_jira():
         print("You can use JIRA_ACCESS_TOKEN instead of JIRA_USERNAME/JIRA_PASSWORD.")
         print("Visit https://issues.apache.org/jira/secure/ViewProfile.jspa ")
         print("and click 'Personal Access Tokens' menu to manage your own tokens.")
-        asf_jira = jira.client.JIRA(jira_server, basic_auth=(JIRA_USERNAME, JIRA_PASSWORD))
+        asf_jira = jira.client.JIRA(
+            jira_server, basic_auth=(JIRA_USERNAME, JIRA_PASSWORD), timeout=(3.05, 30)
+        )
     else:
         print("Neither JIRA_ACCESS_TOKEN nor JIRA_USERNAME/JIRA_PASSWORD are set.")
         continue_maybe("Continue without jira?")
@@ -735,7 +737,7 @@ def main():
 if __name__ == "__main__":
     import doctest
 
-    (failure_count, test_count) = doctest.testmod()
+    failure_count, test_count = doctest.testmod()
     if failure_count:
         sys.exit(-1)
     try:

@@ -18,7 +18,7 @@ Generally, the connection string follows the standard URI definitions. The URI
 scheme is fixed and set to `sc://`. The full URI has to be a 
 [valid URI](http://www.faqs.org/rfcs/rfc2396.html) and must
 be parsed properly by most systems. For example, hostnames have to be valid and
-cannot contain arbitrary characters. Configuration parameter are passed in the 
+cannot contain arbitrary characters. Configuration parameters are passed in the 
 style of the HTTP URL Path Parameter Syntax. This is similar to the JDBC connection
 strings. The path component must be empty. All parameters are interpreted **case sensitive**.
 
@@ -51,7 +51,7 @@ sc://host:port/;param1=value;param2=value
     <td>port</td>
     <td>Numeric</td>
     <td>The port to be used when connecting to the GRPC endpoint. The
-    default values is: <b>15002</b>. Any valid port number can be used.</td>
+    default value is: <b>15002</b>. Any valid port number can be used.</td>
     <td><pre>15002</pre><pre>443</pre></td>
   </tr>
   <tr>

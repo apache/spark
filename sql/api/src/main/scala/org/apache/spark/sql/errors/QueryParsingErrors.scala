@@ -55,8 +55,15 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0004", ctx.source)
   }
 
-  def insertedValueNumberNotMatchFieldNumberError(ctx: NotMatchedClauseContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0006", ctx.notMatchedAction())
+  def insertedValueNumberNotMatchColumnNumberError(
+      expectedCount: Int,
+      actualCount: Int,
+      ctx: NotMatchedClauseContext): Throwable = {
+    new ParseException(
+      errorClass = "MERGE_INSERT_VALUE_COUNT_MISMATCH",
+      messageParameters =
+        Map("expectedCount" -> expectedCount.toString, "actualCount" -> actualCount.toString),
+      ctx.notMatchedAction())
   }
 
   def mergeStatementWithoutWhenClauseError(ctx: MergeIntoTableContext): Throwable = {
@@ -618,8 +625,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def createViewWithBothIfNotExistsAndReplaceError(ctx: ParserRuleContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0052", ctx)
+  def createViewWithBothIfNotExistsAndReplaceError(
+      viewName: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "CREATE_VIEW_WITH_IF_NOT_EXISTS_AND_REPLACE",
+      messageParameters = Map("viewName" -> viewName),
+      ctx)
   }
 
   def temporaryViewWithSchemaBindingMode(ctx: StatementContext): Throwable = {
@@ -674,6 +686,20 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(errorClass = "INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_IF_NOT_EXISTS", ctx)
   }
 
+  def invalidTempObjQualifierError(
+      objectType: String,
+      objectName: String,
+      qualifier: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      "INVALID_TEMP_OBJ_QUALIFIER",
+      Map(
+        "objectType" -> objectType,
+        "objectName" -> toSQLId(objectName),
+        "qualifier" -> toSQLId(qualifier)),
+      ctx)
+  }
+
   def unsupportedFunctionNameError(funcName: Seq[String], ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
@@ -720,13 +746,6 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
       messageParameters =
         Map("statement" -> toSQLStmt("DROP TEMPORARY FUNCTION"), "name" -> toSQLId(name)),
-      ctx)
-  }
-
-  def invalidNameForSetCatalog(name: Seq[String], ctx: ParserRuleContext): Throwable = {
-    new ParseException(
-      errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
-      messageParameters = Map("statement" -> toSQLStmt("SET CATALOG"), "name" -> toSQLId(name)),
       ctx)
   }
 
@@ -851,5 +870,21 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       errorClass = "UNEXPECTED_USE_OF_PARAMETER_MARKER",
       messageParameters = Map("parameterMarker" -> ctx.getText),
       ctx = ctx)
+  }
+
+  /**
+   * Throws an exception when a cursor reference has more than one qualifier. Valid: cursor or
+   * label.cursor Invalid: a.b.cursor
+   *
+   * @param cursorName
+   *   The fully qualified cursor name with multiple qualifiers
+   * @throws ParseException
+   *   Always throws this exception
+   */
+  def cursorInvalidQualifierError(cursorName: String): Throwable = {
+    new ParseException(
+      errorClass = "CURSOR_REFERENCE_INVALID_QUALIFIER",
+      messageParameters = Map("cursorName" -> toSQLId(cursorName)),
+      ctx = null)
   }
 }

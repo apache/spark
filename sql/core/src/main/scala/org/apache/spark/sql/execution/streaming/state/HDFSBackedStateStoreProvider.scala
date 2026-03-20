@@ -81,6 +81,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = map.get(key)
 
+    override def multiGet(keys: Array[UnsafeRow], colFamilyName: String): Iterator[UnsafeRow] = {
+      keys.iterator.map(key => get(key, colFamilyName))
+    }
+
     override def iterator(colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
       val iter = map.iterator()
       new StateStoreIterator(iter)
@@ -107,6 +111,17 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
     override def allColumnFamilyNames: Set[String] =
       Set[String](StateStore.DEFAULT_COL_FAMILY_NAME)
+
+    override def prefixScanWithMultiValues(
+        prefixKey: UnsafeRow,
+        colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+      throw StateStoreErrors.unsupportedOperationException("multipleValuesPerKey", "HDFSStateStore")
+    }
+
+    override def iteratorWithMultiValues(
+        colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+      throw StateStoreErrors.unsupportedOperationException("multipleValuesPerKey", "HDFSStateStore")
+    }
   }
 
   /** Implementation of [[StateStore]] API which is backed by an HDFS-compatible file system */
@@ -164,6 +179,11 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
       assertUseOfDefaultColFamily(colFamilyName)
       mapToUpdate.get(key)
+    }
+
+    override def multiGet(keys: Array[UnsafeRow], colFamilyName: String): Iterator[UnsafeRow] = {
+      assertUseOfDefaultColFamily(colFamilyName)
+      keys.iterator.map(key => mapToUpdate.get(key))
     }
 
     override def put(key: UnsafeRow, value: UnsafeRow, colFamilyName: String): Unit = {
@@ -313,6 +333,19 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     override def mergeList(
         key: UnsafeRow, values: Array[UnsafeRow], colFamilyName: String): Unit = {
       throw StateStoreErrors.unsupportedOperationException("mergeList", providerName)
+    }
+
+    override def prefixScanWithMultiValues(
+        prefixKey: UnsafeRow,
+        colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+      throw StateStoreErrors.unsupportedOperationException(
+        "prefixScanWithMultiValues", providerName)
+    }
+
+    override def iteratorWithMultiValues(
+        colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+      throw StateStoreErrors.unsupportedOperationException(
+        "iteratorWithMultiValues", providerName)
     }
   }
 
@@ -496,15 +529,21 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   private[state] lazy val fm = {
     val mgr = CheckpointFileManager.create(baseDir, hadoopConf)
     if (storeConf.checkpointFileChecksumEnabled) {
+      // To avoid blocking, we need 2 threads per fm caller (one for main file, one for checksum
+      // file). Since this fm is used by both query task and maintenance thread, the recommended
+      // default is 2 * 2 = 4 threads. A value of 0 disables the thread pool (sequential mode).
+      val numThreads = storeConf.fileChecksumThreadPoolSize
+      if (numThreads < ChecksumCheckpointFileManager.DEFAULT_THREAD_POOL_SIZE) {
+        logWarning(s"fileChecksumThreadPoolSize for the state store file checksum thread pool " +
+          s"is set to $numThreads, which is below the recommended default of " +
+          s"${ChecksumCheckpointFileManager.DEFAULT_THREAD_POOL_SIZE}. " +
+          "This may have performance impact.")
+      }
       new ChecksumCheckpointFileManager(
         mgr,
         // Allowing this for perf, since we do orphan checksum file cleanup in maintenance anyway
         allowConcurrentDelete = true,
-        // We need 2 threads per fm caller to avoid blocking
-        // (one for main file and another for checksum file).
-        // Since this fm is used by both query task and maintenance thread,
-        // then we need 2 * 2 = 4 threads.
-        numThreads = 4,
+        numThreads = numThreads,
         skipCreationIfFileMissingChecksum =
           storeConf.checkpointFileChecksumSkipCreationIfFileMissingChecksum)
     } else {

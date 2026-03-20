@@ -20,10 +20,11 @@ from functools import partial
 from typing import Any, Optional, Union, cast, no_type_check
 
 import pandas as pd
-from pandas.api.types import is_hashable  # type: ignore[attr-defined]
+from pandas.api.types import is_hashable
 from pandas.tseries.offsets import DateOffset
 from pyspark._globals import _NoValue
 
+from pyspark.loose_version import LooseVersion
 from pyspark import pandas as ps
 from pyspark.pandas import DataFrame
 from pyspark.pandas.indexes.base import Index
@@ -74,7 +75,7 @@ class DatetimeIndex(Index):
     yearfirst : bool, default False
         If True parse dates in `data` with the year first order.
     dtype : numpy.dtype or str, default None
-        Note that the only NumPy dtype allowed is ‘datetime64[ns]’.
+        Note that the only NumPy dtype allowed is 'datetime64[ns]'.
     copy : bool, default False
         Make a copy of input ndarray.
     name : label, default None
@@ -109,8 +110,8 @@ class DatetimeIndex(Index):
         cls,
         data=None,
         freq=_NoValue,
-        normalize=False,
-        closed=None,
+        normalize=_NoValue,
+        closed=_NoValue,
         ambiguous="raise",
         dayfirst=False,
         yearfirst=False,
@@ -118,30 +119,8 @@ class DatetimeIndex(Index):
         copy=False,
         name=None,
     ) -> "DatetimeIndex":
-        if closed is not None:
-            warnings.warn(
-                "The 'closed' keyword in DatetimeIndex construction is deprecated "
-                "and will be removed in a future version.",
-                FutureWarning,
-            )
-        if normalize is not None:
-            warnings.warn(
-                "The 'normalize' keyword in DatetimeIndex construction is deprecated "
-                "and will be removed in a future version.",
-                FutureWarning,
-            )
-        if not is_hashable(name):
-            raise TypeError("Index.name must be a hashable type")
-
-        if isinstance(data, (Series, Index)):
-            if dtype is None:
-                dtype = "datetime64[ns]"
-            return cast(DatetimeIndex, Index(data, dtype=dtype, copy=copy, name=name))
-
         kwargs = dict(
             data=data,
-            normalize=normalize,
-            closed=closed,
             ambiguous=ambiguous,
             dayfirst=dayfirst,
             yearfirst=yearfirst,
@@ -151,6 +130,40 @@ class DatetimeIndex(Index):
         )
         if freq is not _NoValue:
             kwargs["freq"] = freq
+
+        if LooseVersion(pd.__version__) < "3.0.0":
+            if normalize is not _NoValue:
+                warnings.warn(
+                    "The 'normalize' keyword in DatetimeIndex construction is deprecated "
+                    "and will be removed in a future version.",
+                    FutureWarning,
+                )
+                kwargs["normalize"] = normalize
+            else:
+                kwargs["normalize"] = False
+            if closed is not _NoValue:
+                warnings.warn(
+                    "The 'closed' keyword in DatetimeIndex construction is deprecated "
+                    "and will be removed in a future version.",
+                    FutureWarning,
+                )
+                kwargs["closed"] = closed
+        else:
+            if normalize is not _NoValue:
+                raise TypeError(
+                    "The 'normalize' keyword is not supported in pandas 3.0.0 and later."
+                )
+            if closed is not _NoValue:
+                raise TypeError("The 'closed' keyword is not supported in pandas 3.0.0 and later.")
+
+        if not is_hashable(name):
+            raise TypeError("Index.name must be a hashable type")
+
+        if isinstance(data, (Series, Index)):
+            if LooseVersion(pd.__version__) < "3.0.0":
+                if dtype is None:
+                    dtype = "datetime64[ns]"
+            return cast(DatetimeIndex, Index(data, dtype=dtype, copy=copy, name=name))
 
         return cast(DatetimeIndex, ps.from_pandas(pd.DatetimeIndex(**kwargs)))
 
@@ -505,7 +518,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = ps.date_range("2012-01-01", "2015-01-01", freq="Y")  # doctest: +SKIP
+        >>> idx = ps.date_range("2012-01-01", "2015-01-01", freq="YE")  # doctest: +SKIP
         >>> idx.is_leap_year  # doctest: +SKIP
         Index([True, False, False], dtype='bool')
         """
@@ -693,7 +706,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = ps.date_range(start='2014-08-01 10:00', freq='H', periods=3)  # doctest: +SKIP
+        >>> idx = ps.date_range(start='2014-08-01 10:00', freq='h', periods=3)  # doctest: +SKIP
         >>> idx.normalize()  # doctest: +SKIP
         DatetimeIndex(['2014-08-01', '2014-08-01', '2014-08-01'], dtype='datetime64[ns]', freq=None)
         """
@@ -761,7 +774,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> psidx = ps.date_range("2000-01-01", periods=3, freq="T")
+        >>> psidx = ps.date_range("2000-01-01", periods=3, freq="min")
         >>> psidx
         DatetimeIndex(['2000-01-01 00:00:00', '2000-01-01 00:01:00',
                        '2000-01-01 00:02:00'],
@@ -815,7 +828,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> psidx = ps.date_range("2000-01-01", periods=3, freq="T")  # doctest: +SKIP
+        >>> psidx = ps.date_range("2000-01-01", periods=3, freq="min")  # doctest: +SKIP
         >>> psidx  # doctest: +SKIP
         DatetimeIndex(['2000-01-01 00:00:00', '2000-01-01 00:01:00',
                        '2000-01-01 00:02:00'],
@@ -868,7 +881,7 @@ def _test() -> None:
         .appName("pyspark.pandas.indexes.datetimes tests")
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.indexes.datetimes,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

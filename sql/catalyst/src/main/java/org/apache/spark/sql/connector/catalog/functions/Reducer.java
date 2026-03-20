@@ -39,4 +39,12 @@ import org.apache.spark.annotation.Evolving;
 @Evolving
 public interface Reducer<I, O> {
   O reduce(I arg);
+
+  /**
+   * Returns a short string representation for plan display (e.g. explain output).
+   * Defaults to the unqualified class name; implementations may override for a richer description.
+   */
+  default String displayName() {
+    return getClass().getSimpleName();
+  }
 }

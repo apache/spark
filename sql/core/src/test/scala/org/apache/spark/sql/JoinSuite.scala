@@ -1236,13 +1236,13 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString) {
       // positive not in subquery case
       var joinExec = assertJoin((
-        "select * from testData where key not in (select a from testData2)",
+        "select * from testData where key not in (select b from testData3)",
         classOf[BroadcastHashJoinExec]))
       assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
 
       // negative not in subquery case since multi-column is not supported
       assertJoin((
-        "select * from testData where (key, key + 1) not in (select * from testData2)",
+        "select * from testData where (key, key + 1) not in (select b, b + 1 from testData3)",
         classOf[BroadcastNestedLoopJoinExec]))
 
       // positive hand-written left anti join
@@ -1268,6 +1268,23 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
         "select * from testData2 left anti join testData3 ON testData2.a = testData3.b or " +
           "isnull(testData2.b = testData3.b)",
         classOf[BroadcastNestedLoopJoinExec]))
+    }
+  }
+
+  test("SPARK-54972: Improve not in subqueries with non-nullable columns") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString) {
+      // testData.key nullable false
+      // testData2.* nullable false
+
+      val joinExec = assertJoin((
+        "select * from testData where key not in (select a from testData2)",
+        classOf[BroadcastHashJoinExec]))
+      assert(!joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
+
+      val joinExec2 = assertJoin((
+        "select * from testData where (key, key + 1) not in (select * from testData2)",
+        classOf[BroadcastHashJoinExec]))
+      assert(!joinExec2.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
     }
   }
 

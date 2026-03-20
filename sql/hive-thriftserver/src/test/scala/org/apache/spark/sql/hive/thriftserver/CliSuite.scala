@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.io._
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util.concurrent.CountDownLatch
 
 import scala.collection.mutable.ArrayBuffer
@@ -862,5 +863,32 @@ class CliSuite extends SparkFunSuite {
       2.minute,
       extraArgs = "--conf" :: s"spark.plugins=${classOf[RedirectConsolePlugin].getName}" :: Nil)(
       "SELECT 1;" -> "1")
+  }
+
+  test("unbound parameter markers in CLI are detected and reported") {
+    // Test that parameter markers without parameters are properly detected in spark-sql CLI
+    // and throw UNBOUND_SQL_PARAMETER error instead of internal errors.
+    // This guards against regression where SparkSQLDriver wasn't using pre-parser.
+    runCliWithin(
+      2.minute,
+      errorResponses = Seq("UNBOUND_SQL_PARAMETER"))(
+      "SELECT :param;" -> "param",
+      "SELECT 'hello' :parm;" -> "parm",
+      "SELECT ?;" -> ""
+    )
+  }
+
+  test("SPARK-55198: spark-sql should skip comment line with leading whitespaces") {
+    val sql = """SET x=
+                | -- comment
+                |1;
+                |""".stripMargin
+    runCliWithin(2.minutes)(sql -> "x\t1")
+
+    withTempDir { tmpDir =>
+      val sqlFilePath = tmpDir.toPath.resolve("test.sql").toAbsolutePath
+      Files.writeString(sqlFilePath, sql)
+      runCliWithin(2.minutes, extraArgs = Seq("-f", sqlFilePath.toString))("" -> "x\t1")
+    }
   }
 }

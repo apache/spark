@@ -226,6 +226,8 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.streaming.TestGroupState"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.streaming.TestGroupState$"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.TwsTester"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.TwsTester$"),
 
       // Artifact Manager, client has a totally different implementation.
       ProblemFilters.exclude[MissingClassProblem](

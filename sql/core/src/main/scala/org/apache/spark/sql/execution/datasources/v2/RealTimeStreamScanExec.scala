@@ -66,7 +66,7 @@ case class LowLatencyReaderWrap(
     val ret = if (curTime >= lowLatencyEndTime) {
       RecordStatus.newStatusWithoutArrivalTime(false)
     } else {
-      reader.nextWithTimeout(lowLatencyEndTime - curTime)
+      reader.nextWithTimeout(curTime, lowLatencyEndTime - curTime)
     }
 
     if (!ret.hasRecord) {

@@ -23,12 +23,11 @@ import os
 import sys
 import warnings
 from io import StringIO
-from typing import Iterator, cast
+from typing import Iterator
 
 from pyspark import SparkConf
 from pyspark.errors import PySparkValueError
 from pyspark.sql import SparkSession
-from pyspark.sql.datasource import DataSource, DataSourceReader
 from pyspark.sql.functions import col, arrow_udf, pandas_udf, udf
 from pyspark.sql.window import Window
 from pyspark.profiler import UDFBasicProfiler
@@ -261,7 +260,7 @@ class UDFProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_perf_profiler_udf_with_arrow(self):
         with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
@@ -303,7 +302,7 @@ class UDFProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_perf_profiler_pandas_udf(self):
         @pandas_udf("long")
@@ -350,7 +349,7 @@ class UDFProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_perf_profiler_pandas_udf_iterator(self):
         import pandas as pd
@@ -389,7 +388,7 @@ class UDFProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_perf_profiler_map_in_pandas(self):
         df = self.spark.createDataFrame([(1, 21), (2, 30)], ("id", "age")).repartition(1)
@@ -426,7 +425,7 @@ class UDFProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_perf_profiler_pandas_udf_window(self):
         # WindowInPandasExec
@@ -472,7 +471,7 @@ class UDFProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_perf_profiler_aggregate_in_pandas(self):
         # AggregateInPandasExec
@@ -539,7 +538,7 @@ class UDFProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_perf_profiler_pandas_udf_grouped_agg_iter(self):
         import pandas as pd
@@ -566,7 +565,7 @@ class UDFProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_perf_profiler_group_apply_in_pandas(self):
         # FlatMapGroupsInBatchExec
@@ -588,7 +587,7 @@ class UDFProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_perf_profiler_cogroup_apply_in_pandas(self):
         # FlatMapCoGroupsInBatchExec
@@ -617,7 +616,7 @@ class UDFProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_perf_profiler_group_apply_in_arrow(self):
         # FlatMapGroupsInBatchExec
@@ -642,7 +641,7 @@ class UDFProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_perf_profiler_cogroup_apply_in_arrow(self):
         import pyarrow as pa
@@ -662,35 +661,6 @@ class UDFProfiler2TestsMixin:
 
         for id in self.profile_results:
             self.assert_udf_profile_present(udf_id=id, expected_line_count_prefix=2)
-
-    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
-    def test_perf_profiler_data_source(self):
-        class TestDataSourceReader(DataSourceReader):
-            def __init__(self, schema):
-                self.schema = schema
-
-            def partitions(self):
-                raise NotImplementedError
-
-            def read(self, partition):
-                yield from ((1,), (2,), (3,))
-
-        class TestDataSource(DataSource):
-            def schema(self):
-                return "id long"
-
-            def reader(self, schema) -> "DataSourceReader":
-                return TestDataSourceReader(schema)
-
-        self.spark.dataSource.register(TestDataSource)
-
-        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
-            self.spark.read.format("TestDataSource").load().collect()
-
-        self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
-
-        for id in self.profile_results:
-            self.assert_udf_profile_present(udf_id=id, expected_line_count_prefix=4)
 
     def test_perf_profiler_render(self):
         with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):

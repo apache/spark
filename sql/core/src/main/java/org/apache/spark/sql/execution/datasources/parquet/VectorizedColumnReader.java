@@ -43,6 +43,8 @@ import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.sql.types.DecimalType;
+import org.apache.spark.sql.types.GeometryType;
+import org.apache.spark.sql.types.GeographyType;
 
 import static org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.BOOLEAN;
 import static org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.INT64;
@@ -180,6 +182,8 @@ public class VectorizedColumnReader {
         break;
       case BINARY:
         isSupported = !needsDecimalScaleRebase(sparkType);
+        boolean isGeoType = sparkType instanceof GeometryType || sparkType instanceof GeographyType;
+        isSupported = isSupported && !isGeoType;
         break;
     }
     return isSupported;

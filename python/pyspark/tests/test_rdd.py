@@ -36,9 +36,8 @@ from pyspark.serializers import (
     NoOpSerializer,
 )
 from pyspark.sql import SparkSession
-from pyspark.testing.utils import ReusedPySparkTestCase, QuietTest, have_numpy
-from pyspark.testing.sqlutils import SPARK_HOME, have_pandas
-
+from pyspark.testing.utils import ReusedPySparkTestCase, QuietTest, have_numpy, have_pandas
+from pyspark.testing.sqlutils import SPARK_HOME
 
 global_func = lambda: "Hi"  # noqa: E731
 
@@ -97,7 +96,7 @@ class RDDTests(ReusedPySparkTestCase):
 
     def test_save_as_textfile_with_unicode(self):
         # Regression test for SPARK-970
-        x = "\u00A1Hola, mundo!"
+        x = "\u00a1Hola, mundo!"
         data = self.sc.parallelize([x])
         tempFile = tempfile.NamedTemporaryFile(delete=True)
         tempFile.close()
@@ -106,7 +105,7 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertEqual(x, raw_contents.strip().decode("utf-8"))
 
     def test_save_as_textfile_with_utf8(self):
-        x = "\u00A1Hola, mundo!"
+        x = "\u00a1Hola, mundo!"
         data = self.sc.parallelize([x.encode("utf-8")])
         tempFile = tempfile.NamedTemporaryFile(delete=True)
         tempFile.close()
@@ -135,7 +134,7 @@ class RDDTests(ReusedPySparkTestCase):
         path = os.path.join(SPARK_HOME, "python/test_support/hello/hello.txt")
         a = self.sc.textFile(path)
         result = a.cartesian(a).collect()
-        (x, y) = result[0]
+        x, y = result[0]
         self.assertEqual("Hello World!", x.strip())
         self.assertEqual("Hello World!", y.strip())
 

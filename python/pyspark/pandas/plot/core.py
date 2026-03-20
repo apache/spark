@@ -20,7 +20,7 @@ import math
 
 import pandas as pd
 import numpy as np
-from pandas.core.base import PandasObject
+from pandas.core.base import PandasObject  # type: ignore[attr-defined]
 from pandas.core.dtypes.inference import is_integer
 
 from pyspark.sql import functions as F, Column
@@ -145,7 +145,7 @@ class NumericPlotBase:
         # no empty frames or series allowed
         if len(numeric_data.columns) == 0:
             raise TypeError(
-                "Empty {0!r}: no numeric data to " "plot".format(numeric_data.__class__.__name__)
+                "Empty {0!r}: no numeric data to plot".format(numeric_data.__class__.__name__)
             )
 
         return data, numeric_data
@@ -420,9 +420,9 @@ class KdePlotBase(NumericPlotBase):
     @staticmethod
     def compute_kde_col(input_col, bw_method=None, ind=None):
         # refers to org.apache.spark.mllib.stat.KernelDensity
-        assert bw_method is not None and isinstance(
-            bw_method, (int, float)
-        ), "'bw_method' must be set as a scalar number."
+        assert bw_method is not None and isinstance(bw_method, (int, float)), (
+            "'bw_method' must be set as a scalar number."
+        )
 
         assert ind is not None, "'ind' must be a scalar array."
 
@@ -542,8 +542,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
                 from pyspark.pandas.plot import plotly as module
             except ImportError:
                 raise ImportError(
-                    "plotly is required for plotting when the "
-                    "default backend 'plotly' is selected."
+                    "plotly is required for plotting when the default backend 'plotly' is selected."
                 ) from None
 
             PandasOnSparkPlotAccessor._backends["plotly"] = module
@@ -573,7 +572,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
         """
         Plot DataFrame/Series as lines.
 
-        This function is useful to plot lines using DataFrame’s values
+        This function is useful to plot lines using DataFrame's values
         as coordinates.
 
         Parameters
@@ -904,12 +903,12 @@ class PandasOnSparkPlotAccessor(PandasObject):
 
     def hist(self, bins=10, **kwds):
         """
-        Draw one histogram of the DataFrame’s columns.
+        Draw one histogram of the DataFrame's columns.
 
         A `histogram`_ is a representation of the distribution of data.
         This function calls :meth:`plotting.backend.plot`,
         on each series in the DataFrame, resulting in one histogram per column.
-        This is useful when the DataFrame’s Series are in a similar scale.
+        This is useful when the DataFrame's Series are in a similar scale.
 
         .. _histogram: https://en.wikipedia.org/wiki/Histogram
 

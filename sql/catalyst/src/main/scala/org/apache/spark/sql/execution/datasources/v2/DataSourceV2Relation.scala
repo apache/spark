@@ -17,17 +17,24 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.util.{Optional, OptionalLong}
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation, TimeTravelSpec}
+import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.streaming.{StreamingSourceIdentifyingName, Unassigned}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability, TableCatalog, V2TableUtil}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
+import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics}
+import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram => V2Histogram, HistogramBin => V2HistogramBin}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
@@ -131,8 +138,8 @@ case class DataSourceV2Relation(
     }
   }
 
-  def autoSchemaEvolution(): Boolean =
-    table.capabilities().contains(TableCapability.AUTOMATIC_SCHEMA_EVOLUTION)
+  def autoSchemaEvolution: Boolean =
+    table.capabilities.contains(TableCapability.AUTOMATIC_SCHEMA_EVOLUTION)
 
   def isVersioned: Boolean = table.version != null
 }
@@ -207,7 +214,8 @@ case class StreamingDataSourceV2Relation(
     identifier: Option[Identifier],
     options: CaseInsensitiveStringMap,
     metadataPath: String,
-    realTimeModeDuration: Option[Long] = None)
+    realTimeModeDuration: Option[Long] = None,
+    sourceIdentifyingName: StreamingSourceIdentifyingName = Unassigned)
   extends DataSourceV2RelationBase(table, output, catalog, identifier, options) {
 
   override def isStreaming: Boolean = true
@@ -296,6 +304,75 @@ object DataSourceV2Relation {
       catalog: Option[CatalogPlugin],
       identifier: Option[Identifier]): DataSourceV2Relation =
     create(table, catalog, identifier, CaseInsensitiveStringMap.empty)
+
+  /**
+   * This is used to transform catalog statistics to data source v2 statistics.
+   */
+  def v1StatsToV2Stats(
+      v1Statistics: CatalogStatistics,
+      schema: StructType): V2Statistics = {
+    val typeMap = schema.fields.map(f => f.name -> f.dataType).toMap
+    val colStatsMap: Map[NamedReference, ColumnStatistics] =
+      v1Statistics.colStats.flatMap { case (name, stat) =>
+        typeMap.get(name).map { dt =>
+          FieldReference.column(name) -> v1ColStatToV2ColStat(stat, name, dt)
+        }
+      }
+
+    val v2SizeInBytes = OptionalLong.of(v1Statistics.sizeInBytes.longValue)
+    val v2NumRows = v1Statistics.rowCount
+      .map(v => OptionalLong.of(v.longValue)).getOrElse(OptionalLong.empty())
+    val v2ColStats = new java.util.HashMap[NamedReference, ColumnStatistics]()
+    colStatsMap.foreach { case (k, v) => v2ColStats.put(k, v) }
+
+    new V2Statistics {
+      override def sizeInBytes(): OptionalLong = v2SizeInBytes
+      override def numRows(): OptionalLong = v2NumRows
+      override def columnStats(): java.util.Map[NamedReference, ColumnStatistics] = v2ColStats
+    }
+  }
+
+  private def v1ColStatToV2ColStat(
+      stat: CatalogColumnStat,
+      colName: String,
+      dataType: DataType): ColumnStatistics = {
+    val parsedMin = stat.min.map(
+      CatalogColumnStat.fromExternalString(_, colName, dataType, stat.version))
+    val parsedMax = stat.max.map(
+      CatalogColumnStat.fromExternalString(_, colName, dataType, stat.version))
+    val v2DistinctCount =
+      stat.distinctCount.map(v => OptionalLong.of(v.longValue)).getOrElse(OptionalLong.empty())
+    val v2NullCount =
+      stat.nullCount.map(v => OptionalLong.of(v.longValue)).getOrElse(OptionalLong.empty())
+    val v2AvgLen = stat.avgLen.map(OptionalLong.of).getOrElse(OptionalLong.empty())
+    val v2MaxLen = stat.maxLen.map(OptionalLong.of).getOrElse(OptionalLong.empty())
+    val v2Histogram: Optional[V2Histogram] = stat.histogram match {
+      case Some(h) =>
+        val v2Bins: Array[V2HistogramBin] = h.bins.map { bin =>
+          new V2HistogramBin {
+            override def lo(): Double = bin.lo
+            override def hi(): Double = bin.hi
+            override def ndv(): Long = bin.ndv
+          }
+        }
+        Optional.of(new V2Histogram {
+          override def height(): Double = h.height
+          override def bins(): Array[V2HistogramBin] = v2Bins
+        })
+      case None => Optional.empty()
+    }
+    new ColumnStatistics {
+      override def distinctCount(): OptionalLong = v2DistinctCount
+      override def min(): Optional[Object] = Optional.ofNullable(
+        parsedMin.map(_.asInstanceOf[Object]).orNull)
+      override def max(): Optional[Object] = Optional.ofNullable(
+        parsedMax.map(_.asInstanceOf[Object]).orNull)
+      override def nullCount(): OptionalLong = v2NullCount
+      override def avgLen(): OptionalLong = v2AvgLen
+      override def maxLen(): OptionalLong = v2MaxLen
+      override def histogram(): Optional[V2Histogram] = v2Histogram
+    }
+  }
 
   /**
    * This is used to transform data source v2 statistics to logical.Statistics.

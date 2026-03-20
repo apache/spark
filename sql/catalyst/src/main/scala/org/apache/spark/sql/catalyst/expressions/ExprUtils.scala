@@ -66,7 +66,10 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
         .acceptsType(m.dataType) =>
       val arrayMap = m.eval().asInstanceOf[ArrayBasedMapData]
       ArrayBasedMapData.toScalaMap(arrayMap).map { case (key, value) =>
-        key.toString -> value.toString
+        if (key == null) {
+          throw QueryExecutionErrors.nullAsMapKeyNotAllowedError()
+        }
+        key.toString -> (if (value == null) "null" else value.toString)
       }
     case m: CreateMap =>
       throw QueryCompilationErrors.keyValueInMapNotStringError(m)
@@ -152,7 +155,11 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
     }
   }
 
-  def assertValidAggregation(a: Aggregate): Unit = {
+  def assertValidAggregation(
+      a: Aggregate,
+      semanticEquality: (Expression, Expression) => Boolean =
+        (groupingExpression, checkedExpression) =>
+          groupingExpression.semanticEquals(checkedExpression)): Unit = {
     def checkValidAggregateExpression(expr: Expression): Unit = expr match {
       case expr: AggregateExpression =>
         val aggFunction = expr.aggregateFunction
@@ -175,14 +182,14 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
         a.failAnalysis(
           errorClass = "MISSING_GROUP_BY",
           messageParameters = Map.empty)
-      case e: Attribute if !a.groupingExpressions.exists(_.semanticEquals(e)) =>
+      case e: Attribute if !a.groupingExpressions.exists(semanticEquality(_, e)) =>
         throw QueryCompilationErrors.columnNotInGroupByClauseError(e)
       case s: ScalarSubquery
-        if s.children.nonEmpty && !a.groupingExpressions.exists(_.semanticEquals(s)) =>
+        if s.children.nonEmpty && !a.groupingExpressions.exists(semanticEquality(_, s)) =>
         s.failAnalysis(
           errorClass = "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION",
           messageParameters = Map("sqlExpr" -> toSQLExpr(s)))
-      case e if a.groupingExpressions.exists(_.semanticEquals(e)) => // OK
+      case e if a.groupingExpressions.exists(semanticEquality(_, e)) => // OK
       // There should be no Window in Aggregate - this case will fail later check anyway.
       // Perform this check for special case of lateral column alias, when the window
       // expression is not eligible to propagate to upper plan because it is not valid,

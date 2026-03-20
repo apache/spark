@@ -169,6 +169,15 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   override def visit(tree: ParseTree): AnyRef = {
     if (tree == null) return null
 
+    // Skip cursor query definitions - parameter markers in cursor queries
+    // should not be substituted until OPEN time
+    tree match {
+      case ctx: DeclareCursorStatementContext =>
+        // Don't visit the query() child, only visit other parts if needed
+        return null
+      case _ => // Continue with normal processing
+    }
+
     // Check if this is a parameter literal
     tree match {
       case ctx: NamedParameterLiteralContext =>

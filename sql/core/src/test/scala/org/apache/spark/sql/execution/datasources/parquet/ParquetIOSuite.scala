@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.math.{BigDecimal => JBigDecimal}
 import java.time.{LocalDateTime, LocalTime}
 import java.util.Locale
 
@@ -765,6 +766,24 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
+  gridTest("Read external file with UNKNOWN type annotation")(
+    Seq(true, false)
+  ) { respectUnknown =>
+    withSQLConf(
+      SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION.key ->
+        respectUnknown.toString
+    ) {
+      withAllParquetReaders {
+        // Parquet file column void_col has physical type INT32 and logical type UNKNOWN and was
+        // not written by Spark, so this goes through Parquet --> Spark type conversion.
+        val df = readResourceParquetFile("test-data/void_in_parquet.parquet")
+        val inferredType = df.schema("void_col").dataType
+        val expected = if (respectUnknown) NullType else IntegerType
+        assert(inferredType == expected)
+      }
+    }
+  }
+
   test("vectorized reader: missing all struct fields") {
     for {
       offheapEnabled <- Seq(true, false)
@@ -1261,9 +1280,15 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         val writer = createParquetWriter(schema, path, dictionaryEnabled)
 
         val factory = new SimpleGroupFactory(schema)
+        // Original range retained to avoid regression
         (-500 until 500).foreach { i =>
           val group = factory.newGroup()
             .append("a", i % 100L)
+          writer.write(group)
+        }
+        // Boundary values: zero, one, signed extremes interpreted as unsigned
+        Seq(0L, 1L, Long.MaxValue, Long.MinValue, -2L, -1L).foreach { v =>
+          val group = factory.newGroup().append("a", v)
           writer.write(group)
         }
         writer.close()
@@ -1273,10 +1298,13 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         val path = new Path(dir.toURI.toString, "part-r-0.parquet")
         makeRawParquetFile(path)
         readParquetFile(path.toString) { df =>
-          checkAnswer(df, (-500 until 500).map { i =>
-            val bi = UnsignedLong.fromLongBits(i % 100L).bigIntegerValue()
-            Row(new java.math.BigDecimal(bi))
-          })
+          val originalExpected = (-500 until 500).map { i =>
+            Row(new JBigDecimal(UnsignedLong.fromLongBits(i % 100L).bigIntegerValue()))
+          }
+          val boundaryExpected = Seq(0L, 1L, Long.MaxValue, Long.MinValue, -2L, -1L).map { v =>
+            Row(new JBigDecimal(UnsignedLong.fromLongBits(v).bigIntegerValue()))
+          }
+          checkAnswer(df, originalExpected ++ boundaryExpected)
         }
       }
     }

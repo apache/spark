@@ -122,6 +122,22 @@ trait ConditionalStatementExec extends NonLeafStatementExec {
    * HANDLER.
    */
   protected[scripting] var interrupted: Boolean = false
+
+  /**
+   * Returns true if the conditional statement is currently evaluating its condition,
+   * false if it's executing its body. This is used by CONTINUE HANDLER to determine
+   * whether to interrupt the conditional statement when an exception occurs.
+   *
+   * For loop statements (WHILE, REPEAT, FOR), this should return true when evaluating
+   * the loop condition and false when executing the loop body. This distinction is
+   * critical because:
+   * - Exception in condition: loop should be skipped (interrupted)
+   * - Exception in body: loop should continue to next iteration (not interrupted)
+   *
+   * For IF/CASE statements, this should return true when evaluating the condition
+   * expression and false when executing any branch body.
+   */
+  protected[scripting] def isInCondition: Boolean
 }
 
 /**
@@ -481,6 +497,8 @@ class IfElseStatementExec(
 
   override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
 
+  override protected[scripting] def isInCondition: Boolean = state == IfElseState.Condition
+
   override def reset(): Unit = {
     state = IfElseState.Condition
     curr = Some(conditions.head)
@@ -538,6 +556,18 @@ class WhileStatementExec(
                 throw SparkException.internalError("Unexpected statement type in WHILE condition.")
             }
           case WhileState.Body =>
+            // Check if body has more statements before calling next(). When an exception in a
+            // conditional statement's condition is handled by a CONTINUE handler, the conditional
+            // is interrupted. If it's the last statement in the loop body, calling next() on the
+            // exhausted iterator would fail. Instead, we return NoOpStatementExec and transition
+            // back to the condition.
+            if (!body.getTreeIterator.hasNext) {
+              state = WhileState.Condition
+              curr = Some(condition)
+              condition.reset()
+              return new NoOpStatementExec
+            }
+
             val retStmt = body.getTreeIterator.next()
 
             // Handle LEAVE or ITERATE statement if it has been encountered.
@@ -566,6 +596,8 @@ class WhileStatementExec(
     }
 
   override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
+
+  override protected[scripting] def isInCondition: Boolean = state == WhileState.Condition
 
   override def reset(): Unit = {
     state = WhileState.Condition
@@ -656,6 +688,8 @@ class SearchedCaseStatementExec(
 
   override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
 
+  override protected[scripting] def isInCondition: Boolean = state == CaseState.Condition
+
   override def reset(): Unit = {
     state = CaseState.Condition
     curr = Some(conditions.head)
@@ -696,15 +730,23 @@ class SimpleCaseStatementExec(
   private var conditionBodyTupleIterator: Iterator[(SingleStatementExec, CompoundBodyExec)] = _
   private var caseVariableLiteral: Literal = _
 
+  // Flag to track if case variable evaluation has been attempted. Used by CONTINUE handler
+  // mechanism to determine if an exception occurred during case variable evaluation vs. before
+  // the CASE statement was reached.
+  protected[scripting] var hasStartedCaseVariableEvaluation: Boolean = false
+
   private var isCacheValid = false
   private def validateCache(): Unit = {
     if (!isCacheValid) {
+      // Set flags before evaluation so CONTINUE handler can detect if exception happened here.
+      hasStartedCaseVariableEvaluation = true
       val values = caseVariableExec.buildDataFrame(session).collect()
       caseVariableExec.isExecuted = true
 
       caseVariableLiteral = Literal(values.head.get(0))
       conditionBodyTupleIterator = createConditionBodyIterator
       isCacheValid = true
+      hasStartedCaseVariableEvaluation = false
     }
   }
 
@@ -795,6 +837,8 @@ class SimpleCaseStatementExec(
 
   override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
 
+  override protected[scripting] def isInCondition: Boolean = state == CaseState.Condition
+
   override def reset(): Unit = {
     state = CaseState.Condition
     bodyExec = None
@@ -804,6 +848,7 @@ class SimpleCaseStatementExec(
     caseVariableExec.reset()
     conditionalBodies.foreach(b => b.reset())
     elseBody.foreach(b => b.reset())
+    hasStartedCaseVariableEvaluation = false
   }
 }
 
@@ -854,6 +899,18 @@ class RepeatStatementExec(
               throw SparkException.internalError("Unexpected statement type in REPEAT condition.")
           }
         case RepeatState.Body =>
+          // Check if body has more statements before calling next(). When an exception in a
+          // conditional statement's condition is handled by a CONTINUE handler, the conditional
+          // is interrupted. If it's the last statement in the loop body, calling next() on the
+          // exhausted iterator would fail. Instead, we return NoOpStatementExec and transition
+          // back to the condition.
+          if (!body.getTreeIterator.hasNext) {
+            state = RepeatState.Condition
+            curr = Some(condition)
+            condition.reset()
+            return new NoOpStatementExec
+          }
+
           val retStmt = body.getTreeIterator.next()
 
           retStmt match {
@@ -881,6 +938,8 @@ class RepeatStatementExec(
     }
 
   override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
+
+  override protected[scripting] def isInCondition: Boolean = state == RepeatState.Condition
 
   override def reset(): Unit = {
     state = RepeatState.Body
@@ -1019,17 +1078,24 @@ class ForStatementExec(
   }
   private var state = ForState.VariableAssignment
 
+  // Flag to track if FOR query evaluation has been attempted. Used by CONTINUE handler
+  // mechanism to determine if an exception occurred during query evaluation vs. before
+  // the FOR statement was reached.
+  protected[scripting] var hasStartedQueryEvaluation = false
   private var queryResult: util.Iterator[Row] = _
   private var queryColumnNameToDataType: Map[String, DataType] = _
   private var isResultCacheValid = false
   private def cachedQueryResult(): util.Iterator[Row] = {
     if (!isResultCacheValid) {
+      // Set flag before evaluation so CONTINUE handler can detect if exception happened here.
+      hasStartedQueryEvaluation = true
       val df = query.buildDataFrame(session)
       queryResult = df.toLocalIterator()
       queryColumnNameToDataType = df.schema.fields.map(f => f.name -> f.dataType).toMap
 
       query.isExecuted = true
       isResultCacheValid = true
+      hasStartedQueryEvaluation = false
     }
     queryResult
   }
@@ -1218,6 +1284,8 @@ class ForStatementExec(
 
   override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
 
+  override protected[scripting] def isInCondition: Boolean = state == ForState.VariableAssignment
+
   override def reset(): Unit = {
     state = ForState.VariableAssignment
     isResultCacheValid = false
@@ -1225,6 +1293,7 @@ class ForStatementExec(
     curr = None
     bodyWithVariables = None
     firstIteration = true
+    hasStartedQueryEvaluation = false
   }
 }
 

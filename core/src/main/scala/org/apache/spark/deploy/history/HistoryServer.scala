@@ -23,7 +23,7 @@ import scala.util.control.NonFatal
 import scala.xml.Node
 
 import jakarta.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
-import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
+import org.eclipse.jetty.ee10.servlet.{ServletContextHandler, ServletHolder}
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil

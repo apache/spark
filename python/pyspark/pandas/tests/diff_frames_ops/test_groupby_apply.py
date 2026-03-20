@@ -60,6 +60,10 @@ class GroupByApplyMixin:
             pdf.groupby(["a", pkey]).apply(lambda x: x + x.min()).sort_index(),
         )
 
+    def test_apply_without_shortcut(self):
+        with ps.option_context("compute.shortcut_limit", 0):
+            self.test_apply()
+
 
 class GroupByApplyTests(
     GroupByApplyMixin,

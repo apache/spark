@@ -26,7 +26,7 @@ import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache, Removal
 import com.google.common.util.concurrent.UncheckedExecutionException
 import jakarta.servlet.{DispatcherType, Filter, FilterChain, ServletException, ServletRequest, ServletResponse}
 import jakarta.servlet.http.{HttpServletRequest, HttpServletResponse}
-import org.eclipse.jetty.servlet.FilterHolder
+import org.eclipse.jetty.ee10.servlet.FilterHolder
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
@@ -293,26 +293,12 @@ private[history] class CacheMetrics(prefix: String) extends Source {
     ("eviction.count", evictionCount),
     ("load.count", loadCount))
 
-  /** all metrics, including timers */
-  private val allMetrics = counters ++ Seq(
-    ("load.timer", loadTimer))
-
   /**
    * Name of metric source
    */
   override val sourceName = "ApplicationCache"
 
   override val metricRegistry: MetricRegistry = new MetricRegistry
-
-  /**
-   * Startup actions.
-   * This includes registering metrics with [[metricRegistry]]
-   */
-  private def init(): Unit = {
-    allMetrics.foreach { case (name, metric) =>
-      metricRegistry.register(MetricRegistry.name(prefix, name), metric)
-    }
-  }
 
   override def toString: String = {
     val sb = new StringBuilder()

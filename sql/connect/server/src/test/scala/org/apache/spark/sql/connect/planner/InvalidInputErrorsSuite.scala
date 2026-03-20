@@ -21,7 +21,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput}
-import org.apache.spark.sql.connect.planner.SparkConnectPlanTest
+import org.apache.spark.sql.connect.planner.{InvalidInputErrors, SparkConnectPlanTest}
 import org.apache.spark.sql.types._
 
 class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
@@ -75,7 +75,7 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
       }),
     TestCase(
       name = "Invalid schema string non struct type",
-      expectedErrorCondition = "INVALID_SCHEMA.NON_STRUCT_TYPE",
+      expectedErrorCondition = "CONNECT_INVALID_PLAN.INVALID_SCHEMA_NON_STRUCT_TYPE",
       expectedParameters = Map(
         "inputSchema" -> """"{"type":"array","elementType":"integer","containsNull":false}"""",
         "dataType" -> "\"ARRAY<INT>\""),
@@ -97,8 +97,8 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
       }),
     TestCase(
       name = "Deduplicate needs input",
-      expectedErrorCondition = "INTERNAL_ERROR",
-      expectedParameters = Map("message" -> "Deduplicate needs a plan input"),
+      expectedErrorCondition = "CONNECT_INVALID_PLAN.DEDUPLICATE_NEEDS_INPUT",
+      expectedParameters = Map.empty,
       invalidInput = {
         val deduplicate = proto.Deduplicate
           .newBuilder()
@@ -109,9 +109,9 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
       }),
     TestCase(
       name = "Catalog not set",
-      expectedErrorCondition = "INTERNAL_ERROR",
+      expectedErrorCondition = "CONNECT_INVALID_PLAN.INVALID_ONE_OF_FIELD_NOT_SET",
       expectedParameters =
-        Map("message" -> "This oneOf field in spark.connect.Catalog is not set: CATTYPE_NOT_SET"),
+        Map("fullName" -> "spark.connect.Catalog", "name" -> "CATTYPE_NOT_SET"),
       invalidInput = {
         val catalog = proto.Catalog
           .newBuilder()
@@ -126,13 +126,56 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
   // Run all test cases
   testCases.foreach { testCase =>
     test(s"${testCase.name}") {
+      val exception = intercept[InvalidPlanInput] {
+        transform(testCase.invalidInput)
+      }
       checkError(
-        exception = intercept[InvalidPlanInput] {
-          transform(testCase.invalidInput)
-        },
+        exception = exception,
         condition = testCase.expectedErrorCondition,
         parameters = testCase.expectedParameters)
+      if (testCase.expectedErrorCondition.startsWith("CONNECT_INVALID_PLAN")) {
+        assert(exception.getSqlState == "56K00")
+      }
     }
+  }
+
+  test("noHandlerFoundForExtension") {
+    val ex = InvalidInputErrors.noHandlerFoundForExtension("foo.bar.Ext")
+    assert(ex.getCondition.contains("NO_HANDLER_FOR_EXTENSION"))
+    assert(ex.getMessage.contains("foo.bar.Ext"))
+    assert(ex.getSqlState == "56K00")
+  }
+
+  test("notFoundCachedLocalRelation") {
+    val ex = InvalidInputErrors.notFoundCachedLocalRelation("abc123", "sess-uuid")
+    assert(ex.getCondition.contains("NOT_FOUND_CACHED_LOCAL_RELATION"))
+    assert(ex.getMessage.contains("abc123"))
+    assert(ex.getMessage.contains("sess-uuid"))
+    assert(ex.getSqlState == "56K00")
+  }
+
+  test("localRelationSizeLimitExceeded") {
+    val ex = InvalidInputErrors.localRelationSizeLimitExceeded(1000L, 500L)
+    assert(ex.getCondition.contains("LOCAL_RELATION_SIZE_LIMIT_EXCEEDED"))
+    assert(ex.getMessage.contains("1000"))
+    assert(ex.getMessage.contains("500"))
+    assert(ex.getSqlState == "56K00")
+  }
+
+  test("functionEvalTypeNotSupported") {
+    val ex = InvalidInputErrors.functionEvalTypeNotSupported(42)
+    assert(ex.getCondition.contains("FUNCTION_EVAL_TYPE_NOT_SUPPORTED"))
+    assert(ex.getMessage.contains("42"))
+    assert(ex.getSqlState == "56K00")
+  }
+
+  test("streamingQueryRunIdMismatch") {
+    val ex = InvalidInputErrors.streamingQueryRunIdMismatch("q1", "run1", "run2")
+    assert(ex.getCondition.contains("STREAMING_QUERY_RUN_ID_MISMATCH"))
+    assert(ex.getMessage.contains("q1"))
+    assert(ex.getMessage.contains("run1"))
+    assert(ex.getMessage.contains("run2"))
+    assert(ex.getSqlState == "56K00")
   }
 
   // Helper case class to define test cases

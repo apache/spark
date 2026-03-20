@@ -262,11 +262,15 @@ class ComputeCurrentTimeSuite extends PlanTest {
       assert(expected === uniqueLiteralObjectIds.size)
     }
 
-    val numTimezones = ZoneId.SHORT_IDS.size
+    // Use unique ZoneIds count instead of SHORT_IDS.size because some short zone IDs
+    // may map to the same ZoneId (e.g., in Java 25, MST and PNT both map to America/Phoenix)
+    val numUniqueZoneIds = ZoneId.SHORT_IDS.asScala.map { case (zoneId, _) =>
+      ZoneId.of(zoneId, ZoneId.SHORT_IDS)
+    }.toSet.size
     checkLiterals({ _: String => CurrentTimestamp() }, 1)
-    checkLiterals({ zoneId: String => LocalTimestamp(Some(zoneId)) }, numTimezones)
+    checkLiterals({ zoneId: String => LocalTimestamp(Some(zoneId)) }, numUniqueZoneIds)
     checkLiterals({ _: String => Now() }, 1)
-    checkLiterals({ zoneId: String => CurrentDate(Some(zoneId)) }, numTimezones)
+    checkLiterals({ zoneId: String => CurrentDate(Some(zoneId)) }, numUniqueZoneIds)
   }
 
   private def literals[T](plan: LogicalPlan): scala.collection.mutable.ArrayBuffer[T] = {

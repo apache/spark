@@ -21,12 +21,12 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 FWDIR="$( cd "$DIR"/.. && pwd )"
 cd "$FWDIR"
 
-BLACK_BUILD="${PYTHON_EXECUTABLE} -m black"
-BLACK_VERSION="23.12.1"
-$PYTHON_EXECUTABLE -c 'import black' 2> /dev/null
+RUFF_BUILD="${PYTHON_EXECUTABLE} -m ruff"
+RUFF_VERSION="0.14.8"
+$PYTHON_EXECUTABLE -c 'import ruff' 2> /dev/null
 if [ $? -ne 0 ]; then
-    echo "The Python library providing the 'black' module was not found. Please install Black, for example, via 'pip install black==$BLACK_VERSION'."
+    echo "The Python library providing the 'ruff' module was not found. Please install Ruff, for example, via 'pip install ruff==$RUFF_VERSION'."
     exit 1
 fi
 
-$BLACK_BUILD --config dev/pyproject.toml python/pyspark dev python/packaging
+$RUFF_BUILD format python/pyspark dev python/packaging python/benchmarks

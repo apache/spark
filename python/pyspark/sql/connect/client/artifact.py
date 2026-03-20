@@ -15,10 +15,7 @@
 # limitations under the License.
 #
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
-from pyspark.sql.connect.utils import check_dependencies
 from pyspark.sql.connect.logging import logger
-
-check_dependencies(__name__)
 
 import hashlib
 import importlib
@@ -29,7 +26,7 @@ import zlib
 from itertools import chain
 from typing import List, Iterable, BinaryIO, Iterator, Optional, Tuple
 import abc
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from urllib.parse import urlparse
 from urllib.request import url2pathname
 from functools import cached_property
@@ -38,7 +35,6 @@ import grpc
 
 import pyspark.sql.connect.proto as proto
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
-
 
 JAR_PREFIX: str = "jars"
 PYFILE_PREFIX: str = "pyfiles"
@@ -184,7 +180,17 @@ class ArtifactManager:
     def _parse_artifacts(
         self, path_or_uri: str, pyfile: bool, archive: bool, file: bool
     ) -> List[Artifact]:
-        # Currently only local files with .jar extension is supported.
+        # Handle Windows absolute paths (e.g., C:\path\to\file) which urlparse
+        # incorrectly interprets as having URI scheme 'C' instead of being a local path.
+        # First check if path_or_uri is a Windows path, if so, convert it to file:// URI.
+        try:
+            win_path = PureWindowsPath(path_or_uri)
+            if win_path.is_absolute() and win_path.drive:
+                # Convert Windows path to file:// URI so urlparse handles it correctly
+                path_or_uri = Path(path_or_uri).resolve().as_uri()
+        except Exception:
+            pass
+
         parsed = urlparse(path_or_uri)
         # Check if it is a file from the scheme
         if parsed.scheme == "":

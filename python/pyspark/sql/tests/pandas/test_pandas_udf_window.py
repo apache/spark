@@ -17,7 +17,6 @@
 
 import unittest
 import logging
-from typing import cast
 from decimal import Decimal
 
 from pyspark.errors import AnalysisException, PythonException
@@ -31,14 +30,14 @@ from pyspark.sql.types import (
     FloatType,
     DoubleType,
 )
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
+    assertDataFrameEqual,
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import assertDataFrameEqual
 from pyspark.sql import Row
 from pyspark.util import is_remote_only
 
@@ -48,7 +47,7 @@ if have_pandas:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class WindowPandasUDFTestsMixin:
     @property

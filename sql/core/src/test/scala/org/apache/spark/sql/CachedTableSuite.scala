@@ -53,7 +53,7 @@ import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.storage.StorageLevel.{MEMORY_AND_DISK_2, MEMORY_ONLY}
@@ -64,7 +64,7 @@ import org.apache.spark.util.{AccumulatorContext, Utils}
 private case class BigData(s: String)
 
 @SlowSQLTest
-class CachedTableSuite extends QueryTest with SQLTestUtils
+class CachedTableSuite extends QueryTest
   with SharedSparkSession
   with AdaptiveSparkPlanHelper {
   import testImplicits._
@@ -2660,6 +2660,24 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       }
       assert(subqueryInMemoryTableScan.size == 1)
       checkAnswer(cteInSubquery, Row(1) :: Nil)
+    }
+  }
+
+  test("ALTER TABLE invalidates cached table") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      sql(s"CACHE TABLE $t")
+      assertCached(sql(s"SELECT * FROM $t"))
+      checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1, "a"), Row(2, "b")))
+
+      sql(s"ALTER TABLE $t ADD COLUMN new_col int")
+
+      val result = sql(s"SELECT * FROM $t ORDER BY id")
+      assertCached(result)
+      checkAnswer(result, Seq(Row(1, "a", null), Row(2, "b", null)))
     }
   }
 

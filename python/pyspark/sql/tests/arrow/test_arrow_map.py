@@ -20,15 +20,15 @@ import unittest
 import logging
 
 from pyspark.sql.utils import PythonException
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.sql import Row
+from pyspark.testing.utils import (
+    assertDataFrameEqual,
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.sql import Row
-from pyspark.testing.utils import assertDataFrameEqual
 from pyspark.util import is_remote_only
 
 if have_pyarrow:
@@ -54,6 +54,16 @@ class MapInArrowTestsMixin(object):
         actual = df.mapInArrow(func, "id long").collect()
         expected = df.collect()
         self.assertEqual(actual, expected)
+
+    def test_map_in_arrow_with_limit(self):
+        def get_size(iterator):
+            for batch in iterator:
+                assert isinstance(batch, pa.RecordBatch)
+                if batch.num_rows > 0:
+                    yield pa.RecordBatch.from_arrays([pa.array([batch.num_rows])], names=["size"])
+
+        df = self.spark.range(100)
+        df.mapInArrow(get_size, "size long").limit(1).collect()
 
     def test_multiple_columns(self):
         data = [(1, "foo"), (2, None), (3, "bar"), (4, "bar")]
@@ -129,6 +139,21 @@ class MapInArrowTestsMixin(object):
             return iter([pa.RecordBatch.from_pandas(pd.DataFrame({"a": []}))])
 
         self.assertEqual(self.spark.range(10).mapInArrow(empty_rows, "a double").count(), 0)
+
+    def test_passing_metadata(self):
+        def extract_metadata(iterator):
+            for batch in iterator:
+                assert isinstance(batch, pa.RecordBatch)
+                if batch.num_rows > 0:
+                    m = batch.schema.field("id").metadata[b"SPARK::metadata::json"]
+                    yield pa.RecordBatch.from_arrays(
+                        [pa.array([str(m)] * batch.num_rows)], names=["metadata"]
+                    )
+
+        df = self.spark.range(1).withMetadata("id", {"x": 1})
+
+        row = df.mapInArrow(extract_metadata, "metadata string").first()
+        self.assertEqual(row.metadata, """b'{"x":1}'""")
 
     def test_chain_map_in_arrow(self):
         def func(iterator):

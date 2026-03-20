@@ -4,7 +4,7 @@ SELECT vector_cosine_similarity(array(1.0F, 2.0F, 3.0F), array(4.0F, 5.0F, 6.0F)
 -- !query schema
 struct<vector_cosine_similarity(array(1.0, 2.0, 3.0), array(4.0, 5.0, 6.0)):float>
 -- !query output
-0.97463185
+0.9746319
 
 
 -- !query

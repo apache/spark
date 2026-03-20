@@ -45,8 +45,7 @@ class ArrowWindowPythonEvaluatorFactory(
     val evalType: Int,
     val spillSize: SQLMetric,
     pythonMetrics: Map[String, SQLMetric],
-    sessionUUID: Option[String],
-    profiler: Option[String])
+    sessionUUID: Option[String])
   extends PartitionEvaluatorFactory[InternalRow, InternalRow] with WindowEvaluatorFactoryBase {
 
   /**
@@ -379,8 +378,7 @@ class ArrowWindowPythonEvaluatorFactory(
         pythonRunnerConf,
         pythonMetrics,
         jobArtifactUUID,
-        sessionUUID,
-        profiler) with GroupedPythonArrowInput
+        sessionUUID) with GroupedPythonArrowInput
 
       val windowFunctionResult = runner.compute(pythonInput, context.partitionId(), context)
 

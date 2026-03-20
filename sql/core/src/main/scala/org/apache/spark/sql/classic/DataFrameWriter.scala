@@ -314,7 +314,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
     assertNotBucketed("insertInto")
 
     if (partitioningColumns.isDefined) {
-      throw QueryCompilationErrors.partitionByDoesNotAllowedWhenUsingInsertIntoError()
+      throw QueryCompilationErrors.partitionByDoesNotAllowedWhenUsingInsertIntoError(tableName)
     }
 
     val session = df.sparkSession
@@ -372,9 +372,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
       ifPartitionNotExists = false)
   }
 
-  private def getWritePrivileges: Seq[TableWritePrivilege] = curmode match {
-    case SaveMode.Overwrite => Seq(INSERT, DELETE)
-    case _ => Seq(INSERT)
+  private def getWritePrivileges: Set[TableWritePrivilege] = curmode match {
+    case SaveMode.Overwrite => Set(INSERT, DELETE)
+    case _ => Set(INSERT)
   }
 
   private def getBucketSpec: Option[BucketSpec] = {
@@ -588,7 +588,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
    */
   private def runCommand(session: SparkSession)(command: LogicalPlan): Unit = {
     val qe = new QueryExecution(session, command, df.queryExecution.tracker,
-      shuffleCleanupMode = QueryExecution.determineShuffleCleanupMode(session.sessionState.conf))
+      shuffleCleanupModeOpt =
+        Some(QueryExecution.determineShuffleCleanupMode(session.sessionState.conf)))
     qe.assertCommandExecuted()
   }
 

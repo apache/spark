@@ -100,7 +100,7 @@ class ConnectCompatibilityTestsMixin:
             connect_signature = inspect.signature(connect_methods[method])
 
             # Cannot support RDD arguments from Spark Connect
-            has_rdd_arguments = ("createDataFrame", "xml", "json")
+            has_rdd_arguments = ("createDataFrame", "xml", "json", "toJSON")
             if method not in has_rdd_arguments:
                 self.assertEqual(
                     classic_signature,
@@ -380,7 +380,7 @@ class ConnectCompatibilityTestsMixin:
         expected_missing_connect_properties = set()
         expected_missing_classic_properties = set()
         expected_missing_connect_methods = set()
-        expected_missing_classic_methods = {"check_dependencies"}
+        expected_missing_classic_methods = set()
         self.check_compatibility(
             ClassicFunctions,
             ConnectFunctions,
@@ -418,7 +418,7 @@ class ConnectCompatibilityTestsMixin:
             "cast",
             "get_active_spark_context",
         }
-        expected_missing_classic_methods = {"lit", "check_dependencies"}
+        expected_missing_classic_methods = {"lit"}
         self.check_compatibility(
             ClassicAvro,
             ConnectAvro,
@@ -456,7 +456,7 @@ class ConnectCompatibilityTestsMixin:
             "try_remote_protobuf_functions",
             "get_active_spark_context",
         }
-        expected_missing_classic_methods = {"lit", "check_dependencies"}
+        expected_missing_classic_methods = {"lit"}
         self.check_compatibility(
             ClassicProtobuf,
             ConnectProtobuf,

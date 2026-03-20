@@ -16,16 +16,17 @@
  */
 package org.apache.spark.sql.connect.client
 
-import java.util.UUID
+import java.nio.charset.StandardCharsets.UTF_8
+import java.util.{Base64, UUID}
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
-import io.grpc.{CallOptions, Channel, ClientCall, ClientInterceptor, MethodDescriptor, Server, Status, StatusRuntimeException}
+import com.google.protobuf.{Any => PAny, StringValue}
+import io.grpc.{CallOptions, Channel, ClientCall, ClientInterceptor, Metadata, MethodDescriptor, Server, ServerCall, ServerCallHandler, ServerInterceptor, Status, StatusRuntimeException}
 import io.grpc.netty.NettyServerBuilder
 import io.grpc.stub.StreamObserver
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
@@ -37,18 +38,19 @@ import org.apache.spark.sql.connect.SparkSession
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.connect.test.ConnectFunSuite
 
-class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
+class SparkConnectClientSuite extends ConnectFunSuite {
 
   private var client: SparkConnectClient = _
   private var service: DummySparkConnectService = _
   private var server: Server = _
 
-  private def startDummyServer(port: Int): Unit = {
+  private def startDummyServer(port: Int, interceptors: Seq[ServerInterceptor] = Seq()): Unit = {
     service = new DummySparkConnectService
-    server = NettyServerBuilder
+    val serverBuilder = NettyServerBuilder
       .forPort(port)
       .addService(service)
-      .build()
+    interceptors.foreach(serverBuilder.intercept)
+    server = serverBuilder.build()
     server.start()
   }
 
@@ -228,13 +230,15 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
           cause = None,
           errorClass = Some("DUPLICATE_KEY"),
           messageParameters = Map("keyColumn" -> "`abc`"),
-          queryContext = Array.empty)
+          queryContext = Array.empty,
+          sqlState = None)
         val error = constructor(testParams).asInstanceOf[Throwable with SparkThrowable]
         assert(error.getMessage.contains(testParams.message))
         assert(error.getCause == null)
         assert(error.getCondition == testParams.errorClass.get)
         assert(error.getMessageParameters.asScala == testParams.messageParameters)
         assert(error.getQueryContext.isEmpty)
+        assert(error.getSqlState == "23505")
       }
     }
 
@@ -245,11 +249,39 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
           cause = None,
           errorClass = None,
           messageParameters = Map.empty,
-          queryContext = Array.empty)
+          queryContext = Array.empty,
+          sqlState = None)
         val error = constructor(testParams)
         assert(error.getMessage.contains(testParams.message))
         assert(error.getCause == null)
       }
+    }
+  }
+
+  test("Legacy error class is set as default") {
+    Seq(
+      ("org.apache.spark.sql.AnalysisException", "_LEGACY_ERROR_TEMP_3100"),
+      ("java.lang.NumberFormatException", "_LEGACY_ERROR_TEMP_3104"),
+      ("java.lang.IllegalArgumentException", "_LEGACY_ERROR_TEMP_3105"),
+      ("java.lang.ArithmeticException", "_LEGACY_ERROR_TEMP_3106"),
+      ("java.lang.UnsupportedOperationException", "_LEGACY_ERROR_TEMP_3107"),
+      ("java.lang.ArrayIndexOutOfBoundsException", "_LEGACY_ERROR_TEMP_3108"),
+      ("java.time.DateTimeException", "_LEGACY_ERROR_TEMP_3109")).foreach {
+      case (className, legacyErrorClass) =>
+        val baseParams = GrpcExceptionConverter.ErrorParams(
+          message = "Test error message",
+          cause = None,
+          errorClass = None,
+          messageParameters = Map.empty,
+          queryContext = Array.empty,
+          sqlState = None)
+
+        val error = GrpcExceptionConverter
+          .errorFactory(className)(baseParams)
+          .asInstanceOf[SparkThrowable]
+        assert(error.asInstanceOf[Exception].getMessage.contains("Test error message"))
+        assert(error.getCondition == legacyErrorClass)
+        assert(error.getSqlState == "XXKCM")
     }
   }
 
@@ -517,6 +549,114 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     observer.onCompleted()
   }
 
+  test("getOperationStatuses returns operation statuses for requested IDs") {
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .build()
+
+    val response =
+      client.getOperationStatuses(Seq("default-op-1", "unknown-op"))
+    val statuses = response.getOperationStatusesList.asScala.toSeq
+    assert(statuses.size == 2)
+    assert(statuses.map(_.getOperationId).toSet == Set("default-op-1", "unknown-op"))
+
+    val statusMap = statuses.map(s => s.getOperationId -> s.getState).toMap
+    assert(
+      statusMap("default-op-1") ==
+        proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_SUCCEEDED)
+    assert(
+      statusMap("unknown-op") ==
+        proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_UNKNOWN)
+  }
+
+  test("getOperationStatuses with no IDs returns all operations from server") {
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .build()
+
+    val response = client.getOperationStatuses()
+    val statuses = response.getOperationStatusesList.asScala.toSeq
+    assert(statuses.size == 2)
+    assert(statuses.map(_.getOperationId).toSet == Set("default-op-1", "default-op-2"))
+
+    val statusMap = statuses.map(s => s.getOperationId -> s.getState).toMap
+    assert(
+      statusMap("default-op-1") ==
+        proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_SUCCEEDED)
+    assert(
+      statusMap("default-op-2") ==
+        proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_RUNNING)
+  }
+
+  test("getOperationStatuses sends extensions and returns them per operation") {
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .build()
+
+    val extension = PAny.pack(StringValue.of("custom_extension"))
+
+    val response = client.getOperationStatuses(
+      operationIds = Seq("default-op-1", "default-op-2"),
+      operationExtensions = Seq(extension))
+
+    // Verify operation statuses are returned
+    val statuses = response.getOperationStatusesList.asScala.toSeq
+    assert(statuses.size == 2)
+
+    val statusMap = statuses.map(s => s.getOperationId -> s).toMap
+    assert(
+      statusMap("default-op-1").getState ==
+        proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_SUCCEEDED)
+    assert(
+      statusMap("default-op-2").getState ==
+        proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_RUNNING)
+
+    // Verify that extensions are echoed back per operation
+    statuses.foreach { status =>
+      val opExtensions = status.getExtensionsList.asScala.toSeq
+      assert(opExtensions.size == 1)
+      assert(opExtensions.head.is(classOf[StringValue]))
+      assert(
+        opExtensions.head
+          .unpack(classOf[StringValue])
+          .getValue == "custom_extension")
+    }
+  }
+
+  test("getOperationStatuses sends request-level extensions and echoes them in the response") {
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .build()
+
+    val reqExtension = PAny.pack(StringValue.of("request_extension"))
+
+    val response = client.getOperationStatuses(
+      operationIds = Seq("default-op-1"),
+      requestExtensions = Seq(reqExtension))
+
+    // Verify the operation status is returned
+    val statuses = response.getOperationStatusesList.asScala.toSeq
+    assert(statuses.size == 1)
+    assert(statuses.head.getOperationId == "default-op-1")
+
+    // Verify request-level extensions were echoed back in the response
+    val responseExtensions = response.getExtensionsList.asScala.toSeq
+    assert(responseExtensions.size == 1)
+    assert(responseExtensions.head.is(classOf[StringValue]))
+    assert(
+      responseExtensions.head
+        .unpack(classOf[StringValue])
+        .getValue == "request_extension")
+  }
+
   test("client can set a custom operation id for ExecutePlan requests") {
     startDummyServer(0)
     client = SparkConnectClient
@@ -619,6 +759,70 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     assert(client.getPlanCompressionOptions.isEmpty)
     // The client should try to fetch the config only once.
     assert(service.getAndClearLatestConfigRequests().size == 1)
+  }
+
+  test("SPARK-55243: Binary headers use the correct marshaller") {
+    class HeadersInterceptor extends ServerInterceptor {
+      var headers: Option[Metadata] = None
+
+      override def interceptCall[ReqT, RespT](
+          call: ServerCall[ReqT, RespT],
+          headers: Metadata,
+          next: ServerCallHandler[ReqT, RespT]): ServerCall.Listener[ReqT] = {
+        this.headers = Some(headers)
+        next.startCall(call, headers)
+      }
+    }
+
+    def buildClientWithHeader(key: String, value: String): SparkConnectClient = {
+      SparkConnectClient
+        .builder()
+        .connectionString(s"sc://localhost:${server.getPort}")
+        .option(key, value)
+        .build()
+    }
+
+    val headerInterceptor = new HeadersInterceptor()
+    startDummyServer(0, Seq(headerInterceptor))
+
+    val keyName = "test-bin"
+    val key = Metadata.Key.of(keyName, Metadata.BINARY_BYTE_MARSHALLER)
+    val binaryData = "test-binary-data"
+    val base64EncodedValue = Base64.getEncoder.encodeToString(binaryData.getBytes(UTF_8))
+
+    val plan = buildPlan("select * from range(10)")
+
+    // Successfully set and use base64-encoded -bin key.
+    client = buildClientWithHeader(keyName, base64EncodedValue)
+    client.execute(plan)
+
+    Eventually.eventually(timeout(5.seconds)) {
+      assert(headerInterceptor.headers.exists(_.containsKey(key)))
+      val bytes = headerInterceptor.headers.get.get(key)
+      assert(new String(bytes, UTF_8) == binaryData)
+    }
+
+    // Non base64-encoded -bin header throws IllegalArgumentException at construction time.
+    assertThrows[IllegalArgumentException] {
+      buildClientWithHeader(keyName, binaryData)
+    }
+
+    // Non -bin headers keep using the ASCII marshaller.
+    val asciiKeyName = "test"
+    val asciiKey = Metadata.Key.of(asciiKeyName, Metadata.ASCII_STRING_MARSHALLER)
+
+    headerInterceptor.headers = None // Reset captured headers.
+
+    client = buildClientWithHeader(asciiKeyName, base64EncodedValue)
+    client.execute(plan)
+
+    Eventually.eventually(timeout(5.seconds)) {
+      assert(headerInterceptor.headers.exists(_.containsKey(asciiKey)))
+      val value = headerInterceptor.headers.get.get(asciiKey)
+      assert(value == base64EncodedValue)
+      // No BINARY_BYTE_MARSHALLER header.
+      assert(!headerInterceptor.headers.exists(_.containsKey(key)))
+    }
   }
 }
 
@@ -830,6 +1034,61 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
       .setOperationId(request.getOperationId)
       .build()
     responseObserver.onNext(response)
+    responseObserver.onCompleted()
+  }
+
+  // Default operations stored in the mock session
+  private val defaultOperationStatuses = Map(
+    "default-op-1" ->
+      proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_SUCCEEDED,
+    "default-op-2" ->
+      proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_RUNNING)
+
+  override def getStatus(
+      request: proto.GetStatusRequest,
+      responseObserver: StreamObserver[proto.GetStatusResponse]): Unit = {
+    val responseBuilder = proto.GetStatusResponse
+      .newBuilder()
+      .setSessionId(request.getSessionId)
+      .setServerSideSessionId(UUID.randomUUID().toString)
+
+    if (request.hasOperationStatus) {
+      val opStatusRequest = request.getOperationStatus
+      val requestedIds = opStatusRequest.getOperationIdsList.asScala.toSeq
+      // Collect operation-status-level extensions from the request to echo back
+      val opStatusExtensions = opStatusRequest.getExtensionsList.asScala
+
+      if (requestedIds.isEmpty) {
+        // No specific IDs requested - return all default operations
+        defaultOperationStatuses.foreach { case (opId, state) =>
+          val statusBuilder = proto.GetStatusResponse.OperationStatus
+            .newBuilder()
+            .setOperationId(opId)
+            .setState(state)
+          opStatusExtensions.foreach(statusBuilder.addExtensions)
+          responseBuilder.addOperationStatuses(statusBuilder.build())
+        }
+      } else {
+        // Return status for each requested operation ID
+        // Unknown operations return OPERATION_STATE_UNKNOWN
+        requestedIds.foreach { opId =>
+          val state = defaultOperationStatuses.getOrElse(
+            opId,
+            proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_UNKNOWN)
+          val statusBuilder = proto.GetStatusResponse.OperationStatus
+            .newBuilder()
+            .setOperationId(opId)
+            .setState(state)
+          opStatusExtensions.foreach(statusBuilder.addExtensions)
+          responseBuilder.addOperationStatuses(statusBuilder.build())
+        }
+      }
+    }
+
+    // Echo request-level extensions back in the response
+    request.getExtensionsList.asScala.foreach(responseBuilder.addExtensions)
+
+    responseObserver.onNext(responseBuilder.build())
     responseObserver.onCompleted()
   }
 }

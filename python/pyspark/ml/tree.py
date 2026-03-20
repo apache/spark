@@ -317,7 +317,7 @@ class _RandomForestParams(_TreeEnsembleParams):
     bootstrap: Param[bool] = Param(
         Params._dummy(),
         "bootstrap",
-        "Whether bootstrap samples are used " "when building trees.",
+        "Whether bootstrap samples are used when building trees.",
         typeConverter=TypeConverters.toBoolean,
     )
 

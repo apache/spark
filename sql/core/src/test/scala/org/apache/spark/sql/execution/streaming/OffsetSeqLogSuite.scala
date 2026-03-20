@@ -368,6 +368,47 @@ class OffsetSeqLogSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-55131: offset log records defaults to merge operator version 2") {
+    val offsetSeqMetadata = OffsetSeqMetadata.apply(batchWatermarkMs = 0, batchTimestampMs = 0,
+      spark.conf)
+    assert(offsetSeqMetadata.conf.get(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key) ===
+      Some("2"))
+  }
+
+  test("SPARK-55131: offset log uses the merge operator version set in the conf") {
+    val offsetSeqMetadata = OffsetSeqMetadata.apply(batchWatermarkMs = 0, batchTimestampMs = 0,
+      // Trying to set it to non-default value, 1
+      Map(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key -> "1"))
+    assert(offsetSeqMetadata.conf.get(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key) ===
+      Some("1"))
+  }
+
+  test("SPARK-55131: Backward compatibility test with merge operator version") {
+    // Read from the checkpoint which does not have an entry for merge operator version
+    // in its offset log. This should pick up the value to 1 instead of 2.
+    withTempDir { checkpointDir =>
+      val resourceUri = this.getClass.getResource(
+        "/structured-streaming/checkpoint-version-4.0.0-tws-unsaferow/").toURI
+      Utils.copyDirectory(new File(resourceUri), checkpointDir.getCanonicalFile)
+
+      val log = new OffsetSeqLog(spark, s"$checkpointDir/offsets")
+      val latestBatchId = log.getLatestBatchId()
+      assert(latestBatchId.isDefined, "No offset log entries found in the checkpoint location")
+
+      // Read the latest offset log
+      val offsetSeq = log.get(latestBatchId.get).get
+      val offsetSeqMetadata = offsetSeq.metadataOpt.get
+
+      assert(!offsetSeqMetadata.conf
+        .contains(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key),
+        "Merge operator version should be absent in the offset log entry")
+
+      val clonedSqlConf = spark.sessionState.conf.clone()
+      OffsetSeqMetadata.setSessionConf(offsetSeqMetadata, clonedSqlConf)
+      assert(clonedSqlConf.getConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION) == 1)
+    }
+  }
+
   def testWithOffsetV2(
       testName: String, testTags: Tag*)(testBody: => Any): Unit = {
     super.test(testName, testTags: _*) {

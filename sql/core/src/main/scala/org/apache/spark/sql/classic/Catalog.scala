@@ -323,8 +323,7 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
   }
 
   private def functionExists(ident: Seq[String]): Boolean = {
-    val plan =
-      UnresolvedFunctionName(ident, Catalog.FUNCTION_EXISTS_COMMAND_NAME, false, None)
+    val plan = UnresolvedFunctionName(ident, Catalog.FUNCTION_EXISTS_COMMAND_NAME)
     try {
       sparkSession.sessionState.executePlan(plan).analyzed match {
         case _: ResolvedPersistentFunc => true
@@ -337,7 +336,7 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
   }
 
   private def makeFunction(ident: Seq[String]): Function = {
-    val plan = UnresolvedFunctionName(ident, "Catalog.makeFunction", false, None)
+    val plan = UnresolvedFunctionName(ident, "Catalog.makeFunction")
     sparkSession.sessionState.executePlan(plan).analyzed match {
       case f: ResolvedPersistentFunc =>
         val className = f.func match {
@@ -366,9 +365,14 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
           isTemporary = true)
 
       case _ =>
-        val catalogPath = (currentCatalog() +:
-          sparkSession.sessionState.catalogManager.currentNamespace).mkString(".")
-        throw QueryCompilationErrors.unresolvedRoutineError(ident, Seq(catalogPath), plan.origin)
+        val catalogPath =
+          (Seq(currentCatalog()) ++
+            sparkSession.sessionState.catalogManager.currentNamespace).toSeq
+        val searchPath = sparkSession.sessionState.conf.resolutionSearchPath(catalogPath)
+        throw QueryCompilationErrors.unresolvedRoutineError(
+          ident,
+          searchPath.map(_.quoted),
+          plan.origin)
     }
   }
 
@@ -975,7 +979,8 @@ private[sql] object Catalog {
 
     val ERROR_HANDLING_RULES: Map[String, ErrorHandlingAction] = Map(
       "UNSUPPORTED_FEATURE.HIVE_TABLE_TYPE" -> ReturnPartialResults,
-      "TABLE_OR_VIEW_NOT_FOUND" -> Skip
+      "TABLE_OR_VIEW_NOT_FOUND" -> Skip,
+      "DATA_SOURCE_NOT_FOUND" -> ReturnPartialResults
     )
   }
 }

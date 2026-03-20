@@ -27,7 +27,7 @@ from pyspark.serializers import read_int, CPickleSerializer
 from pyspark.errors import PySparkRuntimeError
 
 if TYPE_CHECKING:
-    from pyspark._typing import SupportsIAdd  # noqa: F401
+    from pyspark._typing import SupportsIAdd
     import socketserver.BaseRequestHandler  # type: ignore[import-not-found]
 
 
@@ -63,7 +63,6 @@ class SpecialAccumulatorIds:
 
 
 class Accumulator(Generic[T]):
-
     """
     A shared variable that can be accumulated, i.e., has a commutative and associative "add"
     operation. Worker tasks on a Spark cluster can add values to an Accumulator with the `+=`
@@ -186,7 +185,6 @@ class Accumulator(Generic[T]):
 
 
 class AccumulatorParam(Generic[T]):
-
     """
     Helper object that defines how to accumulate values of a given type.
 
@@ -229,7 +227,6 @@ class AccumulatorParam(Generic[T]):
 
 
 class AddingAccumulatorParam(AccumulatorParam[U]):
-
     """
     An AccumulatorParam that uses the + operators to add values. Designed for simple types
     such as integers, floats, and lists. Requires the zero value for the underlying type
@@ -254,7 +251,6 @@ COMPLEX_ACCUMULATOR_PARAM = AddingAccumulatorParam(0.0j)  # type: ignore[type-va
 
 
 class UpdateRequestHandler(socketserver.StreamRequestHandler):
-
     """
     This handler will keep polling updates from the same socket until the
     server is shutdown.
@@ -299,7 +295,7 @@ class UpdateRequestHandler(socketserver.StreamRequestHandler):
         def accum_updates() -> bool:
             num_updates = read_int(self.rfile)
             for _ in range(num_updates):
-                (aid, update) = pickleSer._read_with_length(self.rfile)
+                aid, update = pickleSer._read_with_length(self.rfile)
                 _accumulatorRegistry[aid] += update
             # Write a byte in acknowledgement
             self.wfile.write(struct.pack("!b", 1))
@@ -387,9 +383,7 @@ def _start_update_server(
             os.remove(socket_path)
         server = AccumulatorUnixServer(socket_path, UpdateRequestHandler)
     else:
-        server = AccumulatorTCPServer(
-            ("localhost", 0), UpdateRequestHandler, auth_token
-        )  # type: ignore[assignment]
+        server = AccumulatorTCPServer(("localhost", 0), UpdateRequestHandler, auth_token)  # type: ignore[assignment]
 
     thread = threading.Thread(target=server.serve_forever)
     thread.daemon = True
@@ -406,7 +400,7 @@ if __name__ == "__main__":
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
     globs["sc"] = SparkContext("local", "test")
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    failure_count, test_count = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs["sc"].stop()
     if failure_count:
         sys.exit(-1)

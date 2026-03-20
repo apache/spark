@@ -22,6 +22,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
@@ -29,7 +30,7 @@ from pyspark.testing.sqlutils import SQLTestUtils
 class SeriesDateTimeTestsMixin:
     @property
     def pdf1(self):
-        date1 = pd.Series(pd.date_range("2012-1-1 12:45:31", periods=3, freq="M"))
+        date1 = pd.Series(pd.date_range("2012-1-1 12:45:31", periods=3, freq="ME"))
         date2 = pd.Series(pd.date_range("2013-3-11 21:45:00", periods=3, freq="W"))
         return pd.DataFrame(dict(start_date=date1, end_date=date2))
 
@@ -85,35 +86,44 @@ class SeriesDateTimeTestsMixin:
         py_datetime = self.pd_start_date.dt.to_pydatetime()
         datetime_index = ps.Index(self.pd_start_date)
 
-        for other in [1, 0.1, psser, datetime_index, py_datetime]:
-            expected_err_msg = "Addition can not be applied to datetimes."
-            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psser + other)
-            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other + psser)
+        others = [1, 0.1, psser, datetime_index, py_datetime]
+        if LooseVersion(pd.__version__) < "3.0.0":
+            # py_datetime is np.ndarray, adding pd.Series.
+            others.append(pd.Series(py_datetime, dtype="object"))
+        else:
+            # py_datetime is pd.Series, adding np.ndarray.
+            others.append(py_datetime.to_numpy())
+        for i, other in enumerate(others):
+            with self.subTest(i=i):
+                expected_err_msg = "Addition can not be applied to datetimes."
+                self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psser + other)
+                self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other + psser)
 
-            expected_err_msg = "Multiplication can not be applied to datetimes."
-            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psser * other)
-            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other * psser)
+                expected_err_msg = "Multiplication can not be applied to datetimes."
+                self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psser * other)
+                self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other * psser)
 
-            expected_err_msg = "True division can not be applied to datetimes."
-            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psser / other)
-            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other / psser)
+                expected_err_msg = "True division can not be applied to datetimes."
+                self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psser / other)
+                self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other / psser)
 
-            expected_err_msg = "Floor division can not be applied to datetimes."
-            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psser // other)
-            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other // psser)
+                expected_err_msg = "Floor division can not be applied to datetimes."
+                self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psser // other)
+                self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other // psser)
 
-            expected_err_msg = "Modulo can not be applied to datetimes."
-            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psser % other)
-            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other % psser)
+                expected_err_msg = "Modulo can not be applied to datetimes."
+                self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psser % other)
+                self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other % psser)
 
         expected_err_msg = "Datetime subtraction can only be applied to datetime series."
 
-        for other in [1, 0.1]:
-            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psser - other)
-            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other - psser)
+        for i, other in enumerate([1, 0.1], len(others)):
+            with self.subTest(i=i):
+                self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psser - other)
+                self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other - psser)
 
-        self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psser - other)
-        self.assertRaises(NotImplementedError, lambda: py_datetime - psser)
+                self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psser - other)
+                self.assertRaises(NotImplementedError, lambda: py_datetime - psser)
 
     def test_date_subtraction(self):
         pdf = self.pdf1
@@ -254,15 +264,15 @@ class SeriesDateTimeTestsMixin:
 
     def test_round(self):
         self.check_func(lambda x: x.dt.round(freq="min"))
-        self.check_func(lambda x: x.dt.round(freq="H"))
+        self.check_func(lambda x: x.dt.round(freq="h"))
 
     def test_floor(self):
         self.check_func(lambda x: x.dt.floor(freq="min"))
-        self.check_func(lambda x: x.dt.floor(freq="H"))
+        self.check_func(lambda x: x.dt.floor(freq="h"))
 
     def test_ceil(self):
         self.check_func(lambda x: x.dt.ceil(freq="min"))
-        self.check_func(lambda x: x.dt.ceil(freq="H"))
+        self.check_func(lambda x: x.dt.ceil(freq="h"))
 
     @unittest.skip("Unsupported locale setting")
     def test_month_name(self):

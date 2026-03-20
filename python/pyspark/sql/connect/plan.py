@@ -18,9 +18,6 @@
 # mypy: disable-error-code="operator"
 
 from pyspark.resource import ResourceProfile
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
 
 from typing import (
     Any,
@@ -161,7 +158,7 @@ class LogicalPlan:
 
     @staticmethod
     def _collect_references(
-        cols_or_exprs: Sequence[Union[Column, Expression]]
+        cols_or_exprs: Sequence[Union[Column, Expression]],
     ) -> Sequence["LogicalPlan"]:
         references: List[LogicalPlan] = []
 
@@ -300,9 +297,7 @@ class LogicalPlan:
             HTML representation of this :class:`LogicalPlan`.
         """
         params = self._parameters_to_print(signature(self.__class__.__init__).parameters)
-        pretty_params = [
-            f"\n              {name}: " f"{param} <br/>" for name, param in params.items()
-        ]
+        pretty_params = [f"\n              {name}: {param} <br/>" for name, param in params.items()]
         if len(pretty_params) == 0:
             pretty_str = ""
         else:
@@ -334,6 +329,7 @@ class DataSource(LogicalPlan):
         paths: Optional[List[str]] = None,
         predicates: Optional[List[str]] = None,
         is_streaming: Optional[bool] = None,
+        source_name: Optional[str] = None,
     ) -> None:
         super().__init__(None)
 
@@ -357,12 +353,15 @@ class DataSource(LogicalPlan):
             assert isinstance(predicates, list)
             assert all(isinstance(predicate, str) for predicate in predicates)
 
+        assert source_name is None or isinstance(source_name, str)
+
         self._format = format
         self._schema = schema
         self._options = options
         self._paths = paths
         self._predicates = predicates
         self._is_streaming = is_streaming
+        self._source_name = source_name
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         plan = self._create_proto_relation()
@@ -377,6 +376,8 @@ class DataSource(LogicalPlan):
             plan.read.data_source.paths.extend(self._paths)
         if self._predicates is not None and len(self._predicates) > 0:
             plan.read.data_source.predicates.extend(self._predicates)
+        if self._source_name is not None:
+            plan.read.data_source.source_name = self._source_name
         if self._is_streaming is not None:
             plan.read.is_streaming = self._is_streaming
         return plan
@@ -727,7 +728,7 @@ class CachedRemoteRelation(LogicalPlan):
                         metadata = session.client._builder.metadata()
                         channel(req, metadata=metadata)  # type: ignore[arg-type]
             except Exception as e:
-                logger.warn(f"RemoveRemoteCachedRelation failed with exception: {e}.")
+                logger.warning(f"RemoveRemoteCachedRelation failed with exception: {e}.")
 
 
 class Hint(LogicalPlan):
@@ -1137,9 +1138,9 @@ class AsOfJoin(LogicalPlan):
                 + (
                     []
                     if on is None or isinstance(on, str)
-                    else [on]
-                    if isinstance(on, Column)
-                    else [c for c in on if isinstance(c, Column)]
+                    else (
+                        [on] if isinstance(on, Column) else [c for c in on if isinstance(c, Column)]
+                    )
                 )
                 + ([tolerance] if tolerance is not None else [])
             ),
@@ -1969,9 +1970,7 @@ class WriteOperation(LogicalPlan):
             if self.table_save_method is not None:
                 tsm = self.table_save_method.lower()
                 if tsm == "save_as_table":
-                    plan.write_operation.table.save_method = (
-                        proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_SAVE_AS_TABLE  # noqa: E501
-                    )
+                    plan.write_operation.table.save_method = proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_SAVE_AS_TABLE
                 elif tsm == "insert_into":
                     plan.write_operation.table.save_method = (
                         proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_INSERT_INTO
@@ -2742,8 +2741,7 @@ class PythonUDTF:
 
     def __repr__(self) -> str:
         return (
-            f"PythonUDTF({self._name}, {self._return_type}, "
-            f"{self._eval_type}, {self._python_ver})"
+            f"PythonUDTF({self._name}, {self._return_type}, {self._eval_type}, {self._python_ver})"
         )
 
 
@@ -2841,7 +2839,7 @@ class CommonInlineUserDefinedDataSource(LogicalPlan):
 
 class CachedRelation(LogicalPlan):
     def __init__(self, plan: proto.Relation) -> None:
-        super(CachedRelation, self).__init__(None)
+        super().__init__(None)
         self._plan = plan
         # Update the plan ID based on the incremented counter.
         self._plan.common.plan_id = self._plan_id

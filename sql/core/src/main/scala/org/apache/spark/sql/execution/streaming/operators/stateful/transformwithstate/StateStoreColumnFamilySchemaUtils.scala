@@ -21,8 +21,9 @@ import scala.collection.mutable
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateKeyValueRowSchemaUtils._
-import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateVariableUtils.getRowCounterCFName
-import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, RangeKeyScanStateEncoderSpec, StateStoreColFamilySchema}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateVariableUtils.{getRowCounterCFName, getStateNameFromRowCounterCFName, isRowCounterCFName}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.TimerStateUtils
+import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, RangeKeyScanStateEncoderSpec, StateStoreColFamilySchema, StateStoreErrors}
 import org.apache.spark.sql.types._
 
 object StateStoreColumnFamilySchemaUtils {
@@ -112,6 +113,60 @@ object StateStoreColumnFamilySchemaUtils {
    */
   def isTestingInternalColFamily(colFamilyName: String): Boolean = {
     org.apache.spark.util.Utils.isTesting && isInternalColFamily(colFamilyName)
+  }
+
+  /**
+   * Extracts the base state variable name from internal column family names.
+   * Internal column families are auxiliary data structures (TTL index, min expiry index,
+   * count index, row counter) that are associated with a user-defined state variable.
+   *
+   * @param colFamilyName The internal column family name (must start with "$")
+   * @return The base state variable name
+   * @throws IllegalArgumentException if the column family name is not a recognized internal type
+   */
+  private def getStateNameForInternalCF(colFamilyName: String): String = {
+    if (isTtlColFamilyName(colFamilyName)) {
+      getStateNameFromTtlColFamily(colFamilyName)
+    } else if (isMinExpiryIndexCFName(colFamilyName)) {
+      getStateNameFromMinExpiryIndexCFName(colFamilyName)
+    } else if (isCountIndexCFName(colFamilyName)) {
+      getStateNameFromCountIndexCFName(colFamilyName)
+    } else if (isRowCounterCFName(colFamilyName)) {
+      getStateNameFromRowCounterCFName(colFamilyName)
+    } else if (TimerStateUtils.isTimerCFName(colFamilyName)) {
+      // Return the primary index for timer secondary index column family
+      // because we only store the primary index column family in the
+      // StateMetadataTableEntry.operatorProperies.stateVariables
+      if (TimerStateUtils.isTimerSecondaryIndexCF(colFamilyName)) {
+        TimerStateUtils.getPrimaryIndexFromSecondaryIndexCF(colFamilyName)
+      } else {
+        colFamilyName
+      }
+    } else {
+      throw StateStoreErrors.unknownInternalColumnFamily(colFamilyName)
+    }
+  }
+
+  /**
+   * Extracts the base state variable name from a column family name.
+   *
+   * This is useful for looking up the stateVariableInfo associated with a column family,
+   * since stateVariableInfo is only stored for primary/user-facing column families.
+   *
+   * Returns:
+   *   - For internal CFs (e.g., $ttl_*, $min_*, $count_*): the associated state variable name
+   *   - For timer secondary index CFs: the corresponding primary index timer CF name
+   *   - For all other CFs (regular state variables, timer primary index): the name as-is
+   *
+   * @param colFamilyName The column family name
+   * @return The base state variable name for stateVariableInfo lookup
+   */
+  def getBaseStateName(colFamilyName: String): String = {
+    if (isInternalColFamily(colFamilyName)) {
+      getStateNameForInternalCF(colFamilyName)
+    } else {
+      colFamilyName
+    }
   }
 
   def getValueStateSchema[T](

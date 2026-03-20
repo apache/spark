@@ -17,6 +17,22 @@
 
 package org.apache.spark.sql.catalyst.streaming
 
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+
+/**
+ * A trait for logical plans that have a streaming source identifying name.
+ *
+ * This trait provides a common interface for both V1 (StreamingRelation) and V2
+ * (StreamingRelationV2) streaming sources, allowing analyzer rules in sql/catalyst
+ * to uniformly handle source naming without module boundary issues.
+ *
+ * The self-type constraint ensures this trait can only be mixed into LogicalPlan subclasses.
+ */
+trait HasStreamingSourceIdentifyingName { self: LogicalPlan =>
+  def sourceIdentifyingName: StreamingSourceIdentifyingName
+  def withSourceIdentifyingName(name: StreamingSourceIdentifyingName): LogicalPlan
+}
+
 /**
  * Represents the identifying name state for a streaming source during query analysis.
  *
@@ -30,6 +46,33 @@ sealed trait StreamingSourceIdentifyingName {
     case UserProvided(name) => s"""name="$name""""
     case FlowAssigned(name) => s"""name="$name""""
     case Unassigned => "name=<Unassigned>"
+  }
+
+  /**
+   * Extracts only user-provided names, filtering out flow-assigned or unassigned sources.
+   * Used when narrowing to explicitly user-specified names (e.g., when passing to DataSource).
+   *
+   * @return Option value set to the user-provided name if available, None otherwise
+   */
+  def toUserProvided: Option[UserProvided] = this match {
+    case up: UserProvided => Some(up)
+    case _ => None
+  }
+
+  /**
+   * Extracts the name string from named sources (UserProvided or FlowAssigned).
+   * Returns None for Unassigned sources.
+   *
+   * Useful for pattern matching when both UserProvided and FlowAssigned should be
+   * treated identically (e.g., when computing metadata paths or building sourceIdMap).
+   *
+   * @return Option value set to the source name (user-provided or flow-assigned) if available,
+   *         None otherwise
+   */
+  def nameOpt: Option[String] = this match {
+    case UserProvided(name) => Some(name)
+    case FlowAssigned(name) => Some(name)
+    case Unassigned => None
   }
 }
 

@@ -902,14 +902,6 @@ struct<level:int>
 
 
 -- !query
-SET spark.sql.legacy.ctePrecedencePolicy=EXCEPTION
--- !query schema
-struct<key:string,value:string>
--- !query output
-spark.sql.legacy.ctePrecedencePolicy	EXCEPTION
-
-
--- !query
 WITH RECURSIVE r(level, data) AS (
   VALUES (0, 0)
   UNION ALL

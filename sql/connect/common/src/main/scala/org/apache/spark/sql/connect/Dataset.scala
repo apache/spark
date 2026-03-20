@@ -1228,7 +1228,7 @@ class Dataset[T] private[sql] (
 
   /** @inheritdoc */
   def toJSON: Dataset[String] = {
-    select(to_json(struct(col("*")))).as(StringEncoder)
+    select(to_json(struct(col("*"))).as("value")).as(StringEncoder)
   }
 
   private[sql] def analyze: proto.AnalyzePlanResponse = {

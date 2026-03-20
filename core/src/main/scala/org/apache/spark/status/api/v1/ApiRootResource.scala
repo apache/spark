@@ -22,8 +22,8 @@ import jakarta.servlet.ServletContext
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.ws.rs._
 import jakarta.ws.rs.core.{Context, Response}
+import org.eclipse.jetty.ee10.servlet.{ServletContextHandler, ServletHolder}
 import org.eclipse.jetty.server.handler.ContextHandler
-import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.glassfish.jersey.server.ServerProperties
 import org.glassfish.jersey.servlet.ServletContainer
 

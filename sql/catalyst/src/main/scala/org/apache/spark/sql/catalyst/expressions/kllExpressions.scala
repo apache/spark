@@ -38,7 +38,7 @@ import org.apache.spark.unsafe.types.UTF8String
       > SELECT LENGTH(_FUNC_(kll_sketch_agg_bigint(col))) > 0 FROM VALUES (1), (2), (3), (4), (5) tab(col);
        true
   """,
-  group = "misc_funcs",
+  group = "sketch_funcs",
   since = "4.1.0")
 case class KllSketchToStringBigint(child: Expression) extends KllSketchToStringBase {
   override protected def withNewChildInternal(newChild: Expression): KllSketchToStringBigint =
@@ -66,7 +66,7 @@ case class KllSketchToStringBigint(child: Expression) extends KllSketchToStringB
       > SELECT LENGTH(_FUNC_(kll_sketch_agg_float(col))) > 0 FROM VALUES (CAST(1.0 AS FLOAT)), (CAST(2.0 AS FLOAT)), (CAST(3.0 AS FLOAT)), (CAST(4.0 AS FLOAT)), (CAST(5.0 AS FLOAT)) tab(col);
        true
   """,
-  group = "misc_funcs",
+  group = "sketch_funcs",
   since = "4.1.0")
 case class KllSketchToStringFloat(child: Expression) extends KllSketchToStringBase {
   override protected def withNewChildInternal(newChild: Expression): KllSketchToStringFloat =
@@ -94,7 +94,7 @@ case class KllSketchToStringFloat(child: Expression) extends KllSketchToStringBa
       > SELECT LENGTH(_FUNC_(kll_sketch_agg_double(col))) > 0 FROM VALUES (CAST(1.0 AS DOUBLE)), (CAST(2.0 AS DOUBLE)), (CAST(3.0 AS DOUBLE)), (CAST(4.0 AS DOUBLE)), (CAST(5.0 AS DOUBLE)) tab(col);
        true
   """,
-  group = "misc_funcs",
+  group = "sketch_funcs",
   since = "4.1.0")
 case class KllSketchToStringDouble(child: Expression) extends KllSketchToStringBase {
   override protected def withNewChildInternal(newChild: Expression): KllSketchToStringDouble =
@@ -132,7 +132,7 @@ abstract class KllSketchToStringBase
       > SELECT _FUNC_(kll_sketch_agg_bigint(col)) FROM VALUES (1), (2), (3), (4), (5) tab(col);
        5
   """,
-  group = "misc_funcs",
+  group = "sketch_funcs",
   since = "4.1.0")
 case class KllSketchGetNBigint(child: Expression) extends KllSketchGetNBase {
   override protected def withNewChildInternal(newChild: Expression): KllSketchGetNBigint =
@@ -160,7 +160,7 @@ case class KllSketchGetNBigint(child: Expression) extends KllSketchGetNBase {
       > SELECT _FUNC_(kll_sketch_agg_float(col)) FROM VALUES (CAST(1.0 AS FLOAT)), (CAST(2.0 AS FLOAT)), (CAST(3.0 AS FLOAT)), (CAST(4.0 AS FLOAT)), (CAST(5.0 AS FLOAT)) tab(col);
        5
   """,
-  group = "misc_funcs",
+  group = "sketch_funcs",
   since = "4.1.0")
 case class KllSketchGetNFloat(child: Expression) extends KllSketchGetNBase {
   override protected def withNewChildInternal(newChild: Expression): KllSketchGetNFloat =
@@ -188,7 +188,7 @@ case class KllSketchGetNFloat(child: Expression) extends KllSketchGetNBase {
       > SELECT _FUNC_(kll_sketch_agg_double(col)) FROM VALUES (CAST(1.0 AS DOUBLE)), (CAST(2.0 AS DOUBLE)), (CAST(3.0 AS DOUBLE)), (CAST(4.0 AS DOUBLE)), (CAST(5.0 AS DOUBLE)) tab(col);
        5
   """,
-  group = "misc_funcs",
+  group = "sketch_funcs",
   since = "4.1.0")
 case class KllSketchGetNDouble(child: Expression) extends KllSketchGetNBase {
   override protected def withNewChildInternal(newChild: Expression): KllSketchGetNDouble =
@@ -226,7 +226,7 @@ abstract class KllSketchGetNBase
       > SELECT LENGTH(kll_sketch_to_string_bigint(_FUNC_(kll_sketch_agg_bigint(col), kll_sketch_agg_bigint(col)))) > 0 FROM VALUES (1), (2), (3), (4), (5) tab(col);
        true
   """,
-  group = "misc_funcs",
+  group = "sketch_funcs",
   since = "4.1.0")
 case class KllSketchMergeBigint(left: Expression, right: Expression) extends KllSketchMergeBase {
   override def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
@@ -257,7 +257,7 @@ case class KllSketchMergeBigint(left: Expression, right: Expression) extends Kll
       > SELECT LENGTH(kll_sketch_to_string_float(_FUNC_(kll_sketch_agg_float(col), kll_sketch_agg_float(col)))) > 0 FROM VALUES (CAST(1.0 AS FLOAT)), (CAST(2.0 AS FLOAT)), (CAST(3.0 AS FLOAT)), (CAST(4.0 AS FLOAT)), (CAST(5.0 AS FLOAT)) tab(col);
        true
   """,
-  group = "misc_funcs",
+  group = "sketch_funcs",
   since = "4.1.0")
 case class KllSketchMergeFloat(left: Expression, right: Expression) extends KllSketchMergeBase {
   override def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
@@ -288,7 +288,7 @@ case class KllSketchMergeFloat(left: Expression, right: Expression) extends KllS
       > SELECT LENGTH(kll_sketch_to_string_double(_FUNC_(kll_sketch_agg_double(col), kll_sketch_agg_double(col)))) > 0 FROM VALUES (CAST(1.0 AS DOUBLE)), (CAST(2.0 AS DOUBLE)), (CAST(3.0 AS DOUBLE)), (CAST(4.0 AS DOUBLE)), (CAST(5.0 AS DOUBLE)) tab(col);
        true
   """,
-  group = "misc_funcs",
+  group = "sketch_funcs",
   since = "4.1.0")
 case class KllSketchMergeDouble(left: Expression, right: Expression) extends KllSketchMergeBase {
   override def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
@@ -332,7 +332,7 @@ abstract class KllSketchMergeBase
       > SELECT _FUNC_(kll_sketch_agg_bigint(col), 0.5) > 1 FROM VALUES (1), (2), (3), (4), (5) tab(col);
        true
   """,
-  group = "misc_funcs",
+  group = "sketch_funcs",
   since = "4.1.0")
 case class KllSketchGetQuantileBigint(left: Expression, right: Expression)
     extends KllSketchGetQuantileBase {
@@ -364,7 +364,7 @@ case class KllSketchGetQuantileBigint(left: Expression, right: Expression)
       > SELECT _FUNC_(kll_sketch_agg_float(col), 0.5) > 1 FROM VALUES (CAST(1.0 AS FLOAT)), (CAST(2.0 AS FLOAT)), (CAST(3.0 AS FLOAT)), (CAST(4.0 AS FLOAT)), (CAST(5.0 AS FLOAT)) tab(col);
        true
   """,
-  group = "misc_funcs",
+  group = "sketch_funcs",
   since = "4.1.0")
 case class KllSketchGetQuantileFloat(left: Expression, right: Expression)
     extends KllSketchGetQuantileBase {
@@ -396,7 +396,7 @@ case class KllSketchGetQuantileFloat(left: Expression, right: Expression)
       > SELECT _FUNC_(kll_sketch_agg_double(col), 0.5) > 1 FROM VALUES (CAST(1.0 AS DOUBLE)), (CAST(2.0 AS DOUBLE)), (CAST(3.0 AS DOUBLE)), (CAST(4.0 AS DOUBLE)), (CAST(5.0 AS DOUBLE)) tab(col);
        true
   """,
-  group = "misc_funcs",
+  group = "sketch_funcs",
   since = "4.1.0")
 case class KllSketchGetQuantileDouble(left: Expression, right: Expression)
     extends KllSketchGetQuantileBase {
@@ -528,7 +528,7 @@ abstract class KllSketchGetQuantileBase
       > SELECT _FUNC_(kll_sketch_agg_bigint(col), 3) > 0.3 FROM VALUES (1), (2), (3), (4), (5) tab(col);
        true
   """,
-  group = "misc_funcs",
+  group = "sketch_funcs",
   since = "4.1.0")
 case class KllSketchGetRankBigint(left: Expression, right: Expression)
     extends KllSketchGetRankBase {
@@ -556,7 +556,7 @@ case class KllSketchGetRankBigint(left: Expression, right: Expression)
       > SELECT _FUNC_(kll_sketch_agg_float(col), 3.0) > 0.3 FROM VALUES (CAST(1.0 AS FLOAT)), (CAST(2.0 AS FLOAT)), (CAST(3.0 AS FLOAT)), (CAST(4.0 AS FLOAT)), (CAST(5.0 AS FLOAT)) tab(col);
        true
   """,
-  group = "misc_funcs",
+  group = "sketch_funcs",
   since = "4.1.0")
 case class KllSketchGetRankFloat(left: Expression, right: Expression)
     extends KllSketchGetRankBase {
@@ -584,7 +584,7 @@ case class KllSketchGetRankFloat(left: Expression, right: Expression)
       > SELECT _FUNC_(kll_sketch_agg_double(col), 3.0) > 0.3 FROM VALUES (CAST(1.0 AS DOUBLE)), (CAST(2.0 AS DOUBLE)), (CAST(3.0 AS DOUBLE)), (CAST(4.0 AS DOUBLE)), (CAST(5.0 AS DOUBLE)) tab(col);
        true
   """,
-  group = "misc_funcs",
+  group = "sketch_funcs",
   since = "4.1.0")
 case class KllSketchGetRankDouble(left: Expression, right: Expression)
     extends KllSketchGetRankBase {

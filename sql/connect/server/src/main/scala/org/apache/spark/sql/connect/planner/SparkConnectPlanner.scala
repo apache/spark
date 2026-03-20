@@ -43,7 +43,7 @@ import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{AnalysisException, Column, Encoders, ForeachWriter, Row}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, InternalRow, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedOrdinal, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
+import org.apache.spark.sql.catalyst.analysis.{ChangelogInfoUtils, FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, RelationChanges, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedOrdinal, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.expressions._
@@ -59,7 +59,7 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.classic.{Catalog, DataFrameWriter, Dataset, MergeIntoWriter, RelationalGroupedDataset, SparkSession, TypedAggUtils, UserDefinedFunctionUtils}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.ml.MLHandler
 import org.apache.spark.sql.connect.pipelines.PipelinesHandler
@@ -148,6 +148,8 @@ class SparkConnectPlanner(
         case proto.Relation.RelTypeCase.SHOW_STRING => transformShowString(rel.getShowString)
         case proto.Relation.RelTypeCase.HTML_STRING => transformHtmlString(rel.getHtmlString)
         case proto.Relation.RelTypeCase.READ => transformReadRel(rel.getRead)
+        case proto.Relation.RelTypeCase.RELATION_CHANGES =>
+          transformRelationChanges(rel.getRelationChanges)
         case proto.Relation.RelTypeCase.PROJECT => transformProject(rel.getProject)
         case proto.Relation.RelTypeCase.FILTER => transformFilter(rel.getFilter)
         case proto.Relation.RelTypeCase.LIMIT => transformLimit(rel.getLimit)
@@ -264,7 +266,7 @@ class SparkConnectPlanner(
       .map(p => p.transform(extension.toByteArray, this))
       // Find the first non-empty transformation or throw.
       .find(_.isPresent)
-      .getOrElse(throw InvalidInputErrors.noHandlerFoundForExtension())
+      .getOrElse(throw InvalidInputErrors.noHandlerFoundForExtension(extension.getTypeUrl))
       .get()
   }
 
@@ -1332,7 +1334,7 @@ class SparkConnectPlanner(
   private def transformCachedLocalRelation(rel: proto.CachedLocalRelation): LogicalPlan = {
     val blockManager = session.sparkContext.env.blockManager
     val blockId = session.artifactManager.getCachedBlockId(rel.getHash).getOrElse {
-      throw InvalidPlanInput(s"Cannot find a cached local relation for hash: ${rel.getHash}")
+      throw InvalidInputErrors.cannotFindCachedLocalRelation(rel.getHash)
     }
     val bytes = blockManager.getLocalBytes(blockId)
     bytes
@@ -1445,7 +1447,8 @@ class SparkConnectPlanner(
         // so we call filter instead of find.
         val cols = allColumns.filter(col => resolver(col.name, colName))
         if (cols.isEmpty) {
-          throw InvalidInputErrors.invalidDeduplicateColumn(colName)
+          val fieldNames = allColumns.map(_.name).mkString(", ")
+          throw InvalidInputErrors.invalidDeduplicateColumn(colName, fieldNames)
         }
         cols
       }
@@ -1697,6 +1700,9 @@ class SparkConnectPlanner(
         if (streamSource.getSchema.nonEmpty) {
           reader.schema(parseSchema(streamSource.getSchema))
         }
+        if (streamSource.hasSourceName) {
+          reader.name(streamSource.getSourceName)
+        }
         val streamDF = streamSource.getPathsCount match {
           case 0 => reader.load()
           case 1 => reader.load(streamSource.getPaths(0))
@@ -1709,6 +1715,16 @@ class SparkConnectPlanner(
       case other =>
         throw InvalidInputErrors.invalidOneOfField(other, rel.getDescriptorForType)
     }
+  }
+
+  private def transformRelationChanges(rel: proto.RelationChanges): LogicalPlan = {
+    val tableName = rel.getUnparsedIdentifier
+    val options = new CaseInsensitiveStringMap(rel.getOptionsMap)
+    val timeZone = session.sessionState.conf.sessionLocalTimeZone
+    val changelogInfo = ChangelogInfoUtils.fromOptions(options, timeZone)
+    val ident = parser.parseMultipartIdentifier(tableName)
+    val relation = UnresolvedRelation(ident, options, isStreaming = rel.getIsStreaming)
+    RelationChanges(relation, changelogInfo)
   }
 
   private def transformParse(rel: proto.Parse): LogicalPlan = {
@@ -1945,7 +1961,7 @@ class SparkConnectPlanner(
       .map(p => p.transform(extension.toByteArray, this))
       // Find the first non-empty transformation or throw.
       .find(_.isPresent)
-      .getOrElse(throw InvalidInputErrors.noHandlerFoundForExtension())
+      .getOrElse(throw InvalidInputErrors.noHandlerFoundForExtension(extension.getTypeUrl))
       .get
   }
 
@@ -3227,7 +3243,7 @@ class SparkConnectPlanner(
       .map(p => p.process(extension.toByteArray, this))
       // Find the first non-empty transformation or throw.
       .find(_ == true)
-      .getOrElse(throw InvalidInputErrors.noHandlerFoundForExtension())
+      .getOrElse(throw InvalidInputErrors.noHandlerFoundForExtension(extension.getTypeUrl))
     executeHolder.eventsManager.postFinished()
   }
 
@@ -3433,6 +3449,8 @@ class SparkConnectPlanner(
         writer.trigger(Trigger.Once())
       case TriggerCase.CONTINUOUS_CHECKPOINT_INTERVAL =>
         writer.trigger(Trigger.Continuous(writeOp.getContinuousCheckpointInterval))
+      case TriggerCase.REAL_TIME_BATCH_DURATION =>
+        writer.trigger(Trigger.RealTime(writeOp.getRealTimeBatchDuration))
       case TriggerCase.TRIGGER_NOT_SET =>
     }
 
