@@ -40,8 +40,7 @@ class PushDownJoinThroughUnionSuite extends PlanTest {
 
   test("Push down Inner Join through Union when right side is small") {
     withSQLConf(
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000",
-      SQLConf.PUSH_DOWN_JOIN_THROUGH_UNION_ENABLED.key -> "true") {
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000") {
       val union = Union(testRelation1, testRelation2)
       val query = union.join(testRelation3, Inner, Some($"a" === $"e"))
       val optimized = Optimize.execute(query.analyze)
@@ -57,8 +56,7 @@ class PushDownJoinThroughUnionSuite extends PlanTest {
 
   test("Push down Left Outer Join through Union when right side is small") {
     withSQLConf(
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000",
-      SQLConf.PUSH_DOWN_JOIN_THROUGH_UNION_ENABLED.key -> "true") {
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000") {
       val union = Union(testRelation1, testRelation2)
       val query = union.join(testRelation3, LeftOuter, Some($"a" === $"e"))
       val optimized = Optimize.execute(query.analyze)
@@ -74,8 +72,7 @@ class PushDownJoinThroughUnionSuite extends PlanTest {
 
   test("Do not push down when right side is too large (broadcast disabled)") {
     withSQLConf(
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-      SQLConf.PUSH_DOWN_JOIN_THROUGH_UNION_ENABLED.key -> "true") {
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       val union = Union(testRelation1, testRelation2)
       val query = union.join(testRelation3, Inner, Some($"a" === $"e"))
       val optimized = Optimize.execute(query.analyze)
@@ -86,8 +83,7 @@ class PushDownJoinThroughUnionSuite extends PlanTest {
 
   test("Correctly rewrite attributes in join condition") {
     withSQLConf(
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000",
-      SQLConf.PUSH_DOWN_JOIN_THROUGH_UNION_ENABLED.key -> "true") {
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000") {
       val union = Union(testRelation1, testRelation2)
       val query = union.join(testRelation3, Inner, Some($"a" === $"e" && $"b" > 10))
       val optimized = Optimize.execute(query.analyze)
@@ -103,8 +99,7 @@ class PushDownJoinThroughUnionSuite extends PlanTest {
 
   test("Push down Inner Join through 3-way Union (TPC-DS pattern)") {
     withSQLConf(
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000",
-      SQLConf.PUSH_DOWN_JOIN_THROUGH_UNION_ENABLED.key -> "true") {
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000") {
       val union = Union(Seq(testRelation1, testRelation2, testRelation4))
       val query = union.join(testRelation3, Inner, Some($"a" === $"e"))
       val optimized = Optimize.execute(query.analyze)
@@ -121,8 +116,7 @@ class PushDownJoinThroughUnionSuite extends PlanTest {
 
   test("Do not push down unsupported join types") {
     withSQLConf(
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000",
-      SQLConf.PUSH_DOWN_JOIN_THROUGH_UNION_ENABLED.key -> "true") {
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000") {
       val union = Union(testRelation1, testRelation2)
       Seq(RightOuter, FullOuter, LeftSemi, LeftAnti).foreach { joinType =>
         val query = union.join(testRelation3, joinType, Some($"a" === $"e"))
@@ -134,8 +128,7 @@ class PushDownJoinThroughUnionSuite extends PlanTest {
 
   test("Do not push down Cross Join (no join condition)") {
     withSQLConf(
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000",
-      SQLConf.PUSH_DOWN_JOIN_THROUGH_UNION_ENABLED.key -> "true") {
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000") {
       val union = Union(testRelation1, testRelation2)
       val query = union.join(testRelation3, Inner, None)
       val optimized = Optimize.execute(query.analyze)
@@ -146,8 +139,7 @@ class PushDownJoinThroughUnionSuite extends PlanTest {
 
   test("Do not push down when Union is on the right side") {
     withSQLConf(
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000",
-      SQLConf.PUSH_DOWN_JOIN_THROUGH_UNION_ENABLED.key -> "true") {
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000") {
       val union = Union(testRelation1, testRelation2)
       val query = testRelation3.join(union, Inner, Some($"e" === $"a"))
       val optimized = Optimize.execute(query.analyze)
@@ -158,8 +150,7 @@ class PushDownJoinThroughUnionSuite extends PlanTest {
 
   test("Push down when right side is a complex subplan") {
     withSQLConf(
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000",
-      SQLConf.PUSH_DOWN_JOIN_THROUGH_UNION_ENABLED.key -> "true") {
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000") {
       val complexRight = testRelation3
         .where($"f" > 0)
         .select($"e", ($"f" + 1).as("f_plus_1"))
@@ -183,8 +174,7 @@ class PushDownJoinThroughUnionSuite extends PlanTest {
 
   test("Push down when right side contains Generate (Explode)") {
     withSQLConf(
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000",
-      SQLConf.PUSH_DOWN_JOIN_THROUGH_UNION_ENABLED.key -> "true") {
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000") {
       val arrayRelation = LocalRelation($"k".int, $"arr".array(IntegerType))
       val rightWithGenerate = arrayRelation
         .generate(Explode($"arr"), outputNames = Seq("exploded_val"))
@@ -208,8 +198,7 @@ class PushDownJoinThroughUnionSuite extends PlanTest {
 
   test("Push down when right side contains SubqueryAlias") {
     withSQLConf(
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000",
-      SQLConf.PUSH_DOWN_JOIN_THROUGH_UNION_ENABLED.key -> "true") {
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000") {
       val rightWithAlias = testRelation3.subquery("dim")
       val union = Union(testRelation1, testRelation2)
       val query = union.join(rightWithAlias, Inner, Some($"a" === $"e"))
@@ -230,8 +219,7 @@ class PushDownJoinThroughUnionSuite extends PlanTest {
 
   test("Push down when right side contains Project with Alias") {
     withSQLConf(
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000",
-      SQLConf.PUSH_DOWN_JOIN_THROUGH_UNION_ENABLED.key -> "true") {
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000") {
       val rightWithAlias = testRelation3
         .select($"e", ($"f" + 1).as("f_plus_1"))
       val union = Union(testRelation1, testRelation2)
@@ -251,8 +239,7 @@ class PushDownJoinThroughUnionSuite extends PlanTest {
 
   test("Push down when right side contains Aggregate") {
     withSQLConf(
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000",
-      SQLConf.PUSH_DOWN_JOIN_THROUGH_UNION_ENABLED.key -> "true") {
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000") {
       val rightWithAgg = testRelation3
         .groupBy($"e")(count($"f").as("cnt"), $"e")
       val union = Union(testRelation1, testRelation2)
@@ -267,18 +254,6 @@ class PushDownJoinThroughUnionSuite extends PlanTest {
         assert(ids_i.intersect(ids_j).isEmpty,
           s"Union children $i and $j share ExprIds: ${ids_i.intersect(ids_j)}")
       }
-    }
-  }
-
-  test("Do not push down when config is disabled") {
-    withSQLConf(
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000",
-      SQLConf.PUSH_DOWN_JOIN_THROUGH_UNION_ENABLED.key -> "false") {
-      val union = Union(testRelation1, testRelation2)
-      val query = union.join(testRelation3, Inner, Some($"a" === $"e"))
-      val optimized = Optimize.execute(query.analyze)
-
-      comparePlans(optimized, query.analyze)
     }
   }
 }

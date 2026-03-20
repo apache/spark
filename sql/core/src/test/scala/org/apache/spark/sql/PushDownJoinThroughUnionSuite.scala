@@ -26,8 +26,7 @@ class PushDownJoinThroughUnionSuite extends QueryTest with SharedSparkSession {
   test("UNION ALL + broadcast JOIN produces correct results") {
     withTempView("fact1", "fact2", "dim") {
       withSQLConf(
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10485760",
-        SQLConf.PUSH_DOWN_JOIN_THROUGH_UNION_ENABLED.key -> "true") {
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10485760") {
         val fact1 = Seq((1, "a"), (2, "b")).toDF("id", "val1")
         val fact2 = Seq((3, "c"), (4, "d")).toDF("id", "val1")
         val dim = Seq((1, "x"), (2, "y"), (3, "z")).toDF("id", "label")
@@ -54,8 +53,7 @@ class PushDownJoinThroughUnionSuite extends QueryTest with SharedSparkSession {
   test("3-way UNION ALL + broadcast JOIN (TPC-DS pattern)") {
     withTempView("fact1", "fact2", "fact3", "dim") {
       withSQLConf(
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10485760",
-        SQLConf.PUSH_DOWN_JOIN_THROUGH_UNION_ENABLED.key -> "true") {
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10485760") {
         val fact1 = Seq((1, 10), (2, 20)).toDF("id", "amount")
         val fact2 = Seq((3, 30), (4, 40)).toDF("id", "amount")
         val fact3 = Seq((1, 50), (5, 60)).toDF("id", "amount")
@@ -91,8 +89,7 @@ class PushDownJoinThroughUnionSuite extends QueryTest with SharedSparkSession {
   test("LeftOuter Join through UNION ALL produces correct results") {
     withTempView("fact1", "fact2", "dim") {
       withSQLConf(
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10485760",
-        SQLConf.PUSH_DOWN_JOIN_THROUGH_UNION_ENABLED.key -> "true") {
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10485760") {
         val fact1 = Seq((1, "a"), (2, "b")).toDF("id", "val1")
         val fact2 = Seq((3, "c"), (99, "d")).toDF("id", "val1")
         val dim = Seq((1, "x"), (2, "y"), (3, "z")).toDF("id", "label")
@@ -140,14 +137,14 @@ class PushDownJoinThroughUnionSuite extends QueryTest with SharedSparkSession {
       )
 
       withSQLConf(
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10485760",
-        SQLConf.PUSH_DOWN_JOIN_THROUGH_UNION_ENABLED.key -> "true") {
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10485760") {
         checkAnswer(sql(query), expected)
       }
 
       withSQLConf(
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10485760",
-        SQLConf.PUSH_DOWN_JOIN_THROUGH_UNION_ENABLED.key -> "false") {
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+          "org.apache.spark.sql.catalyst.optimizer.PushDownJoinThroughUnion") {
         checkAnswer(sql(query), expected)
       }
     }
@@ -156,8 +153,7 @@ class PushDownJoinThroughUnionSuite extends QueryTest with SharedSparkSession {
   test("ColumnPruning works after join push down") {
     withTempView("fact1", "fact2", "dim") {
       withSQLConf(
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10485760",
-        SQLConf.PUSH_DOWN_JOIN_THROUGH_UNION_ENABLED.key -> "true") {
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10485760") {
         val fact1 = Seq((1, "a", 100), (2, "b", 200)).toDF("id", "val1", "val2")
         val fact2 = Seq((3, "c", 300), (4, "d", 400)).toDF("id", "val1", "val2")
         val dim = Seq((1, "x", "extra1"), (2, "y", "extra2"), (3, "z", "extra3"))
@@ -185,8 +181,7 @@ class PushDownJoinThroughUnionSuite extends QueryTest with SharedSparkSession {
   test("PushPredicateThroughJoin works after join push down") {
     withTempView("fact1", "fact2", "dim") {
       withSQLConf(
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10485760",
-        SQLConf.PUSH_DOWN_JOIN_THROUGH_UNION_ENABLED.key -> "true") {
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10485760") {
         val fact1 = Seq((1, "a"), (2, "b")).toDF("id", "val1")
         val fact2 = Seq((3, "c"), (4, "d")).toDF("id", "val1")
         val dim = Seq((1, "x"), (2, "y"), (3, "z"), (4, "w")).toDF("id", "label")

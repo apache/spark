@@ -24,8 +24,6 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{JOIN, UNION}
-import org.apache.spark.sql.internal.SQLConf
-
 /**
  * Pushes down `Join` through `Union` when the right side of the join is small enough
  * to broadcast.
@@ -56,8 +54,7 @@ object PushDownJoinThroughUnion
     _.containsAllPatterns(JOIN, UNION), ruleId) {
 
     case join @ Join(u: Union, right, joinType, joinCond, hint)
-      if conf.getConf(SQLConf.PUSH_DOWN_JOIN_THROUGH_UNION_ENABLED) &&
-        (joinType == Inner || joinType == LeftOuter) &&
+      if (joinType == Inner || joinType == LeftOuter) &&
         canPlanAsBroadcastHashJoin(join, conf) &&
         // Conservatively exclude any right subtree containing subqueries,
         // as DeduplicateRelations may not correctly handle correlated references.
