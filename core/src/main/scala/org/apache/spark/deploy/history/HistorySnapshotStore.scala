@@ -405,8 +405,8 @@ private[spark] object HistorySnapshotStore extends Logging {
   }
 
   private def deletePathQuietly(fs: FileSystem, path: Path, recursive: Boolean): Unit = {
-    if (fs.exists(path)) {
-      Utils.tryLogNonFatalError {
+    Utils.tryLogNonFatalError {
+      if (fs.exists(path)) {
         fs.delete(path, recursive)
       }
     }
