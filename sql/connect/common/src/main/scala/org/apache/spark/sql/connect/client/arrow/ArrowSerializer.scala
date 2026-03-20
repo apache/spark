@@ -240,7 +240,12 @@ object ArrowSerializer {
   }
 
   // TODO throw better errors on class cast exceptions.
-  private[arrow] def serializerFor[E](encoder: AgnosticEncoder[E], v: AnyRef): Serializer = {
+  private[arrow] def serializerFor[E](encoder: AgnosticEncoder[E], v: AnyRef): Serializer =
+    ConnectArrowTypeOps(encoder)
+      .map(_.createArrowSerializer(v).asInstanceOf[Serializer])
+      .getOrElse(serializerForDefault(encoder, v))
+
+  private def serializerForDefault[E](encoder: AgnosticEncoder[E], v: AnyRef): Serializer =
     (encoder, v) match {
       case (PrimitiveBooleanEncoder | BoxedBooleanEncoder, v: BitVector) =>
         new FieldSerializer[Boolean, BitVector](v) {
@@ -392,8 +397,6 @@ object ArrowSerializer {
           override def set(index: Int, value: LocalDateTime): Unit =
             vector.setSafe(index, SparkDateTimeUtils.localDateTimeToMicros(value))
         }
-      case (enc, v) if ConnectArrowTypeOps(enc).isDefined =>
-        ConnectArrowTypeOps(enc).get.createArrowSerializer(v).asInstanceOf[Serializer]
       case (LocalTimeEncoder, v: TimeNanoVector) =>
         new FieldSerializer[LocalTime, TimeNanoVector](v) {
           override def set(index: Int, value: LocalTime): Unit =
@@ -520,7 +523,6 @@ object ArrowSerializer {
       case _ =>
         throw new RuntimeException(s"Unsupported Encoder($encoder)/Vector($v) combination.")
     }
-  }
 
   private val methodLookup = MethodHandles.lookup()
 

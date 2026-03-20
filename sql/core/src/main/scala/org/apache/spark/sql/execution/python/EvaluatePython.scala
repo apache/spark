@@ -43,18 +43,19 @@ object EvaluatePython {
   private[python] class BytesWrapper(val data: Array[Byte])
 
   def needConversionInPython(dt: DataType): Boolean =
-    ClientTypeOps(dt).map(_.needConversionInPython).getOrElse {
-      dt match {
-        case DateType | TimestampType | TimestampNTZType | VariantType | _: DayTimeIntervalType
-             | _: TimeType | _: GeometryType | _: GeographyType => true
-        case _: StructType => true
-        case _: UserDefinedType[_] => true
-        case ArrayType(elementType, _) => needConversionInPython(elementType)
-        case MapType(keyType, valueType, _) =>
-          needConversionInPython(keyType) || needConversionInPython(valueType)
-        case _ => false
-      }
-    }
+    ClientTypeOps(dt).map(_.needConversionInPython)
+      .getOrElse(needConversionInPythonDefault(dt))
+
+  private def needConversionInPythonDefault(dt: DataType): Boolean = dt match {
+    case DateType | TimestampType | TimestampNTZType | VariantType | _: DayTimeIntervalType
+         | _: TimeType | _: GeometryType | _: GeographyType => true
+    case _: StructType => true
+    case _: UserDefinedType[_] => true
+    case ArrayType(elementType, _) => needConversionInPython(elementType)
+    case MapType(keyType, valueType, _) =>
+      needConversionInPython(keyType) || needConversionInPython(valueType)
+    case _ => false
+  }
 
   /**
    * Helper for converting from Catalyst type to java type suitable for Pickle.

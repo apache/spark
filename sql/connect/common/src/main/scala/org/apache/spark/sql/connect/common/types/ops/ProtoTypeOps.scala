@@ -68,6 +68,18 @@ object ProtoTypeOps {
     }
   }
 
+  /** Reverse lookup by value class for the generic literal builder. */
+  def toLiteralProtoForValue(
+      value: Any,
+      builder: proto.Expression.Literal.Builder): Option[proto.Expression.Literal.Builder] = {
+    if (!SqlApiConf.get.typesFrameworkEnabled) return None
+    value match {
+      case v: java.time.LocalTime =>
+        Some(new TimeTypeConnectOps(TimeType()).toLiteralProto(v, builder))
+      case _ => None
+    }
+  }
+
   /**
    * Reverse lookup: converts a proto DataType to a Spark DataType, if it belongs to a
    * framework-managed type.
