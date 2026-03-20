@@ -24,8 +24,9 @@ import org.apache.spark.sql.types._
 
 /**
  * Estimate the number of output rows by doing the sum of output rows for each child of union,
- * and estimate min and max stats for each column by finding the overall min and max of that
- * column coming from its children.
+ * and estimate column stats (min, max, nullCount, distinctCount) for each column from its
+ * children. Min and max are computed as the overall min/max across children, nullCount is summed,
+ * and distinctCount is estimated as the max across children (capped by total row count).
  */
 object UnionEstimation {
   import EstimationUtils._
@@ -51,14 +52,23 @@ object UnionEstimation {
 
     val newMinMaxStats = computeMinMaxStats(union)
     val newNullCountStats = computeNullCountStats(union)
+    val newDistinctCountStats = computeDistinctCountStats(union, outputRows)
     val newAttrStats = {
       val baseStats = AttributeMap(newMinMaxStats)
-      val overwriteStats = newNullCountStats.map { case attrStat@(attr, stat) =>
+      // Layer nullCount on top of min/max
+      val withNullCount = newNullCountStats.map { case attrStat @ (attr, stat) =>
         baseStats.get(attr).map { baseStat =>
           attr -> baseStat.copy(nullCount = stat.nullCount)
         }.getOrElse(attrStat)
       }
-      AttributeMap(newMinMaxStats ++ overwriteStats)
+      val merged = AttributeMap(newMinMaxStats ++ withNullCount)
+      // Layer distinctCount on top of min/max + nullCount
+      val withDistinctCount = newDistinctCountStats.map { case attrStat @ (attr, stat) =>
+        merged.get(attr).map { baseStat =>
+          attr -> baseStat.copy(distinctCount = stat.distinctCount)
+        }.getOrElse(attrStat)
+      }
+      AttributeMap(newMinMaxStats ++ withNullCount ++ withDistinctCount)
     }
 
     Some(
@@ -122,6 +132,45 @@ object UnionEstimation {
             totalNullCount + colStat.nullCount.get
         }
         val newStat = ColumnStat(nullCount = Some(colWithNullStatValues))
+        unionOutput(outputIndex) -> newStat
+    }
+  }
+
+  /**
+   * For each column, if all children have distinctCount, propagate the max distinctCount
+   * across children. The result is capped by outputRows when available.
+   *
+   * For UNION ALL, true distinctCount satisfies:
+   *   max(dc_i) <= true_dc <= min(sum(dc_i), rowCount)
+   * We use max as a lower-bound estimate. This may underestimate when branches have
+   * disjoint values, but UNION ALL branches typically share overlapping values
+   * (e.g. web_sales and catalog_sales reference the same date keys),
+   * so max is a reasonable approximation in the common case.
+   */
+  private def computeDistinctCountStats(
+      union: Union,
+      outputRows: Option[BigInt]): Seq[(Attribute, ColumnStat)] = {
+    val unionOutput = union.output
+    val attrToComputeDistinctCount = union.children.map(_.output).transpose.zipWithIndex.filter {
+      case (attrs, _) => attrs.zipWithIndex.forall {
+        case (attr, childIndex) =>
+          val attrStats = union.children(childIndex).stats.attributeStats
+          attrStats.get(attr).isDefined && attrStats(attr).distinctCount.isDefined
+      }
+    }
+    attrToComputeDistinctCount.map {
+      case (attrs, outputIndex) =>
+        val maxDistinctCount = attrs.zipWithIndex.foldLeft[BigInt](0) {
+          case (currentMax, (attr, childIndex)) =>
+            val colStat = union.children(childIndex).stats.attributeStats(attr)
+            currentMax.max(colStat.distinctCount.get)
+        }
+        // Cap distinctCount by outputRows if available
+        val cappedDistinctCount = outputRows match {
+          case Some(rows) => maxDistinctCount.min(rows)
+          case None => maxDistinctCount
+        }
+        val newStat = ColumnStat(distinctCount = Some(cappedDistinctCount))
         unionOutput(outputIndex) -> newStat
     }
   }
