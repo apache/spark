@@ -19,6 +19,8 @@ Spark Connect protocol is defined in proto files under `sql/connect/common/src/m
 
 ## Build and Test
 
+Build and tests can take a long time. Before running tests, ask the user if they have more changes to make.
+
 Prefer SBT over Maven for faster incremental compilation. Module names are defined in `project/SparkBuild.scala`.
 
 Compile a single module:
