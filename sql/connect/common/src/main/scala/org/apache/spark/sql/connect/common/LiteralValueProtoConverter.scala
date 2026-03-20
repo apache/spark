@@ -110,13 +110,13 @@ object LiteralValueProtoConverter {
       case v: Date => builder.setDate(SparkDateTimeUtils.fromJavaDate(v))
       case v: Duration => builder.setDayTimeInterval(SparkIntervalUtils.durationToMicros(v))
       case v: Period => builder.setYearMonthInterval(SparkIntervalUtils.periodToMonths(v))
-      case v: LocalTime if ProtoTypeOps(TimeType()).isDefined =>
-        ProtoTypeOps(TimeType()).get.toLiteralProto(v, builder)
       case v: LocalTime =>
-        builder.setTime(
-          builder.getTimeBuilder
-            .setNano(SparkDateTimeUtils.localTimeToNanos(v))
-            .setPrecision(TimeType.DEFAULT_PRECISION))
+        ProtoTypeOps(TimeType()).map(_.toLiteralProto(v, builder)).getOrElse {
+          builder.setTime(
+            builder.getTimeBuilder
+              .setNano(SparkDateTimeUtils.localTimeToNanos(v))
+              .setPrecision(TimeType.DEFAULT_PRECISION))
+        }
       case v: Array[_] => builder.setArray(arrayBuilder(v))
       case v: CalendarInterval =>
         builder.setCalendarInterval(calendarIntervalBuilder(v.months, v.days, v.microseconds))
@@ -219,13 +219,13 @@ object LiteralValueProtoConverter {
         builder.setMap(mapBuilder(v, keyType, valueType))
       case (v, structType: StructType) =>
         builder.setStruct(structBuilder(v, structType))
-      case (v, dt) if ProtoTypeOps(dt).isDefined =>
-        ProtoTypeOps(dt).get.toLiteralProtoWithType(v, dt, builder)
       case (v: LocalTime, timeType: TimeType) =>
-        builder.setTime(
-          builder.getTimeBuilder
-            .setNano(SparkDateTimeUtils.localTimeToNanos(v))
-            .setPrecision(timeType.precision))
+        ProtoTypeOps(timeType).map(_.toLiteralProtoWithType(v, timeType, builder)).getOrElse {
+          builder.setTime(
+            builder.getTimeBuilder
+              .setNano(SparkDateTimeUtils.localTimeToNanos(v))
+              .setPrecision(timeType.precision))
+        }
       case _ => toLiteralProtoBuilderInternal(literal, options)
     }
 
@@ -390,51 +390,52 @@ object LiteralValueProtoConverter {
   }
 
   private def getScalaConverter(dataType: proto.DataType): proto.Expression.Literal => Any = {
-    val converter: proto.Expression.Literal => Any = dataType.getKindCase match {
-      case proto.DataType.KindCase.NULL =>
-        v =>
-          throw InvalidPlanInput(
-            "CONNECT_INVALID_PLAN.EXPECTED_NULL_VALUE",
-            Map("literalTypeCase" -> v.getLiteralTypeCase.toString))
-      case proto.DataType.KindCase.SHORT => v => v.getShort.toShort
-      case proto.DataType.KindCase.INTEGER => v => v.getInteger
-      case proto.DataType.KindCase.LONG => v => v.getLong
-      case proto.DataType.KindCase.DOUBLE => v => v.getDouble
-      case proto.DataType.KindCase.BYTE => v => v.getByte.toByte
-      case proto.DataType.KindCase.FLOAT => v => v.getFloat
-      case proto.DataType.KindCase.BOOLEAN => v => v.getBoolean
-      case proto.DataType.KindCase.STRING => v => v.getString
-      case proto.DataType.KindCase.BINARY => v => v.getBinary.toByteArray
-      case proto.DataType.KindCase.DATE =>
-        v => SparkDateTimeUtils.toJavaDate(v.getDate)
-      case proto.DataType.KindCase.TIMESTAMP =>
-        v => SparkDateTimeUtils.toJavaTimestamp(v.getTimestamp)
-      case proto.DataType.KindCase.TIMESTAMP_NTZ =>
-        v => SparkDateTimeUtils.microsToLocalDateTime(v.getTimestampNtz)
-      case proto.DataType.KindCase.DAY_TIME_INTERVAL =>
-        v => SparkIntervalUtils.microsToDuration(v.getDayTimeInterval)
-      case proto.DataType.KindCase.YEAR_MONTH_INTERVAL =>
-        v => SparkIntervalUtils.monthsToPeriod(v.getYearMonthInterval)
-      case kindCase if ProtoTypeOps.getScalaConverterForKind(kindCase).isDefined =>
-        ProtoTypeOps.getScalaConverterForKind(kindCase).get
-      case proto.DataType.KindCase.TIME =>
-        v => SparkDateTimeUtils.nanosToLocalTime(v.getTime.getNano)
-      case proto.DataType.KindCase.DECIMAL => v => Decimal(v.getDecimal.getValue)
-      case proto.DataType.KindCase.CALENDAR_INTERVAL =>
-        v =>
-          val interval = v.getCalendarInterval
-          new CalendarInterval(interval.getMonths, interval.getDays, interval.getMicroseconds)
-      case proto.DataType.KindCase.ARRAY =>
-        v => toScalaArrayInternal(v, dataType.getArray)
-      case proto.DataType.KindCase.MAP =>
-        v => toScalaMapInternal(v, dataType.getMap)
-      case proto.DataType.KindCase.STRUCT =>
-        v => toScalaStructInternal(v, dataType.getStruct)
-      case _ =>
-        throw InvalidPlanInput(
-          "CONNECT_INVALID_PLAN.UNSUPPORTED_LITERAL_TYPE",
-          Map("typeInfo" -> dataType.getKindCase.toString))
-    }
+    val converter: proto.Expression.Literal => Any =
+      ProtoTypeOps.getScalaConverterForKind(dataType.getKindCase).getOrElse {
+        dataType.getKindCase match {
+          case proto.DataType.KindCase.NULL =>
+            v =>
+              throw InvalidPlanInput(
+                "CONNECT_INVALID_PLAN.EXPECTED_NULL_VALUE",
+                Map("literalTypeCase" -> v.getLiteralTypeCase.toString))
+          case proto.DataType.KindCase.SHORT => v => v.getShort.toShort
+          case proto.DataType.KindCase.INTEGER => v => v.getInteger
+          case proto.DataType.KindCase.LONG => v => v.getLong
+          case proto.DataType.KindCase.DOUBLE => v => v.getDouble
+          case proto.DataType.KindCase.BYTE => v => v.getByte.toByte
+          case proto.DataType.KindCase.FLOAT => v => v.getFloat
+          case proto.DataType.KindCase.BOOLEAN => v => v.getBoolean
+          case proto.DataType.KindCase.STRING => v => v.getString
+          case proto.DataType.KindCase.BINARY => v => v.getBinary.toByteArray
+          case proto.DataType.KindCase.DATE =>
+            v => SparkDateTimeUtils.toJavaDate(v.getDate)
+          case proto.DataType.KindCase.TIMESTAMP =>
+            v => SparkDateTimeUtils.toJavaTimestamp(v.getTimestamp)
+          case proto.DataType.KindCase.TIMESTAMP_NTZ =>
+            v => SparkDateTimeUtils.microsToLocalDateTime(v.getTimestampNtz)
+          case proto.DataType.KindCase.DAY_TIME_INTERVAL =>
+            v => SparkIntervalUtils.microsToDuration(v.getDayTimeInterval)
+          case proto.DataType.KindCase.YEAR_MONTH_INTERVAL =>
+            v => SparkIntervalUtils.monthsToPeriod(v.getYearMonthInterval)
+          case proto.DataType.KindCase.TIME =>
+            v => SparkDateTimeUtils.nanosToLocalTime(v.getTime.getNano)
+          case proto.DataType.KindCase.DECIMAL => v => Decimal(v.getDecimal.getValue)
+          case proto.DataType.KindCase.CALENDAR_INTERVAL =>
+            v =>
+              val interval = v.getCalendarInterval
+              new CalendarInterval(interval.getMonths, interval.getDays, interval.getMicroseconds)
+          case proto.DataType.KindCase.ARRAY =>
+            v => toScalaArrayInternal(v, dataType.getArray)
+          case proto.DataType.KindCase.MAP =>
+            v => toScalaMapInternal(v, dataType.getMap)
+          case proto.DataType.KindCase.STRUCT =>
+            v => toScalaStructInternal(v, dataType.getStruct)
+          case _ =>
+            throw InvalidPlanInput(
+              "CONNECT_INVALID_PLAN.UNSUPPORTED_LITERAL_TYPE",
+              Map("typeInfo" -> dataType.getKindCase.toString))
+        }
+      }
     v => if (v.hasNull) null else converter(v)
   }
 
@@ -508,101 +509,101 @@ object LiteralValueProtoConverter {
         literal.getNull
       } else {
         val builder = proto.DataType.newBuilder()
-        literal.getLiteralTypeCase match {
-          case proto.Expression.Literal.LiteralTypeCase.BINARY =>
-            builder.setBinary(proto.DataType.Binary.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.BOOLEAN =>
-            builder.setBoolean(proto.DataType.Boolean.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.BYTE =>
-            builder.setByte(proto.DataType.Byte.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.SHORT =>
-            builder.setShort(proto.DataType.Short.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.INTEGER =>
-            builder.setInteger(proto.DataType.Integer.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.LONG =>
-            builder.setLong(proto.DataType.Long.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.FLOAT =>
-            builder.setFloat(proto.DataType.Float.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.DOUBLE =>
-            builder.setDouble(proto.DataType.Double.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.DECIMAL =>
-            val decimal = Decimal.apply(literal.getDecimal.getValue)
-            var precision = decimal.precision
-            if (literal.getDecimal.hasPrecision) {
-              precision = math.max(precision, literal.getDecimal.getPrecision)
-            }
-            var scale = decimal.scale
-            if (literal.getDecimal.hasScale) {
-              scale = math.max(scale, literal.getDecimal.getScale)
-            }
-            builder.setDecimal(
-              proto.DataType.Decimal
-                .newBuilder()
-                .setPrecision(math.max(precision, scale))
-                .setScale(scale)
-                .build())
-          case proto.Expression.Literal.LiteralTypeCase.STRING =>
-            builder.setString(proto.DataType.String.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.DATE =>
-            builder.setDate(proto.DataType.Date.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.TIMESTAMP =>
-            builder.setTimestamp(proto.DataType.Timestamp.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.TIMESTAMP_NTZ =>
-            builder.setTimestampNtz(proto.DataType.TimestampNTZ.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.CALENDAR_INTERVAL =>
-            builder.setCalendarInterval(proto.DataType.CalendarInterval.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.YEAR_MONTH_INTERVAL =>
-            builder.setYearMonthInterval(proto.DataType.YearMonthInterval.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.DAY_TIME_INTERVAL =>
-            builder.setDayTimeInterval(proto.DataType.DayTimeInterval.newBuilder().build())
-          case litCase if ProtoTypeOps.buildProtoDataTypeForLiteral(literal, builder) =>
-            // Framework handled
-          case proto.Expression.Literal.LiteralTypeCase.TIME =>
-            val timeBuilder = proto.DataType.Time.newBuilder()
-            if (literal.getTime.hasPrecision) {
-              timeBuilder.setPrecision(literal.getTime.getPrecision)
-            }
-            builder.setTime(timeBuilder.build())
-          case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
-            if (literal.getArray.hasElementType) {
-              builder.setArray(
-                proto.DataType.Array
+        if (!ProtoTypeOps.buildProtoDataTypeForLiteral(literal, builder)) {
+          literal.getLiteralTypeCase match {
+            case proto.Expression.Literal.LiteralTypeCase.BINARY =>
+              builder.setBinary(proto.DataType.Binary.newBuilder().build())
+            case proto.Expression.Literal.LiteralTypeCase.BOOLEAN =>
+              builder.setBoolean(proto.DataType.Boolean.newBuilder().build())
+            case proto.Expression.Literal.LiteralTypeCase.BYTE =>
+              builder.setByte(proto.DataType.Byte.newBuilder().build())
+            case proto.Expression.Literal.LiteralTypeCase.SHORT =>
+              builder.setShort(proto.DataType.Short.newBuilder().build())
+            case proto.Expression.Literal.LiteralTypeCase.INTEGER =>
+              builder.setInteger(proto.DataType.Integer.newBuilder().build())
+            case proto.Expression.Literal.LiteralTypeCase.LONG =>
+              builder.setLong(proto.DataType.Long.newBuilder().build())
+            case proto.Expression.Literal.LiteralTypeCase.FLOAT =>
+              builder.setFloat(proto.DataType.Float.newBuilder().build())
+            case proto.Expression.Literal.LiteralTypeCase.DOUBLE =>
+              builder.setDouble(proto.DataType.Double.newBuilder().build())
+            case proto.Expression.Literal.LiteralTypeCase.DECIMAL =>
+              val decimal = Decimal.apply(literal.getDecimal.getValue)
+              var precision = decimal.precision
+              if (literal.getDecimal.hasPrecision) {
+                precision = math.max(precision, literal.getDecimal.getPrecision)
+              }
+              var scale = decimal.scale
+              if (literal.getDecimal.hasScale) {
+                scale = math.max(scale, literal.getDecimal.getScale)
+              }
+              builder.setDecimal(
+                proto.DataType.Decimal
                   .newBuilder()
-                  .setElementType(literal.getArray.getElementType)
-                  .setContainsNull(true)
+                  .setPrecision(math.max(precision, scale))
+                  .setScale(scale)
                   .build())
-            } else {
+            case proto.Expression.Literal.LiteralTypeCase.STRING =>
+              builder.setString(proto.DataType.String.newBuilder().build())
+            case proto.Expression.Literal.LiteralTypeCase.DATE =>
+              builder.setDate(proto.DataType.Date.newBuilder().build())
+            case proto.Expression.Literal.LiteralTypeCase.TIMESTAMP =>
+              builder.setTimestamp(proto.DataType.Timestamp.newBuilder().build())
+            case proto.Expression.Literal.LiteralTypeCase.TIMESTAMP_NTZ =>
+              builder.setTimestampNtz(proto.DataType.TimestampNTZ.newBuilder().build())
+            case proto.Expression.Literal.LiteralTypeCase.CALENDAR_INTERVAL =>
+              builder.setCalendarInterval(proto.DataType.CalendarInterval.newBuilder().build())
+            case proto.Expression.Literal.LiteralTypeCase.YEAR_MONTH_INTERVAL =>
+              builder.setYearMonthInterval(proto.DataType.YearMonthInterval.newBuilder().build())
+            case proto.Expression.Literal.LiteralTypeCase.DAY_TIME_INTERVAL =>
+              builder.setDayTimeInterval(proto.DataType.DayTimeInterval.newBuilder().build())
+            case proto.Expression.Literal.LiteralTypeCase.TIME =>
+              val timeBuilder = proto.DataType.Time.newBuilder()
+              if (literal.getTime.hasPrecision) {
+                timeBuilder.setPrecision(literal.getTime.getPrecision)
+              }
+              builder.setTime(timeBuilder.build())
+            case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
+              if (literal.getArray.hasElementType) {
+                builder.setArray(
+                  proto.DataType.Array
+                    .newBuilder()
+                    .setElementType(literal.getArray.getElementType)
+                    .setContainsNull(true)
+                    .build())
+              } else {
+                throw InvalidPlanInput(
+                  "CONNECT_INVALID_PLAN.ARRAY_LITERAL_MISSING_DATA_TYPE",
+                  Map.empty)
+              }
+            case proto.Expression.Literal.LiteralTypeCase.MAP =>
+              if (literal.getMap.hasKeyType && literal.getMap.hasValueType) {
+                builder.setMap(
+                  proto.DataType.Map
+                    .newBuilder()
+                    .setKeyType(literal.getMap.getKeyType)
+                    .setValueType(literal.getMap.getValueType)
+                    .setValueContainsNull(true)
+                    .build())
+              } else {
+                throw InvalidPlanInput(
+                  "CONNECT_INVALID_PLAN.MAP_LITERAL_MISSING_DATA_TYPE",
+                  Map.empty)
+              }
+            case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
+              if (literal.getStruct.hasStructType) {
+                builder.setStruct(literal.getStruct.getStructType.getStruct)
+              } else {
+                throw InvalidPlanInput(
+                  "CONNECT_INVALID_PLAN.STRUCT_LITERAL_MISSING_DATA_TYPE",
+                  Map.empty)
+              }
+            case _ =>
+              val literalCase = literal.getLiteralTypeCase
               throw InvalidPlanInput(
-                "CONNECT_INVALID_PLAN.ARRAY_LITERAL_MISSING_DATA_TYPE",
-                Map.empty)
-            }
-          case proto.Expression.Literal.LiteralTypeCase.MAP =>
-            if (literal.getMap.hasKeyType && literal.getMap.hasValueType) {
-              builder.setMap(
-                proto.DataType.Map
-                  .newBuilder()
-                  .setKeyType(literal.getMap.getKeyType)
-                  .setValueType(literal.getMap.getValueType)
-                  .setValueContainsNull(true)
-                  .build())
-            } else {
-              throw InvalidPlanInput(
-                "CONNECT_INVALID_PLAN.MAP_LITERAL_MISSING_DATA_TYPE",
-                Map.empty)
-            }
-          case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
-            if (literal.getStruct.hasStructType) {
-              builder.setStruct(literal.getStruct.getStructType.getStruct)
-            } else {
-              throw InvalidPlanInput(
-                "CONNECT_INVALID_PLAN.STRUCT_LITERAL_MISSING_DATA_TYPE",
-                Map.empty)
-            }
-          case _ =>
-            val literalCase = literal.getLiteralTypeCase
-            throw InvalidPlanInput(
-              "CONNECT_INVALID_PLAN.UNSUPPORTED_LITERAL_TYPE",
-              Map("typeInfo" -> s"${literalCase.name}(${literalCase.getNumber})"))
+                "CONNECT_INVALID_PLAN.UNSUPPORTED_LITERAL_TYPE",
+                Map("typeInfo" -> s"${literalCase.name}(${literalCase.getNumber})"))
+          }
         }
         builder.build()
       }

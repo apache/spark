@@ -25,9 +25,9 @@ import org.apache.spark.sql.types.{DataType, TimeType}
 /**
  * Optional client-side type operations for the Types Framework.
  *
- * This trait extends TypeApiOps with operations needed by client-facing infrastructure:
- * Arrow conversion (ArrowUtils), JDBC mapping (JdbcUtils), Python interop (EvaluatePython),
- * Hive formatting (HiveResult), and Thrift type mapping (SparkExecuteStatementOperation).
+ * This trait extends TypeApiOps with operations needed by client-facing infrastructure: Arrow
+ * conversion (ArrowUtils), JDBC mapping (JdbcUtils), Python interop (EvaluatePython), Hive
+ * formatting (HiveResult), and Thrift type mapping (SparkExecuteStatementOperation).
  *
  * Lives in sql/api so it's visible from sql/core and sql/hive-thriftserver.
  *
@@ -45,6 +45,20 @@ import org.apache.spark.sql.types.{DataType, TimeType}
  * @since 4.2.0
  */
 trait ClientTypeOps { self: TypeApiOps =>
+
+  // ==================== Utilities ====================
+
+  /**
+   * Null-safe conversion helper. Returns null for null input, applies the partial function for
+   * non-null input, and returns null for unmatched values.
+   */
+  protected def nullSafeConvert(input: Any)(f: PartialFunction[Any, Any]): Any = {
+    if (input == null) {
+      null
+    } else {
+      f.applyOrElse(input, (_: Any) => null)
+    }
+  }
 
   // ==================== Arrow Conversion ====================
 
@@ -94,8 +108,8 @@ trait ClientTypeOps { self: TypeApiOps =>
   /**
    * Creates a converter function for Python/Py4J interop.
    *
-   * Used by EvaluatePython.makeFromJava. The returned function handles null-safe
-   * conversion of Java/Py4J values to the internal Catalyst representation.
+   * Used by EvaluatePython.makeFromJava. The returned function handles null-safe conversion of
+   * Java/Py4J values to the internal Catalyst representation.
    *
    * @return
    *   a function that converts a Java value to the internal representation
@@ -107,8 +121,8 @@ trait ClientTypeOps { self: TypeApiOps =>
   /**
    * Formats an external-type value for Hive output.
    *
-   * Used by HiveResult.toHiveString. The input is an external-type value
-   * (e.g., java.time.LocalTime for TimeType), NOT the internal representation.
+   * Used by HiveResult.toHiveString. The input is an external-type value (e.g.,
+   * java.time.LocalTime for TimeType), NOT the internal representation.
    *
    * @param value
    *   the external-type value to format
@@ -122,9 +136,9 @@ trait ClientTypeOps { self: TypeApiOps =>
   /**
    * Returns the Thrift TTypeId name for this type.
    *
-   * Used by SparkExecuteStatementOperation.toTTypeId. Returns a String that maps
-   * to a TTypeId enum value (e.g., "STRING_TYPE") since TTypeId is only available
-   * in the hive-thriftserver module.
+   * Used by SparkExecuteStatementOperation.toTTypeId. Returns a String that maps to a TTypeId
+   * enum value (e.g., "STRING_TYPE") since TTypeId is only available in the hive-thriftserver
+   * module.
    *
    * @return
    *   TTypeId enum name (e.g., "STRING_TYPE")
@@ -148,6 +162,9 @@ object ClientTypeOps {
    * @return
    *   Some(ClientTypeOps) if supported, None otherwise
    */
+  // Delegates to TypeApiOps and narrows: a type must implement TypeApiOps AND mix in
+  // ClientTypeOps to be found here. No separate registration needed — the collect
+  // filter handles incremental trait adoption automatically.
   def apply(dt: DataType): Option[ClientTypeOps] =
     TypeApiOps(dt).collect { case co: ClientTypeOps => co }
 
@@ -155,8 +172,8 @@ object ClientTypeOps {
    * Reverse lookup: converts an Arrow type to a Spark DataType, if it belongs to a
    * framework-managed type.
    *
-   * Used by ArrowUtils.fromArrowType. Returns None if the Arrow type doesn't correspond
-   * to any framework-managed type, or the framework is disabled.
+   * Used by ArrowUtils.fromArrowType. Returns None if the Arrow type doesn't correspond to any
+   * framework-managed type, or the framework is disabled.
    *
    * @param at
    *   the ArrowType to convert
@@ -167,9 +184,8 @@ object ClientTypeOps {
     import org.apache.arrow.vector.types.TimeUnit
     if (!SqlApiConf.get.typesFrameworkEnabled) return None
     at match {
-      case t: ArrowType.Time
-        if t.getUnit == TimeUnit.NANOSECOND && t.getBitWidth == 8 * 8 =>
-          Some(TimeType(TimeType.MICROS_PRECISION))
+      case t: ArrowType.Time if t.getUnit == TimeUnit.NANOSECOND && t.getBitWidth == 8 * 8 =>
+        Some(TimeType(TimeType.MICROS_PRECISION))
       // Add new framework types here
       case _ => None
     }

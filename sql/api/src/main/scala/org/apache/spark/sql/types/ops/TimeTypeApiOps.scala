@@ -81,18 +81,12 @@ class TimeTypeApiOps(val t: TimeType) extends TypeApiOps with ClientTypeOps {
 
   override def needConversionInPython: Boolean = true
 
-  override def makeFromJava: Any => Any = (obj: Any) => {
-    if (obj == null) {
-      null
-    } else {
-      obj match {
-        case c: Long => c
-        // Py4J serializes values between MIN_INT and MAX_INT as Ints, not Longs
-        case c: Int => c.toLong
-        case _ => null
-      }
+  override def makeFromJava: Any => Any = (obj: Any) =>
+    nullSafeConvert(obj) {
+      case c: Long => c
+      // Py4J serializes values between MIN_INT and MAX_INT as Ints, not Longs
+      case c: Int => c.toLong
     }
-  }
 
   override def formatExternal(value: Any): String = {
     val nanos = SparkDateTimeUtils.localTimeToNanos(value.asInstanceOf[LocalTime])

@@ -327,7 +327,11 @@ private[hive] class SparkExecuteStatementOperation(
 
 object SparkExecuteStatementOperation {
 
-  def toTTypeId(typ: DataType): TTypeId = typ match {
+  def toTTypeId(typ: DataType): TTypeId =
+    ClientTypeOps(typ).map(ops => TTypeId.valueOf(ops.thriftTypeName))
+      .getOrElse(toTTypeIdDefault(typ))
+
+  private def toTTypeIdDefault(typ: DataType): TTypeId = typ match {
     case NullType => TTypeId.NULL_TYPE
     case BooleanType => TTypeId.BOOLEAN_TYPE
     case ByteType => TTypeId.TINYINT_TYPE
@@ -343,8 +347,6 @@ object SparkExecuteStatementOperation {
     case _: StringType => TTypeId.STRING_TYPE
     case _: DecimalType => TTypeId.DECIMAL_TYPE
     case DateType => TTypeId.DATE_TYPE
-    case dt if ClientTypeOps(dt).isDefined =>
-      TTypeId.valueOf(ClientTypeOps(dt).get.thriftTypeName)
     case _: TimeType => TTypeId.STRING_TYPE
     // TODO: Shall use TIMESTAMPLOCALTZ_TYPE, keep AS-IS now for
     // unnecessary behavior change

@@ -42,17 +42,19 @@ object EvaluatePython {
    */
   private[python] class BytesWrapper(val data: Array[Byte])
 
-  def needConversionInPython(dt: DataType): Boolean = dt match {
-    case dt if ClientTypeOps(dt).exists(_.needConversionInPython) => true
-    case DateType | TimestampType | TimestampNTZType | VariantType | _: DayTimeIntervalType
-         | _: TimeType | _: GeometryType | _: GeographyType => true
-    case _: StructType => true
-    case _: UserDefinedType[_] => true
-    case ArrayType(elementType, _) => needConversionInPython(elementType)
-    case MapType(keyType, valueType, _) =>
-      needConversionInPython(keyType) || needConversionInPython(valueType)
-    case _ => false
-  }
+  def needConversionInPython(dt: DataType): Boolean =
+    ClientTypeOps(dt).map(_.needConversionInPython).getOrElse {
+      dt match {
+        case DateType | TimestampType | TimestampNTZType | VariantType | _: DayTimeIntervalType
+             | _: TimeType | _: GeometryType | _: GeographyType => true
+        case _: StructType => true
+        case _: UserDefinedType[_] => true
+        case ArrayType(elementType, _) => needConversionInPython(elementType)
+        case MapType(keyType, valueType, _) =>
+          needConversionInPython(keyType) || needConversionInPython(valueType)
+        case _ => false
+      }
+    }
 
   /**
    * Helper for converting from Catalyst type to java type suitable for Pickle.
@@ -113,7 +115,10 @@ object EvaluatePython {
    * Make a converter that converts `obj` to the type specified by the data type, or returns
    * null if the type of obj is unexpected. Because Python doesn't enforce the type.
    */
-  def makeFromJava(dataType: DataType): Any => Any = dataType match {
+  def makeFromJava(dataType: DataType): Any => Any =
+    ClientTypeOps(dataType).map(_.makeFromJava).getOrElse(makeFromJavaDefault(dataType))
+
+  private def makeFromJavaDefault(dataType: DataType): Any => Any = dataType match {
     case BooleanType => (obj: Any) => nullSafeConvert(obj) {
       case b: Boolean => b
     }
@@ -164,10 +169,8 @@ object EvaluatePython {
       case c: Int => c
     }
 
-    case dt if ClientTypeOps(dt).isDefined => ClientTypeOps(dt).get.makeFromJava
-
-    case TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType => (obj: Any) =>
-      nullSafeConvert(obj) {
+    case TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
+      (obj: Any) => nullSafeConvert(obj) {
         case c: Long => c
         // Py4J serializes values between MIN_INT and MAX_INT as Ints, not Longs
         case c: Int => c.toLong
@@ -232,7 +235,8 @@ object EvaluatePython {
     case VariantType => (obj: Any) => nullSafeConvert(obj) {
       case s: java.util.HashMap[_, _] =>
         new VariantVal(
-          s.get("value").asInstanceOf[Array[Byte]], s.get("metadata").asInstanceOf[Array[Byte]]
+          s.get("value").asInstanceOf[Array[Byte]],
+          s.get("metadata").asInstanceOf[Array[Byte]]
         )
     }
 

@@ -25,8 +25,8 @@ import org.apache.spark.sql.types.{DataType, TimeType}
 /**
  * Optional type operations for Spark Connect protobuf conversions.
  *
- * Handles bidirectional DataType <-> proto and Literal <-> proto conversions
- * for framework-managed types in DataTypeProtoConverter and LiteralValueProtoConverter.
+ * Handles bidirectional DataType <-> proto and Literal <-> proto conversions for
+ * framework-managed types in DataTypeProtoConverter and LiteralValueProtoConverter.
  *
  * @since 4.2.0
  */
@@ -52,9 +52,7 @@ trait ProtoTypeOps extends Serializable {
   def getScalaConverter: proto.Expression.Literal => Any
 
   /** Builds a proto DataType from a proto literal (for type inference). */
-  def buildProtoDataType(
-      literal: proto.Expression.Literal,
-      builder: proto.DataType.Builder): Unit
+  def buildProtoDataType(literal: proto.Expression.Literal, builder: proto.DataType.Builder): Unit
 }
 
 /**
@@ -71,8 +69,8 @@ object ProtoTypeOps {
   }
 
   /**
-   * Reverse lookup: converts a proto DataType to a Spark DataType, if it belongs
-   * to a framework-managed type.
+   * Reverse lookup: converts a proto DataType to a Spark DataType, if it belongs to a
+   * framework-managed type.
    */
   def toCatalystType(t: proto.DataType): Option[DataType] = {
     if (!SqlApiConf.get.typesFrameworkEnabled) return None

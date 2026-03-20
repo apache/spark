@@ -101,6 +101,8 @@ object CatalystTypeOps {
    * @return
    *   Some(CatalystTypeOps) if supported, None otherwise
    */
+  // Delegates to TypeOps and narrows: a type must implement TypeOps AND mix in
+  // CatalystTypeOps to be found here.
   def apply(dt: DataType): Option[CatalystTypeOps] =
     TypeOps(dt).collect { case co: CatalystTypeOps => co }
 }

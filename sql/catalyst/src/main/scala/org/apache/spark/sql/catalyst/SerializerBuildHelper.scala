@@ -333,7 +333,12 @@ object SerializerBuildHelper {
    * representation. The mapping between the external and internal representations is described
    * by encoder `enc`.
    */
-  private def createSerializer(enc: AgnosticEncoder[_], input: Expression): Expression = enc match {
+  private def createSerializer(enc: AgnosticEncoder[_], input: Expression): Expression =
+    CatalystTypeOps(enc.dataType).map(_.createSerializer(input))
+      .getOrElse(createSerializerDefault(enc, input))
+
+  private def createSerializerDefault(
+      enc: AgnosticEncoder[_], input: Expression): Expression = enc match {
     case ae: AgnosticExpressionPathEncoder[_] => ae.toCatalyst(input)
     case _ if isNativeEncoder(enc) => input
     case BoxedBooleanEncoder => createSerializerForBoolean(input)
@@ -368,8 +373,6 @@ object SerializerBuildHelper {
     case TimestampEncoder(false) => createSerializerForSqlTimestamp(input)
     case InstantEncoder(false) => createSerializerForJavaInstant(input)
     case LocalDateTimeEncoder => createSerializerForLocalDateTime(input)
-    case enc if CatalystTypeOps(enc.dataType).isDefined =>
-      CatalystTypeOps(enc.dataType).get.createSerializer(input)
     case LocalTimeEncoder if !SQLConf.get.isTimeTypeEnabled =>
       throw org.apache.spark.sql.errors.QueryCompilationErrors.unsupportedTimeTypeError()
     case LocalTimeEncoder => createSerializerForLocalTime(input)

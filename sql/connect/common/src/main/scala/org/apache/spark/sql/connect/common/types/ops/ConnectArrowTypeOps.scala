@@ -25,15 +25,15 @@ import org.apache.spark.sql.types.{DataType, TimeType}
 /**
  * Optional type operations for Spark Connect Arrow serialization/deserialization.
  *
- * Handles Arrow-based data exchange on the Connect client side for framework-managed types.
- * Used by ArrowSerializer, ArrowDeserializer, and ArrowVectorReader.
+ * Handles Arrow-based data exchange on the Connect client side for framework-managed types. Used
+ * by ArrowSerializer, ArrowDeserializer, and ArrowVectorReader.
  *
  * NOTE: No feature flag check -the Connect client must handle whatever types the server sends.
- * The feature flag controls server-side engine behavior; the client always needs to handle
- * types that exist in the encoder.
+ * The feature flag controls server-side engine behavior; the client always needs to handle types
+ * that exist in the encoder.
  *
- * Methods return Any to avoid referencing arrow-private types from the types.ops package.
- * Call sites in the arrow package cast to the expected types.
+ * Methods return Any to avoid referencing arrow-private types from the types.ops package. Call
+ * sites in the arrow package cast to the expected types.
  *
  * @since 4.2.0
  */

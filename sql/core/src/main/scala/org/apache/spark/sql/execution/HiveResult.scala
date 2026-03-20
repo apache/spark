@@ -113,11 +113,20 @@ object HiveResult extends SQLConfHelper {
       formatters: TimeFormatters,
       binaryFormatter: BinaryFormatter): String = a match {
     case (null, _) => if (nested) "null" else "NULL"
+    case (value, dt) =>
+      ClientTypeOps(dt).map(_.formatExternal(value)).getOrElse {
+        toHiveStringDefault(a, nested, formatters, binaryFormatter)
+      }
+  }
+
+  private def toHiveStringDefault(
+      a: (Any, DataType),
+      nested: Boolean,
+      formatters: TimeFormatters,
+      binaryFormatter: BinaryFormatter): String = a match {
     case (b, BooleanType) => b.toString
     case (d: Date, DateType) => formatters.date.format(d)
     case (ld: LocalDate, DateType) => formatters.date.format(ld)
-    case (value, dt) if ClientTypeOps(dt).isDefined =>
-      ClientTypeOps(dt).get.formatExternal(value)
     case (lt: LocalTime, _: TimeType) => formatters.time.format(lt)
     case (t: Timestamp, TimestampType) => formatters.timestamp.format(t)
     case (i: Instant, TimestampType) => formatters.timestamp.format(i)
