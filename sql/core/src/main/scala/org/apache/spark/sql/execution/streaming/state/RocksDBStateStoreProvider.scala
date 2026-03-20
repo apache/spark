@@ -1367,9 +1367,8 @@ object RocksDBStateStoreProvider {
   val CUSTOM_METRIC_NUM_REPLAY_CHANGE_LOG_FILES = StateStoreCustomSizeMetric(
     "rocksdbNumReplayChangelogFiles",
     "RocksDB: load - number of change log files replayed")
-
   val CUSTOM_METRIC_LOADED_FROM_DFS = StateStoreCustomSumMetric(
-    "rocksdbLoadedFromDfs",
+    "rocksdbNumLoadedFromDfs",
     "RocksDB: load - number of state loads from external storage")
 
   val CUSTOM_METRIC_BLOCK_CACHE_MISS = StateStoreCustomSumMetric(
