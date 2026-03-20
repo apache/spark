@@ -39,7 +39,7 @@ import org.apache.spark.sql.connect.dsl.plans._
 import org.apache.spark.sql.connect.service.{ExecuteHolder, SessionKey, SparkConnectService}
 import org.apache.spark.sql.execution.arrow.ArrowAllocatorLeakCheck
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.util.CloseableIterator
+import org.apache.spark.sql.util.{ArrowUtils, CloseableIterator}
 
 /**
  * Base class and utilities for a test suite that starts and tests the real SparkConnectService
@@ -89,6 +89,18 @@ trait SparkConnectServerTest extends SharedSparkSession with ArrowAllocatorLeakC
     // before the ArrowAllocatorLeakCheck runs in afterAll().
     holders.foreach { holder =>
       eventuallyWithTimeout { assert(!holder.isExecuteThreadRunnerAlive()) }
+    }
+    // Cancel any Spark jobs still running after the execute threads exited. In local mode the
+    // executor and driver share the same JVM, so a job submitted by an execute thread may still
+    // have tasks running (and holding ArrowBatchWithSchemaIterator allocations) even after the
+    // execute thread itself terminates. Cancelling ensures task completion listeners run and
+    // Arrow memory is released before the ArrowAllocatorLeakCheck fires in afterAll().
+    spark.sparkContext.cancelAllJobs()
+    // Wait for executor tasks to finish releasing Arrow memory.
+    eventuallyWithTimeout {
+      assert(ArrowUtils.rootAllocator.getAllocatedMemory == 0,
+        s"Arrow memory not released by executor tasks: " +
+          s"${ArrowUtils.rootAllocator.getAllocatedMemory} bytes still allocated")
     }
     SparkConnectService.executionManager.periodicMaintenance(0)
     SparkConnectService.sessionManager.invalidateAllSessions()
