@@ -237,6 +237,25 @@ class CreateTableLikeSuite extends DatasourceV2SQLBase {
   }
 
   // -------------------------------------------------------------------------
+  // V2 source, session catalog (V1) target: unsupported
+  // -------------------------------------------------------------------------
+
+  test("v2 source, session catalog target: throws because session catalog does not " +
+      "implement createTableLike") {
+    // CREATE TABLE LIKE targeting the session catalog with a V2 source goes through
+    // CreateTableLikeExec, which calls createTableLike on the session catalog.
+    // The session catalog (InMemoryTableSessionCatalog in tests) does not override
+    // createTableLike, so the default UnsupportedOperationException is thrown.
+    withTable("testcat.src") {
+      sql("CREATE TABLE testcat.src (id bigint, data string) USING parquet")
+      val ex = intercept[UnsupportedOperationException] {
+        sql("CREATE TABLE dst LIKE testcat.src")
+      }
+      assert(ex.getMessage.contains("CREATE TABLE LIKE"))
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // V1 fallback regression
   // -------------------------------------------------------------------------
 
