@@ -74,6 +74,7 @@ class GroupbyStatAdvMixin(GroupbyStatTestingFuncMixin):
                             almost=True,
                         )
 
+        # raise TypeError when bool dtype with pandas 3
         for i, pdf in enumerate(error_dfs):
             with self.subTest(i=i):
                 psdf = ps.from_pandas(pdf)
