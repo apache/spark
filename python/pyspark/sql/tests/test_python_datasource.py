@@ -1364,6 +1364,18 @@ class PythonDataSourceTestsWithSimpleWorker(PythonDataSourceTests):
     def conf(self):
         return super().conf().set("spark.python.use.daemon", "false")
 
+    # Simple Worker is super slow because there's no reuse of workers
+    # so we skip some tests that create many workers
+
+    def test_filter_type(self):
+        pass
+
+    def test_unsupported_filter(self):
+        pass
+
+    def test_filter_value_type(self):
+        pass
+
 
 if __name__ == "__main__":
     from pyspark.testing import main
