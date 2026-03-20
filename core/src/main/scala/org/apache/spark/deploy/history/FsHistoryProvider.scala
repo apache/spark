@@ -92,9 +92,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   import FsHistoryProvider._
 
-  private case class InvalidHistorySnapshotException(snapshot: Path, cause: Throwable)
-    extends IOException(s"History snapshot $snapshot is invalid.", cause)
-
   // Interval between safemode checks.
   private val SAFEMODE_CHECK_INTERVAL_S = conf.get(History.SAFEMODE_CHECK_INTERVAL_S)
 
@@ -1657,12 +1654,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       metadata: AppStatusStoreMetadata,
       manifestPath: Path): KVStore = {
     var newStorePath: File = null
-    val snapshotSize = try {
-      HistorySnapshotStore.snapshotSize(conf, manifestPath)
-    } catch {
-      case e: Exception =>
-        throw InvalidHistorySnapshotException(manifestPath, e)
-    }
+    val snapshotSize = HistorySnapshotStore.snapshotSize(conf, manifestPath)
     while (newStorePath == null) {
       val lease = dm.leaseExact(snapshotSize)
       val startNs = System.nanoTime()
@@ -1811,6 +1803,9 @@ private[spark] object FsHistoryProvider {
    * all data and re-generate the listing data from the event logs.
    */
   val CURRENT_LISTING_VERSION = 1L
+
+  private[history] case class InvalidHistorySnapshotException(snapshot: Path, cause: Throwable)
+    extends IOException(s"History snapshot $snapshot is invalid.", cause)
 }
 
 private[spark] case class FsHistoryProviderMetadata(

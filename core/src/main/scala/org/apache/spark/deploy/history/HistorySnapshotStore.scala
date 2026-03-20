@@ -29,6 +29,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.history.FsHistoryProvider.InvalidHistorySnapshotException
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.History._
 import org.apache.spark.status._
@@ -208,17 +209,23 @@ private[spark] object HistorySnapshotStore extends Logging {
    * Returns the total on-storage size of a published history snapshot, including its manifest.
    *
    * This is used by History Server disk-store allocation so the target local store can reserve
-   * enough space before restoring a snapshot.
+   * enough space before restoring a snapshot, and reports unreadable snapshot metadata as an
+   * invalid snapshot.
    */
   def snapshotSize(conf: SparkConf, manifestPath: Path): Long = {
-    val fs = manifestPath.getFileSystem(SparkHadoopUtil.get.newConfiguration(conf))
-    val manifest = loadManifest(fs, manifestPath)
-    val root = snapshotDataRoot(manifestPath, manifest)
-    val manifestSize = fs.getFileStatus(manifestPath).getLen
-    manifestEntries(manifestPath, manifest)
-      .foldLeft(manifestSize) { (total, entry) =>
-        total + fs.getFileStatus(new Path(root, entry.fileName)).getLen
-      }
+    try {
+      val fs = manifestPath.getFileSystem(SparkHadoopUtil.get.newConfiguration(conf))
+      val manifest = loadManifest(fs, manifestPath)
+      val root = snapshotDataRoot(manifestPath, manifest)
+      val manifestSize = fs.getFileStatus(manifestPath).getLen
+      manifestEntries(manifestPath, manifest)
+        .foldLeft(manifestSize) { (total, entry) =>
+          total + fs.getFileStatus(new Path(root, entry.fileName)).getLen
+        }
+    } catch {
+      case e: Exception =>
+        throw InvalidHistorySnapshotException(manifestPath, e)
+    }
   }
 
   /**
