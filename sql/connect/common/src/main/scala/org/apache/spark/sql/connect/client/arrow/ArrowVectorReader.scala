@@ -95,7 +95,8 @@ object ArrowVectorReader {
       case v: TimeStampMicroVector => new TimeStampMicroVectorReader(v, timeZoneId)
       case v if ConnectArrowTypeOps(targetDataType).isDefined =>
         ConnectArrowTypeOps(targetDataType).get
-          .createArrowVectorReader(v).asInstanceOf[ArrowVectorReader]
+          .createArrowVectorReader(v)
+          .asInstanceOf[ArrowVectorReader]
       case v: TimeNanoVector => new TimeVectorReader(v)
       case _: NullVector => NullVectorReader
       case _ => throw new RuntimeException("Unsupported Vector Type: " + vector.getClass)

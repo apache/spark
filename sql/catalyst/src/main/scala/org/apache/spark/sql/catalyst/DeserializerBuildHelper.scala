@@ -293,6 +293,14 @@ object DeserializerBuildHelper {
       enc: AgnosticEncoder[_],
       path: Expression,
       walkedTypePath: WalkedTypePath,
+      isTopLevel: Boolean = false): Expression =
+    CatalystTypeOps(enc.dataType).map(_.createDeserializer(path))
+      .getOrElse(createDeserializerDefault(enc, path, walkedTypePath, isTopLevel))
+
+  private def createDeserializerDefault(
+      enc: AgnosticEncoder[_],
+      path: Expression,
+      walkedTypePath: WalkedTypePath,
       isTopLevel: Boolean = false): Expression = enc match {
     case ae: AgnosticExpressionPathEncoder[_] =>
       ae.fromCatalyst(path)
@@ -346,8 +354,6 @@ object DeserializerBuildHelper {
       createDeserializerForInstant(path)
     case LocalDateTimeEncoder =>
       createDeserializerForLocalDateTime(path)
-    case enc if CatalystTypeOps(enc.dataType).isDefined =>
-      CatalystTypeOps(enc.dataType).get.createDeserializer(path)
     case LocalTimeEncoder if !SQLConf.get.isTimeTypeEnabled =>
       throw org.apache.spark.sql.errors.QueryCompilationErrors.unsupportedTimeTypeError()
     case LocalTimeEncoder =>

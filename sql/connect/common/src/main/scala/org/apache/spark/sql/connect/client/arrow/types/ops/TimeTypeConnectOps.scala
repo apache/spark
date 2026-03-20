@@ -35,14 +35,16 @@ import org.apache.spark.sql.types.{DataType, TimeType}
  * (Arrow serialization/deserialization) in a single class.
  *
  * Lives in the arrow package to access arrow-private types (ArrowVectorReader, TimeVectorReader,
- * ArrowSerializer.Serializer, ArrowDeserializers.LeafFieldDeserializer).
+ * ArrowSerializer.Serializer, ArrowDeserializers.LeafFieldDeserializer). Placed under types/ops
+ * subdirectory to separate ops implementations from core arrow infrastructure.
  *
  * @param t
  *   The TimeType with precision information
  * @since 4.2.0
  */
 private[connect] class TimeTypeConnectOps(val t: TimeType)
-    extends ProtoTypeOps with ConnectArrowTypeOps {
+    extends ProtoTypeOps
+    with ConnectArrowTypeOps {
 
   override def dataType: DataType = t
 
@@ -79,8 +81,8 @@ private[connect] class TimeTypeConnectOps(val t: TimeType)
         .setPrecision(timeType.precision))
   }
 
-  override def getScalaConverter: proto.Expression.Literal => Any = {
-    v => SparkDateTimeUtils.nanosToLocalTime(v.getTime.getNano)
+  override def getScalaConverter: proto.Expression.Literal => Any = { v =>
+    SparkDateTimeUtils.nanosToLocalTime(v.getTime.getNano)
   }
 
   override def buildProtoDataType(

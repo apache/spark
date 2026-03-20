@@ -203,7 +203,8 @@ object ArrowDeserializers {
         }
       case (enc, v: FieldVector) if ConnectArrowTypeOps(enc).isDefined =>
         ConnectArrowTypeOps(enc).get
-          .createArrowDeserializer(enc, v, timeZoneId).asInstanceOf[Deserializer[Any]]
+          .createArrowDeserializer(enc, v, timeZoneId)
+          .asInstanceOf[Deserializer[Any]]
       case (LocalTimeEncoder, v: FieldVector) =>
         new LeafFieldDeserializer[LocalTime](encoder, v, timeZoneId) {
           override def value(i: Int): LocalTime = reader.getLocalTime(i)
