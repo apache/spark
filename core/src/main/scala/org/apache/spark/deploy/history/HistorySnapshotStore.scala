@@ -228,24 +228,6 @@ private[spark] object HistorySnapshotStore extends Logging {
     }
   }
 
-  /**
-   * Deletes a published history snapshot after it is determined to be unreadable or invalid.
-   *
-   * Any failure while deleting is logged and suppressed so snapshot invalidation does not mask the
-   * original restore failure.
-   */
-  def deleteInvalidSnapshot(
-      conf: SparkConf,
-      appId: String,
-      manifestPath: Path): Unit = {
-    val fs = manifestPath.getFileSystem(SparkHadoopUtil.get.newConfiguration(conf))
-    Utils.tryLogNonFatalError {
-      deleteSnapshotArtifacts(fs, manifestPath)
-      logInfo(
-        s"Deleted invalid history snapshot $manifestPath for appId: $appId.")
-    }
-  }
-
   private[spark] def isEnabled(conf: SparkConf): Boolean = {
     conf.get(SNAPSHOT_ENABLED) && conf.get(SNAPSHOT_PATH).nonEmpty
   }
@@ -382,7 +364,7 @@ private[spark] object HistorySnapshotStore extends Logging {
       }
       val manifests = Option(fs.listStatus(rootPath)).getOrElse(Array.empty).map(_.getPath).toSeq
       staleManifestsForCleanup(manifests, keepManifestPath)
-        .foreach(deleteSnapshotArtifacts(fs, _))
+        .foreach(deleteSnapshot(fs, _))
     } catch {
       case NonFatal(e) =>
         logWarning(s"Failed to clean up stale history snapshots under $rootPath.", e)
@@ -390,7 +372,7 @@ private[spark] object HistorySnapshotStore extends Logging {
   }
 
   /** Deletes a manifest and its associated snapshot artifacts, tolerating partial corruption. */
-  private def deleteSnapshotArtifacts(fs: FileSystem, manifestPath: Path): Unit = {
+  private[history] def deleteSnapshot(fs: FileSystem, manifestPath: Path): Unit = {
     val manifest = try {
       Some(loadManifest(fs, manifestPath))
     } catch {
