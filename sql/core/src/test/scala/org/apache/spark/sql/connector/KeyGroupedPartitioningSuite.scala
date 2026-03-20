@@ -3261,7 +3261,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     }
   }
 
-  test("SPARK-56046: Reducers with same logical result types") {
+  test("SPARK-56046: Reducers with same result types") {
     val items_partitions = Array(days("arrive_time"))
     createTable(items, itemsColumns, items_partitions)
     sql(s"INSERT INTO testcat.ns.$items VALUES " +
@@ -3277,12 +3277,9 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       s"(5, 44.0, cast('2020-01-15' as timestamp)), " +
       s"(7, 46.5, cast('2021-02-08' as timestamp))")
 
-    Seq(true, false).foreach { allowIncompatibleTransformTypes =>
-      withSQLConf(
+    withSQLConf(
         SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
-        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true",
-        SQLConf.V2_BUCKETING_ALLOW_INCOMPATIBLE_TRANSFORM_TYPES.key ->
-          allowIncompatibleTransformTypes.toString) {
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
         Seq(
           s"testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.time = i.arrive_time",
           s"testcat.ns.$purchases p JOIN testcat.ns.$items i ON i.arrive_time = p.time"
@@ -3302,11 +3299,10 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
           checkAnswer(df, Seq(Row(0, 1), Row(1, 1)))
         }
       }
-    }
   }
 
-  test("SPARK-56046: Reducers with different logical but compatible physical result types") {
-    withFunction(UnboundDaysFunctionWithCompatiblePhysicalTypeReducer) {
+  test("SPARK-56046: Reducers with different result types") {
+    withFunction(UnboundDaysFunctionWithIncompatibleResultTypeReducer) {
       val items_partitions = Array(days("arrive_time"))
       createTable(items, itemsColumns, items_partitions)
       sql(s"INSERT INTO testcat.ns.$items VALUES " +
@@ -3330,78 +3326,15 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
           s"testcat.ns.$purchases p JOIN testcat.ns.$items i ON i.arrive_time = p.time"
         ).foreach { joinSting =>
           val e = intercept[SparkException] {
-            val df = sql(
+            sql(
               s"""
                  |${selectWithMergeJoinHint("i", "p")} id, item_id
                  |FROM $joinSting
                  |ORDER BY id, item_id
-                 |""".stripMargin)
-
-            df.collect()
+                 |""".stripMargin).collect()
           }
           assert(e.getMessage.startsWith(
             "Storage-partition join partition transforms produced incompatible reduced types"))
-
-          withSQLConf(SQLConf.V2_BUCKETING_ALLOW_INCOMPATIBLE_TRANSFORM_TYPES.key -> "true") {
-            val df = sql(
-              s"""
-                 |${selectWithMergeJoinHint("i", "p")} id, item_id
-                 |FROM $joinSting
-                 |ORDER BY id, item_id
-                 |""".stripMargin)
-
-            val shuffles = collectShuffles(df.queryExecution.executedPlan)
-            assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
-            val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
-            assert(groupPartitions.forall(_.outputPartitioning.numPartitions == 2))
-
-            checkAnswer(df, Seq(Row(0, 1), Row(1, 1)))
-          }
-        }
-      }
-    }
-  }
-
-  test("SPARK-56046: Reducers with different logical and incompatible physical result types") {
-    withFunction(UnboundDaysFunctionWithIncompatiblePhysicalTypeReducer) {
-      val items_partitions = Array(days("arrive_time"))
-      createTable(items, itemsColumns, items_partitions)
-      sql(s"INSERT INTO testcat.ns.$items VALUES " +
-        s"(0, 'aa', 39.0, cast('2020-01-01' as timestamp)), " +
-        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
-        s"(2, 'bb', 41.0, cast('2021-01-03' as timestamp)), " +
-        s"(3, 'bb', 42.0, cast('2021-01-04' as timestamp))")
-
-      val purchases_partitions = Array(years("time"))
-      createTable(purchases, purchasesColumns, purchases_partitions)
-      sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
-        s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
-        s"(5, 44.0, cast('2020-01-15' as timestamp)), " +
-        s"(7, 46.5, cast('2021-02-08' as timestamp))")
-
-      Seq(true, false).foreach { allowIncompatibleTransformTypes =>
-        withSQLConf(
-          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
-          SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true",
-          SQLConf.V2_BUCKETING_ALLOW_INCOMPATIBLE_TRANSFORM_TYPES.key ->
-            allowIncompatibleTransformTypes.toString) {
-          Seq(
-            s"testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.time = i.arrive_time",
-            s"testcat.ns.$purchases p JOIN testcat.ns.$items i ON i.arrive_time = p.time"
-          ).foreach { joinSting =>
-            val e = intercept[SparkException] {
-              val df = sql(
-                s"""
-                   |${selectWithMergeJoinHint("i", "p")} id, item_id
-                   |FROM $joinSting
-                   |ORDER BY id, item_id
-                   |""".stripMargin)
-
-              df.collect()
-            }
-            assert(e.getMessage.startsWith(
-              "Storage-partition join partition transforms produced incompatible reduced types"))
-          }
         }
       }
     }

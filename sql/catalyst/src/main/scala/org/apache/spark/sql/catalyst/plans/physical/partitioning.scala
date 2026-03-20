@@ -24,7 +24,7 @@ import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
-import org.apache.spark.sql.connector.catalog.functions.{Reducer, TypedReducer}
+import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
@@ -464,15 +464,12 @@ case class KeyedPartitioning(
     KeyedPartitioning.projectKeys(partitionKeys, expressionDataTypes, positions)
 
   /**
-   * Reduces this partitioning's partition keys by applying the given reducers and use the provided
-   * types for comparison.
-   * Returns the distinct reduced keys.
+   * Reduces this partitioning's partition keys by applying the given reducers.
+   * Returns the reduced keys and their data types.
    */
   def reduceKeys(
-      reducers: Seq[Option[Reducer[_, _]]],
-      reducedDataTypes: Seq[DataType]): Seq[InternalRowComparableWrapper] =
-    KeyedPartitioning.reduceKeys(partitionKeys, expressionDataTypes, reducers, reducedDataTypes)
-      .distinct
+      reducers: Seq[Option[Reducer[_, _]]]): (Seq[DataType], Seq[InternalRowComparableWrapper]) =
+    KeyedPartitioning.reduceKeys(partitionKeys, expressionDataTypes, reducers)
 
   override def satisfies0(required: Distribution): Boolean = {
     nonGroupedSatisfies(required) || groupedSatisfies(required)
@@ -585,29 +582,19 @@ object KeyedPartitioning {
   }
 
   /**
-   * Reduces a sequence of data types by applying reducers to each position.
-   */
-  def reduceTypes(
-      dataTypes: Seq[DataType],
-      reducers: Seq[Option[Reducer[_, _]]]): Seq[DataType] = {
-    dataTypes.zip(reducers).map {
-      case (t, Some(reducer: TypedReducer[Any, Any])) => reducer.resultType()
-      case (t, _) => t
-    }
-  }
-
-  /**
-   * Reduces a sequence of partition keys by applying reducers to each position and using the
-   * provided types for comparison.
+   * Reduces a sequence of partition keys by applying reducers to each position.
    */
   def reduceKeys(
       keys: Seq[InternalRowComparableWrapper],
       dataTypes: Seq[DataType],
-      reducers: Seq[Option[Reducer[_, _]]],
-      reducedDataTypes: Seq[DataType]): Seq[InternalRowComparableWrapper] = {
+      reducers: Seq[Option[Reducer[_, _]]]): (Seq[DataType], Seq[InternalRowComparableWrapper]) = {
+    val reducedDataTypes = dataTypes.zip(reducers).map {
+      case (_, Some(reducer: Reducer[Any, Any])) => reducer.resultType()
+      case (t, _) => t
+    }
     val comparableKeyWrapperFactory =
       InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(reducedDataTypes)
-    keys.map { key =>
+    val reducedKeys = keys.map { key =>
       val keyValues = key.row.toSeq(dataTypes)
       val reducedKey = keyValues.zip(reducers).map {
         case (v, Some(reducer: Reducer[Any, Any])) => reducer.reduce(v)
@@ -615,6 +602,8 @@ object KeyedPartitioning {
       }.toArray
       comparableKeyWrapperFactory(new GenericInternalRow(reducedKey))
     }
+
+    (reducedDataTypes, reducedKeys)
   }
 }
 

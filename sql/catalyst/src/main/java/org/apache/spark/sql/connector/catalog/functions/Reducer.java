@@ -34,9 +34,6 @@ import org.apache.spark.sql.types.DataType;
  * </ul>
  * where = means both value and data type match.
  *
- * <p>If the reducer changes the logical Spark {@link DataType data type} of the values it produces,
- * implement {@link TypedReducer} instead.
- *
  * @param <I> the physical Java type of the input
  * @param <O> the physical Java type of the output
  * @since 4.0.0
@@ -52,4 +49,11 @@ public interface Reducer<I, O> {
   default String displayName() {
     return getClass().getSimpleName();
   }
+
+  /**
+   * Returns the {@link DataType data type} of values produced by this reducer.
+   *
+   * @return the data type of values produced by this reducer.
+   */
+  DataType resultType();
 }

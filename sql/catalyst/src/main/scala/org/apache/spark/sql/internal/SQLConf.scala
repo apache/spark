@@ -2144,18 +2144,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val V2_BUCKETING_ALLOW_INCOMPATIBLE_TRANSFORM_TYPES =
-    buildConf("spark.sql.legacy.sources.v2.bucketing.allowIncompatibleTransformTypes.enabled")
-      .internal()
-      .doc("Whether to allow storage-partition join where the left and right partition " +
-        "transforms are reduced to differing logical types and in that case use the left reduced " +
-        "logical types for comparison. This config requires " +
-        s"${V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key} to be enabled.")
-      .version("4.2.0")
-      .withBindingPolicy(ConfigBindingPolicy.SESSION)
-      .booleanConf
-      .createWithDefault(false)
-
   val V2_BUCKETING_PARTITION_FILTER_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.partition.filter.enabled")
       .doc(s"Whether to filter partitions when running storage-partition join. " +
@@ -7741,9 +7729,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def v2BucketingAllowCompatibleTransforms: Boolean =
     getConf(SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS)
-
-  def v2BucketingAllowIncompatibleTransformTypes: Boolean =
-    getConf(SQLConf.V2_BUCKETING_ALLOW_INCOMPATIBLE_TRANSFORM_TYPES)
 
   def v2BucketingAllowSorting: Boolean =
     getConf(SQLConf.V2_BUCKETING_SORTING_ENABLED)
