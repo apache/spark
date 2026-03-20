@@ -50,7 +50,7 @@ class CDCTestsMixin:
     full_table_name = f"{catalog_name}.{test_table}"
 
     def _jvm(self):
-        """Access the JVM gateway. Override in Connect tests."""
+        """Access the JVM. Override in Connect tests."""
         return self.spark._jvm
 
     def _j_spark_session(self):
