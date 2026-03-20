@@ -953,8 +953,10 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     val data = spark.sparkContext.parallelize(Seq(
       Row(1, 5), Row(null, 3), Row(4, null), Row(5, 6), Row(7, 8), Row(2, 3)))
 
+    val expected = Seq(Row(1, 5), Row(5, 6), Row(2, 3))
+
     Seq("1", Int.MaxValue.toString).foreach { splitThreshold =>
-      def testFilterCSE(cseEnabled: Boolean): (Seq[Row], String) = {
+      def testFilterCSE(cseEnabled: Boolean): String = {
         withSQLConf(
           SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> cseEnabled.toString,
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
@@ -966,16 +968,13 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
           val plan = filtered.queryExecution.executedPlan
           assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
             "Filter should be in whole-stage codegen")
-          (filtered.collect().toSeq, codegenString(plan))
+          checkAnswer(filtered, expected)
+          codegenString(plan)
         }
       }
 
-      val (cseResult, cseCode) = testFilterCSE(cseEnabled = true)
-      val (noCseResult, noCseCode) = testFilterCSE(cseEnabled = false)
-
-      val expected = Seq(Row(1, 5), Row(5, 6), Row(2, 3))
-      assert(cseResult === expected)
-      assert(noCseResult === expected)
+      val cseCode = testFilterCSE(cseEnabled = true)
+      val noCseCode = testFilterCSE(cseEnabled = false)
 
       val addExactPattern = "addExact".r
       val cseAddCount = addExactPattern.findAllIn(cseCode).length
